@@ -66,7 +66,7 @@ describe('POST /teams/:slug/members/agents', () => {
 
     const nonce = nonceOf(r.json.connect_url);
     const team = requireTeam(server.db, 'sponsor-t');
-    expect(redeemAgentConnectNonce(server.db, team.id, nonce)?.name).toBe('dana-scout');
+    expect(redeemAgentConnectNonce(server.db, team.id, nonce)?.agent.name).toBe('dana-scout');
   });
 
   it('writes the audit row naming sponsor and agent', async () => {
@@ -115,14 +115,15 @@ describe('POST /teams/:slug/members/agents/:name/connect', () => {
     const team = requireTeam(server.db, 'sponsor-t');
     expect(redeemAgentConnectNonce(server.db, team.id, oldNonce)).toBeNull();
     const newNonce = nonceOf(r.json.connect_url);
-    expect(redeemAgentConnectNonce(server.db, team.id, newNonce)?.name).toBe('dana-scout');
+    expect(redeemAgentConnectNonce(server.db, team.id, newNonce)?.agent.name).toBe('dana-scout');
   });
 
-  it("refuses anyone but the sponsor — another member cannot mint a link to dana's agent", async () => {
+  it("under the default 'sponsor' policy another member cannot mint a link to dana's agent (ADR 456 §2)", async () => {
     const dana = await addHuman('dana');
     const eve = await addHuman('eve');
     await post('/teams/sponsor-t/members/agents', { name: 'dana-scout' }, dana);
     const r = await post('/teams/sponsor-t/members/agents/dana-scout/connect', {}, eve);
-    expect(r.status).toBe(404);
+    expect(r.status).toBe(403);
+    expect(r.json.error.message).toMatch(/sponsor or an admin/);
   });
 });

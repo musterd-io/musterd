@@ -59,6 +59,23 @@ describe('team policy command', () => {
     expect(res.out).toContain('dispatch loop: off');
   });
 
+  it('--agent-connect sets who may start a member-created agent, and the view says which (ADR 456)', async () => {
+    expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
+      'agent connect: sponsor',
+    );
+    const on = await capture(() =>
+      teamCommand(parseArgs(['policy', '--agent-connect', 'any_member'])),
+    );
+    expect(on.code).toBe(0);
+    expect(on.out).toContain('agent connect: any member');
+    expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
+      'agent connect: any member',
+    );
+    await expect(teamCommand(parseArgs(['policy', '--agent-connect', 'admin']))).rejects.toThrow(
+      /--agent-connect <sponsor\|any_member>/,
+    );
+  });
+
   it('--trace-content turns the content column on and off, and the view says which (ADR 445 §3)', async () => {
     expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
       'trace content: off',

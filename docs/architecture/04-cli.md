@@ -403,13 +403,18 @@ Admin lifecycle for least-privilege harness bootstrap credentials. `mint` requir
 
 The one-time **db→file migration** for a team's durable roster (ADR 058 / migration-bootstrap.md). Run in the folder that should own the roster: reads the live roster, writes canonical `.musterd/team.toml` + one `seats/<name>.toml` per member (identity only — **no token touches a file**), runs the format-layer parity self-check, and records `rosterHome[slug]` in the global config (the per-team cutover signal — the daemon then treats this team as file-backed). Token-preserving by construction: the next reconcile is a match-by-name no-op, so live sessions keep their tokens. Refuses if `team.toml` already exists. Output: `✓ exported "<slug>" roster → .musterd/ (N seats)`.
 
-### `musterd team policy [--review-loop on|off] [--dispatch-loop on|off] [--stakes-default <surface>=<low|normal|high>|off] [--trace-content on|off]`
+### `musterd team policy [--review-loop on|off] [--dispatch-loop on|off] [--stakes-default <surface>=<low|normal|high>|off] [--trace-content on|off] [--agent-connect sponsor|any_member]`
 
 Shows or updates the Team's admin-only governance policy. `--review-loop on` arms ADR 191's review
 work-order loop; `--dispatch-loop on` arms ADR 199's dispatch work-order loop; `off` restores each
 default. `--stakes-default <surface>=<low|normal|high>` upserts an ADR 244 default-stakes rule (the
 same surface replaces in place; a new surface appends; first match still wins); `--stakes-default off`
-clears the list so every lane opens at the worker's declaration again. `--trace-content on|off` sets
+clears the list so every lane opens at the worker's declaration again. `--agent-connect
+sponsor|any_member` sets ADR 456 §2's `agent_connect` (default `sponsor`): who may issue a
+member-created agent's connect link. With `sponsor` it is the agent's sponsor or an admin; with
+`any_member` it is any human teammate. That makes them team agents, and it makes every connect a
+possible takeover of the device that held the agent, so the readout says `agent connect: any
+member` and the set prints what it means. `--trace-content on|off` sets
 ADR 445 §3's `trace.content` (default `off`): whether trace.db's content column is written. Structural
 rows are recorded either way; a seat's hooks learn the change from the daemon's next ingest reply and
 send content from the hook after. The command reads the sparse

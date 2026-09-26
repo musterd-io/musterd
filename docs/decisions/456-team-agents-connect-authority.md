@@ -162,6 +162,12 @@ connected it loses their standing".
 - `@musterd/cli`: `musterd team policy --agent-connect <sponsor|any_member>`, shown in the policy
   readout beside the other knobs. A team that wants team agents runs it once.
 
+2026-09-26 — the code landed. One detail differs from Consequences. `team_agent_connect`'s input is a
+server-local zod schema beside its sibling remote tools in `mcpHttp.ts`, not a protocol schema. The
+remote `/mcp` tools never had protocol inputs, and the wire addition this ADR gates is
+`PolicySchema.agent_connect` alone. `connectRefusal` and `issueAgentConnect` are the single
+statements of §2, and `connectorRefusal` is the single statement of §3.
+
 ## Observability & Evaluation
 
 - **Traces:** `member.agent_connect_issued` (issuer → agent), `member.agent_connected` (connector →

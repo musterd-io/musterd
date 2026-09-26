@@ -1,9 +1,11 @@
+import { GENERALIST_CAPABILITIES } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../db/open.js';
 import { addMember, getMemberByName, leaveMember } from './members.js';
 import {
   CONNECT_NONCE_TTL_MS,
   SPONSORED_AGENT_CAP,
+  connectRefusal,
   createSponsoredAgent,
   issueAgentConnectNonce,
   mintConnectNonce,
@@ -123,7 +125,7 @@ describe('agent connect nonce (ADR 449 §4)', () => {
   it('redeems once, for the agent it was minted for, on its own team', () => {
     const { db, team, human } = teamWithHuman();
     const { member, nonce } = createSponsoredAgent(db, team, human, { name: 'dana-scout' });
-    expect(redeemAgentConnectNonce(db, team.id, nonce)?.id).toBe(member.id);
+    expect(redeemAgentConnectNonce(db, team.id, nonce)?.agent.id).toBe(member.id);
     expect(redeemAgentConnectNonce(db, team.id, nonce)).toBeNull();
   });
 
@@ -132,7 +134,7 @@ describe('agent connect nonce (ADR 449 §4)', () => {
     const other = createTeam(db, { slug: 'other' });
     const { member, nonce } = createSponsoredAgent(db, team, human, { name: 'dana-scout' });
     expect(redeemAgentConnectNonce(db, other.id, nonce)).toBeNull();
-    expect(redeemAgentConnectNonce(db, team.id, nonce)?.id).toBe(member.id);
+    expect(redeemAgentConnectNonce(db, team.id, nonce)?.agent.id).toBe(member.id);
   });
 
   it('is void past its TTL', () => {
@@ -148,7 +150,7 @@ describe('agent connect nonce (ADR 449 §4)', () => {
     const { member, nonce: first } = createSponsoredAgent(db, team, human, { name: 'dana-scout' });
     const { nonce: second } = issueAgentConnectNonce(db, team.id, member.id, human.id);
     expect(redeemAgentConnectNonce(db, team.id, first)).toBeNull();
-    expect(redeemAgentConnectNonce(db, team.id, second)?.id).toBe(member.id);
+    expect(redeemAgentConnectNonce(db, team.id, second)?.agent.id).toBe(member.id);
   });
 
   it('refuses to redeem for an agent that has since been removed or disabled', () => {
@@ -167,5 +169,59 @@ describe('mintConnectNonce', () => {
     const nonce = mintConnectNonce(() => draws.shift()!);
     expect(nonce).toBe(lucky.toString('base64url'));
     expect(unlucky.toString('base64url').startsWith('mscr_')).toBe(true);
+  });
+});
+
+describe('who may connect a sponsored agent (ADR 456 §2–3)', () => {
+  function teamOfThree() {
+    const { db, team, human: sponsor } = teamWithHuman();
+    const { row: mate } = addMember(db, team, { name: 'mate', kind: 'human' });
+    const { row: boss } = addMember(db, team, { name: 'boss', kind: 'human' });
+    db.prepare('UPDATE members SET capabilities = ? WHERE id = ?').run(
+      JSON.stringify({ ...GENERALIST_CAPABILITIES, is_admin: true }),
+      boss.id,
+    );
+    const admin = getMemberByName(db, team.id, 'boss')!;
+    const { member: agent } = createSponsoredAgent(db, team, sponsor, { name: 'scout' });
+    return { db, team, sponsor, mate, admin, agent };
+  }
+
+  it("'sponsor': the sponsor and an admin may, a teammate may not", () => {
+    const { team, sponsor, mate, admin, agent } = teamOfThree();
+    expect(connectRefusal(sponsor, agent, 'sponsor', team.slug)).toBeNull();
+    expect(connectRefusal(admin, agent, 'sponsor', team.slug)).toBeNull();
+    expect(connectRefusal(mate, agent, 'sponsor', team.slug)?.message).toMatch(
+      /only an agent's sponsor or an admin/,
+    );
+  });
+
+  it("'any_member': any human member may", () => {
+    const { team, mate, agent } = teamOfThree();
+    expect(connectRefusal(mate, agent, 'any_member', team.slug)).toBeNull();
+  });
+
+  it('an agent never issues, under either policy', () => {
+    const { team, agent } = teamOfThree();
+    for (const policy of ['sponsor', 'any_member'] as const)
+      expect(connectRefusal(agent, agent, policy, team.slug)?.message).toMatch(/only a human/);
+  });
+
+  it('only a live member-created agent is connectable', () => {
+    const { db, team, mate } = teamOfThree();
+    const { row: seated } = addMember(db, team, { name: 'seated', kind: 'agent' });
+    expect(connectRefusal(mate, seated, 'any_member', team.slug)?.code).toBe('not_found');
+    expect(connectRefusal(mate, undefined, 'any_member', team.slug)?.code).toBe('not_found');
+  });
+
+  it('redeem returns the issuer, and refuses once the issuer has lost standing', () => {
+    const { db, team, mate, agent } = teamOfThree();
+    const { nonce } = issueAgentConnectNonce(db, team.id, agent.id, mate.id);
+    const got = redeemAgentConnectNonce(db, team.id, nonce);
+    expect(got?.agent.id).toBe(agent.id);
+    expect(got?.issuedBy.name).toBe('mate');
+
+    const { nonce: second } = issueAgentConnectNonce(db, team.id, agent.id, mate.id);
+    leaveMember(db, mate.id);
+    expect(redeemAgentConnectNonce(db, team.id, second)).toBeNull();
   });
 });

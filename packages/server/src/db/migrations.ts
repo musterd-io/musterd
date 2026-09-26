@@ -1835,6 +1835,24 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    // ADR 456 §3: the member who connected a device bounds its session. A connect nonce's issuer may
+    // now be someone other than the sponsor (`sponsor_id` → `issued_by`), and redemption carries the
+    // issuer onto the code and the chain (`connected_by`), where every use checks its standing.
+    // NULL `connected_by` = a chain minted by a human for themselves (no connector to bound it).
+    version: 76,
+    up: (db) => {
+      const cols = (t: string) =>
+        db.prepare(`SELECT name FROM pragma_table_info('${t}')`).pluck().all() as string[];
+      // Guarded for rewind-and-replay (the v50 containment test replays the whole chain).
+      if (cols('agent_connect_nonces').includes('sponsor_id'))
+        db.exec('ALTER TABLE agent_connect_nonces RENAME COLUMN sponsor_id TO issued_by');
+      if (!cols('oauth_codes').includes('connected_by'))
+        db.exec('ALTER TABLE oauth_codes ADD COLUMN connected_by TEXT REFERENCES members(id)');
+      if (!cols('oauth_tokens').includes('connected_by'))
+        db.exec('ALTER TABLE oauth_tokens ADD COLUMN connected_by TEXT REFERENCES members(id)');
+    },
+  },
 ];
 
 function currentVersion(db: Database): number {

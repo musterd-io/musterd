@@ -338,7 +338,6 @@ import {
 } from '../store/seeds.js';
 import { mintSessionLease, revokeMemberSessionLeases } from '../store/session-leases.js';
 import { redeemHandoff, stageHandoff } from '../store/signinHandoff.js';
-import { issueAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { staleLaneWarnings } from '../store/staleness.js';
 import { searchInsights } from '../store/teamMemory.js';
 import {
@@ -411,7 +410,7 @@ import {
 } from '../telemetry.js';
 import { handleMcpRoute } from './mcpHttp.js';
 import { handleOAuthRoutes } from './oauth.js';
-import { agentConnectUrl, mintSponsoredAgent, originFrom } from './sponsoredAgentMint.js';
+import { issueAgentConnect, mintSponsoredAgent, originFrom } from './sponsoredAgentMint.js';
 
 /**
  * The content-coding negotiated for this response from its request's `Accept-Encoding`, set once at
@@ -2003,30 +2002,22 @@ export async function handleHttp(
         return sendJson(res, 201, { ...minted, member: toMember(minted.member, team.slug) });
       }
 
-      // ADR 449 §4: re-issue an agent's connect link (the last one expired, or went to the wrong
-      // place). Only the sponsor may; the prior unused link dies with the re-issue.
+      // ADR 449 §4 / ADR 456 §2: issue (or re-issue) a sponsored agent's connect link. Who may is
+      // the team's `agent_connect` policy; the prior unused link dies with the re-issue.
       const connectMatch = rest.match(/^\/members\/agents\/([^/]+)\/connect$/);
       if (method === 'POST' && connectMatch) {
-        const { team, member: sponsor } = authMember(ctx.db, slug, bearer(req), actingSeat(req));
-        const agentName = decodeURIComponent(connectMatch[1]!);
-        const agent = getMemberByName(ctx.db, team.id, agentName);
-        if (!agent || agent.left_at !== null || agent.sponsored_by !== sponsor.id)
-          throw new MusterdError(
-            'not_found',
-            `you sponsor no live agent "${agentName}" in ${slug}`,
-          );
-        const { nonce, expires_at } = issueAgentConnectNonce(ctx.db, team.id, agent.id, sponsor.id);
-        appendAudit(ctx.db, team.id, {
-          actor: sponsor.name,
-          action: 'member.agent_connect_issued',
-          target: agent.name,
-          result: 'allow',
-        });
-        return sendJson(res, 200, {
-          member: agent.name,
-          connect_url: agentConnectUrl(requestOrigin(req), team.slug, nonce),
-          connect_expires_at: expires_at,
-        });
+        const { team, member: caller } = authMember(ctx.db, slug, bearer(req), actingSeat(req));
+        return sendJson(
+          res,
+          200,
+          issueAgentConnect(
+            ctx,
+            team,
+            caller,
+            decodeURIComponent(connectMatch[1]!),
+            requestOrigin(req),
+          ),
+        );
       }
 
       /* ─── the infra-touch gate (ADR 227 inc 2) ─────────────────────────────────────────────────

@@ -101,6 +101,8 @@ export function issueCode(
     redirectUri: string;
     codeChallenge: string;
     scope?: string;
+    /** ADR 456 §3: who connected this device (an agent connect's issuer); omitted for self-sign-in. */
+    connectedBy?: string | null;
   },
   now = Date.now(),
 ): OAuthCodeMint {
@@ -108,8 +110,8 @@ export function issueCode(
   const expires_at = now + OAUTH_CODE_TTL_S * 1000;
   db.prepare(
     `INSERT INTO oauth_codes
-       (code_hash, team_id, member_id, client_id, redirect_uri, code_challenge, scope, created_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (code_hash, team_id, member_id, client_id, redirect_uri, code_challenge, scope, created_at, expires_at, connected_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     hashToken(code),
     input.teamId,
@@ -120,6 +122,7 @@ export function issueCode(
     input.scope ?? null,
     now,
     expires_at,
+    input.connectedBy ?? null,
   );
   return { code, expires_at };
 }
@@ -132,7 +135,7 @@ export function redeemCode(
   db: Database,
   input: { teamId: string; clientId: string; code: string; redirectUri: string; verifier: string },
   now = Date.now(),
-): { memberId: string; scope: string | null } {
+): { memberId: string; scope: string | null; connectedBy: string | null } {
   return db.transaction(() => {
     const row = db
       .prepare<
@@ -140,6 +143,7 @@ export function redeemCode(
         {
           team_id: string;
           member_id: string;
+          connected_by: string | null;
           client_id: string;
           redirect_uri: string;
           code_challenge: string;
@@ -161,7 +165,7 @@ export function redeemCode(
       now,
       hashToken(input.code),
     );
-    return { memberId: row.member_id, scope: row.scope };
+    return { memberId: row.member_id, scope: row.scope, connectedBy: row.connected_by };
   })();
 }
 
@@ -193,7 +197,14 @@ function cappedExpiries(
 /** Mint a fresh access + refresh pair on one chain — the chain id is what reuse revokes. */
 export function mintTokenPair(
   db: Database,
-  input: { teamId: string; memberId: string; clientId: string; scope?: string | null },
+  input: {
+    teamId: string;
+    memberId: string;
+    clientId: string;
+    scope?: string | null;
+    /** ADR 456 §3: the member whose standing bounds this chain beside the seat's own. */
+    connectedBy?: string | null;
+  },
   now = Date.now(),
 ): OAuthTokenPair {
   const access_token = newSecret(TOKEN_PREFIXES.oauth_access);
@@ -202,8 +213,8 @@ export function mintTokenPair(
   const exp = cappedExpiries(memberEnd(db, input.memberId), now);
   const ins = db.prepare(
     `INSERT INTO oauth_tokens
-       (token_hash, kind, team_id, member_id, client_id, chain_id, scope, created_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (token_hash, kind, team_id, member_id, client_id, chain_id, scope, created_at, expires_at, connected_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const tx = db.transaction(() => {
     ins.run(
@@ -216,6 +227,7 @@ export function mintTokenPair(
       input.scope ?? null,
       now,
       exp.access,
+      input.connectedBy ?? null,
     );
     ins.run(
       hashToken(refresh_token),
@@ -227,6 +239,7 @@ export function mintTokenPair(
       input.scope ?? null,
       now,
       exp.refresh,
+      input.connectedBy ?? null,
     );
   });
   tx();
@@ -263,6 +276,7 @@ export function rotateRefresh(
             expires_at: number;
             replaced_at: number | null;
             revoked_at: number | null;
+            connected_by: string | null;
           }
         >("SELECT * FROM oauth_tokens WHERE token_hash = ? AND kind = 'refresh'")
         .get(hashToken(input.refreshToken));
@@ -287,8 +301,9 @@ export function rotateRefresh(
       const owner = db
         .prepare<[string], MemberRow>('SELECT * FROM members WHERE id = ?')
         .get(row.member_id);
+      // ADR 456 §3: so does one whose connector (the member who connected this device) lost theirs.
       const ended = owner
-        ? memberStandingRefusal(owner, now)
+        ? (memberStandingRefusal(owner, now) ?? connectorRefusal(db, row.connected_by, now))
         : new MusterdError('unauthorized', 'seat is gone');
       if (ended) {
         db.prepare(
@@ -308,8 +323,8 @@ export function rotateRefresh(
       const refreshExpires = exp.refresh;
       const ins = db.prepare(
         `INSERT INTO oauth_tokens
-         (token_hash, kind, team_id, member_id, client_id, chain_id, scope, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (token_hash, kind, team_id, member_id, client_id, chain_id, scope, created_at, expires_at, connected_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       ins.run(
         hashToken(access_token),
@@ -321,6 +336,7 @@ export function rotateRefresh(
         row.scope,
         now,
         exp.access,
+        row.connected_by,
       );
       ins.run(
         hashToken(refresh_token),
@@ -332,6 +348,7 @@ export function rotateRefresh(
         row.scope,
         now,
         refreshExpires,
+        row.connected_by,
       );
       return { pair: { access_token, refresh_token, expires_in: exp.expires_in } };
     },
@@ -431,11 +448,32 @@ export function burnUnexchangedCodes(
 }
 
 /**
+ * ADR 456 §3: why a chain's connector no longer bounds it — the member who connected the device has
+ * left, been disabled/banned/archived, or expired — or null (including a chain with no connector,
+ * i.e. a human who signed their own seat in).
+ */
+export function connectorRefusal(
+  db: Database,
+  connectedBy: string | null,
+  now = Date.now(),
+): MusterdError | null {
+  if (connectedBy === null) return null;
+  const connector = db
+    .prepare<[string], MemberRow>('SELECT * FROM members WHERE id = ?')
+    .get(connectedBy);
+  if (connector && !memberStandingRefusal(connector, now)) return null;
+  return new MusterdError(
+    'unauthorized',
+    'the member who connected this device is no longer on the team — connect it again',
+  );
+}
+
+/**
  * Verify an `msat_` bearer for `authMember`: same seat proof as `mscr_` (hash-bound member,
  * acting-seat must match-or-absent is checked by the caller) with NO session lease. Returns the
  * live row or throws — expired, revoked, cross-team, and departed seats all fail closed. The row
- * is a human, or (ADR 452 §3) an agent whose chain came from its sponsor's connect nonce — the
- * only way an agent-bound code is ever issued.
+ * is a human, or (ADR 452 §3) an agent whose chain came from a redeemed connect nonce — the only
+ * way an agent-bound code is ever issued — and then (ADR 456 §3) only while its connector stands.
  */
 export function verifyAccess(
   db: Database,
@@ -446,8 +484,16 @@ export function verifyAccess(
   const row = db
     .prepare<
       [string],
-      { member_id: string; team_id: string; expires_at: number; revoked_at: number | null }
-    >("SELECT member_id, team_id, expires_at, revoked_at FROM oauth_tokens WHERE token_hash = ? AND kind = 'access'")
+      {
+        member_id: string;
+        team_id: string;
+        expires_at: number;
+        revoked_at: number | null;
+        connected_by: string | null;
+      }
+    >(
+      "SELECT member_id, team_id, expires_at, revoked_at, connected_by FROM oauth_tokens WHERE token_hash = ? AND kind = 'access'",
+    )
     .get(hashToken(accessToken));
   if (!row || row.team_id !== teamId || row.revoked_at !== null || row.expires_at <= now)
     throw new MusterdError('unauthorized', `invalid access token for this team`);
@@ -458,5 +504,7 @@ export function verifyAccess(
     >("SELECT * FROM members WHERE team_id = ? AND id = ? AND left_at IS NULL AND kind IN ('human', 'agent')")
     .get(teamId, row.member_id);
   if (!member) throw new MusterdError('unauthorized', 'access token names a seat that is gone');
+  const connector = connectorRefusal(db, row.connected_by, now);
+  if (connector) throw connector;
   return member;
 }

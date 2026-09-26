@@ -253,3 +253,86 @@ describe('agent chains and member standing at the token endpoint (ADR 452 §2–
     }
   });
 });
+
+describe('the connector bounds the chain (ADR 456 §3)', () => {
+  function agentConnectedBy() {
+    const f = freshHuman();
+    const { row: agent } = addMember(f.db, f.team, { name: 'scout', kind: 'agent' });
+    const { row: mate } = addMember(f.db, f.team, { name: 'mate', kind: 'human' });
+    const { code } = issueCode(f.db, {
+      teamId: f.team.id,
+      memberId: agent.id,
+      clientId: f.client_id,
+      redirectUri: 'https://app.example/cb',
+      codeChallenge: CHALLENGE,
+      connectedBy: mate.id,
+    });
+    const redeemed = redeemCode(f.db, {
+      teamId: f.team.id,
+      clientId: f.client_id,
+      code,
+      redirectUri: 'https://app.example/cb',
+      verifier: VERIFIER,
+    });
+    const pair = mintTokenPair(f.db, {
+      teamId: f.team.id,
+      memberId: redeemed.memberId,
+      clientId: f.client_id,
+      connectedBy: redeemed.connectedBy,
+    });
+    return { ...f, agent, mate, redeemed, pair };
+  }
+
+  it('the code carries connected_by to the chain', () => {
+    const f = agentConnectedBy();
+    expect(f.redeemed.connectedBy).toBe(f.mate.id);
+    const rows = f.db
+      .prepare('SELECT DISTINCT connected_by FROM oauth_tokens')
+      .pluck()
+      .all() as string[];
+    expect(rows).toEqual([f.mate.id]);
+    expect(verifyAccess(f.db, f.team.id, f.pair.access_token).name).toBe('scout');
+  });
+
+  it('the chain dies at use when its connector leaves, though the agent is fine', () => {
+    const f = agentConnectedBy();
+    f.db.prepare('UPDATE members SET left_at = ? WHERE id = ?').run(Date.now(), f.mate.id);
+    expect(() => verifyAccess(f.db, f.team.id, f.pair.access_token)).toThrow(/connected/);
+  });
+
+  it('refresh keeps connected_by, and is refused (chain revoked) once the connector is disabled', () => {
+    const f = agentConnectedBy();
+    const next = rotateRefresh(f.db, {
+      teamId: f.team.id,
+      clientId: f.client_id,
+      refreshToken: f.pair.refresh_token,
+    });
+    const rows = f.db
+      .prepare('SELECT DISTINCT connected_by FROM oauth_tokens')
+      .pluck()
+      .all() as string[];
+    expect(rows).toEqual([f.mate.id]);
+    f.db.prepare("UPDATE members SET account_status = 'disabled' WHERE id = ?").run(f.mate.id);
+    expect(() =>
+      rotateRefresh(f.db, {
+        teamId: f.team.id,
+        clientId: f.client_id,
+        refreshToken: next.refresh_token,
+      }),
+    ).toThrow(MusterdError);
+    const live = f.db
+      .prepare('SELECT COUNT(*) AS n FROM oauth_tokens WHERE revoked_at IS NULL')
+      .get() as { n: number };
+    expect(live.n).toBe(0);
+  });
+
+  it('a chain with no connector (a human signing themselves in) is unaffected', () => {
+    const f = freshHuman();
+    const pair = mintTokenPair(f.db, {
+      teamId: f.team.id,
+      memberId: f.member.id,
+      clientId: f.client_id,
+    });
+    expect(verifyAccess(f.db, f.team.id, pair.access_token).name).toBe('Nick');
+  });
+});

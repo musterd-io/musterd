@@ -3,6 +3,8 @@ import {
   BootstrapCutoverRequestSchema,
   BootstrapMigrationRequestSchema,
   containsMusterdCredential,
+  PolicyOverrideSchema,
+  PolicySchema,
 } from './credentials.js';
 
 describe('bootstrap retirement credentials (ADR 350)', () => {
@@ -58,5 +60,20 @@ describe('containsMusterdCredential (ADR 452 §1, big-body 01M3FAF83Z)', () => {
     expect(containsMusterdCredential('https://h/join/t#n=AAAAmscr_AAAA')).toBe(false);
     expect(containsMusterdCredential('Z-mscr_')).toBe(false);
     expect(containsMusterdCredential('https://h/join/t#n=' + 'A'.repeat(43))).toBe(false);
+  });
+});
+
+describe('PolicySchema.agent_connect (ADR 456 §2)', () => {
+  it("defaults to 'sponsor' and accepts 'any_member'", () => {
+    expect(PolicySchema.parse({}).agent_connect).toBe('sponsor');
+    expect(PolicySchema.parse({ agent_connect: 'any_member' }).agent_connect).toBe('any_member');
+    expect(PolicySchema.safeParse({ agent_connect: 'admin' }).success).toBe(false);
+  });
+
+  it('rides the sparse override — omitted stays omitted (ADR 185)', () => {
+    expect(PolicyOverrideSchema.parse({}).agent_connect).toBeUndefined();
+    expect(PolicyOverrideSchema.parse({ agent_connect: 'any_member' }).agent_connect).toBe(
+      'any_member',
+    );
   });
 });
