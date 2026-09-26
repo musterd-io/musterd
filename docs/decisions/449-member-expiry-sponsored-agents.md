@@ -162,6 +162,12 @@ is now the team policy `agent_connect`. Under `'sponsor'` (the default) that is 
 admin. Under `'any_member'` it is any human member in good standing. The member who connected a
 device bounds that session.
 
+2026-09-26 — a successful mint now also tells the team (lane `01M3FBK3S6`). `mintSponsoredAgent`
+routes one daemon-composed `@team` `message` in the sponsor's voice, body `<sponsor> created agent
+<agent>`, with `meta.agent_created: {agent, sponsor}`. Both surfaces get it because both share the
+mint; `team_agent_create`'s reply says the team has been told. A refused mint posts nothing. No wire
+change: `meta` was already an open record.
+
 ## Observability & Evaluation
 
 - Traces: audit verbs `member.sponsored_agent_created` and `member.revoked_cascade` — who, whom,

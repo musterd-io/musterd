@@ -708,6 +708,23 @@ describe('/mcp/:team — the Done line (ADR 446 §7)', () => {
     expect(row).toEqual({ kind: 'agent', sponsored_by: nick.id });
     expect(audits('member.sponsored_agent_created')).toHaveLength(1);
 
+    // Lane 01M3FBK3S6: the team is told, in the sponsor's voice, and the creator's reply says so.
+    expect(text).toContain('The team has been told');
+    const notices = () =>
+      server.db
+        .prepare(
+          "SELECT m.body, m.meta, f.name AS sender FROM messages m JOIN members f ON f.id = m.from_member WHERE m.team_id = ? AND m.meta LIKE '%agent_created%'",
+        )
+        .all(dawn.id) as { body: string; meta: string; sender: string }[];
+    const [notice, ...rest] = notices();
+    expect(rest).toHaveLength(0);
+    expect(notice!.sender).toBe('nick');
+    expect(notice!.body).toBe('nick created agent nick-scout');
+    expect(JSON.parse(notice!.meta).agent_created).toEqual({
+      agent: 'nick-scout',
+      sponsor: 'nick',
+    });
+
     const dup = await mcpCall(
       pair.access_token,
       'tools/call',
@@ -716,6 +733,8 @@ describe('/mcp/:team — the Done line (ADR 446 §7)', () => {
     );
     expect(dup.json.result.isError).toBe(true);
     expect(dup.json.result.content[0].text).toContain('already exists');
+    // A refused mint announces nothing.
+    expect(notices()).toHaveLength(1);
   });
 
   it('missing bearer is 401; unknown team is 404', async () => {

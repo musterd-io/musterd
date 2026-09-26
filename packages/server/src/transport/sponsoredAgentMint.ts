@@ -1,7 +1,10 @@
+import { makeEnvelope } from '@musterd/protocol';
+import { ulid } from 'ulid';
 import { resolveRosterRoots } from '../config.js';
 import type { Ctx } from '../context.js';
 import { MusterdError } from '../errors.js';
 import { teamSpecForSlug } from '../projection/reconcile.js';
+import { routeEnvelope } from '../protocol/route.js';
 import { appendAudit } from '../store/audit.js';
 import { getMemberByName } from '../store/members.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
@@ -15,8 +18,8 @@ import { getPolicy } from '../store/teams.js';
 /**
  * The one mint path for member-created agents (ADR 449 §3), shared by `POST …/members/agents` and
  * the remote `team_agent_create` tool so the two surfaces cannot drift: the file-backed refusal,
- * the store's invariants (human-only, inherited expiry, cap, no revived names), the audit row, and
- * the connect link.
+ * the store's invariants (human-only, inherited expiry, cap, no revived names), the audit row, the
+ * team notice, and the connect link.
  */
 export function mintSponsoredAgent(
   ctx: Ctx,
@@ -41,6 +44,7 @@ export function mintSponsoredAgent(
     result: 'allow',
     detail: { lifecycle_until: member.lifecycle_until },
   });
+  announceAgentCreated(ctx, team, sponsor, member);
   return {
     member,
     connect_url: agentConnectUrl(origin, team.slug, nonce),
@@ -82,6 +86,33 @@ export function issueAgentConnect(
     connect_url: agentConnectUrl(origin, team.slug, nonce),
     connect_expires_at: expires_at,
   };
+}
+
+/**
+ * Tell the team a member created an agent (lane 01M3FBK3S6). Before this the mint wrote only an
+ * audit row, so a new seat appeared on the roster with nobody told who made it. One `@team`
+ * `message` in the sponsor's own voice, so /live and every inbox show it as ordinary traffic;
+ * `meta.agent_created` lets a surface key off it without parsing the body. Daemon-composed (ADR 225)
+ * because the server wrote it, not a client. Only a successful mint reaches here: a refused one
+ * threw in `createSponsoredAgent` above and announces nothing.
+ */
+function announceAgentCreated(ctx: Ctx, team: TeamRow, sponsor: MemberRow, agent: MemberRow): void {
+  routeEnvelope(
+    ctx,
+    team,
+    sponsor,
+    makeEnvelope({
+      id: ulid(),
+      team: team.slug,
+      from: sponsor.name,
+      to: { kind: 'team' },
+      act: 'message',
+      body: `${sponsor.name} created agent ${agent.name}`,
+      meta: { agent_created: { agent: agent.name, sponsor: sponsor.name } },
+    }),
+    undefined,
+    true,
+  );
 }
 
 /**
