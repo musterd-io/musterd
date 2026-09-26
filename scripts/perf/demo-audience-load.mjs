@@ -405,35 +405,52 @@ async function drive() {
   ready.agents.forEach((a, i) =>
     arrive(i, ready.agents.length, async () => {
       let lease = null;
-      const claim = async () => {
-        const j = await req('POST /claim (agent)', `${T}/claim`, {
+      // A re-claim clears the previous socketless Presence, and the old lease dies with it the
+      // moment the daemon runs the claim, not when its reply lands. Under load a claim took up to
+      // 57 s (2026-09-26 tunnel run), and every hook call in that window carried the dead lease:
+      // ~71 agent 401s that were the harness racing itself. The real CLI hook reads the lease the
+      // claim wrote, so hook calls wait for an in-flight claim instead of racing it.
+      let claiming = null;
+      const claim = () =>
+        (claiming ??= req('POST /claim (agent)', `${T}/claim`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ key: a.token, target: { seat: a.name }, surface: 'cli' }),
-        });
-        if (j?.session_lease) lease = j.session_lease;
-      };
+        })
+          .then((j) => {
+            if (j?.session_lease) lease = j.session_lease;
+          })
+          .finally(() => {
+            claiming = null;
+          }));
       await claim();
-      const headers = () => ({
-        authorization: `Bearer ${a.token}`,
-        'content-type': 'application/json',
-        ...(lease ? { 'x-musterd-session-lease': lease } : {}),
-      });
-      every(3_000, () =>
-        req('GET /inbox/interrupt-check', `${T}/inbox/interrupt-check`, { headers: headers() }),
+      const headers = async () => {
+        await claiming;
+        return {
+          authorization: `Bearer ${a.token}`,
+          'content-type': 'application/json',
+          ...(lease ? { 'x-musterd-session-lease': lease } : {}),
+        };
+      };
+      every(3_000, async () =>
+        req('GET /inbox/interrupt-check', `${T}/inbox/interrupt-check`, {
+          headers: await headers(),
+        }),
       );
-      every(30_000, () => req('GET /inbox (agent)', `${T}/inbox?unread=1`, { headers: headers() }));
-      every(90_000, () =>
+      every(30_000, async () =>
+        req('GET /inbox (agent)', `${T}/inbox?unread=1`, { headers: await headers() }),
+      );
+      every(90_000, async () =>
         req('POST /messages (agent)', `${T}/messages`, {
           method: 'POST',
-          headers: headers(),
+          headers: await headers(),
           body: JSON.stringify({ envelope: envelope(a.name, 'status_update') }),
         }),
       );
-      every(300_000, () =>
+      every(300_000, async () =>
         req('POST /lanes', `${T}/lanes`, {
           method: 'POST',
-          headers: headers(),
+          headers: await headers(),
           body: JSON.stringify({ title: `aud lane ${seq++}`, claim: true }),
         }),
       );
