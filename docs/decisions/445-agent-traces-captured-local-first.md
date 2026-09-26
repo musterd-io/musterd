@@ -336,8 +336,10 @@ ADR 184's publication gate; a spans backend.
   tool mix; and tokens per lane, where each `usage` row goes to its seat's most recently claimed lane
   open at the row's `ts`, and a row matching no lane is shown as `unattributed` rather than folded
   in. Structural columns only; ADR 128 scoping resolved at the route (admin: every seat; else own).
-  The `/live` per-seat timeline is the second half. Follows-up: 01M3FEB12R870FRSYJH0TXD34V (it
-  waits for the current `/live` work to clear). Falsifier on the dogfood box: `musterd report trace` from an admin seat prints a non-null
+  The `/live` per-seat timeline is the second half, lane 01M3FEB12R870FRSYJH0TXD34V, landed the
+  same day: a `trace` expander on every roster row reads `GET /trace/seats/:name` (newest 50,
+  structural columns only — the store read never selects content) into a lazy chunk, so /live's
+  eager graph pays one button per row. Falsifier on the dogfood box: `musterd report trace` from an admin seat prints a non-null
   coverage for `claude-code` and at least one lane with turns.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
