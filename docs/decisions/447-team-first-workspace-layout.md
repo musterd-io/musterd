@@ -115,6 +115,14 @@ unenforceable.
   `~/musterd/revive/agents/<seat>` the seat. `musterd agent x --team other` from a `revive` Workspace
   must land at `~/musterd/other/<repo>/x`, never under `revive/`.
 
+- **2026-09-26 — the agent guidance caught up (lane `01M3F9HYV1`).** The skill body
+  (`packages/protocol/src/guidance.ts`, guidance v31) and `musterd help human` still taught the
+  pre-447 "team home" floor — a person standing at `~/musterd/<team>` — two weeks after the code
+  stopped doing it. Both now say the person stands in a member Workspace at
+  `~/musterd/<team>/<repo>/<name>` (or `--home <dir>` outside a repo) and that the team root is
+  never bound. No behavior changed; the guidance was the last surface still describing the old
+  layout.
+
 ## Observability & Evaluation
 
 - Traces: none new. `bindingRefusal` refusals print their reason and exit 2; the migration prints
