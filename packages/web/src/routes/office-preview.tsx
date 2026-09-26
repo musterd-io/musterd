@@ -8,7 +8,7 @@ import { OfficeOverlay } from '../live/OfficeOverlay';
 import { isStill } from '../live/stillMode';
 import type { Caption } from '../live/captions';
 import type { RoomEntry } from '../live/workingOn';
-import type { OfficeData, OfficeEvent, OfficeHandle } from '../live/office-scene';
+import type { OfficeData, OfficeEvent, OfficeHandle, OfficeNode } from '../live/office-scene';
 import { spritesFromUrl } from './broadcast';
 
 export const Route = createFileRoute('/office-preview')({
@@ -247,7 +247,7 @@ const SCRIPT: { at: number; ev: OfficeEvent }[] = [
   },
 ];
 /** A fixture member's kind, for the caption dot's colour — the pool is the roster here. */
-const kindOfMock = (name: string): Kind => (POOL.find((m) => m.name === name)?.kind ?? 'agent');
+const kindOfMock = (name: string): Kind => POOL.find((m) => m.name === name)?.kind ?? 'agent';
 
 const LOOP = 5600;
 
@@ -397,6 +397,10 @@ function OfficePreviewPage() {
      one route that can render the room without a daemon, and how `scripts/perf/ambient-density.mjs`
      samples several independent rooms at once instead of waiting out one of them. */
   const [teamName] = useState(() => previewSearch().get('team') ?? 'revive');
+  /* The Welcome Wagon harness (lane 01M3F81DD9): Members added the way the server would add them —
+     offline and never-connected (`offline_reason: 'unknown'`) — then connected, so the real path runs:
+     roster diff → sequencer → the room's residents. Nothing here shortcuts the scene. */
+  const [newcomers, setNewcomers] = useState<OfficeNode[]>([]);
 
   const buildData = useCallback(
     (): OfficeData => ({
@@ -407,63 +411,70 @@ function OfficePreviewPage() {
         start: '11:00',
         end: '15:00',
       },
-      nodes: POOL.filter((m) => present.has(m.name)).map((m) => {
-        const isOffline = offlineSet.has(m.name);
-        const isAway = !isOffline && away.has(m.name);
-        const isStale = stale.has(m.name);
-        // A stale seat keeps `activity: working` but is placed by its projected `active` posture.
-        const activity = isOffline
-          ? ('offline' as const)
-          : isAway || (idle.has(m.name) && !isStale)
-            ? ('active' as const)
-            : m.activity;
-        const posture = isOffline
-          ? ('offline' as const)
-          : isAway
-            ? ('away' as const)
-            : isStale || idle.has(m.name)
+      nodes: [
+        ...POOL.filter((m) => present.has(m.name)).map((m): OfficeNode => {
+          const isOffline = offlineSet.has(m.name);
+          const isAway = !isOffline && away.has(m.name);
+          const isStale = stale.has(m.name);
+          // A stale seat keeps `activity: working` but is placed by its projected `active` posture.
+          const activity = isOffline
+            ? ('offline' as const)
+            : isAway || (idle.has(m.name) && !isStale)
               ? ('active' as const)
-              : activity;
-        return {
-          name: m.name,
-          kind: m.kind,
-          service: m.service === true,
-          presence: isOffline ? ('offline' as const) : isAway ? ('away' as const) : ('online' as const),
-          activity,
-          // The fixture has no availability axis, so posture composes straight off presence + activity —
-          // except a `?stale` seat, which pins posture idle while activity lags at working.
-          posture,
-          state: m.state,
-          color: memberColor(m.name, m.kind),
-          role: FIXTURE_IDENTITY[m.name]?.role ?? '',
-          // Varied identity, so the preview actually exercises the nameplate's provider icon and its
-          // expand detail. These were `null` while the plate carried harness · model, which meant the
-          // one surface for eyeballing a nameplate could never render one.
-          surface: FIXTURE_IDENTITY[m.name]?.surface ?? 'claude-code',
-          // Read the entry, not `?? default` — an explicit `model: null` IS the case worth showing
-          // (a seat with nothing to report), and a nullish fallback makes it unreachable.
-          model: m.name in FIXTURE_IDENTITY ? FIXTURE_IDENTITY[m.name]!.model : 'claude-opus-4-5',
-          workTitle: null,
-          workSource: null,
-          laneState: null,
-          moreLanes: 0,
-          // Why the seat is here at all — a wake, not someone opening a session. Orthogonal to
-          // posture on purpose, so the preview shows the two facts side by side.
-          woken: WOKEN.has(m.name) && !isOffline,
-          dnd: dndSet.has(m.name) && !isOffline,
-          // The first offline fixture wears the amber `disconnected` glint; the rest read released.
-          offline_reason: isOffline
-            ? [...offlineSet][0] === m.name
-              ? 'disconnected'
-              : 'seat_released'
-            : null,
-          last_seen_at: isOffline ? Date.now() - 20 * 60_000 : null,
-          created_at: null,
-          sponsored_by: null,
-        };
-      }),
+              : m.activity;
+          const posture = isOffline
+            ? ('offline' as const)
+            : isAway
+              ? ('away' as const)
+              : isStale || idle.has(m.name)
+                ? ('active' as const)
+                : activity;
+          return {
+            name: m.name,
+            kind: m.kind,
+            service: m.service === true,
+            presence: isOffline
+              ? ('offline' as const)
+              : isAway
+                ? ('away' as const)
+                : ('online' as const),
+            activity,
+            // The fixture has no availability axis, so posture composes straight off presence + activity —
+            // except a `?stale` seat, which pins posture idle while activity lags at working.
+            posture,
+            state: m.state,
+            color: memberColor(m.name, m.kind),
+            role: FIXTURE_IDENTITY[m.name]?.role ?? '',
+            // Varied identity, so the preview actually exercises the nameplate's provider icon and its
+            // expand detail. These were `null` while the plate carried harness · model, which meant the
+            // one surface for eyeballing a nameplate could never render one.
+            surface: FIXTURE_IDENTITY[m.name]?.surface ?? 'claude-code',
+            // Read the entry, not `?? default` — an explicit `model: null` IS the case worth showing
+            // (a seat with nothing to report), and a nullish fallback makes it unreachable.
+            model: m.name in FIXTURE_IDENTITY ? FIXTURE_IDENTITY[m.name]!.model : 'claude-opus-4-5',
+            workTitle: null,
+            workSource: null,
+            laneState: null,
+            moreLanes: 0,
+            // Why the seat is here at all — a wake, not someone opening a session. Orthogonal to
+            // posture on purpose, so the preview shows the two facts side by side.
+            woken: WOKEN.has(m.name) && !isOffline,
+            dnd: dndSet.has(m.name) && !isOffline,
+            // The first offline fixture wears the amber `disconnected` glint; the rest read released.
+            offline_reason: isOffline
+              ? [...offlineSet][0] === m.name
+                ? 'disconnected'
+                : 'seat_released'
+              : null,
+            last_seen_at: isOffline ? Date.now() - 20 * 60_000 : null,
+            created_at: null,
+            sponsored_by: null,
+          };
+        }),
+        ...newcomers,
+      ],
     }),
-    [teamName, present, away, idle, stale, offlineSet, dndSet],
+    [teamName, present, away, idle, stale, offlineSet, dndSet, newcomers],
   );
   const dataRef = useRef(buildData);
   // Synced in an effect, not during render — see OfficeScene: the mount effect subscribes once and
@@ -599,6 +610,55 @@ function OfficePreviewPage() {
   }, [buildData]);
 
   const fire = (ev: OfficeEvent) => handleRef.current?.emit(ev);
+
+  /** A newcomer as the server creates one: offline, never connected, created just now. */
+  const newcomer = (name: string, kind: 'agent' | 'human'): OfficeNode => {
+    const hue = Math.floor(Math.random() * 360);
+    return {
+      name,
+      kind,
+      service: false,
+      presence: 'offline',
+      activity: 'offline',
+      posture: 'offline',
+      state: null,
+      color: memberColor(name, kind, hue),
+      hue,
+      role: '',
+      surface: null,
+      model: null,
+      workTitle: null,
+      workSource: null,
+      laneState: null,
+      moreLanes: 0,
+      dnd: false,
+      offline_reason: 'unknown',
+      last_seen_at: null,
+      created_at: Date.now(),
+      sponsored_by: kind === 'agent' ? 'nick' : null,
+      woken: false,
+    };
+  };
+  const connected = (n: OfficeNode): OfficeNode => ({
+    ...n,
+    presence: 'online',
+    activity: 'working',
+    posture: 'working',
+    offline_reason: null,
+    surface: n.kind === 'agent' ? 'claude-code' : 'web',
+    last_seen_at: Date.now(),
+  });
+  /** Add Members; `connectAfterMs` null leaves them offline (Act 1 only), 0 adds them already online. */
+  const welcome = (names: string[], kind: 'agent' | 'human', connectAfterMs: number | null) => {
+    const fresh = names.map((n) => newcomer(n, kind));
+    setNewcomers((cur) => [...cur, ...(connectAfterMs === 0 ? fresh.map(connected) : fresh)]);
+    if (connectAfterMs)
+      setTimeout(
+        () => setNewcomers((cur) => cur.map((n) => (names.includes(n.name) ? connected(n) : n))),
+        connectAfterMs,
+      );
+  };
+  const stamp = () => Date.now().toString(36).slice(-3);
   const captionAt = useRef(0);
   const toggle = (set: Set<string>, name: string): Set<string> => {
     const next = new Set(set);
@@ -680,6 +740,40 @@ function OfficePreviewPage() {
           }}
         >
           💬
+        </button>
+        <button
+          className="lc__pbtn"
+          title="Welcome Wagon: a human is added, then connects 7 s later"
+          onClick={() => welcome([`ada-${stamp()}`], 'human', 7_000)}
+        >
+          🎀
+        </button>
+        <button
+          className="lc__pbtn"
+          title="Welcome Wagon: an agent is added (sponsored by nick), then connects 7 s later"
+          onClick={() => welcome([`bot-${stamp()}`], 'agent', 7_000)}
+        >
+          🤖
+        </button>
+        <button
+          className="lc__pbtn"
+          title="Welcome Wagon: 14 demo guests join at once, already connected"
+          onClick={() =>
+            welcome(
+              Array.from({ length: 14 }, (_, i) => `guest-${stamp()}${i}`),
+              'human',
+              0,
+            )
+          }
+        >
+          🎉
+        </button>
+        <button
+          className="lc__pbtn"
+          title="Welcome Wagon: a human is added and never connects (Act 1 only — the polaroid when desks are full)"
+          onClick={() => welcome([`lin-${stamp()}`], 'human', null)}
+        >
+          🏷️
         </button>
         <button
           className="lc__pbtn"

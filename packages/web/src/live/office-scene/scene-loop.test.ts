@@ -113,3 +113,15 @@ describe('the Welcome Wagon is plumbed in', () => {
     expect(index.slice(at, index.indexOf('\n    },', at))).toContain('clearInterval(wagonTimer)');
   });
 });
+
+describe('the welcome reads where people ARE, not the baked frame (lane 01M3F81DD9)', () => {
+  it('its confetti and wave ports locate the newcomer from the live pose', () => {
+    // `heads` is refreshed by bake(), which ran when the newcomer was at the door — so a burst or a
+    // wave anchored on it lands at the entrance (found on the office-preview harness, 2026-09-26).
+    expect(index).toMatch(/function liveHead\(/);
+    const at = index.indexOf('const welcomeRoom = createWelcomeRoom(');
+    const ports = index.slice(at, index.indexOf('{ reduced, still: STILL }', at));
+    expect(ports).toMatch(/confetti: [^\n]*liveHead\(/);
+    expect(ports).toMatch(/wave: [\s\S]*?liveHead\(/);
+  });
+});

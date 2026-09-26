@@ -45,6 +45,12 @@ export const WAVE_MS = 2_000;
 export const CROWD_MIN = 3;
 /** The receptionist's conveyor cadence in a crowd, seconds. */
 export const TOSS_GAP_S = 0.6;
+/**
+ * How long a ready wave waits out real choreography before it starts anyway, ms. A team as chatty as
+ * the one this was built on always has an act walk somewhere; "wait for a quiet room" alone meant the
+ * welcome never played there (found on the office-preview harness, 2026-09-26).
+ */
+export const MAX_WAIT_MS = 4_000;
 /** Past this many queued arrivals, everything pending plays as one wave. */
 export const BACKLOG_MAX = 6;
 /** A gated beat (toss at the mark, confetti at the seat) gives up after this long, seconds. */
@@ -245,9 +251,10 @@ function takeWave(s: WelcomeWagonState): Pending[] {
 export function stepWelcomeWagon(s: WelcomeWagonState, now: number, d: WagonDeps): WelcomeBeat[] {
   if (s.playing && (now - s.playing.lastStepAt) / 1000 > STALE_S) s.playing = null;
   if (!s.playing) {
-    if (s.pending.length === 0 || d.busy) return [];
-    const ready = s.pending.length > BACKLOG_MAX || now - s.pending[0]!.at >= WAVE_MS;
-    if (!ready) return [];
+    if (s.pending.length === 0) return [];
+    const waited = now - s.pending[0]!.at;
+    const ready = s.pending.length > BACKLOG_MAX || waited >= WAVE_MS;
+    if (!ready || (d.busy && waited < WAVE_MS + MAX_WAIT_MS)) return [];
     s.playing = { startedAt: now, lastStepAt: now, cues: scriptFor(takeWave(s), s, d) };
   }
   const seq = s.playing;

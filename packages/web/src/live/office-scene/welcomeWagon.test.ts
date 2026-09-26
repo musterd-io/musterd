@@ -3,6 +3,7 @@ import type { Arrival } from './arrivals';
 import {
   BACKLOG_MAX,
   createWelcomeWagon,
+  MAX_WAIT_MS,
   enqueueArrivals,
   stepWelcomeWagon,
   welcomePlaying,
@@ -193,6 +194,14 @@ describe('welcomeWagon — guards', () => {
     enqueueArrivals(s, [a('ada')], 0);
     expect(run(s, WAVE_MS, WAVE_MS + 3_000, deps({ busy: true }))).toEqual([]);
     expect(types(run(s, WAVE_MS + 3_050, WAVE_MS + 8_000))[0]).toBe('ring');
+  });
+
+  it('a room that is never quiet cannot starve a welcome — after MAX_WAIT_MS it starts anyway', () => {
+    const s = createWelcomeWagon();
+    enqueueArrivals(s, [a('ada')], 0);
+    const busy = deps({ busy: true });
+    expect(run(s, WAVE_MS, WAVE_MS + MAX_WAIT_MS - 100, busy)).toEqual([]);
+    expect(types(run(s, WAVE_MS + MAX_WAIT_MS, WAVE_MS + MAX_WAIT_MS + 5_000, busy))[0]).toBe('ring');
   });
 
   it('once started, busy does not stop it', () => {

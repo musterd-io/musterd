@@ -32,6 +32,7 @@ import {
   petWagon,
   petZoomies,
   PET_DASH,
+  PET_ERRAND_SPEED,
   PET_SPEED,
   MIN_FACE,
   stepPet,
@@ -528,5 +529,17 @@ describe('the welcome errand outranks everything else the dog does (lane 01M3F81
     expect(petZoomies(pet, lcg(4))).toBe(false);
     expect(pet.path.at(-1)).toEqual(dest);
     expect(pet.errand?.stage).toBe('fetch');
+  });
+});
+
+describe('the welcome errand runs at an eager trot (lane 01M3F81DD9)', () => {
+  it('both legs travel at PET_ERRAND_SPEED — an amble made the wagon miss its moment', () => {
+    const pet = createPet(lcg(3));
+    expect(petWagon(pet, WAGON_PICKUP, COFFEE_STAND)).toBe(true);
+    expect(pet.speed).toBe(PET_ERRAND_SPEED);
+    for (let t = 0; t < 60 && pet.errand?.stage !== 'deliver'; t += 1 / 30) stepPet(pet, 1 / 30);
+    expect(pet.errand?.stage).toBe('deliver');
+    expect(pet.speed).toBe(PET_ERRAND_SPEED);
+    expect(PET_ERRAND_SPEED).toBeGreaterThan(PET_SPEED * 2);
   });
 });

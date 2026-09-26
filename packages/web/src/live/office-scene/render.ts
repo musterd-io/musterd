@@ -5077,56 +5077,70 @@ function drawLabelStrip(ctx: CanvasRenderingContext2D, fit: Fit, color: string, 
 }
 
 /**
- * The wall board's new-arrivals corner and the crowd's flip counter (lane 01M3F81DD9): polaroids pinned
- * just right of the board, the counter hung beneath it. Screen-space at the board's anchor, so they
- * cannot drift from the board they belong to.
+ * Where the new-arrivals corner and the flip counter hang, in screen space (lane 01M3F81DD9): pinned on
+ * the wall UNDER the lane board — polaroids along its left end, the counter under its right end. Laid
+ * out in wall coordinates (`wallPt`), because the board sits at the right wall's far end: "just right
+ * of the board" is thin air, which is where the first cut hung them (office-preview harness, 2026-09-26).
  */
+export function wallArrivalSpots(fit: Fit, n: number): { polaroids: Pt[]; counter: Pt } {
+  const { tc, uc, w: W, h: H } = WALL_BOARD;
+  const edge = WALL_EDGES[WALL_BOARD.wall]!;
+  const u = uc - H / 2 / WALL_H - 12 / WALL_H; // a hand's width under the board's bottom edge
+  const left = tc - W / 2 / FLOOR;
+  const polaroids: Pt[] = [];
+  for (let i = 0; i < n; i++) polaroids.push(wallPt(edge, left + (14 + i * 26) / FLOOR, u, fit));
+  const counter = wallPt(edge, tc + W / 2 / FLOOR - 30 / FLOOR, u, fit);
+  return { polaroids, counter };
+}
+
+/** The wall board's new-arrivals polaroids and the crowd's flip counter, at `wallArrivalSpots`. */
 function drawWallArrivals(ctx: CanvasRenderingContext2D, fit: Fit, w: WelcomePaint, t: number): void {
   if (w.polaroids.length === 0 && !w.counter) return;
-  const b = boardAnchor(fit);
   const s = fit.scale;
+  const spots = wallArrivalSpots(fit, w.polaroids.length);
   w.polaroids.forEach((p, i) => {
-    const x = b.x + b.w + (8 + i * 22) * s;
-    const y = b.y + (6 + (i % 2) * 5) * s;
+    const at = spots.polaroids[i]!;
     const tilt = ((seedOf(p.name) % 9) - 4) * (Math.PI / 180);
+    const cw = 20 * s;
     ctx.save();
-    ctx.translate(x, y);
+    ctx.translate(at.x, at.y);
     ctx.rotate(tilt);
     ctx.fillStyle = POLAROID_WHITE;
-    ctx.fillRect(0, 0, 18 * s, 21 * s);
+    ctx.fillRect(-cw / 2, 0, cw, 24 * s);
     ctx.fillStyle = p.color; // the photo: their colour, which is how the room knows them
-    ctx.fillRect(2 * s, 2 * s, 14 * s, 12 * s);
+    ctx.fillRect(-cw / 2 + 2 * s, 2 * s, cw - 4 * s, 14 * s);
     ctx.fillStyle = '#3f3a33';
-    ctx.font = canvasFont(Math.max(6, Math.round(6.5 * s * 1.6)));
+    ctx.font = canvasFont(Math.max(5, Math.round(6 * s * 1.4)));
     ctx.textAlign = 'center';
-    ctx.fillText(plateText(p.name), 9 * s, 19.5 * s);
-    ctx.restore();
+    ctx.fillText(plateText(p.name), 0, 21.5 * s, cw - 2 * s); // squeezed to the card, never past it
     ctx.fillStyle = '#b3261e';
     ctx.beginPath();
-    ctx.arc(x + 9 * s, y + 1 * s, 1.6 * s, 0, Math.PI * 2); // the pin
+    ctx.arc(0, 1 * s, 1.6 * s, 0, Math.PI * 2); // the pin
     ctx.fill();
+    ctx.restore();
   });
   if (w.counter) {
     const digits = counterDigits(w.counter.value);
     const flip = Math.max(0, 1 - (t - w.counter.flippedAt) / FLIP_S);
-    const cw = 13 * s;
-    const ch = 17 * s;
-    const x0 = b.x + b.w / 2 - (digits.length * (cw + 2 * s)) / 2;
-    const y0 = b.y + b.h + 6 * s;
+    const cw = 11 * s;
+    const ch = 15 * s;
+    const total = digits.length * (cw + 2 * s) - 2 * s;
+    const x0 = spots.counter.x - total / 2;
+    const y0 = spots.counter.y;
     for (let i = 0; i < digits.length; i++) {
       const x = x0 + i * (cw + 2 * s);
       roundRect(ctx, x, y0, cw, ch, 2 * s, '#26221e');
       ctx.fillStyle = '#3a342e'; // the top flap — squashed while it falls, which reads as the flip
       ctx.fillRect(x, y0 + (ch / 2) * flip, cw, (ch / 2) * (1 - flip));
       ctx.fillStyle = '#f4efe6';
-      ctx.font = canvasFont(Math.round(12 * s * 1.3), '--font-mono', 700);
+      ctx.font = canvasFont(Math.round(11 * s * 1.3), '--font-mono', 700);
       ctx.textAlign = 'center';
       ctx.fillText(digits[i]!, x + cw / 2, y0 + ch * 0.74);
     }
     ctx.fillStyle = '#5b544c';
-    ctx.font = canvasFont(Math.max(6, Math.round(7 * s * 1.5)));
+    ctx.font = canvasFont(Math.max(5, Math.round(6 * s * 1.4)));
     ctx.textAlign = 'center';
-    ctx.fillText('guests', b.x + b.w / 2, y0 + ch + 9 * s);
+    ctx.fillText('guests', spots.counter.x, y0 + ch + 8 * s);
   }
 }
 
@@ -5148,7 +5162,8 @@ function drawTosses(
     const k = (t - toss.t0) / TOSS_S;
     if (k < 0 || k >= 1) continue;
     const head = heads.get(toss.name);
-    const end = head ? { x: head.x, y: head.y + 40 * s } : { x: start.x + 60 * s, y: start.y + 20 * s };
+    // `heads` is the plate anchor above the crown; the chest is ~52 units below it.
+    const end = head ? { x: head.x, y: head.y + 52 * s } : { x: start.x + 60 * s, y: start.y + 20 * s };
     const e = 1 - (1 - k) * (1 - k); // eases out as it lands
     const x = start.x + (end.x - start.x) * e;
     const y = start.y + (end.y - start.y) * e - Math.sin(k * Math.PI) * 38 * s; // the arc

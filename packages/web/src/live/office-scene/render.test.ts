@@ -11,6 +11,8 @@ import type { ReceptionistState } from './receptionist';
 import { GESTURE } from './skeleton';
 import {
   BOOT_LED,
+  wallArrivalSpots,
+  drawActor,
   receptionistPose,
   confettiColor,
   counterDigits,
@@ -1650,6 +1652,44 @@ describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
     expect(receptionistPose(r('ringing'))).toMatchObject({ gesture: GESTURE.call, carry: 'phone' });
     expect(receptionistPose(r('label'))).toMatchObject({ typing: true, carry: null });
     expect(receptionistPose(r('idle')).gesture).toBe(0);
+  });
+
+  it('paints the first-day moving box when a member carries it', () => {
+    const member = node('ada', 'working');
+    const members = new Map([[member.name, member]]);
+    const placements = assignSeats([member]);
+    const home = homePoses(placements, members).get('ada')!;
+    const standing = { ...home, dir: 'S' as const, heading: Math.PI / 2, sit: 0 };
+    const carrying: string[] = [];
+    drawActor(recCtx(carrying), fit, { ...standing, carry: 'movingBox' }, member, 1);
+    expect(carrying).toContain('#c9a26b'); // the kraft cardboard
+    const empty: string[] = [];
+    drawActor(recCtx(empty), fit, { ...standing, carry: null }, member, 1);
+    expect(empty).not.toContain('#c9a26b');
+  });
+
+  it('shows the lanyard cord from behind too — newcomers walk away from the camera to their desks', () => {
+    const member = node('ada', 'working');
+    const members = new Map([[member.name, member]]);
+    const placements = assignSeats([member]);
+    const home = homePoses(placements, members).get('ada')!;
+    const away = { ...home, dir: 'N' as const, heading: -Math.PI / 2, sit: 0 };
+    const paints: string[] = [];
+    drawActor(recCtx(paints), fit, away, member, 1, false, undefined, 'hsl(55, 68%, 62%)');
+    expect(paints).toContain('hsl(55, 68%, 62%)');
+  });
+
+  it('hangs the polaroids and the counter ON the wall, under the board — never past the wall’s end', () => {
+    for (const f of [fitFloor(1200, 900), fitFloor(1400, 648), fitFloor(700, 500)]) {
+      const board = boardAnchor(f);
+      const wallEnd = project(900, 0, f).x; // the right wall's far end (FLOOR, ly 0)
+      const spots = wallArrivalSpots(f, 3);
+      for (const p of [...spots.polaroids, spots.counter]) {
+        expect(p.x).toBeGreaterThan(board.x - 1);
+        expect(p.x).toBeLessThan(Math.min(board.x + board.w, wallEnd));
+        expect(p.y).toBeGreaterThan(board.y + board.h * 0.5); // under the board, not beside it
+      }
+    }
   });
 
   it('a spent welcome paints nothing of itself', () => {

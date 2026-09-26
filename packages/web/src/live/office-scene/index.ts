@@ -420,6 +420,17 @@ export function mountOffice(
       : (actors.poses().get(at.name) ?? ENTRANCE);
     return screenPan(project(p.lx, p.ly, fit).x, width);
   };
+  /**
+   * Where `name`'s head is RIGHT NOW. `heads` is refreshed by bake(), which last ran when a newcomer
+   * was standing at the door — a burst or a wave anchored on it landed at the entrance. Same formula
+   * as render.ts's head anchor, read off the live pose.
+   */
+  function liveHead(name: string): Pt | null {
+    const pose = actors.poses().get(name);
+    if (!pose) return heads.get(name) ?? null;
+    const b = project(pose.lx, pose.ly, fit);
+    return { x: b.x, y: b.y - (pose.small ? 90 : 116 - pose.sit * 22) * fit.scale };
+  }
   /** Where the dog parks the wagon: the open aisle behind a desk's chair (nav.test pins it walkable). */
   const deskDrop = (name: string): { lx: number; ly: number } | null => {
     const pl = placements.get(name);
@@ -448,12 +459,12 @@ export function mountOffice(
       zoomies: () => void petZoomies(pet),
       wave: (n) => {
         // The three nearest teammates who are free to look up wave; the nearest of them says so.
-        const waved = nearestNeighbors(n, 3).filter((m) => actors.welcomeWave(m));
+        const waved = nearestNeighbors(n, 3, liveHead(n)).filter((m) => actors.welcomeWave(m));
         if (waved[0]) showSpeech(waved[0], '👋', 'info');
         const drop = deskDrop(n);
         if (drop) petFollow(pet, drop); // the dog trots over to meet them at their desk
       },
-      confetti: (n, color) => pushConfetti(n, color ?? undefined), // a crowd's burst keeps the palette
+      confetti: (n, color) => pushConfetti(n, color ?? undefined, liveHead(n)), // a crowd keeps the palette
       door: (hue) => pushDoorCue(hue === null ? undefined : `hsl(${hue}, 70%, 72%)`),
       caption: (text, who) => pushRail({ text, who, tone: 'presence' }),
       sound: (m, at) => roomTone.moment(m, soundAt(at)),
@@ -1936,8 +1947,8 @@ export function mountOffice(
   }
 
   /** The acceptance celebration burst — a one-shot confetti puff over a member's head. */
-  function pushConfetti(name: string, tint?: string) {
-    const at = heads.get(name);
+  function pushConfetti(name: string, tint?: string, from?: Pt | null) {
+    const at = from ?? heads.get(name);
     if (!at) return;
     cues.push({
       at: { x: at.x, y: at.y },
@@ -1952,8 +1963,8 @@ export function mountOffice(
 
   /** The `count` nearest drawn members to `name` (excluding them) within one pod's reach — the desk
    * neighbors who plausibly noticed. Head positions are already screen-space, so plain distance works. */
-  function nearestNeighbors(name: string, count: number): string[] {
-    const at = heads.get(name);
+  function nearestNeighbors(name: string, count: number, from?: Pt | null): string[] {
+    const at = from ?? heads.get(name);
     if (!at) return [];
     return [...heads.entries()]
       .filter(([n]) => n !== name)

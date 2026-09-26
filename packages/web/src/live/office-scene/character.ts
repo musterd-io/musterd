@@ -635,16 +635,27 @@ const LANYARD_CARD = '#f7f3ea';
 
 /**
  * The first arrival's lanyard (lane 01M3F81DD9): a cord in their colour from the neck down to a small
- * card on the chest. Only on the side facing the camera — seen from behind, a lanyard is just a cord at
- * the neck, and a card painted through the back reads as a hole in the shirt.
+ * card on the chest. Seen from behind it is just the cord round the back of the neck — a card painted
+ * through the back would read as a hole in the shirt.
  */
 function drawLanyard(ctx: CanvasRenderingContext2D, px: (j: V3) => Proj, k: Skel, u: number, color: string): void {
   const front = px({ x: 0, y: k.chest.y + 2, z: k.chest.z + 7 });
-  if (front.d <= px(k.chest).d) return; // facing away
-  const l = px({ x: -4, y: k.neck.y, z: k.neck.z + 3 });
-  const r = px({ x: 4, y: k.neck.y, z: k.neck.z + 3 });
   ctx.strokeStyle = color;
   ctx.lineWidth = Math.max(1, 1.6 * u);
+  if (front.d <= px(k.chest).d) {
+    // Facing away — which is most of a newcomer's walk, since the desks are up-screen. The cord still
+    // shows round the back of the neck, a line of their colour that says who just got their badge.
+    const l = px({ x: -5, y: k.neck.y - 1, z: k.neck.z - 2 });
+    const back = px({ x: 0, y: k.neck.y - 4, z: k.neck.z - 5 });
+    const r = px({ x: 5, y: k.neck.y - 1, z: k.neck.z - 2 });
+    ctx.beginPath();
+    ctx.moveTo(l.p.x, l.p.y);
+    ctx.quadraticCurveTo(back.p.x, back.p.y, r.p.x, r.p.y);
+    ctx.stroke();
+    return;
+  }
+  const l = px({ x: -4, y: k.neck.y, z: k.neck.z + 3 });
+  const r = px({ x: 4, y: k.neck.y, z: k.neck.z + 3 });
   ctx.beginPath();
   ctx.moveTo(l.p.x, l.p.y);
   ctx.lineTo(front.p.x, front.p.y);

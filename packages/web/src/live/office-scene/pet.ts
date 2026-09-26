@@ -111,6 +111,12 @@ export const PET_SPEED = 55;
 /** Zoomies pace. Fast enough to read as a tear around the room, not so fast it teleports. */
 export const PET_DASH = 165;
 /**
+ * The welcome errand's pace (lane 01M3F81DD9): an eager trot, between the amble and the zoomies. At
+ * PET_SPEED the dog took most of a welcome just to reach the counter and the wagon arrived long after
+ * its moment (measured on the office-preview harness); a dog with a job to do hurries anyway.
+ */
+export const PET_ERRAND_SPEED = 130;
+/**
  * One full gait cycle per this much ground covered.
  *
  * **This number and the painter's foot reach are one measurement, not two.** A paw is planted for
@@ -480,6 +486,7 @@ function startErrand(pet: PetState, pickup: P, drop: P, load: 'wagon' | 'polaroi
   pet.sitFor = 4;
   // minTrip 0: the dog may already be lying by the counter, and the errand must still run.
   if (!setOff(pet, pickup, 'sit-then-nap', 0)) return false;
+  pet.speed = PET_ERRAND_SPEED; // both legs — the deliver leg keeps it (stepPet only swaps the path)
   pet.errand = { stage: 'fetch', drop, load };
   pet.cargo = 'none';
   return true;
