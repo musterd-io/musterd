@@ -356,8 +356,11 @@ describe('GET /report/trace (ADR 445 increment 4) — ADR 128 scoping', () => {
         sessions: 2,
         sessions_with_r2: 1,
         post_tool_use: 2,
+        // nick's session carries no R2 rail, so only Ada's hook call is in the ratio — the very
+        // mismatch that read 124% on the live team before post_tool_use_r2 existed
+        post_tool_use_r2: 1,
         r2_tool_uses: 2,
-        coverage: 1,
+        coverage: 0.5,
       },
     ]);
     const own = await get('/teams/dawn/report/trace', {

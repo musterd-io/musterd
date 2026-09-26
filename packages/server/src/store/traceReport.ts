@@ -70,12 +70,19 @@ export function deriveTraceReport(
       sessions: 0,
       sessions_with_r2: 0,
       post_tool_use: 0,
+      post_tool_use_r2: 0,
       r2_tool_uses: 0,
       coverage: null,
     };
     row.sessions++;
-    if (s.has_r2) row.sessions_with_r2++;
     row.post_tool_use += s.post;
+    // The ratio compares like with like: hook calls from the sessions the transcript rail also
+    // covers. Counting every session's hook calls over only the R2-bearing sessions' transcript
+    // calls read 124% on the live team (8 sessions, 2 with R2) — a number that meant nothing.
+    if (s.has_r2) {
+      row.sessions_with_r2++;
+      row.post_tool_use_r2 += s.post;
+    }
     cov.set(s.harness, row);
   }
   const parsedUsage = usage.map((u) => {
@@ -92,7 +99,7 @@ export function deriveTraceReport(
     if (row) row.r2_tool_uses += num(u.d['tool_uses']);
   }
   for (const row of cov.values()) {
-    row.coverage = row.r2_tool_uses > 0 ? row.post_tool_use / row.r2_tool_uses : null;
+    row.coverage = row.r2_tool_uses > 0 ? row.post_tool_use_r2 / row.r2_tool_uses : null;
   }
 
   // ── tool mix ──
