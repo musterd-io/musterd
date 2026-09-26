@@ -89,7 +89,8 @@ member. Semantics:
 
 `team_agent_create`'s response carries no secret. It returns the agent's name and a **one-time
 connect URL** (`/join/:team/agent#<nonce>` — a nonce may ride a URL, ADR 170): the sponsor opens
-it on (or sends it to) the device that will run the agent. That device's harness adds the same
+it on (or sends it to) the device that will run the agent. _(Amended 2026-09-26: ADR 456 makes who
+may issue this link a team policy, `'sponsor'` by default. See the note in Consequences.)_ That device's harness adds the same
 `/mcp/:team` connector; at the OAuth authorize step the nonce redeems as the authorization —
 consent was given by the sponsor at create time — and the token endpoint mints an `msat_`/`msrt_`
 chain **bound to the agent seat**. This is a sponsor-authorized exception to ADR 446 §6's refusal
@@ -154,6 +155,12 @@ invite shares one join page per team, and the fragment key dispatches (`n=` agen
 human invite; fifty, `01M3DJZ78F`). Either way the nonce rides the fragment and reaches the server
 only in the sign-in POST body. The Decision's substance (single-use, hashed, 15 minutes,
 sponsor-authorized) is unchanged.
+
+2026-09-26 — [ADR 456](456-team-agents-connect-authority.md) amends §4. Sponsorship stays
+accountability (the inherited expiry, the cap, the cascade), but who may issue an agent's connect link
+is now the team policy `agent_connect`. Under `'sponsor'` (the default) that is the sponsor or an
+admin. Under `'any_member'` it is any human member in good standing. The member who connected a
+device bounds that session.
 
 ## Observability & Evaluation
 
