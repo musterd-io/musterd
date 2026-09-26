@@ -637,7 +637,13 @@ describe('/mcp/:team — the Done line (ADR 446 §7)', () => {
 
     const list = await mcpCall(pair.access_token, 'tools/list', {}, 2);
     const names = list.json.result.tools.map((t: any) => t.name).sort();
-    expect(names).toEqual(['team_agent_create', 'team_inbox_check', 'team_join', 'team_send']);
+    expect(names).toEqual([
+      'team_agent_connect',
+      'team_agent_create',
+      'team_inbox_check',
+      'team_join',
+      'team_send',
+    ]);
 
     const join = await mcpCall(
       pair.access_token,
@@ -1134,5 +1140,135 @@ describe('agent seats over OAuth via the sponsor nonce (ADR 452)', () => {
     const res = await authorizeAgent(nickCred + 'x'.repeat(20));
     expect(res.authz.status).toBe(400);
     expect(audits('member.agent_connect_refused')).toHaveLength(0);
+  });
+
+  // ── ADR 456: team agents — who may connect, and the connector bounds the session ──
+
+  async function setAgentConnect(value: 'sponsor' | 'any_member') {
+    const r = await postJson(
+      '/teams/dawn/policy',
+      { agent_connect: value },
+      { authorization: `Bearer ${nickCred}` },
+    );
+    expect(r.status).toBe(200);
+  }
+
+  function directedTo(name: string): { from: string; body: string }[] {
+    return server.db
+      .prepare(
+        `SELECT f.name AS "from", m.body AS body FROM messages m
+           JOIN members f ON f.id = m.from_member JOIN members t ON t.id = m.to_member
+          WHERE t.name = ? AND m.to_kind = 'member'`,
+      )
+      .all(name) as { from: string; body: string }[];
+  }
+
+  it("under 'sponsor' (the default) a teammate is refused a link; the sponsor and an admin get one", async () => {
+    const dana = await human('dana');
+    await createAgent(dana, 'dana-scout');
+    await createAgent(nickCred, 'nick-scout');
+    const refused = await postJson(
+      '/teams/dawn/members/agents/nick-scout/connect',
+      {},
+      { authorization: `Bearer ${dana}` },
+    );
+    expect(refused.status).toBe(403);
+    expect(refused.json.error.message).toMatch(/only an agent's sponsor or an admin/);
+    // nick is the team's admin: he may connect dana's agent even under 'sponsor'.
+    const byAdmin = await postJson(
+      '/teams/dawn/members/agents/dana-scout/connect',
+      {},
+      { authorization: `Bearer ${nickCred}` },
+    );
+    expect(byAdmin.status).toBe(200);
+    const bySponsor = await postJson(
+      '/teams/dawn/members/agents/dana-scout/connect',
+      {},
+      { authorization: `Bearer ${dana}` },
+    );
+    expect(bySponsor.status).toBe(200);
+  });
+
+  it("under 'any_member' a teammate connects, and a takeover tells the sponsor and the displaced connector", async () => {
+    await setAgentConnect('any_member');
+    const dana = await human('dana');
+    const eve = await human('eve');
+    await createAgent(nickCred, 'nick-scout');
+    const first = await connect(await reissue(dana, 'nick-scout'));
+    expect(await joinedAs(first.pair.access_token)).toContain('nick-scout');
+    await connect(await reissue(eve, 'nick-scout'));
+    // The displaced device is out; the sponsor and the previous connector each hear it from eve.
+    expect((await mcpCall(first.pair.access_token, 'tools/list', {}, 5)).status).toBe(401);
+    for (const who of ['nick', 'dana']) {
+      const notes = directedTo(who).filter((m) => m.from === 'eve');
+      expect(notes, who).toHaveLength(1);
+      expect(notes[0]!.body).toMatch(/connected nick-scout/);
+    }
+    expect(directedTo('eve')).toHaveLength(0);
+    const connected = audits('member.agent_connected').map((r) => r.actor);
+    expect(connected.sort()).toEqual(['dana', 'eve']);
+  });
+
+  it('removing the member who connected a device stops it, though the agent and its sponsor are fine', async () => {
+    await setAgentConnect('any_member');
+    const dana = await human('dana');
+    await createAgent(nickCred, 'nick-scout');
+    const { pair, client_id } = await connect(await reissue(dana, 'nick-scout'));
+    expect(await joinedAs(pair.access_token)).toContain('nick-scout');
+    const removed = await postJson(
+      '/teams/dawn/members/dana/remove',
+      {},
+      { authorization: `Bearer ${nickCred}` },
+    );
+    expect(removed.status).toBe(200);
+    expect((await mcpCall(pair.access_token, 'tools/list', {}, 6)).status).toBe(401);
+    const refresh = await postForm('/oauth/dawn/token', {
+      grant_type: 'refresh_token',
+      refresh_token: pair.refresh_token,
+      client_id,
+    });
+    expect(refresh.status).toBe(400);
+    // The sponsor's own connect still works: nothing about the agent itself was touched.
+    const again = await connect(await reissue(nickCred, 'nick-scout'));
+    expect(await joinedAs(again.pair.access_token)).toContain('nick-scout');
+  });
+
+  it('an agent is refused a link under either policy', async () => {
+    const { pair } = await connect(await createAgent(nickCred, 'nick-scout'));
+    for (const policy of ['sponsor', 'any_member'] as const) {
+      await setAgentConnect(policy);
+      const r = await postJson(
+        '/teams/dawn/members/agents/nick-scout/connect',
+        {},
+        { authorization: `Bearer ${pair.access_token}` },
+      );
+      expect(r.status, policy).toBe(403);
+    }
+  });
+
+  it('team_agent_connect on /mcp hands a teammate the link under any_member, and refuses under sponsor', async () => {
+    const dana = await human('dana');
+    await createAgent(nickCred, 'nick-scout');
+    const { pair } = await signInPair(dana, 'dana');
+    await mcpCall(pair.access_token, 'initialize', {
+      protocolVersion: '2025-06-18',
+      capabilities: {},
+      clientInfo: { name: 'phone', version: '0' },
+    });
+    const call = () =>
+      mcpCall(
+        pair.access_token,
+        'tools/call',
+        { name: 'team_agent_connect', arguments: { name: 'nick-scout' } },
+        7,
+      );
+    const refused = await call();
+    expect(refused.json.result.isError).toBe(true);
+    expect(refused.json.result.content[0].text).toMatch(/sponsor or an admin/);
+    await setAgentConnect('any_member');
+    const ok = await call();
+    expect(ok.json.result.isError).toBeUndefined();
+    expect(ok.json.result.content[0].text).toMatch(/\/join\/dawn#n=[A-Za-z0-9_-]{43}/);
+    expect(ok.json.result.content[0].text).not.toMatch(/ms(cr|ac|at|kd)_/);
   });
 });

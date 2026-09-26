@@ -14,7 +14,7 @@ import { listInbox } from '../store/messages.js';
 import { touchAmbientPresence } from '../store/presence.js';
 import { requireTeam } from '../store/teams.js';
 import { isTlsPeer, requireTeamRedacted } from './oauth.js';
-import { mintSponsoredAgent, originFrom } from './sponsoredAgentMint.js';
+import { issueAgentConnect, mintSponsoredAgent, originFrom } from './sponsoredAgentMint.js';
 
 /**
  * The remote-MCP rail (ADR 446 §1): the musterd adapter served as Streamable HTTP at
@@ -130,6 +130,8 @@ const TeamSendInput = z.object({
   meta: z.record(z.string(), z.unknown()).optional(),
 });
 
+const TeamAgentConnectInput = z.object({ name: z.string().min(1).max(64) });
+
 const TeamAgentCreateInput = z.object({
   name: z.string().min(1).max(64),
   role: z.string().max(64).optional(),
@@ -152,7 +154,7 @@ function buildRemoteServer(ctx: Ctx, webReq: Request): McpServer {
       instructions:
         `You are joined to the musterd team "${slug}" as ${memberName} over a phone connector. ` +
         `Call team_join first, then team_inbox_check; send with team_send. ` +
-        `team_agent_create adds an agent you sponsor.`,
+        `team_agent_create adds an agent you sponsor; team_agent_connect starts a team agent.`,
     },
   );
 
@@ -253,6 +255,42 @@ function buildRemoteServer(ctx: Ctx, webReq: Request): McpServer {
           `Created agent "${minted.member.name}" on ${slug}, sponsored by you.\n` +
             `Open this link on the device that will run it (expires in 15 minutes, works once):\n` +
             `${minted.connect_url}`,
+        );
+      } catch (err) {
+        return toolError(asMusterdError(err).message);
+      }
+    },
+  );
+
+  // ADR 456 §2: a teammate starts a team agent from their phone — the same issue path as
+  // `POST …/members/agents/:name/connect`, gated by the team's `agent_connect` policy.
+  server.registerTool(
+    'team_agent_connect',
+    {
+      description:
+        "Get a one-time connect link (15 minutes) for one of the team's member-created agents, to open " +
+        'on the device that will run it. Connecting takes the agent over from whatever device ' +
+        "held it; the agent's sponsor is told. Who may is team policy.",
+      inputSchema: asMcpSchema(TeamAgentConnectInput, {
+        type: 'object',
+        required: ['name'],
+        properties: { name: { type: 'string', description: "the agent's member name" } },
+      }),
+    },
+    async (rawArgs: unknown) => {
+      const parsed = TeamAgentConnectInput.safeParse(rawArgs ?? {});
+      if (!parsed.success) return toolError('invalid input: name');
+      const caller = getMemberByName(ctx.db, team.id, memberName);
+      if (!caller) return toolError('seat is gone — sign in again');
+      try {
+        const origin = originFrom(
+          webReq.headers.get('host'),
+          webReq.headers.get('x-forwarded-proto'),
+        );
+        const issued = issueAgentConnect(ctx, team, caller, parsed.data.name, origin);
+        return textResult(
+          `Connect link for "${issued.member}" (expires in 15 minutes, works once):\n` +
+            `${issued.connect_url}`,
         );
       } catch (err) {
         return toolError(asMusterdError(err).message);

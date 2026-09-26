@@ -5,20 +5,24 @@ import {
   OAuthAuthorizeQuerySchema,
   OAuthClientRegistrationRequestSchema,
   OAuthTokenRequestSchema,
+  makeEnvelope,
   type OAuthAuthorizationServerMetadata,
   type OAuthProtectedResourceMetadata,
 } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
+import { ulid } from 'ulid';
 import { z } from 'zod';
 import { isLocalPeer } from '../config.js';
 import type { Ctx } from '../context.js';
 import { asMusterdError, MusterdError } from '../errors.js';
+import { routeEnvelope } from '../protocol/route.js';
 import { appendAudit } from '../store/audit.js';
 import { checkInvite, consumeInvite } from '../store/invites.js';
 import { addMember, authMember, getMemberByName, memberStandingRefusal } from '../store/members.js';
 import {
   burnUnexchangedCodes,
   chainMember,
+  connectorRefusal,
   getClient,
   issueCode,
   mintTokenPair,
@@ -620,9 +624,11 @@ export async function handleOAuthRoutes(
       const codeChallenge = body.code_challenge;
       const scope = body.scope;
       const outcome = ctx.db.transaction(
-        (): { err: MusterdError } | { agent: MemberRow; code: string } => {
-          const agent = nonce ? redeemAgentConnectNonce(ctx.db, team.id, nonce) : null;
-          if (!agent) {
+        ():
+          | { err: MusterdError }
+          | { agent: MemberRow; connector: MemberRow; code: string; notify: string[] } => {
+          const redeemed = nonce ? redeemAgentConnectNonce(ctx.db, team.id, nonce) : null;
+          if (!redeemed) {
             appendAudit(ctx.db, team.id, {
               actor: null,
               action: 'member.agent_connect_refused',
@@ -633,10 +639,19 @@ export async function handleOAuthRoutes(
             return {
               err: new MusterdError(
                 'unauthorized',
-                "that connect link isn't valid — ask your sponsor for a new one",
+                "that connect link isn't valid — ask for a new one",
               ),
             };
           }
+          const { agent, issuedBy: connector } = redeemed;
+          // ADR 456 §4: who this connect displaces — read BEFORE the supersede revokes them.
+          const displaced = ctx.db
+            .prepare<[string, string], { connected_by: string | null }>(
+              'SELECT DISTINCT connected_by FROM oauth_tokens WHERE team_id = ? AND member_id = ? AND revoked_at IS NULL',
+            )
+            .all(team.id, agent.id)
+            .map((r) => r.connected_by)
+            .filter((id): id is string => id !== null);
           // One OAuth occupant per agent: every prior chain AND every unexchanged code goes.
           const chains = revokeAllForMember(ctx.db, team.id, agent.id);
           const codes = burnUnexchangedCodes(ctx.db, team.id, agent.id);
@@ -648,27 +663,32 @@ export async function handleOAuthRoutes(
               result: 'allow',
               detail: { reason: 'superseded', chains, codes },
             });
+          // ADR 456 §3: the issuer rides the code onto the chain and bounds it.
           const { code } = issueCode(ctx.db, {
             teamId: team.id,
             memberId: agent.id,
             clientId,
             redirectUri,
             codeChallenge,
+            connectedBy: connector.id,
             ...(scope ? { scope } : {}),
           });
-          const sponsor = agent.sponsored_by
-            ? ctx.db
-                .prepare<[string], { name: string }>('SELECT name FROM members WHERE id = ?')
-                .get(agent.sponsored_by)?.name
-            : undefined;
           appendAudit(ctx.db, team.id, {
-            actor: sponsor ?? null,
+            actor: connector.name,
             action: 'member.agent_connected',
             target: agent.name,
             result: 'allow',
             detail: { client_id: clientId, client_name: client.client_name },
           });
-          return { agent, code };
+          // A takeover of a live session is never silent to the people it affects: the sponsor and
+          // whoever connected the displaced device, minus the connector themself.
+          const notify =
+            chains > 0
+              ? [...new Set([agent.sponsored_by, ...displaced])].filter(
+                  (id): id is string => id !== null && id !== connector.id,
+                )
+              : [];
+          return { agent, connector, code, notify };
         },
       )();
       if ('err' in outcome) {
@@ -677,6 +697,34 @@ export async function handleOAuthRoutes(
       }
       member = outcome.agent;
       agentCode = outcome.code;
+      for (const id of outcome.notify) {
+        const to = ctx.db
+          .prepare<
+            [string],
+            { name: string }
+          >('SELECT name FROM members WHERE id = ? AND left_at IS NULL')
+          .get(id)?.name;
+        if (!to) continue;
+        try {
+          routeEnvelope(
+            ctx,
+            team,
+            outcome.connector,
+            makeEnvelope({
+              id: ulid(),
+              team: slug,
+              from: outcome.connector.name,
+              to: { kind: 'member', name: to },
+              act: 'message',
+              body: `${outcome.connector.name} connected ${outcome.agent.name} from ${client.client_name}; the device that was running it is signed out (ADR 456).`,
+              thread: null,
+              meta: null,
+            }),
+          );
+        } catch {
+          // A notice that cannot be delivered must not undo the connect; the audit row stands.
+        }
+      }
     } else if (body.proof.kind === 'invite') {
       // ADR 450 §2: a stranger proves an admin gave them an invite, then becomes a NEW human
       // member — one transaction: check-and-charge, name refusal, addMember, consume, audit.
@@ -804,7 +852,7 @@ export async function handleOAuthRoutes(
     }
     if (tokenReq.grant_type === 'authorization_code') {
       try {
-        const { memberId, scope } = redeemCode(ctx.db, {
+        const { memberId, scope, connectedBy } = redeemCode(ctx.db, {
           teamId: team.id,
           clientId: tokenReq.client_id,
           code: tokenReq.code,
@@ -817,7 +865,7 @@ export async function handleOAuthRoutes(
           .prepare<[string], MemberRow>('SELECT * FROM members WHERE id = ?')
           .get(memberId);
         const ended = owner
-          ? memberStandingRefusal(owner)
+          ? (memberStandingRefusal(owner) ?? connectorRefusal(ctx.db, connectedBy))
           : new MusterdError('unauthorized', 'seat is gone');
         if (ended) throw ended;
         const pair = mintTokenPair(ctx.db, {
@@ -825,6 +873,7 @@ export async function handleOAuthRoutes(
           memberId,
           clientId: tokenReq.client_id,
           scope,
+          connectedBy,
         });
         const memberName = ctx.db
           .prepare<[string], { name: string }>('SELECT name FROM members WHERE id = ?')

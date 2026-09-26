@@ -3,8 +3,14 @@ import type { Ctx } from '../context.js';
 import { MusterdError } from '../errors.js';
 import { teamSpecForSlug } from '../projection/reconcile.js';
 import { appendAudit } from '../store/audit.js';
+import { getMemberByName } from '../store/members.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
-import { createSponsoredAgent } from '../store/sponsoredAgents.js';
+import {
+  connectRefusal,
+  createSponsoredAgent,
+  issueAgentConnectNonce,
+} from '../store/sponsoredAgents.js';
+import { getPolicy } from '../store/teams.js';
 
 /**
  * The one mint path for member-created agents (ADR 449 §3), shared by `POST …/members/agents` and
@@ -37,6 +43,42 @@ export function mintSponsoredAgent(
   });
   return {
     member,
+    connect_url: agentConnectUrl(origin, team.slug, nonce),
+    connect_expires_at: expires_at,
+  };
+}
+
+/**
+ * Issue a connect link for a live sponsored agent (ADR 456 §2), shared by
+ * `POST …/members/agents/:name/connect` and the remote `team_agent_connect` tool: the team's
+ * `agent_connect` policy decides who may (`connectRefusal`), the issuer is recorded on the nonce so
+ * it bounds the session it starts (§3), and the issue is audited with the issuer as actor (§4).
+ */
+export function issueAgentConnect(
+  ctx: Ctx,
+  team: TeamRow,
+  caller: MemberRow,
+  agentName: string,
+  origin: string,
+): { member: string; connect_url: string; connect_expires_at: number } {
+  const agent = getMemberByName(ctx.db, team.id, agentName);
+  const refusal = connectRefusal(
+    caller,
+    agent,
+    getPolicy(ctx.db, team.id).agent_connect,
+    team.slug,
+  );
+  if (refusal) throw refusal;
+  const { nonce, expires_at } = issueAgentConnectNonce(ctx.db, team.id, agent!.id, caller.id);
+  appendAudit(ctx.db, team.id, {
+    actor: caller.name,
+    action: 'member.agent_connect_issued',
+    target: agent!.name,
+    result: 'allow',
+    detail: { sponsor_is_caller: agent!.sponsored_by === caller.id },
+  });
+  return {
+    member: agent!.name,
     connect_url: agentConnectUrl(origin, team.slug, nonce),
     connect_expires_at: expires_at,
   };

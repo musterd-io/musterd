@@ -307,7 +307,8 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
  * `musterd team policy [--reseat-known-agents on|off] [--ask-fallback-to-nonadmin on|off]
  * [--review-loop on|off] [--dispatch-loop on|off] [--sweep-loop on|off]
  * [--ask-slack-webhook <url|off>] [--stakes-default <surface>=<low|normal|high>|off]
- * [--guardian-tier <class>=<observe|alert|auto>|off] [--trace-content on|off]` — show or set the
+ * [--guardian-tier <class>=<observe|alert|auto>|off] [--trace-content on|off]
+ * [--agent-connect sponsor|any_member]` — show or set the
  * team governance policy (admin-only, audited `policy.change`). ADR 146: `--reseat-known-agents on`
  * opts the team into dogfood-mode re-seat — an already-held agent seat re-occupies without an admin
  * decision. ADR 147: `--ask-fallback-to-nonadmin on` lets an admin-unanswered ask fall back to
@@ -321,7 +322,9 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
  * `--stakes-default <surface>=<low|normal|high>` upserts a default-stakes rule (same surface
  * replaces in place; a new surface appends); `--stakes-default off` clears the list. ADR 445 §3:
  * `--trace-content on` keeps what each seat's hooks saw (credential-scrubbed) in trace.db's content
- * column; structural rows are recorded either way. Reads → merges the named
+ * column; structural rows are recorded either way. ADR 456 §2: `--agent-connect any_member` lets
+ * any teammate issue a member-created agent's connect link (team agents); `sponsor` (the default)
+ * keeps it to the sponsor or an admin. Reads → merges the named
  * knob(s) → POSTs the policy (the residency-policy read-merge-write pattern), so setting one knob
  * never clobbers the wake-policy defaults.
  */
@@ -424,6 +427,15 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
     merged.trace = { ...merged.trace, content: traceContent ? 'on' : 'off' };
     changed = true;
   }
+  // ADR 456 §2: who may issue a member-created agent's connect link. `any_member` makes them team
+  // agents — and makes a connect a possible takeover by any teammate, which the admin chooses here.
+  const agentConnect = flagStr(parsed.flags, 'agent-connect');
+  if (agentConnect !== undefined) {
+    if (agentConnect !== 'sponsor' && agentConnect !== 'any_member')
+      throw new CliError('usage: musterd team policy --agent-connect <sponsor|any_member>', 2);
+    merged.agent_connect = agentConnect;
+    changed = true;
+  }
   // ADR 149: the ask stream's Slack delivery — a webhook URL, or `off` to clear it (delete the key so
   // the daemon's "unset = no outbound call ever" default is restored, not stored as an empty string).
   const webhook = flagStr(parsed.flags, 'ask-slack-webhook');
@@ -500,6 +512,14 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
           updated.trace.content === 'on'
             ? "trace content on — each seat's hooks keep what they saw, credential-scrubbed, in this machine's trace.db (from the next hook on)"
             : 'trace content off — trace.db records structure only; content already stored is kept',
+        ) + '\n',
+      );
+    if (agentConnect !== undefined)
+      process.stdout.write(
+        hint(
+          updated.agent_connect === 'any_member'
+            ? 'agent connect: any member — any teammate can start any member-created agent, taking it over from the device that held it; the sponsor is told (ADR 456)'
+            : "agent connect: sponsor — only an agent's sponsor or an admin can start it (ADR 456)",
         ) + '\n',
       );
     if (webhook !== undefined)
@@ -583,6 +603,9 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
   );
   process.stdout.write(
     `  trace content: ${current.trace.content === 'on' ? theme.accent('on') : 'off'}${inherited(stored.trace, 'content')}\n`,
+  );
+  process.stdout.write(
+    `  agent connect: ${current.agent_connect === 'any_member' ? theme.accent('any member') : 'sponsor'}${inherited(stored, 'agent_connect')}\n`,
   );
   // ADR 149: the webhook URL is a secret — show only that it's set, and where it points (host).
   process.stdout.write(

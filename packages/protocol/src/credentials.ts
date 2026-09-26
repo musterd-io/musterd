@@ -199,6 +199,14 @@ export const PolicySchema = z.object({
    * content column is written at all; structural rows are recorded either way. Not a secret.
    */
   trace: TracePolicySchema.default({}),
+  /**
+   * Who may issue a sponsored agent's one-time connect link (ADR 456 §2). `'sponsor'` (default): the
+   * agent's sponsor or a team admin. `'any_member'`: any human member in good standing — team
+   * agents. A connect link is a takeover (redeeming it evicts the device holding the agent, ADR 452
+   * §2.3), so the default is the safe one; a team opts in. Never refused on an invite-admitting
+   * team: that choice, and its risk, is the admin's (ADR 456 §2).
+   */
+  agent_connect: z.enum(['sponsor', 'any_member']).default('sponsor'),
 });
 export type Policy = z.infer<typeof PolicySchema>;
 

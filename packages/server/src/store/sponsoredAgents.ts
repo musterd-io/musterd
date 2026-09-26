@@ -2,9 +2,9 @@ import { randomBytes } from 'node:crypto';
 import { isMusterdCredential } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
 import { MusterdError } from '../errors.js';
-import { addMember, getMemberByName, hashToken } from './members.js';
+import { addMember, getMemberByName, hashToken, memberStandingRefusal } from './members.js';
 import type { MemberRow, TeamRow } from './rows.js';
-import { resolveAccountStatus } from './rows.js';
+import { resolveAccountStatus, resolveCapabilities } from './rows.js';
 
 /**
  * Member-created agents (ADR 449 §3–4). A human member mints an agent seat the way `musterd agent`
@@ -32,13 +32,15 @@ export interface AgentConnectNonce {
 
 /**
  * Issue a fresh connect nonce for `memberId`, burning any unused one it had — one live link per
- * agent, so a re-issue is also how a sponsor kills a link they sent to the wrong place.
+ * agent, so a re-issue is also how a sponsor kills a link they sent to the wrong place. `issuedBy`
+ * is who asked for it (ADR 456 §3): it travels onto the chain as `connected_by` and bounds it.
+ * Callers authorize first with {@link connectRefusal}.
  */
 export function issueAgentConnectNonce(
   db: Database,
   teamId: string,
   memberId: string,
-  sponsorId: string,
+  issuedBy: string,
   now = Date.now(),
 ): AgentConnectNonce {
   const nonce = mintConnectNonce();
@@ -49,9 +51,9 @@ export function issueAgentConnectNonce(
     ).run(now, memberId);
     db.prepare(
       `INSERT INTO agent_connect_nonces
-         (nonce_hash, team_id, member_id, sponsor_id, created_at, expires_at)
+         (nonce_hash, team_id, member_id, issued_by, created_at, expires_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(hashToken(nonce), teamId, memberId, sponsorId, now, expires_at);
+    ).run(hashToken(nonce), teamId, memberId, issuedBy, now, expires_at);
   })();
   return { nonce, expires_at };
 }
@@ -66,6 +68,42 @@ export function mintConnectNonce(draw: () => Buffer = () => randomBytes(32)): st
     const nonce = draw().toString('base64url');
     if (!isMusterdCredential(nonce)) return nonce;
   }
+}
+
+/**
+ * Why `caller` may NOT issue a connect link for `agent` under the team's `agent_connect` policy
+ * (ADR 456 §2), or null when they may. The one statement of the rule, shared by the HTTP route and
+ * the remote `team_agent_connect` tool. `'sponsor'`: the sponsor or an admin. `'any_member'`: any
+ * human member. Agents never issue; only a live sponsored agent is connectable (ADR 452).
+ */
+export function connectRefusal(
+  caller: MemberRow,
+  agent: MemberRow | undefined,
+  policy: 'sponsor' | 'any_member',
+  teamSlug: string,
+): MusterdError | null {
+  if (caller.kind !== 'human' || caller.observer === 1)
+    return new MusterdError('forbidden', 'only a human member can connect an agent (ADR 456 §2)');
+  const s = agent ? resolveAccountStatus(agent) : null;
+  if (
+    !agent ||
+    agent.kind !== 'agent' ||
+    agent.left_at !== null ||
+    agent.sponsored_by === null ||
+    s === 'disabled' ||
+    s === 'banned' ||
+    s === 'archived'
+  )
+    return new MusterdError(
+      'not_found',
+      `no connectable agent by that name in ${teamSlug} — only live member-created agents connect over OAuth`,
+    );
+  if (policy === 'any_member') return null;
+  if (agent.sponsored_by === caller.id || resolveCapabilities(caller).is_admin) return null;
+  return new MusterdError(
+    'forbidden',
+    `on ${teamSlug} only an agent's sponsor or an admin can connect it (team policy agent_connect: sponsor)`,
+  );
 }
 
 /** Live (not left, not disabled/banned/archived) agents this sponsor has minted. */
@@ -119,7 +157,7 @@ export function createSponsoredAgent(
 }
 
 /**
- * Redeem a connect nonce exactly once, returning the agent it names — or null for anything a
+ * Redeem a connect nonce exactly once, returning the agent it names and who issued it — or null for anything a
  * stranger would also get null for: unknown, used, expired, wrong team, or an agent that has since
  * left or been disabled. A wrong-team attempt does not burn it.
  */
@@ -128,13 +166,21 @@ export function redeemAgentConnectNonce(
   teamId: string,
   nonce: string,
   now = Date.now(),
-): MemberRow | null {
+): { agent: MemberRow; issuedBy: MemberRow } | null {
   return db.transaction(() => {
     const row = db
       .prepare<
         [string],
-        { team_id: string; member_id: string; expires_at: number; used_at: number | null }
-      >('SELECT team_id, member_id, expires_at, used_at FROM agent_connect_nonces WHERE nonce_hash = ?')
+        {
+          team_id: string;
+          member_id: string;
+          issued_by: string;
+          expires_at: number;
+          used_at: number | null;
+        }
+      >(
+        'SELECT team_id, member_id, issued_by, expires_at, used_at FROM agent_connect_nonces WHERE nonce_hash = ?',
+      )
       .get(hashToken(nonce));
     if (!row || row.team_id !== teamId || row.used_at !== null) return null;
     db.prepare('UPDATE agent_connect_nonces SET used_at = ? WHERE nonce_hash = ?').run(
@@ -151,6 +197,12 @@ export function redeemAgentConnectNonce(
     if (!member) return null;
     const s = resolveAccountStatus(member);
     if (s === 'disabled' || s === 'banned' || s === 'archived') return null;
-    return member;
+    // ADR 456 §3: the issuer bounds the session, so an issuer who has since lost standing redeems
+    // nothing — the chain would be dead on its first use anyway.
+    const issuedBy = db
+      .prepare<[string], MemberRow>('SELECT * FROM members WHERE id = ?')
+      .get(row.issued_by);
+    if (!issuedBy || memberStandingRefusal(issuedBy, now)) return null;
+    return { agent: member, issuedBy };
   })();
 }
