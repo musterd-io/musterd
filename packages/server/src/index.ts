@@ -18,7 +18,9 @@ import { startReaper } from './presence/reaper.js';
 import { reconcileAll } from './projection/reconcile.js';
 import { startRosterWatcher } from './projection/watcher.js';
 import { startSeedsIngest } from './seeds/ingest.js';
+import { appendAudit } from './store/audit.js';
 import { countDiversityFlagsByTeam } from './store/mast.js';
+import { startExpiredMemberSweep } from './store/members.js';
 import { countOpenLoopsByTeam } from './store/messages.js';
 import { activePresenceBySurface, slowestInboxLagMs } from './store/metrics.js';
 import { startTraceContentPrune } from './store/trace.js';
@@ -147,6 +149,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   let stopPull: (() => void) | null = null;
   let stopFootprint: (() => void) | null = null;
   let stopTracePrune: (() => void) | null = null;
+  let stopExpiredSweep: (() => void) | null = null;
   let stopTracePush: (() => void) | null = null;
   let stopWatcher: (() => void) | null = null;
   let stopTelemetry: (() => Promise<void>) | null = null;
@@ -221,6 +224,25 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
             },
             (err) => log.warn({ msg: 'trace_prune_failed', err: String(err) }),
           );
+          // ADR 459 §4: expired members read as departed on the roster. Hygiene only — auth
+          // already refused them — so one audited row per swept member, and a failing pass logs on.
+          stopExpiredSweep = startExpiredMemberSweep(
+            db,
+            (swept) => {
+              for (const m of swept) {
+                appendAudit(db, m.team_id, {
+                  actor: null,
+                  action: 'member.expired_swept',
+                  target: m.name,
+                  result: 'allow',
+                  detail: { lifecycle_until: m.lifecycle_until },
+                });
+              }
+              if (swept.length > 0)
+                log.info({ msg: 'expired_members_swept', count: swept.length });
+            },
+            (err) => log.warn({ msg: 'expired_sweep_failed', err: String(err) }),
+          );
           startWatching();
           log.info({
             msg: 'listening',
@@ -267,6 +289,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         stopPull?.();
         stopFootprint?.();
         stopTracePrune?.();
+        stopExpiredSweep?.();
         stopTracePush?.();
         stopWatcher?.();
         void stopTelemetry?.();

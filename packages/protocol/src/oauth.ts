@@ -41,6 +41,13 @@ export const OAUTH_RATE_LIMITS = {
   register: 5,
   authorize: 10,
   token: 20,
+  /**
+   * Member-created agent mints per IP per minute (ADR 459, on ADR 449 §3). 10 clears a
+   * planner's half-dozen rapid human mints with headroom; the per-sponsor cap still bounds what
+   * succeeds. Enforced on POST /teams/:slug/members/agents only — the MCP tool path has no peer
+   * address, and the capability switch + cap are the bound there.
+   */
+  agent_mint: 10,
 } as const;
 
 /** `POST /oauth/:team/register` (RFC 7591) — redirect URIs validated server-side, never just typed. */

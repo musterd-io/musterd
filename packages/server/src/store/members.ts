@@ -866,6 +866,72 @@ export function leaveMember(db: Database, memberId: string): void {
   }
 }
 
+/** A member the expiry sweeper marked departed. Returned so the caller can audit the roster change. */
+export interface SweptMember {
+  team_id: string;
+  id: string;
+  name: string;
+  lifecycle_until: number | null;
+}
+
+/**
+ * Cosmetic expiry sweep (ADR 459 §4, on ADR 449's "roster hygiene" line). Marks `left_at` on
+ * members past `lifecycle_until` — auth already refused them, so this changes no decision, only
+ * what the roster shows. Never touches unexpiring members, never deletes (the tombstone stays
+ * for the name-refusal rules), never releases claims (use `leaveMember` for a real departure).
+ * Returns the swept rows; the caller audits them.
+ */
+export function sweepExpiredMembers(db: Database, now = Date.now()): SweptMember[] {
+  const rows = db
+    .prepare<
+      [],
+      { team_id: string; id: string; name: string; lifecycle_until: number | null }
+    >(
+      `SELECT team_id, id, name, lifecycle_until FROM members
+        WHERE lifecycle = 'until' AND lifecycle_until IS NOT NULL
+          AND lifecycle_until <= ? AND left_at IS NULL`,
+    )
+    .all(now);
+  if (rows.length === 0) return [];
+  const mark = db.prepare('UPDATE members SET left_at = ?, updated_at = ? WHERE id = ?');
+  const tx = db.transaction(() => {
+    for (const r of rows) mark.run(now, now, r.id);
+  });
+  tx();
+  return rows;
+}
+
+/** How often the daemon sweeps expired members off the roster, and how long after boot the first
+ *  pass waits (off the boot path — reconcile and the first requests come first). */
+export const EXPIRED_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+export const EXPIRED_SWEEP_FIRST_DELAY_MS = 60 * 1000;
+
+/**
+ * The daemon's expiry-sweep loop. A failing pass logs and the loop keeps running — the sweep is
+ * hygiene, never load-bearing. Returns the stop function `close()` calls.
+ */
+export function startExpiredMemberSweep(
+  db: Database,
+  onPass: (swept: SweptMember[]) => void,
+  onError: (err: unknown) => void,
+): () => void {
+  const pass = () => {
+    try {
+      onPass(sweepExpiredMembers(db));
+    } catch (err) {
+      onError(err);
+    }
+  };
+  const first = setTimeout(pass, EXPIRED_SWEEP_FIRST_DELAY_MS);
+  first.unref?.();
+  const every = setInterval(pass, EXPIRED_SWEEP_INTERVAL_MS);
+  every.unref?.();
+  return () => {
+    clearTimeout(first);
+    clearInterval(every);
+  };
+}
+
 /** Sticky offline reason for an intentional seat release (unbind) — ADR 141, presence-honesty §2.3. */
 export function markSeatReleased(db: Database, memberId: string): void {
   db.prepare(

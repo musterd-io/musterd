@@ -19,7 +19,8 @@ import { resolveAccountStatus, resolveCapabilities } from './rows.js';
  * - at most {@link SPONSORED_AGENT_CAP} live agents per sponsor.
  */
 
-/** Live sponsored agents per sponsor. Per-team tuning is increment 3. */
+/** Live sponsored agents per sponsor. The shipped default; teams retune it through the
+ *  `sponsored_agent_cap` policy (ADR 459), threaded in by the caller. */
 export const SPONSORED_AGENT_CAP = 3;
 
 /** How long a connect link lives: long enough to install a harness, short enough to be inert. */
@@ -125,9 +126,18 @@ export function createSponsoredAgent(
   sponsor: MemberRow,
   input: { name: string; role?: string | null | undefined },
   now = Date.now(),
+  opts: { cap?: number } = {},
 ): { member: MemberRow } & AgentConnectNonce {
   if (sponsor.kind !== 'human' || sponsor.observer === 1)
     throw new MusterdError('forbidden', 'only a human member can create agents (ADR 449 §3)');
+  // ADR 459 §1: an admin can narrow one member's minting through capabilities without touching
+  // anyone else's. Default true (generalist), so this fires only where an admin chose it.
+  if (resolveCapabilities(sponsor).can_create_agents === false)
+    throw new MusterdError(
+      'forbidden',
+      'an admin turned off agent creation for this seat (capability can_create_agents) — ask them to re-enable it',
+    );
+  const cap = opts.cap ?? SPONSORED_AGENT_CAP;
   return db.transaction(() => {
     // `addMember` would *revive* a tombstoned name — row, history and all. A sponsored mint must
     // never inherit someone else's past, so a removed name is refused here, not revived.
@@ -138,10 +148,10 @@ export function createSponsoredAgent(
         `"${input.name}" was used by a removed member of "${team.slug}" — pick another name`,
       );
     const live = liveSponsoredAgents(db, team.id, sponsor.id);
-    if (live.length >= SPONSORED_AGENT_CAP)
+    if (live.length >= cap)
       throw new MusterdError(
         'forbidden',
-        `you already have ${live.length} live agents (the cap of ${SPONSORED_AGENT_CAP} per member) — ` +
+        `you already have ${live.length} live agents (the cap of ${cap} per member) — ` +
           `remove one first: ${live.map((m) => m.name).join(', ')}`,
       );
     const expiring = sponsor.lifecycle === 'until' && sponsor.lifecycle_until !== null;

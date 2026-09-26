@@ -409,7 +409,7 @@ import {
   recordTraceReplicated,
 } from '../telemetry.js';
 import { handleMcpRoute } from './mcpHttp.js';
-import { handleOAuthRoutes } from './oauth.js';
+import { checkRateLimit, handleOAuthRoutes } from './oauth.js';
 import { issueAgentConnect, mintSponsoredAgent, originFrom } from './sponsoredAgentMint.js';
 
 /**
@@ -1996,6 +1996,9 @@ export async function handleHttp(
       // `POST /members`). The response carries no secret: a one-time connect link the sponsor opens
       // on the agent's device, redeemed at OAuth authorize (increment 2b).
       if (method === 'POST' && rest === '/members/agents') {
+        // ADR 459 §2: per-IP mint bucket, checked before auth — attempts cost a DB write + audit
+        // row even when refused, so the bound sits in front of the work, not behind it.
+        checkRateLimit(ctx, req, 'agent_mint');
         const { team, member: sponsor } = authMember(ctx.db, slug, bearer(req), actingSeat(req));
         const body = parseOrBadRequest(SponsoredAgentBody, await readJson(req));
         const minted = mintSponsoredAgent(ctx, team, sponsor, body, requestOrigin(req));

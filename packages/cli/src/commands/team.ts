@@ -308,7 +308,7 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
  * [--review-loop on|off] [--dispatch-loop on|off] [--sweep-loop on|off]
  * [--ask-slack-webhook <url|off>] [--stakes-default <surface>=<low|normal|high>|off]
  * [--guardian-tier <class>=<observe|alert|auto>|off] [--trace-content on|off]
- * [--agent-connect sponsor|any_member]` — show or set the
+ * [--agent-connect sponsor|any_member] [--sponsored-agent-cap <1–100>]` — show or set the
  * team governance policy (admin-only, audited `policy.change`). ADR 146: `--reseat-known-agents on`
  * opts the team into dogfood-mode re-seat — an already-held agent seat re-occupies without an admin
  * decision. ADR 147: `--ask-fallback-to-nonadmin on` lets an admin-unanswered ask fall back to
@@ -324,7 +324,8 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
  * `--trace-content on` keeps what each seat's hooks saw (credential-scrubbed) in trace.db's content
  * column; structural rows are recorded either way. ADR 456 §2: `--agent-connect any_member` lets
  * any teammate issue a member-created agent's connect link (team agents); `sponsor` (the default)
- * keeps it to the sponsor or an admin. Reads → merges the named
+ * keeps it to the sponsor or an admin. ADR 459 (on ADR 449 §3): `--sponsored-agent-cap <n>`
+ * tunes live member-created agents per sponsor (default 3). Reads → merges the named
  * knob(s) → POSTs the policy (the residency-policy read-merge-write pattern), so setting one knob
  * never clobbers the wake-policy defaults.
  */
@@ -436,6 +437,17 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
     merged.agent_connect = agentConnect;
     changed = true;
   }
+  // ADR 459 (on ADR 449 §3): live member-created agents per sponsor. Default 3 (the shipped
+  // constant); the daemon's schema caps it at 100, validated here too so a typo fails fast.
+  const agentCap = flagStr(parsed.flags, 'sponsored-agent-cap');
+  if (agentCap !== undefined) {
+    const n = Number(agentCap);
+    if (!Number.isInteger(n) || n < 1 || n > 100) {
+      throw new CliError('usage: musterd team policy --sponsored-agent-cap <1–100>', 2);
+    }
+    merged.sponsored_agent_cap = n;
+    changed = true;
+  }
   // ADR 149: the ask stream's Slack delivery — a webhook URL, or `off` to clear it (delete the key so
   // the daemon's "unset = no outbound call ever" default is restored, not stored as an empty string).
   const webhook = flagStr(parsed.flags, 'ask-slack-webhook');
@@ -522,6 +534,12 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
             : "agent connect: sponsor — only an agent's sponsor or an admin can start it (ADR 456)",
         ) + '\n',
       );
+    if (agentCap !== undefined)
+      process.stdout.write(
+        hint(
+          `sponsored agent cap: ${updated.sponsored_agent_cap} live agents per sponsor (ADR 459)`,
+        ) + '\n',
+      );
     if (webhook !== undefined)
       process.stdout.write(
         hint(
@@ -606,6 +624,9 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
   );
   process.stdout.write(
     `  agent connect: ${current.agent_connect === 'any_member' ? theme.accent('any member') : 'sponsor'}${inherited(stored, 'agent_connect')}\n`,
+  );
+  process.stdout.write(
+    `  sponsored agent cap: ${current.sponsored_agent_cap} per sponsor${inherited(stored, 'sponsored_agent_cap')}\n`,
   );
   // ADR 149: the webhook URL is a secret — show only that it's set, and where it points (host).
   process.stdout.write(

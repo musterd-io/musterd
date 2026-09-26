@@ -207,6 +207,12 @@ export const PolicySchema = z.object({
    * team: that choice, and its risk, is the admin's (ADR 456 §2).
    */
   agent_connect: z.enum(['sponsor', 'any_member']).default('sponsor'),
+  /**
+   * Live member-created agents per sponsor (ADR 459, on ADR 449 §3). Default 3 reproduces the
+   * shipped constant on every team that never sets it; the ceiling stops a fat-fingered million
+   * from becoming surprise load. Admin-set through the policy route, audited `policy.change`.
+   */
+  sponsored_agent_cap: z.number().int().min(1).max(100).default(3),
 });
 export type Policy = z.infer<typeof PolicySchema>;
 
