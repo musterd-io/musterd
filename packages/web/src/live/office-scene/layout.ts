@@ -534,6 +534,16 @@ export const CHECK_IN_MARKS: ReadonlyArray<{ lx: number; ly: number }> = [
 /** The pause at the mark, seconds. A beat, not a gate. */
 export const CHECK_IN_S = 1.2;
 
+/**
+ * The Welcome Wagon's two stops (lane 01M3F81DD9). The wagon waits just off the counter's east end,
+ * on the arrivals side — the dog collects it there — and a deskless newcomer's polaroid goes to the
+ * floor under the wall board's right edge (`WALL_BOARD` sits on the ly=0 wall at tc 0.885, so its
+ * right edge is near lx 870). Both are pinned walkable by `nav.test.ts`: the counter's padded
+ * footprint swallows anything much closer than this.
+ */
+export const WAGON_PICKUP = { lx: 240, ly: 760 };
+export const WALL_DROP = { lx: 860, ly: 40 };
+
 /** The printer/supply station against the back wall — moved out of the bench run (it stood at
  * lx 390, which is now mid-counter), into the band between the bench's end and the kitchenette. */
 export const PRINTER = { lx: 505, ly: 60, w: 46, d: 34, h: 32 };

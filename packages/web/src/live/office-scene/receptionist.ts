@@ -15,7 +15,17 @@ import { roll } from './ambientSeed';
  * first arrival, works small idles while anyone is present, looks up (`greeting`) while a check-in
  * beat plays, and dozes off again a little after the last member leaves.
  */
-export type ReceptionistMode = 'asleep' | 'waking' | 'idle' | 'greeting' | 'typing' | 'call';
+export type ReceptionistMode =
+  | 'asleep'
+  | 'waking'
+  | 'idle'
+  | 'greeting'
+  | 'typing'
+  | 'call'
+  // The Welcome Wagon's front-desk beats (lane 01M3F81DD9) — see `receptionistCue`.
+  | 'ringing'
+  | 'label'
+  | 'toss';
 
 export interface ReceptionistState {
   mode: ReceptionistMode;
@@ -55,6 +65,27 @@ export const RECEPTIONIST_SLEEP_DELAY_S = 6;
 
 export function createReceptionist(): ReceptionistState {
   return { mode: 'asleep', modeT: 0, aloneT: 0, lastSlot: -1, beatLen: 0 };
+}
+
+/**
+ * The Welcome Wagon's front-desk beats (lane 01M3F81DD9): the phone ringing and picked up, the label
+ * maker printing a nameplate, the lanyard toss. Lengths in seconds. She still never leaves the desk —
+ * the toss is how she reaches an arrival.
+ */
+export const RECEPTION_CUE_S: Record<'ringing' | 'label' | 'toss', number> = {
+  ringing: 1.1,
+  label: 0.8,
+  toss: 0.7,
+};
+
+/**
+ * Cue a welcome beat now. It outranks whatever she was doing — asleep, typing, on a call — because the
+ * sequencer only cues her when someone is arriving, and an arrival is exactly when she looks up.
+ */
+export function receptionistCue(r: ReceptionistState, cue: 'ring' | 'label' | 'toss'): void {
+  r.mode = cue === 'ring' ? 'ringing' : cue;
+  r.modeT = 0;
+  r.aloneT = 0;
 }
 
 /** Is she mid-work-beat? The painter uses this to pick the pose; nothing else should care. */
@@ -135,6 +166,16 @@ export function stepReceptionist(
         r.lastSlot = slot;
       }
       break;
+    case 'ringing':
+    case 'label':
+    case 'toss':
+      // A welcome cue plays to its end; a check-in greeting waiting on it starts a beat later.
+      if (r.modeT >= RECEPTION_CUE_S[r.mode]) {
+        r.mode = greeting ? 'greeting' : 'idle';
+        r.modeT = 0;
+        r.lastSlot = slot;
+      }
+      break;
     case 'greeting':
       if (!greeting) {
         r.mode = 'idle';
@@ -144,5 +185,13 @@ export function stepReceptionist(
       break;
   }
   // Typing and calls are motion, so they hold the dynamic frame; settled idle does not (see above).
-  return r.mode !== before || r.mode === 'waking' || r.mode === 'greeting' || receptionistBusy(r);
+  return (
+    r.mode !== before ||
+    r.mode === 'waking' ||
+    r.mode === 'greeting' ||
+    r.mode === 'ringing' ||
+    r.mode === 'label' ||
+    r.mode === 'toss' ||
+    receptionistBusy(r)
+  );
 }

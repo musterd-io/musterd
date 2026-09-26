@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   createReceptionist,
+  RECEPTION_CUE_S,
+  receptionistCue,
   RECEPTIONIST_SLEEP_DELAY_S,
   RECEPTIONIST_WAKE_S,
   stepReceptionist,
@@ -145,5 +147,42 @@ describe('shared work beats (E1 spec §2)', () => {
     const settled = b.filter(([t]) => t >= 30).map(([t, m, l]) => [t + lateStart / 1000, m, l]);
     const inEarly = new Set(a.map(([t, m, l]) => `${t}|${m}|${l}`));
     for (const [t, m, l] of settled) expect(inEarly.has(`${t}|${m}|${l}`)).toBe(true);
+  });
+});
+
+describe('welcome cues (lane 01M3F81DD9)', () => {
+  it('a cue wakes her if asleep, plays for its length, then she is idle', () => {
+    const v = viewer();
+    receptionistCue(v.r, 'ring');
+    expect(v.r.mode).toBe('ringing');
+    expect(v.step(0.05, true)).toBe(true); // a cue holds the dynamic frame
+    v.step(RECEPTION_CUE_S.ringing + 0.1, true);
+    expect(v.r.mode).toBe('idle');
+  });
+
+  it('a cue outranks a work beat', () => {
+    const v = viewer();
+    v.r.mode = 'typing';
+    v.r.beatLen = 10;
+    receptionistCue(v.r, 'toss');
+    v.step(0.05, true);
+    expect(v.r.mode).toBe('toss');
+  });
+
+  it('a check-in greeting waiting on a toss starts when the toss ends, not before', () => {
+    const v = viewer();
+    receptionistCue(v.r, 'toss');
+    v.step(RECEPTION_CUE_S.toss - 0.2, true, true);
+    expect(v.r.mode).toBe('toss');
+    v.step(0.4, true, true);
+    expect(v.r.mode).toBe('greeting');
+  });
+
+  it('the label maker and the phone each have their own length', () => {
+    const v = viewer();
+    receptionistCue(v.r, 'label');
+    expect(v.r.mode).toBe('label');
+    v.step(RECEPTION_CUE_S.label + 0.1, true);
+    expect(v.r.mode).toBe('idle');
   });
 });

@@ -320,6 +320,8 @@ function CharacterSheet() {
               sitFor: 99,
               speed: 55,
               vel: 55,
+              cargo: 'none',
+              errand: null,
             },
             t,
           );

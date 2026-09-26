@@ -28,6 +28,9 @@ import {
   petGreet,
   petNotice,
   petBeg,
+  petCarryToWall,
+  petWagon,
+  petZoomies,
   PET_DASH,
   PET_SPEED,
   MIN_FACE,
@@ -35,7 +38,15 @@ import {
   STRETCH_S,
   type PetState,
 } from './pet';
-import { COFFEE_STAND, DESK_SLOTS, ENTRANCE, MEETING, NOOK } from './layout';
+import {
+  COFFEE_STAND,
+  DESK_SLOTS,
+  ENTRANCE,
+  MEETING,
+  NOOK,
+  WAGON_PICKUP,
+  WALL_DROP,
+} from './layout';
 import { walkable } from './nav';
 
 /** A tiny deterministic LCG so behaviour tests never depend on Math.random. */
@@ -451,5 +462,71 @@ describe('zoomies', () => {
     runUntil(pet, 'sleep', 240);
     for (let i = 0; i < 40 && pet.mode === 'sleep'; i++) petBeat(pet, { daylight: 1, rng: lcg(21 + i) });
     expect(pet.speed).toBe(PET_SPEED);
+  });
+});
+
+describe('the welcome wagon (lane 01M3F81DD9)', () => {
+  /** Step until `pred` holds, bounded so a broken machine fails rather than hangs. */
+  function stepUntil(pet: PetState, pred: () => boolean, maxS = 120): void {
+    for (let t = 0; t < maxS && !pred(); t += 1 / 30) stepPet(pet, 1 / 30);
+    expect(pred()).toBe(true);
+  }
+
+  it('fetches empty-mouthed, pulls the wagon to the drop, then sits beside it and lets go', () => {
+    const pet = createPet(lcg(3));
+    expect(petWagon(pet, WAGON_PICKUP, COFFEE_STAND)).toBe(true);
+    expect(pet.cargo).toBe('none');
+    expect(pet.errand?.stage).toBe('fetch');
+    stepUntil(pet, () => pet.errand?.stage === 'deliver');
+    expect(Math.hypot(pet.lx - WAGON_PICKUP.lx, pet.ly - WAGON_PICKUP.ly)).toBeLessThan(2);
+    expect(pet.cargo).toBe('wagon');
+    stepUntil(pet, () => pet.mode === 'sit');
+    expect(Math.hypot(pet.lx - COFFEE_STAND.lx, pet.ly - COFFEE_STAND.ly)).toBeLessThan(2);
+    expect(pet.cargo).toBe('none');
+    expect(pet.errand).toBeNull();
+  });
+
+  it('takes one welcome trip at a time', () => {
+    const pet = createPet(lcg(3));
+    expect(petWagon(pet, WAGON_PICKUP, COFFEE_STAND)).toBe(true);
+    expect(petWagon(pet, WAGON_PICKUP, NOOK)).toBe(false);
+    expect(petCarryToWall(pet, WAGON_PICKUP, WALL_DROP)).toBe(false);
+  });
+
+  it('runs the errand even when it is already lying at the pickup', () => {
+    const pet = createPet(lcg(3));
+    pet.lx = WAGON_PICKUP.lx;
+    pet.ly = WAGON_PICKUP.ly;
+    expect(petWagon(pet, WAGON_PICKUP, COFFEE_STAND)).toBe(true);
+    stepUntil(pet, () => pet.cargo === 'wagon');
+  });
+
+  it('carries a polaroid in its mouth to the wall', () => {
+    const pet = createPet(lcg(3));
+    expect(petCarryToWall(pet, WAGON_PICKUP, WALL_DROP)).toBe(true);
+    stepUntil(pet, () => pet.errand?.stage === 'deliver');
+    expect(pet.cargo).toBe('polaroid');
+    stepUntil(pet, () => pet.errand === null);
+    expect(Math.hypot(pet.lx - WALL_DROP.lx, pet.ly - WALL_DROP.ly)).toBeLessThan(2);
+  });
+
+  it('a crowd gets one lap of zoomies, fast', () => {
+    const pet = createPet(lcg(3));
+    expect(petZoomies(pet, lcg(9))).toBe(true);
+    stepUntil(pet, () => pet.mode === 'walk');
+    expect(pet.speed).toBe(PET_DASH);
+  });
+});
+
+describe('the welcome errand outranks everything else the dog does (lane 01M3F81DD9)', () => {
+  it('a door greeting, a beat or zoomies cannot hijack a wagon run', () => {
+    const pet = createPet(lcg(3));
+    expect(petWagon(pet, WAGON_PICKUP, COFFEE_STAND)).toBe(true);
+    const dest = pet.path.at(-1);
+    expect(petGreet(pet, lcg(1))).toBe(false);
+    expect(petBeat(pet, { daylight: 1, rng: lcg(2) })).toBe(false);
+    expect(petZoomies(pet, lcg(4))).toBe(false);
+    expect(pet.path.at(-1)).toEqual(dest);
+    expect(pet.errand?.stage).toBe('fetch');
   });
 });

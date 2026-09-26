@@ -5,7 +5,7 @@ import { drawCharacter } from './character';
 import { depth, FLOOR, KX, KY, project, THICK, WALL_H, type Fit, type Pt } from './iso';
 import { deviceBox, measureBounds, type SpriteCache } from './sprite-cache';
 import { STRIDE, type PetState } from './pet';
-import { RECEPTIONIST_WAKE_S, type ReceptionistState } from './receptionist';
+import { RECEPTION_CUE_S, RECEPTIONIST_WAKE_S, type ReceptionistState } from './receptionist';
 import {
   BEAM_LEN,
   BEAM_SHEAR,
@@ -1701,15 +1701,19 @@ function drawReceptionist(ctx: CanvasRenderingContext2D, fit: Fit, r: Receptioni
   // Asleep is a slump, not a separate drawing: the same seated figure folded forward over the desk.
   // `sit` stays 1 throughout — she never stands up, which is most of what "never leaves the desk"
   // means to the painter.
+  // The Welcome Wagon's cues (lane 01M3F81DD9) reuse her poses: the ringing phone is the call pose
+  // with the receiver up, the label maker is a typing burst at the counter.
+  const onPhone = r.mode === 'call' || r.mode === 'ringing';
   const gesture =
-    r.mode === 'call' ? GESTURE.call
+    onPhone ? GESTURE.call
     : asleep || r.mode === 'waking' ? GESTURE.chin // chin-on-hand reads as dozing at a desk
     : 0;
   const gestureT =
     r.mode === 'call' ? Math.min(0.98, r.modeT / Math.max(r.beatLen, 0.01))
+    : r.mode === 'ringing' ? Math.min(0.98, r.modeT / RECEPTION_CUE_S.ringing)
     : asleep ? 0.5 // held at the plateau: a still slump, no animation on an empty office
     : 1 - wake;
-  const typing = r.mode === 'typing';
+  const typing = r.mode === 'typing' || r.mode === 'label';
   const pose: Pose = {
     lx: RECEPTIONIST.lx,
     ly: RECEPTIONIST.ly,
@@ -1720,7 +1724,7 @@ function drawReceptionist(ctx: CanvasRenderingContext2D, fit: Fit, r: Receptioni
     run: false,
     small: false,
     alpha: 1,
-    carry: r.mode === 'call' ? 'phone' : null,
+    carry: onPhone ? 'phone' : null,
     bubble: null,
     gesture,
     gestureT,
