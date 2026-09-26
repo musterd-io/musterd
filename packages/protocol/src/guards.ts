@@ -59,6 +59,7 @@ import {
 } from './working-hours.wire.js';
 
 /** Thrown when a response is not the shape its endpoint promises. Mirrors a zod parse failure. */
+
 export class WireShapeError extends Error {
   constructor(what: string) {
     super(`invalid ${what} response`);

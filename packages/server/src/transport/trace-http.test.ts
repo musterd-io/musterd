@@ -377,3 +377,67 @@ describe('GET /report/trace (ADR 445 increment 4) — ADR 128 scoping', () => {
     expect(wide.json.window_days).toBe(7);
   });
 });
+
+describe('GET /trace/seats/:name (ADR 445 increment 4b) — the /live timeline read', () => {
+  async function get(path: string, headers: Record<string, string>) {
+    const res = await fetch(base + path, { headers });
+    return { status: res.status, json: (await res.json()) as any };
+  }
+  it('returns a seat’s rows newest first with content always null; scoped like the session read', async () => {
+    // Ada records with content ON so the store holds it — the timeline still must not carry it.
+    await post(
+      '/teams/dawn/policy',
+      { trace: { content: 'on' } },
+      { authorization: `Bearer ${humanCredential}` },
+    );
+    await post(
+      '/teams/dawn/trace/events',
+      {
+        events: [
+          ev({
+            ts: 1_790_000_000_000,
+            content: { tool_input: 'ls -la SECRET', redactions: 0, truncated: false },
+          }),
+          ev({
+            ts: 1_790_000_000_500,
+            kind: 'usage',
+            tool_use_id: 'toolu_2',
+            detail: { parser: 'claude-code@1', input_tokens: 3 },
+          }),
+          ev({ ts: 1_790_000_001_000, tool_name: 'Read', tool_use_id: 'toolu_3' }),
+        ],
+      },
+      { authorization: `Bearer ${auth.key}`, 'x-musterd-seat': 'Ada' },
+    );
+    const own = await get('/teams/dawn/trace/seats/Ada?limit=2', {
+      authorization: `Bearer ${auth.key}`,
+      'x-musterd-seat': 'Ada',
+      'x-musterd-session-lease': auth.sessionLease,
+    });
+    expect(own.status).toBe(200);
+    expect(own.json.seat).toBe('Ada');
+    expect(own.json.events.map((e: any) => [e.kind, e.tool_name])).toEqual([
+      ['PostToolUse', 'Read'],
+      ['usage', 'Bash'],
+    ]);
+    expect(own.json.events.every((e: any) => e.content === null)).toBe(true);
+    expect(JSON.stringify(own.json)).not.toContain('SECRET');
+    // an admin reads any seat; a stranger seat reads empty, not refused
+    const admin = await get('/teams/dawn/trace/seats/Ada', {
+      authorization: `Bearer ${humanCredential}`,
+    });
+    expect(admin.json.events).toHaveLength(3);
+    const other = await get('/teams/dawn/trace/seats/nick', {
+      authorization: `Bearer ${auth.key}`,
+      'x-musterd-seat': 'Ada',
+      'x-musterd-session-lease': auth.sessionLease,
+    });
+    expect(other.status).toBe(200);
+    expect(other.json.events).toEqual([]);
+    // an out-of-range limit falls back to the default
+    const wide = await get('/teams/dawn/trace/seats/Ada?limit=9999', {
+      authorization: `Bearer ${humanCredential}`,
+    });
+    expect(wide.json.events).toHaveLength(3);
+  });
+});

@@ -217,3 +217,18 @@ export const TraceSessionResponseSchema = z.object({
   events: z.array(TraceSessionEventSchema),
 });
 export type TraceSessionResponse = z.infer<typeof TraceSessionResponseSchema>;
+
+/**
+ * One seat's most recent structural events, newest first — `GET /teams/:slug/trace/seats/:name`
+ * (ADR 445 increment 4b, the `/live` per-seat timeline). Same row shape as a session read, but
+ * `content` is ALWAYS null here: the timeline is a view over structural columns and the route never
+ * selects the content column. ADR 128-scoped like the session read (own seat, or any for an admin;
+ * everything else reads empty).
+ */
+export const TRACE_SEAT_TIMELINE_MAX = 200;
+export const TRACE_SEAT_TIMELINE_DEFAULT = 50;
+export const TraceSeatTimelineResponseSchema = z.object({
+  seat: z.string(),
+  events: z.array(TraceSessionEventSchema),
+});
+export type TraceSeatTimelineResponse = z.infer<typeof TraceSeatTimelineResponseSchema>;

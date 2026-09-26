@@ -123,7 +123,8 @@ live/
   coalesce.ts                   // at most one run in flight + one trailing run per gap — the roster refetch's burst guard (viewers × presence frames)
   format.ts                     // act tone/label, laneEvent recovery, roster/colour/status projections
   Stream.tsx                    // the act feed + ACT_GLYPH + typewriter
-  RosterPanel.tsx               // posture/offline_reason chip + exception account_status
+  RosterPanel.tsx               // posture/offline_reason chip + exception account_status; per-row `trace` expander (ADR 445 inc 4b) that lazy-loads the timeline
+  TraceTimeline.tsx             // the per-seat trace timeline (ADR 445 inc 4b): pure TraceTimeline + default SeatTracePanel (fetch); a lazy chunk, never on /live's eager graph
   SeedsTray.tsx                 // read-only active/history Seed drawer; promoted history → focused Lane
   OfficeScene.tsx               // React wrapper: mounts the scene, feeds it envelopes → emit
   Board.tsx / ApprovalQueue.tsx / ApprovalCard.tsx / AuditLog.tsx   // the other live views

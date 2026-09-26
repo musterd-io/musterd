@@ -6448,3 +6448,57 @@
     transform: scaleX(1);
   }
 }
+
+/* ── per-seat trace timeline (ADR 445 increment 4b) ─────────────────────────────────────
+   Quiet rows are INK, not opacity: `--lc-muted` clears 5.71:1 on the darkest paper, where an
+   opacity-dimmed row would fall under AA the moment the contrast gate could see it. */
+.lc-seat__trace {
+  margin-left: auto;
+  font: inherit;
+  font-size: 0.72em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lc-muted);
+  background: none;
+  border: 1px solid var(--lc-border-2);
+  border-radius: 999px;
+  padding: 0 0.55em;
+  min-height: 24px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.lc-seat__trace:hover,
+.lc-seat__trace.is-open {
+  color: var(--lc-text);
+  border-color: currentColor;
+}
+.lc-trace {
+  list-style: none;
+  margin: 0.35em 0 0.2em;
+  padding: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.74em;
+  color: var(--lc-text);
+  max-height: 14em;
+  overflow-y: auto;
+}
+.lc-trace__row {
+  display: grid;
+  grid-template-columns: 5.2em 8.5em 1fr;
+  gap: 0.6em;
+  padding: 0.1em 0;
+  white-space: nowrap;
+}
+.lc-trace__row.is-r2,
+.lc-trace__time {
+  color: var(--lc-muted);
+}
+.lc-trace__what {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lc-trace__empty {
+  margin: 0.35em 0 0.2em;
+  font-size: 0.74em;
+  color: var(--lc-faint);
+}

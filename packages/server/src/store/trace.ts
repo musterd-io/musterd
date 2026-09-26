@@ -255,6 +255,30 @@ export function startTraceContentPrune(
   };
 }
 
+/**
+ * One seat's most recent rows, newest first, structural columns ONLY — the `/live` per-seat
+ * timeline's read (ADR 445 increment 4b). The content column is not selected, so nothing this
+ * returns can carry it. Ordered by `ts` then `seq` so the two rails interleave in time.
+ */
+export function listSeatTrace(
+  traceDb: Database,
+  teamId: string,
+  seat: string,
+  limit: number,
+): Omit<TraceEventRow, 'content' | 'redactions'>[] {
+  return traceDb
+    .prepare<[string, string, number], Omit<TraceEventRow, 'content' | 'redactions'>>(
+      `SELECT id, team_id, seat, session_digest, seq, ts, received_at, harness, kind, tool_name,
+              tool_use_id, agent_id, parent_agent_id, duration_ms, outcome, detail, truncated,
+              content_pruned_at, origin_node
+         FROM trace_events
+        WHERE team_id = ? AND seat = ?
+        ORDER BY ts DESC, seq DESC
+        LIMIT ?`,
+    )
+    .all(teamId, seat, limit);
+}
+
 /** Per-kind counts for a team (optionally one seat) — the `musterd.trace.ingest` cross-check. */
 export function countTraceEvents(
   traceDb: Database,

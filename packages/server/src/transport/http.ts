@@ -109,6 +109,9 @@ import {
   TRACE_REPORT_DEFAULT_DAYS,
   TRACE_REPORT_MAX_DAYS,
   TraceReportSchema,
+  TRACE_SEAT_TIMELINE_DEFAULT,
+  TRACE_SEAT_TIMELINE_MAX,
+  TraceSeatTimelineResponseSchema,
 } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
@@ -359,7 +362,12 @@ import {
   applyPolicyChange,
 } from '../store/teams.js';
 import { applyToolCalls, recordSurfaceRender } from '../store/toolCalls.js';
-import { ingestSyncedTraceRows, ingestTraceEvents, listSessionTrace } from '../store/trace.js';
+import {
+  ingestSyncedTraceRows,
+  ingestTraceEvents,
+  listSeatTrace,
+  listSessionTrace,
+} from '../store/trace.js';
 import { deriveTraceReport } from '../store/traceReport.js';
 import {
   applyTrust,
@@ -5188,6 +5196,42 @@ export async function handleHttp(
       // IT produced; an admin reads any seat's. Rows another seat produced are filtered, not
       // refused, so "not yours" and "not there" are the same empty answer — the route is not an
       // oracle for which session digests exist.
+      // One seat's recent structural events, newest first (ADR 445 increment 4b, the `/live`
+      // per-seat timeline). Same ADR 128 scoping as the session read — "not yours" and "not there"
+      // are the same empty answer — and the store read never selects the content column, so this
+      // wire cannot carry it whatever the team's trace.content policy says.
+      if (method === 'GET' && rest.startsWith('/trace/seats/')) {
+        const { team, member } = authTouch(ctx, slug, req);
+        const seat = decodeURIComponent(rest.slice('/trace/seats/'.length));
+        const rawLimit = Number(url.searchParams.get('limit') ?? TRACE_SEAT_TIMELINE_DEFAULT);
+        const limit =
+          Number.isInteger(rawLimit) && rawLimit >= 1 && rawLimit <= TRACE_SEAT_TIMELINE_MAX
+            ? rawLimit
+            : TRACE_SEAT_TIMELINE_DEFAULT;
+        const allowed = resolveCapabilities(member).is_admin || seat === member.name;
+        const rows = allowed ? listSeatTrace(ctx.traceDb, team.id, seat, limit) : [];
+        const events = rows.map((r) => ({
+          seq: r.seq,
+          ts: r.ts,
+          received_at: r.received_at,
+          seat: r.seat,
+          harness: r.harness,
+          kind: r.kind,
+          tool_name: r.tool_name,
+          tool_use_id: r.tool_use_id,
+          agent_id: r.agent_id,
+          parent_agent_id: r.parent_agent_id,
+          duration_ms: r.duration_ms,
+          outcome: r.outcome,
+          detail: parseStoredJson(r.detail),
+          content: null,
+          redactions: null,
+          truncated: r.truncated === 1,
+          content_pruned_at: r.content_pruned_at,
+        }));
+        return sendJson(res, 200, TraceSeatTimelineResponseSchema.parse({ seat, events }));
+      }
+
       if (method === 'GET' && rest.startsWith('/trace/sessions/')) {
         const { team, member } = authTouch(ctx, slug, req);
         const digest = parseOrBadRequest(

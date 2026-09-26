@@ -1,4 +1,5 @@
 import type { MemberSummary } from '@musterd/protocol';
+import { lazy, Suspense, useState } from 'react';
 import {
   acceptanceCapacity,
   accountStatusException,
@@ -10,8 +11,13 @@ import {
   rosterPrimaryChip,
 } from './format';
 import { dwellTrace, type DwellLog } from './dwell';
+import type { LiveConfig } from './client';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { wokenBadge, wokenSeat } from './wokenSeat';
+
+/** The per-seat trace panel (ADR 445 increment 4b), kept out of /live's eager graph (ADR 151/183):
+ *  fetched the first time any row is expanded, never before. */
+const LazySeatTrace = lazy(() => import('./TraceTimeline'));
 
 /**
  * The roster rail — presence posture (ADR 138) plus governance exceptions/capabilities (ADR 073/070).
@@ -28,6 +34,7 @@ export function RosterPanel({
   stale = false,
   dwell,
   dwellNow,
+  cfg = null,
 }: {
   roster: MemberSummary[];
   collapsed?: boolean;
@@ -47,6 +54,10 @@ export function RosterPanel({
   /** The clock the trace ages against, passed rather than read so the rail has one `now` per render
    *  and a test can state the moment it means. */
   dwellNow?: number;
+  /** The signed-in viewer's config (ADR 445 increment 4b): with one, every row gets a `trace`
+   *  expander that reads that seat's recent structural events. Without one — every render test,
+   *  and a viewer who has not signed in — the roster reads exactly as before. */
+  cfg?: LiveConfig | null;
 }) {
   const members = [...roster].sort(rosterOrder);
   const admins = members.filter((m) => m.capabilities?.is_admin).length;
@@ -82,6 +93,7 @@ export function RosterPanel({
             daemonBuild={daemonBuild}
             daemonEpoch={daemonEpoch}
             trace={dwell && dwellNow !== undefined ? dwellTrace(dwell, m, dwellNow) : null}
+            cfg={cfg}
           />
         ))}
       </div>
@@ -129,10 +141,12 @@ function SeatRow({
   daemonBuild,
   daemonEpoch,
   trace = null,
+  cfg = null,
 }: {
   m: MemberSummary;
   daemonBuild?: string | undefined;
   daemonEpoch?: number | undefined;
+  cfg?: LiveConfig | null;
   /** What this page remembers of a visit that has ENDED, or null. Never rendered for a live seat —
    *  `dwellTrace` refuses that case at the source, so this row cannot reintroduce it. */
   trace?: { label: string; title: string } | null;
@@ -298,7 +312,33 @@ function SeatRow({
             </span>
           )}
         </div>
+        {/* ADR 445 increment 4b: the seat's recent trace, on demand. Structural events only —
+            the route never selects content — and empty when this viewer may not read the seat. */}
+        {cfg && <SeatTraceToggle cfg={cfg} seat={m.name} />}
       </div>
     </div>
+  );
+}
+
+/** The `trace` expander on a roster row: one small eager button; the panel is a lazy chunk. */
+function SeatTraceToggle({ cfg, seat }: { cfg: LiveConfig; seat: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        className={`lc-seat__trace${open ? ' is-open' : ''}`}
+        aria-expanded={open}
+        title="Recent trace — structural events only, never content"
+        onClick={() => setOpen((o) => !o)}
+      >
+        trace
+      </button>
+      {open && (
+        <Suspense fallback={<p className="lc-trace__empty">Reading {seat}'s trace…</p>}>
+          <LazySeatTrace cfg={cfg} seat={seat} />
+        </Suspense>
+      )}
+    </>
   );
 }

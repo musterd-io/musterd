@@ -533,6 +533,7 @@ function LivePage() {
               daemonEpoch={daemonEpoch}
               unreadable={rosterUnreadable}
               stale={rosterStale}
+              cfg={cfg}
             />
             <Stream
               envelopes={envelopes}
