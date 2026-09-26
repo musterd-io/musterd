@@ -50,24 +50,24 @@ export const OAUTH_RATE_LIMITS = {
   agent_mint: 10,
 } as const;
 
-/** `POST /oauth/:team/register` (RFC 7591) — redirect URIs validated server-side, never just typed. */
-export const OAuthClientRegistrationRequestSchema = z
-  .object({
-    redirect_uris: z.array(z.string().min(1)).min(1),
-    client_name: z.string().min(1).max(200),
-    token_endpoint_auth_method: z.enum(['none', 'client_secret_basic']).default('none'),
-    client_uri: z.string().optional(),
-    logo_uri: z.string().optional(),
-    scope: z.string().optional(),
-    // RFC 7591 §2 optional members the real phone connectors send (Claude and ChatGPT
-    // include grant_types/response_types in DCR). Accepted and ignored: increment 1 issues
-    // exactly one flow (code + refresh), so there is nothing to negotiate — but 400ing a
-    // standards-shaped body would lock a real app out at the first step (2026-09-25 live
-    // exercise, fifty's #1694 verdict). Truly unknown keys still fail closed under .strict().
-    grant_types: z.array(z.string()).optional(),
-    response_types: z.array(z.string()).optional(),
-  })
-  .strict();
+/**
+ * `POST /oauth/:team/register` (RFC 7591) — redirect URIs validated server-side, never just typed.
+ * RFC 7591 §2: "The authorization server MUST ignore any client metadata sent by the client that
+ * it does not understand" — so unknown members are stripped, not refused (ADR 458; the strict
+ * form locked the Claude iOS app out at registration in Rehearsal A, 2026-09-26). Any
+ * `token_endpoint_auth_method` parses; the server issues public clients only and says so in the
+ * response (§3.2.1 lets it override), which the client MUST then use.
+ */
+export const OAuthClientRegistrationRequestSchema = z.object({
+  redirect_uris: z.array(z.string().min(1)).min(1),
+  client_name: z.string().min(1).max(200),
+  token_endpoint_auth_method: z.string().default('none'),
+  client_uri: z.string().optional(),
+  logo_uri: z.string().optional(),
+  scope: z.string().optional(),
+  grant_types: z.array(z.string()).optional(),
+  response_types: z.array(z.string()).optional(),
+});
 export type OAuthClientRegistrationRequest = z.infer<typeof OAuthClientRegistrationRequestSchema>;
 
 /** Registration response — the secret is present ONLY for confidential clients, shown once. */

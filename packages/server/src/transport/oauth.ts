@@ -507,16 +507,31 @@ export async function handleOAuthRoutes(
   if (method === 'POST' && rest === '/register') {
     requireTlsPeer(ctx, req, 'client registration');
     checkRateLimit(ctx, req, 'register');
-    const body = parseOrOAuth(
-      OAuthClientRegistrationRequestSchema,
-      await readTokenRequestBody(req),
-    );
-    if (body.token_endpoint_auth_method !== 'none')
-      throw new MusterdError(
-        'bad_request',
-        'confidential clients are not issued in increment 1 — register a public client (both phone apps are public)',
+    // RFC 7591 §3.2.2: a registration failure is `{error, error_description}` with one of the
+    // registered codes — the apps parse that, not the musterd envelope (ADR 458).
+    const parsedReg = OAuthClientRegistrationRequestSchema.safeParse(await readTokenRequestBody(req));
+    if (!parsedReg.success) {
+      sendTokenError(
+        res,
+        400,
+        'invalid_client_metadata',
+        parsedReg.error.issues
+          .slice(0, 4)
+          .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+          .join('; '),
       );
-    for (const uri of body.redirect_uris) assertRedirectUri(uri);
+      return true;
+    }
+    const body = parsedReg.data;
+    // Public clients only: whatever auth method the app asked for, the response says `none`
+    // (RFC 7591 §3.2.1 — the server may override, and the client MUST use the returned values).
+    // Both phone apps are public; refusing here locked a real one out (Rehearsal A, 2026-09-26).
+    try {
+      for (const uri of body.redirect_uris) assertRedirectUri(uri);
+    } catch (err) {
+      sendTokenError(res, 400, 'invalid_redirect_uri', asMusterdError(err).message);
+      return true;
+    }
     const { client_id } = registerClient(ctx.db, {
       teamId: team.id,
       clientName: body.client_name,

@@ -254,7 +254,7 @@ describe('client registration (ADR 446 §3/§5)', () => {
     expect(JSON.stringify(rows[0])).not.toMatch(/mscr_|msat_|msrt_/);
   });
 
-  it('refuses wildcard, plaintext, and private-host redirect URIs — and confidential clients', async () => {
+  it('refuses wildcard, plaintext, and private-host redirect URIs — in RFC 7591 error shape', async () => {
     for (const uri of [
       'https://*.example/cb',
       'http://app.example/cb',
@@ -264,18 +264,41 @@ describe('client registration (ADR 446 §3/§5)', () => {
     ]) {
       const res = await registerClient([uri]);
       expect(res.status).toBe(400);
+      expect(res.json.error).toBe('invalid_redirect_uri');
     }
     // Loopback http is for desktop testing only — allowed at registration.
     // (Buckets reset: the five refusals above already spent this IP's minute.)
     __resetOAuthBucketsForTest();
     expect((await registerClient(['http://127.0.0.1:5174/cb'])).status).toBe(201);
-    // Confidential clients are not issued in increment 1.
+    // ADR 458: a confidential request is answered with a PUBLIC client, not refused — the
+    // response's token_endpoint_auth_method is what the client must use (RFC 7591 §3.2.1).
     const res = await postJson('/oauth/dawn/register', {
       redirect_uris: [REDIRECT],
       client_name: 'Conf',
-      token_endpoint_auth_method: 'client_secret_basic',
+      token_endpoint_auth_method: 'client_secret_post',
     });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(201);
+    expect(res.json.token_endpoint_auth_method).toBe('none');
+    expect(res.json.client_secret).toBeUndefined();
+  });
+
+  it('ignores unknown RFC 7591 members instead of refusing the app (ADR 458)', async () => {
+    __resetOAuthBucketsForTest();
+    const res = await postJson('/oauth/dawn/register', {
+      redirect_uris: [REDIRECT],
+      client_name: 'Claude',
+      token_endpoint_auth_method: 'none',
+      contacts: ['a@b.c'],
+      software_id: 'claude-ios',
+      software_version: '1',
+      tos_uri: 'https://claude.ai/tos',
+      policy_uri: 'https://claude.ai/privacy',
+    });
+    expect(res.status).toBe(201);
+    expect(res.json.client_id).toMatch(/^cid_/);
+    const missing = await postJson('/oauth/dawn/register', { client_name: 'NoRedirects' });
+    expect(missing.status).toBe(400);
+    expect(missing.json.error).toBe('invalid_client_metadata');
   });
 
   it('rate-limits registration (5/min/IP)', async () => {

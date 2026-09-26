@@ -197,9 +197,22 @@ describe('oauth schemas (ADR 446)', () => {
       response_types: ['code'],
     } as const;
     expect(OAuthClientRegistrationRequestSchema.safeParse(claudeBody).success).toBe(true);
-    // Tolerance is enumerated, not open: truly unknown keys still fail closed.
-    expect(
-      OAuthClientRegistrationRequestSchema.safeParse({ ...claudeBody, bogus_key: 1 }).success,
-    ).toBe(false);
+  });
+
+  it('registration ignores unknown RFC 7591 members and any auth method (ADR 458)', () => {
+    // RFC 7591 §2: unknown metadata MUST be ignored. Rehearsal A (2026-09-26): the Claude iOS app
+    // was refused at registration by the strict form — "Couldn't register with demo's sign-in".
+    const parsed = OAuthClientRegistrationRequestSchema.safeParse({
+      redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+      client_name: 'Claude',
+      token_endpoint_auth_method: 'client_secret_post',
+      contacts: ['a@b.c'],
+      software_id: 'x',
+      tos_uri: 'https://claude.ai/tos',
+      bogus_key: 1,
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && 'bogus_key' in parsed.data).toBe(false);
+    expect(parsed.success && parsed.data.token_endpoint_auth_method).toBe('client_secret_post');
   });
 });
