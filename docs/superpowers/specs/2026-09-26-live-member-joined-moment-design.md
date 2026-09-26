@@ -93,14 +93,18 @@ wagon to the desk while the guest walks there, arriving just before them. One ca
 
 ### 3.4 The crowd (20–50 guests)
 
-- **Waves.** Arrivals within 2 s of each other form one wave.
+- **Waves.** Arrivals within 2 s of each other form one wave, settled to one record per name (a
+  `member add` and a connect a second later arrive as two refetches and play as the one folded
+  moment of §3.3), without anyone who left before it started.
 - **No queue** (amended 2026-09-26 while building). Guests check in at the three marks in parallel;
   anyone past the last mark walks straight in — the reception design's own rule (`layout.ts`
   `CHECK_IN_MARKS`: ceremony that queues is the gate it rejected). The conveyor toss reaches them as
   they pass the counter.
 - **Conveyor mode.** The receptionist tosses one lanyard every 0.6 s with a short `welcome!`
   bubble instead of the full greeting.
-- **Once per wave:** one doorbell, one confetti burst (at the queue, not per desk), one caption:
+- **Once per wave:** one confetti burst, one caption — and one doorbell per roster update, rung as
+  the guests walk through the door (amended 2026-09-26: the bell used to wait for the wave's script,
+  two seconds after the walk-in):
   `{n} guests joined — welcome` (a single-Member wave uses the §3.2 line).
 - **Flip counter.** While a crowd is arriving, a flip counter on the wallboard ticks up per
   lanyard: `guests 12 → 13 → 14`. It stays for 60 s after the last arrival, then folds away.
@@ -130,7 +134,7 @@ Member arrives in the viewer's roster within the refetch coalesce window (~1 s).
   change (hard rule 1, ADR required), and `/live` does not need it: roster diffing already
   distinguishes a new name.
 
-### 4.2 Client detection (`packages/web/src/live/arrivals.ts`, pure)
+### 4.2 Client detection (`packages/web/src/live/office-scene/arrivals.ts`, pure)
 
 Given the previous and next roster:
 

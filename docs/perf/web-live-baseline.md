@@ -952,3 +952,18 @@ re-baseline may only tighten, and there is no dependency to drop. The new ceilin
 
 - Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — total must read under 249.4 KB.
   At or under 242.6 KB, the Welcome Wagon has left the graph and this raise should go with it.
+
+### 2026-09-26 — Welcome Wagon runtime: a 28-guest crowd arriving (lane 01M3F81DD9)
+
+Measured on `/office-preview?quiet` under `vite dev` (unminified — production reads lower), 1400×900
+viewport, an independent rAF probe over two 12 s windows, `PerformanceObserver('longtask')` alongside:
+
+| Window                                   | FPS  | p95 frame | worst frame | long tasks |
+| ---------------------------------------- | ---- | --------- | ----------- | ---------- |
+| quiet room (baseline)                    | 60.0 | 18.5 ms   | 18.7 ms     | 0          |
+| 28 guests arriving (two 🎉 presses, 1 s) | 55.8 | 33.3 ms   | 35.3 ms     | 0          |
+
+The worst frame stays inside the log's recorded envelope (42–794 ms) and nothing crosses a long
+task; the p95 rise is 28 bodies walking in at once through the existing actor engine. An idle room
+parks at 0 ticks/s before and after a welcome (`?quiet&idle=all`), and under reduced motion a welcome
+runs with 0 rAF ticks (an off-loop timer steps it, and stops once it is done).
