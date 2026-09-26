@@ -436,7 +436,7 @@ export const CATALOG: readonly CommandEntry[] = [
     primary: true,
     detail:
       'The mirror of `musterd agent`: the person stands in a member workspace, ' +
-      '`~/musterd/<team>/<repo>/<name>` — a worktree on `human/<name>` when run inside the project ' +
+      '`~/musterd/<team>/<repo>/<name>` — a git checkout on branch `human/<name>` when run inside the project ' +
       'checkout; outside one, `--home <dir>` is required (ADR 447). It holds their 0600 binding, so ' +
       '`musterd board`, `musterd inbox --watch` and `musterd send` are simply them with nothing named ' +
       'and nothing pasted. The team root `~/musterd/<team>` is never bound. ' +
