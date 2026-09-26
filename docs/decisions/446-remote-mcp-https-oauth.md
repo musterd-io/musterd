@@ -212,6 +212,14 @@ apps' setup prompts call it; failing there fails the demo).
 - 2026-09-26: the token request schema was `.strict()` and refused the RFC 8707 `resource`
   parameter every MCP client sends, so a real client's exchange 400'd after sign-in. Admitted and
   audience-checked by [ADR 457](457-oauth-resource-indicator.md).
+- 2026-09-26 (Rehearsal A, lane 01M3FDG1MD): the daemon had served authorization-server metadata
+  only at `/.well-known/oauth-authorization-server/:team` and the path-appended
+  `/oauth/:team/.well-known/oauth-authorization-server`. Neither is what an MCP client fetches
+  for issuer `/oauth/:team`: RFC 8414 path insertion is
+  `/.well-known/oauth-authorization-server/oauth/:team`, and the MCP auth spec's fallbacks are the
+  two `openid-configuration` forms. All three 404'd, so the Claude iOS app reported "could not
+  start sign in" before the sign-in page ever loaded; the load bench never saw it because the
+  harness read the metadata URL directly. Fixed by serving all four forms; the old paths stay.
 
 - `@musterd/protocol` grows two prefixes + OAuth zod schemas + `rate_limited` (429) and
   `payload_too_large` (413) error codes (ADR-gated, as required — this ADR is the gate). `@musterd/server` grows one runtime dependency
