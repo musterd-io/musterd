@@ -36,9 +36,16 @@ export function mintSponsoredAgent(
       `"${team.slug}" keeps its roster in seat files — add an agent there (\`musterd agent\`); ` +
         'member-created agents need a team whose roster lives in the daemon',
     );
-  const { member, nonce, expires_at } = createSponsoredAgent(ctx.db, team, sponsor, input, Date.now(), {
-    cap: getPolicy(ctx.db, team.id).sponsored_agent_cap,
-  });
+  const { member, nonce, expires_at } = createSponsoredAgent(
+    ctx.db,
+    team,
+    sponsor,
+    input,
+    Date.now(),
+    {
+      cap: getPolicy(ctx.db, team.id).sponsored_agent_cap,
+    },
+  );
   appendAudit(ctx.db, team.id, {
     actor: sponsor.name,
     action: 'member.sponsored_agent_created',

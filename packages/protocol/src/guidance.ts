@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 31;
+export const GUIDANCE_CONTENT_VERSION = 32;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -156,10 +156,11 @@ export function renderSkillBody(opts: { team: string }): string {
     '**Remote members (OAuth, ADR 446).** A client connected to `https://<host>/mcp/<team>` is signed in',
     'as its member; `team_join` is a no-op success there. New people are admitted by an admin-minted',
     'invite — `musterd team invite create [--member-until <when>]` prints a room code and a link value',
-    'once (ADR 450); the person types or pastes it into the sign-in page. A human member can mint up to',
-    'three agents they sponsor with `team_agent_create` (ADR 449 §3): the reply carries no secret, only a',
-    'one-time connect link, `/join/<team>#n=<nonce>` (ADR 452). A sponsored agent can never outlive its',
-    'sponsor, and revoking the sponsor revokes it.',
+    'once (ADR 450); the person types or pastes it into the sign-in page. A human member can mint',
+    'agents they sponsor with `team_agent_create` (ADR 449 §3) — three live agents each by default,',
+    'retunable per team (`musterd team policy --sponsored-agent-cap`, ADR 459), off per member by an',
+    'admin: the reply carries no secret, only a one-time connect link, `/join/<team>#n=<nonce>`',
+    '(ADR 452). A sponsored agent can never outlive its sponsor, and revoking the sponsor revokes it.',
     '',
     '## Owning work in a lane — claim before you build',
     '',

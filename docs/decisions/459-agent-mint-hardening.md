@@ -95,3 +95,6 @@ half-dozen rapid human mints while still stopping automated mint spam.
   teammate mints; the 4th live agent is refused at default cap and the 7th at a team cap of 6;
   the 11th mint in a minute from one IP is `rate_limited`; an expired member gains `left_at`
   while an unexpiring one is untouched; old capability blobs still parse.
+- **Experiment:** in the demo rehearsal, count mint refusals by cause (switch off / cap /
+  rate) — a rehearsal with zero switch-off refusals means no team has tried the control, and
+  the control is unverified, not working.

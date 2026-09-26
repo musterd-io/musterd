@@ -884,7 +884,7 @@ export interface SweptMember {
 export function sweepExpiredMembers(db: Database, now = Date.now()): SweptMember[] {
   const rows = db
     .prepare<
-      [],
+      [number],
       { team_id: string; id: string; name: string; lifecycle_until: number | null }
     >(
       `SELECT team_id, id, name, lifecycle_until FROM members

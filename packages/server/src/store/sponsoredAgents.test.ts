@@ -121,6 +121,34 @@ describe('createSponsoredAgent (ADR 449 §3)', () => {
   });
 });
 
+describe('agent mint hardening (ADR 459)', () => {
+  it('a sponsor narrowed off can_create_agents is refused while a teammate mints', () => {
+    const { db, team, human } = teamWithHuman();
+    const { row: mate } = addMember(db, team, { name: 'mate', kind: 'human' });
+    db.prepare('UPDATE members SET capabilities = ? WHERE id = ?').run(
+      JSON.stringify({ ...GENERALIST_CAPABILITIES, can_create_agents: false }),
+      human.id,
+    );
+    const narrowed = getMemberByName(db, team.id, 'dana')!;
+    expect(() => createSponsoredAgent(db, team, narrowed, { name: 'dana-scout' })).toThrowError(
+      /can_create_agents/,
+    );
+    // The teammate's grant is untouched.
+    expect(createSponsoredAgent(db, team, mate, { name: 'mate-scout' }).member.name).toBe(
+      'mate-scout',
+    );
+  });
+
+  it('the per-team cap tunes the count and names the effective number', () => {
+    const { db, team, human } = teamWithHuman();
+    for (let i = 0; i < 6; i++)
+      createSponsoredAgent(db, team, human, { name: `a${i}` }, Date.now(), { cap: 6 });
+    expect(() =>
+      createSponsoredAgent(db, team, human, { name: 'one-too-many' }, Date.now(), { cap: 6 }),
+    ).toThrowError(/cap of 6/);
+  });
+});
+
 describe('agent connect nonce (ADR 449 §4)', () => {
   it('redeems once, for the agent it was minted for, on its own team', () => {
     const { db, team, human } = teamWithHuman();

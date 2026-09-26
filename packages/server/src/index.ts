@@ -238,8 +238,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
                   detail: { lifecycle_until: m.lifecycle_until },
                 });
               }
-              if (swept.length > 0)
-                log.info({ msg: 'expired_members_swept', count: swept.length });
+              if (swept.length > 0) log.info({ msg: 'expired_members_swept', count: swept.length });
             },
             (err) => log.warn({ msg: 'expired_sweep_failed', err: String(err) }),
           );
