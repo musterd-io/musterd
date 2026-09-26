@@ -934,24 +934,25 @@ Measured + 15%, following ADR 313. A loosening, approved by nick.
 The chunk is the join-page copy spec's strings verbatim plus the fragment/room-code helpers, so there is
 nothing to trim or delete; lazy-loading cannot move total (ADR 183); a re-baseline would loosen. New
 ceiling is measured + ~0.7 KB CI gzip delta + ~1.2%, per precedent.
-## 2026-09-26 — `totalJsGzipBytes` 248,400 → 255,400: the Welcome Wagon (lane 01M3F81DD9)
+## 2026-09-26 — `totalJsGzipBytes` 254,700 → 261,200: the Welcome Wagon (lane 01M3F81DD9)
 
-Measured with Node zlib over `packages/web/dist/client` after `pnpm --filter @musterd/web build`, as
-the gate does: main @ `ea69eb3c` **246,125 B**, this branch **251,595 B** — the feature is **+5,470 B**.
+Measured with Node zlib over `packages/web/dist/client` after a build, as the gate does: main @
+`0a297877` (with `/join` landed) **250,999 B**, this branch **257,400 B** — the feature is **+6,401 B**
+(first measured at +5,470 B against an earlier main; the whole-branch review's fixes added the rest).
 
-Per chunk (gzip -9, main → branch): `render` 30,362 → 34,335 (+3,973 — the painters, plus the
-sequencer and wiring, pulled in by `render.ts` importing the lanyard flight time from `welcomeRoom.ts`),
-`office-scene` 20,882 → 21,681 (+799), `soundEngine` +280 (five synth voices), `character` +241 (the
-moving box and the lanyard), `skeleton` +81. The welcome code is in the build exactly once (grepped
-the chunks for its copy). `initialJsGzipBytes` moved 135.6 → 135.7 KB: 17 B is the wire reader
-learning `sponsored_by`, which the roster needs to name a sponsor in the caption.
+All of it rides the lazy `render` / `office-scene` chunks — the painters, plus the sequencer and
+wiring (pulled into `render` by `render.ts` importing the lanyard flight time from `welcomeRoom.ts`)
+— with `soundEngine` carrying the five synth voices. The welcome code is in the build exactly once
+(grepped the chunks for its copy). `initialJsGzipBytes` moved +0.1 KB: the wire reader learning
+`sponsored_by`, which the roster needs to name a sponsor in the caption.
 
 No trim was available that keeps the feature: lazy-loading cannot move this budget (ADR 183), a
 re-baseline may only tighten, and there is no dependency to drop. The new ceiling is measured + the
 ~0.7 KB CI gzip delta + ~1.2%, per the 2026-08-24/25/31 and 09-02/03 precedents.
 
-- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — total must read under 249.4 KB.
-  At or under 242.6 KB, the Welcome Wagon has left the graph and this raise should go with it.
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — total must read under 255.1 KB.
+  At or under 245.1 KB (main's measure), the Welcome Wagon has left the graph and this raise should
+  go with it.
 
 ### 2026-09-26 — Welcome Wagon runtime: a 28-guest crowd arriving (lane 01M3F81DD9)
 
