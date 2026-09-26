@@ -997,6 +997,41 @@ describe('HTTP API', () => {
     );
     watcher.ws.close();
   });
+
+  it('a live watcher hears a new member the moment it is added (lane 01M3F81DD9)', async () => {
+    const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+    const nickTok = team.json.human_credential;
+    const watcher = new TestWs();
+    await watcher.open();
+    await watcher.claim('dawn', nickTok, 'nick');
+    watcher.send({ type: 'subscribe', scope: 'team' });
+
+    await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, nickTok);
+    await pollUntil(() =>
+      watcher.frames.some(
+        (f) =>
+          f.type === 'presence' && (f as any).member === 'Ada' && (f as any).status === 'offline',
+      ),
+    );
+    watcher.ws.close();
+  });
+
+  it('an observer seat is not announced (lane 01M3F81DD9)', async () => {
+    const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+    const nickTok = team.json.human_credential;
+    const watcher = new TestWs();
+    await watcher.open();
+    await watcher.claim('dawn', nickTok, 'nick');
+    watcher.send({ type: 'subscribe', scope: 'team' });
+
+    const r = await post('/teams/dawn/members', { name: 'eye', kind: 'agent', observer: true }, nickTok);
+    expect(r.status).toBe(201);
+    await new Promise((res) => setTimeout(res, 150));
+    expect(watcher.frames.some((f) => f.type === 'presence' && (f as any).member === 'eye')).toBe(
+      false,
+    );
+    watcher.ws.close();
+  });
 });
 
 describe('static web serving (ADR 062)', () => {

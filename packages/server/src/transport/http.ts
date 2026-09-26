@@ -409,6 +409,7 @@ import {
   recordTraceReplicated,
 } from '../telemetry.js';
 import { handleMcpRoute } from './mcpHttp.js';
+import { broadcastMemberAdded } from './memberAdded.js';
 import { checkRateLimit, handleOAuthRoutes } from './oauth.js';
 import { issueAgentConnect, mintSponsoredAgent, originFrom } from './sponsoredAgentMint.js';
 
@@ -1958,6 +1959,9 @@ export async function handleHttp(
           }
           const sharedWith =
             row.hue === null ? null : hueSharedWith(ctx.db, team.id, row.hue, row.id);
+          // A fresh or revived seat is news to the room; a re-mint of an existing one is not.
+          if (result.added.includes(body.name) || result.revived.includes(body.name))
+            broadcastMemberAdded(ctx.hub, team.id, body.name);
           return sendJson(res, 201, {
             member: toMember(row, team.slug),
             token,
@@ -1983,6 +1987,8 @@ export async function handleHttp(
             ? { observer: true, observerScope: body.observer_scope ?? 'full' }
             : {}),
         });
+        // Observers (ADR 063) are runtime watchers, not teammates — the room does not welcome them.
+        if (!body.observer) broadcastMemberAdded(ctx.hub, team.id, row.name);
         return sendJson(res, 201, {
           member: toMember(row, team.slug),
           token,

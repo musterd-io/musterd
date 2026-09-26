@@ -31,6 +31,7 @@ import { startTracePush } from './sync/tracePush.js';
 import { registerRuntimeGauges, startTelemetry, telemetryEnabled } from './telemetry.js';
 import { handleHttp } from './transport/http.js';
 import { Hub } from './transport/hub.js';
+import { broadcastReconciled } from './transport/memberAdded.js';
 import { attachWsServer } from './transport/ws.js';
 
 export interface ServerOptions {
@@ -164,7 +165,8 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     stopWatcher = null;
     if (ctx.rosterRoots.length > 0) {
       stopWatcher = startRosterWatcher(ctx.rosterRoots, RECONCILE_DEBOUNCE_MS, () => {
-        reconcileAll(db, ctx.rosterRoots);
+        // A seat file that just appeared (a git pull, `musterd agent`) is a Member arriving — say so.
+        broadcastReconciled(ctx, reconcileAll(db, ctx.rosterRoots));
       });
     }
   };
@@ -263,6 +265,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       // Wired to SIGHUP by the daemon bin — the lib never grabs process signals (tests would clash).
       if (!rootsExplicit) ctx.rosterRoots = resolveRosterRoots();
       const summary = reconcileAll(db, ctx.rosterRoots);
+      broadcastReconciled(ctx, summary);
       startWatching();
       log.info({ msg: 'reconcile_reload', teams: summary.length, roots: ctx.rosterRoots.length });
     },
