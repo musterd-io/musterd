@@ -576,11 +576,13 @@ function typingTap(t: number, seed: number, hand: number): number {
 /** Overlays ride on top of whichever base pose was solved, so a carrying walker still walks. */
 function applyOverlays(s: Skel, inp: SkelInput): void {
   const C = CHAR;
-  if (inp.carry === 'box' || inp.carry === 'plate') {
+  // A first-day moving box (lane 01M3F81DD9) is held exactly like the handoff box — same arms, new box.
+  const boxy = inp.carry === 'box' || inp.carry === 'movingBox';
+  if (boxy || inp.carry === 'plate') {
     // Both hands forward, holding it — at the chest for the box, lower and flatter for a plate of food.
-    const y = inp.carry === 'box' ? s.chest.y - 2 : s.chest.y - 9;
-    const z = inp.carry === 'box' ? s.chest.z + 13 : s.chest.z + 12;
-    const span = inp.carry === 'box' ? 8 : 6.5;
+    const y = boxy ? s.chest.y - 2 : s.chest.y - 9;
+    const z = boxy ? s.chest.z + 13 : s.chest.z + 12;
+    const span = boxy ? 8 : 6.5;
     for (const i of [0, 1] as const) {
       const sgn = i === 0 ? -1 : 1;
       const hand = v(sgn * span, y, z);

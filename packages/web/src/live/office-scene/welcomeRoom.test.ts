@@ -157,6 +157,19 @@ describe('welcomeRoom — dispatch', () => {
     expect(room.active()).toBe(false);
   });
 
+  it('the lanyard flies from the counter for 0.6 s before it is on them', () => {
+    const { ports } = fakePorts();
+    const room = createWelcomeRoom(ports, OPTS);
+    room.onRoster([subject('ada')], new Set(), 0);
+    room.onRoster([online(subject('ada'))], new Set(), 0);
+    run(room, WAVE_MS, WAVE_MS + 1_600); // the toss lands at 1.6 s
+    expect(room.paint.tosses.map((x) => x.name)).toEqual(['ada']);
+    expect(room.paint.tosses[0]!.color).toBe('c(ada,40)');
+    run(room, WAVE_MS + 1_650, WAVE_MS + 2_400);
+    expect(room.paint.tosses).toEqual([]);
+    expect(room.paint.lanyards.has('ada')).toBe(true);
+  });
+
   it('an agent gets the boot blink with the toss; a human does not', () => {
     const { ports } = fakePorts();
     const room = createWelcomeRoom(ports, OPTS);

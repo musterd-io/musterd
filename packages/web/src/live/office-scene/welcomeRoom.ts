@@ -66,6 +66,8 @@ export interface WelcomeRoom {
 
 /** How long each transient paint lives, in scene seconds. */
 const LABEL_S = 2.0;
+/** A tossed lanyard's flight from the counter to the newcomer — render.ts reads the same number. */
+export const TOSS_S = 0.6;
 const HELLO_S = 1.0;
 const BLINK_S = 1.2;
 /** A lanyard outlives its moment by at most this long — a guest in the overflow gallery never sits. */
@@ -87,6 +89,7 @@ export function createWelcomeRoom(
   const tossedAt = new Map<string, number>();
   const paint: WelcomePaint = {
     lanyards: new Map(),
+    tosses: [],
     hello: new Map(),
     bootBlink: new Map(),
     labels: [],
@@ -126,6 +129,7 @@ export function createWelcomeRoom(
       case 'toss':
         ports.receptionist('toss');
         paint.lanyards.set(b.name, ports.color(b.name, b.hue));
+        paint.tosses.push({ name: b.name, color: ports.color(b.name, b.hue), t0: clock });
         tossedAt.set(b.name, clock);
         if (ports.kindOf(b.name) === 'agent') paint.bootBlink.set(b.name, clock);
         ports.sound('whoosh', 'desk');
@@ -154,6 +158,7 @@ export function createWelcomeRoom(
 
   function prune(clock: number): void {
     paint.labels = paint.labels.filter((l) => clock - l.t0 < LABEL_S);
+    paint.tosses = paint.tosses.filter((x) => clock - x.t0 < TOSS_S);
     for (const [n, t0] of paint.hello) if (clock - t0 >= HELLO_S) paint.hello.delete(n);
     for (const [n, t0] of paint.bootBlink) if (clock - t0 >= BLINK_S) paint.bootBlink.delete(n);
     // The lanyard is a prop of the moment: gone once they sit, if they left mid-welcome, or — for a
@@ -201,6 +206,7 @@ export function createWelcomeRoom(
         welcomePlaying(wagon) ||
         wagon.pending.length > 0 ||
         paint.labels.length > 0 ||
+        paint.tosses.length > 0 ||
         paint.hello.size > 0 ||
         paint.bootBlink.size > 0 ||
         paint.lanyards.size > 0 ||

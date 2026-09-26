@@ -365,3 +365,13 @@ describe('the welcome wave gesture (lane 01M3F81DD9)', () => {
     expect(IDLE_GESTURES).not.toContain(GESTURE.wave);
   });
 });
+
+describe('the first-day moving box (lane 01M3F81DD9)', () => {
+  it('is held in both forearms at the chest, exactly like the handoff box', () => {
+    const box = solveSkeleton(walk(0.3, { carry: 'box' }));
+    const moving = solveSkeleton(walk(0.3, { carry: 'movingBox' }));
+    expect(moving.wrist).toEqual(box.wrist);
+    expect(moving.elbow).toEqual(box.elbow);
+    expect(moving.wrist).not.toEqual(solveSkeleton(walk(0.3)).wrist);
+  });
+});

@@ -453,7 +453,7 @@ export function mountOffice(
         const drop = deskDrop(n);
         if (drop) petFollow(pet, drop); // the dog trots over to meet them at their desk
       },
-      confetti: (n, color) => pushConfetti(n, color ?? '#E1AD01'),
+      confetti: (n, color) => pushConfetti(n, color ?? undefined), // a crowd's burst keeps the palette
       door: (hue) => pushDoorCue(hue === null ? undefined : `hsl(${hue}, 70%, 72%)`),
       caption: (text, who) => pushRail({ text, who, tone: 'presence' }),
       sound: (m, at) => roomTone.moment(m, soundAt(at)),
@@ -666,6 +666,7 @@ export function mountOffice(
       recep,
       wallBoard,
       teamWorkingHours,
+      { welcome: welcomeRoom.paint },
     );
     heads = anchors.heads;
     // The receptionist's bubble anchor — synthetic head above her desk. syncLabels skips names
@@ -1450,7 +1451,7 @@ export function mountOffice(
       recep,
       wallBoard,
       teamWorkingHours,
-      { sprites, dpr },
+      { sprites, dpr, welcome: welcomeRoom.paint },
     );
     drawCues();
     positionLabels(anchors.heads);
@@ -1935,10 +1936,18 @@ export function mountOffice(
   }
 
   /** The acceptance celebration burst — a one-shot confetti puff over a member's head. */
-  function pushConfetti(name: string, color = '#5cd49a') {
+  function pushConfetti(name: string, tint?: string) {
     const at = heads.get(name);
     if (!at) return;
-    cues.push({ at: { x: at.x, y: at.y }, color, glyph: '', t: 0, urgent: false, kind: 'confetti' });
+    cues.push({
+      at: { x: at.x, y: at.y },
+      color: '#5cd49a',
+      glyph: '',
+      t: 0,
+      urgent: false,
+      kind: 'confetti',
+      ...(tint ? { tint } : {}),
+    });
   }
 
   /** The `count` nearest drawn members to `name` (excluding them) within one pod's reach — the desk

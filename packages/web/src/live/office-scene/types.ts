@@ -77,6 +77,8 @@ export interface OfficeNode {
 export interface WelcomePaint {
   /** Name → lanyard colour, from the toss until they sit down. */
   lanyards: Map<string, string>;
+  /** Lanyards in the air: tossed from the front desk at `t0` (scene clock), landing on `name`. */
+  tosses: { name: string; color: string; t0: number }[];
   /** Name → scene clock when their monitor's one-frame hello screen lit. */
   hello: Map<string, number>;
   /** Agent name → scene clock when the status light over their head began to blink. */

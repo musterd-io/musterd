@@ -131,6 +131,8 @@ export interface CharacterOpts {
    * long hair, which closed around her face into one oval and read, fairly, as a seal).
    */
   look?: Appearance;
+  /** A first arrival's lanyard, in their colour (lane 01M3F81DD9) — from the toss until they sit. */
+  lanyard?: string;
 }
 
 /**
@@ -263,7 +265,7 @@ export function drawCharacter(
         ? wr.d * 0.6 + px(k.chest).d * 0.4
         : o.carry === 'plate'
           ? (wr.d + px(k.wrist[0]).d) / 2
-          : o.carry === 'box'
+          : o.carry === 'box' || o.carry === 'movingBox'
             ? px({ x: 0, y: k.chest.y - 1, z: k.chest.z + 13 }).d
             : wr.d;
     return { d, fn: () => drawCarry(ctx, px, k, u, o.carry!) };
@@ -321,6 +323,7 @@ export function drawCharacter(
         disc(ctx, hood.p, 11 * u, 8 * u, accDark);
       }
       if (node.kind === 'agent') disc(ctx, ch.p, 3 * u, 2.8 * u, '#74e08a'); // the chest LED
+      if (o.lanyard) drawLanyard(ctx, px, k, u, o.lanyard);
     },
   });
 
@@ -622,6 +625,37 @@ function drawSipMug(ctx: CanvasRenderingContext2D, px: (j: V3) => Proj, k: Skel,
   disc(ctx, { x: wr.p.x, y: wr.p.y - h * 0.7 }, w / 2, w / 4.2, '#3a2416'); // the coffee surface
 }
 
+/** The moving box's kraft cardboard and the plant in it (lane 01M3F81DD9). */
+const MOVING_BOX = '#c9a26b';
+const MOVING_BOX_FLAP = '#a8834f';
+const PLANT_LEAF = '#4f8a4b';
+const PLANT_LEAF_LIT = '#79b36a';
+/** The lanyard's card — an off-white that reads as a badge against any identity hue. */
+const LANYARD_CARD = '#f7f3ea';
+
+/**
+ * The first arrival's lanyard (lane 01M3F81DD9): a cord in their colour from the neck down to a small
+ * card on the chest. Only on the side facing the camera — seen from behind, a lanyard is just a cord at
+ * the neck, and a card painted through the back reads as a hole in the shirt.
+ */
+function drawLanyard(ctx: CanvasRenderingContext2D, px: (j: V3) => Proj, k: Skel, u: number, color: string): void {
+  const front = px({ x: 0, y: k.chest.y + 2, z: k.chest.z + 7 });
+  if (front.d <= px(k.chest).d) return; // facing away
+  const l = px({ x: -4, y: k.neck.y, z: k.neck.z + 3 });
+  const r = px({ x: 4, y: k.neck.y, z: k.neck.z + 3 });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(1, 1.6 * u);
+  ctx.beginPath();
+  ctx.moveTo(l.p.x, l.p.y);
+  ctx.lineTo(front.p.x, front.p.y);
+  ctx.lineTo(r.p.x, r.p.y);
+  ctx.stroke();
+  ctx.fillStyle = LANYARD_CARD;
+  ctx.fillRect(front.p.x - 2.6 * u, front.p.y, 5.2 * u, 6.4 * u);
+  ctx.fillStyle = color; // the card's colour band — whose badge it is
+  ctx.fillRect(front.p.x - 2.6 * u, front.p.y, 5.2 * u, 1.8 * u);
+}
+
 /** The closed laptop's aluminium, its shut-lid seam, and the logo dot — the same silver the desk dock
  * stands one in, so the object you watched walk in is the object that lands in the dock. */
 const LAPTOP_SILVER = '#c7ccd2';
@@ -632,6 +666,20 @@ const LAPTOP_LOGO = '#a3a9b1';
  * plate of food flat between both hands, a water bottle or mug riding the right hand, or the
  * member's own closed laptop tucked at their side. */
 function drawCarry(ctx: CanvasRenderingContext2D, px: (j: V3) => Proj, k: Skel, u: number, kind: CarryKind): void {
+  if (kind === 'movingBox') {
+    // A first day (lane 01M3F81DD9): a kraft cardboard box at the chest, its flaps open, and a potted
+    // plant poking out of it — the universal shorthand for "my things", readable at 40px.
+    const c = px({ x: 0, y: k.chest.y - 1, z: k.chest.z + 13 });
+    ctx.fillStyle = MOVING_BOX;
+    ctx.fillRect(c.p.x - 11 * u, c.p.y - 8 * u, 22 * u, 16 * u);
+    ctx.fillStyle = MOVING_BOX_FLAP;
+    ctx.fillRect(c.p.x - 12 * u, c.p.y - 10 * u, 8 * u, 3 * u); // the open flaps
+    ctx.fillRect(c.p.x + 4 * u, c.p.y - 10 * u, 8 * u, 3 * u);
+    ctx.fillStyle = PLANT_LEAF; // the plant, leaning out of the top
+    disc(ctx, { x: c.p.x + 3 * u, y: c.p.y - 14 * u }, 5 * u, 4 * u, PLANT_LEAF);
+    disc(ctx, { x: c.p.x - 1 * u, y: c.p.y - 17 * u }, 3.5 * u, 3 * u, PLANT_LEAF_LIT);
+    return;
+  }
   if (kind === 'box') {
     const c = px({ x: 0, y: k.chest.y - 1, z: k.chest.z + 13 });
     ctx.fillStyle = '#b592f0';
