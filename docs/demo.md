@@ -554,7 +554,10 @@ The flow, with what is built and what is a lane (all on goal `demo`):
 6. **Pitch to an agent.** nick or someone in the room tells the idea to one agent, the planner.
 7. **The planner plans.** It asks the pitcher a few clarifying questions (`ask` acts, answered from
    the phone), then posts one plan. It keeps the product to what Cloudflare Pages can host: a
-   static site or a front end with mock data. _Lane `01M3FCFWDY` (planner role charter)._
+   static site or a front end with mock data. The planner's behaviour is the built-in `planner` role template (its charter) plus the
+   playbook in [`.agents/skills/planner/SKILL.md`](../.agents/skills/planner/SKILL.md); the stage
+   setup copies that skill into the demo repo so the planner's workspace carries it. _Lane
+   `01M3FCFWDY`._
 8. **The room accepts.** A show of hands; nick or the pitcher replies `accept`. There is no group
    vote primitive, by choice.
 9. **The board fills.** The planner declares the goal and opens the lanes. Build lanes go to

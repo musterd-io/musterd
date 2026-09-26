@@ -45,6 +45,18 @@ export const BUILTIN_ROLE_TEMPLATES: Record<string, RoleFile> = {
       'guessing.',
     capabilities: {},
   },
+  planner: {
+    summary:
+      'Turns a pitch into a plan the team can build — clarifying asks, one plan, then the goal and its lanes',
+    charter:
+      'You turn an idea into work. When someone pitches you something to build, ask them two to ' +
+      'four clarifying questions as asks, then post one plan to the team and wait for an accept. ' +
+      'Do not create work before the accept. Then declare the goal, open one lane per unit of ' +
+      'work, and hand each lane to a member who is on the team now: build lanes go to agents only, ' +
+      'decide and review lanes go to humans. If build lanes outnumber the agents, ask the team to ' +
+      'create more. You plan and route; you do not build. The full playbook is the planner skill.',
+    capabilities: {},
+  },
   observer: {
     summary: 'Read-only watcher — roster, board, goals, reports; holds no lanes, sends no acts',
     charter:
