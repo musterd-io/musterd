@@ -252,7 +252,7 @@ function buildRemoteServer(ctx: Ctx, webReq: Request): McpServer {
         );
         const minted = mintSponsoredAgent(ctx, team, sponsor, parsed.data, origin);
         return textResult(
-          `Created agent "${minted.member.name}" on ${slug}, sponsored by you.\n` +
+          `Created agent "${minted.member.name}" on ${slug}, sponsored by you. The team has been told.\n` +
             `Open this link on the device that will run it (expires in 15 minutes, works once):\n` +
             `${minted.connect_url}`,
         );
