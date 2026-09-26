@@ -539,7 +539,16 @@ The flow, with what is built and what is a lane (all on goal `demo`):
 1. **Stage setup.** nick runs one setup command: a fresh public GitHub repo, Cloudflare Pages
    connected to it (production deploys `main`, every PR gets a preview URL), a new team plus
    invite, and the presenter laptop's host ready to run agents in worktrees of that repo. There is
-   no team creation in the UI; this is CLI. _Lane `01M3FCFQ8K` (setup script)._
+   no team creation in the UI; this is CLI. The command is `node scripts/demo/setup.ts --owner
+   <gh-owner> --public-origin https://<tunnel-host> --presenter nick`: it prints the plan, and `--apply`
+   does it. It needs the demo daemon already up per
+   [public-demo-tunnel.md](operations/public-demo-tunnel.md), `gh` signed in, and
+   `CLOUDFLARE_API_TOKEN` plus `CLOUDFLARE_ACCOUNT_ID` in the environment, with the Cloudflare Pages
+   GitHub app installed on the owner (else `--skip-pages` and connect it in the dashboard). It also
+   sets `agent_connect=any_member`, mints the invite with a member expiry, seeds the repo with the
+   planner skill and its bridges, adds the `planner` agent and enrolls it on the residency host. It
+   ends by printing the room code, join URL, `/live`, `/board` and Pages URLs. Run `musterd host`
+   (or `musterd service install --wake` once) so the planner wakes. _Lane `01M3FCFQ8K`._
 2. **Open `/live` and `/board`** on the projector.
 3. **The room joins, live.** The projector shows the QR code and room code. People add the musterd
    connector in Claude, ChatGPT, Codex or Cursor, sign in with the invite, and paste the setup
@@ -568,6 +577,21 @@ The flow, with what is built and what is a lane (all on goal `demo`):
    anyone can watch commits land; every PR has a Pages preview URL.
 11. **The preview.** The Pages URL goes on the projector; the room opens the app on the same
    phones they joined from.
+
+### Teardown
+
+After the talk, from the presenter checkout (`~/musterd/demo/<repo>/nick`):
+
+```
+musterd team invite revoke <invite id>          # printed by the setup
+musterd residency off --seat planner
+musterd team archive demo
+wrangler pages project delete <repo>            # or the dashboard
+gh repo delete <owner>/<repo> --yes             # or keep it public as the record of the build
+git worktree prune && rm -rf ~/musterd/demo/<repo>
+```
+
+The attendees' memberships end on their own at the invite's `--member-until`.
 
 ### The paste prompt
 
