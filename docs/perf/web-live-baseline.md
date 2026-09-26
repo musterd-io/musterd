@@ -921,3 +921,16 @@ are ~2.3 KB raw, and gzip already absorbs most of that, so a cascade-reordering 
 Split per ADR 441: `Live` 18,056 → `liveCssGzipBytes` 20,800 (2,744 B free); Board 2,279 +
 Broadcast 2,246 + approvals 1,863 + audit 217 = 6,605 → `appCssGzipBytes` 7,600 (995 B free).
 Measured + 15%, following ADR 313. A loosening, approved by nick.
+
+### 2026-09-26 — /join/<team> (lane 01M3AKNKQ1): totalJsGzipBytes 248400 → 254700, `join` CSS → app
+
+| measure | main (est.) | branch |
+| --- | --- | --- |
+| total JS gzip | ~241.6 KiB | 245.1 KiB (250,982 B), 40 chunks |
+| initial JS gzip (/live) | 136.0 KiB | 136.0 KiB — unchanged, the route chunk is lazy |
+| `join._team` chunk | — | 3,290 B gzip |
+| `join` CSS | — | 557 B gzip (app group 6.5 of 7.4 KiB) |
+
+The chunk is the join-page copy spec's strings verbatim plus the fragment/room-code helpers, so there is
+nothing to trim or delete; lazy-loading cannot move total (ADR 183); a re-baseline would loosen. New
+ceiling is measured + ~0.7 KB CI gzip delta + ~1.2%, per precedent.
