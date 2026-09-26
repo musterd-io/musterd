@@ -86,6 +86,15 @@ describe('welcomeRoom — the roster side', () => {
     expect(room.active()).toBe(true); // queued — the scene must keep ticking to start it
   });
 
+  it('someone seen online on load who lapses and comes back is not welcomed again (e2e 2026-09-26)', () => {
+    const { ports, calls } = fakePorts();
+    const room = createWelcomeRoom(ports, OPTS);
+    room.onRoster([online(subject('nick'))], new Set(), 0); // first load: nick is on the floor
+    expect(room.onRoster([subject('nick')], new Set(), 1_000)).toEqual([]); // lapses to offline/unknown
+    expect(room.onRoster([online(subject('nick'))], new Set(), 2_000)).toEqual([]); // …and returns
+    expect(calls).toEqual([]);
+  });
+
   it('derives the new-arrivals corner from the roster, coloured by the port', () => {
     const { ports } = fakePorts();
     const room = createWelcomeRoom(ports, OPTS);

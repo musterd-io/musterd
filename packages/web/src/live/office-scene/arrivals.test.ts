@@ -65,6 +65,39 @@ describe('diffArrivals (lane 01M3F81DD9)', () => {
   });
 });
 
+describe('diffArrivals — a lapsed presence is not a first arrival (lane 01M3F81DD9, e2e 2026-09-26)', () => {
+  // A member present only through CLI/HTTP calls (ambient presence, ADR 057) lapses to offline with
+  // offline_reason `unknown` — the same value as never-connected. Found on a throwaway daemon: nick,
+  // who had been active a minute earlier, was welcomed as "joined the team" on their next command.
+  const now = 10 * 3_600_000;
+  const fresh = (name: string, over: Partial<ArrivalSubject> = {}) => m(name, { created_at: now - 60_000, ...over });
+
+  it('someone this viewer has already seen online does not arrive for the first time again', () => {
+    const out = diffArrivals(map([fresh('nick')]), [fresh('nick', { presence: 'online', offline_reason: null })], {
+      now,
+      seenOnline: new Set(['nick']),
+    });
+    expect(out).toEqual([]);
+  });
+
+  it('a never-connected Member created more than 24 h ago is not a newcomer', () => {
+    const old = m('delta', { created_at: now - 25 * 3_600_000 });
+    const out = diffArrivals(map([old]), [{ ...old, presence: 'online', offline_reason: null }], {
+      now,
+      seenOnline: new Set(),
+    });
+    expect(out).toEqual([]);
+  });
+
+  it('a Member created today and never seen online still gets their welcome', () => {
+    const out = diffArrivals(map([fresh('ada')]), [fresh('ada', { presence: 'online', offline_reason: null })], {
+      now,
+      seenOnline: new Set(),
+    });
+    expect(out.map((a) => [a.kind, a.name])).toEqual([['firstOnline', 'ada']]);
+  });
+});
+
 describe('newArrivalsCorner', () => {
   const now = 100 * 3_600_000;
   it('lists deskless Members created in the last 24 h, newest first, at most 3', () => {

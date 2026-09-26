@@ -38,9 +38,24 @@ function arrival(kind: Arrival['kind'], n: ArrivalSubject): Arrival {
   };
 }
 
+/**
+ * A never-connected Member counts as a newcomer only this long after being created. `unknown` is also
+ * what a lapsed AMBIENT presence reads (a member present only through CLI/HTTP calls, ADR 057) — found
+ * on a throwaway daemon, where a human active a minute earlier was welcomed again on their next command.
+ */
+export const FIRST_ONLINE_WINDOW_MS = 24 * 3_600_000;
+
+/** What the diff needs beyond the two rosters to tell a first arrival from a return. */
+export interface ArrivalContext {
+  now: number;
+  /** Everyone this viewer has seen online (or away) since the page loaded — none of them is new. */
+  seenOnline: ReadonlySet<string>;
+}
+
 export function diffArrivals(
   prev: ReadonlyMap<string, ArrivalSubject> | null,
   next: readonly ArrivalSubject[],
+  ctx?: ArrivalContext,
 ): Arrival[] {
   if (prev === null) return [];
   const out: Arrival[] = [];
@@ -52,12 +67,19 @@ export function diffArrivals(
     } else if (
       before.presence === 'offline' &&
       before.offline_reason === 'unknown' &&
-      n.presence === 'online'
+      n.presence === 'online' &&
+      (!ctx || isNewcomer(n, ctx))
     ) {
       out.push(arrival('firstOnline', n));
     }
   }
   return out;
+}
+
+/** Not seen online this session, and created recently (or of unknown age — an older daemon, a preview). */
+function isNewcomer(n: ArrivalSubject, ctx: ArrivalContext): boolean {
+  if (ctx.seenOnline.has(n.name)) return false;
+  return n.created_at === null || ctx.now - n.created_at < FIRST_ONLINE_WINDOW_MS;
 }
 
 /** The corner holds this many polaroids — more is a noticeboard, not a welcome. */

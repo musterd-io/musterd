@@ -83,6 +83,8 @@ export function createWelcomeRoom(
 ): WelcomeRoom {
   const wagon = createWelcomeWagon();
   let prev: Map<string, ArrivalSubject> | null = null;
+  /** Everyone seen online since the page loaded — a return is never a first arrival. */
+  const seenOnline = new Set<string>();
   let started = 0;
   let clockNow = 0;
   /** When each lanyard was tossed (scene clock) — the painter only needs the colour. */
@@ -174,8 +176,9 @@ export function createWelcomeRoom(
   return {
     paint,
     onRoster(nodes, deskHolders, now) {
-      const arrivals = opts.still ? [] : diffArrivals(prev, nodes);
+      const arrivals = opts.still ? [] : diffArrivals(prev, nodes, { now, seenOnline });
       prev = new Map(nodes.map((n) => [n.name, n]));
+      for (const n of nodes) if (n.presence !== 'offline') seenOnline.add(n.name);
       if (!opts.reduced)
         for (const a of arrivals)
           if (a.online) ports.expectFirstArrival(a.name, a.memberKind === 'human' ? 'movingBox' : null);
