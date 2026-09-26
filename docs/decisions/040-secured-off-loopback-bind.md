@@ -74,6 +74,14 @@ the boundary (hard rule #4); cert/key contents and any secret are never logged (
 
 ## Consequences
 
+- 2026-09-26 (Rehearsal A, lane 01M3AKNPS1): the Origin refusal applied to every Host, and it
+  fired before the request log. Anthropic's connector client sends an `Origin` header, so every
+  claude.ai "add connector" check against the tunnel and the Fly hostname was 403'd invisibly:
+  the phone said "no server responded", the box saw nothing. A hostname listed in
+  `MUSTERD_ALLOWED_HOSTS` is a public face where every request is bearer-authenticated, so Origin
+  is no longer a refusal there; loopback and the bound host keep the DNS-rebinding rule. Gate
+  refusals now log `http_request_refused` with the reason.
+
 - **Loopback default is unchanged.** `musterd serve` with no flags binds `127.0.0.1` plaintext exactly
   as before; the guard, the upgrade check (no Origin from CLI/MCP clients, loopback Host), and the
   default timeouts are all transparent to it. Existing tests keep passing.

@@ -363,19 +363,24 @@ export function checkUpgrade(
   // an explicitly-listed origin, OR a *same-origin* page the daemon itself serves — Origin host:port
   // equals the Host header (ADR 062, daemon static-serve). A cross-site/DNS-rebinding Origin differs
   // from Host and is still refused.
+  if (!headers.host) return { ok: false, reason: 'missing Host header' };
+  const hostname = hostnameOf(headers.host);
+  // A hostname the operator listed in MUSTERD_ALLOWED_HOSTS is a PUBLIC face (a tunnel or a
+  // platform hostname): everything that arrives on it is bearer-authenticated, so a browser-ish
+  // Origin carries no DNS-rebinding risk there and is not a reason to refuse. Rehearsal A
+  // (2026-09-26): Anthropic's connector client sends an Origin, and the daemon 403'd it — before
+  // the request log, so the phone saw "no server responded" and the box saw nothing.
+  const publicFace = cfg.allowedHosts.some((h) => normalizeHost(h) === hostname);
   if (
+    !publicFace &&
     headers.origin !== undefined &&
     !cfg.allowedOrigins.includes(headers.origin) &&
     !isSameOrigin(headers.origin, headers.host)
   ) {
     return { ok: false, reason: `origin not allowed: ${headers.origin}` };
   }
-  if (!headers.host) return { ok: false, reason: 'missing Host header' };
-  const hostname = hostnameOf(headers.host);
   const allowed =
-    isLoopbackHost(hostname) ||
-    hostname === normalizeHost(cfg.boundHost) ||
-    cfg.allowedHosts.some((h) => normalizeHost(h) === hostname);
+    publicFace || isLoopbackHost(hostname) || hostname === normalizeHost(cfg.boundHost);
   if (!allowed) return { ok: false, reason: `host not allowed: ${headers.host}` };
   return { ok: true };
 }
