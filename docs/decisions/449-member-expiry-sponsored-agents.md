@@ -168,6 +168,13 @@ routes one daemon-composed `@team` `message` in the sponsor's voice, body `<spon
 mint; `team_agent_create`'s reply says the team has been told. A refused mint posts nothing. No wire
 change: `meta` was already an open record.
 
+2026-09-26 — `sponsored_by` never reached the browser. `MemberSummarySchema` has carried it since
+this ADR, but `readMemberSummary` (`packages/protocol/src/guards.ts`, the zod-free reader `/live`
+parses the roster with) had no branch for it and dropped it silently — its parity corpus had no row
+with the field, so the drift test could not see the gap. Lane 01M3F81DD9 (the `/live` Welcome Wagon,
+whose caption names the sponsor) added the read and two corpus rows. A reader parity fix for this
+ADR's own field, not a contract change: the schema, the wire and every other reader are unchanged.
+
 ## Observability & Evaluation
 
 - Traces: audit verbs `member.sponsored_agent_created` and `member.revoked_cascade` — who, whom,
