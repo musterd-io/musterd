@@ -149,7 +149,7 @@ export function renderSkillBody(opts: { team: string }): string {
     '`~/musterd/<team>/<repo>/<name>` (ADR 447). `musterd agent <name>` mints an agent seat in its own git',
     'worktree. `musterd human <name>` does the same for a person — a worktree on `human/<name>` when run',
     'inside the project checkout, or `--home <dir>` outside one — so `musterd board`, `musterd inbox',
-    "--watch` and `musterd send` are simply them there, with no `--as` and nothing pasted. `~/musterd/<team>`",
+    '--watch` and `musterd send` are simply them there, with no `--as` and nothing pasted. `~/musterd/<team>`',
     'itself is a roof, never a floor: nothing binds there. If a human on your team has no floor to act',
     'from, `musterd human` is the fix.',
     '',
