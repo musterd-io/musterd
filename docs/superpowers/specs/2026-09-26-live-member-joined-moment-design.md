@@ -59,7 +59,7 @@ Times are seconds from the trigger. `{name}` is the Member's name; "their hue" i
 | 0.0 | The receptionist's phone rings; she picks up (her existing `call` pose). Bubble: `oh! someone new: {name}`.                                                                                                                                                  | two-tone ring          |
 | 0.9 | Her label maker goes *ka-chunk*: a nameplate strip in their hue prints and curls off the counter.                                                                                                                                                            | ratchet click ×3       |
 | 1.4 | **The dog is the welcome wagon.** It wakes, trots to reception, takes the handle of a small red wagon (nameplate, a monitor box, a potted plant) and pulls it to their desk on the real nav grid.                                                           | small wheel rattle     |
-| 3.6 | The nameplate snaps into the desk's holder with a brief glow in their hue. The dog flops down beside the desk. The desk is now an ordinary owned, empty desk (presence-honesty §4).                                                                         | —                      |
+| 3.6 | The nameplate snaps into the desk's holder with a brief glow in their hue. The dog flops down beside the desk. The desk is now an ordinary owned, empty desk (presence-honesty §4). The dog runs this errand at an eager trot (130 u/s) — the delivery lands when it lands, not on this beat. | —                      |
 | 4.0 | Caption line: `{name} was added to the team · by {sponsor}` (the `· by` clause only when `sponsored_by` is set).                                                                                                                                              | —                      |
 
 **No free desk.** The 12 desk slots are usually full on a large team (revive has 25 Members;
@@ -77,8 +77,8 @@ a polaroid leaves when its Member gets a desk or ages out.
 | 0.3 | **Human:** walks in carrying a cardboard box with a plant poking out (a new `CarryKind`). **Agent:** walks in empty-handed; a small status light blinks twice above their head, like booting up.         | —                     |
 | 1.6 | They stop at a check-in mark (the existing reception routing). The receptionist looks up (`greeting`) and tosses a lanyard in their hue; it arcs over and settles around their neck. Bubble: `welcome, {name}!` | soft whoosh + clip    |
 | 2.6 | On the walk to the desk, **the three nearest online teammates** swivel toward them and wave; the nearest one says `👋`. The dog gets up and trots alongside.                                                | —                     |
-| 5.2 | They sit. A small confetti puff in their hue (24 pieces) settles and fades. The lanyard is gone once they are seated — it is a prop of the moment, not a lasting mark.                                    | pop + sparkle         |
-| 6.0 | Their monitor boots to a one-frame `hello, {name}` screen, then the normal work glow.                                                                                                                      | —                     |
+| 5.2 | They sit. A small confetti puff — the office's 18-piece burst, in their hue alternated with mustard — settles and fades. The lanyard is gone once they are seated — it is a prop of the moment, not a lasting mark.                                    | pop + sparkle         |
+| 6.0 | Their monitor lights with `hello` for a second (a name does not fit a monitor at office scale), then the normal work glow.                                                                              | —                     |
 | 6.2 | Caption line: `{name} joined the team — welcome`.                                                                                                                                                           | —                     |
 
 The receptionist never leaves her desk (her module's own rule); the toss is how she reaches them.
@@ -94,8 +94,10 @@ wagon to the desk while the guest walks there, arriving just before them. One ca
 ### 3.4 The crowd (20–50 guests)
 
 - **Waves.** Arrivals within 2 s of each other form one wave.
-- **Queue.** Guests line up at the check-in marks (the existing round-robin); anyone past the last
-  mark queues behind it.
+- **No queue** (amended 2026-09-26 while building). Guests check in at the three marks in parallel;
+  anyone past the last mark walks straight in — the reception design's own rule (`layout.ts`
+  `CHECK_IN_MARKS`: ceremony that queues is the gate it rejected). The conveyor toss reaches them as
+  they pass the counter.
 - **Conveyor mode.** The receptionist tosses one lanyard every 0.6 s with a short `welcome!`
   bubble instead of the full greeting.
 - **Once per wave:** one doorbell, one confetti burst (at the queue, not per desk), one caption:
@@ -135,14 +137,19 @@ Given the previous and next roster:
 - **`created`** — a name in `next` that was not in `previous`. The first roster load of the page
   never counts (no welcome stampede).
 - **`firstOnline`** — a Member present in both, going from not-online to online, whose previous
-  entry was offline with `offline_reason: 'unknown'` (the server's never-connected value).
+  entry was offline with `offline_reason: 'unknown'` (the server's never-connected value) — AND whom
+  this viewer has not seen online since the page loaded, AND who was created in the last 24 h (or is
+  of unknown age). Amended 2026-09-26: `unknown` is also what a lapsed *ambient* presence reads (a
+  Member present only through CLI/HTTP calls, ADR 057); end to end on a throwaway daemon, a human
+  active a minute earlier was welcomed as "joined the team" on their next command.
 - **Excluded:** `kind: 'service'` (ledger seats are not arrivals).
 - **Waves:** events within 2 s group into one wave; a wave carries its events in arrival order.
 
 **Honest limits.**
 - Only a live viewer sees the moment. Nothing is persisted and a reload does not replay it.
-- Some older Members still carry `unknown` from before ADR 141's stamps (on revive today: `delta`,
-  `nativeprobe`). Their first visible connect gets the welcome they never had. Accepted.
+- A Member created more than 24 h before their first connect gets the ordinary walk-in, not Act 2
+  (so the pre-ADR-141 `unknown` rows on revive — `delta`, `nativeprobe` — are no longer welcomed).
+  Accepted: the window is what separates a first arrival from a lapsed CLI presence.
 
 ## 5. Components
 
@@ -170,9 +177,11 @@ as `welcome.ts` already requires.
 - **Perf (ADR 151).** Confetti capped at 24 pieces per wave; no per-frame allocation in the
   sequencer or painters; the sequencer asks for animation frames only while a sequence is playing,
   so an idle office stays at rAF 0/s (ADR 086).
-- **Priority.** A pending welcome waits to *start* while real choreography plays; once started it
-  finishes (the receptionist welcome's rule — stopping mid-thought reads worse than talking over a
-  walk).
+- **Priority.** A pending welcome waits to *start* while a real act's walk plays (never the
+  newcomer's own walk-in); once started it finishes (the receptionist welcome's rule — stopping
+  mid-thought reads worse than talking over a walk). The wait is capped at 4 s past the wave window
+  (amended 2026-09-26: on a room as chatty as revive there is always an act walk in flight, and the
+  uncapped rule meant the welcome never played — found on the office-preview harness).
 - **Contrast gate.** Bubble and caption text use the existing tokens.
 
 ## 7. Testing

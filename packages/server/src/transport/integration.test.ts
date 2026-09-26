@@ -1024,7 +1024,11 @@ describe('HTTP API', () => {
     await watcher.claim('dawn', nickTok, 'nick');
     watcher.send({ type: 'subscribe', scope: 'team' });
 
-    const r = await post('/teams/dawn/members', { name: 'eye', kind: 'agent', observer: true }, nickTok);
+    const r = await post(
+      '/teams/dawn/members',
+      { name: 'eye', kind: 'agent', observer: true },
+      nickTok,
+    );
     expect(r.status).toBe(201);
     await new Promise((res) => setTimeout(res, 150));
     expect(watcher.frames.some((f) => f.type === 'presence' && (f as any).member === 'eye')).toBe(
