@@ -28,6 +28,8 @@ function node(name: string, presence: OfficeNode['presence'] = 'online'): Office
     dnd: false,
     offline_reason: null,
     last_seen_at: null,
+    created_at: null,
+    sponsored_by: null,
   };
 }
 function world(nodes: OfficeNode[]) {

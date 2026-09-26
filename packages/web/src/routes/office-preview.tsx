@@ -458,6 +458,8 @@ function OfficePreviewPage() {
               : 'seat_released'
             : null,
           last_seen_at: isOffline ? Date.now() - 20 * 60_000 : null,
+          created_at: null,
+          sponsored_by: null,
         };
       }),
     }),

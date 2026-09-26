@@ -51,6 +51,12 @@ export interface OfficeNode {
   offline_reason: string | null;
   /** Last seen (wire fact) — the warm-desk fade and the desk-capacity tiebreak read it. */
   last_seen_at: number | null;
+  /** When the Member was created (wire `created_at`) — the new-arrivals corner's 24 h window reads it
+   *  (lane 01M3F81DD9). Null in previews that build nodes by hand. */
+  created_at: number | null;
+  /** The NAME of the Member who sponsored this one (ADR 449 stores an id; OfficeScene resolves it),
+   *  for the "added by" caption; null for everyone else or when the sponsor has left the roster. */
+  sponsored_by: string | null;
   /**
    * This seat is in the room because a wake put it there (ADR 131), not because a person opened a
    * session — read from the live presence's stamped `provenance` (see `wokenSeat.ts`).

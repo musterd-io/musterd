@@ -1688,6 +1688,8 @@ const RECEPTIONIST_NODE: OfficeNode = {
   dnd: false,
   offline_reason: null,
   last_seen_at: null,
+  created_at: null,
+  sponsored_by: null,
 };
 
 function drawReceptionist(ctx: CanvasRenderingContext2D, fit: Fit, r: ReceptionistState, t: number): void {

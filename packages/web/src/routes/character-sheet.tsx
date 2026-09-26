@@ -167,6 +167,8 @@ function CharacterSheet() {
               dnd: false,
               offline_reason: null,
               last_seen_at: null,
+              created_at: null,
+              sponsored_by: null,
               // The character sheet draws BODIES, not sessions — nothing here came from a wake.
               woken: false,
             };

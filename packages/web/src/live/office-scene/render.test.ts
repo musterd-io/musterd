@@ -106,6 +106,8 @@ function node(name: string, activity: OfficeNode['activity']): OfficeNode {
     dnd: false,
     offline_reason: null,
     last_seen_at: null,
+    created_at: null,
+    sponsored_by: null,
   };
 }
 
