@@ -1,0 +1,219 @@
+import { diffArrivals, newArrivalsCorner, type Arrival, type ArrivalSubject } from './arrivals';
+import type { CarryKind, WelcomePaint } from './types';
+import {
+  createWelcomeWagon,
+  enqueueArrivals,
+  stepWelcomeWagon,
+  welcomePlaying,
+  type WelcomeBeat,
+} from './welcomeWagon';
+
+/**
+ * The Welcome Wagon's wiring (lane 01M3F81DD9): roster → arrivals → sequencer → the room's residents.
+ *
+ * Everything the scene has to DECIDE about a welcome lives here — which arrivals are flagged for the
+ * first-day walk-in, what each beat asks of whom, what the painter is shown and when it stops being
+ * shown — behind `WelcomePorts`, so it is unit-tested with fakes. `mountOffice` cannot run under the
+ * test environment (no canvas, no rAF; scene-loop.test.ts), so index.ts is left with nothing but the
+ * plumbing: build the ports from the real residents, call `onRoster` from `update()` and `step` from
+ * the frame loop.
+ */
+
+/** Where a welcome sound comes from — the stereo pan follows it. */
+export type WelcomeSoundAt = 'desk' | 'door' | { name: string };
+export type WelcomeSound = 'ring' | 'ratchet' | 'rattle' | 'doorbell' | 'whoosh' | 'pop';
+
+export interface WelcomePorts {
+  // What the sequencer asks about the room.
+  present(name: string): boolean;
+  hasDesk(name: string): boolean;
+  seated(name: string): boolean;
+  reachedMark(name: string): boolean;
+  /** A real act's walk is in flight — a welcome will not START over it. */
+  busy(): boolean;
+  kindOf(name: string): 'agent' | 'human';
+  color(name: string, hue: number | null): string;
+  // The residents who play the beats.
+  expectFirstArrival(name: string, carry: CarryKind | null): void;
+  receptionist(cue: 'ring' | 'label' | 'toss'): void;
+  say(text: string): void;
+  /** The dog fetches the wagon and pulls it to `name`'s desk. */
+  wagon(name: string): void;
+  /** The dog carries `name`'s printed nameplate to the wall board. */
+  polaroid(name: string): void;
+  zoomies(): void;
+  /** The nearest teammates wave at `name`; the dog trots alongside. */
+  wave(name: string): void;
+  confetti(name: string, color: string | null): void;
+  door(hue: number | null): void;
+  caption(text: string, who: string): void;
+  sound(m: WelcomeSound, at: WelcomeSoundAt): void;
+}
+
+export interface WelcomeRoom {
+  /** Feed the roster the scene is about to seat. Returns the arrivals it found (never on the first). */
+  onRoster(nodes: readonly ArrivalSubject[], deskHolders: ReadonlySet<string>, now: number): Arrival[];
+  /** Advance to `now` (wall ms) at scene clock `clock` (s); plays due beats. */
+  step(now: number, clock: number): void;
+  /** Something is queued or playing, or a transient paint is still animating — keep the loop running. */
+  active(): boolean;
+  /** Fold away what has outlived its window while the loop is parked. True when the paint changed. */
+  expire(now: number): boolean;
+  /** How many welcome sequences have started — a probe for the perf harness (`stats()`). */
+  started(): number;
+  readonly paint: WelcomePaint;
+}
+
+/** How long each transient paint lives, in scene seconds. */
+const LABEL_S = 2.0;
+const HELLO_S = 1.0;
+const BLINK_S = 1.2;
+/** A lanyard outlives its moment by at most this long — a guest in the overflow gallery never sits. */
+const LANYARD_MAX_S = 12;
+/** The counter's flip animation, scene seconds — the only part of the counter that moves. */
+const FLIP_S = 0.25;
+/** The crowd counter folds away this long after its last flip, wall ms. */
+const COUNTER_HOLD_MS = 60_000;
+
+export function createWelcomeRoom(
+  ports: WelcomePorts,
+  opts: { reduced: boolean; still: boolean },
+): WelcomeRoom {
+  const wagon = createWelcomeWagon();
+  let prev: Map<string, ArrivalSubject> | null = null;
+  let started = 0;
+  let clockNow = 0;
+  /** When each lanyard was tossed (scene clock) — the painter only needs the colour. */
+  const tossedAt = new Map<string, number>();
+  const paint: WelcomePaint = {
+    lanyards: new Map(),
+    hello: new Map(),
+    bootBlink: new Map(),
+    labels: [],
+    polaroids: [],
+    counter: null,
+  };
+
+  function play(b: WelcomeBeat, now: number, clock: number): void {
+    switch (b.type) {
+      case 'ring':
+        if (!opts.reduced) ports.receptionist('ring');
+        ports.sound('ring', 'desk');
+        return;
+      case 'say':
+        ports.say(b.text);
+        return;
+      case 'label':
+        // Under reduced motion the nameplate simply appears (the desk already renders its owner);
+        // the label maker is still heard — audio is not motion (E3 spec §2).
+        if (!opts.reduced) {
+          ports.receptionist('label');
+          paint.labels.push({ color: ports.color(b.name, b.hue), t0: clock });
+        }
+        ports.sound('ratchet', 'desk');
+        return;
+      case 'wagon':
+        ports.wagon(b.name);
+        ports.sound('rattle', 'desk');
+        return;
+      case 'polaroid':
+        ports.polaroid(b.name); // a dog with a polaroid in its mouth makes no sound
+        return;
+      case 'doorbell':
+        ports.door(b.hue);
+        ports.sound('doorbell', 'door');
+        return;
+      case 'toss':
+        ports.receptionist('toss');
+        paint.lanyards.set(b.name, ports.color(b.name, b.hue));
+        tossedAt.set(b.name, clock);
+        if (ports.kindOf(b.name) === 'agent') paint.bootBlink.set(b.name, clock);
+        ports.sound('whoosh', 'desk');
+        return;
+      case 'wave':
+        ports.wave(b.name);
+        return;
+      case 'confetti':
+        ports.confetti(b.name, b.hue === null ? null : ports.color(b.name, b.hue));
+        ports.sound('pop', { name: b.name });
+        return;
+      case 'hello':
+        paint.hello.set(b.name, clock);
+        return;
+      case 'zoomies':
+        ports.zoomies();
+        return;
+      case 'counter':
+        paint.counter = { value: b.value, flippedAt: clock, until: now + COUNTER_HOLD_MS };
+        return;
+      case 'caption':
+        ports.caption(b.text, b.who);
+        return;
+    }
+  }
+
+  function prune(clock: number): void {
+    paint.labels = paint.labels.filter((l) => clock - l.t0 < LABEL_S);
+    for (const [n, t0] of paint.hello) if (clock - t0 >= HELLO_S) paint.hello.delete(n);
+    for (const [n, t0] of paint.bootBlink) if (clock - t0 >= BLINK_S) paint.bootBlink.delete(n);
+    // The lanyard is a prop of the moment: gone once they sit, if they left mid-welcome, or — for a
+    // guest standing in the overflow gallery, who never sits — once the moment is long over.
+    for (const n of paint.lanyards.keys()) {
+      if (ports.seated(n) || !ports.present(n) || clock - (tossedAt.get(n) ?? clock) >= LANYARD_MAX_S) {
+        paint.lanyards.delete(n);
+        tossedAt.delete(n);
+      }
+    }
+  }
+
+  return {
+    paint,
+    onRoster(nodes, deskHolders, now) {
+      const arrivals = opts.still ? [] : diffArrivals(prev, nodes);
+      prev = new Map(nodes.map((n) => [n.name, n]));
+      if (!opts.reduced)
+        for (const a of arrivals)
+          if (a.online) ports.expectFirstArrival(a.name, a.memberKind === 'human' ? 'movingBox' : null);
+      enqueueArrivals(wagon, arrivals, now);
+      paint.polaroids = newArrivalsCorner(nodes, deskHolders, now).map((p) => ({
+        name: p.name,
+        color: ports.color(p.name, p.hue),
+      }));
+      return arrivals;
+    },
+    step(now, clock) {
+      clockNow = clock;
+      const wasPlaying = welcomePlaying(wagon);
+      const beats = stepWelcomeWagon(wagon, now, {
+        busy: ports.busy(),
+        reduced: opts.reduced,
+        present: ports.present,
+        hasDesk: ports.hasDesk,
+        seated: ports.seated,
+        atMark: ports.reachedMark,
+      });
+      if (!wasPlaying && (welcomePlaying(wagon) || beats.length > 0)) started++;
+      for (const b of beats) play(b, now, clock);
+      prune(clock);
+    },
+    active() {
+      return (
+        welcomePlaying(wagon) ||
+        wagon.pending.length > 0 ||
+        paint.labels.length > 0 ||
+        paint.hello.size > 0 ||
+        paint.bootBlink.size > 0 ||
+        paint.lanyards.size > 0 ||
+        (paint.counter !== null && clockNow - paint.counter.flippedAt < FLIP_S)
+      );
+    },
+    expire(now) {
+      if (paint.counter && now > paint.counter.until) {
+        paint.counter = null;
+        return true;
+      }
+      return false;
+    },
+    started: () => started,
+  };
+}

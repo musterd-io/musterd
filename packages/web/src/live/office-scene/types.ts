@@ -69,6 +69,26 @@ export interface OfficeNode {
   woken: boolean;
 }
 
+/**
+ * What the Welcome Wagon asks the painter to draw (lane 01M3F81DD9). Owned and pruned by
+ * `welcomeRoom.ts`; read-only to `render.ts`. Times named `clock`/`t0` are the scene clock (seconds,
+ * advances only while the loop runs); `until` is wall-clock ms.
+ */
+export interface WelcomePaint {
+  /** Name → lanyard colour, from the toss until they sit down. */
+  lanyards: Map<string, string>;
+  /** Name → scene clock when their monitor's one-frame hello screen lit. */
+  hello: Map<string, number>;
+  /** Agent name → scene clock when the status light over their head began to blink. */
+  bootBlink: Map<string, number>;
+  /** Label strips curling off the front desk's label maker. */
+  labels: { color: string; t0: number }[];
+  /** The wall board's new-arrivals corner — derived from the roster on every update, never stored. */
+  polaroids: { name: string; color: string }[];
+  /** The crowd's flip counter: its value, when it last flipped (scene clock), when it folds away (ms). */
+  counter: { value: number; flippedAt: number; until: number } | null;
+}
+
 /** The office has no arcs — relationships show as choreography, not edges. */
 export interface OfficeData {
   /** Stable visual seed for desk moods; absent in previews, where the default seed is used. */
@@ -333,4 +353,6 @@ export interface OfficeStats {
   beats: number;
   /** `performance.now()` when the scene mounted — the denominator for a rate. */
   since: number;
+  /** Welcome Wagon sequences started since mount (lane 01M3F81DD9) — the perf harness's probe. */
+  welcomes: number;
 }

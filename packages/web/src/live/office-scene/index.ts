@@ -10,7 +10,7 @@ import {
   shortWorkTitle,
 } from '../presenceLabel';
 import { musterdChipSvg } from '../../brand/chipMark';
-import { memberInk } from '../format';
+import { memberColor, memberInk } from '../format';
 import { platesOpenMode, stillMode } from '../stillMode';
 import { surfaceGlyph } from '../surfaceGlyph';
 import { createActors, deskNeighbourPairs, type Actors } from './actors';
@@ -27,15 +27,38 @@ import {
   suspendIgnored,
 } from './broadcast';
 import { AMBIENT_SLOT_MS, decideAmbient, roll, slotAt, slotRng } from './ambientSeed';
-import { createPet, petBeat, petBeg, petFollow, petGreet, petNotice, stepPet } from './pet';
-import { createReceptionist, stepReceptionist } from './receptionist';
+import {
+  createPet,
+  petBeat,
+  petBeg,
+  petCarryToWall,
+  petFollow,
+  petGreet,
+  petNotice,
+  petWagon,
+  petZoomies,
+  stepPet,
+} from './pet';
+import { createReceptionist, receptionistCue, stepReceptionist } from './receptionist';
 import { fitFloor, project, type Fit, type Pt } from './iso';
-import { CHAIR_OFF, COFFEE_STAND, DESK_SLOTS, ENTRANCE, FWD, LEISURE_SPOTS , RECEPTIONIST } from './layout';
+import {
+  CHAIR_OFF,
+  COFFEE_STAND,
+  DESK_SLOTS,
+  ENTRANCE,
+  FWD,
+  LEISURE_SPOTS,
+  RECEPTIONIST,
+  SEAT_BACK,
+  WAGON_PICKUP,
+  WALL_DROP,
+} from './layout';
 import { computeLightEnv, type LightEnv } from './lighting';
 import { isWithinWorkingHours } from './workingHours';
 import { assignSeats, workingAtDesk, type Placement } from './seating';
 import { captionForPresence, pushCaption, tickCaption, CAPTION_HOLD_MS, type Caption, type CaptionRail } from '../captions';
 import { createWelcome, stepWelcome } from './welcome';
+import { createWelcomeRoom, type WelcomeSoundAt } from './welcomeRoom';
 import {
   animatedDeskAnchors,
   boardAnchor,
@@ -383,6 +406,71 @@ export function mountOffice(
     const line = stepWelcome(welcome, Date.now(), actors.active(), teamName);
     if (line) showSpeech(RECEPTIONIST_SPEAKER, line, 'info');
   }, 5_000);
+  /**
+   * The Welcome Wagon (lane 01M3F81DD9): a new Member's arrival, played by the room's own residents.
+   * Every decision lives in welcomeRoom.ts (unit-tested); these ports are only the residents it plays
+   * through. The receptionist welcome above is a different thing — hers greets a VIEWER.
+   */
+  const kindOf = (name: string): 'agent' | 'human' =>
+    actors.nodes().get(name)?.kind === 'agent' ? 'agent' : 'human';
+  const soundAt = (at: WelcomeSoundAt): number => {
+    const p =
+      at === 'desk' ? RECEPTIONIST
+      : at === 'door' ? ENTRANCE
+      : (actors.poses().get(at.name) ?? ENTRANCE);
+    return screenPan(project(p.lx, p.ly, fit).x, width);
+  };
+  /** Where the dog parks the wagon: the open aisle behind a desk's chair (nav.test pins it walkable). */
+  const deskDrop = (name: string): { lx: number; ly: number } | null => {
+    const pl = placements.get(name);
+    const slot = pl?.kind === 'desk' ? DESK_SLOTS[pl.slot] : undefined;
+    if (!slot) return null;
+    const f = FWD[slot.dir];
+    return { lx: slot.lx - f[0] * (SEAT_BACK + 60), ly: slot.ly - f[1] * (SEAT_BACK + 60) };
+  };
+  const welcomeRoom = createWelcomeRoom(
+    {
+      present: (n) => actors.nodes().has(n),
+      hasDesk: (n) => placements.get(n)?.kind === 'desk',
+      seated: (n) => actors.isSeated(n),
+      reachedMark: (n) => actors.reachedMark(n),
+      busy: () => actors.actWalking(),
+      kindOf,
+      color: (n, hue) => memberColor(n, kindOf(n), hue),
+      expectFirstArrival: (n, carry) => actors.expectFirstArrival(n, carry),
+      receptionist: (cue) => receptionistCue(recep, cue),
+      say: (text) => showSpeech(RECEPTIONIST_SPEAKER, text, 'info'),
+      wagon: (n) => {
+        const drop = deskDrop(n);
+        if (drop) petWagon(pet, WAGON_PICKUP, drop);
+      },
+      polaroid: () => void petCarryToWall(pet, WAGON_PICKUP, WALL_DROP),
+      zoomies: () => void petZoomies(pet),
+      wave: (n) => {
+        // The three nearest teammates who are free to look up wave; the nearest of them says so.
+        const waved = nearestNeighbors(n, 3).filter((m) => actors.welcomeWave(m));
+        if (waved[0]) showSpeech(waved[0], '👋', 'info');
+        const drop = deskDrop(n);
+        if (drop) petFollow(pet, drop); // the dog trots over to meet them at their desk
+      },
+      confetti: (n, color) => pushConfetti(n, color ?? '#E1AD01'),
+      door: (hue) => pushDoorCue(hue === null ? undefined : `hsl(${hue}, 70%, 72%)`),
+      caption: (text, who) => pushRail({ text, who, tone: 'presence' }),
+      sound: (m, at) => roomTone.moment(m, soundAt(at)),
+    },
+    { reduced, still: STILL },
+  );
+  /* A parked room never ticks, so a queued welcome would wait for some other motion to start it —
+     and the crowd's flip counter would hang on the wall. Coarse on purpose: 500 ms of latency on a
+     2 s wave window is invisible, and the timer does nothing unless a welcome is actually pending. */
+  const wagonTimer = setInterval(() => {
+    if (disposed || suspended || (!broadcast && !VISIBLE())) return;
+    if (welcomeRoom.active() && !raf) ensureLoop();
+    if (welcomeRoom.expire(Date.now()) && !raf) {
+      bake();
+      paintResting();
+    }
+  }, 500);
   function renderRail() {
     // The line is chrome now, not scene DOM — hand it out and let WorkStack's header carry it.
     options.onCaption?.(rail.current);
@@ -1447,6 +1535,8 @@ export function mountOffice(
     // the pet, she never keeps an empty room awake: asleep returns false and the room bakes still.
     const anyonePresent = [...actors.nodes().values()].some((n) => n.presence !== 'offline');
     const recepActive = stepReceptionist(recep, dt, anyonePresent, actors.checkInHolds() > 0, { team: teamName, nowMs: Date.now() });
+    welcomeRoom.step(Date.now(), clock); // the Welcome Wagon's beats land here (lane 01M3F81DD9)
+    const welcomeActive = welcomeRoom.active();
     pushOccupancy(now);
     for (let i = cues.length - 1; i >= 0; i--) {
       const c = cues[i]!;
@@ -1459,20 +1549,20 @@ export function mountOffice(
     // freezing the instant a long walk ends (#5).
     if (walking || cues.length) lastActive = now;
     const alive = living();
-    if (walking || alive || petActive || recepActive) {
+    if (walking || alive || petActive || recepActive || welcomeActive) {
       drawDynamic();
     } else {
       if (wasActive) bake(); // walkers just re-seated (or the pet/receptionist dozed off) — refresh
       drawStatic();
     }
-    wasActive = walking || alive || petActive || recepActive;
+    wasActive = walking || alive || petActive || recepActive || welcomeActive;
     // Keep animating while anything moves *or* while the room is alive (someone at a desk breathing and
     // typing — capped to ~20fps above). When the last walk/cue clears and nobody is working, we draw one
     // final settled frame and park: the frame stays on-canvas until the next act or presence change.
     // Afterglow: a brief tail past the last motion so a character eases into idle instead of freezing
     // mid-gesture — `actors.step` also reports its own blends, so a member never stops half-out of a chair.
     const settling = lastActive > 0 && now - lastActive < AFTERGLOW_MS;
-    if ((walking || cues.length || settling || alive || petActive) && !reduced && !suspended && VISIBLE()) {
+    if ((walking || cues.length || settling || alive || petActive || welcomeActive) && !reduced && !suspended && VISIBLE()) {
       raf = requestAnimationFrame(tick);
     } else {
       raf = 0;
@@ -1519,7 +1609,7 @@ export function mountOffice(
   }
 
   /** Is anything actually happening right now? One home — two doors used to spell this out separately. */
-  const alive = () => living() || actors.active() || cues.length > 0;
+  const alive = () => living() || actors.active() || cues.length > 0 || welcomeRoom.active();
   /*
    * Coming back to a room that stopped being watched. There are two doors — the tab becoming visible
    * again and the panel re-expanding — and they ask the SAME question: the loop if the room is alive,
@@ -1803,16 +1893,21 @@ export function mountOffice(
 
   function update(next: OfficeData) {
     const nextOnline = new Set(next.nodes.filter((n) => n.presence === 'online').map((n) => n.name));
-    if (onlineNames.size > 0) {
-      const line = captionForPresence(onlineNames, nextOnline);
-      if (line) pushRail(line);
-    }
+    const presenceLine = onlineNames.size > 0 ? captionForPresence(onlineNames, nextOnline) : null;
     onlineNames = nextOnline;
     teamName = next.teamName ?? 'revive';
     teamWorkingHours = next.teamWorkingHours ?? null;
     wallBoard = next.wallBoard ?? null;
     placements = assignSeats(next.nodes, new Set(next.gathered ?? []));
     const byName = new Map(next.nodes.map((n) => [n.name, n]));
+    // Who is NEW (lane 01M3F81DD9) — fed BEFORE setHomes, because a first arrival's walk-in (the box,
+    // the longer pause at the mark) is built inside it.
+    const deskHolders = new Set<string>();
+    for (const [n, p] of placements) if (p.kind === 'desk') deskHolders.add(n);
+    const arrivals = welcomeRoom.onRoster(next.nodes, deskHolders, Date.now());
+    // "{name} just walked in" would say it twice — the welcome writes its own line for a newcomer.
+    if (presenceLine && !arrivals.some((a) => a.online && a.name === presenceLine.who))
+      pushRail(presenceLine);
     // The overhead lights follow occupancy: on while anyone's online on the floor, off once the room empties.
     occupied = next.nodes.some((n) => n.presence === 'online');
     refreshLightEnv(); // fold the new occupancy (+ current clock) into the lighting before we bake
@@ -1828,7 +1923,7 @@ export function mountOffice(
     // gets up to see you leave. This outranks whatever nap it had planned, which is the whole point of it.
     if (!reduced && actors.takeArrivals() > 0) petGreet(pet);
     bake();
-    if (actors.active() || cues.length) ensureLoop();
+    if (actors.active() || cues.length || welcomeRoom.active()) ensureLoop();
     else paintResting(); // no motion → hold a still frame (Rive-aware; not the code-drawn buffer)
   }
 
@@ -1840,10 +1935,10 @@ export function mountOffice(
   }
 
   /** The acceptance celebration burst — a one-shot confetti puff over a member's head. */
-  function pushConfetti(name: string) {
+  function pushConfetti(name: string, color = '#5cd49a') {
     const at = heads.get(name);
     if (!at) return;
-    cues.push({ at: { x: at.x, y: at.y }, color: '#5cd49a', glyph: '', t: 0, urgent: false, kind: 'confetti' });
+    cues.push({ at: { x: at.x, y: at.y }, color, glyph: '', t: 0, urgent: false, kind: 'confetti' });
   }
 
   /** The `count` nearest drawn members to `name` (excluding them) within one pod's reach — the desk
@@ -1885,9 +1980,9 @@ export function mountOffice(
   }
 
   /** The entrance glows as a member walks in or out. */
-  function pushDoorCue() {
+  function pushDoorCue(color = '#cfe7ee') {
     const p = project(ENTRANCE.lx, ENTRANCE.ly, fit);
-    cues.push({ at: { x: p.x, y: p.y }, color: '#cfe7ee', glyph: '', t: 0, urgent: false, kind: 'door' });
+    cues.push({ at: { x: p.x, y: p.y }, color, glyph: '', t: 0, urgent: false, kind: 'door' });
   }
 
   function emit(ev: OfficeEvent) {
@@ -2210,7 +2305,7 @@ export function mountOffice(
     ...(import.meta.env.DEV ? { spriteParity, spriteCrops } : {}),
     update,
     emit,
-    stats: () => ({ ticks, draws, beats, since }),
+    stats: () => ({ ticks, draws, beats, since, welcomes: welcomeRoom.started() }),
     ambientLog: () => [...ambientLog],
     floorSamples: () =>
       [...actors.poses()].map(([name, p]) => ({
@@ -2297,6 +2392,7 @@ export function mountOffice(
       if (railTimer) clearInterval(railTimer); // stop the caption rail
       options.onCaption?.(null);
       clearInterval(welcomeTimer); // stop the receptionist welcome
+      clearInterval(wagonTimer); // stop the Welcome Wagon's parked-room check
       if (ambientTimer) clearTimeout(ambientTimer); // stop the idle-beat scheduler
       window.removeEventListener('resize', onResize);
       ro?.disconnect();

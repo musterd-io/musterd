@@ -86,3 +86,30 @@ describe('nameplates are laid out, not just pinned (lane 01M3GPH5KB)', () => {
     expect(index).toMatch(/new ResizeObserver\(/);
   });
 });
+
+/**
+ * The Welcome Wagon's plumbing (lane 01M3F81DD9). Its decisions are unit-tested in welcomeRoom.test.ts;
+ * these hold the four joints index.ts owns, as source structure for the same reason as above.
+ */
+describe('the Welcome Wagon is plumbed in', () => {
+  it('update() feeds the roster to the welcome BEFORE the actors seat it', () => {
+    const update = body('update');
+    const feed = update.indexOf('welcomeRoom.onRoster(');
+    const seat = update.indexOf('actors.setHomes(');
+    expect(feed, 'update() never feeds the welcome').toBeGreaterThan(-1);
+    // expectFirstArrival must land before setHomes builds the check-in walk, or the box never shows.
+    expect(feed).toBeLessThan(seat);
+  });
+
+  it('the frame loop steps it, and its activity keeps the loop alive', () => {
+    expect(body('tick')).toContain('welcomeRoom.step(');
+    expect(index).toMatch(/const alive = \(\) =>[^;]*welcomeRoom\.active\(\)/);
+  });
+
+  it('a parked room still starts a queued welcome and folds away the counter', () => {
+    expect(index).toMatch(/const wagonTimer = setInterval\(/);
+    const at = index.indexOf('dispose: () =>');
+    expect(at, 'no dispose in the handle').toBeGreaterThan(-1);
+    expect(index.slice(at, index.indexOf('\n    },', at))).toContain('clearInterval(wagonTimer)');
+  });
+});

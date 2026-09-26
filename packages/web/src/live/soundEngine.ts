@@ -474,7 +474,80 @@ export class RoomTone {
       case 'boardOpen': return this.boardPaper(ctx, out, true);
       case 'boardClose': return this.boardPaper(ctx, out, false);
       case 'whoosh': return this.whoosh(ctx, out);
+      case 'ring': return this.ring(ctx, out);
+      case 'ratchet': return this.ratchet(ctx, out);
+      case 'rattle': return this.rattle(ctx, out);
+      case 'doorbell': return this.doorbell(ctx, out);
+      case 'pop': return this.pop(ctx, out);
+      default: {
+        // Every Moment has a voice: a name added to the union without one fails to compile here.
+        const unvoiced: never = name;
+        return unvoiced;
+      }
     }
+  }
+
+  /** The front-desk phone (lane 01M3F81DD9): a two-tone trill, twice. Quiet — it is across the room. */
+  private ring(ctx: AudioContext, out: AudioNode): void {
+    const t0 = ctx.currentTime + 0.02;
+    for (let r = 0; r < 2; r++) {
+      for (let i = 0; i < 6; i++) {
+        const t = t0 + r * 0.42 + i * 0.045;
+        const o = ctx.createOscillator();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(i % 2 ? 1180 : 940, t);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.018, t + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+        o.connect(g).connect(out);
+        o.start(t);
+        o.stop(t + 0.05);
+      }
+    }
+  }
+
+  /** The label maker: three ratchet clicks, the last one lower — ka-chunk. */
+  private ratchet(ctx: AudioContext, out: AudioNode): void {
+    const t0 = ctx.currentTime + 0.01;
+    [1400, 1320, 760].forEach((f, i) => this.click(ctx, out, t0 + i * 0.07, f, 0.03, 0.04));
+  }
+
+  /** Small wheels on a wooden floor: a short run of soft, uneven ticks. */
+  private rattle(ctx: AudioContext, out: AudioNode): void {
+    let t = ctx.currentTime + 0.01;
+    for (let i = 0; i < 9; i++) {
+      this.click(ctx, out, t, 300 + Math.random() * 120, 0.012, 0.03);
+      t += 0.09 + Math.random() * 0.03;
+    }
+  }
+
+  /** The front door's chime: ding-dong, a falling major third with a soft tail. */
+  private doorbell(ctx: AudioContext, out: AudioNode): void {
+    const t0 = ctx.currentTime + 0.02;
+    for (const [freq, dt] of [
+      [659.25, 0],
+      [523.25, 0.32],
+    ] as const) {
+      const at = t0 + dt;
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq, at);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(0.04, at + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.9);
+      o.connect(g).connect(out);
+      o.start(at);
+      o.stop(at + 0.95);
+    }
+  }
+
+  /** The confetti pop: one bright click, then a sparkle of three high ticks. */
+  private pop(ctx: AudioContext, out: AudioNode): void {
+    const t0 = ctx.currentTime + 0.01;
+    this.click(ctx, out, t0, 900, 0.05, 0.05);
+    for (let i = 0; i < 3; i++) this.click(ctx, out, t0 + 0.08 + i * 0.05, 2600 + i * 400, 0.01, 0.02);
   }
 
   /** A nameplate under the viewer's own hand (E4): one felt-pad tick, pitched a touch up on open

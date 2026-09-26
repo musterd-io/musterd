@@ -319,6 +319,8 @@ interface Walk {
   /** An arrival routed via a check-in mark (reception design 2026-07-30): which mark, and the index
    * of the pause leg — so the engine can report who is mid-check-in without inspecting geometry. */
   checkIn?: { mark: number; holdLeg: number };
+  /** Built from a real act (help / handoff) — what the Welcome Wagon waits out before it starts. */
+  act?: true;
 }
 type Req = { kind: 'help' | 'handoff'; to: string; urgent: boolean };
 
@@ -505,6 +507,12 @@ export interface Actors {
   welcomeWave(name: string): boolean;
   /** At home, not walking, and fully lowered into the seat — the confetti waits for this. */
   isSeated(name: string): boolean;
+  /** A real act's walk (help / handoff) is in flight or queued — arrivals, drifts and ambient
+   *  errands do not count. The Welcome Wagon will not START a welcome over one. */
+  actWalking(): boolean;
+  /** `name` has reached their check-in mark (or is past it, or is not checking in at all) — the
+   *  lanyard toss waits for this rather than being thrown at the door. */
+  reachedMark(name: string): boolean;
   active(): boolean;
 }
 
@@ -851,6 +859,7 @@ export function createActors(): Actors {
       t: 0,
       small: home.small,
       run: req.urgent,
+      act: true,
     };
   }
 
@@ -1158,6 +1167,15 @@ export function createActors(): Actors {
       if (!canGesture(name)) return false;
       gestures.set(name, { kind: GESTURE.wave, t: 0, dur: WAVE_S });
       return true;
+    },
+    actWalking() {
+      for (const w of walks.values()) if (w.act) return true;
+      for (const q of pending.values()) if (q.length) return true;
+      return false;
+    },
+    reachedMark(name) {
+      const w = walks.get(name);
+      return !w?.checkIn || w.i >= w.checkIn.holdLeg;
     },
     isSeated(name) {
       if (!homes.has(name) || walks.has(name) || exiting.has(name)) return false;

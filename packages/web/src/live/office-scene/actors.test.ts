@@ -1361,3 +1361,34 @@ describe('the welcome wave (lane 01M3F81DD9)', () => {
     expect(actors.welcomeWave('Ada')).toBe(false); // already waving
   });
 });
+
+describe('what the Welcome Wagon asks the actors (lane 01M3F81DD9)', () => {
+  it('actWalking counts a real act walk, never an arrival', () => {
+    const actors = createActors();
+    const w1 = world([node('Ada'), node('Cy')]);
+    actors.setHomes(w1.placements, w1.byName, false);
+    const w2 = world([node('Ada'), node('Cy'), node('Bo')]);
+    actors.setHomes(w2.placements, w2.byName, true);
+    expect(actors.active()).toBe(true); // Bo is walking in…
+    expect(actors.actWalking()).toBe(false); // …which is presence, not an act
+    expect(actors.walk('Ada', { kind: 'help', to: 'Cy', urgent: false })).toBe(true);
+    expect(actors.actWalking()).toBe(true);
+  });
+
+  it('reachedMark is false on the way to the mark and true from the pause onward', () => {
+    const actors = createActors();
+    const w1 = world([node('Ada')]);
+    actors.setHomes(w1.placements, w1.byName, false);
+    expect(actors.reachedMark('Ada')).toBe(true); // not checking in at all
+    const w2 = world([node('Ada'), node('Bo')]);
+    actors.setHomes(w2.placements, w2.byName, true);
+    expect(actors.reachedMark('Bo')).toBe(false);
+    let reached = false;
+    for (let i = 0; i < 400 && !reached; i++) {
+      actors.step(0.05);
+      reached = actors.reachedMark('Bo');
+    }
+    expect(reached).toBe(true);
+    expect(actors.checkInHolds()).toBe(1); // it turned true AT the mark, not after walking on
+  });
+});
