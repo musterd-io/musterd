@@ -165,7 +165,8 @@ function actTwo(a: Arrival, d: WagonDeps): Cue[] {
 /** A crowd: one lap of zoomies, conveyor tosses, one confetti, one caption (§3.4). */
 function crowd(online: Pending[], s: WelcomeWagonState, d: WagonDeps): Cue[] {
   const n = online.length;
-  const noun = online.every((a) => a.memberKind === 'human') ? 'guests' : 'teammates';
+  // Never "guests": everyone who joins is a Member like anyone else (sloane's copy read, 2026-09-26).
+  const noun = online.every((a) => a.memberKind === 'human') ? 'people' : 'members';
   const end = 1.2 + n * TOSS_GAP_S;
   const caption: Cue = {
     t: end,

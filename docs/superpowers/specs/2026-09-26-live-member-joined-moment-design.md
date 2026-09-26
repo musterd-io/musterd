@@ -105,9 +105,9 @@ wagon to the desk while the guest walks there, arriving just before them. One ca
 - **Once per wave:** one confetti burst, one caption — and one doorbell per roster update, rung as
   the guests walk through the door (amended 2026-09-26: the bell used to wait for the wave's script,
   two seconds after the walk-in):
-  `{n} guests joined — welcome` (a single-Member wave uses the §3.2 line).
+  `{n} people joined — welcome` (all human) or `{n} members joined — welcome` (mixed); a single-Member wave uses the §3.2 line. Never "guests" — attendees are Members like anyone else (sloane's copy read, 2026-09-26).
 - **Flip counter.** While a crowd is arriving, a flip counter on the wallboard ticks up per
-  lanyard: `guests 12 → 13 → 14`. It stays for 60 s after the last arrival, then folds away.
+  lanyard: `12 → 13 → 14`, labelled `joined`. It stays for 60 s after the last arrival, then folds away.
 - **Past 12 desks** guests stand in the gallery by the door (the existing overflow strip).
 - **The dog** does one lap of the room per crowd, not one wagon run per guest. Wagon deliveries
   happen only for Members who get a desk, at most one wagon trip in flight at a time.

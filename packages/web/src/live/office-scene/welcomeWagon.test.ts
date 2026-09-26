@@ -164,15 +164,15 @@ describe('welcomeWagon — the crowd', () => {
     ).toEqual([4, 5, 6]);
   });
 
-  it('an all-human crowd says guests; a mixed one says teammates', () => {
+  it('an all-human crowd says people; a mixed one says members — never guests (sloane)', () => {
     const s = createWelcomeWagon();
     enqueueArrivals(s, crowd(3), 0);
     const cap = run(s, WAVE_MS, WAVE_MS + 6_000).find((b) => b.beat.type === 'caption')!.beat;
-    expect(cap).toMatchObject({ text: '3 guests joined — welcome' });
+    expect(cap).toMatchObject({ text: '3 people joined — welcome' });
     const s2 = createWelcomeWagon();
     enqueueArrivals(s2, [...crowd(2), a('bot', { online: true, memberKind: 'agent' })], 0);
     const cap2 = run(s2, WAVE_MS, WAVE_MS + 6_000).find((b) => b.beat.type === 'caption')!.beat;
-    expect(cap2).toMatchObject({ text: '3 teammates joined — welcome' });
+    expect(cap2).toMatchObject({ text: '3 members joined — welcome' });
   });
 
   it('past the backlog cap, everything pending merges into one wave', () => {

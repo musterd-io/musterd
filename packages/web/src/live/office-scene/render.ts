@@ -5140,7 +5140,7 @@ function drawWallArrivals(ctx: CanvasRenderingContext2D, fit: Fit, w: WelcomePai
     ctx.fillStyle = '#5b544c';
     ctx.font = canvasFont(Math.max(5, Math.round(6 * s * 1.4)));
     ctx.textAlign = 'center';
-    ctx.fillText('guests', spots.counter.x, y0 + ch + 8 * s);
+    ctx.fillText('joined', spots.counter.x, y0 + ch + 8 * s); // never "guests" — they are Members
   }
 }
 

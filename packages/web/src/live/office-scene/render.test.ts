@@ -1623,7 +1623,8 @@ describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
     expect(paints).toContain(BOOT_LED); // the agent's boot blink
     expect(texts).toContain('a-very-lo…');
     expect(texts).toContain('12');
-    expect(texts).toContain('guests');
+    expect(texts).toContain('joined'); // the counter's label — never 'guests' (sloane)
+    expect(texts).not.toContain('guests');
     expect(texts).toContain('hello');
   });
 
