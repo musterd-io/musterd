@@ -358,3 +358,10 @@ describe('isIdleGesture — the boundary between scheduler beats and errand over
     for (const n of [0, 99, -1, 1.5, Number.NaN]) expect(isIdleGesture(n)).toBe(false);
   });
 });
+
+describe('the welcome wave gesture (lane 01M3F81DD9)', () => {
+  it('exists, and the ambient scheduler can never pick it', () => {
+    expect(GESTURE.wave).toBe(19);
+    expect(IDLE_GESTURES).not.toContain(GESTURE.wave);
+  });
+});

@@ -423,6 +423,11 @@ const EXCHANGES: ReadonlyArray<readonly [number, number]> = [
   [GESTURE.shoulders, GESTURE.lean],
 ];
 
+/** How long a first arrival stands at the check-in mark — long enough to catch a lanyard (spec §3.2). */
+export const FIRST_ARRIVAL_HOLD_S = 2.4;
+/** The welcome wave's window, seconds — two and a half rocks of the forearm. */
+const WAVE_S = 1.6;
+
 export interface Actors {
   /** Reconcile to a new roster: seat everyone, and (when `animate`) walk arrivals in, departures out,
    * and away/return drifts between desk and nook. The first call just snaps (no entrance stampede). */
@@ -490,6 +495,16 @@ export interface Actors {
   checkInMark(name: string): number | null;
   /** How many arrivals are standing at a mark right now — the receptionist's cue to look up. */
   checkInHolds(): number;
+  /**
+   * The NEXT arrival of `name` is their first ever (lane 01M3F81DD9): they carry `carry` in from the
+   * door and stand at the check-in mark for `FIRST_ARRIVAL_HOLD_S`. Set before the `setHomes` that
+   * brings them in; spent by that arrival, so a later walk-in is the ordinary one.
+   */
+  expectFirstArrival(name: string, carry: CarryKind | null): void;
+  /** One welcome wave from a seated, free member (the gesture eligibility `gestureBeat` uses). */
+  welcomeWave(name: string): boolean;
+  /** At home, not walking, and fully lowered into the seat — the confetti waits for this. */
+  isSeated(name: string): boolean;
   active(): boolean;
 }
 
@@ -503,6 +518,8 @@ export function createActors(): Actors {
   // seated member's idle pose for a short window, then cleared. Parallel to `walks` — no movement, so it
   // keeps the loop alive (advance the Rive gesture layer) without a walk. `t` counts up to `dur` seconds.
   const gestures = new Map<string, { kind: number; t: number; dur: number }>();
+  /** Names whose next arrival is their first ever — see `expectFirstArrival`. */
+  const firstArrivals = new Map<string, CarryKind | null>();
   /** Per-member animation blends (gait phase, stride, sit) — carried between frames; see `advanceAnim`. */
   const anim = new Map<string, Anim>();
   const exiting = new Set<string>();
@@ -545,16 +562,19 @@ export function createActors(): Actors {
    * animate branch of `setHomes`** — the first snapshot seats everyone silently, which is the whole
    * guard against a page reload replaying the ritual for the entire roster.
    */
-  function checkInWalk(who: string, dest: Pose, mark: number): Walk {
+  function checkInWalk(who: string, dest: Pose, mark: number, first?: { carry: CarryKind | null }): Walk {
     const speed = 78;
     const at = CHECK_IN_MARKS[mark]!;
     const from = entrancePose(dest);
-    const toMark = legsAlong(findPath({ lx: from.lx, ly: from.ly }, { lx: at.lx, ly: at.ly }, othersAt(who)), speed, 1.2, 4, null);
+    // A first arrival (lane 01M3F81DD9) carries their things in and lingers to catch the lanyard.
+    const carry = first?.carry ?? null;
+    const toMark = legsAlong(findPath({ lx: from.lx, ly: from.ly }, { lx: at.lx, ly: at.ly }, othersAt(who)), speed, 1.2, 4, carry);
     const stand = endOf(toMark);
-    const onward = legsAlong(findPath(stand, { lx: dest.lx, ly: dest.ly }, othersAt(who)), speed, 1.2, 5, null);
+    const onward = legsAlong(findPath(stand, { lx: dest.lx, ly: dest.ly }, othersAt(who)), speed, 1.2, 5, carry);
+    const pause = first ? FIRST_ARRIVAL_HOLD_S : CHECK_IN_S;
     return {
       // Facing N: the counter is north of every mark, and the pause is *at* somebody, not near them.
-      legs: [...toMark, hold(stand, 'N', CHECK_IN_S, {}), ...onward],
+      legs: [...toMark, hold(stand, 'N', pause, carry ? { carry } : {}), ...onward],
       i: 0,
       t: 0,
       small: dest.small,
@@ -565,6 +585,19 @@ export function createActors(): Actors {
 
   /** The between-frame animation state of a member, seeded from their home the first time we see them
    * (or, for a member first seen mid-walk — an arrival — from the walk's own direction of travel). */
+  /** Only a seated desk member, present and idle (not walking/queued/already gesturing), gestures. */
+  function canGesture(from: string): boolean {
+    const home = homes.get(from);
+    return !(
+      !home ||
+      home.small ||
+      exiting.has(from) ||
+      walks.has(from) ||
+      pending.get(from)?.length ||
+      gestures.has(from)
+    );
+  }
+
   function animOf(name: string): Anim {
     let a = anim.get(name);
     if (!a) {
@@ -861,8 +894,10 @@ export function createActors(): Actors {
         if (!prevHomes.has(name)) {
           exiting.delete(name);
           ghosts.delete(name);
+          const first = firstArrivals.has(name) ? { carry: firstArrivals.get(name) ?? null } : undefined;
+          firstArrivals.delete(name);
           if (!dest.small && marksDealt < CHECK_IN_MARKS.length) {
-            walks.set(name, checkInWalk(name, dest, marksDealt++));
+            walks.set(name, checkInWalk(name, dest, marksDealt++, first));
           } else {
             walks.set(name, straightWalk(name, entrancePose(dest), dest, false, 'in'));
           }
@@ -1112,20 +1147,21 @@ export function createActors(): Actors {
       return true;
     },
     gestureBeat(from, kind) {
-      const home = homes.get(from);
-      // Only a seated desk member, present and idle (not walking/queued/already gesturing), gestures.
-      if (
-        !home ||
-        home.small ||
-        exiting.has(from) ||
-        walks.has(from) ||
-        pending.get(from)?.length ||
-        gestures.has(from)
-      ) {
-        return false;
-      }
+      if (!canGesture(from)) return false;
       gestures.set(from, { kind, t: 0, dur: GESTURE_DUR[kind] }); // one full beat window, then clear
       return true;
+    },
+    expectFirstArrival(name, carry) {
+      firstArrivals.set(name, carry);
+    },
+    welcomeWave(name) {
+      if (!canGesture(name)) return false;
+      gestures.set(name, { kind: GESTURE.wave, t: 0, dur: WAVE_S });
+      return true;
+    },
+    isSeated(name) {
+      if (!homes.has(name) || walks.has(name) || exiting.has(name)) return false;
+      return animOf(name).sit > 0.9;
     },
     idleDeskMembers() {
       const out: string[] = [];

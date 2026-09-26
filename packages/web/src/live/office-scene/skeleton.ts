@@ -123,6 +123,12 @@ export const GESTURE = {
   pour: 12,
   /** Phone to the ear, held for the length of a call. */
   call: 13,
+  /**
+   * The welcome wave (lane 01M3F81DD9): a hand up beside the head, the forearm rocking. Played only by
+   * the Welcome Wagon, on the teammates nearest a first arrival — never by the gesture scheduler, which
+   * is why it is listed in `ERRAND_GESTURES` below (that list IS the "not scheduler-pickable" family).
+   */
+  wave: 19,
 } as const;
 
 /**
@@ -130,7 +136,7 @@ export const GESTURE = {
  * scheduler. Listed here (rather than by id range) because this is the ONLY thing that separates the
  * two families, and the separation has to be derivable — see `IDLE_GESTURES` directly below.
  */
-const ERRAND_GESTURES = ['browse', 'fill', 'eat', 'pour', 'call'] as const;
+const ERRAND_GESTURES = ['browse', 'fill', 'eat', 'pour', 'call', 'wave'] as const;
 
 /** A beat the gesture scheduler may pick: everything in the registry that is not an errand overlay. */
 export type IdleGesture = (typeof GESTURE)[Exclude<keyof typeof GESTURE, (typeof ERRAND_GESTURES)[number]>];
@@ -623,6 +629,15 @@ function applyOverlays(s: Skel, inp: SkelInput): void {
     }
     s.head = v(s.head.x, s.head.y + a * 2, s.head.z - a * 3);
     s.chest = v(s.chest.x, s.chest.y + a * 1.5, s.chest.z - a * 1.5);
+  } else if (inp.gesture === GESTURE.wave) {
+    // The welcome wave: the right hand comes up beside the head, palm out, and the forearm rocks about
+    // the elbow — two and a half rocks — while the head turns a touch toward the newcomer.
+    const a = arcEnv(inp.gestureT);
+    const rock = Math.sin(inp.gestureT * Math.PI * 5) * 3 * a;
+    const up = v(C.shoulderW + 3 + rock, s.shoulder[1].y + C.upperArm + 2, s.shoulder[1].z + 4);
+    s.wrist[1] = lerp3(s.wrist[1], up, a);
+    s.elbow[1] = ik2(s.shoulder[1], s.wrist[1], C.upperArm, C.foreArm, v(1, -0.6, 0.2));
+    s.head = v(s.head.x + a * 1.5, s.head.y, s.head.z);
   } else if (inp.gesture === GESTURE.glance) {
     // Glance: the head turns away from the screen and drifts back. Cheap, and startlingly human.
     const a = arcEnv(inp.gestureT);
