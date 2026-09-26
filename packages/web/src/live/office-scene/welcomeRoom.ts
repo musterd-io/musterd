@@ -124,10 +124,6 @@ export function createWelcomeRoom(
       case 'polaroid':
         ports.polaroid(b.name); // a dog with a polaroid in its mouth makes no sound
         return;
-      case 'doorbell':
-        ports.door(b.hue);
-        ports.sound('doorbell', 'door');
-        return;
       case 'toss':
         ports.receptionist('toss');
         paint.lanyards.set(b.name, ports.color(b.name, b.hue));
@@ -176,6 +172,9 @@ export function createWelcomeRoom(
   return {
     paint,
     onRoster(nodes, deskHolders, now) {
+      // An empty roster before any roster is the page mounting ahead of its data, not an empty team:
+      // taking it as the baseline made the real roster read as the whole team arriving at once.
+      if (prev === null && nodes.length === 0) return [];
       const arrivals = opts.still ? [] : diffArrivals(prev, nodes, { now, seenOnline });
       prev = new Map(nodes.map((n) => [n.name, n]));
       for (const n of nodes) if (n.presence !== 'offline') seenOnline.add(n.name);
@@ -183,6 +182,14 @@ export function createWelcomeRoom(
         for (const a of arrivals)
           if (a.online) ports.expectFirstArrival(a.name, a.memberKind === 'human' ? 'movingBox' : null);
       enqueueArrivals(wagon, arrivals, now);
+      // The door rings as they walk through it — now, with the walk-in `setHomes` is about to build,
+      // not two seconds later when the wave's script starts and they are already past it. One ring
+      // for a crowd, in no one colour; the glow is motion, the bell is not (E3 spec §2).
+      const walkingIn = arrivals.filter((a) => a.online);
+      if (walkingIn.length > 0) {
+        if (!opts.reduced) ports.door(walkingIn.length === 1 ? walkingIn[0]!.hue : null);
+        ports.sound('doorbell', 'door');
+      }
       paint.polaroids = newArrivalsCorner(nodes, deskHolders, now).map((p) => ({
         name: p.name,
         color: ports.color(p.name, p.hue),

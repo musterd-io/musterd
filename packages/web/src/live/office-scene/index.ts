@@ -471,17 +471,35 @@ export function mountOffice(
     },
     { reduced, still: STILL },
   );
-  /* A parked room never ticks, so a queued welcome would wait for some other motion to start it —
-     and the crowd's flip counter would hang on the wall. Coarse on purpose: 500 ms of latency on a
-     2 s wave window is invisible, and the timer does nothing unless a welcome is actually pending. */
-  const wagonTimer = setInterval(() => {
-    if (disposed || suspended || (!broadcast && !VISIBLE())) return;
-    if (welcomeRoom.active() && !raf) ensureLoop();
-    if (welcomeRoom.expire(Date.now()) && !raf) {
-      bake();
-      paintResting();
-    }
-  }, 500);
+  /**
+   * The Welcome Wagon's off-loop clock — armed by update() only while a welcome is queued or playing
+   * or the crowd's counter is on the wall, and it stops itself after (idle cost is paid by every
+   * viewer, forever: packages/web/AGENTS.md). Two jobs. Under reduced motion there is no rAF loop at
+   * all, so this IS the welcome's clock: stepped here, its captions and end states land (the final
+   * review found that without it a reduced-motion room never drained and its canvas froze). Otherwise
+   * it starts the loop for a welcome that became ready while the room was parked, and folds the
+   * counter away. Coarse on purpose: 500 ms on a 2 s wave window is invisible.
+   */
+  let wagonTimer: ReturnType<typeof setInterval> | null = null;
+  function armWagonTimer() {
+    if (wagonTimer || STILL) return;
+    wagonTimer = setInterval(() => {
+      const seen = !disposed && !suspended && (broadcast || VISIBLE());
+      if (reduced) {
+        if (seen) welcomeRoom.step(Date.now(), clock);
+      } else if (seen && welcomeRoom.active() && !raf) {
+        ensureLoop();
+      }
+      if (welcomeRoom.expire(Date.now()) && !raf && !disposed) {
+        bake();
+        paintResting();
+      }
+      if (disposed || (!welcomeRoom.active() && !welcomeRoom.paint.counter)) {
+        if (wagonTimer) clearInterval(wagonTimer);
+        wagonTimer = null;
+      }
+    }, 500);
+  }
   function renderRail() {
     // The line is chrome now, not scene DOM — hand it out and let WorkStack's header carry it.
     options.onCaption?.(rail.current);
@@ -1621,7 +1639,7 @@ export function mountOffice(
   }
 
   /** Is anything actually happening right now? One home — two doors used to spell this out separately. */
-  const alive = () => living() || actors.active() || cues.length > 0 || welcomeRoom.active();
+  const alive = () => living() || actors.active() || cues.length > 0 || (!reduced && welcomeRoom.active());
   /*
    * Coming back to a room that stopped being watched. There are two doors — the tab becoming visible
    * again and the panel re-expanding — and they ask the SAME question: the loop if the room is alive,
@@ -1917,6 +1935,7 @@ export function mountOffice(
     const deskHolders = new Set<string>();
     for (const [n, p] of placements) if (p.kind === 'desk') deskHolders.add(n);
     const arrivals = welcomeRoom.onRoster(next.nodes, deskHolders, Date.now());
+    if (welcomeRoom.active() || welcomeRoom.paint.counter) armWagonTimer();
     // "{name} just walked in" would say it twice — the welcome writes its own line for a newcomer.
     if (presenceLine && !arrivals.some((a) => a.online && a.name === presenceLine.who))
       pushRail(presenceLine);
@@ -1927,7 +1946,9 @@ export function mountOffice(
     actors.setHomes(placements, byName, !reduced);
     // The pulse is read ONCE, above the motion gate: the door's sound plays under reduced-motion
     // (audio is not motion, E3 spec §2); only the visual glow stays gated.
-    if (actors.takeDoorPulses() > 0) {
+    // A newcomer's walk-in already rang the door in their colour (welcomeRoom) — the plain cue stands down.
+    const welcomedAtDoor = arrivals.some((a) => a.online);
+    if (actors.takeDoorPulses() > 0 && !welcomedAtDoor) {
       roomTone.moment('door', screenPan(project(ENTRANCE.lx, ENTRANCE.ly, fit).x, width));
       if (!reduced) pushDoorCue(); // the entrance "opens" as someone comes/goes
     }
@@ -1935,7 +1956,9 @@ export function mountOffice(
     // gets up to see you leave. This outranks whatever nap it had planned, which is the whole point of it.
     if (!reduced && actors.takeArrivals() > 0) petGreet(pet);
     bake();
-    if (actors.active() || cues.length || welcomeRoom.active()) ensureLoop();
+    // Under reduced motion there is no loop to start — a pending welcome must never stand in for the
+    // resting repaint (it is stepped by armWagonTimer instead).
+    if (actors.active() || cues.length || (!reduced && welcomeRoom.active())) ensureLoop();
     else paintResting(); // no motion → hold a still frame (Rive-aware; not the code-drawn buffer)
   }
 
@@ -2412,7 +2435,7 @@ export function mountOffice(
       if (railTimer) clearInterval(railTimer); // stop the caption rail
       options.onCaption?.(null);
       clearInterval(welcomeTimer); // stop the receptionist welcome
-      clearInterval(wagonTimer); // stop the Welcome Wagon's parked-room check
+      if (wagonTimer) clearInterval(wagonTimer); // stop the Welcome Wagon's off-loop clock
       if (ambientTimer) clearTimeout(ambientTimer); // stop the idle-beat scheduler
       window.removeEventListener('resize', onResize);
       ro?.disconnect();

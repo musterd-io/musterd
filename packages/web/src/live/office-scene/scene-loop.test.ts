@@ -106,11 +106,26 @@ describe('the Welcome Wagon is plumbed in', () => {
     expect(index).toMatch(/const alive = \(\) =>[^;]*welcomeRoom\.active\(\)/);
   });
 
-  it('a parked room still starts a queued welcome and folds away the counter', () => {
-    expect(index).toMatch(/const wagonTimer = setInterval\(/);
+  it('a parked room still starts a queued welcome and folds away the counter — on a timer that only runs while needed', () => {
+    const arm = body('armWagonTimer');
+    expect(arm).toMatch(/setInterval\(/);
+    expect(arm, 'the timer must stop itself once the welcome is over').toMatch(/clearInterval\(wagonTimer\)/);
+    expect(body('update')).toContain('armWagonTimer()');
     const at = index.indexOf('dispose: () =>');
     expect(at, 'no dispose in the handle').toBeGreaterThan(-1);
     expect(index.slice(at, index.indexOf('\n    },', at))).toContain('clearInterval(wagonTimer)');
+  });
+
+  it('reduced motion: the welcome is stepped off the frame loop, and never blocks the resting repaint', () => {
+    // Final review, Critical: under reduced motion the rAF loop never runs, so a welcome stepped only
+    // from `tick` never drained, `active()` stayed true, and update() took ensureLoop() (a no-op) instead
+    // of paintResting() on every roster change — the canvas froze after the first arrival.
+    expect(body('armWagonTimer')).toMatch(/if \(reduced\)[\s\S]*?welcomeRoom\.step\(/);
+    expect(body('update')).toMatch(/!reduced && welcomeRoom\.active\(\)/);
+  });
+
+  it('the plain door cue stands down when the welcome rang the door', () => {
+    expect(body('update')).toMatch(/takeDoorPulses\(\)[\s\S]*?welcomedAtDoor/);
   });
 });
 

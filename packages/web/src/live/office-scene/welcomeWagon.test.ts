@@ -88,7 +88,7 @@ describe('welcomeWagon — Act 2 (first time online)', () => {
     const s = createWelcomeWagon();
     enqueueArrivals(s, [a('ada', { kind: 'firstOnline', online: true })], 0);
     const beats = run(s, WAVE_MS, WAVE_MS + 8_000);
-    expect(types(beats)).toEqual(['doorbell', 'toss', 'say', 'wave', 'confetti', 'hello', 'caption']);
+    expect(types(beats)).toEqual(['toss', 'say', 'wave', 'confetti', 'hello', 'caption']);
     expect(beats.find((b) => b.beat.type === 'caption')!.beat).toMatchObject({
       text: 'ada joined the team — welcome',
     });
@@ -120,7 +120,7 @@ describe('welcomeWagon — Act 2 (first time online)', () => {
     expect(t).toContain('label');
     expect(t).toContain('wagon');
     expect(t.filter((x) => x === 'caption')).toHaveLength(1);
-    expect(t).not.toContain('ring'); // the doorbell is the one sound that opens the fold
+    expect(t).not.toContain('ring'); // the fold is one moment: the door opened it, no phone call
   });
 
   it('skips beats for a Member who left before they fired', () => {
@@ -134,11 +134,10 @@ describe('welcomeWagon — Act 2 (first time online)', () => {
 describe('welcomeWagon — the crowd', () => {
   const crowd = (n: number) => Array.from({ length: n }, (_, i) => a(`g${i}`, { online: true }));
 
-  it('one doorbell, one zoomies, a toss + counter per guest, one confetti, one caption', () => {
+  it('one zoomies, a toss + counter per guest, one confetti, one caption', () => {
     const s = createWelcomeWagon();
     enqueueArrivals(s, crowd(5), 0);
     const t = types(run(s, WAVE_MS, WAVE_MS + 10_000));
-    expect(t.filter((x) => x === 'doorbell')).toHaveLength(1);
     expect(t.filter((x) => x === 'zoomies')).toHaveLength(1);
     expect(t.filter((x) => x === 'toss')).toHaveLength(5);
     expect(t.filter((x) => x === 'counter')).toHaveLength(5);
@@ -183,8 +182,40 @@ describe('welcomeWagon — the crowd', () => {
       enqueueArrivals(s, [a(`s${i}`, { online: true })], i * 3_000);
     const start = BACKLOG_MAX * 3_000 + WAVE_MS;
     const t = types(run(s, start, start + 12_000));
-    expect(t.filter((x) => x === 'doorbell')).toHaveLength(1); // …but the backlog plays as one crowd
+    expect(t.filter((x) => x === 'zoomies')).toHaveLength(1); // …but the backlog plays as one crowd
     expect(t.filter((x) => x === 'toss')).toHaveLength(BACKLOG_MAX + 1);
+  });
+});
+
+describe('welcomeWagon — the final review (lane 01M3F81DD9)', () => {
+  it('created, then connected a second later, is ONE folded welcome — not Act 2 then Act 1', () => {
+    // member add → presence:offline refetch; the connect ~1 s later → presence:online refetch: two
+    // records for the same name inside one wave.
+    const s = createWelcomeWagon();
+    enqueueArrivals(s, [a('ada')], 0);
+    enqueueArrivals(s, [a('ada', { kind: 'firstOnline', online: true })], 1_000);
+    const t = types(run(s, 1_000 + WAVE_MS, 1_000 + WAVE_MS + 12_000));
+    expect(t).not.toContain('ring');
+    expect(t.filter((x) => x === 'label')).toHaveLength(1);
+    expect(t.filter((x) => x === 'caption')).toHaveLength(1);
+    expect(t.indexOf('label')).toBeLessThan(t.indexOf('toss'));
+  });
+
+  it('a Member added and removed before the wave starts is not announced at all', () => {
+    const s = createWelcomeWagon();
+    enqueueArrivals(s, [a('adaa')], 0); // the typo…
+    expect(run(s, WAVE_MS, WAVE_MS + 6_000, deps({ present: (n) => n !== 'adaa' }))).toEqual([]);
+    expect(welcomePlaying(s)).toBe(false);
+  });
+
+  it('a short hidden gap pauses the sequence instead of bursting it', () => {
+    const s = createWelcomeWagon();
+    enqueueArrivals(s, [a('ada', { kind: 'firstOnline', online: true })], 0);
+    run(s, WAVE_MS, WAVE_MS + 200); // started
+    const afterGap = stepWelcomeWagon(s, WAVE_MS + 10_200, deps()).map((b) => b.type);
+    expect(afterGap).toEqual([]); // nothing fires on the frame the tab comes back
+    const resumed = types(run(s, WAVE_MS + 10_250, WAVE_MS + 18_000));
+    expect(resumed).toEqual(['toss', 'say', 'wave', 'confetti', 'hello', 'caption']); // in order, paced
   });
 });
 

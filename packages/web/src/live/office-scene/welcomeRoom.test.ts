@@ -82,7 +82,7 @@ describe('welcomeRoom — the roster side', () => {
       10,
     );
     expect(out.map((a) => a.name)).toEqual(['ada', 'bot1']);
-    expect(calls).toEqual(['first:ada:movingBox', 'first:bot1:null']);
+    expect(calls.filter((c) => c.startsWith('first:'))).toEqual(['first:ada:movingBox', 'first:bot1:null']);
     expect(room.active()).toBe(true); // queued — the scene must keep ticking to start it
   });
 
@@ -101,6 +101,25 @@ describe('welcomeRoom — the roster side', () => {
     const now = 50 * 3_600_000;
     room.onRoster([subject('ada', { created_at: now - 1_000 }), subject('lin', { created_at: now - 2_000 })], new Set(['lin']), now);
     expect(room.paint.polaroids).toEqual([{ name: 'ada', color: 'c(ada,40)' }]);
+  });
+
+  it('an empty first roster is not the baseline — the page mounted before the roster arrived', () => {
+    const { ports, calls } = fakePorts();
+    const room = createWelcomeRoom(ports, OPTS);
+    expect(room.onRoster([], new Set(), 0)).toEqual([]);
+    // The real roster lands: that is the first roster, not a whole team arriving at once.
+    expect(room.onRoster([subject('nick'), subject('ada'), subject('lin')], new Set(), 100)).toEqual([]);
+    run(room, 0, 8_000);
+    expect(calls).toEqual([]);
+  });
+
+  it('a crowd walking in rings the door once, with no single colour', () => {
+    const { ports, calls } = fakePorts();
+    const room = createWelcomeRoom(ports, OPTS);
+    room.onRoster([subject('nick')], new Set(), 0);
+    room.onRoster([subject('nick'), ...['g1', 'g2', 'g3'].map((n) => online(subject(n)))], new Set(), 0);
+    expect(calls.filter((c) => c.startsWith('door:'))).toEqual(['door:null']);
+    expect(calls.filter((c) => c === 'sound:doorbell@door')).toHaveLength(1);
   });
 
   it('still mode never welcomes anyone', () => {
@@ -140,9 +159,9 @@ describe('welcomeRoom — dispatch', () => {
     const room = createWelcomeRoom(ports, OPTS);
     room.onRoster([subject('ada')], new Set(), 0);
     room.onRoster([online(subject('ada'))], new Set(), 0);
+    // The door rings as they walk through it — at the roster, not 2 s later when the script starts.
+    expect(calls.slice(-2)).toEqual(['door:40', 'sound:doorbell@door']);
     run(room, WAVE_MS, WAVE_MS + 2_000);
-    expect(calls).toContain('door:40');
-    expect(calls).toContain('sound:doorbell@door');
     expect(calls).toContain('recep:toss');
     expect(room.paint.lanyards.get('ada')).toBe('c(ada,40)');
     seated.add('ada');
@@ -240,7 +259,12 @@ describe('welcomeRoom — reduced motion', () => {
     room.onRoster([subject('nick')], new Set(), 0);
     room.onRoster([subject('nick'), online(subject('ada'))], new Set(), 0);
     run(room, WAVE_MS, WAVE_MS + 8_000);
-    expect(calls).toEqual(['sound:ratchet@desk', 'caption:ada joined the team — welcome']);
+    // No glow (motion) — but the doorbell still rings: audio is not motion (E3 spec §2).
+    expect(calls).toEqual([
+      'sound:doorbell@door',
+      'sound:ratchet@desk',
+      'caption:ada joined the team — welcome',
+    ]);
     expect(room.paint.labels).toHaveLength(0);
   });
 });

@@ -16,7 +16,6 @@ export type WelcomeBeat =
   | { type: 'label'; name: string; hue: number | null }
   | { type: 'wagon'; name: string }
   | { type: 'polaroid'; name: string }
-  | { type: 'doorbell'; hue: number | null }
   | { type: 'toss'; name: string; hue: number | null }
   | { type: 'wave'; name: string }
   | { type: 'confetti'; name: string; hue: number | null }
@@ -57,6 +56,12 @@ export const BACKLOG_MAX = 6;
 export const GATE_TIMEOUT_S = 12;
 /** A sequence unstepped for this long (a hidden tab), seconds, is dropped — never burst. */
 export const STALE_S = 20;
+/**
+ * A gap between steps longer than this (ms) is a pause — a hidden tab, a collapsed panel — and the
+ * sequence resumes where it stopped instead of firing every beat that fell due in the gap at once.
+ * Well above a frame (the loop never runs slower than ~20 fps), well below anything a viewer sees.
+ */
+export const PAUSE_GAP_MS = 250;
 
 type Gate = { kind: 'seated' | 'mark'; name: string };
 interface Cue {
@@ -145,8 +150,8 @@ function actTwo(a: Arrival, d: WagonDeps): Cue[] {
       : [];
   const mark: Gate = { kind: 'mark', name: a.name };
   const seat: Gate = { kind: 'seated', name: a.name };
+  // The door itself rang when they walked in (welcomeRoom.onRoster) — the script starts inside.
   return [
-    { t: 0, beat: { type: 'doorbell', hue: a.hue }, who: a.name },
     ...fold,
     { t: 1.6, beat: { type: 'toss', name: a.name, hue: a.hue }, who: a.name, gate: mark },
     { t: 1.6, beat: { type: 'say', text: `welcome, ${a.name}!` }, who: a.name, gate: mark },
@@ -157,7 +162,7 @@ function actTwo(a: Arrival, d: WagonDeps): Cue[] {
   ];
 }
 
-/** A crowd: one doorbell, one lap of zoomies, conveyor tosses, one confetti, one caption (§3.4). */
+/** A crowd: one lap of zoomies, conveyor tosses, one confetti, one caption (§3.4). */
 function crowd(online: Pending[], s: WelcomeWagonState, d: WagonDeps): Cue[] {
   const n = online.length;
   const noun = online.every((a) => a.memberKind === 'human') ? 'guests' : 'teammates';
@@ -170,10 +175,7 @@ function crowd(online: Pending[], s: WelcomeWagonState, d: WagonDeps): Cue[] {
     s.guests += n;
     return [{ ...caption, t: 0 }];
   }
-  const cues: Cue[] = [
-    { t: 0, beat: { type: 'doorbell', hue: null } },
-    { t: 0.2, beat: { type: 'zoomies' } },
-  ];
+  const cues: Cue[] = [{ t: 0.2, beat: { type: 'zoomies' } }];
   online.forEach((a, i) => {
     const t = 1.2 + i * TOSS_GAP_S;
     s.guests += 1;
@@ -235,27 +237,54 @@ function scriptFor(wave: Pending[], s: WelcomeWagonState, d: WagonDeps): Cue[] {
   return cues.sort((x, y) => x.t - y.t);
 }
 
-function takeWave(s: WelcomeWagonState): Pending[] {
+function takeWave(s: WelcomeWagonState, d: WagonDeps): Pending[] {
+  let wave: Pending[];
   if (s.pending.length > BACKLOG_MAX) {
-    const all = s.pending;
+    wave = s.pending;
     s.pending = [];
-    return all;
+  } else {
+    const first = s.pending[0]!.at;
+    wave = s.pending.filter((p) => p.at - first <= WAVE_MS);
+    s.pending = s.pending.filter((p) => p.at - first > WAVE_MS);
   }
-  const first = s.pending[0]!.at;
-  const wave = s.pending.filter((p) => p.at - first <= WAVE_MS);
-  s.pending = s.pending.filter((p) => p.at - first > WAVE_MS);
-  return wave;
+  return settle(wave, d);
+}
+
+/**
+ * One record per Member, and only for Members still here. `member add` then a connect a second later
+ * reach the diff as two refetches — `created` offline, then `firstOnline` — and played as two they ran
+ * backwards (the welcome, then "oh! someone new" seven seconds after). Merged, they are the one folded
+ * moment §3.3 describes. A Member added and removed before the wave starts (a typo) is not announced.
+ */
+function settle(wave: Pending[], d: WagonDeps): Pending[] {
+  const byName = new Map<string, Pending>();
+  for (const p of wave) {
+    const had = byName.get(p.name);
+    byName.set(
+      p.name,
+      had
+        ? { ...p, kind: had.kind === 'created' || p.kind === 'created' ? 'created' : p.kind, online: had.online || p.online }
+        : p,
+    );
+  }
+  return [...byName.values()].filter((p) => d.present(p.name));
 }
 
 /** Advance the wagon to `now`; returns the beats to play this frame, in order. */
 export function stepWelcomeWagon(s: WelcomeWagonState, now: number, d: WagonDeps): WelcomeBeat[] {
-  if (s.playing && (now - s.playing.lastStepAt) / 1000 > STALE_S) s.playing = null;
+  if (s.playing) {
+    const gap = now - s.playing.lastStepAt;
+    if (gap / 1000 > STALE_S) s.playing = null;
+    else if (gap > PAUSE_GAP_MS) s.playing.startedAt += gap; // paused, not elapsed
+  }
   if (!s.playing) {
     if (s.pending.length === 0) return [];
     const waited = now - s.pending[0]!.at;
     const ready = s.pending.length > BACKLOG_MAX || waited >= WAVE_MS;
     if (!ready || (d.busy && waited < WAVE_MS + MAX_WAIT_MS)) return [];
-    s.playing = { startedAt: now, lastStepAt: now, cues: scriptFor(takeWave(s), s, d) };
+    const wave = takeWave(s, d);
+    if (wave.length === 0) return [];
+    s.playing = { startedAt: now, lastStepAt: now, cues: scriptFor(wave, s, d) };
   }
   const seq = s.playing;
   seq.lastStepAt = now;
