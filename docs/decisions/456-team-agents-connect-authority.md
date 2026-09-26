@@ -1,6 +1,7 @@
 # 456 — Team agents: who may connect a sponsored agent
 
-- Status: proposed — 2026-09-26
+- Status: accepted — 2026-09-26, by nick in session (after ghost `01M3FDTQEX`, sloane
+  `01M3FDYEF2`, and big-body's security review `01M3FF4PNY`, whose residual risk §2 records)
 - Date: 2026-09-26
 - Lane: `01M3FBKNB52C157YTNBY8SD4FT` (goal `demo`)
 - Amends: [ADR 449](449-member-expiry-sponsored-agents.md) §4 (the sponsor alone receives and

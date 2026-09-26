@@ -106,6 +106,9 @@ carries each guarantee:
 | invalid on credential rotation | The admin rotate path already revokes all chains (ADR 446 §3). |
 | invalid on expiry | `authMember` refuses past `lifecycle_until`. Chains are capped at it (§4). |
 
+_(Amended 2026-09-26: ADR 456 adds a row, "invalid when the member who connected it loses their
+standing". See the note in Consequences.)_
+
 `verifyAccess` admits an `agent`-kind row as well as `human`. By construction, only §2 can bind a
 chain to an agent. Every other agent keeps ADR 337's credential-plus-lease rule untouched, and the
 claim handshake is unchanged.
@@ -203,6 +206,11 @@ therefore passed the schema. `containsMusterdCredential` refuses any prefix wher
 start: the value's start, or after any non-base64url character. So it never fires inside a nonce,
 and nonce minting redraws the ~1-in-10⁷ nonce that would begin with a prefix. Refusal happens at
 the schema, before redemption, so the real nonce survives a bad paste.
+
+2026-09-26 — [ADR 456](456-team-agents-connect-authority.md) amends §2–3. The connect nonce's issuer
+travels onto the code and the chain as `connected_by`. The chain is valid only while both the agent
+and that member are in good standing, checked in `verifyAccess` and on both token grants. The issuer
+may be someone other than the sponsor, according to the team's `agent_connect` policy.
 
 ## Observability & Evaluation
 
