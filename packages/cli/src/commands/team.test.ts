@@ -76,6 +76,26 @@ describe('team policy command', () => {
     );
   });
 
+  it('--sponsored-agent-cap tunes live agents per sponsor, and the view says how many (ADR 459)', async () => {
+    expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
+      'sponsored agent cap: 3 per sponsor',
+    );
+    const set = await capture(() =>
+      teamCommand(parseArgs(['policy', '--sponsored-agent-cap', '6'])),
+    );
+    expect(set.code).toBe(0);
+    expect(set.out).toContain('sponsored agent cap: 6 live agents per sponsor');
+    expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
+      'sponsored agent cap: 6 per sponsor',
+    );
+    await expect(teamCommand(parseArgs(['policy', '--sponsored-agent-cap', '0']))).rejects.toThrow(
+      /--sponsored-agent-cap <1–100>/,
+    );
+    await expect(
+      teamCommand(parseArgs(['policy', '--sponsored-agent-cap', 'many'])),
+    ).rejects.toThrow(/--sponsored-agent-cap <1–100>/);
+  });
+
   it('--trace-content turns the content column on and off, and the view says which (ADR 445 §3)', async () => {
     expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
       'trace content: off',

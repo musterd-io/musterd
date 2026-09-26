@@ -3,6 +3,7 @@ import { openDb } from '../db/open.js';
 import { createServer, type RunningServer } from '../index.js';
 import { SPONSORED_AGENT_CAP, redeemAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { requireTeam } from '../store/teams.js';
+import { __resetOAuthBucketsForTest } from './oauth.js';
 
 /**
  * ADR 449 §3–4 through HTTP: `POST /teams/:slug/members/agents` (a human member mints an agent they
@@ -38,6 +39,9 @@ async function addHuman(name: string): Promise<string> {
 }
 
 beforeEach(async () => {
+  // The mint bucket is per-IP and module-level: every test server here shares loopback, so a
+  // previous test's mints would spend this test's budget without the reset (ADR 459 §2).
+  __resetOAuthBucketsForTest();
   server = createServer({ db: openDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
@@ -102,6 +106,37 @@ describe('POST /teams/:slug/members/agents', () => {
       .prepare("SELECT account_status FROM members WHERE name = 'dana-scout'")
       .get() as { account_status: string };
     expect(row.account_status).toBe('disabled');
+  });
+
+  it('the per-team cap tunes the count (ADR 459 §3)', async () => {
+    const dana = await addHuman('dana');
+    expect((await post('/teams/sponsor-t/policy', { sponsored_agent_cap: 6 }, nick)).status).toBe(
+      200,
+    );
+    for (let i = 0; i < 6; i++)
+      expect((await post('/teams/sponsor-t/members/agents', { name: `a${i}` }, dana)).status).toBe(
+        201,
+      );
+    const r = await post('/teams/sponsor-t/members/agents', { name: 'extra' }, dana);
+    expect(r.status).toBe(403);
+    expect(r.json.error.message).toMatch(/cap of 6/);
+  });
+
+  it('the 11th mint in a minute from one IP is rate_limited (ADR 459 §2)', async () => {
+    // Four sponsors × three agents: the per-sponsor cap never fires, so only the IP bucket can.
+    const creds = [];
+    for (const name of ['s0', 's1', 's2', 's3']) creds.push(await addHuman(name));
+    for (let i = 0; i < 10; i++) {
+      const r = await post(
+        '/teams/sponsor-t/members/agents',
+        { name: `r${i}` },
+        creds[Math.floor(i / 3)]!,
+      );
+      expect(r.status).toBe(201);
+    }
+    const over = await post('/teams/sponsor-t/members/agents', { name: 'r10' }, creds[3]!);
+    expect(over.status).toBe(429);
+    expect(over.json.error.code).toBe('rate_limited');
   });
 });
 

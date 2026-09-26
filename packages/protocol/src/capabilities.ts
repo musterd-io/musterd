@@ -48,6 +48,13 @@ export const CapabilitiesSchema = z.object({
   is_admin: z.boolean(),
   can_flag_urgent: z.boolean(),
   can_observe: z.boolean(),
+  /**
+   * Whether this seat may mint member-created agents (ADR 459, on ADR 449 §3). Default true:
+   * every existing seat keeps exactly today's behavior, and old blobs parse unchanged. An admin
+   * narrows it per seat through the ADR 070 machinery (`true→false` only); `createSponsoredAgent`
+   * refuses a narrowed sponsor. False never widens anything else.
+   */
+  can_create_agents: z.boolean().default(true),
   can_message: CanMessageSchema,
   visibility_level: VisibilityLevelSchema,
   tool_allowlist: z.array(z.string()),
@@ -69,6 +76,7 @@ export const GENERALIST_CAPABILITIES: Capabilities = {
   is_admin: false,
   can_flag_urgent: true,
   can_observe: true,
+  can_create_agents: true,
   can_message: 'team',
   visibility_level: 'team',
   tool_allowlist: [],
@@ -96,6 +104,7 @@ export function clampNarrow(
     is_admin: bool(ceiling.is_admin, override.is_admin),
     can_flag_urgent: bool(ceiling.can_flag_urgent, override.can_flag_urgent),
     can_observe: bool(ceiling.can_observe, override.can_observe),
+    can_create_agents: bool(ceiling.can_create_agents, override.can_create_agents),
     can_message:
       override.can_message === undefined
         ? ceiling.can_message
@@ -181,6 +190,7 @@ export function effectiveCapabilities(
     is_admin: roleDefaults.is_admin ?? g.is_admin,
     can_flag_urgent: roleDefaults.can_flag_urgent ?? g.can_flag_urgent,
     can_observe: roleDefaults.can_observe ?? g.can_observe,
+    can_create_agents: roleDefaults.can_create_agents ?? g.can_create_agents,
     can_message: roleDefaults.can_message ?? g.can_message,
     visibility_level: roleDefaults.visibility_level ?? g.visibility_level,
     tool_allowlist: roleDefaults.tool_allowlist ?? g.tool_allowlist,

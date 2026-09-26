@@ -99,7 +99,11 @@ function clientIp(ctx: Ctx, req: IncomingMessage): string {
 /** Hard bound on bucket cardinality — distinct IPs are unbounded (botnet), memory is not. */
 const OAUTH_BUCKET_MAX_KEYS = 10_000;
 
-function checkRateLimit(
+/**
+ * Shared per-IP bucket check (ADR 446 §5 buckets, ADR 459 adds `agent_mint`). Exported so the
+ * member-agents route in `http.ts` rides the same buckets and key — one limiter, not two.
+ */
+export function checkRateLimit(
   ctx: Ctx,
   req: IncomingMessage,
   route: keyof typeof OAUTH_RATE_LIMITS,

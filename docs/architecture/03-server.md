@@ -27,7 +27,7 @@ src/
     seed.ts           // seedDawn(db) test helper
   store/
     teams.ts          // Team CRUD/policy + scoped bootstrap credential lifecycle, legacy exchange/readiness, transactional cutover (ADR 344/350); restateUnstampedPolicy (ADR 398: one-shot stamp of pre-kind stored policy when the hub has joiners)
-    members.ts        // addMember (issues token), getMember, authMember(token), leaveMember (releases in-flight claims — ADR 196), reapStaleObservers + reapExcessIdleObservers; takenHues is live roster only — observers do not occupy the hue floor (ADR 409)
+    members.ts        // addMember (issues token), getMember, authMember(token), leaveMember (releases in-flight claims — ADR 196), sweepExpiredMembers + startExpiredMemberSweep (hourly cosmetic left_at for past-until members — ADR 459 §4), reapStaleObservers + reapExcessIdleObservers; takenHues is live roster only — observers do not occupy the hue floor (ADR 409)
     messages.ts       // insertMessage, listInbox(memberId, since), listTeamMessages
     presence.ts       // attach, heartbeat, detach/release, listPresence, reapStale, reattestModel (ADR 101), reattestSurface (ADR 275) (kind-scoped single-active, ADR 042)
     activity.ts       // resolveActivity: the two-clocks rule → offline/idle/working (v0.2 M2; ADR 140)
@@ -55,7 +55,7 @@ src/
     seeds.ts          // shared Seed persistence + authorized lifecycle transitions; atomic retry-safe promotion to one ordinary Lane (ADR 291/311); captureRepoSeed — a document-recorded intention as a Seed, idempotent on ref, lane_id links (ADR 373 inc 2)
     teamMemory.ts     // team-memory retrieval: searchInsights over the insights_fts fold + rebuildInsightsFts (the cache property) (ADR 327)
     audit.ts          // append-only governance audit log: appendAudit/listAudit (+ authorized_by filter, ADR 071/127)
-    sponsoredAgents.ts // member-created agents (ADR 449 §3–4): createSponsoredAgent (human-only, sponsor's expiry inherited, cap 3, removed names refused) + the hashed single-use 15-min agent connect nonce (issue/redeem); `connectRefusal` — who may issue a connect link under the team's `agent_connect` policy (ADR 456 §2); redeem returns the issuer and refuses one who lost standing (§3)
+    sponsoredAgents.ts // member-created agents (ADR 449 §3–4): createSponsoredAgent (human-only, can_create_agents switch — ADR 459 §1, sponsor's expiry inherited, per-team cap via policy default 3, removed names refused) + the hashed single-use 15-min agent connect nonce (issue/redeem); `connectRefusal` — who may issue a connect link under the team's `agent_connect` policy (ADR 456 §2); redeem returns the issuer and refuses one who lost standing (§3)
     signinHandoff.ts  // sign-in handoff relay: stageHandoff/redeemHandoff — memory-only, single-use 60s nonces so `musterd board` hands the browser a handle, never a credential (ADR 170)
     gateAsk.ts        // Gate B (ADR 150) ask-lifecycle reads: findGateAsk (fingerprint dedup — one ask per re-attempted costly action) + gateAskHumanAnswer (human-only accept/decline release); pure reads over the ADR 147 ask-stream log
     grants.ts         // grant store: issueGrant/validateGrant/consumeGrant/revokeGrant (ADR 076, P3.1)

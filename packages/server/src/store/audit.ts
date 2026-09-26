@@ -28,6 +28,8 @@ export type AuditAction =
   // ADR 452: a sponsored agent's device redeemed its sponsor's connect nonce / a nonce was refused.
   | 'member.agent_connected'
   | 'member.agent_connect_refused'
+  // ADR 459 §4: the hourly expiry sweeper marked an expired member departed (actor null — the daemon).
+  | 'member.expired_swept'
   | 'invite.minted'
   | 'invite.revoked'
   | 'observe.denied'
@@ -519,6 +521,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'member.invite_refused': 'actor',
   'member.agent_connected': 'actor',
   'member.agent_connect_refused': 'actor',
+  'member.expired_swept': 'none',
   'invite.minted': 'actor',
   'invite.revoked': 'actor',
   'observe.denied': 'actor',

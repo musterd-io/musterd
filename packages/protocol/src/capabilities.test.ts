@@ -15,6 +15,7 @@ describe('capability model (ADR 070)', () => {
       is_admin: false,
       can_flag_urgent: true, // urgent stays ungated until P2 flips the default
       can_observe: true,
+      can_create_agents: true, // ADR 459: minting stays open unless an admin narrows it
       can_message: 'team',
       visibility_level: 'team',
       tool_allowlist: [],
@@ -22,6 +23,20 @@ describe('capability model (ADR 070)', () => {
     });
     // a real Capabilities record validates against the schema
     expect(CapabilitiesSchema.parse(GENERALIST_CAPABILITIES)).toEqual(GENERALIST_CAPABILITIES);
+  });
+
+  it('a pre-459 blob without the switch parses with the default (ADR 459)', () => {
+    const { can_create_agents, ...old } = GENERALIST_CAPABILITIES;
+    expect(can_create_agents).toBe(true);
+    expect(CapabilitiesSchema.parse(old).can_create_agents).toBe(true);
+  });
+
+  it('the mint switch narrows true→false through the ceiling (ADR 459 §1)', () => {
+    const ceiling = effectiveCapabilities({ can_create_agents: true });
+    expect(clampNarrow(ceiling, { can_create_agents: false }).can_create_agents).toBe(false);
+    // ...and never widens false→true.
+    const closed = effectiveCapabilities({ can_create_agents: false });
+    expect(clampNarrow(closed, { can_create_agents: true }).can_create_agents).toBe(false);
   });
 
   it('no role + no override resolves to the generalist default', () => {
