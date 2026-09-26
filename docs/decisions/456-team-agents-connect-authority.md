@@ -66,6 +66,23 @@ nick chose `'any_member'` for both `revive` and the public demo team (relayed by
 members are admitted by invite. The shipped default stays `'sponsor'` for every team that hasn't
 chosen.
 
+**The residual risk, accepted by nick (2026-09-26).** big-body's security review (`01M3FF4PNY`,
+severity high on a persistent team, confidence high) is right about what `'any_member'` means on the
+demo team. Any attendee admitted by invite can issue a link for any live sponsored agent, evict its
+device, and act as that agent. §3 ends that session only when the attendee's own standing ends. So on
+a reusable team, an attendee whose membership never expires keeps that power indefinitely. nick chose
+`'any_member'` for the demo anyway, with two containments the demo runbook makes mandatory:
+
+- **Every invite on a team running `'any_member'` sets a member expiry** (`musterd team invite create
+  --member-until …`, ADR 450 §1). Attendees' memberships, and with them any takeover power, end on
+  a known date.
+- **No agent the demo does not own lives on that team.** The presenter's own working agents, and any
+  team agent that matters after the event, stay on other teams.
+
+big-body's alternatives stay available and are recorded in Considered and rejected. The server does
+not enforce either containment, because ADR 449 made expiry an ordinary per-member setting rather
+than an event rule. They are an operator's obligation, written where the operator runs the demo.
+
 The server does not derive the setting from invite usage. A team that once used an invite would flip
 behaviour silently, the moment it minted one. That is a change nobody chose, and nothing prompts
 anyone to look for it.
@@ -121,6 +138,12 @@ connected it loses their standing".
   agent anyway and could simply create another one. It adds no protection over `'sponsor'`.
 - **Deriving the setting from whether the team uses invites.** This is rejected in §2 as hidden,
   flip-on-use state.
+- **`'sponsor'` on the demo team** (big-body's containment and stanley's recommendation). Admins
+  can connect any agent under `'sponsor'`, so the presenter's host could still start every agent.
+  nick chose `'any_member'` so attendees can also start each other's agents, and accepted the risk
+  under §2's containments.
+- **A disposable demo team.** This is big-body's other containment. It would reverse ADR 451's
+  persistent team.
 - **Cascading revocation from the connector instead of checking at use.** A cascade has to find
   every chain on every removal path (remove, disable, expiry, credential rotation). A check at use
   is exact on all of them, and it is the pattern ADR 449 §1 already chose for expiry.
