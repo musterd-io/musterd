@@ -669,9 +669,12 @@ export function renderTraceReport(r: TraceReport, team: string, w: (s: string) =
   if (r.coverage.length === 0) w(theme.meta('  no trace rows in the window') + '\n');
   for (const c of r.coverage) {
     const ratio = c.coverage === null ? theme.meta('no R2 tool calls') : pct(c.coverage);
+    // The fraction shown is the one the ratio is made of (hook calls INSIDE R2-bearing sessions);
+    // the all-sessions hook count follows as its own fact, so a reader can see how much of the
+    // window the transcript rail actually covered.
     w(
       `  ${c.harness} — ${ratio} ${theme.meta(
-        `(${n(c.post_tool_use)} / ${n(c.r2_tool_uses)}) · ${c.sessions} session${c.sessions === 1 ? '' : 's'}, ${c.sessions_with_r2} with R2`,
+        `(${n(c.post_tool_use_r2)} / ${n(c.r2_tool_uses)}) · ${c.sessions} session${c.sessions === 1 ? '' : 's'}, ${c.sessions_with_r2} with R2 · ${n(c.post_tool_use)} hook calls in all`,
       )}\n`,
     );
   }

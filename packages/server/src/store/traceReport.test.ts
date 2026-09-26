@@ -40,14 +40,20 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
       ev({ tool_name: 'Bash', outcome: 'error', kind: 'PostToolUseFailure' }),
       usage('ryder', NOW - H, { tool_uses: 4, input_tokens: 10, output_tokens: 5 }),
       ev({ harness: 'codex', session_digest: 'bbbbbbbbbbbb', tool_name: 'Bash' }),
+      // a claude-code session with NO transcript rail: its hook calls count as a fact but must
+      // not inflate the ratio — this is the 124% the live team read
+      ev({ session_digest: 'ffffffffffff', tool_name: 'Bash' }),
+      ev({ session_digest: 'ffffffffffff', tool_name: 'Read' }),
+      ev({ session_digest: 'ffffffffffff', tool_name: 'Edit' }),
     ]);
     const r = deriveTraceReport(db, traceDb, team.id, ['ryder', 'izzo'], { days: 7, now: NOW });
     expect(r.coverage).toEqual([
       {
         harness: 'claude-code',
-        sessions: 1,
+        sessions: 2,
         sessions_with_r2: 1,
-        post_tool_use: 2,
+        post_tool_use: 5,
+        post_tool_use_r2: 2,
         r2_tool_uses: 4,
         coverage: 0.5,
       },
@@ -56,14 +62,16 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
         sessions: 1,
         sessions_with_r2: 0,
         post_tool_use: 1,
+        post_tool_use_r2: 0,
         r2_tool_uses: 0,
         coverage: null,
       },
     ]);
     expect(r.tool_mix).toEqual([
-      { harness: 'claude-code', tool: 'Bash', calls: 2, errors: 1, avg_duration_ms: null },
+      { harness: 'claude-code', tool: 'Bash', calls: 3, errors: 1, avg_duration_ms: null },
+      { harness: 'claude-code', tool: 'Read', calls: 2, errors: 0, avg_duration_ms: null },
       { harness: 'codex', tool: 'Bash', calls: 1, errors: 0, avg_duration_ms: null },
-      { harness: 'claude-code', tool: 'Read', calls: 1, errors: 0, avg_duration_ms: null },
+      { harness: 'claude-code', tool: 'Edit', calls: 1, errors: 0, avg_duration_ms: null },
     ]);
   });
 

@@ -339,7 +339,11 @@ ADR 184's publication gate; a spans backend.
   The `/live` per-seat timeline is the second half, lane 01M3FEB12R870FRSYJH0TXD34V, landed the
   same day: a `trace` expander on every roster row reads `GET /trace/seats/:name` (newest 50,
   structural columns only — the store read never selects content) into a lazy chunk, so /live's
-  eager graph pays one button per row. Falsifier on the dogfood box: `musterd report trace` from an admin seat prints a non-null
+  eager graph pays one button per row. The first run of the falsifier below read **124%** coverage
+  on `revive` (8 sessions, 2 with R2): the ratio counted every session's hook calls over only the
+  R2-bearing sessions' transcript calls. Fixed the same day (lane `01M3FQ75PG4ZA2ZMQ0N2YJZTF8`): the
+  numerator is now `post_tool_use_r2`, hook calls inside sessions that carry both rails, and the
+  all-sessions count stays on the row as its own fact. Falsifier on the dogfood box: `musterd report trace` from an admin seat prints a non-null
   coverage for `claude-code` and at least one lane with turns.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.

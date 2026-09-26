@@ -227,7 +227,8 @@ describe('report trace (ADR 445 increment 4)', () => {
         harness: 'claude-code',
         sessions: 3,
         sessions_with_r2: 2,
-        post_tool_use: 40,
+        post_tool_use: 61,
+        post_tool_use_r2: 40,
         r2_tool_uses: 50,
         coverage: 0.8,
       },
@@ -236,6 +237,7 @@ describe('report trace (ADR 445 increment 4)', () => {
         sessions: 1,
         sessions_with_r2: 0,
         post_tool_use: 9,
+        post_tool_use_r2: 0,
         r2_tool_uses: 0,
         coverage: null,
       },
@@ -265,8 +267,12 @@ describe('report trace (ADR 445 increment 4)', () => {
     renderTraceReport(sample, 'dawn', (s) => void out.push(s));
     const text = out.join('');
     expect(text).toContain('trace — dawn · last 7d · 2 seats readable');
-    expect(text).toContain('claude-code — 80% (40 / 50) · 3 sessions, 2 with R2');
-    expect(text).toContain('codex — no R2 tool calls (9 / 0) · 1 session, 0 with R2');
+    expect(text).toContain(
+      'claude-code — 80% (40 / 50) · 3 sessions, 2 with R2 · 61 hook calls in all',
+    );
+    expect(text).toContain(
+      'codex — no R2 tool calls (0 / 0) · 1 session, 0 with R2 · 9 hook calls in all',
+    );
     expect(text).toContain('Bash claude-code — 30 calls · 2 errors · avg 412ms');
     expect(text).toContain('apply_patch codex — 4 calls');
     expect(text).toContain('01M3FDM0HT ADR 445 increment 4 — views over trace_events');
@@ -303,6 +309,7 @@ describe('report trace (ADR 445 increment 4)', () => {
         sessions: 1,
         sessions_with_r2: 0,
         post_tool_use: 1,
+        post_tool_use_r2: 0,
         r2_tool_uses: 0,
         coverage: null,
       },
