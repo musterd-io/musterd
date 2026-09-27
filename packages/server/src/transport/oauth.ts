@@ -509,7 +509,9 @@ export async function handleOAuthRoutes(
     checkRateLimit(ctx, req, 'register');
     // RFC 7591 §3.2.2: a registration failure is `{error, error_description}` with one of the
     // registered codes — the apps parse that, not the musterd envelope (ADR 458).
-    const parsedReg = OAuthClientRegistrationRequestSchema.safeParse(await readTokenRequestBody(req));
+    const parsedReg = OAuthClientRegistrationRequestSchema.safeParse(
+      await readTokenRequestBody(req),
+    );
     if (!parsedReg.success) {
       sendTokenError(
         res,
