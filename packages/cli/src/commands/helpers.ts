@@ -443,7 +443,21 @@ const NUDGE_SKIP_COMMANDS = new Set([
  * `--json`/`--quiet`/`MUSTERD_NO_NUDGE=1` (scripts that want a clean sidecar) and skips commands that
  * either show the acts already or carry no identity ({@link NUDGE_SKIP_COMMANDS}).
  */
-export async function reachabilityNudge(command: string, parsed: Parsed): Promise<string> {
+/**
+ * How long the nudge may hold a command's exit (lane 01M3ABD9DM). It rides every dispatched command
+ * and `HttpClient` carries no AbortSignal, so a daemon that accepts the socket and never answers held
+ * the process until undici's 300 s header timeout — after the command itself had finished. On a
+ * hook-fired `session start` that was the whole of a woken session's hung first turn. The same size
+ * as the statusline's budget, for the same reason: silence on failure is only true if failure is
+ * bounded.
+ */
+export const NUDGE_BUDGET_MS = 1_500;
+
+export async function reachabilityNudge(
+  command: string,
+  parsed: Parsed,
+  budgetMs: number = NUDGE_BUDGET_MS,
+): Promise<string> {
   if (NUDGE_SKIP_COMMANDS.has(command)) return '';
   if (parsed.flags['json'] === true || parsed.flags['quiet'] === true) return '';
   if (process.env['MUSTERD_NO_NUDGE'] === '1') return '';
@@ -453,7 +467,13 @@ export async function reachabilityNudge(command: string, parsed: Parsed): Promis
     // the very commands that had opted out. Never reclaims: the default is off and stays off here.
     const { http, team, identity, explicit } = resolveRead(parsed.flags);
     if (!explicit || !identity) return '';
-    const pending = await pendingActionSummary(http, team, identity.name);
+    let timer: NodeJS.Timeout | undefined;
+    const pending = await Promise.race([
+      pendingActionSummary(http, team, identity.name),
+      new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => resolve(undefined), budgetMs);
+      }),
+    ]).finally(() => clearTimeout(timer));
     if (!pending) return '';
     return renderReachabilityNudge(pending.count, pending.since, identity.name);
   } catch {
