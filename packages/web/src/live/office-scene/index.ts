@@ -15,6 +15,7 @@ import { platesOpenMode, stillMode } from '../stillMode';
 import { surfaceGlyph } from '../surfaceGlyph';
 import { createActors, deskNeighbourPairs, type Actors } from './actors';
 import { solidHit, walkable } from './nav';
+import { layoutPlates, leaderFrom, type PlateBox } from './plateLayout';
 import { helpWalks } from './mapping';
 import {
   ambientFrameBudgetMs,
@@ -641,6 +642,32 @@ export function mountOffice(
     steamEl.style.transform = `translate(-50%, -100%) translate(${p.x}px, ${p.y}px)`;
   }
 
+  /**
+   * Plate sizes, as the browser last laid them out (lane 01M3GPH5KB). Read from a ResizeObserver so
+   * the per-frame layout never forces a synchronous layout itself; an expanded plate reports its new
+   * size here and the plates re-flow around it.
+   */
+  const plateSize = new Map<string, { w: number; h: number }>();
+  /** Each plate's slot from the last layout — its hysteresis (plateLayout.ts). */
+  let plateSlots = new Map<string, number>();
+  let lastHeads: Map<string, Pt> | null = null;
+  const plateRO =
+    typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver((entries) => {
+          for (const e of entries) {
+            const name = (e.target as HTMLElement).dataset['plate'];
+            if (!name) continue;
+            const box = e.borderBoxSize?.[0];
+            plateSize.set(name, {
+              w: box ? box.inlineSize : e.contentRect.width,
+              h: box ? box.blockSize : e.contentRect.height,
+            });
+          }
+          // A plate that grew (expanded) or first measured re-flows the room even while it is parked.
+          if (lastHeads) positionLabels(lastHeads);
+        });
+
   /** Create/remove label elements + set their text, and position them from `headMap`. Small (nook/strip)
    * actors are left unlabelled — their names bunch at a glance and the roster panel is the name source of
    * truth; the "+N" pills and location carry the secondary read.
@@ -649,7 +676,7 @@ export function mountOffice(
    * name and reveals model · harness · role behind it. Broadcast: icon + short model only. */
   function syncLabels(headMap: Map<string, Pt>, nodes: Map<string, OfficeNode>, poses: Map<string, Pose>) {
     const seen = new Set<string>();
-    for (const [name, head] of headMap) {
+    for (const name of headMap.keys()) {
       const node = nodes.get(name);
       if (!node || poses.get(name)?.small) continue;
       seen.add(name);
@@ -657,9 +684,11 @@ export function mountOffice(
       if (!el) {
         el = document.createElement('div');
         el.className = 'lc-gl-label';
+        el.dataset['plate'] = name;
         if (interactiveLabels) el.tabIndex = 0;
         labelHost.appendChild(el);
         labels.set(name, el);
+        plateRO?.observe(el);
       }
       el.textContent = '';
       el.style.pointerEvents = interactiveLabels ? 'auto' : 'none';
@@ -859,23 +888,53 @@ export function mountOffice(
       }
 
       el.classList.toggle('is-offline', node.presence !== 'online');
-      el.style.transform = `translate(-50%, -100%) translate(${head.x}px, ${head.y}px)`;
     }
     for (const [name, el] of labels) {
       if (!seen.has(name)) {
         clearExpandTimer(name);
         plateExpand.delete(name);
+        plateRO?.unobserve(el);
+        plateSize.delete(name);
         el.remove();
         labels.delete(name);
       }
     }
+    positionLabels(headMap);
   }
 
-  /** Cheap per-frame reposition of existing labels (used while walking — no structural change). */
+  /**
+   * Place every plate for this frame (lane 01M3GPH5KB): front-to-back into the first free slot near its
+   * own head, clear of other plates and other members' heads (plateLayout.ts). A plate off its home
+   * spot draws a hairline leader back to its head, in the member's colour, so it is never read as
+   * someone else's. Cheap enough per frame: ~25 plates, compared pairwise, sizes from the observer.
+   */
   function positionLabels(headMap: Map<string, Pt>) {
-    for (const [name, el] of labels) {
+    lastHeads = headMap;
+    const boxes: PlateBox[] = [];
+    for (const name of labels.keys()) {
       const head = headMap.get(name);
-      if (head) el.style.transform = `translate(-50%, -100%) translate(${head.x}px, ${head.y}px)`;
+      if (!head) continue;
+      const size = plateSize.get(name);
+      boxes.push({ name, anchor: head, w: size?.w ?? 60, h: size?.h ?? 14 });
+    }
+    const laid = layoutPlates(boxes, headMap, plateSlots, { scale: fit.scale });
+    plateSlots = laid.slots;
+    for (const [name, el] of labels) {
+      const at = laid.placements.get(name);
+      const head = headMap.get(name);
+      if (!at || !head) continue;
+      el.style.transform = `translate(-50%, -100%) translate(${at.x}px, ${at.y}px)`;
+      el.classList.toggle('is-displaced', at.displaced);
+      if (at.displaced) {
+        // From the plate's nearest edge to just above the crown it belongs to, in the label's own
+        // coordinates (its box is `translate(-50%, -100%)` from `at`).
+        const size = plateSize.get(name) ?? { w: 60, h: 14 };
+        const lead = leaderFrom(at, size.w, size.h, { x: head.x, y: head.y + 6 * fit.scale });
+        el.style.setProperty('--lead-x', `${(lead.start.x - (at.x - size.w / 2)).toFixed(1)}px`);
+        el.style.setProperty('--lead-y', `${(lead.start.y - (at.y - size.h)).toFixed(1)}px`);
+        el.style.setProperty('--lead-len', `${lead.len.toFixed(1)}px`);
+        el.style.setProperty('--lead-angle', `${lead.angle.toFixed(3)}rad`);
+      }
     }
     repositionSpeeches(headMap);
   }
@@ -2248,6 +2307,7 @@ export function mountOffice(
       queued.clear();
       for (const name of plateExpand.keys()) clearExpandTimer(name);
       plateExpand.clear();
+      plateRO?.disconnect();
       for (const el of labels.values()) el.remove();
       labels.clear();
       ambientHost.remove(); // removes the day-cycle wash, steam, and the animated desk props
