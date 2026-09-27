@@ -45,12 +45,12 @@ Note that this is the blocker behind the earlier "no server responded" on the qu
 
 Daemon-log timestamps, UTC, 2026-09-27; "add check" is the unauthenticated `POST /mcp/demo` claude.ai sends when the connector is added.
 
-| join | add check | register | form submitted | first tool call | add → first tool | on the form |
-|---|---|---|---|---|---|---|
-| Charm | 00:10:06 | 00:10:38 | 00:10:54 | 00:10:55 | 49 s | 15 s |
-| Toto | 00:14:04 | 00:14:12 | 00:14:58 | 00:15:00 | 56 s | 46 s |
+| join | client | network | add check | register | form submitted | first tool call | add → first tool | on the form |
+|---|---|---|---|---|---|---|---|---|
+| Charm | claude.ai web, laptop | Wi-Fi | 00:10:06 | 00:10:38 | 00:10:54 | 00:10:55 | 49 s | 15 s |
+| Toto | Claude iOS app, iPhone | cellular | 00:14:04 | 00:14:12 | 00:14:58 | 00:15:00 | 56 s | 46 s |
 
-Both under the 3-minute target from [join-page-copy §7](../design/join-page-copy.md). Not measured this run: mistypes per admission (0 wrong-code 401s in the log across both joins), `/live` at 60 s, a deliberate wrong code, the link-value paste, cellular vs Wi-Fi, and which client each join used (phone app vs claude.ai web) — nick to fill in.
+Both under the 3-minute target from [join-page-copy §7](../design/join-page-copy.md); 0 wrong-code 401s in the log across both joins. The phone join added the connector in the app directly (no web step), which the help center calls beta — it worked once here. Not measured this run: `/live` at 60 s, a deliberate wrong code, the link-value paste, three phones at once.
 
 ## Still open
 
