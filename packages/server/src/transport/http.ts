@@ -1684,6 +1684,14 @@ export async function handleHttp(
       },
     );
     if (!requestCheck.ok) {
+      // Logged: a refusal here happens before the request log, and an unlogged 403 hid the
+      // Origin problem for a whole rehearsal (2026-09-26).
+      log.warn({
+        msg: 'http_request_refused',
+        method: req.method ?? 'GET',
+        path: (req.url ?? '/').split('?')[0],
+        reason: requestCheck.reason,
+      });
       return sendJson(res, 403, {
         error: { code: 'forbidden', message: 'request Host or Origin is not allowed' },
       });
