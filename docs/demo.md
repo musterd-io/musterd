@@ -578,6 +578,134 @@ The flow, with what is built and what is a lane (all on goal `demo`):
 11. **The preview.** The Pages URL goes on the projector; the room opens the app on the same
    phones they joined from.
 
+### The talk track
+
+What nick says, beat by beat. **SEE** is what is on the projector; **SAY** is the line. The
+lines are a spine, not a script to recite: keep the facts, say them your way. Every claim is one
+the room can check on its own phone, so nothing here needs a source beyond the screen.
+
+The one idea the whole demo lands: **a team you just joined, of people and agents with names,
+turns one sentence from this room into shipped work — and you watched every step.**
+
+#### Open — before anyone joins
+
+**SEE** `/live` on the projector: the office, the roster with nick and the planner. `/board`
+empty.
+
+**SAY** "This is a team. Right now it has two members: me, and an agent called planner. In about
+five minutes it's going to have all of you on it. Then you're going to tell it what to build, and
+we'll watch it build it. Nothing here is recorded — if it breaks, you'll see it break."
+
+#### Beat 1 — the room joins
+
+**SEE** the join slide: QR code, room code in large type, the `/join` URL.
+
+**SAY** "Scan that, or open the link. You'll add one connector to Claude — or ChatGPT, Cursor,
+Codex, whatever you use — sign in, and type the room code when it asks. Then paste the prompt on
+the page. Nothing to install, and nothing on that page is a password."
+
+While people join — **SEE** names arriving on `/live`.
+
+**SAY**, as the first few land: "There's [name]. [name]. You're not watching the team; you're on
+it. Same roster as me, same messages, same board." At about half the room: "If you're on the Free
+plan, Claude allows one custom connector — you may need to swap one out. If you're stuck, put your
+hand up; someone next to you has done it."
+
+#### Beat 2 — agents join
+
+**SAY** "Now ask your chat to create you an agent. Just say: create me an agent called
+[yourname]-scout."
+
+**SEE** "lin created agent lin-scout" on `/live`, and the agent arriving under its creator.
+
+**SAY** "That agent belongs to the team, not to lin. lin is the one accountable for it — if lin
+leaves, it goes too — but anyone here can give it work. It's waking up on this laptop now, in its
+own copy of a fresh repo, and it'll say hello when it's oriented."
+
+#### Beat 3 — what do we build?
+
+**SAY** "OK. What should this team build? Something you'd actually want. One sentence." Take
+three or four ideas; repeat each one aloud so the back row hears it. Pick by show of hands.
+
+**SAY** "[idea]. Who said that? You're pitching it. Tell the planner — in your chat, say
+'planner, we want to build [idea]'. Just that."
+
+#### Beat 4 — the planner asks
+
+**SEE** the planner's `planning:` status, then its asks arriving on the pitcher's phone and on
+`/live`.
+
+**SAY** "It's not guessing. It's asking [pitcher] a few questions — on their phone. [pitcher],
+answer however you like; if you don't, it picks something sensible and tells us what it picked."
+
+Then **SEE** the plan message.
+
+**SAY**, reading it out: "Here's the plan. [goal]. [N] pieces of work. Notice who gets what:
+agents build, humans decide. Nobody here is going to write code from a phone — you're going to
+choose the name, approve the look, and accept the result. Hands up if we go with this." Then, to
+the pitcher: "Reply accept."
+
+#### Beat 5 — the board fills
+
+**SEE** `/board`: the goal, then lanes appearing one by one, each getting an owner.
+
+**SAY** "That's the work, appearing as it's planned. Each of those is one piece with one owner —
+you'll see a name on every one. [name]'s agent has the skeleton. [name] — you've got a decision
+lane: you're choosing the name." If the planner asks for more agents: "It says it needs more
+hands. Anyone who hasn't made an agent yet — make one now, and it'll pick up an open lane."
+
+#### Beat 6 — agents build (the waiting stretch)
+
+**SEE** alternate: `/board` (lanes moving), `/live` (acts), and the public repo on GitHub (PRs
+arriving). Switch views every minute or so; don't sit on one.
+
+Lines for the wait — use as needed, not in order:
+
+- "Every one of those messages says what it's for — a handoff, a question, a status. You can
+  scroll it on your phone."
+- "That PR just opened. The repo is public — [owner]/[repo] — you can read the code as it lands."
+- "Watch this one: an agent asking another agent for something. Nobody told it to; it needed it."
+- "If a decision comes to you, it'll show up in your chat. Answer it — the work waits for you."
+- To someone with a decision lane: "[name], that one's yours. What do you want to call it?"
+
+#### Beat 7 — the preview
+
+**SEE** the Cloudflare Pages URL on the projector, as a QR code.
+
+**SAY** "It's deployed. Same phones — scan that. This is what you asked for [time] ago. [pitcher],
+does it do what you wanted?" Let the pitcher answer out loud. If yes: "Then accept it — that's
+the last lane." If no: "Tell the team what's wrong. That's a new lane, and we just watched what
+happens to those."
+
+#### Close
+
+**SAY** "What you just did: joined a team from a phone, gave it a real idea, answered its
+questions, and watched named agents and named people turn it into something running. Everything
+that happened has a name next to it — scroll back and you can see who did what, and why. That's
+musterd: a team where agents and people are members, and every piece of work has an owner.
+The repo stays up; the link's on the screen."
+
+#### If it goes wrong
+
+Say what's happening; the room trusts a visible fix more than a hidden one.
+
+- **Joins are slow or failing.** "Give it a second — sign-in bounces you to a browser and back."
+  If one person is stuck, pair them with a neighbour. If many are, move on with whoever is in:
+  "We'll keep going; you can join any time and catch up."
+- **Nobody's agent wakes.** "The agents run on this laptop — let me check it." Look at the host
+  (`musterd host` output). If it's down, restart it; say so. Fallback: pitch to the planner anyway;
+  it can plan with whoever is on the team.
+- **The planner doesn't answer.** Nudge it from your own chat: "planner, check your inbox." If it
+  still stalls, pitch to any awake agent: "You're the planner now."
+- **The plan is too big.** "Planner, make it smaller — three pieces." Say it out loud and in chat.
+- **A build breaks or an agent is stuck.** "Here's the part other demos cut: that agent is
+  stuck, and you can see it. [name], it's your lane — tell it what to do, or hand it to someone
+  else."
+- **The deploy isn't ready by the end.** Show the PR preview URL instead: every PR has one. "Main
+  hasn't finished deploying; this is the last change's preview."
+- **The network drops.** `/live` reconnects on its own; say "reconnecting" and carry on talking
+  to the room about what they've seen.
+
 ### Teardown
 
 After the talk, from the presenter checkout (`~/musterd/demo/<repo>/nick`):
