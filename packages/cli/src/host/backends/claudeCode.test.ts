@@ -441,6 +441,49 @@ describe('claudeCodeBackend.wake', () => {
     await actuation.settled;
   });
 
+  // Lane 01M3ABD9DM finding (C): `transcript_bytes`/`transcript_age_ms` describe the transcript the
+  // host examined for RESUME — the previous wake's — so a wake_failed row read them as this spawn's.
+  // The failure reason now says what THIS spawn wrote, without its session id (ADR 131 §5).
+  describe("a failed wake's reason names this spawn's transcript", () => {
+    const minted = '00000000-0000-4000-8000-000000000000';
+
+    it('says none was written when the spawned session left no transcript', async () => {
+      const child = new FakeChild();
+      const seen: string[] = [];
+      const { backend } = harness(child, {
+        findSpawnTranscript: (id) => {
+          seen.push(id);
+          return undefined;
+        },
+      });
+      const actuation = await backend.wake(
+        spec(),
+        ctx(async () => ({ occupied: false })),
+      );
+      expect(seen).toEqual([minted]);
+      expect(actuation.outcome.reason).toContain("this spawn's transcript: none written");
+      expect(actuation.outcome.reason).not.toContain(minted);
+      child.exit(143);
+      await actuation.settled;
+    });
+
+    it('gives its size and age when it exists', async () => {
+      const child = new FakeChild();
+      const { backend } = harness(child, {
+        findSpawnTranscript: () => ({ bytes: 2048, mtimeMs: Date.now() - 4_000 }),
+      });
+      const actuation = await backend.wake(
+        spec(),
+        ctx(async () => ({ occupied: false })),
+      );
+      expect(actuation.outcome.reason).toMatch(
+        /this spawn's transcript: 2 KiB, last written [45]s ago/,
+      );
+      child.exit(143);
+      await actuation.settled;
+    });
+  });
+
   it('watchdog: a run past timeout_ms is killed and the reason names the watchdog', async () => {
     const child = new FakeChild();
     // The fake honors SIGTERM like a real child: exits shortly after the kill.

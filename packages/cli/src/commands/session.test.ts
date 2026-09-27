@@ -544,6 +544,53 @@ describe('musterd session (capture)', () => {
     await expect(sessionCommand(parseArgs(['bogus']))).rejects.toMatchObject({ exitCode: 2 });
   });
 
+  // Lane 01M3ABD9DM: a woken session's SessionStart hook hung 1,031,822 ms past its 600 s timeout.
+  // `HttpClient` carries no AbortSignal, so a daemon that accepts the socket and never answers held
+  // every call until undici's own 300 s header timeout — two of those fill the harness's budget.
+  describe('a stalled daemon cannot hold the capture hook', () => {
+    let stalled: import('node:net').Server;
+    let port = 0;
+    const sockets: import('node:net').Socket[] = [];
+    beforeEach(async () => {
+      const net = await import('node:net');
+      stalled = net.createServer((s) => sockets.push(s)); // accept, read nothing, answer nothing
+      await new Promise<void>((r) => stalled.listen(0, '127.0.0.1', r));
+      port = (stalled.address() as import('node:net').AddressInfo).port;
+    });
+    afterEach(async () => {
+      for (const s of sockets.splice(0)) s.destroy();
+      await new Promise<void>((r) => stalled.close(() => r()));
+    });
+
+    for (const event of ['start', 'end'] as const) {
+      it(`session ${event} returns 0 inside its budget`, async () => {
+        writeBinding(
+          wsA,
+          bindingOf({
+            server: `http://127.0.0.1:${port}`,
+            seat_credential: 'msac_scout',
+            session_lease: 'msls_live',
+          }),
+        );
+        const probe = vi.fn(() => new Promise<void>(() => undefined)); // a probe that never settles
+        const started = Date.now();
+        const code = await sessionCommand(parseArgs([event, '--stdin']), {
+          probe,
+          budgetMs: 300,
+          stdin: async () => JSON.stringify({ session_id: `stall-${event}`, cwd: wsA }),
+        });
+        expect(code).toBe(0);
+        expect(Date.now() - started).toBeLessThan(2_000);
+        if (event === 'start') expect(probe).toHaveBeenCalledTimes(1);
+      });
+    }
+
+    it('the production budget sits well under the harness hook timeout', async () => {
+      const { SESSION_CAPTURE_BUDGET_MS } = await import('./session.js');
+      expect(SESSION_CAPTURE_BUDGET_MS).toBeLessThanOrEqual(60_000); // Claude Code's is 600 s
+    });
+  });
+
   it('runs the startup probe for a Grok SessionStart using the payload workspace', async () => {
     const probe = vi.fn();
     const stdin = vi.spyOn(process.stdin, 'on').mockImplementation((event, listener) => {

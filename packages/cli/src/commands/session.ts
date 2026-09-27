@@ -59,7 +59,28 @@ import { composeSessionStatusline, type SessionStatuslineInput } from './session
  */
 export interface SessionCommandDeps {
   probe?: SessionStartProbe;
+  /** Test seam: the capture hook's whole-command budget (default {@link SESSION_CAPTURE_BUDGET_MS}). */
+  budgetMs?: number;
+  /** Test seam: the hook payload source (default: drain the real stdin). */
+  stdin?: () => Promise<string>;
 }
+
+/**
+ * The hard bound on `session start|end --stdin` as a whole (lane 01M3ABD9DM).
+ *
+ * `HttpClient` carries no AbortSignal, and the start path makes several network calls in sequence:
+ * the self-heal probe's repair post, the never-evict roster read, the lease claim, the attestation,
+ * the orientation's GETs. A daemon that accepts the socket and never answers (wedged, or a host
+ * that slept mid-request) held each of them until undici's 300 s header timeout, and two of those
+ * fill Claude Code's 600 s hook budget: a woken session sat 1,031,822 ms before its first turn
+ * (dolly, 2026-09-22). The bound is on awake time, like every Node timer: a sleeping laptop pauses
+ * it, which is what we want, since the harness's own timer pauses too.
+ *
+ * Past the budget the hook returns 0 with whatever it has already written. Everything it does is
+ * fail-open already (a dead daemon is silence), and `bin` exits once the command settles, so the
+ * stalled sockets die with the process instead of holding the session's first turn.
+ */
+export const SESSION_CAPTURE_BUDGET_MS = 30_000;
 
 export async function sessionCommand(
   parsed: Parsed,
@@ -177,7 +198,24 @@ async function captureCommand(
       2,
     );
   }
-  const raw = await readStdin();
+  const raw = await (deps.stdin ?? readStdin)();
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<'expired'>((resolve) => {
+    timer = setTimeout(() => resolve('expired'), deps.budgetMs ?? SESSION_CAPTURE_BUDGET_MS);
+  });
+  try {
+    await Promise.race([capture(event, raw, deps), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+  return 0;
+}
+
+async function capture(
+  event: 'start' | 'end',
+  raw: string,
+  deps: SessionCommandDeps,
+): Promise<void> {
   const payload = parseHookPayload(raw);
   const captureDir = resolveCaptureDir(payload);
   if (event === 'start') await runSessionStartProbe(captureDir ?? undefined, deps.probe);
@@ -213,7 +251,6 @@ async function captureCommand(
     const orientation = await emitSessionOrientation(captureDir);
     if (orientation) process.stdout.write(orientation + '\n');
   }
-  return 0;
 }
 
 /** The one derivation of "which workspace does this hook payload belong to": explicit

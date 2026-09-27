@@ -1,6 +1,8 @@
 import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import {
   matchBinding,
   type ContinuityRegistry,
@@ -141,6 +143,43 @@ export interface ClaudeCodeDeps {
   /** Injectable conversation weigh (default: {@link resumeWeightBytes}) — ADR 427. Read only when
    *  the file is over the bound; `undefined` means "could not weigh", which judges as the file. */
   weighTranscript?: (path: string) => number | undefined;
+  /** Injectable lookup of THIS spawn's transcript by its minted/resumed session id (default:
+   *  {@link findClaudeTranscript}) — lane 01M3ABD9DM; tests never touch $HOME. */
+  findSpawnTranscript?: (sessionId: string) => { bytes: number; mtimeMs: number } | undefined;
+}
+
+/** Claude Code writes `~/.claude/projects/<workspace slug>/<session id>.jsonl`. The slug is lossy,
+ *  so look in every project folder for the one file named by the id rather than re-deriving it. */
+export function findClaudeTranscript(
+  sessionId: string,
+  home = homedir(),
+): { bytes: number; mtimeMs: number } | undefined {
+  const root = join(home, '.claude', 'projects');
+  try {
+    for (const dir of readdirSync(root)) {
+      const p = join(root, dir, `${sessionId}.jsonl`);
+      if (!existsSync(p)) continue;
+      const st = statSync(p);
+      return { bytes: st.size, mtimeMs: st.mtimeMs };
+    }
+  } catch {
+    // No projects tree, or unreadable: say nothing rather than guess.
+  }
+  return undefined;
+}
+
+/**
+ * What THIS spawn wrote, for the failure reason (lane 01M3ABD9DM finding C). `transcript_bytes` and
+ * `transcript_age_ms` on the report describe the transcript the host examined for RESUME — the
+ * previous wake's — so a `wake_failed` row reading them as this spawn's was misleading. "None
+ * written" separates a session that never started (a hung SessionStart hook, a refused binary) from
+ * one that started and never joined. No session id crosses the boundary (ADR 131 §5).
+ */
+function spawnTranscriptNote(deps: ClaudeCodeDeps, sessionId: string): string {
+  const found = (deps.findSpawnTranscript ?? findClaudeTranscript)(sessionId);
+  if (!found) return "this spawn's transcript: none written";
+  const age = Math.max(0, Math.round((Date.now() - found.mtimeMs) / 1000));
+  return `this spawn's transcript: ${fmtBytes(found.bytes)}, last written ${age}s ago`;
 }
 
 /** What the hygiene rung concluded, in the unit ADR 427 fixed. `weight` is present only when the
@@ -537,7 +576,9 @@ function runAttempt(
     const reason =
       child.exitCode !== null && !spawnError
         ? composeFailureReason(verdict, parseRunSummary(stdout), stderr)
-        : verdict.slice(0, REASON_MAX);
+        : // A watchdogged or still-live run carries no words of its own, so say what it wrote: the
+          // hung-SessionStart shape (lane 01M3ABD9DM) is a session that never wrote a transcript.
+          `${verdict}; ${spawnTranscriptNote(deps, opts.sessionId)}`.slice(0, REASON_MAX);
     return {
       occupied: false,
       reason,
