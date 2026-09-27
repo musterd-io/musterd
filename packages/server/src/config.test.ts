@@ -150,9 +150,13 @@ describe('checkUpgrade', () => {
   });
   it('an Origin on an allowlisted public Host is not refused — bearer auth, not ambient (Rehearsal A)', () => {
     // 2026-09-26: Anthropic's connector client sends Origin; the daemon 403'd it unlogged.
-    expect(checkUpgrade({ host: 'daemon.example', origin: 'https://claude.ai' }, cfg).ok).toBe(true);
+    expect(checkUpgrade({ host: 'daemon.example', origin: 'https://claude.ai' }, cfg).ok).toBe(
+      true,
+    );
     // The bound/loopback face keeps the DNS-rebinding refusal.
-    expect(checkUpgrade({ host: 'localhost:4849', origin: 'https://claude.ai' }, cfg).ok).toBe(false);
+    expect(checkUpgrade({ host: 'localhost:4849', origin: 'https://claude.ai' }, cfg).ok).toBe(
+      false,
+    );
   });
   it('rejects a Host not loopback/bound/allowlisted (DNS-rebinding)', () => {
     const r = checkUpgrade({ host: 'attacker.example' }, cfg);
