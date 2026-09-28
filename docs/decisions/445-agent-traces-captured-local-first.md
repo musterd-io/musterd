@@ -428,6 +428,15 @@ ADR 184's publication gate; a spans backend.
   denominator. Re-run this table once grok, cursor and opencode seats have run on today's build.
   Falsifier for the claude-code row: a finished session (quiet ≥ 30 min) whose main-loop R1 count
   is above its R2 count.
+- **2026-09-28 — `codex@2` counts codex's tools** (with lane `01M3MG7Q650Z8C5DKZKGJ31MDG`). The
+  denominator is `event_msg.item_completed` items that are tools (`CommandExecution`,
+  `McpToolCall`, `FileChange`, `Extension`), not the `custom_tool_call` response items. In code
+  mode one `exec` call runs several nested tools and codex's hook fires for each, so counting
+  `exec` calls read R1 at 128% of R2. A tool completes after the usage record of the model call that
+  issued it, so each completion is credited to the preceding usage record. On big-body's four
+  rollouts on disk, R1/R2 per session: 343/340, 156/158, 10/10, and 239/269. The last one's R2
+  excess is unexplained; the likeliest cause is calls made before the session's R1 tap was
+  installed.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a

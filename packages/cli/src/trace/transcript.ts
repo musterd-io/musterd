@@ -18,7 +18,7 @@
 
 /** Parser stamps — bump the suffix when the parse logic changes shape, not on refactors. */
 export const CLAUDE_TRANSCRIPT_PARSER = 'claude-code@1';
-export const CODEX_TRANSCRIPT_PARSER = 'codex@1';
+export const CODEX_TRANSCRIPT_PARSER = 'codex@2';
 export const GROK_TRANSCRIPT_PARSER = 'grok@1';
 export const CURSOR_TRANSCRIPT_PARSER = 'cursor@1';
 
@@ -261,6 +261,20 @@ const CODEX_SKIP_ITEMS = new Set([
 ]);
 
 /**
+ * The `event_msg.item_completed` item types that are a tool codex ran — the unit a codex hook fires
+ * on, so the unit R2 counts as `tool_uses` (codex@2). Not the `custom_tool_call` response items: in
+ * code mode one `exec` call runs several nested tools and the hook fires for each, so counting
+ * `exec` calls read R1 at 128% of R2. Measured on one 2026-09-26 rollout: 205 CommandExecution
+ * against R1's 205 Bash, 7 FileChange against 7 apply_patch; 340 items against 343 R1 calls.
+ */
+const CODEX_TOOL_ITEMS: ReadonlySet<string> = new Set([
+  'CommandExecution',
+  'McpToolCall',
+  'FileChange',
+  'Extension',
+]);
+
+/**
  * Parse a delta of Codex rollout lines. Codex writes reasoning and the tool call it led to as
  * SEPARATE `response_item` records, so the join is positional: a reasoning item binds to the next
  * tool call's `call_id` in the same delta (flushed unjoined at an assistant message or the delta's
@@ -272,6 +286,11 @@ export function parseCodexTranscript(lines: readonly string[]): TranscriptRecord
   const unknowns = new UnknownBudget();
   /** Reasoning records waiting for the tool call that follows them. */
   let pending: TranscriptRecord[] = [];
+  /** codex@2: a tool completes AFTER the usage record of the model call that issued it, so a
+   *  completion is credited to the latest usage record in this delta; one that arrives before any
+   *  (a delta that opens mid-call) waits for the next. */
+  let lastUsage: TranscriptRecord | undefined;
+  let unclaimed = 0;
   const flush = (toolUseId?: string): void => {
     for (const r of pending) {
       if (toolUseId) r.tool_use_id = toolUseId;
@@ -377,8 +396,25 @@ export function parseCodexTranscript(lines: readonly string[]): TranscriptRecord
             reasoning_tokens: 'reasoning_output_tokens',
             total_tokens: 'total_tokens',
           }),
+          tool_uses: unclaimed,
         },
       });
+      lastUsage = out[out.length - 1];
+      unclaimed = 0;
+      continue;
+    }
+
+    if (type === 'event_msg' && payload && str(payload['type']) === 'item_completed') {
+      const item = payload['item'];
+      const itemType =
+        typeof item === 'object' && item !== null
+          ? str((item as Record<string, unknown>)['type'])
+          : undefined;
+      if (itemType !== undefined && CODEX_TOOL_ITEMS.has(itemType)) {
+        if (lastUsage)
+          lastUsage.detail['tool_uses'] = Number(lastUsage.detail['tool_uses'] ?? 0) + 1;
+        else unclaimed++;
+      }
       continue;
     }
 

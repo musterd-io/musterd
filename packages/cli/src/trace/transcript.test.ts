@@ -121,6 +121,8 @@ describe('parseCodexTranscript', () => {
         name: 'shell',
         input: '{}',
       }),
+      // a delta that opens mid-call: this completion waits for the next usage record
+      codexLine('event_msg', { type: 'item_completed', item: { type: 'McpToolCall' } }),
       codexLine('token_usage_record', {
         session_id: 's1',
         usage: {
@@ -131,6 +133,10 @@ describe('parseCodexTranscript', () => {
           total_tokens: 25_002,
         },
       }),
+      // one `exec` ran two nested tools: two completions, credited to the call that issued them
+      codexLine('event_msg', { type: 'item_completed', item: { type: 'CommandExecution' } }),
+      codexLine('event_msg', { type: 'item_completed', item: { type: 'CommandExecution' } }),
+      codexLine('event_msg', { type: 'item_completed', item: { type: 'Reasoning' } }), // not a tool
       codexLine('response_item', {
         type: 'message',
         role: 'assistant',
@@ -152,6 +158,7 @@ describe('parseCodexTranscript', () => {
       output_tokens: 62,
       reasoning_tokens: 40,
       total_tokens: 25_002,
+      tool_uses: 3,
     });
   });
 
