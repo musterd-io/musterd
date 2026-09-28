@@ -46,7 +46,7 @@ import { ACCOUNT_STATUSES, type AccountStatus } from './capabilities.wire.js';
 import type { Report } from './insights.js';
 import type { LaneBoard, LaneResult } from './lanes.js';
 import type { Member, MemberSummary, Presence, Quiescence } from './member.js';
-import { WAKEABILITIES, type Wakeability } from './model.js';
+import { WAKEABILITIES, WIRE_ATTESTATION_SOURCES, type Wakeability } from './model.js';
 import { OFFLINE_REASONS, type OfflineReason } from './offline.wire.js';
 import { POSTURES_ON_WIRE, normalizePosture, type Posture } from './posture.wire.js';
 import type { Seed } from './seeds.js';
@@ -210,6 +210,14 @@ function readPresence(v: unknown): Presence | typeof FAIL {
   const workspace = nullishString(v['workspace']);
   const driver = nullishString(v['driver']);
   const model = nullishString(v['model']);
+  // Which tier produced `model` (ADR 101/158). A tier this reader does not know is read as null —
+  // "tier unknown" — rather than failing the row: absence is not an assertion (ADR 236), and a
+  // newer daemon's new tier must not cost the roster a seat (ADR 148). The web's model badge
+  // (ADR 464) says "observed" only for `observed`, so a dropped tier can only understate.
+  const model_source =
+    v['model_source'] === undefined
+      ? undefined
+      : (oneOf(WIRE_ATTESTATION_SOURCES, v['model_source']) ?? null);
   const build = nullishString(v['build']);
   const epoch = nullishInt(v['epoch'], { min: 0 });
   const wake_lease = nullishString(v['wake_lease']);
@@ -236,6 +244,7 @@ function readPresence(v: unknown): Presence | typeof FAIL {
     workspace,
     driver,
     model,
+    model_source,
     build,
     epoch,
     wake_lease,

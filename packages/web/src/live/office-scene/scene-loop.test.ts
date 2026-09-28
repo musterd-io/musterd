@@ -20,16 +20,14 @@ import { describe, expect, it } from 'vitest';
  * and it is NOT what these are; they hold the STRUCTURE that makes the bug unrepresentable —
  * one home for the decision — rather than the behaviour. That gap is real and stated, not covered over.
  */
-const index = readFileSync(
-  fileURLToPath(new URL('./index.ts', import.meta.url)),
-  'utf8',
-);
+const index = readFileSync(fileURLToPath(new URL('./index.ts', import.meta.url)), 'utf8');
 
 /** The body of a named function in the scene source — `function f()` or `const f = () =>` — brace-matched. */
 function body(name: string): string {
-  const at = [`function ${name}(`, `const ${name} = (`]
-    .map((decl) => index.indexOf(decl))
-    .find((i) => i > -1) ?? -1;
+  const at =
+    [`function ${name}(`, `const ${name} = (`]
+      .map((decl) => index.indexOf(decl))
+      .find((i) => i > -1) ?? -1;
   expect(at, `no function ${name} in index.ts`).toBeGreaterThan(-1);
   const open = index.indexOf('{', at);
   let depth = 0;
@@ -109,7 +107,9 @@ describe('the Welcome Wagon is plumbed in', () => {
   it('a parked room still starts a queued welcome and folds away the counter — on a timer that only runs while needed', () => {
     const arm = body('armWagonTimer');
     expect(arm).toMatch(/setInterval\(/);
-    expect(arm, 'the timer must stop itself once the welcome is over').toMatch(/clearInterval\(wagonTimer\)/);
+    expect(arm, 'the timer must stop itself once the welcome is over').toMatch(
+      /clearInterval\(wagonTimer\)/,
+    );
     expect(body('update')).toContain('armWagonTimer()');
     const at = index.indexOf('dispose: () =>');
     expect(at, 'no dispose in the handle').toBeGreaterThan(-1);
@@ -138,5 +138,24 @@ describe('the welcome reads where people ARE, not the baked frame (lane 01M3F81D
     const ports = index.slice(at, index.indexOf('{ reduced, still: STILL }', at));
     expect(ports).toMatch(/confetti: [^\n]*liveHead\(/);
     expect(ports).toMatch(/wave: [\s\S]*?liveHead\(/);
+  });
+});
+
+describe('the team column is linked to the room (ADR 464, lane 1)', () => {
+  it('the handle exposes setLinked, and it only toggles a plate class — no canvas redraw', () => {
+    expect(index).toMatch(/setLinked: \(name: string \| null\) =>/);
+    const at = index.indexOf('setLinked: (name');
+    const fn = index.slice(at, index.indexOf('\n    },', at));
+    expect(fn).toContain("classList.toggle('is-linked'");
+    expect(fn).not.toMatch(/draw|bake|renderScene/);
+  });
+
+  it('a plate reports hover back through options.onPlateHover', () => {
+    expect(index).toMatch(/options\.onPlateHover\?\.\(/);
+  });
+
+  it('the plate carries the short model name beside the provider logo', () => {
+    expect(index).toMatch(/lc-gl-label__model/);
+    expect(index).toMatch(/displayModel\(node\.model\)/);
   });
 });

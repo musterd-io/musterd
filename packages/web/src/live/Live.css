@@ -719,26 +719,32 @@
      lever on how big the room draws — `fitFloor` is width-limited here at every realistic window
      size. Measured 2026-07-29 at a 1280px viewport: 1.55fr gave the office 456px and a fit scale of
      0.337, which put the room's entire back wall at 63px tall. Widened to 2.05fr → 549px → scale
-     0.405 → a 76px wall, taken from the stream, which had the most to spare. */
-  --col-office: minmax(0, 2.05fr);
-  --col-roster: 234px;
+     0.405 → a 76px wall, taken from the stream, which had the most to spare.
+     Re-tuned 2026-09-28 for the team column (ADR 464, spec falsifier 4): the column is wider than
+     the roster rail it replaces (300–400px vs 234px), and the floor must not pay for it. 2.6fr
+     keeps the office at 1920px at ≥ its pre-ADR-464 width (measured 864px → 869px); the stream
+     gives the difference, and lane 2 retires it into a drawer anyway. */
+  --col-office: minmax(0, 2.6fr);
+  /* The team column (ADR 464) is read by a room: wide enough for a lane title in 16px type on two
+     lines, never wider than a fifth of the window so the office keeps its pixels. */
+  --col-team: clamp(300px, 22vw, 400px);
   --col-stream: minmax(0, 1.95fr);
   display: grid;
-  grid-template-columns: var(--col-office) var(--col-roster) var(--col-stream);
+  grid-template-columns: var(--col-office) var(--col-team) var(--col-stream);
   flex: 1;
   min-height: 0;
   animation: lc-fade var(--lc-dur-2) var(--lc-ease-out) both;
   transition: grid-template-columns var(--lc-dur-4) var(--lc-ease-out);
 }
 /* Pin each panel to its own grid track. Required because the responsive rules below hide a panel
-   with `display: none` (roster ≤1080px, office ≤880px), and a `display:none` grid item is pulled out
+   with `display: none` (office ≤880px), and a `display:none` grid item is pulled out
    of the grid entirely — the survivors would auto-flow leftward into the wrong (often 0-width) tracks
    (e.g. the stream collapsing into the hidden roster's rail while its own track sits empty). Explicit
    columns keep every visible panel in its intended track no matter which siblings are hidden. */
 .lc-office {
   grid-column: 1;
 }
-.lc-roster {
+.lc-team {
   grid-column: 2;
 }
 .lc-stream {
@@ -757,16 +763,17 @@
 .lc__canvas.is-office-collapsed {
   --col-office: var(--rail-w);
 }
-.lc__canvas.is-roster-collapsed {
-  --col-roster: var(--rail-w);
+.lc__canvas.is-team-collapsed {
+  /* Wider than the other rails: the folded column is a stack of 32px avatars, not a spine. */
+  --col-team: 56px;
 }
 .lc__canvas.is-stream-collapsed {
   --col-stream: var(--rail-w);
 }
-/* office + stream (the two flexible panels) both folded → the roster is the only thing left to read,
-   so let it grow into all the freed space instead of stranding an empty gutter. */
+/* office + stream (the two flexible panels) both folded → the team column is the only thing left to
+   read, so let it grow into all the freed space instead of stranding an empty gutter. */
 .lc__canvas.is-office-collapsed.is-stream-collapsed {
-  --col-roster: minmax(234px, 1fr);
+  --col-team: minmax(300px, 1fr);
 }
 
 /* companion: the office fills the whole window (topbar stays; side panels tuck away). Not OS
@@ -777,7 +784,7 @@
 .lc__canvas--companion .lc-office {
   border-right: 0;
 }
-.lc__canvas--companion .lc-roster,
+.lc__canvas--companion .lc-team,
 .lc__canvas--companion .lc-stream {
   display: none;
 }
@@ -1037,6 +1044,7 @@
 }
 
 .lc-roster__spacer,
+.lc-team__spacer,
 .lc-stream__spacer {
   flex: 1;
 }
@@ -1723,6 +1731,18 @@
 /* The provider mark as an enamel pin: a domed, colour-filled badge with a specular cap, seated into
    the paper with a shadow beneath. At 11px the highlight is doing the legibility work — a flat chip
    this size reads as a coloured square, where a lit dome reads as an object. */
+.lc-gl-label__model {
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 3px;
+  color: var(--lc-paper-muted);
+  white-space: nowrap;
+}
+/* The team column's card↔character link (ADR 464): the hovered member's plate wears a ring in
+   their own hue — the same `--lc-plate-hue` the rim is mixed from. */
+.lc-gl-label.is-linked {
+  box-shadow: 0 0 0 2px var(--lc-plate-hue);
+}
 .lc-gl-label__provider {
   position: relative;
   display: inline-flex;
@@ -3270,6 +3290,235 @@
   letter-spacing: 0;
   white-space: nowrap;
 }
+
+/* ─── team column (ADR 464) — read by a room ─────────────────────────── */
+.lc-team {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--lc-ground-2);
+  border-right: 1px solid var(--lc-border);
+  overflow: hidden;
+}
+.lc-team__head {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-4);
+  padding: var(--lc-5) var(--lc-6);
+}
+.lc-team__title {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lc-muted);
+}
+.lc-team__count {
+  font-size: 12px;
+  color: var(--lc-muted);
+}
+.lc-team__caption {
+  display: block;
+  min-height: 0;
+  padding: 0 var(--lc-5);
+}
+.lc-team__caption:empty {
+  padding: 0;
+}
+.lc-team__cards {
+  list-style: none;
+  margin: 0;
+  padding: var(--lc-4) var(--lc-5) var(--lc-5);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lc-4);
+}
+.lc-team-card {
+  border-radius: var(--lc-r-md);
+  border: 1px solid var(--lc-border);
+  border-left: 4px solid var(--member);
+  background: var(--lc-surface);
+  transition: box-shadow var(--lc-dur-1) var(--lc-ease-out);
+}
+.lc-team-card.is-linked {
+  box-shadow: 0 0 0 2px var(--member);
+}
+.lc-team-card__hit {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  column-gap: var(--lc-4);
+  row-gap: 2px;
+  padding: var(--lc-4) var(--lc-5);
+  cursor: pointer;
+}
+.lc-team-card__hit:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 2px;
+}
+.lc-team-card__avatar {
+  grid-row: span 2;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+}
+.lc-team-card__who {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--lc-4);
+  min-width: 0;
+}
+.lc-team-card__name {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--lc-text);
+}
+.lc-team-card__model {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border: 1px solid;
+  border-radius: var(--lc-r-sm);
+  white-space: nowrap;
+}
+.lc-team-card__model.is-unknown,
+.lc-team-card__model.is-human,
+.lc-team-card__model.is-service {
+  border-color: var(--lc-border);
+  color: var(--lc-muted);
+}
+.lc-team-card__declared {
+  font-weight: 500;
+}
+.lc-team-card__logo svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+.lc-team-card__state,
+.lc-team-card__work,
+.lc-team-card__meta {
+  grid-column: 2;
+}
+.lc-team-card__state {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lc-muted);
+}
+.lc-team-card__work {
+  font-size: 16px;
+  line-height: 1.3;
+  color: var(--lc-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lc-team-card__work.is-said {
+  font-style: italic;
+}
+.lc-team-card__more {
+  font-size: 12px;
+  color: var(--lc-muted);
+  white-space: nowrap;
+}
+.lc-team-card__meta {
+  font-size: 12px;
+  color: var(--lc-muted);
+}
+.lc-team-card__detail {
+  padding: 0 var(--lc-5) var(--lc-4) calc(28px + var(--lc-4) + var(--lc-5));
+}
+.lc-team__offline {
+  margin: 0;
+  padding: var(--lc-4) var(--lc-6);
+  font-size: 12px;
+  color: var(--lc-muted);
+}
+/* Folded: a rail of avatars, each wearing its provider logo as a pip. The PanelRail spine stays as
+   the expand control but gives up its full-height cover here — it becomes a short cap at the top,
+   and the avatars stack beneath it and scroll (25 seats at 1080px tall). */
+.lc-team.is-collapsed .lc-rail {
+  position: relative;
+  inset: auto;
+  flex: 0 0 128px;
+  width: 100%;
+}
+.lc-team.is-collapsed .lc-team__rail {
+  list-style: none;
+  margin: 0;
+  padding: var(--lc-4) 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lc-4);
+  overflow-y: auto;
+  min-height: 0;
+}
+.lc-team__pip {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex: none;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+.lc-team__pip--working {
+  outline-color: var(--lc-text);
+}
+.lc-team__pip--between {
+  outline: 2px dashed var(--lc-muted);
+}
+.lc-team__pip--away {
+  opacity: 0.6;
+}
+.lc-team__pip.is-linked {
+  outline-width: 3px;
+  outline-color: var(--lc-focus);
+}
+.lc-team__pip-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+}
+.lc-team__pip-logo {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--lc-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lc-team__pip-logo svg {
+  width: 11px;
+  height: 11px;
+}
 .lc-stat--quiet {
   color: var(--lc-faint);
   background: transparent;
@@ -4277,11 +4526,10 @@
 
 /* ─── responsive (shed the ambient panels as width tightens) ──────────── */
 @media (max-width: 1080px) {
+  /* The team column is never hidden (ADR 464): it folds to the avatar rail, and the route starts
+     it folded below 1280px. */
   .lc__canvas {
-    --col-roster: 0px;
-  }
-  .lc-roster {
-    display: none;
+    --col-team: 56px;
   }
 }
 @media (max-width: 880px) {

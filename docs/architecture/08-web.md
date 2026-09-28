@@ -66,10 +66,16 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   (Member inheritance is resolved by the daemon), including timezone and weekday grouping (ADR 206).
 - **Stream** (`live/Stream.tsx`) — the legible half: the act feed, newest-last, live rows type out,
   threaded replies indent, day/now dividers. This is where a human reads the team.
-- **Roster** (`live/RosterPanel.tsx`) — posture + offline reason + governance (ADR 138/141/070):
-  server-projected `posture` (`working`·`idle`·`away`·`offline`), with offline chips preferring
-  `offline_reason` (`reconnecting`/`disconnected`/`signed off`/`off hours`) when known; account-status
-  only for exceptions (`disabled`/`banned`/`archived`); capability deviations; presence dot.
+- **Team column** (`live/TeamColumn.tsx` + `live/TeamCard.tsx`) — who is here, read by a room
+  (ADR 464): one card per present member with the provider logo and readable model name
+  (`modelBadge.ts`: observed / declared / unknown / human — never a guess), a plain-language state
+  (`teamCards.ts`: working on · waiting for review · blocked on · between tasks · away, from the lane
+  board + posture), the lane title in large type with its goal and elapsed time, and offline seats
+  folded to a count. Hovering a card rings the member's plate in the office and vice versa
+  (`OfficeHandle.setLinked`). Click expands to the operator detail the roster rail used to carry
+  (`SeatDetail`, exported from `live/RosterPanel.tsx`): posture chip with offline reason
+  (ADR 138/141), account-status exceptions and capability deviations (ADR 070), residency (ADR 131),
+  and the per-seat `trace` expander (ADR 445). Collapsed, it is a rail of avatars with logo pips.
 - **Shared Seeds tray** (`live/SeedsTray.tsx`) — a read-only drawer from the `/live` top bar (ADR 319).
   Active uses the protocol's shared tray rule; history reveals completed/promoted work and links a
   promoted Seed to the ordinary focused Lane view. It refetches on firehose activity so promotion
@@ -123,7 +129,12 @@ live/
   coalesce.ts                   // at most one run in flight + one trailing run per gap — the roster refetch's burst guard (viewers × presence frames)
   format.ts                     // act tone/label, laneEvent recovery, roster/colour/status projections
   Stream.tsx                    // the act feed + ACT_GLYPH + typewriter
-  RosterPanel.tsx               // posture/offline_reason chip + exception account_status; per-row `trace` expander (ADR 445 inc 4b) that lazy-loads the timeline
+  RosterPanel.tsx               // the roster rail (no route mounts it since ADR 464) + `SeatDetail`, the per-seat operator block the team card expands to; `trace` expander (ADR 445 inc 4b) lazy-loads the timeline
+  TeamColumn.tsx                // the /live team column (ADR 464) + its collapsed avatar rail; `captionColorFor` (the narrator's colour)
+  TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type; click expands to `SeatDetail`
+  teamCards.ts                  // roster + lane board + goals → ordered team cards in plain words (pure, node-tested)
+  modelBadge.ts                 // presence → provider + readable model label; observed / declared / unknown / human / service — never a guess
+  broadcastChrome.ts            // one lazy chunk for the /broadcast-only overlay + work stack, off /live's eager graph
   TraceTimeline.tsx             // the per-seat trace timeline (ADR 445 inc 4b): pure TraceTimeline + default SeatTracePanel (fetch); a lazy chunk, never on /live's eager graph
   SeedsTray.tsx                 // read-only active/history Seed drawer; promoted history → focused Lane
   OfficeScene.tsx               // React wrapper: mounts the scene, feeds it envelopes → emit

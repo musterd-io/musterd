@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Clock } from '../live/Clock';
 import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
@@ -7,7 +7,8 @@ import { MusterdWord } from '../brand/MusterdWord';
 import { AsksStrip } from '../live/AsksStrip';
 import { MemberSignInFields, MemberSignInToggle, type AdvancedState } from '../live/MemberSignIn';
 import { OfficeScene } from '../live/OfficeScene';
-import { RosterPanel } from '../live/RosterPanel';
+import { TeamColumn, captionColorFor } from '../live/TeamColumn';
+import type { Caption } from '../live/captions';
 import { scrollToMessage, Stream } from '../live/Stream';
 import type { LiveConfig } from '../live/client';
 import {
@@ -29,7 +30,6 @@ import {
 import { firehoseSound, roomTone } from '../live/sound';
 import { useLiveStream } from '../live/useLiveStream';
 import { officeRoom } from '../live/officeRoom';
-import { useDwell } from '../live/useDwell';
 import { useWorkingOn } from '../live/useWorkingOn';
 import { useReport } from '../live/useReport';
 import { roomEntries } from '../live/workingOn';
@@ -71,13 +71,20 @@ const TEAM_KEY = 'musterd.live.team';
 const COLLAPSE_KEY = 'musterd.live.collapsed';
 const COMPANION_KEY = 'musterd.live.companion';
 
-/** Work lives in the in-panel stack — not on nameplates (nick, 2026-07-30 eye test). */
-const WORK_CUES: 'hybrid' | 'stack' | 'none' = 'stack';
+/** Work lives in the team column (ADR 464) — not on plates, and no longer in the floating stack. */
+const WORK_CUES: 'hybrid' | 'stack' | 'none' = 'none';
 
 /** The three live panels, each independently collapsible into a slim rail. */
-type PanelId = 'office' | 'roster' | 'stream';
+type PanelId = 'office' | 'team' | 'stream';
 type Collapsed = Record<PanelId, boolean>;
-const NO_COLLAPSE: Collapsed = { office: false, roster: false, stream: false };
+const NO_COLLAPSE: Collapsed = { office: false, team: false, stream: false };
+/** Below this width the team column starts folded (ADR 464): the room keeps its pixels. */
+const TEAM_FOLDS_BELOW = 1280;
+/** The collapse restore must land BEFORE first paint: the canvas grid animates its columns, so a
+ *  restore in a passive effect slides every panel shut in front of the viewer on every load — and
+ *  the contrast sweep shot /live mid-slide on CI (2026-09-28). A layout effect is a no-op on the
+ *  server, which is what the guard inside it already assumed. */
+const useBeforePaint = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 function LivePage() {
   const router = useRouter();
@@ -94,6 +101,10 @@ function LivePage() {
   const [collapsed, setCollapsed] = useState<Collapsed>(NO_COLLAPSE);
   const [companion, setCompanion] = useState(false);
   const [seedsOpen, setSeedsOpen] = useState(false);
+  /** ADR 464: the member under the pointer — on a card or on their plate — so both wear a ring. */
+  const [linked, setLinked] = useState<string | null>(null);
+  /** The room's narration line, lifted out of the scene so the team column's header can carry it. */
+  const [caption, setCaption] = useState<Caption | null>(null);
 
   const toggleCollapse = (id: PanelId) => {
     setCollapsed((prev) => {
@@ -174,18 +185,21 @@ function LivePage() {
     onCredentialInvalid: recoverObserver,
     onConnected: armRecovery,
   });
-  const { envelopes, roster, error, liveIds, daemonBuild, daemonEpoch, rosterUnreadable, rosterStale } =
-    stream;
+  const {
+    envelopes,
+    roster,
+    error,
+    liveIds,
+    daemonBuild,
+    daemonEpoch,
+    rosterUnreadable,
+    rosterStale,
+  } = stream;
 
   // The office overlay's reel: everyone in the room and what they are on. Derived here (not in the
   // scene) so both routes hand the scene the same already-projected shape.
   const board = useWorkingOn(cfg, envelopes);
   const report = useReport(cfg, envelopes);
-  // What this page has watched come and go (lane 01M1JQENBK). Only the roster rail reads it: a
-  // short visit's trace is a fact about the recent past, and the room itself must keep describing
-  // now. Costs nothing until someone actually leaves — the hook schedules no tick while no trace is
-  // live.
-  const dwell = useDwell(roster);
   const entries = roomEntries(roster, board);
 
   /**
@@ -400,18 +414,22 @@ function LivePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Restore saved panel collapse + companion state (SSR-safe; once on the client).
-  useEffect(() => {
+  // Restore saved panel collapse + companion state (SSR-safe; once on the client, before paint).
+  useBeforePaint(() => {
     if (typeof window === 'undefined') return;
     try {
       const raw = window.localStorage.getItem(COLLAPSE_KEY);
       if (raw) {
-        const saved = JSON.parse(raw) as Partial<Collapsed>;
+        // `roster` is the key the team column's track carried before ADR 464 — honour it so a
+        // stored collapse survives the rename.
+        const saved = JSON.parse(raw) as Partial<Collapsed> & { roster?: boolean };
         setCollapsed({
           office: !!saved.office,
-          roster: !!saved.roster,
+          team: !!(saved.team ?? saved.roster),
           stream: !!saved.stream,
         });
+      } else {
+        setCollapsed({ ...NO_COLLAPSE, team: window.innerWidth < TEAM_FOLDS_BELOW });
       }
     } catch {
       /* ignore malformed persisted state */
@@ -491,7 +509,7 @@ function LivePage() {
             className={
               `lc__canvas${companion ? ' lc__canvas--companion' : ''}` +
               `${collapsed.office ? ' is-office-collapsed' : ''}` +
-              `${collapsed.roster ? ' is-roster-collapsed' : ''}` +
+              `${collapsed.team ? ' is-team-collapsed' : ''}` +
               `${collapsed.stream ? ' is-stream-collapsed' : ''}`
             }
             // A modal means it: while the board overlay is up, the room behind it takes no focus and
@@ -522,18 +540,25 @@ function LivePage() {
                 />
               }
               workCues={WORK_CUES}
+              onCaption={setCaption}
+              linked={linked}
+              onPlateHover={setLinked}
             />
-            <RosterPanel
+            <TeamColumn
               roster={roster}
-              dwell={dwell.log}
-              dwellNow={dwell.now}
-              collapsed={collapsed.roster}
-              onCollapse={() => toggleCollapse('roster')}
+              board={board}
+              goals={report?.goals ?? []}
+              collapsed={collapsed.team}
+              onCollapse={() => toggleCollapse('team')}
+              linked={linked}
+              onLink={setLinked}
+              caption={caption}
+              captionColor={captionColorFor(roster, caption)}
+              cfg={cfg}
               daemonBuild={daemonBuild}
               daemonEpoch={daemonEpoch}
               unreadable={rosterUnreadable}
               stale={rosterStale}
-              cfg={cfg}
             />
             <Stream
               envelopes={envelopes}
@@ -699,11 +724,7 @@ function RoomToneToggle() {
       {/* Three rising bars behind a mug — "the room is running", not "a message arrived". Muted, the
           bars flatten to one line: the room is still there, it just is not making a sound. */}
       <svg viewBox="0 0 16 16" aria-hidden="true">
-        {on ? (
-          <path d="M2.5 9.5v2M5 7.5v4M7.5 5.5v6" />
-        ) : (
-          <path d="M2.5 11.5h5.2" />
-        )}
+        {on ? <path d="M2.5 9.5v2M5 7.5v4M7.5 5.5v6" /> : <path d="M2.5 11.5h5.2" />}
         <path d="M10.5 6.5h3.2v3a2 2 0 0 1-2 2h-1.2z" />
         <path d="M13.7 7.5h.6a1.1 1.1 0 0 1 0 2.2h-.6" />
       </svg>

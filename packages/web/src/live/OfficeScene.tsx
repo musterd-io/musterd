@@ -1,5 +1,5 @@
 import type { Envelope, LaneBoard, MemberSummary, WorkingHours } from '@musterd/protocol';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { MusterdWord } from '../brand/MusterdWord';
 import { memberColor, memberPosture } from './format';
 import { gatheredFrom } from './huddles';
@@ -7,13 +7,18 @@ import { HuddleRail } from './HuddleRail';
 import type { OfficeData, OfficeHandle } from './office-scene';
 import { actToEvent, speechEventFor } from './office-scene/mapping';
 import { CollapseButton, PanelRail } from './PanelChrome';
-import { OfficeOverlay } from './OfficeOverlay';
 import { captionFor, type Caption } from './captions';
-import { WorkStack } from './WorkStack';
+import { captionColorFor } from './TeamColumn';
 import { presentCount, type RoomEntry } from './workingOn';
 import { wokenSeat } from './wokenSeat';
 import type { OfficeRoomProps } from './officeRoom';
 import { projectWallBoard } from './office-scene/wallboard';
+
+/** Broadcast-only chrome (ADR 464: /live's work now lives in the team column), kept out of /live's
+ *  eager graph (ADR 151/183): fetched only when a route asks for the overlay or the stack. */
+const broadcastChrome = () => import('./broadcastChrome');
+const LazyOfficeOverlay = lazy(() => broadcastChrome().then((m) => ({ default: m.OfficeOverlay })));
+const LazyWorkStack = lazy(() => broadcastChrome().then((m) => ({ default: m.WorkStack })));
 
 /**
  * Roster → the office's node data. `posture` is resolved here with `memberPosture` — the *same* call the
@@ -108,6 +113,9 @@ export function OfficeScene({
   /** Hybrid nameplate work cues vs in-panel WorkStack (`stack`) vs neither. Default none on the
    *  plate — work lives in WorkStack on `/live` (nick, 2026-07-30). */
   workCues = 'none',
+  onCaption,
+  linked = null,
+  onPlateHover,
 }: OfficeRoomProps & {
   collapsed?: boolean;
   onCollapse?: () => void;
@@ -145,12 +153,18 @@ export function OfficeScene({
    * assertions about the page (a notice, a contact line). `/broadcast` fills it; `/live` does not. */
   cornerSlot?: ReactNode;
   workCues?: 'hybrid' | 'stack' | 'none';
+  /** ADR 464: the narration line, handed OUT to the route so chrome outside the room (the team
+   * column's header) can carry it. The scene keeps its own copy for WorkStack / the overlay. */
+  onCaption?: (caption: Caption | null) => void;
+  /** ADR 464: the member whose card is hovered in the team column — their plate wears a ring. */
+  linked?: string | null;
+  /** ADR 464: a plate under the pointer (null on leave), so the route can ring that member's card. */
+  onPlateHover?: (name: string | null) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const labelRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<OfficeHandle | null>(null);
   const emittedRef = useRef<Set<string>>(new Set());
-
 
   const data = useMemo(
     () => computeData(teamName, teamWorkingHours, roster, entries, board, envelopes),
@@ -168,6 +182,8 @@ export function OfficeScene({
   const onBoardOpenRef = useRef(onBoardOpen);
   const onBoardHoverRef = useRef(onBoardHover);
   const onReadyRef = useRef(onReady);
+  const onCaptionRef = useRef(onCaption);
+  const onPlateHoverRef = useRef(onPlateHover);
   const collapsedRef = useRef(collapsed);
   useEffect(() => {
     dataRef.current = data;
@@ -175,6 +191,8 @@ export function OfficeScene({
     onBoardOpenRef.current = onBoardOpen;
     onBoardHoverRef.current = onBoardHover;
     onReadyRef.current = onReady;
+    onCaptionRef.current = onCaption;
+    onPlateHoverRef.current = onPlateHover;
     collapsedRef.current = collapsed;
   });
 
@@ -184,10 +202,7 @@ export function OfficeScene({
   // The narrator's own colour, from the same roster the floor is drawn from — so the pill's dot,
   // their floor plate and their roster chip are one identity. A caption can name someone who is not
   // in the working list (an arrival, above all), so this reads the roster rather than the entries.
-  const narrator = caption ? roster.find((m) => m.name === caption.who) : undefined;
-  const captionColor = narrator
-    ? memberColor(narrator.name, narrator.kind === 'human' ? 'human' : 'agent', narrator.hue)
-    : undefined;
+  const captionColor = captionColorFor(roster, caption);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -207,8 +222,11 @@ export function OfficeScene({
           onActClick: (id) => onActClickRef.current?.(id),
           // The narration line renders in WorkStack's header (chrome), not as scene DOM.
           onCaption: (next) => {
-            if (!disposed) setCaption(next);
+            if (disposed) return;
+            setCaption(next);
+            onCaptionRef.current?.(next);
           },
+          onPlateHover: (n) => onPlateHoverRef.current?.(n),
           // Presence decides whether the hotspot exists at all, so gate on the mount-time prop —
           // stable per route (/live wires it, /broadcast never does) — and read through the ref after.
           ...(onBoardOpenRef.current
@@ -250,6 +268,11 @@ export function OfficeScene({
     handleRef.current?.setSuspended(collapsed);
   }, [collapsed]);
 
+  // The card↔character link (ADR 464): a class on the plate, so it costs no frame.
+  useEffect(() => {
+    handleRef.current?.setLinked(linked ?? null);
+  }, [linked]);
+
   // Play a cue for each newly *live*-arrived act (backfilled history never appears in liveIds, so it
   // doesn't replay on load). The act→choreography mapping lives in office-scene/mapping.
   useEffect(() => {
@@ -287,20 +310,24 @@ export function OfficeScene({
             design). The old OfficeOverlay chyron only renders when workCues is not stack — otherwise
             the two would sit on top of each other and the routes would diverge again. */}
         {!collapsed && broadcast && workCues !== 'stack' && (
-          <OfficeOverlay
-            teamName={teamName}
-            present={presentCount(roster)}
-            entries={entries}
-            status={status}
-            caption={caption}
-            captionColor={captionColor}
-            interactive={false}
-          />
+          <Suspense fallback={null}>
+            <LazyOfficeOverlay
+              teamName={teamName}
+              present={presentCount(roster)}
+              entries={entries}
+              status={status}
+              caption={caption}
+              captionColor={captionColor}
+              interactive={false}
+            />
+          </Suspense>
         )}
         {/* Work card floats over the room (bottom of the stage) — not a band under it. */}
         {!collapsed && workCues === 'stack' && (
           <div className="lc-office__work">
-            <WorkStack entries={entries} caption={caption} captionColor={captionColor} />
+            <Suspense fallback={null}>
+              <LazyWorkStack entries={entries} caption={caption} captionColor={captionColor} />
+            </Suspense>
           </div>
         )}
         {/* The asks rail floats over the top of the room the way the reel floats over the bottom —

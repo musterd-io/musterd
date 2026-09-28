@@ -271,6 +271,9 @@ export interface OfficeHandle {
    * Suspended: no rAF, no ambient beats — zero draw cost for invisible pixels. Resuming re-bakes and
    * paints one fresh frame synchronously, so re-expanding is still instant. */
   setSuspended: (on: boolean) => void;
+  /** ADR 464: ring this member's plate (null clears) — the team column's card↔character link. A
+   * class toggle on the HTML plate, never a canvas redraw. */
+  setLinked: (name: string | null) => void;
   /** Fire an in-place ambient gesture now on an idle desk member (a `GESTURE` kind), bypassing the
    * ambient scheduler. Returns the member it played on, or null if none was eligible.
    * A design-preview / verification affordance (see office-preview); the live office uses the scheduler. */
