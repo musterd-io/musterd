@@ -216,6 +216,7 @@ describe('version-bump discipline (ADR 085)', () => {
     30: '2ca60432ec427933', // ADR 442 (the wall): the nudge-relay skill and the Claude Code peer label sweep leave the rendered surface; orient step 6 labels only this chat; the skill body gains "a line is only a pointer"
     31: '1c939454225f3d42', // guidance refresh (lane 01M3F9HYV1): ADR 447 — the human stands in a member Workspace, not the team root; remote members (ADR 446), invites (ADR 450) and sponsored agents via team_agent_create (ADR 449/452)
     34: 'aa888b6ac55cd29d', // ADR 467 renumbered from 465 (collision with #1791): the orient step 6 citation changed
+    35: '976848f9a3915497', // ADR 468 (lane 01M3MWSF32): the self-label skill and orient step 6 spell the grammar out — `<seat> · <start time> · <team> · <title>`, no chip; the sweep-era `resolve-labels` mention leaves
     33: 'a2a868e8b8fbe955', // ADR 467 (lane 01M3MSPAMA): orient step 6 + self-label skill gain Claude Code Desktop `set_session_title {session_id:"self"}` — the wall (#1676) had left Desktop rows unlabeled
     32: 'f4eef0bb9a9e710a', // ADR 459 (lane 01M3FAPB32): the sponsored-agent line names the tunable cap (`--sponsored-agent-cap`) and the per-member switch instead of a fixed three
   };

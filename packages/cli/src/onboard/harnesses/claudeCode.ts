@@ -302,14 +302,13 @@ function sessionStartHookCommand(): string {
     // ADR 135 freshness probe: one line when this checkout's CLI dist differs from the daemon, so a
     // stale worktree learns at minute 0 instead of after an hour of "but I merged it". Guarded (only
     // when `musterd` resolves), read-only, ≤2s, and never failing — the hook contract stays intact.
-    // The label-sweep nudge rides the same guard: due-gated (silent once any seat swept in the last
-    // 4h), replacing the old always-on "run the label-sessions skill" clause that agents measurably
-    // skipped — the per-turn UserPromptSubmit repeat below is what actually gets it run.
-    // The orient nudge rides here too (session-orientation spec 2026-08-25 §B): due-gated per
+    // The orient nudge rides the same guard (session-orientation spec 2026-08-25 §B): due-gated per
     // session (quiet once `musterd session orient-stamp` names the captured session), so a seat
-    // session that starts un-oriented is told to run the musterd-orient skill from minute 0.
+    // session that starts un-oriented is told to run the musterd-orient skill from minute 0. The
+    // label-sweep nudge that rode here until ADR 468 is gone with the sweep it announced (ADR 442
+    // retired the sweep; a seat labels only its own session, from the orient skill).
     'command -v musterd >/dev/null 2>&1 && { musterd init --check-build 2>/dev/null; ' +
-    'musterd session label-nudge 2>/dev/null; musterd session orient-nudge 2>/dev/null; } || true ' +
+    'musterd session orient-nudge 2>/dev/null; } || true ' +
     // ADR 168: the epoch stamp. This hook is ONE machine-wide entry, so whichever checkout runs
     // `init` last writes it for every folder — and until this stamp, an older checkout's rewrite was
     // indistinguishable from the current text. The stamp makes the generation readable, so a writer
@@ -321,20 +320,20 @@ function sessionStartHookCommand(): string {
 function promptSubmitHookCommand(): string {
   // The per-turn boundary nudge (machine-wide, self-gating like the SessionStart orientation): at
   // every prompt in a musterd folder, remind the agent of the status_update/inbox ritual, then run
-  // the due-gated label-sweep nudge. The label clause is the load-bearing half: the one-shot
-  // SessionStart ask was measured to fail (agents skip it under a busy first prompt — 3 days of
-  // unlabeled sidebar, 2026-07-29), and a nudge that REPEATS until `musterd session resolve-labels`
-  // stamps the machine-wide sweep file is the difference between "documented" and "happens".
+  // the due-gated orient nudge. The repeat is the load-bearing half: the one-shot SessionStart ask
+  // was measured to fail (agents skip it under a busy first prompt — 3 days of unlabeled sidebar,
+  // 2026-07-29, back when this clause carried the label-sweep nudge), and a nudge that REPEATS
+  // until a stamp lands is the difference between "documented" and "happens". The label clause
+  // itself left with ADR 468 (the sweep it announced was retired by ADR 442).
   // Formerly a hand-pasted recipe (docs/harness-hooks.md); managed here so it drift-checks and
   // epoch-guards like every other musterd hook.
   return (
     'd="${CLAUDE_PROJECT_DIR:-.}"; test -f "$d/AGENTS.md" && grep -q musterd:start "$d/AGENTS.md" || exit 0; ' +
     declinedGate(SURFACE_MACHINE_PROMPT_SUBMIT) +
     `echo '${HOOK_NUDGE_TEXTS.prompt_submit_ritual}'; ` +
-    // orient-nudge repeats per turn on the same measured grounds as the label clause above —
-    // one-shot session-start asks get skipped; a repeat that a stamp quiets actually lands.
-    'command -v musterd >/dev/null 2>&1 && { musterd session label-nudge 2>/dev/null; ' +
-    'musterd session orient-nudge 2>/dev/null; } || true ' +
+    // orient-nudge repeats per turn on the measured grounds above — one-shot session-start asks
+    // get skipped; a repeat that a stamp quiets actually lands.
+    'command -v musterd >/dev/null 2>&1 && { musterd session orient-nudge 2>/dev/null; } || true ' +
     `# ${PROMPTSUBMIT_HOOK_MARKER} ${epochTag(FEATURE_EPOCH)}`
   );
 }
@@ -640,7 +639,7 @@ export function installMusterdHooks(
   }
   // The machine-wide hooks — the ones an older checkout could silently downgrade for every folder
   // at once, and so the ones carrying an epoch stamp and a refusal (ADR 168): the SessionStart
-  // orientation, and the per-turn UserPromptSubmit boundary/label nudge it hands off to.
+  // orientation, and the per-turn UserPromptSubmit boundary/orient nudge it hands off to.
   // Under `withinWorktreeOnly` (self-heal) they are skipped, not written: one seat's session start
   // must not rewrite the file every folder on the machine reads.
   if (!opts.withinWorktreeOnly) {
@@ -925,7 +924,7 @@ function inspectGlobalSessionStartDrift(): string[] {
       isMusterdPromptSubmit,
       PROMPTSUBMIT_HOOK_MARKER,
       promptSubmitHookCommand(),
-      'boundary/label-nudge',
+      'boundary/orient-nudge',
     ),
   ];
 }

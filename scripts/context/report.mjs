@@ -5,7 +5,7 @@
  *   node scripts/context/report.mjs
  *
  * Informational only: never a nonzero exit for size. The dynamic share (init --check-build text,
- * label-nudge output, wire/init fix lines) depends on machine state (`musterd`/`claude` on PATH,
+ * orient-nudge output, wire/init fix lines) depends on machine state (`musterd`/`claude` on PATH,
  * daemon freshness), so it cannot be a CI gate — but it is exactly what a real seat's context
  * pays, so the baseline doc cites it alongside the static table.
  *
@@ -98,7 +98,7 @@ for (const [event, command] of Object.entries(commands)) {
 }
 console.log(
   'Note: the printed size is per SESSION for SessionStart and per TURN for UserPromptSubmit;\n' +
-    'dynamic clauses (init --check-build, label-nudge) vary with machine state.',
+    'dynamic clauses (init --check-build, orient-nudge) vary with machine state.',
 );
 
 for (const d of [configDir, hookCwd, fixture]) rmSync(d, { recursive: true, force: true });

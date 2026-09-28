@@ -327,7 +327,7 @@ export interface ResolveReadOptions {
    * same processes had never considered the flag and reclaimed anyway (`reachabilityNudge` after
    * every dispatched command, `inbox --interrupt-check`, `infra-gate`). Measured on main @
    * `fcb92af8`: 2 `claim.superseded` rows per hook invocation for `gate check`, `inbox
-   * --interrupt-check` and `session label-nudge` alike, 0 with the nudge suppressed.
+   * --interrupt-check` and `session orient-nudge` alike, 0 with the nudge suppressed.
    *
    * Defaulting off inverts the failure mode. Forget it on a genuinely interactive read and that
    * read fails closed with a lease error — loud, local, and fixed by one word. Forget it the other

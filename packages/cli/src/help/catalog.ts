@@ -918,7 +918,7 @@ export const CATALOG: readonly CommandEntry[] = [
   {
     name: 'session',
     signature:
-      'show [--json]  |  start --stdin | end --stdin  |  bind --thread <id>  |  resolve-labels --stdin  |  label-nudge',
+      'show [--json]  |  start --stdin | end --stdin  |  bind --thread <id>  |  orient-nudge | orient-stamp',
     summary: 'this workspace’s captured harness session — what a wake would resume (ADR 131)',
     group: 'ops',
     detail:
@@ -928,9 +928,11 @@ export const CATALOG: readonly CommandEntry[] = [
       'daemon gets a harness-class-only attestation (presence-neutral, never claims). A wake then ' +
       'upgrades from fresh to `--resume`, and a live local session defers the wake entirely. ' +
       '`show` is the human view: what is captured here, is it live, would a wake resume or defer. ' +
-      '`resolve-labels` is the sidebar-sweep decision engine (ADR 160): session-list JSON in, ' +
-      '`{apply, skipped}` out; it also stamps the machine-wide last-sweep file. `label-nudge` is ' +
-      'a silent no-op since ADR 442 retired the peer sweep — a seat never renames another session. ' +
+      '`orient-nudge` / `orient-stamp` are the per-session orientation ritual (ADR 326): the hook ' +
+      'repeats the nudge until the stamp names the running session. A seat labels only its own ' +
+      'session, from the orient skill (`seat · time · team · title`, ADR 468); the sidebar sweep ' +
+      'and its `resolve-labels` engine are gone (ADR 442 retired the sweep), and `label-nudge` ' +
+      'survives only as a silent no-op for hooks written before feature epoch 26. ' +
       '`observe --orient` (ADR 333) is the Cursor sessionStart injector: after observe, stdout is ' +
       'JSON `{ additional_context }` wrapping the orientation block. ' +
       '`bind --thread <id>` is ADR 210 repair: a threaded send binds this session to that thread ' +

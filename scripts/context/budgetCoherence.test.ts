@@ -75,13 +75,12 @@ describe('the real budget file', () => {
 
   // Kept in step with check-budgets.ts by the assertion below, not by hope.
   const REAL: Composition = {
-    perTurnTotalBytes: ['toolsListDefaultBytes', 'promptSubmitNudgeBytes', 'labelNudgeBytes'],
+    perTurnTotalBytes: ['toolsListDefaultBytes', 'promptSubmitNudgeBytes'],
     perSessionTotalBytes: [
       'toolsListDefaultBytes',
       'primerBytes',
       'sessionStartNudgesBytes',
       'promptSubmitNudgeBytes',
-      'labelNudgeBytes',
     ],
   };
 
@@ -109,7 +108,8 @@ describe('the real budget file', () => {
 
     const [failure] = coherenceFailures(before, REAL);
     expect(failure).toContain('perTurnTotalBytes');
-    expect(failure).toContain('short by 795');
+    // 795 B when the composition still carried the 103 B label nudge; ADR 468 removed that part.
+    expect(failure).toContain('short by 692');
   });
 
   /*

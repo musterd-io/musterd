@@ -112,5 +112,9 @@
 // Epoch 25 — ADR 445 R1 on Grok: the Grok PreToolUse interrupt probe and Stop doorbell carry
 // `--hook grok`, and the Stop script hands the probe its payload, so both are traced. The epoch
 // keeps an older checkout from rewriting those hook lines back to the untraced form.
-export const FEATURE_EPOCH = 25 as const;
+// Epoch 26 — ADR 468: the machine-wide SessionStart and UserPromptSubmit hooks drop the
+// `musterd session label-nudge` clause (the sweep it announced was retired by ADR 442; the
+// subcommand stays a silent no-op for hooks written before this epoch). The bump keeps an older
+// checkout's `init` from rewriting the clause back in.
+export const FEATURE_EPOCH = 26 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;

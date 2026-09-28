@@ -231,13 +231,15 @@ describe('runRefreshHooks — hooks only, never identity (ADR 168)', () => {
     expect(readFileSync(globalSettings(), 'utf8')).toContain('musterd-sessionstart-hook e');
   });
 
-  it('installs the machine-wide UserPromptSubmit nudge hook, stamped and label-nudge-bearing', () => {
+  it('installs the machine-wide UserPromptSubmit nudge hook, stamped and orient-nudge-bearing', () => {
     h.folderBinding = { team: 'revive' };
     seedProvisioned();
     expect(runRefreshHooks(cwd).code).toBe(0);
     const global = readFileSync(globalSettings(), 'utf8');
     expect(global).toContain('musterd-promptsubmit-hook e');
-    expect(global).toContain('musterd session label-nudge');
+    expect(global).toContain('musterd session orient-nudge');
+    // ADR 468: the label-sweep clause left the hook with the sweep it announced.
+    expect(global).not.toContain('label-nudge');
   });
 
   it('ABSORBS a hand-pasted UserPromptSubmit recipe instead of stacking a second hook beside it', () => {

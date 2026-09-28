@@ -33,11 +33,15 @@ it behave otherwise, then invalidate-date the cell (wiki rule 4).
 | Config entry scope | repo-shared (keys by repo root) | same | same | per-folder, secret inside the tree | same | per-folder; plus machine-global `~/.codex/config.toml` that no repair reaches (`registeredElsewhere`, measured 2026-08-05) |
 | Hook drift detection (doctor) | markers checked, missing hooks named | same | same | ~~not populated~~ populated since 2026-09-05 (`inspectCursorHookDrift`, ADR 369 note): missing and STALE hooks named, refresh prescribed | same as IDE (same file) | the only harness that populates `hookDrift` today (2026-08-24; falsify: grep `hookDrift` in `harnesses/*`) | <!-- claim: other -->
 
-Desktop and terminal share the same `.claude/skills/musterd-label-sessions` file and the same
-`label-nudge` hook, so provision cannot express the labeling row's driver split. ADR 418's runtime
+~~Desktop and terminal share the same `.claude/skills/musterd-label-sessions` file and the same
+`label-nudge` hook, so provision cannot express the labeling row's driver split.~~ ADR 418's runtime
 gate: the agent follows **this session's tool list** (~~peer sweep /~~ self-label / skip silently), then
-always `orient-stamp`. The peer sweep was retired 2026-09-24 by ADR 442 (#1676). `label-nudge` is silent when `TERM_PROGRAM` is a known terminal emulator.
-Measured on `claude` 2.1.276 in Apple Terminal: `TERM_PROGRAM=Apple_Terminal` (2026-09-17; falsify: a Claude Code Desktop UserPromptSubmit hook that inherits that value). <!-- claim: other -->
+always `orient-stamp`. The peer sweep was retired 2026-09-24 by ADR 442 (#1676); its engine, stamp and
+the `label-nudge` hook clause were deleted 2026-09-28 by ADR 468 (feature epoch 26), so the
+`TERM_PROGRAM` silence no longer exists — there is no label nudge to silence. The self-label grammar
+since ADR 468 is `<seat> · <start time> · <team> · <the host's own title>`, written by the orient
+skill only (Desktop `set_session_title(self)`, Cursor `rename_chat`).
+Measured on `claude` 2.1.276 in Apple Terminal: `TERM_PROGRAM=Apple_Terminal` (2026-09-17; falsify: a Claude Code Desktop UserPromptSubmit hook that inherits that value — still the driver-detection fact, no longer load-bearing for labeling since ADR 468). <!-- claim: other -->
 
 ### Grok CLI (added 2026-09-02, ADR 352)
 
