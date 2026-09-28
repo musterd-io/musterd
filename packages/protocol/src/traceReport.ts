@@ -33,7 +33,7 @@ export const TraceToolMixRowSchema = z.object({
   avg_duration_ms: z.number().int().min(0).nullable(),
 });
 
-/** Tokens a seat spent while a lane was its open work (`usage` rows inside the claim window). */
+/** Tokens a seat spent while a lane was its open work (`usage` rows between its claim and its merge, ADR 462). */
 export const TraceLaneCostRowSchema = z.object({
   lane: z.string(),
   title: z.string(),

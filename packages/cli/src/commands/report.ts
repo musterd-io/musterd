@@ -688,7 +688,7 @@ export function renderTraceReport(r: TraceReport, team: string, w: (s: string) =
       `  ${t.tool} ${theme.meta(t.harness)} — ${n(t.calls)} call${t.calls === 1 ? '' : 's'}${err}${lat}\n`,
     );
   }
-  w(`\n${theme.accent('cost per lane')} ${theme.meta('(usage rows inside the claim window)')}:\n`);
+  w(`\n${theme.accent('cost per lane')} ${theme.meta('(usage rows between claim and merge)')}:\n`);
   if (r.lane_cost.length === 0) w(theme.meta('  no usage rows attributed to a lane') + '\n');
   for (const l of r.lane_cost) {
     w(
