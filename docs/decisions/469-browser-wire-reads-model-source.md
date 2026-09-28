@@ -55,7 +55,10 @@ declaration, per `member.ts`, and never read as one.
 
 ## Observability & Evaluation
 
-- **Trace:** `packages/web/src/live/modelBadge.test.ts` pins the three-way read; the `guards`
-  tests pin that an unknown tier reads as null and keeps the row.
-- **Falsifier:** on `/live` for a team whose seats attest `observed` models, a badge that reads
-  "· unverified" means the reader dropped the field again.
+- **Traces:** `packages/web/src/live/modelBadge.test.ts` pins the three-way read (observed /
+  declared / unverified); the `guards` tests pin that an unknown tier reads as null and keeps the
+  row. On a live page, the badge suffix is the trace: "· unverified" on a seat the daemon attests
+  `observed` means the reader dropped the field again.
+- **Eval:** open `/live` for a team whose seats attest `observed` models; every agent badge reads
+  bare (no suffix). Falsifier: any "· unverified" badge on such a seat.
+- **Experiment:** n/a — a one-field read with a pinned test; nothing to measure over time.
