@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Clock } from '../live/Clock';
 import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
@@ -80,6 +80,11 @@ type Collapsed = Record<PanelId, boolean>;
 const NO_COLLAPSE: Collapsed = { office: false, team: false, stream: false };
 /** Below this width the team column starts folded (ADR 464): the room keeps its pixels. */
 const TEAM_FOLDS_BELOW = 1280;
+/** The collapse restore must land BEFORE first paint: the canvas grid animates its columns, so a
+ *  restore in a passive effect slides every panel shut in front of the viewer on every load — and
+ *  the contrast sweep shot /live mid-slide on CI (2026-09-28). A layout effect is a no-op on the
+ *  server, which is what the guard inside it already assumed. */
+const useBeforePaint = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 function LivePage() {
   const router = useRouter();
@@ -409,8 +414,8 @@ function LivePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Restore saved panel collapse + companion state (SSR-safe; once on the client).
-  useEffect(() => {
+  // Restore saved panel collapse + companion state (SSR-safe; once on the client, before paint).
+  useBeforePaint(() => {
     if (typeof window === 'undefined') return;
     try {
       const raw = window.localStorage.getItem(COLLAPSE_KEY);
