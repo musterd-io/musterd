@@ -42,6 +42,11 @@ export interface CommitFacts {
    */
   files: FileChange[];
   merge: boolean;
+  /**
+   * The PR the commit belongs to (ADR 462): a delivered squash's `(#n)`, or the retained PR head
+   * it was reached from. Absent under the cookoff's `all` population.
+   */
+  pr?: number;
 }
 
 /** A window line added by `srcSha` and later deleted by a delivered commit's author. */
@@ -60,6 +65,8 @@ export interface RepoFacts {
   deletions: DeletionProvenance[];
   /** True when `ancestor` is an ancestor of `descendant` (same-branch pairs never W3-match). */
   isAncestor: (ancestor: string, descendant: string) => boolean;
+  /** Open PRs left out of the window as work in flight (ADR 462 `pulls` population only). */
+  inFlightPrs?: number[];
 }
 
 export interface LineVerdict {
@@ -68,6 +75,8 @@ export interface LineVerdict {
   n: number;
   actor: string;
   cls: WasteClass | 'survived';
+  /** The authoring commit's PR, when the population tags one (ADR 462). */
+  pr?: number;
   /** The other side of the relation (dup source, deleting commit, …) when there is one. */
   counterpart?: string;
 }
@@ -79,7 +88,21 @@ export interface ArchaeologyReport {
   wastedTotal: number;
   wastedPct: number;
   byActor: Record<string, { authored: number; wasted: number }>;
+  /**
+   * Per PR (ADR 462): authored lines, wasted lines, and the class split. A clobbered line (W2) is
+   * charged to the PR that authored it — the work that was lost — never to the one deleting it.
+   * Empty when no commit carries a PR.
+   */
+  byPr: Record<string, PrTally>;
+  /** Open PRs the window left out as in flight — reported so the exclusion is never silent. */
+  inFlightPrs?: number[];
   lines: LineVerdict[];
+}
+
+export interface PrTally {
+  authored: number;
+  wasted: number;
+  classes: Record<WasteClass, number>;
 }
 
 /** Whitespace-collapsed comparison form; empty string ⇒ blank line, excluded from counting. */
@@ -194,6 +217,7 @@ export function classify(facts: RepoFacts): ArchaeologyReport {
       n: r.n,
       actor: r.commit.actor,
       cls: 'survived',
+      ...(r.commit.pr !== undefined ? { pr: r.commit.pr } : {}),
     });
   }
   const mark = (r: LineRef, cls: WasteClass, counterpart: string): void => {
@@ -258,6 +282,9 @@ export function classify(facts: RepoFacts): ArchaeologyReport {
     for (let b = a + 1; b < nonMerge.length; b++) {
       const [x, y] = [nonMerge[a]!, nonMerge[b]!];
       if (x.actor === y.actor) continue;
+      // A path in common first: the ancestry test spawns git, and most cross-actor pairs share no
+      // file (ADR 462 measured ~190k pairs on one 2.5-day window of the dogfood repo).
+      if (!x.files.some((f) => seqs.has(`${y.sha} ${f.path}`))) continue;
       if (facts.isAncestor(x.sha, y.sha) || facts.isAncestor(y.sha, x.sha)) continue;
       const [earlier, later] = x.order <= y.order ? [x, y] : [y, x];
       for (const f of later.files) {
@@ -306,13 +333,27 @@ export function classify(facts: RepoFacts): ArchaeologyReport {
   // ---- Roll-up.
   const wasted: Record<WasteClass, number> = { W1: 0, W2: 0, W3: 0, W4: 0 };
   const byActor: Record<string, { authored: number; wasted: number }> = {};
+  const byPr: Record<string, PrTally> = {};
   const lines = [...verdicts.values()];
   for (const v of lines) {
     const a = (byActor[v.actor] ??= { authored: 0, wasted: 0 });
+    const p =
+      v.pr !== undefined
+        ? (byPr[String(v.pr)] ??= {
+            authored: 0,
+            wasted: 0,
+            classes: { W1: 0, W2: 0, W3: 0, W4: 0 },
+          })
+        : undefined;
     a.authored += 1;
+    if (p) p.authored += 1;
     if (v.cls !== 'survived') {
       wasted[v.cls] += 1;
       a.wasted += 1;
+      if (p) {
+        p.wasted += 1;
+        p.classes[v.cls] += 1;
+      }
     }
   }
   const wastedTotal = wasted.W1 + wasted.W2 + wasted.W3 + wasted.W4;
@@ -324,6 +365,8 @@ export function classify(facts: RepoFacts): ArchaeologyReport {
     wastedTotal,
     wastedPct: total === 0 ? 0 : (wastedTotal / total) * 100,
     byActor,
+    byPr,
+    ...(facts.inFlightPrs ? { inFlightPrs: facts.inFlightPrs } : {}),
     lines,
   };
 }

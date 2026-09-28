@@ -22,6 +22,11 @@ whose two hard-won rigor lessons are baked in as exclusions:
 
 ## 2. Run frame (what the predicates evaluate over)
 
+> **Live-repo use (2026-09-28, [ADR 462](../decisions/462-lane-wasted-work-from-git.md)).** The same
+> predicates measure lanes on the dogfood repo over a different population: `main` plus the remote's
+> retained PR heads, bounded by commit time, with open PRs left out as in flight (a live repo has no
+> run end). The frame below is the cookoff's and is unchanged.
+
 - **Run window** — from the kickoff commit (the scenario repo's pinned starting SHA, identical in
   every cell) to **run end**: all tickets reported done by the agents, or the wall-clock cap `T`
   (pinned per manifest, ADR 051), whichever is first.

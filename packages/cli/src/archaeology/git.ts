@@ -16,6 +16,59 @@ export interface ExtractOptions {
   delivered?: string;
   /** Exclusion globs on repo-relative paths (lockfiles, dist, …). */
   exclude?: string[];
+  /**
+   * Which commits are in the window (ADR 462). `all` (the cookoff default): every ref reachable
+   * after `start`. `pulls`: the delivered range plus the commits of the remote's retained PR heads
+   * (`refs/pull/<n>/head`) authored at or after `start` — the population a shared multi-worktree
+   * repo can reproduce from any checkout, and the one that tags every commit with its PR.
+   */
+  population?: 'all' | 'pulls';
+  /** Remote whose PR heads `pulls` reads. Default `origin`. */
+  remote?: string;
+}
+
+export interface PullHead {
+  sha: string;
+  pr: number;
+  /**
+   * The PR is still open: GitHub keeps `refs/pull/<n>/merge` only while a PR is open (matched the
+   * open-PR list exactly on the dogfood repo, 2026-09-28). An open PR is work in flight — a live
+   * repo has no run end, so it is neither delivered nor abandoned yet (ADR 462).
+   */
+  open: boolean;
+}
+
+/** The remote's retained PR heads, with which of them are still open, in one `ls-remote`. */
+export function listPullHeads(repo: string, remote = 'origin'): PullHead[] {
+  const out = git(['ls-remote', remote, 'refs/pull/*/head', 'refs/pull/*/merge'], repo);
+  const open = new Set<number>();
+  for (const m of out.matchAll(/\trefs\/pull\/(\d+)\/merge$/gm)) open.add(Number(m[1]!));
+  const heads: PullHead[] = [];
+  for (const m of out.matchAll(/^([0-9a-f]{40})\trefs\/pull\/(\d+)\/head$/gm)) {
+    const pr = Number(m[2]!);
+    heads.push({ sha: m[1]!, pr, open: open.has(pr) });
+  }
+  return heads;
+}
+
+/**
+ * Fetch the objects of any PR head this clone lacks, by sha, writing no ref and no FETCH_HEAD:
+ * a ref namespace in a repo whose `.git` every seat's worktree shares would put 1,700 heads into
+ * everyone's `git log --all`.
+ */
+export function fetchMissing(repo: string, remote: string, shas: string[]): void {
+  if (shas.length === 0) return;
+  const check = git(['cat-file', '--batch-check'], repo, shas.join('\n') + '\n');
+  const missing = [...check.matchAll(/^([0-9a-f]{40}) missing$/gm)].map((m) => m[1]!);
+  if (missing.length === 0) return;
+  git(['fetch', '-q', '--no-write-fetch-head', '--stdin', remote], repo, missing.join('\n') + '\n');
+}
+
+/** The `(#<n>)` a squash merge appends to its subject; null when the subject carries none. */
+export function prFromSubject(body: string): number | null {
+  const subject = body.split('\n', 1)[0] ?? '';
+  const m = /\(#(\d+)\)\s*$/.exec(subject);
+  return m ? Number(m[1]) : null;
 }
 
 export const DEFAULT_EXCLUDES = [
@@ -124,10 +177,53 @@ export function extractFacts(opts: ExtractOptions): RepoFacts {
   const regexes = (opts.exclude ?? DEFAULT_EXCLUDES).map(globToRegExp);
   const excluded = (p: string): boolean => regexes.some((r) => r.test(p));
 
-  const windowShas = git(['rev-list', '--all', '--not', start], repo).split('\n').filter(Boolean);
-  const deliveredSet = new Set(
-    git(['rev-list', delivered, '--not', start], repo).split('\n').filter(Boolean),
-  );
+  const deliveredShas = git(['rev-list', delivered, '--not', start], repo)
+    .split('\n')
+    .filter(Boolean);
+  const deliveredSet = new Set(deliveredShas);
+  // A PR-head commit's PR. Lowest PR wins when stacked heads share a commit: the earlier PR is
+  // the one that authored it.
+  const pullPr = new Map<string, number>();
+  const inFlightPrs: number[] = [];
+  let windowShas: string[];
+  if (opts.population === 'pulls') {
+    const remote = opts.remote ?? 'origin';
+    const heads = listPullHeads(repo, remote).sort((a, b) => a.pr - b.pr);
+    fetchMissing(
+      repo,
+      remote,
+      heads.map((h) => h.sha),
+    );
+    // Squash merges never make a branch an ancestor of main, so `--not start` cannot bound a PR
+    // head's history: the window is bounded by commit time instead, from `start`'s own.
+    // ISO, not the bare epoch: git's date parser reads a short integer as something else.
+    const since = new Date(
+      Number(git(['show', '-s', '--format=%ct', start], repo).trim()) * 1000,
+    ).toISOString();
+    const inWindow = new Set(
+      git(
+        ['rev-list', '--stdin', '--no-walk', `--since=${since}`],
+        repo,
+        heads.map((h) => h.sha).join('\n') + '\n',
+      )
+        .split('\n')
+        .filter(Boolean),
+    );
+    for (const h of heads) {
+      if (!inWindow.has(h.sha)) continue;
+      if (h.open) {
+        inFlightPrs.push(h.pr);
+        continue;
+      }
+      const own = git(['rev-list', `--since=${since}`, h.sha, '--not', delivered, start], repo)
+        .split('\n')
+        .filter(Boolean);
+      for (const sha of own) if (!pullPr.has(sha)) pullPr.set(sha, h.pr);
+    }
+    windowShas = [...deliveredShas, ...pullPr.keys()];
+  } else {
+    windowShas = git(['rev-list', '--all', '--not', start], repo).split('\n').filter(Boolean);
+  }
 
   const windowSet = new Set(windowShas);
   const commits: CommitFacts[] = [];
@@ -196,7 +292,17 @@ export function extractFacts(opts: ExtractOptions): RepoFacts {
       }
     }
 
-    commits.push({ sha, actor, order, delivered: deliveredSet.has(sha), patchId, files, merge });
+    const pr = deliveredSet.has(sha) ? prFromSubject(body) : (pullPr.get(sha) ?? null);
+    commits.push({
+      sha,
+      actor,
+      order,
+      delivered: deliveredSet.has(sha),
+      patchId,
+      files,
+      merge,
+      ...(pr !== null ? { pr } : {}),
+    });
   }
 
   const ancestryCache = new Map<string, boolean>();
@@ -215,7 +321,12 @@ export function extractFacts(opts: ExtractOptions): RepoFacts {
     return v;
   };
 
-  return { commits, deletions, isAncestor };
+  return {
+    commits,
+    deletions,
+    isAncestor,
+    ...(opts.population === 'pulls' ? { inFlightPrs } : {}),
+  };
 }
 
 /** Collapse sorted line numbers into inclusive [from,to] ranges for batched blame calls. */

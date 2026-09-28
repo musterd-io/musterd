@@ -355,6 +355,10 @@ ADR 184's publication gate; a spans backend.
   in `report trace` also over-counts a lane's build cost: 4b's window carries 4a's closeout and about
   85 minutes after the merge. Falsifier for the pass: a second lane, on another harness, whose two
   sides differ by more than 5%.
+- **2026-09-28 — the wasted-work half moves to git** ([ADR 462](462-lane-wasted-work-from-git.md),
+  proposed). Per-lane wasted work is ADR 123's predicates over `main` and the remote's PR heads,
+  joined to lanes by PR number. It is not rebuilt from `trace_events`. Increment 4b reads 439 authored
+  lines and 0 wasted from its claim.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
