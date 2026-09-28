@@ -282,32 +282,55 @@ export async function tailTranscript(opts: {
       return await downgrade(opts, digest, 'parse_failure', post);
     }
 
-    const content = traceContentEnabled(binding, opts.dir);
-    const events: TraceEvent[] = [];
-    for (const record of records) {
-      const event = buildTailEvent(record, { harness: opts.harness, digest, content });
-      if (event) events.push(event);
-    }
-
-    let allLanded = true;
-    for (let i = 0; i < events.length; i += TRACE_MAX_BATCH) {
-      if (!(await post(events.slice(i, i + TRACE_MAX_BATCH)))) {
-        allLanded = false;
-        break;
-      }
-    }
+    const { allLanded, events } = await postTailRecords(records, {
+      binding,
+      dir: opts.dir,
+      harness: opts.harness,
+      digest,
+      post,
+    });
     // Advance only when everything landed — a dropped delta is re-read by the next hook.
-    if (allLanded || events.length === 0) {
+    if (allLanded || events === 0) {
       writeTailCursor(opts.dir, digest, {
         path: opts.transcriptPath,
         offset: delta.nextOffset,
         updated_at: Date.now(),
       });
     }
-    return allLanded && events.length > 0;
+    return allLanded && events > 0;
   } catch {
     return false;
   }
+}
+
+/**
+ * Build and post one read's records — content only past the gates, in `TRACE_MAX_BATCH` chunks,
+ * stopping at the first chunk that does not land. Shared by the file tail above and the OpenCode
+ * store read (`opencode.ts`), which differ only in where the records come from and how their
+ * cursor advances.
+ */
+export async function postTailRecords(
+  records: readonly TranscriptRecord[],
+  opts: {
+    binding: Binding;
+    dir: string;
+    harness: string;
+    digest: string;
+    post: (events: readonly TraceEvent[]) => Promise<boolean>;
+  },
+): Promise<{ allLanded: boolean; events: number }> {
+  const content = traceContentEnabled(opts.binding, opts.dir);
+  const events: TraceEvent[] = [];
+  for (const record of records) {
+    const event = buildTailEvent(record, { harness: opts.harness, digest: opts.digest, content });
+    if (event) events.push(event);
+  }
+  for (let i = 0; i < events.length; i += TRACE_MAX_BATCH) {
+    if (!(await opts.post(events.slice(i, i + TRACE_MAX_BATCH)))) {
+      return { allLanded: false, events: events.length };
+    }
+  }
+  return { allLanded: true, events: events.length };
 }
 
 async function downgrade(

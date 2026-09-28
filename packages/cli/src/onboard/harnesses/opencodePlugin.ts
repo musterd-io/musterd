@@ -25,6 +25,11 @@ import { isDeclined } from '../declined.js';
  * - `event: session.idle` — the Stop-hook analog (ADR 370's idle-at-turn-end rung): a raised line is
  *   delivered as a reply-triggering `prompt_async`, capped per session so an ignored bell cannot
  *   burn budget forever (Grok caps at 8; this caps lower because reply-mode spends a real turn).
+ * - The trace tap (ADR 445, generation 2). The tool-boundary probe gets the call's structural
+ *   fields on stdin under `--hook opencode`, so it records `PostToolUse` in the process it already
+ *   is — no second process per call. Each idle runs `musterd trace hook --kind Stop`, which records
+ *   `Stop` and reads the turn's R2 records out of OpenCode's session store (`trace/opencode.ts`).
+ *   `MUSTERD_NO_NUDGE=1` skips the probe, and with it the `PostToolUse` tap.
  *
  * The plugin never composes text: the line is the daemon's (ADR 088), fenced so the model can tell
  * it from tool output, and the CLI keeps every gate it already has (`MUSTERD_NO_NUDGE`, explicit
@@ -33,7 +38,7 @@ import { isDeclined } from '../declined.js';
 
 export const OPENCODE_PLUGIN_MARKER = 'musterd-opencode-interrupt';
 /** Bump when the rendered plugin changes: the doctor names a file stamped otherwise as STALE. */
-export const OPENCODE_PLUGIN_GENERATION = 1;
+export const OPENCODE_PLUGIN_GENERATION = 2;
 export const OPENCODE_PLUGIN_SURFACE = 'opencode:plugin';
 /** Reply-mode idle bells per session before the plugin goes quiet (see module doc). */
 export const OPENCODE_IDLE_BELL_CAP = 4;
@@ -56,13 +61,16 @@ import { execFile } from "node:child_process";
 
 const PROBE_ARGS = ["inbox", "--interrupt-check"];
 const PROBE_TIMEOUT_MS = 5000;
+const TRACE_TIMEOUT_MS = 15000;
 const IDLE_BELL_CAP = ${String(OPENCODE_IDLE_BELL_CAP)};
 const OPEN = "<musterd-interrupt>";
 const CLOSE = "</musterd-interrupt>";
 
 // One daemon-composed line, or "" — never a throw, never a rejection (a probe on every tool call
 // must never disrupt the loop, ADR 088). cwd is the seat folder so the bound seat resolves.
-function probe(directory) {
+// With a payload, the probe also records the tool call on the trace tap (ADR 445 R1): the JSON
+// goes in on stdin and \`--hook opencode\` tells the probe to read it. Structural fields only.
+function probe(directory, payload) {
   return new Promise((resolve) => {
     if (process.env.MUSTERD_NO_NUDGE === "1") return resolve("");
     let settled = false;
@@ -72,23 +80,56 @@ function probe(directory) {
       resolve(line);
     };
     try {
-      execFile(
+      const child = execFile(
         "musterd",
-        PROBE_ARGS,
+        payload ? [...PROBE_ARGS, "--hook", "opencode"] : PROBE_ARGS,
         { cwd: directory, encoding: "utf8", timeout: PROBE_TIMEOUT_MS, env: process.env },
         (err, stdout) => finish(err ? "" : String(stdout ?? "").trim()),
       );
+      if (payload && child.stdin) {
+        child.stdin.on("error", () => {});
+        child.stdin.end(JSON.stringify(payload));
+      }
     } catch {
       finish("");
     }
   });
 }
 
+// The turn ended: record Stop and read the turn's transcript records out of OpenCode's session
+// store (ADR 445 R1 + R2). Fire-and-forget — the idle bell below must not wait on the trace.
+function traceTurnEnd(directory, sessionID) {
+  try {
+    const child = execFile(
+      "musterd",
+      ["trace", "hook", "--stdin", "--harness", "opencode", "--kind", "Stop"],
+      { cwd: directory, timeout: TRACE_TIMEOUT_MS, env: process.env },
+      () => {},
+    );
+    if (child.stdin) {
+      child.stdin.on("error", () => {});
+      child.stdin.end(JSON.stringify({ session_id: sessionID, hook_event_name: "Stop" }));
+    }
+  } catch {
+    // fail-open, like every tap
+  }
+}
+
 export const MusterdInterrupt = async ({ client, directory }) => {
   const bells = new Map();
   return {
-    "tool.execute.after": async (_input, output) => {
-      const line = await probe(directory);
+    "tool.execute.after": async (input, output) => {
+      const line = await probe(
+        directory,
+        input && input.sessionID
+          ? {
+              session_id: input.sessionID,
+              hook_event_name: "PostToolUse",
+              tool_name: input.tool,
+              tool_use_id: input.callID,
+            }
+          : undefined,
+      );
       if (!line) return;
       const fenced = OPEN + "\\n" + line + "\\n" + CLOSE;
       output.output = output.output ? output.output + "\\n\\n" + fenced : fenced;
@@ -97,6 +138,7 @@ export const MusterdInterrupt = async ({ client, directory }) => {
       if (!event || event.type !== "session.idle") return;
       const id = event.properties && event.properties.sessionID;
       if (!id) return;
+      traceTurnEnd(directory, id);
       const rung = bells.get(id) || 0;
       if (rung >= IDLE_BELL_CAP) return;
       const line = await probe(directory);

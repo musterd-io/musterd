@@ -353,7 +353,7 @@ const DEFERRED_TOOL_HARNESSES: Record<string, string> = {
 };
 
 /** The `--hook` values whose hook line pipes its payload to the probe, so the probe taps it (ADR 445). */
-const TAPPED_HOOKS: ReadonlySet<string> = new Set(['claude-code', 'grok']);
+const TAPPED_HOOKS: ReadonlySet<string> = new Set(['claude-code', 'grok', 'opencode']);
 
 async function interruptCheck(parsed: Parsed): Promise<number> {
   // Which harness's hook is running us, if any: decides whether a raised line (or the deaf line) is
