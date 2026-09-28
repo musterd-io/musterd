@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Hard rule 1: **no `@musterd/protocol` schema change without an ADR.** Task 0 writes ADR 462 first; every protocol change below cites it.
+- Hard rule 1: **no `@musterd/protocol` schema change without an ADR.** Task 0 writes ADR 463 first; every protocol change below cites it.
 - Hard rule 4: every HTTP body, tool arg and argv is parsed through a protocol zod schema at the boundary.
 - Hard rule 5: never log a secret; credentials are `sha256` at rest. Provisions never carry a secret.
 - Hard rule 8: implement in your seat; no writing subagents.
@@ -34,23 +34,23 @@
 
 ---
 
-### Task 0: ADR 462 — sponsor-hosted agents (supersedes the unmerged ADR 460)
+### Task 0: ADR 463 — sponsor-hosted agents (supersedes the unmerged ADR 460)
 
 **Files:**
-- Create: `docs/decisions/462-sponsor-hosted-agents.md` (number from `pnpm adr:next`; if it is not 462, use what it prints everywhere below)
-- Modify: `docs/superpowers/specs/2026-09-28-sponsor-hosted-agents-design.md` (Status line → "accepted as ADR NNN")
+- Create: `docs/decisions/463-sponsor-hosted-agents.md` (number from `pnpm adr:next`; if it is not 463, use what it prints everywhere below)
+- Modify: `docs/superpowers/specs/2026-09-28-sponsor-hosted-agents-design.md` (Status line → "accepted as ADR 463")
 
 **Interfaces:**
-- Produces: the ADR number every later commit footer cites as `Refs ADR-NNN`.
+- Produces: the ADR number every later commit footer cites as `Refs ADR-463`.
 
 - [ ] **Step 1: Branch, push a draft PR, take the number (ADR 223: publish before writing)**
 
 ```bash
 git fetch origin main && git checkout -b docs/adr-sponsor-hosted-agents origin/main
 pnpm adr:next
-git commit --allow-empty -m "docs(adr): reserve ADR NNN — sponsor-hosted agents" -m "Co-authored-by: stanley <stanley@revive.musterd>"
+git commit --allow-empty -m "docs(adr): reserve ADR 463 — sponsor-hosted agents" -m "Co-authored-by: stanley <stanley@revive.musterd>"
 git push -u origin docs/adr-sponsor-hosted-agents
-gh pr create --draft --title "ADR NNN: sponsor-hosted agents (supersedes ADR 460)" --body "Draft. Spec: docs/superpowers/specs/2026-09-28-sponsor-hosted-agents-design.md"
+gh pr create --draft --title "ADR 463: sponsor-hosted agents (supersedes ADR 460)" --body "Draft. Spec: docs/superpowers/specs/2026-09-28-sponsor-hosted-agents-design.md"
 ```
 
 - [ ] **Step 2: Write the ADR** — skeleton per `07-conventions.md` (Context, Problem, Decision, Consequences, Observability & Evaluation). Decision = spec §3 + §4 verbatim in ADR voice; "Considered and rejected" = spec §9; Eval = Scenario D's 2-minute line plus the spec §5 falsifiers. Header lines:
@@ -71,9 +71,9 @@ gh pr create --draft --title "ADR NNN: sponsor-hosted agents (supersedes ADR 460
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm format:check
-git add docs && git commit -m "ADR NNN: sponsor-hosted agents (supersedes ADR 460)" -m "Co-authored-by: stanley <stanley@revive.musterd>"
+git add docs && git commit -m "ADR 463: sponsor-hosted agents (supersedes ADR 460)" -m "Co-authored-by: stanley <stanley@revive.musterd>"
 git push && gh pr ready && gh pr merge --squash --auto --delete-branch
-gh pr close 1765 --comment "Withdrawn: superseded by ADR NNN (sponsor-hosted agents)."
+gh pr close 1765 --comment "Withdrawn: superseded by ADR 463 (sponsor-hosted agents)."
 ```
 
 Ask big-body for the security review by `team_send {act:'request_help', to:'big-body'}` naming the PR and Decision §1.
@@ -88,7 +88,7 @@ Ask big-body for the security review by `team_send {act:'request_help', to:'big-
 - Modify: `packages/protocol/src/index.ts` (export the new module)
 - Modify: `packages/protocol/src/residency.ts` (`WakeOrderSchema.reason`)
 - Test: `packages/protocol/src/credentials.test.ts`, `packages/protocol/src/hostProvisions.test.ts`
-- Modify: `docs/architecture/02-protocol.md` file tree (add `hostProvisions.ts — host provision rows, claim/report bodies (ADR NNN)`)
+- Modify: `docs/architecture/02-protocol.md` file tree (add `hostProvisions.ts — host provision rows, claim/report bodies (ADR 463)`)
 
 **Interfaces:**
 - Produces:
@@ -106,7 +106,7 @@ Ask big-body for the security review by `team_send {act:'request_help', to:'big-
 `packages/protocol/src/credentials.test.ts` — append:
 
 ```ts
-describe('PolicySchema.agent_host / invite_requires_expiry (ADR NNN)', () => {
+describe('PolicySchema.agent_host / invite_requires_expiry (ADR 463)', () => {
   it('defaults: max_per_host 5, empty policy, invites need no expiry', () => {
     const p = PolicySchema.parse({});
     expect(p.agent_host).toEqual({ max_per_host: 5, policy: {} });
@@ -133,7 +133,7 @@ import {
   HostProvisionsClaimBodySchema,
 } from './hostProvisions.js';
 
-describe('host provision schemas (ADR NNN)', () => {
+describe('host provision schemas (ADR 463)', () => {
   it('round-trips a row', () => {
     const row = {
       id: '01ABC', team: 'acme', agent: 'dana-scout', sponsor: 'dana', host: 'dana-mbp',
@@ -160,7 +160,7 @@ describe('host provision schemas (ADR NNN)', () => {
 
 ```ts
   /**
-   * Sponsor-hosted agents (ADR NNN §4.2). `max_per_host` bounds live enrolled sponsored seats per
+   * Sponsor-hosted agents (ADR 463 §4.2). `max_per_host` bounds live enrolled sponsored seats per
    * host label; `policy` is the residency override every provisioned seat enrolls with. `budget_usd`
    * inside it is REQUIRED for a claim to succeed — checked at claim, not here, so `parse({})` stays
    * inert and a team that never hosts never sees it.
@@ -172,7 +172,7 @@ describe('host provision schemas (ADR NNN)', () => {
     })
     .default({}),
   /**
-   * ADR NNN §4.4.3: when true, `POST /invites` without `member_until` is refused. Required on any
+   * ADR 463 §4.4.3: when true, `POST /invites` without `member_until` is refused. Required on any
    * team that sets `agent_connect: 'any_member'` (the setter enforces the pair).
    */
   invite_requires_expiry: z.boolean().default(false),
@@ -185,7 +185,7 @@ describe('host provision schemas (ADR NNN)', () => {
 ```ts
 import { z } from 'zod';
 
-/** ADR NNN §4.2: one row per sponsored agent awaiting a process on its sponsor's host. */
+/** ADR 463 §4.2: one row per sponsored agent awaiting a process on its sponsor's host. */
 export const HostProvisionStateSchema = z.enum(['pending', 'claimed', 'ready', 'failed', 'cancelled']);
 export type HostProvisionState = z.infer<typeof HostProvisionStateSchema>;
 
@@ -225,7 +225,7 @@ export type SponsoredAgentHosting = z.infer<typeof SponsoredAgentHostingSchema>;
 `packages/protocol/src/residency.ts` `WakeOrderSchema` — add after `lane`:
 
 ```ts
-    /** ADR NNN §4.2: the one-time first wake of a freshly provisioned seat. */
+    /** ADR 463 §4.2: the one-time first wake of a freshly provisioned seat. */
     reason: z.enum(['provisioned']).optional(),
 ```
 
@@ -240,7 +240,7 @@ Add the file-tree line in `docs/architecture/02-protocol.md`. Then:
 ```bash
 pnpm typecheck && pnpm lint && pnpm format:check
 git add packages/protocol docs/architecture/02-protocol.md
-git commit -m "feat(protocol): agent_host policy, host provision schemas, provisioned wake reason" -m "Refs ADR-NNN" -m "Co-authored-by: stanley <stanley@revive.musterd>"
+git commit -m "feat(protocol): agent_host policy, host provision schemas, provisioned wake reason" -m "Refs ADR-463" -m "Co-authored-by: stanley <stanley@revive.musterd>"
 ```
 
 ---
@@ -251,7 +251,7 @@ git commit -m "feat(protocol): agent_host policy, host provision schemas, provis
 - Create: `packages/server/src/transport/authSponsor.ts`
 - Modify: `packages/server/src/transport/http.ts:2704` (`/agent-bootstrap-credentials`), `:2612` (`/grants`), `:3134` (`/residency/enroll`), `:3228` (`/residency/revoke`)
 - Test: `packages/server/src/transport/sponsor-authority-http.test.ts`
-- Modify: `docs/architecture/03-server.md` file tree (`transport/authSponsor.ts — sponsor-scoped authorizer: a member's power over agents they sponsor (ADR NNN §4.1)`)
+- Modify: `docs/architecture/03-server.md` file tree (`transport/authSponsor.ts — sponsor-scoped authorizer: a member's power over agents they sponsor (ADR 463 §4.1)`)
 
 **Interfaces:**
 - Consumes: `authMember`, `getMemberByName`, `resolveCapabilities`, `memberStandingRefusal` (store/members.ts); `bearer`, `actingSeat`, `agentSessionLease` (http.ts helpers — export them if not already).
@@ -268,7 +268,7 @@ export function authAdminOrSponsorOf(ctx: Ctx, slug: string, req: IncomingMessag
 - [ ] **Step 1: Failing tests** — `sponsor-authority-http.test.ts` using the harness shape of `sponsored-agents-http.test.ts` (copy its `post`, `addHuman`, `beforeEach`/`afterEach` verbatim, slug `auth-t`):
 
 ```ts
-describe('sponsor-scoped authority (ADR NNN §4.1)', () => {
+describe('sponsor-scoped authority (ADR 463 §4.1)', () => {
   it('a sponsor mints a claim_seat credential for their own agent; not for another member’s', async () => {
     const dana = await addHuman('dana');
     const eve = await addHuman('eve');
@@ -335,7 +335,7 @@ import { actingSeat, agentSessionLease, bearer } from './requestAuth.js';
 export interface SponsorAuth { team: TeamRow; member: MemberRow; agent: MemberRow; sponsorScoped: true }
 
 /**
- * ADR NNN §4.1: a member's authority over the agents they sponsor — and nothing else. Live human,
+ * ADR 463 §4.1: a member's authority over the agents they sponsor — and nothing else. Live human,
  * good standing, `can_create_agents` not withdrawn, `agent.sponsored_by === member.id`, agent live.
  * The refusal for a live agent someone else sponsors is `forbidden`; for a name that is not a live
  * sponsored agent it is `not_found` (a removed name is never re-minted for, Review Focus 4).
@@ -343,7 +343,7 @@ export interface SponsorAuth { team: TeamRow; member: MemberRow; agent: MemberRo
 export function authSponsorOf(ctx: Ctx, slug: string, req: IncomingMessage, agentName: string): SponsorAuth {
   const { team, member } = authMember(ctx.db, slug, bearer(req), actingSeat(req), agentSessionLease(req));
   if (member.kind !== 'human' || member.observer === 1)
-    throw new MusterdError('forbidden', 'only a human member acts for the agents they sponsor (ADR NNN §4.1)');
+    throw new MusterdError('forbidden', 'only a human member acts for the agents they sponsor (ADR 463 §4.1)');
   const standing = memberStandingRefusal(member);
   if (standing) throw standing;
   if (resolveCapabilities(member).can_create_agents === false)
@@ -392,7 +392,7 @@ If `bearer`/`actingSeat`/`agentSessionLease` are module-private in `http.ts`, mo
 ```bash
 pnpm typecheck && pnpm lint && pnpm format:check
 git add packages/server docs/architecture/03-server.md
-git commit -m "feat(server): sponsor-scoped authority over sponsored agents (mint, grant, residency)" -m "Refs ADR-NNN" -m "Co-authored-by: stanley <stanley@revive.musterd>"
+git commit -m "feat(server): sponsor-scoped authority over sponsored agents (mint, grant, residency)" -m "Refs ADR-463" -m "Co-authored-by: stanley <stanley@revive.musterd>"
 ```
 
 This is increment 1 of the spec: open its PR now, request big-body's security review, and land it alone before Task 3.
@@ -415,7 +415,7 @@ This is increment 1 of the spec: open its PR now, request big-body's security re
 - [ ] **Step 1: Failing test**
 
 ```ts
-describe('sponsor host key (ADR NNN §4.1, Review Focus 1)', () => {
+describe('sponsor host key (ADR 463 §4.1, Review Focus 1)', () => {
   it('a host key minted by a sponsor polls wake-leases and sees only the sponsor’s seats', async () => {
     const dana = await addHuman('dana');
     const eve = await addHuman('eve');
@@ -453,7 +453,7 @@ Legacy-key branch returns `{ team, sponsorId: null }`. Update every caller (`/do
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "feat(server): a sponsor's host key polls only the sponsor's seats" -m "Refs ADR-NNN" -m "Co-authored-by: stanley <stanley@revive.musterd>"
+git commit -am "feat(server): a sponsor's host key polls only the sponsor's seats" -m "Refs ADR-463" -m "Co-authored-by: stanley <stanley@revive.musterd>"
 ```
 
 ---
@@ -482,7 +482,7 @@ git commit -am "feat(server): a sponsor's host key polls only the sponsor's seat
 
 `sponsoredAgents.test.ts` — append:
 ```ts
-describe('connectRefusal while hosted (ADR NNN §4.4.1)', () => {
+describe('connectRefusal while hosted (ADR 463 §4.4.1)', () => {
   it('refuses a connect link for an enrolled agent even for its sponsor', () => {
     const { db, team, human } = teamWithHuman();
     const { member: agent } = createSponsoredAgent(db, team, human, { name: 'scout' });
@@ -502,7 +502,7 @@ import { enrollResidency, getResidency } from './residency.js';
 import { createSponsoredAgent } from './sponsoredAgents.js';
 import { createTeam } from './teams.js';
 
-describe('cascade on disable/ban (ADR NNN §4.4.2)', () => {
+describe('cascade on disable/ban (ADR 463 §4.4.2)', () => {
   it('disabling a sponsor disables their agents and revokes their residency', () => {
     const db = openDb(':memory:');
     const team = createTeam(db, { slug: 'acme' });
@@ -545,7 +545,7 @@ it('invite without member_until is refused when invite_requires_expiry', async (
 
 - [ ] **Step 4: Run** `pnpm --filter @musterd/server test -- sponsoredAgents members.cascade policy-pair sponsored-agents-http` — PASS.
 
-- [ ] **Step 5: Commit** — `feat(server): close ADR 456's residual in code — hosted agents unconnectable, cascade on disable/ban, invite expiry policy` / `Refs ADR-NNN`. This is increment 2: its own PR.
+- [ ] **Step 5: Commit** — `feat(server): close ADR 456's residual in code — hosted agents unconnectable, cascade on disable/ban, invite expiry policy` / `Refs ADR-463`. This is increment 2: its own PR.
 
 ---
 
@@ -560,7 +560,7 @@ it('invite without member_until is refused when invite_requires_expiry', async (
 - Modify: `packages/server/src/store/residency.ts` (`recordHostSeen` gains sponsor; `claimWakeLeases` derives the `provisioned` candidate)
 - Modify: `packages/server/src/index.ts` (or wherever `startExpiredMemberSweep` is started — `grep -rn startExpiredMemberSweep packages/server/src`) — start the provision cancel sweep
 - Test: `packages/server/src/store/hostProvisions.test.ts`, `packages/server/src/transport/host-provisions-http.test.ts`
-- Modify: `docs/architecture/03-server.md` file tree (`store/hostProvisions.ts — sponsor-host provision rows: insert on mint, atomic claim, report, 15-minute cancel (ADR NNN §4.2)`)
+- Modify: `docs/architecture/03-server.md` file tree (`store/hostProvisions.ts — sponsor-host provision rows: insert on mint, atomic claim, report, 15-minute cancel (ADR 463 §4.2)`)
 
 **Interfaces:**
 - Produces (`store/hostProvisions.ts`):
@@ -614,7 +614,7 @@ export function toProvision(row, teamSlug, agentName, sponsorName): HostProvisio
 - [ ] **Step 2: Failing store tests** (`hostProvisions.test.ts`):
 
 ```ts
-describe('host provisions (ADR NNN §4.2)', () => {
+describe('host provisions (ADR 463 §4.2)', () => {
   it('insert → claim is atomic and one host wins', () => {
     const { db, team, human } = teamWithHuman();
     const { member: agent } = createSponsoredAgent(db, team, human, { name: 'scout' });
@@ -705,7 +705,7 @@ Cancel sweep: next to `startExpiredMemberSweep`, add a 60 s interval calling `ca
 
 - [ ] **Step 7: Run** `pnpm --filter @musterd/server test` — PASS, coverage ≥85%.
 
-- [ ] **Step 8: Docs + commit** — `feat(server): host provisions — sponsor-host claim/report, creation hook, provisioned first wake, 15-minute fallback` / `Refs ADR-NNN`. Increment 3: its own PR.
+- [ ] **Step 8: Docs + commit** — `feat(server): host provisions — sponsor-host claim/report, creation hook, provisioned first wake, 15-minute fallback` / `Refs ADR-463`. Increment 3: its own PR.
 
 ---
 
@@ -716,7 +716,7 @@ Cancel sweep: next to `startExpiredMemberSweep`, add a 60 s interval calling `ca
 - Modify: `packages/cli/src/commands/agent.ts:132-238` (call the extraction)
 - Modify: `packages/cli/src/client.ts` (add `claimProvisions(slug, host)`, `reportProvision(slug, id, body)`)
 - Test: `packages/cli/src/onboard/provisionSeat.test.ts`
-- Modify: `docs/architecture/04-cli.md` file tree (`onboard/provisionSeat.ts — the one seat-provisioning sequence: credential, grant, binding, permissions, spec, harness wiring — shared by \`musterd agent\` and the host provisioner (ADR NNN §4.3)`)
+- Modify: `docs/architecture/04-cli.md` file tree (`onboard/provisionSeat.ts — the one seat-provisioning sequence: credential, grant, binding, permissions, spec, harness wiring — shared by \`musterd agent\` and the host provisioner (ADR 463 §4.3)`)
 
 **Interfaces:**
 - Produces:
@@ -740,7 +740,7 @@ export async function provisionSeat(input: ProvisionSeatInput): Promise<Provisio
 
 - [ ] **Step 2: Run** — FAIL (module missing). **Step 3: Implement** by moving lines 132–238 of `agent.ts` into `provisionSeat.ts` unchanged except for parameters; `agent.ts` keeps argv parsing, `addMember`, `writeSeatFile`, `provisionWorkspace`, output. **Step 4: Run** `pnpm --filter @musterd/cli test -- provisionSeat agent` — PASS (existing `agent.test.ts` must still pass).
 
-- [ ] **Step 5: Commit** — `refactor(cli): extract provisionSeat from musterd agent` / `Refs ADR-NNN`.
+- [ ] **Step 5: Commit** — `refactor(cli): extract provisionSeat from musterd agent` / `Refs ADR-463`.
 
 ---
 
@@ -757,7 +757,7 @@ export async function provisionSeat(input: ProvisionSeatInput): Promise<Provisio
 
 - [ ] **Step 2–4:** in the `catch` after `addMember`, treat `err.code === 'forbidden'` like `conflict` **only if** the roster shows the name as an existing agent; then proceed as `reused`. Run — PASS.
 
-- [ ] **Step 5: Commit** — `feat(cli): musterd agent provisions a workspace for an agent you sponsor without admin` / `Refs ADR-NNN`.
+- [ ] **Step 5: Commit** — `feat(cli): musterd agent provisions a workspace for an agent you sponsor without admin` / `Refs ADR-463`.
 
 ---
 
@@ -769,7 +769,7 @@ export async function provisionSeat(input: ProvisionSeatInput): Promise<Provisio
 - Modify: `packages/cli/src/commands/host.ts` (`--no-provision`, `--clone`, `musterd host provisions` subcommand)
 - Modify: `packages/cli/src/help/catalog.ts` (the two flags and the subcommand)
 - Test: `packages/cli/src/host/provisioner.test.ts`, `packages/cli/src/host/loop.test.ts`
-- Modify: `docs/architecture/04-cli.md` file tree (`host/provisioner.ts — claims a sponsor's host provisions and stands each seat up: workspace, credential, binding, harness, residency, report (ADR NNN §4.3)`)
+- Modify: `docs/architecture/04-cli.md` file tree (`host/provisioner.ts — claims a sponsor's host provisions and stands each seat up: workspace, credential, binding, harness, residency, report (ADR 463 §4.3)`)
 
 **Interfaces:**
 - Consumes: `provisionSeat` (Task 6), `provisionWorkspace(name, {team, cwd, home, branch})`, `HttpClient.claimProvisions/reportProvision/enrollResidency`, `upsertHostEntry` (host/registry.ts), `ensureHostKey` (commands/residency.ts — export it).
@@ -800,7 +800,7 @@ export async function provisionOnce(deps: ProvisionDeps): Promise<{ claimed: num
 
 - [ ] **Step 2: Run** — FAIL. **Step 3: Implement** `provisioner.ts` per the interface; branch name `agent/<name>`; on `clone: true` call `git clone <repoRoot> <dir>` via `execFileSync` then write `.git/info/exclude` with `.musterd/`. In `host.ts`, derive `repoRoot` from `gitToplevel(process.cwd())`, `harness` from the host workspace's binding (`binding.session?.harness ?? 'claude-code'`), and pass `provision` unless `--no-provision`. `musterd host provisions` → `GET`-less: reuse `claimProvisions`? No — claiming has side effects; add `HttpClient.listProvisions(slug, host)` → `GET /teams/:slug/host/provisions?host=` (add that read route to Task 5's server work: same auth, no claim) and render `id · agent · state · reason`.
 
-- [ ] **Step 4: Run** `pnpm --filter @musterd/cli test` — PASS. **Step 5: Commit** — `feat(cli): musterd host provisions a sponsor's newly created agents` / `Refs ADR-NNN`. Increment 4's PR carries Tasks 6–9.
+- [ ] **Step 4: Run** `pnpm --filter @musterd/cli test` — PASS. **Step 5: Commit** — `feat(cli): musterd host provisions a sponsor's newly created agents` / `Refs ADR-463`. Increment 4's PR carries Tasks 6–9.
 
 ---
 
@@ -822,7 +822,7 @@ export async function provisionOnce(deps: ProvisionDeps): Promise<{ claimed: num
 
 - [ ] **Step 2: Run** `pnpm --filter @musterd/cli test -- sponsorHosted` — PASS. Add it to `pnpm test:scenarios`.
 
-- [ ] **Step 3: Docs** — `06-testing.md` Scenario D paragraph mirroring §6 of the spec; **Step 4: Commit** — `test(scenarios): Scenario D — a sponsor's host runs the agent they created` / `Refs ADR-NNN`.
+- [ ] **Step 3: Docs** — `06-testing.md` Scenario D paragraph mirroring §6 of the spec; **Step 4: Commit** — `test(scenarios): Scenario D — a sponsor's host runs the agent they created` / `Refs ADR-463`.
 
 ---
 
@@ -833,12 +833,12 @@ export async function provisionOnce(deps: ProvisionDeps): Promise<{ claimed: num
 - Modify: `docs/architecture/03-server.md` (routes; sponsor-scoped authority paragraph under auth)
 - Modify: `docs/architecture/04-cli.md` (`musterd host` provisioning; `musterd agent` for sponsors)
 - Modify: `docs/design/security.md` (trust-domain paragraph: a sponsored agent shares its sponsor's account; containers are the opt-in next increment)
-- Modify: `docs/demo.md` §7 (the "agents run in worktrees as the host user" line → points at ADR NNN; the demo is done, mark §7 historical)
+- Modify: `docs/demo.md` §7 (the "agents run in worktrees as the host user" line → points at ADR 463; the demo is done, mark §7 historical)
 - Modify: `ROADMAP.md` via `content/roadmap.data.ts` + `pnpm roadmap:gen` (add: container isolation on the sponsor's machine; team-shared hosts; Cloud runtime)
 - Modify: `SPEC.md` Appendix A if any new wire route belongs there (host provisions are daemon-local HTTP, not envelope acts — likely no change; confirm)
-- Modify: `docs/implementation-plan.md` (status line: sponsor-hosted agents landed, ADR NNN)
+- Modify: `docs/implementation-plan.md` (status line: sponsor-hosted agents landed, ADR 463)
 
-- [ ] **Step 1:** make each edit; **Step 2:** `pnpm format:check` (runs `arch-trees:check`, `roadmap:check`, `vocab:check`, `change-adr:check`); **Step 3:** commit `docs: sponsor-hosted agents — architecture, security, roadmap` / `Refs ADR-NNN`; **Step 4:** after merge, `lane_submit` lane 01M3FBKS39 with `{pr, sha, authorized_by:'nick'}` and follow its reply. Amend ADR NNN `## Consequences` with a dated "landed" note listing the five PRs.
+- [ ] **Step 1:** make each edit; **Step 2:** `pnpm format:check` (runs `arch-trees:check`, `roadmap:check`, `vocab:check`, `change-adr:check`); **Step 3:** commit `docs: sponsor-hosted agents — architecture, security, roadmap` / `Refs ADR-463`; **Step 4:** after merge, `lane_submit` lane 01M3FBKS39 with `{pr, sha, authorized_by:'nick'}` and follow its reply. Amend ADR 463 `## Consequences` with a dated "landed" note listing the five PRs.
 
 ---
 

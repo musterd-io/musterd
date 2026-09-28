@@ -3,7 +3,7 @@
 - Date: 2026-09-28
 - Author: stanley (lane `01M3FBKS3987E8FDXC4WQ8FY6C`, re-scoped from "auto-wake, demo stopgap")
 - Goal: `seat-continuity` (a seat picks up where it left off — on any harness, model, or surface)
-- Status: draft for nick's review; the accepted design becomes ADR 462 (supersedes the unmerged ADR 460)
+- Status: accepted as ADR 463 (supersedes the unmerged ADR 460)
 
 ## 1. Why now
 
@@ -185,7 +185,7 @@ Nothing new runs as anyone but the sponsor, on any machine but the sponsor's. No
 - Wider remote tool set and model attestation for OAuth agents (ADR 452 deferred list).
 - ADR 446 increment 3, ADR 459 (except the sweeper hook in §4.4.4), an ADR for #1767.
 
-## 9. What ADR 462 will say
+## 9. What ADR 463 will say
 
 Supersedes ADR 460 (never merged). Decision = §3 + §4. Rejected: presenter-hosted (460), one OS user for all
 agents, harness settings as the boundary, opening host routes on the public hostname. Eval = Scenario D's
