@@ -58,6 +58,7 @@ src/
     seeds.ts          // shared Seed persistence + authorized lifecycle transitions; atomic retry-safe promotion to one ordinary Lane (ADR 291/311); captureRepoSeed — a document-recorded intention as a Seed, idempotent on ref, lane_id links (ADR 373 inc 2)
     teamMemory.ts     // team-memory retrieval: searchInsights over the insights_fts fold + rebuildInsightsFts (the cache property) (ADR 327)
     audit.ts          // append-only governance audit log: appendAudit/listAudit (+ authorized_by filter, ADR 071/127)
+    sponsoredCascade.ts // ADR 463 §4.2/§4.4: revokeSponsoredDescendants — one cascade for every loss of a sponsor's standing (remove route, expiry sweep): disable each descendant and revoke its residency + standing grant, OAuth chains + unexchanged codes, and presence, one `member.revoked_cascade` row each naming root and trigger; revokeExpiredMember — the sweep's half (own residency, then cascade)
     sponsoredAgents.ts // member-created agents (ADR 449 §3–4): createSponsoredAgent (human-only, can_create_agents switch — ADR 459 §1, sponsor's expiry inherited, per-team cap via policy default 3, removed names refused) + the hashed single-use 15-min agent connect nonce (issue/redeem); `connectRefusal` — who may issue a connect link under the team's `agent_connect` policy (ADR 456 §2); redeem returns the issuer and refuses one who lost standing (§3)
     signinHandoff.ts  // sign-in handoff relay: stageHandoff/redeemHandoff — memory-only, single-use 60s nonces so `musterd board` hands the browser a handle, never a credential (ADR 170)
     gateAsk.ts        // Gate B (ADR 150) ask-lifecycle reads: findGateAsk (fingerprint dedup — one ask per re-attempted costly action) + gateAskHumanAnswer (human-only accept/decline release); pure reads over the ADR 147 ask-stream log
@@ -114,7 +115,7 @@ src/
     claim.ts          // federation 3c (ADR 355): the hub-authoritative claim. arbitrateClaim runs ON THE HUB — seat resolved, lane folded, ADR 203 live-incumbent rule against the hub's presence, then the guarded updateLane, writing lane.claimed with `node` (the seat→node residence binding); claimAtHub runs ON A JOINER and never writes — the row converges from the fold. ClaimRefusedError carries holder/state; HubUnreachableError is its own code, never a provisional claim
   projection/
     load.ts           // read .musterd/team.toml + seats/*.toml -> TeamSpec; fail-closed per seat (ADR 058)
-    reconcile.ts      // match-by-name delta: ADD/UPDATE/REVIVE/REMOVE the projection from the files
+    reconcile.ts      // match-by-name delta: ADD/UPDATE/REVIVE/REMOVE the projection from the files; refuses (`conflict`, prior projection kept) a team that still holds sponsored agents (ADR 463 §4.2)
     serialize.ts      // db projection -> file structures (guard-1 round-trip + `team export`)
     watcher.ts        // debounced fs.watch over each roster root -> full reconcile (ADR 058)
   telemetry.ts        // minimal OpenTelemetry, off unless an OTLP endpoint is set (ADR 015)

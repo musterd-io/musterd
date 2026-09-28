@@ -543,6 +543,8 @@ export const WakeOrderSchema = z
     derivation: WakeDerivationSchema.optional(),
     /** Lane id on a work-order wake (ADR 179 injection bar — id only, never a title). */
     lane_id: z.string().optional(),
+    /** ADR 463 §2: the one-time first wake of a freshly provisioned seat. */
+    reason: z.enum(['provisioned']).optional(),
   })
   .superRefine((o, ctx) => {
     const boardContinuation =

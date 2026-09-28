@@ -7,6 +7,7 @@ import { teamSpecForSlug } from '../projection/reconcile.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { appendAudit } from '../store/audit.js';
 import { getMemberByName } from '../store/members.js';
+import { getResidency } from '../store/residency.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import {
   connectRefusal,
@@ -77,11 +78,13 @@ export function issueAgentConnect(
   origin: string,
 ): { member: string; connect_url: string; connect_expires_at: number } {
   const agent = getMemberByName(ctx.db, team.id, agentName);
+  const hosted = agent ? (getResidency(ctx.db, team.id, agent.id)?.host ?? null) : null;
   const refusal = connectRefusal(
     caller,
     agent,
     getPolicy(ctx.db, team.id).agent_connect,
     team.slug,
+    { hosted },
   );
   if (refusal) throw refusal;
   const { nonce, expires_at } = issueAgentConnectNonce(ctx.db, team.id, agent!.id, caller.id);

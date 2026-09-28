@@ -5,6 +5,7 @@ import {
   containsMusterdCredential,
   PolicyOverrideSchema,
   PolicySchema,
+  sparsifyPolicy,
 } from './credentials.js';
 
 describe('bootstrap retirement credentials (ADR 350)', () => {
@@ -75,5 +76,32 @@ describe('PolicySchema.agent_connect (ADR 456 §2)', () => {
     expect(PolicyOverrideSchema.parse({ agent_connect: 'any_member' }).agent_connect).toBe(
       'any_member',
     );
+  });
+});
+
+describe('PolicySchema.agent_host / invite_requires_expiry (ADR 463)', () => {
+  it('defaults: max_per_host 5, empty policy, invites need no expiry', () => {
+    const p = PolicySchema.parse({});
+    expect(p.agent_host).toEqual({ max_per_host: 5, policy: {} });
+    expect(p.invite_requires_expiry).toBe(false);
+  });
+  it('bounds max_per_host to 1..100 and keeps budget_usd optional at the schema (required at claim, not here)', () => {
+    expect(PolicySchema.safeParse({ agent_host: { max_per_host: 0 } }).success).toBe(false);
+    expect(PolicySchema.safeParse({ agent_host: { max_per_host: 101 } }).success).toBe(false);
+    expect(
+      PolicySchema.parse({ agent_host: { policy: { budget_usd: 2 } } }).agent_host.policy
+        .budget_usd,
+    ).toBe(2);
+  });
+  it('PolicyOverrideSchema keeps agent_host sparse', () => {
+    expect(PolicyOverrideSchema.parse({ agent_host: { max_per_host: 2 } })).toEqual({
+      agent_host: { max_per_host: 2 },
+    });
+  });
+  it('sparsifyPolicy drops a dense agent_host that equals the defaults, keeps a chosen budget', () => {
+    expect(sparsifyPolicy({ agent_host: { max_per_host: 5, policy: {} } })).toEqual({});
+    expect(sparsifyPolicy({ agent_host: { max_per_host: 5, policy: { budget_usd: 3 } } })).toEqual({
+      agent_host: { policy: { budget_usd: 3 } },
+    });
   });
 });

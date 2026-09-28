@@ -308,7 +308,8 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
  * [--review-loop on|off] [--dispatch-loop on|off] [--sweep-loop on|off]
  * [--ask-slack-webhook <url|off>] [--stakes-default <surface>=<low|normal|high>|off]
  * [--guardian-tier <class>=<observe|alert|auto>|off] [--trace-content on|off]
- * [--agent-connect sponsor|any_member] [--sponsored-agent-cap <1–100>]` — show or set the
+ * [--agent-connect sponsor|any_member] [--invite-requires-expiry on|off]
+ * [--sponsored-agent-cap <1–100>]` — show or set the
  * team governance policy (admin-only, audited `policy.change`). ADR 146: `--reseat-known-agents on`
  * opts the team into dogfood-mode re-seat — an already-held agent seat re-occupies without an admin
  * decision. ADR 147: `--ask-fallback-to-nonadmin on` lets an admin-unanswered ask fall back to
@@ -324,7 +325,8 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
  * `--trace-content on` keeps what each seat's hooks saw (credential-scrubbed) in trace.db's content
  * column; structural rows are recorded either way. ADR 456 §2: `--agent-connect any_member` lets
  * any teammate issue a member-created agent's connect link (team agents); `sponsor` (the default)
- * keeps it to the sponsor or an admin. ADR 459 (on ADR 449 §3): `--sponsored-agent-cap <n>`
+ * keeps it to the sponsor or an admin; the daemon accepts `any_member` only with
+ * `--invite-requires-expiry on` (ADR 463 §4.3), so both may ride one call. ADR 459 (on ADR 449 §3): `--sponsored-agent-cap <n>`
  * tunes live member-created agents per sponsor (default 3). Reads → merges the named
  * knob(s) → POSTs the policy (the residency-policy read-merge-write pattern), so setting one knob
  * never clobbers the wake-policy defaults.
@@ -437,6 +439,13 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
     merged.agent_connect = agentConnect;
     changed = true;
   }
+  // ADR 463 §4.3: every invite must carry member_until. `any_member` is accepted only with this on,
+  // in the same write — so the two flags compose in one call.
+  const inviteExpiry = onOff(parsed.flags['invite-requires-expiry'], '--invite-requires-expiry');
+  if (inviteExpiry !== undefined) {
+    merged.invite_requires_expiry = inviteExpiry;
+    changed = true;
+  }
   // ADR 459 (on ADR 449 §3): live member-created agents per sponsor. Default 3 (the shipped
   // constant); the daemon's schema caps it at 100, validated here too so a typo fails fast.
   const agentCap = flagStr(parsed.flags, 'sponsored-agent-cap');
@@ -534,6 +543,14 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
             : "agent connect: sponsor — only an agent's sponsor or an admin can start it (ADR 456)",
         ) + '\n',
       );
+    if (inviteExpiry !== undefined)
+      process.stdout.write(
+        hint(
+          updated.invite_requires_expiry
+            ? 'invite requires expiry: on — every invite must set member_until (ADR 463 §4.3)'
+            : 'invite requires expiry: off — invites may be open-ended',
+        ) + '\n',
+      );
     if (agentCap !== undefined)
       process.stdout.write(
         hint(
@@ -624,6 +641,9 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
   );
   process.stdout.write(
     `  agent connect: ${current.agent_connect === 'any_member' ? theme.accent('any member') : 'sponsor'}${inherited(stored, 'agent_connect')}\n`,
+  );
+  process.stdout.write(
+    `  invite requires expiry: ${current.invite_requires_expiry ? theme.accent('on') : 'off'}${inherited(stored, 'invite_requires_expiry')}\n`,
   );
   process.stdout.write(
     `  sponsored agent cap: ${current.sponsored_agent_cap} per sponsor${inherited(stored, 'sponsored_agent_cap')}\n`,
@@ -1624,6 +1644,8 @@ export interface RosterMember {
   lifecycle_until?: number | null;
   /** The seat's EFFECTIVE capabilities. Admin-visible only, and load-bearing — see below. */
   capabilities?: Capabilities | undefined;
+  /** ADR 449 §3: the member who created this agent, if any. A seat file cannot carry it. */
+  sponsored_by?: string | null | undefined;
 }
 
 /**
@@ -1669,6 +1691,19 @@ export function rosterToFiles(
   slug: string,
   members: RosterMember[],
 ): { teamToml: string; seatFiles: Record<string, string> } {
+  // ADR 463 §4.2: a seat file cannot carry `sponsored_by`, and on a file-backed team reconcile is the
+  // account-status writer — so after a cutover, disabling a sponsor would reach none of its agents
+  // (and each agent's own file would re-enable it). The daemon refuses that projection; say so here,
+  // before any file is written, with the way out.
+  const sponsored = members.filter((m) => m.sponsored_by);
+  if (sponsored.length > 0) {
+    throw new CliError(
+      `"${slug}" still holds sponsored agents (${sponsored.map((m) => m.name).join(', ')}) — seat ` +
+        'files cannot carry sponsorship, so the roster must stay in the daemon. Remove them first ' +
+        '(`musterd team remove <name>`), then export again. (ADR 463 §4.2)',
+      1,
+    );
+  }
   const team: TeamFile = { slug, lifecycle: 'forever' };
   const seatFiles: Record<string, string> = {};
   for (const m of members) {
@@ -1774,6 +1809,7 @@ async function teamExport(parsed: Parsed): Promise<number> {
       // Admin-visible only; when the roster does not carry them the seat file simply omits them and
       // reconcile keeps rebuilding from the role, exactly as before this change.
       capabilities: m.capabilities,
+      sponsored_by: m.sponsored_by ?? null,
     })),
   );
 

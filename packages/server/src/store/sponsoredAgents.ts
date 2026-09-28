@@ -82,6 +82,7 @@ export function connectRefusal(
   agent: MemberRow | undefined,
   policy: 'sponsor' | 'any_member',
   teamSlug: string,
+  opts: { hosted?: string | null } = {},
 ): MusterdError | null {
   if (caller.kind !== 'human' || caller.observer === 1)
     return new MusterdError('forbidden', 'only a human member can connect an agent (ADR 456 §2)');
@@ -98,6 +99,13 @@ export function connectRefusal(
     return new MusterdError(
       'not_found',
       `no connectable agent by that name in ${teamSlug} — only live member-created agents connect over OAuth`,
+    );
+  // ADR 463 §4.1: a hosted agent is never OAuth-connectable, by anyone, under either policy — the
+  // link and the host would occupy one seat, and `any_member` would make every member a way in.
+  if (opts.hosted)
+    return new MusterdError(
+      'conflict',
+      `"${agent.name}" is hosted on ${opts.hosted} — it runs there, not over a connect link; unenroll it first (musterd residency off)`,
     );
   if (policy === 'any_member') return null;
   if (agent.sponsored_by === caller.id || resolveCapabilities(caller).is_admin) return null;
@@ -207,6 +215,16 @@ export function redeemAgentConnectNonce(
     if (!member) return null;
     const s = resolveAccountStatus(member);
     if (s === 'disabled' || s === 'banned' || s === 'archived') return null;
+    // ADR 463 §4.1: a link issued before the agent was hosted redeems nothing once it is.
+    if (
+      db
+        .prepare<
+          [string, string],
+          { one: number }
+        >('SELECT 1 AS one FROM residency WHERE team_id = ? AND member_id = ?')
+        .get(teamId, member.id)
+    )
+      return null;
     // ADR 456 §3: the issuer bounds the session, so an issuer who has since lost standing redeems
     // nothing — the chain would be dead on its first use anyway.
     const issuedBy = db

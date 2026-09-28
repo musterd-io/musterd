@@ -588,9 +588,14 @@ export function applyPolicyChange(
   teamId: string,
   actor: string,
   policy: z.input<typeof PolicyOverrideSchema>,
+  opts: { enforce?: boolean } = {},
 ): { policy: Policy; stored: PolicyOverride } {
   return db.transaction(() => {
     const stored = PolicyOverrideSchema.parse(policy);
+    if (opts.enforce !== false) {
+      const refusal = policyPairRefusal(db, teamId, PolicySchema.parse(stored));
+      if (refusal) throw refusal;
+    }
     const effective = setPolicy(db, teamId, stored);
     appendReplicatedEvent(db, teamId, {
       actor,
@@ -601,6 +606,47 @@ export function applyPolicyChange(
     });
     return { policy: effective, stored };
   })();
+}
+
+/**
+ * ADR 463 §4.1: one live sponsored agent enrolled in residency, if any — the fact that makes
+ * `agent_connect: 'any_member'` unsafe on this team. Null when no sponsored agent is hosted.
+ */
+function anyHostedSponsoredAgent(
+  db: Database,
+  teamId: string,
+): { agent: string; host: string } | null {
+  return (
+    db
+      .prepare<[string], { agent: string; host: string }>(
+        `SELECT m.name AS agent, r.host AS host FROM residency r JOIN members m ON m.id = r.member_id
+          WHERE r.team_id = ? AND m.sponsored_by IS NOT NULL AND m.left_at IS NULL
+          ORDER BY m.name LIMIT 1`,
+      )
+      .get(teamId) ?? null
+  );
+}
+
+/**
+ * ADR 463 §4.3 / §4.1: `agent_connect: 'any_member'` lets any human issue a takeover link, so it is
+ * accepted only with `invite_requires_expiry` (every invited member expires) and only while no
+ * sponsored agent is hosted (a hosted agent runs on its sponsor's machine and must not be
+ * connectable). Checked on the hub's write path; a fold or restatement never refuses.
+ */
+function policyPairRefusal(db: Database, teamId: string, effective: Policy): MusterdError | null {
+  if (effective.agent_connect !== 'any_member') return null;
+  if (!effective.invite_requires_expiry)
+    return new MusterdError(
+      'validation',
+      "agent_connect 'any_member' requires invite_requires_expiry: true — set both in one write (ADR 463 §4.3)",
+    );
+  const hosted = anyHostedSponsoredAgent(db, teamId);
+  if (hosted)
+    return new MusterdError(
+      'conflict',
+      `agent_connect 'any_member' is refused while a sponsored agent is hosted ("${hosted.agent}" on ${hosted.host}) — ADR 463 §4.1`,
+    );
+  return null;
 }
 
 /**
@@ -626,7 +672,9 @@ export function restateUnstampedPolicy(db: Database, teamId: string): boolean {
   if (stamped) return false;
   const stored = getStoredPolicy(db, teamId);
   if (Object.keys(stored).length === 0) return false;
-  applyPolicyChange(db, teamId, policyRestateActor(db, teamId), stored);
+  // A restatement repeats what the hub already holds — never refuse it (ADR 463 §4.3's pair rule
+  // guards new choices, and a team stored before the rule existed must still converge).
+  applyPolicyChange(db, teamId, policyRestateActor(db, teamId), stored, { enforce: false });
   return true;
 }
 
