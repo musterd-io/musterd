@@ -60,6 +60,18 @@ ADR 284 removed the asymmetry rather than documenting around it: both modes are 
 
 The old workaround — `pnpm exec prettier --write <files>` on your own files only — is no longer necessary, and stays safe if you prefer it.
 
+## `gh pr edit --body` fails on this repo — PATCH the REST endpoint instead
+
+`gh pr edit <n> --body …` / `--body-file …` exits 1 and writes nothing (2026-09-28, gh 2.71.0, PR #1792 — body length stayed 114 after two edits; falsify: run `gh pr edit` on any open PR and watch `gh pr view --json body -q '.body|length'` change). <!-- claim: defect -->
+
+Its stderr names `repository.pullRequest.projectCards` and the Projects (classic) deprecation. The command pre-fetches the PR's classic project cards before mutating, and that field errors on this repo, so the mutation is skipped. `gh pr ready` and `gh pr merge` are unaffected — but a `&&`-chain that puts `pr edit` before `pr merge --auto` drops the auto-merge arm silently. The `--title` flag is on the same code path, so assume it fails too. Works instead:
+
+```bash
+gh api -X PATCH repos/SandRiseStudio/musterd/pulls/<n> -F body=@/path/to/body.md   # -f title='…' likewise
+```
+
+Or write the body once at `gh pr create --body-file` and never edit it. Falsify the trap itself: a newer `gh` (or GitHub removing the `projectCards` field) makes `gh pr edit` exit 0 — invalidate-date this section when that happens.
+
 ## Ordering landmine
 
 Same-millisecond `ts` collisions are real; any new ts-only ordering or dedup is nondeterministic. Always order by `(ts, id)`.
