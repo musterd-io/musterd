@@ -411,6 +411,7 @@ import {
 import { handleMcpRoute } from './mcpHttp.js';
 import { broadcastMemberAdded } from './memberAdded.js';
 import { checkRateLimit, handleOAuthRoutes } from './oauth.js';
+import { assertSponsorCaller, assertSponsorOf } from './authSponsor.js';
 import { issueAgentConnect, mintSponsoredAgent, originFrom } from './sponsoredAgentMint.js';
 
 /**
@@ -1397,6 +1398,44 @@ function authAdmin(
   if (!resolveCapabilities(auth.member).is_admin)
     throw new MusterdError('forbidden', 'this resource is admin-only (visibility_level: admin)');
   return auth;
+}
+
+/**
+ * ADR 463 §1: an admin, or the sponsor of `agentName` acting only for that agent. Strict like
+ * {@link authAdmin} (no empty-admin fallback). `sponsorScoped` rides into the audit `detail`.
+ */
+function authAdminOrSponsorOf(
+  ctx: Ctx,
+  slug: string,
+  req: IncomingMessage,
+  agentName: string,
+): { team: TeamRow; member: MemberRow; sponsorScoped: boolean } {
+  const { team, member } = authMember(
+    ctx.db,
+    slug,
+    bearer(req),
+    actingSeat(req),
+    agentSessionLease(req),
+  );
+  if (resolveCapabilities(member).is_admin) return { team, member, sponsorScoped: false };
+  assertSponsorOf(ctx.db, team, member, agentName);
+  return { team, member, sponsorScoped: true };
+}
+
+/** {@link authGovernance}, widened by ADR 463 §1 to the sponsor of `agentName`. */
+function authGovernanceOrSponsorOf(
+  ctx: Ctx,
+  slug: string,
+  req: IncomingMessage,
+  agentName: string,
+): { team: TeamRow; member: MemberRow; viaFallback: boolean; sponsorScoped: boolean } {
+  const { team, member } = authTouch(ctx, slug, req);
+  if (resolveCapabilities(member).is_admin)
+    return { team, member, viaFallback: false, sponsorScoped: false };
+  if (!teamHasAdmin(ctx.db, team.id))
+    return { team, member, viaFallback: true, sponsorScoped: false };
+  assertSponsorOf(ctx.db, team, member, agentName);
+  return { team, member, viaFallback: false, sponsorScoped: true };
 }
 
 /**
@@ -2616,8 +2655,12 @@ export async function handleHttp(
       }
 
       if (method === 'POST' && rest === '/grants') {
-        const { team, member } = authAdmin(ctx, slug, req);
         const body = parseOrBadRequest(IssueGrantSchema, await readJson(req));
+        // ADR 463 §1: a sponsor may issue a SEAT grant for an agent they sponsor; all else is admin.
+        const { team, member, sponsorScoped } =
+          body.scope === 'seat'
+            ? authAdminOrSponsorOf(ctx, slug, req, body.target)
+            : { ...authAdmin(ctx, slug, req), sponsorScoped: false };
         const mint = issueGrant(ctx.db, team.id, body, member.name);
         appendAudit(ctx.db, team.id, {
           actor: member.name,
@@ -2629,6 +2672,7 @@ export async function handleHttp(
             lifetime: body.lifetime,
             grant_id: mint.grant.id,
             authorized_by: member.name,
+            sponsor_scoped: sponsorScoped,
           },
         });
         return sendJson(res, 201, mint);
@@ -2706,8 +2750,12 @@ export async function handleHttp(
       });
 
       if (method === 'POST' && rest === '/agent-bootstrap-credentials') {
-        const { team, member } = authAdmin(ctx, slug, req);
         const body = parseOrBadRequest(BootstrapCredentialBody, await readJson(req));
+        // ADR 463 §1: a sponsor may mint a `claim_seat` credential for an agent they sponsor.
+        const { team, member, sponsorScoped } =
+          body.use === 'claim_seat'
+            ? authAdminOrSponsorOf(ctx, slug, req, body.target)
+            : { ...authAdmin(ctx, slug, req), sponsorScoped: false };
         if (body.use === 'claim_seat' && !getMemberByName(ctx.db, team.id, body.target)) {
           throw new MusterdError('not_found', `no seat "${body.target}" in team "${slug}"`);
         }
@@ -2735,7 +2783,7 @@ export async function handleHttp(
           action: 'bootstrap_credential.minted',
           target: minted.credential.id,
           result: 'allow',
-          detail: { use: body.use, target: body.target },
+          detail: { use: body.use, target: body.target, sponsor_scoped: sponsorScoped },
         });
         for (const predecessorId of minted.rotated) {
           appendAudit(ctx.db, team.id, {
@@ -3147,8 +3195,13 @@ export async function handleHttp(
       // seat's `binding.grant`, so woken sessions occupy via the seat's own credential and the
       // daemon never holds it.
       if (method === 'POST' && rest === '/residency/enroll') {
-        const { team, member: authorizer, viaFallback } = authGovernance(ctx, slug, req);
         const body = parseOrBadRequest(EnrollResidencyBodySchema, await readJson(req));
+        const {
+          team,
+          member: authorizer,
+          viaFallback,
+          sponsorScoped,
+        } = authGovernanceOrSponsorOf(ctx, slug, req, body.seat);
         const target = getMemberByName(ctx.db, team.id, body.seat);
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no seat "${body.seat}" in team "${slug}"`);
@@ -3202,6 +3255,7 @@ export async function handleHttp(
             ...(body.policy !== undefined ? { policy: body.policy } : {}),
             ...(previous ? { previous_host: previous.host } : {}),
             ...(viaFallback ? { fallback: 'no-admin' } : {}),
+            sponsor_scoped: sponsorScoped,
           },
         });
         appendAudit(ctx.db, team.id, {
@@ -3215,6 +3269,7 @@ export async function handleHttp(
             grant_id: mint.grant.id,
             via: 'residency.enroll',
             authorized_by: authorizer.name,
+            sponsor_scoped: sponsorScoped,
           },
         });
         // Grant-rotation trap (dogfood 2026-07-13): a re-enroll revokes the previous standing
@@ -3247,10 +3302,20 @@ export async function handleHttp(
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no seat "${body.seat}" in team "${slug}"`);
         const selfRevoke = member.id === target.id;
-        if (!selfRevoke && !resolveCapabilities(member).is_admin && teamHasAdmin(ctx.db, team.id))
+        // ADR 463 §1: the agent's sponsor may revoke too — the kill switch belongs to whoever
+        // is accountable for the seat.
+        const sponsorRevoke =
+          !selfRevoke && target.kind === 'agent' && target.sponsored_by === member.id;
+        if (sponsorRevoke) assertSponsorCaller(member);
+        if (
+          !selfRevoke &&
+          !sponsorRevoke &&
+          !resolveCapabilities(member).is_admin &&
+          teamHasAdmin(ctx.db, team.id)
+        )
           throw new MusterdError(
             'forbidden',
-            `revoking another seat's residency requires an admin seat (is_admin)`,
+            `revoking another seat's residency requires an admin seat (is_admin) or its sponsor`,
           );
         const removed = revokeResidency(ctx.db, team.id, target.id);
         if (!removed)
@@ -3265,6 +3330,7 @@ export async function handleHttp(
             host: removed.host,
             ...(removed.grant_id ? { grant_id: removed.grant_id } : {}),
             authorized_by: member.name,
+            ...(sponsorRevoke ? { sponsor_scoped: true } : {}),
           },
         });
         return sendJson(res, 200, { ok: true });
