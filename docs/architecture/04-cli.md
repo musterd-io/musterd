@@ -151,7 +151,7 @@ src/
       grok.ts         // detect/configure via project-local .grok/config.toml + hooks in .grok/hooks/musterd.json (inbox --waiting, PreToolUse interrupt additionalContext + Stop continuation (ADR 370), gate, capture, end); inspectGrokHookDrift compares command text + FEATURE_EPOCH two-way (ADR 168); statusline, permission floor; Cursor hook compat off (ADR 352)
       codexHooks.ts   // reversible .codex/hooks.json renderer: marker-owned SessionStart/SessionEnd/PostToolUse + UserPromptSubmit orient-nudge; exact event/type/command + FEATURE_EPOCH two-way drift detection, including the git-common-dir copy (ADR 249/333/397)
       codexToml.ts    // TOML read/merge helper for the Codex adapter — [mcp_servers.*] and [plugins.*] tables only (ADR 031/323)
-  archaeology/        // cookoff wasted-work reference collector — git-only, no daemon (ADR 122/123)
+  archaeology/        // wasted-work collector (ADR 123 predicates): cookoff `all` population, or live-repo `pulls` = main + PR heads, per PR (ADR 462)
     engine.ts         // pure predicate-set-v1 classifier: W3 dup → W1 abandoned → W2 clobbered → W4 churn
     git.ts            // RepoFacts extractor over git plumbing; actor identity = ADR 109 attribution
   commands/
@@ -203,7 +203,7 @@ src/
     report.ts         // the insight report at ic/team/exec altitudes: flow, coordination, steering (ADR 050/084/125), waiting-on, Goal board; `report trace [--days N]` (ADR 445 increment 4): coverage, tool mix, cost per lane over structural trace columns, scoped by the daemon
     board.ts          // musterd board: open /board signed in as yourself — stages a one-shot 60s nonce with the daemon and opens it in the fragment, so no human ever handles a credential (ADR 170)
     live.ts           // musterd live: the same one-shot relay pointed at /live, so the office a human actually leaves open is one they can answer asks from (ADR 222)
-    archaeology.ts    // musterd archaeology --start <sha>: wasted-work % from git alone (ADR 123 predicate set v1)
+    archaeology.ts    // musterd archaeology --start <sha> | --lane <id> [--by-lane]: wasted-work % from git, per lane by PR number (ADR 123 v1, ADR 462)
     unbind.ts         // release this folder's own seat — clears bound_at + presence, keeps it declared (ADR 058)
     reload.ts         // SIGHUP the service daemon to re-resolve roster roots + reconcile (ADR 058)
     reclaim.ts        // operator force-drop of a member's stuck live session (ADR 017 follow-up)

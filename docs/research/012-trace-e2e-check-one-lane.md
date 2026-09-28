@@ -85,3 +85,8 @@ Grok, cursor-agent and opencode are unmeasured (lanes 01M3MG7Q65, 01M3MGQ6M1, 01
 
 **Reproduce.** The comparison is the method above. The script used is not committed, because the
 transcript side reads a machine-local Claude Code jsonl.
+
+**Follow-up (2026-09-28, [ADR 462](../decisions/462-lane-wasted-work-from-git.md)).** Wasted work is
+now measured per lane from git. Increment 4b reads 439 authored lines and 0 wasted:
+`musterd archaeology --lane 01M3FEB12R --delivered origin/main`. The team-wide rate over the same
+window is 0.9% (37 of 4,214 lines), with 4 open PRs left out as in flight.

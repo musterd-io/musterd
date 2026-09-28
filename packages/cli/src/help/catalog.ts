@@ -693,16 +693,22 @@ export const CATALOG: readonly CommandEntry[] = [
   },
   {
     name: 'archaeology',
-    signature: '--start <sha> [--delivered <ref>] [--repo <path>] [--exclude <glob>,…] [--json]',
-    summary: 'wasted-work % from git alone — the cookoff reference collector',
+    signature:
+      '(--start <sha> | --lane <id>) [--delivered <ref>] [--population all|pulls] [--by-lane] [--repo <path>] [--exclude <glob>,…] [--json]',
+    summary: 'wasted-work % from git — per lane on a live repo, or a cookoff run',
     group: 'insight',
     primary: false,
     detail:
       'Classifies every authored line after the kickoff commit per wasted-work predicate set v1 ' +
       '(ADR 123): W3 duplicated → W1 abandoned → W2 clobbered → W4 conflict churn. Needs only git — ' +
       'no daemon; actor identity comes from git attribution (ADR 109 seat identities / Co-authored-by ' +
-      'trailers). Runs on any repo.',
-    examples: ['musterd archaeology --start a1b2c3d --delivered main --json'],
+      'trailers). Runs on any repo. On a live repo (ADR 462), `--population pulls` reads main plus the ' +
+      'remote’s PR heads instead of every local ref, leaves open PRs out as in flight, and `--by-lane` / ' +
+      '`--lane <id>` join each PR to the lane whose merge attestation names it.',
+    examples: [
+      'musterd archaeology --start a1b2c3d --delivered main --json',
+      'musterd archaeology --lane 01M3FEB12R --delivered origin/main',
+    ],
   },
   {
     name: 'status',

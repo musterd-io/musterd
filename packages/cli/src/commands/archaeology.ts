@@ -127,7 +127,10 @@ export async function archaeologyCommand(
       lane = lanes.find((l) => l.id === laneId || l.id.startsWith(laneId));
       if (!lane) throw new CliError(`no lane ${laneId} on ${team}`, 1);
       if (lane.merged?.pr == null) {
-        throw new CliError(`lane ${lane.id} has no merge attestation naming a PR — nothing to measure`, 1);
+        throw new CliError(
+          `lane ${lane.id} has no merge attestation naming a PR — nothing to measure`,
+          1,
+        );
       }
     }
   }
@@ -136,11 +139,10 @@ export async function archaeologyCommand(
   if (!start && lane?.claimed_at != null) {
     // The lane's window opens at its claim: the delivered tip as it stood then.
     const before = Math.floor(lane.claimed_at / 1000);
-    start = execFileSync(
-      'git',
-      ['rev-list', '-1', `--before=${before}`, delivered ?? 'HEAD'],
-      { cwd: repo, encoding: 'utf8' },
-    ).trim();
+    start = execFileSync('git', ['rev-list', '-1', `--before=${before}`, delivered ?? 'HEAD'], {
+      cwd: repo,
+      encoding: 'utf8',
+    }).trim();
   }
   if (!start) throw new CliError(`--start <sha> (the kickoff commit) is required\n${USAGE}`, 2);
   const excludeRaw = flagStr(parsed.flags, 'exclude');

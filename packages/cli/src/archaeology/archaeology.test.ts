@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { wasteByLane } from '../commands/archaeology.js';
 import {
   classify,
   dupMatch,
@@ -11,7 +12,6 @@ import {
   type CommitFacts,
   type RepoFacts,
 } from './engine.js';
-import { wasteByLane } from '../commands/archaeology.js';
 import {
   extractFacts,
   globToRegExp,

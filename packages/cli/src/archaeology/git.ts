@@ -201,7 +201,11 @@ export function extractFacts(opts: ExtractOptions): RepoFacts {
       Number(git(['show', '-s', '--format=%ct', start], repo).trim()) * 1000,
     ).toISOString();
     const inWindow = new Set(
-      git(['rev-list', '--stdin', '--no-walk', `--since=${since}`], repo, heads.map((h) => h.sha).join('\n') + '\n')
+      git(
+        ['rev-list', '--stdin', '--no-walk', `--since=${since}`],
+        repo,
+        heads.map((h) => h.sha).join('\n') + '\n',
+      )
         .split('\n')
         .filter(Boolean),
     );
@@ -317,7 +321,12 @@ export function extractFacts(opts: ExtractOptions): RepoFacts {
     return v;
   };
 
-  return { commits, deletions, isAncestor, ...(opts.population === 'pulls' ? { inFlightPrs } : {}) };
+  return {
+    commits,
+    deletions,
+    isAncestor,
+    ...(opts.population === 'pulls' ? { inFlightPrs } : {}),
+  };
 }
 
 /** Collapse sorted line numbers into inclusive [from,to] ranges for batched blame calls. */
