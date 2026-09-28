@@ -71,6 +71,9 @@ quiets the orient nudge.
   why it did not.
 - `label-nudge` no longer asks Apple Terminal (and the other named emulators) to run
   `musterd-label-sessions`. Desktop and unknown drivers keep the evidence-based due check.
+- 2026-09-28 (ADR 465): the peer-sweep branch of Decision 1 was retired by ADR 442; the tool-list
+  tree is now `set_session_title` (Desktop, `session_id: "self"` only) → `rename_chat` (Cursor) →
+  skip silently. The skip's stated reason ("the host labels seat sessions") was wrong and is gone.
 - ADR 186's harness capability table remains the provision map (`sessionsSkillPath` /
   `selfLabelSkillPath`). This ADR is the runtime gate the shared files could not express.
 

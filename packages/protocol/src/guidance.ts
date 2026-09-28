@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 32;
+export const GUIDANCE_CONTENT_VERSION = 33;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -352,27 +352,31 @@ export function renderSkillBody(opts: { team: string }): string {
 }
 
 /**
- * The **self-label** skill (ADR 186) — Cursor (and any future harness with current-only rename):
- * `rename_chat` renames *only the current* chat. Since ADR 442 it is the only labeling a seat does
+ * The **self-label** skill (ADR 186) — any harness with a current-session rename: Cursor's
+ * `rename_chat` (current chat only, no session id) and Claude Code Desktop's `set_session_title`
+ * with `session_id: "self"` (ADR 465). Since ADR 442 self-rename is the only labeling a seat does
  * itself — the Claude Code peer sweep (`list_sessions` + `set_session_title` across every session on
- * the machine) reached outside the seat and was retired; the host labels seat sessions (ADR 166).
+ * the machine) reached outside the seat and was retired. Nothing else labels a seat's sidebar row:
+ * the ADR 442 note that "the host labels seat sessions (ADR 166)" pointed at a liveness ADR, not a
+ * labeler, and Desktop rows stayed unlabeled from 2026-09-24 until ADR 465 (lane 01M3MSPAMA).
  */
 export function renderSelfLabelSessionSkill(): string {
   return [
     '# Label this seat session (current chat only)',
     '',
-    'Prefix **this** chat’s title with the musterd chip and seat so a human scanning the Cursor',
-    'sidebar can tell which seat it is — `\u{1F536} Dolly (Fri 3p) - <subject>`. Only this chat:',
+    'Prefix **this** session’s title with the musterd chip and seat so a human scanning the Cursor',
+    'or Claude Code Desktop sidebar can tell which seat it is — `\u{1F536} Dolly (Fri 3p) - <subject>`. Only this session:',
     'a seat never renames another session (ADR 442). Terminal tabs are already labeled by the CLI',
     'OSC postamble whenever you shell out to `musterd`.',
     '',
     '## When to run',
     '',
-    '- At session start in a musterd seat worktree, once, if the `rename_chat` tool is available',
-    '  (Cursor built-in MCP `cursor-app-control`).',
+    '- At session start in a musterd seat worktree, once, if the `set_session_title` tool',
+    '  (Claude Code Desktop `ccd_session_mgmt`) or the `rename_chat` tool (Cursor built-in MCP',
+    '  `cursor-app-control`) is available.',
     '- When the user asks to label or rename this chat.',
-    '- Skip silently when `rename_chat` is not in your tool list — do not narrate the skip; do',
-    '  not invent a SQLite write. Terminal tabs are already OSC-labeled.',
+    '- Skip silently when neither `set_session_title` nor `rename_chat` is in your tool list —',
+    '  do not narrate the skip; do not invent a SQLite write. Terminal tabs are already OSC-labeled.',
     '',
     '## The self-label',
     '',
@@ -381,7 +385,9 @@ export function renderSelfLabelSessionSkill(): string {
     '   short subject (current title stripped of any prior chip/seat prefix, or a 3–6 word summary',
     '   of the task). Prefer `musterd session resolve-labels` shape mentally: never re-date a title',
     '   that already carries `(Fri 3p)`; never invent a wrong seat.',
-    '3. Call `rename_chat` with that exact title (current chat only — the tool has no session id).',
+    '3. Call `set_session_title {session_id: "self", title}` — `"self"` and nothing else, never an',
+    '   id from anywhere (ADR 442/465) — or `rename_chat` with that exact title (current chat',
+    '   only — the tool has no session id).',
     '4. Report one line: `labeled this session as Dolly`. If the tool is missing, say nothing',
     '   when this ran automatically.',
     '',
@@ -399,8 +405,8 @@ export function renderSelfLabelSessionSkill(): string {
 export function renderSelfLabelSessionFrontmatter(): string {
   return [
     '---',
-    'description: Label this Cursor chat with the musterd seat chip (e.g. "\u{1F536} Dolly (Fri 3p) - …"). ' +
-      'Use at session start in a musterd seat worktree when rename_chat is available, and when the ' +
+    'description: Label this chat with the musterd seat chip (e.g. "\u{1F536} Dolly (Fri 3p) - …"). ' +
+      'Use at session start in a musterd seat worktree when set_session_title or rename_chat is available, and when the ' +
       'user asks to label or rename this chat.',
     'alwaysApply: false',
     '---',
@@ -470,10 +476,11 @@ export function renderOrientSkill(): string {
     '   of step 2, never from memory alone. Do not claim unaddressed work.',
     "5. `team_send {act:'status_update'}` — one line.",
     "6. **Label from THIS session's tool list** — not from which harness you think you are on",
-    '   (ADR 418). `rename_chat` → self-label this chat with the shared grammar; a title the',
-    '   user just typed wins. Else skip silently: the host labels seat sessions (ADR 166) and',
-    '   terminal tabs are already OSC-labeled; never rename another session (ADR 442); do not',
-    '   narrate the skip; do not write Cursor `state.vscdb` or Codex SQLite.',
+    '   (ADR 418). `set_session_title` → self-label THIS session with `session_id: "self"` and',
+    '   the shared grammar (ADR 465; never any other session_id). Else `rename_chat` → self-label',
+    '   this chat the same way. A title the user just typed wins. Else skip silently: terminal',
+    '   tabs are already OSC-labeled; never rename another session (ADR 442); do not narrate the',
+    '   skip; do not write Cursor `state.vscdb` or Codex SQLite.',
     '7. Then always run `musterd session orient-stamp`. A skip does not skip the stamp — the',
     '   stamp is what quiets the orient nudge.',
     '8. When tier 1 is done, stop and wait for direction. Autonomous pickup of UNADDRESSED work',
