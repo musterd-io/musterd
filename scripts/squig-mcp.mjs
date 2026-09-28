@@ -80,6 +80,49 @@ export class LineBuffer {
   }
 }
 
+/** Squig's own file lock, `{"pid":N,"token":...}`, written by its `mcp` process. */
+export function squigLockPath(file) {
+  return `${file}.lock`;
+}
+
+/**
+ * Squig refuses to open a file whose lock names another session, even when
+ * that process died without cleaning up. Remove the lock only when its pid is
+ * gone (ESRCH). A live pid, one we may not signal (EPERM), or a lock we cannot
+ * read stays put, so Squig's own refusal still guards a running session.
+ */
+export function clearStaleSquigLock(file, deps = {}) {
+  const read = deps.read ?? ((path) => readFileSync(path, 'utf8'));
+  const unlink = deps.unlink ?? unlinkSync;
+  const kill = deps.kill ?? ((pid) => process.kill(pid, 0));
+  const lock = squigLockPath(file);
+  let text;
+  try {
+    text = read(lock);
+  } catch {
+    return 'absent';
+  }
+  let pid;
+  try {
+    pid = JSON.parse(text)?.pid;
+  } catch {
+    return 'unreadable';
+  }
+  if (!Number.isInteger(pid) || pid <= 0) return 'unreadable';
+  try {
+    kill(pid);
+    return 'live';
+  } catch (err) {
+    if (!err || err.code !== 'ESRCH') return 'live';
+  }
+  try {
+    unlink(lock);
+  } catch {
+    /* already gone */
+  }
+  return 'cleared';
+}
+
 function readSession(sessionPath) {
   try {
     const data = JSON.parse(readFileSync(sessionPath, 'utf8'));
@@ -360,6 +403,9 @@ async function main() {
   if (!tryLock(lock)) {
     await follow(sessionPath);
     return;
+  }
+  if (clearStaleSquigLock(file) === 'cleared') {
+    process.stderr.write(`squig: removed a stale lock left by a dead Squig session\n`);
   }
   becomeCompanion(checkout, file, node);
 }
