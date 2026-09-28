@@ -126,7 +126,7 @@ describe('OpenCode doorbell plugin behaviour', () => {
     writeFileSync(
       fake,
       // records cwd and args so the test can assert the probe ran in the seat folder
-      `#!/bin/sh\nprintf '%s %s\\n' "$PWD" "$*" >> "${join(dir, 'calls.log')}"\nif [ -n "$MUSTERD_FAKE_LINE" ]; then printf '%s\\n' "$MUSTERD_FAKE_LINE"; fi\n`,
+      `#!/bin/sh\nprintf '%s %s\\n' "$PWD" "$*" >> "${join(dir, 'calls.log')}"\ncase "$*" in *--hook*|*--stdin*) cat >> "${join(dir, 'stdin.log')}"; echo >> "${join(dir, 'stdin.log')}";; esac\nif [ -n "$MUSTERD_FAKE_LINE" ]; then printf '%s\\n' "$MUSTERD_FAKE_LINE"; fi\n`,
     );
     chmodSync(fake, 0o755);
     const pluginFile = join(dir, 'musterd-plugin.mjs');
@@ -193,6 +193,32 @@ describe('OpenCode doorbell plugin behaviour', () => {
       path: { id: 'ses_1' },
       body: { parts: [{ type: 'text', text: 'musterd: a huddle turn is yours', synthetic: true }] },
     });
+  });
+
+  it('taps the trace (ADR 445): the tool probe carries the call on stdin; idle records Stop', () => {
+    const dir = tmpProject();
+    run(
+      dir,
+      '',
+      `const hooks = await MusterdInterrupt({ client: {}, directory: ${JSON.stringify(dir)} });
+       await hooks['tool.execute.after']({ tool: 'bash', sessionID: 'ses_1', callID: 'call_9' }, { output: '' });
+       await hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'ses_1' } } });
+       console.log('{}');`,
+    );
+    const calls = readFileSync(join(dir, 'calls.log'), 'utf8');
+    expect(calls).toContain('inbox --interrupt-check --hook opencode');
+    expect(calls).toContain('trace hook --stdin --harness opencode --kind Stop');
+    const stdin = readFileSync(join(dir, 'stdin.log'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
+    expect(stdin).toContainEqual({
+      session_id: 'ses_1',
+      hook_event_name: 'PostToolUse',
+      tool_name: 'bash',
+      tool_use_id: 'call_9',
+    });
+    expect(stdin).toContainEqual({ session_id: 'ses_1', hook_event_name: 'Stop' });
   });
 
   it('MUSTERD_NO_NUDGE=1 mutes the plugin without running the CLI', () => {

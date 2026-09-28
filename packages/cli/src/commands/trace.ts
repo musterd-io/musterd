@@ -6,6 +6,7 @@ import { readHookStdin } from '../hookStdin.js';
 import { theme } from '../render/theme.js';
 import { sessionDigest } from '../session/digest.js';
 import { tapHook } from '../trace/hook.js';
+import { tailOpencodeSession } from '../trace/opencode.js';
 import { tailTranscript } from '../trace/tail.js';
 import { findWorkspaceDir, resolveRead } from './helpers.js';
 
@@ -86,6 +87,13 @@ async function tailAfterHook(
     const kind = opts.kind ?? payload['hook_event_name'];
     if (kind !== 'Stop' && kind !== 'SessionEnd') return;
     const sessionId = payload['session_id'];
+    // OpenCode keeps no transcript file; its R2 reads the session store instead (opencode.ts).
+    if (opts.harness === 'opencode') {
+      if (typeof sessionId === 'string' && sessionId) {
+        await tailOpencodeSession({ binding: opts.binding, dir: opts.dir, sessionId });
+      }
+      return;
+    }
     const transcriptPath = payload['transcript_path'];
     if (typeof sessionId !== 'string' || !sessionId) return;
     if (typeof transcriptPath !== 'string' || !transcriptPath) return;

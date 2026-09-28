@@ -388,6 +388,15 @@ ADR 184's publication gate; a spans backend.
   session: each Grok session's `tool_uses` matches Grok's own `tool_completed` count within 1 (613
   vs 612 in one of 8). Gap: headless Grok wakes (`grok -p`) fire no `session_end`, so their R2
   waits on a host-side read at wake exit.
+- **2026-09-28 — OpenCode is tapped on both rails** (lane `01M3MGQ6M158K3398BZVC6MDP5`). OpenCode
+  has no hook table, so the doorbell plugin carries the tap (generation 2). R1: the tool-boundary
+  probe gets the call's structural fields on stdin under `--hook opencode`, so `PostToolUse` rides
+  a process that already runs. Each `session.idle` fires `trace hook --kind Stop`. R2: OpenCode
+  keeps no transcript file. `opencode@1` reads completed assistant messages and their parts from
+  `opencode.db` through the `sqlite3` CLI, as `observeModel` already does. The cursor is the last
+  message's `time_created`. One message is one `usage`, with the message's tokens and its `tool`
+  parts as `tool_uses`. On the largest local session the read matched the store exactly: 479 tool
+  parts over 457 completed messages, 0 unknown parts. A machine without `sqlite3` records R1 only.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
