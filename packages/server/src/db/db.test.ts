@@ -18,7 +18,7 @@ describe('db', () => {
     // Bumped with every migration, deliberately ABSOLUTE rather than read from the MIGRATIONS
     // array: a test written against the constant under test cannot fail (ryder's ADR 236 finding —
     // one of his five mutants survived for exactly that reason).
-    expect(ver?.value).toBe('76');
+    expect(ver?.value).toBe('77');
     const fk = db.prepare<[], { foreign_keys: number }>('PRAGMA foreign_keys').get();
     expect(fk?.foreign_keys).toBe(1);
     db.close();
@@ -145,7 +145,7 @@ describe('db', () => {
       `INSERT INTO seed_thread_entries (id, seed_id, kind, body, member_id, created_at)
        VALUES ('t1', 's1', 'clarification', 'why?', ?, 2)`,
     ).run(member.id);
-    expect(runMigrations(db)).toBe(76);
+    expect(runMigrations(db)).toBe(77);
     const col = (db.pragma('table_info(seeds)') as { name: string; notnull: number }[]).find(
       (c) => c.name === 'slack_user_id',
     );
@@ -333,7 +333,7 @@ describe('db', () => {
     member(1, 'm-obs', 'web-legacy');
     member(0, 'm-reg', 'nick');
 
-    expect(runMigrations(db)).toBe(76); // runs v18…v76 (governed authorization substrate, audit actor attestation, guidance epoch, doorbell, in_reply_to column, oauth, member sponsorship, agent connect nonces, team invites, agent connectors)
+    expect(runMigrations(db)).toBe(77); // runs v18…v77 (governed authorization substrate, audit actor attestation, guidance epoch, doorbell, in_reply_to column, oauth, member sponsorship, agent connect nonces, team invites, agent connectors, roster status index)
 
     const scope = (id: string) =>
       db
@@ -397,7 +397,7 @@ describe('db', () => {
     );
     team('t2', 'dawn', null);
 
-    expect(runMigrations(db)).toBe(76);
+    expect(runMigrations(db)).toBe(77);
 
     const policy = (id: string) =>
       db
@@ -729,7 +729,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
     stage(db, 'm1', 1, 1);
 
     db.prepare("UPDATE schema_meta SET value = '49' WHERE key = 'schema_version'").run();
-    expect(runMigrations(db)).toBe(76);
+    expect(runMigrations(db)).toBe(77);
 
     expect(db.prepare('SELECT COUNT(*) AS n FROM sync_log').get()).toEqual({ n: 1 });
     db.close();
@@ -744,7 +744,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
     db.exec('DROP INDEX idx_messages_origin; DROP TABLE sync_pull_cursor;');
     db.prepare("UPDATE schema_meta SET value = '55' WHERE key = 'schema_version'").run();
 
-    expect(runMigrations(db)).toBe(76);
+    expect(runMigrations(db)).toBe(77);
 
     expect(
       db.prepare("SELECT name FROM sqlite_master WHERE name = 'sync_pull_cursor'").get(),
@@ -760,7 +760,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
   it('v58 stamps audit with the origin pair, unique only where a stamp exists', () => {
     const db = withRemoteNode();
     db.prepare("UPDATE schema_meta SET value = '57' WHERE key = 'schema_version'").run();
-    expect(runMigrations(db)).toBe(76);
+    expect(runMigrations(db)).toBe(77);
 
     const insert = db.prepare(
       `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq)
@@ -830,7 +830,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
       INSERT INTO seat_nodes VALUES ('m', 't', 'nA', 5);
     `);
     db.prepare("UPDATE schema_meta SET value = '62' WHERE key = 'schema_version'").run();
-    expect(runMigrations(db)).toBe(76);
+    expect(runMigrations(db)).toBe(77);
     expect(db.prepare('SELECT member_id, node_id, bound_at FROM seat_nodes').all()).toEqual([
       { member_id: 'm', node_id: 'nA', bound_at: 5 },
     ]);
@@ -871,7 +871,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
     expect(plan).toMatch(/idx_messages_in_reply_to \(team_id=\? AND in_reply_to=\?\)/);
     // A replay must not re-add the column: table_info hides a VIRTUAL column, table_xinfo shows it.
     db.prepare("UPDATE schema_meta SET value = '70' WHERE key = 'schema_version'").run();
-    expect(runMigrations(db)).toBe(76);
+    expect(runMigrations(db)).toBe(77);
     db.close();
   });
 });
@@ -927,6 +927,28 @@ describe('v45 — incident_reports ids become ULIDs (ADR 325 prereq)', () => {
     expect(rows).toHaveLength(3);
     for (const r of rows) expect(String(r.id)).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
     expect(rows.map((r) => r.seat)).toEqual(['a', 'b', 'c']);
+    db.close();
+  });
+});
+
+/**
+ * Lane 01M3D4069F: the roster reads each member's latest status_update. Before v77 that lookup
+ * searched idx_messages_from_reply and sorted in a temp B-tree — ~100 ms of a ~118 ms roster read on
+ * the live copy, and GET /teams/:slug p95 2.2 s in the 2026-09-28 tunnel bench.
+ */
+describe('v77 — the roster status lookup is served by an index, with no sort', () => {
+  it('latestStatusUpdate seeks idx_messages_from_act_ts and reads it in order', () => {
+    const db = openDb(':memory:');
+    // The same SQL as latestStatusUpdate (store/messages.ts).
+    const plan = db
+      .prepare<[], { detail: string }>(
+        "EXPLAIN QUERY PLAN SELECT body, meta, ts FROM messages WHERE from_member = 'a' AND act = 'status_update' ORDER BY ts DESC, id DESC LIMIT 1",
+      )
+      .all()
+      .map((r) => r.detail)
+      .join('\n');
+    expect(plan).toMatch(/idx_messages_from_act_ts \(from_member=\? AND act=\?\)/);
+    expect(plan).not.toMatch(/TEMP B-TREE/);
     db.close();
   });
 });
