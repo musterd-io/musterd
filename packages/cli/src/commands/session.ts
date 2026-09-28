@@ -1527,8 +1527,17 @@ function labelNudgeCommand(): number {
  * applied to orientation: a per-turn line that repeats until a stamp lands, because the one-shot
  * SessionStart ask was measured to fail (see the label-nudge history above). Unlike the label
  * sweep, orientation is a property of THIS session, not this machine, so the stamp is
- * workspace-local and keyed by the captured session id — a new capture makes the old stamp stale
- * and the nudge fires again.
+ * workspace-local and keyed by the session id — a new session makes the old stamp stale and the
+ * nudge fires again.
+ *
+ * WHICH id matters, because the slot is not always the running session. When SessionStart is
+ * turned away by the interloper gate (a predecessor that never ended still looks live), the slot
+ * names the predecessor for up to LOCAL_SESSION_LIVE_MS, until the tool-boundary heal hands it
+ * over. Measured on izzo 2026-09-28: the skill stamped the predecessor's id at 19:59, the heal
+ * landed at 20:05, and the 20:06 nudge fired on a session that had already oriented. So both sides
+ * prefer the running session's OWN id — the hook payload's `session_id` for the nudge,
+ * `CLAUDE_CODE_SESSION_ID` for the stamp — and the stamp also records the slot id it saw, which
+ * keeps the old slot-keyed behaviour wherever a harness reports no id of its own.
  */
 export const ORIENT_NUDGE_TEXT =
   'musterd: unoriented seat session — run the musterd-orient skill now.';
@@ -1544,36 +1553,64 @@ function orientStampPath(dir: string): string {
  *  PREVIOUS session's capture and can stay quiet on turn 0. Deliberately left: the per-turn
  *  UserPromptSubmit repeat self-heals on the next prompt, which is exactly why the repeat exists
  *  (the label-nudge lesson). The stamp key is race-free from turn 1 onward. */
-export function orientNudgeDue(dir: string | null): boolean {
+export function orientNudgeDue(dir: string | null, runningId?: string): boolean {
   if (!dir) return false;
   const binding = findBinding(dir, {});
-  const sessionId = binding?.session?.id;
-  if (!binding || binding.claim?.mode !== 'seat' || sessionId === undefined) return false;
+  const slotId = binding?.session?.id;
+  if (!binding || binding.claim?.mode !== 'seat' || slotId === undefined) return false;
+  const current = runningId ?? slotId;
   try {
     const rec = JSON.parse(readFileSync(orientStampPath(dir), 'utf8')) as {
       session_id?: unknown;
+      slot_id?: unknown;
     };
-    return rec.session_id !== sessionId; // stamped for a previous session ⇒ due again
+    // Either id the stamp saw may name this session: its own id (the heal case) or the slot's (a
+    // running id inherited from a parent harness's env, while the slot was right all along).
+    return rec.session_id !== current && rec.slot_id !== current;
   } catch {
     return true; // no stamp (or unreadable) ⇒ due
   }
 }
 
-/** Stamp the CAPTURED session oriented (exported for tests; `orient-stamp` is the CLI face). */
-export function writeOrientStamp(dir: string | null, now = Date.now()): void {
-  const sessionId = dir ? findBinding(dir, {})?.session?.id : undefined;
+/** Stamp this session oriented (exported for tests; `orient-stamp` is the CLI face). `runningId` is
+ *  the session's own id when the harness reports one; the slot's id is recorded beside it. */
+export function writeOrientStamp(dir: string | null, now = Date.now(), runningId?: string): void {
+  const slotId = dir ? findBinding(dir, {})?.session?.id : undefined;
+  const sessionId = runningId ?? slotId;
   if (!dir || sessionId === undefined) return;
   writeFileSync(
     orientStampPath(dir),
-    JSON.stringify({ session_id: sessionId, oriented_at: now }) + '\n',
+    JSON.stringify({
+      session_id: sessionId,
+      ...(slotId !== undefined ? { slot_id: slotId } : {}),
+      oriented_at: now,
+    }) + '\n',
   );
 }
 
+/** The running session's own id from the environment. Claude Code sets `CLAUDE_CODE_SESSION_ID` for
+ *  the processes it spawns; other harnesses report none here, and the slot stands in. */
+function runningSessionIdFromEnv(env: NodeJS.ProcessEnv): string | undefined {
+  const id = env['CLAUDE_CODE_SESSION_ID']?.trim();
+  return id ? id : undefined;
+}
+
+/** How long the nudge waits for its hook payload. Short: it rides every prompt, and a missing
+ *  payload only means falling back to the env or the slot. */
+const ORIENT_NUDGE_STDIN_MS = 500;
+
 /** `session orient-nudge` — hook-driven, hence silent-or-one-line and never failing. */
-function orientNudgeCommand(): number {
+async function orientNudgeCommand(): Promise<number> {
   try {
     if (process.env['MUSTERD_PROVENANCE'] === 'wake') return 0; // a wake's errand IS its orientation
-    if (orientNudgeDue(findWorkspaceDir())) process.stdout.write(`${ORIENT_NUDGE_TEXT}\n`);
+    // The hook payload names the session the prompt belongs to. A terminal has no payload to read.
+    const payloadId = process.stdin.isTTY
+      ? undefined
+      : parseHookPayload(await readHookStdin(ORIENT_NUDGE_STDIN_MS)).session_id;
+    const runningId = payloadId ?? runningSessionIdFromEnv(process.env);
+    if (orientNudgeDue(findWorkspaceDir(), runningId)) {
+      process.stdout.write(`${ORIENT_NUDGE_TEXT}\n`);
+    }
   } catch {
     // hook contract: never fail, never noise
   }
@@ -1584,7 +1621,7 @@ function orientNudgeCommand(): number {
  *  the stamp is simply absent and the nudge repeats, which is the correct failure direction. */
 function orientStampCommand(): number {
   try {
-    writeOrientStamp(findWorkspaceDir());
+    writeOrientStamp(findWorkspaceDir(), Date.now(), runningSessionIdFromEnv(process.env));
   } catch {
     // best-effort; the nudge simply repeats
   }

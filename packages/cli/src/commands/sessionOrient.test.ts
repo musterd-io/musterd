@@ -66,6 +66,36 @@ describe('session orient stamp/nudge', () => {
     expect(orientNudgeDue(ws)).toBe(true);
   });
 
+  // Measured on izzo 2026-09-28: SessionStart was gated by a predecessor's live-looking slot, the
+  // skill stamped while the slot still named that predecessor, and when the heal handed the slot to
+  // the running session ~6 minutes later the nudge fired on a session that had already oriented.
+  it('a stamp taken while the slot names a predecessor survives the heal to the running session', () => {
+    writeBinding(
+      bindingOf({ session: { harness: 'claude-code', id: 'pred', started_at: Date.now() } }),
+    );
+    writeOrientStamp(ws, Date.now(), 'live');
+    writeBinding(
+      bindingOf({ session: { harness: 'claude-code', id: 'live', started_at: Date.now() } }),
+    );
+    expect(orientNudgeDue(ws, 'live')).toBe(false);
+    expect(orientNudgeDue(ws)).toBe(false); // the slot-only read agrees once healed
+  });
+
+  it('the nudge reads the running id, so a stamp for the predecessor alone does not quiet it', () => {
+    writeBinding(
+      bindingOf({ session: { harness: 'claude-code', id: 'pred', started_at: Date.now() } }),
+    );
+    writeOrientStamp(ws); // no running id known: keyed to the slot, the old behaviour
+    expect(orientNudgeDue(ws, 'live')).toBe(true);
+  });
+
+  it('a running id leaked from a parent harness does not strand the nudge: the slot id also matches', () => {
+    // e.g. a Codex seat launched from a Claude Code shell inherits CLAUDE_CODE_SESSION_ID.
+    writeOrientStamp(ws, Date.now(), 'parent-claude');
+    expect(orientNudgeDue(ws, 'sess-1')).toBe(false);
+    expect(orientNudgeDue(ws)).toBe(false);
+  });
+
   it('silent outside a seat workspace: no dir, no captured session, or no seat claim', () => {
     expect(orientNudgeDue(null)).toBe(false);
     writeBinding(bindingOf({ session: undefined }));
