@@ -47,7 +47,8 @@
  * throwaway Fly machine — scripts/perf/loadbench.fly.toml.
  *
  * DB_COPY opens a COPY of a real database (never the live one — this writes to it) so /lanes and
- * /report carry production-sized boards. Without it a synthetic board of LANES lanes is seeded.
+ * /report carry production-sized boards. Without it a synthetic board of LANES lanes is seeded into a
+ * temp file (not `:memory:` — the /report worker needs a file it can open read-only).
  * Results are logged in docs/perf/daemon-load-baseline.md. Exits non-zero if p95 over all requests
  * exceeds BUDGET_MS.
  */
@@ -74,7 +75,14 @@ async function serve() {
   const AGENTS = env('AGENTS', 50);
   const LANES = env('LANES', 1200);
   const dbPath = process.env.DB_COPY;
-  const db = openDb(dbPath ?? ':memory:');
+  // The synthetic board lives in a temp FILE, never `:memory:`: the daemon serves /report from a
+  // worker thread on its own read-only connection, which an in-memory store cannot give it, so an
+  // in-memory bench measured the pre-#1777 inline path the production daemon no longer runs.
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const tmpDir = dbPath ? undefined : mkdtempSync(join(tmpdir(), 'musterd-bench-'));
+  const db = openDb(dbPath ?? join(tmpDir, 'bench.db'));
   let team;
   if (dbPath) {
     team = getTeamBySlug(db, process.env.TEAM ?? 'revive');
@@ -141,6 +149,7 @@ async function serve() {
         rssMb: process.memoryUsage().rss / 2 ** 20,
       });
       await server.close();
+      if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
       process.exit(0);
     }
   });
@@ -578,7 +587,7 @@ async function drive() {
     `humans=${ready.humans.length} agents=${ready.agents.length} viewers=${VIEWERS} ` +
       `daemon_cpus=${process.env.DAEMON_CPUS ?? 'shared'} roster=${ROSTER} ` +
       `human_rail=${HUMAN_RAIL} human_origin=${REMOTE_URL ? 'tunnel' : 'loopback'} ` +
-      `duration=${DURATION / 1000}s ramp=${RAMP / 1000}s db=${process.env.DB_COPY ? 'copy' : 'synthetic'}`,
+      `duration=${DURATION / 1000}s ramp=${RAMP / 1000}s db=${process.env.DB_COPY ? 'copy' : 'synthetic-file'}`,
   );
   console.log(
     `daemon  cpu ${cpuPct.toFixed(0)}%  rss ${stats.rssMb.toFixed(0)} MB  ` +
