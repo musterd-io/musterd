@@ -4,11 +4,13 @@ import { describe, expect, it } from 'vitest';
 import {
   LineBuffer,
   canvasPath,
+  clearStaleSquigLock,
   companionPaths,
   parseEditorLine,
   redactEditorUrl,
   resolveCheckout,
   resolveNodeBinary,
+  squigLockPath,
 } from './squig-mcp.mjs';
 
 describe('squig companion launcher', () => {
@@ -92,6 +94,43 @@ describe('squig companion launcher', () => {
         (path: string) => path === '/usr/bin/node',
       ),
     ).toBe('/usr/bin/node');
+  });
+
+  it("clears Squig's lock only when its pid is gone", () => {
+    const file = '/tmp/team.squig.json';
+    expect(squigLockPath(file)).toBe('/tmp/team.squig.json.lock');
+    const errno = (code: string) => Object.assign(new Error(code), { code });
+    const run = (text: string | null, kill: (pid: number) => void) => {
+      const unlinked: string[] = [];
+      const result = clearStaleSquigLock(file, {
+        read: () => {
+          if (text === null) throw errno('ENOENT');
+          return text;
+        },
+        unlink: (path: string) => unlinked.push(path),
+        kill,
+      });
+      return { result, unlinked };
+    };
+    const lock = '{"pid":21454,"token":"t"}';
+
+    expect(
+      run(lock, () => {
+        throw errno('ESRCH');
+      }),
+    ).toEqual({
+      result: 'cleared',
+      unlinked: ['/tmp/team.squig.json.lock'],
+    });
+    expect(run(lock, () => {})).toEqual({ result: 'live', unlinked: [] });
+    expect(
+      run(lock, () => {
+        throw errno('EPERM');
+      }),
+    ).toEqual({ result: 'live', unlinked: [] });
+    expect(run(null, () => {})).toEqual({ result: 'absent', unlinked: [] });
+    expect(run('not json', () => {})).toEqual({ result: 'unreadable', unlinked: [] });
+    expect(run('{"token":"t"}', () => {})).toEqual({ result: 'unreadable', unlinked: [] });
   });
 
   it('commits an empty portable Squig document', () => {
