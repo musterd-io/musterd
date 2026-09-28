@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { LiveConfig } from './client';
-import { initial, memberAvatar } from './format';
+import { initial, isFeatureBehind, memberAvatar } from './format';
 import { modelBadge } from './modelBadge';
 import { providerIconHtml } from './modelProviderIcon';
 import { SeatDetail } from './RosterPanel';
@@ -18,18 +18,33 @@ export function TeamCard({
   linked,
   onLink,
   cfg = null,
+  daemonBuild,
+  daemonEpoch,
 }: {
   card: Card;
   now: number;
   linked: boolean;
   onLink?: ((name: string | null) => void) | undefined;
   cfg?: LiveConfig | null;
+  daemonBuild?: string | undefined;
+  daemonEpoch?: number | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const badge = modelBadge(card.member);
   const age = elapsed(card.since, now);
   const meta = [card.goal ? `for ${card.goal}` : null, age].filter(Boolean).join(' · ');
   const showLogo = badge.source !== 'human' && badge.source !== 'service';
+  // Feature-skew (ADR 148): the one actionable skew, carried over from the roster row's name line.
+  const m = card.member;
+  const behind = isFeatureBehind(m, daemonEpoch);
+  const memberBuild = m.presences?.[0]?.build;
+  const skewTitle = behind
+    ? `Behind on features — this seat is on epoch ${m.presences?.[0]?.epoch}, the team is on ${daemonEpoch}. ` +
+      `Reload it to pick up recent capabilities.` +
+      (memberBuild && daemonBuild
+        ? ` (build ${memberBuild.slice(0, 7)} vs ${daemonBuild.slice(0, 7)})`
+        : '')
+    : undefined;
   return (
     <li
       className={`lc-team-card lc-team-card--${card.state}${linked ? ' is-linked' : ''}`}
@@ -79,6 +94,11 @@ export function TeamCard({
               <span className="lc-team-card__declared"> · declared</span>
             )}
           </span>
+          {behind && (
+            <span className="lc-seat__behind" title={skewTitle}>
+              behind
+            </span>
+          )}
         </span>
         <span className="lc-team-card__state">{card.stateLabel}</span>
         {card.title && (

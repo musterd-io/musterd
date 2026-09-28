@@ -41,6 +41,8 @@ export function TeamColumn({
   captionColor,
   now = Date.now(),
   cfg = null,
+  daemonBuild,
+  daemonEpoch,
   unreadable = 0,
   stale = false,
 }: {
@@ -57,6 +59,10 @@ export function TeamColumn({
   /** The clock cards age against — passed so one render has one `now`, and a test can name it. */
   now?: number;
   cfg?: LiveConfig | null;
+  /** The daemon's build ref (ADR 135) — operator detail, in a behind seat's tooltip. */
+  daemonBuild?: string | undefined;
+  /** The daemon's feature epoch (ADR 148) — a live seat below it wears a calm `behind` tag. */
+  daemonEpoch?: number | undefined;
   /** Seats this bundle could not read (`fetchRoster`) — said here because this is the only
    *  surface that knows the count it shows is short. */
   unreadable?: number;
@@ -123,6 +129,8 @@ export function TeamColumn({
             linked={linked === c.name}
             onLink={onLink}
             cfg={cfg}
+            daemonBuild={daemonBuild}
+            daemonEpoch={daemonEpoch}
           />
         ))}
       </ul>
