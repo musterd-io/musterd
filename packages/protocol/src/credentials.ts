@@ -108,6 +108,13 @@ export type CredentialMint = z.infer<typeof CredentialMintSchema>;
  * session claim with a grant token **without** a pending-request round-trip (the fast path); when false,
  * every claim without a standing grant goes through the request/approval lane.
  */
+/** `PolicySchema.agent_host` (ADR 463 §2) — named so sparsification can walk it like the other blocks. */
+export const AgentHostPolicySchema = z.object({
+  max_per_host: z.number().int().min(1).max(100).default(5),
+  policy: ResidencyPolicyOverrideSchema.default({}),
+});
+export type AgentHostPolicy = z.infer<typeof AgentHostPolicySchema>;
+
 export const PolicySchema = z.object({
   allow_pre_issued_grants: z.boolean().default(false),
   /**
@@ -213,6 +220,18 @@ export const PolicySchema = z.object({
    * from becoming surprise load. Admin-set through the policy route, audited `policy.change`.
    */
   sponsored_agent_cap: z.number().int().min(1).max(100).default(3),
+  /**
+   * Sponsor-hosted agents (ADR 463 §2). `max_per_host` bounds live enrolled sponsored seats per
+   * host label; `policy` is the residency override every provisioned seat enrolls with. `budget_usd`
+   * inside it is REQUIRED for a provision to go ready — checked at claim, not here, so `parse({})`
+   * stays inert and a team that never hosts never sees it.
+   */
+  agent_host: AgentHostPolicySchema.default({}),
+  /**
+   * ADR 463 §4.3: when true, `POST /invites` without `member_until` is refused. The policy setter
+   * refuses `agent_connect: 'any_member'` unless this is also true.
+   */
+  invite_requires_expiry: z.boolean().default(false),
 });
 export type Policy = z.infer<typeof PolicySchema>;
 
@@ -234,6 +253,7 @@ export const PolicyOverrideSchema = PolicySchema.partial().extend({
   incident: IncidentPolicySchema.partial().optional(),
   doorbell: DoorbellPolicySchema.partial().optional(),
   trace: TracePolicySchema.partial().optional(),
+  agent_host: AgentHostPolicySchema.partial().optional(),
 });
 export type PolicyOverride = z.infer<typeof PolicyOverrideSchema>;
 
@@ -254,6 +274,7 @@ const POLICY_SUB_SCHEMAS = {
   incident: IncidentPolicySchema,
   doorbell: DoorbellPolicySchema,
   trace: TracePolicySchema,
+  agent_host: AgentHostPolicySchema,
 } as const;
 
 /** Strip the keys of one sub-object that equal their current schema default; undefined if none survive. */
