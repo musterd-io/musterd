@@ -719,8 +719,12 @@
      lever on how big the room draws — `fitFloor` is width-limited here at every realistic window
      size. Measured 2026-07-29 at a 1280px viewport: 1.55fr gave the office 456px and a fit scale of
      0.337, which put the room's entire back wall at 63px tall. Widened to 2.05fr → 549px → scale
-     0.405 → a 76px wall, taken from the stream, which had the most to spare. */
-  --col-office: minmax(0, 2.05fr);
+     0.405 → a 76px wall, taken from the stream, which had the most to spare.
+     Re-tuned 2026-09-28 for the team column (ADR 464, spec falsifier 4): the column is wider than
+     the roster rail it replaces (300–400px vs 234px), and the floor must not pay for it. 2.6fr
+     keeps the office at 1920px at ≥ its pre-ADR-464 width (measured 864px → 869px); the stream
+     gives the difference, and lane 2 retires it into a drawer anyway. */
+  --col-office: minmax(0, 2.6fr);
   /* The team column (ADR 464) is read by a room: wide enough for a lane title in 16px type on two
      lines, never wider than a fifth of the window so the office keeps its pixels. */
   --col-team: clamp(300px, 22vw, 400px);
@@ -3448,7 +3452,14 @@
   color: var(--lc-muted);
 }
 /* Folded: a rail of avatars, each wearing its provider logo as a pip. The PanelRail spine stays as
-   the expand control; the avatars stack beneath it and scroll (25 seats at 1080px tall). */
+   the expand control but gives up its full-height cover here — it becomes a short cap at the top,
+   and the avatars stack beneath it and scroll (25 seats at 1080px tall). */
+.lc-team.is-collapsed .lc-rail {
+  position: relative;
+  inset: auto;
+  flex: 0 0 128px;
+  width: 100%;
+}
 .lc-team.is-collapsed .lc-team__rail {
   list-style: none;
   margin: 0;
