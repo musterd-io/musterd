@@ -5,9 +5,11 @@ import { shortModel } from './presenceLabel';
 /**
  * The model badge the team column and the plates show (ADR 464, spec §4). The one rule it exists to
  * keep: never claim more than we know. `observed` is the server watching the model on the wire
- * (ADR 301); anything else the seat merely said about itself, and the badge says so.
+ * (ADR 301); `environment` / `binding` is something the seat said about itself ("declared"); and a
+ * model with NO tier is "unverified" — a pre-migration row or an older client, which is a different
+ * fact from a declaration (`member.ts`, ADR 236) and is never read as one.
  */
-export type BadgeSource = 'observed' | 'declared' | 'unknown' | 'human' | 'service';
+export type BadgeSource = 'observed' | 'declared' | 'unverified' | 'unknown' | 'human' | 'service';
 
 export interface ModelBadge {
   provider: ModelProvider;
@@ -49,6 +51,11 @@ export function modelBadge(m: MemberSummary): ModelBadge {
     provider,
     label: displayModel(model) || model,
     full: model,
-    source: p?.model_source === 'observed' ? 'observed' : 'declared',
+    source:
+      p?.model_source === 'observed'
+        ? 'observed'
+        : p?.model_source === 'environment' || p?.model_source === 'binding'
+          ? 'declared'
+          : 'unverified',
   };
 }

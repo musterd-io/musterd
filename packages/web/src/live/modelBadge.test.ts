@@ -34,7 +34,16 @@ describe('modelBadge', () => {
     expect(modelBadge(m({}, { model: 'gpt-6-luna', model_source: 'binding' })).source).toBe(
       'declared',
     );
-    expect(modelBadge(m({}, { model: 'gpt-6-luna', model_source: null })).source).toBe('declared');
+    expect(modelBadge(m({}, { model: 'gpt-6-luna', model_source: 'environment' })).source).toBe(
+      'declared',
+    );
+  });
+
+  it('a model with no tier is unverified — a different fact from a declaration (ADR 236)', () => {
+    expect(modelBadge(m({}, { model: 'gpt-6-luna', model_source: null })).source).toBe(
+      'unverified',
+    );
+    expect(modelBadge(m({}, { model: 'gpt-6-luna' })).source).toBe('unverified');
   });
 
   it('no model → "model unknown", never a guess (falsifier 2)', () => {

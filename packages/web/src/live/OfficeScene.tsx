@@ -1,5 +1,5 @@
 import type { Envelope, LaneBoard, MemberSummary, WorkingHours } from '@musterd/protocol';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { MusterdWord } from '../brand/MusterdWord';
 import { memberColor, memberPosture } from './format';
 import { gatheredFrom } from './huddles';
@@ -7,14 +7,18 @@ import { HuddleRail } from './HuddleRail';
 import type { OfficeData, OfficeHandle } from './office-scene';
 import { actToEvent, speechEventFor } from './office-scene/mapping';
 import { CollapseButton, PanelRail } from './PanelChrome';
-import { OfficeOverlay } from './OfficeOverlay';
 import { captionFor, type Caption } from './captions';
 import { captionColorFor } from './TeamColumn';
-import { WorkStack } from './WorkStack';
 import { presentCount, type RoomEntry } from './workingOn';
 import { wokenSeat } from './wokenSeat';
 import type { OfficeRoomProps } from './officeRoom';
 import { projectWallBoard } from './office-scene/wallboard';
+
+/** Broadcast-only chrome (ADR 464: /live's work now lives in the team column), kept out of /live's
+ *  eager graph (ADR 151/183): fetched only when a route asks for the overlay or the stack. */
+const broadcastChrome = () => import('./broadcastChrome');
+const LazyOfficeOverlay = lazy(() => broadcastChrome().then((m) => ({ default: m.OfficeOverlay })));
+const LazyWorkStack = lazy(() => broadcastChrome().then((m) => ({ default: m.WorkStack })));
 
 /**
  * Roster → the office's node data. `posture` is resolved here with `memberPosture` — the *same* call the
@@ -306,20 +310,24 @@ export function OfficeScene({
             design). The old OfficeOverlay chyron only renders when workCues is not stack — otherwise
             the two would sit on top of each other and the routes would diverge again. */}
         {!collapsed && broadcast && workCues !== 'stack' && (
-          <OfficeOverlay
-            teamName={teamName}
-            present={presentCount(roster)}
-            entries={entries}
-            status={status}
-            caption={caption}
-            captionColor={captionColor}
-            interactive={false}
-          />
+          <Suspense fallback={null}>
+            <LazyOfficeOverlay
+              teamName={teamName}
+              present={presentCount(roster)}
+              entries={entries}
+              status={status}
+              caption={caption}
+              captionColor={captionColor}
+              interactive={false}
+            />
+          </Suspense>
         )}
         {/* Work card floats over the room (bottom of the stage) — not a band under it. */}
         {!collapsed && workCues === 'stack' && (
           <div className="lc-office__work">
-            <WorkStack entries={entries} caption={caption} captionColor={captionColor} />
+            <Suspense fallback={null}>
+              <LazyWorkStack entries={entries} caption={caption} captionColor={captionColor} />
+            </Suspense>
           </div>
         )}
         {/* The asks rail floats over the top of the room the way the reel floats over the bottom —

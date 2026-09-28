@@ -90,8 +90,8 @@ export function TeamCard({
               />
             )}
             {badge.label}
-            {badge.source === 'declared' && (
-              <span className="lc-team-card__declared"> · declared</span>
+            {(badge.source === 'declared' || badge.source === 'unverified') && (
+              <span className="lc-team-card__declared"> · {badge.source}</span>
             )}
           </span>
           {behind && (
