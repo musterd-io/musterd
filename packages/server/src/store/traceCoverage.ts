@@ -4,7 +4,8 @@ import type { Database } from 'better-sqlite3';
  * ADR 445 §Observability: "a session below [0.98 tool coverage] is audited as
  * `trace.coverage_low`". Coverage is rail R1's count of tool calls that ended (`PostToolUse` +
  * `PostToolUseFailure`) over rail R2's transcript tool count (the `usage` rows' `tool_uses`), per
- * session — the same ratio `report trace` shows per harness.
+ * session — the same ratio `report trace` shows per harness. A subagent's calls (rows with an
+ * `agent_id`) are left out: their transcript is a sidechain file R2 does not read.
  *
  * What still reads low on Claude Code (measured 2026-09-28, 5 of 7 flagged sessions) is not a tap
  * miss: a call refused before it ran (a permission check, a blocked command) fires no Post hook,
@@ -59,7 +60,8 @@ export function findLowCoverageSessions(
       }
     >(
       `SELECT team_id, seat, MIN(harness) AS harness, session_digest,
-              SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') THEN 1 ELSE 0 END) AS post,
+              SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NULL
+                       THEN 1 ELSE 0 END) AS post,
               SUM(CASE WHEN kind = 'usage'
                        THEN COALESCE(json_extract(detail, '$.tool_uses'), 0) ELSE 0 END) AS r2,
               MAX(received_at) AS last

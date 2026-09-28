@@ -401,13 +401,33 @@ ADR 184's publication gate; a spans backend.
   daemon sweep judges each session that has been quiet for 30 minutes, not at SessionEnd, because
   every harness posts its final R2 rows after SessionEnd. A session with an R2 tool count and R1/R2
   below 0.98 gets one audit row with both counts. A session only one rail reached is not judged.
-  The numerator now counts `PostToolUseFailure` too, here and in `report trace`: R2 counts a failed
-  call, and leaving failures out made one real session read 124/127 instead of 127/127. A dry run
-  over the live `trace.db` still flags 5 Claude Code sessions. None of the 5 is a tap miss. The
-  missing calls are calls refused before they ran (a permission check, a blocked command), which
-  fire no Post hook, and hookless built-ins (`ToolSearch`). Both are `tool_use` blocks in the
-  transcript. Open for nick: keep that definition, or have R2 subtract never-run calls from its
-  denominator (a `claude-code@2` parser that reads `tool_result` errors).
+  The numerator changed twice, here and in `report trace`. It now counts `PostToolUseFailure`,
+  because R2 counts a failed call (one session read 124/127 before, 127/127 after). It now leaves
+  out subagent calls (rows with `agent_id`), because their transcript is a sidechain file R2 does
+  not read. Those were 307 of the 382 calls by which claude-code's 30-day R1 exceeded R2, so
+  claude-code went from 1.098 to 1.019. A dry run over the live `trace.db` flags 6 Claude Code
+  sessions. Two were diffed against their transcripts, and neither miss is a tap failure: every
+  missing call was refused before it ran (a permission check, a blocked command) and so fired no
+  Post hook, or was a hookless built-in (`ToolSearch`). Open for nick: keep that definition, or
+  have R2 subtract never-run calls from its denominator (a `claude-code@2` parser that reads
+  `tool_result` errors).
+- **2026-09-28 — coverage matrix, baseline** (lane `01M3MG7Q650Z8C5DKZKGJ31MDG`). Read from the
+  dogfood box's `trace.db` over 30 days, all seats, structural columns only, with the numerator
+  above. Target ≥ 0.98.
+
+  | Harness     | Sessions | With R2 | R1 main calls | R2 calls | Coverage | Why                                         |
+  | ----------- | -------- | ------- | ------------- | -------- | -------- | ------------------------------------------- |
+  | claude-code | 63       | 31      | 3,977         | 3,902    | 1.019    | over 1: live sessions' last turn not tailed |
+  | codex       | 9        | 9       | 1,360         | 0        | null     | `codex@1` emits no `tool_uses`              |
+  | cursor      | 6        | 0       | 766           | —        | null     | `cursor@1` landed today (#1783)             |
+  | grok        | 0        | 0       | —             | —        | null     | R1 tapped today (#1782), R2 today (#1783)   |
+  | opencode    | 0        | 0       | —             | —        | null     | both rails landed today (#1785)             |
+  | native      | 0        | 0       | —             | —        | null     | no tap (lane `01M3MGQC0J`)                  |
+
+  The codex row is a parser gap: `token_usage_record` carries no tool count, so R2 never gives a
+  denominator. Re-run this table once grok, cursor and opencode seats have run on today's build.
+  Falsifier for the claude-code row: a finished session (quiet ≥ 30 min) whose main-loop R1 count
+  is above its R2 count.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
