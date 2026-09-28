@@ -1,14 +1,10 @@
 import type { Posture } from '@musterd/protocol';
 import { preloadCanvasFont } from '../canvasFont';
 import { roomTone, screenPan, type LifeContext } from '../sound';
+import { displayModel } from '../modelBadge';
 import { modelProvider } from '../modelProvider';
 import { providerIconHtml } from '../modelProviderIcon';
-import {
-  identityMeta,
-  plateDetailParts,
-  shortLaneState,
-  shortWorkTitle,
-} from '../presenceLabel';
+import { identityMeta, plateDetailParts, shortLaneState, shortWorkTitle } from '../presenceLabel';
 import { musterdChipSvg } from '../../brand/chipMark';
 import { memberColor, memberInk } from '../format';
 import { platesOpenMode, stillMode } from '../stillMode';
@@ -56,7 +52,14 @@ import {
 import { computeLightEnv, type LightEnv } from './lighting';
 import { isWithinWorkingHours } from './workingHours';
 import { assignSeats, workingAtDesk, type Placement } from './seating';
-import { captionForPresence, pushCaption, tickCaption, CAPTION_HOLD_MS, type Caption, type CaptionRail } from '../captions';
+import {
+  captionForPresence,
+  pushCaption,
+  tickCaption,
+  CAPTION_HOLD_MS,
+  type Caption,
+  type CaptionRail,
+} from '../captions';
 import { createWelcome, stepWelcome } from './welcome';
 import { createWelcomeRoom, type WelcomeSoundAt } from './welcomeRoom';
 import {
@@ -89,7 +92,15 @@ import {
   type SpeechMarking,
   type SpeechToken,
 } from './speech';
-import type { AmbientLogEntry, OfficeData, OfficeEvent, OfficeHandle, OfficeNode, Pose, SpriteParity } from './types';
+import type {
+  AmbientLogEntry,
+  OfficeData,
+  OfficeEvent,
+  OfficeHandle,
+  OfficeNode,
+  Pose,
+  SpriteParity,
+} from './types';
 
 export type { OfficeData, OfficeEvent, OfficeHandle, OfficeNode, OfficeStats } from './types';
 
@@ -293,6 +304,9 @@ export interface OfficeOptions {
    * renders it (WorkStack's header) and the scene only says what the moment is (nick, 2026-08-31).
    */
   onCaption?: (caption: Caption | null) => void;
+  /** ADR 464: a plate under the pointer names its member (null on leave), so the team column can
+   * ring that member's card — the office and the column read as one person. `/live` only. */
+  onPlateHover?: (name: string | null) => void;
   /**
    * Rasterize the static furniture once per state and blit it, instead of redrawing the whole room
    * every frame (spec 2026-09-17). Dark by default: `/broadcast` turns it on with `&sprites=1`, and
@@ -397,7 +411,10 @@ export function mountOffice(
   let onlineNames = new Set<string>();
   // The receptionist welcome (first-five-seconds §4) — stepped on a coarse timer; her bubble rides
   // the ordinary speech machinery via the synthetic 'receptionist' head injected each bake.
-  const welcome = createWelcome(broadcast, typeof localStorage === 'undefined' ? null : localStorage);
+  const welcome = createWelcome(
+    broadcast,
+    typeof localStorage === 'undefined' ? null : localStorage,
+  );
   const welcomeTimer = setInterval(() => {
     if (STILL) return; // deterministic measurement mode: nothing transient may start
     if (!broadcast && (suspended || !VISIBLE())) return;
@@ -415,9 +432,11 @@ export function mountOffice(
     actors.nodes().get(name)?.kind === 'agent' ? 'agent' : 'human';
   const soundAt = (at: WelcomeSoundAt): number => {
     const p =
-      at === 'desk' ? RECEPTIONIST
-      : at === 'door' ? ENTRANCE
-      : (actors.poses().get(at.name) ?? ENTRANCE);
+      at === 'desk'
+        ? RECEPTIONIST
+        : at === 'door'
+          ? ENTRANCE
+          : (actors.poses().get(at.name) ?? ENTRANCE);
     return screenPan(project(p.lx, p.ly, fit).x, width);
   };
   /**
@@ -549,7 +568,10 @@ export function mountOffice(
     if (!el) return;
     el.classList.toggle('is-expanded', expanded);
     // The plate is the toggle now, so it carries the state a screen reader announces.
-    el.querySelector('.lc-gl-label__plate')?.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    el.querySelector('.lc-gl-label__plate')?.setAttribute(
+      'aria-expanded',
+      expanded ? 'true' : 'false',
+    );
   }
 
   function scheduleCollapse(name: string) {
@@ -671,7 +693,9 @@ export function mountOffice(
       ambientHost.style.setProperty('--lc-amb-strength', lightEnv.skyStrength.toFixed(3));
       ambientHost.style.setProperty('--lc-amb-tint', lightEnv.skyTint);
     }
-    return Math.abs(lightEnv.veilAlpha - prev.veilAlpha) > 0.01 || lightEnv.lampsOn !== prev.lampsOn;
+    return (
+      Math.abs(lightEnv.veilAlpha - prev.veilAlpha) > 0.01 || lightEnv.lampsOn !== prev.lampsOn
+    );
   }
 
   /** Redraw the office at rest (everyone home) into the offscreen buffer and rebuild the name labels. */
@@ -730,7 +754,13 @@ export function mountOffice(
 
   /** Grow/shrink an element pool to `pts.length` and position each at its anchor. Used for the fixed-set
    * animated desk props — cheap reposition on every bake, structural change only if the count ever moves. */
-  function syncAnchorPool(pool: HTMLDivElement[], pts: Pt[], cls: string, inner: string, origin: string) {
+  function syncAnchorPool(
+    pool: HTMLDivElement[],
+    pts: Pt[],
+    cls: string,
+    inner: string,
+    origin: string,
+  ) {
     while (pool.length < pts.length) {
       const el = document.createElement('div');
       el.className = cls;
@@ -750,8 +780,20 @@ export function mountOffice(
     const occupied = new Set<number>();
     for (const pl of placements.values()) if (pl.kind === 'desk') occupied.add(pl.slot);
     const { fans, coffees } = animatedDeskAnchors(fit, occupied);
-    syncAnchorPool(fanEls, fans, 'lc-amb-fan', '<div class="lc-amb-fan__tilt"><div class="lc-amb-fan__blades"></div></div>', 'translate(-50%, -50%)');
-    syncAnchorPool(deskSteamEls, coffees, 'lc-amb-steam lc-amb-steam--desk', '<i></i><i></i><i></i>', 'translate(-50%, -100%)');
+    syncAnchorPool(
+      fanEls,
+      fans,
+      'lc-amb-fan',
+      '<div class="lc-amb-fan__tilt"><div class="lc-amb-fan__blades"></div></div>',
+      'translate(-50%, -50%)',
+    );
+    syncAnchorPool(
+      deskSteamEls,
+      coffees,
+      'lc-amb-steam lc-amb-steam--desk',
+      '<i></i><i></i><i></i>',
+      'translate(-50%, -100%)',
+    );
   }
 
   function positionSteam() {
@@ -792,7 +834,11 @@ export function mountOffice(
    *
    * Present members: collapsed plate is dot + name + provider icon; expand grows a divider after the
    * name and reveals model · harness · role behind it. Broadcast: icon + short model only. */
-  function syncLabels(headMap: Map<string, Pt>, nodes: Map<string, OfficeNode>, poses: Map<string, Pose>) {
+  function syncLabels(
+    headMap: Map<string, Pt>,
+    nodes: Map<string, OfficeNode>,
+    poses: Map<string, Pose>,
+  ) {
     const seen = new Set<string>();
     for (const name of headMap.keys()) {
       const node = nodes.get(name);
@@ -803,7 +849,11 @@ export function mountOffice(
         el = document.createElement('div');
         el.className = 'lc-gl-label';
         el.dataset['plate'] = name;
-        if (interactiveLabels) el.tabIndex = 0;
+        if (interactiveLabels) {
+          el.tabIndex = 0;
+          el.addEventListener('mouseenter', () => options.onPlateHover?.(node.name));
+          el.addEventListener('mouseleave', () => options.onPlateHover?.(null));
+        }
         labelHost.appendChild(el);
         labels.set(name, el);
         plateRO?.observe(el);
@@ -886,6 +936,15 @@ export function mountOffice(
           icon.style.background = provider.fill;
           icon.innerHTML = providerIconHtml(provider);
           plate.appendChild(icon);
+          // ADR 464: the model's short name beside its logo — a room reads "Opus 5.5", not a mark.
+          // Lane titles stay OFF the plate; that is the team column's job (spec §4).
+          const short = displayModel(node.model);
+          if (short) {
+            const modelName = document.createElement('span');
+            modelName.className = 'lc-gl-label__model';
+            modelName.textContent = short;
+            plate.appendChild(modelName);
+          }
         }
 
         // The detail is a two-part nest on purpose: the outer element is the animating *track* (a
@@ -1253,7 +1312,8 @@ export function mountOffice(
       const chip = document.createElement('span');
       // A set chip drops the single-name width clamp: at 3-4 names the clamp ellipsises, and a chip
       // that names the set and then hides part of it is the failure this whole path exists to end.
-      chip.className = addressee.names.length > 1 ? 'lc-speech__to lc-speech__to--set' : 'lc-speech__to';
+      chip.className =
+        addressee.names.length > 1 ? 'lc-speech__to lc-speech__to--set' : 'lc-speech__to';
       chip.textContent = `→ ${addressee.label}`;
       inner.appendChild(chip);
     }
@@ -1507,7 +1567,8 @@ export function mountOffice(
     // sat down at it. A member still walking in keeps the loop running on their walk, and their sit
     // blend is itself reported as motion, so the loop cannot park between "seated" and `sit > 0.9`.
     const poses = actors.poses();
-    for (const n of actors.nodes().values()) if (workingAtDesk(n, poses.get(n.name)?.sit)) return true;
+    for (const n of actors.nodes().values())
+      if (workingAtDesk(n, poses.get(n.name)?.sit)) return true;
     return false;
   }
 
@@ -1545,7 +1606,11 @@ export function mountOffice(
     if (capped) {
       // Nearest-tick with carry, not "first tick past the budget": on the capture box the rAF runs
       // at about the budget itself, and the strict rule dropped a quarter of the frames (2026-09-16).
-      const step = coalesceStep(phase, rafMs, ambientFrameBudgetMs(broadcast, AMBIENT_FRAME_MS, captureFps));
+      const step = coalesceStep(
+        phase,
+        rafMs,
+        ambientFrameBudgetMs(broadcast, AMBIENT_FRAME_MS, captureFps),
+      );
       phase = step.phase;
       if (!step.draw) {
         raf = requestAnimationFrame(tick); // too soon for the next coalesced frame — keep the loop, skip the draw
@@ -1564,7 +1629,10 @@ export function mountOffice(
     // The receptionist wakes for a present member and looks up while any check-in beat holds. Like
     // the pet, she never keeps an empty room awake: asleep returns false and the room bakes still.
     const anyonePresent = [...actors.nodes().values()].some((n) => n.presence !== 'offline');
-    const recepActive = stepReceptionist(recep, dt, anyonePresent, actors.checkInHolds() > 0, { team: teamName, nowMs: Date.now() });
+    const recepActive = stepReceptionist(recep, dt, anyonePresent, actors.checkInHolds() > 0, {
+      team: teamName,
+      nowMs: Date.now(),
+    });
     welcomeRoom.step(Date.now(), clock); // the Welcome Wagon's beats land here (lane 01M3F81DD9)
     const welcomeActive = welcomeRoom.active();
     pushOccupancy(now);
@@ -1592,7 +1660,12 @@ export function mountOffice(
     // Afterglow: a brief tail past the last motion so a character eases into idle instead of freezing
     // mid-gesture — `actors.step` also reports its own blends, so a member never stops half-out of a chair.
     const settling = lastActive > 0 && now - lastActive < AFTERGLOW_MS;
-    if ((walking || cues.length || settling || alive || petActive || welcomeActive) && !reduced && !suspended && VISIBLE()) {
+    if (
+      (walking || cues.length || settling || alive || petActive || welcomeActive) &&
+      !reduced &&
+      !suspended &&
+      VISIBLE()
+    ) {
       raf = requestAnimationFrame(tick);
     } else {
       raf = 0;
@@ -1639,7 +1712,8 @@ export function mountOffice(
   }
 
   /** Is anything actually happening right now? One home — two doors used to spell this out separately. */
-  const alive = () => living() || actors.active() || cues.length > 0 || (!reduced && welcomeRoom.active());
+  const alive = () =>
+    living() || actors.active() || cues.length > 0 || (!reduced && welcomeRoom.active());
   /*
    * Coming back to a room that stopped being watched. There are two doors — the tab becoming visible
    * again and the panel re-expanding — and they ask the SAME question: the loop if the room is alive,
@@ -1665,7 +1739,8 @@ export function mountOffice(
    */
   function noticePassersBy(): void {
     const moving: { lx: number; ly: number }[] = [];
-    for (const pose of actors.poses().values()) if (pose.moving) moving.push({ lx: pose.lx, ly: pose.ly });
+    for (const pose of actors.poses().values())
+      if (pose.moving) moving.push({ lx: pose.lx, ly: pose.ly });
     if (moving.length) petNotice(pet, moving);
   }
 
@@ -1784,12 +1859,17 @@ export function mountOffice(
    */
   function coffeeStroll(who: string, slot: number): boolean {
     if (!actors.ambientWalk(who)) return false;
-    if (roll(teamName, slot, 'pet-follow') < 0.5) petFollow(pet, COFFEE_STAND, slotRng(teamName, slot, 'pet-follow-walk'));
+    if (roll(teamName, slot, 'pet-follow') < 0.5)
+      petFollow(pet, COFFEE_STAND, slotRng(teamName, slot, 'pet-follow-walk'));
     return true;
   }
 
   function quiet(): boolean {
-    return !actors.active() && cues.length === 0 && !(lastActive > 0 && performance.now() - lastActive < AFTERGLOW_MS);
+    return (
+      !actors.active() &&
+      cues.length === 0 &&
+      !(lastActive > 0 && performance.now() - lastActive < AFTERGLOW_MS)
+    );
   }
   /** The shared beat log — the E1 falsifier: what the slot lattice decided, and whether this browser
    * could play it. Two visible viewers over the same interval must log the same slots, actors, and
@@ -1903,14 +1983,19 @@ export function mountOffice(
         () => {
           const seat = actors.errandFridge(who, slotRng(teamName, slot, 'fridge'));
           if (!seat) return actors.gestureBeat(who, GESTURE.glance); // lounge full → cheap fallback
-          if (roll(teamName, slot, 'pet-beg') < 0.65) petBeg(pet, seat, slotRng(teamName, slot, 'pet-beg-walk'));
+          if (roll(teamName, slot, 'pet-beg') < 0.65)
+            petBeg(pet, seat, slotRng(teamName, slot, 'pet-beg-walk'));
           return true;
         },
       ],
     ];
     if (water) beats.push([8, () => actors.errandWater(who)]);
     if (mug) beats.push([14, () => actors.gestureBeat(who, GESTURE.sip)]);
-    if (casters) beats.push([9, () => actors.gestureBeat(who, GESTURE.swivel)], [5, () => actors.gestureBeat(who, GESTURE.roll)]);
+    if (casters)
+      beats.push(
+        [9, () => actors.gestureBeat(who, GESTURE.swivel)],
+        [5, () => actors.gestureBeat(who, GESTURE.roll)],
+      );
     let total = 0;
     for (const [w] of beats) total += w;
     let r = roll(teamName, slot, 'beat') * total;
@@ -1922,7 +2007,9 @@ export function mountOffice(
   }
 
   function update(next: OfficeData) {
-    const nextOnline = new Set(next.nodes.filter((n) => n.presence === 'online').map((n) => n.name));
+    const nextOnline = new Set(
+      next.nodes.filter((n) => n.presence === 'online').map((n) => n.name),
+    );
     const presenceLine = onlineNames.size > 0 ? captionForPresence(onlineNames, nextOnline) : null;
     onlineNames = nextOnline;
     teamName = next.teamName ?? 'revive';
@@ -2002,7 +2089,14 @@ export function mountOffice(
   function pushWave(name: string, color: string) {
     const at = heads.get(name);
     if (!at) return;
-    cues.push({ at: { x: at.x, y: at.y + 20 }, color, glyph: '', t: 0, urgent: false, kind: 'wave' });
+    cues.push({
+      at: { x: at.x, y: at.y + 20 },
+      color,
+      glyph: '',
+      t: 0,
+      urgent: false,
+      kind: 'wave',
+    });
   }
 
   /** A quiet mustard relationship between two Members for a meaningful directed Act. */
@@ -2238,7 +2332,11 @@ export function mountOffice(
     const cached = surface();
     setScenePalette(resolveScenePalette());
     paint(direct);
-    paint(cached, { sprites: makeSpriteCache({ dpr }), dpr, ...(only !== undefined ? { spriteOnly: only } : {}) });
+    paint(cached, {
+      sprites: makeSpriteCache({ dpr }),
+      dpr,
+      ...(only !== undefined ? { spriteOnly: only } : {}),
+    });
     const da = direct.getImageData(0, 0, canvas.width, canvas.height).data;
     const db = cached.getImageData(0, 0, canvas.width, canvas.height).data;
     const histogram = new Array<number>(256).fill(0);
@@ -2276,7 +2374,10 @@ export function mountOffice(
       const ab = db[i + 3]!;
       let d = Math.abs(aa - ab);
       for (let k = 0; k < 3; k++) {
-        d = Math.max(d, Math.abs(Math.round((da[i + k]! * aa) / 255) - Math.round((db[i + k]! * ab) / 255)));
+        d = Math.max(
+          d,
+          Math.abs(Math.round((da[i + k]! * aa) / 255) - Math.round((db[i + k]! * ab) / 255)),
+        );
       }
       if (d === 0) continue;
       differing++;
@@ -2321,7 +2422,22 @@ export function mountOffice(
       const g = c.getContext('2d')!;
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, width, height);
-      renderScene(g, fit, placements, actors.nodes(), actors.poses(), clock, teamName, lightEnv, pet, actors.sceneFx(), recep, wallBoard, teamWorkingHours, o);
+      renderScene(
+        g,
+        fit,
+        placements,
+        actors.nodes(),
+        actors.poses(),
+        clock,
+        teamName,
+        lightEnv,
+        pet,
+        actors.sceneFx(),
+        recep,
+        wallBoard,
+        teamWorkingHours,
+        o,
+      );
       return c;
     };
     setScenePalette(resolveScenePalette());
@@ -2359,6 +2475,10 @@ export function mountOffice(
         hit: solidHit(p.lx, p.ly),
         sit: p.sit,
       })),
+    setLinked: (name: string | null) => {
+      // A class toggle only — the ring is CSS, so linking costs no frame (ADR 464).
+      for (const [who, el] of labels) el.classList.toggle('is-linked', who === name);
+    },
     setSuspended: (on: boolean) => {
       // A stream never parks (ADR 157). The broadcast route has no collapse control, so this only ever
       // fires from a host surface that shouldn't be able to freeze the outgoing frame anyway.
