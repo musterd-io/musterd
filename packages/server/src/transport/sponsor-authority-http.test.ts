@@ -1,7 +1,7 @@
+import { GENERALIST_CAPABILITIES } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDb } from '../db/open.js';
 import { createServer, type RunningServer } from '../index.js';
-import { GENERALIST_CAPABILITIES } from '@musterd/protocol';
 import { getMemberByName, setMemberGovernance } from '../store/members.js';
 import { requireTeam } from '../store/teams.js';
 import { __resetOAuthBucketsForTest } from './oauth.js';
@@ -36,7 +36,12 @@ async function addHuman(name: string): Promise<string> {
 function govern(name: string, status: string | null, caps: Record<string, unknown> = {}): void {
   const team = requireTeam(server.db, 'auth-t');
   const m = getMemberByName(server.db, team.id, name)!;
-  setMemberGovernance(server.db, m.id, status, JSON.stringify({ ...GENERALIST_CAPABILITIES, ...caps }));
+  setMemberGovernance(
+    server.db,
+    m.id,
+    status,
+    JSON.stringify({ ...GENERALIST_CAPABILITIES, ...caps }),
+  );
 }
 
 function auditRows(action: string): { actor: string | null; target: string; detail: any }[] {

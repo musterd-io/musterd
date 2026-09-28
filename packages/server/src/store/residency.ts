@@ -1398,6 +1398,7 @@ export function claimWakeLeases(
   host: string,
   presenceTimeoutMs: number,
   now = Date.now(),
+  opts: { sponsorId?: string | null } = {},
 ): WakeOrder[] {
   const tx = db.transaction((): WakeOrder[] => {
     const orders: WakeOrder[] = [];
@@ -1415,6 +1416,9 @@ export function claimWakeLeases(
     for (const enrollment of enrollments) {
       const member = getMemberById(db, enrollment.member_id);
       if (!member || member.left_at !== null) continue;
+      // ADR 463 §1 (Review Focus 1): a sponsor's host key is ordered to wake only seats its
+      // creator sponsors, whatever else shares the host label.
+      if (opts.sponsorId && member.sponsored_by !== opts.sponsorId) continue;
       if (hasLivePresence(db, member.id, presenceTimeoutMs)) continue;
       if (reclaimable.has(member.id)) continue;
       if (liveLease(db, member.id, now)) continue;
