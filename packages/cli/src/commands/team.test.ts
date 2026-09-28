@@ -63,11 +63,18 @@ describe('team policy command', () => {
     expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
       'agent connect: sponsor',
     );
-    const on = await capture(() =>
+    // ADR 463 §4.3: the daemon refuses any_member unless invite expiry rides the same write.
+    await expect(
       teamCommand(parseArgs(['policy', '--agent-connect', 'any_member'])),
+    ).rejects.toThrow(/requires invite_requires_expiry/);
+    const on = await capture(() =>
+      teamCommand(
+        parseArgs(['policy', '--agent-connect', 'any_member', '--invite-requires-expiry', 'on']),
+      ),
     );
     expect(on.code).toBe(0);
     expect(on.out).toContain('agent connect: any member');
+    expect(on.out).toContain('invite requires expiry: on');
     expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
       'agent connect: any member',
     );

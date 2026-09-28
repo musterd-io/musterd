@@ -147,6 +147,13 @@ never provisioned a second time. `--no-provision` opts out; `musterd host provis
   overwrite the cascade on the same pass. §4.2 now names the triggers that exist (remove, expiry).
   The real gap it closes: the remove route disabled descendants and revoked OAuth but left their
   residency, so a hosted agent kept its standing grant after its sponsor was removed.
+- 2026-09-28 (increment 2, review): the note above said seat-file teams cannot hold sponsored
+  agents. That holds for new mints only. A DB-rostered team that already holds them could be cut
+  over — by `team export` or by a hand-written `team.toml` — and then its sponsor could be disabled
+  with no cascade (found in review by big-body). The cutover is now refused at both points.
+  `reconcileTeam` fails closed with `conflict` while any live member has `sponsored_by`, and
+  `rosterToFiles` refuses the export first and names the way out: remove the agents, then export.
+  Falsifier: a file-backed team with a live `sponsored_by` row.
 - The work lands in five PRs, each alone: (1) this ADR; (2) sponsor-scoped authority and host-key
   scoping; (3) the residual closed in code; (4) provisions; (5) the provisioner, Scenario D, docs.
 

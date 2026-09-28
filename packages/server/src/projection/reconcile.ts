@@ -5,6 +5,7 @@ import {
   seatRoles,
 } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
+import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import {
   addMember,
@@ -59,6 +60,21 @@ export function reconcileTeam(db: Database, spec: TeamSpec): ReconcileResult {
   const teamLifecycle = spec.team.lifecycle as Lifecycle;
   // Upsert the team identity (durable fields only; id + created_at preserved).
   let team = getTeamBySlug(db, spec.team.slug);
+  // ADR 463 §4.2: sponsored agents live only on daemon-rostered teams. A seat file carries no
+  // `sponsored_by`, and reconcile is the account-status writer on a file-backed team, so projecting
+  // files over a team that still holds sponsored agents would disable/ban a sponsor with no cascade
+  // — and the descendant's own seat file would re-enable it on the same pass. Refuse the whole
+  // projection (fail closed: the prior db state stays) until those agents are removed.
+  if (team) {
+    const sponsored = listMembers(db, team.id).filter((m) => m.sponsored_by !== null);
+    if (sponsored.length > 0)
+      throw new MusterdError(
+        'conflict',
+        `"${spec.team.slug}" still holds sponsored agents (${sponsored.map((m) => m.name).join(', ')}) — ` +
+          'seat files cannot carry sponsorship, so the roster stays in the daemon until they are removed ' +
+          '(`musterd team remove <name>`) (ADR 463 §4.2)',
+      );
+  }
   if (!team) {
     team = createTeam(db, {
       slug: spec.team.slug,

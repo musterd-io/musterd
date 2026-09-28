@@ -6,8 +6,10 @@ import type { Database } from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openDb } from '../db/open.js';
 import {
+  addMember,
   getMemberByName,
   isHeld,
+  leaveMember,
   listMembers,
   markBound,
   setMemberGovernance,
@@ -715,5 +717,35 @@ describe('reconcile — the seat file owns the hue (ADR 374)', () => {
     } finally {
       other.close();
     }
+  });
+});
+
+describe('reconcile refuses a cutover over sponsored agents (ADR 463 §4.2, big-body REQUIRED on #1789)', () => {
+  it('fails closed while a live sponsored agent exists, and projects once it is removed', () => {
+    writeRoster('slug = "alpha"\n', { dana: 'kind = "human"\nrole = ""\n' });
+    reconcile();
+    const team = getTeamBySlug(db, 'alpha')!;
+    const dana = getMemberByName(db, team.id, 'dana')!;
+    const { row: scout } = addMember(db, team, {
+      name: 'dana-scout',
+      kind: 'agent',
+      sponsoredBy: dana.id,
+    });
+    // The cutover a `team export` (or a hand-written team.toml) would make: files that disable the
+    // sponsor and restate the agent with no sponsorship.
+    writeRoster('slug = "alpha"\n', {
+      dana: 'kind = "human"\nrole = ""\naccount_status = "disabled"\n',
+      'dana-scout': 'kind = "agent"\nrole = ""\n',
+    });
+    expect(() => reconcile()).toThrow(/still holds sponsored agents \(dana-scout\)/);
+    // Nothing projected: the sponsor was not disabled without its cascade.
+    expect(getMemberByName(db, team.id, 'dana')!.account_status).toBeNull();
+    // reconcileAll keeps the prior projection and goes on (fail closed, logged).
+    expect(reconcileAll(db, [dir])).toEqual([]);
+
+    leaveMember(db, scout.id);
+    const r = reconcile();
+    expect(r.errors).toEqual([]);
+    expect(getMemberByName(db, team.id, 'dana')!.account_status).toBe('disabled');
   });
 });

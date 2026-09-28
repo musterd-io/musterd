@@ -114,7 +114,7 @@ src/
     claim.ts          // federation 3c (ADR 355): the hub-authoritative claim. arbitrateClaim runs ON THE HUB — seat resolved, lane folded, ADR 203 live-incumbent rule against the hub's presence, then the guarded updateLane, writing lane.claimed with `node` (the seat→node residence binding); claimAtHub runs ON A JOINER and never writes — the row converges from the fold. ClaimRefusedError carries holder/state; HubUnreachableError is its own code, never a provisional claim
   projection/
     load.ts           // read .musterd/team.toml + seats/*.toml -> TeamSpec; fail-closed per seat (ADR 058)
-    reconcile.ts      // match-by-name delta: ADD/UPDATE/REVIVE/REMOVE the projection from the files
+    reconcile.ts      // match-by-name delta: ADD/UPDATE/REVIVE/REMOVE the projection from the files; refuses (`conflict`, prior projection kept) a team that still holds sponsored agents (ADR 463 §4.2)
     serialize.ts      // db projection -> file structures (guard-1 round-trip + `team export`)
     watcher.ts        // debounced fs.watch over each roster root -> full reconcile (ADR 058)
   telemetry.ts        // minimal OpenTelemetry, off unless an OTLP endpoint is set (ADR 015)
