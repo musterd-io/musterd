@@ -1,4 +1,7 @@
 import {
+  isAwaitingAcceptance,
+  LANE_TERMINAL_STATES,
+  type LaneState,
   TRACE_TOOL_MIX_TOP,
   type TraceCoverageRowSchema,
   type TraceLaneCostRowSchema,
@@ -128,6 +131,12 @@ export function deriveTraceReport(
     }));
 
   // ── cost per lane: each usage row → the seat's most recently claimed lane open at its ts ──
+  // A lane's window is claim → MERGE, the same window ADR 462's archaeology uses. The lane row has
+  // no merge timestamp, so the submit (`lane.ready_for_review`, which follows the merge) stands in
+  // for it. Bounding at `resolved_at` instead held a landed lane open for as long as its acceptor
+  // took, and charged the seat's NEXT work to it (ryder, 2026-09-28). The submit only bounds a lane
+  // that is still submitted or closed: a rejected lane is back in work, and its old submit is not
+  // the end of anything.
   const lanes = db
     .prepare<
       [string],
@@ -146,6 +155,24 @@ export function deriveTraceReport(
         ORDER BY claimed_at DESC`,
     )
     .all(teamId);
+  const submittedAt = new Map(
+    db
+      .prepare<[string], { target: string; ts: number }>(
+        `SELECT target, MAX(ts) AS ts FROM audit
+          WHERE team_id = ? AND action = 'lane.ready_for_review'
+          GROUP BY target`,
+      )
+      .all(teamId)
+      .map((r) => [r.target, r.ts]),
+  );
+  const windowEnd = (l: (typeof lanes)[number]): number | null => {
+    const submitted = submittedAt.get(l.id);
+    const bounded = isAwaitingAcceptance(l.state) || LANE_TERMINAL_STATES.has(l.state as LaneState);
+    if (bounded && submitted !== undefined && submitted >= l.claimed_at) {
+      return l.resolved_at === null ? submitted : Math.min(submitted, l.resolved_at);
+    }
+    return l.resolved_at;
+  };
   const bySeat = new Map<string, typeof lanes>();
   for (const l of lanes) {
     const list = bySeat.get(l.owner_seat) ?? [];
@@ -156,9 +183,10 @@ export function deriveTraceReport(
   const unattributed = { turns: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0 };
   for (const u of parsedUsage) {
     // lanes are DESC by claimed_at, so the first open one at `ts` is the most recently claimed
-    const lane = (bySeat.get(u.seat) ?? []).find(
-      (l) => l.claimed_at <= u.ts && (l.resolved_at === null || u.ts <= l.resolved_at),
-    );
+    const lane = (bySeat.get(u.seat) ?? []).find((l) => {
+      const end = windowEnd(l);
+      return l.claimed_at <= u.ts && (end === null || u.ts <= end);
+    });
     const tokens = {
       input_tokens: num(u.d['input_tokens']),
       output_tokens: num(u.d['output_tokens']),

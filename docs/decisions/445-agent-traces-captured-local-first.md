@@ -359,6 +359,14 @@ ADR 184's publication gate; a spans backend.
   proposed). Per-lane wasted work is ADR 123's predicates over `main` and the remote's PR heads,
   joined to lanes by PR number. It is not rebuilt from `trace_events`. Increment 4b reads 439 authored
   lines and 0 wasted from its claim.
+- **2026-09-28 — cost per lane is bounded at the merge** (lane `01M3MMKPWB501MVVFQMJ66P70P`). The
+  window was claim → `resolved_at`, so a landed lane stayed open for as long as its acceptor took
+  and was charged with the seat's next work — the "85 minutes after the merge" above. The window is
+  now claim → merge, the same as ADR 462's. The lane row carries no merge time, so the lane's latest
+  `lane.ready_for_review` row stands in for it (a submit follows its merge). That bound applies only
+  to a lane that is awaiting acceptance or closed. A rejected lane is back in work, and its old
+  submit ends nothing. Usage after the submit and before the next claim now reads `unattributed`.
+  Falsifier: a submitted lane whose `report trace` turns still include rows stamped after its submit.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a

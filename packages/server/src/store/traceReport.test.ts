@@ -108,6 +108,39 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
     });
   });
 
+  it('cost per lane: a submitted lane stops collecting at its submit, not at its acceptor resolve', () => {
+    const { db, traceDb, team } = fixture();
+    const a = openLane(db, team.id, 'dawn', 'ryder', { title: 'lane A', claim: true }, NOW - 5 * H);
+    // A merged and was submitted at -3h; its acceptor has not resolved it yet (resolved_at null).
+    const submit = (laneId: string, ts: number, n: number) =>
+      db
+        .prepare(
+          `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at)
+           VALUES (?, ?, ?, 'ryder', 'lane.ready_for_review', ?, 'allow', '{}', ?)`,
+        )
+        .run(`rfr-${laneId}-${n}`, team.id, ts, laneId, ts);
+    submit(a.id, NOW - 3 * H, 1);
+    db.prepare(`UPDATE lanes SET state = 'awaiting_acceptance' WHERE id = ?`).run(a.id);
+    // A second lane that was submitted, rejected back to claimed, and is being worked again: its
+    // submit row is history, not a bound.
+    const c = openLane(db, team.id, 'dawn', 'izzo', { title: 'lane C', claim: true }, NOW - 5 * H);
+    submit(c.id, NOW - 4 * H, 1);
+    ingestTraceEvents(traceDb, team.id, 'ryder', [
+      usage('ryder', NOW - 4 * H, { input_tokens: 10, output_tokens: 20 }), // A, before submit
+      usage('ryder', NOW - 2 * H, { input_tokens: 5, output_tokens: 5 }), // after A's submit → next work
+    ]);
+    ingestTraceEvents(traceDb, team.id, 'izzo', [
+      usage('izzo', NOW - 1 * H, { input_tokens: 7, output_tokens: 7 }, 'cccccccccccc'), // C, resumed
+    ]);
+    const r = deriveTraceReport(db, traceDb, team.id, ['ryder', 'izzo'], { days: 7, now: NOW });
+    expect(r.lane_cost.map((l) => [l.title, l.turns, l.input_tokens])).toEqual([
+      ['lane A', 1, 10],
+      ['lane C', 1, 7],
+    ]);
+    expect(r.unattributed.turns).toBe(1);
+    expect(r.unattributed.input_tokens).toBe(5);
+  });
+
   it('scopes to the seats given, and the window', () => {
     const { db, traceDb, team } = fixture();
     ingestTraceEvents(traceDb, team.id, 'ryder', [ev({ tool_name: 'Bash' })]);
