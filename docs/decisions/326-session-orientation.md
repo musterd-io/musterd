@@ -90,6 +90,17 @@ authorized, and named by no guidance surface at all.
   ([ADR 418](418-session-label-capability-is-the-tool-list.md)).** The ritual still ends on
   `orient-stamp`. A new step between `status_update` and the stamp chooses peer-sweep / self-label /
   skip silently from tools present in this session. A skip does not skip the stamp.
+- **2026-09-28 — "keyed by the captured session id" read the slot, and the slot can name the
+  predecessor** (lane `01M3MTEGATKTNR5853JNEH6PR1`). When the interloper gate turns SessionStart
+  away, because a predecessor that never ended still looks live, the slot keeps the predecessor's
+  id for up to 10 minutes, until the tool-boundary heal hands it over. Measured on izzo: the skill
+  stamped the predecessor's id at 19:59Z, the heal landed at 20:05Z, and the 20:06Z nudge fired on
+  a session that had already oriented. The key is now the running session's own id: the hook
+  payload's `session_id` for the nudge, `CLAUDE_CODE_SESSION_ID` for the stamp. The stamp also
+  records the slot id it saw (`slot_id`), and the nudge accepts either, so a harness that reports
+  no id of its own keeps the slot-keyed behaviour. This is still Decision 2's key, "the session,
+  not the machine", read from a stronger witness. Falsifier: a seat that stamped once and whose
+  slot later healed gets the nudge again.
 
 ## Observability & Evaluation
 
