@@ -16,6 +16,7 @@ import {
   readTranscriptDelta,
   TAIL_SESSION_CAP,
   tailTranscript,
+  transcriptPathFor,
   writeTailCursor,
 } from './tail.js';
 
@@ -54,6 +55,25 @@ const claudeLine = (messageId: string, block: Record<string, unknown>): string =
       usage: { input_tokens: 2, output_tokens: 5 },
     },
   }) + '\n';
+
+describe('transcriptPathFor', () => {
+  it("uses the payload path, else derives Grok's updates.jsonl from cwd + session id", () => {
+    const env = { GROK_HOME: '/g' };
+    expect(transcriptPathFor({ transcript_path: '/t.jsonl', harness: 'grok' }, env)).toBe(
+      '/t.jsonl',
+    );
+    expect(
+      transcriptPathFor({ harness: 'grok', session_id: '01a0-ca3a', cwd: '/Users/n/ws' }, env),
+    ).toBe(join('/g', 'sessions', encodeURIComponent('/Users/n/ws'), '01a0-ca3a', 'updates.jsonl'));
+    // no derivation for other harnesses, and never a session id that walks out of the group
+    expect(
+      transcriptPathFor({ harness: 'cursor', session_id: 'c', cwd: '/w' }, env),
+    ).toBeUndefined();
+    expect(
+      transcriptPathFor({ harness: 'grok', session_id: '../../etc', cwd: '/w' }, env),
+    ).toBeUndefined();
+  });
+});
 
 describe('readTranscriptDelta', () => {
   it('reads whole lines from the offset and holds back a partial trailing line', () => {
@@ -216,7 +236,7 @@ describe('tailTranscript', () => {
       await tailTranscript({
         binding,
         dir,
-        harness: 'grok',
+        harness: 'opencode',
         sessionId: 'sess-1',
         transcriptPath: transcript,
         env: {},

@@ -29,7 +29,7 @@ import {
   type LocalSessionLiveness,
 } from '../session/liveness.js';
 import { tapHook } from '../trace/hook.js';
-import { tailTranscript } from '../trace/tail.js';
+import { tailTranscript, transcriptPathFor } from '../trace/tail.js';
 import { attestedModel, findWorkspaceDir, resolveClaimWorkspace } from './helpers.js';
 import { composeSessionOrientation, type SessionOrientationInput } from './sessionOrientation.js';
 import { runSessionStartProbe, type SessionStartProbe } from './sessionProbe.js';
@@ -234,13 +234,15 @@ async function capture(
     // whatever the per-turn Stop reads left behind (a final partial turn, a session that never
     // fired Stop) is picked up here. Awaited, because a hook process that exits kills its posts;
     // the tail is bounded and fail-open, so the wait is what the gate costs, not a new risk.
-    if (event === 'end' && payload.session_id && payload.transcript_path) {
+    // Grok names no transcript in its payload; `transcriptPathFor` derives it from cwd + id.
+    const transcriptPath = event === 'end' ? transcriptPathFor(payload) : undefined;
+    if (event === 'end' && payload.session_id && transcriptPath) {
       await tailTranscript({
         binding,
         dir: captureDir,
         harness: payload.harness ?? 'claude-code',
         sessionId: payload.session_id,
-        transcriptPath: payload.transcript_path,
+        transcriptPath,
       });
     }
   }

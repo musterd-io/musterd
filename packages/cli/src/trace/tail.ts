@@ -1,4 +1,5 @@
 import { closeSync, openSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
   type Binding,
@@ -9,6 +10,7 @@ import {
   type TraceEvent,
   TraceEventSchema,
 } from '@musterd/protocol';
+import { grokSessionsDirFor } from '../host/backends/grokUsage.js';
 import { sessionDigest } from '../session/digest.js';
 import {
   emitTraceEvents,
@@ -20,6 +22,8 @@ import {
 import {
   CLAUDE_TRANSCRIPT_PARSER,
   CODEX_TRANSCRIPT_PARSER,
+  CURSOR_TRANSCRIPT_PARSER,
+  GROK_TRANSCRIPT_PARSER,
   type TranscriptRecord,
   transcriptParserFor,
 } from './transcript.js';
@@ -205,6 +209,24 @@ function downgradeEvent(
 }
 
 /**
+ * The transcript a harness's SessionEnd hook points the tail at. Claude Code and Cursor name it in
+ * the payload (`transcript_path`); Grok does not, but files each session under
+ * `$GROK_HOME/sessions/<encodeURIComponent(cwd)>/<sessionId>/`, and its `updates.jsonl` is the
+ * rail R2 source (see `parseGrokTranscript`). Undefined when neither route names a file.
+ */
+export function transcriptPathFor(
+  payload: { harness?: string; session_id?: string; transcript_path?: string; cwd?: string },
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  if (payload.transcript_path) return payload.transcript_path;
+  if (payload.harness !== 'grok' || !payload.session_id || !payload.cwd) return undefined;
+  // A session id is a path segment here: refuse anything that could walk out of the group.
+  if (!/^[\w-]+$/.test(payload.session_id)) return undefined;
+  const home = env['GROK_HOME'] ?? join(homedir(), '.grok');
+  return join(grokSessionsDirFor(home, payload.cwd), payload.session_id, 'updates.jsonl');
+}
+
+/**
  * The one-call form the hook sites use: cursor → delta → parse → build → post → advance. Never
  * throws; never reads past the byte bound; returns whether anything landed (for a caller's counter,
  * never control flow).
@@ -311,5 +333,8 @@ async function downgrade(
 }
 
 function transcriptParserVersion(harness: string): string {
-  return harness === 'codex' ? CODEX_TRANSCRIPT_PARSER : CLAUDE_TRANSCRIPT_PARSER;
+  if (harness === 'codex') return CODEX_TRANSCRIPT_PARSER;
+  if (harness === 'grok') return GROK_TRANSCRIPT_PARSER;
+  if (harness === 'cursor') return CURSOR_TRANSCRIPT_PARSER;
+  return CLAUDE_TRANSCRIPT_PARSER;
 }

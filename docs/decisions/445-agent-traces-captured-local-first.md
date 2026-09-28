@@ -377,6 +377,17 @@ ADR 184's publication gate; a spans backend.
   passes `rail=grok` to the daemon, so Grok's `interrupt.raised` audit rows name their rail (ADR 423).
   Falsifier: a Grok seat's session with `HookOutcome` rows from `interrupt` and `gate`, and
   `PreToolUse` rows for read tools as well as write tools.
+- **2026-09-28 — R2 reaches Grok and Cursor** (lane `01M3MGQ93WW9WFQ6MN79EXXCQY`). `grok@1` reads
+  `updates.jsonl`, not `chat_history.jsonl`, because only `updates.jsonl` has timestamps and usage.
+  It emits coalesced reasoning and assistant chunks, and one `usage` per `turn_completed` with its
+  `tool_call` count. `cursor@1` reads the agent transcript, which has no timestamps, tokens, or
+  reasoning. It emits assistant text and one `usage` per turn that carries only `tool_uses`, so a
+  Cursor turn adds to coverage and never adds invented tokens. Both run at SessionEnd. Grok writes
+  `turn_completed` after its Stop hook, so a read at Stop would split a turn from its usage. Grok's
+  payload names no transcript, so the path comes from `cwd` + `sessionId`. Checked over every local
+  session: each Grok session's `tool_uses` matches Grok's own `tool_completed` count within 1 (613
+  vs 612 in one of 8). Gap: headless Grok wakes (`grok -p`) fire no `session_end`, so their R2
+  waits on a host-side read at wake exit.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
