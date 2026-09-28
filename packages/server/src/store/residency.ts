@@ -3,6 +3,7 @@ import type {
   WakeabilityFacts,
   Envelope,
   LoopEdge,
+  Policy,
   Residency,
   ResidencyPolicy,
   ResidencyPolicyOverride,
@@ -184,6 +185,23 @@ export function parsePolicyOverride(raw: string | null): ResidencyPolicyOverride
  * (ADR 131 §3). Team defaults arrive already default-filled (`getPolicy` parses with defaults);
  * the sparse override contributes only its explicitly-set keys.
  */
+/**
+ * The wake-policy defaults a seat starts from, before its own enrollment override: the team's
+ * `residency` block — and, for a sponsored agent (ADR 463 §2), `agent_host.policy` on top, so the
+ * team's hosted-agent budget and bounds apply to every seat a sponsor's host runs.
+ */
+export function seatWakeDefaults(
+  policy: Pick<Policy, 'residency' | 'agent_host'>,
+  member: { sponsored_by: string | null } | undefined,
+): ResidencyPolicy {
+  if (!member || member.sponsored_by === null) return policy.residency;
+  const merged: ResidencyPolicy = { ...policy.residency };
+  for (const [key, value] of Object.entries(policy.agent_host.policy)) {
+    if (value !== undefined) (merged as Record<string, unknown>)[key] = value;
+  }
+  return merged;
+}
+
 export function effectiveWakePolicy(
   teamDefaults: ResidencyPolicy,
   storedOverride: string | null,
@@ -504,11 +522,20 @@ export const HOST_STALE_MS = 300_000;
  * `enrolled_host_stale` could only ever appear on a wake report after the wake had failed. Newest
  * wins; an out-of-order old poll never moves a sighting backwards.
  */
-export function recordHostSeen(db: Database, teamId: string, host: string, now: number): void {
+export function recordHostSeen(
+  db: Database,
+  teamId: string,
+  host: string,
+  now: number,
+  /** ADR 463 §2: the member whose host key polled, if any. A team-wide poll never clears it —
+   *  a shared label keeps the last sponsor seen there. */
+  sponsorId: string | null = null,
+): void {
   db.prepare(
-    `INSERT INTO host_liveness (team_id, host, seen_at) VALUES (?, ?, ?)
-     ON CONFLICT(team_id, host) DO UPDATE SET seen_at = MAX(seen_at, excluded.seen_at)`,
-  ).run(teamId, host, now);
+    `INSERT INTO host_liveness (team_id, host, seen_at, sponsor_id) VALUES (?, ?, ?, ?)
+     ON CONFLICT(team_id, host) DO UPDATE SET seen_at = MAX(seen_at, excluded.seen_at),
+       sponsor_id = COALESCE(excluded.sponsor_id, sponsor_id)`,
+  ).run(teamId, host, now, sponsorId);
 }
 
 /** Every host this team has ever heard from, and when — nearest reading of "is the actuator up". */
@@ -1415,6 +1442,36 @@ export function hostMayServe(scope: HostScope, member: MemberRow): boolean {
   return scope.teamWide;
 }
 
+/**
+ * ADR 463 §2: the one `provisioned` wake — a `ready` provision whose seat has not yet been woken
+ * for it. Marks it taken in the same call, so a second poll never derives it again. Runs inside
+ * the wake-lease transaction. No act backs it (no fake directed act is written).
+ */
+export function takeProvisionedWake(
+  db: Database,
+  teamId: string,
+  memberId: string,
+  now = Date.now(),
+): { id: string; sponsor_id: string } | undefined {
+  const row = db
+    .prepare<[string, string], { id: string; sponsor_id: string }>(
+      `SELECT id, sponsor_id FROM host_provisions WHERE team_id = ? AND member_id = ?
+         AND state = 'ready' AND first_wake_at IS NULL ORDER BY ready_at ASC LIMIT 1`,
+    )
+    .get(teamId, memberId);
+  if (!row) return undefined;
+  db.prepare('UPDATE host_provisions SET first_wake_at = ? WHERE id = ?').run(now, row.id);
+  return row;
+}
+
+/** The provisioned wake's line: who created the seat, and the one thing to do first. */
+function composeProvisionedLine(seat: string, teamSlug: string, sponsor: string): string {
+  return (
+    `${wakePrefix(teamSlug)} you are seat "${seat}": you were just created by "${sponsor}"; ` +
+    'greet them with team_send and ask what to build.'
+  );
+}
+
 export function claimWakeLeases(
   db: Database,
   teamId: string,
@@ -1434,7 +1491,6 @@ export function claimWakeLeases(
     // nothing. Lazy rather than eager for exactly that case; memoised for exactly this transaction.
     let ledgerMemo: ActDelivery[] | null = null;
     const teamLedger = (): ActDelivery[] => (ledgerMemo ??= openDirectedLedger(db, teamId));
-    const teamDefaults = teamPolicy.residency;
     const reviewLoopOn = teamPolicy.loops?.review === true;
     const dispatchLoopOn = teamPolicy.loops?.dispatch === true;
     for (const enrollment of enrollments) {
@@ -1449,7 +1505,65 @@ export function claimWakeLeases(
       // Local-session guard snooze (increment 4): the host reported a live local session in this
       // seat's workspace — don't re-derive a lease every tick while someone is plainly working there.
       if (deferredSince(db, teamId, member.name, now - WAKE_DEFER_SNOOZE_MS)) continue;
-      const policy = effectiveWakePolicy(teamDefaults, enrollment.policy);
+      const policy = effectiveWakePolicy(seatWakeDefaults(teamPolicy, member), enrollment.policy);
+      // ADR 463 §2: a freshly provisioned seat's first wake — once, ahead of everything else, and
+      // outside the rate gates (it is the seat's first wake, so they cannot have been spent).
+      const provisioned = takeProvisionedWake(db, teamId, member.id, now);
+      if (provisioned) {
+        const sponsorName = getMemberById(db, provisioned.sponsor_id)?.name ?? '?';
+        const lease: WakeLeaseRow = {
+          id: ulid(),
+          team_id: teamId,
+          member_id: member.id,
+          act_id: null,
+          lane_id: null,
+          host,
+          lane: 'immediate',
+          status: 'leased',
+          created_at: now,
+          expires_at: now + WAKE_LEASE_TTL_MS,
+          edge: null,
+          spawned_at: null,
+        };
+        db.prepare(
+          `INSERT INTO wake_leases (id, team_id, member_id, act_id, lane_id, host, lane, status, created_at, expires_at, edge, spawned_at)
+           VALUES (@id, @team_id, @member_id, @act_id, @lane_id, @host, @lane, @status, @created_at, @expires_at, @edge, @spawned_at)`,
+        ).run(lease);
+        appendAudit(db, teamId, {
+          actor: null,
+          action: 'residency.wake_leased',
+          target: member.name,
+          result: 'allow',
+          detail: {
+            lease_id: lease.id,
+            reason: 'provisioned',
+            provision_id: provisioned.id,
+            sponsor: sponsorName,
+            lane: 'immediate',
+            host,
+            derivation: 'immediate',
+          },
+        });
+        orders.push({
+          lease_id: lease.id,
+          seat: member.name,
+          lane: 'immediate',
+          composed_line: composeProvisionedLine(member.name, teamSlug, sponsorName),
+          expires_at: lease.expires_at,
+          tool_policy: policy.tool_policy,
+          bounds: {
+            timeout_ms: policy.timeout_ms,
+            ...(policy.max_turns !== undefined ? { max_turns: policy.max_turns } : {}),
+            ...(policy.budget_usd !== undefined ? { budget_usd: policy.budget_usd } : {}),
+          },
+          transcript_max_bytes: policy.transcript_max_bytes,
+          continuity_requirement: 'portable',
+          intended_delivery: 'fresh',
+          derivation: 'immediate',
+          reason: 'provisioned',
+        });
+        continue;
+      }
       if (wakesSince(db, teamId, member.name, now - 3_600_000) >= policy.hourly_cap) continue;
 
       const cooled = wakesSince(db, teamId, member.name, now - policy.cooldown_ms) === 0;

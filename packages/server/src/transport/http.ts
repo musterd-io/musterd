@@ -5,6 +5,8 @@ import { extname, join, resolve, sep } from 'node:path';
 import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
 import {
   WorkspaceRepairBodySchema,
+  HostProvisionReportBodySchema,
+  HostProvisionsClaimBodySchema,
   isWireAttestationSource,
   type Act,
   MemberKindSchema,
@@ -183,6 +185,13 @@ import {
   revokeGrant,
   validateGrant,
 } from '../store/grants.js';
+import {
+  claimProvisions,
+  failProvision,
+  getProvision,
+  reportProvision,
+  toProvision,
+} from '../store/hostProvisions.js';
 import { rowsToEnvelopes } from '../store/hydrate.js';
 import { listInterruptCandidates } from '../store/interruptCandidates.js';
 import {
@@ -216,6 +225,7 @@ import {
   clearBound,
   getMemberById,
   getMemberByName,
+  memberStandingRefusal,
   isHeld,
   hashToken,
   leaveMember,
@@ -291,6 +301,7 @@ import {
   TEAM_WIDE_HOST,
   buildWakeContext,
   effectiveWakePolicy,
+  seatWakeDefaults,
   enrollResidency,
   getResidency,
   listResidency,
@@ -340,6 +351,7 @@ import {
 } from '../store/seeds.js';
 import { mintSessionLease, revokeMemberSessionLeases } from '../store/session-leases.js';
 import { redeemHandoff, stageHandoff } from '../store/signinHandoff.js';
+import { issueAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { revokeSponsoredDescendants } from '../store/sponsoredCascade.js';
 import { staleLaneWarnings } from '../store/staleness.js';
 import { searchInsights } from '../store/teamMemory.js';
@@ -415,7 +427,13 @@ import { assertSponsorCaller, assertSponsorOf } from './authSponsor.js';
 import { handleMcpRoute } from './mcpHttp.js';
 import { broadcastMemberAdded } from './memberAdded.js';
 import { checkRateLimit, handleOAuthRoutes } from './oauth.js';
-import { issueAgentConnect, mintSponsoredAgent, originFrom } from './sponsoredAgentMint.js';
+import {
+  agentConnectUrl,
+  issueAgentConnect,
+  mintSponsoredAgent,
+  originFrom,
+  tellSponsorOfProvision,
+} from './sponsoredAgentMint.js';
 
 /**
  * The content-coding negotiated for this response from its request's `Accept-Encoding`, set once at
@@ -3422,7 +3440,7 @@ export async function handleHttp(
         // ADR 357: this poll is the host's heartbeat. Recorded before the lease claim so a host
         // that polls and gets nothing still counts as alive — the roster's `enrolled_host_stale`
         // is derived from it.
-        recordHostSeen(ctx.db, team.id, body.host, Date.now());
+        recordHostSeen(ctx.db, team.id, body.host, Date.now(), scope.creatorId);
         const orders = claimWakeLeases(
           ctx.db,
           team.id,
@@ -3433,6 +3451,108 @@ export async function handleHttp(
           scope,
         );
         return sendJson(res, 200, { orders });
+      }
+
+      // ADR 463 §2: the sponsor's host claims the provisions it may serve — a sponsored seat only
+      // from its sponsor's own key (`hostMayServe`) — atomically, one claimant, capped per host.
+      // The claim poll is a heartbeat too. With no `agent_host.policy.budget_usd` set, a claimed
+      // row fails `no_budget` at once and the sponsor is told which setting to change.
+      if (method === 'POST' && rest === '/host/provisions') {
+        const body = parseOrBadRequest(HostProvisionsClaimBodySchema, await readJson(req));
+        const { team, scope } = authAgentKeyOnly(ctx, slug, req, body.host);
+        const now = Date.now();
+        recordHostSeen(ctx.db, team.id, body.host, now, scope.creatorId);
+        const agentHost = getPolicy(ctx.db, team.id).agent_host;
+        const claimed = claimProvisions(
+          ctx.db,
+          team.id,
+          body.host,
+          scope,
+          agentHost.max_per_host,
+          now,
+        );
+        const ready: ReturnType<typeof toProvision>[] = [];
+        for (const row of claimed) {
+          const agent = getMemberById(ctx.db, row.member_id)!;
+          const sponsor = getMemberById(ctx.db, row.sponsor_id);
+          appendAudit(ctx.db, team.id, {
+            actor: null,
+            action: 'host.provision_claimed',
+            target: row.id,
+            result: 'allow',
+            detail: { host: body.host, agent: agent.name },
+          });
+          if (agentHost.policy.budget_usd === undefined) {
+            failProvision(ctx.db, row.id, 'no_budget');
+            appendAudit(ctx.db, team.id, {
+              actor: null,
+              action: 'host.provision_failed',
+              target: row.id,
+              result: 'deny',
+              detail: { host: body.host, agent: agent.name, reason: 'no_budget' },
+            });
+            if (sponsor)
+              tellSponsorOfProvision(
+                ctx,
+                team,
+                agent,
+                sponsor.name,
+                `Your host ${body.host} did not set up ${agent.name}: the team has no budget for ` +
+                  'hosted agents. An admin sets it with the policy `agent_host.policy.budget_usd`.',
+                { agent_provision_failed: { agent: agent.name, reason: 'no_budget' } },
+              );
+            continue;
+          }
+          ready.push(toProvision(row, team.slug, agent.name, sponsor?.name ?? '?'));
+        }
+        return sendJson(res, 200, { provisions: ready });
+      }
+
+      // ADR 463 §2: the claimant reports `ready` or `failed {reason}`. The row's claimant label is
+      // the host authority, as on wake reports. A `ready` report is refused, and the row failed,
+      // if the sponsor or the agent lost standing since the claim (Review Focus 2).
+      const provisionReport = rest.match(/^\/host\/provisions\/([^/]+)\/report$/);
+      if (method === 'POST' && provisionReport) {
+        const body = parseOrBadRequest(HostProvisionReportBodySchema, await readJson(req));
+        const id = decodeURIComponent(provisionReport[1]!);
+        const known = getTeamBySlug(ctx.db, slug);
+        const claimant = known ? (getProvision(ctx.db, known.id, id)?.claimed_by ?? '') : '';
+        const { team, scope } = authAgentKeyOnly(ctx, slug, req, claimant);
+        const existing = getProvision(ctx.db, team.id, id);
+        const agent = existing ? getMemberById(ctx.db, existing.member_id) : undefined;
+        if (!existing || !agent || !hostMayServe(scope, agent))
+          throw new MusterdError('not_found', `no provision "${id}" for this host`);
+        const { row, refused } = reportProvision(ctx.db, team.id, id, claimant, body);
+        const sponsor = getMemberById(ctx.db, row.sponsor_id);
+        appendAudit(ctx.db, team.id, {
+          actor: null,
+          action: row.state === 'ready' ? 'host.provision_ready' : 'host.provision_failed',
+          target: row.id,
+          result: row.state === 'ready' ? 'allow' : 'deny',
+          detail: {
+            host: claimant,
+            agent: agent.name,
+            ...(row.failed_reason ? { reason: row.failed_reason } : {}),
+          },
+        });
+        if (refused)
+          throw new MusterdError('forbidden', `provision "${id}" cannot go ready: ${refused}`);
+        if (row.state === 'failed' && sponsor && !memberStandingRefusal(sponsor)) {
+          const { nonce } = issueAgentConnectNonce(ctx.db, team.id, agent.id, sponsor.id);
+          tellSponsorOfProvision(
+            ctx,
+            team,
+            agent,
+            sponsor.name,
+            `Your host ${claimant} could not set up ${agent.name} (${row.failed_reason}). Open this ` +
+              'link on the device that will run it instead (expires in 15 minutes, works once): ' +
+              agentConnectUrl(row.connect_origin ?? requestOrigin(req), team.slug, nonce),
+            { agent_provision_failed: { agent: agent.name, reason: row.failed_reason } },
+          );
+        }
+        return sendJson(res, 200, {
+          provision: toProvision(row, team.slug, agent.name, sponsor?.name ?? '?'),
+        });
       }
 
       // The doorbell's `os` sink (ADR 443 §3): the host on the human's own machine claims the rings
@@ -5832,7 +5952,10 @@ export async function handleHttp(
                 const wakeMember = getMemberByName(ctx.db, team.id, wakePick.reviewer);
                 const enrollment = wakeMember ? getResidency(ctx.db, team.id, wakeMember.id) : null;
                 const seatPolicy = enrollment
-                  ? effectiveWakePolicy(teamPolicy.residency, enrollment.policy)
+                  ? effectiveWakePolicy(
+                      seatWakeDefaults(teamPolicy, wakeMember ?? undefined),
+                      enrollment.policy,
+                    )
                   : null;
                 if (seatPolicy?.flow === 'auto') {
                   pick = wakePick;

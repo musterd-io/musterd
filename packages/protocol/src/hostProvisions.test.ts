@@ -63,4 +63,20 @@ describe('host provision schemas (ADR 463)', () => {
     expect(WakeOrderSchema.parse({ ...order, reason: 'provisioned' }).reason).toBe('provisioned');
     expect(WakeOrderSchema.safeParse({ ...order, reason: 'other' }).success).toBe(false);
   });
+  it('a provisioned wake carries no act (ADR 463 §2: no fake directed act); any other act-less one is refused', () => {
+    const bare = {
+      lease_id: 'l',
+      seat: 'dana-scout',
+      lane: 'immediate',
+      derivation: 'immediate',
+      composed_line: 'you were just created by dana',
+      expires_at: 1,
+    };
+    expect(WakeOrderSchema.safeParse({ ...bare, reason: 'provisioned' }).success).toBe(true);
+    expect(WakeOrderSchema.safeParse(bare).success).toBe(false);
+    expect(
+      WakeOrderSchema.safeParse({ ...bare, reason: 'provisioned', derivation: 'work_order' })
+        .success,
+    ).toBe(false);
+  });
 });

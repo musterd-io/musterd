@@ -163,6 +163,20 @@ never provisioned a second time. `--no-provision` opts out; `musterd host provis
   team-wide over sponsored seats, so a sponsor enrolling on a label an admin host already used
   would be woken on the admin's machine. §1 now binds a sponsored seat to its sponsor's own key
   (landed with increment 1, #1784, with a regression on an admin host label).
+- 2026-09-28 (increment 3, provisions): four details the Decision left open, settled in code.
+  (a) The sweep settles every open row that can no longer finish, not only unclaimed ones: a
+  claimed row with no report after 15 minutes fails `not_reported`, and a row whose sponsor lost
+  standing fails `sponsor_lost_standing`, because §1 kills that sponsor's host keys and the host
+  could never report. (b) `host_provisions` carries `connect_origin`, the origin the mint was
+  reached at, so the sweep's fallback link is built with no request in hand. (c) The fallback
+  message comes from the agent's own seat, not the sponsor's: an inbox never shows its owner's
+  own acts. `meta.agent_connect_fallback` / `meta.agent_provision_failed` mark it. (d)
+  `agent_host.policy` applies to every sponsored seat's wakes, between the team defaults and the
+  seat's own override (`seatWakeDefaults`). The `provisioned` order carries no act, so
+  `WakeOrderSchema` accepts an act-less order for that reason only (§5 already authorizes the
+  reason). A known limit: `host_liveness` keeps one `sponsor_id` per label, so two sponsors
+  sharing one label see only the last to poll. The other sponsor falls back to the connect link,
+  which is safe.
 - The work lands in five PRs, each alone: (1) this ADR; (2) sponsor-scoped authority and host-key
   scoping; (3) the residual closed in code; (4) provisions; (5) the provisioner, Scenario D, docs.
 
