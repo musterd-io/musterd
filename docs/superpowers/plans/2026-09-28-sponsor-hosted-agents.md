@@ -836,7 +836,7 @@ export async function provisionOnce(deps: ProvisionDeps): Promise<{ claimed: num
 - Modify: `docs/demo.md` §7 (the "agents run in worktrees as the host user" line → points at ADR NNN; the demo is done, mark §7 historical)
 - Modify: `ROADMAP.md` via `content/roadmap.data.ts` + `pnpm roadmap:gen` (add: container isolation on the sponsor's machine; team-shared hosts; Cloud runtime)
 - Modify: `SPEC.md` Appendix A if any new wire route belongs there (host provisions are daemon-local HTTP, not envelope acts — likely no change; confirm)
-- Modify: `docs/implementation-plan.md` (milestone line: sponsor-hosted agents landed, ADR NNN)
+- Modify: `docs/implementation-plan.md` (status line: sponsor-hosted agents landed, ADR NNN)
 
 - [ ] **Step 1:** make each edit; **Step 2:** `pnpm format:check` (runs `arch-trees:check`, `roadmap:check`, `vocab:check`, `change-adr:check`); **Step 3:** commit `docs: sponsor-hosted agents — architecture, security, roadmap` / `Refs ADR-NNN`; **Step 4:** after merge, `lane_submit` lane 01M3FBKS39 with `{pr, sha, authorized_by:'nick'}` and follow its reply. Amend ADR NNN `## Consequences` with a dated "landed" note listing the five PRs.
 
