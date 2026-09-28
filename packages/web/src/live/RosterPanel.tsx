@@ -83,9 +83,7 @@ export function RosterPanel({
         {onCollapse && <CollapseButton side="mid" label="the roster" onClick={onCollapse} />}
       </header>
       <div className="lc-roster__rows">
-        {members.length === 0 && (
-          <p className="lc-roster__empty">No seats on this team yet.</p>
-        )}
+        {members.length === 0 && <p className="lc-roster__empty">No seats on this team yet.</p>}
         {members.map((m) => (
           <SeatRow
             key={m.id}
@@ -112,7 +110,7 @@ export function RosterPanel({
           <b>No live acceptor.</b>{' '}
           {capacity.models.length === 1
             ? `Every live agent is on ${capacity.models[0]}, and a seat cannot accept its own model's work — so every review is waiting on a wake.`
-            : 'No live seat can accept another seat\'s work, so every review is waiting on a wake.'}
+            : "No live seat can accept another seat's work, so every review is waiting on a wake."}
         </p>
       )}
       {/* Reported whether or not the ladder is flat, because an unattested seat is ineligible in
@@ -153,50 +151,17 @@ function SeatRow({
 }) {
   const kind = m.kind === 'human' ? 'human' : 'agent';
   const online = m.presence !== 'offline';
-  // Feature-skew (ADR 148): a *live* seat whose attested feature epoch is below the daemon's is missing
-  // capabilities that landed later — the one meaningful, actionable skew (reload the seat). This replaces
-  // the old raw build-SHA "stale" chip, which fired an alarm on every benign drift even though genuine
-  // wire-incompatibility is already refused at the handshake (so a present seat is always compatible).
-  // The build ref stays only as operator detail in the tooltip; it is never itself the trigger.
   const memberBuild = m.presences?.[0]?.build ?? undefined;
   const memberEpoch = m.presences?.[0]?.epoch ?? undefined;
-  // The machine this seat lives on (presence replication, ADR 356) — `presences` comes back ordered
-  // `last_seen_at DESC` (presence.ts:461), so index 0 is where the seat was seen MOST RECENTLY, and
-  // the CLI reads the same index for the same reason (render/rows.ts:352). A local row carries
-  // `node: null` and says nothing: the machine you are already looking at is not news, and a suffix
-  // on every row would cost the rare remote one all its salience.
-  // Falls back to silence rather than the raw id when the label has not synced — `node_label` is a
-  // LEFT JOIN onto `nodes`, so a node this daemon has not replicated yet joins to null, and a ULID
-  // in the roster would be worse than not naming the machine at all.
-  const nodeLabel = m.presences?.[0]?.node_label?.trim() || undefined;
-  // Why this seat is in the room at all (ADR 131) — a wake, or a person opening a session. Rides
-  // ALONGSIDE the posture chip rather than replacing it: posture is what the seat is doing,
-  // provenance is why it is here, and a woken seat is `working` or `active` like any other.
-  const woken = wokenSeat(m);
   const epochBehind = isFeatureBehind(m, daemonEpoch);
   const skewTitle = epochBehind
     ? `Behind on features — this seat is on epoch ${memberEpoch}, the team is on ${daemonEpoch}. ` +
       `Reload it to pick up recent capabilities.` +
-      (memberBuild && daemonBuild ? ` (build ${memberBuild.slice(0, 7)} vs ${daemonBuild.slice(0, 7)})` : '')
+      (memberBuild && daemonBuild
+        ? ` (build ${memberBuild.slice(0, 7)} vs ${daemonBuild.slice(0, 7)})`
+        : '')
     : undefined;
-  // Reclaimable (ADR 105): seat held within reclaim grace. Chip shows `reconnecting` via
-  // offline_reason (ADR 141); no separate recon label.
   const reconnecting = !online && m.reclaimable === true;
-  // Residency (ADR 131): an enrolled offline seat is not unreachable — a directed act wakes it;
-  // `resumable` only while the capture sits inside the harness's ~30d GC horizon (inc 5), which is
-  // exactly why the wire carries a timestamp and not a boolean.
-  const enrolled = !online && !reconnecting && m.wakeable === true;
-  // ADR 357: the five-state read, when the daemon sends it. An older daemon omits `wakeability`
-  // and the chip reads exactly as before (enrolled ⇒ "wakeable"). A newer one lets the chip say
-  // WHY an enrolled seat cannot be reached — a dead actuator or a vanished workspace used to read
-  // "wakeable" until a wake failed in host.log where nobody was looking.
-  const wakeability = enrolled ? (m.wakeability ?? 'wakeable') : null;
-  const wakeable = wakeability === 'wakeable';
-  const resumable =
-    wakeable && m.resumable_at != null && Date.now() - m.resumable_at < 30 * 24 * 60 * 60 * 1000;
-  const chip = rosterPrimaryChip(m);
-  const accountEx = accountStatusException(m.account_status);
-  const badges = capabilityBadges(m.capabilities);
   const dotState = online ? 'on' : reconnecting ? 'recon' : 'off';
   const seatMod = online ? '' : reconnecting ? ' lc-seat--recon' : ' lc-seat--offline';
 
@@ -204,7 +169,13 @@ function SeatRow({
     <div className={`lc-seat${seatMod}`}>
       <span
         className={`lc-seat__dot lc-seat__dot--${dotState}`}
-        title={online ? `online · ${m.presence}` : reconnecting ? 'reconnecting — seat held within reclaim grace' : 'offline'}
+        title={
+          online
+            ? `online · ${m.presence}`
+            : reconnecting
+              ? 'reconnecting — seat held within reclaim grace'
+              : 'offline'
+        }
       />
       {/* The monogram, restored (2026-08-13) — white on `memberAvatar` measures 4.86 at its worst
           across 24 names, and the 3.42 that took it away in #781/#789 came from a different
@@ -234,89 +205,142 @@ function SeatRow({
             </span>
           )}
         </div>
-        <div className="lc-seat__gov">
-          <span
-            className={`lc-stat lc-stat--${chip.quiet ? 'quiet' : chip.tone}`}
-            title={
-              (m.offline_reason
-                ? `Offline reason: ${m.offline_reason}`
-                : `Posture: ${chip.label}`) + (nodeLabel ? ` · on ${nodeLabel}` : '')
-            }
-          >
-            {chip.label}
-            {nodeLabel && <span className="lc-stat__node"> @ {nodeLabel}</span>}
-          </span>
-          {woken && (
-            <span className="lc-stat lc-stat--woken" title={wokenBadge().title}>
-              {wokenBadge().label}
-            </span>
-          )}
-          {accountEx && (
-            <span
-              className={`lc-stat lc-stat--${accountEx.tone}`}
-              title={`Account status: ${m.account_status}`}
-            >
-              {accountEx.label}
-            </span>
-          )}
-          {badges.map((b) => (
-            <span key={b.key} className={`lc-cap lc-cap--${b.tone}`} title={b.title}>
-              {b.label}
-            </span>
-          ))}
-          {wakeable && (
-            <span
-              className="lc-stat lc-stat--quiet"
-              title="Enrolled in harness residency (ADR 131) — a directed act wakes this seat"
-            >
-              wakeable
-            </span>
-          )}
-          {wakeability === 'enrolled_host_stale' && (
-            <span
-              className="lc-stat lc-stat--quiet"
-              title="Enrolled, but the host actuator that would spawn this seat has stopped polling — a directed act will wait until it is back (ADR 357)"
-            >
-              enrolled · host quiet
-            </span>
-          )}
-          {wakeability === 'enrolled_dead_workspace' && (
-            <span
-              className="lc-stat lc-stat--quiet"
-              title="Enrolled, but the last wake reported the workspace gone — re-provision before a directed act can reach it (ADR 357)"
-            >
-              enrolled · workspace gone
-            </span>
-          )}
-          {wakeability === 'enrolled_seat_busy' && (
-            <span
-              className="lc-stat lc-stat--quiet"
-              title="Enrolled and acting on the ledger just now with a lapsed heartbeat — waking it would spawn a duplicate (ADR 219)"
-            >
-              enrolled · busy
-            </span>
-          )}
-          {resumable && (
-            <span
-              className="lc-stat lc-stat--quiet"
-              title="A captured harness session is resumable — a wake continues the seat's own transcript"
-            >
-              resumable
-            </span>
-          )}
-          {/* Last, and deliberately not a `lc-stat` chip: the visit is over, and a trace that looked
-              like the live chips beside it would be competing with facts about now. */}
-          {trace && (
-            <span className="lc-roster__dwell" title={trace.title}>
-              {trace.label}
-            </span>
-          )}
-        </div>
-        {/* ADR 445 increment 4b: the seat's recent trace, on demand. Structural events only —
-            the route never selects content — and empty when this viewer may not read the seat. */}
-        {cfg && <SeatTraceToggle cfg={cfg} seat={m.name} />}
+        <SeatDetail m={m} trace={trace} cfg={cfg} />
       </div>
     </div>
+  );
+}
+
+/**
+ * The operator detail under a seat's name line — posture chip, provenance, governance badges,
+ * residency, dwell, and the trace expander. Extracted from `SeatRow` (ADR 464) so the team card
+ * on /live can carry the same detail one click down without owning a second copy of it.
+ */
+export function SeatDetail({
+  m,
+  trace = null,
+  cfg = null,
+}: {
+  m: MemberSummary;
+  cfg?: LiveConfig | null;
+  trace?: { label: string; title: string } | null;
+}) {
+  const online = m.presence !== 'offline';
+  // The machine this seat lives on (presence replication, ADR 356) — `presences` comes back ordered
+  // `last_seen_at DESC` (presence.ts:461), so index 0 is where the seat was seen MOST RECENTLY, and
+  // the CLI reads the same index for the same reason (render/rows.ts:352). A local row carries
+  // `node: null` and says nothing: the machine you are already looking at is not news, and a suffix
+  // on every row would cost the rare remote one all its salience.
+  // Falls back to silence rather than the raw id when the label has not synced — `node_label` is a
+  // LEFT JOIN onto `nodes`, so a node this daemon has not replicated yet joins to null, and a ULID
+  // in the roster would be worse than not naming the machine at all.
+  const nodeLabel = m.presences?.[0]?.node_label?.trim() || undefined;
+  // Why this seat is in the room at all (ADR 131) — a wake, or a person opening a session. Rides
+  // ALONGSIDE the posture chip rather than replacing it: posture is what the seat is doing,
+  // provenance is why it is here, and a woken seat is `working` or `active` like any other.
+  const woken = wokenSeat(m);
+  // Reclaimable (ADR 105): seat held within reclaim grace. Chip shows `reconnecting` via
+  // offline_reason (ADR 141); no separate recon label.
+  const reconnecting = !online && m.reclaimable === true;
+  // Residency (ADR 131): an enrolled offline seat is not unreachable — a directed act wakes it;
+  // `resumable` only while the capture sits inside the harness's ~30d GC horizon (inc 5), which is
+  // exactly why the wire carries a timestamp and not a boolean.
+  const enrolled = !online && !reconnecting && m.wakeable === true;
+  // ADR 357: the five-state read, when the daemon sends it. An older daemon omits `wakeability`
+  // and the chip reads exactly as before (enrolled ⇒ "wakeable"). A newer one lets the chip say
+  // WHY an enrolled seat cannot be reached — a dead actuator or a vanished workspace used to read
+  // "wakeable" until a wake failed in host.log where nobody was looking.
+  const wakeability = enrolled ? (m.wakeability ?? 'wakeable') : null;
+  const wakeable = wakeability === 'wakeable';
+  const resumable =
+    wakeable && m.resumable_at != null && Date.now() - m.resumable_at < 30 * 24 * 60 * 60 * 1000;
+  const chip = rosterPrimaryChip(m);
+  const accountEx = accountStatusException(m.account_status);
+  const badges = capabilityBadges(m.capabilities);
+
+  return (
+    <>
+      <div className="lc-seat__gov">
+        <span
+          className={`lc-stat lc-stat--${chip.quiet ? 'quiet' : chip.tone}`}
+          title={
+            (m.offline_reason ? `Offline reason: ${m.offline_reason}` : `Posture: ${chip.label}`) +
+            (nodeLabel ? ` · on ${nodeLabel}` : '')
+          }
+        >
+          {chip.label}
+          {nodeLabel && <span className="lc-stat__node"> @ {nodeLabel}</span>}
+        </span>
+        {woken && (
+          <span className="lc-stat lc-stat--woken" title={wokenBadge().title}>
+            {wokenBadge().label}
+          </span>
+        )}
+        {accountEx && (
+          <span
+            className={`lc-stat lc-stat--${accountEx.tone}`}
+            title={`Account status: ${m.account_status}`}
+          >
+            {accountEx.label}
+          </span>
+        )}
+        {badges.map((b) => (
+          <span key={b.key} className={`lc-cap lc-cap--${b.tone}`} title={b.title}>
+            {b.label}
+          </span>
+        ))}
+        {wakeable && (
+          <span
+            className="lc-stat lc-stat--quiet"
+            title="Enrolled in harness residency (ADR 131) — a directed act wakes this seat"
+          >
+            wakeable
+          </span>
+        )}
+        {wakeability === 'enrolled_host_stale' && (
+          <span
+            className="lc-stat lc-stat--quiet"
+            title="Enrolled, but the host actuator that would spawn this seat has stopped polling — a directed act will wait until it is back (ADR 357)"
+          >
+            enrolled · host quiet
+          </span>
+        )}
+        {wakeability === 'enrolled_dead_workspace' && (
+          <span
+            className="lc-stat lc-stat--quiet"
+            title="Enrolled, but the last wake reported the workspace gone — re-provision before a directed act can reach it (ADR 357)"
+          >
+            enrolled · workspace gone
+          </span>
+        )}
+        {wakeability === 'enrolled_seat_busy' && (
+          <span
+            className="lc-stat lc-stat--quiet"
+            title="Enrolled and acting on the ledger just now with a lapsed heartbeat — waking it would spawn a duplicate (ADR 219)"
+          >
+            enrolled · busy
+          </span>
+        )}
+        {resumable && (
+          <span
+            className="lc-stat lc-stat--quiet"
+            title="A captured harness session is resumable — a wake continues the seat's own transcript"
+          >
+            resumable
+          </span>
+        )}
+        {/* Last, and deliberately not a `lc-stat` chip: the visit is over, and a trace that looked
+          like the live chips beside it would be competing with facts about now. */}
+        {trace && (
+          <span className="lc-roster__dwell" title={trace.title}>
+            {trace.label}
+          </span>
+        )}
+      </div>
+      {/* ADR 445 increment 4b: the seat's recent trace, on demand. Structural events only —
+        the route never selects content — and empty when this viewer may not read the seat. */}
+      {cfg && <SeatTraceToggle cfg={cfg} seat={m.name} />}
+    </>
   );
 }
 
