@@ -1,4 +1,4 @@
-# 468 — Remote MCP OAuth with generic CIMD and retained DCR
+# 470 — Remote MCP OAuth with generic CIMD and retained DCR
 
 ## Observability & Evaluation
 
