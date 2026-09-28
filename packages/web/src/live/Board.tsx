@@ -38,6 +38,8 @@ const COLUMNS: ReadonlyArray<{ key: LaneState; label: string; tone: string }> = 
   { key: 'blocked', label: 'Blocked', tone: 'danger' },
   { key: 'awaiting_acceptance', label: 'Awaiting acceptance', tone: 'lane' },
   { key: 'done', label: 'Done', tone: 'success' },
+  // ADR 466: kept, deliberately not now — its own column so it never reads as backlog.
+  { key: 'parked', label: 'Parked', tone: 'neutral' },
 ];
 
 /** Column DOM caps (perf contract — no unbounded lists). Done grows forever, so it caps tighter. */
@@ -54,6 +56,7 @@ const EMPTY_COPY: Partial<Record<LaneState, string>> = {
   ready_for_review: 'Nothing awaiting acceptance.',
   done: 'Nothing shipped yet — soon.',
   abandoned: '', // no column
+  parked: 'Nothing on the shelf.',
 };
 
 const ACTION_LABEL: Record<LaneAction['kind'], string> = {
@@ -67,6 +70,7 @@ const ACTION_LABEL: Record<LaneAction['kind'], string> = {
   confirm: 'accept',
   sendback: 'reject',
   abandon: 'let it go',
+  unpark: 'unpark',
 };
 
 /** Compact relative age (`3m`, `2h`, `4d`) from a ms-epoch ts — how long a card has sat where it is. */

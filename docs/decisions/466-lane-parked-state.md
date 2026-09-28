@@ -1,6 +1,6 @@
 # 466 — lane `parked` state: keep a lane, not now
 
-- Status: proposed — 2026-09-28
+- Status: accepted — 2026-09-28 (nick)
 - Date: 2026-09-28
 - Lane: 01M3MTAFBZQD6SS8BQFHR1A3CP
 - Builds on: ADR 084 (lanes join the plan), ADR 103 (`defer` for Goals), ADR 192 (outcome acceptance), ADR 083 (advisory contention), ADR 373 (up-next in orientation)
@@ -43,46 +43,54 @@ undo by claiming it.
    is shown, and it is **not** a timer — no sweep unparks a lane (the ADR 229 sweep stays the only
    lane timer, and it only touches `awaiting_acceptance`).
 
-3. **Transitions.**
-   - Into `parked`: from `open`, `claimed`, `active`, or `blocked`, by any Member. An agent may park
-     its own lane (it is choosing not to do it now); parking another seat's claimed lane follows the
-     same rule as any other state change on someone else's lane.
-   - Out of `parked`: to `open` (unpark) or `abandoned`. **Unpark is human-or-parker only**: the
-     Member recorded in `parked.by`, or any human Member. An agent that is neither gets a refusal
-     naming who can unpark.
-   - `lane_claim` on a parked lane is refused with a hint naming `parked.by` and the reason. This
-     is a deliberate exception to warn-only contention (ADR 083: "two checks, warn-only, never block"): contention warnings exist
-     because two seats may not know about each other, but a park is an explicit decision already
-     recorded against the lane, and a claim that overrode it would be the silent undo the Problem
-     rules out. The path forward is an `ask` to the parker, or a human unparking.
+3. **Transitions — parking is a human's call, and `blocked` stays for real blockers.**
+   - Into `parked`: from `open`, `claimed`, `active`, or `blocked`, by a **human** Member only, with
+     a `park_reason`. An agent's park is refused, and the refusal points it at `blocked`: a lane
+     that cannot proceed (an unmet dependency, an outside wait) is `blocked`, keeps its owner, and
+     says why in its detail. That is what keeps the two states from blurring — `parked` always
+     means a person chose "not now", never that the work is stuck. An agent that thinks a lane
+     should be shelved `ask`s a human.
+   - Out of `parked`: to `open` (unpark) or `abandoned`, by a human only.
+   - `lane_claim`, or a handoff, of a parked lane is refused (409) with a message naming `parked.by`
+     and the reason. This is a deliberate exception to warn-only contention (ADR 083: "two checks,
+     warn-only, never block"): contention warnings exist because two seats may not know about each
+     other, but a park is an explicit decision already recorded against the lane, and a claim that
+     overrode it would be the silent undo the Problem rules out.
+   - The rules live in `decideParkPatch` (`sync/claim.ts`), inside `decideLanePatch`, so the local
+     PATCH path and the hub's arbitration refuse the same things.
 
 4. **Every reader treats `parked` as "kept, not offered".**
    - `team_next` excludes parked lanes from "open lanes you could pick up" and shows a one-line
      count (`parked: N — lane_board {state:["parked"]}`), so the brief stays short and the lanes
      stay findable.
-   - `lane_board` shows parked lanes by default, grouped after open lanes, with reason and `until`.
-   - `/live` and `/board` render parked lanes in their own muted group; the backlog counts in
-     `store/insights.ts` do not count them as open.
-   - `done`-lane metrics, the review debt readout, and the acceptance backstop ignore them.
+   - `lane_board` and `musterd lanes` show parked lanes with who parked them, the reason, and
+     `until`; the CLI lists them last under their own heading.
+   - The web board gives them their own `Parked` column, offers only `unpark` on the card, and never
+     `claim`. Backlog counts (`state = 'open'`) already exclude them.
+   - The ADR 229 sweep, review debt, and carrying counts never select `parked`.
 
-5. **Surfaces.** MCP: `lane_update {id, state:"parked", reason, until?}`; CLI:
-   `musterd lane park <id> --reason "…" [--until <date>]` and `musterd lane unpark <id>`. The reason
-   is carried in the patch; a park without a reason is rejected at the zod boundary.
+5. **Surfaces.** Wire: `UpdateLane` gains `park_reason` (1–280 chars) and `park_until` (ms), both
+   ignored off the park move; the transport refuses a park without a reason. MCP:
+   `lane_update {id, state:"parked", park_reason, park_until?}` (`park_until` as a date string).
+   CLI: `musterd lane park <id> --reason "…" [--until <date>]` and `musterd lane unpark <id>`.
+   Storage: nullable `lanes.parked_json` (migration v78), replicated through `lane.updated`'s
+   `parked` field; the fold of `lane.state_changed` to `parked` also clears the owner.
 
-6. **Versioning.** A new enum member is a wire-visible change. A peer on an older protocol that
-   receives `state: "parked"` must not fail the whole board read; the schema accepts it, and older
-   renderers that switch on state fall through to their default. This goes in SPEC.md Appendix A as
-   Unreleased until the code lands, then into the lane section with a minor protocol version bump.
+6. **Versioning.** A new enum member is wire-visible. `Lane.parked` is optional and `parked_total`
+   defaults to 0, so a newer client reads an older daemon's board unchanged. SPEC.md enumerates no
+   lane states (the protocol package is their one home, `lanes.wire.ts`), so it needs no edit.
 
 ## Consequences
 
-- The "hold off" titles become state. Migration is manual and cheap: re-park the currently
+- The "hold off" titles become state. Migration is manual and cheap: a human re-parks the
   prose-held lanes (today, the HuggingFace release lane) with their existing wording as the reason.
 - An agent reading its brief no longer sees shelved work as an invitation, and cannot pick it up by
   accident; a human can still unpark in one command.
-- `lane_claim` gains its first hard refusal. If this proves too strict in practice (seats asking
-  just to claim), the fallback is a `force` flag that records the override against the lane, not a
-  return to warn-only.
+- Agents cannot park, so `parked` cannot drift into meaning "stuck": the board's `blocked` column
+  keeps every lane that is actually blocked, with its owner.
+- `lane_claim` gains its first hard refusal (nick chose the block over a recorded override,
+  2026-09-28). If it proves too strict in practice, the fallback is a `force` flag that records the
+  override against the lane, not a return to warn-only.
 - `until` without a timer means a parked lane can outlive its date unnoticed. Accepted for now: an
   automatic unpark would re-offer work a human shelved, which is the failure this ADR exists to
   prevent. A later increment may surface overdue parks in `team_next` as a nudge, still without
@@ -102,9 +110,15 @@ undo by claiming it.
 - **Name it `deferred`.** `defer` is already the Goal act (ADR 103), and a lane state with the same
   root would suggest the act applies to lanes. `parked` is distinct and says the lane is kept.
 
-## Observability
+## Observability & Evaluation
 
-- Eval: after one week, count lanes in `parked`, the parks with an `until` already past, and any
+- **Traces:** a park, unpark, or refused claim is a lane edge the store already audits:
+  `lane.state_changed` (to/from `parked`) and `lane.updated` with the `parked` field carry who,
+  when, and why. A refused claim or agent park is a 403/409 on the PATCH and writes nothing.
+- **Eval:** after one week of use, count lanes in `parked`, parks whose `until` has passed, and
   refused claims on parked lanes. Falsifier: if refused claims are frequent and each is followed by
-  an unpark within the hour, the hard refusal is friction rather than protection, and Decision 3
-  should move to the `force` fallback.
+  a human unpark within the hour, the hard refusal is friction rather than protection, and
+  Decision 3 moves to the `force` fallback. Second falsifier: any parked lane whose reason names a
+  dependency or outside wait means `parked` is absorbing `blocked`.
+- **Experiment:** n/a — a state and its refusals, not a variant to A/B. **Baseline:** 2026-09-28 — no parked state; one lane held by title prose ("hold off
+  (human-gated)") and still offered in `team_next`.

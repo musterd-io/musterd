@@ -95,6 +95,8 @@ function noteFor(patch: UpdateLane, title: string, meName: string): string {
       return `done — "${title}" shipped`;
     case 'abandoned':
       return 'let it go.';
+    case 'parked':
+      return `parked — "${title}" kept for later`;
     default:
       return 'updated';
   }

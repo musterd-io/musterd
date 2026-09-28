@@ -259,6 +259,21 @@ export const LANE_TERMINAL_STATES: ReadonlySet<LaneState> = new Set(['done', 'ab
 // ADR 296 tier 2's `surface_globs` wire mirror (dual-send + dual-populate for one-epoch skew) was
 // dropped at epoch 16, on-touch, with the fleet verified at 14 — `scope` is the only wire token.
 
+/**
+ * Why a lane is parked (ADR 466) — set as a unit on the move into `parked`, cleared on the move out.
+ * `reason` is required so the next reader knows what "later" waits on. `until` is advisory: shown,
+ * never a timer — nothing unparks a lane on its own, because re-offering shelved work is the failure
+ * the state exists to prevent.
+ */
+export const LaneParkSchema = z.object({
+  /** The human Member who parked it (only humans park or unpark). */
+  by: z.string(),
+  at: z.number().int(),
+  reason: z.string().min(1).max(280),
+  until: z.number().int().optional(),
+});
+export type LanePark = z.infer<typeof LaneParkSchema>;
+
 export const LaneSchema = z.object({
   id: z.string(),
   team: z.string(),
@@ -359,6 +374,8 @@ export const LaneSchema = z.object({
     .nullable()
     .default(null),
   state: LaneStateSchema,
+  /** Present iff `state === 'parked'` (ADR 466). Optional (like `kind`) so older daemons and fixtures stay assignable; absent reads as not parked. */
+  parked: LaneParkSchema.nullable().optional(),
   /**
    * Board-projection annotation (ADR 169/191), never stored: for a `done` lane, whether the close
    * was a counterpart *acceptance* (derived from the `lane.closed` audit row's closer vs
@@ -527,6 +544,13 @@ export const UpdateLaneSchema = z.object({
    * job is only to say that a human made it.
    */
   acceptor: z.string().min(1).optional(),
+  /**
+   * Why this lane is being parked (ADR 466) — required on the move into `parked` (the transport
+   * refuses a park without one) and ignored on any other patch. Stored as `parked.reason`.
+   */
+  park_reason: z.string().min(1).max(280).optional(),
+  /** Advisory revisit date (ms) for a park — shown, never acted on. Ignored off the park move. */
+  park_until: z.number().int().optional(),
 });
 export type UpdateLane = z.infer<typeof UpdateLaneSchema>;
 
@@ -634,8 +658,13 @@ export const NextBriefSchema = z.object({
   in_flight: z.array(LaneSchema),
   /** Your most recently shipped lanes (done), newest first — what just landed. */
   shipped: z.array(LaneSchema),
-  /** Unowned lanes you could pick up, oldest first — what to start next. */
+  /** Unowned lanes you could pick up, oldest first — what to start next. Never parked ones. */
   up_next: z.array(LaneSchema),
+  /**
+   * How many lanes are parked (ADR 466). A count, not the lanes: a parked lane is kept, not
+   * offered, so the brief says it exists and where to look (`lane_board`) without inviting pickup.
+   */
+  parked_total: z.number().int().nonnegative().default(0),
   /**
    * Recorded intentions nobody has started: open Seeds awaiting exploration, oldest first
    * (ADR 373 increment 4).

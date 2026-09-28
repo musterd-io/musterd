@@ -37,7 +37,7 @@ src/
     interruptCandidates.ts // listInterruptCandidates: the unread rows pendingInterrupts can actually use (urgent/steer/obligation + resolve/accept/decline/eligible), plus this seat's own suppress acts (the inbox omits them) — keep in step with the fold (ADR 088/225/254)
     deferralFold.ts   // deferralFold: held + raised + the seat's own sends, hydrating the 2000-row window ONLY when a deferral is actually held (ADR 211 §3)
     metrics.ts        // backing queries for the observable telemetry gauges (ADR 015)
-    lanes.ts          // coordination lanes P1: CRUD + the two warn-only checks; goal_id join + deriveGoalStatus (ADR 083/084); counterpart close does not rewrite merged (ADR 305, stripped at HTTP)
+    lanes.ts          // coordination lanes P1: CRUD + the two warn-only checks; goal_id join + deriveGoalStatus (ADR 083/084); counterpart close does not rewrite merged (ADR 305, stripped at HTTP); `parked` releases the owner and carries `parked_json` (ADR 466)
     incidents.ts      // incident convergence inc 1 (ADR 266): recordBlockedReport pools blocked_by reports per (team, gate), opens ONE unowned kind:'incident' lane at 2 distinct seats, appends after; openIncidents/incidentReporters feed the team_next banner and the route hook's fan-out
     laneClose.ts      // recordLaneClose: the terminal edge's audit (verified/reason/grade + the ADR 109 merge join), shared by the board PATCH and an acceptor's accept (ADR 169/188/192/202)
     laneSweep.ts      // sweepAbandonedAcceptance: the backstop — closes a lane parked past the 24h grace in awaiting_acceptance as `review_swept`, never verified, since the ADR 217 reasons label a close and never cause one (ADR 229)
@@ -288,6 +288,12 @@ Something addressed to a human rings them through surfaces musterd owns, never a
   `up_next_seeds` (open Seeds, oldest first, compact: id/source/ref/summary/submitted_by) and
   `up_next_seeds_total`, projected by `openSeedsForBrief` and rendered above `up_next` on both
   surfaces.
+- **Parked lanes (ADR 466).** `parked` is a human's "kept, not now". `decideParkPatch`
+  (`sync/claim.ts`, so the hub and the local path agree) admits a park only from a human, with a
+  `park_reason`, from open/claimed/active/blocked; an unpark only from a human, to open or
+  abandoned; and refuses any claim or handoff of a parked lane (409, naming who parked it and why).
+  An agent that cannot proceed is pointed at `blocked`. The brief carries `parked_total`, never the
+  lanes: `up_next` takes only `open`.
 - **Repo capture (ADR 373 inc 2).** `POST /teams/:slug/seeds/repo` `{ref, body, captured_at?,
   lane_id?}` — a document-recorded intention as a Seed with `source: 'repo'`, idempotent on `ref`
   (201 created / 200 already held); `lane_id` links + promotes. Any seated Member.

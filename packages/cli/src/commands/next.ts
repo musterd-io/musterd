@@ -82,6 +82,8 @@ function render(brief: NextBrief): void {
     w(`\n${theme.accent('up next')} — open lanes you could pick up:\n`);
     for (const l of brief.up_next) w(laneLine(l) + '\n');
   }
+  if ((brief.parked_total ?? 0) > 0)
+    w(theme.meta(`\nparked: ${brief.parked_total} — kept, not offered (\`musterd lanes\`)`) + '\n');
   if (brief.shipped.length > 0) {
     w(`\n${theme.meta('recently shipped:')}\n`);
     for (const l of brief.shipped)

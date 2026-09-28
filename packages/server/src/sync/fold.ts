@@ -181,12 +181,20 @@ function projectLaneEvent(
     case 'lane.state_changed': {
       const to = typeof d['to'] === 'string' ? d['to'] : null;
       if (to === null) return 'applied';
-      db.prepare('UPDATE lanes SET state = ?, updated_at = ? WHERE team_id = ? AND id = ?').run(
-        to,
-        ts,
-        teamId,
-        laneId,
-      );
+      // ADR 466: parking releases the owner (the origin store's release invariant); the park
+      // record itself follows in the same write's `lane.updated` row (`parked` field).
+      if (to === 'parked')
+        db.prepare(
+          `UPDATE lanes SET state = ?, owner_seat = NULL, claimed_at = NULL, updated_at = ?
+            WHERE team_id = ? AND id = ?`,
+        ).run(to, ts, teamId, laneId);
+      else
+        db.prepare('UPDATE lanes SET state = ?, updated_at = ? WHERE team_id = ? AND id = ?').run(
+          to,
+          ts,
+          teamId,
+          laneId,
+        );
       return 'applied';
     }
     case 'lane.ready_for_review':
@@ -218,6 +226,7 @@ function projectLaneEvent(
         stakes: 'stakes',
         kind: 'kind',
         merged: 'merged_json',
+        parked: 'parked_json',
       };
       for (const [field, change] of Object.entries(changes)) {
         const col = column[field];
@@ -227,7 +236,8 @@ function projectLaneEvent(
         else if (field === 'risk')
           value = Array.isArray(value) && value.length > 0 ? JSON.stringify(value) : null;
         else if (field === 'stakes') value = value === 'normal' ? null : value;
-        else if (field === 'merged') value = value === null ? null : JSON.stringify(value);
+        else if (field === 'merged' || field === 'parked')
+          value = value === null ? null : JSON.stringify(value);
         db.prepare(`UPDATE lanes SET ${col} = ?, updated_at = ? WHERE team_id = ? AND id = ?`).run(
           value,
           ts,

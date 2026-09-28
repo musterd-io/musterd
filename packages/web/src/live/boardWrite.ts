@@ -16,7 +16,8 @@ export interface LaneAction {
     | 'done'
     | 'confirm'
     | 'sendback'
-    | 'abandon';
+    | 'abandon'
+    | 'unpark';
   patch: UpdateLane;
 }
 
@@ -35,6 +36,9 @@ const TERMINAL = new Set<Lane['state']>(['done', 'abandoned']);
  */
 export function laneActions(lane: Lane, me: string | null): LaneAction[] {
   if (!me || TERMINAL.has(lane.state)) return [];
+  // ADR 466: a parked lane is not claimable. Unpark is offered; the daemon admits it from a human
+  // only, so an agent session's click is refused there with the reason.
+  if (lane.state === 'parked') return [{ kind: 'unpark', patch: { state: 'open' } }];
   if (!lane.owner_seat) {
     // The daemon flips open→claimed itself when ownership lands (store/lanes.ts) — owner_seat alone.
     return [{ kind: 'claim', patch: { owner_seat: me } }];
