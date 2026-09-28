@@ -6,9 +6,10 @@ import { MusterdError } from '../errors.js';
 import { teamSpecForSlug } from '../projection/reconcile.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { appendAudit } from '../store/audit.js';
+import { revokeGrant } from '../store/grants.js';
 import { insertProvision, sponsorHostsSeen, sweepProvisions } from '../store/hostProvisions.js';
 import { getMemberById, getMemberByName } from '../store/members.js';
-import { getResidency } from '../store/residency.js';
+import { getResidency, revokeResidency } from '../store/residency.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import {
   connectRefusal,
@@ -198,6 +199,33 @@ export function tellSponsorOfProvision(
 }
 
 /**
+ * A provision that failed leaves no half-hosted seat behind: a host that enrolled the seat before it
+ * failed (or before it went quiet) has that enrollment and its standing grant revoked, so the
+ * connect link the sponsor gets next can redeem (ADR 463 §4.1 refuses a hosted agent's link).
+ */
+export function unhostFailedProvision(
+  ctx: Ctx,
+  team: TeamRow,
+  agent: MemberRow,
+  reason: string,
+): void {
+  const removed = revokeResidency(ctx.db, team.id, agent.id);
+  if (!removed) return;
+  if (removed.grant_id) revokeGrant(ctx.db, team.id, removed.grant_id);
+  appendAudit(ctx.db, team.id, {
+    actor: null,
+    action: 'residency.revoked',
+    target: agent.name,
+    result: 'allow',
+    detail: {
+      host: removed.host,
+      ...(removed.grant_id ? { grant_id: removed.grant_id } : {}),
+      provision_failed: reason,
+    },
+  });
+}
+
+/**
  * One sweep pass (ADR 463 §2, `sweepProvisions`): every open provision that can no longer finish is
  * settled and audited. A sponsor still in standing gets one message carrying a fresh connect link,
  * issued in their name — nothing is stuck waiting on a host that never came or never reported.
@@ -217,6 +245,7 @@ export function sweepProvisionsPass(ctx: Ctx, now = Date.now()): number {
       detail: { agent: agent.name, reason, ...(row.host ? { host: row.host } : {}) },
     });
     if (reason === 'agent_left' || reason === 'sponsor_lost_standing' || !sponsor) continue;
+    if (reason === 'not_reported') unhostFailedProvision(ctx, team, agent, reason);
     const { nonce } = issueAgentConnectNonce(ctx.db, team.id, agent.id, sponsor.id, now);
     const url = agentConnectUrl(row.connect_origin ?? originFrom(null, null), team.slug, nonce);
     const what =

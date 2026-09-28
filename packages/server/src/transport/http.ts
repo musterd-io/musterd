@@ -433,6 +433,7 @@ import {
   mintSponsoredAgent,
   originFrom,
   tellSponsorOfProvision,
+  unhostFailedProvision,
 } from './sponsoredAgentMint.js';
 
 /**
@@ -3538,6 +3539,7 @@ export async function handleHttp(
         if (refused)
           throw new MusterdError('forbidden', `provision "${id}" cannot go ready: ${refused}`);
         if (row.state === 'failed' && sponsor && !memberStandingRefusal(sponsor)) {
+          unhostFailedProvision(ctx, team, agent, row.failed_reason ?? 'failed');
           const { nonce } = issueAgentConnectNonce(ctx.db, team.id, agent.id, sponsor.id);
           tellSponsorOfProvision(
             ctx,

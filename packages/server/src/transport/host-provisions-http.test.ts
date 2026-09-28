@@ -203,6 +203,13 @@ describe('host provisions (ADR 463 §2)', () => {
       otherKey.json.agent_key,
     );
     expect(wrong.status).toBe(401);
+    // The host got as far as enrolling the seat before it failed.
+    const en = await post(
+      '/teams/hp-t/residency/enroll',
+      { seat: 'dana-scout', harness: 'claude-code', host: 'dana-mbp' },
+      dana,
+    );
+    expect(en.status).toBe(201);
     const failed = await post(
       `/teams/hp-t/host/provisions/${id}/report`,
       { state: 'failed', reason: 'worktree' },
@@ -218,6 +225,11 @@ describe('host provisions (ADR 463 §2)', () => {
     expect(twice.status).toBe(409);
     const told = (await inboxOf(dana)).find((m) => m.meta?.agent_provision_failed);
     expect(told.body).toMatch(/could not set up dana-scout \(worktree\).*\/join\/hp-t#n=/);
+    // …and a failed provision leaves no half-hosted seat, so that link can redeem (ADR 463 §4.1).
+    const residency = server.db
+      .prepare('SELECT COUNT(*) AS n FROM residency WHERE member_id = ?')
+      .get(member('dana-scout').id) as { n: number };
+    expect(residency.n).toBe(0);
   });
 
   it('a ready provision yields exactly one provisioned wake, naming the sponsor', async () => {
