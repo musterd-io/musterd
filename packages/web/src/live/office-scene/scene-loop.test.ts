@@ -76,3 +76,13 @@ describe('coming back to a room that stopped being watched', () => {
     expect(spelled.length, 'the liveness predicate is written out more than once').toBe(1);
   });
 });
+
+describe('nameplates are laid out, not just pinned (lane 01M3GPH5KB)', () => {
+  it('positionLabels places every plate through layoutPlates, from sizes it did not force a layout for', () => {
+    const pos = body('positionLabels');
+    expect(pos).toContain('layoutPlates(');
+    // Reading offsetWidth per frame would force a synchronous layout 20–60 times a second.
+    expect(pos).not.toMatch(/offset(Width|Height)|getBoundingClientRect/);
+    expect(index).toMatch(/new ResizeObserver\(/);
+  });
+});

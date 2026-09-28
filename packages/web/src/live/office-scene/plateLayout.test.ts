@@ -1,0 +1,134 @@
+import { describe, expect, it } from 'vitest';
+import { headBox, layoutPlates, leaderFrom, plateRect, type PlateBox } from './plateLayout';
+
+/**
+ * Nameplates stacked over a neighbour (lane 01M3GPH5KB): the four seats at the meeting table read as
+ * "autorefresh" slicing "sloane" to "loane", miley's plate on dolly's head. Plates are pinned above
+ * their own head with no idea of each other. `layoutPlates` places them front-to-back into the first
+ * free slot near their head.
+ */
+const W = 80;
+const H = 14;
+const plate = (name: string, x: number, y: number, w = W): PlateBox => ({
+  name,
+  anchor: { x, y },
+  w,
+  h: H,
+});
+const overlaps = (a: ReturnType<typeof plateRect>, b: ReturnType<typeof plateRect>) =>
+  a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+
+function run(plates: PlateBox[], prev = new Map<string, number>()) {
+  const heads = new Map(plates.map((p) => [p.name, p.anchor]));
+  return layoutPlates(plates, heads, prev, { scale: 1 });
+}
+
+describe('layoutPlates', () => {
+  it('a plate with room keeps its place straight above its own head', () => {
+    const out = run([plate('ada', 100, 100)]);
+    expect(out.placements.get('ada')).toEqual({ x: 100, y: 100, displaced: false });
+  });
+
+  it('of two plates that would overlap, the one nearer the viewer keeps its place and the other moves clear', () => {
+    const out = run([plate('back', 100, 100), plate('front', 160, 104)]);
+    expect(out.placements.get('front')!.displaced).toBe(false);
+    const back = out.placements.get('back')!;
+    expect(back.displaced).toBe(true);
+    const rb = plateRect(back, W, H);
+    const rf = plateRect(out.placements.get('front')!, W, H);
+    expect(overlaps(rb, rf)).toBe(false);
+  });
+
+  it('a plate never sits on another member’s head', () => {
+    // In the isometric room the member BEHIND is drawn up-screen, so the front member's plate —
+    // hanging above the front head — lands exactly on the back member's head.
+    const plates = [plate('behind', 200, 150), plate('front', 200, 175)];
+    const out = run(plates);
+    const f = out.placements.get('front')!;
+    expect(overlaps(plateRect(f, W, H), headBox({ x: 200, y: 150 }, 1))).toBe(false);
+  });
+
+  it('the meeting-table cluster: no plate overlaps another plate or a neighbour’s head', () => {
+    // Four seats round a table, heads 20–40 px apart — the screenshot that opened this lane.
+    const plates = [
+      plate('autorefresh', 400, 300, 118),
+      plate('sloane', 440, 305),
+      plate('miley', 425, 322),
+      plate('dolly', 430, 350),
+    ];
+    const out = run(plates);
+    const rects = plates.map((p) => ({
+      name: p.name,
+      r: plateRect(out.placements.get(p.name)!, p.w, H),
+    }));
+    for (const a of rects)
+      for (const b of rects)
+        if (a.name !== b.name) expect(overlaps(a.r, b.r), `${a.name} × ${b.name}`).toBe(false);
+    for (const a of rects)
+      for (const p of plates)
+        if (p.name !== a.name)
+          expect(overlaps(a.r, headBox(p.anchor, 1)), `${a.name} on ${p.name}'s head`).toBe(false);
+  });
+
+  it('keeps a displaced plate where it is while that spot still works — no flicker as people walk', () => {
+    const first = run([plate('back', 100, 100), plate('front', 160, 104)]);
+    const slot = first.slots.get('back')!;
+    // The front member drifts a couple of pixels: the back plate must not hop to a different slot.
+    const second = run([plate('back', 100, 100), plate('front', 161, 105)], first.slots);
+    expect(second.slots.get('back')).toBe(slot);
+  });
+
+  it('returns a plate home once its own spot is clear again', () => {
+    const first = run([plate('back', 100, 100), plate('front', 160, 104)]);
+    expect(first.placements.get('back')!.displaced).toBe(true);
+    const alone = run([plate('back', 100, 100), plate('front', 400, 104)], first.slots);
+    expect(alone.placements.get('back')).toEqual({ x: 100, y: 100, displaced: false });
+  });
+
+  it('when nowhere is free, a plate takes the spot that overlaps least, never disappears', () => {
+    const crowd = Array.from({ length: 9 }, (_, i) =>
+      plate(`m${i}`, 300 + (i % 3) * 6, 300 + Math.floor(i / 3) * 6),
+    );
+    const out = run(crowd);
+    expect(out.placements.size).toBe(9);
+  });
+});
+
+describe('leaderFrom — the hairline back to a displaced plate’s head', () => {
+  const inside = (x: number, y: number, r: ReturnType<typeof plateRect>) =>
+    x > r.x0 + 0.5 && x < r.x1 - 0.5 && y > r.y0 + 0.5 && y < r.y1 - 0.5;
+
+  it('starts at the plate edge nearest the head, and never runs back through the plate', () => {
+    // A plate stepped to the RIGHT of its head, at head level: the head is up-left of it.
+    const at = { x: 200, y: 120 };
+    const head = { x: 130, y: 100 };
+    const lead = leaderFrom(at, W, H, head);
+    const r = plateRect(at, W, H);
+    expect(lead.start.x).toBeCloseTo(r.x0, 5); // the left edge — the side facing the head
+    for (let t = 0.05; t <= 1; t += 0.05) {
+      const x = lead.start.x + Math.cos(lead.angle) * lead.len * t;
+      const y = lead.start.y + Math.sin(lead.angle) * lead.len * t;
+      expect(inside(x, y, r), `point ${t.toFixed(2)} of the leader is inside the plate`).toBe(
+        false,
+      );
+    }
+    const end = {
+      x: lead.start.x + Math.cos(lead.angle) * lead.len,
+      y: lead.start.y + Math.sin(lead.angle) * lead.len,
+    };
+    expect(end.x).toBeCloseTo(head.x, 5);
+    expect(end.y).toBeCloseTo(head.y, 5);
+  });
+
+  it('a plate raised straight above its head leaves from its bottom edge', () => {
+    const lead = leaderFrom({ x: 100, y: 80 }, W, H, { x: 100, y: 100 });
+    expect(lead.start).toEqual({ x: 100, y: 80 });
+  });
+});
+
+describe('the head box covers the shoulders too', () => {
+  it('reaches far enough down that a plate beside a neighbour’s head cannot clip their torso', () => {
+    const b = headBox({ x: 0, y: 0 }, 1);
+    expect(b.y1).toBeGreaterThanOrEqual(50);
+  });
+});

@@ -1401,11 +1401,19 @@
   flex: 1 1 auto;
 }
 @keyframes lc-caption-in {
-  from { opacity: 0; transform: translateY(-2px); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lc-caption__pill { animation: none; }
+  .lc-caption__pill {
+    animation: none;
+  }
 }
 .lc-workstack__count,
 .lc-workstack__quiet {
@@ -1593,6 +1601,23 @@
   white-space: nowrap;
   transition: opacity var(--lc-dur-2) var(--lc-ease-out);
 }
+/* A plate the layout moved off its own head (plateLayout.ts, lane 01M3GPH5KB) keeps a hairline back
+   to it, in the member's own colour: where seats crowd — the meeting table, a pod row — a plate that
+   has to step aside must never be read as the neighbour's. It leaves from the plate's edge nearest
+   the head (never through the name); start, length and angle are set per frame. */
+.lc-gl-label.is-displaced::after {
+  content: '';
+  position: absolute;
+  left: var(--lead-x);
+  top: var(--lead-y);
+  width: var(--lead-len);
+  height: 1px;
+  background: var(--lc-plate-hue);
+  opacity: 0.75;
+  transform-origin: 0 50%;
+  transform: rotate(var(--lead-angle));
+  pointer-events: none;
+}
 /* The nameplate: compact paper pill — collapsed is dot + name + provider icon; expand grows a
    divider after the name and reveals model · harness · role behind it. Broadcast always shows icon +
    short model. See 2026-07-31-expandable-nameplates-design, re-cut 2026-08-02.
@@ -1750,7 +1775,6 @@
   text-transform: lowercase;
   color: color-mix(in srgb, var(--lc-paper-ink) 78%, transparent);
 }
-
 
 /* The dnd pill (presence-honesty §3): the one plate tag that is a state, not an identity — the
    warn ink as border + text on the plate's own paper (--lc-warn-ink measures 5.11 worst case; the
@@ -2130,11 +2154,16 @@
     ),
     /* The stock beneath it, at 93% — see the glass note above for why not less. */
     linear-gradient(
-      180deg,
-      color-mix(in srgb, color-mix(in srgb, var(--lc-paper) 88%, var(--lc-speech-tone)) 93%, transparent) 0%,
-      color-mix(in srgb, var(--lc-paper) 93%, transparent) 34%,
-      color-mix(in srgb, var(--lc-paper-2) 93%, transparent) 100%
-    );
+        180deg,
+        color-mix(
+            in srgb,
+            color-mix(in srgb, var(--lc-paper) 88%, var(--lc-speech-tone)) 93%,
+            transparent
+          )
+          0%,
+        color-mix(in srgb, var(--lc-paper) 93%, transparent) 34%,
+        color-mix(in srgb, var(--lc-paper-2) 93%, transparent) 100%
+      );
   /* ── the glass, and exactly how much of it there is ───────────────────────────────────────────
      (nick, 2026-09-02: "a tiny bit of glassmorphism")
 
