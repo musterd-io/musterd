@@ -48,11 +48,13 @@ export function deriveTraceReport(
   const sessions = traceDb
     .prepare<
       [string, number, ...string[]],
-      { harness: string; session_digest: string; has_r2: number; post: number }
+      { harness: string; session_digest: string; has_r2: number; post: number; post_main: number }
     >(
       `SELECT harness, session_digest,
               MAX(CASE WHEN kind IN ('reasoning','assistant_text','usage','unknown') THEN 1 ELSE 0 END) AS has_r2,
-              SUM(CASE WHEN kind = 'PostToolUse' THEN 1 ELSE 0 END) AS post
+              SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') THEN 1 ELSE 0 END) AS post,
+              SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NULL
+                       THEN 1 ELSE 0 END) AS post_main
          FROM trace_events
         WHERE team_id = ? AND ts >= ? ${inSeats}
         GROUP BY harness, session_digest`,
@@ -82,9 +84,12 @@ export function deriveTraceReport(
     // The ratio compares like with like: hook calls from the sessions the transcript rail also
     // covers. Counting every session's hook calls over only the R2-bearing sessions' transcript
     // calls read 124% on the live team (8 sessions, 2 with R2) — a number that meant nothing.
+    // A subagent's calls fire hooks in the parent session (with `agent_id`), but its transcript is
+    // a sidechain file the tail does not read — so they are left out of the ratio's numerator
+    // (307 of the 382 calls claude-code read OVER its R2 count, measured 2026-09-28).
     if (s.has_r2) {
       row.sessions_with_r2++;
-      row.post_tool_use_r2 += s.post;
+      row.post_tool_use_r2 += s.post_main;
     }
     cov.set(s.harness, row);
   }

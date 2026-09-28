@@ -25,6 +25,7 @@ import { countOpenLoopsByTeam } from './store/messages.js';
 import { activePresenceBySurface, slowestInboxLagMs } from './store/metrics.js';
 import { closeReportService } from './store/reportCache.js';
 import { startTraceContentPrune } from './store/trace.js';
+import { startTraceCoverageSweep } from './store/traceCoverage.js';
 import { startSyncPull } from './sync/pull.js';
 import { startSyncPush } from './sync/push.js';
 import { startTracePush } from './sync/tracePush.js';
@@ -151,6 +152,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   let stopPull: (() => void) | null = null;
   let stopFootprint: (() => void) | null = null;
   let stopTracePrune: (() => void) | null = null;
+  let stopTraceCoverage: (() => void) | null = null;
   let stopExpiredSweep: (() => void) | null = null;
   let stopTracePush: (() => void) | null = null;
   let stopWatcher: (() => void) | null = null;
@@ -227,6 +229,29 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
             },
             (err) => log.warn({ msg: 'trace_prune_failed', err: String(err) }),
           );
+          // ADR 445 §Observability: a quiet session below 0.98 tool coverage is audited, once.
+          stopTraceCoverage = startTraceCoverageSweep(
+            db,
+            traceDb,
+            (sessions) => {
+              for (const s of sessions) {
+                appendAudit(db, s.team_id, {
+                  actor: null,
+                  action: 'trace.coverage_low',
+                  target: s.seat,
+                  result: 'allow',
+                  detail: {
+                    harness: s.harness,
+                    session_digest: s.session_digest,
+                    post_tool_use: s.post_tool_use,
+                    r2_tool_uses: s.r2_tool_uses,
+                    coverage: s.coverage,
+                  },
+                });
+              }
+            },
+            (err) => log.warn({ msg: 'trace_coverage_sweep_failed', err: String(err) }),
+          );
           // ADR 459 §4: expired members read as departed on the roster. Hygiene only — auth
           // already refused them — so one audited row per swept member, and a failing pass logs on.
           stopExpiredSweep = startExpiredMemberSweep(
@@ -292,6 +317,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         stopPull?.();
         stopFootprint?.();
         stopTracePrune?.();
+        stopTraceCoverage?.();
         stopExpiredSweep?.();
         stopTracePush?.();
         stopWatcher?.();

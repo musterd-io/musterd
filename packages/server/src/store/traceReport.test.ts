@@ -38,6 +38,8 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
       ev({ tool_name: 'Bash' }),
       ev({ tool_name: 'Read' }),
       ev({ tool_name: 'Bash', outcome: 'error', kind: 'PostToolUseFailure' }),
+      // a subagent's call: a fact in the hook count, but its sidechain transcript is not tailed
+      ev({ tool_name: 'Grep', agent_id: 'sub-1' }),
       usage('ryder', NOW - H, { tool_uses: 4, input_tokens: 10, output_tokens: 5 }),
       ev({ harness: 'codex', session_digest: 'bbbbbbbbbbbb', tool_name: 'Bash' }),
       // a claude-code session with NO transcript rail: its hook calls count as a fact but must
@@ -52,10 +54,11 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
         harness: 'claude-code',
         sessions: 2,
         sessions_with_r2: 1,
-        post_tool_use: 5,
-        post_tool_use_r2: 2,
+        // the failed Bash counts: R2 counts a failed call too
+        post_tool_use: 7,
+        post_tool_use_r2: 3,
         r2_tool_uses: 4,
-        coverage: 0.5,
+        coverage: 0.75,
       },
       {
         harness: 'codex',
@@ -72,6 +75,7 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
       { harness: 'claude-code', tool: 'Read', calls: 2, errors: 0, avg_duration_ms: null },
       { harness: 'codex', tool: 'Bash', calls: 1, errors: 0, avg_duration_ms: null },
       { harness: 'claude-code', tool: 'Edit', calls: 1, errors: 0, avg_duration_ms: null },
+      { harness: 'claude-code', tool: 'Grep', calls: 1, errors: 0, avg_duration_ms: null },
     ]);
   });
 
