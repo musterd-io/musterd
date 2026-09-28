@@ -109,5 +109,8 @@
 // Epoch 24 — ADR 443 (the doorbell): `PolicySchema.doorbell`, per-human doorbell prefs, and the
 // host's ring poll for the `os` sink. A daemon behind this epoch drops a `doorbell` policy key and
 // has no `/doorbell` routes; a host behind it raises no banner.
-export const FEATURE_EPOCH = 24 as const;
+// Epoch 25 — ADR 445 R1 on Grok: the Grok PreToolUse interrupt probe and Stop doorbell carry
+// `--hook grok`, and the Stop script hands the probe its payload, so both are traced. The epoch
+// keeps an older checkout from rewriting those hook lines back to the untraced form.
+export const FEATURE_EPOCH = 25 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;

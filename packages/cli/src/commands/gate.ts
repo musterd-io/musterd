@@ -15,7 +15,7 @@ import type { HttpClient } from '../client.js';
 import { findBinding } from '../config.js';
 import { CliError } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
-import { tapHook } from '../trace/hook.js';
+import { inferPayloadHarness, tapHook } from '../trace/hook.js';
 import {
   isStageShaped,
   markSessionStart,
@@ -425,13 +425,17 @@ async function gateCheck(parsed: Parsed): Promise<number> {
   // decision is on stdout: it cannot change whether the call proceeds, and the payload's tool input
   // never leaves this process. Bounded and silent (TRACE_POST_BUDGET_MS); an unbound folder, a seat
   // with no credential, or MUSTERD_NO_TRACE=1 all make it a no-op. Harness: env first, then the
-  // payload's spelling — Grok sets no env var the gate can read.
+  // payload's spelling — Grok sets no env var the gate can read. On Grok the interrupt probe (no
+  // matcher) records every PreToolUse, so the gate posts only its outcome — one row per call, not
+  // two for a write.
   if (tapPayload) {
+    const harness = harnessFromEnv() ?? inferPayloadHarness(tapPayload);
     await tapHook(tapPayload, {
       binding: findBinding(),
       dir: process.cwd(),
-      harness: harnessFromEnv(),
+      harness,
       kind: 'PreToolUse',
+      observed: harness !== 'grok',
       outcome: {
         hook: 'gate',
         outcome: decision === 'deny' ? 'denied' : 'ok',

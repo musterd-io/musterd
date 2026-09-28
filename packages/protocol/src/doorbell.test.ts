@@ -214,8 +214,8 @@ describe('personal URLs stay private (ADR 443 §5)', () => {
 });
 
 describe('FEATURE_EPOCH (the doorbell, ADR 443)', () => {
-  it('is 24 — a daemon behind it has no doorbell routes and drops the policy key', () =>
-    expect(FEATURE_EPOCH).toBe(24));
+  it('is at least 24 — a daemon behind it has no doorbell routes and drops the policy key', () =>
+    expect(FEATURE_EPOCH).toBeGreaterThanOrEqual(24));
 });
 
 describe('PolicySchema carries the doorbell', () => {

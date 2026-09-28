@@ -115,6 +115,18 @@ export function inferTraceHarness(o: Record<string, unknown>): string | undefine
   return undefined;
 }
 
+/** {@link inferTraceHarness} over a raw hook payload; undefined for one that does not parse. */
+export function inferPayloadHarness(raw: string): string | undefined {
+  try {
+    const json: unknown = JSON.parse(raw);
+    return typeof json === 'object' && json !== null
+      ? inferTraceHarness(json as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Where a payload keeps each content field: the Claude Code / Codex names, then Cursor's shell and
  *  MCP event names (`command` / `output` / `result_json` are top-level only on Cursor's events). */
 const CONTENT_SOURCES: Record<TraceContentField, readonly string[]> = {

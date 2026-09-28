@@ -352,6 +352,9 @@ const DEFERRED_TOOL_HARNESSES: Record<string, string> = {
   'claude-code': 'ToolSearch',
 };
 
+/** The `--hook` values whose hook line pipes its payload to the probe, so the probe taps it (ADR 445). */
+const TAPPED_HOOKS: ReadonlySet<string> = new Set(['claude-code', 'grok']);
+
 async function interruptCheck(parsed: Parsed): Promise<number> {
   // Which harness's hook is running us, if any: decides whether a raised line (or the deaf line) is
   // printed bare or wrapped in that harness's injection JSON. Unknown value → bare, never a throw.
@@ -374,19 +377,19 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
   // even to a seat whose nudges are muted — so this runs before the MUSTERD_NO_NUDGE gate below.
   // One push per session, not per tool call: the slot's `attested_at` stamp is what bounds it.
   await attestSlotIfUnattested();
-  // ADR 445 R1 — the PostToolUse trace event rides the probe that already runs on every tool call,
-  // so the tap adds a payload to an existing process rather than a process to every call. Only the
-  // Claude Code hook pipes its JSON to this command; the other harnesses' probes come in through
-  // `session observe` / `codex-hook` and tap there. Started here, awaited at the very end: the
-  // interrupt GET below is the hook's one job and this must never delay or fail it (short stdin
-  // budget — the JSON is already in the pipe when the process starts, or it is not coming).
+  // ADR 445 R1 — the trace event rides the probe that already runs on every tool call, so the tap
+  // adds a payload to an existing process rather than a process to every call. Claude Code
+  // (PostToolUse) and Grok (PreToolUse, and the Stop doorbell) pipe their hook JSON to this
+  // command; Codex and Cursor probes come in through `codex-hook` / `session observe` and tap there.
+  // Started here, awaited at the very end: the interrupt GET below is the hook's one job and this
+  // must never delay or fail it (short stdin budget — the JSON is already in the pipe when the
+  // process starts, or it is not coming).
   //
   // The probe's own HookOutcome rides the same post, so the payload is read now and the post goes
-  // out at the end, when `raised` is known. Grok pipes its PreToolUse JSON here too, but with no
-  // `--hook` flag that says so — a bare probe cannot tell a harness pipe from any other stdin, so
-  // Grok's probe is not tapped until its hook line names itself (ADR 445 Consequences, 2026-09-25).
-  const payload: Promise<string> =
-    hookFlag === 'claude-code' ? readHookStdin(750) : Promise.resolve('');
+  // out at the end, when `raised` is known. Only a probe whose hook line names its harness reads
+  // stdin: a bare probe cannot tell a harness pipe from any other stdin.
+  const tapHarness = TAPPED_HOOKS.has(hookFlag) ? hookFlag : undefined;
+  const payload: Promise<string> = tapHarness ? readHookStdin(750) : Promise.resolve('');
   let raised = false;
   let deaf = false;
   const tap = async (): Promise<void> => {
@@ -395,7 +398,7 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
     await tapHook(raw, {
       binding: findBinding(),
       dir: process.cwd(),
-      harness: 'claude-code',
+      harness: tapHarness,
       outcome: { hook: 'interrupt', detail: deaf ? { raised, deaf } : { raised } },
     });
   };

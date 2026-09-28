@@ -12,6 +12,7 @@ import {
   INTERRUPT_MARKER,
   STOP_MARKER,
   grok,
+  grokInterruptPreCommand,
   inspectGrokHookDrift,
 } from './grok.js';
 
@@ -269,6 +270,39 @@ describe('grok interrupt scripts (ADR 370)', () => {
     } finally {
       rmSync(binDir, { recursive: true, force: true });
     }
+  });
+
+  // ADR 445 (lane 01M3MG7EAM): the probe can only tap a payload it is handed, and only when its
+  // hook line names the harness. The Stop script used to spawn the probe with stdin ignored.
+  it('Stop hands its payload to the probe and names the harness', () => {
+    const binDir = mkdtempSync(join(tmpdir(), 'musterd-fake-'));
+    try {
+      const log = join(binDir, 'seen');
+      const bin = join(binDir, 'musterd');
+      writeFileSync(
+        bin,
+        `#!/bin/sh\necho "$@" > ${JSON.stringify(log)}\ncat >> ${JSON.stringify(log)}\n`,
+      );
+      chmodSync(bin, 0o755);
+      const payload = JSON.stringify({
+        reason: 'end_turn',
+        sessionId: 'g1',
+        hookEventName: 'Stop',
+      });
+      const run = runNode(GROK_INTERRUPT_STOP_SCRIPT, payload, {
+        PATH: `${binDir}:${process.env['PATH'] ?? ''}`,
+      });
+      expect(run.status).toBe(0);
+      const [args, ...stdin] = readFileSync(log, 'utf8').split('\n');
+      expect(args).toBe('inbox --interrupt-check --hook grok');
+      expect(stdin.join('\n').trim()).toBe(payload);
+    } finally {
+      rmSync(binDir, { recursive: true, force: true });
+    }
+  });
+
+  it('the PreToolUse probe names the harness, so its piped payload is tapped', () => {
+    expect(grokInterruptPreCommand()).toContain('musterd inbox --interrupt-check --hook grok ');
   });
 
   it('Stop stays silent when interrupt-check prints nothing', () => {
