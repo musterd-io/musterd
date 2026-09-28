@@ -24,6 +24,7 @@ import { startExpiredMemberSweep } from './store/members.js';
 import { countOpenLoopsByTeam } from './store/messages.js';
 import { activePresenceBySurface, slowestInboxLagMs } from './store/metrics.js';
 import { closeReportService } from './store/reportCache.js';
+import { revokeExpiredMember } from './store/sponsoredCascade.js';
 import { startTraceContentPrune } from './store/trace.js';
 import { startSyncPull } from './sync/pull.js';
 import { startSyncPush } from './sync/push.js';
@@ -240,6 +241,8 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
                   result: 'allow',
                   detail: { lifecycle_until: m.lifecycle_until },
                 });
+                // ADR 463 §4.4: expiry takes the enrollment and anything the member sponsored.
+                revokeExpiredMember(db, m.team_id, m);
               }
               if (swept.length > 0) log.info({ msg: 'expired_members_swept', count: swept.length });
             },

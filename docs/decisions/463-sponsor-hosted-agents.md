@@ -102,14 +102,17 @@ never provisioned a second time. `--no-provision` opts out; `musterd host provis
 1. A sponsored agent enrolled in residency is never OAuth-connectable: `connectRefusal` refuses it
    (`conflict`, "hosted"), and a policy change to `agent_connect: 'any_member'` is refused while
    any sponsored agent on the team is hosted.
-2. Disable and ban cascade like remove: `setMemberGovernance` calls `cascadeSponsoredRevocation` on
-   a transition into `disabled` or `banned`, and the cascade also revokes residency and OAuth
-   chains for each descendant.
+2. Every loss of a sponsor's standing cascades the same way (`store/sponsoredCascade.ts`): each
+   descendant is disabled and loses its residency (with the standing grant), its OAuth chains and
+   unexchanged codes, and its presence. Removal and expiry are the triggers today. Disable and ban
+   have no writer on the teams where sponsored agents exist — seat-file reconcile is the only
+   account-status writer, and a seat-file team refuses sponsored mints (ADR 449) — so the first
+   such writer must call the same cascade.
 3. `PolicySchema.invite_requires_expiry` (default `false`): when true, `POST /invites` without
    `member_until` is refused. The policy setter refuses `agent_connect: 'any_member'` unless
    `invite_requires_expiry` is also true.
-4. The expiry sweeper (ADR 459) also cancels pending provisions and revokes residency for expired
-   agents.
+4. The expiry sweeper (ADR 459) revokes an expired member's own residency and cascades from it;
+   increment 3 adds cancelling its pending provisions.
 
 ### 5. Protocol changes this ADR authorizes
 
@@ -138,6 +141,12 @@ never provisioned a second time. `--no-provision` opts out; `musterd host provis
   already uses; nothing widens it. Containers on the sponsor's machine (opt-in via
   `agent_host.policy.isolation`), team-shared hosts and the Cloud runtime are the next increments
   on the same table.
+- 2026-09-28 (increment 2): §4.2 first named `setMemberGovernance` as the disable/ban hook. That
+  setter is written only by seat-file reconcile, and seat-file teams cannot hold sponsored
+  agents, so the hook could never fire — and where it could, the agent's own seat file would
+  overwrite the cascade on the same pass. §4.2 now names the triggers that exist (remove, expiry).
+  The real gap it closes: the remove route disabled descendants and revoked OAuth but left their
+  residency, so a hosted agent kept its standing grant after its sponsor was removed.
 - The work lands in five PRs, each alone: (1) this ADR; (2) sponsor-scoped authority and host-key
   scoping; (3) the residual closed in code; (4) provisions; (5) the provisioner, Scenario D, docs.
 

@@ -228,7 +228,6 @@ import {
   newSecret,
   rotateToken,
   setAvailability,
-  cascadeSponsoredRevocation,
   setMemberGovernance,
   setMemberHue,
   teamHasAdmin,
@@ -338,6 +337,7 @@ import {
 } from '../store/seeds.js';
 import { mintSessionLease, revokeMemberSessionLeases } from '../store/session-leases.js';
 import { redeemHandoff, stageHandoff } from '../store/signinHandoff.js';
+import { revokeSponsoredDescendants } from '../store/sponsoredCascade.js';
 import { staleLaneWarnings } from '../store/staleness.js';
 import { searchInsights } from '../store/teamMemory.js';
 import {
@@ -2792,6 +2792,15 @@ export async function handleHttp(
           })
           .strict();
         const body = parseOrBadRequest(InviteBody, await readJson(req));
+        // ADR 463 §4.3: a team that requires expiring invites refuses one that would admit forever.
+        if (
+          (body.member_until === undefined || body.member_until === null) &&
+          getPolicy(ctx.db, team.id).invite_requires_expiry
+        )
+          throw new MusterdError(
+            'validation',
+            `team "${slug}" requires member_until on every invite (policy invite_requires_expiry)`,
+          );
         const minted = mintTeamInvite(ctx.db, {
           teamId: team.id,
           createdBy: member.name,
@@ -7040,9 +7049,16 @@ export async function handleHttp(
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no member "${targetName}" in ${slug}`);
         leaveMember(ctx.db, target.id);
-        // ADR 449 §3: authority must not outlive the authorizer — removal disables every live
-        // member the target sponsored, transitively, with one audit row each naming the root.
-        for (const revoked of cascadeSponsoredRevocation(ctx.db, team.id, target.id)) {
+        // ADR 449 §3 / ADR 463 §4.2: authority must not outlive the authorizer — removal disables
+        // every live member the target sponsored, transitively, and takes residency, OAuth chains
+        // and presence with it (one audit row each, naming the root). The hub is ours to drop.
+        for (const { member: revoked } of revokeSponsoredDescendants(
+          ctx.db,
+          team.id,
+          target,
+          'remove',
+          caller.name,
+        )) {
           for (const old of ctx.hub.connsForMember(revoked.id)) {
             old.send({
               type: 'error',
@@ -7052,17 +7068,6 @@ export async function handleHttp(
             old.close?.();
             ctx.hub.remove(old.connId);
           }
-          clearMemberPresence(ctx.db, revoked.id);
-          // ADR 452 §3: an agent that connected over OAuth loses its chains with its standing —
-          // revoked outright, so a later re-enable cannot revive a chain nobody re-authorized.
-          const oauthRevoked = revokeAllForMember(ctx.db, team.id, revoked.id);
-          appendAudit(ctx.db, team.id, {
-            actor: caller.name,
-            action: 'member.revoked_cascade',
-            target: revoked.name,
-            result: 'allow',
-            detail: { root: target.name, oauth_revoked: oauthRevoked },
-          });
         }
         // Free the seat immediately: drop any live session (same mechanism as reclaim) so removal
         // doesn't leave a zombie presence holding a name that's no longer on the roster.

@@ -2,6 +2,7 @@ import { GENERALIST_CAPABILITIES } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../db/open.js';
 import { addMember, getMemberByName, leaveMember } from './members.js';
+import { enrollResidency } from './residency.js';
 import {
   CONNECT_NONCE_TTL_MS,
   SPONSORED_AGENT_CAP,
@@ -251,5 +252,40 @@ describe('who may connect a sponsored agent (ADR 456 §2–3)', () => {
     const { nonce: second } = issueAgentConnectNonce(db, team.id, agent.id, mate.id);
     leaveMember(db, mate.id);
     expect(redeemAgentConnectNonce(db, team.id, second)).toBeNull();
+  });
+});
+
+describe('a hosted agent is never OAuth-connectable (ADR 463 §4.1)', () => {
+  function hosted() {
+    const { db, team, human } = teamWithHuman();
+    const { member: agent, nonce } = createSponsoredAgent(db, team, human, { name: 'scout' });
+    enrollResidency(db, team.id, {
+      member_id: agent.id,
+      harness: 'claude-code',
+      host: 'dana-mbp',
+      grant_id: null,
+      authorized_by: 'dana',
+    });
+    return { db, team, human, agent, nonce };
+  }
+
+  it('refuses a connect link for an enrolled agent even for its sponsor, under either policy', () => {
+    const { team, human, agent } = hosted();
+    for (const policy of ['sponsor', 'any_member'] as const) {
+      const err = connectRefusal(human, agent, policy, team.slug, { hosted: 'dana-mbp' });
+      expect(err?.code).toBe('conflict');
+      expect(err?.message).toMatch(/hosted on dana-mbp/);
+    }
+  });
+
+  it('an unhosted agent connects as before', () => {
+    const { db, team, human } = teamWithHuman();
+    const { member: agent } = createSponsoredAgent(db, team, human, { name: 'scout' });
+    expect(connectRefusal(human, agent, 'sponsor', team.slug, { hosted: null })).toBeNull();
+  });
+
+  it('a link issued before the agent was hosted redeems nothing once it is', () => {
+    const { db, team, nonce } = hosted();
+    expect(redeemAgentConnectNonce(db, team.id, nonce)).toBeNull();
   });
 });

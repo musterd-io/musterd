@@ -1189,7 +1189,8 @@ describe('agent seats over OAuth via the sponsor nonce (ADR 452)', () => {
   async function setAgentConnect(value: 'sponsor' | 'any_member') {
     const r = await postJson(
       '/teams/dawn/policy',
-      { agent_connect: value },
+      // ADR 463 §4.3: any_member is only accepted paired with expiring invites.
+      { agent_connect: value, invite_requires_expiry: value === 'any_member' },
       { authorization: `Bearer ${nickCred}` },
     );
     expect(r.status).toBe(200);
