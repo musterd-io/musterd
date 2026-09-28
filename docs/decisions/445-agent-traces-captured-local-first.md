@@ -437,6 +437,40 @@ ADR 184's publication gate; a spans backend.
   rollouts on disk, R1/R2 per session: 343/340, 156/158, 10/10, and 239/269. The last one's R2
   excess is unexplained; the likeliest cause is calls made before the session's R1 tap was
   installed.
+- **2026-09-28 — coverage matrix, second read** (lane `01M3MG7Q650Z8C5DKZKGJ31MDG`). The daemon
+  reached `7d46d080` at 21:21Z, the first build carrying `codex@2`, `cursor@1`, `grok@1` and the
+  opencode taps, so no R2 row from those parsers exists yet (the newest codex `usage` row is still
+  `codex@1`). Read instead by re-parsing the transcripts on the dogfood box with this build's
+  parsers and joining each to its R1 session by seat workspace and start minute (the digest key
+  is per seat binding, so it is not a join an admin can make from outside the seat). 30 days,
+  main-loop R1 only, same numerator as the sweep.
+
+  | Harness     | Sessions | R1 main | R2 calls | Coverage | Why                                                   |
+  | ----------- | -------- | ------- | -------- | -------- | ----------------------------------------------------- |
+  | claude-code | 79 / 39  | 4,680   | 4,734    | 0.989    | daemon read (`report trace`, all seats)               |
+  | codex       | 8 of 9   | 1,254   | 1,264    | 0.992    | offline `codex@2`; 9th excluded (tap installed 90 min in: 384/684) |
+  | cursor      | 6        | 585     | 543      | 1.077    | offline `cursor@1`, numerator de-duplicated (see below) |
+  | grok        | 0        | —       | —        | null     | no grok seat has run since #1782                      |
+  | opencode    | 0        | —       | —        | null     | no opencode seat has run since #1785                  |
+  | native      | 0        | —       | —        | null     | no tap (lane `01M3MGQC0J`)                            |
+
+  Codex per session, R1/R2: 35/35, 53/53, 33/33, 107/108, 343/340, 10/10, 156/158, 517/527 — the
+  last one was live at the read, so its tail lags the hooks. Codex is at target.
+
+  Cursor is **not computable as recorded**: the raw ratio is 831/543 = 1.53 because the R1 tap
+  records `afterShellExecution` as `PostToolUse` beside `postToolUse` for the same shell call — on
+  cursor-agent too, not only the IDE (wanderer's 0e58c84e: 86 `postToolUse` Shell rows and 91
+  `afterShellExecution` rows against 92 Shell calls in the transcript). Counting `postToolUse` rows
+  only, per session R1/R2 reads 33/37, 317/262, 127/127, 22/26, 86/91 — five of six within 0.85–1.0
+  and one at 1.21 whose Read rows (144) are twice the transcript's (73), unexplained. The transcript
+  also carries calls that fire no hook (`Glob`, `GetDynamicTools`), which pulls the ratio under 1.
+  Two follow-ups, neither in this lane: the sweep's and the report's numerator should count one
+  `PostToolUse` per call for cursor (key on `detail.hook_event`, which is stored for exactly this),
+  and the tap's "instead of `postToolUse`" note on cursor-agent is wrong and should say "beside".
+  Falsifier for the cursor row: a cursor-agent session whose `postToolUse` count differs from its
+  transcript's `tool_use` count by more than 2% once shell/MCP after-hooks are excluded.
+
+  Grok and opencode wait on a seat running on this build; re-read then, from the daemon.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
