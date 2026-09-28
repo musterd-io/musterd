@@ -11,7 +11,15 @@ import {
   type CommitFacts,
   type RepoFacts,
 } from './engine.js';
-import { extractFacts, globToRegExp, parseDiff, resolveActor, toRanges } from './git.js';
+import { wasteByLane } from '../commands/archaeology.js';
+import {
+  extractFacts,
+  globToRegExp,
+  parseDiff,
+  prFromSubject,
+  resolveActor,
+  toRanges,
+} from './git.js';
 
 // ── engine unit tests ────────────────────────────────────────────────────────────────────────
 
@@ -187,6 +195,60 @@ describe('classify — predicate set v1', () => {
   });
 });
 
+describe('per-PR and per-lane roll-up (ADR 462)', () => {
+  it('tallies lines by PR and charges a clobbered line to the PR that authored it', () => {
+    const report = classify(
+      facts(
+        [
+          commit({
+            sha: 'a',
+            actor: 'ana',
+            order: 1,
+            delivered: true,
+            pr: 10,
+            files: [{ path: 'x', added: lines(['one', 'two']) }],
+          }),
+          commit({ sha: 'b', actor: 'bob', order: 2, delivered: true, pr: 11 }),
+          commit({
+            sha: 'c',
+            actor: 'cat',
+            order: 3,
+            files: [{ path: 'y', added: lines(['cookoff line']) }],
+          }),
+        ],
+        { deletions: [{ delSha: 'b', srcSha: 'a', path: 'x', srcLine: 2 }] },
+      ),
+    );
+    expect(report.byPr['10']).toEqual({
+      authored: 2,
+      wasted: 1,
+      classes: { W1: 0, W2: 1, W3: 0, W4: 0 },
+    });
+    expect(report.byPr['11']).toBeUndefined(); // deleting authors nothing
+    expect(Object.keys(report.byPr)).toEqual(['10']); // an untagged commit joins no PR
+  });
+
+  it('joins PRs to lanes by merge attestation; an unattested PR stays visible as (no lane)', () => {
+    const tally = (authored: number, wasted: number) => ({
+      authored,
+      wasted,
+      classes: { W1: wasted, W2: 0, W3: 0, W4: 0 },
+    });
+    const lane = { id: 'L1', title: 'the lane', merged: { pr: 10 } } as never;
+    const rows = wasteByLane({ '10': tally(5, 0), '12': tally(3, 3) }, [lane]);
+    expect(rows.map((r) => [r.pr, r.lane])).toEqual([
+      [12, null],
+      [10, 'L1'],
+    ]);
+  });
+
+  it('reads the squash subject’s (#n) and nothing else', () => {
+    expect(prFromSubject('feat: x (#1757)\n\nbody (#1)')).toBe(1757);
+    expect(prFromSubject('feat: x #1757')).toBeNull();
+    expect(prFromSubject('reserve ADR 462')).toBeNull();
+  });
+});
+
 describe('normalize / globToRegExp / toRanges / resolveActor / parseDiff', () => {
   it('normalize collapses whitespace', () => {
     expect(normalize('  const   x =\t1; ')).toBe('const x = 1;');
@@ -351,5 +413,76 @@ describe('extractFacts + classify on a real repo', { timeout: 30_000 }, () => {
 
     const report = classify(extractFacts({ repo, start }));
     expect(Object.keys(report.byActor)).toEqual(['izzo@revive.musterd']);
+  });
+
+  it('pulls population: PR heads, not local refs; open PRs in flight; squash drift charged to its PR', () => {
+    const origin = mkdtempSync(join(tmpdir(), 'march-origin-'));
+    made.push(origin);
+    sh(origin, ['init', '-q', '-b', 'main']);
+    writeFileSync(join(origin, 'base.txt'), 'scaffold\n');
+    sh(origin, ['add', '.'], actorEnv('nick', 'nick@example.com', 1000));
+    sh(origin, ['commit', '-q', '-m', 'kickoff'], actorEnv('nick', 'nick@example.com', 1000));
+    const start = sh(origin, ['rev-parse', 'HEAD']);
+    const ana = actorEnv('ana', 'ana@t.musterd', 2000);
+
+    // PR 1: two branch commits (the second revises the first), squash-merged as "(#1)".
+    sh(origin, ['checkout', '-q', '-b', 'ana', start]);
+    writeFileSync(join(origin, 'a.txt'), 'a1\na2\na3\na4\n');
+    sh(origin, ['add', '.'], ana);
+    sh(origin, ['commit', '-q', '-m', 'ana: draft'], ana);
+    writeFileSync(join(origin, 'a.txt'), 'a1\na2\na3\na4 revised\n');
+    sh(origin, ['commit', '-q', '-am', 'ana: revise'], actorEnv('ana', 'ana@t.musterd', 2100));
+    sh(origin, ['update-ref', 'refs/pull/1/head', 'HEAD']);
+    sh(origin, ['checkout', '-q', 'main']);
+    sh(origin, ['merge', '-q', '--squash', 'ana']);
+    sh(origin, ['commit', '-q', '-m', 'ana: feature (#1)'], actorEnv('ana', 'ana@t.musterd', 2200));
+
+    // PR 2: closed without merging — abandoned.
+    sh(origin, ['checkout', '-q', '-b', 'carol', start]);
+    writeFileSync(join(origin, 'c.txt'), 'carol dead work\n');
+    sh(origin, ['add', '.'], actorEnv('carol', 'carol@t.musterd', 3000));
+    sh(origin, ['commit', '-q', '-m', 'carol: wip'], actorEnv('carol', 'carol@t.musterd', 3000));
+    sh(origin, ['update-ref', 'refs/pull/2/head', 'HEAD']);
+
+    // PR 3: still open (it has a merge ref) — in flight, neither delivered nor wasted.
+    sh(origin, ['checkout', '-q', '-b', 'bob', start]);
+    writeFileSync(join(origin, 'b.txt'), 'bob in flight\n');
+    sh(origin, ['add', '.'], actorEnv('bob', 'bob@t.musterd', 4000));
+    sh(origin, ['commit', '-q', '-m', 'bob: wip'], actorEnv('bob', 'bob@t.musterd', 4000));
+    sh(origin, ['update-ref', 'refs/pull/3/head', 'HEAD']);
+    sh(origin, ['update-ref', 'refs/pull/3/merge', 'HEAD']);
+    sh(origin, ['checkout', '-q', 'main']);
+    for (const b of ['ana', 'carol', 'bob']) sh(origin, ['branch', '-q', '-D', b]);
+
+    // The measuring clone lacks every PR head's objects (--no-local: no hardlinked store) and
+    // carries a local branch that is no PR at all — the `all` population would count it.
+    const repo = mkdtempSync(join(tmpdir(), 'march-clone-'));
+    made.push(repo);
+    rmSync(repo, { recursive: true, force: true });
+    sh(tmpdir(), ['clone', '-q', '--no-local', origin, repo]);
+    sh(repo, ['checkout', '-q', '-b', 'dave-local', start]);
+    writeFileSync(join(repo, 'd.txt'), 'dave local only\n');
+    sh(repo, ['add', '.'], actorEnv('dave', 'dave@t.musterd', 5000));
+    sh(repo, ['commit', '-q', '-m', 'dave: local'], actorEnv('dave', 'dave@t.musterd', 5000));
+
+    const report = classify(
+      extractFacts({ repo, start, delivered: 'origin/main', population: 'pulls' }),
+    );
+
+    expect(report.inFlightPrs).toEqual([3]);
+    expect(report.byActor['dave@t.musterd']).toBeUndefined();
+    expect(report.byActor['bob@t.musterd']).toBeUndefined();
+    // The squash's 4 lines survive; the draft's replaced "a4" is re-land drift charged to #1.
+    expect(report.byPr['1']).toEqual({
+      authored: 5,
+      wasted: 1,
+      classes: { W1: 0, W2: 0, W3: 0, W4: 1 },
+    });
+    expect(report.byPr['2']).toEqual({
+      authored: 1,
+      wasted: 1,
+      classes: { W1: 1, W2: 0, W3: 0, W4: 0 },
+    });
+    expect(report.totalAuthoredLines).toBe(6);
   });
 });
