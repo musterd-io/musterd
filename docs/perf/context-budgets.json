@@ -1,5 +1,5 @@
 {
-  "note": "Standing-context byte budgets (spec 2026-08-03, `pnpm context:check`). Every byte musterd injects into a seat's context — tools/list render, primer, hook nudges, including the due-gated label nudge — measured statically from source-of-truth exports. Raising any budget requires replacing that item's `justification`. bytes are UTF-8 of the model-readable text; estTokens = bytes/4 (the SurfaceRender formula).",
+  "note": "Standing-context byte budgets (spec 2026-08-03, `pnpm context:check`). Every byte musterd injects into a seat's context — tools/list render, primer, hook nudges — measured statically from source-of-truth exports. Raising any budget requires replacing that item's `justification`. bytes are UTF-8 of the model-readable text; estTokens = bytes/4 (the SurfaceRender formula).",
   "items": {
     "toolsListDefaultBytes": {
       "budget": 18287,
@@ -21,17 +21,13 @@
       "budget": 97,
       "justification": "post-trim 2026-08-03 (92 B) + 5% headroom"
     },
-    "labelNudgeBytes": {
-      "budget": 103,
-      "justification": "post-trim 2026-08-03 (98 B) + 5% headroom"
-    },
     "perTurnTotalBytes": {
-      "budget": 18487,
-      "justification": "2026-08-27 (17606 B, +team_insight_search alias — ADR 327 amendment) + 5% headroom. Pays rent via ADR 327 eval (trap-recurrence down, promotions up), reviewed at next re-baseline."
+      "budget": 18384,
+      "justification": "2026-09-28 (ADR 468): the 2026-08-27 ceiling (18487 B = 17606 B + 5%) minus the 103 B labelNudgeBytes part, which left the composition with the label sweep it announced. The parts still exactly spend the ceiling (the coherence test's binding rule). Pays rent via ADR 327 eval, reviewed at next re-baseline."
     },
     "perSessionTotalBytes": {
-      "budget": 21833,
-      "justification": "2026-08-27 (20793 B, same alias) + 5% headroom"
+      "budget": 21730,
+      "justification": "2026-09-28 (ADR 468): the 2026-08-27 ceiling (21833 B = 20793 B + 5%) minus the 103 B labelNudgeBytes part"
     }
   }
 }

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LABEL_DIVIDER,
   SEAT_CHIP,
-  capitalizeSeat,
   formatLabelWhen,
-  parseSeatLabel,
-  renderSeatLabel,
+  renderSessionLabel,
   renderTerminalTitle,
+  stripSessionLabel,
 } from './label.js';
 
 // A fixed "now": Sat 2026-07-25 12:00 local.
@@ -32,17 +32,27 @@ describe('formatLabelWhen', () => {
   });
 });
 
-describe('renderSeatLabel / renderTerminalTitle', () => {
-  it('renders the sidebar grammar with a capitalized seat', () => {
-    const friday3pm = new Date(2026, 6, 24, 15, 0).getTime();
-    expect(renderSeatLabel('miley', friday3pm, 'Daemon refresh', NOW)).toBe(
-      `${SEAT_CHIP} Miley (Fri 3p) - Daemon refresh`,
+describe('renderSessionLabel (ADR 468) / renderTerminalTitle', () => {
+  const friday3pm = new Date(2026, 6, 24, 15, 0).getTime();
+
+  it('renders seat · time · team · subject, lowercase seat, no chip', () => {
+    expect(renderSessionLabel('miley', friday3pm, 'revive', 'Daemon refresh', NOW)).toBe(
+      'miley · Fri 3p · revive · Daemon refresh',
+    );
+    expect(LABEL_DIVIDER).toBe(' · ');
+  });
+
+  it('drops the trailing divider when there is no subject to carry', () => {
+    expect(renderSessionLabel('miley', friday3pm, 'revive', '   ', NOW)).toBe(
+      'miley · Fri 3p · revive',
     );
   });
 
-  it('drops the separator when there is no subject to carry (never a dangling " - ")', () => {
-    const friday3pm = new Date(2026, 6, 24, 15, 0).getTime();
-    expect(renderSeatLabel('miley', friday3pm, '   ', NOW)).toBe(`${SEAT_CHIP} Miley (Fri 3p)`);
+  it('uses the date form for a session older than six days', () => {
+    const twoWeeksBack = new Date(2026, 6, 11, 15, 30).getTime();
+    expect(renderSessionLabel('dolly', twoWeeksBack, 'revive', 'x', NOW)).toBe(
+      'dolly · Jul 11 3p · revive · x',
+    );
   });
 
   it('renders the terminal title lowercase, with and without a subject', () => {
@@ -51,85 +61,63 @@ describe('renderSeatLabel / renderTerminalTitle', () => {
     );
     expect(renderTerminalTitle('stanley')).toBe(`${SEAT_CHIP} stanley`);
   });
-
-  it('capitalizes only the first letter, leaving the rest alone', () => {
-    expect(capitalizeSeat('miley')).toBe('Miley');
-    expect(capitalizeSeat('dELLa')).toBe('DELLa');
-  });
 });
 
-describe('parseSeatLabel — the three sweep states', () => {
-  it('fully labeled: chipped and seated', () => {
-    const p = parseSeatLabel(`${SEAT_CHIP} Miley (Fri 3p) - MCP list`, 'miley');
-    expect(p).toMatchObject({ chipped: true, seated: true });
-    expect(p.bare).toBe('Miley (Fri 3p) - MCP list');
+describe('stripSessionLabel — the subject behind a label this seat already wrote', () => {
+  it('strips the ADR 468 stem so a re-orient is idempotent', () => {
+    const once = renderSessionLabel('dolly', NOW, 'revive', 'orient after mcp reload', NOW);
+    expect(stripSessionLabel(once, 'dolly')).toBe('orient after mcp reload');
+    expect(renderSessionLabel('dolly', NOW, 'revive', stripSessionLabel(once, 'dolly'), NOW)).toBe(
+      once,
+    );
   });
 
-  it('pre-chip label: seated only, bare keeps the original timestamp text', () => {
-    const p = parseSeatLabel('Stanley (Mon 9p) - ADR 153 terminal', 'stanley');
-    expect(p).toMatchObject({ chipped: false, seated: true });
-    expect(p.bare).toBe('Stanley (Mon 9p) - ADR 153 terminal');
+  it('strips the ADR 468 stem with a date-form time and a hyphenated team', () => {
+    expect(stripSessionLabel('dolly · Jul 11 3p · agents-live · fix(x): y', 'dolly')).toBe(
+      'fix(x): y',
+    );
   });
 
-  it('untouched: neither chipped nor seated', () => {
-    const p = parseSeatLabel('Daemon refresh and MCP reload', 'miley');
-    expect(p).toMatchObject({ chipped: false, seated: false });
-    expect(p.bare).toBe('Daemon refresh and MCP reload');
+  it('strips the pre-468 sweep grammar, chipped and dated', () => {
+    expect(stripSessionLabel(`${SEAT_CHIP} Miley (Fri 3p) - MCP list`, 'miley')).toBe('MCP list');
   });
 
-  it('a chip for a DIFFERENT seat is chipped but not seated (never treated as done)', () => {
-    const p = parseSeatLabel(`${SEAT_CHIP} Miley (Fri 3p) - x`, 'izzo');
-    expect(p).toMatchObject({ chipped: true, seated: false });
+  it('strips a pre-468 label without chip, and a hand-seated title without stamp', () => {
+    expect(stripSessionLabel('Stanley (Mon 9p) - ADR 153 terminal', 'stanley')).toBe(
+      'ADR 153 terminal',
+    );
+    expect(stripSessionLabel('Miley - fix(broadcast): three things', 'miley')).toBe(
+      'fix(broadcast): three things',
+    );
+    expect(stripSessionLabel('Ryder- ADR-158 model attestation PR', 'ryder')).toBe(
+      'ADR-158 model attestation PR',
+    );
   });
 
-  it('seat match is case-insensitive (bindings are lowercase, labels capitalized)', () => {
-    expect(parseSeatLabel('miley - something', 'Miley').seated).toBe(true);
+  it('returns a title that is not this seat’s label untouched', () => {
+    expect(stripSessionLabel('Daemon refresh and MCP reload', 'miley')).toBe(
+      'Daemon refresh and MCP reload',
+    );
+    expect(stripSessionLabel(`${SEAT_CHIP} Miley (Fri 3p) - x`, 'izzo')).toBe(
+      `${SEAT_CHIP} Miley (Fri 3p) - x`,
+    );
+    expect(stripSessionLabel('izzo · Fri 3p · revive · x', 'dolly')).toBe(
+      'izzo · Fri 3p · revive · x',
+    );
+    expect(stripSessionLabel("Reviewing Miley's PR", 'miley')).toBe("Reviewing Miley's PR");
   });
 
-  // `dated` is what separates a pre-chip SWEEP label (has a stamp, must never be re-dated) from a
-  // human's bare "Miley - x" (no stamp, and the missing time is the whole point of relabeling it).
-  it('a seated title WITH a stamp is dated, and its subject excludes seat and stamp', () => {
-    const p = parseSeatLabel('Miley (Mon 2p) - MCP list', 'miley');
-    expect(p).toMatchObject({ seated: true, dated: true, subject: 'MCP list' });
-  });
-
-  it('a seated title WITHOUT a stamp is undated, and its subject drops the seat prefix', () => {
-    const p = parseSeatLabel('Miley - fix(broadcast): three things', 'miley');
-    expect(p).toMatchObject({
-      seated: true,
-      dated: false,
-      subject: 'fix(broadcast): three things',
-    });
-  });
-
-  it('tolerates a missing space before the separator ("Ryder- x", as typed by hand)', () => {
-    expect(parseSeatLabel('Ryder- ADR-158 model attestation PR', 'ryder')).toMatchObject({
-      seated: true,
-      dated: false,
-      subject: 'ADR-158 model attestation PR',
-    });
-  });
-
-  // `seated` licenses touching a human-typed title, so a loose prefix match would license
-  // overwriting words the sweep has no business touching. A boundary is required after the seat.
   it('requires a word boundary — seat "miley" does not claim "Mileystone planning"', () => {
-    expect(parseSeatLabel('Mileystone planning', 'miley')).toMatchObject({
-      seated: false,
-      dated: false,
-      subject: 'Mileystone planning',
-    });
+    expect(stripSessionLabel('Mileystone planning', 'miley')).toBe('Mileystone planning');
   });
 
-  it('a title that merely mentions the seat later is not seated', () => {
-    expect(parseSeatLabel("Reviewing Miley's PR", 'miley').seated).toBe(false);
+  it('a bare seat name strips to an empty subject', () => {
+    expect(stripSessionLabel('Miley', 'miley')).toBe('');
+    expect(stripSessionLabel('dolly · Mon 1p · revive', 'dolly')).toBe('');
   });
 
-  it('a bare seat name is seated with an empty subject', () => {
-    expect(parseSeatLabel('Miley', 'miley')).toMatchObject({ seated: true, subject: '' });
-  });
-
-  it('a seat name with regex metacharacters is matched literally, not as a pattern', () => {
-    expect(parseSeatLabel('a.c - x', 'a.c').seated).toBe(true);
-    expect(parseSeatLabel('abc - x', 'a.c').seated).toBe(false);
+  it('a seat name with regex metacharacters is matched literally', () => {
+    expect(stripSessionLabel('a.c - x', 'a.c')).toBe('x');
+    expect(stripSessionLabel('abc - x', 'a.c')).toBe('abc - x');
   });
 });

@@ -1,12 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { readFileSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import {
-  SEAT_CHIP,
   bindingSeat,
-  capitalizeSeat,
-  parseSeatLabel,
-  renderSeatLabel,
   resolveAttestedWakeLease,
   type Binding,
   type SessionCapture,
@@ -14,7 +9,7 @@ import {
 import { resolveWorkspaceKey } from '@musterd/protocol/project';
 import { flagStr, type Parsed } from '../args.js';
 import { HttpClient } from '../client.js';
-import { findBinding, findWorkspaceSpec, requireUsableBinding, saveBinding } from '../config.js';
+import { findBinding, requireUsableBinding, saveBinding } from '../config.js';
 import { CliError } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
 import { HARNESSES } from '../onboard/harnesses/index.js';
@@ -89,7 +84,6 @@ export async function sessionCommand(
   const sub = parsed.positionals[0];
   if (sub === 'start' || sub === 'end') return captureCommand(sub, parsed, deps);
   if (sub === 'observe') return observeCommand(parsed, deps);
-  if (sub === 'resolve-labels') return resolveLabelsCommand(parsed);
   if (sub === 'label-nudge') return labelNudgeCommand();
   if (sub === 'orient-nudge') return orientNudgeCommand();
   if (sub === 'orient-stamp') return orientStampCommand();
@@ -97,7 +91,7 @@ export async function sessionCommand(
   if (sub === 'bind') return bindCommand(parsed);
   if (sub === 'show' || sub === undefined) return showCommand(parsed);
   throw new CliError(
-    'usage: musterd session start --stdin | end --stdin | observe --stdin [--orient] [--interrupt] | resolve-labels --stdin | label-nudge | orient-nudge | orient-stamp | statusline --stdin | bind --thread <id> | show  ' +
+    'usage: musterd session start --stdin | end --stdin | observe --stdin [--orient] [--interrupt] | label-nudge | orient-nudge | orient-stamp | statusline --stdin | bind --thread <id> | show  ' +
       '(start/end/observe are hook-driven — `musterd init` provisions the hooks; humans want `show`)',
     2,
   );
@@ -1162,355 +1156,6 @@ export function refreshModelObservation(
   }
 }
 
-// ---------------------------------------------------------------------------------------------
-// `session resolve-labels` — the sidebar-sweep decision engine (ADR 160, surface 2)
-// ---------------------------------------------------------------------------------------------
-
-/** One row of the harness's session list, parsed leniently — unknown fields ignored. */
-export interface SessionRow {
-  sessionId?: string;
-  title?: string;
-  cwd?: string;
-  isArchived?: boolean;
-  /** ISO timestamp of last activity — the degraded stand-in for `createdAt` (see below). */
-  lastActivityAt?: string;
-}
-
-export interface ResolveLabelsResult {
-  apply: { session_id: string; seat: string; title: string }[];
-  skipped: Record<string, number>;
-}
-
-/**
- * A brand-new session's title is still a first guess off the opening prompt; wait for the harness's
- * real auto-title before pinning a prefix on it.
- */
-const LABEL_MIN_AGE_MS = 120_000;
-
-/**
- * Where Claude Code Desktop keeps its own session records (`createdAt`, `titleSource`). Undocumented
- * and version-fragile, so strictly best-effort enrichment: `MUSTERD_CCD_SESSIONS_DIR` overrides, and
- * every read degrades to the session row itself. The worst failure is a mis-dated label or a missed
- * skip — never corruption, since the original title always survives as the label's suffix.
- */
-function ccdSessionsDir(env: NodeJS.ProcessEnv): string {
-  return (
-    env['MUSTERD_CCD_SESSIONS_DIR'] ??
-    join(homedir(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions')
-  );
-}
-
-type CcdMeta = { createdAt?: number; titleSource?: string };
-type CcdIndex = Map<string, CcdMeta>;
-
-export interface CcdScan {
-  rows: SessionRow[];
-  index: CcdIndex;
-}
-
-/**
- * One walk of the CCD tree: SessionRows for the due-check **and** the enrichment index
- * resolveLabels needs. Measured 2026-07-31 (lane 01KYWGMXYY / #538 review): labelSweepDue used
- * to walk+parse twice (~155ms each → 311ms every UserPromptSubmit). Hand the parse forward.
- * Returns null when the tree is missing/unreadable (ADR 173 abstention).
- */
-export function scanCcd(dir: string): CcdScan | null {
-  if (!existsSync(dir)) return null;
-  const rows: SessionRow[] = [];
-  const index: CcdIndex = new Map();
-  try {
-    for (const org of readdirSync(dir)) {
-      const orgDir = join(dir, org);
-      let projects: string[];
-      try {
-        projects = readdirSync(orgDir);
-      } catch {
-        continue;
-      }
-      for (const proj of projects) {
-        const projDir = join(orgDir, proj);
-        let files: string[];
-        try {
-          files = readdirSync(projDir);
-        } catch {
-          continue;
-        }
-        for (const file of files) {
-          if (!file.endsWith('.json')) continue;
-          try {
-            const rec = JSON.parse(readFileSync(join(projDir, file), 'utf8')) as {
-              sessionId?: string;
-              cliSessionId?: string;
-              title?: string;
-              cwd?: string;
-              isArchived?: boolean;
-              lastActivityAt?: number;
-              createdAt?: number;
-              titleSource?: string;
-            };
-            const meta: CcdMeta = {
-              ...(rec.createdAt !== undefined ? { createdAt: rec.createdAt } : {}),
-              ...(rec.titleSource !== undefined ? { titleSource: rec.titleSource } : {}),
-            };
-            const stem = file.slice(0, -'.json'.length);
-            index.set(stem, meta);
-            if (rec.sessionId) index.set(rec.sessionId, meta);
-            if (rec.cliSessionId) index.set(rec.cliSessionId, meta);
-
-            const sessionId = rec.cliSessionId ?? rec.sessionId;
-            if (!sessionId) continue;
-            rows.push({
-              sessionId,
-              ...(rec.title !== undefined ? { title: rec.title } : {}),
-              ...(rec.cwd !== undefined ? { cwd: rec.cwd } : {}),
-              ...(rec.isArchived !== undefined ? { isArchived: rec.isArchived } : {}),
-              ...(typeof rec.lastActivityAt === 'number'
-                ? { lastActivityAt: new Date(rec.lastActivityAt).toISOString() }
-                : {}),
-            });
-          } catch {
-            // one bad record — keep scanning
-          }
-        }
-      }
-    }
-  } catch {
-    return null;
-  }
-  return { rows, index };
-}
-
-/** Index every CCD record by sessionId, cliSessionId, and file stem — list_sessions may hand any. */
-function buildCcdIndex(dir: string): CcdIndex {
-  return scanCcd(dir)?.index ?? new Map();
-}
-
-/**
- * The desktop app's record for a session: created-at (ms) + who last set the title.
- * Always tries the `local_` prefix/strip fallback (list_sessions ids and file stems disagree).
- * When `index` is omitted, builds one once — never per-key (the old no-index branch rebuilt the
- * whole tree on every call *and* skipped the `local_` fallback, which is the forever-loop bug
- * waiting for a second caller — #538 review / lane 01KYWGMXYY).
- */
-export function lookupCcdMeta(dir: string, sessionId: string, index?: CcdIndex): CcdMeta {
-  const idx = index ?? buildCcdIndex(dir);
-  const alt = sessionId.startsWith('local_')
-    ? sessionId.slice('local_'.length)
-    : `local_${sessionId}`;
-  return idx.get(sessionId) ?? idx.get(alt) ?? {};
-}
-
-/**
- * The seat behind a session's cwd, or null when it is not a seat workspace. The committed
- * `workspace.json` claim is authoritative (walk-up, so a session parked in a subfolder still
- * resolves); an `agents-<name>` folder without a seat claim (role/chat binding) falls back to the
- * folder suffix rather than dropping the session.
- */
-function seatForCwd(cwd: string | undefined): string | null {
-  if (!cwd) return null;
-  const spec = findWorkspaceSpec(cwd);
-  if (spec?.claim?.mode === 'seat') return spec.claim.name;
-  const m = /^agents[-_](.+)$/.exec(basename(cwd.replace(/\/+$/, '')));
-  return m ? m[1]! : null;
-}
-
-/**
- * The pure sweep decision: which sessions get which titles, and why the rest were skipped. The
- * caller (a harness-side agent, via the label-sessions guidance skill) applies the renames — this
- * engine never writes anything. Invariants, proven by the personal sweep this productizes:
- *
- * - `titleSource: "user"` is inviolable for a title in the human's OWN terms — their words outrank
- *   the sweep, always. Narrowed (ADR 160 amendment): a title the human already wrote in seat form
- *   ("Miley - fix(x)") says what the sweep says, so it is completed — chip and timestamp added,
- *   their words carried through verbatim — rather than skipped. The original ordering ran this
- *   guard before the seat parse, which made the upgrade branch below unreachable for exactly the
- *   rows that needed it and turned hand-renaming into a permanent opt-out.
- * - Idempotent via `parseSeatLabel`: fully-labeled rows skip; seat-prefixed rows that already carry
- *   a stamp (a pre-chip sweep's work) get the chip prepended with their ORIGINAL timestamp text
- *   kept — re-rendering would re-date history; seat-prefixed rows with no stamp are re-rendered
- *   around their subject, which is what gives a hand-named row its missing time.
- * - Freshness gates on `createdAt`, and — unlike the python original, which skipped the gate on
- *   its fallback branch — also on `lastActivityAt` when the app's record is unreadable.
- */
-export function resolveLabels(
-  sessions: SessionRow[],
-  opts: {
-    now?: number;
-    env?: NodeJS.ProcessEnv;
-    /** Pre-built CCD index — labelSweepDue hands the scan forward so we don't parse twice. */
-    ccdIndex?: CcdIndex;
-  } = {},
-): ResolveLabelsResult {
-  const now = opts.now ?? Date.now();
-  const dir = ccdSessionsDir(opts.env ?? process.env);
-  const ccdIndex = opts.ccdIndex ?? buildCcdIndex(dir);
-  const apply: ResolveLabelsResult['apply'] = [];
-  const skipped: Record<string, number> = {};
-  const skip = (reason: string): void => {
-    skipped[reason] = (skipped[reason] ?? 0) + 1;
-  };
-
-  for (const s of sessions) {
-    const title = (s.title ?? '').trim();
-    if (s.isArchived) {
-      skip('archived');
-      continue;
-    }
-    if (!title || !s.sessionId) {
-      skip('no-title-yet');
-      continue;
-    }
-    const seat = seatForCwd(s.cwd);
-    if (!seat) {
-      skip('not-a-seat');
-      continue;
-    }
-    const meta = lookupCcdMeta(dir, s.sessionId, ccdIndex);
-    const parse = parseSeatLabel(title, seat);
-    if (parse.chipped && parse.seated) {
-      skip('already-labeled');
-      continue;
-    }
-    // A titleSource:user row is never proposed — including seat-form hand titles
-    // ("Miley - fix(x)"). Measured 2026-07-27 and again 2026-07-30 (lane 01KYSY7JNB): Claude Code
-    // Desktop's rename tool soft-refuses every user-titled session and reports success anyway, so
-    // proposing them produced an infinite sweep (same ~30 rows every 4h, zero chips land). The
-    // 2026-07-27 "complete seat-form user titles" narrowing was right in principle and inert on
-    // this harness; on this harness it was also harmful. Other surfaces without that soft-refuse
-    // can revisit; for Claude Code Desktop, skip all user titles (ADR 160 / ADR 186).
-    if (meta.titleSource === 'user') {
-      skip('hand-named');
-      continue;
-    }
-    if (parse.seated && parse.dated) {
-      // Pre-chip label: prepend the chip, keep the original "(Fri 3p)" text — never re-date.
-      apply.push({
-        session_id: s.sessionId,
-        seat: capitalizeSeat(seat),
-        title: `${SEAT_CHIP} ${parse.bare}`,
-      });
-      continue;
-    }
-    const createdMs =
-      meta.createdAt ?? (s.lastActivityAt ? Date.parse(s.lastActivityAt) : undefined);
-    if (createdMs === undefined || Number.isNaN(createdMs)) {
-      skip('no-timestamp');
-      continue;
-    }
-    if (now - createdMs < LABEL_MIN_AGE_MS) {
-      skip('too-fresh');
-      continue;
-    }
-    apply.push({
-      session_id: s.sessionId,
-      seat: capitalizeSeat(seat),
-      // `subject`, not `bare`: a hand-seated title ("Miley - fix(x)") must not be re-seated into
-      // "🔶 Miley (Sun 9p) - Miley - fix(x)". For an unseated title the two are identical.
-      title: renderSeatLabel(seat, createdMs, parse.subject, now),
-    });
-  }
-
-  return { apply, skipped };
-}
-
-// ---------------------------------------------------------------------------------------------
-// The label-sweep nudge rail. The sweep only happens when a harness-side agent runs it, and the
-// one-shot SessionStart instruction was measured to fail: agents skip it under a busy first prompt
-// (3 days of unlabeled sidebar, 2026-07-29). So the ask repeats — the UserPromptSubmit hook calls
-// `label-nudge` every turn — but self-quiets when there is nothing left that the engine can land.
-//
-// ADR 173 / lane 01KYSY7JNB: the due predicate keys off *evidence* ("are there labelable unlabeled
-// seat sessions?") via the desktop session records + resolveLabels, not off stamp age. Stamp age
-// alone re-armed forever while the same soft-refused user titles stayed unlabeled. The stamp is
-// kept as a fallback when those records are unreadable (non-mac / no Desktop install).
-// ---------------------------------------------------------------------------------------------
-
-/** How stale the machine-wide sweep stamp may get before the *fallback* nudge re-arms (CCD absent). */
-export const LABEL_SWEEP_STALE_MS = 4 * 3_600_000;
-
-/** Machine-wide (not per-workspace): a sweep labels every seat's sessions, so one stamp serves
- *  all. Env-overridable for tests, like `MUSTERD_CCD_SESSIONS_DIR` above. */
-function labelStampPath(env: NodeJS.ProcessEnv): string {
-  return env['MUSTERD_LABEL_STAMP'] ?? join(homedir(), '.musterd', 'label-sweep.json');
-}
-
-/** Record "a sweep ran now". Best-effort: rides a hook-adjacent path, so it must never throw. */
-export function stampLabelSweep(now = Date.now(), env: NodeJS.ProcessEnv = process.env): void {
-  try {
-    const p = labelStampPath(env);
-    mkdirSync(dirname(p), { recursive: true });
-    writeFileSync(p, JSON.stringify({ swept_at: now }) + '\n', 'utf8');
-  } catch {
-    // a failed stamp costs one extra nudge, never a broken sweep
-  }
-}
-
-/**
- * Build SessionRows from the desktop app's session-record tree (same enrichment source
- * resolveLabels reads). Returns null when the tree is missing/unreadable — ADR 173 abstention:
- * we cannot see whether work remains, so the caller falls back to stamp age.
- */
-export function ccdSessionRows(env: NodeJS.ProcessEnv = process.env): SessionRow[] | null {
-  return scanCcd(ccdSessionsDir(env))?.rows ?? null;
-}
-
-/**
- * True when the nudge should fire. Prefer evidence (unlabeled sessions resolveLabels would still
- * propose) over stamp age. Stamp age is the fallback when CCD records are absent — never treat
- * "I cannot see" as "nothing to do" (ADR 173).
- *
- * One `scanCcd` feeds both the rows and the index into resolveLabels — never walk the tree twice
- * on the hot UserPromptSubmit path (lane 01KYWGMXYY).
- */
-export function labelSweepDue(now = Date.now(), env: NodeJS.ProcessEnv = process.env): boolean {
-  const scan = scanCcd(ccdSessionsDir(env));
-  if (scan !== null) {
-    return resolveLabels(scan.rows, { now, env, ccdIndex: scan.index }).apply.length > 0;
-  }
-  try {
-    const rec = JSON.parse(readFileSync(labelStampPath(env), 'utf8')) as { swept_at?: unknown };
-    return typeof rec.swept_at !== 'number' || now - rec.swept_at >= LABEL_SWEEP_STALE_MS;
-  } catch {
-    return true;
-  }
-}
-
-/**
- * The label-sweep nudge text, budgeted by the standing-context gate (`pnpm context:check`, ADR 212).
- * It rides the per-turn UserPromptSubmit hook whenever a sweep is due, so it is paid at per-turn
- * rates — trimmed to the trigger, with the procedure left to the skill it names.
- */
-export const LABEL_NUDGE_TEXT =
-  'musterd: unlabeled seat sessions need a sidebar chip — run the musterd-label-sessions skill now.';
-
-/**
- * `TERM_PROGRAM` values that mean this hook is running under a terminal emulator — Claude Code
- * CLI, not Desktop session-management. Measured 2026-09-17: `claude` 2.1.276 in Apple Terminal
- * inherits `TERM_PROGRAM=Apple_Terminal` (ADR 418). Falsify: a Desktop UserPromptSubmit hook
- * that inherits one of these; drop that value from the set rather than widening silence.
- */
-export const TERMINAL_TERM_PROGRAMS: ReadonlySet<string> = new Set([
-  'Apple_Terminal',
-  'iTerm.app',
-  'ghostty',
-  'WezTerm',
-  'kitty',
-  'Alacritty',
-  'alacritty',
-  'tmux',
-  'screen',
-]);
-
-/**
- * True when this process is a known no-sidebar-write driver. Unknown stays false (ADR 173:
- * absent ≠ nothing to do — silencing Desktop by mistake is the unlabeled-sidebar failure the
- * nudge exists to close). `TERM_PROGRAM=vscode` is not in {@link TERMINAL_TERM_PROGRAMS}.
- */
-export function labelNudgeHasNoSidebarWrite(env: NodeJS.ProcessEnv = process.env): boolean {
-  const tp = env['TERM_PROGRAM'];
-  return typeof tp === 'string' && TERMINAL_TERM_PROGRAMS.has(tp);
-}
-
 /**
  * `session label-nudge` — retired by ADR 442 (the wall). It sent sessions to the Claude Code peer
  * sweep, which renamed every session on the machine; a seat no longer reaches outside itself, and
@@ -1625,27 +1270,6 @@ function orientStampCommand(): number {
   } catch {
     // best-effort; the nudge simply repeats
   }
-  return 0;
-}
-
-/** The stdin wrapper: harness session-list JSON in, `{apply, skipped}` JSON out. */
-async function resolveLabelsCommand(parsed: Parsed): Promise<number> {
-  if (parsed.flags['stdin'] !== true) {
-    throw new CliError('usage: musterd session resolve-labels --stdin  (session-list JSON in)', 2);
-  }
-  const raw = await readStdin();
-  let sessions: SessionRow[];
-  try {
-    const data: unknown = JSON.parse(raw);
-    if (!Array.isArray(data)) throw new Error('not an array');
-    sessions = data as SessionRow[];
-  } catch {
-    throw new CliError('resolve-labels: stdin must be a JSON array of session rows', 2);
-  }
-  process.stdout.write(JSON.stringify(resolveLabels(sessions), null, 1) + '\n');
-  // The sweep ran (even if `apply` came back empty — "checked, nothing to do" is still a sweep):
-  // stamp it, so `label-nudge` goes quiet machine-wide.
-  stampLabelSweep();
   return 0;
 }
 

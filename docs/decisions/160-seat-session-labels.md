@@ -262,3 +262,12 @@ Superseded in part by [ADR 186](186-cross-harness-session-labels.md):
    narrowing remains right in principle and was inert+harmful on Desktop's soft-refuse.
 3. **Cursor is `self_rename`, not "no sidebar".** `rename_chat` labels the current chat only;
    Codex stays write-`none` (titles are readable). Terminal OSC remains the universal path.
+
+### Note 2026-09-28 — grammar superseded, sweep code removed (ADR 468)
+
+[ADR 468](468-self-label-grammar-and-sweep-removal.md) replaces the sidebar grammar with
+`<seat> · <start time> · <team> · <title>` (no chip, lowercase seat) and deletes the sweep engine
+(`resolveLabels`, `labelSweepDue`, the machine-wide stamp, `LABEL_NUDGE_TEXT`, the hook clause)
+that ADR 442 had retired on 2026-09-24. The observability paragraph above describes a trigger that
+no longer exists; the standing check is the sidebar itself. `formatLabelWhen` and the terminal
+title survive unchanged.

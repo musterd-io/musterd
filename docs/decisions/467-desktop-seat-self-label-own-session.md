@@ -58,6 +58,11 @@ seats went unlabeled while the skill said the host had it covered.
 - The rest of ADR 418 (stamp always follows; `label-nudge` silent on known no-write drivers; no
   per-driver orient files) stands.
 
+- **2026-09-28 (ADR 468, lane 01M3MWSF32).** The grammar this ADR's Decision quotes
+  (`🔶 Dolly (Fri 3p) - <subject>`) is superseded the same day by
+  [ADR 468](468-self-label-grammar-and-sweep-removal.md): `<seat> · <start time> · <team> · <title>`,
+  no chip, lowercase seat. The `set_session_title {session_id: "self"}` path itself is unchanged.
+
 ## Observability & Evaluation
 
 - **Traces.** None added. The rename is the app's own; the orient stamp is unchanged.

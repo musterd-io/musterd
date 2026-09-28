@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 34;
+export const GUIDANCE_CONTENT_VERSION = 35;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -364,8 +364,13 @@ export function renderSelfLabelSessionSkill(): string {
   return [
     '# Label this seat session (current chat only)',
     '',
-    'Prefix **this** session’s title with the musterd chip and seat so a human scanning the Cursor',
-    'or Claude Code Desktop sidebar can tell which seat it is — `\u{1F536} Dolly (Fri 3p) - <subject>`. Only this session:',
+    'Title **this** session so a human scanning the Cursor or Claude Code Desktop sidebar can tell',
+    'which seat it is, when it started, on which team, and what it is about (ADR 468):',
+    '',
+    '    <seat> · <start time> · <team> · <the host’s own auto-summarized title>',
+    '    dolly · Mon 1p · revive · orient after mcp reload',
+    '',
+    'Lowercase seat; a spaced middle dot (` · `) between fields; no chip. Only this session:',
     'a seat never renames another session (ADR 442). Terminal tabs are already labeled by the CLI',
     'OSC postamble whenever you shell out to `musterd`.',
     '',
@@ -380,16 +385,18 @@ export function renderSelfLabelSessionSkill(): string {
     '',
     '## The self-label',
     '',
-    '1. Resolve this folder’s seat (`musterd whoami` / binding claim name).',
-    '2. Build the title with the shared grammar: chip + capitalized seat + compact start time +',
-    '   short subject (current title stripped of any prior chip/seat prefix, or a 3–6 word summary',
-    '   of the task). Prefer `musterd session resolve-labels` shape mentally: never re-date a title',
-    '   that already carries `(Fri 3p)`; never invent a wrong seat.',
+    '1. Resolve this folder’s seat and team (`musterd whoami` / the binding claim name).',
+    '2. Build the title: seat, then the session’s START time as `Mon 1p` (weekday + hour, no',
+    '   minutes; `Jul 11 3p` once the weekday would be ambiguous), then team, then the title the',
+    '   host already gave this session — its own words, verbatim. If that title already carries a',
+    '   `<seat> · <time> · <team> · ` stem from an earlier orient (or the older',
+    '   `\u{1F536} Seat (Fri 3p) - ` form), keep its time and carry only the words after the stem: never',
+    '   re-date, never stack two stems, never invent a wrong seat.',
     '3. Call `set_session_title {session_id: "self", title}` — `"self"` and nothing else, never an',
     '   id from anywhere (ADR 442/467) — or `rename_chat` with that exact title (current chat',
     '   only — the tool has no session id).',
-    '4. Report one line: `labeled this session as Dolly`. If the tool is missing, say nothing',
-    '   when this ran automatically.',
+    '4. Report one line: `labeled this session as dolly · Mon 1p · revive`. If the tool is',
+    '   missing, say nothing when this ran automatically.',
     '',
     '## Hard rules',
     '',
@@ -405,7 +412,7 @@ export function renderSelfLabelSessionSkill(): string {
 export function renderSelfLabelSessionFrontmatter(): string {
   return [
     '---',
-    'description: Label this chat with the musterd seat chip (e.g. "\u{1F536} Dolly (Fri 3p) - …"). ' +
+    'description: Label this chat as its musterd seat session (`<seat> · <start time> · <team> · <title>`, e.g. "dolly · Mon 1p · revive · …", ADR 468). ' +
       'Use at session start in a musterd seat worktree when set_session_title or rename_chat is available, and when the ' +
       'user asks to label or rename this chat.',
     'alwaysApply: false',
@@ -476,9 +483,10 @@ export function renderOrientSkill(): string {
     '   of step 2, never from memory alone. Do not claim unaddressed work.',
     "5. `team_send {act:'status_update'}` — one line.",
     "6. **Label from THIS session's tool list** — not from which harness you think you are on",
-    '   (ADR 418). `set_session_title` → self-label THIS session with `session_id: "self"` and',
-    '   the shared grammar (ADR 467; never any other session_id). Else `rename_chat` → self-label',
-    '   this chat the same way. A title the user just typed wins. Else skip silently: terminal',
+    '   (ADR 418). `set_session_title` → self-label THIS session with `session_id: "self"` as',
+    '   `<seat> · <start time> · <team> · <the host’s own title>` — e.g. `dolly · Mon 1p · revive ·',
+    '   orient after mcp reload` (ADR 468; never any other session_id). Else `rename_chat` →',
+    '   self-label this chat the same way. A title the user just typed wins. Else skip silently: terminal',
     '   tabs are already OSC-labeled; never rename another session (ADR 442); do not narrate the',
     '   skip; do not write Cursor `state.vscdb` or Codex SQLite.',
     '7. Then always run `musterd session orient-stamp`. A skip does not skip the stamp — the',
