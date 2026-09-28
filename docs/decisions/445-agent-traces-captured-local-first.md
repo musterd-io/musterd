@@ -367,6 +367,16 @@ ADR 184's publication gate; a spans backend.
   to a lane that is awaiting acceptance or closed. A rejected lane is back in work, and its old
   submit ends nothing. Usage after the submit and before the next claim now reads `unattributed`.
   Falsifier: a submitted lane whose `report trace` turns still include rows stamped after its submit.
+- **2026-09-28 — Grok's two untapped hooks are tapped** (lane `01M3MG7EAMMH9Q2WYE3KPT0AS0`), closing
+  the 2026-09-25 open item. The Grok PreToolUse interrupt probe and the Stop doorbell now run
+  `musterd inbox --interrupt-check --hook grok`, and the Stop script hands the probe the payload it
+  read, where before it spawned the probe with stdin ignored. `FEATURE_EPOCH` is 25, so an older
+  checkout cannot rewrite the lines back. One row per call: the probe has no matcher, so on Grok it
+  records every `PreToolUse`, and the gate (write tools only) posts only its `HookOutcome`. The gate
+  keeps the observed event on Claude Code, where the probe records `PostToolUse`. The probe also
+  passes `rail=grok` to the daemon, so Grok's `interrupt.raised` audit rows name their rail (ADR 423).
+  Falsifier: a Grok seat's session with `HookOutcome` rows from `interrupt` and `gate`, and
+  `PreToolUse` rows for read tools as well as write tools.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a

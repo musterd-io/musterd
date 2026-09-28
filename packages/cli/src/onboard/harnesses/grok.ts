@@ -100,7 +100,9 @@ function cmd(inner: string, marker: string, discardStdout: boolean): string {
 /**
  * Grok 1.0.13: PostToolUse stdout and additionalContext JSON are ignored. PreToolUse
  * additionalContext reaches the model after the tool, wrapped in a system-reminder (ADR 370).
- * Empty interrupt-check (the common path) prints nothing, so no context is added.
+ * Empty interrupt-check (the common path) prints nothing, so no context is added. `--hook grok`
+ * names the harness, so the probe reads the PreToolUse payload Grok pipes it and taps it (ADR 445 R1)
+ * — the one Grok hook with no matcher, so the one that sees every tool call.
  */
 export const GROK_INTERRUPT_PRE_WRAP =
   'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const t=s.trim();if(t)console.log(JSON.stringify({hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:t}}))})';
@@ -108,22 +110,26 @@ export const GROK_INTERRUPT_PRE_WRAP =
 export function grokInterruptPreCommand(): string {
   return (
     'command -v musterd >/dev/null 2>&1 && command -v node >/dev/null 2>&1 && ' +
-    `musterd inbox --interrupt-check 2>/dev/null | node -e '${GROK_INTERRUPT_PRE_WRAP}' || true # ${INTERRUPT_MARKER} ${epochTag(FEATURE_EPOCH)}`
+    `musterd inbox --interrupt-check --hook grok 2>/dev/null | node -e '${GROK_INTERRUPT_PRE_WRAP}' || true # ${INTERRUPT_MARKER} ${epochTag(FEATURE_EPOCH)}`
   );
 }
 
 /**
  * Idle-at-turn-end doorbell (ADR 370). Blocks a genuine end_turn once with the daemon-composed
- * interrupt line; `stopHookActive` and non-end_turn reasons (session shutdown) exit 0.
+ * interrupt line; `stopHookActive` and non-end_turn reasons (session shutdown) exit 0. The script
+ * reads the Stop payload itself, so it hands the probe that payload on stdin with `--hook grok`, or
+ * the probe has nothing to tap (ADR 445 R1).
  */
 export const GROK_INTERRUPT_STOP_SCRIPT = [
   'const fs=require("fs");',
   'const {execFileSync}=require("child_process");',
+  'let raw="";',
+  'try{raw=fs.readFileSync(0,"utf8")}catch{}',
   'let ev={};',
-  'try{ev=JSON.parse(fs.readFileSync(0,"utf8"))}catch{}',
+  'try{ev=JSON.parse(raw)}catch{}',
   'if(ev.reason!=="end_turn"||ev.stopHookActive)process.exit(0);',
   'let line="";',
-  'try{line=execFileSync("musterd",["inbox","--interrupt-check"],{encoding:"utf8",stdio:["ignore","pipe","ignore"]}).trim()}catch{}',
+  'try{line=execFileSync("musterd",["inbox","--interrupt-check","--hook","grok"],{encoding:"utf8",input:raw,stdio:["pipe","pipe","ignore"]}).trim()}catch{}',
   'if(line)console.log(JSON.stringify({decision:"block",reason:line}))',
 ].join('');
 
