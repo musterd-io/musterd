@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 33;
+export const GUIDANCE_CONTENT_VERSION = 34;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -354,11 +354,11 @@ export function renderSkillBody(opts: { team: string }): string {
 /**
  * The **self-label** skill (ADR 186) — any harness with a current-session rename: Cursor's
  * `rename_chat` (current chat only, no session id) and Claude Code Desktop's `set_session_title`
- * with `session_id: "self"` (ADR 465). Since ADR 442 self-rename is the only labeling a seat does
+ * with `session_id: "self"` (ADR 467). Since ADR 442 self-rename is the only labeling a seat does
  * itself — the Claude Code peer sweep (`list_sessions` + `set_session_title` across every session on
  * the machine) reached outside the seat and was retired. Nothing else labels a seat's sidebar row:
  * the ADR 442 note that "the host labels seat sessions (ADR 166)" pointed at a liveness ADR, not a
- * labeler, and Desktop rows stayed unlabeled from 2026-09-24 until ADR 465 (lane 01M3MSPAMA).
+ * labeler, and Desktop rows stayed unlabeled from 2026-09-24 until ADR 467 (lane 01M3MSPAMA).
  */
 export function renderSelfLabelSessionSkill(): string {
   return [
@@ -386,7 +386,7 @@ export function renderSelfLabelSessionSkill(): string {
     '   of the task). Prefer `musterd session resolve-labels` shape mentally: never re-date a title',
     '   that already carries `(Fri 3p)`; never invent a wrong seat.',
     '3. Call `set_session_title {session_id: "self", title}` — `"self"` and nothing else, never an',
-    '   id from anywhere (ADR 442/465) — or `rename_chat` with that exact title (current chat',
+    '   id from anywhere (ADR 442/467) — or `rename_chat` with that exact title (current chat',
     '   only — the tool has no session id).',
     '4. Report one line: `labeled this session as Dolly`. If the tool is missing, say nothing',
     '   when this ran automatically.',
@@ -477,7 +477,7 @@ export function renderOrientSkill(): string {
     "5. `team_send {act:'status_update'}` — one line.",
     "6. **Label from THIS session's tool list** — not from which harness you think you are on",
     '   (ADR 418). `set_session_title` → self-label THIS session with `session_id: "self"` and',
-    '   the shared grammar (ADR 465; never any other session_id). Else `rename_chat` → self-label',
+    '   the shared grammar (ADR 467; never any other session_id). Else `rename_chat` → self-label',
     '   this chat the same way. A title the user just typed wins. Else skip silently: terminal',
     '   tabs are already OSC-labeled; never rename another session (ADR 442); do not narrate the',
     '   skip; do not write Cursor `state.vscdb` or Codex SQLite.',

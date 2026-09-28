@@ -113,7 +113,7 @@ credential custody (ADR 200, ADR 341, and spec §8).
 - The Claude Code peer label sweep (`list_sessions` across the machine) is retired. Cursor's
   self-label path, which touches only the current chat, is kept. (This note said "the host labels
   seat sessions (ADR 166)" until 2026-09-28; ADR 166 is liveness and nothing labeled Desktop rows.
-  ADR 465 gives Desktop the same current-session-only path via `set_session_title {session_id:
+  ADR 467 gives Desktop the same current-session-only path via `set_session_title {session_id:
   "self"}`, which is not reach and is not in `SESSION_REACH_TOOLS`.)
 - **Lane 1c spike (2026-09-24, Claude Code 2.1.281 transcripts).** `SendMessage` addresses its
   target with `tool_input.to` (the same string is also copied to `recipient`). An async `Agent`

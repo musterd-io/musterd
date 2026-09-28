@@ -1,6 +1,6 @@
-# 465 — A Claude Code Desktop seat labels its own session: `set_session_title` with `session_id: "self"`
+# 467 — A Claude Code Desktop seat labels its own session: `set_session_title` with `session_id: "self"`
 
-- Status: accepted — 2026-09-28
+- Status: accepted — 2026-09-28 (renumbered from 465 the same day: PR #1791 had published 465 sixty seconds earlier)
 - Date: 2026-09-28
 - Lane: `01M3MSPAMA7K3XW2XWHGHTEJXX` (goal `seat-continuity`)
 - Amends: [ADR 418](418-session-label-capability-is-the-tool-list.md) (the tool-list branches),
