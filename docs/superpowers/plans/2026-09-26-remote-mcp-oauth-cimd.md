@@ -41,7 +41,7 @@
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-09-26-remote-mcp-oauth-cimd.md`
-- Create: `docs/decisions/465-remote-mcp-oauth-cimd.md` (`pnpm adr:next` returned 465; open PR #1786 claims 464)
+- Create: `docs/decisions/467-remote-mcp-oauth-cimd.md` (`pnpm adr:next` first returned 465; that number was later taken by a competing PR, so this lane moved to the fresh next number, 467)
 
 **Interfaces:**
 - Produces: the accepted decision for generic CIMD plus retained DCR, including the bounded metadata-fetch policy and the network-free token path.
@@ -49,11 +49,11 @@
 
 - [ ] **Step 1: Reconcile the active lane overlaps**
 
-Read the current inbox and coordinate with Ghost on shared OAuth files, Ryder on the broad protocol/server trace-audit scope, Stanley on server transport/spec paths, and Izzo on server/architecture paths. Record the exact file boundaries and any required merge order before implementation starts. The live-audience lane has claimed ADR 464; keep this change on 465.
+Read the current inbox and coordinate with Ghost on shared OAuth files, Ryder on the broad protocol/server trace-audit scope, Stanley on server transport/spec paths, and Izzo on server/architecture paths. Record the exact file boundaries and any required merge order before implementation starts. The live-audience lane has claimed ADR 464. ADR 465 was first reserved by draft PR #1791, then a competing PR #1792 landed its own ADR 465; keep this change on 467 and hold shared OAuth edits until the remaining boundaries are clear.
 
 - [ ] **Step 2: Reserve a fresh ADR number**
 
-Use the number returned by a fresh `pnpm adr:next`; do not choose a number by inspecting `origin/main` or this plan. For this reservation it returned 465. Before the reservation push, run `pnpm typecheck && pnpm lint && pnpm format:check`. Include the approved plan and a reservation stub at `docs/decisions/465-remote-mcp-oauth-cimd.md` in the reservation commit (ADR 223). `format:check` requires the stub to carry a minimally complete `Observability & Evaluation` section; keep Context, Problem, Decision, and Consequences out until the draft PR publishes the number.
+Use the number returned by a fresh `pnpm adr:next`; do not choose a number by inspecting `origin/main` or this plan. The initial reservation returned 465, but after PR #1792 landed a competing ADR 465, the fresh result is 467 because PR #1793 claims 466. Move the draft reservation to 467 before writing the ADR. Before the reservation push, run `pnpm typecheck && pnpm lint && pnpm format:check`. Include the approved plan and a reservation stub at `docs/decisions/467-remote-mcp-oauth-cimd.md` in the reservation commit (ADR 223). `format:check` requires the stub to carry a minimally complete `Observability & Evaluation` section; keep Context, Problem, Decision, and Consequences out until the draft PR publishes the number.
 
 - [ ] **Step 3: Write the ADR before any protocol schema edit**
 
