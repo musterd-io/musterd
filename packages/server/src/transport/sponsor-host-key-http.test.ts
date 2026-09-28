@@ -153,6 +153,44 @@ describe('sponsor host key (ADR 463 §1, Review Focus 1)', () => {
     expect(leases.json.orders.map((o: any) => o.seat)).toEqual(['dana-scout']);
   });
 
+  it.each([
+    ['can_create_agents withdrawn', { account: null, caps: { can_create_agents: false } }, 403],
+    ['sponsor disabled', { account: 'disabled', caps: {} }, 403],
+    ['sponsor banned', { account: 'banned', caps: {} }, 403],
+  ] as const)(
+    'big-body REQUIRED: a key minted while hosting was allowed stops serving once %s',
+    async (_label, change, status) => {
+      const { dana } = await sharedHost();
+      const hk = await post(
+        '/teams/hk-t/agent-bootstrap-credentials',
+        { use: 'host', target: 'shared' },
+        dana,
+      );
+      expect(hk.status).toBe(201);
+      const ok = await post(
+        '/teams/hk-t/residency/wake-leases',
+        { host: 'shared' },
+        hk.json.agent_key,
+      );
+      expect(ok.status).toBe(200);
+      const team = requireTeam(server.db, 'hk-t');
+      setMemberGovernance(
+        server.db,
+        getMemberByName(server.db, team.id, 'dana')!.id,
+        change.account,
+        JSON.stringify({ ...GENERALIST_CAPABILITIES, ...change.caps }),
+      );
+      const leases = await post(
+        '/teams/hk-t/residency/wake-leases',
+        { host: 'shared' },
+        hk.json.agent_key,
+      );
+      expect(leases.status).toBe(status);
+      const rings = await post('/teams/hk-t/doorbell/rings', { host: 'shared' }, hk.json.agent_key);
+      expect(rings.status).toBe(status);
+    },
+  );
+
   it('big-body REQUIRED: an admin host key on the same label wakes no sponsored seat — only unsponsored ones', async () => {
     await sharedHost();
     await post('/teams/hk-t/members', { name: 'ops-bot', kind: 'agent' }, nick);
@@ -243,5 +281,10 @@ describe('sponsor host key (ADR 463 §1, Review Focus 1)', () => {
     const r = await post('/teams/hk-t/doorbell/rings', { host: 'shared' }, hk.json.agent_key);
     expect(r.status).toBe(200);
     expect(r.json.rings.map((x: any) => x.member)).toEqual(['dana']);
+  });
+
+  it('/residency/revoke parses before it authenticates: a bad body unauthenticated is a 400', async () => {
+    const r = await post('/teams/hk-t/residency/revoke', { nope: 1 });
+    expect(r.status).toBe(400);
   });
 });

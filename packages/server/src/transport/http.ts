@@ -1532,14 +1532,18 @@ function authAgentKeyOnly(
  * ADR 463 §1: whose seats a host key may serve (see `hostMayServe`). An admin-minted key is team-wide
  * AND serves the admin's own sponsored seats; a non-admin's key serves only that member's sponsored
  * seats. Resolved per request, so promotion or demotion changes a key's reach at once; a key whose
- * creator has left is refused.
+ * creator has left, lost standing, or had can_create_agents withdrawn is refused.
  */
 function hostKeyScope(ctx: Ctx, team: TeamRow, createdBy: string | null): HostScope {
   if (createdBy === null) return TEAM_WIDE_HOST;
   const creator = getMemberByName(ctx.db, team.id, createdBy);
   if (!creator || creator.left_at !== null)
     throw new MusterdError('unauthorized', 'this host credential’s creator has left the team');
-  return { creatorId: creator.id, teamWide: resolveCapabilities(creator).is_admin };
+  const teamWide = resolveCapabilities(creator).is_admin;
+  // A sponsor's key is re-checked on every use, not only at mint: withdrawing can_create_agents, or
+  // the sponsor's standing, stops hosting at once (ADR 463 §1). Fail closed.
+  if (!teamWide) assertSponsorCaller(creator);
+  return { creatorId: creator.id, teamWide };
 }
 
 /** ADR 463 §1: a host key reports only on leases of seats it may serve. */
@@ -3352,8 +3356,9 @@ export async function handleHttp(
       // The kill switch (`musterd residency off`): the seat itself or an admin — revocation must
       // be easy. Reverses the enrollment and revokes the standing grant in one verb.
       if (method === 'POST' && rest === '/residency/revoke') {
-        const { team, member } = authTouch(ctx, slug, req);
+        // Parse before auth, like the other sponsor-widened routes: a bad body is a 400, not a 401.
         const body = parseOrBadRequest(RevokeResidencyBodySchema, await readJson(req));
+        const { team, member } = authTouch(ctx, slug, req);
         const target = getMemberByName(ctx.db, team.id, body.seat);
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no seat "${body.seat}" in team "${slug}"`);
