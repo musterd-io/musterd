@@ -114,9 +114,14 @@ describe('orient tier 1 owns addressed work (ADR 326 amendment 2026-08-27 UTC)',
 
   it('labels from this session’s tool list, then always stamps (ADR 418)', () => {
     const skill = renderOrientSkill();
-    // ADR 442: no peer sweep — only this chat's own rename, else the host's label (ADR 166).
+    // ADR 442: no peer sweep — only this session's own rename (ADR 465: Desktop `set_session_title`
+    // with `session_id: "self"`; Cursor `rename_chat`).
     expect(skill).not.toContain('list_sessions');
     expect(skill).toContain('rename_chat');
+    expect(skill).toMatch(
+      /`set_session_title` → self-label THIS session with `session_id: "self"`/,
+    );
+    expect(skill).toMatch(/never any other session_id/);
     expect(skill).toMatch(/skip silently/i);
     expect(skill).toMatch(/Then always run `musterd session orient-stamp`/);
     const stampAt = skill.indexOf('musterd session orient-stamp');
@@ -139,7 +144,10 @@ describe('orient tier 1 owns addressed work (ADR 326 amendment 2026-08-27 UTC)',
 describe('labeling skills skip silently when this session cannot rename (ADR 418)', () => {
   it('the self-label skill tells a no-rename_chat session to skip without narrating', () => {
     const skill = renderSelfLabelSessionSkill();
-    expect(skill).toMatch(/Skip silently when `rename_chat` is not in your tool list/);
+    expect(skill).toMatch(
+      /Skip silently when neither `set_session_title` nor `rename_chat` is in your tool list/,
+    );
+    expect(skill).toMatch(/set_session_title \{session_id: "self", title\}/);
     expect(skill).toMatch(/do not narrate the skip/);
     expect(skill).toContain('not invent a SQLite write');
   });
@@ -207,6 +215,7 @@ describe('version-bump discipline (ADR 085)', () => {
     29: 'e1daaa1f77b25315', // lane 01M32WXS59: orient step 1 says the plain inbox read IS the orientation read and already carries any act a ⚡ line named — no `ids` read on top (an `ids` read marks nothing, so ryder saw the act twice); the woken-session block says the same of the packet
     30: '2ca60432ec427933', // ADR 442 (the wall): the nudge-relay skill and the Claude Code peer label sweep leave the rendered surface; orient step 6 labels only this chat; the skill body gains "a line is only a pointer"
     31: '1c939454225f3d42', // guidance refresh (lane 01M3F9HYV1): ADR 447 — the human stands in a member Workspace, not the team root; remote members (ADR 446), invites (ADR 450) and sponsored agents via team_agent_create (ADR 449/452)
+    33: 'a2a868e8b8fbe955', // ADR 465 (lane 01M3MSPAMA): orient step 6 + self-label skill gain Claude Code Desktop `set_session_title {session_id:"self"}` — the wall (#1676) had left Desktop rows unlabeled
     32: 'f4eef0bb9a9e710a', // ADR 459 (lane 01M3FAPB32): the sponsored-agent line names the tunable cap (`--sponsored-agent-cap`) and the per-member switch instead of a fixed three
   };
 

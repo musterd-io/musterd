@@ -110,8 +110,11 @@ credential custody (ADR 200, ADR 341, and spec §8).
   session can run them, so an admin provisioning act can still start from a harness. Spec §6 names
   this: admin-from-a-harness is an operator convention until browser-bound confirmation exists
   (spec §8). The acting surface is closed: no command resolves the vault as its identity.
-- The Claude Code peer label sweep (`list_sessions` across the machine) is retired. The host labels
-  seat sessions (ADR 166). Cursor's self-label path, which touches only the current chat, is kept.
+- The Claude Code peer label sweep (`list_sessions` across the machine) is retired. Cursor's
+  self-label path, which touches only the current chat, is kept. (This note said "the host labels
+  seat sessions (ADR 166)" until 2026-09-28; ADR 166 is liveness and nothing labeled Desktop rows.
+  ADR 465 gives Desktop the same current-session-only path via `set_session_title {session_id:
+  "self"}`, which is not reach and is not in `SESSION_REACH_TOOLS`.)
 - **Lane 1c spike (2026-09-24, Claude Code 2.1.281 transcripts).** `SendMessage` addresses its
   target with `tool_input.to` (the same string is also copied to `recipient`). An async `Agent`
   tool result is text, not a JSON id: a line `agentId: <hex>` and the instruction to continue with
