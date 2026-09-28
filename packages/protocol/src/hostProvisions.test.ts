@@ -24,7 +24,9 @@ describe('host provision schemas (ADR 463)', () => {
   };
   it('round-trips a row and a claim response', () => {
     expect(HostProvisionSchema.parse(row)).toEqual(row);
-    expect(HostProvisionsClaimResponseSchema.parse({ provisions: [row] }).provisions).toHaveLength(1);
+    expect(HostProvisionsClaimResponseSchema.parse({ provisions: [row] }).provisions).toHaveLength(
+      1,
+    );
   });
   it('refuses an unknown state', () => {
     expect(HostProvisionSchema.safeParse({ ...row, state: 'running' }).success).toBe(false);

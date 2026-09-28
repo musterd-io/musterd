@@ -89,7 +89,8 @@ describe('PolicySchema.agent_host / invite_requires_expiry (ADR 463)', () => {
     expect(PolicySchema.safeParse({ agent_host: { max_per_host: 0 } }).success).toBe(false);
     expect(PolicySchema.safeParse({ agent_host: { max_per_host: 101 } }).success).toBe(false);
     expect(
-      PolicySchema.parse({ agent_host: { policy: { budget_usd: 2 } } }).agent_host.policy.budget_usd,
+      PolicySchema.parse({ agent_host: { policy: { budget_usd: 2 } } }).agent_host.policy
+        .budget_usd,
     ).toBe(2);
   });
   it('PolicyOverrideSchema keeps agent_host sparse', () => {
@@ -99,8 +100,8 @@ describe('PolicySchema.agent_host / invite_requires_expiry (ADR 463)', () => {
   });
   it('sparsifyPolicy drops a dense agent_host that equals the defaults, keeps a chosen budget', () => {
     expect(sparsifyPolicy({ agent_host: { max_per_host: 5, policy: {} } })).toEqual({});
-    expect(
-      sparsifyPolicy({ agent_host: { max_per_host: 5, policy: { budget_usd: 3 } } }),
-    ).toEqual({ agent_host: { policy: { budget_usd: 3 } } });
+    expect(sparsifyPolicy({ agent_host: { max_per_host: 5, policy: { budget_usd: 3 } } })).toEqual({
+      agent_host: { policy: { budget_usd: 3 } },
+    });
   });
 });
