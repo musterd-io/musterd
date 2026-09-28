@@ -1853,6 +1853,20 @@ export const MIGRATIONS: Migration[] = [
         db.exec('ALTER TABLE oauth_tokens ADD COLUMN connected_by TEXT REFERENCES members(id)');
     },
   },
+  {
+    // Lane 01M3D4069F: the 2026-09-28 demo-scale tunnel bench measured GET /teams/:slug at p95 2.2 s
+    // over 13k calls. The roster's per-member `latestStatusUpdate` (from_member + act, newest first)
+    // had no usable index — it searched idx_messages_from_reply and sorted in a temp B-tree, ~4 ms a
+    // member, ~100 ms of a ~118 ms roster read on the live copy. This index serves the lookup and its
+    // ORDER BY directly: 101.6 ms → 1.7 ms for 25 members.
+    version: 77,
+    up: (db) => {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_messages_from_act_ts ON messages(from_member, act, ts, id);
+        ANALYZE messages;
+      `);
+    },
+  },
 ];
 
 function currentVersion(db: Database): number {
