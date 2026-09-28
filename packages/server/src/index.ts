@@ -23,6 +23,7 @@ import { countDiversityFlagsByTeam } from './store/mast.js';
 import { startExpiredMemberSweep } from './store/members.js';
 import { countOpenLoopsByTeam } from './store/messages.js';
 import { activePresenceBySurface, slowestInboxLagMs } from './store/metrics.js';
+import { closeReportService } from './store/reportCache.js';
 import { startTraceContentPrune } from './store/trace.js';
 import { startSyncPull } from './sync/pull.js';
 import { startSyncPush } from './sync/push.js';
@@ -292,6 +293,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         stopTracePush?.();
         stopWatcher?.();
         void stopTelemetry?.();
+        void closeReportService(db);
         // Kill the upgraded sockets FIRST — http.close() below never settles while they live.
         for (const client of wss.clients) client.terminate();
         wss.close();
