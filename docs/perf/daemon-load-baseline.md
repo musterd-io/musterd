@@ -250,3 +250,35 @@ members, spread over many `prepare` calls, and is the next suspect if a re-run s
 90 s runs and does not hold under sustained load — at 50 the build before this fix fails. Re-read
 the ceiling from a sustained run on the fixed build. Falsifier for the root cause: a sustained
 tunnel run on the fixed build whose loop-delay max is still multi-second.
+
+## 2026-09-28 — sustained 50/50/50 through the tunnel passes the budget (lane 01M3D4069F)
+
+Same rig and shape as the 2026-09-26 sustained run: a Fly box, quick tunnel, 50 humans, 50 agents and
+50 viewers, RAMP=1000, DURATION=1300, daemon pinned to one core (`DAEMON_CPUS=0`).
+
+| build | all-request p95 | loop max | `GET /report` p95 | `GET /teams/:slug` p95 | errors | verdict |
+| ----- | --------------- | -------- | ----------------- | ---------------------- | ------ | ------- |
+| 3ce5aed3 (#1762: agent re-claim race) | 2 539 ms | 2.7 s | 13.2 s | 2.2 s | — | fail |
+| 659a17bc (+#1777: `/report` on a worker) | 5 547 ms | 2.6 s | 13.7 s | 5.4 s | 23 | **invalid** |
+| **c278dfb8** (+#1781: roster index, bench on a file DB) | **760 ms** | 1.0 s | 552 ms | 860 ms | 3 | **pass** |
+
+On c278dfb8: 36 358 requests (28/s), daemon CPU 35 %, rss 253 MB, loop delay p99 83 ms. All 50
+humans signed in through the edge. The 3 errors were 2× 502 on human `/mcp inbox` at the edge and
+1× 401 on `interrupt-check`. #1762 took the agent 401s from ~71 to single digits.
+
+*The 659a17bc run is invalid for `/report`.* The bench's synthetic daemon opened `:memory:`, and
+`store/reportCache.ts` derives inline and uncached for an in-memory store because a worker cannot
+share it. The run measured the path the production daemon no longer takes. The bench now seeds its
+synthetic board into a temp file (#1781).
+
+*What fixed it.* (1) `GET /report` derives on a worker thread with its own read-only connection,
+behind a per-team single-flight cache with a 5 s TTL (#1777). 50 viewers now share one derivation,
+off the event loop. (2) The roster's per-member `latestStatusUpdate` had no usable index: it sorted in a
+temp B-tree, ~100 ms of a ~118 ms roster read on the live copy. Migration v77 adds
+`idx_messages_from_act_ts`, which takes it to 1.7 ms (#1781).
+
+*What is left.* `GET /teams/:slug` is now the slowest route (p95 860 ms over 14 034 calls), and the
+next cost inside it is `seatWakeabilityFacts` (~14 ms, per-member audit lookups). The `/report`
+worker inherits the daemon's single-core pin in this rig, so the pass is conservative for a
+multi-core host. Falsifier: a sustained run at 50/50/50 on this build or later with all-request
+p95 over 1 000 ms.
