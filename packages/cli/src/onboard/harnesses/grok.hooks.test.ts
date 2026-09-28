@@ -272,6 +272,29 @@ describe('grok interrupt scripts (ADR 370)', () => {
     }
   });
 
+  // Lane 01M3MTYP9D: a probe that exits without draining stdin leaves the script's write of the
+  // payload with EPIPE. `execFileSync` raised that as a throw and the block was lost — ~3% of runs
+  // with the non-reading fake above, the `grok.hooks` CI flake. A payload larger than the pipe
+  // buffer makes the write block until the child reads, so a fake that never reads forces EPIPE
+  // deterministically; the verdict must still come from the child's stdout.
+  it('Stop still blocks when the probe exits without reading its stdin (EPIPE)', () => {
+    const binDir = mkdtempSync(join(tmpdir(), 'musterd-fake-'));
+    try {
+      const env = {
+        PATH: `${fakeMusterd(binDir, 'urgent from nick')}:${process.env['PATH'] ?? ''}`,
+      };
+      const block = runNode(
+        GROK_INTERRUPT_STOP_SCRIPT,
+        JSON.stringify({ reason: 'end_turn', pad: 'x'.repeat(1 << 20) }),
+        env,
+      );
+      expect(block.status).toBe(0);
+      expect(JSON.parse(block.stdout)).toEqual({ decision: 'block', reason: 'urgent from nick' });
+    } finally {
+      rmSync(binDir, { recursive: true, force: true });
+    }
+  });
+
   // ADR 445 (lane 01M3MG7EAM): the probe can only tap a payload it is handed, and only when its
   // hook line names the harness. The Stop script used to spawn the probe with stdin ignored.
   it('Stop hands its payload to the probe and names the harness', () => {

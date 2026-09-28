@@ -119,17 +119,24 @@ export function grokInterruptPreCommand(): string {
  * interrupt line; `stopHookActive` and non-end_turn reasons (session shutdown) exit 0. The script
  * reads the Stop payload itself, so it hands the probe that payload on stdin with `--hook grok`, or
  * the probe has nothing to tap (ADR 445 R1).
+ *
+ * `spawnSync`, not `execFileSync`, and the verdict is read off `status`/`stdout` rather than the
+ * throw: a probe that exits before draining stdin (an early gate, an unreachable daemon) leaves the
+ * parent's write of `input` with EPIPE, which `execFileSync` raises as an error even though the
+ * child exited 0 with the interrupt line on stdout — so a genuine end_turn silently went unblocked
+ * (~3% of runs with a non-reading probe; the `grok.hooks` CI flake). The line is the child's
+ * verdict; the pipe's fate is not.
  */
 export const GROK_INTERRUPT_STOP_SCRIPT = [
   'const fs=require("fs");',
-  'const {execFileSync}=require("child_process");',
+  'const {spawnSync}=require("child_process");',
   'let raw="";',
   'try{raw=fs.readFileSync(0,"utf8")}catch{}',
   'let ev={};',
   'try{ev=JSON.parse(raw)}catch{}',
   'if(ev.reason!=="end_turn"||ev.stopHookActive)process.exit(0);',
   'let line="";',
-  'try{line=execFileSync("musterd",["inbox","--interrupt-check","--hook","grok"],{encoding:"utf8",input:raw,stdio:["pipe","pipe","ignore"]}).trim()}catch{}',
+  'try{const r=spawnSync("musterd",["inbox","--interrupt-check","--hook","grok"],{encoding:"utf8",input:raw,stdio:["pipe","pipe","ignore"]});if(r.status===0&&r.stdout)line=r.stdout.trim()}catch{}',
   'if(line)console.log(JSON.stringify({decision:"block",reason:line}))',
 ].join('');
 
