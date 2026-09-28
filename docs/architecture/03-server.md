@@ -91,6 +91,7 @@ src/
     mcpHttp.ts        // Streamable-HTTP `/mcp/:team` (ADR 446 §1): SDK `createMcpHandler` framing with a per-request seat-bound factory; Done-line tools (`team_join` no-op, `team_inbox_check`, `team_send`) plus `team_agent_create` (ADR 449 §3) and `team_agent_connect` (ADR 456 §5), via `sponsoredAgentMint` over the REST routes' own store paths; ambient-presence stamp per call
     ws.ts             // WS upgrade, handshake state machine, frame dispatch
     hub.ts            // in-memory connection registry: member -> Set<conn>; broadcast/deliver
+    memberAdded.ts    // a Member was created → `presence: offline` to the team, the /live roster-refetch trigger (lane 01M3F81DD9): broadcastMemberAdded (POST /members, the sponsored mint) + broadcastReconciled (watcher/reload added+revived seats); observers are never announced
     test-auth.ts      // HTTP-test fixture: claim a named agent seat and return its msac_ credential plus msls_ Presence proof (ADR 337)
   presence/
     reaper.ts         // setInterval: presence timeout, request/wake expiry, departed-seat claim release + observer TTL/cap (ADR 064/196); emit offline events

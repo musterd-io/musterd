@@ -358,3 +358,20 @@ describe('isIdleGesture — the boundary between scheduler beats and errand over
     for (const n of [0, 99, -1, 1.5, Number.NaN]) expect(isIdleGesture(n)).toBe(false);
   });
 });
+
+describe('the welcome wave gesture (lane 01M3F81DD9)', () => {
+  it('exists, and the ambient scheduler can never pick it', () => {
+    expect(GESTURE.wave).toBe(19);
+    expect(IDLE_GESTURES).not.toContain(GESTURE.wave);
+  });
+});
+
+describe('the first-day moving box (lane 01M3F81DD9)', () => {
+  it('is held in both forearms at the chest, exactly like the handoff box', () => {
+    const box = solveSkeleton(walk(0.3, { carry: 'box' }));
+    const moving = solveSkeleton(walk(0.3, { carry: 'movingBox' }));
+    expect(moving.wrist).toEqual(box.wrist);
+    expect(moving.elbow).toEqual(box.elbow);
+    expect(moving.wrist).not.toEqual(solveSkeleton(walk(0.3)).wrist);
+  });
+});

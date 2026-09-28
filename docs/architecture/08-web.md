@@ -140,6 +140,9 @@ live/
     appearance.ts               // THE character identity: skin/hair/hats/clothes, name-seeded, pure — ADR 142
     character.ts                // paints a skeleton in an appearance (facing + limb self-occlusion)
     speech.ts                   // the over-head speech-bubble text model
+    arrivals.ts                 // who is new: pure roster diff (created / firstOnline — never-seen-online this session, created ≤24 h) + the wall board's new-arrivals corner (lane 01M3F81DD9)
+    welcomeWagon.ts             // the Welcome Wagon beat sequencer: 2 s waves, Act 1 / Act 2 / crowd scripts, mark/seat gates, backlog cap, busy-room cap — pure
+    welcomeRoom.ts              // the Welcome Wagon's wiring behind ports: roster → arrivals → beats → residents, and the paint the renderer is shown (unit-tested; index.ts only plugs it in)
 components/                     // marketing surface (Hero, Roadmap, Footer, LiquidGlass, Wedge)
 brand/                          // unified marks — Chip + MusterdWord topbar lockup (ADR 154); social-card.png + siteMeta.ts (og:image on musterd.io)
 ```

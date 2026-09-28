@@ -31,6 +31,8 @@ function computeData(
   envelopes: Envelope[],
 ): OfficeData {
   const byName = new Map(entries.map((e) => [e.name, e]));
+  // ADR 449's `sponsored_by` is a member ID; the welcome caption says the sponsor's NAME.
+  const nameById = new Map(roster.map((m) => [m.id, m.name]));
   return {
     teamName,
     teamWorkingHours,
@@ -65,6 +67,8 @@ function computeData(
         last_seen_at: m.presences?.length
           ? Math.max(...m.presences.map((p) => p.last_seen_at))
           : null,
+        created_at: m.created_at ?? null,
+        sponsored_by: m.sponsored_by ? (nameById.get(m.sponsored_by) ?? null) : null,
         // Reads the same live row `surface` and `model` came from just above, via the shared
         // helper — a plate that took its harness from one attachment and its provenance from
         // another would be describing two sessions as one.

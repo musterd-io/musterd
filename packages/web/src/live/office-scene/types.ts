@@ -51,6 +51,12 @@ export interface OfficeNode {
   offline_reason: string | null;
   /** Last seen (wire fact) — the warm-desk fade and the desk-capacity tiebreak read it. */
   last_seen_at: number | null;
+  /** When the Member was created (wire `created_at`) — the new-arrivals corner's 24 h window reads it
+   *  (lane 01M3F81DD9). Null in previews that build nodes by hand. */
+  created_at: number | null;
+  /** The NAME of the Member who sponsored this one (ADR 449 stores an id; OfficeScene resolves it),
+   *  for the "added by" caption; null for everyone else or when the sponsor has left the roster. */
+  sponsored_by: string | null;
   /**
    * This seat is in the room because a wake put it there (ADR 131), not because a person opened a
    * session — read from the live presence's stamped `provenance` (see `wokenSeat.ts`).
@@ -61,6 +67,28 @@ export interface OfficeNode {
    * eleven-second codex wake and a human at a terminal drew identically until now.
    */
   woken: boolean;
+}
+
+/**
+ * What the Welcome Wagon asks the painter to draw (lane 01M3F81DD9). Owned and pruned by
+ * `welcomeRoom.ts`; read-only to `render.ts`. Times named `clock`/`t0` are the scene clock (seconds,
+ * advances only while the loop runs); `until` is wall-clock ms.
+ */
+export interface WelcomePaint {
+  /** Name → lanyard colour, from the toss until they sit down. */
+  lanyards: Map<string, string>;
+  /** Lanyards in the air: tossed from the front desk at `t0` (scene clock), landing on `name`. */
+  tosses: { name: string; color: string; t0: number }[];
+  /** Name → scene clock when their monitor's one-frame hello screen lit. */
+  hello: Map<string, number>;
+  /** Agent name → scene clock when the status light over their head began to blink. */
+  bootBlink: Map<string, number>;
+  /** Label strips curling off the front desk's label maker. */
+  labels: { color: string; t0: number }[];
+  /** The wall board's new-arrivals corner — derived from the roster on every update, never stored. */
+  polaroids: { name: string; color: string }[];
+  /** The crowd's flip counter: its value, when it last flipped (scene clock), when it folds away (ms). */
+  counter: { value: number; flippedAt: number; until: number } | null;
 }
 
 /** The office has no arcs — relationships show as choreography, not edges. */
@@ -140,7 +168,15 @@ export interface Pose {
 /** What a member can carry through a walk or a hold: the handoff box, an errand's prop, or the
  * member's own closed laptop — which is the default whenever it is not docked at their desk, and
  * which an errand's carry outranks for the errand's duration (you set the laptop down to eat). */
-export type CarryKind = 'box' | 'plate' | 'bottle' | 'mug' | 'phone' | 'laptop';
+export type CarryKind =
+  | 'box'
+  | 'plate'
+  | 'bottle'
+  | 'mug'
+  | 'phone'
+  | 'laptop'
+  /** A first-day human's cardboard box, a plant poking out of it (lane 01M3F81DD9). */
+  | 'movingBox';
 
 /** Motion intensity == notification tier (memory: travel-intensity == notification tiers). */
 export type Tier = 'ambient' | 'needs-attn' | 'urgent';
@@ -319,4 +355,6 @@ export interface OfficeStats {
   beats: number;
   /** `performance.now()` when the scene mounted — the denominator for a rate. */
   since: number;
+  /** Welcome Wagon sequences started since mount (lane 01M3F81DD9) — the perf harness's probe. */
+  welcomes: number;
 }

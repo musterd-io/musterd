@@ -15,6 +15,8 @@ import {
   RECEPTION,
   SEAT_BACK,
   SINK_STAND,
+  WAGON_PICKUP,
+  WALL_DROP,
 } from './layout';
 import { findPath, walkable } from './nav';
 
@@ -229,6 +231,15 @@ describe('the front desk blocks', () => {
     // inside the counter's padded footprint (that is what "behind the desk" means to the nav grid),
     // and she never walks, so the grid owes her nothing.
     for (const m of CHECK_IN_MARKS) expect(walkable(m.lx, m.ly), `mark ${m.lx},${m.ly}`).toBe(true);
+  });
+
+  it('keeps the Welcome Wagon stops on walkable, connected floor (lane 01M3F81DD9)', () => {
+    // A stop inside a footprint would still route (findPath nudges the endpoint) and the dog would
+    // collect the wagon from somewhere that is not beside the counter — the failure the marks guard.
+    expect(walkable(WAGON_PICKUP.lx, WAGON_PICKUP.ly)).toBe(true);
+    expect(walkable(WALL_DROP.lx, WALL_DROP.ly)).toBe(true);
+    const path = findPath(WAGON_PICKUP, WALL_DROP);
+    expect(path.at(-1)).toEqual(WALL_DROP);
   });
 
   it('stands every errand dweller and reader on open floor', () => {

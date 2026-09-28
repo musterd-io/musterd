@@ -86,3 +86,57 @@ describe('nameplates are laid out, not just pinned (lane 01M3GPH5KB)', () => {
     expect(index).toMatch(/new ResizeObserver\(/);
   });
 });
+
+/**
+ * The Welcome Wagon's plumbing (lane 01M3F81DD9). Its decisions are unit-tested in welcomeRoom.test.ts;
+ * these hold the four joints index.ts owns, as source structure for the same reason as above.
+ */
+describe('the Welcome Wagon is plumbed in', () => {
+  it('update() feeds the roster to the welcome BEFORE the actors seat it', () => {
+    const update = body('update');
+    const feed = update.indexOf('welcomeRoom.onRoster(');
+    const seat = update.indexOf('actors.setHomes(');
+    expect(feed, 'update() never feeds the welcome').toBeGreaterThan(-1);
+    // expectFirstArrival must land before setHomes builds the check-in walk, or the box never shows.
+    expect(feed).toBeLessThan(seat);
+  });
+
+  it('the frame loop steps it, and its activity keeps the loop alive', () => {
+    expect(body('tick')).toContain('welcomeRoom.step(');
+    expect(index).toMatch(/const alive = \(\) =>[^;]*welcomeRoom\.active\(\)/);
+  });
+
+  it('a parked room still starts a queued welcome and folds away the counter — on a timer that only runs while needed', () => {
+    const arm = body('armWagonTimer');
+    expect(arm).toMatch(/setInterval\(/);
+    expect(arm, 'the timer must stop itself once the welcome is over').toMatch(/clearInterval\(wagonTimer\)/);
+    expect(body('update')).toContain('armWagonTimer()');
+    const at = index.indexOf('dispose: () =>');
+    expect(at, 'no dispose in the handle').toBeGreaterThan(-1);
+    expect(index.slice(at, index.indexOf('\n    },', at))).toContain('clearInterval(wagonTimer)');
+  });
+
+  it('reduced motion: the welcome is stepped off the frame loop, and never blocks the resting repaint', () => {
+    // Final review, Critical: under reduced motion the rAF loop never runs, so a welcome stepped only
+    // from `tick` never drained, `active()` stayed true, and update() took ensureLoop() (a no-op) instead
+    // of paintResting() on every roster change — the canvas froze after the first arrival.
+    expect(body('armWagonTimer')).toMatch(/if \(reduced\)[\s\S]*?welcomeRoom\.step\(/);
+    expect(body('update')).toMatch(/!reduced && welcomeRoom\.active\(\)/);
+  });
+
+  it('the plain door cue stands down when the welcome rang the door', () => {
+    expect(body('update')).toMatch(/takeDoorPulses\(\)[\s\S]*?welcomedAtDoor/);
+  });
+});
+
+describe('the welcome reads where people ARE, not the baked frame (lane 01M3F81DD9)', () => {
+  it('its confetti and wave ports locate the newcomer from the live pose', () => {
+    // `heads` is refreshed by bake(), which ran when the newcomer was at the door — so a burst or a
+    // wave anchored on it lands at the entrance (found on the office-preview harness, 2026-09-26).
+    expect(index).toMatch(/function liveHead\(/);
+    const at = index.indexOf('const welcomeRoom = createWelcomeRoom(');
+    const ports = index.slice(at, index.indexOf('{ reduced, still: STILL }', at));
+    expect(ports).toMatch(/confetti: [^\n]*liveHead\(/);
+    expect(ports).toMatch(/wave: [\s\S]*?liveHead\(/);
+  });
+});

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { GESTURE_DUR, createActors, deskNeighbourPairs, homePoses, travelDir } from './actors';
+import {
+  FIRST_ARRIVAL_HOLD_S,
+  GESTURE_DUR,
+  createActors,
+  deskNeighbourPairs,
+  homePoses,
+  travelDir,
+} from './actors';
 import { COFFEE_STAND, DESK_SLOTS, ENTRANCE, NOOK, NOOK_RUG_R, STRIP_CAP } from './layout';
 import { GESTURE, IDLE_GESTURES } from './skeleton';
 import { LEISURE_SPOTS } from './layout';
@@ -28,6 +35,8 @@ function node(name: string, presence: OfficeNode['presence'] = 'online'): Office
     dnd: false,
     offline_reason: null,
     last_seen_at: null,
+    created_at: null,
+    sponsored_by: null,
   };
 }
 function world(nodes: OfficeNode[]) {
@@ -1259,5 +1268,127 @@ describe('GESTURE_DUR covers every scheduler beat with a usable window', () => {
       expect(Number.isFinite(dur), `gesture ${kind} has no usable window`).toBe(true);
       expect(dur).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('first arrival (lane 01M3F81DD9)', () => {
+  it('a flagged arrival carries the moving box and stands longer at the mark', () => {
+    const actors = createActors();
+    const w1 = world([node('Ada')]);
+    actors.setHomes(w1.placements, w1.byName, false);
+    actors.expectFirstArrival('Bo', 'movingBox');
+    const w2 = world([node('Ada'), node('Bo')]);
+    actors.setHomes(w2.placements, w2.byName, true);
+    expect(actors.pendingCheckIns()).toEqual(['Bo']);
+    let sawBox = false;
+    let heldFor = 0;
+    for (let i = 0; i < 600 && actors.active(); i++) {
+      actors.step(0.05);
+      const p = actors.poses().get('Bo');
+      if (p?.carry === 'movingBox') sawBox = true;
+      if (actors.checkInHolds() > 0) heldFor += 0.05;
+    }
+    expect(sawBox).toBe(true);
+    expect(heldFor).toBeGreaterThan(FIRST_ARRIVAL_HOLD_S - 0.2);
+    seated(actors, 'Bo');
+    expect(actors.isSeated('Bo')).toBe(true);
+  });
+
+  it('the flag is spent by the arrival it was set for — the next walk-in is ordinary', () => {
+    const actors = createActors();
+    const w1 = world([node('Ada')]);
+    actors.setHomes(w1.placements, w1.byName, false);
+    actors.expectFirstArrival('Bo', 'movingBox');
+    const w2 = world([node('Ada'), node('Bo')]);
+    actors.setHomes(w2.placements, w2.byName, true);
+    for (let i = 0; i < 600 && actors.active(); i++) actors.step(0.05);
+    actors.setHomes(w1.placements, w1.byName, true); // Bo leaves
+    for (let i = 0; i < 600 && actors.active(); i++) actors.step(0.05);
+    actors.setHomes(w2.placements, w2.byName, true); // …and comes back
+    let sawBox = false;
+    for (let i = 0; i < 600 && actors.active(); i++) {
+      actors.step(0.05);
+      if (actors.poses().get('Bo')?.carry === 'movingBox') sawBox = true;
+    }
+    expect(sawBox).toBe(false);
+  });
+
+  it('an unflagged arrival never carries the moving box (their laptop is theirs to carry)', () => {
+    const actors = createActors();
+    const w1 = world([node('Ada')]);
+    actors.setHomes(w1.placements, w1.byName, false);
+    const w2 = world([node('Ada'), node('Bo')]);
+    actors.setHomes(w2.placements, w2.byName, true);
+    let sawBox = false;
+    for (let i = 0; i < 600 && actors.active(); i++) {
+      actors.step(0.05);
+      if (actors.poses().get('Bo')?.carry === 'movingBox') sawBox = true;
+    }
+    expect(sawBox).toBe(false);
+  });
+
+  it('isSeated is false mid-walk and true once they have sat down', () => {
+    const actors = createActors();
+    const w1 = world([node('Ada')]);
+    actors.setHomes(w1.placements, w1.byName, false);
+    expect(actors.isSeated('Ada')).toBe(true); // snapped home, already in the chair
+    const w2 = world([node('Ada'), node('Bo')]);
+    actors.setHomes(w2.placements, w2.byName, true);
+    actors.step(0.05);
+    expect(actors.isSeated('Bo')).toBe(false);
+    expect(actors.isSeated('nobody')).toBe(false);
+  });
+});
+
+describe('the welcome wave (lane 01M3F81DD9)', () => {
+  it('plays on a seated, free desk member', () => {
+    const actors = createActors();
+    const w = world([node('Ada')]);
+    actors.setHomes(w.placements, w.byName, false);
+    expect(actors.welcomeWave('Ada')).toBe(true);
+    actors.step(0.05);
+    expect(actors.poses().get('Ada')?.gesture).toBe(GESTURE.wave);
+  });
+
+  it('is refused for someone mid-walk or already gesturing', () => {
+    const actors = createActors();
+    const w1 = world([node('Ada')]);
+    actors.setHomes(w1.placements, w1.byName, false);
+    const w2 = world([node('Ada'), node('Bo')]);
+    actors.setHomes(w2.placements, w2.byName, true);
+    expect(actors.welcomeWave('Bo')).toBe(false); // walking in
+    expect(actors.welcomeWave('Ada')).toBe(true);
+    expect(actors.welcomeWave('Ada')).toBe(false); // already waving
+  });
+});
+
+describe('what the Welcome Wagon asks the actors (lane 01M3F81DD9)', () => {
+  it('actWalking counts a real act walk, never an arrival', () => {
+    const actors = createActors();
+    const w1 = world([node('Ada'), node('Cy')]);
+    actors.setHomes(w1.placements, w1.byName, false);
+    const w2 = world([node('Ada'), node('Cy'), node('Bo')]);
+    actors.setHomes(w2.placements, w2.byName, true);
+    expect(actors.active()).toBe(true); // Bo is walking in…
+    expect(actors.actWalking()).toBe(false); // …which is presence, not an act
+    expect(actors.walk('Ada', { kind: 'help', to: 'Cy', urgent: false })).toBe(true);
+    expect(actors.actWalking()).toBe(true);
+  });
+
+  it('reachedMark is false on the way to the mark and true from the pause onward', () => {
+    const actors = createActors();
+    const w1 = world([node('Ada')]);
+    actors.setHomes(w1.placements, w1.byName, false);
+    expect(actors.reachedMark('Ada')).toBe(true); // not checking in at all
+    const w2 = world([node('Ada'), node('Bo')]);
+    actors.setHomes(w2.placements, w2.byName, true);
+    expect(actors.reachedMark('Bo')).toBe(false);
+    let reached = false;
+    for (let i = 0; i < 400 && !reached; i++) {
+      actors.step(0.05);
+      reached = actors.reachedMark('Bo');
+    }
+    expect(reached).toBe(true);
+    expect(actors.checkInHolds()).toBe(1); // it turned true AT the mark, not after walking on
   });
 });

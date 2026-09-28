@@ -14,6 +14,7 @@ import {
   issueAgentConnectNonce,
 } from '../store/sponsoredAgents.js';
 import { getPolicy } from '../store/teams.js';
+import { broadcastMemberAdded } from './memberAdded.js';
 
 /**
  * The one mint path for member-created agents (ADR 449 §3), shared by `POST …/members/agents` and
@@ -54,6 +55,7 @@ export function mintSponsoredAgent(
     detail: { lifecycle_until: member.lifecycle_until },
   });
   announceAgentCreated(ctx, team, sponsor, member);
+  broadcastMemberAdded(ctx.hub, team.id, member.name);
   return {
     member,
     connect_url: agentConnectUrl(origin, team.slug, nonce),

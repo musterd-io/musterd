@@ -7,7 +7,19 @@ import { depth, fitFloor, project } from './iso';
 import { BENCH, BOOKSHELVES, CHAIR_OFF, DESK_D, DESK_SLOTS, DESK_W, FWD, KEYBOARD_ALONG, LOUNGE, NOOK, PLANTS, WORKING_HOURS_CALENDAR } from './layout';
 import { computeLightEnv } from './lighting';
 import type { PetMode, PetState } from './pet';
+import type { ReceptionistState } from './receptionist';
+import { GESTURE } from './skeleton';
 import {
+  BOOT_LED,
+  wallArrivalSpots,
+  drawActor,
+  receptionistPose,
+  confettiColor,
+  counterDigits,
+  plateText,
+  POLAROID_WHITE,
+  WAGON_RED,
+  wagonTrail,
   actorSortAnchor,
   animatedDeskAnchors,
   boardAnchor,
@@ -52,7 +64,7 @@ import {
   WIDEST_PANEL_HALF,
 } from './render';
 import { assignSeats } from './seating';
-import type { OfficeNode, Pose } from './types';
+import type { OfficeNode, Pose, WelcomePaint } from './types';
 import { projectWallBoard, STICKY_CAP, type WallBoard } from './wallboard';
 import { fmtOps, recordingCtx, type RecordedOp } from './recording-ctx';
 import type { SpriteCache } from './sprite-cache';
@@ -106,6 +118,8 @@ function node(name: string, activity: OfficeNode['activity']): OfficeNode {
     dnd: false,
     offline_reason: null,
     last_seen_at: null,
+    created_at: null,
+    sponsored_by: null,
   };
 }
 
@@ -677,14 +691,14 @@ describe('drawDog paints every pose', () => {
 
   it.each(modes)('draws the %s pose without throwing, both facings', (mode) => {
     for (const flip of [false, true]) {
-      const pet: PetState = { lx: 300, ly: 300, mode, modeT: 0.4, phase: 1.7, flip, path: [], seg: 0, plan: 'nap', sitFor: 5, speed: 55, face: flip ? -1 : 1, faceMag: 1, depthSign: 1, vel: 55 };
+      const pet: PetState = { lx: 300, ly: 300, mode, modeT: 0.4, phase: 1.7, flip, path: [], seg: 0, plan: 'nap', sitFor: 5, speed: 55, face: flip ? -1 : 1, faceMag: 1, depthSign: 1, vel: 55, cargo: 'none', errand: null };
       expect(() => drawDog(mockCtx(), fit, pet, 3.2)).not.toThrow();
     }
   });
 
   /** The narrow walk headings crossfade in the chest-on/rump-on view — both must paint. */
   it.each([1, -1] as const)('draws the walk at a narrow facing (depthSign %d) without throwing', (depthSign) => {
-    const pet: PetState = { lx: 300, ly: 300, mode: 'walk', modeT: 0.4, phase: 1.7, flip: false, path: [], seg: 0, plan: 'nap', sitFor: 5, speed: 55, face: 0.18, faceMag: 0.18, depthSign, vel: 55 };
+    const pet: PetState = { lx: 300, ly: 300, mode: 'walk', modeT: 0.4, phase: 1.7, flip: false, path: [], seg: 0, plan: 'nap', sitFor: 5, speed: 55, face: 0.18, faceMag: 0.18, depthSign, vel: 55, cargo: 'none', errand: null };
     expect(() => drawDog(mockCtx(), fit, pet, 3.2)).not.toThrow();
   });
 
@@ -695,7 +709,7 @@ describe('drawDog paints every pose', () => {
    */
   it.each(modes)('gives the %s pose both a white coat and black markings', (mode) => {
     const paints: string[] = [];
-    const pet: PetState = { lx: 300, ly: 300, mode, modeT: 0.4, phase: 1.7, flip: false, path: [], seg: 0, plan: 'nap', sitFor: 5, speed: 55, face: 1, faceMag: 1, depthSign: 1, vel: 55 };
+    const pet: PetState = { lx: 300, ly: 300, mode, modeT: 0.4, phase: 1.7, flip: false, path: [], seg: 0, plan: 'nap', sitFor: 5, speed: 55, face: 1, faceMag: 1, depthSign: 1, vel: 55, cargo: 'none', errand: null };
     drawDog(mockCtx(paints), fit, pet, 3.2);
     const lum = (hex: string) => {
       const m = /^#([0-9a-f]{6})$/i.exec(hex);
@@ -1485,5 +1499,215 @@ describe('background layer (sprite cache)', () => {
     const r = recordingCtx();
     drawWalls(r.ctx, fit, env, schedule, board(), 3, 'static');
     expect(readsBeforeWrites(r.ops)).toEqual([]);
+  });
+});
+
+describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
+  const fit = fitFloor(1200, 900);
+  function recCtx(paints: string[], texts: string[] = []): CanvasRenderingContext2D {
+    const grad = { addColorStop: (_s: number, c: string) => void paints.push(c) };
+    return new Proxy(
+      {},
+      {
+        get(_t, prop) {
+          if (prop === 'canvas') return { width: 1200, height: 900 };
+          if (prop === 'createLinearGradient' || prop === 'createRadialGradient') return () => grad;
+          if (prop === 'measureText') return () => ({ width: 0 });
+          if (prop === 'fillText') return (s: string) => void texts.push(s);
+          return () => undefined;
+        },
+        set(_t, prop, value) {
+          if ((prop === 'fillStyle' || prop === 'strokeStyle') && typeof value === 'string') paints.push(value);
+          return true;
+        },
+      },
+    ) as unknown as CanvasRenderingContext2D;
+  }
+  const walkingPet = (over: Partial<PetState> = {}): PetState => ({
+    lx: 300,
+    ly: 300,
+    mode: 'walk',
+    modeT: 0.4,
+    phase: 1.7,
+    flip: false,
+    path: [
+      { lx: 200, ly: 300 },
+      { lx: 400, ly: 300 },
+    ],
+    seg: 0,
+    plan: 'sit-then-nap',
+    sitFor: 4,
+    speed: 55,
+    face: 1,
+    faceMag: 1,
+    depthSign: 1,
+    vel: 55,
+    cargo: 'none',
+    errand: null,
+    ...over,
+  });
+  const paint = (over: Partial<WelcomePaint> = {}): WelcomePaint => ({
+    lanyards: new Map(),
+    tosses: [],
+    hello: new Map(),
+    bootBlink: new Map(),
+    labels: [],
+    polaroids: [],
+    counter: null,
+    ...over,
+  });
+
+  it('clips a long name on a nameplate or polaroid', () => {
+    expect(plateText('ada')).toBe('ada');
+    expect(plateText('a-very-long-seat-name')).toBe('a-very-lo…');
+  });
+
+  it('shows the flip counter as two digits at least, and caps at 99+', () => {
+    expect(counterDigits(4)).toBe('04');
+    expect(counterDigits(37)).toBe('37');
+    expect(counterDigits(140)).toBe('99+');
+  });
+
+  it("colours a newcomer's confetti in their colour and mustard; plain confetti keeps its palette", () => {
+    expect(confettiColor(0, 'hsl(1, 2%, 3%)')).toBe('hsl(1, 2%, 3%)');
+    expect(confettiColor(1, 'hsl(1, 2%, 3%)')).toBe('#E1AD01');
+    expect(confettiColor(0)).toBe('#5cd49a');
+  });
+
+  it('trails the wagon behind the dog, the way it came', () => {
+    const trail = wagonTrail(walkingPet({ cargo: 'wagon' }));
+    expect(trail.lx).toBeLessThan(300); // walking +lx, so the wagon is at smaller lx
+    expect(Math.abs(trail.ly - 300)).toBeLessThan(1);
+  });
+
+  it('draws the wagon only while the dog is hauling it', () => {
+    const hauling: string[] = [];
+    renderScene(recCtx(hauling), fit, new Map(), new Map(), new Map(), 1, 'revive', undefined, walkingPet({ cargo: 'wagon' }));
+    expect(hauling).toContain(WAGON_RED);
+    const free: string[] = [];
+    renderScene(recCtx(free), fit, new Map(), new Map(), new Map(), 1, 'revive', undefined, walkingPet());
+    expect(free).not.toContain(WAGON_RED);
+  });
+
+  it('puts the polaroid in the dog’s mouth', () => {
+    const paints: string[] = [];
+    drawDog(recCtx(paints), fit, walkingPet({ cargo: 'polaroid' }), 1);
+    expect(paints).toContain(POLAROID_WHITE);
+    const plain: string[] = [];
+    drawDog(recCtx(plain), fit, walkingPet(), 1);
+    expect(plain).not.toContain(POLAROID_WHITE);
+  });
+
+  it('paints the lanyard, the label strip, the polaroids, the counter, the hello and the blink', () => {
+    const member = node('ada', 'working');
+    const members = new Map([[member.name, member]]);
+    const placements = assignSeats([member]);
+    const home = homePoses(placements, members).get('ada')!;
+    // Standing and facing the camera, so the lanyard's card is on the visible side of the chest.
+    const poses = new Map([['ada', { ...home, dir: 'S' as const, heading: Math.PI / 2, sit: 0 }]]);
+    const paints: string[] = [];
+    const texts: string[] = [];
+    renderScene(recCtx(paints, texts), fit, placements, members, poses, 5, 'revive', undefined, null, undefined, null, null, null, {
+      welcome: paint({
+        lanyards: new Map([['ada', 'hsl(11, 68%, 62%)']]),
+        hello: new Map([['ada', 4.8]]),
+        bootBlink: new Map([['ada', 4.9]]),
+        labels: [{ color: 'hsl(22, 68%, 62%)', t0: 4.5 }],
+        polaroids: [{ name: 'a-very-long-seat-name', color: 'hsl(33, 68%, 62%)' }],
+        counter: { value: 12, flippedAt: 4.9, until: Infinity },
+      }),
+    });
+    expect(paints).toContain('hsl(11, 68%, 62%)'); // the lanyard
+    expect(paints).toContain('hsl(22, 68%, 62%)'); // the label strip
+    expect(paints).toContain('hsl(33, 68%, 62%)'); // the polaroid
+    expect(paints).toContain(BOOT_LED); // the agent's boot blink
+    expect(texts).toContain('a-very-lo…');
+    expect(texts).toContain('12');
+    expect(texts).toContain('joined'); // the counter's label — never 'guests' (sloane)
+    expect(texts).not.toContain('guests');
+    expect(texts).toContain('hello');
+  });
+
+  it('draws a lanyard in flight from the front desk, and only while it flies', () => {
+    const flying: string[] = [];
+    renderScene(recCtx(flying), fit, new Map(), new Map(), new Map(), 2.2, 'revive', undefined, null, undefined, null, null, null, {
+      welcome: paint({ tosses: [{ name: 'ada', color: 'hsl(44, 68%, 62%)', t0: 2.0 }] }),
+    });
+    expect(flying).toContain('hsl(44, 68%, 62%)');
+    const landed: string[] = [];
+    renderScene(recCtx(landed), fit, new Map(), new Map(), new Map(), 3.0, 'revive', undefined, null, undefined, null, null, null, {
+      welcome: paint({ tosses: [{ name: 'ada', color: 'hsl(44, 68%, 62%)', t0: 2.0 }] }),
+    });
+    expect(landed).not.toContain('hsl(44, 68%, 62%)');
+  });
+
+  it('the receptionist throws on a toss, lifts the receiver on a ring, types on a label', () => {
+    const r = (mode: ReceptionistState['mode'], modeT = 0.3): ReceptionistState => ({
+      mode,
+      modeT,
+      aloneT: 0,
+      lastSlot: 0,
+      beatLen: 5,
+    });
+    expect(receptionistPose(r('toss')).gesture).toBe(GESTURE.wave);
+    expect(receptionistPose(r('ringing'))).toMatchObject({ gesture: GESTURE.call, carry: 'phone' });
+    expect(receptionistPose(r('label'))).toMatchObject({ typing: true, carry: null });
+    expect(receptionistPose(r('idle')).gesture).toBe(0);
+  });
+
+  it('paints the first-day moving box when a member carries it', () => {
+    const member = node('ada', 'working');
+    const members = new Map([[member.name, member]]);
+    const placements = assignSeats([member]);
+    const home = homePoses(placements, members).get('ada')!;
+    const standing = { ...home, dir: 'S' as const, heading: Math.PI / 2, sit: 0 };
+    const carrying: string[] = [];
+    drawActor(recCtx(carrying), fit, { ...standing, carry: 'movingBox' }, member, 1);
+    expect(carrying).toContain('#c9a26b'); // the kraft cardboard
+    const empty: string[] = [];
+    drawActor(recCtx(empty), fit, { ...standing, carry: null }, member, 1);
+    expect(empty).not.toContain('#c9a26b');
+  });
+
+  it('shows the lanyard cord from behind too — newcomers walk away from the camera to their desks', () => {
+    const member = node('ada', 'working');
+    const members = new Map([[member.name, member]]);
+    const placements = assignSeats([member]);
+    const home = homePoses(placements, members).get('ada')!;
+    const away = { ...home, dir: 'N' as const, heading: -Math.PI / 2, sit: 0 };
+    const paints: string[] = [];
+    drawActor(recCtx(paints), fit, away, member, 1, false, undefined, 'hsl(55, 68%, 62%)');
+    expect(paints).toContain('hsl(55, 68%, 62%)');
+  });
+
+  it('hangs the polaroids and the counter ON the wall, under the board — never past the wall’s end', () => {
+    for (const f of [fitFloor(1200, 900), fitFloor(1400, 648), fitFloor(700, 500)]) {
+      const board = boardAnchor(f);
+      const wallEnd = project(900, 0, f).x; // the right wall's far end (FLOOR, ly 0)
+      const spots = wallArrivalSpots(f, 3);
+      for (const p of [...spots.polaroids, spots.counter]) {
+        expect(p.x).toBeGreaterThan(board.x - 1);
+        expect(p.x).toBeLessThan(Math.min(board.x + board.w, wallEnd));
+        expect(p.y).toBeGreaterThan(board.y + board.h * 0.5); // under the board, not beside it
+      }
+    }
+  });
+
+  it('a spent welcome paints nothing of itself', () => {
+    const member = node('ada', 'working');
+    const members = new Map([[member.name, member]]);
+    const placements = assignSeats([member]);
+    const paints: string[] = [];
+    const texts: string[] = [];
+    renderScene(recCtx(paints, texts), fit, placements, members, homePoses(placements, members), 50, 'revive', undefined, null, undefined, null, null, null, {
+      welcome: paint({
+        hello: new Map([['ada', 1]]),
+        bootBlink: new Map([['ada', 1]]),
+        labels: [{ color: 'hsl(22, 68%, 62%)', t0: 1 }],
+      }),
+    });
+    expect(texts).not.toContain('hello');
+    expect(paints).not.toContain(BOOT_LED);
+    expect(paints).not.toContain('hsl(22, 68%, 62%)');
   });
 });

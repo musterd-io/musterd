@@ -300,6 +300,7 @@ export function readMemberSummary(row: unknown): MemberSummary | null {
   const working_hours = memberWorkingHours(row['working_hours']);
   const slack_user_id = nullishString(row['slack_user_id'], 1);
   const hue = nullishInt(row['hue'], { min: 0, max: 359 });
+  const sponsored_by = nullishString(row['sponsored_by']);
   const capabilities = readCapabilities(row['capabilities']);
   const state = nullishString(row['state']);
   const last_status_at = nullishInt(row['last_status_at']);
@@ -311,6 +312,7 @@ export function readMemberSummary(row: unknown): MemberSummary | null {
     failed(working_hours) ||
     failed(slack_user_id) ||
     failed(hue) ||
+    failed(sponsored_by) ||
     failed(capabilities) ||
     failed(state) ||
     failed(last_status_at) ||
@@ -363,6 +365,7 @@ export function readMemberSummary(row: unknown): MemberSummary | null {
     working_hours,
     slack_user_id,
     hue,
+    sponsored_by,
     account_status: account_status as AccountStatus | undefined,
     capabilities,
     created_at: row['created_at'] as number,

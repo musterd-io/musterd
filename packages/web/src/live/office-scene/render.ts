@@ -5,7 +5,7 @@ import { drawCharacter } from './character';
 import { depth, FLOOR, KX, KY, project, THICK, WALL_H, type Fit, type Pt } from './iso';
 import { deviceBox, measureBounds, type SpriteCache } from './sprite-cache';
 import { STRIDE, type PetState } from './pet';
-import { RECEPTIONIST_WAKE_S, type ReceptionistState } from './receptionist';
+import { RECEPTION_CUE_S, RECEPTIONIST_WAKE_S, type ReceptionistState } from './receptionist';
 import {
   BEAM_LEN,
   BEAM_SHEAR,
@@ -56,7 +56,8 @@ import { CANVAS_EASE } from './motion';
 import { deskMoodFor, deskMoodStyle } from './moods';
 import { workingAtDesk, type Placement } from './seating';
 import { chairShift, chairYaw, GESTURE, handsInLap, seedOf, solveSkeleton, typingBurst } from './skeleton';
-import type { Dir, OfficeNode, Pose } from './types';
+import type { CarryKind, Dir, OfficeNode, Pose, WelcomePaint } from './types';
+import { TOSS_S } from './welcomeRoom';
 import { formatWorkingHours } from './workingHours';
 
 /**
@@ -1688,7 +1689,34 @@ const RECEPTIONIST_NODE: OfficeNode = {
   dnd: false,
   offline_reason: null,
   last_seen_at: null,
+  created_at: null,
+  sponsored_by: null,
 };
+
+/**
+ * What her body is doing, per mode — pure, so the mapping is a test rather than a thing to eyeball.
+ * The Welcome Wagon's cues (lane 01M3F81DD9) reuse her vocabulary: the ringing phone is the call pose
+ * with the receiver up, the label maker is a typing burst, and the lanyard toss is the raised-hand
+ * wave — thrown, then held up a beat as it lands. `gestureT` null → the caller's wake-driven value.
+ */
+export function receptionistPose(r: ReceptionistState): {
+  gesture: number;
+  gestureT: number | null;
+  carry: CarryKind | null;
+  typing: boolean;
+} {
+  const asleep = r.mode === 'asleep';
+  if (r.mode === 'call')
+    return { gesture: GESTURE.call, gestureT: Math.min(0.98, r.modeT / Math.max(r.beatLen, 0.01)), carry: 'phone', typing: false };
+  if (r.mode === 'ringing')
+    return { gesture: GESTURE.call, gestureT: Math.min(0.98, r.modeT / RECEPTION_CUE_S.ringing), carry: 'phone', typing: false };
+  if (r.mode === 'toss')
+    return { gesture: GESTURE.wave, gestureT: Math.min(0.98, r.modeT / RECEPTION_CUE_S.toss), carry: null, typing: false };
+  if (asleep || r.mode === 'waking')
+    // chin-on-hand reads as dozing at a desk; asleep holds the plateau — a still slump, no animation
+    return { gesture: GESTURE.chin, gestureT: asleep ? 0.5 : null, carry: null, typing: false };
+  return { gesture: 0, gestureT: null, carry: null, typing: r.mode === 'typing' || r.mode === 'label' };
+}
 
 function drawReceptionist(ctx: CanvasRenderingContext2D, fit: Fit, r: ReceptionistState, t: number): void {
   const asleep = r.mode === 'asleep';
@@ -1699,15 +1727,9 @@ function drawReceptionist(ctx: CanvasRenderingContext2D, fit: Fit, r: Receptioni
   // Asleep is a slump, not a separate drawing: the same seated figure folded forward over the desk.
   // `sit` stays 1 throughout — she never stands up, which is most of what "never leaves the desk"
   // means to the painter.
-  const gesture =
-    r.mode === 'call' ? GESTURE.call
-    : asleep || r.mode === 'waking' ? GESTURE.chin // chin-on-hand reads as dozing at a desk
-    : 0;
-  const gestureT =
-    r.mode === 'call' ? Math.min(0.98, r.modeT / Math.max(r.beatLen, 0.01))
-    : asleep ? 0.5 // held at the plateau: a still slump, no animation on an empty office
-    : 1 - wake;
-  const typing = r.mode === 'typing';
+  const { gesture, gestureT: poseT, carry, typing } = receptionistPose(r);
+  const gestureT = poseT ?? 1 - wake;
+  const onPhone = carry === 'phone';
   const pose: Pose = {
     lx: RECEPTIONIST.lx,
     ly: RECEPTIONIST.ly,
@@ -1718,7 +1740,7 @@ function drawReceptionist(ctx: CanvasRenderingContext2D, fit: Fit, r: Receptioni
     run: false,
     small: false,
     alpha: 1,
-    carry: r.mode === 'call' ? 'phone' : null,
+    carry: onPhone ? 'phone' : null,
     bubble: null,
     gesture,
     gestureT,
@@ -1897,6 +1919,9 @@ export interface RenderOpts {
    * which of thirty items moved a pixel — which is how the additive-pass fault was found.
    */
   spriteOnly?: string | undefined;
+  /** The Welcome Wagon's paint (lane 01M3F81DD9) — lanyards, label strips, the wall's new-arrivals
+   *  corner and flip counter, hello screens, boot blinks. Absent → nothing of it is drawn. */
+  welcome?: WelcomePaint | undefined;
 }
 
 /** The break-nook lounge, as depth items: the rug flat on the floor, every solid piece self-sorted. */
@@ -2646,6 +2671,12 @@ export function drawDog(ctx: CanvasRenderingContext2D, fit: Fit, pet: PetState, 
     ellipse(ctx, px(x + 4.6, y + 2.2), 4.3 * s, 2.5 * s, DOG.cream); // snout, out front
     if (tongue) ellipse(ctx, px(x + 5.4, y + 4), 1.5 * s, 1.1 * s, DOG.tongue);
     ellipse(ctx, px(x + 8.2, y + 1.4), 1.25 * s, 1.05 * s, DOG.nose);
+    if (awake && pet.cargo === 'polaroid') {
+      // A newcomer's printed nameplate, carried to the wall board in its mouth (lane 01M3F81DD9).
+      const card = px(x + 7, y + 3.4);
+      ctx.fillStyle = POLAROID_WHITE;
+      ctx.fillRect(card.x - 2.4 * s, card.y - 1.2 * s, 4.8 * s, 5.4 * s);
+    }
     ellipse(ctx, px(x + 2.4, y - 3.4), 2.4 * s, 1.5 * s, DOG.patch); // brow — reads as the patch's top edge
     // The eye sits *on* the patch, so it gets a pale rim: a dark eye on dark fur is no eye at all.
     if (awake) {
@@ -3050,6 +3081,8 @@ export function drawActor(
   armsOnly = false,
   /** Mug colour while a sip beat is playing — the painter puts it in the raised hand. */
   mug?: string,
+  /** A first arrival's lanyard colour (lane 01M3F81DD9). */
+  lanyard?: string,
 ): void {
   drawCharacter(
     ctx,
@@ -3067,6 +3100,7 @@ export function drawActor(
       gesture: pose.gesture,
       gestureT: pose.gestureT,
       ...(mug !== undefined ? { mug } : {}),
+      ...(lanyard !== undefined ? { lanyard } : {}),
       t,
       seed: seedOf(node.name),
     },
@@ -4788,6 +4822,9 @@ export function renderScene(
   } else {
     shell(ctx);
   }
+  // The wall board's new-arrivals corner and the crowd's flip counter hang on the back wall, so they
+  // paint with the wall: after the shell, before anything that stands in front of it.
+  if (opts.welcome) drawWallArrivals(ctx, fit, opts.welcome, t);
   items.push({ d: depth(MEETING.lx, MEETING.ly), fn: () => meetingTable(ctx, fit) });
   for (const c of MEETING.chairs) {
     const cx = MEETING.lx + c.dx;
@@ -4804,6 +4841,20 @@ export function renderScene(
 
   // The office dog sorts with everything else at its own floor position (behaviour lives in pet.ts).
   if (pet) items.push({ d: depth(pet.lx, pet.ly) + 0.08, fn: () => drawDog(ctx, fit, pet, t) });
+  // The welcome wagon (lane 01M3F81DD9) trails the dog on the floor and sorts at its own position.
+  if (pet?.cargo === 'wagon') {
+    const w = wagonTrail(pet);
+    items.push({ d: depth(w.lx, w.ly) + 0.08, fn: () => drawWagon(ctx, fit, w.lx, w.ly) });
+  }
+  // The label maker's strips, curling up off the front desk's arrivals end.
+  for (const label of opts.welcome?.labels ?? []) {
+    const age = t - label.t0;
+    if (age < 0 || age >= LABEL_S) continue;
+    items.push({
+      d: depth(FRONT_DESK.lx + 30, FRONT_DESK.ly + 10) + 0.05,
+      fn: () => drawLabelStrip(ctx, fit, label.color, age),
+    });
+  }
 
   // The bench's shared counter, once — its seats' gear rides per-slot below.
   // 300 long: the widest footprint on the floor, so the centre-vs-edge error is largest here.
@@ -4870,7 +4921,10 @@ export function renderScene(
     const d = actorDepth(anchor.lx, anchor.ly);
     // The desk mug travels with a sipping owner — passed down so the hand mug matches the desk mug.
     const mug = seated && pose.gesture === GESTURE.sip ? deskMugColor(slot.id) : undefined;
-    items.push({ d, fn: () => drawActor(ctx, fit, pose, node, t, false, mug) });
+    // A lanyard still in the air is not on them yet — it lands at the end of its flight.
+    const inFlight = opts.welcome?.tosses.some((x) => x.name === name && t - x.t0 < TOSS_S) ?? false;
+    const lanyard = inFlight ? undefined : opts.welcome?.lanyards.get(name);
+    items.push({ d, fn: () => drawActor(ctx, fit, pose, node, t, false, mug, lanyard) });
 
     // Seated overlay: the desk paints over a member sitting behind it (correct — that is what a desk does
     // to your legs), but their forearms *rest on the surface*, above it, so they must paint on top of the
@@ -4906,8 +4960,15 @@ export function renderScene(
     }
   }
 
+  // Lanyards in the air (lane 01M3F81DD9): over everything on the floor, under the night veil.
+  if (opts.welcome?.tosses.length) drawTosses(ctx, fit, opts.welcome.tosses, heads, t);
+
   // Interior lighting: veil the room to the night level, then let occupied desks' lamps glow through.
   drawInteriorLight(ctx, fit, env, poses, byName, litLamps);
+
+  // The Welcome Wagon's light-emitting bits (lane 01M3F81DD9) go over the night veil, like the lamps:
+  // a monitor saying hello and an agent's status light are sources, not surfaces.
+  if (opts.welcome) drawWelcomeGlows(ctx, fit, opts.welcome, placements, heads, t);
 
   // Collapse any queue/nook members past the render cap into a single "+N" pill, so a very large roster
   // stays bounded. Hidden count = placed-but-not-drawn (capped members get no pose in homePoses).
@@ -4937,6 +4998,228 @@ export function renderScene(
   drawVignette(ctx);
 
   return { heads, bases };
+}
+
+// ── the Welcome Wagon (lane 01M3F81DD9) ────────────────────────────────────────────────────────────
+// Everything a new Member's arrival adds to the room. Built from the same primitives as the furniture
+// (`box`, `project`, `roundRect`) so it depth-sorts and scales like the rest of the office; the timing
+// is welcomeRoom.ts's, the painting is here.
+
+/** The wagon's red — a toy-wagon red, warm enough to belong in an amber room. */
+export const WAGON_RED = '#c8412f';
+/** The polaroid / nameplate card stock. */
+export const POLAROID_WHITE = '#f7f3ea';
+/** An agent's status light blinking as it boots up. */
+export const BOOT_LED = '#9ff5b0';
+const MUSTARD = '#E1AD01';
+/** How long a label strip curls off the counter, scene seconds (welcomeRoom prunes on the same number). */
+const LABEL_S = 2.0;
+const HELLO_S = 1.0;
+const BLINK_S = 1.2;
+const FLIP_S = 0.25;
+/** How far behind the dog the wagon rolls, floor units — handle length plus half a wagon. */
+const WAGON_LAG = 24;
+
+/** A name on a nameplate or polaroid: ten characters, then an ellipsis — a card has no room for more. */
+export function plateText(name: string): string {
+  return name.length <= 10 ? name : `${name.slice(0, 9)}…`;
+}
+
+/** The flip counter's digits: two at least, `99+` past what two flaps can show. */
+export function counterDigits(n: number): string {
+  return n > 99 ? '99+' : String(n).padStart(2, '0');
+}
+
+/**
+ * Where the wagon is, trailing the dog: back along the way it came (from the waypoint it is leaving
+ * toward where it stands), so it follows the dog around corners instead of swinging out wide.
+ */
+export function wagonTrail(pet: PetState): { lx: number; ly: number } {
+  const from = pet.path[pet.seg] ?? { lx: pet.lx - (pet.flip ? -1 : 1), ly: pet.ly };
+  let dx = pet.lx - from.lx;
+  let dy = pet.ly - from.ly;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) {
+    dx = pet.flip ? -1 : 1; // standing: behind is opposite to where it faces
+    dy = 0;
+  } else {
+    dx /= len;
+    dy /= len;
+  }
+  return { lx: pet.lx - dx * WAGON_LAG, ly: pet.ly - dy * WAGON_LAG };
+}
+
+/** The welcome wagon: a small red cart on four dark wheels, loaded with a monitor box and a plant. */
+function drawWagon(ctx: CanvasRenderingContext2D, fit: Fit, lx: number, ly: number): void {
+  for (const [dx, dy] of [
+    [-9, -6],
+    [9, -6],
+    [-9, 6],
+    [9, 6],
+  ] as const) {
+    box(ctx, fit, lx + dx, ly + dy, 4, 4, 4, '#2b2622');
+  }
+  box(ctx, fit, lx, ly, 24, 16, 6, WAGON_RED, 3); // the bed
+  box(ctx, fit, lx, ly, 24, 16, 1.5, dim(WAGON_RED, 0.75), 9); // the rim
+  box(ctx, fit, lx + 4, ly, 12, 10, 9, '#c9a26b', 9); // the monitor, still boxed
+  box(ctx, fit, lx - 6, ly + 2, 6, 6, 5, '#8a5a3b', 9); // the pot…
+  box(ctx, fit, lx - 6, ly + 2, 7, 7, 7, '#4f8a4b', 14); // …and its plant
+  box(ctx, fit, lx - 5, ly - 5, 6, 1, 2, POLAROID_WHITE, 18); // the nameplate, riding on top
+}
+
+/** A label strip in the newcomer's colour, printed out of the counter's label maker and curling up. */
+function drawLabelStrip(ctx: CanvasRenderingContext2D, fit: Fit, color: string, age: number): void {
+  const rise = Math.min(1, age / 0.6);
+  const fade = age > LABEL_S - 0.5 ? (LABEL_S - age) / 0.5 : 1;
+  ctx.globalAlpha = Math.max(0, fade);
+  box(ctx, fit, FRONT_DESK.lx + 30, FRONT_DESK.ly + 10, 14, 2, 3, color, FRONT_DESK.high + 2 + rise * 6);
+  ctx.globalAlpha = 1;
+}
+
+/**
+ * Where the new-arrivals corner and the flip counter hang, in screen space (lane 01M3F81DD9): pinned on
+ * the wall UNDER the lane board — polaroids along its left end, the counter under its right end. Laid
+ * out in wall coordinates (`wallPt`), because the board sits at the right wall's far end: "just right
+ * of the board" is thin air, which is where the first cut hung them (office-preview harness, 2026-09-26).
+ */
+export function wallArrivalSpots(fit: Fit, n: number): { polaroids: Pt[]; counter: Pt } {
+  const { tc, uc, w: W, h: H } = WALL_BOARD;
+  const edge = WALL_EDGES[WALL_BOARD.wall]!;
+  const u = uc - H / 2 / WALL_H - 12 / WALL_H; // a hand's width under the board's bottom edge
+  const left = tc - W / 2 / FLOOR;
+  const polaroids: Pt[] = [];
+  for (let i = 0; i < n; i++) polaroids.push(wallPt(edge, left + (14 + i * 26) / FLOOR, u, fit));
+  const counter = wallPt(edge, tc + W / 2 / FLOOR - 30 / FLOOR, u, fit);
+  return { polaroids, counter };
+}
+
+/** The wall board's new-arrivals polaroids and the crowd's flip counter, at `wallArrivalSpots`. */
+function drawWallArrivals(ctx: CanvasRenderingContext2D, fit: Fit, w: WelcomePaint, t: number): void {
+  if (w.polaroids.length === 0 && !w.counter) return;
+  const s = fit.scale;
+  const spots = wallArrivalSpots(fit, w.polaroids.length);
+  w.polaroids.forEach((p, i) => {
+    const at = spots.polaroids[i]!;
+    const tilt = ((seedOf(p.name) % 9) - 4) * (Math.PI / 180);
+    const cw = 20 * s;
+    ctx.save();
+    ctx.translate(at.x, at.y);
+    ctx.rotate(tilt);
+    ctx.fillStyle = POLAROID_WHITE;
+    ctx.fillRect(-cw / 2, 0, cw, 24 * s);
+    ctx.fillStyle = p.color; // the photo: their colour, which is how the room knows them
+    ctx.fillRect(-cw / 2 + 2 * s, 2 * s, cw - 4 * s, 14 * s);
+    ctx.fillStyle = '#3f3a33';
+    ctx.font = canvasFont(Math.max(5, Math.round(6 * s * 1.4)));
+    ctx.textAlign = 'center';
+    ctx.fillText(plateText(p.name), 0, 21.5 * s, cw - 2 * s); // squeezed to the card, never past it
+    ctx.fillStyle = '#b3261e';
+    ctx.beginPath();
+    ctx.arc(0, 1 * s, 1.6 * s, 0, Math.PI * 2); // the pin
+    ctx.fill();
+    ctx.restore();
+  });
+  if (w.counter) {
+    const digits = counterDigits(w.counter.value);
+    const flip = Math.max(0, 1 - (t - w.counter.flippedAt) / FLIP_S);
+    const cw = 11 * s;
+    const ch = 15 * s;
+    const total = digits.length * (cw + 2 * s) - 2 * s;
+    const x0 = spots.counter.x - total / 2;
+    const y0 = spots.counter.y;
+    for (let i = 0; i < digits.length; i++) {
+      const x = x0 + i * (cw + 2 * s);
+      roundRect(ctx, x, y0, cw, ch, 2 * s, '#26221e');
+      ctx.fillStyle = '#3a342e'; // the top flap — squashed while it falls, which reads as the flip
+      ctx.fillRect(x, y0 + (ch / 2) * flip, cw, (ch / 2) * (1 - flip));
+      ctx.fillStyle = '#f4efe6';
+      ctx.font = canvasFont(Math.round(11 * s * 1.3), '--font-mono', 700);
+      ctx.textAlign = 'center';
+      ctx.fillText(digits[i]!, x + cw / 2, y0 + ch * 0.74);
+    }
+    ctx.fillStyle = '#5b544c';
+    ctx.font = canvasFont(Math.max(5, Math.round(6 * s * 1.4)));
+    ctx.textAlign = 'center';
+    ctx.fillText('joined', spots.counter.x, y0 + ch + 8 * s); // never "guests" — they are Members
+  }
+}
+
+/**
+ * A lanyard in the air: a card on a trailing cord, arcing from the receptionist's hands to the
+ * newcomer's chest over the flight, spinning a little as it goes.
+ */
+function drawTosses(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  tosses: WelcomePaint['tosses'],
+  heads: Map<string, Pt>,
+  t: number,
+): void {
+  const s = fit.scale;
+  const from = project(RECEPTIONIST.lx, RECEPTIONIST.ly, fit);
+  const start = { x: from.x, y: from.y - 70 * s };
+  for (const toss of tosses) {
+    const k = (t - toss.t0) / TOSS_S;
+    if (k < 0 || k >= 1) continue;
+    const head = heads.get(toss.name);
+    // `heads` is the plate anchor above the crown; the chest is ~52 units below it.
+    const end = head ? { x: head.x, y: head.y + 52 * s } : { x: start.x + 60 * s, y: start.y + 20 * s };
+    const e = 1 - (1 - k) * (1 - k); // eases out as it lands
+    const x = start.x + (end.x - start.x) * e;
+    const y = start.y + (end.y - start.y) * e - Math.sin(k * Math.PI) * 38 * s; // the arc
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(k * Math.PI * 1.5);
+    ctx.strokeStyle = toss.color;
+    ctx.lineWidth = Math.max(1, 1.4 * s);
+    ctx.beginPath();
+    ctx.ellipse(0, -5 * s, 4 * s, 5 * s, 0, 0, Math.PI * 2); // the cord, a loop in the air
+    ctx.stroke();
+    ctx.fillStyle = POLAROID_WHITE;
+    ctx.fillRect(-2.6 * s, 0, 5.2 * s, 6.4 * s);
+    ctx.fillStyle = toss.color;
+    ctx.fillRect(-2.6 * s, 0, 5.2 * s, 1.8 * s);
+    ctx.restore();
+  }
+}
+
+/**
+ * The Welcome Wagon's light sources, drawn over the night veil: a newcomer's monitor saying hello for
+ * a second as they sit down, and an agent's status light blinking twice as it boots up.
+ */
+function drawWelcomeGlows(
+  ctx: CanvasRenderingContext2D,
+  fit: Fit,
+  w: WelcomePaint,
+  placements: Map<string, Placement>,
+  heads: Map<string, Pt>,
+  t: number,
+): void {
+  const s = fit.scale;
+  for (const [name, t0] of w.hello) {
+    const age = t - t0;
+    const pl = placements.get(name);
+    if (age < 0 || age >= HELLO_S || pl?.kind !== 'desk') continue;
+    const slot = DESK_SLOTS[pl.slot];
+    if (!slot) continue;
+    const [mx, my] = deskPoint(slot, MONITOR_ALONG, 0);
+    const m = project(mx, my, fit);
+    ctx.globalAlpha = Math.sin((age / HELLO_S) * Math.PI); // lights up and fades, one breath
+    roundRect(ctx, m.x - 17 * s, m.y - (DESK_UP + 34) * s, 34 * s, 16 * s, 3 * s, POLAROID_WHITE);
+    ctx.fillStyle = '#26221e';
+    ctx.font = canvasFont(Math.round(9 * s * 1.5), '--font-mono', 700);
+    ctx.textAlign = 'center';
+    ctx.fillText('hello', m.x, m.y - (DESK_UP + 23) * s);
+    ctx.globalAlpha = 1;
+  }
+  for (const [name, t0] of w.bootBlink) {
+    const age = t - t0;
+    const at = heads.get(name);
+    if (age < 0 || age >= BLINK_S || !at) continue;
+    // Two blinks: on for 0.15 s, off for 0.15 s, twice — then the ordinary firefly takes over.
+    if (Math.floor(age / 0.15) % 2 !== 0 || age >= 0.6) continue;
+    ellipse(ctx, { x: at.x, y: at.y + 14 * s }, 2.6 * s, 2.6 * s, BOOT_LED);
+  }
 }
 
 /**
@@ -4987,6 +5270,9 @@ export interface Cue {
   t: number;
   urgent: boolean;
   kind?: 'ring' | 'wave' | 'door' | 'thread' | 'confetti';
+  /** Confetti only: a newcomer's colour (lane 01M3F81DD9) — alternated with mustard, replacing the
+   *  celebration palette, so the burst is theirs and the brand's. */
+  tint?: string;
 }
 
 /** The celebration palette — the cue-family literals the scene already speaks (accept green, the
@@ -5007,6 +5293,13 @@ function confettiParticle(i: number, t: number, scale: number, at: Pt) {
   const y = at.y + Math.sin(angle) * speed * t * 1.9 + 52 * scale * t * t; // gravity
   const spin = t * (4 + (i % 5)) + i;
   return { x, y, spin, color: CONFETTI_COLORS[i % CONFETTI_COLORS.length]! };
+}
+
+/** A confetti fleck's colour: the celebration palette, or — for a welcome — the newcomer's own colour
+ *  alternated with the brand mustard (lane 01M3F81DD9). */
+export function confettiColor(i: number, tint?: string): string {
+  if (tint) return i % 2 === 0 ? tint : MUSTARD;
+  return CONFETTI_COLORS[i % CONFETTI_COLORS.length]!;
 }
 
 export function drawCue(ctx: CanvasRenderingContext2D, cue: Cue, scale: number): void {
@@ -5045,7 +5338,7 @@ export function drawCue(ctx: CanvasRenderingContext2D, cue: Cue, scale: number):
       ctx.save();
       ctx.translate(p.x, p.y - 26 * scale);
       ctx.rotate(p.spin);
-      ctx.fillStyle = p.color;
+      ctx.fillStyle = confettiColor(i, cue.tint);
       // Fleck size is stream-tested: 4.8×2.8 read as noise at room zoom (2026-08-19 eyeball),
       // and the 720p encode eats another third — these proportions are the floor, not a taste call.
       ctx.fillRect(-3.6 * scale, -2.1 * scale, 7.2 * scale, 4.2 * scale);

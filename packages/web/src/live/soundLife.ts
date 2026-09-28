@@ -249,7 +249,14 @@ export type Moment =
   | 'plateClose'
   | 'boardOpen'
   | 'boardClose'
-  | 'whoosh';
+  | 'whoosh'
+  // The Welcome Wagon (lane 01M3F81DD9): the desk phone, the label maker, the wagon's wheels, the
+  // front-door chime and the confetti pop. All synthesized — no audio files (ADR 151 bytes).
+  | 'ring'
+  | 'ratchet'
+  | 'rattle'
+  | 'doorbell'
+  | 'pop';
 
 /** Minimum gap between moments, ms. Moments are act-driven and sparse by nature; the one plausible
  *  burst (a flood of accepts) coalesces rather than becoming a slot machine — same principle as the

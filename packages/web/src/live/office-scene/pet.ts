@@ -97,12 +97,25 @@ export interface PetState {
    * the legs over faster for free.
    */
   speed: number;
+  /** What the dog is hauling this frame — the painter draws it. `none` outside a welcome errand. */
+  cargo: 'none' | 'wagon' | 'polaroid';
+  /**
+   * A two-stage welcome errand (lane 01M3F81DD9): `fetch` to the pickup, then `deliver` to `drop`
+   * hauling `load`. While one is set, nothing else may send the dog anywhere — see `setOff`.
+   */
+  errand: null | { stage: 'fetch' | 'deliver'; drop: P; load: 'wagon' | 'polaroid' };
 }
 
 /** Walking speed, logical units/s — an unhurried pad, slower than the members. */
 export const PET_SPEED = 55;
 /** Zoomies pace. Fast enough to read as a tear around the room, not so fast it teleports. */
 export const PET_DASH = 165;
+/**
+ * The welcome errand's pace (lane 01M3F81DD9): an eager trot, between the amble and the zoomies. At
+ * PET_SPEED the dog took most of a welcome just to reach the counter and the wagon arrived long after
+ * its moment (measured on the office-preview harness); a dog with a job to do hurries anyway.
+ */
+export const PET_ERRAND_SPEED = 130;
 /**
  * One full gait cycle per this much ground covered.
  *
@@ -226,6 +239,8 @@ export function createPet(rng: () => number = Math.random): PetState {
     plan: 'nap',
     sitFor: 0,
     speed: PET_SPEED,
+    cargo: 'none',
+    errand: null,
   };
 }
 
@@ -284,6 +299,7 @@ export function petBeat(pet: PetState, opts: PetBeatOpts): boolean {
  * than `minTrip` — a dog that hauls itself up to move a foot and a half looks broken, not alive.
  */
 function setOff(pet: PetState, target: P | null, plan: PetState['plan'], minTrip: number): boolean {
+  if (pet.errand) return false; // a welcome errand outranks every other trip (lane 01M3F81DD9)
   if (!target || Math.hypot(target.lx - pet.lx, target.ly - pet.ly) < minTrip) return false;
   pet.path = findPath({ lx: pet.lx, ly: pet.ly }, { lx: target.lx, ly: target.ly });
   pet.seg = 0;
@@ -309,6 +325,7 @@ const DASH_MIN_LEG = 170;
  * else, so a tearing dog still goes around the furniture rather than through it.
  */
 function zoomies(pet: PetState, rng: () => number): boolean {
+  if (pet.errand) return false;
   const legs = DASH_LEGS[0] + Math.floor(rng() * (DASH_LEGS[1] - DASH_LEGS[0] + 1));
   const path: P[] = [{ lx: pet.lx, ly: pet.ly }];
   let at: P = { lx: pet.lx, ly: pet.ly };
@@ -442,6 +459,39 @@ export function petFollow(pet: PetState, dest: P, rng: () => number = Math.rando
   return setOff(pet, spot, 'sit-then-nap', MIN_TRIP);
 }
 
+/**
+ * The welcome wagon (lane 01M3F81DD9, spec §3.1): trot to the pickup by the front desk, take the
+ * handle, pull the wagon to the new Member's desk, and flop down beside it. Two ordinary trips on the
+ * nav grid — the second is started by `stepPet` when the first arrives — so every rule the dog
+ * already walks by (distance-driven gait, braking, eased turns) holds for free. It outranks a nap and
+ * every other trip for its whole length; one welcome errand at a time.
+ */
+export function petWagon(pet: PetState, pickup: P, drop: P): boolean {
+  return startErrand(pet, pickup, drop, 'wagon');
+}
+
+/** No free desk: the printed nameplate goes to the wall board's new-arrivals corner in the dog's mouth. */
+export function petCarryToWall(pet: PetState, pickup: P, wall: P): boolean {
+  return startErrand(pet, pickup, wall, 'polaroid');
+}
+
+/** The crowd's one lap (spec §3.4): the zoomies the ambient beat already knows, on cue. */
+export function petZoomies(pet: PetState, rng: () => number = Math.random): boolean {
+  if (pet.mode === 'stretch' || pet.mode === 'curl') return false; // mid-transition — let it finish
+  return zoomies(pet, rng);
+}
+
+function startErrand(pet: PetState, pickup: P, drop: P, load: 'wagon' | 'polaroid'): boolean {
+  if (pet.errand) return false;
+  pet.sitFor = 4;
+  // minTrip 0: the dog may already be lying by the counter, and the errand must still run.
+  if (!setOff(pet, pickup, 'sit-then-nap', 0)) return false;
+  pet.speed = PET_ERRAND_SPEED; // both legs — the deliver leg keeps it (stepPet only swaps the path)
+  pet.errand = { stage: 'fetch', drop, load };
+  pet.cargo = 'none';
+  return true;
+}
+
 /** How far off a destination the dog parks itself — close enough to be *with* you, not underfoot. */
 const BESIDE_OFF = 52;
 
@@ -540,6 +590,21 @@ export function stepPet(pet: PetState, dt: number): boolean {
         if (step >= d) pet.seg++;
       }
       if (pet.seg >= pet.path.length - 1) {
+        if (pet.errand?.stage === 'fetch') {
+          // Picked it up: the second leg leaves from right here, hauling. It winds up from standing,
+          // exactly as a trip out of a stretch does.
+          const { drop, load } = pet.errand;
+          pet.errand = { stage: 'deliver', drop, load };
+          pet.cargo = load;
+          pet.path = findPath({ lx: pet.lx, ly: pet.ly }, drop);
+          pet.seg = 0;
+          pet.vel = 0;
+          return true;
+        }
+        if (pet.errand?.stage === 'deliver') {
+          pet.errand = null;
+          pet.cargo = 'none';
+        }
         pet.mode = pet.plan === 'sit-then-nap' ? 'sit' : 'curl';
         pet.modeT = 0;
         pet.vel = 0;

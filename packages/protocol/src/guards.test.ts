@@ -86,6 +86,9 @@ const corpus: unknown[] = [
     },
   },
   { ...row, account_status: 'active' },
+  // ADR 449's sponsor field — the reader dropped it silently until lane 01M3F81DD9 needed it.
+  { ...row, sponsored_by: '01SPONSOR' },
+  { ...row, sponsored_by: null },
   // Rejections — each is a row this build cannot read, and `unreadable` must count it.
   { ...row, kind: 'daemon' }, // a kind from the daemon's future (ADR 232's real case)
   { ...row, presence: 'lurking' },
