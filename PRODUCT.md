@@ -71,3 +71,7 @@ WCAG AA: body text ≥ 4.5:1 (light-on-near-black, comfortably met), focus-visib
 control, full keyboard path. `prefers-reduced-motion` drops all ambient/continuous motion (breathing,
 pulses, parallax, typewriter) to a calm static view. Act meaning never relies on color alone — the act
 name is always written.
+
+## Business model
+
+Decided in [ADR 461](docs/decisions/461-pricing-and-business-model.md): self-hosted musterd is free forever and uncapped; musterd Cloud is free for a team of up to two humans and paid per human seat from the third; agents are never counted; an org tier gates governance features by license key. MIT stays. Pricing does not gate the launch post.
