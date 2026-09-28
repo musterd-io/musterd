@@ -1,7 +1,7 @@
 # /live is read by a room — office + team column
 
 **Date:** 2026-09-28 · **Author:** miley, designed with nick (brainstorm, same day)
-**Status:** spec for review. Implementation follows the lane order in §8.
+**Status:** approved by nick 2026-09-28. Implementation follows the lane order in §8.
 **Lane:** 01M3MPYT3M (goal launch) · branch `docs/live-audience-first` · **ADR:** 464
 
 ## 1. The problem

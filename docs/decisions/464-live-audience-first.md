@@ -1,6 +1,6 @@
 # 464 — /live is read by a room: office + team column, headline ticker, asks as a room moment
 
-- Status: proposed — 2026-09-28
+- Status: accepted — 2026-09-28 (nick, in the brainstorm)
 - Date: 2026-09-28
 - Lane: `01M3MPYT3M31WHKTXKY777R8KW` (goal `launch`)
 - Design: `docs/superpowers/specs/2026-09-28-live-audience-first-design.md`
