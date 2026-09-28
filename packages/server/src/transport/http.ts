@@ -184,7 +184,6 @@ import {
   validateGrant,
 } from '../store/grants.js';
 import { rowsToEnvelopes } from '../store/hydrate.js';
-import { deriveReport } from '../store/insights.js';
 import { listInterruptCandidates } from '../store/interruptCandidates.js';
 import {
   INVITE_DEFAULTS,
@@ -283,6 +282,7 @@ import {
   QUIESCENCE_DEFAULT_QUIET_AFTER_MS,
 } from '../store/quiescence.js';
 import { unblockerReachable } from '../store/reachability.js';
+import { reportServiceFor } from '../store/reportCache.js';
 import { createRequest, decideRequest, getRequest, listRequests } from '../store/requests.js';
 import {
   appendWakeTurn,
@@ -5115,11 +5115,12 @@ export async function handleHttp(
 
       if (method === 'GET' && rest === '/report') {
         const { team, member: _member } = authTouch(ctx, slug, req);
-        return sendJson(
-          res,
-          200,
-          deriveReport(ctx.db, team.id, team.slug, Date.now(), ctx.config.presenceTimeoutMs),
+        // Off the loop and shared across viewers (store/reportCache.ts, lane 01M3D4069F).
+        const report = await reportServiceFor(ctx.db, ctx.config.presenceTimeoutMs).get(
+          team.id,
+          team.slug,
         );
+        return sendJson(res, 200, report);
       }
 
       // Tool-call telemetry ingest (ADR 144 inc 1): the adapter's batched flush of its own MCP
