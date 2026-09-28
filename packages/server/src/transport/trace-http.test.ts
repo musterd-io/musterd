@@ -333,15 +333,23 @@ describe('GET /report/trace (ADR 445 increment 4) — ADR 128 scoping', () => {
     return { status: res.status, json: (await res.json()) as any };
   }
   it('an admin reads every seat; a seat reads only its own rows; the window is bounded', async () => {
+    // the report windows back from the real clock, so these rows must be recent — ev()'s fixed ts
+    // fell out of the 7-day default on 2026-09-28 and turned every PR's coverage job red
+    const ts = Date.now() - 60_000;
     await post(
       '/teams/dawn/trace/events',
-      { events: [ev(), ev({ kind: 'usage', detail: { parser: 'claude-code@1', tool_uses: 2 } })] },
+      {
+        events: [
+          ev({ ts }),
+          ev({ ts, kind: 'usage', detail: { parser: 'claude-code@1', tool_uses: 2 } }),
+        ],
+      },
       { authorization: `Bearer ${auth.key}`, 'x-musterd-seat': 'Ada' },
     );
     // nick (admin) records a row of their own too
     await post(
       '/teams/dawn/trace/events',
-      { events: [ev({ session_digest: 'ffffffff0000', tool_name: 'Read' })] },
+      { events: [ev({ ts, session_digest: 'ffffffff0000', tool_name: 'Read' })] },
       { authorization: `Bearer ${humanCredential}` },
     );
     const admin = await get('/teams/dawn/report/trace?days=30', {
