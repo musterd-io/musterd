@@ -52,7 +52,7 @@ export function deriveTraceReport(
     >(
       `SELECT harness, session_digest,
               MAX(CASE WHEN kind IN ('reasoning','assistant_text','usage','unknown') THEN 1 ELSE 0 END) AS has_r2,
-              SUM(CASE WHEN kind = 'PostToolUse' THEN 1 ELSE 0 END) AS post
+              SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') THEN 1 ELSE 0 END) AS post
          FROM trace_events
         WHERE team_id = ? AND ts >= ? ${inSeats}
         GROUP BY harness, session_digest`,

@@ -397,6 +397,17 @@ ADR 184's publication gate; a spans backend.
   message's `time_created`. One message is one `usage`, with the message's tokens and its `tool`
   parts as `tool_uses`. On the largest local session the read matched the store exactly: 479 tool
   parts over 457 completed messages, 0 unknown parts. A machine without `sqlite3` records R1 only.
+- **2026-09-28 — `trace.coverage_low` is written** (lane `01M3MG7KH30X95DJ75SVMDFMYQ`). An hourly
+  daemon sweep judges each session that has been quiet for 30 minutes, not at SessionEnd, because
+  every harness posts its final R2 rows after SessionEnd. A session with an R2 tool count and R1/R2
+  below 0.98 gets one audit row with both counts. A session only one rail reached is not judged.
+  The numerator now counts `PostToolUseFailure` too, here and in `report trace`: R2 counts a failed
+  call, and leaving failures out made one real session read 124/127 instead of 127/127. A dry run
+  over the live `trace.db` still flags 5 Claude Code sessions. None of the 5 is a tap miss. The
+  missing calls are calls refused before they ran (a permission check, a blocked command), which
+  fire no Post hook, and hookless built-ins (`ToolSearch`). Both are `tool_use` blocks in the
+  transcript. Open for nick: keep that definition, or have R2 subtract never-run calls from its
+  denominator (a `claude-code@2` parser that reads `tool_result` errors).
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a

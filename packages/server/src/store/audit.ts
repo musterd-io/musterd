@@ -97,6 +97,11 @@ export type AuditAction =
   // it ingests it, so the downgrade is on the coordination ledger, not only in `trace.db`.
   // target = the seat whose session downgraded; detail = { harness, session_digest, reason }.
   | 'trace.downgraded'
+  // ADR 445 §Observability: a quiet session whose R1 PostToolUse count fell below 0.98 of its R2
+  // transcript tool count. Written by the daemon's coverage sweep, once per session digest.
+  // target = the seat whose session it was; detail = { harness, session_digest, post_tool_use,
+  // r2_tool_uses, coverage }.
+  | 'trace.coverage_low'
   | 'request.decide'
   | 'request.expired'
   // ADR 088: an interrupt-class act was surfaced to a busy agent at a tool boundary (delivery, not
@@ -656,6 +661,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'governed.request.allow': 'actor',
   'governed.request.deny': 'actor',
   'trace.downgraded': 'actor',
+  'trace.coverage_low': 'none',
 };
 
 /** The actions whose acting seat is in `target`, and those where no seat acted. */

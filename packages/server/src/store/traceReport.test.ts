@@ -52,10 +52,11 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
         harness: 'claude-code',
         sessions: 2,
         sessions_with_r2: 1,
-        post_tool_use: 5,
-        post_tool_use_r2: 2,
+        // the failed Bash counts: R2 counts a failed call too
+        post_tool_use: 6,
+        post_tool_use_r2: 3,
         r2_tool_uses: 4,
-        coverage: 0.5,
+        coverage: 0.75,
       },
       {
         harness: 'codex',

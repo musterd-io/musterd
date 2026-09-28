@@ -14,7 +14,8 @@ export const TraceCoverageRowSchema = z.object({
   sessions: z.number().int().min(0),
   /** Sessions carrying at least one R2 (transcript) row. */
   sessions_with_r2: z.number().int().min(0),
-  /** R1 `PostToolUse` rows across every session in the window — a fact on its own. */
+  /** R1 rows for every tool call the hook saw end — `PostToolUse` plus `PostToolUseFailure`, since
+   *  R2 counts a failed call too — across every session in the window; a fact on its own. */
   post_tool_use: z.number().int().min(0),
   /** The same count, restricted to sessions that carry an R2 rail — the ratio's numerator, so the
    *  two sides of `coverage` describe the same sessions (the live team read 124% before this). */
