@@ -345,6 +345,16 @@ ADR 184's publication gate; a spans backend.
   numerator is now `post_tool_use_r2`, hook calls inside sessions that carry both rails, and the
   all-sessions count stays on the row as its own fact. Falsifier on the dogfood box: `musterd report trace` from an admin seat prints a non-null
   coverage for `claude-code` and at least one lane with turns.
+- **2026-09-28 — the §Observability experiment ran once, on increment 4b** (lane
+  `01M3MG7BXY853JC4593APH3692`, [finding 012](../research/012-trace-e2e-check-one-lane.md)). The
+  coordination-token ratio rebuilt from structural columns alone read 0.4197%, against 0.4159% from a
+  hand read of the transcript: 0.9% apart, so that half passes. The wasted-work half cannot pass as
+  written. 13 of the 15 file-writing calls in the build went through Bash rather than `Edit`/`Write`,
+  so the tool column does not see most of what was produced. Waste needs a git-side join per lane
+  (branch commits against the squash diff), which is open for nick to decide. Claim-window attribution
+  in `report trace` also over-counts a lane's build cost: 4b's window carries 4a's closeout and about
+  85 minutes after the merge. Falsifier for the pass: a second lane, on another harness, whose two
+  sides differ by more than 5%.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
