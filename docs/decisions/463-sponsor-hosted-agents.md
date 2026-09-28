@@ -58,8 +58,13 @@ re-minted for). It is accepted **only for the sponsor's own agents** on:
 - `POST /residency/enroll` and `/residency/revoke` for `<own agent>`;
 - `POST /agent-bootstrap-credentials` with `use: 'host'` — a **sponsor host key**. The server
   filters `/residency/wake-leases` and `/host/provisions` for that key to seats its creator
-  sponsors, even when other seats share the host label. An admin host key keeps today's
-  team-wide reach.
+  sponsors, even when other seats share the host label.
+
+A host label is not a machine identity (ADR 344, ADR 395), so the own-machine guarantee is bound
+to the key, not the label: **a sponsored seat is served only by a host key its sponsor minted.**
+A team-wide key — admin-minted, or the legacy team key — serves unsponsored seats as before and
+never a sponsored one, even on a shared label. An admin's own key also serves the agents that
+admin sponsors. Wake-lease reports and doorbell rings follow the same rule.
 
 Admin keeps every existing power. Audit rows carry `actor: <sponsor>` and
 `detail.sponsor_scoped: true`. `can_create_agents` (ADR 459) now gates hosting as well as
@@ -154,6 +159,10 @@ never provisioned a second time. `--no-provision` opts out; `musterd host provis
   `reconcileTeam` fails closed with `conflict` while any live member has `sponsored_by`, and
   `rosterToFiles` refuses the export first and names the way out: remove the agents, then export.
   Falsifier: a file-backed team with a live `sponsored_by` row.
+- 2026-09-28 (big-body, REQUIRED on #1779): as first written, §1 left admin host keys
+  team-wide over sponsored seats, so a sponsor enrolling on a label an admin host already used
+  would be woken on the admin's machine. §1 now binds a sponsored seat to its sponsor's own key
+  (landed with increment 1, #1784, with a regression on an admin host label).
 - The work lands in five PRs, each alone: (1) this ADR; (2) sponsor-scoped authority and host-key
   scoping; (3) the residual closed in code; (4) provisions; (5) the provisioner, Scenario D, docs.
 

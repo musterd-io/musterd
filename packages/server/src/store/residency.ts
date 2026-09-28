@@ -1391,6 +1391,30 @@ function dueCandidates(
  * inbox anyway). Audit `residency.wake_leased` is written here per lease — actor null (a machine
  * decision), best-effort by `appendAudit`'s contract.
  */
+/**
+ * ADR 463 §1: whose seats one host credential may serve. `creatorId` is the member who minted it
+ * (null for the legacy team key or an unrecorded mint); `teamWide` is true for admin-minted and
+ * legacy keys.
+ */
+export interface HostScope {
+  creatorId: string | null;
+  teamWide: boolean;
+}
+
+/** The legacy team key and pre-ADR-463 callers: every unsponsored seat, no sponsored one. */
+export const TEAM_WIDE_HOST: HostScope = { creatorId: null, teamWide: true };
+
+/**
+ * ADR 463 §1 (big-body's REQUIRED on #1779): a SPONSORED seat is served only by a host key its
+ * sponsor minted — never by a team-wide key, even one sharing its host label, because a label is
+ * not a machine and "runs on the sponsor's own machine" is the guarantee. An unsponsored seat is
+ * served only by a team-wide key, as before.
+ */
+export function hostMayServe(scope: HostScope, member: MemberRow): boolean {
+  if (member.sponsored_by !== null) return scope.creatorId === member.sponsored_by;
+  return scope.teamWide;
+}
+
 export function claimWakeLeases(
   db: Database,
   teamId: string,
@@ -1398,7 +1422,7 @@ export function claimWakeLeases(
   host: string,
   presenceTimeoutMs: number,
   now = Date.now(),
-  opts: { sponsorId?: string | null } = {},
+  scope: HostScope = TEAM_WIDE_HOST,
 ): WakeOrder[] {
   const tx = db.transaction((): WakeOrder[] => {
     const orders: WakeOrder[] = [];
@@ -1416,9 +1440,9 @@ export function claimWakeLeases(
     for (const enrollment of enrollments) {
       const member = getMemberById(db, enrollment.member_id);
       if (!member || member.left_at !== null) continue;
-      // ADR 463 §1 (Review Focus 1): a sponsor's host key is ordered to wake only seats its
-      // creator sponsors, whatever else shares the host label.
-      if (opts.sponsorId && member.sponsored_by !== opts.sponsorId) continue;
+      // ADR 463 §1 (Review Focus 1): whatever else shares the host label, a key wakes only the
+      // seats it may serve — a sponsored seat only from its sponsor's own key.
+      if (!hostMayServe(scope, member)) continue;
       if (hasLivePresence(db, member.id, presenceTimeoutMs)) continue;
       if (reclaimable.has(member.id)) continue;
       if (liveLease(db, member.id, now)) continue;

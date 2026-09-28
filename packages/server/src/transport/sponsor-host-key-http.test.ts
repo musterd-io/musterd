@@ -14,6 +14,7 @@ import { __resetOAuthBucketsForTest } from './oauth.js';
 let server: RunningServer;
 let base: string;
 let nick: string;
+let teamKey: string;
 
 async function post(path: string, body: unknown, bearer?: string) {
   const res = await fetch(base + path, {
@@ -100,6 +101,7 @@ beforeEach(async () => {
   base = `http://127.0.0.1:${port}`;
   const r = await post('/teams', { slug: 'hk-t', creator: { name: 'nick', kind: 'human' } });
   nick = r.json.human_credential;
+  teamKey = r.json.agent_key;
 });
 
 afterEach(async () => {
@@ -151,8 +153,15 @@ describe('sponsor host key (ADR 463 §1, Review Focus 1)', () => {
     expect(leases.json.orders.map((o: any) => o.seat)).toEqual(['dana-scout']);
   });
 
-  it('an admin host key on the same label still sees every seat', async () => {
+  it('big-body REQUIRED: an admin host key on the same label wakes no sponsored seat — only unsponsored ones', async () => {
     await sharedHost();
+    await post('/teams/hk-t/members', { name: 'ops-bot', kind: 'agent' }, nick);
+    await post(
+      '/teams/hk-t/residency/enroll',
+      { seat: 'ops-bot', harness: 'claude-code', host: 'shared' },
+      nick,
+    );
+    await directedTo('ops-bot', 'o1');
     const hk = await post(
       '/teams/hk-t/agent-bootstrap-credentials',
       { use: 'host', target: 'shared' },
@@ -163,20 +172,49 @@ describe('sponsor host key (ADR 463 §1, Review Focus 1)', () => {
       { host: 'shared' },
       hk.json.agent_key,
     );
-    expect(leases.json.orders.map((o: any) => o.seat).sort()).toEqual(['dana-scout', 'eve-scout']);
+    expect(leases.json.orders.map((o: any) => o.seat)).toEqual(['ops-bot']);
   });
 
-  it('cannot report on a lease of a seat it does not sponsor', async () => {
-    const { eve } = await sharedHost();
-    const admin = await post(
+  it('big-body REQUIRED: the legacy team key never wakes a sponsored seat either', async () => {
+    await sharedHost();
+    expect(teamKey).toMatch(/^mskey_/);
+    const leases = await post('/teams/hk-t/residency/wake-leases', { host: 'shared' }, teamKey);
+    expect(leases.status).toBe(200);
+    expect(leases.json.orders).toEqual([]);
+  });
+
+  it('an admin who sponsors an agent wakes it from their own host key', async () => {
+    await post('/teams/hk-t/members/agents', { name: 'nick-scout' }, nick);
+    await post(
+      '/teams/hk-t/residency/enroll',
+      { seat: 'nick-scout', harness: 'claude-code', host: 'nick-mbp' },
+      nick,
+    );
+    await directedTo('nick-scout', 'n1');
+    const hk = await post(
       '/teams/hk-t/agent-bootstrap-credentials',
-      { use: 'host', target: 'shared' },
+      { use: 'host', target: 'nick-mbp' },
       nick,
     );
     const leases = await post(
       '/teams/hk-t/residency/wake-leases',
+      { host: 'nick-mbp' },
+      hk.json.agent_key,
+    );
+    expect(leases.json.orders.map((o: any) => o.seat)).toEqual(['nick-scout']);
+  });
+
+  it('cannot report on a lease of a seat it does not sponsor', async () => {
+    const { dana, eve } = await sharedHost();
+    const danaKey = await post(
+      '/teams/hk-t/agent-bootstrap-credentials',
+      { use: 'host', target: 'shared' },
+      dana,
+    );
+    const leases = await post(
+      '/teams/hk-t/residency/wake-leases',
       { host: 'shared' },
-      admin.json.agent_key,
+      danaKey.json.agent_key,
     );
     const danaLease = leases.json.orders.find((o: any) => o.seat === 'dana-scout').lease_id;
     const eveKey = await post(

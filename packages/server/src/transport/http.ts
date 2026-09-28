@@ -286,6 +286,9 @@ import { createRequest, decideRequest, getRequest, listRequests } from '../store
 import {
   appendWakeTurn,
   claimWakeLeases,
+  type HostScope,
+  hostMayServe,
+  TEAM_WIDE_HOST,
   buildWakeContext,
   effectiveWakePolicy,
   enrollResidency,
@@ -1468,7 +1471,7 @@ function authAgentKeyOnly(
   slug: string,
   req: IncomingMessage,
   host?: string,
-): { team: TeamRow; sponsorId: string | null } {
+): { team: TeamRow; scope: HostScope } {
   const team = requireTeam(ctx.db, slug);
   const credential = findBootstrapCredential(ctx.db, team.id, bearer(req));
   const credentialRecord =
@@ -1496,7 +1499,7 @@ function authAgentKeyOnly(
       result: 'allow',
       detail: { use: 'host', target: credential.target },
     });
-    return { team, sponsorId: hostKeySponsor(ctx, team, credential.created_by) };
+    return { team, scope: hostKeyScope(ctx, team, credential.created_by) };
   }
   if (credential && credential.use_kind !== 'legacy') {
     appendAudit(ctx.db, team.id, {
@@ -1522,38 +1525,33 @@ function authAgentKeyOnly(
         : `the residency wake endpoints authenticate with the team agent key (mskey_) for "${slug}"`,
     );
   }
-  return { team, sponsorId: null };
+  return { team, scope: TEAM_WIDE_HOST };
 }
 
 /**
- * ADR 463 §1: whose seats a host key may see. A key minted by an admin (or by nobody recorded)
- * reaches the whole team, as before; a key minted by a non-admin member is a SPONSOR host key and
- * sees only that member's sponsored seats. Resolved per request, so a creator who is promoted to
- * or demoted from admin changes their key's reach at once; a creator who has left sees nothing.
+ * ADR 463 §1: whose seats a host key may serve (see `hostMayServe`). An admin-minted key is team-wide
+ * AND serves the admin's own sponsored seats; a non-admin's key serves only that member's sponsored
+ * seats. Resolved per request, so promotion or demotion changes a key's reach at once; a key whose
+ * creator has left is refused.
  */
-function hostKeySponsor(ctx: Ctx, team: TeamRow, createdBy: string | null): string | null {
-  if (createdBy === null) return null;
+function hostKeyScope(ctx: Ctx, team: TeamRow, createdBy: string | null): HostScope {
+  if (createdBy === null) return TEAM_WIDE_HOST;
   const creator = getMemberByName(ctx.db, team.id, createdBy);
   if (!creator || creator.left_at !== null)
     throw new MusterdError('unauthorized', 'this host credential’s creator has left the team');
-  return resolveCapabilities(creator).is_admin ? null : creator.id;
+  return { creatorId: creator.id, teamWide: resolveCapabilities(creator).is_admin };
 }
 
-/** ADR 463 §1: a sponsor host key reports only on leases of seats its creator sponsors. */
-function assertLeaseInScope(
-  ctx: Ctx,
-  teamId: string,
-  leaseId: string,
-  sponsorId: string | null,
-): void {
-  if (sponsorId === null) return;
+/** ADR 463 §1: a host key reports only on leases of seats it may serve. */
+function assertLeaseInScope(ctx: Ctx, teamId: string, leaseId: string, scope: HostScope): void {
   const row = ctx.db
-    .prepare<[string, string], { sponsored_by: string | null }>(
-      `SELECT m.sponsored_by FROM wake_leases l JOIN members m ON m.id = l.member_id
-        WHERE l.team_id = ? AND l.id = ?`,
-    )
+    .prepare<
+      [string, string],
+      { member_id: string }
+    >('SELECT member_id FROM wake_leases WHERE team_id = ? AND id = ?')
     .get(teamId, leaseId);
-  if (row?.sponsored_by !== sponsorId)
+  const member = row ? getMemberById(ctx.db, row.member_id) : undefined;
+  if (member && !hostMayServe(scope, member))
     throw new MusterdError('not_found', `no wake lease "${leaseId}" for this host`);
 }
 
@@ -3414,7 +3412,7 @@ export async function handleHttp(
       // infrastructure); the response carries structured fields only, never message bodies.
       if (method === 'POST' && rest === '/residency/wake-leases') {
         const body = parseOrBadRequest(WakeLeasesBodySchema, await readJson(req));
-        const { team, sponsorId } = authAgentKeyOnly(ctx, slug, req, body.host);
+        const { team, scope } = authAgentKeyOnly(ctx, slug, req, body.host);
         // ADR 357: this poll is the host's heartbeat. Recorded before the lease claim so a host
         // that polls and gets nothing still counts as alive — the roster's `enrolled_host_stale`
         // is derived from it.
@@ -3426,7 +3424,7 @@ export async function handleHttp(
           body.host,
           ctx.config.presenceTimeoutMs,
           Date.now(),
-          { sponsorId },
+          scope,
         );
         return sendJson(res, 200, { orders });
       }
@@ -3437,9 +3435,11 @@ export async function handleHttp(
       // shape: a ring is the record, never a message body.
       if (method === 'POST' && rest === '/doorbell/rings') {
         const body = parseOrBadRequest(DoorbellRingsBodySchema, await readJson(req));
-        const { team, sponsorId } = authAgentKeyOnly(ctx, slug, req, body.host);
+        const { team, scope } = authAgentKeyOnly(ctx, slug, req, body.host);
+        // A non-admin's key raises only its creator's own banners; a team-wide key, as before.
+        const ringsOf = scope.teamWide ? null : scope.creatorId;
         const rings = claimHostRings(ctx.db, team.id, body.host, Date.now(), {
-          memberId: sponsorId,
+          memberId: ringsOf,
         }).map(({ ring, member }) => ({ id: ring.id, member, record: ring.record }));
         return sendJson(res, 200, { rings });
       }
@@ -3447,7 +3447,7 @@ export async function handleHttp(
       const surfacedRing = rest.match(/^\/doorbell\/rings\/([^/]+)\/surfaced$/);
       if (method === 'POST' && surfacedRing) {
         const body = parseOrBadRequest(DoorbellSurfacedBodySchema, await readJson(req));
-        const { team, sponsorId } = authAgentKeyOnly(ctx, slug, req, body.host);
+        const { team, scope } = authAgentKeyOnly(ctx, slug, req, body.host);
         let ringId: string;
         try {
           ringId = decodeURIComponent(surfacedRing[1]!);
@@ -3460,7 +3460,7 @@ export async function handleHttp(
         if (
           !ring ||
           (ring.host !== null && ring.host !== body.host) ||
-          (sponsorId !== null && ring.member_id !== sponsorId)
+          (!scope.teamWide && ring.member_id !== scope.creatorId)
         )
           throw new MusterdError('not_found', 'no such ring for this host');
         if (!markRingReported(ctx.db, ring.id, body.host))
@@ -3488,8 +3488,8 @@ export async function handleHttp(
         const body = parseOrBadRequest(WakeTurnBodySchema, await readJson(req));
         const team = requireTeam(ctx.db, slug);
         const turnHost = hostForWakeLease(ctx, team.id, body.lease_id);
-        const { sponsorId: turnSponsor } = authAgentKeyOnly(ctx, slug, req, turnHost);
-        assertLeaseInScope(ctx, team.id, body.lease_id, turnSponsor);
+        const { scope: turnScope } = authAgentKeyOnly(ctx, slug, req, turnHost);
+        assertLeaseInScope(ctx, team.id, body.lease_id, turnScope);
         // ADR 357 correction: a host mid-actuation is not polling, but it is talking — every
         // host-authenticated residency request is a sighting.
         if (turnHost) recordHostSeen(ctx.db, team.id, turnHost, Date.now());
@@ -3503,8 +3503,8 @@ export async function handleHttp(
         const body = parseOrBadRequest(WakeProgressBodySchema, await readJson(req));
         const team = requireTeam(ctx.db, slug);
         const progressHost = hostForWakeLease(ctx, team.id, body.lease_id);
-        const { sponsorId: progressSponsor } = authAgentKeyOnly(ctx, slug, req, progressHost);
-        assertLeaseInScope(ctx, team.id, body.lease_id, progressSponsor);
+        const { scope: progressScope } = authAgentKeyOnly(ctx, slug, req, progressHost);
+        assertLeaseInScope(ctx, team.id, body.lease_id, progressScope);
         if (progressHost) recordHostSeen(ctx.db, team.id, progressHost, Date.now()); // ADR 357 correction
         const row = markWakeSpawned(ctx.db, team.id, body.lease_id);
         if (!row)
@@ -3523,9 +3523,8 @@ export async function handleHttp(
         const reportHost = authBody.success
           ? hostForWakeLease(ctx, team.id, authBody.data.lease_id)
           : undefined;
-        const { sponsorId: reportSponsor } = authAgentKeyOnly(ctx, slug, req, reportHost);
-        if (authBody.success)
-          assertLeaseInScope(ctx, team.id, authBody.data.lease_id, reportSponsor);
+        const { scope: reportScope } = authAgentKeyOnly(ctx, slug, req, reportHost);
+        if (authBody.success) assertLeaseInScope(ctx, team.id, authBody.data.lease_id, reportScope);
         // ADR 357 correction: the report is the LAST thing a serial actuation says before it polls
         // again — stamping it here is what keeps a busy host from reading `enrolled_host_stale`.
         if (reportHost) recordHostSeen(ctx.db, team.id, reportHost, Date.now());
