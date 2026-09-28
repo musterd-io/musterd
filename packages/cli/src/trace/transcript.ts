@@ -19,6 +19,8 @@
 /** Parser stamps — bump the suffix when the parse logic changes shape, not on refactors. */
 export const CLAUDE_TRANSCRIPT_PARSER = 'claude-code@1';
 export const CODEX_TRANSCRIPT_PARSER = 'codex@1';
+export const GROK_TRANSCRIPT_PARSER = 'grok@1';
+export const CURSOR_TRANSCRIPT_PARSER = 'cursor@1';
 
 /** How many `unknown` records one parse may emit — a novel benign type must surface, not flood.
  *  The last one carries `detail.suppressed` with the count that hit the cap. */
@@ -394,11 +396,242 @@ export function parseCodexTranscript(lines: readonly string[]): TranscriptRecord
   return out;
 }
 
-/** The parser for a harness, or undefined — R2 ships Claude Code and Codex first (ADR 445 §5). */
+/* ------------------------- Grok $GROK_HOME/sessions/<cwd>/<id>/updates.jsonl ------------------------- */
+
+/** `sessionUpdate` kinds the Grok parser KNOWS and never emits: tool-call progress and hook runs
+ *  are rail R1's, user chunks ride R1 as prompts, the rest is session bookkeeping. Measured over
+ *  every local Grok session (11,333 update lines, grok-4.7-build) on 2026-09-28. */
+const GROK_SKIP_UPDATES = new Set([
+  'tool_call_update',
+  'hook_execution',
+  'hook_annotation',
+  'user_message_chunk',
+  'task_backgrounded',
+  'task_completed',
+  'background_tasks',
+  'plan',
+  'retry_state',
+  'session_recap',
+  'auto_compact_started',
+  'auto_compact_completed',
+  'compaction_checkpoint',
+  'current_mode_update',
+]);
+
+const obj = (v: unknown): Record<string, unknown> | undefined =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : undefined;
+
+/**
+ * Parse a delta of Grok `updates.jsonl` — the ACP-style session-update stream, the one Grok file
+ * that is both timestamped and complete (`chat_history.jsonl` has neither timestamps nor usage).
+ * Reasoning and assistant text arrive as `*_chunk` updates; consecutive chunks of one kind are one
+ * record. A reasoning record joins the NEXT `tool_call`'s id, as Codex's does. Each
+ * `turn_completed` carries the turn's token totals and is one `usage` record, whose `tool_uses` is
+ * the `tool_call` count since the previous one in this delta.
+ *
+ * `turn_completed` is written AFTER Grok's Stop hook runs (3 of 3 wanderer sessions, 2026-09-28),
+ * so a Stop-time read would split a turn's calls from its usage. Grok's R2 therefore rides
+ * SessionEnd, which Grok fires after the last `turn_completed`.
+ */
+export function parseGrokTranscript(lines: readonly string[]): TranscriptRecord[] {
+  const out: TranscriptRecord[] = [];
+  const unknowns = new UnknownBudget();
+  let chunk: { kind: 'reasoning' | 'assistant_text'; ts?: number; text: string } | undefined;
+  let pendingReasoning: TranscriptRecord[] = [];
+  let toolCalls = 0;
+  const flushChunk = (): void => {
+    if (!chunk) return;
+    const record: TranscriptRecord = {
+      kind: chunk.kind,
+      ...(chunk.ts !== undefined ? { ts: chunk.ts } : {}),
+      detail: {
+        parser: GROK_TRANSCRIPT_PARSER,
+        [chunk.kind === 'reasoning' ? 'reasoning_bytes' : 'assistant_bytes']: bytes(chunk.text),
+      },
+      ...(chunk.text ? { text: chunk.text } : {}),
+    };
+    if (chunk.kind === 'reasoning') pendingReasoning.push(record);
+    else out.push(record);
+    chunk = undefined;
+  };
+  const flushReasoning = (toolUseId?: string): void => {
+    for (const r of pendingReasoning) {
+      if (toolUseId) r.tool_use_id = toolUseId;
+      out.push(r);
+    }
+    pendingReasoning = [];
+  };
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let o: Record<string, unknown> | undefined;
+    try {
+      o = obj(JSON.parse(line));
+    } catch {
+      o = undefined;
+    }
+    const params = obj(o?.['params']);
+    const update = obj(params?.['update']);
+    if (!o || !update) {
+      unknowns.push(out, {
+        kind: 'unknown',
+        detail: { parser: GROK_TRANSCRIPT_PARSER, bytes: bytes(line), parse_error: true },
+      });
+      continue;
+    }
+    const agentMs = num(obj(params?.['_meta'])?.['agentTimestampMs']);
+    const secs = num(o['timestamp']);
+    const ts = agentMs ?? (secs !== undefined ? secs * 1000 : undefined);
+    const type = str(update['sessionUpdate']);
+
+    if (type === 'agent_thought_chunk' || type === 'agent_message_chunk') {
+      const kind = type === 'agent_thought_chunk' ? 'reasoning' : 'assistant_text';
+      const text = str(obj(update['content'])?.['text']) ?? '';
+      if (chunk?.kind !== kind) {
+        flushChunk();
+        chunk = { kind, ...(ts !== undefined ? { ts } : {}), text: '' };
+      }
+      chunk.text += text;
+      continue;
+    }
+    flushChunk();
+    if (type === 'tool_call') {
+      toolCalls++;
+      flushReasoning(str(update['toolCallId']));
+      continue;
+    }
+    if (type === 'turn_completed') {
+      flushReasoning();
+      const usage = obj(update['usage']) ?? {};
+      out.push({
+        kind: 'usage',
+        ...(ts !== undefined ? { ts } : {}),
+        detail: {
+          parser: GROK_TRANSCRIPT_PARSER,
+          ...pickTokens(usage, {
+            input_tokens: 'inputTokens',
+            output_tokens: 'outputTokens',
+            cache_read_tokens: 'cachedReadTokens',
+            cache_creation_tokens: 'cacheCreationTokens',
+            reasoning_tokens: 'reasoningTokens',
+            total_tokens: 'totalTokens',
+            model_calls: 'modelCalls',
+          }),
+          tool_uses: toolCalls,
+        },
+      });
+      toolCalls = 0;
+      continue;
+    }
+    if (type !== undefined && GROK_SKIP_UPDATES.has(type)) continue;
+    unknowns.push(out, {
+      kind: 'unknown',
+      detail: {
+        parser: GROK_TRANSCRIPT_PARSER,
+        bytes: bytes(line),
+        ...(type ? { type: type.slice(0, 64) } : {}),
+      },
+    });
+  }
+  flushChunk();
+  flushReasoning();
+  return out;
+}
+
+/* ------------------ Cursor ~/.cursor/projects/<slug>/agent-transcripts/<id>/<id>.jsonl ------------------ */
+
+/**
+ * Parse a delta of Cursor agent transcript lines: `{role, message:{content:[…]}}` records and a
+ * `{type:'turn_ended'}` marker per turn. The file carries no timestamps, no token counts and no
+ * reasoning (measured over every local Cursor transcript, 53,306 assistant records, 2026-09-28), so
+ * what R2 can say for Cursor is assistant text and, per turn, how many tools it called: one
+ * `usage` record per `turn_ended` with `tool_uses` and no token fields. That is enough for the
+ * coverage ratio and deliberately nothing more — a zero is not invented where a count is absent.
+ */
+export function parseCursorTranscript(lines: readonly string[]): TranscriptRecord[] {
+  const out: TranscriptRecord[] = [];
+  const unknowns = new UnknownBudget();
+  let toolUses = 0;
+  let firstToolUse: string | undefined;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let o: Record<string, unknown> | undefined;
+    try {
+      o = obj(JSON.parse(line));
+    } catch {
+      o = undefined;
+    }
+    if (!o) {
+      unknowns.push(out, {
+        kind: 'unknown',
+        detail: { parser: CURSOR_TRANSCRIPT_PARSER, bytes: bytes(line), parse_error: true },
+      });
+      continue;
+    }
+    const role = str(o['role']);
+    if (role === 'assistant') {
+      const content = obj(o['message'])?.['content'];
+      for (const block of Array.isArray(content) ? content : []) {
+        const b = obj(block);
+        const type = str(b?.['type']);
+        if (type === 'text') {
+          const text = str(b?.['text']) ?? '';
+          out.push({
+            kind: 'assistant_text',
+            detail: { parser: CURSOR_TRANSCRIPT_PARSER, assistant_bytes: bytes(text) },
+            ...(text ? { text } : {}),
+          });
+        } else if (type === 'tool_use') {
+          toolUses++;
+          firstToolUse ??= str(b?.['id']);
+        }
+      }
+      continue;
+    }
+    if (role === 'user') continue; // rides rail R1 as the prompt
+    const type = str(o['type']);
+    if (type === 'turn_ended') {
+      out.push({
+        kind: 'usage',
+        ...(firstToolUse ? { tool_use_id: firstToolUse } : {}),
+        detail: { parser: CURSOR_TRANSCRIPT_PARSER, tool_uses: toolUses },
+      });
+      toolUses = 0;
+      firstToolUse = undefined;
+      continue;
+    }
+    unknowns.push(out, {
+      kind: 'unknown',
+      detail: {
+        parser: CURSOR_TRANSCRIPT_PARSER,
+        bytes: bytes(line),
+        ...((type ?? role) ? { type: (type ?? role)!.slice(0, 64) } : {}),
+      },
+    });
+  }
+  // Older transcripts carry no `turn_ended` at all (664 markers over 53,306 assistant records).
+  // Cursor's R2 is read once, at SessionEnd, so the end of the delta is the end of the session:
+  // calls after the last marker are that session's final turn, not calls to drop.
+  if (toolUses > 0) {
+    out.push({
+      kind: 'usage',
+      ...(firstToolUse ? { tool_use_id: firstToolUse } : {}),
+      detail: { parser: CURSOR_TRANSCRIPT_PARSER, tool_uses: toolUses, turn_marker: false },
+    });
+  }
+  return out;
+}
+
+/** The parser for a harness, or undefined — R2 shipped Claude Code and Codex first (ADR 445 §5);
+ *  Grok and Cursor followed (lane 01M3MGQ93W). */
 export function transcriptParserFor(
   harness: string,
 ): ((lines: readonly string[]) => TranscriptRecord[]) | undefined {
   if (harness === 'claude-code') return parseClaudeTranscript;
   if (harness === 'codex') return parseCodexTranscript;
+  if (harness === 'grok') return parseGrokTranscript;
+  if (harness === 'cursor') return parseCursorTranscript;
   return undefined;
 }
