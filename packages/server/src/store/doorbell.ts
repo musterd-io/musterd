@@ -142,6 +142,7 @@ export function claimHostRings(
   teamId: string,
   host: string,
   now: number,
+  opts: { memberId?: string | null } = {},
 ): { ring: Ring; member: string }[] {
   return db.transaction(() => {
     const rows = db
@@ -150,7 +151,10 @@ export function claimHostRings(
           WHERE r.team_id = ? AND r.host = ? AND r.state = 'queued'
           ORDER BY r.created_at, r.id`,
       )
-      .all(teamId, host);
+      .all(teamId, host)
+      // ADR 463 §1: a sponsor's host key raises only its creator's own banners — a label is not
+      // proof of whose machine it is, so another member's rings on the same label stay queued.
+      .filter((row) => !opts.memberId || row.member_id === opts.memberId);
     const out: { ring: Ring; member: string }[] = [];
     for (const row of rows) {
       const ring = toRing(row);

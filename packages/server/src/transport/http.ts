@@ -286,6 +286,9 @@ import { createRequest, decideRequest, getRequest, listRequests } from '../store
 import {
   appendWakeTurn,
   claimWakeLeases,
+  type HostScope,
+  hostMayServe,
+  TEAM_WIDE_HOST,
   buildWakeContext,
   effectiveWakePolicy,
   enrollResidency,
@@ -408,6 +411,7 @@ import {
   recordTraceNormalized,
   recordTraceReplicated,
 } from '../telemetry.js';
+import { assertSponsorCaller, assertSponsorOf } from './authSponsor.js';
 import { handleMcpRoute } from './mcpHttp.js';
 import { broadcastMemberAdded } from './memberAdded.js';
 import { checkRateLimit, handleOAuthRoutes } from './oauth.js';
@@ -1400,13 +1404,74 @@ function authAdmin(
 }
 
 /**
+ * ADR 463 §1: an admin, or the sponsor of `agentName` acting only for that agent. Strict like
+ * {@link authAdmin} (no empty-admin fallback). `sponsorScoped` rides into the audit `detail`.
+ */
+function authAdminOrSponsorOf(
+  ctx: Ctx,
+  slug: string,
+  req: IncomingMessage,
+  agentName: string,
+): { team: TeamRow; member: MemberRow; sponsorScoped: boolean } {
+  const { team, member } = authMember(
+    ctx.db,
+    slug,
+    bearer(req),
+    actingSeat(req),
+    agentSessionLease(req),
+  );
+  if (resolveCapabilities(member).is_admin) return { team, member, sponsorScoped: false };
+  assertSponsorOf(ctx.db, team, member, agentName);
+  return { team, member, sponsorScoped: true };
+}
+
+/** ADR 463 §1: an admin, or any member who may sponsor (a sponsor host key is scoped at use). */
+function authAdminOrSponsorCaller(
+  ctx: Ctx,
+  slug: string,
+  req: IncomingMessage,
+): { team: TeamRow; member: MemberRow; sponsorScoped: boolean } {
+  const { team, member } = authMember(
+    ctx.db,
+    slug,
+    bearer(req),
+    actingSeat(req),
+    agentSessionLease(req),
+  );
+  if (resolveCapabilities(member).is_admin) return { team, member, sponsorScoped: false };
+  assertSponsorCaller(member);
+  return { team, member, sponsorScoped: true };
+}
+
+/** {@link authGovernance}, widened by ADR 463 §1 to the sponsor of `agentName`. */
+function authGovernanceOrSponsorOf(
+  ctx: Ctx,
+  slug: string,
+  req: IncomingMessage,
+  agentName: string,
+): { team: TeamRow; member: MemberRow; viaFallback: boolean; sponsorScoped: boolean } {
+  const { team, member } = authTouch(ctx, slug, req);
+  if (resolveCapabilities(member).is_admin)
+    return { team, member, viaFallback: false, sponsorScoped: false };
+  if (!teamHasAdmin(ctx.db, team.id))
+    return { team, member, viaFallback: true, sponsorScoped: false };
+  assertSponsorOf(ctx.db, team, member, agentName);
+  return { team, member, viaFallback: false, sponsorScoped: true };
+}
+
+/**
  * Authenticate a bearer that must be the **team agent key, with no acting seat** (ADR 131): the
  * wake-lease/wake-report poller (`musterd host`) is harness-side infrastructure, not a seat — it
  * never occupies anything, so there is no member to resolve, no presence to touch, nothing to
  * impersonate. Presence-neutral by construction (the woken session announces itself by occupying
  * via the seat's own grant).
  */
-function authAgentKeyOnly(ctx: Ctx, slug: string, req: IncomingMessage, host?: string): TeamRow {
+function authAgentKeyOnly(
+  ctx: Ctx,
+  slug: string,
+  req: IncomingMessage,
+  host?: string,
+): { team: TeamRow; scope: HostScope } {
   const team = requireTeam(ctx.db, slug);
   const credential = findBootstrapCredential(ctx.db, team.id, bearer(req));
   const credentialRecord =
@@ -1434,7 +1499,7 @@ function authAgentKeyOnly(ctx: Ctx, slug: string, req: IncomingMessage, host?: s
       result: 'allow',
       detail: { use: 'host', target: credential.target },
     });
-    return team;
+    return { team, scope: hostKeyScope(ctx, team, credential.created_by) };
   }
   if (credential && credential.use_kind !== 'legacy') {
     appendAudit(ctx.db, team.id, {
@@ -1460,7 +1525,39 @@ function authAgentKeyOnly(ctx: Ctx, slug: string, req: IncomingMessage, host?: s
         : `the residency wake endpoints authenticate with the team agent key (mskey_) for "${slug}"`,
     );
   }
-  return team;
+  return { team, scope: TEAM_WIDE_HOST };
+}
+
+/**
+ * ADR 463 §1: whose seats a host key may serve (see `hostMayServe`). An admin-minted key is team-wide
+ * AND serves the admin's own sponsored seats; a non-admin's key serves only that member's sponsored
+ * seats. Resolved per request, so promotion or demotion changes a key's reach at once. Any key whose
+ * creator has left is refused; a non-admin sponsor's key is also refused once its creator loses
+ * standing or has can_create_agents withdrawn. An admin-minted key keeps its team-wide reach.
+ */
+function hostKeyScope(ctx: Ctx, team: TeamRow, createdBy: string | null): HostScope {
+  if (createdBy === null) return TEAM_WIDE_HOST;
+  const creator = getMemberByName(ctx.db, team.id, createdBy);
+  if (!creator || creator.left_at !== null)
+    throw new MusterdError('unauthorized', 'this host credential’s creator has left the team');
+  const teamWide = resolveCapabilities(creator).is_admin;
+  // A sponsor's key is re-checked on every use, not only at mint: withdrawing can_create_agents, or
+  // the sponsor's standing, stops hosting at once (ADR 463 §1). Fail closed.
+  if (!teamWide) assertSponsorCaller(creator);
+  return { creatorId: creator.id, teamWide };
+}
+
+/** ADR 463 §1: a host key reports only on leases of seats it may serve. */
+function assertLeaseInScope(ctx: Ctx, teamId: string, leaseId: string, scope: HostScope): void {
+  const row = ctx.db
+    .prepare<
+      [string, string],
+      { member_id: string }
+    >('SELECT member_id FROM wake_leases WHERE team_id = ? AND id = ?')
+    .get(teamId, leaseId);
+  const member = row ? getMemberById(ctx.db, row.member_id) : undefined;
+  if (member && !hostMayServe(scope, member))
+    throw new MusterdError('not_found', `no wake lease "${leaseId}" for this host`);
 }
 
 /** The lease's server-recorded host is the authority for host-scoped credentials. */
@@ -2616,8 +2713,12 @@ export async function handleHttp(
       }
 
       if (method === 'POST' && rest === '/grants') {
-        const { team, member } = authAdmin(ctx, slug, req);
         const body = parseOrBadRequest(IssueGrantSchema, await readJson(req));
+        // ADR 463 §1: a sponsor may issue a SEAT grant for an agent they sponsor; all else is admin.
+        const { team, member, sponsorScoped } =
+          body.scope === 'seat'
+            ? authAdminOrSponsorOf(ctx, slug, req, body.target)
+            : { ...authAdmin(ctx, slug, req), sponsorScoped: false };
         const mint = issueGrant(ctx.db, team.id, body, member.name);
         appendAudit(ctx.db, team.id, {
           actor: member.name,
@@ -2629,6 +2730,7 @@ export async function handleHttp(
             lifetime: body.lifetime,
             grant_id: mint.grant.id,
             authorized_by: member.name,
+            sponsor_scoped: sponsorScoped,
           },
         });
         return sendJson(res, 201, mint);
@@ -2706,8 +2808,15 @@ export async function handleHttp(
       });
 
       if (method === 'POST' && rest === '/agent-bootstrap-credentials') {
-        const { team, member } = authAdmin(ctx, slug, req);
         const body = parseOrBadRequest(BootstrapCredentialBody, await readJson(req));
+        // ADR 463 §1: a sponsor may mint a `claim_seat` credential for an agent they sponsor.
+        // …and a `host` key, which the wake/doorbell routes then scope to that sponsor's seats.
+        const { team, member, sponsorScoped } =
+          body.use === 'claim_seat'
+            ? authAdminOrSponsorOf(ctx, slug, req, body.target)
+            : body.use === 'host'
+              ? authAdminOrSponsorCaller(ctx, slug, req)
+              : { ...authAdmin(ctx, slug, req), sponsorScoped: false };
         if (body.use === 'claim_seat' && !getMemberByName(ctx.db, team.id, body.target)) {
           throw new MusterdError('not_found', `no seat "${body.target}" in team "${slug}"`);
         }
@@ -2735,7 +2844,7 @@ export async function handleHttp(
           action: 'bootstrap_credential.minted',
           target: minted.credential.id,
           result: 'allow',
-          detail: { use: body.use, target: body.target },
+          detail: { use: body.use, target: body.target, sponsor_scoped: sponsorScoped },
         });
         for (const predecessorId of minted.rotated) {
           appendAudit(ctx.db, team.id, {
@@ -3147,8 +3256,13 @@ export async function handleHttp(
       // seat's `binding.grant`, so woken sessions occupy via the seat's own credential and the
       // daemon never holds it.
       if (method === 'POST' && rest === '/residency/enroll') {
-        const { team, member: authorizer, viaFallback } = authGovernance(ctx, slug, req);
         const body = parseOrBadRequest(EnrollResidencyBodySchema, await readJson(req));
+        const {
+          team,
+          member: authorizer,
+          viaFallback,
+          sponsorScoped,
+        } = authGovernanceOrSponsorOf(ctx, slug, req, body.seat);
         const target = getMemberByName(ctx.db, team.id, body.seat);
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no seat "${body.seat}" in team "${slug}"`);
@@ -3202,6 +3316,7 @@ export async function handleHttp(
             ...(body.policy !== undefined ? { policy: body.policy } : {}),
             ...(previous ? { previous_host: previous.host } : {}),
             ...(viaFallback ? { fallback: 'no-admin' } : {}),
+            sponsor_scoped: sponsorScoped,
           },
         });
         appendAudit(ctx.db, team.id, {
@@ -3215,6 +3330,7 @@ export async function handleHttp(
             grant_id: mint.grant.id,
             via: 'residency.enroll',
             authorized_by: authorizer.name,
+            sponsor_scoped: sponsorScoped,
           },
         });
         // Grant-rotation trap (dogfood 2026-07-13): a re-enroll revokes the previous standing
@@ -3241,16 +3357,27 @@ export async function handleHttp(
       // The kill switch (`musterd residency off`): the seat itself or an admin — revocation must
       // be easy. Reverses the enrollment and revokes the standing grant in one verb.
       if (method === 'POST' && rest === '/residency/revoke') {
-        const { team, member } = authTouch(ctx, slug, req);
+        // Parse before auth, like the other sponsor-widened routes: a bad body is a 400, not a 401.
         const body = parseOrBadRequest(RevokeResidencyBodySchema, await readJson(req));
+        const { team, member } = authTouch(ctx, slug, req);
         const target = getMemberByName(ctx.db, team.id, body.seat);
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no seat "${body.seat}" in team "${slug}"`);
         const selfRevoke = member.id === target.id;
-        if (!selfRevoke && !resolveCapabilities(member).is_admin && teamHasAdmin(ctx.db, team.id))
+        // ADR 463 §1: the agent's sponsor may revoke too — the kill switch belongs to whoever
+        // is accountable for the seat.
+        const sponsorRevoke =
+          !selfRevoke && target.kind === 'agent' && target.sponsored_by === member.id;
+        if (sponsorRevoke) assertSponsorCaller(member);
+        if (
+          !selfRevoke &&
+          !sponsorRevoke &&
+          !resolveCapabilities(member).is_admin &&
+          teamHasAdmin(ctx.db, team.id)
+        )
           throw new MusterdError(
             'forbidden',
-            `revoking another seat's residency requires an admin seat (is_admin)`,
+            `revoking another seat's residency requires an admin seat (is_admin) or its sponsor`,
           );
         const removed = revokeResidency(ctx.db, team.id, target.id);
         if (!removed)
@@ -3265,6 +3392,7 @@ export async function handleHttp(
             host: removed.host,
             ...(removed.grant_id ? { grant_id: removed.grant_id } : {}),
             authorized_by: member.name,
+            ...(sponsorRevoke ? { sponsor_scoped: true } : {}),
           },
         });
         return sendJson(res, 200, { ok: true });
@@ -3290,7 +3418,7 @@ export async function handleHttp(
       // infrastructure); the response carries structured fields only, never message bodies.
       if (method === 'POST' && rest === '/residency/wake-leases') {
         const body = parseOrBadRequest(WakeLeasesBodySchema, await readJson(req));
-        const team = authAgentKeyOnly(ctx, slug, req, body.host);
+        const { team, scope } = authAgentKeyOnly(ctx, slug, req, body.host);
         // ADR 357: this poll is the host's heartbeat. Recorded before the lease claim so a host
         // that polls and gets nothing still counts as alive — the roster's `enrolled_host_stale`
         // is derived from it.
@@ -3301,6 +3429,8 @@ export async function handleHttp(
           team.slug,
           body.host,
           ctx.config.presenceTimeoutMs,
+          Date.now(),
+          scope,
         );
         return sendJson(res, 200, { orders });
       }
@@ -3311,17 +3441,19 @@ export async function handleHttp(
       // shape: a ring is the record, never a message body.
       if (method === 'POST' && rest === '/doorbell/rings') {
         const body = parseOrBadRequest(DoorbellRingsBodySchema, await readJson(req));
-        const team = authAgentKeyOnly(ctx, slug, req, body.host);
-        const rings = claimHostRings(ctx.db, team.id, body.host, Date.now()).map(
-          ({ ring, member }) => ({ id: ring.id, member, record: ring.record }),
-        );
+        const { team, scope } = authAgentKeyOnly(ctx, slug, req, body.host);
+        // A non-admin's key raises only its creator's own banners; a team-wide key, as before.
+        const ringsOf = scope.teamWide ? null : scope.creatorId;
+        const rings = claimHostRings(ctx.db, team.id, body.host, Date.now(), {
+          memberId: ringsOf,
+        }).map(({ ring, member }) => ({ id: ring.id, member, record: ring.record }));
         return sendJson(res, 200, { rings });
       }
 
       const surfacedRing = rest.match(/^\/doorbell\/rings\/([^/]+)\/surfaced$/);
       if (method === 'POST' && surfacedRing) {
         const body = parseOrBadRequest(DoorbellSurfacedBodySchema, await readJson(req));
-        const team = authAgentKeyOnly(ctx, slug, req, body.host);
+        const { team, scope } = authAgentKeyOnly(ctx, slug, req, body.host);
         let ringId: string;
         try {
           ringId = decodeURIComponent(surfacedRing[1]!);
@@ -3331,7 +3463,11 @@ export async function handleHttp(
         const ring = getRing(ctx.db, team.id, ringId);
         // A host reports only its own rings — a label cannot speak for another machine's banner.
         // The label is cleared once reported (or never returned), so that ring answers 409.
-        if (!ring || (ring.host !== null && ring.host !== body.host))
+        if (
+          !ring ||
+          (ring.host !== null && ring.host !== body.host) ||
+          (!scope.teamWide && ring.member_id !== scope.creatorId)
+        )
           throw new MusterdError('not_found', 'no such ring for this host');
         if (!markRingReported(ctx.db, ring.id, body.host))
           throw new MusterdError('conflict', 'this ring is not awaiting a report');
@@ -3358,7 +3494,8 @@ export async function handleHttp(
         const body = parseOrBadRequest(WakeTurnBodySchema, await readJson(req));
         const team = requireTeam(ctx.db, slug);
         const turnHost = hostForWakeLease(ctx, team.id, body.lease_id);
-        authAgentKeyOnly(ctx, slug, req, turnHost);
+        const { scope: turnScope } = authAgentKeyOnly(ctx, slug, req, turnHost);
+        assertLeaseInScope(ctx, team.id, body.lease_id, turnScope);
         // ADR 357 correction: a host mid-actuation is not polling, but it is talking — every
         // host-authenticated residency request is a sighting.
         if (turnHost) recordHostSeen(ctx.db, team.id, turnHost, Date.now());
@@ -3372,7 +3509,8 @@ export async function handleHttp(
         const body = parseOrBadRequest(WakeProgressBodySchema, await readJson(req));
         const team = requireTeam(ctx.db, slug);
         const progressHost = hostForWakeLease(ctx, team.id, body.lease_id);
-        authAgentKeyOnly(ctx, slug, req, progressHost);
+        const { scope: progressScope } = authAgentKeyOnly(ctx, slug, req, progressHost);
+        assertLeaseInScope(ctx, team.id, body.lease_id, progressScope);
         if (progressHost) recordHostSeen(ctx.db, team.id, progressHost, Date.now()); // ADR 357 correction
         const row = markWakeSpawned(ctx.db, team.id, body.lease_id);
         if (!row)
@@ -3391,7 +3529,8 @@ export async function handleHttp(
         const reportHost = authBody.success
           ? hostForWakeLease(ctx, team.id, authBody.data.lease_id)
           : undefined;
-        authAgentKeyOnly(ctx, slug, req, reportHost);
+        const { scope: reportScope } = authAgentKeyOnly(ctx, slug, req, reportHost);
+        if (authBody.success) assertLeaseInScope(ctx, team.id, authBody.data.lease_id, reportScope);
         // ADR 357 correction: the report is the LAST thing a serial actuation says before it polls
         // again — stamping it here is what keeps a busy host from reading `enrolled_host_stale`.
         if (reportHost) recordHostSeen(ctx.db, team.id, reportHost, Date.now());
