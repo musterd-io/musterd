@@ -447,7 +447,7 @@ ADR 184's publication gate; a spans backend.
 
   | Harness     | Sessions | R1 main | R2 calls | Coverage | Why                                                   |
   | ----------- | -------- | ------- | -------- | -------- | ----------------------------------------------------- |
-  | claude-code | 79 / 39  | 4,680   | 4,734    | 0.989    | daemon read (`report trace`, all seats)               |
+  | claude-code | 79 (39 with R2) | 4,680 | 4,734 | 0.989 | daemon read (`report trace`, all seats)         |
   | codex       | 8 of 9   | 1,254   | 1,264    | 0.992    | offline `codex@2`; 9th excluded (tap installed 90 min in: 384/684) |
   | cursor      | 6        | 585     | 543      | 1.077    | offline `cursor@1`, numerator de-duplicated (see below) |
   | grok        | 0        | —       | —        | null     | no grok seat has run since #1782                      |
