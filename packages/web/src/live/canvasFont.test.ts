@@ -7,11 +7,11 @@ describe('canvasFont', () => {
     vi.unstubAllGlobals();
   });
 
-  it('falls back to a literal izzocam stack with no DOM (SSR)', () => {
+  it('falls back to a literal Recursive stack with no DOM (SSR)', () => {
     vi.stubGlobal('document', undefined);
-    expect(canvasFont(12)).toBe('700 12px "Space Grotesk", system-ui, sans-serif');
+    expect(canvasFont(12)).toBe('700 12px "Recursive Casual", system-ui, sans-serif');
     expect(canvasFont(11, '--font-mono', 400)).toBe(
-      '400 11px "Space Mono", ui-monospace, monospace',
+      '400 11px "Recursive Mono", ui-monospace, monospace',
     );
   });
 
@@ -19,14 +19,14 @@ describe('canvasFont', () => {
     vi.stubGlobal('document', { documentElement: {}, fonts: undefined });
     vi.stubGlobal('getComputedStyle', () => ({
       getPropertyValue: (p: string) =>
-        p === '--font-display' ? " 'Space Grotesk', 'Inter', sans-serif " : '',
+        p === '--font-display' ? " 'Recursive Casual', 'Recursive', sans-serif " : '',
     }));
     // trailing/leading whitespace trimmed; weight + px prefixed
-    expect(canvasFont(15)).toBe("700 15px 'Space Grotesk', 'Inter', sans-serif");
+    expect(canvasFont(15)).toBe("700 15px 'Recursive Casual', 'Recursive', sans-serif");
   });
 
   it('caches the resolved stack (getComputedStyle called once per token)', () => {
-    const spy = vi.fn(() => ({ getPropertyValue: () => "'Space Grotesk'" }));
+    const spy = vi.fn(() => ({ getPropertyValue: () => "'Recursive Casual'" }));
     vi.stubGlobal('document', { documentElement: {} });
     vi.stubGlobal('getComputedStyle', spy);
     canvasFont(10);
@@ -38,9 +38,9 @@ describe('canvasFont', () => {
   it('preloadCanvasFont drives document.fonts.load and swallows rejection', async () => {
     const load = vi.fn(() => Promise.reject(new Error('nope')));
     vi.stubGlobal('document', { documentElement: {}, fonts: { load } });
-    vi.stubGlobal('getComputedStyle', () => ({ getPropertyValue: () => "'Space Grotesk'" }));
+    vi.stubGlobal('getComputedStyle', () => ({ getPropertyValue: () => "'Recursive Casual'" }));
     expect(() => preloadCanvasFont()).not.toThrow();
-    expect(load).toHaveBeenCalledWith('700 16px \'Space Grotesk\'');
+    expect(load).toHaveBeenCalledWith('700 16px \'Recursive Casual\'');
     await Promise.resolve();
   });
 

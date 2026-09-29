@@ -154,7 +154,7 @@
   height: 100vh;
   height: 100dvh;
   color: var(--lc-text);
-  font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
+  font-family: var(--font-sans, 'Recursive', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow: hidden;

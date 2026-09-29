@@ -115,9 +115,9 @@ against the markdown the moment either changed.
   idle cost is paid by every viewer, forever.
 - **The stream DOM stays windowed** (~60 mounted rows, reveal-on-scrollback, live-edge collapse,
   1,000-envelope memory cap — #328). Don't mount unbounded lists anywhere; window them.
-- **Fonts: the three active families only** (Inter, Space Grotesk, Space Mono — body was re-fonted
-  Fraunces → Inter on 2026-07-20; `budgets.json` is the authority). A new family or
-  weight is a re-font decision, not a side-effect (#329). Canvas painters read type via
+- **Fonts: one family, Recursive, in three committed cuts** (casual / linear / mono, ADR 477 —
+  re-fonted from Inter + Space Grotesk + Space Mono on 2026-09-29; `budgets.json` is the authority).
+  A new family is a re-font decision with an ADR, not a side-effect (#329). Canvas painters read type via
   `src/live/canvasFont.ts` tokens — never hard-code a family name in a painter.
 - **Colour AND length tokens must be defined, and a `var()` fallback must not contradict them.**
   `pnpm tokens:check` (in the `format:check` chain) fails on two silent lies: a token used with a

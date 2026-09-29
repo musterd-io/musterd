@@ -10,7 +10,7 @@
   border: 1px solid var(--lc-border-2);
   background: var(--lc-ground-2);
   overflow: hidden;
-  font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
+  font-family: var(--font-sans, 'Recursive', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   color: var(--lc-text);
 }

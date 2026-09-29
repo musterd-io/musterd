@@ -12,8 +12,6 @@
     "deploy:site": "pnpm build && pnpm stage:site && pnpm dlx wrangler@4.83.0 deploy"
   },
   "dependencies": {
-    "@fontsource/space-grotesk": "^5.2.10",
-    "@fontsource/space-mono": "^5.2.9",
     "@musterd/protocol": "workspace:*",
     "@tanstack/react-router": "1.170.16",
     "@tanstack/react-start": "1.168.26",
@@ -21,8 +19,6 @@
     "react-dom": "19.2.7"
   },
   "devDependencies": {
-    "@fontsource/inter": "5.2.8",
-    "@fontsource/jetbrains-mono": "5.2.8",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.3",

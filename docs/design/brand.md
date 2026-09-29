@@ -83,23 +83,26 @@ The CLI uses only these mappings so output stays on-brand and degrades cleanly i
 
 ## 3. Typography
 
-Two families only.
+One family, **Recursive**, in three cuts ([ADR 477](../decisions/477-web-type-recursive.md), 2026-09-29; it replaced Inter + JetBrains Mono here and the Inter + Space Grotesk + Space Mono the web had drifted to).
 
-- **Mono (terminal, code, wordmark, CLI-mirroring UI):** `JetBrains Mono` as the design/Figma reference. In the README/web, the CSS stack is `"JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace`. The CLI inherits the user's terminal font — Figma terminal frames must use a mono that visually matches an 80-col terminal grid.
-- **Sans (docs, web dashboard chrome, marketing):** `Inter`. CSS stack `Inter, ui-sans-serif, system-ui, -apple-system, sans-serif`.
+- **Display (headings, member names, chyron labels):** `Recursive Casual` — Recursive's casual axis. CSS token `--font-display`.
+- **Sans (body, web chrome, marketing):** `Recursive` — the linear cut. CSS token `--font-sans`.
+- **Mono (data, timestamps, ids, CLI-mirroring UI, Figma terminal frames):** `Recursive Mono`. CSS token `--font-mono`. The CLI itself inherits the user's terminal font — Figma terminal frames must use a mono that visually matches an 80-col terminal grid.
+
+The three cuts are committed files cut from the upstream variable font by `scripts/fonts/instance-recursive.py` (latin only, weight axis 400–800). The **wordmark** is unchanged: lowercase JetBrains Mono, as drawn.
 
 ### Type ramp (web/docs)
 
-| Token     | Size / line-height | Weight | Family         |
-| --------- | ------------------ | ------ | -------------- |
-| display   | 40 / 48            | 700    | Inter          |
-| h1        | 28 / 36            | 700    | Inter          |
-| h2        | 22 / 30            | 600    | Inter          |
-| h3        | 18 / 26            | 600    | Inter          |
-| body      | 15 / 24            | 400    | Inter          |
-| small     | 13 / 20            | 400    | Inter          |
-| mono-body | 14 / 22            | 400    | JetBrains Mono |
-| mono-sm   | 12 / 18            | 400    | JetBrains Mono |
+| Token     | Size / line-height | Weight | Family           |
+| --------- | ------------------ | ------ | ---------------- |
+| display   | 40 / 48            | 780    | Recursive Casual |
+| h1        | 28 / 36            | 700    | Recursive Casual |
+| h2        | 22 / 30            | 600    | Recursive Casual |
+| h3        | 18 / 26            | 600    | Recursive        |
+| body      | 15 / 24            | 400    | Recursive        |
+| small     | 13 / 20            | 400    | Recursive        |
+| mono-body | 14 / 22            | 400    | Recursive Mono   |
+| mono-sm   | 12 / 18            | 400    | Recursive Mono   |
 
 ### Terminal type ramp (Figma terminal frames)
 
@@ -152,4 +155,4 @@ This entire identity is intentionally small: one name, one accent color, one wor
 
 ## 7. Web surface (carve-out)
 
-The **landing / marketing web surface** (`packages/web`) is allowed to go maximal — immersive WebGL, gradients, glows, depth, motion, and a deep-black ground — while the **product chrome** (CLI, terminal frames, the future dashboard's functional UI) stays minimal under §1–§6. The shared anchor is unchanged on every surface: mustard `#E1AD01` is still the one accent, Inter + JetBrains Mono are still the only typefaces, the wordmark is still lowercase JetBrains Mono, and copy stays plain and declarative (the _experience_ carries the spectacle, never the words). This split, its guardrails (reduced-motion fallback, static-first content), and its limits are recorded in `docs/decisions/037-web-surface-aesthetic.md`.
+The **landing / marketing web surface** (`packages/web`) is allowed to go maximal — immersive WebGL, gradients, glows, depth, motion, and a deep-black ground — while the **product chrome** (CLI, terminal frames, the future dashboard's functional UI) stays minimal under §1–§6. The shared anchor is unchanged on every surface: mustard `#E1AD01` is still the one accent, Recursive (§3) is still the only type family, the wordmark is still lowercase JetBrains Mono, and copy stays plain and declarative (the _experience_ carries the spectacle, never the words). This split, its guardrails (reduced-motion fallback, static-first content), and its limits are recorded in `docs/decisions/037-web-surface-aesthetic.md`.

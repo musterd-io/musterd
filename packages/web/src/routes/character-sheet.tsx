@@ -35,7 +35,7 @@ function CharacterSheet() {
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
-    // Warm the izzocam telemetry face (Space Mono) before the canvas paints its caption labels.
+    // Warm the telemetry face (Recursive Mono) before the canvas paints its caption labels.
     preloadCanvasFont(11, '--font-mono', 400);
     let raf = 0;
     let stop = false;
