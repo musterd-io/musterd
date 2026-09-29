@@ -513,6 +513,51 @@ ADR 184's publication gate; a spans backend.
   cursor-agent transcript format that carries `tool_use.id` (then R1↔R2 join by id, as Claude
   Code's does). Falsifier: a fresh cursor-agent session, ended cleanly, with no re-emitted id, whose
   distinct Read ids differ from its transcript Read blocks by more than 2%.
+- **2026-09-29 — coverage matrix, third read: daemon-side, all seats, and what the daemon's own
+  numbers are made of** (lane `01M3NMDWA9Q5WN0K8D9M1PQD0D`). `deriveTraceReport` over every
+  seat, 30 days, `POST_TOOL_USE_ONCE`. To get grok and opencode rows at all: ghost's opencode
+  plugin was still generation 1 (no tap) and grokbot had no `.grok/hooks/musterd.json` — neither
+  wake self-heal had repaired them (lane `01M3NMZ94D`); `init --refresh-hooks` in each workspace,
+  then one steered errand each.
+
+  | Harness     | Sessions (with R2) | R1 main | R2 calls | Report reads | What the number is                                                    |
+  | ----------- | ------------------ | ------- | -------- | ------------ | --------------------------------------------------------------------- |
+  | claude-code | 89 (44)            | 5,526   | 6,756    | 0.818        | dead-lease sessions drop R1 (below); clean sessions 0.96–0.98         |
+  | codex       | 11 (3)             | 769     | 1,289    | 0.597        | one session's R2 tailed 5×; the two clean `codex@2` sessions 0.994, 1.000 |
+  | cursor      | 8 (1)              | 78      | 188      | 0.415        | R2 tailed twice (94 + 94); the IDE session is 78/94 = 0.83            |
+  | grok        | 1 (0)              | 0       | 0        | null         | `grok -p` loaded only the global hooks; no `session_end` headless     |
+  | opencode    | 1 (1)              | 7       | 15       | 0.467        | R2 spans two wakes, the tap only the second: 7/7 = 1.00 on it         |
+  | native      | 0                  | —       | —        | null         | no tap (lane `01M3MGQC0J`)                                            |
+
+  Five things the daemon-side read exposed, each with its evidence and its lane:
+  1. **A refused interrupt probe drops the R1 tap.** My own session (b7bed855) has `usage` rows
+     from 12:56 and `PostToolUse` rows only from 20:51 — the minute `claim --detach` re-occupied
+     the seat. Its lease had been dead since start (the defect ADR 471 / #1801 fixed today), every
+     probe was refused, and the tap that rides the probe went with it: 50/279 = 0.18 for the day.
+     miley's b8702e0b (84/494) is the same shape. That, not a tap gap, is claude-code's 0.818; the
+     ten clean sessions read 0.96–0.98. The tap should post even when the probe is refused.
+  2. **The R2 tail re-posts spans.** codex 0cd68449 posted the same range at 17:19:43, 17:19:50,
+     17:21:12 and 17:23:59 (81 rows / 87 calls each), then 162/174 and 372/369 — 1,115 counted
+     against 596 hook calls. cursor f7d7bc1c carries two `SessionEnd` and two `usage` rows in one
+     second, 94 + 94. Sessions the tail touched once are at target (codex 159/160, 14/14). Not the
+     16-cursor cap (big-body holds 6); the rewind is in `tail.ts` and needs its own read.
+  3. **A rail that cannot count is no denominator.** `codex@1` usage rows carry tokens and no
+     `tool_uses`; counted as "with R2" they put 11 sessions' hook calls over 1,289 and read 1.47.
+     Fixed here: `has_r2` requires a `tool_uses`-bearing usage row (11 → 3 sessions).
+  4. **New parser tags normalize to `other`.** Every `usage` row since the new build carries
+     `parser: "other"` — `traceSync`'s per-field enum admits the values it knew (`claude-code@1`,
+     `codex@1`) and folds the rest. Same for opencode tool names (`bash`, `read`, `musterd_*` →
+     `other`). The values list needs `codex@2`, `cursor@1`, `grok@1`, the opencode tag, and an
+     opencode tool namespace.
+  5. **`grok -p` does not load project hooks.** grokbot's `updates.jsonl` names only
+     `global/settings:*` and `global/musterd-sessionstart` hooks across 42 tool calls; the
+     `.grok/hooks/musterd.json` written minutes earlier never ran. The wake also failed Presence
+     attestation ("no roster Presence attesting this wake lease") though the seat answered.
+
+  Read together: opencode's tap is complete on the wake it covered (ids match one for one),
+  codex is at target where the tail ran once, and cursor's 0.83 on the IDE is the compaction and
+  retry family already on this ADR. Falsifier for this note: a session with a live lease, tailed
+  once, whose report ratio sits below 0.96 on claude-code or codex.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
