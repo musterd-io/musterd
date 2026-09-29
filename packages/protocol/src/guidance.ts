@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 35;
+export const GUIDANCE_CONTENT_VERSION = 36;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -210,6 +210,26 @@ export function renderSkillBody(opts: { team: string }): string {
     '   stop being true, say so rather than resuming self-closing). Only when nobody was asked —',
     '   no eligible acceptor, or acceptance-exempt (ADR 234) — is `lane_resolve` / `musterd lane',
     '   resolve` yourself sanctioned (recorded **unconfirmed**, never a wedge).',
+    '',
+    '## Answering a critique — verify, then concede or hold (ADR 476)',
+    '',
+    'A `challenge`, a `steer` aimed at a finding, a review note, or a human saying "I think you are wrong',
+    'about X" is a **claim**. Answer it with the check you ran, not with a verdict: `accept` naming what you',
+    're-checked and what it showed, or `decline` naming the evidence that held. "You are right" with nothing',
+    'checked is not an answer, and neither is "I disagree" — the obligation is the check, not the direction.',
+    'Measured on this team (2026-09-29): six of six answered challenges conceded, none declined, and four',
+    "of the six named no check. Humans are peers on this line too: a human's critique carries the weight",
+    'of its evidence, no more, and is answered the same way.',
+    '',
+    "- **Commit before you ask.** When you want a peer's view on your finding, send the question and the",
+    '  evidence, not your conclusion (`request_help` / `message` with an eligible set), and post your own',
+    '  conclusion with its falsifier in a `status_update` first. If you then change your mind, it is a',
+    '  recorded before-and-after, not a rewrite.',
+    '- **A wrong concession is a false claim.** If the check later shows the critic was wrong and you had',
+    '  conceded, mint the ledger entry (`.agents/skills/claims-ledger`) — that is what makes "did the team',
+    '  get more selective or just more stubborn" answerable.',
+    '- **Do not overcorrect.** The goal is that concession tracks evidence: keep changing your mind when the',
+    '  check fails, stop when it does not.',
     '',
     '## Asking a human (the ask stream, ADR 147)',
     '',

@@ -219,6 +219,7 @@ describe('version-bump discipline (ADR 085)', () => {
     35: '976848f9a3915497', // ADR 468 (lane 01M3MWSF32): the self-label skill and orient step 6 spell the grammar out — `<seat> · <start time> · <team> · <title>`, no chip; the sweep-era `resolve-labels` mention leaves
     33: 'a2a868e8b8fbe955', // ADR 467 (lane 01M3MSPAMA): orient step 6 + self-label skill gain Claude Code Desktop `set_session_title {session_id:"self"}` — the wall (#1676) had left Desktop rows unlabeled
     32: 'f4eef0bb9a9e710a', // ADR 459 (lane 01M3FAPB32): the sponsored-agent line names the tunable cap (`--sponsored-agent-cap`) and the per-member switch instead of a fixed three
+    36: '3c5ea4ea5e81d976', // ADR 476 (lane 01M3QA4KCZ): + "Answering a critique" — a challenge/steer/review note/human critique is answered with the check run, not a verdict; commit before you ask; a wrong concession is a ledger entry; do not overcorrect (measured 2026-09-29: 6/6 challenges conceded, 0 declined)
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {
