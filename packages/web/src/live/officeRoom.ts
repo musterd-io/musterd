@@ -1,4 +1,5 @@
 import type { Envelope, LaneBoard, MemberSummary, WorkingHours } from '@musterd/protocol';
+import type { AskView } from './asks';
 import type { ConnStatus } from './client';
 import type { RoomEntry } from './workingOn';
 
@@ -26,6 +27,8 @@ export interface OfficeRoomProps {
   liveIds: Set<string>;
   entries: RoomEntry[];
   board: LaneBoard | null;
+  /** The derived asks with the tier clock applied (ADR 464 §3.3) — the room's ask moment reads them. */
+  asks: readonly AskView[];
   status: ConnStatus;
 }
 
@@ -46,7 +49,7 @@ export interface RoomStream {
 export function officeRoom(
   teamName: string,
   stream: RoomStream,
-  derived: { entries: RoomEntry[]; board: LaneBoard | null },
+  derived: { entries: RoomEntry[]; board: LaneBoard | null; asks: readonly AskView[] },
 ): OfficeRoomProps {
   return {
     teamName,
@@ -56,6 +59,7 @@ export function officeRoom(
     liveIds: stream.liveIds,
     entries: derived.entries,
     board: derived.board,
+    asks: derived.asks,
     status: stream.status,
   };
 }

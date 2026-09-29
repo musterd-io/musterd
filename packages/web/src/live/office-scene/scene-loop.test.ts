@@ -159,3 +159,37 @@ describe('the team column is linked to the room (ADR 464, lane 1)', () => {
     expect(index).toMatch(/displayModel\(node\.model\)/);
   });
 });
+
+describe('the in-room ask moment (ADR 464, lane 3)', () => {
+  it('a new open ask raises the hand and rests a card; backfill and reduced motion get the card only', () => {
+    const fn = index.slice(
+      index.indexOf('function syncAsks('),
+      index.indexOf('function positionAskCards('),
+    );
+    expect(fn).toContain("el.className = 'lc-gl-ask'");
+    expect(fn).toMatch(
+      /if \(asksSeeded && !reduced && !STILL\) \{[\s\S]*?welcomeWave\(ask\.from\)/,
+    );
+    expect(fn).toContain("pushCue(ask.from, '#f4cf52', '?')");
+  });
+
+  it('a settled ask wears its mark and clears on a timer that dispose stops', () => {
+    const fn = index.slice(
+      index.indexOf('function syncAsks('),
+      index.indexOf('function positionAskCards('),
+    );
+    expect(fn).toContain("classList.add('is-settled')");
+    expect(fn).toContain('askSettleTimers.set(ask.id, t)');
+    const at = index.indexOf('dispose: () =>');
+    expect(index.slice(at, index.indexOf('\n    },', at))).toContain('askSettleTimers.clear()');
+  });
+
+  it("the cards follow the plates every frame, at the human's plate or the asker's", () => {
+    expect(index).toMatch(/repositionSpeeches\(headMap\);\s*positionAskCards\(/);
+    const fn = index.slice(
+      index.indexOf('function positionAskCards('),
+      index.indexOf('function positionLabels('),
+    );
+    expect(fn).toContain('ask.to && placed.get(ask.to) ? ask.to : ask.from');
+  });
+});

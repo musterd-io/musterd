@@ -63,7 +63,11 @@ describe('teamCards', () => {
         m('d', { posture: 'active' }),
         m('e', { posture: 'away', presence: 'away' }),
       ],
-      board(lane('a'), lane('b', { state: 'awaiting_acceptance' }), lane('c', { state: 'blocked' })),
+      board(
+        lane('a'),
+        lane('b', { state: 'awaiting_acceptance' }),
+        lane('c', { state: 'blocked' }),
+      ),
       [],
     );
     expect(cards.map((c) => c.stateLabel)).toEqual([
@@ -85,11 +89,9 @@ describe('teamCards', () => {
   });
 
   it('names the goal and keeps claimed_at for elapsed', () => {
-    const { cards } = teamCards(
-      [m('a')],
-      board(lane('a', { goal_id: 'launch', claimed_at: 5 })),
-      [{ id: 'launch', title: 'Launch' }],
-    );
+    const { cards } = teamCards([m('a')], board(lane('a', { goal_id: 'launch', claimed_at: 5 })), [
+      { id: 'launch', title: 'Launch' },
+    ]);
     expect(cards[0]).toMatchObject({ goal: 'Launch', since: 5 });
   });
 
@@ -110,6 +112,67 @@ describe('teamCards', () => {
     const out = teamCards([m('a'), m('b', { presence: 'offline', posture: 'offline' })], null, []);
     expect(out.cards.map((c) => c.name)).toEqual(['a']);
     expect(out.offline).toBe(1);
+  });
+});
+
+describe('teamCards — asking a human (ADR 464 §4)', () => {
+  const askView = (from: string, to: string | null, state = 'open', ts = 5) =>
+    ({
+      env: {
+        id: `ask_${from}_${ts}`,
+        from,
+        to: to ? { kind: 'member', name: to } : { kind: 'team' },
+        ts,
+        act: 'ask',
+        body: '',
+      },
+      species: 'approve',
+      tier: 'standard',
+      to,
+      deadline: ts + 1,
+      state,
+    }) as unknown as import('./asks').AskView;
+
+  it('an open ask to a human says "asking nick" and sorts after blocked, before between', () => {
+    const roster = [
+      m('nick', { kind: 'human', posture: 'active' }),
+      m('a'),
+      m('b', { posture: 'active' }),
+      m('c'),
+    ];
+    const { cards } = teamCards(
+      roster,
+      board(lane('a'), lane('c', { state: 'blocked' })),
+      [],
+      [askView('a', 'nick')],
+    );
+    expect(cards.map((c) => [c.name, c.state])).toEqual([
+      ['c', 'blocked'],
+      ['a', 'asking'],
+      ['b', 'between'],
+      ['nick', 'between'],
+    ]);
+    expect(cards[1]?.stateLabel).toBe('asking nick');
+    expect(cards[1]?.title).toBe('Fix the thing'); // the lane is still the work
+  });
+
+  it('an agent-routed review ask is not "asking" (Review Focus 2), and a lapsed one is not either', () => {
+    const roster = [m('stanley'), m('a')];
+    expect(
+      teamCards(roster, board(lane('a')), [], [askView('a', 'stanley')]).cards.find(
+        (c) => c.name === 'a',
+      )?.state,
+    ).toBe('working');
+    expect(
+      teamCards(roster, board(lane('a')), [], [askView('a', null, 'lapsed')]).cards.find(
+        (c) => c.name === 'a',
+      )?.state,
+    ).toBe('working');
+  });
+
+  it('a team-addressed open ask reads "asking the team"', () => {
+    const { cards } = teamCards([m('a')], null, [], [askView('a', null)]);
+    expect(cards[0]).toMatchObject({ state: 'asking', stateLabel: 'asking the team' });
   });
 });
 

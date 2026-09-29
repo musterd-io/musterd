@@ -48,7 +48,7 @@ describe('the asks rail sheds by its own width, not the window', () => {
   /* The bug, in one assertion. A `@media` step here is not a style preference: `.lc-office` is
      `display: none` below 880px, so a viewport-keyed rule on this rail is dead on the only route
      that renders it. */
-  it.each(['.lc-asks__gist', '.lc-asks__meta', '.lc-asks__link', '.lc-asks__verb', '.lc-asks__tier'])(
+  it.each(['.lc-asks__q', '.lc-asks__meta', '.lc-asks__link', '.lc-asks__verb', '.lc-asks__tier'])(
     'hides %s from a container query and never from a viewport one',
     (sel) => {
       const rules = hidingRules(sel);
@@ -59,10 +59,10 @@ describe('the asks rail sheds by its own width, not the window', () => {
 
   /* The ladder's whole doctrine is an ORDER: context goes before the answer does. Encoded as
      thresholds, that means the expendable things must leave at a WIDER container than the ones that
-     outrank them — the gist before the counts, the counts before the verb and the tier. */
-  it('sheds in priority order — gist, then the counts and the link, then verb and tier', () => {
+     outrank them — the question before the counts, the counts before the verb and the tier. */
+  it('sheds in priority order — the question, then the counts and the link, then verb and tier', () => {
     const at = (sel: string) => width(hidingRules(sel)[0] ?? '');
-    const gist = at('.lc-asks__gist');
+    const gist = at('.lc-asks__q');
     const meta = at('.lc-asks__meta');
     const link = at('.lc-asks__link');
     const verb = at('.lc-asks__verb');
@@ -80,7 +80,7 @@ describe('the asks rail sheds by its own width, not the window', () => {
      shows, and it should have to say so here. */
   it('fires its first two steps at the office panel’s measured 553px, and not its third', () => {
     const OFFICE_PANEL_PX = 553;
-    expect(width(hidingRules('.lc-asks__gist')[0] ?? '')).toBeGreaterThan(OFFICE_PANEL_PX);
+    expect(width(hidingRules('.lc-asks__q')[0] ?? '')).toBeGreaterThan(OFFICE_PANEL_PX);
     expect(width(hidingRules('.lc-asks__meta')[0] ?? '')).toBeGreaterThan(OFFICE_PANEL_PX);
     expect(width(hidingRules('.lc-asks__verb')[0] ?? '')).toBeLessThan(OFFICE_PANEL_PX);
   });

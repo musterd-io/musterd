@@ -1726,6 +1726,40 @@
 /* The provider mark as an enamel pin: a domed, colour-filled badge with a specular cap, seated into
    the paper with a shadow beneath. At 11px the highlight is doing the legibility work — a flat chip
    this size reads as a coloured square, where a lit dome reads as an object. */
+/* The ask card (ADR 464 §3.3): a small paper tag resting just above the human's plate while an
+   ask to them is open — the asker's hand, in the asker's hue. Settled, it wears the verdict's mark
+   for a beat (index.ts ASK_SETTLED_MS) and clears. Same stock as the plate; never text-on-fill. */
+.lc-gl-ask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px 2px 5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--lc-ask-hue, var(--lc-accent)) 60%, var(--lc-paper-rim));
+  background: var(--lc-paper);
+  color: var(--lc-paper-ink);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--lc-type-name);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 2px -0.5px var(--lc-paper-drop);
+  animation: lc-caption-in var(--lc-dur-2) ease-out;
+  transition: opacity var(--lc-dur-2) var(--lc-ease-out);
+}
+.lc-gl-ask__hand {
+  font-size: 12px;
+  line-height: 1;
+}
+.lc-gl-ask.is-settled {
+  border-color: color-mix(in srgb, var(--lc-success) 60%, var(--lc-paper-rim));
+}
+.lc-gl-ask.is-settled .lc-gl-ask__hand {
+  color: var(--lc-success-ink);
+  font-weight: 700;
+}
 .lc-gl-label__model {
   font-size: 11px;
   font-weight: 600;
@@ -3427,6 +3461,14 @@
 }
 .lc-team-card__work.is-said {
   font-style: italic;
+}
+/* Asking a human (ADR 464 §4): the state line takes the ask amber INK, the same family the banner's
+   hold line wears — a member waiting on a person reads as one thing across the page. */
+.lc-team-card--asking .lc-team-card__state {
+  color: var(--lc-warn-ink);
+}
+.lc-team__pip--asking {
+  outline: 2px solid var(--lc-warn);
 }
 .lc-team-card__more {
   font-size: 12px;
@@ -5829,18 +5871,43 @@
   background: var(--lc-danger);
 }
 
-/* The one line. 30px of chrome, whatever is happening behind it. */
+/* The one line — the ask banner (ADR 464 §6): 34px of chrome, read from the back of a room. */
 .lc-asks__rail {
   display: flex;
   align-items: center;
   gap: var(--lc-4);
-  height: 30px;
+  height: 34px;
   padding: 0 var(--lc-3) 0 var(--lc-5);
-  font-size: 11.5px;
+  font-size: 13px;
   min-width: 0;
   /* Backstop: whatever the viewport does to the shrink chain, the rail stays one clean line and
      never spills past its own pill. */
   overflow: hidden;
+}
+.lc-asks__hand {
+  flex: none;
+  font-size: 15px;
+  line-height: 1;
+  animation: lc-asks-hand var(--lc-dur-5) var(--lc-ease-out) 1;
+}
+@keyframes lc-asks-hand {
+  from {
+    transform: translateY(6px) rotate(-12deg);
+    opacity: 0;
+  }
+}
+/* Settled: the verdict, said once, then the pill shrinks back (askPhrase SETTLED_MS). */
+.lc-asks--settled .lc-asks__lead {
+  cursor: default;
+}
+.lc-asks__outcome {
+  font-weight: 600;
+  color: var(--lc-success-ink);
+}
+/* Idle: a small quiet pill — the room has no open question. */
+.lc-asks--idle .lc-asks__rail {
+  height: 28px;
+  font-size: 11.5px;
 }
 .lc-asks__bell {
   width: 13px;
@@ -5921,7 +5988,7 @@
   background: none;
   padding: 0;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 13px;
   color: var(--lc-text);
   cursor: pointer;
   text-align: left;
@@ -5952,11 +6019,16 @@
   flex: none;
   font-weight: 650;
 }
-.lc-asks__gist {
+.lc-asks__q {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--lc-muted);
+  font-style: italic;
+  color: var(--lc-dim);
+}
+.lc-asks__clock {
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
 }
 /* Tier + clock sit inline on the rail; inside a card the clock is pushed right by margin auto. */
 .lc-asks__rail .lc-ask__clock {
@@ -6176,7 +6248,7 @@
  * Precedent for the mechanism is two rules down the same file (`.lc-ov`, `@container (max-width:
  * 420px)`) and in `.lc-office__work` — both containers for the same reason, both inside this panel. */
 @container asks (max-width: 850px) {
-  .lc-asks__gist {
+  .lc-asks__q {
     display: none;
   }
 }

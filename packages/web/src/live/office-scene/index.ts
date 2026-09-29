@@ -93,6 +93,7 @@ import {
   type SpeechToken,
 } from './speech';
 import type {
+  OfficeAsk,
   AmbientLogEntry,
   OfficeData,
   OfficeEvent,
@@ -545,6 +546,10 @@ export function mountOffice(
   let lightEnv: LightEnv = computeLightEnv(pstNowHours(), occupied); // office lighting from the PST clock
 
   const labels = new Map<string, HTMLDivElement>();
+  /** The ask cards (ADR 464 §3.3): one per ask to a human, resting at the human's plate while open. */
+  const askCards = new Map<string, { el: HTMLDivElement; ask: OfficeAsk }>();
+  const askSettleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  let asksSeeded = false; // the first update seeds the open set silently — no hands go up for backfill
   const speeches = new Map<string, Speech>(); // one live speech bubble per member (name → bubble)
   const queued = new Map<string, Utterance[]>(); // acts waiting behind a member's live bubble
   const cues: Cue[] = [];
@@ -1082,6 +1087,87 @@ export function mountOffice(
    * spot draws a hairline leader back to its head, in the member's colour, so it is never read as
    * someone else's. Cheap enough per frame: ~25 plates, compared pairwise, sizes from the observer.
    */
+  /**
+   * The in-room ask moment (ADR 464 §3.3, spec §6). A NEW open ask to a human: the asker raises a hand
+   * at their desk (the welcome `wave` gesture, a beat long), a `?` cue rises over them, and a small
+   * card rests at the human's plate for as long as the ask is open — the room can see who is waiting
+   * on whom without a word from anyone. Settled: the card wears the verdict (✓ ✗ →) for a few seconds
+   * and clears. Data-driven off `OfficeData.asks`, so a page loaded mid-ask shows the resting card
+   * (no hand for backfill), and the state comes from the same derivation the banner reads.
+   */
+  const ASK_SETTLED_MS = 6_000;
+  const ASK_MARK: Record<NonNullable<OfficeAsk['outcome']>, string> = {
+    accepted: '✓',
+    declined: '✗',
+    proceeded: '→',
+    deferred: '…',
+    expired: '·',
+    resolved: '✓',
+  };
+  function syncAsks(next: readonly OfficeAsk[], byName: Map<string, OfficeNode>) {
+    const seen = new Set<string>();
+    for (const ask of next) {
+      seen.add(ask.id);
+      const had = askCards.get(ask.id);
+      if (!had) {
+        if (ask.state !== 'open') continue; // a settled ask this page never saw open gets no card
+        const el = document.createElement('div');
+        el.className = 'lc-gl-ask';
+        el.setAttribute('aria-hidden', 'true');
+        el.innerHTML = `<span class="lc-gl-ask__hand">✋</span><span class="lc-gl-ask__who"></span>`;
+        el.querySelector('.lc-gl-ask__who')!.textContent = ask.from;
+        el.style.setProperty('--lc-ask-hue', byName.get(ask.from)?.color ?? '');
+        labelHost.appendChild(el);
+        askCards.set(ask.id, { el, ask });
+        // The hand goes up for a LIVE ask only: backfill and reduced motion show the resting card alone.
+        if (asksSeeded && !reduced && !STILL) {
+          actors.welcomeWave(ask.from); // the hand up beside the head, a beat long
+          pushCue(ask.from, '#f4cf52', '?');
+          ensureLoop();
+        }
+        continue;
+      }
+      if (ask.state === 'settled' && had.ask.state === 'open') {
+        had.ask = ask;
+        had.el.classList.add('is-settled');
+        had.el.querySelector('.lc-gl-ask__hand')!.textContent = ASK_MARK[ask.outcome ?? 'resolved'];
+        const t = setTimeout(() => {
+          askSettleTimers.delete(ask.id);
+          askCards.get(ask.id)?.el.remove();
+          askCards.delete(ask.id);
+        }, ASK_SETTLED_MS);
+        askSettleTimers.set(ask.id, t);
+      }
+    }
+    // Gone from the data without a settled beat (an older buffer edge): drop the card quietly.
+    for (const [id, card] of askCards) {
+      if (!seen.has(id) && card.ask.state === 'open') {
+        card.el.remove();
+        askCards.delete(id);
+      }
+    }
+    asksSeeded = true;
+  }
+
+  /** Rest each card just above its human's plate (or the asker's, when the human has no plate). */
+  function positionAskCards(placed: Map<string, { x: number; y: number }>) {
+    const stacked = new Map<string, number>(); // cards already resting on this plate this frame
+    for (const { el, ask } of askCards.values()) {
+      const at = ask.to && placed.get(ask.to) ? ask.to : ask.from;
+      const host = placed.get(at);
+      if (!host) {
+        el.style.opacity = '0';
+        continue;
+      }
+      // Two asks resting on one plate stack upward rather than print on top of each other.
+      const n = stacked.get(at) ?? 0;
+      stacked.set(at, n + 1);
+      const size = plateSize.get(at) ?? { w: 60, h: 14 };
+      el.style.opacity = '';
+      el.style.transform = `translate(-50%, -100%) translate(${host.x}px, ${host.y - size.h - 6 - n * 18}px)`;
+    }
+  }
+
   function positionLabels(headMap: Map<string, Pt>) {
     lastHeads = headMap;
     const boxes: PlateBox[] = [];
@@ -1119,6 +1205,9 @@ export function mountOffice(
       }
     }
     repositionSpeeches(headMap);
+    positionAskCards(
+      new Map([...laid.placements].map(([n, p]) => [n, { x: p.x, y: p.y }] as const)),
+    );
   }
 
   /**
@@ -2022,6 +2111,7 @@ export function mountOffice(
     wallBoard = next.wallBoard ?? null;
     placements = assignSeats(next.nodes, new Set(next.gathered ?? []));
     const byName = new Map(next.nodes.map((n) => [n.name, n]));
+    syncAsks(next.asks ?? [], byName);
     // Who is NEW (lane 01M3F81DD9) — fed BEFORE setHomes, because a first arrival's walk-in (the box,
     // the longer pause at the mark) is built inside it.
     const deskHolders = new Set<string>();
@@ -2574,6 +2664,10 @@ export function mountOffice(
       plateRO?.disconnect();
       for (const el of labels.values()) el.remove();
       labels.clear();
+      for (const t of askSettleTimers.values()) clearTimeout(t);
+      askSettleTimers.clear();
+      for (const c of askCards.values()) c.el.remove();
+      askCards.clear();
       ambientHost.remove(); // removes the day-cycle wash, steam, and the animated desk props
       boardSpot?.remove();
       canvas.remove();

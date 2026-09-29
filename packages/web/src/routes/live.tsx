@@ -1,5 +1,14 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Clock } from '../live/Clock';
 import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
@@ -9,6 +18,7 @@ import { MemberSignInFields, MemberSignInToggle, type AdvancedState } from '../l
 import { OfficeScene } from '../live/OfficeScene';
 import { TeamColumn, captionColorFor } from '../live/TeamColumn';
 import type { Caption } from '../live/captions';
+import { applyTierClock, deriveAsks } from '../live/asks';
 import { logOpenMode } from '../live/stillMode';
 import { revealWhenMounted } from '../live/reveal';
 import { LogDrawer } from '../live/LogDrawer';
@@ -197,6 +207,11 @@ function LivePage() {
   // scene) so both routes hand the scene the same already-projected shape.
   const board = useWorkingOn(cfg, envelopes);
   const report = useReport(cfg, envelopes);
+  // The asks, derived once for the surfaces that read them beside the strip (ADR 464 §4): the team
+  // column's "asking nick" and the room's ask moment. The strip keeps its own derivation because it
+  // folds in the answers this browser just sent; a second copy here costs one pass over the buffer.
+  const derivedAsks = useMemo(() => deriveAsks(envelopes), [envelopes]);
+  const asks = useMemo(() => applyTierClock(derivedAsks, Date.now()), [derivedAsks]);
   const entries = roomEntries(roster, board);
 
   /**
@@ -520,7 +535,7 @@ function LivePage() {
             inert={boardOpen || seedsOpen || logOpen}
           >
             <OfficeScene
-              {...officeRoom(team, stream, { entries, board })}
+              {...officeRoom(team, stream, { entries, board, asks })}
               collapsed={collapsed.office}
               onCollapse={() => toggleCollapse('office')}
               onActClick={onActClick}
@@ -540,6 +555,7 @@ function LivePage() {
                   board={board}
                   onOpenLane={setBoardLane}
                   liveIds={liveIds}
+                  onReveal={onActClick}
                 />
               }
               workCues={WORK_CUES}
@@ -562,6 +578,7 @@ function LivePage() {
               daemonEpoch={daemonEpoch}
               unreadable={rosterUnreadable}
               stale={rosterStale}
+              asks={asks}
             />
           </div>
           {/* The headline ticker (ADR 464 §5): the last few notable moments, under the room. */}

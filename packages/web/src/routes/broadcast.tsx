@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import broadcastCss from '../live/Broadcast.css?url';
 import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
@@ -8,6 +8,7 @@ import { OfficeScene } from '../live/OfficeScene';
 import { acquireObserver, forgetObserver, type LiveConfig } from '../live/client';
 import { firehoseSound, roomTone } from '../live/sound';
 import type { OfficeHandle } from '../live/office-scene';
+import { applyTierClock, deriveAsks } from '../live/asks';
 import { useLiveStream } from '../live/useLiveStream';
 import { justShipped } from '../live/buildSync';
 import { officeRoom } from '../live/officeRoom';
@@ -220,7 +221,9 @@ function BroadcastPage() {
   }, []);
   const [captureFps] = useState(captureFpsFromUrl);
   // Read once per page load, like the stage rung above: a capture never changes it mid-stream.
-  const [sprites] = useState(() => (typeof window === 'undefined' ? false : spritesFromUrl(window.location.search)));
+  const [sprites] = useState(() =>
+    typeof window === 'undefined' ? false : spritesFromUrl(window.location.search),
+  );
 
   // Sound on, unless the URL says otherwise. Both engines default OFF and normally need a click;
   // a capture box never gets one, which is what `--autoplay-policy=no-user-gesture-required` and
@@ -262,6 +265,9 @@ function BroadcastPage() {
   // cycles one at a time, so the roster costs dwell time rather than stage area.
   const board = useWorkingOn(cfg, envelopes);
   const entries = roomEntries(roster, board);
+  // The room's ask moment (ADR 464 §3.3) reads the same derivation the page's banner does.
+  const derivedAsks = useMemo(() => deriveAsks(envelopes), [envelopes]);
+  const asks = useMemo(() => applyTierClock(derivedAsks, Date.now()), [derivedAsks]);
 
   // Connect from the URL only — no form, no localStorage team memory. A stream source is launched by a
   // URL (an OBS source, a headless capturer), so the URL is the whole configuration.
@@ -309,7 +315,7 @@ function BroadcastPage() {
       >
         {team && (
           <OfficeScene
-            {...officeRoom(team, stream, { entries, board })}
+            {...officeRoom(team, stream, { entries, board, asks })}
             broadcast
             captureFps={captureFps}
             sprites={sprites}

@@ -1,4 +1,5 @@
 import type { LaneBoard, MemberSummary } from '@musterd/protocol';
+import type { AskView } from './asks';
 import { CaptionPill } from './CaptionPill';
 import type { Caption } from './captions';
 import type { LiveConfig } from './client';
@@ -45,10 +46,14 @@ export function TeamColumn({
   daemonEpoch,
   unreadable = 0,
   stale = false,
+  asks = [],
 }: {
   roster: MemberSummary[];
   board: LaneBoard | null;
   goals: readonly { id: string; title: string }[];
+  /** The derived asks, clock applied (ADR 464 §4): an open one to a human makes a card say
+   *  "asking nick". */
+  asks?: readonly AskView[];
   collapsed?: boolean;
   onCollapse?: () => void;
   /** The member whose character is under the pointer on the floor (or whose card is hovered). */
@@ -69,7 +74,7 @@ export function TeamColumn({
   /** The roster refetch is failing persistently; these cards are frozen at the last good read. */
   stale?: boolean;
 }) {
-  const { cards, offline } = teamCards(roster, board, goals);
+  const { cards, offline } = teamCards(roster, board, goals, asks);
   const working = cards.filter((c) => c.state === 'working').length;
   if (collapsed) {
     return (

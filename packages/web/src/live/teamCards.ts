@@ -1,4 +1,5 @@
 import type { Lane, LaneBoard, LaneState, MemberSummary } from '@musterd/protocol';
+import { askIsLoud, type AskView } from './asks';
 import { memberColor, memberPosture } from './format';
 
 /**
@@ -10,7 +11,7 @@ import { memberColor, memberPosture } from './format';
  * Sibling of `workingOn.ts` (the /broadcast reel), not a replacement: that one answers "what is
  * the room doing" as a list of titles; this one answers "who is this person" as a card.
  */
-export type CardState = 'working' | 'review' | 'blocked' | 'between' | 'away';
+export type CardState = 'working' | 'review' | 'blocked' | 'asking' | 'between' | 'away';
 
 export interface TeamCard {
   name: string;
@@ -18,7 +19,7 @@ export interface TeamCard {
   color: string;
   member: MemberSummary;
   state: CardState;
-  /** "working on" · "waiting for review" · "blocked on" · "between tasks" · "away". */
+  /** "working on" · "waiting for review" · "blocked on" · "asking nick" · "between tasks" · "away". */
   stateLabel: string;
   /** The shown lane's title, else the member's own status line, else null. */
   title: string | null;
@@ -32,21 +33,32 @@ export interface TeamCard {
 }
 
 const IN_FLIGHT: readonly LaneState[] = ['claimed', 'active', 'blocked', 'awaiting_acceptance'];
-const ORDER: Record<CardState, number> = { working: 0, review: 1, blocked: 2, between: 3, away: 4 };
+const ORDER: Record<CardState, number> = {
+  working: 0,
+  review: 1,
+  blocked: 2,
+  asking: 3,
+  between: 4,
+  away: 5,
+};
 const LABEL: Record<CardState, string> = {
   working: 'working on',
   review: 'waiting for review',
   blocked: 'blocked on',
+  asking: 'asking',
   between: 'between tasks',
   away: 'away',
 };
 
 const recency = (l: Lane) => l.claimed_at ?? l.updated_at;
 
-function stateOf(m: MemberSummary, lane: Lane | undefined): CardState {
+function stateOf(m: MemberSummary, lane: Lane | undefined, asking: AskView | undefined): CardState {
   if (memberPosture(m) === 'away') return 'away';
   if (lane?.state === 'awaiting_acceptance') return 'review';
   if (lane?.state === 'blocked') return 'blocked';
+  // An open ask to a person outranks the lane it is about (ADR 464 §4): the room should see that
+  // this member is waiting on someone, which is what their work is actually doing.
+  if (asking) return 'asking';
   if (lane) return 'working';
   return 'between';
 }
@@ -55,7 +67,20 @@ export function teamCards(
   roster: MemberSummary[],
   board: LaneBoard | null,
   goals: readonly { id: string; title: string }[],
+  /** The derived asks (with the tier clock applied) — an open one to a human makes the asker's card
+   *  say "asking nick". Optional: without them no card ever says it. */
+  asks: readonly AskView[] = [],
 ): { cards: TeamCard[]; offline: number } {
+  // The freshest open ask per asker that is addressed to a HUMAN (or the team). An agent-routed
+  // review ask is a review, not a room moment — the same line the banner draws.
+  const humans = new Set(roster.filter((m) => m.kind === 'human').map((m) => m.name));
+  const askingBy = new Map<string, AskView>();
+  for (const a of asks) {
+    if (!askIsLoud(a.state)) continue;
+    if (a.to !== null && !humans.has(a.to)) continue;
+    const had = askingBy.get(a.env.from);
+    if (!had || a.env.ts > had.env.ts) askingBy.set(a.env.from, a);
+  }
   const owned = new Map<string, Lane[]>();
   for (const l of board?.lanes ?? []) {
     if (l.owner_seat === null || !IN_FLIGHT.includes(l.state)) continue;
@@ -72,14 +97,15 @@ export function teamCards(
     const lanes = owned.get(m.name) ?? [];
     const lane = lanes[0];
     const status = m.state?.trim() ? m.state.trim() : null;
-    const state = stateOf(m, lane);
+    const asking = askingBy.get(m.name);
+    const state = stateOf(m, lane, asking);
     return {
       name: m.name,
       kind,
       color: memberColor(m.name, kind, m.hue),
       member: m,
       state,
-      stateLabel: LABEL[state],
+      stateLabel: state === 'asking' ? `asking ${asking?.to ?? 'the team'}` : LABEL[state],
       title: lane ? lane.title : status,
       source: lane ? 'lane' : status ? 'status' : null,
       goal: lane?.goal_id ? (goalTitle.get(lane.goal_id) ?? null) : null,
