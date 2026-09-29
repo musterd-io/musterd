@@ -129,3 +129,42 @@ describe('claudeCode.configure', () => {
     expect(r.activation.startsWith('in a terminal here')).toBe(true);
   });
 });
+
+// Lane 01M3QFDDGM: `claude mcp get musterd` was 7.4s of a 17.6s `init --check`, and `--fix` ran it
+// on every pass. One read per process; any write forgets it; its own timeout above the 8s probe.
+describe('claude mcp get — one read per process, forgotten on write', () => {
+  const mcpGets = () =>
+    m.execFile.mock.calls.filter(
+      (c) => (c[1] as string[])[0] === 'mcp' && (c[1] as string[])[1] === 'get',
+    );
+
+  it('a second detect reuses the first registration read', async () => {
+    onExec((_cmd, args) =>
+      args[0] === '--version' ? { stdout: '1.2.3' } : { stdout: 'musterd: ok' },
+    );
+    const cc = await load();
+    expect((await cc.detect()).configured).toBe(true);
+    expect((await cc.detect()).configured).toBe(true);
+    expect(mcpGets()).toHaveLength(1);
+  });
+
+  it('configure forgets it, so the next detect reads again', async () => {
+    onExec((_cmd, args) =>
+      args[0] === '--version' ? { stdout: '1.2.3' } : { stdout: 'musterd: ok' },
+    );
+    const cc = await load();
+    await cc.detect();
+    await cc.configure(entry, binding as never);
+    await cc.detect();
+    expect(mcpGets()).toHaveLength(2);
+  });
+
+  it('gives the registration read a longer timeout than the 8s probe', async () => {
+    onExec((_cmd, args) =>
+      args[0] === '--version' ? { stdout: '1.2.3' } : { stdout: 'musterd: ok' },
+    );
+    await (await load()).detect();
+    const opts = mcpGets()[0]![2] as { timeout: number };
+    expect(opts.timeout).toBeGreaterThan(8000);
+  });
+});
