@@ -134,13 +134,19 @@ constrains the others, so they were decided together.
   and the identity statement, per-author consent fields.
 - _2026-09-29 — increment 0 result:_ the PGlite spike ([`docs/perf/pglite-spike.md`](../perf/pglite-spike.md))
   was reshaped from "boot the daemon on PGlite" — impossible in two days with 62 synchronous
-  better-sqlite3 store files against a Promise-only engine — to four measured questions. Schema
-  loads (106/106, one FTS5 hand-fix) and one SQL text serves both engines behind an async driver,
-  but PGlite boots in 3.5–4.2 s and the gate's `json_extract` query runs 18–38 ms p95, so decision
-  3 resolves to **two backends** behind one async store interface: better-sqlite3 on the laptop,
-  `pg` in Cloud, with PGlite kept as the Cloud driver's in-CI test double. The async store
-  conversion is owed either way and is sized there: ~1,000 call sites in ~70 files, one pass.
-  `@electric-sql/pglite` stays a devDependency (a test double, not a runtime dependency).
+  better-sqlite3 store files against a Promise-only engine — to four measured questions, and the
+  plan tightened this ADR's Experiment bar ("within the internet hop") to a **laptop** bar of
+  p95 ≤ 10 ms per query and start ≤ 2 s, because the self-hosted daemon pays no hop today. Schema
+  loads (106/106; the only hand-fixes are FTS5's); one SQL text serves both engines behind an async
+  driver; every gate-path query is ≤ 1.2 ms p95 on file-backed PGlite with statistics, and
+  reopening a data directory takes 93 ms (creating one takes 4.6 s, once). **By the plan's rule the
+  spike says one dialect.** A first draft read "two backends" from a bench that timed `initdb` as
+  boot and skipped `ANALYZE`; the whole-branch review caught it. The result page records the
+  judgment on both sides (memory 310 MB vs 109 MB resident, out-of-process readers, PGlite
+  maturity, against one store layer and no native module) for nick to confirm; decision 3 stays
+  open until he does. Settled either way: the async store conversion is ~730 call sites in ~70
+  files, one pass; the Cloud `pg` driver's tests run on PGlite in CI. `@electric-sql/pglite` is a
+  devDependency until then.
 - Same-PR notes landed with this ADR: `deployment-topology.md` Topology C reclassified relay →
   hosted authority; ADR 451 Consequences (shape superseded); ADR 445 Consequences (§3 amended);
   `brand.md` §5 secondary nouns Account / Console / Owner / Guest.

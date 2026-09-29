@@ -17,20 +17,25 @@ describe('pglite dialect inventory', () => {
         'db.transaction(() => db.prepare("INSERT OR IGNORE INTO t VALUES (?)").run(1))();',
         'db.pragma("journal_mode = WAL");',
         'const n = db.prepare("DELETE FROM t").run().changes;',
+        "db.prepare(\"SELECT 1 WHERE json_extract(meta, '$.gate.fingerprint') = ? AND json_extract(meta, '$.urgent') = 1 AND body LIKE ?\")",
       ].join('\n'),
     );
     writeFileSync(join(root, 'store', 'a.test.ts'), 'db.prepare("PRAGMA x")');
     const r = inventory(root);
     expect(r.files).toBe(1);
-    expect(r.byConstruct.json_extract).toBe(1);
     expect(r.byConstruct.PRAGMA).toBe(1);
     expect(r.byConstruct['INSERT OR IGNORE']).toBe(1);
-    expect(r.byConstruct['.prepare(']).toBe(3);
+    expect(r.byConstruct['.prepare(']).toBe(4);
     expect(r.byConstruct['.exec(']).toBe(1);
     expect(r.byConstruct['.transaction(']).toBe(1);
     expect(r.byConstruct['.pragma(']).toBe(1);
     expect(r.byConstruct['.changes']).toBe(1);
     expect(r.byFile['store/a.ts']).toBeGreaterThan(0);
+    // Review I4: the flat-path rewrite does not cover these; they are counted on their own.
+    expect(r.byConstruct['json_extract nested path']).toBe(1);
+    expect(r.byConstruct['json_extract typed compare']).toBe(1);
+    expect(r.byConstruct[' LIKE ']).toBe(1);
+    expect(r.byConstruct.json_extract).toBe(3);
   });
 
   it('pins the construct list so the report cannot silently drop one', () => {
@@ -56,6 +61,9 @@ describe('pglite dialect inventory', () => {
       '.exec(',
       '.transaction(',
       '.changes',
+      'json_extract nested path',
+      'json_extract typed compare',
+      ' LIKE ',
     ]);
   });
 });

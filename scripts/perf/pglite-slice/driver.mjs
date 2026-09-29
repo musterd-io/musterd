@@ -35,10 +35,12 @@ export function sqliteDriver(path) {
       db.exec(sql);
     },
     // better-sqlite3 transactions are synchronous; an async body cannot be wrapped in db.transaction.
-    // BEGIN/COMMIT by hand keeps the same call shape as PGlite. This is the one place the two
-    // drivers differ, and it is the finding: a sync engine under an async interface serialises
-    // every transaction on the event loop by construction — fine for one process, and exactly
-    // what the daemon does today.
+    // BEGIN/COMMIT by hand keeps the same call shape as PGlite — but it is NOT equivalent to
+    // today's db.transaction(fn): every `await` in the body yields the event loop, so another
+    // request's statements can run inside this open transaction on the same connection, and a
+    // second tx() would hit "cannot start a transaction within a transaction". A real driver needs
+    // a transaction queue (one tx at a time; the next waits) or a rule that transaction bodies
+    // stay synchronous (review I5). The spike serialises tests, so it never hits it.
     async tx(fn) {
       db.exec('BEGIN');
       try {

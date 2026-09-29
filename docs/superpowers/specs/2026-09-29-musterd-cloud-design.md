@@ -159,9 +159,10 @@ daemon on PGlite, run the server suite, measure hook-path latency against SQLite
 dialect. Fail → the two-backend interface. Either result shapes every store change after it,
 which is why it cannot run in parallel or later.
 
-_Result (2026-09-29): **two backends** — schema and SQL text port cleanly, but PGlite boots in
-3.5–4.2 s and the gate's JSON query misses the latency bar; PGlite becomes the Cloud driver's
-in-CI test double. [`docs/perf/pglite-spike.md`](../../perf/pglite-spike.md)._
+_Result (2026-09-29): by the spike's rule, **one dialect** — the schema loads, one SQL text serves
+both engines, every gate-path query is ≤ 1.2 ms p95 on PGlite and reopen is 93 ms. The judgment
+(memory, out-of-process readers, maturity) is on the result page for nick to confirm before
+increment 1's store shape is fixed. [`docs/perf/pglite-spike.md`](../../perf/pglite-spike.md)._
 
 ## 4. Identity and data flow
 

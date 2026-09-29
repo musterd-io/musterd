@@ -2,6 +2,7 @@
 // same SQL text. `scale: 1` is revive's order of magnitude on 2026-09-29 (50 members, 400 lanes,
 // 18k messages, 230k audit rows).
 //   node scripts/perf/pglite-hookpath.mjs [scale] [rounds]
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, readdirSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
@@ -203,6 +204,10 @@ export async function runBench({ backend, dir, scale = 1, rounds = 200, indexJso
   const tSeed = performance.now();
   await seed(b, backend, s);
   const seed_ms = performance.now() - tSeed;
+  // Review I2: PGlite has no autovacuum, so a bulk-loaded table has no planner statistics until
+  // ANALYZE runs; SQLite gets the same call so the comparison stays like-for-like.
+  await b.exec('ANALYZE');
+  const analyzed = true;
   // Variant: the expression index a native-Postgres schema would carry for `findGateAsk` (SQLite
   // supports the same shape). Without it Postgres casts text→jsonb on every candidate row.
   if (indexJson)
@@ -238,10 +243,25 @@ export async function runBench({ backend, dir, scale = 1, rounds = 200, indexJso
     });
     writes.push(performance.now() - t0);
   }
+  // Review C1: `boot_ms` timed CREATING a database in an empty directory. What `musterd serve`
+  // pays on every start after the first is a REOPEN of an existing data directory — measured here
+  // by closing the file-backed instance and opening the same directory again.
+  let reopen_ms = null;
+  if (backend === 'pglite-file') {
+    await b.close();
+    const t0 = performance.now();
+    const again = new PGlite(b.file);
+    await again.waitReady;
+    await again.query('SELECT 1');
+    reopen_ms = performance.now() - t0;
+    await again.close();
+  }
   const report = {
     backend,
     indexJson,
+    analyzed,
     boot_ms: b.boot_ms,
+    reopen_ms,
     seed_ms,
     rows: { members: s.members, lanes: s.lanes, messages: s.messages, audit: s.audit },
     queries,
@@ -249,7 +269,7 @@ export async function runBench({ backend, dir, scale = 1, rounds = 200, indexJso
     rss_mb: process.memoryUsage().rss / 1e6,
     disk_mb: dirSizeMb(b.file),
   };
-  await b.close();
+  if (backend !== 'pglite-file') await b.close();
   return report;
 }
 
@@ -262,10 +282,10 @@ export function renderMarkdown(reports) {
       `| \`${q}\` | ${reports.map((r) => `${f(r.queries[q].p50)} / ${f(r.queries[q].p95)} / ${f(r.queries[q].p99)}`).join(' | ')} |`,
   );
   const write = `| audit insert, own tx | ${reports.map((r) => `${f(r.write_commit_ms.p50)} / ${f(r.write_commit_ms.p95)} / ${f(r.write_commit_ms.p99)}`).join(' | ')} |`;
-  const meta = `| boot ms · seed s · disk MB · rss MB | ${reports.map((r) => `${r.boot_ms.toFixed(0)} · ${(r.seed_ms / 1000).toFixed(1)} · ${r.disk_mb.toFixed(1)} · ${r.rss_mb.toFixed(0)}`).join(' | ')} |`;
+  const meta = `| create ms · reopen ms · seed s · disk MB · rss MB | ${reports.map((r) => `${r.boot_ms.toFixed(0)} · ${r.reopen_ms === null ? '—' : r.reopen_ms.toFixed(0)} · ${(r.seed_ms / 1000).toFixed(1)} · ${r.disk_mb.toFixed(1)} · ${r.rss_mb.toFixed(0)}`).join(' | ')} |`;
   const r0 = reports[0];
   return [
-    `Seed: ${r0.rows.members} members · ${r0.rows.lanes} lanes · ${r0.rows.messages} messages · ${r0.rows.audit} audit rows; ${r0.queries.getPolicy.n} rounds after one warm-up${r0.indexJson ? '; with the json expression index' : ''}.`,
+    `Seed: ${r0.rows.members} members · ${r0.rows.lanes} lanes · ${r0.rows.messages} messages · ${r0.rows.audit} audit rows; ${r0.queries.getPolicy.n} rounds after one warm-up; ANALYZE after seed; each backend in its own process${r0.indexJson ? '; with the json expression index' : ''}.`,
     '',
     head,
     sep,
@@ -276,12 +296,27 @@ export function renderMarkdown(reports) {
 }
 
 if (process.argv[1] && process.argv[1].endsWith('pglite-hookpath.mjs')) {
-  const scale = Number(process.argv[2] ?? 1);
-  const rounds = Number(process.argv[3] ?? 200);
-  const indexJson = process.argv[4] === 'index';
-  const dir = join(process.env.TMPDIR ?? '/tmp', `pglite-hookpath-${Date.now()}`);
-  const reports = [];
-  for (const backend of ['sqlite', 'pglite-file', 'pglite-memory'])
-    reports.push(await runBench({ backend, dir: join(dir, backend), scale, rounds, indexJson }));
-  console.log(renderMarkdown(reports));
+  if (process.env.PGLITE_BENCH_ONE) {
+    // Child mode: one backend, JSON report on stdout (review I3 — a shared process let later
+    // backends inherit the earlier ones' heap and made RSS cumulative).
+    const opts = JSON.parse(process.env.PGLITE_BENCH_ONE);
+    process.stdout.write(JSON.stringify(await runBench(opts)));
+  } else {
+    const scale = Number(process.argv[2] ?? 1);
+    const rounds = Number(process.argv[3] ?? 200);
+    const indexJson = process.argv[4] === 'index';
+    const dir = join(process.env.TMPDIR ?? '/tmp', `pglite-hookpath-${Date.now()}`);
+    const reports = [];
+    for (const backend of ['sqlite', 'pglite-file', 'pglite-memory']) {
+      const opts = { backend, dir: join(dir, backend), scale, rounds, indexJson };
+      const child = spawnSync(process.execPath, [process.argv[1]], {
+        env: { ...process.env, PGLITE_BENCH_ONE: JSON.stringify(opts) },
+        encoding: 'utf8',
+        maxBuffer: 16 * 1024 * 1024,
+      });
+      if (child.status !== 0) throw new Error(`${backend}: ${child.stderr}`);
+      reports.push(JSON.parse(child.stdout));
+    }
+    console.log(renderMarkdown(reports));
+  }
 }

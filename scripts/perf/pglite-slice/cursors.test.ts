@@ -5,12 +5,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { getCursor, migrate, setCursor } from './cursors.mjs';
 import { pgliteDriver, sqliteDriver, type Driver } from './driver.mjs';
 
+const spike = process.env.PGLITE_SPIKE ? describe : describe.skip;
+
 const drivers: Array<[string, () => Promise<Driver>]> = [
   ['sqlite', async () => sqliteDriver(join(mkdtempSync(join(tmpdir(), 'cur-')), 'x.db'))],
   ['pglite', async () => pgliteDriver(undefined)],
 ];
 
-describe.each(drivers)('cursors on %s', (_name, open) => {
+spike.each(drivers)('cursors on %s', (_name, open) => {
   let d: Driver;
   afterEach(async () => {
     await d?.close();

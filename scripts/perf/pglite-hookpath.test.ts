@@ -4,7 +4,10 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { QUERY_NAMES, runBench, toPgPlaceholders } from './pglite-hookpath.mjs';
 
-describe('pglite hook-path bench', () => {
+// Spike-only: 9 PGlite boots + seeding per run is minutes on a loaded CI box (review I6).
+const spike = process.env.PGLITE_SPIKE ? describe : describe.skip;
+
+spike('pglite hook-path bench', () => {
   it('produces a full report for each backend at a tiny scale, with a warm-up round discarded', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'hp-'));
     for (const backend of ['sqlite', 'pglite-memory', 'pglite-file'] as const) {
@@ -19,8 +22,12 @@ describe('pglite hook-path bench', () => {
         expect(stats?.p95).toBeGreaterThanOrEqual(stats?.p50 ?? Infinity);
       }
       expect(r.write_commit_ms.p50).toBeGreaterThan(0);
+      // C1: boot on a fresh directory is creation; the daemon's real start is a REOPEN.
+      if (backend === 'pglite-file') expect(r.reopen_ms).toBeGreaterThan(0);
+      else expect(r.reopen_ms).toBeNull();
+      expect(r.analyzed).toBe(true);
     }
-  }, 120_000);
+  }, 180_000);
 
   it("a literal '?' is not a placeholder", () => {
     expect(toPgPlaceholders("SELECT 'why?' AS s WHERE ? = ? AND t = 'a?b'")).toBe(
@@ -29,7 +36,7 @@ describe('pglite hook-path bench', () => {
   });
 });
 
-describe('indexJson option', () => {
+spike('indexJson option', () => {
   it('adds the json expression index and says so in the report', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'hp-'));
     const r = await runBench({

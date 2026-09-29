@@ -28,7 +28,17 @@ export const CONSTRUCTS = [
   '.exec(',
   '.transaction(',
   '.changes',
+  // Review I4: the flat `'$.k'` rewrite does not reach these three; counted so the two-backends
+  // translation layer is not undercounted. Regex-matched, not substring-matched.
+  'json_extract nested path',
+  'json_extract typed compare',
+  ' LIKE ',
 ];
+
+const REGEX_CONSTRUCTS = {
+  'json_extract nested path': /json_extract\([^)]*'\$\.[A-Za-z0-9_]+\.[^']*'\)/g,
+  'json_extract typed compare': /json_extract\([^)]*\)\s*(=|<>|!=|<|>|<=|>=)\s*\d/g,
+};
 
 const PORTABLE = new Set(['ON CONFLICT', 'RETURNING']);
 
@@ -41,6 +51,8 @@ function* walk(dir) {
 }
 
 function countOccurrences(text, needle) {
+  const re = REGEX_CONSTRUCTS[needle];
+  if (re) return (text.match(re) ?? []).length;
   let n = 0;
   for (let i = text.indexOf(needle); i !== -1; i = text.indexOf(needle, i + needle.length)) n++;
   return n;

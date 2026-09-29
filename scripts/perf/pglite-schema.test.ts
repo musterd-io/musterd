@@ -2,6 +2,8 @@ import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 import { loadSchema, splitStatements, sqliteToPostgres } from './pglite-schema.mjs';
 
+const spike = process.env.PGLITE_SPIKE ? describe : describe.skip;
+
 describe('sqliteToPostgres', () => {
   it('rewrites the constructs the inventory found, and nothing inside string literals', () => {
     const ddl = `CREATE TABLE t (
@@ -28,7 +30,7 @@ CREATE INDEX i ON t(ts);`;
   });
 });
 
-describe('loadSchema', () => {
+spike('loadSchema', () => {
   it('reports each statement as ok or failed with the Postgres error', async () => {
     const pg = new PGlite();
     const r = await loadSchema(pg, ['CREATE TABLE a (x TEXT)', 'CREATE TABLE a (x TEXT)']);
