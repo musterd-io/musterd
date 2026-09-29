@@ -10,14 +10,14 @@
 //      frame instead of flashing the fallback.
 
 const FALLBACK: Record<string, string> = {
-  '--font-display': '"Space Grotesk", system-ui, sans-serif',
-  '--font-mono': '"Space Mono", ui-monospace, monospace',
-  '--font-sans': '"Inter", ui-sans-serif, system-ui, sans-serif',
+  '--font-display': '"Recursive Casual", system-ui, sans-serif',
+  '--font-mono': '"Recursive Mono", ui-monospace, monospace',
+  '--font-sans': '"Recursive", ui-sans-serif, system-ui, sans-serif',
 };
 
 const cache = new Map<string, string>();
 
-/** The token's resolved font stack (e.g. `'Space Grotesk', 'Inter', …`), cached; a literal fallback
+/** The token's resolved font stack (e.g. `'Recursive Casual', 'Recursive', …`), cached; a literal fallback
  *  before the DOM exists (SSR/prerender) so a server render still produces a valid `ctx.font`. */
 function stack(token: string): string {
   const hit = cache.get(token);
@@ -33,7 +33,7 @@ function stack(token: string): string {
 
 /**
  * A `ctx.font` shorthand at `px`, from a type token. Defaults to `--font-display` at weight 700 —
- * the izzocam chyron face (Space Grotesk), already loaded for the DOM headings, so canvas labels
+ * the display face (Recursive Casual), already loaded for the DOM headings, so canvas labels
  * match the UI with no extra download.
  */
 export function canvasFont(px: number, token = '--font-display', weight = 700): string {
