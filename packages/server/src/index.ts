@@ -24,6 +24,7 @@ import { startExpiredMemberSweep } from './store/members.js';
 import { countOpenLoopsByTeam } from './store/messages.js';
 import { activePresenceBySurface, slowestInboxLagMs } from './store/metrics.js';
 import { closeReportService } from './store/reportCache.js';
+import { defaultArchiveDir, startAuditRetention } from './store/retention.js';
 import { revokeExpiredMember } from './store/sponsoredCascade.js';
 import { startTraceContentPrune } from './store/trace.js';
 import { startTraceCoverageSweep } from './store/traceCoverage.js';
@@ -156,6 +157,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   let stopPull: (() => void) | null = null;
   let stopFootprint: (() => void) | null = null;
   let stopTracePrune: (() => void) | null = null;
+  let stopAuditRetention: (() => void) | null = null;
   let stopTraceCoverage: (() => void) | null = null;
   let stopExpiredSweep: (() => void) | null = null;
   let stopProvisionSweep: (() => void) | null = null;
@@ -221,7 +223,8 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
           // ADR 453 §4: its own loop, so a stalled /sync/trace never delays /sync/push.
           stopTracePush = startTracePush(ctx);
           stopFootprint = startFootprintSampler(ctx);
-          // ADR 445 increment 3a: content past its 30-day window is nulled, structural rows stay.
+          // ADR 445 increment 3a: content past its window is nulled, structural rows stay; the
+          // window is config (ADR 478 §3: 7 days locally).
           stopTracePrune = startTraceContentPrune(
             traceDb,
             (r) => {
@@ -234,6 +237,40 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
                 });
             },
             (err) => log.warn({ msg: 'trace_prune_failed', err: String(err) }),
+            { maxAgeMs: config.traceContentRetentionMs },
+          );
+          // ADR 478 §1/§5: churn-class audit rows past their window are archived, then pruned, daily;
+          // an in-memory store has no archive dir and is skipped. One `store.pruned` row per team.
+          stopAuditRetention = startAuditRetention(
+            db,
+            {
+              archiveDir: defaultArchiveDir(config.dbPath),
+              maxAgeMs: config.auditChurnRetentionMs,
+            },
+            (r) => {
+              if (r.pruned === 0) return;
+              log.info({
+                msg: 'audit_churn_pruned',
+                rows: r.pruned,
+                bytes: r.archivedBytes,
+                cutoff: r.cutoff,
+              });
+              for (const [teamId, rows] of Object.entries(r.perTeam)) {
+                appendAudit(db, teamId, {
+                  actor: null,
+                  action: 'store.pruned',
+                  target: null,
+                  result: 'allow',
+                  detail: {
+                    class: 'audit_churn',
+                    rows,
+                    bytes: r.archivedBytes,
+                    archive: defaultArchiveDir(config.dbPath),
+                  },
+                });
+              }
+            },
+            (err) => log.warn({ msg: 'audit_prune_failed', err: String(err) }),
           );
           // ADR 445 §Observability: a quiet session below 0.98 tool coverage is audited, once.
           stopTraceCoverage = startTraceCoverageSweep(
@@ -329,6 +366,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         stopPull?.();
         stopFootprint?.();
         stopTracePrune?.();
+        stopAuditRetention?.();
         stopTraceCoverage?.();
         stopExpiredSweep?.();
         stopProvisionSweep?.();

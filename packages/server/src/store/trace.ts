@@ -164,7 +164,8 @@ export function listSessionTrace(
     .all(teamId, sessionDigest);
 }
 
-/** How long content stays in the live store (ADR 445 §3). Structural columns are never pruned. */
+/** ADR 445 §3's content window and the function's fallback. The DAEMON passes
+ *  `config.traceContentRetentionMs` (ADR 478 §3: 7 days locally). Structural columns are never pruned. */
 export const TRACE_CONTENT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Rows per prune transaction — short enough that no single statement holds the writer for long
@@ -237,10 +238,17 @@ export function startTraceContentPrune(
   traceDb: Database,
   onPass: (r: ReturnType<typeof pruneTraceContent>) => void,
   onError: (err: unknown) => void,
+  opts: { maxAgeMs?: number } = {},
 ): () => void {
   const pass = () => {
     try {
-      onPass(pruneTraceContent(traceDb));
+      onPass(
+        pruneTraceContent(
+          traceDb,
+          Date.now(),
+          opts.maxAgeMs === undefined ? {} : { maxAgeMs: opts.maxAgeMs },
+        ),
+      );
     } catch (err) {
       onError(err);
     }

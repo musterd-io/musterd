@@ -288,6 +288,12 @@ export interface SnapshotEntry extends PlannedItem {
  */
 export const TRACE_WATERMARK_KEY = 'content_captured_through';
 
+/** ADR 478 §1: the same watermark for the coordination store's `audit` — `MAX(ts)` of the captured
+ *  rows, stamped on the LIVE `musterd.db`'s `schema_meta`. Mirrors `AUDIT_CAPTURED_THROUGH_KEY` in
+ *  `packages/server/src/store/retention.ts` (the test pins that they agree). */
+export const AUDIT_WATERMARK_KEY = 'audit_captured_through';
+export const AUDIT_WATERMARK_QUERY = 'SELECT MAX(ts) FROM audit';
+
 /** The watermark query, run against the CAPTURED image — never the live file, which has moved on. */
 export const TRACE_WATERMARK_QUERY = 'SELECT MAX(received_at) FROM trace_events';
 
@@ -295,18 +301,18 @@ export const TRACE_WATERMARK_QUERY = 'SELECT MAX(received_at) FROM trace_events'
  * The stamp, run against the LIVE trace store once the snapshot's manifest is written. Monotonic: a
  * snapshot restored from an older run can never pull the watermark back and un-archive rows.
  */
-export function traceWatermarkStamp(through: number): string {
+export function traceWatermarkStamp(through: number, key = TRACE_WATERMARK_KEY): string {
   if (!Number.isSafeInteger(through) || through < 0) throw new Error(`bad watermark ${through}`);
   return (
-    `INSERT INTO schema_meta (key, value) VALUES ('${TRACE_WATERMARK_KEY}', '${through}') ` +
+    `INSERT INTO schema_meta (key, value) VALUES ('${key}', '${through}') ` +
     `ON CONFLICT(key) DO UPDATE SET value = CAST(MAX(CAST(value AS INTEGER), ` +
     `CAST(excluded.value AS INTEGER)) AS TEXT)`
   );
 }
 
-function readTraceWatermark(image: string): number | null {
+function readTraceWatermark(image: string, query = TRACE_WATERMARK_QUERY): number | null {
   try {
-    const out = execFileSync('sqlite3', [image, TRACE_WATERMARK_QUERY], { encoding: 'utf8' });
+    const out = execFileSync('sqlite3', [image, query], { encoding: 'utf8' });
     const n = Number(out.trim());
     return out.trim() === '' || !Number.isSafeInteger(n) ? null : n;
   } catch {
@@ -315,9 +321,9 @@ function readTraceWatermark(image: string): number | null {
   }
 }
 
-function stampTraceWatermark(live: string, through: number): void {
+function stampTraceWatermark(live: string, through: number, key = TRACE_WATERMARK_KEY): void {
   // `.timeout`: the daemon holds this file open and writes to it; wait out its writer, don't fail.
-  execFileSync('sqlite3', ['-cmd', '.timeout 5000', live, traceWatermarkStamp(through)], {
+  execFileSync('sqlite3', ['-cmd', '.timeout 5000', live, traceWatermarkStamp(through, key)], {
     stdio: 'pipe',
   });
 }
@@ -348,7 +354,12 @@ export async function runSnapshot(
       // it costs nothing next to the copy.
       const staged = join(dir, `${flat}.snapshot`);
       vacuumInto(item.source, staged);
-      const through = item.id === 'trace.db' ? readTraceWatermark(staged) : undefined;
+      const through =
+        item.id === 'trace.db'
+          ? readTraceWatermark(staged)
+          : item.id === 'musterd.db'
+            ? readTraceWatermark(staged, AUDIT_WATERMARK_QUERY)
+            : undefined;
       const artifact = `${flat}.db.gz`;
       await gzipTo(staged, join(dir, artifact));
       execFileSync('rm', ['-f', staged]);
@@ -396,6 +407,22 @@ export async function runSnapshot(
   // learn that its content below this point is archived. A failed stamp is not a failed snapshot:
   // the daemon just keeps the content a while longer.
   let watermark: { through: number; stamped: boolean; error?: string } | undefined;
+  // ADR 478 §1: the coordination store learns the same way that its `audit` below this point is
+  // archived; the daemon's churn prune never deletes above it. Same failure contract as the trace stamp.
+  let auditWatermark: { through: number; stamped: boolean; error?: string } | undefined;
+  const coord = entries.find((e) => e.id === 'musterd.db');
+  if (coord && typeof coord.content_captured_through === 'number') {
+    try {
+      stampTraceWatermark(coord.source, coord.content_captured_through, AUDIT_WATERMARK_KEY);
+      auditWatermark = { through: coord.content_captured_through, stamped: true };
+    } catch (err) {
+      auditWatermark = {
+        through: coord.content_captured_through,
+        stamped: false,
+        error: String(err),
+      };
+    }
+  }
   const trace = entries.find((e) => e.id === 'trace.db');
   if (trace && typeof trace.content_captured_through === 'number') {
     try {
@@ -410,7 +437,14 @@ export async function runSnapshot(
     }
   }
 
-  return { dir, entries, rawBytes, storedBytes, ...(watermark ? { watermark } : {}) };
+  return {
+    dir,
+    entries,
+    rawBytes,
+    storedBytes,
+    ...(watermark ? { watermark } : {}),
+    ...(auditWatermark ? { audit_watermark: auditWatermark } : {}),
+  };
 }
 
 function mb(bytes: number): string {
