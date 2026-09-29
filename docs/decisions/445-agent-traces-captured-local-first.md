@@ -513,6 +513,24 @@ ADR 184's publication gate; a spans backend.
   cursor-agent transcript format that carries `tool_use.id` (then R1↔R2 join by id, as Claude
   Code's does). Falsifier: a fresh cursor-agent session, ended cleanly, with no re-emitted id, whose
   distinct Read ids differ from its transcript Read blocks by more than 2%.
+- **2026-09-29 — a payload's spelling outranks the hook line's word; a contradicting pair is a
+  foreign run and records only its outcome** (lane `01M3NNAKJ9Q3XXFFV4GHFTCT7Q`). Cursor runs a
+  workspace's `.claude/settings*.json` hook lines beside its own `hooks.json`. On schmidt's three
+  cursor-agent sessions (`43483901`, `a19b7de1`, `f7d7bc1c`; 2026-09-28 19:14Z → 09-29 03:54Z) the
+  Claude interrupt probe (`inbox --interrupt-check --hook claude-code`) received cursor-spelled
+  payloads (`conversation_id`, `postToolUse`, `0_tool_…` ids) and stamped them `claude-code`,
+  because `tapHook` let the caller's word beat the payload's spelling. Cursor's own
+  `session observe --interrupt` line had already recorded the same calls as `cursor`, so 118 call
+  ids sat under two harnesses: 130 `PostToolUse` + 130 `HookOutcome` rows filed as `claude-code`,
+  which misattributes a Cursor seat's work in the per-harness split ADR 056 reads. `tapHook` now
+  takes the payload's spelling first and the caller's word only when the spelling names no harness
+  (Claude Code and Codex share one). When the two disagree, it posts only the probe's
+  `HookOutcome`, under the payload's harness: the harness's own line records the call. The 260 rows
+  already filed stay as recorded, because the trace store is append-only. A reader splitting by
+  harness should drop the `claude-code` rows of any `session_digest` that also has `cursor` rows.
+  That catches both kinds: the `PostToolUse` rows carry `detail.hook_event = 'postToolUse'`, which
+  is cursor's spelling and never Claude Code's, but the `HookOutcome` rows carry no `hook_event`. Falsifier: a `session_digest` with rows under two
+  harnesses, or one `tool_use_id` recorded under two harnesses, from a tap built after this note.
 - **2026-09-29 — coverage matrix, third read: daemon-side, all seats, and what the daemon's own
   numbers are made of** (lane `01M3NMDWA9Q5WN0K8D9M1PQD0D`). `deriveTraceReport` over every
   seat, 30 days, `POST_TOOL_USE_ONCE`. To get grok and opencode rows at all: ghost's opencode
