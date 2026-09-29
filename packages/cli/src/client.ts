@@ -656,6 +656,17 @@ export class HttpClient {
       throw new CliError('provision claim response did not match the protocol schema', 1);
     return parsed.data;
   }
+  /** ADR 463 §3: `musterd host provisions` — the rows this host key may see; claims nothing. */
+  async listProvisions(slug: string, host: string): Promise<HostProvisionsClaimResponse> {
+    const json = await this.request(
+      'GET',
+      `/teams/${encodeURIComponent(slug)}/host/provisions?host=${encodeURIComponent(host)}`,
+    );
+    const parsed = HostProvisionsClaimResponseSchema.safeParse(json);
+    if (!parsed.success)
+      throw new CliError('provision list response did not match the protocol schema', 1);
+    return parsed.data;
+  }
   /** ADR 463 §2: report a claimed provision `ready` or `failed {reason}`. */
   async reportProvision(
     slug: string,

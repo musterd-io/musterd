@@ -1,6 +1,11 @@
+import { hostname } from 'node:os';
+import { gitToplevel } from '@musterd/protocol/project';
 import { z } from 'zod';
 import type { Parsed } from '../args.js';
 import { flagStr } from '../args.js';
+import { HttpClient } from '../client.js';
+import { findBinding, saveBinding } from '../config.js';
+import { CliError } from '../errors.js';
 import type { ActuatorBackend } from '../host/backend.js';
 import { claudeCodeBackend } from '../host/backends/claudeCode.js';
 import { codexBackend } from '../host/backends/codex.js';
@@ -9,8 +14,12 @@ import { nativeBackend } from '../host/backends/native.js';
 import { opencodeBackend } from '../host/backends/opencode.js';
 import { type DoorbellPollDeps, pollDoorbellOnce } from '../host/doorbell.js';
 import { pollHostOnce, type HostPollDeps } from '../host/loop.js';
+import { provisionOnce, type ProvisionDeps } from '../host/provisioner.js';
 import { hostRegistryPath, loadHostRegistry } from '../host/registry.js';
+import { HARNESSES } from '../onboard/harnesses/index.js';
 import { theme } from '../render/theme.js';
+import { resolve } from './helpers.js';
+import { ensureHostKey } from './residency.js';
 
 /**
  * `musterd host [--once]` (ADR 131, increment 3) — the wake actuator: the resident, per-machine
@@ -44,13 +53,113 @@ function parseOptions(flags: Record<string, string | boolean>): z.infer<typeof H
   });
 }
 
+/**
+ * The provisioner's wiring (ADR 463 §3): who this host is, and which identity acts for it. Reads the
+ * host's OWN workspace — the folder `musterd host` runs in — for the sponsor's binding, the checkout
+ * that new agents are worktree'd from, and a host-scoped credential (minted once, kept in the
+ * binding as `host_key`). Anything that means "this host has no sponsor to provision for" — no
+ * binding, not a repo, a credential the daemon refuses to mint — returns null: the wake half runs
+ * exactly as it always did, and the host says nothing.
+ */
+export async function buildProvisioner(
+  parsed: Parsed,
+  log: (line: string) => void,
+  seams: {
+    resolveIdentity?: typeof resolve;
+    cwd?: string;
+    hostLabel?: string;
+    clientFor?: (
+      server: string,
+      key: string,
+    ) => Pick<HttpClient, 'claimProvisions' | 'reportProvision'>;
+  } = {},
+): Promise<((now?: number) => ReturnType<typeof provisionOnce>) | null> {
+  try {
+    const cwd = seams.cwd ?? process.cwd();
+    const { team, http } = (seams.resolveIdentity ?? resolve)(parsed.flags);
+    const binding = findBinding(cwd);
+    const repoRoot = gitToplevel(cwd);
+    if (!binding || !repoRoot) return null;
+    const host = seams.hostLabel ?? flagStr(parsed.flags, 'host') ?? hostname();
+    const hostKey = await ensureHostKey(binding, host, async (label) => {
+      const minted = await http.mintBootstrapCredential(team, {
+        use: 'host',
+        target: label,
+        label: `provision:${label}`,
+      });
+      return minted.agent_key;
+    });
+    if (hostKey !== binding.host_key) saveBinding(cwd, { ...binding, host_key: hostKey });
+    const harnessId = binding.session?.harness ?? 'claude-code';
+    const harness =
+      HARNESSES.find((h) => h.id === harnessId) ?? HARNESSES.find((h) => h.id === 'claude-code');
+    if (!harness) return null;
+    const client = (
+      seams.clientFor ?? ((server, key) => new HttpClient({ server, key }).presenceNeutral())
+    )(binding.server, hostKey);
+    const base: Omit<ProvisionDeps, 'log'> = {
+      client: client as ProvisionDeps['client'],
+      sponsor: http,
+      team,
+      server: binding.server,
+      host,
+      hostKey,
+      harness,
+      repoRoot,
+      clone: parsed.flags['clone'] === true,
+    };
+    return () => provisionOnce({ ...base, log });
+  } catch (err) {
+    // Not a sponsor's host (an agent's folder, an unbound one, a daemon that refuses the mint):
+    // provisioning is simply off. Only a genuinely unexpected failure is worth a line.
+    if (!(err instanceof CliError)) log(`! provisioning is off: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+/** `musterd host provisions` — what this host key may see, claimed by nobody (ADR 463 §3). */
+async function provisionsCommand(parsed: Parsed): Promise<number> {
+  const { team } = resolve(parsed.flags);
+  const cwd = process.cwd();
+  const binding = findBinding(cwd);
+  const host = flagStr(parsed.flags, 'host') ?? hostname();
+  const key = binding?.host_key;
+  if (!binding || !key) {
+    throw new CliError(
+      'no host credential here — run `musterd host` once in this folder (it mints one), ' +
+        'or pass through a sponsor’s Workspace',
+      4,
+    );
+  }
+  const { provisions } = await new HttpClient({ server: binding.server, key })
+    .presenceNeutral()
+    .listProvisions(team, host);
+  if (parsed.flags['json']) {
+    process.stdout.write(JSON.stringify({ host, provisions }) + '\n');
+    return 0;
+  }
+  if (provisions.length === 0) {
+    process.stdout.write(theme.meta(`no provisions for ${host}`) + '\n');
+    return 0;
+  }
+  for (const p of provisions) {
+    process.stdout.write(
+      `${p.id} · ${p.agent} · ${p.state}${p.failed_reason ? ` · ${p.failed_reason}` : ''}\n`,
+    );
+  }
+  return 0;
+}
+
 export async function hostCommand(
   parsed: Parsed,
   deps: Partial<HostPollDeps & DoorbellPollDeps> & {
     /** `false` runs the wake half alone — the doorbell never polls a daemon. */
     doorbell?: boolean;
+    /** Injectable provisioner tick (tests); `null` disables. Default: built from this folder. */
+    provisioner?: (() => ReturnType<typeof provisionOnce>) | null;
   } = {},
 ): Promise<number> {
+  if (parsed.positionals[0] === 'provisions') return provisionsCommand(parsed);
   const opts = parseOptions(parsed.flags);
   const backends = new Map<string, ActuatorBackend>();
   const claude = claudeCodeBackend();
@@ -77,8 +186,30 @@ export async function hostCommand(
     ...deps,
   };
 
+  // ADR 463 §3: a sponsor's host provisions new agents as they are created, each tick, after the
+  // wake half's lease claim. On by default; `--no-provision` opts out. Built once — the host key is
+  // minted (and kept) at most once — and a null result leaves the wake half exactly as it was.
+  const provisionTick: (() => ReturnType<typeof provisionOnce>) | null =
+    parsed.flags['no-provision'] === true
+      ? null
+      : deps.provisioner !== undefined
+        ? deps.provisioner
+        : await buildProvisioner(parsed, log);
+  let provisioning: Promise<unknown> | null = null;
+  // Its own catch, like the doorbell: a provisioning failure never stops a wake, and a slow
+  // provision (a clone, a harness install) never delays one — the tick does not await it.
+  const provision = (): Promise<unknown> => {
+    if (provisionTick === null) return Promise.resolve();
+    provisioning ??= provisionTick()
+      .catch((err: Error) => log(`! provision tick failed: ${err.message}`))
+      .finally(() => {
+        provisioning = null;
+      });
+    return provisioning;
+  };
+
   const registry = loadHostRegistry();
-  if (registry.entries.length === 0) {
+  if (registry.entries.length === 0 && provisionTick === null) {
     process.stdout.write(
       theme.warn(`no seats in this machine's host registry (${hostRegistryPath()})`) + '\n',
     );
@@ -112,7 +243,7 @@ export async function hostCommand(
   };
 
   if (opts.once) {
-    const [, result] = await Promise.all([ringDoorbell(), pollHostOnce(pollDeps)]);
+    const [, , result] = await Promise.all([ringDoorbell(), provision(), pollHostOnce(pollDeps)]);
     if (result.orders === 0) process.stdout.write(theme.meta('no wakes due') + '\n');
     // Await in-flight runs so the mandatory watchdog outlives every spawn (never orphaned).
     await Promise.allSettled(result.settled);
@@ -131,6 +262,7 @@ export async function hostCommand(
     const inFlight = new Set<Promise<void>>();
     const tick = async () => {
       void ringDoorbell();
+      void provision();
       // Best-effort: a transient daemon/registry failure must not kill the resident loop.
       const result = await pollHostOnce(pollDeps).catch((err: Error) => {
         log(`! poll failed: ${err.message}`);

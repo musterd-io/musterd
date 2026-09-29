@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, realpathSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve as resolvePath } from 'node:path';
 import { gitToplevel } from '@musterd/protocol/project';
@@ -45,6 +45,13 @@ export interface WorkspaceOpts {
    * person's own git identity — {@link setSeatGitIdentity} is for agent seats only.
    */
   gitIdentity?: boolean;
+  /**
+   * A full clone of the checkout instead of a `git worktree` (ADR 463 §3, `musterd host --clone`):
+   * isolation from the sponsor's own checkout — a worktree shares its object store, refs and
+   * hooks config; a clone shares nothing. Only the layout-driven case (a new Workspace named from
+   * inside a repo) honours it; `--here` / `--path` are unaffected.
+   */
+  clone?: boolean;
 }
 
 /**
@@ -131,6 +138,17 @@ function realpathNearest(p: string): string {
   return parent === abs ? abs : join(realpathNearest(parent), basename(abs));
 }
 
+/** ADR 463 §3: a self-contained clone of `top` on its own `branch`, with `.musterd/` kept out of git. */
+function addClone(top: string, dir: string, branch: string): void {
+  mkdirSync(dirname(dir), { recursive: true });
+  execFileSync('git', ['clone', '--quiet', top, dir], { encoding: 'utf8' });
+  git(['switch', '-c', branch], dir);
+  // A clone has its own `.git/info/exclude`: the binding must never be committable from it.
+  const exclude = join(dir, '.git', 'info', 'exclude');
+  mkdirSync(dirname(exclude), { recursive: true });
+  appendFileSync(exclude, '\n.musterd/\n');
+}
+
 function addWorktree(top: string, dir: string, branch: string): void {
   mkdirSync(dirname(dir), { recursive: true });
   try {
@@ -205,9 +223,10 @@ export function provisionWorkspace(name: string, opts: WorkspaceOpts = {}): Work
       identity(dir);
       return { dir, kind: 'worktree', branch, created: false };
     }
-    addWorktree(top, dir, branch);
+    if (opts.clone) addClone(top, dir, branch);
+    else addWorktree(top, dir, branch);
     identity(dir);
-    return { dir, kind: 'worktree', branch, created: true };
+    return { dir, kind: opts.clone ? 'folder' : 'worktree', branch, created: true };
   }
 
   // Not a git repo — a plain sibling folder.
