@@ -9,7 +9,10 @@ import { MemberSignInFields, MemberSignInToggle, type AdvancedState } from '../l
 import { OfficeScene } from '../live/OfficeScene';
 import { TeamColumn, captionColorFor } from '../live/TeamColumn';
 import type { Caption } from '../live/captions';
-import { scrollToMessage, Stream } from '../live/Stream';
+import { revealWhenMounted } from '../live/reveal';
+import { LogDrawer } from '../live/LogDrawer';
+import { Ticker } from '../live/Ticker';
+import { TopMeter } from '../live/TopMeter';
 import type { LiveConfig } from '../live/client';
 import {
   provisionObserver,
@@ -69,15 +72,18 @@ export const Route = createFileRoute('/live')({
 
 const TEAM_KEY = 'musterd.live.team';
 const COLLAPSE_KEY = 'musterd.live.collapsed';
-const COMPANION_KEY = 'musterd.live.companion';
 
 /** Work lives in the team column (ADR 464) — not on plates, and no longer in the floating stack. */
 const WORK_CUES: 'hybrid' | 'stack' | 'none' = 'none';
 
 /** The three live panels, each independently collapsible into a slim rail. */
-type PanelId = 'office' | 'team' | 'stream';
+type PanelId = 'office' | 'team';
 type Collapsed = Record<PanelId, boolean>;
-const NO_COLLAPSE: Collapsed = { office: false, team: false, stream: false };
+const NO_COLLAPSE: Collapsed = { office: false, team: false };
+
+/** The log drawer hosts today's `Stream` unchanged (ADR 464 lane 2) — fetched the first time it
+ *  opens, never before: the stream column left /live's eager graph with the column itself. */
+const LazyStream = lazy(() => import('../live/Stream').then((m) => ({ default: m.Stream })));
 /** Below this width the team column starts folded (ADR 464): the room keeps its pixels. */
 const TEAM_FOLDS_BELOW = 1280;
 /** The collapse restore must land BEFORE first paint: the canvas grid animates its columns, so a
@@ -99,8 +105,10 @@ function LivePage() {
   const [provisioning, setProvisioning] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Collapsed>(NO_COLLAPSE);
-  const [companion, setCompanion] = useState(false);
   const [seedsOpen, setSeedsOpen] = useState(false);
+  /** The log drawer (ADR 464 lane 2): every message, one keystroke away. */
+  const [logOpen, setLogOpen] = useState(false);
+  const closeLog = useCallback(() => setLogOpen(false), []);
   /** ADR 464: the member under the pointer — on a card or on their plate — so both wear a ring. */
   const [linked, setLinked] = useState<string | null>(null);
   /** The room's narration line, lifted out of the scene so the team column's header can carry it. */
@@ -113,18 +121,6 @@ function LivePage() {
         window.localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next));
       } catch {
         /* private mode — collapse state just won't persist */
-      }
-      return next;
-    });
-  };
-
-  const toggleCompanion = () => {
-    setCompanion((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem(COMPANION_KEY, next ? '1' : '');
-      } catch {
-        /* private mode */
       }
       return next;
     });
@@ -414,7 +410,7 @@ function LivePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Restore saved panel collapse + companion state (SSR-safe; once on the client, before paint).
+  // Restore saved panel collapse state (SSR-safe; once on the client, before paint).
   useBeforePaint(() => {
     if (typeof window === 'undefined') return;
     try {
@@ -426,7 +422,6 @@ function LivePage() {
         setCollapsed({
           office: !!saved.office,
           team: !!(saved.team ?? saved.roster),
-          stream: !!saved.stream,
         });
       } else {
         setCollapsed({ ...NO_COLLAPSE, team: window.innerWidth < TEAM_FOLDS_BELOW });
@@ -434,22 +429,31 @@ function LivePage() {
     } catch {
       /* ignore malformed persisted state */
     }
-    setCompanion(window.localStorage.getItem(COMPANION_KEY) === '1');
   }, []);
 
-  // A clicked office speech bubble navigates to its act in the stream. If the stream rail is collapsed,
-  // expand it first and let the expand transition land before scrolling — one smooth motion, no jump cut.
-  const onActClick = useCallback(
-    (id: string) => {
-      if (collapsed.stream) {
-        toggleCollapse('stream');
-        window.setTimeout(() => scrollToMessage(id), 380);
-      } else {
-        scrollToMessage(id);
-      }
-    },
-    [collapsed.stream],
-  );
+  // A clicked office speech bubble opens the log on its act. The drawer mounts the stream lazily,
+  // so the reveal waits for the rows to exist rather than firing into an empty listener list.
+  const onActClick = useCallback((id: string) => {
+    setLogOpen(true);
+    revealWhenMounted(id);
+  }, []);
+
+  // `L` opens the log (spec §5). Not while typing, not with a modifier, and not under a modal —
+  // the board overlay and the seeds tray own the keyboard while they are up.
+  useEffect(() => {
+    if (!cfg) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'l' && event.key !== 'L') return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const t = event.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (boardOpen || seedsOpen) return;
+      event.preventDefault();
+      setLogOpen((o) => !o);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [cfg, boardOpen, seedsOpen]);
 
   // On a terminal connection error (e.g. a stale observer token after a daemon reset), drop the
   // stored observer so the next Watch re-provisions a fresh one.
@@ -467,6 +471,7 @@ function LivePage() {
             office overlay, which carries them over the scene on both /live and /broadcast — repeating
             them a few inches above was the duplication nick asked us to drop (2026-07-24). */}
         <MusterdWord />
+        {connected && <TopMeter teamName={team} envelopes={envelopes} roster={roster} />}
         <span className="lc__spacer" />
         {connected && (
           <button
@@ -482,7 +487,6 @@ function LivePage() {
           </button>
         )}
         {connected && <WatchLinkButton cfg={cfg!} />}
-        {connected && <CompanionToggle on={companion} onToggle={toggleCompanion} />}
         {connected && <RoomToneToggle />}
         {connected && <SoundToggle />}
         <Clock />
@@ -507,14 +511,12 @@ function LivePage() {
           )}
           <div
             className={
-              `lc__canvas${companion ? ' lc__canvas--companion' : ''}` +
-              `${collapsed.office ? ' is-office-collapsed' : ''}` +
-              `${collapsed.team ? ' is-team-collapsed' : ''}` +
-              `${collapsed.stream ? ' is-stream-collapsed' : ''}`
+              `lc__canvas${collapsed.office ? ' is-office-collapsed' : ''}` +
+              `${collapsed.team ? ' is-team-collapsed' : ''}`
             }
             // A modal means it: while the board overlay is up, the room behind it takes no focus and
             // no clicks (the AsksStrip inert precedent, promoted to page scope).
-            inert={boardOpen || seedsOpen}
+            inert={boardOpen || seedsOpen || logOpen}
           >
             <OfficeScene
               {...officeRoom(team, stream, { entries, board })}
@@ -560,14 +562,19 @@ function LivePage() {
               unreadable={rosterUnreadable}
               stale={rosterStale}
             />
-            <Stream
-              envelopes={envelopes}
-              roster={roster}
-              liveIds={liveIds}
-              collapsed={collapsed.stream}
-              onCollapse={() => toggleCollapse('stream')}
-            />
           </div>
+          {/* The headline ticker (ADR 464 §5): the last few notable moments, under the room. */}
+          <Ticker
+            envelopes={envelopes}
+            roster={roster}
+            board={board}
+            onSeeAll={() => setLogOpen(true)}
+          />
+          <LogDrawer open={logOpen} onClose={closeLog} title={`Team log — ${team}`}>
+            <Suspense fallback={<p className="lc-drawer__loading">Opening the log…</p>}>
+              <LazyStream envelopes={envelopes} roster={roster} liveIds={liveIds} />
+            </Suspense>
+          </LogDrawer>
           {boardOpen && (
             <Suspense fallback={null}>
               <LazyBoardOverlay
@@ -727,30 +734,6 @@ function RoomToneToggle() {
         {on ? <path d="M2.5 9.5v2M5 7.5v4M7.5 5.5v6" /> : <path d="M2.5 11.5h5.2" />}
         <path d="M10.5 6.5h3.2v3a2 2 0 0 1-2 2h-1.2z" />
         <path d="M13.7 7.5h.6a1.1 1.1 0 0 1 0 2.2h-.6" />
-      </svg>
-    </button>
-  );
-}
-
-/**
- * Companion toggle: make the office fill the browser window (not OS fullscreen) with the roster/stream
- * tucked away. Per-panel collapse now lives inside each panel's own header (see PanelChrome).
- */
-function CompanionToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
-  return (
-    <button
-      type="button"
-      className={`lc__pbtn${on ? ' lc__pbtn--on' : ''}`}
-      onClick={onToggle}
-      aria-pressed={on}
-      title={on ? 'Exit companion mode' : 'Companion mode — office fills the window'}
-    >
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        {on ? (
-          <path d="M6.5 3v3.5H3M9.5 3v3.5H13M6.5 13V9.5H3M9.5 13V9.5H13" />
-        ) : (
-          <path d="M3 6.5V3h3.5M13 6.5V3H9.5M3 9.5V13h3.5M13 9.5V13H9.5" />
-        )}
       </svg>
     </button>
   );

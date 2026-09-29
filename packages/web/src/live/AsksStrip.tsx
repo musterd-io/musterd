@@ -20,7 +20,7 @@ import { sendAct, type LiveConfig } from './client';
 import { asksOpenMode, stillMode } from './stillMode';
 import { initial, memberAvatar, memberColor, kindOf, hueOf } from './format';
 import { newRings, notifyBrowser, openRingsFor, ringNotice } from './doorbellNotify';
-import { scrollToMessage } from './Stream';
+import { scrollToMessage } from './reveal';
 
 /**
  * The asks & approvals rail (ADR 149) — the above-the-fold home of the to-human ask stream (ADR 147)
@@ -124,10 +124,7 @@ export function AsksStrip({
   const yoursCount = answerableCount(loud, ctx);
 
   // The review queue (nick, 2026-08-05): every lane in acceptance and who it waits on, at a glance.
-  const reviews = useMemo(
-    () => (board ? deriveReviewQueue(board.lanes, asks) : []),
-    [board, asks],
-  );
+  const reviews = useMemo(() => (board ? deriveReviewQueue(board.lanes, asks) : []), [board, asks]);
 
   // A 1s tick while any clock is running, so the countdowns are honest. Stops when nothing is loud —
   // idle cost is paid by every viewer, forever (packages/web/AGENTS.md).
@@ -256,7 +253,11 @@ export function AsksStrip({
   const frac = lead ? clockFraction(lead, now) : null;
   const leadStyle = lead
     ? ({
-        '--lc-asks-hue': memberColor(lead.env.from, kindOf(lead.env.from, idx), hueOf(lead.env.from, idx)),
+        '--lc-asks-hue': memberColor(
+          lead.env.from,
+          kindOf(lead.env.from, idx),
+          hueOf(lead.env.from, idx),
+        ),
       } as CSSProperties)
     : undefined;
 
@@ -280,7 +281,11 @@ export function AsksStrip({
               }`}
               style={
                 {
-                  background: memberAvatar(lead.env.from, kindOf(lead.env.from, idx), hueOf(lead.env.from, idx)),
+                  background: memberAvatar(
+                    lead.env.from,
+                    kindOf(lead.env.from, idx),
+                    hueOf(lead.env.from, idx),
+                  ),
                   '--lc-ask-frac': frac ?? 0,
                 } as CSSProperties
               }
@@ -296,13 +301,13 @@ export function AsksStrip({
             >
               <b>{lead.env.from}</b>
               <span className="lc-asks__verb">
-                {leadAudience === 'you' ? SPECIES_VERB_YOU[lead.species] : SPECIES_VERB[lead.species]}
+                {leadAudience === 'you'
+                  ? SPECIES_VERB_YOU[lead.species]
+                  : SPECIES_VERB[lead.species]}
               </span>
               {/* Routed elsewhere: name the actual acceptor, so nobody reads an agent's queue as
                   their own (lane 01KZ9GFHZ9 — the strip's wrong-acceptor bug was exactly this). */}
-              {!leadIsOurs && lead.to && (
-                <span className="lc-asks__routed">→ {lead.to}</span>
-              )}
+              {!leadIsOurs && lead.to && <span className="lc-asks__routed">→ {lead.to}</span>}
               {lead.env.body && <span className="lc-asks__gist">{lead.env.body}</span>}
             </button>
             <AskHold ask={lead} now={now} className="lc-asks__hold" />
@@ -369,9 +374,7 @@ export function AsksStrip({
         {deferred.length > 0 && <span className="lc-asks__meta">{deferred.length} deciding</span>}
         {/* Counted apart from "settled" on purpose: an ask nobody answered in time is not the same
             event as one somebody answered, and folding the two would make the gap unfindable. */}
-        {lapsed.length > 0 && (
-          <span className="lc-asks__meta">{lapsed.length} elapsed</span>
-        )}
+        {lapsed.length > 0 && <span className="lc-asks__meta">{lapsed.length} elapsed</span>}
         {closed > 0 && <span className="lc-asks__meta">{closed} settled</span>}
 
         {(cards.length > 0 || reviews.length > 0) && (
@@ -452,7 +455,8 @@ export function AsksStrip({
           {reviews.length > 0 && (
             <div className="lc-asks__reviews">
               <h3 className="lc-asks__reviews-title">
-                In review — {reviews.length} lane{reviews.length === 1 ? '' : 's'} awaiting acceptance
+                In review — {reviews.length} lane{reviews.length === 1 ? '' : 's'} awaiting
+                acceptance
               </h3>
               {reviews.map((r) => (
                 <button
@@ -501,8 +505,6 @@ export function AsksStrip({
   );
 }
 
-
-
 function AskCard({
   ask,
   idx,
@@ -541,7 +543,8 @@ function AskCard({
             {initial(from)}
           </span>
           <span className="lc-ask__verb">
-            <b>{from}</b> {audience === 'you' ? SPECIES_VERB_YOU[ask.species] : SPECIES_VERB[ask.species]}
+            <b>{from}</b>{' '}
+            {audience === 'you' ? SPECIES_VERB_YOU[ask.species] : SPECIES_VERB[ask.species]}
             {!ours && ask.to && <span className="lc-asks__routed"> → {ask.to}</span>}
           </span>
           <AskHold ask={ask} now={now} />
@@ -618,7 +621,8 @@ function AskClock({ ask, now }: { ask: AskView; now: number }) {
    * and the card's note says what the contract means. Neither says approved: nothing here knows
    * what the agent decided, only that it was free to decide.
    */
-  if (ask.state === 'lapsed') return <span className="lc-ask__clock lc-ask__clock--lapsed">elapsed</span>;
+  if (ask.state === 'lapsed')
+    return <span className="lc-ask__clock lc-ask__clock--lapsed">elapsed</span>;
   if (ask.state !== 'open') return null;
   const left = ask.deadline - now;
   if (left <= 0) return <Elapsed holding={askTierHolds(ask.tier)} />;
@@ -669,8 +673,6 @@ function BellIcon() {
   );
 }
 
-
-
 function ChevronIcon() {
   return (
     <svg className="lc-asks__chev" viewBox="0 0 12 12" aria-hidden="true">
@@ -689,15 +691,7 @@ function ChevronIcon() {
  * Renders nothing for a settled verdict: `holdStateLine` returns null there and the card's own
  * outcome rendering is already saying it.
  */
-function AskHold({
-  ask,
-  now,
-  className,
-}: {
-  ask: AskView;
-  now: number;
-  className?: string;
-}) {
+function AskHold({ ask, now, className }: { ask: AskView; now: number; className?: string }) {
   const hold = holdStateLine(ask, now);
   if (!hold) return null;
   return (

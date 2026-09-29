@@ -934,6 +934,31 @@ Measured + 15%, following ADR 313. A loosening, approved by nick.
 The chunk is the join-page copy spec's strings verbatim plus the fragment/room-code helpers, so there is
 nothing to trim or delete; lazy-loading cannot move total (ADR 183); a re-baseline would loosen. New
 ceiling is measured + ~0.7 KB CI gzip delta + ~1.2%, per precedent.
+## 2026-09-28 — `totalJsGzipBytes` 261,200 → 267,300: meter, ticker, log drawer (ADR 464 lane 2, lane 01M3N7XHY6ENQQJZ425GZ9G9TZ)
+
+Measured with Node zlib over `packages/web/dist/client` after a build, as the gate does: main @
+`a4ee69b8` (lane 1 landed) **260,198 B** (254.1 KiB, 43 chunks), this branch **263,424 B** (257.3 KiB,
+45 chunks) — **+3,226 B**.
+
+| measure | main | branch |
+| --- | --- | --- |
+| total JS gzip | 254.1 KiB | 257.3 KiB |
+| initial JS gzip (/live) | 135.1 KiB | **134.5 KiB** — the stream is a lazy drawer chunk now |
+| `Stream` chunk | in `live` (eager) | 3,822 B, lazy |
+| `reveal` chunk | — | 257 B (the reveal event, split so a caller need not pull the stream) |
+| `live` CSS | 18.5 KiB | 19.0 KiB of 20.3 |
+
+What the bytes are: `headline()` and `busyness()` (pure, tested), `TopMeter`, `Ticker`, `LogDrawer`,
+and the route's key handling — about 2.5 KB — plus two chunks' worth of per-chunk overhead from the
+`Stream` and `reveal` splits. The split is the point, not a cost to avoid: it is what moved the
+number a viewer feels (initial) the other way. Companion mode, the stream grid track and its collapse
+rules were deleted in the same change, so no further trim is available; lazy-loading cannot move
+total (ADR 183); no dependency to drop; a re-baseline would loosen. New ceiling is measured + the
+~0.7 KB CI gzip delta + ~1.2%, per precedent.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — total must read under 261.0 KiB.
+  At or under 254.1 KiB (main's measure), lane 2 has left the graph and this raise should go with it.
+
 ## 2026-09-26 — `totalJsGzipBytes` 254,700 → 261,200: the Welcome Wagon (lane 01M3F81DD9)
 
 Measured with Node zlib over `packages/web/dist/client` after a build, as the gate does: main @
