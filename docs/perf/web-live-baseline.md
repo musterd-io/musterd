@@ -934,6 +934,14 @@ Measured + 15%, following ADR 313. A loosening, approved by nick.
 The chunk is the join-page copy spec's strings verbatim plus the fragment/room-code helpers, so there is
 nothing to trim or delete; lazy-loading cannot move total (ADR 183); a re-baseline would loosen. New
 ceiling is measured + ~0.7 KB CI gzip delta + ~1.2%, per precedent.
+## 2026-09-29 — /broadcast adopts the ask banner; `AsksReel` retires (ADR 464 follow-up)
+
+No budget moves. `AsksReel.tsx`, `reel.ts`, `reelItems()` and the `.bc-reel` CSS are deleted;
+`StreamAskBanner` reuses `askBanner()` and the `lc-asks` markup `/live` already ships. Measured
+after lane 5 (main) → this branch: total JS 257.1 → 255.7 KiB (44 → 42 chunks), initial JS (/live)
+134.9 → 130.7 KiB (13 → 11 eager chunks, a re-chunking side effect of the smaller graph), app CSS
+7.0 → 6.0 KiB.
+
 ## 2026-09-29 — /broadcast adopts the team column + ticker; the overlay reel and work stack retire (ADR 464 lane 5)
 
 No budget moves. Deletion repays: `OfficeOverlay.tsx`, `WorkStack.tsx`, `broadcastChrome.ts` and

@@ -173,8 +173,8 @@ export function OfficeScene({
   onReady?: (handle: OfficeHandle | null) => void;
   /** Chrome floated over the TOP of the room. `/live` seats the answerable asks & approvals rail
    * here (nick's call: the office frames its own asks; the page above the panels stays quiet), and
-   * `/broadcast` seats `AsksReel` — the same asks, read-only and cycling, because a stream cannot
-   * answer one but should still show that thirteen are waiting (ADR 228). */
+   * `/broadcast` seats `StreamAskBanner` — the same banner, read-only, because a stream cannot
+   * answer an ask but should still show one is waiting (ADR 228, ADR 464). */
   topSlot?: ReactNode;
   /**
    * Chrome seated in a strip BENEATH the room rather than floated over it. The band is sized to its

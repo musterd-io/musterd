@@ -712,7 +712,7 @@ function CrossIcon() {
   );
 }
 
-function BellIcon() {
+export function BellIcon() {
   return (
     <svg className="lc-asks__bell" viewBox="0 0 12 12" aria-hidden="true">
       <path d="M6 1.8a2.9 2.9 0 0 1 2.9 2.9v1.9l1 1.6H2.1l1-1.6V4.7A2.9 2.9 0 0 1 6 1.8zM4.9 9.6a1.15 1.15 0 0 0 2.2 0" />
