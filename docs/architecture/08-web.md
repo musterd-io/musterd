@@ -64,8 +64,18 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   blends. ADR 086 layers ambient life (idle strolls, gestures) on top; the scene idle-parks to 0 rAF/sec
   when nobody is working. A read-only working-hours sign is painted from the Team schedule projection
   (Member inheritance is resolved by the daemon), including timezone and weekday grouping (ADR 206).
-- **Stream** (`live/Stream.tsx`) — the legible half: the act feed, newest-last, live rows type out,
-  threaded replies indent, day/now dividers. This is where a human reads the team.
+- **Log drawer** (`live/LogDrawer.tsx`, hosting `live/Stream.tsx`) — every message, one keystroke
+  away (ADR 464 lane 2): the act feed, newest-last, live rows type out, threaded replies indent,
+  day/now dividers, the model stamp and the click-through. `L` opens it, Escape closes it, and a
+  speech-bubble click opens it on its act (`live/reveal.ts`). The stream column and companion mode
+  it replaced retired on 2026-09-28.
+- **Busyness meter** (`live/TopMeter.tsx`, from `live/busyness.ts`) — in the top bar: the team,
+  a heartbeat that pulses on every act, acts over the loaded span (never extrapolated), and who is
+  working / between tasks / human.
+- **Headline ticker** (`live/Ticker.tsx`, from `live/headline.ts`) — under the room: the last few
+  notable moments in one line, newest left, each chip in its actor's hue. `headline()` builds every
+  line from names and lane titles, never the act body (an ask's question, clipped, is the one
+  exception); adjacent same-actor same-verb lines within 30s fold into a count.
 - **Team column** (`live/TeamColumn.tsx` + `live/TeamCard.tsx`) — who is here, read by a room
   (ADR 464): one card per present member with the provider logo and readable model name
   (`modelBadge.ts`: observed / declared / unknown / human — never a guess), a plain-language state
@@ -128,7 +138,14 @@ live/
   useLiveStream.ts              // the React hook: envelopes, roster, liveIds, conn status; drives the chime; roster refetch on presence is coalesced
   coalesce.ts                   // at most one run in flight + one trailing run per gap — the roster refetch's burst guard (viewers × presence frames)
   format.ts                     // act tone/label, laneEvent recovery, roster/colour/status projections
-  Stream.tsx                    // the act feed + ACT_GLYPH + typewriter
+  Stream.tsx                    // the act feed + ACT_GLYPH + typewriter; hosted by the log drawer on /live (lazy)
+  reveal.ts                     // the "reveal this act in the log" window event + revealWhenMounted (the drawer mounts the stream lazily)
+  LogDrawer.tsx                 // the /live log drawer (ADR 464 lane 2): a right-edge dialog around the stream; Escape closes, focus returns
+  busyness.ts                   // envelopes + roster → last-act age, acts over the loaded span (bucketed), who is working (pure, node-tested)
+  TopMeter.tsx                  // the top bar's busyness meter: team · heartbeat · sparkline · counts
+  headline.ts                   // notable act → { who, verb, object, target } from names and titles, never the body; collapseHeadlines (pure)
+  Ticker.tsx                    // the headline ticker under the room: newest ~3 headlines in the actor's hue + "See every message"
+
   RosterPanel.tsx               // the roster rail (no route mounts it since ADR 464) + `SeatDetail`, the per-seat operator block the team card expands to; `trace` expander (ADR 445 inc 4b) lazy-loads the timeline
   TeamColumn.tsx                // the /live team column (ADR 464) + its collapsed avatar rail; `captionColorFor` (the narrator's colour)
   TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type; click expands to `SeatDetail`

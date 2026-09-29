@@ -1,13 +1,6 @@
 import type { Envelope, MemberSummary } from '@musterd/protocol';
 import { eligibleOf } from '@musterd/protocol/wire';
-import {
-  Fragment,
-  type ReactElement,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
+import { Fragment, type ReactElement, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   actLabel,
   actTone,
@@ -20,15 +13,18 @@ import {
   laneEvent,
   laneEventDetail,
   type LaneEventDetail,
-  memberColor, memberAvatar,
+  memberColor,
+  memberAvatar,
   proseSegments,
   recipientNames,
   recipientScope,
   richLength,
   rosterIndex,
-  type RichToken, hueOf
+  type RichToken,
+  hueOf,
 } from './format';
 import { CollapseButton, PanelRail } from './PanelChrome';
+import { REVEAL_EVENT, scrollToMessage } from './reveal';
 import {
   INITIAL_WINDOW,
   anchoredScrollTop,
@@ -130,7 +126,11 @@ export function Stream({
     const el = scrollRef.current;
     if (!el) return;
     if (anchorRef.current) {
-      el.scrollTop = anchoredScrollTop(anchorRef.current.top, anchorRef.current.height, el.scrollHeight);
+      el.scrollTop = anchoredScrollTop(
+        anchorRef.current.top,
+        anchorRef.current.height,
+        el.scrollHeight,
+      );
       anchorRef.current = null;
     } else if (atBottom.current) {
       el.scrollTop = el.scrollHeight; // collapse / first backfill: stay pinned to the live edge
@@ -210,8 +210,8 @@ export function Stream({
         {envelopes.length === 0 && (
           <p className="lc-empty">
             <strong>Listening.</strong>
-            Every message on the team will stream here the moment it&apos;s sent — requests, handoffs,
-            status, and resolutions, live.
+            Every message on the team will stream here the moment it&apos;s sent — requests,
+            handoffs, status, and resolutions, live.
           </p>
         )}
         {hasHidden && (
@@ -250,19 +250,9 @@ export function Stream({
   );
 }
 
-/** The reveal request the stream listens for — carries the target message id. */
-const REVEAL_EVENT = 'lc:reveal-message';
-
-/**
- * Scroll a message into view (and flash it) — used by reply quotes here and by the office's
- * speech-bubble click-through and the asks strip. Dispatched as an event rather than a direct DOM
- * lookup because the target row may sit above the stream's rendered window: the stream widens its
- * window to mount the row first, then scrolls.
- */
-export function scrollToMessage(id: string) {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(REVEAL_EVENT, { detail: { id } }));
-}
+// The reveal request lives in `./reveal` (ADR 464 lane 2); re-exported so existing callers keep
+// their import path.
+export { scrollToMessage };
 
 function flashRow(el: Element) {
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -321,7 +311,10 @@ function Row({
       <div className="lc-row__head">
         <time className="lc-row__ts">{clock(env.ts)}</time>
         <span className={`lc-chip lc-chip--${kind}`}>
-          <span className="lc-chip__avatar" style={{ background: memberAvatar(env.from, kind, hue) }}>
+          <span
+            className="lc-chip__avatar"
+            style={{ background: memberAvatar(env.from, kind, hue) }}
+          >
             {initial(env.from)}
           </span>
           <span className="lc-chip__name">{env.from}</span>
@@ -341,7 +334,13 @@ function Row({
         >
           <span
             className="lc-quote__bar"
-            style={{ background: memberColor(parent.from, kindOf(parent.from, idx), hueOf(parent.from, idx)) }}
+            style={{
+              background: memberColor(
+                parent.from,
+                kindOf(parent.from, idx),
+                hueOf(parent.from, idx),
+              ),
+            }}
           />
           <span className="lc-quote__who">{parent.from}</span>
           <span className="lc-quote__text">{summaryLine(parent)}</span>
@@ -470,7 +469,9 @@ const ACT_GLYPH: Record<string, ReactElement> = {
   // The to-human ask (ADR 147/149) — a bell: a notification aimed at a person, distinct from
   // request_help's open question mark. The loud rendering lives in the asks strip; this keeps the
   // firehose row legible.
-  ask: <path d="M6 1.8a2.9 2.9 0 0 1 2.9 2.9v1.9l1 1.6H2.1l1-1.6V4.7A2.9 2.9 0 0 1 6 1.8zM4.9 9.6a1.15 1.15 0 0 0 2.2 0" />,
+  ask: (
+    <path d="M6 1.8a2.9 2.9 0 0 1 2.9 2.9v1.9l1 1.6H2.1l1-1.6V4.7A2.9 2.9 0 0 1 6 1.8zM4.9 9.6a1.15 1.15 0 0 0 2.2 0" />
+  ),
   // Steering trio (ADR 103): steer = a redirecting arrow (change of course); challenge = a raised
   // pennant (an objection to justify); defer = a skip-forward chevron (push later on the plan).
   steer: <path d="M2.7 9.6V6.2C2.7 4.7 3.9 4 5.2 4h3.8M6.9 2.1 9.2 4.2 6.9 6.3" />,
