@@ -351,6 +351,63 @@ describe('musterd agent <name>', () => {
     expect(h.saveBinding).not.toHaveBeenCalled();
   });
 
+  describe('a non-admin sponsor provisions the agent they created (ADR 463 §3)', () => {
+    const forbidden = () =>
+      new CliError('adding a member requires an admin seat (is_admin)', 4, 'forbidden');
+
+    it('treats forbidden like a re-run when the name is already an agent, and builds the workspace', async () => {
+      h.addMember.mockRejectedValueOnce(forbidden());
+      h.roster.mockResolvedValueOnce({ members: [{ name: 'dana-scout', kind: 'agent' }] });
+      const chunks: string[] = [];
+      const spy = vi.spyOn(process.stdout, 'write').mockImplementation((c: never) => {
+        chunks.push(String(c));
+        return true;
+      });
+      let code: number;
+      try {
+        code = await agentCommand(parseArgs(['dana-scout']), { infraGate: async () => null });
+      } finally {
+        spy.mockRestore();
+      }
+      expect(code).toBe(0);
+      // the credential is still minted through the shared sequence — the daemon decides whether
+      // THIS caller may (a sponsor of the agent, or an admin), not the CLI
+      expect(h.mintBootstrapCredential).toHaveBeenCalledWith('ritual', {
+        use: 'claim_seat',
+        target: 'dana-scout',
+        label: 'claude-code:dana-scout',
+      });
+      expect(h.saveBinding).toHaveBeenCalled();
+      expect(h.configure).toHaveBeenCalled();
+      expect(chunks.join('')).toContain('reused');
+    });
+
+    it('still fails with the forbidden message for a name that is not on the roster', async () => {
+      h.addMember.mockRejectedValueOnce(forbidden());
+      h.roster.mockResolvedValueOnce({ members: [] });
+      await expect(agentCommand(parseArgs(['ghost']))).rejects.toThrow(/requires an admin seat/);
+      expect(h.mintBootstrapCredential).not.toHaveBeenCalled();
+      expect(h.saveBinding).not.toHaveBeenCalled();
+    });
+
+    it('still fails for a name that is a human, not an agent', async () => {
+      h.addMember.mockRejectedValueOnce(forbidden());
+      h.roster.mockResolvedValueOnce({ members: [{ name: 'dana', kind: 'human' }] });
+      await expect(agentCommand(parseArgs(['dana']))).rejects.toThrow(/requires an admin seat/);
+      expect(h.saveBinding).not.toHaveBeenCalled();
+    });
+
+    it('a sponsor of another agent is refused at the credential mint, and no workspace is left', async () => {
+      h.addMember.mockRejectedValueOnce(forbidden());
+      h.roster.mockResolvedValueOnce({ members: [{ name: 'eve-scout', kind: 'agent' }] });
+      h.mintBootstrapCredential.mockRejectedValueOnce(
+        new CliError('only the sponsor of "eve-scout" may mint for it', 4, 'forbidden'),
+      );
+      await expect(agentCommand(parseArgs(['eve-scout']))).rejects.toThrow(/only the sponsor/);
+      expect(h.saveBinding).not.toHaveBeenCalled();
+    });
+  });
+
   it('rejects a name with whitespace', async () => {
     await expect(agentCommand(parseArgs(['two words']))).rejects.toThrow(/usage/);
   });
