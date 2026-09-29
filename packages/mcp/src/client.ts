@@ -292,6 +292,12 @@ export class MusterdClient {
     return this.claimed && this.wantPresence;
   }
 
+  /** The agent session lease this occupancy presents on HTTP (ADR 337/347), or undefined before a
+   *  claim. Read-only: the socket's `occupied` / `lease` frames are the only writers. */
+  get sessionLease(): string | undefined {
+    return this.config.sessionLease;
+  }
+
   /** The claimed seat's member name, or undefined while pending (unclaimed). */
   get member(): string | undefined {
     return this.config.member;

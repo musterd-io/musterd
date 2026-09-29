@@ -1,7 +1,12 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { type ClaimPolicy } from '@musterd/protocol';
 import { z } from 'zod';
-import { ClaimConflictError, claimAndJoin, type ClaimTarget } from '../claim.js';
+import {
+  ClaimConflictError,
+  claimAndJoin,
+  persistRenewedLease,
+  type ClaimTarget,
+} from '../claim.js';
 import type { MusterdClient } from '../client.js';
 import type { McpConfig } from '../config.js';
 import { repairHint, textResult } from './format.js';
@@ -65,12 +70,32 @@ export function registerJoin(server: McpServer, client: MusterdClient, config: M
     },
     async (args) => {
       if (client.joined) {
+        // The flag is in-process state and the two things that die are elsewhere (ADR 471): the
+        // Presence is server-side (a daemon bounce, a reaped row — lane 01M2GP25R3), and the lease
+        // the CLI hook reads is on disk, where a `musterd claim --detach` from this folder used to
+        // erase it. The deaf line prescribes THIS call as the repair for both, so answering
+        // "already" from the flag repaired neither (izzo, stanley 2026-09-14; dolly 2026-09-28).
+        // Verify both: one authenticated read on the very route the hook probes — `request()`
+        // re-joins for real when the server refuses the lease — then write the live lease back to
+        // this seat's binding, which is a no-op when nothing changed.
+        const before = client.sessionLease;
+        const raised = await client.interruptCheck();
+        const rejoined = client.joined && client.sessionLease !== before;
+        persistRenewedLease(config);
+        const verdict = !client.joined
+          ? ' The server had dropped this Presence and the re-join failed — your next team_* call retries it.'
+          : rejoined
+            ? ' The server had dropped this Presence: re-occupied it and re-wrote the session lease.'
+            : ' Verified live with the server; the session lease is written to this folder’s binding.';
         // Still show the continuity pointer (ADR 093): the occupy that delivered it may have happened
         // silently in the background (an admin approval after a team_join timeout, ADR 087), making
         // this confirm call the first place the agent can see it.
         const charter = charterBlock(client);
         const memory = client.memory ? `\n\n${memoryLine(client.memory)}` : '';
-        return textResult(`Already joined ${config.team} as ${config.member}.${charter}${memory}`);
+        const line = raised ? `\n\n${raised}` : '';
+        return textResult(
+          `Already joined ${config.team} as ${config.member}.${verdict}${charter}${memory}${line}`,
+        );
       }
 
       const target = resolveTarget(args, config.claim, config.member);

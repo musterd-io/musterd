@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { makeEnvelope, PROTOCOL_VERSION } from '@musterd/protocol';
@@ -153,6 +153,51 @@ describe('MCP adapter', () => {
     client.leave();
     expect(client.joined).toBe(false);
     client.close();
+  });
+
+  // ADR 471 (lane 01M3N79FWR85): the deaf line prescribes team_join as the repair for a dead session
+  // lease. Answered from the in-process flag it repaired nothing — and one way the lease dies is on
+  // DISK: `musterd claim <seat> --detach` from the same folder rewrote binding.json without it while
+  // the Presence stayed alive (dolly 2026-09-28). An explicit join while joined must verify with the
+  // server and write the live lease back where the hook reads it.
+  it('an explicit team_join while joined verifies the Presence and re-writes an erased session lease', async () => {
+    const bindingDir = mkdtempSync(join(tmpdir(), 'musterd-join-verify-'));
+    const config = { ...adaConfig(), bindingDir };
+    const client = new MusterdClient(config);
+    const mcp = buildMcpServer(client, config);
+    const teamJoin = (
+      mcp as unknown as {
+        _registeredTools: Record<string, { handler: (...a: unknown[]) => unknown }>;
+      }
+    )._registeredTools['team_join']!.handler;
+    const reply = async (): Promise<string> => {
+      const res = (await teamJoin({ wait: 0 })) as { content: { text: string }[] };
+      return res.content[0]!.text;
+    };
+    const bindingPath = join(bindingDir, '.musterd', 'binding.json');
+    const onDisk = () => JSON.parse(readFileSync(bindingPath, 'utf8')) as Record<string, unknown>;
+    try {
+      expect(await reply()).toContain('Joined dawn as Ada');
+      const lease = client.sessionLease;
+      expect(typeof lease).toBe('string');
+      expect(onDisk()['session_lease']).toBe(lease);
+
+      // The detached CLI claim's rewrite, as it was before ADR 471: same seat, no lease.
+      const { session_lease: _erased, ...rest } = onDisk();
+      writeFileSync(bindingPath, JSON.stringify(rest, null, 2) + '\n');
+      expect(onDisk()['session_lease']).toBeUndefined();
+
+      // The Presence is alive, so the flag is right for once — and the lease still has to come back.
+      const again = await reply();
+      expect(again).toContain('Already joined dawn as Ada');
+      expect(again).toContain('Verified live with the server');
+      expect(onDisk()['session_lease']).toBe(lease);
+      expect(client.joined).toBe(true);
+    } finally {
+      client.leave();
+      client.close();
+      rmSync(bindingDir, { recursive: true, force: true });
+    }
   });
 
   // ADR 087: a blocking team_join with no grant parks on the approval request and resolves — with the

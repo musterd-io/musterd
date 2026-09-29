@@ -463,8 +463,9 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
       // It names the STATE and refuses to prescribe `musterd claim`, which does not repair it —
       // measured by stanley on delta 2026-09-04: after a successful "✓ delta — occupied on revive"
       // the identical request still 401'd. Both claim paths explain why. `detachedClaim` is
-      // documented "no socket held, no lease" and rewrites the binding WITHOUT `session_lease`, so
-      // `--detach` erases a lease rather than renewing one; and the attached path writes the lease
+      // documented "no socket held, no lease" and, until ADR 471 (2026-09-28), rewrote the binding
+      // WITHOUT `session_lease` — so `--detach` ERASED the adapter's live lease rather than renewing
+      // one (saveBinding now carries a same-seat lease forward); and the attached path writes the lease
       // the WS minted but then returns, so the Presence — and the lease bound to it (ADR 337) —
       // dies with the command. A lease outlives its command only where something holds the
       // Presence, which is the harness adapter. Naming a repair that does not work is worse than
@@ -487,7 +488,7 @@ async function interruptCheck(parsed: Parsed): Promise<number> {
           `interrupt check is being refused. ` +
           `it needs a live Presence: ${reJoin}. ` +
           `\`musterd claim${seat !== undefined ? ' ' + seat : ''}\` mints a lease that dies with ` +
-          `the command, and \`--detach\` writes none.`,
+          `the command, and \`--detach\` holds none.`,
       );
       deaf = true;
     }

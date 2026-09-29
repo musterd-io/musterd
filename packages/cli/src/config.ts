@@ -389,6 +389,17 @@ export function saveBinding(dir: string, binding: Binding, opts?: SaveBindingOpt
     onDisk?.seat_credential !== undefined
       ? { seat_credential: onDisk.seat_credential }
       : {}),
+    // The agent session lease is the adapter's, held alive by its socket (ADR 337/347) and read by
+    // this folder's CLI hook probe. A writer that has no lease of its own — `claim --detach`, a
+    // re-provision — must not erase the one the adapter wrote: doing so made the interrupt line
+    // deaf while the Presence was perfectly alive (ADR 471, dolly 2026-09-28). Same seat guard as
+    // the credential: a lease is never carried to a different claimed seat.
+    ...(binding.session_lease === undefined &&
+    onDisk != null &&
+    bindingSeat(binding) === bindingSeat(onDisk) &&
+    onDisk?.session_lease !== undefined
+      ? { session_lease: onDisk.session_lease }
+      : {}),
     ...(binding.session === undefined && onDisk?.session !== undefined
       ? { session: onDisk.session }
       : {}),

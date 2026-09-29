@@ -391,6 +391,33 @@ describe('saveBinding merge-guard (ADR 131 inc 4 — the adapter must not clobbe
     }
   });
 
+  it('preserves the session lease when a later writer omits it (ADR 471)', () => {
+    const ws = mkdtempSync(join(tmpdir(), 'musterd-mcp-lease-'));
+    try {
+      const boot = {
+        version: 2,
+        server: 'http://s1',
+        team: 'lab',
+        claim: { mode: 'seat' as const, name: 'Ui' },
+        agent_key: 'mskey_1',
+      };
+      saveBinding(ws, { ...boot, session_lease: 'msls_kept' });
+      saveBinding(ws, { ...boot, model: 'claude-test-1' });
+      const after = JSON.parse(
+        readFileSync(join(ws, '.musterd', 'binding.json'), 'utf8'),
+      ) as Record<string, unknown>;
+      expect(after['session_lease']).toBe('msls_kept');
+      // Never to a different seat.
+      saveBinding(ws, { ...boot, claim: { mode: 'seat' as const, name: 'Ada' } });
+      const other = JSON.parse(
+        readFileSync(join(ws, '.musterd', 'binding.json'), 'utf8'),
+      ) as Record<string, unknown>;
+      expect(other['session_lease']).toBeUndefined();
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
   it('preserves host_key when a later writer omits it (ADR 395)', () => {
     const ws = mkdtempSync(join(tmpdir(), 'musterd-mcp-hostkey-'));
     try {
