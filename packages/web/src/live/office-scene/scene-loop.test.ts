@@ -190,6 +190,6 @@ describe('the in-room ask moment (ADR 464, lane 3)', () => {
       index.indexOf('function positionAskCards('),
       index.indexOf('function positionLabels('),
     );
-    expect(fn).toContain('placed.get(ask.to)) ?? placed.get(ask.from)');
+    expect(fn).toContain('ask.to && placed.get(ask.to) ? ask.to : ask.from');
   });
 });

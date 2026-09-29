@@ -1151,16 +1151,20 @@ export function mountOffice(
 
   /** Rest each card just above its human's plate (or the asker's, when the human has no plate). */
   function positionAskCards(placed: Map<string, { x: number; y: number }>) {
+    const stacked = new Map<string, number>(); // cards already resting on this plate this frame
     for (const { el, ask } of askCards.values()) {
-      const host = (ask.to && placed.get(ask.to)) ?? placed.get(ask.from);
+      const at = ask.to && placed.get(ask.to) ? ask.to : ask.from;
+      const host = placed.get(at);
       if (!host) {
         el.style.opacity = '0';
         continue;
       }
-      const at = ask.to && placed.get(ask.to) ? ask.to : ask.from;
+      // Two asks resting on one plate stack upward rather than print on top of each other.
+      const n = stacked.get(at) ?? 0;
+      stacked.set(at, n + 1);
       const size = plateSize.get(at) ?? { w: 60, h: 14 };
       el.style.opacity = '';
-      el.style.transform = `translate(-50%, -100%) translate(${host.x}px, ${host.y - size.h - 6}px)`;
+      el.style.transform = `translate(-50%, -100%) translate(${host.x}px, ${host.y - size.h - 6 - n * 18}px)`;
     }
   }
 
