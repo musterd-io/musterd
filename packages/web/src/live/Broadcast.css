@@ -1,8 +1,9 @@
 /*
  * musterd — broadcast mode (ADR 157). Route-local styles for /broadcast: a fixed 1920×1080 capture
- * stage centred in a letterbox. The on-screen chrome is the shared WorkStack (same as /live),
- * styled in Live.css so the dashboard and the stream cannot drift apart. This file only ships
- * in the /broadcast lazy chunk and holds nothing but the stage.
+ * stage centred in a letterbox. The chrome beside and under the room is /live's own team column
+ * and ticker (ADR 464 lane 5), styled in Live.css so the page and the stream cannot drift apart.
+ * This file only ships in the /broadcast lazy chunk and holds the stage and its few stream-only
+ * departures.
  *
  * The stage is fixed in CSS pixels *on purpose*. The office scene sizes its canvas from
  * `host.clientWidth/clientHeight`, and `transform: scale()` doesn't touch those, so the scene always
@@ -25,23 +26,37 @@
   position: relative;
   width: 1920px;
   height: 1080px;
-  flex: none; /* .lc is a flex column — the stage is a fixed box, not a flex child */
-  display: block;
+  flex: none; /* the stage is a fixed box inside .bc, not a flex child of it */
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   transform-origin: center center;
   will-change: transform;
 }
 
-/* The office fills the stage: no panel track, no border, no collapse rail. */
-.bc__stage .lc-office {
-  position: absolute;
-  inset: 0;
-  flex: none;
-  border-right: 0;
+/* The room and the team column, as on /live — but the column is sized off the STAGE, not the
+   window: `vw` here is whatever window the capturer opened, and a 16:9 frame must lay out the same
+   in every one. 21% of 1920 is 403 → the 400 cap; of 1280 it is 269 → the 280 floor, which keeps a
+   lane title on two lines at the 720 rung. */
+.bc__canvas {
+  --col-team: clamp(280px, 21%, 400px);
+  animation: none;
+}
+/* Nothing on a stream can be pointed at: no pointer cursor pretending otherwise. */
+.bc .lc-team-card__hit {
+  cursor: default;
 }
 
-/* Operator diagnostics only — the two states with no office to look at. Everything else on screen
-   is the shared WorkStack, styled in Live.css so /live and /broadcast cannot drift apart. */
+/* A stream cannot scroll the column, so a card must not spend five lines on its goal's full title
+   (measured at the 720 rung: three of five working cards fit, the other two were off the frame).
+   One line each — the lane title above it is the thing a viewer reads. */
+.bc .lc-team-card__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Operator diagnostics only — the two states with no office to look at. */
 
 .bc__note {
   position: absolute;
@@ -224,7 +239,7 @@
 /* ─── the asks reel (ADR 228) ─────────────────────────────────────────────
    The floor card's sibling, not a page banner. First version shipped as a full-bleed washed-out
    bar and nick called it on the live stream — the fix is structural: the reel inherits the
-   scene-chrome paper set and the workstack frame (gradient, rim, sheen, drop). The second cut grew
+   scene-chrome paper set and the retired work stack's frame (gradient, rim, sheen, drop). The second cut grew
    a mono eyebrow header over the ask line and nick called that too (2026-08-19: two rows of stage
    for what /live says in one) — so the reel is now a single line, /live's rail shape: bell, the
    rotating ask, counts and rotation dots on the right edge. Type still runs ~1.5× /live's rail so

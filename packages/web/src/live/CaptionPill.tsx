@@ -14,8 +14,8 @@ import type { Caption } from './captions';
  * the act family. Colour is never the only signal: the sentence says the same thing in words, and
  * the tone only tints a border and a dot.
  *
- * One component, two mounts (`WorkStack`'s header on /live, `OfficeOverlay`'s card on /broadcast),
- * because those two surfaces have drifted apart before and the caption is the same object on both.
+ * One component, one mount: the team column's header, on /live and /broadcast alike (ADR 464) —
+ * those two surfaces have drifted apart before, and the caption is the same object on both.
  */
 export function CaptionPill({
   caption,

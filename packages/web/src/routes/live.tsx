@@ -85,7 +85,7 @@ const TEAM_KEY = 'musterd.live.team';
 const COLLAPSE_KEY = 'musterd.live.collapsed';
 
 /** Work lives in the team column (ADR 464) — not on plates, and no longer in the floating stack. */
-const WORK_CUES: 'hybrid' | 'stack' | 'none' = 'none';
+const WORK_CUES: 'hybrid' | 'none' = 'none';
 
 /** The three live panels, each independently collapsible into a slim rail. */
 type PanelId = 'office' | 'team';

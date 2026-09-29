@@ -29,6 +29,9 @@ export function captionColorFor(
  * The team column (ADR 464): who is here, which model each agent runs, and what each is doing —
  * readable from the back of a room. Replaces the roster rail on /live; the operator detail it
  * carried is one click down on every card. Collapsed, it is a rail of avatars with provider logos.
+ *
+ * `still` is the stream's column (`/broadcast`, ADR 464 lane 5): the same cards with nothing to
+ * press, and none of the operator notes — a Twitch viewer cannot reload a seat.
  */
 export function TeamColumn({
   roster,
@@ -47,6 +50,7 @@ export function TeamColumn({
   unreadable = 0,
   stale = false,
   asks = [],
+  still = false,
 }: {
   roster: MemberSummary[];
   board: LaneBoard | null;
@@ -74,6 +78,8 @@ export function TeamColumn({
   unreadable?: number;
   /** The roster refetch is failing persistently; these cards are frozen at the last good read. */
   stale?: boolean;
+  /** Non-interactive (a stream source): no hover link, no expanding, no operator notes. */
+  still?: boolean;
 }) {
   const { cards, offline } = teamCards(roster, board, goals, asks);
   const working = cards.filter((c) => c.state === 'working').length;
@@ -137,11 +143,12 @@ export function TeamColumn({
             cfg={cfg}
             daemonBuild={daemonBuild}
             daemonEpoch={daemonEpoch}
+            still={still}
           />
         ))}
       </ul>
       {offline > 0 && <p className="lc-team__offline">+ {offline} offline</p>}
-      <TeamColumnNotes roster={roster} unreadable={unreadable} stale={stale} />
+      {!still && <TeamColumnNotes roster={roster} unreadable={unreadable} stale={stale} />}
     </aside>
   );
 }

@@ -117,6 +117,21 @@ describe('TeamColumn', () => {
     expect(html).toContain('lc-team-card--asking');
   });
 
+  it('still (the stream): the same card, nothing to press, no operator notes (ADR 464 lane 5)', () => {
+    const html = render({
+      roster: [m('ryder')],
+      board,
+      goals: [{ id: 'launch', title: 'Launch' }],
+      unreadable: 2,
+      still: true,
+    });
+    expect(html).toContain('Trace coverage for every harness');
+    expect(html).toContain('is-still');
+    expect(html).not.toContain('<button');
+    expect(html).not.toContain('aria-expanded');
+    expect(html).not.toContain('newer than this page');
+  });
+
   it('says when this page cannot read every seat', () => {
     expect(render({ roster: [m('a')], unreadable: 1 })).toContain('reload to meet');
   });

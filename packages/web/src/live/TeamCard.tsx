@@ -11,6 +11,9 @@ import { elapsed, type TeamCard as Card } from './teamCards';
  * readable name, or "human"), a plain-language state, and what they are on in big type. Hover or
  * focus links the card to the member's character on the floor; click expands to the operator
  * detail the roster row used to carry.
+ *
+ * `still` is the stream's card (`/broadcast`, ADR 464 lane 5): the same face, but nobody can point
+ * at a stream, so there is no hit area, no link and no detail to open.
  */
 export function TeamCard({
   card,
@@ -20,6 +23,7 @@ export function TeamCard({
   cfg = null,
   daemonBuild,
   daemonEpoch,
+  still = false,
 }: {
   card: Card;
   now: number;
@@ -28,6 +32,7 @@ export function TeamCard({
   cfg?: LiveConfig | null;
   daemonBuild?: string | undefined;
   daemonEpoch?: number | undefined;
+  still?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const badge = modelBadge(card.member);
@@ -45,6 +50,72 @@ export function TeamCard({
         ? ` (build ${memberBuild.slice(0, 7)} vs ${daemonBuild.slice(0, 7)})`
         : '')
     : undefined;
+  const face = (
+    <>
+      <span
+        className="lc-team-card__avatar"
+        style={{ background: memberAvatar(card.name, card.kind, card.member.hue) }}
+        aria-hidden="true"
+      >
+        {initial(card.name)}
+      </span>
+      <span className="lc-team-card__who">
+        <span className="lc-team-card__name">{card.name}</span>
+        <span
+          className={`lc-team-card__model is-${badge.source}`}
+          // The readable name first, so the accessible name matches what the eye reads; the raw
+          // id follows for the operator (stanley, lane-1 acceptance).
+          title={badge.full ? `${badge.label} · ${badge.full}` : undefined}
+          style={
+            showLogo
+              ? {
+                  borderColor: badge.provider.border,
+                  background: badge.provider.fill,
+                  color: badge.provider.ink,
+                }
+              : undefined
+          }
+        >
+          {showLogo && (
+            <span
+              className="lc-team-card__logo"
+              aria-hidden="true"
+              dangerouslySetInnerHTML={{ __html: providerIconHtml(badge.provider) }}
+            />
+          )}
+          {badge.label}
+          {(badge.source === 'declared' || badge.source === 'unverified') && (
+            <span className="lc-team-card__declared"> · {badge.source}</span>
+          )}
+        </span>
+        {behind && (
+          <span className="lc-seat__behind" title={skewTitle}>
+            behind
+          </span>
+        )}
+      </span>
+      <span className="lc-team-card__state">{card.stateLabel}</span>
+      {card.title && (
+        <span className={`lc-team-card__work${card.source === 'status' ? ' is-said' : ''}`}>
+          {card.source === 'status' ? `“${card.title}”` : card.title}
+          {card.moreLanes > 0 && (
+            <span className="lc-team-card__more"> +{card.moreLanes} more</span>
+          )}
+        </span>
+      )}
+      {meta && <span className="lc-team-card__meta">{meta}</span>}
+    </>
+  );
+  if (still) {
+    return (
+      <li
+        className={`lc-team-card lc-team-card--${card.state} is-still`}
+        style={{ ['--member' as string]: card.color }}
+      >
+        <div className="lc-team-card__hit">{face}</div>
+      </li>
+    );
+  }
   return (
     <li
       className={`lc-team-card lc-team-card--${card.state}${linked ? ' is-linked' : ''}`}
@@ -60,58 +131,7 @@ export function TeamCard({
         onFocus={() => onLink?.(card.name)}
         onBlur={() => onLink?.(null)}
       >
-        <span
-          className="lc-team-card__avatar"
-          style={{ background: memberAvatar(card.name, card.kind, card.member.hue) }}
-          aria-hidden="true"
-        >
-          {initial(card.name)}
-        </span>
-        <span className="lc-team-card__who">
-          <span className="lc-team-card__name">{card.name}</span>
-          <span
-            className={`lc-team-card__model is-${badge.source}`}
-            // The readable name first, so the accessible name matches what the eye reads; the raw
-            // id follows for the operator (stanley, lane-1 acceptance).
-            title={badge.full ? `${badge.label} · ${badge.full}` : undefined}
-            style={
-              showLogo
-                ? {
-                    borderColor: badge.provider.border,
-                    background: badge.provider.fill,
-                    color: badge.provider.ink,
-                  }
-                : undefined
-            }
-          >
-            {showLogo && (
-              <span
-                className="lc-team-card__logo"
-                aria-hidden="true"
-                dangerouslySetInnerHTML={{ __html: providerIconHtml(badge.provider) }}
-              />
-            )}
-            {badge.label}
-            {(badge.source === 'declared' || badge.source === 'unverified') && (
-              <span className="lc-team-card__declared"> · {badge.source}</span>
-            )}
-          </span>
-          {behind && (
-            <span className="lc-seat__behind" title={skewTitle}>
-              behind
-            </span>
-          )}
-        </span>
-        <span className="lc-team-card__state">{card.stateLabel}</span>
-        {card.title && (
-          <span className={`lc-team-card__work${card.source === 'status' ? ' is-said' : ''}`}>
-            {card.source === 'status' ? `“${card.title}”` : card.title}
-            {card.moreLanes > 0 && (
-              <span className="lc-team-card__more"> +{card.moreLanes} more</span>
-            )}
-          </span>
-        )}
-        {meta && <span className="lc-team-card__meta">{meta}</span>}
+        {face}
       </button>
       {open && (
         <div className="lc-team-card__detail">

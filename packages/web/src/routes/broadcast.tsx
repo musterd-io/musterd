@@ -14,6 +14,10 @@ import { justShipped } from '../live/buildSync';
 import { officeRoom } from '../live/officeRoom';
 import { useWorkingOn } from '../live/useWorkingOn';
 import { roomEntries } from '../live/workingOn';
+import { useReport } from '../live/useReport';
+import { TeamColumn, captionColorFor } from '../live/TeamColumn';
+import { Ticker } from '../live/Ticker';
+import type { Caption } from '../live/captions';
 
 export const Route = createFileRoute('/broadcast')({
   head: () => ({
@@ -190,10 +194,11 @@ interface BroadcastWindow {
 /**
  * **Broadcast mode** (ADR 157) — the office as a stream source.
  *
- * `/broadcast?team=<slug>` renders the animated office and nothing else: a fixed 1920×1080 stage, no
- * panels, no controls, no connect form, and a minimal overlay (team name + LIVE pill). OBS points a
- * Browser source straight at this URL, so there is no window capture and no compositor round-trip —
- * the failure mode that melted the laptop the first time round.
+ * `/broadcast?team=<slug>` renders the office, the team column and the headline ticker (ADR 464 lane
+ * 5 — the same story /live tells, so a stream viewer and a room viewer read one page) on a fixed
+ * 16:9 stage: no controls, no connect form, nothing to press. OBS points a Browser source straight at
+ * this URL, so there is no window capture and no compositor round-trip — the failure mode that
+ * melted the laptop the first time round.
  *
  * Two properties this route holds by construction rather than by care:
  *
@@ -261,10 +266,12 @@ function BroadcastPage() {
   });
   const { envelopes, roster, status } = stream;
 
-  // The overlay's reel: everyone in the room and what they are on. Uncapped — the stream's chyron
-  // cycles one at a time, so the roster costs dwell time rather than stage area.
+  // Who is on what — the room's desks and the team column read the same board.
   const board = useWorkingOn(cfg, envelopes);
   const entries = roomEntries(roster, board);
+  const report = useReport(cfg, envelopes);
+  // The narration line, handed out by the scene and carried in the team column's header (as on /live).
+  const [caption, setCaption] = useState<Caption | null>(null);
   // The room's ask moment (ADR 464 §3.3) reads the same derivation the page's banner does.
   const derivedAsks = useMemo(() => deriveAsks(envelopes), [envelopes]);
   const asks = useMemo(() => applyTierClock(derivedAsks, Date.now()), [derivedAsks]);
@@ -314,16 +321,30 @@ function BroadcastPage() {
         style={{ width: stage.w, height: stage.h, transform: `scale(${scale})` }}
       >
         {team && (
-          <OfficeScene
-            {...officeRoom(team, stream, { entries, board, asks })}
-            broadcast
-            captureFps={captureFps}
-            sprites={sprites}
-            workCues="stack"
-            topSlot={<AsksReel envelopes={envelopes} roster={roster} board={board} />}
-            cornerSlot={broadcastCorner(team, shipped)}
-            onReady={onSceneReady}
-          />
+          <>
+            <div className="lc__canvas bc__canvas">
+              <OfficeScene
+                {...officeRoom(team, stream, { entries, board, asks })}
+                broadcast
+                captureFps={captureFps}
+                sprites={sprites}
+                topSlot={<AsksReel envelopes={envelopes} roster={roster} board={board} />}
+                cornerSlot={broadcastCorner(team, shipped)}
+                onReady={onSceneReady}
+                onCaption={setCaption}
+              />
+              <TeamColumn
+                roster={roster}
+                board={board}
+                goals={report?.goals ?? []}
+                caption={caption}
+                captionColor={captionColorFor(roster, caption)}
+                asks={asks}
+                still
+              />
+            </div>
+            <Ticker envelopes={envelopes} roster={roster} board={board} />
+          </>
         )}
         {/* Operator diagnostics, not stream chrome: the two states where there is no office to look
             at. A misconfigured OBS source must say so rather than show an empty black stage. */}
