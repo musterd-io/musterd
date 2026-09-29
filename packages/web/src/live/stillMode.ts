@@ -128,3 +128,18 @@ export const asksOpenMode = (): boolean => flagHere('asks-open');
 export const isPlatesOpen = (search: string): boolean => hasFlag(search, 'plates-open');
 
 export const platesOpenMode = (): boolean => flagHere('plates-open');
+
+/**
+ * `?log-open` — MEASUREMENT MODE for the log drawer (ADR 464 lane 2).
+ *
+ * Fourth of the same bargain. The stream left /live's page for a drawer that is closed by default,
+ * so the contrast gate's connected sweep would otherwise never again see a stream row on this
+ * route — and the base page's text-node floor, sized when the column was always there, would read
+ * "never connected" against a page that simply has less prose on it now. The page knows whether its
+ * drawer is open; it can mount it open, with no slide to race.
+ *
+ * Scope: the drawer's INITIAL state only. Escape and the close control behave normally.
+ */
+export const isLogOpen = (search: string): boolean => hasFlag(search, 'log-open');
+
+export const logOpenMode = (): boolean => flagHere('log-open');

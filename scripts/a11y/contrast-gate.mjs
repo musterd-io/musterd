@@ -498,8 +498,13 @@ if (!STATIC_ONLY) {
     report(await sweep(`${base}/board?team=${team}`), '/board (connected)', 12);
     /* /live's floor is NOT /board's 12. A /live whose team data never arrives renders its empty
        screen ("0 seats", "No seats on this team", "Listening.") at ~18 rows, so 12 passed it green.
-       The fixture team paints 260-307 (CI, 2026-09-24); 100 sits ~5x over empty and well under that. */
-    const LIVE_FLOOR = 100;
+       The fixture team painted 260-307 (CI, 2026-09-24) while the stream column was on the page;
+       ADR 464 lane 2 (2026-09-28) moved the stream into a closed-by-default drawer, and the base
+       page now paints ~80 (team cards, the meter, the ticker, the plates). 50 sits ~3x over empty
+       and under that; the stream's own rows are measured by the `?log-open` pass below, which
+       keeps the old 100. */
+    const LIVE_FLOOR = 50;
+    const LOG_FLOOR = 100;
     // Connected /live mounts the office scene, so its lighting is pinned like the preview's —
     // same clock-dependence, same two-ended bracket. See SCENE_LIGHTS above.
     for (const light of SCENE_LIGHTS) {
@@ -538,6 +543,16 @@ if (!STATIC_ONLY) {
       await sweep(`${base}/live?team=${team}&light=${SCENE_LIGHTS[0]}${SCENE_STILL}&plates-open`),
       '/live (connected, nameplates open)',
       LIVE_FLOOR,
+    );
+    /* The LOG DRAWER, open (`?log-open`, ADR 464 lane 2). The stream — every act row, the model
+       stamp, the reply quotes, the day/now dividers — is inside a drawer that is closed by default,
+       so without this pass the connected sweep would never again see a stream row on /live. One
+       lighting value: the drawer is opaque paper over the page, so its inks do not track the room's
+       light. Its floor is the old whole-page floor, because the rows are what carried it. */
+    report(
+      await sweep(`${base}/live?team=${team}&light=${SCENE_LIGHTS[0]}${SCENE_STILL}&log-open`),
+      '/live (connected, log open)',
+      LOG_FLOOR,
     );
   } finally {
     await sh(['down']);

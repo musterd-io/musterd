@@ -9,6 +9,7 @@ import { MemberSignInFields, MemberSignInToggle, type AdvancedState } from '../l
 import { OfficeScene } from '../live/OfficeScene';
 import { TeamColumn, captionColorFor } from '../live/TeamColumn';
 import type { Caption } from '../live/captions';
+import { logOpenMode } from '../live/stillMode';
 import { revealWhenMounted } from '../live/reveal';
 import { LogDrawer } from '../live/LogDrawer';
 import { Ticker } from '../live/Ticker';
@@ -107,7 +108,7 @@ function LivePage() {
   const [collapsed, setCollapsed] = useState<Collapsed>(NO_COLLAPSE);
   const [seedsOpen, setSeedsOpen] = useState(false);
   /** The log drawer (ADR 464 lane 2): every message, one keystroke away. */
-  const [logOpen, setLogOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(logOpenMode);
   const closeLog = useCallback(() => setLogOpen(false), []);
   /** ADR 464: the member under the pointer — on a card or on their plate — so both wear a ring. */
   const [linked, setLinked] = useState<string | null>(null);
