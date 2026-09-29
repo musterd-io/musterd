@@ -115,6 +115,13 @@ concession without lowering _wrong_ concession.
 
 ## Consequences
 
+- **2026-09-29 — the `Follows-up:` line at the end of Decision §3 is not an edit artifact** (stanley's
+  acceptance note on #1828). It is the disposition `pnpm intents:check` requires beside the §3
+  sentence that points at a later ADR: every forward reference in an ADR must name a lane, a reopen
+  trigger with a date, or a reason it will never be done (ADR 373's meter). The trigger it names is the first
+  thirty-day read of the eval below, around 2026-10-29; the anonymised-delivery ADR is written then,
+  with the baseline in hand to A/B against. The gate reads the line only when it sits beside the
+  phrase, which is why it lives in §3 rather than here.
 - **Increment 1 (this lane):** this ADR; the skill section "Answering a critique" in
   `packages/protocol/src/guidance.ts` (content version bumped, every seat's `SKILL.md` refreshes on
   the next `musterd init`/doctor pass); the wiki page with the baseline table, the queries, and the
