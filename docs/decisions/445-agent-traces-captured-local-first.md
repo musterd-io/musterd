@@ -495,6 +495,24 @@ ADR 184's publication gate; a spans backend.
   the transcript's 73 Read blocks by 33, unexplained; and rows from that session's build carry a
   `tool_use_id` of two ids joined by a newline (`call-…\nfc_…`), which the tap has since cut to its
   first line. Falsifier: a session whose numerator exceeds its distinct main-loop call ids.
+- **2026-09-29 — the 33-Read gap is model messages the transcript does not hold, not a tap fault**
+  (lane `01M3NBTAC8HXSNVBJEW2D1M0GQ`; no code change). On 0e58c84e the 106 distinct Read ids
+  come from 61 model messages (the `fc_<message>_<k>` companion id); the transcript holds 48
+  Read-bearing assistant messages with 73 blocks, and the per-message shape is the same on both
+  sides (mostly 1, up to 4–5). Ruled out: compaction — all 14 user turns are present with their
+  timestamps and Shell reconciles per 10-minute bucket (86 ids vs 92 blocks); harness-issued reads
+  at session start — the transcript's turn 1 holds those four `.cursor/rules` / `.grok/skills`
+  reads; IDE-issued reads — this was cursor-agent. The extra 13 messages sit inside the two heavy
+  turns (3 and 12), where the hook rate was highest and where the three ids re-emitted 7–26 times
+  also sit; R1's tool calls for turn 12 end at 10:05 local while the transcript's turn runs to
+  10:28. The best-supported reading is retried model responses: cursor-agent ran the tool calls of
+  a response it then discarded, and the transcript keeps only the response it kept. Not provable
+  here — the transcript carries no message or call ids — so R1 stands as the record of what ran and
+  R2 as the record of what the model kept, and the ratio's residual on cursor is a harness property,
+  not a tap gap. Nothing to change in the taps or the aggregate. What would settle it: a
+  cursor-agent transcript format that carries `tool_use.id` (then R1↔R2 join by id, as Claude
+  Code's does). Falsifier: a fresh cursor-agent session, ended cleanly, with no re-emitted id, whose
+  distinct Read ids differ from its transcript Read blocks by more than 2%.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
