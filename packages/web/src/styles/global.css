@@ -5,6 +5,10 @@
  * weight in that range renders without another file. The tokens in tokens.css
  * point at these names; budgets.json allowlists the `recursive-` files.
  */
+/* @import must precede every other rule, @font-face included, or the browser drops it — and
+ * with it every token (ADR 477 shipped that way for one publish). */
+@import './tokens.css';
+
 @font-face {
   font-family: 'Recursive Casual';
   src: url('./fonts/recursive-casual.woff2') format('woff2');
@@ -27,7 +31,6 @@
   font-display: swap;
 }
 
-@import './tokens.css';
 
 *,
 *::before,
