@@ -278,6 +278,35 @@ describe('host provisions (ADR 463 §2)', () => {
     expect(told.body).toMatch(/No host of yours picked up dana-scout.*\/join\/hp-t#n=/);
   });
 
+  it('GET /host/provisions lists without claiming, and only the caller’s own sponsored seats', async () => {
+    const { dana, hostKey } = await danaWithLiveHost();
+    await post('/teams/hp-t/members/agents', { name: 'dana-scout' }, dana);
+    const eve = await addHuman('eve');
+    await post('/teams/hp-t/members/agents', { name: 'eve-scout' }, eve);
+    const listed = await call(
+      'GET',
+      '/teams/hp-t/host/provisions?host=dana-mbp',
+      undefined,
+      hostKey,
+    );
+    expect(listed.status).toBe(200);
+    expect(listed.json.provisions.map((p: any) => [p.agent, p.state])).toEqual([
+      ['dana-scout', 'pending'],
+    ]);
+    // Reading claimed nothing: the same row is still claimable.
+    const claim = await post('/teams/hp-t/host/provisions', { host: 'dana-mbp' }, hostKey);
+    expect(claim.json.provisions).toHaveLength(1);
+    const after = await call(
+      'GET',
+      '/teams/hp-t/host/provisions?host=dana-mbp',
+      undefined,
+      hostKey,
+    );
+    expect(after.json.provisions[0].state).toBe('claimed');
+    const noHost = await call('GET', '/teams/hp-t/host/provisions', undefined, hostKey);
+    expect(noHost.status).toBe(422);
+  });
+
   it('the claim poll is a sponsor heartbeat, too', async () => {
     const dana = await addHuman('dana');
     const hk = await post(

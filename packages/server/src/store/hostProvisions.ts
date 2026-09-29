@@ -213,6 +213,16 @@ export function reportProvision(
   })();
 }
 
+/** The newest provisions, for `musterd host provisions` — unclaimed and claimed rows included. */
+export function listProvisions(db: Database, teamId: string, limit = 50): HostProvisionRow[] {
+  return db
+    .prepare<
+      [string, number],
+      HostProvisionRow
+    >('SELECT * FROM host_provisions WHERE team_id = ? ORDER BY created_at DESC, id DESC LIMIT ?')
+    .all(teamId, limit);
+}
+
 /** What the sweep did to one row, and why. */
 export interface SweptProvision {
   row: HostProvisionRow;

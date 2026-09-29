@@ -15,6 +15,58 @@ afterEach(() => {
   for (const d of made.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
+describe('provisionWorkspace --clone (ADR 463 §3)', () => {
+  function repoWithCommit(): string {
+    const repo = realpathSync(tmp('mwd-clone-src-'));
+    execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: repo });
+    execFileSync('git', ['config', 'user.email', 't@t'], { cwd: repo });
+    execFileSync('git', ['config', 'user.name', 't'], { cwd: repo });
+    execFileSync('git', ['commit', '-q', '--allow-empty', '-m', 'root'], { cwd: repo });
+    return repo;
+  }
+
+  it('makes a self-contained clone on its own branch, with .musterd/ kept out of git', () => {
+    const repo = repoWithCommit();
+    const home = tmp('mwd-clone-home-');
+    const ws = provisionWorkspace('dana-scout', { team: 'acme', cwd: repo, home, clone: true });
+    expect(ws.created).toBe(true);
+    expect(realpathSync(ws.dir)).toBe(
+      join(realpathSync(home), 'musterd', 'acme', basename(repo), 'dana-scout'),
+    );
+    const git = (...a: string[]) =>
+      execFileSync('git', a, { cwd: ws.dir, encoding: 'utf8' }).trim();
+    // a real clone: its own object store, not a linked worktree
+    expect(existsSync(join(ws.dir, '.git', 'objects'))).toBe(true);
+    expect(git('rev-parse', '--git-common-dir')).toBe('.git');
+    expect(git('branch', '--show-current')).toBe('agent/dana-scout');
+    expect(git('config', '--worktree', 'user.email')).toBe('dana-scout@acme.musterd');
+    // the binding can never be committed from it
+    execFileSync('sh', ['-c', 'mkdir -p .musterd && echo secret > .musterd/binding.json'], {
+      cwd: ws.dir,
+    });
+    expect(git('status', '--porcelain')).toBe('');
+  });
+
+  it('without clone it is still a linked worktree sharing the source’s object store', () => {
+    const repo = repoWithCommit();
+    const home = tmp('mwd-clone-home-');
+    const ws = provisionWorkspace('dana-scout', { team: 'acme', cwd: repo, home });
+    const common = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+      cwd: ws.dir,
+      encoding: 'utf8',
+    }).trim();
+    expect(common).toBe(join(repo, '.git'));
+  });
+
+  it('an existing Workspace is reused, never re-cloned', () => {
+    const repo = repoWithCommit();
+    const home = tmp('mwd-clone-home-');
+    const first = provisionWorkspace('dana-scout', { team: 'acme', cwd: repo, home, clone: true });
+    const again = provisionWorkspace('dana-scout', { team: 'acme', cwd: repo, home, clone: true });
+    expect(again).toMatchObject({ dir: first.dir, created: false });
+  });
+});
+
 describe('provisionWorkspace', () => {
   it('--here binds the current folder, creates nothing', () => {
     const cwd = tmp('mwd-here-');

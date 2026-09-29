@@ -189,6 +189,7 @@ import {
   claimProvisions,
   failProvision,
   getProvision,
+  listProvisions,
   reportProvision,
   toProvision,
 } from '../store/hostProvisions.js';
@@ -3507,6 +3508,21 @@ export async function handleHttp(
           ready.push(toProvision(row, team.slug, agent.name, sponsor?.name ?? '?'));
         }
         return sendJson(res, 200, { provisions: ready });
+      }
+
+      // ADR 463 §3: `musterd host provisions` — read-only, no claim. The host key sees only the
+      // provisions of seats it may serve (`hostMayServe`), the same scoping as the claim.
+      if (method === 'GET' && rest === '/host/provisions') {
+        const host = url.searchParams.get('host');
+        if (!host) throw new MusterdError('validation', 'host query parameter required');
+        const { team, scope } = authAgentKeyOnly(ctx, slug, req, host);
+        const provisions = listProvisions(ctx.db, team.id).flatMap((row) => {
+          const agent = getMemberById(ctx.db, row.member_id);
+          if (!agent || !hostMayServe(scope, agent)) return [];
+          const sponsor = getMemberById(ctx.db, row.sponsor_id);
+          return [toProvision(row, team.slug, agent.name, sponsor?.name ?? '?')];
+        });
+        return sendJson(res, 200, { provisions });
       }
 
       // ADR 463 §2: the claimant reports `ready` or `failed {reason}`. The row's claimant label is

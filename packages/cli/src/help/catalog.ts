@@ -948,8 +948,10 @@ export const CATALOG: readonly CommandEntry[] = [
   },
   {
     name: 'host',
-    signature: '[--once] [--interval <s>] [--timeout <s>] [--host <label>]',
-    summary: 'the wake actuator — resurrect enrolled offline seats on this machine (ADR 131)',
+    signature:
+      '[provisions] [--once] [--interval <s>] [--timeout <s>] [--host <label>] [--no-provision] [--clone]',
+    summary:
+      'the wake actuator — resurrect enrolled offline seats on this machine; provisions the agents you create (ADR 131, 463)',
     group: 'ops',
     detail:
       'The per-machine wake actuator (ADR 131 inc 3): polls the daemon for wake leases ' +
@@ -958,8 +960,19 @@ export const CATALOG: readonly CommandEntry[] = [
       'the roster (never stdout), kills on the mandatory watchdog (--timeout, default 300s), and ' +
       'reports the outcome. Reply-only by default: the spawned run gets musterd MCP tools under ' +
       'the workspace’s own permission mode — never a skip-permissions flag. Seats register via ' +
-      '`musterd residency on` in their workspace; `--once` polls a single time (for cron/testing).',
-    examples: ['musterd host', 'musterd host --once', 'musterd host --interval 5 --timeout 120'],
+      '`musterd residency on` in their workspace; `--once` polls a single time (for cron/testing). ' +
+      'Run in a sponsor’s own Workspace, it also provisions the agents that sponsor creates ' +
+      '(ADR 463 §3): each tick it claims them, stands each up here — a linked checkout by default, or ' +
+      'a full clone with `--clone` for isolation from your checkout — enrolls it, and reports ' +
+      'ready; the new agent then greets you. `--no-provision` opts out. `musterd host provisions` ' +
+      'lists what this host may see and claims nothing.',
+    examples: [
+      'musterd host',
+      'musterd host --once',
+      'musterd host --interval 5 --timeout 120',
+      'musterd host --clone',
+      'musterd host provisions',
+    ],
   },
   {
     name: 'unbind',
