@@ -1531,8 +1531,9 @@ function authAgentKeyOnly(
 /**
  * ADR 463 §1: whose seats a host key may serve (see `hostMayServe`). An admin-minted key is team-wide
  * AND serves the admin's own sponsored seats; a non-admin's key serves only that member's sponsored
- * seats. Resolved per request, so promotion or demotion changes a key's reach at once; a key whose
- * creator has left, lost standing, or had can_create_agents withdrawn is refused.
+ * seats. Resolved per request, so promotion or demotion changes a key's reach at once. Any key whose
+ * creator has left is refused; a non-admin sponsor's key is also refused once its creator loses
+ * standing or has can_create_agents withdrawn. An admin-minted key keeps its team-wide reach.
  */
 function hostKeyScope(ctx: Ctx, team: TeamRow, createdBy: string | null): HostScope {
   if (createdBy === null) return TEAM_WIDE_HOST;
