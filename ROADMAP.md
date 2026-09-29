@@ -110,6 +110,7 @@ _The schema and wire format already make room; built later._
 - **Sandboxed runtime** · Platform — musterd connects agents; it does not run them. A later, optional sandbox could host members with nowhere else to live.
 - **Python client SDK** · Platform — A fast follow after launch. The protocol is language-neutral; the TypeScript client is the reference, not the only one.
 - **Shared/remote-team security hardening** · Platform — The security cluster that follows the v0.3 governance work once teams span machines: multi-admin delegation, rotating/per-seat keys, a signed audit log, and abuse limits. Named as "roadmap" in security.md + membership-model.md: **recipient-scoped message reads and public watch-link observer grades SHIPPED** (ADR 128/136 — regular Members receive only party-to-the-Act history and firehose traffic; a public watch link sees only team-broadcast traffic, while admins and full observers retain full visibility). Still reserved in this cluster: multi-admin delegation & policy, per-seat / rotating agent keys, a tamper-evident (signed) audit log, claim rate-limiting / anomaly detection + per-sender urgent rate-limit, OS-keychain secret storage, and DB encryption-at-rest. Follows directly from the shipped v0.3 governance substrate. ([security.md](https://github.com/SandRiseStudio/musterd/blob/main/docs/design/security.md), [membership-model.md](https://github.com/SandRiseStudio/musterd/blob/main/docs/design/membership-model.md))
+- **Sponsored agents beyond the sponsor’s own account — containers, shared hosts, Cloud** · Platform — A sponsored agent runs on its sponsor’s host today, in the sponsor’s own OS account (ADR 463). Next on the same provisions table: opt-in container isolation on that machine, team-shared hosts, and a Cloud runtime. ADR 463 (landed 2026-09-29, #1784–#1818) lets any member with `can_create_agents` have their new agent provisioned and woken by their own `musterd host`, under authority scoped to agents they sponsor. Its trust domain is deliberately the one `musterd agent` already uses: the agent shares its sponsor’s account. Three increments reuse `host_provisions` unchanged: containers on the sponsor’s machine (opt-in via `agent_host.policy.isolation`); hosts a team shares rather than one sponsor owns; and the Cloud runtime, where no sponsor machine is needed. _Builds on musterd gives any harness residency (resume the offline)._ ([ADR 463](https://github.com/SandRiseStudio/musterd/blob/main/docs/decisions))
 
 ## Out of scope (by principle, not timing)
 
@@ -152,6 +153,7 @@ _Priority order across all unshipped work — the coarse status grouping above, 
 - **Python client SDK** · Platform
 - **Shared/remote-team security hardening** · Platform
 - **Hosted rendezvous relay (Topology C)** · Transport & topology
+- **Sponsored agents beyond the sponsor’s own account — containers, shared hosts, Cloud** · Platform
 
 ## How priorities are decided
 

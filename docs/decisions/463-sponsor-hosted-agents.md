@@ -186,6 +186,13 @@ never provisioned a second time. `--no-provision` opts out; `musterd host provis
   fails step 5; skipping the cascade's residency revoke fails step 8. Step 8 removes the sponsor
   rather than disabling them: disable and ban have no writer on a team that holds sponsored agents
   (§4.2, amended 2026-09-28), so removal is the trigger the eval exercises.
+- 2026-09-29 (landed): all increments are on `main` — #1784 `09f7ab13` (authority, host-key
+  scoping), #1789 (the residual closed), #1800 `6df0aa5c` (provisions, migration 79), #1810
+  `d4408f0e` (`provisionSeat` extract), #1813 `b84aa4c0` (`musterd agent` for a sponsor), #1814
+  `78a696b7` (the host provisioner), #1818 `e32bb4e1` (Scenario E), and the docs sweep. The five
+  planned PRs became seven because increment 3 split at `provisionSeat`. `SPEC.md` is unchanged:
+  host provisions are daemon-local HTTP, not envelope acts. Falsifier still open: nothing has run
+  on a real sponsor's machine against the live daemon, only the in-process Scenario E.
 - The work lands in five PRs, each alone: (1) this ADR; (2) sponsor-scoped authority and host-key
   scoping; (3) the residual closed in code; (4) provisions; (5) the provisioner, Scenario E, docs.
 

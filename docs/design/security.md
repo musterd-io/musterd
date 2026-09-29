@@ -45,6 +45,7 @@ Credentials decide _who_; capabilities decide _what_ and _what's visible_. Both 
 - **The daemon** is the trusted core; it holds the DB and enforces all authz.
 - **Harness configs** (`.cursor/mcp.json`, `~/.claude.json` project scope, env) hold secrets and sit **outside** the daemon's control — treat them as the weakest link.
 - **The local machine / user account** is trusted in v0.1 (local-first). Shared/remote teams widen the boundary; that's why grants exist.
+- **A sponsored agent shares its sponsor's OS account** (ADR 463). When a member's agent runs on that member's `musterd host`, it is the same trust domain `musterd agent` already uses; nothing widens it. What bounds it is authority, not isolation: the sponsor can mint credentials only for agents they sponsor, and losing their standing revokes every descendant. Container isolation on the sponsor's machine is the opt-in next increment (`ROADMAP.md`).
 
 ## Threats & mitigations
 

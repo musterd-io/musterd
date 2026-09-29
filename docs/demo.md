@@ -526,6 +526,8 @@ The §4 table applies. For this cut specifically:
 
 ## 7. The live-build demo — the room joins, pitches, and watches a team build it (goal `demo`)
 
+> **Historical (2026-09-29).** This section records the demo as walked; it is not maintained. Step 4's "the agent wakes on the presenter's host" is superseded: a member's agent now runs on its **sponsor's own** `musterd host`, in the sponsor's account — see [ADR 463](decisions/463-sponsor-hosted-agents.md).
+
 Walked through by nick on 2026-09-26. This supersedes the 2026-09-24 "joins happen before the slot"
 line, which nick does not recognise as his decision: **the link is given live, during the demo.**
 This first cut has **no time limit**; a 2-minute cut (§6's slot) comes later as its own version.
