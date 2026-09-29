@@ -117,9 +117,11 @@ function holdNow(ask: AskView, now: number): string {
     : `goes ahead in ${min} min if unanswered`;
 }
 
+/** m:ss under an hour; past it, "5h 31m" — a room does not read "331:09" (dolly, lane 3). */
 function clock(ask: AskView, now: number): string {
   const ms = ask.state === 'open' && ask.deadline > now ? ask.deadline - now : now - ask.env.ts;
   const m = Math.floor(ms / 60_000);
+  if (m >= 60) return `${Math.floor(m / 60)}h ${m % 60}m`;
   const s = Math.floor((ms % 60_000) / 1000);
   return `${m}:${String(s).padStart(2, '0')}`;
 }

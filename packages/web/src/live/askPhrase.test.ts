@@ -79,6 +79,13 @@ describe('askBanner', () => {
     expect(b.clock).toBe('20:00');
   });
 
+  it('a clock past an hour reads in hours and minutes', () => {
+    const b = banner([
+      ask('a', { ts: NOW - 331 * MIN, meta: { species: 'approve', tier: 'blocking' } }),
+    ]);
+    expect(b.mode === 'open' && b.clock).toBe('5h 31m');
+  });
+
   it('settled within SETTLED_MS shows the outcome; older is idle (Review Focus 3)', () => {
     const answered = [
       ask('a'),

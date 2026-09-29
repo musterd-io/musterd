@@ -496,6 +496,24 @@ function LivePage() {
   };
 
   const connected = cfg != null;
+  // The ask banner (ADR 464 §6). Inside the office on a desk; on a phone the office is hidden, so
+  // the banner sits ABOVE the team list instead — spec §2's phone order, and the answer to dolly's
+  // note that a phone could not see an open question at all.
+  const asksStrip = connected ? (
+    <AsksStrip
+      envelopes={envelopes}
+      roster={roster}
+      cfg={cfg}
+      watchLink={watchLink}
+      localIdentity={localIdentity}
+      onSignIn={signInHere}
+      onSignOut={signOut}
+      board={board}
+      onOpenLane={setBoardLane}
+      liveIds={liveIds}
+      onReveal={onActClick}
+    />
+  ) : null;
 
   return (
     <main className="lc">
@@ -542,6 +560,7 @@ function LivePage() {
               {error} <button onClick={reset}>reset &amp; reconnect</button>
             </div>
           )}
+          {phone && <div className="lc__phone-asks">{asksStrip}</div>}
           <div
             className={
               `lc__canvas${collapsed.office ? ' is-office-collapsed' : ''}` +
@@ -560,21 +579,7 @@ function LivePage() {
               onBoardHover={preloadBoardOverlay}
               // The asks & approvals rail (ADR 149) rides the top of the room itself — the office
               // frames its own asks (nick, 2026-07-28). Still renders nothing until an ask exists.
-              topSlot={
-                <AsksStrip
-                  envelopes={envelopes}
-                  roster={roster}
-                  cfg={cfg!}
-                  watchLink={watchLink}
-                  localIdentity={localIdentity}
-                  onSignIn={signInHere}
-                  onSignOut={signOut}
-                  board={board}
-                  onOpenLane={setBoardLane}
-                  liveIds={liveIds}
-                  onReveal={onActClick}
-                />
-              }
+              topSlot={phone ? null : asksStrip}
               workCues={WORK_CUES}
               onCaption={setCaption}
               linked={linked}
