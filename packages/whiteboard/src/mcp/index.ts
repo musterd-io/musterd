@@ -7,6 +7,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod';
+import { isEntryPoint } from '../entry.js';
 import { NOTE_TEXT_MAX, seatActor, type CreatedBy, type EditOp, type ItemInput } from '../port.js';
 import { WhiteboardServiceClient } from './client.js';
 import { formatOutline } from './format.js';
@@ -244,7 +245,7 @@ export function buildWhiteboardMcpServer(client: WhiteboardServiceClient): McpSe
 }
 
 // stdio entry point (the .mcp.json target).
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (isEntryPoint(import.meta.url)) {
   const port = parseInt(process.env['WHITEBOARD_PORT'] ?? '4851', 10);
   const server = buildWhiteboardMcpServer(new WhiteboardServiceClient(port));
   await server.connect(new StdioServerTransport());

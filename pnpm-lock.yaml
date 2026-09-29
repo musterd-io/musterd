@@ -301,6 +301,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.20
       '@types/react':
         specifier: 19.2.17
         version: 19.2.17
@@ -322,9 +325,15 @@ importers:
       tldraw:
         specifier: 4.5.9
         version: 4.5.9(@floating-ui/dom@1.8.0)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
       vite:
         specifier: 8.1.0
         version: 8.1.0(@types/node@22.19.20)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0)
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.20)(@vitest/coverage-v8@4.1.11)(vite@8.1.0(@types/node@22.19.20)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
 
 packages:
 

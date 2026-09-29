@@ -14,6 +14,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { isEntryPoint } from './entry.js';
 import type { CreatedBy, EditOp, ItemInput } from './port.js';
 import { BOARD_NAME_RE } from './port.js';
 import { RoomManager } from './sync/roomManager.js';
@@ -218,7 +219,7 @@ function log(level: 'info' | 'warn' | 'error', message: string, error?: unknown)
 }
 
 // Entry point when spawned directly (the MCP server's spawn-on-demand path, ADR 330 decision 8).
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (isEntryPoint(import.meta.url)) {
   const running = await startService();
   const shutdown = async () => {
     log('info', 'shutting down — persisting open boards');

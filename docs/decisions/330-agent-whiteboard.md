@@ -106,3 +106,17 @@ extractable package to `@musterd/mcp`.
   skill, service, and data directory move intact.
 - Increment 2 is recorded, not promised: browser-rendered image export, and a long-poll variant
   of `whiteboard_read` so a facilitating seat waits instead of polling.
+- 2026-09-29 (lane 01M2PAMFW1, extraction for publish): the package is named `@musterd/whiteboard`
+  (nick: musterd-branded, but standalone; the unscoped `agent-whiteboard` is someone else's on npm),
+  with a `whiteboard` bin so `npx @musterd/whiteboard` starts the MCP server. The wire identity
+  `service: 'agent-whiteboard'`, which `musterd huddle` probes, is unchanged. Lifting the package out
+  of the monorepo showed the guarantee was narrower than this ADR claimed: `tsconfig.json` extended
+  `../../tsconfig.base.json`, `vitest.config.ts` imported `../../vitest.shared.ts`, and vitest,
+  typescript and `@types/node` resolved only because the monorepo hoisted them. `extraction.test.ts`
+  now fails on each of these (lane 01M32K08BD). The lift also found that neither entry point ever
+  started when run through an npm bin symlink (the main-module check compared argv[1] to the
+  module URL without resolving the link), so `npx` would have exited silently. `src/entry.ts` fixes
+  both. Verified from a packed tarball in an empty directory: the MCP server lists its six tools,
+  and `whiteboard_open` starts the service and serves the board page. A plain `npm install` in the
+  lifted package crashes in npm 10.9's peer resolver (vitest's optional peers); `npm ci` and
+  `npm install` both work once a `package-lock.json` exists, so the standalone repo commits one.
