@@ -251,10 +251,16 @@ function buildRemoteServer(ctx: Ctx, webReq: Request): McpServer {
           webReq.headers.get('x-forwarded-proto'),
         );
         const minted = mintSponsoredAgent(ctx, team, sponsor, parsed.data, origin);
+        // ADR 463 §2: lead with whichever happened — the sponsor's host is standing it up, or
+        // here is the link to open on the device that will run it.
         return textResult(
-          `Created agent "${minted.member.name}" on ${slug}, sponsored by you. The team has been told.\n` +
-            `Open this link on the device that will run it (expires in 15 minutes, works once):\n` +
-            `${minted.connect_url}`,
+          minted.hosting === 'sponsor_host'
+            ? `Created agent "${minted.member.name}" on ${slug}, sponsored by you. The team has been told.\n` +
+                `Your host ${minted.host} is setting it up; it will greet you shortly. ` +
+                "(If it doesn't within 15 minutes you'll get a connect link.)"
+            : `Created agent "${minted.member.name}" on ${slug}, sponsored by you. The team has been told.\n` +
+                `Open this link on the device that will run it (expires in 15 minutes, works once):\n` +
+                `${minted.connect_url}`,
         );
       } catch (err) {
         return toolError(asMusterdError(err).message);

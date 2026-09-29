@@ -1878,6 +1878,40 @@ export const MIGRATIONS: Migration[] = [
         db.exec('ALTER TABLE lanes ADD COLUMN parked_json TEXT');
     },
   },
+  {
+    // ADR 463 §2: one row per sponsored agent awaiting a process on its sponsor's own host. Not
+    // replicated (ADR 331): a provision is this daemon's hand-off to a host it can see. The
+    // `host_liveness.sponsor_id` column says whose host key last polled a label, so a mint can tell
+    // whether the sponsor has a live host to run the agent on.
+    version: 79,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS host_provisions (
+          id            TEXT PRIMARY KEY,
+          team_id       TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+          member_id     TEXT NOT NULL REFERENCES members(id),
+          sponsor_id    TEXT NOT NULL REFERENCES members(id),
+          host          TEXT,
+          state         TEXT NOT NULL CHECK (state IN ('pending','claimed','ready','failed','cancelled')),
+          claimed_by    TEXT,
+          claimed_at    INTEGER,
+          ready_at      INTEGER,
+          first_wake_at INTEGER,
+          failed_reason TEXT,
+          connect_origin TEXT,
+          created_at    INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_host_provisions_team_state ON host_provisions(team_id, state);
+        CREATE INDEX IF NOT EXISTS idx_host_provisions_member ON host_provisions(member_id);
+      `);
+      const cols = db
+        .prepare(`SELECT name FROM pragma_table_info('host_liveness')`)
+        .pluck()
+        .all() as string[];
+      if (!cols.includes('sponsor_id'))
+        db.exec('ALTER TABLE host_liveness ADD COLUMN sponsor_id TEXT');
+    },
+  },
 ];
 
 function currentVersion(db: Database): number {

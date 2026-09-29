@@ -34,6 +34,7 @@ import { registerRuntimeGauges, startTelemetry, telemetryEnabled } from './telem
 import { handleHttp } from './transport/http.js';
 import { Hub } from './transport/hub.js';
 import { broadcastReconciled } from './transport/memberAdded.js';
+import { startProvisionSweep, sweepProvisionsPass } from './transport/sponsoredAgentMint.js';
 import { attachWsServer } from './transport/ws.js';
 
 export interface ServerOptions {
@@ -68,6 +69,8 @@ export interface RunningServer {
   db: Database;
   /** The trace store (ADR 445 §3) — exposed so tests can read what a hook posted. */
   traceDb: Database;
+  /** One provision sweep pass now (ADR 463 §2) — the 60 s loop's body, for tests. */
+  runProvisionSweep: (now?: number) => number;
   /** The bound port, available after listen() resolves. */
   readonly port: number;
   /** The resolved database path this daemon serves (diagnostics — which db is live). */
@@ -155,6 +158,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   let stopTracePrune: (() => void) | null = null;
   let stopTraceCoverage: (() => void) | null = null;
   let stopExpiredSweep: (() => void) | null = null;
+  let stopProvisionSweep: (() => void) | null = null;
   let stopTracePush: (() => void) | null = null;
   let stopWatcher: (() => void) | null = null;
   let stopTelemetry: (() => Promise<void>) | null = null;
@@ -177,6 +181,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   return {
     db,
     traceDb,
+    runProvisionSweep: (now?: number) => sweepProvisionsPass(ctx, now),
     get port() {
       return boundPort;
     },
@@ -273,6 +278,10 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
             },
             (err) => log.warn({ msg: 'expired_sweep_failed', err: String(err) }),
           );
+          // ADR 463 §2: a provision that can no longer finish hands the sponsor a connect link.
+          stopProvisionSweep = startProvisionSweep(ctx, (err) =>
+            log.warn({ msg: 'provision_sweep_failed', err: String(err) }),
+          );
           startWatching();
           log.info({
             msg: 'listening',
@@ -322,6 +331,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         stopTracePrune?.();
         stopTraceCoverage?.();
         stopExpiredSweep?.();
+        stopProvisionSweep?.();
         stopTracePush?.();
         stopWatcher?.();
         void stopTelemetry?.();

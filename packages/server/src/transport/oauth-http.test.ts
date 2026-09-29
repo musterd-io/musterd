@@ -5,6 +5,7 @@ import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
 import { __setInviteKeyForTest } from '../store/invites.js';
 import { addMember } from '../store/members.js';
+import { recordHostSeen } from '../store/residency.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { resetMcpHandlersForTest } from './mcpHttp.js';
 import { __oauthBucketSizeForTest, __resetOAuthBucketsForTest, isTlsPeer } from './oauth.js';
@@ -701,6 +702,30 @@ describe('/mcp/:team — the Done line (ADR 446 §7)', () => {
     );
     // Our own send is excluded from our inbox (from_member != me) — the cursor proves the read.
     expect(inbox.json.result.content[0].text).toContain('cursor');
+  });
+
+  it('team_agent_create leads with the sponsor’s host when one is live (ADR 463 §2)', async () => {
+    const { pair } = await signInPair(nickCred);
+    await mcpCall(pair.access_token, 'initialize', {
+      protocolVersion: '2025-06-18',
+      capabilities: {},
+      clientInfo: { name: 'phone', version: '0' },
+    });
+    const dawn = getTeamBySlug(server.db, 'dawn')!;
+    const nick = server.db
+      .prepare("SELECT id FROM members WHERE team_id = ? AND name = 'nick'")
+      .get(dawn.id) as { id: string };
+    recordHostSeen(server.db, dawn.id, 'nick-mbp', Date.now(), nick.id);
+    const made = await mcpCall(
+      pair.access_token,
+      'tools/call',
+      { name: 'team_agent_create', arguments: { name: 'nick-scout' } },
+      2,
+    );
+    const text: string = made.json.result.content[0].text;
+    expect(text).toContain('Created agent "nick-scout"');
+    expect(text).toContain('Your host nick-mbp is setting it up; it will greet you shortly.');
+    expect(text).not.toMatch(/\/join\//);
   });
 
   it('team_agent_create over MCP frames mints a sponsored agent and returns a connect link (ADR 449 §3)', async () => {

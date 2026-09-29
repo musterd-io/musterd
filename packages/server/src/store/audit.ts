@@ -273,6 +273,12 @@ export type AuditAction =
   | 'residency.woke'
   | 'residency.wake_failed'
   | 'residency.wake_exhausted'
+  // ADR 463 §2 — sponsor-host provisions, actor null (a host or the daemon's sweep): claimed by a
+  // host, reported ready / failed (detail.reason), cancelled unclaimed. Not replicated (ADR 331).
+  | 'host.provision_claimed'
+  | 'host.provision_ready'
+  | 'host.provision_failed'
+  | 'host.provision_cancelled'
   // ADR 131 increment 4: `wake_deferred` — the host skipped an actuation because a live local
   // session already held the workspace (the local-session guard; roster-offline ≠ workspace-idle).
   // Deliberately OUTSIDE the rate/attempt derivations (those count woke+wake_failed only): a
@@ -610,6 +616,10 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'residency.wake_exhausted': 'none',
   'residency.wake_deferred': 'none',
   'residency.host_suspended': 'none',
+  'host.provision_claimed': 'none',
+  'host.provision_ready': 'none',
+  'host.provision_failed': 'none',
+  'host.provision_cancelled': 'none',
   'residency.session_captured': 'none',
   'residency.session_ended': 'none',
   'nudge.decision': 'actor',

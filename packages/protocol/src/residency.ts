@@ -495,7 +495,8 @@ export type WakeContextResponse = z.infer<typeof WakeContextResponseSchema>;
 /**
  * One wake order. Inbox / review wakes carry a triggering act. Dispatch **continuation**
  * work-orders (ADR 199) have no act — `act_id`/`act`/`sender` are omitted and `lane_id` is
- * required when `derivation === 'work_order'` without an act.
+ * required when `derivation === 'work_order'` without an act. A `provisioned` first wake
+ * (ADR 463 §2) has no act either.
  */
 export const WakeOrderSchema = z
   .object({
@@ -550,6 +551,10 @@ export const WakeOrderSchema = z
     const boardContinuation =
       o.derivation === 'work_order' && o.lane_id !== undefined && o.act_id === undefined;
     if (boardContinuation) return;
+    // ADR 463 §2: a provisioned seat's first wake answers no act — "no fake directed act is
+    // written" — so it carries none; its composed line names the sponsor.
+    if (o.reason === 'provisioned' && o.act_id === undefined && o.derivation !== 'work_order')
+      return;
     if (o.act_id === undefined) {
       ctx.addIssue({
         code: 'custom',

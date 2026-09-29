@@ -21,7 +21,7 @@ import { listBlockedLanes } from './lanes.js';
 import { deriveMast } from './mast.js';
 import { getMemberByName } from './members.js';
 import { listTeamMessages, longDeferred } from './messages.js';
-import { effectiveWakePolicy, getResidency } from './residency.js';
+import { effectiveWakePolicy, getResidency, seatWakeDefaults } from './residency.js';
 import { teamFamilyPosture } from './review.js';
 import type { MessageRow } from './rows.js';
 import { getPolicy } from './teams.js';
@@ -767,7 +767,7 @@ export function deriveWakeMetrics(
 
   // Per-seat economics against the effective budget_usd (a per-run report bound: over_budget
   // when any single wake's attested cost exceeded it).
-  const teamDefaults = getPolicy(db, teamId).residency;
+  const teamPolicy = getPolicy(db, teamId);
   const by_seat: WakeSeatCost[] = [...wakesBySeat.entries()]
     .map(([seat, wakes]) => {
       const costs = [...costByLease.values()].filter((c) => c.seat === seat).map((c) => c.cost);
@@ -775,7 +775,8 @@ export function deriveWakeMetrics(
       const member = getMemberByName(db, teamId, seat);
       const enrollment = member ? getResidency(db, teamId, member.id) : null;
       const budget = enrollment
-        ? (effectiveWakePolicy(teamDefaults, enrollment.policy).budget_usd ?? null)
+        ? (effectiveWakePolicy(seatWakeDefaults(teamPolicy, member), enrollment.policy)
+            .budget_usd ?? null)
         : null;
       return {
         seat,
