@@ -101,7 +101,9 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   the review queue, browser notifications (ADR 443), sign-in offers (ADR 222). The room plays the
   same ask (ADR 464 §3.3): `OfficeData.asks` raises the asker's hand with a `?` cue and rests an
   `lc-gl-ask` card at the human's plate while it is open; settled, the card wears ✓ / ✗ / → for a
-  beat and clears. `/broadcast`'s `AsksReel` is untouched.
+  beat and clears. `/broadcast` shows the same banner read-only (`live/StreamAskBanner.tsx`: the
+  `askBanner()` view-model and `lc-asks` markup, no buttons, no sheet, "+N more waiting" as
+  words, type scaled for the 720p encode); the rotating `AsksReel` it replaced is gone.
 - **Shared Seeds tray** (`live/SeedsTray.tsx`) — a read-only drawer from the `/live` top bar (ADR 319).
   Active uses the protocol's shared tray rule; history reveals completed/promoted work and links a
   promoted Seed to the ordinary focused Lane view. It refetches on firehose activity so promotion

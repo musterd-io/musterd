@@ -236,15 +236,11 @@
   letter-spacing: 0.01em;
 }
 
-/* ─── the asks reel (ADR 228) ─────────────────────────────────────────────
-   The floor card's sibling, not a page banner. First version shipped as a full-bleed washed-out
-   bar and nick called it on the live stream — the fix is structural: the reel inherits the
-   scene-chrome paper set and the retired work stack's frame (gradient, rim, sheen, drop). The second cut grew
-   a mono eyebrow header over the ask line and nick called that too (2026-08-19: two rows of stage
-   for what /live says in one) — so the reel is now a single line, /live's rail shape: bell, the
-   rotating ask, counts and rotation dots on the right edge. Type still runs ~1.5× /live's rail so
-   it survives the 720p encode (the reason this is not simply .lc-asks reused). */
-
+/* ─── the ask banner (ADR 228 → ADR 464) ─────────────────────────────────
+   /live's banner, read-only (`StreamAskBanner`), in place of the reel that rotated its own cards.
+   Same `lc-asks` markup and paint as /live, so the page and the stream say one sentence. Only the
+   type is scaled here: the 1080p stage is encoded at 720p and then by Twitch, so /live's rail type
+   arrives at about two thirds of its size. 18px (1.4× /live's 13px) lands near /live's size in the encode. */
 /* The slot spans the room, inset by one gutter each side — the same edge the floor card sits on,
    so the two read as opposite corners of one frame rather than two floating objects. The first cut
    capped this at 62% left-anchored; on a 1920 stage that left a third of the top edge empty and the
@@ -255,361 +251,44 @@
   inset: var(--lc-5) var(--lc-5) auto var(--lc-5);
 }
 
-.bc-reel {
-  /* The scene-chrome paper set — same values the floor card scopes for itself. */
-  --lc-paper: #f3e2c3;
-  --lc-paper-2: #e9d3ab;
-  --lc-paper-ink: #2b1f13;
-  --lc-paper-dim: rgba(43, 31, 19, 0.72);
-  --lc-paper-rim: rgba(120, 78, 42, 0.42);
-  --lc-paper-drop: rgba(58, 34, 12, 0.38);
-  --lc-paper-sheen: rgba(255, 252, 245, 0.55);
-  display: flex;
-  flex-direction: column;
-  padding: 8px 14px;
-  border-radius: 14px;
-  color: var(--lc-paper-ink);
-  background: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--lc-paper) 94%, var(--lc-accent)) 0%,
-    color-mix(in srgb, var(--lc-paper) 91%, transparent) 48%,
-    color-mix(in srgb, var(--lc-paper-2) 90%, transparent) 100%
-  );
-  border: 1px solid color-mix(in srgb, var(--lc-accent) 30%, var(--lc-paper-rim));
-  box-shadow:
-    inset 0 1px 0 var(--lc-paper-sheen),
-    inset 0 0 22px -10px color-mix(in srgb, var(--lc-accent) 24%, transparent),
-    0 3px 10px -2px var(--lc-paper-drop),
-    0 0 20px -6px color-mix(in srgb, var(--lc-accent) 30%, transparent);
-  animation: lc-fade var(--lc-dur-2) var(--lc-ease-out) both;
-}
-/* Loud breathes AMBER, exactly like /live's strip — urgency in this room is mustard, not red. */
-.bc-reel--loud {
-  /* `--lc-asks-glow`: the accent by default, the shown seat's hue under `.has-lead` — a variable,
-     never a second `animation:` list (see Live.css `.lc-asks--loud` for the measured reason). */
-  --lc-asks-glow: var(--lc-accent);
-  border-color: color-mix(in srgb, var(--lc-asks-glow) 55%, var(--lc-paper-rim));
-  animation:
-    lc-fade var(--lc-dur-2) var(--lc-ease-out) both,
-    bc-reel-breathe 2.4s ease-in-out infinite;
-}
-@keyframes bc-reel-breathe {
-  50% {
-    box-shadow:
-      inset 0 1px 0 var(--lc-paper-sheen),
-      inset 0 0 22px -10px color-mix(in srgb, var(--lc-asks-glow) 24%, transparent),
-      0 3px 12px -2px var(--lc-paper-drop),
-      0 0 30px -4px color-mix(in srgb, var(--lc-asks-glow) 55%, transparent);
-  }
-}
-
-/* The line — everything on one row: bell, the rotating slot (grows), counts + dots (pinned). */
-.bc-reel__line {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  white-space: nowrap;
-}
-.bc-reel__bell {
-  width: 17px;
-  height: 17px;
-  flex: none;
-  fill: none;
-  stroke: var(--lc-accent);
-  stroke-width: 1.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.bc-reel--loud .bc-reel__bell {
-  animation: lc-asks-ring 2.4s ease-in-out infinite;
-  transform-origin: 50% 22%;
-}
-/* The reel wears the shown seat's hue on rim and bell, and drains the tier clock as an arc round
-   the avatar — /live's `.lc-asks.has-lead` / `.lc-asks__who.is-timed` at stage scale (a 27px
-   avatar, a 2.5px band). See the note in Live.css for why colour is WHO and weight is urgency. */
-.bc-reel.has-lead {
-  border-color: color-mix(in srgb, var(--lc-asks-hue) 62%, var(--lc-paper-rim));
-}
-.bc-reel.has-lead .bc-reel__bell {
-  stroke: var(--lc-asks-hue);
-}
-.bc-reel--loud.has-lead {
-  --lc-asks-glow: var(--lc-asks-hue);
-  border-color: color-mix(in srgb, var(--lc-asks-hue) 84%, var(--lc-paper-rim));
-}
-.bc-reel__who {
-  position: relative;
-}
-.bc-reel__who.is-timed::after,
-.bc-reel__who.is-over::after {
-  content: '';
-  position: absolute;
-  inset: -4.5px;
-  border-radius: 50%;
-  pointer-events: none;
-  --lc-arc: color-mix(
-    in srgb,
-    var(--lc-accent) calc((1 - var(--lc-ask-frac)) * 100%),
-    var(--lc-asks-hue)
-  );
-  background: conic-gradient(var(--lc-arc) calc(var(--lc-ask-frac) * 360deg), transparent 0);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), var(--lc-paper-ink) 0);
-  mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), var(--lc-paper-ink) 0);
-}
-.bc-reel__who.is-over::after {
-  background: var(--lc-danger);
-}
-/* ── the tally: what is owed, then what is answered ────────────────────────────────────────────
-   Five spans in one grey voice is a run of text, not a summary (nick, 2026-09-04). See the long
-   note on `ReelCounts` in AsksReel.tsx for the reasoning; this is the paint.
-
-   The whole group is `flex: none` so the right edge still never moves when the slot rotates — the
-   property that made the first version calm, and the one easiest to lose while restyling it. */
-.bc-reel__counts {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 13px;
-}
-
-/* The hairline between owed and answered. Not a border on a neighbour: as its own element it exists
-   only when BOTH sides do (AsksReel renders it conditionally), so the group never ends on a rule. */
-.bc-reel__counts-split {
-  width: 1px;
-  height: 15px;
-  background: color-mix(in srgb, var(--lc-paper-ink) 24%, transparent);
-}
-
-.bc-reel__meta {
-  flex: none;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  font-family: var(--font-mono, monospace);
-  color: var(--lc-paper-ink);
-}
-
-/* The digit is the content. Tabular figures so a count ticking 9 → 10 does not shift the label
-   beside it — the reel re-renders every second, and a jittering tally reads as a glitch on video. */
-.bc-reel__meta b {
-  font-size: 16px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-/* The label is what the digit means, held quiet enough that the eye takes the number first and the
-   word only if it stopped. `em` for the tag, not the tone — nothing here is emphasis. */
-.bc-reel__meta em {
-  font-size: 11.5px;
-  font-style: normal;
-  letter-spacing: 0.02em;
-  color: var(--lc-paper-dim);
-}
-
-/* Colour carries the state, because colour survives the 720p encode where weight does not. The pip
-   is `aria-hidden` decoration — every count still reads as "3 waiting" with no colour at all. */
-.bc-reel__pip {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  align-self: center;
-  background: var(--lc-paper-dim);
-}
-.bc-reel__meta.is-waiting .bc-reel__pip {
-  background: var(--lc-accent);
-}
-.bc-reel__meta.is-waiting b {
-  color: var(--lc-accent-ink);
-}
-/* Elapsed is a DASH, not a dot — and deliberately not the warn amber it started as. `--lc-warn` sits
-   a few degrees from `--lc-accent`, so "1 elapsed" and "3 waiting" came out as two yellows side by
-   side and the colour coding cancelled itself exactly where it had to work hardest. Shape carries
-   what a second yellow could not: a spent clock is a line, not a live dot. */
-.bc-reel__meta.is-elapsed .bc-reel__pip {
-  width: 8px;
-  height: 2px;
-  border-radius: 1px;
-  background: color-mix(in srgb, var(--lc-paper-ink) 46%, transparent);
-}
-/* Answered and gone: a hollow ring — the outline of the shape the live counts fill in. */
-.bc-reel__meta.is-settled .bc-reel__pip {
-  background: none;
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--lc-paper-ink) 38%, transparent);
-}
-
-/* History steps back as a group — one rule, rather than a `--dim` modifier the caller has to
-   remember on each of two states. */
-.bc-reel__meta.is-past {
-  opacity: 0.62;
-}
-
-/* Something is genuinely waiting: the pip breathes. The only motion in the tally, on the one count
-   that is a demand — and gated on `--loud`, so it cannot pulse over a zero. */
-.bc-reel--loud .bc-reel__meta.is-waiting .bc-reel__pip {
-  animation: bc-pip-breathe 2.6s ease-in-out infinite;
-}
-@keyframes bc-pip-breathe {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--lc-accent) 55%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--lc-accent) 0%, transparent);
-  }
-}
-
-/* The count still says what it says; only the breath goes. Same contract as the notice's pulse. */
-@media (prefers-reduced-motion: reduce) {
-  .bc-reel--loud .bc-reel__meta.is-waiting .bc-reel__pip {
-    animation: none;
-  }
-}
-.bc-reel__dots {
-  display: flex;
-  gap: 5px;
-  flex: none;
-  margin-left: 4px;
-}
-.bc-reel__dots i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--lc-paper-ink) 22%, transparent);
-}
-.bc-reel__dots i.is-on {
-  background: var(--lc-accent);
-}
-
-/* The rotating slot — one strict line, everything nowrap, only the gist gives ground. It grows;
-   the counts and dots to its right are flex: none, so the right edge never moves on rotation. */
-.bc-reel__row {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  min-width: 0;
-  height: 34px;
+.bc .lc-asks__rail {
+  height: 48px;
   font-size: 18px;
-  line-height: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  animation: bc-reel-in var(--lc-dur-4) var(--lc-ease-out) both;
 }
-.bc-reel__row--quiet {
-  color: var(--lc-paper-dim);
+.bc .lc-asks__hand {
+  font-size: 21px;
+}
+.bc .lc-asks__lead {
+  font-size: 18px;
+}
+.bc .lc-ask__hold {
+  font-size: 15px;
+}
+/* Idle on a stream is a small pill at the corner, not an empty bar across the room: /live's rail
+   keeps its width for the links on its right, and a stream has none. */
+.bc .lc-asks--idle {
+  align-self: flex-start;
+  /* An inline-size container has no intrinsic width, so fitting to content needs it off. The idle
+     rail holds one short phrase; the width ladder it queries has nothing to drop. */
+  container-type: normal;
+}
+.bc .lc-asks--idle .lc-asks__rail {
+  height: 38px;
   font-size: 16px;
 }
-.bc-reel__row--quiet b {
-  font-weight: 680;
+.bc .lc-asks__bell {
+  width: 18px;
+  height: 18px;
 }
-.bc-reel__who {
-  width: 27px;
-  height: 27px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  border: 1.5px solid var(--lc-paper-sheen);
-  color: #fff;
+.bc .lc-asks__who {
+  width: 30px;
+  height: 30px;
   font-size: 14px;
-  font-weight: 650;
 }
-.bc-reel__lead {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  overflow: hidden;
-}
-.bc-reel__lead b {
+.bc .lc-asks__more-text {
   flex: none;
-  font-weight: 680;
-}
-.bc-reel__verb {
-  flex: none;
-  color: var(--lc-paper-dim);
-}
-.bc-reel__gist {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--lc-paper-dim);
-  font-style: italic;
-}
-/* The acceptor, inline in an ask row — reads as routing rather than as a second subject, so it sits
-   in the lead run right after the verb and never wraps. */
-.bc-reel__routed-inline {
-  flex: none;
-  font-family: var(--font-mono, monospace);
-  font-size: 12.5px;
-  color: var(--lc-paper-dim);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--lc-muted);
   white-space: nowrap;
-}
-/* Who a review lane is waiting on. Sits where the tier chip sits on an ask row, so the rotation
-   never shifts the right edge — on a stream a jumping column reads as a glitch. Mono and dim: it is
-   a name, not a status, and the row's subject is the lane. */
-.bc-reel__routed {
-  flex: none;
-  margin-left: auto;
-  font-family: var(--font-mono, monospace);
-  font-size: 12.5px;
-  letter-spacing: 0.02em;
-  color: var(--lc-paper-dim);
-  white-space: nowrap;
-}
-.bc-reel__tier {
-  flex: none;
-  margin-left: auto;
-  font-family: var(--font-mono, monospace);
-  font-size: 12.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 2px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--lc-paper-rim);
-  color: var(--lc-paper-dim);
-}
-.bc-reel__tier--blocking {
-  color: var(--lc-danger);
-  border-color: color-mix(in srgb, var(--lc-danger) 45%, transparent);
-  background: color-mix(in srgb, var(--lc-danger) 9%, transparent);
-}
-.bc-reel__tier--standard {
-  color: #8a6508;
-  border-color: color-mix(in srgb, var(--lc-accent) 50%, transparent);
-}
-.bc-reel__clock {
-  flex: none;
-  font-family: var(--font-mono, monospace);
-  font-size: 14.5px;
-  font-variant-numeric: tabular-nums;
-  color: var(--lc-paper-dim);
-}
-.bc-reel__clock--over {
-  color: var(--lc-danger);
-}
-@keyframes bc-reel-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-}
-
-/* The ladder line under the reel (2026-08-05). Persistent, not rotated: it is the CONDITION the
-   rotation is happening under, and a viewer who catches only one frame should still see it. Amber
-   on the paper rim at stream weight — 13px, because 11px here lands under 8px after the 720p
-   encode and would be decoration rather than information. */
-.bc-reel__ladder {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid color-mix(in srgb, var(--lc-accent) 30%, transparent);
-  font-family: var(--font-mono, monospace);
-  font-size: 13px;
-  letter-spacing: 0.01em;
-  /* Deep amber, not the accent mustard, which sits near 2.4:1 on this card. A stream re-encodes at
-     720p and low-contrast type is the first thing it eats. Now the shared text amber rather than a
-     literal — same value, one owner. */
-  color: var(--lc-warn-ink);
 }

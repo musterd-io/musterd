@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import broadcastCss from '../live/Broadcast.css?url';
 import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
-import { AsksReel } from '../live/AsksReel';
+import { StreamAskBanner } from '../live/StreamAskBanner';
 import { OfficeScene } from '../live/OfficeScene';
 import { acquireObserver, forgetObserver, type LiveConfig } from '../live/client';
 import { firehoseSound, roomTone } from '../live/sound';
@@ -328,7 +328,7 @@ function BroadcastPage() {
                 broadcast
                 captureFps={captureFps}
                 sprites={sprites}
-                topSlot={<AsksReel envelopes={envelopes} roster={roster} board={board} />}
+                topSlot={<StreamAskBanner envelopes={envelopes} roster={roster} />}
                 cornerSlot={broadcastCorner(team, shipped)}
                 onReady={onSceneReady}
                 onCaption={setCaption}
