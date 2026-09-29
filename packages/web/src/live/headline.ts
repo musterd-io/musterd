@@ -118,6 +118,23 @@ export function headline(env: Envelope, ctx: HeadlineContext): Headline | null {
   }
 }
 
+/**
+ * The verb tag a walker wears while a purposeful walk is in flight (ADR 464 §3.2) — the same
+ * pattern as the ticker's line, present tense because the walk is happening now:
+ * "handing off → dolly" · "asking for help" · "redirecting izzo". One home with `headline()`, so
+ * the band and the room say the same thing about the same act.
+ */
+export function walkTag(kind: 'handoff' | 'help' | 'steer', to: string | null): string {
+  switch (kind) {
+    case 'handoff':
+      return to ? `handing off → ${to}` : 'handing off';
+    case 'help':
+      return 'asking for help';
+    case 'steer':
+      return to ? `redirecting ${to}` : 'redirecting';
+  }
+}
+
 /** The headline as one sentence — the ticker's text and the walk tag's. */
 export function headlineText(h: Headline): string {
   if (h.count > 1) return `${h.who} ${h.verb} ${h.count} ${plural(h)}`;

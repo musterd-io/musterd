@@ -61,7 +61,11 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   Presence → placement, act → choreography, travel-intensity == notification tier. Members are drawn from a
   **procedural jointed skeleton** (ADR 133 — `skeleton.ts` solves the joints, `character.ts` paints them):
   a distance-driven walk cycle, a seated pose with the hands typing on the desk, and eased sit/stride
-  blends. ADR 086 layers ambient life (idle strolls, gestures) on top; the scene idle-parks to 0 rAF/sec
+  blends. ADR 086 layers ambient life (idle strolls, gestures) on top — since ADR 464 lane 4 a
+  `working` member keeps their desk (micro-gestures only; errands and desk chats go to members
+  between tasks, `ambientSeed.ts` `ambientPool`), a purposeful walk wears its verb over the plate
+  (`headline.ts` `walkTag`: "handing off → dolly"), and `live/OfficeKey.tsx` says how to read the
+  room in one closable corner card; the scene idle-parks to 0 rAF/sec
   when nobody is working. A read-only working-hours sign is painted from the Team schedule projection
   (Member inheritance is resolved by the daemon), including timezone and weekday grouping (ADR 206).
 - **Log drawer** (`live/LogDrawer.tsx`, hosting `live/Stream.tsx`) — every message, one keystroke
@@ -157,6 +161,7 @@ live/
 
   RosterPanel.tsx               // the roster rail (no route mounts it since ADR 464) + `SeatDetail`, the per-seat operator block the team card expands to; `trace` expander (ADR 445 inc 4b) lazy-loads the timeline
   askPhrase.ts                  // the ask banner's words (spec §6 table) + askBanner() view-model: open / settled / idle (pure)
+  OfficeKey.tsx                 // "how to read the office" — the four postures in a closable corner card (ADR 464 §3.4), /live only
   TeamColumn.tsx                // the /live team column (ADR 464) + its collapsed avatar rail; `captionColorFor` (the narrator's colour)
   TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type; click expands to `SeatDetail`
   teamCards.ts                  // roster + lane board + goals → ordered team cards in plain words (pure, node-tested)

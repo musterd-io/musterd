@@ -6,6 +6,7 @@ import {
   AMBIENT_QUIET_ROOM,
   AMBIENT_SLOT_MS,
   ambientFireP,
+  ambientPool,
   decideAmbient,
   roll,
   slotAt,
@@ -30,7 +31,9 @@ describe('slotAt — the 10 s lattice', () => {
   it('two viewers with skewed clocks inside one slot agree on the slot', () => {
     const t = 1_756_000_000_000; // an arbitrary real epoch ms
     const skewMs = 2_000; // ordinary NTP-grade skew, well under the 10 s slot
-    expect(slotAt(t)).toBe(slotAt(t + skewMs - (t % AMBIENT_SLOT_MS > AMBIENT_SLOT_MS - skewMs ? skewMs : 0)));
+    expect(slotAt(t)).toBe(
+      slotAt(t + skewMs - (t % AMBIENT_SLOT_MS > AMBIENT_SLOT_MS - skewMs ? skewMs : 0)),
+    );
   });
 });
 
@@ -49,7 +52,9 @@ describe('roll — one shared draw per (team, slot, purpose)', () => {
 
   it('purposes are independent — one slot yields as many uncorrelated draws as a beat needs', () => {
     const s = 42;
-    const values = ['fire', 'actor', 'beat', 'pet-follow', 'phone-stop-2'].map((p) => roll('revive', s, p));
+    const values = ['fire', 'actor', 'beat', 'pet-follow', 'phone-stop-2'].map((p) =>
+      roll('revive', s, p),
+    );
     expect(new Set(values).size).toBe(values.length);
   });
 
@@ -83,7 +88,9 @@ describe('slotRng — a slot-scoped sequence for beat interiors', () => {
 
   it('is slot-scoped: no state survives the slot, so a skipped slot cannot desync the next one', () => {
     const first = slotRng('revive', 7, 'walk');
-    first(); first(); first(); // one viewer consumes; the other never ran this slot
+    first();
+    first();
+    first(); // one viewer consumes; the other never ran this slot
     const fresh = slotRng('revive', 8, 'walk');
     const other = slotRng('revive', 8, 'walk');
     expect(fresh()).toBe(other());
@@ -109,7 +116,8 @@ describe('ambientFireP — the occupancy curve (E1b)', () => {
   });
 
   it('rises monotonically through the middle — no step a viewer could read as the room reacting to them', () => {
-    for (let n = 0; n < 20; n++) expect(ambientFireP(n + 1)).toBeGreaterThanOrEqual(ambientFireP(n));
+    for (let n = 0; n < 20; n++)
+      expect(ambientFireP(n + 1)).toBeGreaterThanOrEqual(ambientFireP(n));
     // Mid-ramp really is between the ends, not snapped to one of them.
     const mid = ambientFireP((AMBIENT_QUIET_ROOM + AMBIENT_FULL_ROOM) / 2);
     expect(mid).toBeGreaterThan(AMBIENT_P_QUIET);
@@ -127,7 +135,10 @@ describe('ambientFireP — the occupancy curve (E1b)', () => {
 describe('decideAmbient — the per-slot decision, pure over the shared pool', () => {
   const pool = {
     members: ['ada', 'bo', 'cy', 'dev', 'eli', 'fen'],
-    pairs: [['ada', 'bo'], ['cy', 'dev']] as Array<[string, string]>,
+    pairs: [
+      ['ada', 'bo'],
+      ['cy', 'dev'],
+    ] as Array<[string, string]>,
   };
 
   it('two viewers over the same slot range and pool produce identical decision logs', () => {
@@ -142,14 +153,17 @@ describe('decideAmbient — the per-slot decision, pure over the shared pool', (
   it('ignores pool array order — candidate ordering is canonical, array order never leaks in', () => {
     const shuffled = {
       members: ['fen', 'cy', 'ada', 'eli', 'bo', 'dev'],
-      pairs: [['cy', 'dev'], ['ada', 'bo']] as Array<[string, string]>,
+      pairs: [
+        ['cy', 'dev'],
+        ['ada', 'bo'],
+      ] as Array<[string, string]>,
     };
     for (let s = 0; s < 200; s++) {
       expect(decideAmbient('revive', s, shuffled)).toEqual(decideAmbient('revive', s, pool));
     }
   });
 
-  it('fires at the occupancy curve\'s rate — the six-member pool sits mid-ramp', () => {
+  it("fires at the occupancy curve's rate — the six-member pool sits mid-ramp", () => {
     let fired = 0;
     for (let s = 0; s < 5000; s++) if (decideAmbient('revive', s, pool).kind !== 'none') fired++;
     const want = ambientFireP(pool.members.length);
@@ -161,7 +175,8 @@ describe('decideAmbient — the per-slot decision, pure over the shared pool', (
     const rate = (n: number) => {
       const members = Array.from({ length: n }, (_, i) => `m${i}`);
       let fired = 0;
-      for (let s = 0; s < 5000; s++) if (decideAmbient('revive', s, { members, pairs: [] }).kind !== 'none') fired++;
+      for (let s = 0; s < 5000; s++)
+        if (decideAmbient('revive', s, { members, pairs: [] }).kind !== 'none') fired++;
       return fired / 5000;
     };
     const two = rate(2);
@@ -171,7 +186,9 @@ describe('decideAmbient — the per-slot decision, pure over the shared pool', (
   });
 
   it('keeps the category split: ~35% pet, then ~22% pair among the rest, else a member', () => {
-    let pet = 0, pair = 0, member = 0;
+    let pet = 0,
+      pair = 0,
+      member = 0;
     for (let s = 0; s < 10_000; s++) {
       const d = decideAmbient('revive', s, pool);
       if (d.kind === 'pet') pet++;
@@ -200,5 +217,53 @@ describe('decideAmbient — the per-slot decision, pure over the shared pool', (
       expect(d.kind === 'pair').toBe(false);
       expect(decideAmbient('revive', s, { members: [], pairs: [] })).toEqual({ kind: 'none' });
     }
+  });
+});
+
+describe('ambientPool — a working member keeps their desk (ADR 464 §3.1, falsifier 1)', () => {
+  const node = (name: string, posture: 'working' | 'active') =>
+    ({
+      name,
+      posture,
+      presence: 'online',
+      kind: 'agent',
+    }) as unknown as import('./types').OfficeNode;
+  // Row-mates: desk slots 0 and 1 share a pod row in the layout; 2 and 3 the next.
+  const placements = new Map<string, import('./seating').Placement>([
+    ['ada', { kind: 'desk', slot: 0 }],
+    ['bo', { kind: 'desk', slot: 1 }],
+    ['cy', { kind: 'desk', slot: 2 }],
+    ['di', { kind: 'desk', slot: 3 }],
+    ['ev', { kind: 'leisure', spot: 0 }],
+  ]);
+  const nodes = new Map([
+    ['ada', node('ada', 'working')],
+    ['bo', node('bo', 'active')],
+    ['cy', node('cy', 'active')],
+    ['di', node('di', 'active')],
+    ['ev', node('ev', 'active')],
+  ]);
+
+  it('lists every present desk member for micro-gestures, working or not', () => {
+    expect(ambientPool(placements, nodes).members.sort()).toEqual(['ada', 'bo', 'cy', 'di']);
+  });
+
+  it('never sends a working member on an errand', () => {
+    const pool = ambientPool(placements, nodes);
+    expect(pool.errands).not.toContain('ada');
+    expect(pool.errands?.sort()).toEqual(['bo', 'cy', 'di']);
+  });
+
+  it('never pairs a working member for a desk chat', () => {
+    const pool = ambientPool(placements, nodes);
+    for (const [a, b] of pool.pairs) {
+      expect(a).not.toBe('ada');
+      expect(b).not.toBe('ada');
+    }
+    // The rule bites: with nobody working, ada's row pair is back.
+    const rested = new Map(nodes);
+    rested.set('ada', node('ada', 'active'));
+    const pairs = ambientPool(placements, rested).pairs.map((p) => p.join('+'));
+    expect(pairs.some((p) => p.includes('ada'))).toBe(true);
   });
 });

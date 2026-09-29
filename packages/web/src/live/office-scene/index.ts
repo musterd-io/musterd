@@ -9,7 +9,7 @@ import { musterdChipSvg } from '../../brand/chipMark';
 import { memberColor, memberInk } from '../format';
 import { platesOpenMode, stillMode } from '../stillMode';
 import { surfaceGlyph } from '../surfaceGlyph';
-import { createActors, deskNeighbourPairs, type Actors } from './actors';
+import { createActors, type Actors } from './actors';
 import { solidHit, walkable } from './nav';
 import { layoutPlates, leaderFrom, type PlateBox } from './plateLayout';
 import { helpWalks } from './mapping';
@@ -22,7 +22,8 @@ import {
   shouldCoalesceDraw,
   suspendIgnored,
 } from './broadcast';
-import { AMBIENT_SLOT_MS, decideAmbient, roll, slotAt, slotRng } from './ambientSeed';
+import { AMBIENT_SLOT_MS, ambientPool, decideAmbient, roll, slotAt, slotRng } from './ambientSeed';
+import { walkTag } from '../headline';
 import {
   createPet,
   petBeat,
@@ -549,6 +550,9 @@ export function mountOffice(
   /** The ask cards (ADR 464 §3.3): one per ask to a human, resting at the human's plate while open. */
   const askCards = new Map<string, { el: HTMLDivElement; ask: OfficeAsk }>();
   const askSettleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** The verb over a walker (ADR 464 §3.2): set when an act walk starts, worn while
+   *  `actors.actWalkingFor(name)`, dropped after — an ambient stroll never wears one. */
+  const walkTags = new Map<string, string>();
   let asksSeeded = false; // the first update seeds the open set silently — no hands go up for backfill
   const speeches = new Map<string, Speech>(); // one live speech bubble per member (name → bubble)
   const queued = new Map<string, Utterance[]>(); // acts waiting behind a member's live bubble
@@ -1149,6 +1153,32 @@ export function mountOffice(
     asksSeeded = true;
   }
 
+  /**
+   * The walk tag (ADR 464 §3.2): the verb over a walker, for exactly as long as their act walk is
+   * in flight. Managed PER FRAME here rather than on a bake: a plate rebuilt only on bakes would
+   * gain the tag late and shed it late, and a plate whose width changes between two frames
+   * re-centres its name — which is what the contrast sweep photographed mid-shift. An ambient
+   * stroll never wears one; a finished walk loses it on the very next frame.
+   */
+  function syncWalkTags() {
+    for (const [name, el] of labels) {
+      const plate = el.querySelector('.lc-gl-label__plate');
+      if (!plate) continue;
+      const verb = walkTags.get(name);
+      const show = verb !== undefined && actors.actWalkingFor(name);
+      const tag = plate.querySelector('.lc-gl-label__walk');
+      if (show && !tag) {
+        const span = document.createElement('span');
+        span.className = 'lc-gl-label__walk';
+        span.textContent = verb;
+        plate.appendChild(span);
+      } else if (!show && tag) {
+        tag.remove();
+        if (verb !== undefined) walkTags.delete(name);
+      }
+    }
+  }
+
   /** Rest each card just above its human's plate (or the asker's, when the human has no plate). */
   function positionAskCards(placed: Map<string, { x: number; y: number }>) {
     const stacked = new Map<string, number>(); // cards already resting on this plate this frame
@@ -1170,6 +1200,7 @@ export function mountOffice(
 
   function positionLabels(headMap: Map<string, Pt>) {
     lastHeads = headMap;
+    syncWalkTags();
     const boxes: PlateBox[] = [];
     for (const name of labels.keys()) {
       const head = headMap.get(name);
@@ -1996,15 +2027,10 @@ export function mountOffice(
     if (!reduced && !suspended && VISIBLE() && quiet()) {
       const slot = slotAt(Date.now());
       const nodes = actors.nodes();
-      const members: string[] = [];
-      // Mirrors `homePoses`'s desk test exactly: present desk members, minus owned (empty) desks.
-      for (const [name, pl] of placements) {
-        if (pl.kind === 'desk' && !pl.owned && nodes.has(name)) members.push(name);
-      }
-      const decision = decideAmbient(teamName, slot, {
-        members,
-        pairs: deskNeighbourPairs(placements, nodes),
-      });
+      // The pool is pure over placements + nodes (ambientSeed.ts): desk members for gestures, the
+      // non-working ones for errands, and chat pairs with nobody working (ADR 464 §3.1).
+      const pool = ambientPool(placements, nodes);
+      const decision = decideAmbient(teamName, slot, pool);
       if (decision.kind === 'pet') {
         // The pet's beat: it wakes, stretches, pads to a fresh nap spot (a sunbeam by day, a rug by
         // night, occasionally a working member's side) and curls back up.
@@ -2022,7 +2048,11 @@ export function mountOffice(
         logAmbient({ slot, kind: 'pair', pair: [decision.a, decision.b], played });
         if (played) ensureLoop();
       } else if (decision.kind === 'member') {
-        const played = playAmbientBeat(decision.who, slot);
+        const played = playAmbientBeat(
+          decision.who,
+          slot,
+          pool.errands?.includes(decision.who) ?? true,
+        );
         logAmbient({ slot, kind: 'member', who: decision.who, played });
         if (played) ensureLoop();
       }
@@ -2036,7 +2066,7 @@ export function mountOffice(
    * coffee-stroll staying in the mix at ~1 in 5. Weighted rather than uniform so the broad, always-valid
    * beats (stretch/glance/scratch/chin/lean) carry the room and the chair theatrics stay occasional.
    */
-  function playAmbientBeat(who: string, slot: number): boolean {
+  function playAmbientBeat(who: string, slot: number, mayErrand = true): boolean {
     const pl = placements.get(who);
     const deskSlot = pl?.kind === 'desk' ? pl.slot : null;
     const casters = deskSlot !== null; // every desk chair rolls now (the `stool` kind is gone)
@@ -2066,24 +2096,30 @@ export function mountOffice(
             [10, () => actors.gestureBeat(who, GESTURE.behindHead)],
             [9, () => actors.gestureBeat(who, GESTURE.pocketPhone)],
           ] as Array<[number, () => boolean]>)),
-      // The errands — real trips with a point to them, so they stay the occasional highlight:
-      [15, () => coffeeStroll(who, slot)],
-      [9, () => actors.errandPhone(who, slotRng(teamName, slot, 'phone'))], // gets up, takes a call, paces, comes back
-      // A meal is the one errand the dog cares about: it drops whatever it was doing and follows the
-      // plate to the lounge to sit and stare at it. Not every time — a dog that never misses a meal is
-      // a mechanism, and the beat reads better when you notice it happening rather than expect it.
-      [
-        7,
-        () => {
-          const seat = actors.errandFridge(who, slotRng(teamName, slot, 'fridge'));
-          if (!seat) return actors.gestureBeat(who, GESTURE.glance); // lounge full → cheap fallback
-          if (roll(teamName, slot, 'pet-beg') < 0.65)
-            petBeg(pet, seat, slotRng(teamName, slot, 'pet-beg-walk'));
-          return true;
-        },
-      ],
+      // The errands — real trips with a point to them, so they stay the occasional highlight.
+      // A WORKING member gets none of them (ADR 464 §3.1): they stay at their desk, and the
+      // micro-gestures above keep them from reading as a statue.
+      ...(mayErrand
+        ? ([
+            [15, () => coffeeStroll(who, slot)],
+            [9, () => actors.errandPhone(who, slotRng(teamName, slot, 'phone'))], // gets up, takes a call, paces, comes back
+            // A meal is the one errand the dog cares about: it drops whatever it was doing and follows the
+            // plate to the lounge to sit and stare at it. Not every time — a dog that never misses a meal is
+            // a mechanism, and the beat reads better when you notice it happening rather than expect it.
+            [
+              7,
+              () => {
+                const seat = actors.errandFridge(who, slotRng(teamName, slot, 'fridge'));
+                if (!seat) return actors.gestureBeat(who, GESTURE.glance); // lounge full → cheap fallback
+                if (roll(teamName, slot, 'pet-beg') < 0.65)
+                  petBeg(pet, seat, slotRng(teamName, slot, 'pet-beg-walk'));
+                return true;
+              },
+            ],
+          ] as Array<[number, () => boolean]>)
+        : []),
     ];
-    if (water) beats.push([8, () => actors.errandWater(who)]);
+    if (water && mayErrand) beats.push([8, () => actors.errandWater(who)]);
     if (mug) beats.push([14, () => actors.gestureBeat(who, GESTURE.sip)]);
     if (casters)
       beats.push(
@@ -2277,6 +2313,7 @@ export function mountOffice(
           pushThread(ev.from, req.to);
           if (actors.walk(ev.from, req)) walked = true;
         }
+        if (walked) walkTags.set(ev.from, walkTag('help', null));
         if (!walked) {
           pushCue(ev.from, '#f4cf52', ev.tier === 'urgent' ? '!' : '', ev.tier === 'urgent');
         }
@@ -2284,7 +2321,9 @@ export function mountOffice(
       }
       case 'walk-handoff':
         pushThread(ev.from, ev.to, toneColor('handoff'));
-        if (!actors.walk(ev.from, { kind: 'handoff', to: ev.to, urgent: false })) {
+        if (actors.walk(ev.from, { kind: 'handoff', to: ev.to, urgent: false })) {
+          walkTags.set(ev.from, walkTag('handoff', ev.to));
+        } else {
           pushCue(ev.from, '#c6a3ff', '↦');
         }
         break;
@@ -2325,7 +2364,9 @@ export function mountOffice(
         // steer), the sweep plus a bold urgent marker at the sender carry it.
         const col = toneColor('steer');
         pushWave(ev.from, col);
-        if (!ev.to || !actors.walk(ev.from, { kind: 'help', to: ev.to, urgent: true })) {
+        if (ev.to && actors.walk(ev.from, { kind: 'help', to: ev.to, urgent: true })) {
+          walkTags.set(ev.from, walkTag('steer', ev.to));
+        } else {
           pushCue(ev.from, col, '↪', true);
         }
         break;

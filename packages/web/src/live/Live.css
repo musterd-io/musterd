@@ -1016,6 +1016,68 @@
    assistive tech and NOT washed out: what sits here is a fact the page asserts about itself
    (where to find us; that this feed may blink while the team ships the thing being watched).
    `/broadcast` fills it; `/live` leaves it empty. Content-sized so the room keeps every pixel. */
+/* "How to read the office" (ADR 464 §3.4): a small corner card, bottom-left, open by default and
+   closable — the vocabulary a stranger needs, four lines, on the same paper as the plates. */
+.lc-office__key {
+  position: absolute;
+  left: var(--lc-5);
+  bottom: var(--lc-4);
+  z-index: var(--lc-z-overlay);
+  max-width: 220px;
+  padding: var(--lc-4) var(--lc-5);
+  border-radius: var(--lc-r-md);
+  border: 1px solid var(--lc-border);
+  background: color-mix(in srgb, var(--lc-ground-2) 92%, transparent);
+  font-size: 12px;
+  color: var(--lc-text);
+  animation: lc-fade var(--lc-dur-2) var(--lc-ease-out) both;
+}
+.lc-office__key-head {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-4);
+  margin-bottom: var(--lc-3);
+}
+.lc-office__key-title {
+  flex: 1;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lc-muted);
+}
+.lc-office__key-close {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lc-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.lc-office__key-close:hover {
+  color: var(--lc-text);
+}
+.lc-office__key ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+}
+.lc-office__key li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--lc-3);
+}
+.lc-office__key b {
+  font-weight: 600;
+  color: var(--lc-dim);
+}
 .lc-office__corner {
   position: absolute;
   right: var(--lc-5);
@@ -1850,6 +1912,22 @@
    there is even less room here than there was there — any tint at all would fail.
    Quieter than dnd in weight and border alpha, because dnd is an instruction to the room (do not
    walk to me) and this is context you read after something has caught your eye. */
+/* The walk tag (ADR 464 §3.2): the verb a walker wears — "handing off → dolly" — in the act's own
+   family colour on the plate's paper, gone the frame the walk ends. */
+.lc-gl-label__walk {
+  flex: none;
+  margin-left: 4px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--lc-handoff-ink) 40%, transparent);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--lc-type-tag);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: var(--lc-handoff-ink);
+  white-space: nowrap;
+}
 .lc-gl-label__woken {
   flex: none;
   margin-left: 4px;

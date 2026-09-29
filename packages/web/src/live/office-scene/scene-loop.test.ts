@@ -193,3 +193,30 @@ describe('the in-room ask moment (ADR 464, lane 3)', () => {
     expect(fn).toContain('ask.to && placed.get(ask.to) ? ask.to : ask.from');
   });
 });
+
+describe('motion means something (ADR 464, lane 4)', () => {
+  it('the ambient scheduler draws from the pure pool, and a working member gets no errand', () => {
+    const fn = body('fireAmbient');
+    expect(fn).toContain('ambientPool(placements, nodes)');
+    expect(fn).toMatch(
+      /playAmbientBeat\(\s*decision\.who,\s*slot,\s*pool\.errands\?\.includes\(decision\.who\)/,
+    );
+    const beat = body('playAmbientBeat');
+    expect(beat).toMatch(
+      /\.\.\.\(mayErrand[\s\S]*?coffeeStroll\(who, slot\)[\s\S]*?errandPhone[\s\S]*?errandFridge/,
+    );
+    expect(beat).toContain('if (water && mayErrand)');
+  });
+
+  it('a purposeful walk wears its verb, from headline.ts, only while the act walk is in flight', () => {
+    expect(index).toContain("walkTags.set(ev.from, walkTag('help', null))");
+    expect(index).toContain("walkTags.set(ev.from, walkTag('handoff', ev.to))");
+    expect(index).toContain("walkTags.set(ev.from, walkTag('steer', ev.to))");
+    // Per frame, not per bake: a tag that arrived or left on a bake re-centred the plate between
+    // the sweep's measure and its shutter (found by the contrast gate on /office-preview).
+    const sync = body('syncWalkTags');
+    expect(sync).toMatch(/actors\.actWalkingFor\(name\)[\s\S]*?'lc-gl-label__walk'/);
+    expect(sync).toContain('walkTags.delete(name)');
+    expect(body('positionLabels')).toContain('syncWalkTags()');
+  });
+});

@@ -16,6 +16,10 @@ import { wokenSeat } from './wokenSeat';
 import type { OfficeRoomProps } from './officeRoom';
 import { projectWallBoard } from './office-scene/wallboard';
 
+/** The key (ADR 464 §3.4) is a corner card a viewer reads once; it rides a lazy chunk so the words
+ *  cost /live's eager graph nothing (ADR 151/183 — initial JS sat exactly at its ceiling). */
+const LazyOfficeKey = lazy(() => import('./OfficeKey').then((m) => ({ default: m.OfficeKey })));
+
 /** Broadcast-only chrome (ADR 464: /live's work now lives in the team column), kept out of /live's
  *  eager graph (ADR 151/183): fetched only when a route asks for the overlay or the stack. */
 const broadcastChrome = () => import('./broadcastChrome');
@@ -382,6 +386,12 @@ export function OfficeScene({
         {/* The product's mark on the room itself — for every frame that leaves this app (a clip, a
             screenshot, the stream), quiet enough to live under everything. The overlay card carries
             the TEAM's name; this corner carries the product's. */}
+        {/* The key (ADR 464 §3.4) — the page only: a stream has no one to close it. */}
+        {!collapsed && !broadcast && (
+          <Suspense fallback={null}>
+            <LazyOfficeKey />
+          </Suspense>
+        )}
         {!collapsed && cornerSlot && <div className="lc-office__corner">{cornerSlot}</div>}
         {!collapsed && (
           <div className="lc-office__mark" aria-hidden="true">

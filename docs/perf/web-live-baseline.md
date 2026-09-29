@@ -934,6 +934,30 @@ Measured + 15%, following ADR 313. A loosening, approved by nick.
 The chunk is the join-page copy spec's strings verbatim plus the fragment/room-code helpers, so there is
 nothing to trim or delete; lazy-loading cannot move total (ADR 183); a re-baseline would loosen. New
 ceiling is measured + ~0.7 KB CI gzip delta + ~1.2%, per precedent.
+## 2026-09-29 — `initialJsGzipBytes` 139,500 → 141,700: the ask banner and the walk tags (ADR 464 lanes 3–4)
+
+Measured with Node zlib over `/live`'s modulepreload closure in `packages/web/dist/client`, as the
+gate does: **139,294 B** (136.0 KiB, 14 eager chunks) against 139,500 — 206 B free locally, none on
+CI after the ~0.7 KB gzip delta.
+
+| measure | after lane 2 | after lane 4 |
+| --- | --- | --- |
+| initial JS gzip (/live) | 134.5 KiB | 136.0 KiB |
+| total JS gzip | 257.3 KiB | 260.0 KiB of 261.0 |
+| `live` CSS | 19.0 KiB | 19.4 KiB of 20.3 |
+
+What the +1.5 KiB is: `askPhrase.ts` (the §6 words and the banner view-model), the banner's markup
+in `AsksStrip`, `AskView.settledAt`, the asks wiring into `teamCards` / `TeamColumn` / `officeRoom`
+(both routes), and `walkTag()` in `headline.ts`. All of it is on the eager path because it IS the
+first paint a room reads. The lazy remedy was applied where it fits: `OfficeKey` (the corner card)
+is a lazy chunk, which is what took 136.2 → 136.0. Nothing else here can move without moving the
+banner off the first frame. Re-baseline unavailable (measured + 15% loosens). New ceiling is
+measured + the ~0.7 KB CI gzip delta + ~1.2%, per precedent.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — initial must read under
+  138.4 KiB. At or under 134.5 KiB (lane 2's measure), lanes 3–4 have left the eager graph and
+  this raise should go with it.
+
 ## 2026-09-28 — `totalJsGzipBytes` 261,200 → 267,300: meter, ticker, log drawer (ADR 464 lane 2, lane 01M3N7XHY6ENQQJZ425GZ9G9TZ)
 
 Measured with Node zlib over `packages/web/dist/client` after a build, as the gate does: main @
