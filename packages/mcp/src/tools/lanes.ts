@@ -244,8 +244,7 @@ export function registerLanes(
     {
       description:
         'Update a lane: state (active/blocked/done/…), title, scope, depends_on, branch, ' +
-        'detail, project, goal_id. Going active re-runs contention checks. `parked` (ADR 466) is ' +
-        'a human\'s "not now" and needs park_reason; if a lane cannot proceed, use `blocked`.',
+        'detail, project, goal_id. Going active re-runs contention checks.',
       inputSchema: {
         id: z.string().describe('lane id'),
         // Derived from the protocol schema (ADR 169 consolidation) — this enum was hand-duplicated
@@ -268,16 +267,10 @@ export function registerLanes(
           .nullable()
           .optional()
           .describe('link (or clear, with null) this lane to a Goal'),
-        park_reason: z
-          .string()
-          .min(1)
-          .max(280)
-          .optional()
-          .describe('with state "parked" (humans only): why this waits — required to park'),
-        park_until: z
-          .string()
-          .optional()
-          .describe('with state "parked": advisory revisit date, e.g. 2026-10-15 (never a timer)'),
+        // ADR 466 — with state "parked" (humans only). The daemon requires and bounds the reason;
+        // until is a date string, advisory. Undescribed on purpose: the tools list is budgeted.
+        park_reason: z.string().optional(),
+        park_until: z.string().optional(),
         // ADR 305 amendment 2 (lane 01M2GR0434): the one verb for NONE. A lane stamped with the
         // wrong merge — someone else's PR, a SHA that was never this branch — had no way back.
         merged: z
