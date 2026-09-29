@@ -10,12 +10,17 @@ import { findGrokWakeSessionId, readGrokWakeUsage } from './grokUsage.js';
 const KILL_GRACE_MS = 10_000;
 const RESUME_VERIFY_WINDOW_MS = 30_000;
 
+/**
+ * `--trust` is what makes Grok run `.grok/hooks` (ADR 473). Without it a headless wake loads
+ * only the global hooks, and the seat's R1 tap never fires. Grok persists the grant on the git
+ * common-dir root. The flag is not advertised in `grok --help`.
+ */
 export function buildGrokFreshArgs(line: string, workspace: string): string[] {
-  return ['-p', line, '--cwd', workspace];
+  return ['--trust', '-p', line, '--cwd', workspace];
 }
 
 export function buildGrokResumeArgs(line: string, sessionId: string, workspace: string): string[] {
-  return ['-p', line, '-r', sessionId, '--cwd', workspace];
+  return ['--trust', '-p', line, '-r', sessionId, '--cwd', workspace];
 }
 
 export function grokWakeEnv(

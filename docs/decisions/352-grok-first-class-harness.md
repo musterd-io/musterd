@@ -115,6 +115,7 @@ If project `.grok/config.toml` has no `[ui.status_line]`, write `type = "command
 - This product repo gitignores `.grok/skills/` and `.grok/commands/` because `writeGuidance` stamps the dogfood team name into them. User projects follow §9 and commit those shells.
 - **2026-09-26 — the committed hooks file.** The epoch tag inside `.grok/hooks/musterd.json` (`# musterd-grok-* eN`) changes on every `FEATURE_EPOCH` bump, so the committed copy dirtied every seat workspace and stamped builds `-dirty`. [ADR 454](454-untrack-grok-hooks.md) untracks it. §9's sentence stays; the product-repo clause is what 454 reverses.
 - **2026-09-03 — interrupt injection.** Decision 8's PostToolUse wiring ran the ADR 088 probe and discarded the line; Grok 1.0.13 also ignores PostToolUse stdout and additionalContext JSON. Measured with canary hooks: PreToolUse additionalContext and Stop `decision:block` reach the model; PostToolUse does not. [ADR 370](370-grok-interrupt-injection.md) is the replacement. Decision 8 is marked, not rewritten.
+- **2026-09-29 — wakes pass `--trust`.** §7's argv is unchanged in `## Decision`. Grok skips `.grok/hooks` until the git common-dir root is folder-trusted, and a headless wake never prompted, so project hooks never ran. [ADR 473](473-grok-wake-trusts-the-repo.md) adds `--trust` to both fresh and resume. The no-`--yolo` clause stands.
 
 ## Observability & Evaluation
 

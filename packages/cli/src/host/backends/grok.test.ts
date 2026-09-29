@@ -34,15 +34,16 @@ const spec: WakeSpec = {
   bounds: { timeout_ms: 5_000 },
 };
 
-describe('grok wake argv (ADR 352 §7)', () => {
-  it('fresh is -p with --cwd, never --yolo', () => {
+describe('grok wake argv (ADR 352 §7, ADR 473 --trust)', () => {
+  it('fresh is --trust -p with --cwd, never --yolo', () => {
     const args = buildGrokFreshArgs('hello from the daemon', '/tmp/ws');
-    expect(args).toEqual(['-p', 'hello from the daemon', '--cwd', '/tmp/ws']);
+    expect(args).toEqual(['--trust', '-p', 'hello from the daemon', '--cwd', '/tmp/ws']);
     expect(args.join(' ')).not.toMatch(/yolo|always-approve|bypassPermissions/);
   });
 
   it('resume is -r <id> plus the same fresh shape', () => {
     expect(buildGrokResumeArgs('line', '01abc', '/tmp/ws')).toEqual([
+      '--trust',
       '-p',
       'line',
       '-r',

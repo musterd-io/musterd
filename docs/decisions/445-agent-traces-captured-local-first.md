@@ -590,6 +590,11 @@ ADR 184's publication gate; a spans backend.
   once, whose report ratio sits below 0.96 on claude-code or codex.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
+- **2026-09-29 — a Grok wake was loading only global hooks.** The project file
+  `.grok/hooks/musterd.json` holds the R1 tap. Grok skips it until the git common-dir root is
+  folder-trusted, and ADR 352's wake argv never passed `--trust`, so a grokbot wake recorded 42
+  tool calls and zero R1 rows. [ADR 473](473-grok-wake-trusts-the-repo.md) puts `--trust` on the
+  wake. The tap itself is unchanged.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
   batched POST, so the per-call overhead is what the gate costs now. R2 is a file tail.
 
