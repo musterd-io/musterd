@@ -1,7 +1,7 @@
-# 013 — A System One judge on our own coordination log: Laya fails every pre-registered bar; Jev not yet run
+# 013 — A System One judge on our own coordination log: Jev and Laya both fail the pre-registered bars
 
-> **Status:** 2026-09-29, lane 01M3QCVE6E (dolly). **Laya arm: complete — reject. Jev arm: pending** (no
-> `TYPESAFE_API_KEY` on the dogfood box). This page is rewritten when the Jev arm lands.
+> **Status:** 2026-09-29, lane 01M3QCVE6E (dolly). **Both arms complete — both reject.** Jev
+> (`jev-1.13.0`, hosted, redacted text only) is far better than Laya but still misses both bars.
 
 ## Question
 
@@ -37,6 +37,35 @@ changing when option names are swapped.
   It was installed in a scratch dir, not as a repo dependency. Reproduce with `run.ts laya` then
   `score.ts laya`.
 
+- **Jev:** TypeSafe's hosted `system_one` API, pinned to `jev-1.13.0`, with 8 concurrent calls. Only
+  redacted text was sent; nick authorized that on 2026-09-29, since TypeSafe offers no zero data
+  retention. Reproduce with `TYPESAFE_API_KEY=… run.ts jev` then `score.ts jev`.
+
+## Result — Jev (test split, n shown)
+
+| question    | n   | acc   | ECE   | T fit | ECE@T | framing flips | top p ≥ .995 | median ms | verdict |
+| ----------- | --- | ----- | ----- | ----- | ----- | ------------- | ------------ | --------- | ------- |
+| act_choice  | 110 | 0.527 | 0.245 | 2.35  | 0.122 | **16%**       | 12%          | 327       | reject  |
+| ask_species | 22  | 0.545 | 0.368 | 4.85  | 0.092 | **23%**       | 27%          | 510       | reject  |
+| owes_reply  | 34  | 0.794 | 0.128 | 2.70  | 0.185 | **27%**       | 0%           | 473       | reject  |
+
+**Jev is overconfident on every question.** Every fitted temperature is above 2: the stated
+confidence has to be softened by that much before it means what it says. Even after the fit, ECE stays
+at 0.09–0.19, against a bar of 0.05. On the reply question the fit made ECE *worse* (0.128 → 0.185),
+because a 26-item tune split is too small to fit on.
+
+**It is still confidently wrong, less often than Laya.** 9 of 165 act answers and 8 of 41 species
+answers were wrong at ≥ 0.95. That is the same failure shape wanderer's 2026-09-21 probe found (wrong
+at 1.0), now at a measured rate.
+
+**Framing still moves it.** 16–27% of answers change with option names or order alone. That is lower
+than Laya's rate and close to the outside reviews' "about a third", but above the 10% bar on every
+question.
+
+**The reply question is its best result** (79% accuracy on a balanced set, with no answers at the
+extremes), and it is the only one near usable. Negating the proposition still flips 27% of its
+answers.
+
 ## Result — Laya (test split, n shown)
 
 | question    | n   | acc   | ECE   | T fit  | ECE@T | framing flips | top p ≥ .995 | verdict |
@@ -68,13 +97,17 @@ advertised 33–40 ms on a T4 GPU. It is local, but it is not cheap here.
 - Our message bodies are long and dense with jargon (ADR numbers, lane ids, seat names). That is
   **out-of-distribution by design**, and it is exactly the regime the outside evaluations flagged.
 - The reply truth is an observed-reply proxy.
-- None of this changes the direction: every question fails both bars by a wide margin.
+- Laya misses every bar by a wide margin. Jev misses them by less: its act-choice flips (16%) and its
+  post-fit species ECE (0.092) are nearest their bars. A larger N could narrow those two, but it is
+  unlikely to close both at once.
 
 ## What it changes
 
-- **Laya is rejected as a corpus labeler** for coordination acts. The local, no-retention alternative
-  does not work on our data.
+- **Neither model is adopted as a corpus labeler.** Jev is the stronger of the two: roughly 2× Laya's
+  accuracy, 3× fewer framing flips, and about 10× faster at median. Still, no question clears both bars.
+  Laya, the local, no-retention option, does not work on our data at all.
+- If labeling is revisited, the reply question on Jev is the only candidate. It would need a larger
+  tune split (≥ 150) before a temperature fit means anything, and the framing flips would still
+  disqualify it as a sole labeler.
 - **The 2026-09-21 verdict is reinforced** (no System One model in the daemon or the send path). A
   second model reproduces confident-wrong answers and framing sensitivity on our own traffic.
-- The Jev arm is ready to run. It only needs `TYPESAFE_API_KEY`, and it sends redacted text only (nick
-  authorized this on 2026-09-29).

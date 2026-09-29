@@ -39,7 +39,7 @@ async function jevBackend(): Promise<Call> {
     const res = await fetch('https://api.typesafe.ai/v1/systemone', {
       method: 'POST',
       headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ state, questions }),
+      body: JSON.stringify({ model: process.env.JEV_MODEL ?? 'jev-1.13.0', state, questions }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
     return ((await res.json()) as { answers: Record<string, Raw> }).answers;
