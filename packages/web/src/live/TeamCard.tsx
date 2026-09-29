@@ -71,7 +71,9 @@ export function TeamCard({
           <span className="lc-team-card__name">{card.name}</span>
           <span
             className={`lc-team-card__model is-${badge.source}`}
-            title={badge.full ?? undefined}
+            // The readable name first, so the accessible name matches what the eye reads; the raw
+            // id follows for the operator (stanley, lane-1 acceptance).
+            title={badge.full ? `${badge.label} · ${badge.full}` : undefined}
             style={
               showLogo
                 ? {
