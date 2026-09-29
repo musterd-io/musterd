@@ -52,7 +52,11 @@ export function deriveTraceReport(
       { harness: string; session_digest: string; has_r2: number; post: number; post_main: number }
     >(
       `SELECT harness, session_digest,
-              MAX(CASE WHEN kind IN ('reasoning','assistant_text','usage','unknown') THEN 1 ELSE 0 END) AS has_r2,
+              -- An R2 session is one whose transcript rail can COUNT calls. A rail that posted
+              -- tokens and no tool_uses (codex@1) is no denominator: with it, codex read 1.47 on
+              -- the dogfood box, 11 of 11 sessions "with R2" over 1,289 calls (lane 01M3NMDWA9).
+              MAX(CASE WHEN kind = 'usage' AND json_extract(detail, '$.tool_uses') IS NOT NULL
+                       THEN 1 ELSE 0 END) AS has_r2,
               SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NOT NULL
                        THEN 1 ELSE 0 END) + ${POST_TOOL_USE_ONCE} AS post,
               ${POST_TOOL_USE_ONCE} AS post_main

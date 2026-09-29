@@ -120,6 +120,43 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
     ]);
   });
 
+  // Lane 01M3NMDWA9: a `codex@1` session carries usage rows with token counts and no `tool_uses`.
+  // Counting it as an R2 session put its hook calls over an empty denominator — codex read 1.47
+  // on the dogfood box (1,890 / 1,289) with 11 of 11 sessions "with R2". A transcript rail that
+  // cannot count calls is no denominator: the session is R1-only for the ratio.
+  it('coverage: a session whose usage rows carry no tool_uses is not an R2 session', () => {
+    const { db, traceDb, team } = fixture();
+    ingestTraceEvents(traceDb, team.id, 'ryder', [
+      ev({ harness: 'codex', session_digest: 'c1c1c1c1c1c1', tool_name: 'Bash' }),
+      ev({ harness: 'codex', session_digest: 'c1c1c1c1c1c1', tool_name: 'Bash' }),
+      ev({
+        harness: 'codex',
+        session_digest: 'c1c1c1c1c1c1',
+        kind: 'usage',
+        detail: { parser: 'codex@1', input_tokens: 10, output_tokens: 5 },
+      }),
+      ev({ harness: 'codex', session_digest: 'c2c2c2c2c2c2', tool_name: 'Bash' }),
+      ev({
+        harness: 'codex',
+        session_digest: 'c2c2c2c2c2c2',
+        kind: 'usage',
+        detail: { parser: 'codex@2', tool_uses: 1 },
+      }),
+    ]);
+    const r = deriveTraceReport(db, traceDb, team.id, ['ryder'], { days: 7, now: NOW });
+    expect(r.coverage).toEqual([
+      {
+        harness: 'codex',
+        sessions: 2,
+        sessions_with_r2: 1,
+        post_tool_use: 3,
+        post_tool_use_r2: 1,
+        r2_tool_uses: 1,
+        coverage: 1,
+      },
+    ]);
+  });
+
   it('cost per lane: a usage row goes to the most recently claimed open lane; none → unattributed', () => {
     const { db, traceDb, team } = fixture();
     openLane(db, team.id, 'dawn', 'ryder', { title: 'lane A', claim: true }, NOW - 5 * H);
