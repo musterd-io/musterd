@@ -30,12 +30,15 @@ import { scrubCredentials } from './traceScrub.js';
 export const TRACE_OTHER = 'other';
 
 /** A structural detail value type. `count` is a non-negative safe integer; `flag` a boolean; `enum`
- *  a closed producer allowlist; `model` the one pattern-typed field (a lowercase model id). */
+ *  a closed producer allowlist; `model` a lowercase model id; `parser` a version-stamped parser tag
+ *  (ADR 474). The last two are pattern-typed: a value outside the pattern is dropped (`model`) or
+ *  becomes `other` (`parser`, as an enum does). */
 export type TraceDetailValueType =
   | { type: 'count' }
   | { type: 'flag' }
   | { type: 'enum'; values: readonly string[] }
-  | { type: 'model' };
+  | { type: 'model' }
+  | { type: 'parser' };
 
 const count: TraceDetailValueType = { type: 'count' };
 const flag: TraceDetailValueType = { type: 'flag' };
@@ -71,8 +74,11 @@ export const TRACE_REASONS = [
   'parse_failure',
 ] as const;
 export const TRACE_TRIGGERS = ['manual', 'auto'] as const;
-/** The transcript parsers, version-stamped (ADR 445 §2): exactly what `cli trace/transcript.ts` stamps. */
-export const TRACE_PARSERS = ['claude-code@1', 'codex@1'] as const;
+/** A transcript parser's version stamp (ADR 445 §2): `<harness>@<n>`, as `cli trace/transcript.ts` and
+ *  `trace/opencode.ts` stamp it. Pattern-typed, not a list (ADR 474): every new tap or parser bump
+ *  would otherwise be a protocol change, and a list one version behind reads the new parser as
+ *  `other` for good. No `_`, so no credential (every `TOKEN_PREFIXES` prefix has one) can match. */
+export const TRACE_PARSER_RE = /^[a-z][a-z0-9-]{0,31}@[0-9]{1,4}$/;
 /** Transcript record types the parsers emit as `unknown` (measured 2026-09-26 + the harness's
  *  documented families). A new one is added here in the change that starts emitting it. */
 export const TRACE_UNKNOWN_TYPES = [
@@ -132,7 +138,7 @@ const DETAIL_TYPES: Record<string, TraceDetailValueType> = {
   source: en(TRACE_SOURCES),
   reason: en(TRACE_REASONS),
   trigger: en(TRACE_TRIGGERS),
-  parser: en(TRACE_PARSERS),
+  parser: { type: 'parser' },
   type: en(TRACE_UNKNOWN_TYPES),
   agent_type: en(TRACE_AGENT_TYPES),
   model: { type: 'model' },
@@ -192,6 +198,8 @@ function valueSchema(t: TraceDetailValueType): z.ZodTypeAny {
       return z.enum([TRACE_OTHER, ...t.values] as [string, ...string[]]);
     case 'model':
       return z.string().regex(TRACE_MODEL_RE);
+    case 'parser':
+      return z.union([z.literal(TRACE_OTHER), z.string().regex(TRACE_PARSER_RE)]);
   }
 }
 
@@ -245,6 +253,13 @@ export function normalizeTraceDetail(
       case 'model':
         if (typeof v === 'string' && TRACE_MODEL_RE.test(v)) out[key] = v;
         else normalized++;
+        break;
+      case 'parser':
+        if (typeof v === 'string' && (v === TRACE_OTHER || TRACE_PARSER_RE.test(v))) out[key] = v;
+        else {
+          out[key] = TRACE_OTHER;
+          normalized++;
+        }
         break;
     }
   }
@@ -346,6 +361,24 @@ export const TRACE_TOOL_NAMESPACES: Record<string, readonly string[]> = {
     'Task',
     'Todo',
   ],
+  // OpenCode's built-ins, lowercase as its plugin's `tool.execute.after` names them (ADR 474).
+  opencode: [
+    'bash',
+    'read',
+    'write',
+    'edit',
+    'patch',
+    'multiedit',
+    'glob',
+    'grep',
+    'list',
+    'todowrite',
+    'todoread',
+    'webfetch',
+    'websearch',
+    'task',
+    'skill',
+  ],
   grok: [
     'bash',
     'read_file',
@@ -358,6 +391,11 @@ export const TRACE_TOOL_NAMESPACES: Record<string, readonly string[]> = {
     'browse',
   ],
 };
+
+/** OpenCode spells an MCP tool `<server>_<tool>`, so the server boundary is not recoverable from the
+ *  name. Only musterd's own server is claimed (ADR 474): the one whose tool mix the research needs,
+ *  and a prefix no other server's name can be told apart from. Lowercase only — no credential fits. */
+export const TRACE_OPENCODE_MUSTERD_TOOL_RE = /^musterd_[a-z][a-z0-9_]{0,63}$/;
 
 /**
  * A tool name in the harness's namespace, or `other` (ADR 453 §2). `null` in → `null` out (an
@@ -374,6 +412,8 @@ export function structuralToolName(
   if (TRACE_MCP_TOOL_RE.test(name)) return { name, normalized: false };
   const ns = TRACE_TOOL_NAMESPACES[harness];
   if (ns?.includes(name)) return { name, normalized: false };
+  if (harness === 'opencode' && TRACE_OPENCODE_MUSTERD_TOOL_RE.test(name))
+    return { name, normalized: false };
   return { name: TRACE_OTHER, normalized: true };
 }
 

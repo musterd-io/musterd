@@ -607,6 +607,11 @@ ADR 184's publication gate; a spans backend.
   still re-posts once; an ingest-side dedupe would close it and needs its own ADR. Falsifier: two
   R2 rows for one digest from one transcript span with different `received_at`, on a build with
   this fix.
+- **2026-09-29 — the new parsers were stored as `parser: "other"`** (lane
+  `01M3NNK27K7BHWHVXBH8TCN5BA`). `traceSync`'s parser list stopped at `codex@1`, so 4,294 `codex@2`
+  rows, 76 `cursor@1` and 32 `opencode@1` were stored as `other`, and every OpenCode tool name too.
+  [ADR 474](474-trace-structural-values-grow-with-each-tap.md) makes the parser tag pattern-typed
+  and gives OpenCode a tool namespace. Rows stored before the daemon runs that build stay `other`.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
   batched POST, so the per-call overhead is what the gate costs now. R2 is a file tail.
 

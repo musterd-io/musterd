@@ -195,3 +195,47 @@ describe('per-kind structural detail (ADR 453 §2)', () => {
     }
   });
 });
+
+describe('values the taps emit since 7d46d080 (ADR 474)', () => {
+  it('a version-stamped parser tag passes as itself, whatever the harness', () => {
+    for (const p of ['claude-code@1', 'codex@1', 'codex@2', 'cursor@1', 'grok@1', 'opencode@1']) {
+      expect(normalizeTraceDetail('usage', { parser: p })).toEqual({
+        detail: { parser: p },
+        normalized: 0,
+      });
+      expect(traceStructuralDetailSchema('usage').safeParse({ parser: p }).success).toBe(true);
+    }
+  });
+
+  it('a parser field cannot carry prose or a credential', () => {
+    for (const v of [...PROSE, ...credentials, 'codex', 'Codex@2', 'codex@', 'a@1@2']) {
+      expect(normalizeTraceDetail('usage', { parser: v }).detail).toEqual({ parser: TRACE_OTHER });
+      expect(traceStructuralDetailSchema('usage').safeParse({ parser: v }).success).toBe(false);
+    }
+  });
+
+  it("opencode's built-ins and musterd's own MCP tools pass; another server's tool is `other`", () => {
+    for (const n of [
+      'bash',
+      'read',
+      'write',
+      'edit',
+      'glob',
+      'grep',
+      'list',
+      'todowrite',
+      'webfetch',
+    ]) {
+      expect(structuralToolName('opencode', n)).toEqual({ name: n, normalized: false });
+    }
+    for (const n of ['musterd_team_inbox_check', 'musterd_lane_board']) {
+      expect(structuralToolName('opencode', n)).toEqual({ name: n, normalized: false });
+      expect(isStructuralToolName('opencode', n)).toBe(true);
+    }
+    for (const n of ['github_create_issue', 'musterd_', 'musterd_Team', ...credentials]) {
+      expect(structuralToolName('opencode', n).name).toBe(TRACE_OTHER);
+    }
+    // opencode's MCP spelling is not a name in another harness's namespace
+    expect(structuralToolName('claude-code', 'musterd_team_inbox_check').name).toBe(TRACE_OTHER);
+  });
+});
