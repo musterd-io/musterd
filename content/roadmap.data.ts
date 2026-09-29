@@ -1662,6 +1662,21 @@ const RAW: RawItem[] = [
     dependsOn: ['harness-adapters', 'own-harness', 'tool-call-telemetry'],
   },
 
+  {
+    id: 'sponsor-host-isolation',
+    unfrozen: 'ADR 463 names these as its next increments; no ADR designs them yet',
+    wave: 'later',
+    title: 'Sponsored agents beyond the sponsor’s own account — containers, shared hosts, Cloud',
+    plan: 'reserved',
+    category: 'platform',
+    blurb:
+      'A sponsored agent runs on its sponsor’s host today, in the sponsor’s own OS account (ADR 463). Next on the same provisions table: opt-in container isolation on that machine, team-shared hosts, and a Cloud runtime.',
+    detail:
+      'ADR 463 (landed 2026-09-29, #1784–#1818) lets any member with `can_create_agents` have their new agent provisioned and woken by their own `musterd host`, under authority scoped to agents they sponsor. Its trust domain is deliberately the one `musterd agent` already uses: the agent shares its sponsor’s account. Three increments reuse `host_provisions` unchanged: containers on the sponsor’s machine (opt-in via `agent_host.policy.isolation`); hosts a team shares rather than one sponsor owns; and the Cloud runtime, where no sponsor machine is needed.',
+    refs: [adr(463, 'ADR 463')],
+    dependsOn: ['harness-residency'],
+  },
+
   // ── out of scope ──────────────────────────────────────────────────────────
   {
     id: 'no-orchestrator',
