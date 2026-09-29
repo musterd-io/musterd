@@ -18,6 +18,7 @@ import type { CreatedBy, EditOp, ItemInput } from './port.js';
 import { BOARD_NAME_RE } from './port.js';
 import { RoomManager } from './sync/roomManager.js';
 import { TldrawProvider } from './tldraw/provider.js';
+import { isEntryPoint } from './entry.js';
 
 export const DEFAULT_PORT = 4851;
 
@@ -218,7 +219,7 @@ function log(level: 'info' | 'warn' | 'error', message: string, error?: unknown)
 }
 
 // Entry point when spawned directly (the MCP server's spawn-on-demand path, ADR 330 decision 8).
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (isEntryPoint(import.meta.url)) {
   const running = await startService();
   const shutdown = async () => {
     log('info', 'shutting down — persisting open boards');

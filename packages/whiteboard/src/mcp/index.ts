@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { NOTE_TEXT_MAX, seatActor, type CreatedBy, type EditOp, type ItemInput } from '../port.js';
 import { WhiteboardServiceClient } from './client.js';
 import { formatOutline } from './format.js';
+import { isEntryPoint } from '../entry.js';
 
 const NO_ACTOR_MSG =
   'no seat has opened a board in this session — call whiteboard_open first (its `seat` parameter is what attributes your shapes)';
@@ -244,7 +245,7 @@ export function buildWhiteboardMcpServer(client: WhiteboardServiceClient): McpSe
 }
 
 // stdio entry point (the .mcp.json target).
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (isEntryPoint(import.meta.url)) {
   const port = parseInt(process.env['WHITEBOARD_PORT'] ?? '4851', 10);
   const server = buildWhiteboardMcpServer(new WhiteboardServiceClient(port));
   await server.connect(new StdioServerTransport());
