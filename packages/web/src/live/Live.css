@@ -3428,6 +3428,14 @@
 .lc-team-card__work.is-said {
   font-style: italic;
 }
+/* Asking a human (ADR 464 §4): the state line takes the ask amber INK, the same family the banner's
+   hold line wears — a member waiting on a person reads as one thing across the page. */
+.lc-team-card--asking .lc-team-card__state {
+  color: var(--lc-warn-ink);
+}
+.lc-team__pip--asking {
+  outline: 2px solid var(--lc-warn);
+}
 .lc-team-card__more {
   font-size: 12px;
   color: var(--lc-muted);

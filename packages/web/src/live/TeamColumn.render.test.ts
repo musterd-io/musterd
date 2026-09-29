@@ -92,6 +92,31 @@ describe('TeamColumn', () => {
     expect(render({ roster: [m('ryder')], board })).not.toContain('01M3ZZZZ');
   });
 
+  it('a member with an open ask to a human reads "asking nick" (ADR 464 §4)', () => {
+    const askView = {
+      env: {
+        id: 'ask1',
+        from: 'ryder',
+        to: { kind: 'member', name: 'nick' },
+        ts: 1,
+        act: 'ask',
+        body: '',
+      },
+      species: 'approve',
+      tier: 'standard',
+      to: 'nick',
+      deadline: 2,
+      state: 'open',
+    } as unknown as import('./asks').AskView;
+    const html = render({
+      roster: [m('ryder'), m('nick', { kind: 'human', posture: 'active' })],
+      board,
+      asks: [askView],
+    });
+    expect(html).toContain('asking nick');
+    expect(html).toContain('lc-team-card--asking');
+  });
+
   it('says when this page cannot read every seat', () => {
     expect(render({ roster: [m('a')], unreadable: 1 })).toContain('reload to meet');
   });
