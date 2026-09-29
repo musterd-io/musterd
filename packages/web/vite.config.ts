@@ -5,6 +5,7 @@ import viteReact from '@vitejs/plugin-react';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import { defineConfig, type Plugin } from 'vite';
 
+import { installPrerenderDiagnostics } from './scripts/prerender-diagnostics.ts';
 import { blogEntries, siteFiles } from './scripts/site-files.ts';
 
 // In dev, the /live dashboard talks to the daemon same-origin and Vite proxies the daemon paths
@@ -74,6 +75,9 @@ export default defineConfig(({ command }) => {
   // One id per `vite build` invocation, shared by the bundle define and the emitted build.json —
   // dev deliberately gets neither, so buildSync stays inert there.
   const id = command === 'build' ? buildId() : null;
+  // The prerender logs "retrying: <route>" and never the error it caught; this prints it
+  // (scripts/prerender-diagnostics.ts, lane 01M3NBT7RMMYZFQGKPS9NNGGBP). Build only.
+  if (command === 'build') installPrerenderDiagnostics();
   return {
   ...(id ? { define: { __WEB_BUILD__: JSON.stringify(id) } } : {}),
   // `vite dev` evaluates modules instead of bundling them, so @musterd/protocol's barrel drags
