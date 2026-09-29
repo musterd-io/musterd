@@ -81,6 +81,31 @@ launching through a live Tailscale workload and Aperture request to provider and
 Increment 4 API provisioning has no implementation or test surface. The complete acceptance remains
 open in the [paved-road design](../superpowers/specs/2026-09-02-tailscale-aperture-paved-road-design.md#13-acceptance-criteria-full-release--not-yet-met).
 
+### Scenario E — a sponsor's host runs the agent they created (ADR 463)
+
+Automated in [`tests/scenarios/sponsor-hosted.test.ts`](../../tests/scenarios/sponsor-hosted.test.ts),
+against the real daemon, real git, the real provisioner and the real wake loop. Only the harness's
+own MCP registration and the woken session are faked, and the session is a real `MusterdClient`
+claiming the seat with the credentials the provisioner wrote into the seat's binding.
+
+1. team `sd-t`: nick (admin), dana (non-admin human); the team sets `agent_host.policy.budget_usd`.
+2. dana mints a host key for her label `dana-mbp` and polls once — the heartbeat a mint looks for.
+3. dana creates `dana-scout`: the reply says `hosting: sponsor_host`, host `dana-mbp`.
+4. The provisioner ticks: one provision claimed and reported `ready`; a real git workspace exists
+   with a binding naming the seat, the host key and a grant; the harness was wired once; the
+   registry holds the seat.
+5. The wake loop yields exactly one order for `dana-scout`, reason `provisioned`, no act, its line
+   naming dana, carrying the team's budget; the session occupies and messages dana. A second poll
+   yields none.
+6. dana's inbox holds the greeting, inside 10 s.
+7. `POST /members/agents/dana-scout/connect` is refused (409, hosted).
+8. nick removes dana: `dana-scout` is disabled, its residency is gone, the next poll yields no
+   orders, and dana's host key is refused.
+   **Pass:** a non-admin member creates an agent and, with no admin step, it runs on their own
+   machine and greets them; it can be reached no other way, and it dies with its sponsor.
+   Falsified by mutation: without the `provisioned` wake step 5 fails; without the cascade's
+   residency revoke step 8 fails.
+
 ## Per-module acceptance (must pass before the next package in build order)
 
 - **protocol**: every act's meta rule enforced (accept/decline require `in_reply_to`; unknown act rejected; unknown meta preserved); `Envelope` round-trips; version literal pinned.
