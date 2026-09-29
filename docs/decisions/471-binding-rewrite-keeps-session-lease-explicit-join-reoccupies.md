@@ -66,6 +66,15 @@ repair either a dead Presence or an erased lease.
   from a folder an adapter holds, and changing what an attached claim persists is ADR 377's call.
 - An explicit `team_join` costs one HTTP round trip more than before when already joined. It is
   rare (autojoin covers the common path), and the round trip is the point.
+- **2026-09-29 — the detached claim also rewrote `agent_key`** (lane `01M3NNJQV1RC738XMBSQG8QVNC`).
+  A re-occupy of the bound seat claims with `seat_credential` (right), and `detachedClaim` then
+  wrote that credential as `binding.agent_key` — so after `musterd claim <seat> --detach` the team
+  key on disk read `msac_…`. The one reader that keys on it, `sessionDigest(agent_key,
+  session_id)` (ADR 445), moved mid-session: ryder's Claude Code session split into 27f7954d and
+  b7bed855 at 20:50:54 on 2026-09-28, the new digest had no tail cursor, and R2 re-posted the
+  whole transcript under it. Now the binding keeps the team key it had and the credential rides
+  beside it; `claim.test.ts` pins a re-occupy that leaves `agent_key` unchanged. Falsifier: a
+  detached re-occupy after which `binding.agent_key` no longer starts with `mskey_`.
 
 ## Observability & Evaluation
 

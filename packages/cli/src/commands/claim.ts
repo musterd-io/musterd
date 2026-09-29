@@ -192,6 +192,10 @@ export async function claimCommand(parsed: Parsed): Promise<number> {
       server,
       team,
       key: claimKey,
+      // The key the binding TRACES under, kept apart from the key this claim authenticates with:
+      // on a re-occupy `claimKey` is the seat credential, and writing that as `agent_key` moved
+      // `sessionDigest(agent_key, session_id)` mid-session (lane 01M3NNJQV1).
+      agentKey,
       target,
       surface,
       grant,
@@ -412,12 +416,14 @@ async function detachedClaim(input: {
   server: string;
   team: string;
   key: string;
+  /** The team agent key the binding keeps as `agent_key`; `key` may be the seat credential. */
+  agentKey: string | undefined;
   target: ClaimSeatTarget;
   surface: Surface;
   grant: string | undefined;
   json: boolean;
 }): Promise<number> {
-  const { http, config, server, team, key, target, surface, grant, json } = input;
+  const { http, config, server, team, key, agentKey, target, surface, grant, json } = input;
   const outcome = await http.claim(team, {
     key,
     target,
@@ -454,11 +460,16 @@ async function detachedClaim(input: {
   config.identities[team] = { name: seat, key, surface };
   rememberIdentity(config, { team, name: seat, key, surface }); // ADR 059 vault
   saveConfig(config);
+  // `agent_key` is the TEAM key the seat traces under (`sessionDigest`), never the credential this
+  // claim happened to present: a re-occupy claims with `seat_credential`, and writing that here
+  // split one Claude Code session into two digests at the minute of the claim (ryder
+  // 27f7954d → b7bed855, 2026-09-28 20:50:54) and re-tailed its whole transcript under the new
+  // one. The credential rides beside it (`saveBinding` carries the on-disk one forward).
   const binding: Binding = {
     version: 2,
     server,
     team,
-    agent_key: key,
+    agent_key: agentKey ?? key,
     claim: { mode: 'seat', name: seat },
     ...(grant !== undefined ? { grant } : {}),
   };
