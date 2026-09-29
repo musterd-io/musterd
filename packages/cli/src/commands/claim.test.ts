@@ -617,4 +617,34 @@ describe('claim --detach (ADR 377 increment 1 — the one-shot HTTP path `join` 
     expect(binding.claim).toEqual({ mode: 'seat', name: 'bo' });
     expect(binding.session_lease).toBe('msls_adapter_live');
   });
+
+  // Lane 01M3NNJQV1: a re-occupy of the bound seat claims with the seat credential (correct), and
+  // the detached path then wrote THAT as `agent_key` — so the binding's team key became `msac_…`.
+  // `sessionDigest(agent_key, session_id)` moved with it: one Claude Code session split into two
+  // digests at the minute of the claim (ryder 27f7954d → b7bed855, 2026-09-28 20:50:54), the new
+  // digest had no tail cursor and R2 re-posted the whole transcript, and every coverage number
+  // built on the pair read wrong. The key the seat traces under must not change on a re-occupy.
+  it('re-occupying the bound seat keeps agent_key as the team key — the credential it claimed with is not the key', async () => {
+    await declareSeat('bo');
+    const g = await grant('bo');
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      // The attached claim mints the seat credential and binds the folder with the team key.
+      expect(await claimCommand(parseArgs(['bo', '--team', 'dawn', '--grant', g]))).toBe(0);
+      const first = readBinding();
+      expect(first.agent_key).toBe(agentKey);
+      expect(first.seat_credential).toMatch(/^msac_/);
+      // A detached re-occupy from the same folder claims WITH the credential…
+      expect(
+        await claimCommand(parseArgs(['bo', '--team', 'dawn', '--surface', 'cursor', '--detach'])),
+      ).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+    const after = readBinding();
+    // …and the binding still traces under the team key, credential carried beside it.
+    expect(after.agent_key).toBe(agentKey);
+    expect(after.seat_credential).toMatch(/^msac_/);
+    expect(after.claim).toEqual({ mode: 'seat', name: 'bo' });
+  });
 });

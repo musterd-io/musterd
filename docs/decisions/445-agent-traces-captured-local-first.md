@@ -553,7 +553,19 @@ ADR 184's publication gate; a spans backend.
      the seat. Its lease had been dead since start (the defect ADR 471 / #1801 fixed today), every
      probe was refused, and the tap that rides the probe went with it: 50/279 = 0.18 for the day.
      miley's b8702e0b (84/494) is the same shape. That, not a tap gap, is claude-code's 0.818; the
-     ten clean sessions read 0.96–0.98. The tap should post even when the probe is refused.
+     ten clean sessions read 0.96–0.98. ~~The tap should post even when the probe is refused.~~
+     **Corrected 2026-09-29** (lane `01M3NNJQV1RC738XMBSQG8QVNC`): the mechanism above is wrong.
+     A refused probe still posts — a garbage lease yields `PostToolUse` + `HookOutcome deaf:1`
+     on the current build, and every build that ran through the gap awaited the tap on that path.
+     What happened is a **split digest**: `claim --detach` on a re-occupy claims with the seat
+     credential and wrote it as `binding.agent_key`, so `sessionDigest(agent_key, session_id)`
+     moved. My session is whole under 27f7954d (176 R1, 144 R2, its SessionStart) until 20:50,
+     then whole under b7bed855; the new digest had no tail cursor, so R2 re-posted the entire
+     transcript with its original timestamps — the "usage from 12:56" was that re-tail, and item
+     2's family. Per digest the ratio is meaningless; per session it is at target. Fixed in the
+     detached claim: `agent_key` stays the team key, the credential rides beside it (test:
+     `claim.test.ts`, re-occupy keeps `agent_key`). Falsifier: a `claim --detach` re-occupy after
+     which `binding.agent_key` starts with `msac_`.
   2. **The R2 tail re-posts spans.** codex 0cd68449 posted the same range at 17:19:43, 17:19:50,
      17:21:12 and 17:23:59 (81 rows / 87 calls each), then 162/174 and 372/369 — 1,115 counted
      against 596 hook calls. cursor f7d7bc1c carries two `SessionEnd` and two `usage` rows in one
