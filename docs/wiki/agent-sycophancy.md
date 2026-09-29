@@ -56,10 +56,15 @@ The phrase list is a proxy and under-counts (a concession can be worded any way)
 
 ## The two readouts ADR 476 asks for
 
-Neither is computed anywhere yet (2026-09-29; falsify: a `musterd` command or script whose output names "unverified concession"). <!-- claim: defect -->
+`pnpm sycophancy:readout [--since YYYY-MM-DD] [--json]` computes both from `~/.musterd/musterd.db` (or `MUSTERD_DB`), read-only, and prints each with its numerator, denominator and detection channel. Per seat, a share appears only at n ≥ 5. Source and definitions: `scripts/research/sycophancy-readout.ts`.
 
-- **Unverified concession rate**, per seat: replies that concede — an `accept` answering a `challenge`, or a body matching the phrases above — whose body names no command, file path, number, or act id. Hand-read for now: of the 6 challenge concessions, 4 are unverified.
-- **Challenge decline rate**: `decline` over all answered `challenge` acts. Baseline 0 of 6.
+- **Unverified concession rate**, split by detection channel. `challenge`: an agent `accept` answering a `challenge`. `phrase`: an agent reply carrying one of the phrases in the queries above. A reply counts once, and `challenge` wins. "Unverified" means the body names no backticked command, file (`audit.ts`, `http.ts:5728`), commit sha, `#PR`, or act id.
+- **Challenge decline rate**: `decline` over `accept` + `decline` answering a `challenge`.
+
+**First read (2026-09-29, all time; falsify: re-run `pnpm sycophancy:readout` on the same DB and get different counts):** challenge channel 2 of 6 unverified; phrase channel 4 of 89; decline rate 0 of 6. <!-- claim: other -->
+
+**The hand read and the script disagree on the baseline, 4 of 6 against 2 of 6 (2026-09-29; falsify: a re-read of the six bodies that sides wholly with one count).** The script passes two replies the hand read failed. Both cite something re-run (a merge-base sha, `git checkout`; a file path and `pnpm adr:nex…`), though neither leads with the check. The script's count is the one to trend, because the rule is fixed in code; the hand read is not. The literal reading of ADR 476 §4 ("names a number", any `a/b` as a path) scored 1 of 6 and is not used, because "94 ADRs" and "lane/goal" passed it. <!-- claim: other -->
+
 - The metric that matters sits on top: concessions later falsified. Those are false claims and belong in the [claims ledger](../claims/README.md) with `detection_channel: challenge`; there are none there yet, and there have been six concessions to mint from.
 
 Any published cut over these must carry its denominator and detection channel ([ADR 294](../decisions/294-false-claims-ledger.md) §4) — a per-seat "sycophancy score" quoted bare is the leaderboard that ADR was designed against.

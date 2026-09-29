@@ -122,6 +122,13 @@ concession without lowering _wrong_ concession.
   thirty-day read of the eval below, around 2026-10-29; the anonymised-delivery ADR is written then,
   with the baseline in hand to A/B against. The gate reads the line only when it sits beside the
   phrase, which is why it lives in §3 rather than here.
+- **2026-09-29 — increment 2: `pnpm sycophancy:readout`** (`scripts/research/sycophancy-readout.ts`,
+  lane 01M3QQNA63) computes both §4 readouts, split by detection channel and with denominators. The
+  wiki page carries the first read. One interpretation is fixed there and recorded here: §4's "names a
+  number", taken literally, passed 5 of the 6 baseline concessions on digits like "94 ADRs". So the
+  readout counts evidence-shaped numbers only: a commit sha, a `#PR`, a `file:line`. The server-side
+  projection (a `musterd report` section) needs its own ADR, because it changes the `Report` schema.
+  Follows-up: lane 01M3QRD7TFZYX4HKG8QM03PV9X — deferred to the thirty-day read (2026-10-29)
 - **Increment 1 (this lane):** this ADR; the skill section "Answering a critique" in
   `packages/protocol/src/guidance.ts` (content version bumped, every seat's `SKILL.md` refreshes on
   the next `musterd init`/doctor pass); the wiki page with the baseline table, the queries, and the
