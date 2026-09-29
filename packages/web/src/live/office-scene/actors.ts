@@ -113,7 +113,15 @@ interface Anim {
 }
 
 /** The animation fields every freshly-built pose starts from; the live values are overlaid in `posesNow`. */
-const AT_REST = { moving: false, run: false, gesture: 0, gestureT: 0, phase: 0, stride: 0, sit: 0 } as const;
+const AT_REST = {
+  moving: false,
+  run: false,
+  gesture: 0,
+  gestureT: 0,
+  phase: 0,
+  stride: 0,
+  sit: 0,
+} as const;
 
 /** Face the direction of travel from (fx,fy) → (tx,ty) in logical space. */
 export function travelDir(fx: number, fy: number, tx: number, ty: number): Dir {
@@ -140,7 +148,8 @@ export function homePoses(
   // what keeps the hand and the dock on the same threshold while a member is still lowering into the
   // chair; a member whose posture flips between placement passes is never drawn holding a laptop
   // their dock also holds.
-  const laptop = (name: string): CarryKind | null => (carriesLaptop(byName.get(name)) ? 'laptop' : null);
+  const laptop = (name: string): CarryKind | null =>
+    carriesLaptop(byName.get(name)) ? 'laptop' : null;
   for (const [name, pl] of placements) {
     if (!byName.has(name)) continue;
     // An owned desk is furniture-with-a-name (presence-honesty §4): the offline owner keeps the
@@ -356,7 +365,10 @@ function hold(
 }
 
 /** A point ~offset in front of `target`, on the side facing `mover` — where a visitor stands. */
-function approach(target: { lx: number; ly: number }, mover: { lx: number; ly: number }): { lx: number; ly: number } {
+function approach(
+  target: { lx: number; ly: number },
+  mover: { lx: number; ly: number },
+): { lx: number; ly: number } {
   const dx = mover.lx - target.lx;
   const dy = mover.ly - target.ly;
   const d = Math.hypot(dx, dy) || 1;
@@ -372,7 +384,13 @@ function approach(target: { lx: number; ly: number }, mover: { lx: number; ly: n
  * old shape (easeInOut per leg) braked to a dead stop at each string-pulled corner, which read as
  * "walk a few steps, pause, turn, walk again".
  */
-function legsAlong(pts: P[], speed: number, minDur: number, maxDur: number, carry: CarryKind | null): Leg[] {
+function legsAlong(
+  pts: P[],
+  speed: number,
+  minDur: number,
+  maxDur: number,
+  carry: CarryKind | null,
+): Leg[] {
   const segs: Array<{ a: P; b: P; len: number }> = [];
   let total = 0;
   for (let i = 0; i < pts.length - 1; i++) {
@@ -385,12 +403,36 @@ function legsAlong(pts: P[], speed: number, minDur: number, maxDur: number, carr
   }
   if (segs.length === 0) {
     const a = pts[0]!;
-    return [{ fx: a.lx, fy: a.ly, tx: a.lx, ty: a.ly, dir: 'S', dur: 0.1, carry, bubble: null, ease: 'inOut' }];
+    return [
+      {
+        fx: a.lx,
+        fy: a.ly,
+        tx: a.lx,
+        ty: a.ly,
+        dir: 'S',
+        dur: 0.1,
+        carry,
+        bubble: null,
+        ease: 'inOut',
+      },
+    ];
   }
   const dur = clamp(total / speed, minDur, maxDur);
   if (segs.length === 1) {
     const { a, b } = segs[0]!;
-    return [{ fx: a.lx, fy: a.ly, tx: b.lx, ty: b.ly, dir: travelDir(a.lx, a.ly, b.lx, b.ly), dur, carry, bubble: null, ease: 'inOut' }];
+    return [
+      {
+        fx: a.lx,
+        fy: a.ly,
+        tx: b.lx,
+        ty: b.ly,
+        dir: travelDir(a.lx, a.ly, b.lx, b.ly),
+        dur,
+        carry,
+        bubble: null,
+        ease: 'inOut',
+      },
+    ];
   }
   const v = total / dur; // cruise speed the whole run holds through its waypoints
   const last = segs.length - 1;
@@ -433,7 +475,11 @@ const WAVE_S = 1.6;
 export interface Actors {
   /** Reconcile to a new roster: seat everyone, and (when `animate`) walk arrivals in, departures out,
    * and away/return drifts between desk and nook. The first call just snaps (no entrance stampede). */
-  setHomes(placements: Map<string, Placement>, byName: Map<string, OfficeNode>, animate: boolean): void;
+  setHomes(
+    placements: Map<string, Placement>,
+    byName: Map<string, OfficeNode>,
+    animate: boolean,
+  ): void;
   /** Enqueue a walk to a teammate. Returns false if it can't play (mover or target not present). */
   walk(from: string, req: Req): boolean;
   /** Enqueue an ambient coffee run for a seated desk member (home → machine → pour → drink → home).
@@ -510,6 +556,8 @@ export interface Actors {
   /** A real act's walk (help / handoff) is in flight or queued — arrivals, drifts and ambient
    *  errands do not count. The Welcome Wagon will not START a welcome over one. */
   actWalking(): boolean;
+  /** `name`'s own act walk (help / handoff) is in flight or queued — the walk tag's lifetime. */
+  actWalkingFor(name: string): boolean;
   /** `name` has reached their check-in mark (or is past it, or is not checking in at all) — the
    *  lanyard toss waits for this rather than being thrown at the door. */
   reachedMark(name: string): boolean;
@@ -539,7 +587,16 @@ export function createActors(): Actors {
   let arrivals = 0; // members that entered since the last takeArrivals() — the dog's cue to go and greet
 
   function entrancePose(ref: Pose): Pose {
-    return { lx: ENTRANCE.lx, ly: ENTRANCE.ly, dir: 'N', small: ref.small, carry: null, bubble: null, alpha: 1, ...AT_REST };
+    return {
+      lx: ENTRANCE.lx,
+      ly: ENTRANCE.ly,
+      dir: 'N',
+      small: ref.small,
+      carry: null,
+      bubble: null,
+      alpha: 1,
+      ...AT_REST,
+    };
   }
   function moved(a: Pose, b: Pose): boolean {
     return Math.hypot(a.lx - b.lx, a.ly - b.ly) > 8;
@@ -552,7 +609,13 @@ export function createActors(): Actors {
   }
 
   /** A routed point-to-point walk (entrance-in, drift, or leave), optionally fading at the door. */
-  function straightWalk(who: string, from: Pose, to: Pose, exit: boolean, fade?: 'in' | 'out'): Walk {
+  function straightWalk(
+    who: string,
+    from: Pose,
+    to: Pose,
+    exit: boolean,
+    fade?: 'in' | 'out',
+  ): Walk {
     const speed = 78; // logical units/sec — an unhurried stroll across the floor
     const path = findPath({ lx: from.lx, ly: from.ly }, { lx: to.lx, ly: to.ly }, othersAt(who));
     return {
@@ -570,15 +633,32 @@ export function createActors(): Actors {
    * animate branch of `setHomes`** — the first snapshot seats everyone silently, which is the whole
    * guard against a page reload replaying the ritual for the entire roster.
    */
-  function checkInWalk(who: string, dest: Pose, mark: number, first?: { carry: CarryKind | null }): Walk {
+  function checkInWalk(
+    who: string,
+    dest: Pose,
+    mark: number,
+    first?: { carry: CarryKind | null },
+  ): Walk {
     const speed = 78;
     const at = CHECK_IN_MARKS[mark]!;
     const from = entrancePose(dest);
     // A first arrival (lane 01M3F81DD9) carries their things in and lingers to catch the lanyard.
     const carry = first?.carry ?? null;
-    const toMark = legsAlong(findPath({ lx: from.lx, ly: from.ly }, { lx: at.lx, ly: at.ly }, othersAt(who)), speed, 1.2, 4, carry);
+    const toMark = legsAlong(
+      findPath({ lx: from.lx, ly: from.ly }, { lx: at.lx, ly: at.ly }, othersAt(who)),
+      speed,
+      1.2,
+      4,
+      carry,
+    );
     const stand = endOf(toMark);
-    const onward = legsAlong(findPath(stand, { lx: dest.lx, ly: dest.ly }, othersAt(who)), speed, 1.2, 5, carry);
+    const onward = legsAlong(
+      findPath(stand, { lx: dest.lx, ly: dest.ly }, othersAt(who)),
+      speed,
+      1.2,
+      5,
+      carry,
+    );
     const pause = first ? FIRST_ARRIVAL_HOLD_S : CHECK_IN_S;
     return {
       // Facing N: the counter is north of every mark, and the pause is *at* somebody, not near them.
@@ -627,7 +707,8 @@ export function createActors(): Actors {
     const w = walks.get(name);
     const leg = w?.legs[w.i];
     if (leg) {
-      if (leg.fx !== leg.tx || leg.fy !== leg.ty) return Math.atan2(leg.ty - leg.fy, leg.tx - leg.fx);
+      if (leg.fx !== leg.tx || leg.fy !== leg.ty)
+        return Math.atan2(leg.ty - leg.fy, leg.tx - leg.fx);
       return DIR_ANGLE[leg.dir];
     }
     const home = homes.get(name);
@@ -730,7 +811,9 @@ export function createActors(): Actors {
         heading: a.head,
         // An errand sit (eating on the couch) is casual; a beat that holds a desk member in their own
         // chair is not, and says so on its fabricated spot. Off a sit leg, their home seat decides.
-        casual: leg.sitAt ? (leg.sitAt.casual ?? leg.sitAt.sit > 0) : (homes.get(name)?.casual ?? false),
+        casual: leg.sitAt
+          ? (leg.sitAt.casual ?? leg.sitAt.sit > 0)
+          : (homes.get(name)?.casual ?? false),
         // An errand sitter on the couch composite-sorts with it, exactly like a leisure placement.
         ...(leg.sitAt?.depthAt ? { depthAt: leg.sitAt.depthAt } : {}),
       });
@@ -846,13 +929,35 @@ export function createActors(): Actors {
     // Route both trips around furniture and standing teammates; the visitor's stand spot is wherever
     // the outbound route actually ends (the approach point may get nudged off a blocked cell).
     const avoid = othersAt(from);
-    const out = legsAlong(findPath({ lx: start.lx, ly: start.ly }, a, avoid), speed, 1.4, 4.5, carry);
+    const out = legsAlong(
+      findPath({ lx: start.lx, ly: start.ly }, a, avoid),
+      speed,
+      1.4,
+      4.5,
+      carry,
+    );
     const stand = { lx: out[out.length - 1]!.tx, ly: out[out.length - 1]!.ty };
-    const back = legsAlong(findPath(stand, { lx: home.lx, ly: home.ly }, avoid), speed, 1.4, 4.5, null);
+    const back = legsAlong(
+      findPath(stand, { lx: home.lx, ly: home.ly }, avoid),
+      speed,
+      1.4,
+      4.5,
+      null,
+    );
     return {
       legs: [
         ...out,
-        { fx: stand.lx, fy: stand.ly, tx: stand.lx, ty: stand.ly, dir: travelDir(stand.lx, stand.ly, target.lx, target.ly), dur: hold, carry, bubble: holdBubble, ease: 'inOut' },
+        {
+          fx: stand.lx,
+          fy: stand.ly,
+          tx: stand.lx,
+          ty: stand.ly,
+          dir: travelDir(stand.lx, stand.ly, target.lx, target.ly),
+          dur: hold,
+          carry,
+          bubble: holdBubble,
+          ease: 'inOut',
+        },
         ...back,
       ],
       i: 0,
@@ -903,7 +1008,9 @@ export function createActors(): Actors {
         if (!prevHomes.has(name)) {
           exiting.delete(name);
           ghosts.delete(name);
-          const first = firstArrivals.has(name) ? { carry: firstArrivals.get(name) ?? null } : undefined;
+          const first = firstArrivals.has(name)
+            ? { carry: firstArrivals.get(name) ?? null }
+            : undefined;
           firstArrivals.delete(name);
           if (!dest.small && marksDealt < CHECK_IN_MARKS.length) {
             walks.set(name, checkInWalk(name, dest, marksDealt++, first));
@@ -941,7 +1048,8 @@ export function createActors(): Actors {
       }
     },
     walk(from, req) {
-      if (!homes.has(from) || !homes.has(req.to) || from === req.to || exiting.has(from)) return false;
+      if (!homes.has(from) || !homes.has(req.to) || from === req.to || exiting.has(from))
+        return false;
       // dnd is do-not-interrupt made physical (§4 lane 4): nobody walks over to them.
       if (live.get(req.to)?.dnd) return false;
       const inflight = walks.get(from);
@@ -971,9 +1079,21 @@ export function createActors(): Actors {
       const { home, avoid } = trip;
       // The coffee run, made to *mean* something (it used to stand at the machine doing nothing): work
       // the machine, then actually drink the cup before heading back.
-      const out = legsAlong(findPath({ lx: home.lx, ly: home.ly }, COFFEE_STAND, avoid), ERRAND_SPEED, 1.8, 5, null);
+      const out = legsAlong(
+        findPath({ lx: home.lx, ly: home.ly }, COFFEE_STAND, avoid),
+        ERRAND_SPEED,
+        1.8,
+        5,
+        null,
+      );
       const stand = endOf(out);
-      const back = legsAlong(findPath(stand, { lx: home.lx, ly: home.ly }, avoid), ERRAND_SPEED, 1.8, 5, null);
+      const back = legsAlong(
+        findPath(stand, { lx: home.lx, ly: home.ly }, avoid),
+        ERRAND_SPEED,
+        1.8,
+        5,
+        null,
+      );
       walks.set(from, {
         legs: [
           ...out,
@@ -995,9 +1115,21 @@ export function createActors(): Actors {
       const { home, avoid } = trip;
       // Grab the bottle off the desk (the desk copy hides while it's in hand — `sceneFx`), amble to the
       // cooler, fill for a good few seconds, come back, put it down.
-      const out = legsAlong(findPath({ lx: home.lx, ly: home.ly }, COOLER_STAND, avoid), ERRAND_SPEED, 1.8, 5, 'bottle');
+      const out = legsAlong(
+        findPath({ lx: home.lx, ly: home.ly }, COOLER_STAND, avoid),
+        ERRAND_SPEED,
+        1.8,
+        5,
+        'bottle',
+      );
       const stand = endOf(out);
-      const back = legsAlong(findPath(stand, { lx: home.lx, ly: home.ly }, avoid), ERRAND_SPEED, 1.8, 5, 'bottle');
+      const back = legsAlong(
+        findPath(stand, { lx: home.lx, ly: home.ly }, avoid),
+        ERRAND_SPEED,
+        1.8,
+        5,
+        'bottle',
+      );
       walks.set(from, {
         legs: [
           hold(home, home.dir, 0.45, { carry: 'bottle' }), // pick it up
@@ -1022,13 +1154,25 @@ export function createActors(): Actors {
       // The full meal arc: open the fridge, browse, take a plate to the lounge, eat, leave the empty
       // plate at the counter sink, come home. Every scene effect (open door, the plate) is derived from
       // the *current* leg, so preemption at any step tidies up by construction.
-      const out = legsAlong(findPath({ lx: home.lx, ly: home.ly }, FRIDGE_STAND, avoid), ERRAND_SPEED, 1.8, 5, null);
+      const out = legsAlong(
+        findPath({ lx: home.lx, ly: home.ly }, FRIDGE_STAND, avoid),
+        ERRAND_SPEED,
+        1.8,
+        5,
+        null,
+      );
       const atFridge = endOf(out);
       const toSeat = legsAlong(findPath(atFridge, spot, avoid), ERRAND_SPEED, 1.8, 5, 'plate');
       const atSeat = endOf(toSeat);
       const toSink = legsAlong(findPath(atSeat, SINK_STAND, avoid), ERRAND_SPEED, 1.8, 5, 'plate');
       const atSink = endOf(toSink);
-      const back = legsAlong(findPath(atSink, { lx: home.lx, ly: home.ly }, avoid), ERRAND_SPEED, 1.8, 5, null);
+      const back = legsAlong(
+        findPath(atSink, { lx: home.lx, ly: home.ly }, avoid),
+        ERRAND_SPEED,
+        1.8,
+        5,
+        null,
+      );
       walks.set(from, {
         legs: [
           ...out,
@@ -1036,7 +1180,19 @@ export function createActors(): Actors {
           hold(atFridge, 'N', 2.2, { door: true, overlay: GESTURE.browse }),
           hold(atFridge, 'N', 0.45, { door: true, carry: 'plate' }), // found something
           ...toSeat,
-          { fx: spot.lx, fy: spot.ly, tx: spot.lx, ty: spot.ly, dir: spot.dir, dur: 6.5, carry: 'plate', bubble: null, ease: 'inOut', overlay: GESTURE.eat, sitAt: spot },
+          {
+            fx: spot.lx,
+            fy: spot.ly,
+            tx: spot.lx,
+            ty: spot.ly,
+            dir: spot.dir,
+            dur: 6.5,
+            carry: 'plate',
+            bubble: null,
+            ease: 'inOut',
+            overlay: GESTURE.eat,
+            sitAt: spot,
+          },
           ...toSink,
           hold(atSink, 'N', 0.5, {}), // the empty plate goes in the sink
           ...back,
@@ -1076,7 +1232,8 @@ export function createActors(): Actors {
         let next: P | null = null;
         for (let tries = 0; tries < 24 && !next; tries++) {
           const p = { lx: rng() * FLOOR, ly: rng() * FLOOR };
-          if (walkable(p.lx, p.ly) && Math.hypot(p.lx - cur.lx, p.ly - cur.ly) > PACE_MIN_LEG) next = p;
+          if (walkable(p.lx, p.ly) && Math.hypot(p.lx - cur.lx, p.ly - cur.ly) > PACE_MIN_LEG)
+            next = p;
         }
         if (!next) break;
         stops.push(next);
@@ -1094,10 +1251,12 @@ export function createActors(): Actors {
         legs.push(...run);
         from2 = endOf(run);
         // A pause at each stop: the bit of the call where you are listening rather than moving.
-        legs.push(hold(from2, travelDir(from2.lx, from2.ly, at.lx, at.ly), 2.2 + rng() * 2.4, {
-          carry: 'phone',
-          overlay: GESTURE.call,
-        }));
+        legs.push(
+          hold(from2, travelDir(from2.lx, from2.ly, at.lx, at.ly), 2.2 + rng() * 2.4, {
+            carry: 'phone',
+            overlay: GESTURE.call,
+          }),
+        );
       }
       legs.push(...onCall(legsAlong(findPath(from2, at, avoid), PACE_SPEED, 1.8, 5, null)));
       legs.push(hold(at, home.dir, 0.5, {})); // phone back in the pocket, then the sit blend takes over
@@ -1117,7 +1276,9 @@ export function createActors(): Actors {
        * twelve-desk fixture has no leisure sitters. One rule, one home — the drift is not possible to
        * reintroduce by editing a single place.
        */
-      return deskNeighbourPairs(lastPlacements, live).filter(([a, b]) => chatReady(a) && chatReady(b));
+      return deskNeighbourPairs(lastPlacements, live).filter(
+        ([a, b]) => chatReady(a) && chatReady(b),
+      );
     },
     deskChat(a, b, rng = Math.random) {
       const ha = homes.get(a);
@@ -1131,11 +1292,27 @@ export function createActors(): Actors {
       const turn = (self: Pose, other: Pose, lead: boolean): Leg[] => {
         // `casual: false` — this holds a member seated at their OWN DESK, keyboard and all. The zone
         // label is only there to satisfy the spot shape; nothing reads it on this path.
-        const seat = { zone: 'lounge' as const, lx: self.lx, ly: self.ly, dir: self.dir, sit: 1, casual: false };
+        const seat = {
+          zone: 'lounge' as const,
+          lx: self.lx,
+          ly: self.ly,
+          dir: self.dir,
+          sit: 1,
+          casual: false,
+        };
         const face = travelDir(self.lx, self.ly, other.lx, other.ly);
         const beat = (d: number, overlay: number): Leg => ({
-          fx: self.lx, fy: self.ly, tx: self.lx, ty: self.ly,
-          dir: face, dur: d, carry: null, bubble: null, ease: 'inOut', overlay, sitAt: seat,
+          fx: self.lx,
+          fy: self.ly,
+          tx: self.lx,
+          ty: self.ly,
+          dir: face,
+          dur: d,
+          carry: null,
+          bubble: null,
+          ease: 'inOut',
+          overlay,
+          sitAt: seat,
         });
         /* Alternating beats so it reads as turn-taking rather than two people gesturing in unison.
          *
@@ -1173,6 +1350,9 @@ export function createActors(): Actors {
       for (const q of pending.values()) if (q.length) return true;
       return false;
     },
+    actWalkingFor(name) {
+      return walks.get(name)?.act === true || (pending.get(name)?.length ?? 0) > 0;
+    },
     reachedMark(name) {
       const w = walks.get(name);
       return !w?.checkIn || w.i >= w.checkIn.holdLeg;
@@ -1184,7 +1364,13 @@ export function createActors(): Actors {
     idleDeskMembers() {
       const out: string[] = [];
       for (const [name, pose] of homes) {
-        if (pose.small || walks.has(name) || exiting.has(name) || pending.get(name)?.length || gestures.has(name)) {
+        if (
+          pose.small ||
+          walks.has(name) ||
+          exiting.has(name) ||
+          pending.get(name)?.length ||
+          gestures.has(name)
+        ) {
           continue;
         }
         out.push(name);

@@ -1,6 +1,6 @@
 import type { Envelope } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { collapseHeadlines, headline, headlineText, type Headline } from './headline';
+import { collapseHeadlines, headline, headlineText, walkTag, type Headline } from './headline';
 
 const env = (over: Partial<Envelope>): Envelope =>
   ({
@@ -160,4 +160,13 @@ describe('collapseHeadlines', () => {
       'dolly opened b',
     ]);
   });
+});
+
+describe('walkTag — the verb over a walker (ADR 464 §3.2)', () => {
+  it.each([
+    ['handoff', 'dolly', 'handing off → dolly'],
+    ['help', 'izzo', 'asking for help'],
+    ['steer', 'izzo', 'redirecting izzo'],
+    ['steer', null, 'redirecting'],
+  ] as const)('%s → %s', (kind, to, out) => expect(walkTag(kind, to)).toBe(out));
 });

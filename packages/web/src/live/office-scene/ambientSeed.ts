@@ -1,3 +1,6 @@
+import { deskNeighbourPairs } from './actors';
+import type { Placement } from './seating';
+import type { OfficeNode } from './types';
 /**
  * The shared ambient seed (E1 spec §2): every viewer of the same team computes the same idle life,
  * because every ambient decision is a pure function of inputs each browser already holds — the team
@@ -72,6 +75,39 @@ export function slotRng(team: string, slot: number, purpose: string): () => numb
 export interface AmbientPool {
   members: string[];
   pairs: Array<[string, string]>;
+  /**
+   * Who may leave their desk for an errand (ADR 464 §3.1): the members whose posture is not
+   * `working`. A working member gets micro-gestures only — the coffee run, the fridge and the phone
+   * pace were how the room taught the demo audience that "walking = working", because ambient
+   * errands went to every desk member and a desk member IS a working member. Absent means "everyone
+   * in `members`" (older callers); the scheduler reads it before every errand.
+   */
+  errands?: string[];
+}
+
+/**
+ * The pool every viewer's shared decision draws from (E1 spec §2), as a pure function of the
+ * roster-derived inputs both viewers hold — placements and nodes — so two browsers keep agreeing.
+ *
+ * - `members`: present desk members (the scheduler's desk test, unchanged) — the micro-gesture pool.
+ * - `errands`: the members above whose posture is not `working` (ADR 464 §3.1).
+ * - `pairs`: desk-chat neighbours where NEITHER is working — a chat pulls two people off their
+ *   screens, and a working member's screen is the point.
+ */
+export function ambientPool(
+  placements: Map<string, Placement>,
+  nodes: Map<string, OfficeNode>,
+): AmbientPool {
+  const members: string[] = [];
+  for (const [name, pl] of placements) {
+    if (pl.kind === 'desk' && !pl.owned && nodes.has(name)) members.push(name);
+  }
+  const working = (n: string) => nodes.get(n)?.posture === 'working';
+  return {
+    members,
+    errands: members.filter((n) => !working(n)),
+    pairs: deskNeighbourPairs(placements, nodes).filter(([a, b]) => !working(a) && !working(b)),
+  };
 }
 
 export type AmbientDecision =

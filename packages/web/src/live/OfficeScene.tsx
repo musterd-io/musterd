@@ -8,6 +8,7 @@ import type { OfficeAsk, OfficeData, OfficeHandle } from './office-scene/types';
 import { askIsLoud, type AskView } from './asks';
 import { SETTLED_MS } from './askPhrase';
 import { actToEvent, speechEventFor } from './office-scene/mapping';
+import { OfficeKey } from './OfficeKey';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { captionFor, type Caption } from './captions';
 import { captionColorFor } from './TeamColumn';
@@ -382,6 +383,8 @@ export function OfficeScene({
         {/* The product's mark on the room itself — for every frame that leaves this app (a clip, a
             screenshot, the stream), quiet enough to live under everything. The overlay card carries
             the TEAM's name; this corner carries the product's. */}
+        {/* The key (ADR 464 §3.4) — the page only: a stream has no one to close it. */}
+        {!collapsed && !broadcast && <OfficeKey />}
         {!collapsed && cornerSlot && <div className="lc-office__corner">{cornerSlot}</div>}
         {!collapsed && (
           <div className="lc-office__mark" aria-hidden="true">
