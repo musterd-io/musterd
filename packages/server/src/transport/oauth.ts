@@ -3,6 +3,7 @@ import {
   OAUTH_RATE_LIMITS,
   OAuthAuthorizeConfirmSchema,
   OAuthAuthorizeQuerySchema,
+  type OAuthClientMetadata,
   OAuthClientRegistrationRequestSchema,
   OAuthTokenRequestSchema,
   makeEnvelope,
@@ -35,7 +36,17 @@ import {
 import type { MemberRow } from '../store/rows.js';
 import { redeemAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { requireTeam } from '../store/teams.js';
+import { CimdResolverCapacityError, isCimdClientId, resolveCimdClient } from './cimd.js';
 import { originFrom } from './sponsoredAgentMint.js';
+
+let cimdResolver: (clientId: string) => Promise<OAuthClientMetadata> = resolveCimdClient;
+
+/** Test seam: inject a hermetic metadata resolver; call without an argument to restore production. */
+export function __setCimdResolverForTest(
+  resolver: (clientId: string) => Promise<OAuthClientMetadata> = resolveCimdClient,
+): void {
+  cimdResolver = resolver;
+}
 
 /**
  * The OAuth 2.1 authorization server (ADR 446 §3) — the daemon is the identity provider for its
@@ -314,6 +325,7 @@ function metadataFor(
       grant_types_supported: ['authorization_code', 'refresh_token'],
       code_challenge_methods_supported: ['S256'],
       token_endpoint_auth_methods_supported: ['none'],
+      client_id_metadata_document_supported: true,
     },
   };
 }
@@ -321,6 +333,7 @@ function metadataFor(
 function consentPage(input: {
   team: string;
   clientName: string;
+  clientHost?: string;
   scope?: string;
   client_id: string;
   redirect_uri: string;
@@ -340,6 +353,7 @@ ${input.scope ? `<input type="hidden" name="scope" value="${e(input.scope)}">` :
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in to ${e(input.team)} — musterd</title></head><body>
 <h1>${e(input.clientName)} wants to join <b>${e(input.team)}</b></h1>
+${input.clientHost ? `<p>Client ID host: <code>${e(input.clientHost)}</code></p>` : ''}
 <p>Signing in adds this app as your seat on the team. It can read the inbox and send as you until you revoke it.</p>
 <h2>I'm new — I have an invite</h2>
 <form method="post" action="">
@@ -567,7 +581,7 @@ export async function handleOAuthRoutes(
       OAuthAuthorizeQuerySchema,
       Object.fromEntries(url.searchParams.entries()),
     );
-    const client = getClientOrOAuth(ctx.db, team.id, query.client_id, res);
+    const client = await getClientOrOAuth(ctx.db, team.id, query.client_id, res);
     if (!client) return true;
     if (!resourceMatches(ctx, req, slug, query.resource)) {
       sendOAuthError(
@@ -589,6 +603,7 @@ export async function handleOAuthRoutes(
       consentPage({
         team: slug,
         clientName: client.client_name,
+        ...(client.client_id_host ? { clientHost: client.client_id_host } : {}),
         ...(query.scope ? { scope: query.scope } : {}),
         client_id: query.client_id,
         redirect_uri: query.redirect_uri,
@@ -624,7 +639,7 @@ export async function handleOAuthRoutes(
               ...(flat.member ? { member: flat.member } : {}),
             },
     });
-    const client = getClientOrOAuth(ctx.db, team.id, body.client_id, res);
+    const client = await getClientOrOAuth(ctx.db, team.id, body.client_id, res);
     if (!client) return true;
     if (!registeredRedirect(client, body.redirect_uri)) {
       sendOAuthError(
@@ -655,7 +670,10 @@ export async function handleOAuthRoutes(
               action: 'member.agent_connect_refused',
               target: null,
               result: 'deny',
-              detail: { client_id: clientId, reason: nonce ? 'invalid' : 'malformed' },
+              detail: {
+                ...auditClientKind(clientId),
+                reason: nonce ? 'invalid' : 'malformed',
+              },
             });
             return {
               err: new MusterdError(
@@ -680,7 +698,7 @@ export async function handleOAuthRoutes(
             appendAudit(ctx.db, team.id, {
               actor: agent.name,
               action: 'oauth.revoked',
-              target: clientId,
+              target: auditClientId(clientId),
               result: 'allow',
               detail: { reason: 'superseded', chains, codes },
             });
@@ -689,6 +707,7 @@ export async function handleOAuthRoutes(
             teamId: team.id,
             memberId: agent.id,
             clientId,
+            clientSource: client.client_source,
             redirectUri,
             codeChallenge,
             connectedBy: connector.id,
@@ -699,7 +718,9 @@ export async function handleOAuthRoutes(
             action: 'member.agent_connected',
             target: agent.name,
             result: 'allow',
-            detail: { client_id: clientId, client_name: client.client_name },
+            detail: isCimdClientId(clientId)
+              ? { client_kind: 'cimd' }
+              : { client_id: clientId, client_name: client.client_name },
           });
           // A takeover of a live session is never silent to the people it affects: the sponsor and
           // whoever connected the displaced device, minus the connector themself.
@@ -760,7 +781,11 @@ export async function handleOAuthRoutes(
             action: 'member.invite_refused',
             target: check.selector,
             result: 'deny',
-            detail: { client_id: clientId, via: check.via, charged: check.charged },
+            detail: {
+              ...auditClientKind(clientId),
+              via: check.via,
+              charged: check.charged,
+            },
           });
           return { err: new MusterdError('unauthorized', "that invite isn't valid for this team") };
         }
@@ -783,7 +808,7 @@ export async function handleOAuthRoutes(
           action: 'member.invite_admitted',
           target: check.invite.id,
           result: 'allow',
-          detail: { client_id: clientId, via: check.via },
+          detail: { ...auditClientKind(clientId), via: check.via },
         });
         return { row: added.row, via: check.via };
       })();
@@ -822,6 +847,7 @@ export async function handleOAuthRoutes(
         teamId: team.id,
         memberId: member.id,
         clientId: body.client_id,
+        clientSource: client.client_source,
         redirectUri: body.redirect_uri,
         codeChallenge: body.code_challenge,
         ...(body.scope ? { scope: body.scope } : {}),
@@ -829,7 +855,7 @@ export async function handleOAuthRoutes(
     appendAudit(ctx.db, team.id, {
       actor: memberName,
       action: 'oauth.code_issued',
-      target: body.client_id,
+      target: auditClientId(body.client_id),
       result: 'allow',
       detail: admittedVia ? { admitted_via: admittedVia } : {},
     });
@@ -868,8 +894,11 @@ export async function handleOAuthRoutes(
     try {
       getClient(ctx.db, team.id, tokenReq.client_id);
     } catch {
-      sendTokenError(res, 401, 'invalid_client', 'unknown client for this team');
-      return true;
+      // CIMD is syntax-checked only here. Grant redemption below is the authority; do not fetch.
+      if (!isCimdClientId(tokenReq.client_id)) {
+        sendTokenError(res, 401, 'invalid_client', 'unknown client for this team');
+        return true;
+      }
     }
     if (tokenReq.grant_type === 'authorization_code') {
       try {
@@ -902,7 +931,7 @@ export async function handleOAuthRoutes(
         appendAudit(ctx.db, team.id, {
           actor: memberName ?? null,
           action: 'oauth.token_issued',
-          target: tokenReq.client_id,
+          target: auditClientId(tokenReq.client_id),
           result: 'allow',
           detail: {},
         });
@@ -931,7 +960,7 @@ export async function handleOAuthRoutes(
       appendAudit(ctx.db, team.id, {
         actor: owner,
         action: 'oauth.token_rotated',
-        target: tokenReq.client_id,
+        target: auditClientId(tokenReq.client_id),
         result: 'allow',
         detail: {},
       });
@@ -949,7 +978,7 @@ export async function handleOAuthRoutes(
         appendAudit(ctx.db, team.id, {
           actor: chainMember(ctx.db, team.id, tokenReq.client_id, tokenReq.refresh_token),
           action: 'oauth.token_reused_revoked',
-          target: tokenReq.client_id,
+          target: auditClientId(tokenReq.client_id),
           result: 'deny',
           detail: { reason: 'refresh_reused' },
         });
@@ -1000,23 +1029,67 @@ export async function handleOAuthRoutes(
 }
 
 /** Unknown client on the browser legs is a musterd-shaped 401, not a redirect (never bounce). */
-function getClientOrOAuth(
+async function getClientOrOAuth(
   db: Database,
   teamId: string,
   clientId: string,
   res: ServerResponse,
-): { client_id: string; client_name: string; redirect_uris: string } | null {
+): Promise<{
+  client_id: string;
+  client_name: string;
+  redirect_uris: string;
+  client_source: 'dcr' | 'cimd';
+  client_id_host?: string;
+} | null> {
   try {
     const row = getClient(db, teamId, clientId);
     return {
       client_id: row.client_id,
       client_name: row.client_name,
       redirect_uris: row.redirect_uris,
+      client_source: 'dcr',
     };
   } catch (err) {
-    sendOAuthError(res, err);
+    if (!(err instanceof MusterdError && err.code === 'not_found')) {
+      sendOAuthError(res, err);
+      return null;
+    }
+  }
+
+  const unknownClient = () => new MusterdError('not_found', 'unknown OAuth client for this team');
+  if (!isCimdClientId(clientId)) {
+    sendOAuthError(res, unknownClient());
     return null;
   }
+  try {
+    const metadata = await cimdResolver(clientId);
+    if (metadata.client_id !== clientId) throw unknownClient();
+    for (const redirectUri of metadata.redirect_uris) assertRedirectUri(redirectUri);
+    return {
+      client_id: clientId,
+      client_name: metadata.client_name,
+      redirect_uris: JSON.stringify(metadata.redirect_uris),
+      client_source: 'cimd',
+      client_id_host: new URL(clientId).hostname,
+    };
+  } catch (err) {
+    sendOAuthError(
+      res,
+      err instanceof CimdResolverCapacityError
+        ? new MusterdError('rate_limited', 'client metadata lookup is busy; retry shortly')
+        : unknownClient(),
+    );
+    return null;
+  }
+}
+
+/** Audit records keep DCR IDs as before but never copy a public CIMD URL. */
+function auditClientId(clientId: string): string | null {
+  return isCimdClientId(clientId) ? null : clientId;
+}
+
+function auditClientKind(clientId: string): { client_kind: 'cimd' } | { client_id: string } {
+  return isCimdClientId(clientId) ? { client_kind: 'cimd' } : { client_id: clientId };
 }
 
 /** Exact-match against registered URIs — no prefix/substring matching (ADR 446 §5). */

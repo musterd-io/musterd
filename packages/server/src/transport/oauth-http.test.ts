@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { OAUTH_RATE_LIMITS } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDb } from '../db/open.js';
 import { createServer, type RunningServer } from '../index.js';
@@ -7,8 +8,14 @@ import { __setInviteKeyForTest } from '../store/invites.js';
 import { addMember } from '../store/members.js';
 import { recordHostSeen } from '../store/residency.js';
 import { getTeamBySlug } from '../store/teams.js';
+import { CimdResolverCapacityError } from './cimd.js';
 import { resetMcpHandlersForTest } from './mcpHttp.js';
-import { __oauthBucketSizeForTest, __resetOAuthBucketsForTest, isTlsPeer } from './oauth.js';
+import {
+  __oauthBucketSizeForTest,
+  __resetOAuthBucketsForTest,
+  __setCimdResolverForTest,
+  isTlsPeer,
+} from './oauth.js';
 
 /**
  * The remote-MCP rail over HTTP (ADR 446) — the daemon as a minimal OAuth 2.1 server plus the
@@ -138,6 +145,7 @@ async function mcpCall(bearer: string, method: string, params: unknown, id: numb
 
 beforeEach(async () => {
   __resetOAuthBucketsForTest();
+  __setCimdResolverForTest();
   resetMcpHandlersForTest();
   __setInviteKeyForTest(randomBytes(32));
   server = createServer({ db: openDb(':memory:'), port: 0 });
@@ -148,6 +156,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  __setCimdResolverForTest();
   await server.close();
 });
 
@@ -184,6 +193,276 @@ describe('OAuth discovery (ADR 446 §3)', () => {
   it('the global authorization-server document 404s rather than naming a wrong team', async () => {
     const res = await get('/.well-known/oauth-authorization-server');
     expect(res.status).toBe(404);
+  });
+
+  it('advertises CIMD support and retains dynamic registration (ADR 470)', async () => {
+    const res = await get('/.well-known/oauth-authorization-server/oauth/dawn');
+    expect(res.status).toBe(200);
+    expect(res.json.client_id_metadata_document_supported).toBe(true);
+    expect(res.json.registration_endpoint).toBe(`${base}/oauth/dawn/register`);
+  });
+});
+
+describe('Client ID Metadata Documents (ADR 470)', () => {
+  const clientId = 'https://chatgpt.com/oauth/client.json';
+  const metadata = (id: string, redirectUris = [REDIRECT], clientName = 'ChatGPT') => ({
+    client_id: id,
+    client_name: clientName,
+    redirect_uris: redirectUris,
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'],
+    token_endpoint_auth_method: 'private_key_jwt',
+    token_endpoint_auth_methods_supported: ['none', 'private_key_jwt'],
+  });
+  const authorizeUrl = (id: string, redirectUri = REDIRECT) => {
+    const query = new URLSearchParams({
+      response_type: 'code',
+      client_id: id,
+      redirect_uri: redirectUri,
+      state: 'state',
+      code_challenge: CHALLENGE,
+      code_challenge_method: 'S256',
+    });
+    return `/oauth/dawn/authorize?${query.toString()}`;
+  };
+
+  it('resolves CIMD on GET and POST, displays escaped name plus hostname, and omits URL from audit', async () => {
+    let calls = 0;
+    __setCimdResolverForTest(async (id) => {
+      calls++;
+      return metadata(id, [REDIRECT], '<script>alert(1)</script>');
+    });
+
+    const page = await get(authorizeUrl(clientId));
+    expect(page.status).toBe(200);
+    expect(page.text).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(page.text).toContain('chatgpt.com');
+    expect(page.text).not.toContain('<script>alert(1)</script>');
+
+    const authz = await postForm('/oauth/dawn/authorize', {
+      client_id: clientId,
+      redirect_uri: REDIRECT,
+      state: 'state',
+      code_challenge: CHALLENGE,
+      code_challenge_method: 'S256',
+      member: 'nick',
+      credential: nickCred,
+    });
+    expect(authz.status, authz.text).toBe(302);
+    expect(new URL(authz.headers.get('location')!).searchParams.get('state')).toBe('state');
+    expect(calls).toBe(2);
+    const codeAudit = audits('oauth.code_issued').at(-1)!;
+    expect(codeAudit.target).toBeNull();
+    expect(JSON.stringify(codeAudit.detail)).not.toContain(clientId);
+  });
+
+  it('keeps DCR precedence and refuses unsafe CIMD redirects without redirecting', async () => {
+    let calls = 0;
+    __setCimdResolverForTest(async (id) => {
+      calls++;
+      return metadata(id);
+    });
+    const registered = await registerClient();
+    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
+    const dcrBinding = server.db
+      .prepare(
+        'SELECT team_id, client_id, source FROM oauth_client_bindings WHERE team_id = ? AND client_id = ?',
+      )
+      .get(teamId, registered.json.client_id);
+    expect(dcrBinding).toEqual({
+      team_id: teamId,
+      client_id: registered.json.client_id,
+      source: 'dcr',
+    });
+    const dcr = await get(authorizeUrl(registered.json.client_id));
+    expect(dcr.status).toBe(200);
+    expect(calls).toBe(0);
+
+    __setCimdResolverForTest(async (id) => metadata(id, ['javascript:alert(1)']));
+    const unsafe = await get(authorizeUrl(clientId, 'javascript:alert(1)'));
+    expect(unsafe.status).toBe(404);
+    expect(unsafe.headers.get('location')).toBeNull();
+  });
+
+  it('requires exact CIMD redirect matching on both authorization legs', async () => {
+    let calls = 0;
+    __setCimdResolverForTest(async (id) => {
+      calls++;
+      return metadata(id);
+    });
+    const nearMatch = 'https://app.example/cb/';
+
+    const page = await get(authorizeUrl(clientId, nearMatch));
+    expect(page.status).toBe(400);
+    expect(page.headers.get('location')).toBeNull();
+
+    const consent = await postForm('/oauth/dawn/authorize', {
+      client_id: clientId,
+      redirect_uri: nearMatch,
+      state: 'state',
+      code_challenge: CHALLENGE,
+      code_challenge_method: 'S256',
+      member: 'nick',
+      credential: nickCred,
+    });
+    expect(consent.status).toBe(400);
+    expect(consent.headers.get('location')).toBeNull();
+    expect(calls).toBe(2);
+  });
+
+  it('rate-limits CIMD resolution before metadata lookup on GET and POST', async () => {
+    let calls = 0;
+    __setCimdResolverForTest(async (id) => {
+      calls++;
+      return metadata(id);
+    });
+
+    for (let i = 0; i < OAUTH_RATE_LIMITS.authorize; i++) {
+      expect((await get(authorizeUrl(clientId))).status).toBe(200);
+    }
+    expect(calls).toBe(OAUTH_RATE_LIMITS.authorize);
+    expect((await get(authorizeUrl(clientId))).status).toBe(429);
+    expect(calls).toBe(OAUTH_RATE_LIMITS.authorize);
+
+    __resetOAuthBucketsForTest();
+    for (let i = 0; i < OAUTH_RATE_LIMITS.authorize; i++) {
+      const consent = await postForm('/oauth/dawn/authorize', {
+        client_id: clientId,
+        redirect_uri: REDIRECT,
+        state: `state-${i}`,
+        code_challenge: CHALLENGE,
+        code_challenge_method: 'S256',
+        member: 'nick',
+        credential: nickCred,
+      });
+      expect(consent.status).toBe(302);
+    }
+    expect(calls).toBe(OAUTH_RATE_LIMITS.authorize * 2);
+    const deniedConsent = await postForm('/oauth/dawn/authorize', {
+      client_id: clientId,
+      redirect_uri: REDIRECT,
+      state: 'overflow',
+      code_challenge: CHALLENGE,
+      code_challenge_method: 'S256',
+      member: 'nick',
+      credential: nickCred,
+    });
+    expect(deniedConsent.status).toBe(429);
+    expect(calls).toBe(OAUTH_RATE_LIMITS.authorize * 2);
+  });
+
+  it('maps metadata failures to a generic client error and capacity pressure to retryable status', async () => {
+    __setCimdResolverForTest(async () => {
+      throw new Error('secret transport detail');
+    });
+    const failed = await get(authorizeUrl(clientId));
+    expect(failed.status).toBe(404);
+    expect(failed.text).not.toContain('secret transport detail');
+    expect(failed.headers.get('location')).toBeNull();
+
+    __setCimdResolverForTest(async () => {
+      throw new CimdResolverCapacityError();
+    });
+    const busy = await get(authorizeUrl(clientId));
+    expect(busy.status).toBe(429);
+    expect(busy.json.error.code).toBe('rate_limited');
+    expect(busy.text).not.toContain(clientId);
+  });
+
+  it('keeps code and refresh exchange local and binds both grants to the exact client ID', async () => {
+    let calls = 0;
+    __setCimdResolverForTest(async (id) => {
+      calls++;
+      return metadata(id);
+    });
+    const authz = await postForm('/oauth/dawn/authorize', {
+      client_id: clientId,
+      redirect_uri: REDIRECT,
+      state: 'state',
+      code_challenge: CHALLENGE,
+      code_challenge_method: 'S256',
+      member: 'nick',
+      credential: nickCred,
+    });
+    expect(authz.status, authz.text).toBe(302);
+    const code = new URL(authz.headers.get('location')!).searchParams.get('code')!;
+    const beforeToken = calls;
+
+    const wrongCode = await postForm('/oauth/dawn/token', {
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: REDIRECT,
+      client_id: 'https://chatgpt.com/oauth/other.json',
+      code_verifier: VERIFIER,
+    });
+    expect(wrongCode.status).toBe(400);
+    expect(wrongCode.json.error).toBe('invalid_grant');
+    const token = await postForm('/oauth/dawn/token', {
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: REDIRECT,
+      client_id: clientId,
+      code_verifier: VERIFIER,
+    });
+    expect(token.status).toBe(200);
+    expect(calls).toBe(beforeToken);
+
+    const wrongRefresh = await postForm('/oauth/dawn/token', {
+      grant_type: 'refresh_token',
+      refresh_token: token.json.refresh_token,
+      client_id: 'https://chatgpt.com/oauth/other.json',
+    });
+    expect(wrongRefresh.status).toBe(400);
+    const rotated = await postForm('/oauth/dawn/token', {
+      grant_type: 'refresh_token',
+      refresh_token: token.json.refresh_token,
+      client_id: clientId,
+    });
+    expect(rotated.status).toBe(200);
+    expect(calls).toBe(beforeToken);
+
+    const unknown = await postForm('/oauth/dawn/token', {
+      grant_type: 'refresh_token',
+      refresh_token: token.json.refresh_token,
+      client_id: 'not-a-cimd-client',
+    });
+    expect(unknown.json.error).toBe('invalid_client');
+
+    const secondTeam = await postJson('/teams', {
+      slug: 'dusk',
+      creator: { name: 'nick', kind: 'human' },
+    });
+    const secondAuthz = await postForm('/oauth/dusk/authorize', {
+      client_id: clientId,
+      redirect_uri: REDIRECT,
+      state: 'state-dusk',
+      code_challenge: CHALLENGE,
+      code_challenge_method: 'S256',
+      member: 'nick',
+      credential: secondTeam.json.human_credential,
+    });
+    expect(secondAuthz.status, secondAuthz.text).toBe(302);
+    const secondCode = new URL(secondAuthz.headers.get('location')!).searchParams.get('code')!;
+    const callsAfterAuthorization = calls;
+    const secondToken = await postForm('/oauth/dusk/token', {
+      grant_type: 'authorization_code',
+      code: secondCode,
+      redirect_uri: REDIRECT,
+      client_id: clientId,
+      code_verifier: VERIFIER,
+    });
+    expect(secondToken.status).toBe(200);
+    expect(calls).toBe(callsAfterAuthorization);
+
+    const teamIds = [getTeamBySlug(server.db, 'dawn')!.id, getTeamBySlug(server.db, 'dusk')!.id];
+    const bindings = server.db
+      .prepare(
+        'SELECT team_id, client_id, source FROM oauth_client_bindings WHERE client_id = ? ORDER BY team_id',
+      )
+      .all(clientId);
+    expect(bindings).toEqual(
+      teamIds.sort().map((team_id) => ({ team_id, client_id: clientId, source: 'cimd' })),
+    );
   });
 });
 

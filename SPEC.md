@@ -319,7 +319,7 @@ Delivery is unchanged (at-least-once, cursor-based); **notification tiering** is
 | `GET`    | `/teams/:slug/members/:name/doorbell`          | admin; a teammate's doorbell, masked — `{on, personal}` per sink, never a URL (ADR 443)                                                                              |
 | `GET`    | `/teams/:slug/audit`                           | admin; audit records                                                                                                                                                  |
 | `GET`    | `/.well-known/oauth-protected-resource/mcp/:team` | public; resource metadata naming this team's issuer (A.13)                                                                                                         |
-| `GET`    | `/.well-known/oauth-authorization-server/:team` | public; issuer, endpoints, `code_challenge_methods_supported: ["S256"]` (A.13); the global path 404s (multi-tenant honesty)                                     |
+| `GET`    | `/.well-known/oauth-authorization-server/:team` | public; issuer, endpoints, `code_challenge_methods_supported: ["S256"]`, `client_id_metadata_document_supported: true` (A.13); the global path 404s (multi-tenant honesty) |
 | `POST`   | `/oauth/:team/register`                        | public, rate-limited; RFC 7591 dynamic client registration — public clients only; redirect URIs validated (https, no wildcards, no private hosts)                    |
 | `GET`    | `/oauth/:team/authorize`                       | TLS-except-loopback; renders the consent page (app, team, seat); PKCE S256 required                                                                                  |
 | `POST`   | `/oauth/:team/authorize`                       | TLS-except-loopback, rate-limited; one of three proofs: the seat's `mscr_` (ADR 446), a team invite admitting a new human (ADR 450), or a sponsored agent's one-time connect nonce, which revokes the agent's prior chains and unexchanged codes (ADR 452); single-use 90s code rides one 302 to the exact registered redirect URI                        |
@@ -526,7 +526,48 @@ unless loopback. Token errors are OAuth-shaped (`invalid_grant`, `invalid_client
 are `oauth.client_registered / oauth.code_issued / oauth.token_issued / oauth.token_rotated /
 oauth.token_reused_revoked / oauth.revoked` — who, which client, when; never the secret.
 
+### Increment 3 — Client ID Metadata Documents (ADR 470)
+
+Authorization-server metadata advertises `client_id_metadata_document_supported: true` and
+continues to publish `registration_endpoint` for Dynamic Client Registration (DCR). DCR remains
+available for clients that need it. On authorization GET and POST, the server resolves a registered
+DCR client first. Only a DCR miss may resolve `client_id` as a Client ID Metadata Document (CIMD)
+URL; resolution happens after the authorization per-IP rate limit. This changes OAuth HTTP
+metadata only and does not change the `musterd/0.3` Envelope or handshake.
+
+A CIMD document must have an exact matching `client_id`, a non-empty `client_name` of at most 200
+characters, at least one entry in `redirect_uris`, grant types containing `authorization_code` and
+`refresh_token`, response types containing `code`, and support for token endpoint authentication
+method `none` either in `token_endpoint_auth_method` or
+`token_endpoint_auth_methods_supported`. Unknown fields are ignored. The server does not fetch
+`jwks_uri` or implement `private_key_jwt`. Every listed redirect URI passes the existing redirect
+safety policy, and the requested URI must match one exactly. Invalid clients receive a generic
+OAuth client error without a redirect.
+
+The CIMD URL is at most 2,048 characters, uses HTTPS on port 443, has no userinfo, query, or
+fragment, and has a non-empty path without `.` or `..` segments, including percent-encoded forms.
+The server resolves all DNS answers once and rejects the URL if any answer is not globally
+routable unicast, including IPv4-mapped IPv6 addresses. It pins the HTTPS connection to a validated
+address while preserving the original hostname for TLS verification, SNI, and `Host`. It does not
+follow redirects; it requires HTTP 200 and `application/json`, stops after 3 seconds, and reads no
+more than 5 KiB. Fetch and validation failures do not reveal their cause. A full bounded-fetch pool
+may return a retryable service failure.
+
+Only valid documents are cached in a process-local 256-entry least-recently-used cache keyed by the
+exact URL. Same-URL fetches are coalesced, and at most 16 unique metadata fetches may be in flight
+per process. The cache lifetime is no longer than 5 minutes; `no-store` and `no-cache` responses
+are not reused, and `max-age`, `Age`, and `Expires` may shorten the lifetime. Without explicit
+freshness, the local maximum is 5 minutes. Errors are not cached.
+The consent page shows the escaped client name with the CIMD hostname and does not fetch logos or
+other remote presentation assets; DCR consent presentation is unchanged.
+
+The token endpoint never resolves or fetches CIMD metadata. After a local DCR lookup, a
+syntactically valid CIMD URL may reach grant matching, but code redemption and refresh rotation
+must match the exact client ID already bound to the grant for that Team. CIMD metadata documents
+are not persisted. Audit targets/details, logs, and traces omit CIMD URLs and fields derived from
+fetched metadata; existing audit fields that would copy a CIMD `client_id` are null. No new trace
+event is added.
+
 Increment 1 serves the Done-line tools (`team_join` as no-op success when the bearer names the
 seat, `team_inbox_check`, `team_send`) with the adapter's input shapes; the rest of the surface
 converges in increment 3 after rehearsal says which tools a phone reaches for.
-

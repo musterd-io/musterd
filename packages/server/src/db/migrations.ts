@@ -1912,6 +1912,77 @@ export const MIGRATIONS: Migration[] = [
         db.exec('ALTER TABLE host_liveness ADD COLUMN sponsor_id TEXT');
     },
   },
+  {
+    // ADR 470 §6: CIMD client IDs are published URLs shared across Teams, so OAuth grant identity
+    // is the composite (team_id, client_id), not a global client row. Preserve each existing DCR
+    // registration and grant while moving the code/token foreign keys to the shared binding table.
+    version: 80,
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS oauth_client_bindings (
+          team_id   TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+          client_id TEXT NOT NULL,
+          source    TEXT NOT NULL CHECK (source IN ('dcr', 'cimd')),
+          PRIMARY KEY (team_id, client_id)
+        );
+        INSERT INTO oauth_client_bindings (team_id, client_id, source)
+          SELECT team_id, client_id, 'dcr' FROM oauth_clients WHERE 1
+          ON CONFLICT(team_id, client_id) DO NOTHING;
+
+        CREATE TABLE oauth_codes_v80 (
+          code_hash      TEXT PRIMARY KEY,
+          team_id        TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+          member_id      TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+          client_id      TEXT NOT NULL,
+          redirect_uri   TEXT NOT NULL,
+          code_challenge TEXT NOT NULL,
+          scope          TEXT,
+          created_at     INTEGER NOT NULL,
+          expires_at     INTEGER NOT NULL,
+          used_at        INTEGER,
+          connected_by   TEXT REFERENCES members(id),
+          FOREIGN KEY (team_id, client_id)
+            REFERENCES oauth_client_bindings(team_id, client_id) ON DELETE CASCADE
+        );
+        INSERT INTO oauth_codes_v80
+          (code_hash, team_id, member_id, client_id, redirect_uri, code_challenge, scope,
+           created_at, expires_at, used_at, connected_by)
+          SELECT code_hash, team_id, member_id, client_id, redirect_uri, code_challenge, scope,
+                 created_at, expires_at, used_at, connected_by
+          FROM oauth_codes;
+        DROP TABLE oauth_codes;
+        ALTER TABLE oauth_codes_v80 RENAME TO oauth_codes;
+        CREATE INDEX idx_oauth_codes_team ON oauth_codes(team_id);
+
+        CREATE TABLE oauth_tokens_v80 (
+          token_hash  TEXT PRIMARY KEY,
+          kind        TEXT NOT NULL CHECK (kind IN ('access', 'refresh')),
+          team_id     TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+          member_id   TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+          client_id   TEXT NOT NULL,
+          chain_id    TEXT NOT NULL,
+          scope       TEXT,
+          created_at  INTEGER NOT NULL,
+          expires_at  INTEGER NOT NULL,
+          replaced_at INTEGER,
+          revoked_at  INTEGER,
+          connected_by TEXT REFERENCES members(id),
+          FOREIGN KEY (team_id, client_id)
+            REFERENCES oauth_client_bindings(team_id, client_id) ON DELETE CASCADE
+        );
+        INSERT INTO oauth_tokens_v80
+          (token_hash, kind, team_id, member_id, client_id, chain_id, scope, created_at,
+           expires_at, replaced_at, revoked_at, connected_by)
+          SELECT token_hash, kind, team_id, member_id, client_id, chain_id, scope, created_at,
+                 expires_at, replaced_at, revoked_at, connected_by
+          FROM oauth_tokens;
+        DROP TABLE oauth_tokens;
+        ALTER TABLE oauth_tokens_v80 RENAME TO oauth_tokens;
+        CREATE INDEX idx_oauth_tokens_member ON oauth_tokens(team_id, member_id, revoked_at);
+        CREATE INDEX idx_oauth_tokens_chain ON oauth_tokens(chain_id);
+      `);
+    },
+  },
 ];
 
 function currentVersion(db: Database): number {

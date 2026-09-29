@@ -84,6 +84,47 @@ export const OAuthClientRegistrationResponseSchema = z.object({
 });
 export type OAuthClientRegistrationResponse = z.infer<typeof OAuthClientRegistrationResponseSchema>;
 
+/**
+ * Client ID Metadata Document fields used by the public-client authorization path (ADR 470).
+ * Unknown members are stripped: this server consumes public metadata, not every OAuth extension.
+ */
+export const OAuthClientMetadataSchema = z
+  .object({
+    client_id: z.string().min(1),
+    client_name: z.string().min(1).max(200),
+    redirect_uris: z.array(z.string().min(1)).min(1),
+    grant_types: z.array(z.string()).min(1),
+    response_types: z.array(z.string()).min(1),
+    token_endpoint_auth_method: z.string().optional(),
+    token_endpoint_auth_methods_supported: z.array(z.string()).optional(),
+  })
+  .superRefine((metadata, ctx) => {
+    for (const grant of ['authorization_code', 'refresh_token']) {
+      if (!metadata.grant_types.includes(grant))
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['grant_types'],
+          message: `grant_types must include ${grant}`,
+        });
+    }
+    if (!metadata.response_types.includes('code'))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['response_types'],
+        message: 'response_types must include code',
+      });
+    if (
+      metadata.token_endpoint_auth_method !== 'none' &&
+      !metadata.token_endpoint_auth_methods_supported?.includes('none')
+    )
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['token_endpoint_auth_method'],
+        message: 'client metadata must support token endpoint authentication method none',
+      });
+  });
+export type OAuthClientMetadata = z.infer<typeof OAuthClientMetadataSchema>;
+
 /** `GET /oauth/:team/authorize?...` — the query the app opens in the system browser. */
 export const OAuthAuthorizeQuerySchema = z.object({
   response_type: z.literal('code'),
@@ -216,6 +257,7 @@ export const OAuthAuthorizationServerMetadataSchema = z.object({
   grant_types_supported: z.array(z.string()),
   code_challenge_methods_supported: z.array(z.string()),
   token_endpoint_auth_methods_supported: z.array(z.string()),
+  client_id_metadata_document_supported: z.boolean().optional(),
 });
 export type OAuthAuthorizationServerMetadata = z.infer<
   typeof OAuthAuthorizationServerMetadataSchema

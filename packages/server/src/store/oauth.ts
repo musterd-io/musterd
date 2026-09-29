@@ -42,6 +42,8 @@ export interface OAuthTokenPair {
   expires_in: number;
 }
 
+export type OAuthClientSource = 'dcr' | 'cimd';
+
 /** PKCE S256 verifier → challenge: `base64url(sha256(verifier))`, constant-time compared. */
 export function pkceChallenge(verifier: string): string {
   return createHash('sha256').update(verifier).digest('base64url');
@@ -58,6 +60,27 @@ function newClientId(): string {
   return `cid_${randomBytes(16).toString('base64url')}`;
 }
 
+/** Ensure a Team owns this exact public client ID without persisting CIMD metadata. */
+function ensureClientBinding(
+  db: Database,
+  teamId: string,
+  clientId: string,
+  source: OAuthClientSource,
+): void {
+  db.prepare(
+    `INSERT INTO oauth_client_bindings (team_id, client_id, source)
+     VALUES (?, ?, ?) ON CONFLICT(team_id, client_id) DO NOTHING`,
+  ).run(teamId, clientId, source);
+  const binding = db
+    .prepare<
+      [string, string],
+      { source: OAuthClientSource }
+    >('SELECT source FROM oauth_client_bindings WHERE team_id = ? AND client_id = ?')
+    .get(teamId, clientId);
+  if (binding?.source !== source)
+    throw new MusterdError('conflict', 'OAuth client binding source mismatch');
+}
+
 /**
  * Register a phone-app client (RFC 7591). Public clients only in increment 1 — both phone apps
  * are public, and a confidential secret needs a typed prefix the ADR does not define yet
@@ -69,10 +92,14 @@ export function registerClient(
   now = Date.now(),
 ): { client_id: string } {
   const client_id = newClientId();
-  db.prepare(
+  const insert = db.prepare(
     `INSERT INTO oauth_clients (client_id, team_id, client_name, redirect_uris, auth_method, created_at)
      VALUES (?, ?, ?, ?, 'none', ?)`,
-  ).run(client_id, input.teamId, input.clientName, JSON.stringify(input.redirectUris), now);
+  );
+  db.transaction(() => {
+    insert.run(client_id, input.teamId, input.clientName, JSON.stringify(input.redirectUris), now);
+    ensureClientBinding(db, input.teamId, client_id, 'dcr');
+  })();
   return { client_id };
 }
 
@@ -101,6 +128,7 @@ export function issueCode(
     redirectUri: string;
     codeChallenge: string;
     scope?: string;
+    clientSource?: OAuthClientSource;
     /** ADR 456 §3: who connected this device (an agent connect's issuer); omitted for self-sign-in. */
     connectedBy?: string | null;
   },
@@ -108,22 +136,26 @@ export function issueCode(
 ): OAuthCodeMint {
   const code = randomBytes(32).toString('base64url');
   const expires_at = now + OAUTH_CODE_TTL_S * 1000;
-  db.prepare(
+  const insert = db.prepare(
     `INSERT INTO oauth_codes
        (code_hash, team_id, member_id, client_id, redirect_uri, code_challenge, scope, created_at, expires_at, connected_by)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    hashToken(code),
-    input.teamId,
-    input.memberId,
-    input.clientId,
-    input.redirectUri,
-    input.codeChallenge,
-    input.scope ?? null,
-    now,
-    expires_at,
-    input.connectedBy ?? null,
   );
+  db.transaction(() => {
+    ensureClientBinding(db, input.teamId, input.clientId, input.clientSource ?? 'dcr');
+    insert.run(
+      hashToken(code),
+      input.teamId,
+      input.memberId,
+      input.clientId,
+      input.redirectUri,
+      input.codeChallenge,
+      input.scope ?? null,
+      now,
+      expires_at,
+      input.connectedBy ?? null,
+    );
+  })();
   return { code, expires_at };
 }
 
