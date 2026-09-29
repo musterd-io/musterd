@@ -63,6 +63,7 @@
     "change-adr:check": "node --disable-warning=ExperimentalWarning scripts/check-change-adr.ts"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@eslint/js": "^9.39.4",
     "@musterd/mcp": "workspace:*",
     "@musterd/protocol": "workspace:*",

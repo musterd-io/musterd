@@ -159,6 +159,12 @@ daemon on PGlite, run the server suite, measure hook-path latency against SQLite
 dialect. Fail → the two-backend interface. Either result shapes every store change after it,
 which is why it cannot run in parallel or later.
 
+_Result (2026-09-29): the spike's rule read **one dialect** — the schema loads, one SQL text serves
+both engines, every gate-path query is ≤ 1.2 ms p95 on PGlite and reopen is 93 ms. The judgment
+(memory, out-of-process readers, maturity) is on the result page, and on it nick chose **two
+backends** (2026-09-29): better-sqlite3 local, `pg` in Cloud, one async driver interface, the
+store suite run on both. [`docs/perf/pglite-spike.md`](../../perf/pglite-spike.md)._
+
 ## 4. Identity and data flow
 
 The split: the **console owns who a person is**; each **team server owns what they are on the
@@ -422,7 +428,9 @@ booting race) and stop-the-world (every change is downtime for every team).
   result is recorded. The first drill is increment 3's; the monthly cadence is increment 6's.
   Survives losing the Neon account. A backup nobody has restored is a guess.
 - **Database unreachable.** The app returns an **honest 503** with the reason; hooks hit their
-  timeout and fail open visibly (§4.7); `/live` shows a banner; recovery is automatic. No serving
+  timeout and apply §4.7's per-class rule — `warn` and unclassified calls proceed and are recorded
+  `unenforced`, `block` and costly-action classes are **denied** until the server is back; `/live`
+  shows a banner; recovery is automatic. No serving
   of stale reads as if current, no local write queues — both create a reconciliation problem
   after the outage that is worse than the outage.
 - **Observability.** OpenTelemetry traces (the server already emits `traceparent`s) and error
