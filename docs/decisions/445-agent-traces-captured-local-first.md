@@ -595,6 +595,18 @@ ADR 184's publication gate; a spans backend.
   folder-trusted, and ADR 352's wake argv never passed `--trust`, so a grokbot wake recorded 42
   tool calls and zero R1 rows. [ADR 473](473-grok-wake-trusts-the-repo.md) puts `--trust` on the
   wake. The tap itself is unchanged.
+- **2026-09-29 — the R2 tail re-posted spans it had already stored** (lane
+  `01M3NNJCX9EYFGTZE32QXH3C0X`). Codex `0cd68449` holds one 256-event chunk (14:51–15:20) eight
+  times, received 17:19–17:25. Two causes, both on the client. (1) The tail posted under the
+  per-tool-call budget of 1.5 s. A chunk that landed after it read as failed, the cursor held, and
+  the next hook re-read and re-posted the whole delta. (2) Two hooks firing together (codex
+  `post-tool-use` + `end`; six chunks in one second at 17:25:04) read one cursor before either
+  advanced it. The tail now posts under its own 10 s budget (`TAIL_POST_BUDGET_MS`) and holds
+  `.musterd/trace-tail.lock` (O_EXCL) while it reads and posts; a hook that finds it held skips,
+  and a lock older than 5 min is broken. Residual: a chunk the daemon stored whose reply was lost
+  still re-posts once; an ingest-side dedupe would close it and needs its own ADR. Falsifier: two
+  R2 rows for one digest from one transcript span with different `received_at`, on a build with
+  this fix.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
   batched POST, so the per-call overhead is what the gate costs now. R2 is a file tail.
 
