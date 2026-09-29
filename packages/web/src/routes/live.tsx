@@ -97,6 +97,22 @@ const NO_COLLAPSE: Collapsed = { office: false, team: false };
 const LazyStream = lazy(() => import('../live/Stream').then((m) => ({ default: m.Stream })));
 /** Below this width the team column starts folded (ADR 464): the room keeps its pixels. */
 const TEAM_FOLDS_BELOW = 1280;
+/** Below this width there is one column (spec §2's phone layout): the office is hidden and the team
+ *  column takes the whole width — never the folded rail, which left a blank page (dolly's acceptance
+ *  of lane 2, 2026-09-29). */
+const PHONE_QUERY = '(max-width: 880px)';
+function usePhone(): boolean {
+  const [phone, setPhone] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(PHONE_QUERY);
+    const on = () => setPhone(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
+
 /** The collapse restore must land BEFORE first paint: the canvas grid animates its columns, so a
  *  restore in a passive effect slides every panel shut in front of the viewer on every load — and
  *  the contrast sweep shot /live mid-slide on CI (2026-09-28). A layout effect is a no-op on the
@@ -120,6 +136,7 @@ function LivePage() {
   /** The log drawer (ADR 464 lane 2): every message, one keystroke away. */
   const [logOpen, setLogOpen] = useState(logOpenMode);
   const closeLog = useCallback(() => setLogOpen(false), []);
+  const phone = usePhone();
   /** ADR 464: the member under the pointer — on a card or on their plate — so both wear a ring. */
   const [linked, setLinked] = useState<string | null>(null);
   /** The room's narration line, lifted out of the scene so the team column's header can carry it. */
@@ -567,8 +584,8 @@ function LivePage() {
               roster={roster}
               board={board}
               goals={report?.goals ?? []}
-              collapsed={collapsed.team}
-              onCollapse={() => toggleCollapse('team')}
+              collapsed={collapsed.team && !phone}
+              onCollapse={phone ? undefined : () => toggleCollapse('team')}
               linked={linked}
               onLink={setLinked}
               caption={caption}

@@ -4790,12 +4790,23 @@
     --col-team: 56px;
   }
 }
+/* A phone (spec §2): one column. The office is hidden (its scene needs width the phone does not
+   have) and the team column takes everything — expanded, never the folded rail: with the stream
+   column gone the old rule left `0px 56px` and a blank page (dolly, lane-2 acceptance, 2026-09-29).
+   The route also un-folds the column below this width (`usePhone`), whatever the saved state. */
 @media (max-width: 880px) {
-  .lc__canvas {
+  .lc__canvas,
+  .lc__canvas.is-team-collapsed {
     --col-office: 0px;
+    --col-team: minmax(0, 1fr);
+    grid-template-columns: var(--col-team);
   }
   .lc-office {
     display: none;
+  }
+  .lc-team {
+    grid-column: 1;
+    border-right: 0;
   }
 }
 
