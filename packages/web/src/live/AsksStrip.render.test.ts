@@ -76,8 +76,10 @@ describe('the rail, rendered — a lapsed ask must not read as one waiting on yo
     expect(html).not.toContain('timed out');
     expect(html).not.toContain('Approve');
     expect(html).not.toContain('Deny');
-    expect(html).toContain('elapsed');
-    expect(html).toContain('1 elapsed');
+    expect(html).toContain('expired');
+    expect(html).toContain('1 expired');
+    // The counters are in the sheet, off the banner (spec §6).
+    expect(html.slice(0, html.indexOf('lc-asks__sheet'))).not.toContain('1 expired');
     // It says the contract let them proceed, and never that anything was approved.
     expect(html).toContain('was free to proceed');
     expect(html).not.toContain('approved');
@@ -100,7 +102,18 @@ describe('the rail, rendered — a lapsed ask must not read as one waiting on yo
     expect(html).toMatch(/lc-asks__clock[^>]*>\d+:\d\d</); // the running countdown, m:ss
     expect(html).toContain('goes ahead in 5 min if unanswered');
     expect(html).toContain('Approve');
-    expect(html).not.toContain('elapsed');
+    expect(html).not.toContain('expired');
+  });
+
+  it('a lane-review ask reads "asked X to accept <lane>", never the machine prefix', () => {
+    const review = {
+      ...ask('r1', 'standard', 1000),
+      body: '[lane] acceptance requested: "Roster fix" — Judge the LANDED OUTCOME',
+    } as Envelope;
+    const html = render([review]);
+    expect(html).toContain('to accept');
+    expect(html).toContain('Roster fix');
+    expect(html.slice(0, html.indexOf('lc-asks__sheet'))).not.toContain('[lane]');
   });
 
   it('with nothing open, the banner is a quiet pill — not nothing', () => {
@@ -159,7 +172,7 @@ describe('the rail, rendered — a lapsed ask must not read as one waiting on yo
     expect(at('live')).toBeLessThan(at('deciding'));
     expect(at('deciding')).toBeLessThan(at('lapsed'));
     // And the counts agree with the buckets the order was built from.
-    expect(html).toContain('1 elapsed');
+    expect(html).toContain('1 expired');
   });
 });
 

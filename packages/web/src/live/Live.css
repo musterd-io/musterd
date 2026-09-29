@@ -4868,6 +4868,26 @@
     --col-team: 56px;
   }
 }
+/* The ask banner's phone mount (ADR 464 §6): above the team list, since the office that frames it
+   on a desk is hidden below 880px. */
+.lc__phone-asks {
+  flex: 0 0 auto;
+  padding: 0 0 var(--lc-4);
+}
+.lc__phone-asks .lc-asks {
+  margin-bottom: 0;
+}
+/* The sheet's counters: the operator's numbers, one quiet line above the cards. */
+.lc-asks__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lc-4);
+  margin: 0 0 var(--lc-3);
+  font-size: 11px;
+}
+.lc-asks__counts:empty {
+  display: none;
+}
 /* A phone (spec §2): one column. The office is hidden (its scene needs width the phone does not
    have) and the team column takes everything — expanded, never the folded rail: with the stream
    column gone the old rule left `0px 56px` and a blank page (dolly, lane-2 acceptance, 2026-09-29).

@@ -313,7 +313,15 @@ export function AsksStrip({
               onClick={() => onReveal(lead.env.id)}
               title="Open this ask in the log"
             >
-              {bannerView.mode === 'open' ? (
+              {bannerView.mode === 'open' && bannerView.reviewTitle ? (
+                <>
+                  <b>{bannerView.who}</b>
+                  <span className="lc-asks__verb">
+                    asked <b>{bannerView.to ?? 'the team'}</b> to accept
+                  </span>
+                  <span className="lc-asks__q">{bannerView.reviewTitle}</span>
+                </>
+              ) : bannerView.mode === 'open' ? (
                 <>
                   <b>{bannerView.who}</b>
                   <span className="lc-asks__verb">
@@ -404,13 +412,6 @@ export function AsksStrip({
 
         <span className="lc-asks__spacer" />
 
-        {reviews.length > 0 && <span className="lc-asks__meta">{reviews.length} in review</span>}
-        {deferred.length > 0 && <span className="lc-asks__meta">{deferred.length} deciding</span>}
-        {/* Counted apart from "settled" on purpose: an ask nobody answered in time is not the same
-            event as one somebody answered, and folding the two would make the gap unfindable. */}
-        {lapsed.length > 0 && <span className="lc-asks__meta">{lapsed.length} elapsed</span>}
-        {closed > 0 && <span className="lc-asks__meta">{closed} settled</span>}
-
         {(cards.length > 0 || reviews.length > 0) && (
           <button
             type="button"
@@ -460,6 +461,19 @@ export function AsksStrip({
       {/* Closed, the sheet is inert: no tab stops into a layer the reader cannot see. */}
       {(cards.length > 0 || reviews.length > 0) && (
         <div className="lc-asks__sheet" data-open={open || undefined} inert={!open}>
+          {/* The operator counters live HERE, not on the banner (spec §6; dolly, lane-3 acceptance):
+              on the rail they crowded the question out at 1300px. Counted apart on purpose: an ask
+              nobody answered in time is not the same event as one somebody answered. */}
+          <p className="lc-asks__counts">
+            {reviews.length > 0 && (
+              <span className="lc-asks__meta">{reviews.length} in review</span>
+            )}
+            {deferred.length > 0 && (
+              <span className="lc-asks__meta">{deferred.length} deciding</span>
+            )}
+            {lapsed.length > 0 && <span className="lc-asks__meta">{lapsed.length} expired</span>}
+            {closed > 0 && <span className="lc-asks__meta">{closed} settled</span>}
+          </p>
           <div className="lc-asks__cards">
             {cards.map((ask, i) => {
               const aud = askAudience(ask, ctx);
@@ -655,7 +669,7 @@ function AskClock({ ask, now }: { ask: AskView; now: number }) {
    * what the agent decided, only that it was free to decide.
    */
   if (ask.state === 'lapsed')
-    return <span className="lc-ask__clock lc-ask__clock--lapsed">elapsed</span>;
+    return <span className="lc-ask__clock lc-ask__clock--lapsed">expired</span>;
   if (ask.state !== 'open') return null;
   const left = ask.deadline - now;
   if (left <= 0) return <Elapsed holding={askTierHolds(ask.tier)} />;
