@@ -472,8 +472,10 @@ export function buildHookOutcomeEvent(
  * The one-call form every hook site uses: parse → build → post, from a raw payload and the
  * workspace's binding. Never throws; never blocks past the budget; returns false on every miss.
  *
- * `harness` is the caller's word when it has one (Codex shares Claude Code's spelling, so only the
- * caller can say); otherwise the payload's spelling decides, then `claude-code`. `outcome` adds the
+ * The payload's spelling names the harness when it names one; otherwise `harness`, the caller's
+ * word (Codex shares Claude Code's spelling, so only the caller can say), then `claude-code`. A
+ * payload whose spelling contradicts the caller's word is a foreign run and posts only its outcome
+ * (see the body). `outcome` adds the
  * hook's own `HookOutcome` to the SAME post — one round trip per hook process, however many events.
  * `observed: false` records only the outcome, for a hook whose observed event another musterd hook
  * on the same harness event already records (Grok's PreToolUse interrupt probe beside the gate).
@@ -497,10 +499,17 @@ export async function tapHook(
     const content = opts.observed !== false && traceContentEnabled(opts.binding, opts.dir);
     const parsed = parseTraceHook(raw, opts.kind, { content });
     if (!parsed) return false;
-    const harness = opts.harness ?? parsed.harness ?? 'claude-code';
+    // A spelling that names a harness outranks the hook line's word: the word is only needed where
+    // spellings are shared. When the two disagree, that harness is running another harness's hook
+    // line — Cursor runs a workspace's .claude/settings lines beside its own hooks.json — and its own
+    // line records the call, so this one posts only its outcome (lane 01M3NNAKJ9: schmidt's
+    // cursor-agent sessions recorded 118 call ids under both `cursor` and `claude-code`).
+    const foreign =
+      opts.harness !== undefined && parsed.harness !== undefined && parsed.harness !== opts.harness;
+    const harness = parsed.harness ?? opts.harness ?? 'claude-code';
     const event = buildTraceEvent(opts.binding, parsed, harness);
     if (!event) return false;
-    const events: TraceEvent[] = opts.observed === false ? [] : [event];
+    const events: TraceEvent[] = opts.observed === false || foreign ? [] : [event];
     if (opts.outcome) {
       const outcome = buildHookOutcomeEvent(event, opts.outcome);
       if (outcome) events.push(outcome);

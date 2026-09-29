@@ -284,6 +284,34 @@ describe('tapHook — one post per hook process', () => {
     expect(posted.mock.calls.map((c) => c[1].events[0]!.harness)).toEqual(['grok', 'claude-code']);
   });
 
+  it("a payload spelled by another harness outranks the hook line's word, and posts only its outcome", async () => {
+    // Cursor runs a workspace's .claude/settings hook lines beside its own hooks.json (schmidt's
+    // three cursor-agent sessions, lane 01M3NNAKJ9): the `--hook claude-code` interrupt probe got a
+    // cursor-spelled payload for a call Cursor's own `session observe` line had already recorded, and
+    // stamped it `claude-code` — 118 call ids recorded under two harnesses.
+    const posted = spy();
+    const cursorPost = JSON.stringify({
+      conversation_id: 'c',
+      hook_event_name: 'postToolUse',
+      tool_name: 'Read',
+      tool_use_id: '0_tool_abc',
+    });
+    await tapHook(cursorPost, {
+      binding,
+      dir: '/tmp',
+      harness: 'claude-code',
+      env: {},
+      outcome: { hook: 'interrupt', detail: { raised: false } },
+    });
+    const { events } = posted.mock.calls[0]![1];
+    expect(events.map((e) => [e.kind, e.harness])).toEqual([['HookOutcome', 'cursor']]);
+    // The harness's own line still records the call, once.
+    await tapHook(cursorPost, { binding, dir: '/tmp', harness: 'cursor', env: {} });
+    expect(posted.mock.calls[1]![1].events.map((e) => [e.kind, e.harness])).toEqual([
+      ['PostToolUse', 'cursor'],
+    ]);
+  });
+
   it('observed:false posts only the outcome; the kill switch posts nothing', async () => {
     const posted = spy();
     await tapHook(post(), {
