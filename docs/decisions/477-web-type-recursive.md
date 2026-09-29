@@ -59,6 +59,8 @@ budget. Canvas painters need a real family name, because `ctx.font` cannot set v
   fallbacks change in this commit.
 - The Figma frames still show the old faces. Re-fonting them is designer follow-up work, tracked on
   the lane.
+- 2026-09-29: the web lane (01M3QD3Q8) closes on the web half: #1833 plus the #1839 token-order
+  fix. Decision 5's Figma scope is unchanged and moves to a dedicated lane. Follows-up: 01M3QQD3FB36JQGG14Z27T6J84
 - Re-cutting (a new upstream version, another subset, another axis) means rerunning the script and
   committing its output. The allowlist does not change as long as the file names stay `recursive-*`.
 - Recursive's casual axis gives /live and the office a hand-drawn warmth, while body and data stay
