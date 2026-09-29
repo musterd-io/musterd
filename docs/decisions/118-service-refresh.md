@@ -72,6 +72,12 @@ standing daemon).
   daemon would refresh via its package manager — `refresh` says so instead of doing something wrong.
 - Doesn't remove the *restart* (inherent to a compiled long-running server) — it removes the friction
   and the footguns around it.
+- **2026-09-28 — "the worst case leaves the daemon exactly as it was" was true of the daemon and
+  false of its checkout** ([ADR 472](472-refresh-build-is-atomic.md)). A build that failed late left
+  some packages' dist on the new commit and the rest on the old one. On 2026-09-28 that crashed every
+  `musterd` invocation, and every hook, on the machine. A failed build now rolls the checkout back
+  and rebuilds the previous commit, and the daemon build leaves out `@musterd/web`, whose dist the
+  daemon never serves.
 
 ## Observability & Evaluation
 

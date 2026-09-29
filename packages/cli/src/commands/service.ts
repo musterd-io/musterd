@@ -1422,7 +1422,7 @@ function daemonCheckout(ctx: ServiceCtx): string | null {
 /**
  * Bounce the other long-lived agents that run from the same checkout the daemon does.
  *
- * `refreshDaemon` rebuilds the **whole** checkout with `pnpm --dir <dir> build`, but then restarts
+ * `refreshDaemon` rebuilds the checkout (every package but web, ADR 472), but then restarts
  * only its own label — so every other KeepAlive process started from that same `dist` keeps running
  * the code it booted with, indefinitely. The wake actuator has always had this problem: the fix was
  * documented as "run `musterd service restart --wake` by hand", which is a currency policy that
@@ -1601,13 +1601,9 @@ async function refreshDaemon(
   }
 
   process.stdout.write(theme.meta('  building…') + '\n');
-  const built = ctx.run('pnpm', ['--dir', dir, 'build']);
+  const built = buildDaemonCheckout(ctx, dir);
   if (built.status !== 0) {
-    throw new CliError(
-      `build failed — the daemon is still running the previous code (not bounced):\n` +
-        (built.stderr || built.stdout || '').trim(),
-      1,
-    );
+    rollBackFailedBuild(ctx, dir, git, before, after, built);
   }
   ok('rebuilt dist');
 
@@ -1627,6 +1623,64 @@ async function refreshDaemon(
   // The rebuild above is checkout-wide, so anything else running from it is now stale too.
   bounceSiblings(ctx, dir, ok);
   return 0;
+}
+
+/**
+ * The daemon checkout's build (ADR 472): every package except `@musterd/web`. The daemon serves
+ * `/live` from the separately published bundle under `liveWebRoot()` (ADR 132), so the checkout's
+ * own web dist is never served. Its prerender is the build's flakiest step under load: on
+ * 2026-09-28 it failed three refreshes in a row, on /live, /character-sheet and /broadcast.
+ */
+export const DAEMON_BUILD_ARGS = ['-r', '--filter', '!@musterd/web', 'build'] as const;
+
+function buildDaemonCheckout(ctx: ServiceCtx, dir: string): RunResult {
+  return ctx.run('pnpm', ['--dir', dir, ...DAEMON_BUILD_ARGS]);
+}
+
+/**
+ * A failed build must not leave the shared checkout half-built (ADR 472). `pnpm -r build` runs in
+ * dependency order and writes each package's dist in place, so a package that fails late leaves the
+ * ones before it on the NEW commit and the rest on the OLD one. Measured 2026-09-28: the refresh to
+ * 66ed2df rebuilt protocol and server, then failed; cli stayed on 0a5012c and imported an export
+ * (`capitalizeSeat`) the new protocol had removed, so `musterd` crashed machine-wide and every hook
+ * went silently dead. The daemon process itself was fine, so the old message — "still running the
+ * previous code" — was true of the one thing nobody was running.
+ *
+ * So: switch back to the commit the checkout was on and rebuild it, which puts every dist on one
+ * commit again. The install check runs first because the failed hop may have installed a lockfile
+ * the old commit does not match. Always throws: the refresh did not happen either way.
+ */
+function rollBackFailedBuild(
+  ctx: ServiceCtx,
+  dir: string,
+  git: (...args: string[]) => RunResult,
+  before: string,
+  after: string,
+  built: RunResult,
+): never {
+  const why = (built.stderr || built.stdout || '').trim();
+  const back = git('switch', '--detach', before);
+  const rebuilt =
+    back.status === 0
+      ? (() => {
+          if (needsInstall(dir)) ctx.run('pnpm', ['--dir', dir, 'install', '--frozen-lockfile']);
+          return buildDaemonCheckout(ctx, dir);
+        })()
+      : back;
+  if (rebuilt.status === 0) {
+    throw new CliError(
+      `build failed at ${after} — rolled back to ${before} and rebuilt it, so the checkout and ` +
+        `the daemon both stay on the previous code (not bounced):\n${why}`,
+      1,
+    );
+  }
+  throw new CliError(
+    `build failed at ${after}, and rebuilding ${before} failed too — ${dir} may hold dist from ` +
+      `both commits, so \`musterd\` and the hooks may not start. The daemon was not bounced. ` +
+      `Rebuild by hand: pnpm --dir ${dir} ${DAEMON_BUILD_ARGS.join(' ')}\n` +
+      `${why}\n--- rollback ---\n${(rebuilt.stderr || rebuilt.stdout || '').trim()}`,
+    1,
+  );
 }
 
 /** The auto-refresher's ledger-seat name (ADR 232) — the first attributed unattended actor. */
