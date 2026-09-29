@@ -77,7 +77,7 @@ export interface Report {
   flips: number;
   exactExtremes: number;
   medianMs: number;
-  verdict: 'pass' | 'reject';
+  verdict: 'pass' | 'reject' | 'no data';
 }
 
 export function report(items: Item[], answers: Answer[], q: Question): Report {
@@ -111,7 +111,7 @@ export function report(items: Item[], answers: Answer[], q: Question): Report {
     flips,
     exactExtremes: top.filter((c) => c >= 0.995).length / Math.max(top.length, 1),
     medianMs: ms[Math.floor(ms.length / 2)] ?? 0,
-    verdict: eceFit > 0.05 || flips > 0.1 ? 'reject' : 'pass',
+    verdict: test.length === 0 ? 'no data' : eceFit > 0.05 || flips > 0.1 ? 'reject' : 'pass',
   };
 }
 
