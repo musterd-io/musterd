@@ -586,4 +586,35 @@ describe('claim --detach (ADR 377 increment 1 — the one-shot HTTP path `join` 
       .map((p) => p.surface);
     expect(live).toEqual(['cursor']);
   });
+
+  // ADR 471 (lane 01M3N79FWR85): run from a folder whose harness adapter holds the seat, the
+  // detached claim used to rewrite binding.json without the adapter's `session_lease` — the hook
+  // probe then read no lease and the interrupt line went deaf while the Presence was alive.
+  it('keeps the on-disk session lease of the same seat — it holds none of its own, and must not erase the adapter’s', async () => {
+    await declareSeat('bo');
+    const g = await grant('bo');
+    saveBinding(cwd, {
+      version: 2,
+      server: serverUrl,
+      team: 'dawn',
+      agent_key: agentKey,
+      claim: { mode: 'seat', name: 'bo' },
+      session_lease: 'msls_adapter_live',
+    });
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    let code: number;
+    try {
+      code = await claimCommand(
+        parseArgs(['bo', '--team', 'dawn', '--grant', g, '--surface', 'cursor', '--detach']),
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    expect(code).toBe(0);
+    const binding = BindingSchema.parse(
+      JSON.parse(readFileSync(join(cwd, BINDING_DIR, BINDING_FILE), 'utf8')),
+    );
+    expect(binding.claim).toEqual({ mode: 'seat', name: 'bo' });
+    expect(binding.session_lease).toBe('msls_adapter_live');
+  });
 });

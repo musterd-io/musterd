@@ -317,6 +317,14 @@ export function saveBinding(dir: string, binding: Binding, opts?: SaveBindingOpt
     onDisk.seat_credential !== undefined
       ? { seat_credential: onDisk.seat_credential }
       : {}),
+    // The session lease survives a lease-less rewrite of the same seat (ADR 471) — the adapter's
+    // socket is its only legitimate writer, and a sibling process re-binding the folder has none.
+    ...(binding.session_lease === undefined &&
+    onDisk != null &&
+    bindingSeat(binding) === bindingSeat(onDisk) &&
+    onDisk.session_lease !== undefined
+      ? { session_lease: onDisk.session_lease }
+      : {}),
     ...(binding.session === undefined && onDisk?.session !== undefined
       ? { session: onDisk.session }
       : {}),

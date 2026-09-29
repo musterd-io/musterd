@@ -1364,13 +1364,48 @@ describe('team_join handler (claim-on-first-use overload, ADR 032)', () => {
 
   it('is idempotent when already joined', async () => {
     const join = vi.fn(async () => undefined);
+    // ADR 471: "already joined" is verified live — one interruptCheck on the hook's route, whose
+    // request() re-joins on refusal — never answered from the in-process flag alone.
+    const interruptCheck = vi.fn(async () => null);
     const handler = capture(
       registerJoin,
-      { joined: true, holdsSeat: true, join: join as any, memory: null },
+      { joined: true, holdsSeat: true, join: join as any, interruptCheck, memory: null },
       config,
     );
-    expect(text(await handler({}))).toContain('Already joined dawn as Ada');
+    const out = text(await handler({}));
+    expect(out).toContain('Already joined dawn as Ada');
+    expect(out).toContain('Verified live with the server');
     expect(join).not.toHaveBeenCalled();
+    expect(interruptCheck).toHaveBeenCalledOnce();
+  });
+
+  it('already-joined names the re-occupy when the verify found the Presence gone (ADR 471)', async () => {
+    const client = {
+      joined: true,
+      holdsSeat: true,
+      sessionLease: 'lease-old',
+      memory: null,
+      interruptCheck: vi.fn(async () => {
+        client.sessionLease = 'lease-new';
+        return null;
+      }),
+    };
+    const handler = capture(registerJoin, client as any, config);
+    expect(text(await handler({}))).toContain('re-occupied it and re-wrote the session lease');
+  });
+
+  it('already-joined says so when the re-join itself failed (ADR 471)', async () => {
+    const client = {
+      joined: true,
+      holdsSeat: true,
+      memory: null,
+      interruptCheck: vi.fn(async () => {
+        client.joined = false;
+        return null;
+      }),
+    };
+    const handler = capture(registerJoin, client as any, config);
+    expect(text(await handler({}))).toContain('the re-join failed');
   });
 
   it('already-joined still shows the memory one-liner (a background approval may have occupied silently)', async () => {
@@ -1380,6 +1415,7 @@ describe('team_join handler (claim-on-first-use overload, ADR 032)', () => {
         joined: true,
         holdsSeat: true,
         charter: 'Own the rails.',
+        interruptCheck: async () => null,
         memory: { headline: 'mid-refactor', saved_at: Date.now() - 60_000, size_bytes: 7 },
       },
       config,

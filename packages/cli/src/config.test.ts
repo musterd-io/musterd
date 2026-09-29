@@ -376,6 +376,25 @@ describe('saveBinding merge-guard + atomic write (ADR 131 inc 4)', () => {
     expect(onDisk()['seat_credential']).toBe('msac_kept');
   });
 
+  it('a lease-less write preserves the on-disk session lease (ADR 471: `claim --detach` erased it)', () => {
+    saveBinding(dir, { ...base, session_lease: 'msls_adapter' });
+    // `musterd claim <seat> --detach` from the same folder: no socket, no lease of its own.
+    saveBinding(dir, { ...base, grant: 'msgr_new' });
+    expect(onDisk()['session_lease']).toBe('msls_adapter');
+  });
+
+  it('an explicit session lease on the argument wins over the on-disk one', () => {
+    saveBinding(dir, { ...base, session_lease: 'msls_old' });
+    saveBinding(dir, { ...base, session_lease: 'msls_new' });
+    expect(onDisk()['session_lease']).toBe('msls_new');
+  });
+
+  it('does not carry a session lease to a different claimed seat', () => {
+    saveBinding(dir, { ...base, session_lease: 'msls_scout' });
+    saveBinding(dir, { ...base, claim: { mode: 'seat', name: 'nick' } });
+    expect(onDisk()['session_lease']).toBeUndefined();
+  });
+
   it('does not carry a credential to a different claimed seat', () => {
     saveBinding(dir, { ...base, seat_credential: 'msac_scout' });
     saveBinding(dir, {
