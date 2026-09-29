@@ -216,6 +216,14 @@ not a location: any edge that re-derives from current state with no memory of wh
 repeats itself, and the ask path had been doing it in plain sight for the whole window this ADR
 was measuring.
 
+_Note, 2026-09-29 (dolly)._ **The three weekly reads now each have an instrument, a reader and a
+cadence.** `pnpm adr250:asks-per-pr` and `pnpm adr250:capability-miss` landed in #1286 (finding
+010), beside `adr-250-repeat-wakes.ts` (finding 009). The weekly reader and the dated verdict are
+in `docs/watches/2026-09-29-adr-250-weekly-reads.md`. That is an ADR 297 watch, not a cron job.
+The first read it registers: the headline rose from 0.06–0.11 asks/PR (W34–W38) to 0.21 (W39) and
+0.15 (W40 to date). This is the opposite of what the ADR predicted, and it happened before items
+2 and 4 landed.
+
 **Experiment.** The dispatch-handoff exercise registered here at merge time was
 **dissolved before it ran** — see the amendment below. Its question ("does the edge
 fire") was already answered by a ledger row, and the free check that established this
