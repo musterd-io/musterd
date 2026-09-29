@@ -105,6 +105,17 @@ describe('the rail, rendered — a lapsed ask must not read as one waiting on yo
     expect(html).not.toContain('expired');
   });
 
+  it('a lane-review ask reads "asked X to accept <lane>", never the machine prefix', () => {
+    const review = {
+      ...ask('r1', 'standard', 1000),
+      body: '[lane] acceptance requested: "Roster fix" — Judge the LANDED OUTCOME',
+    } as Envelope;
+    const html = render([review]);
+    expect(html).toContain('to accept');
+    expect(html).toContain('Roster fix');
+    expect(html.slice(0, html.indexOf('lc-asks__sheet'))).not.toContain('[lane]');
+  });
+
   it('with nothing open, the banner is a quiet pill — not nothing', () => {
     expect(render([])).toContain('no open questions');
   });

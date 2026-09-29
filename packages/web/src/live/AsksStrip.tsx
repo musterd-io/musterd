@@ -313,7 +313,15 @@ export function AsksStrip({
               onClick={() => onReveal(lead.env.id)}
               title="Open this ask in the log"
             >
-              {bannerView.mode === 'open' ? (
+              {bannerView.mode === 'open' && bannerView.reviewTitle ? (
+                <>
+                  <b>{bannerView.who}</b>
+                  <span className="lc-asks__verb">
+                    asked <b>{bannerView.to ?? 'the team'}</b> to accept
+                  </span>
+                  <span className="lc-asks__q">{bannerView.reviewTitle}</span>
+                </>
+              ) : bannerView.mode === 'open' ? (
                 <>
                   <b>{bannerView.who}</b>
                   <span className="lc-asks__verb">
