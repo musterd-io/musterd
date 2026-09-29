@@ -15,7 +15,7 @@ can answer; the conversion is sized, not done.
 | --- | --- | --- |
 | Q1 schema loads | every table/index; hand-fixes ≤ 10 | **pass** — 106/106, 4 hand-fixes (FTS5) |
 | Q2 hook path | file-backed p95 ≤ 10 ms/query; boot ≤ 2 s | _pending_ |
-| Q3 one SQL text, two drivers | cursor tests green on both | _pending_ |
+| Q3 one SQL text, two drivers | cursor tests green on both | **pass** — 8/8, one SQL text |
 | Q4 conversion size | counted | _pending_ |
 
 ## Q4 — dialect and call-site inventory
@@ -97,6 +97,16 @@ rule, and the same list is what the Cloud Postgres path changes anyway:
 
 None of these blocks the decision; each is a line item in increment 1 if PGlite wins.
 
+**Per-module cost, from Q3's port.** `cursors.ts` (85 lines, 3 statements, 1 transaction) → 52 lines
+async: `git diff --no-index --stat` says 43 insertions, 76 deletions — effectively every line that
+touches the store is rewritten (`await`, params as an array, `tx` callback), and the lines that are
+not store calls are untouched. At ~470 driver call sites across ~63 store files that is the whole
+store layer rewritten once, module by module, each with its existing tests as the gate. The
+transport layer is the second half: `transport/http.ts` is 7,395 lines and references `ctx.db`
+481 times — every handler that calls a store function becomes `async` and every store call gets an
+`await`, mechanical but total. Order of magnitude for increment 1's store work, either backend:
+**~1,000 call sites, ~70 files, one pass.** It is the same number whichever way Q2 decides.
+
 ## Q1 — schema on PGlite
 
 **Pass.** `node scripts/perf/pglite-schema.mjs` on 2026-09-29 (schema at migration head of
@@ -137,7 +147,27 @@ _pending (Task 4)_
 
 ## Q3 — two-driver slice
 
-_pending (Task 5)_
+**Pass.** `packages/server/src/store/cursors.ts` (85 lines) ported to
+`scripts/perf/pglite-slice/cursors.mjs` on an async `Driver` interface
+(`get / all / run / exec / tx / close`) with two drivers: `sqliteDriver` (better-sqlite3 wrapped in
+Promises) and `pgliteDriver` (PGlite; SQL text passed through `sqliteToPostgres` +
+`toPgPlaceholders`). The four cursor tests run against both:
+`pnpm vitest run scripts/perf/pglite-slice/cursors.test.ts` → **8/8** (2026-09-29).
+
+What one SQL text needed to serve both:
+
+- `?` → `$n` placeholders, rewritten outside string literals (a `'why?'` literal survives — tested).
+- `json_extract(col, '$.k')` → `(col::jsonb ->> 'k')` — the same rule Q1 used for DDL.
+- **Integer columns come back as JS numbers on both** for `Date.now()`-sized values; the `Number()`
+  casts on read cost nothing on SQLite and are the safe form on PGlite (BIGINT beyond 2^53 would be
+  a string). `affectedRows` names the write count on PGlite; `changes` on better-sqlite3.
+- **Transactions are the one shape difference.** better-sqlite3's `db.transaction(fn)` cannot
+  wrap an async body, so the SQLite driver runs `BEGIN` / `COMMIT` / `ROLLBACK` by hand. That is
+  correct for one process (the daemon is one process) and it is the honest cost of putting a sync
+  engine under an async interface: every transaction still serialises on the event loop, exactly as
+  today.
+
+Nothing in the port is engine-specific above the driver.
 
 ## Decision
 
