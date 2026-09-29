@@ -62,6 +62,10 @@ export interface AskView {
   answeredBy?: string;
   /** The "deciding — check back in ⟨until⟩" horizon, when deferred. */
   until?: string;
+  /** When the timeline moved this ask out of `open` — the ts of the answer, deferral, outcome or
+   *  resolve envelope. The banner shows a settled outcome for a few seconds after THIS, not after
+   *  the page happened to render it (ADR 464 §6). Absent while open, and for the clock's `lapsed`. */
+  settledAt?: number;
 }
 
 /** True when the ask still wants attention on sight — the strip's "loud" predicate. */
@@ -161,6 +165,7 @@ export function deriveAsks(envelopes: Envelope[]): AskView[] {
       if (!refs(env, ask.env.id, ask.env.thread)) continue;
       const terminal = ask.state === 'accepted' || ask.state === 'declined';
       if (terminal) continue;
+      const before = ask.state;
       if (env.act === 'accept') {
         ask.state = 'accepted';
         ask.answeredBy = env.from;
@@ -181,6 +186,8 @@ export function deriveAsks(envelopes: Envelope[]): AskView[] {
         ask.state = 'resolved';
         ask.answeredBy = env.from;
       }
+      // `held` is still open in the room's terms (the asker is waiting); everything else settles.
+      if (ask.state !== before && ask.state !== 'held') ask.settledAt = env.ts;
     }
   }
   return [...asks.values()].reverse();
@@ -320,8 +327,12 @@ export function reelItems(asks: AskView[], reviews: ReviewView[]): ReelItem[] {
       .filter((l): l is string => typeof l === 'string'),
   );
   return [
-    ...asks.filter((a) => askIsLoud(a.state) || a.state === 'deferred').map((ask) => ({ kind: 'ask' as const, ask })),
-    ...reviews.filter((r) => !loudLanes.has(r.lane.id)).map((review) => ({ kind: 'review' as const, review })),
+    ...asks
+      .filter((a) => askIsLoud(a.state) || a.state === 'deferred')
+      .map((ask) => ({ kind: 'ask' as const, ask })),
+    ...reviews
+      .filter((r) => !loudLanes.has(r.lane.id))
+      .map((review) => ({ kind: 'review' as const, review })),
   ];
 }
 
