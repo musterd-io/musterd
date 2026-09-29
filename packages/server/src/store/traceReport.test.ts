@@ -79,6 +79,44 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
     ]);
   });
 
+  // Lane 01M3N78KVY: cursor fires `afterShellExecution` / `afterMCPExecution` BESIDE `postToolUse`
+  // for one call (cursor-agent too — wanderer 0e58c84e: 86 + 91 hook rows for 92 shell calls), and
+  // the tap records all three as PostToolUse. One call is one call: the after-rows count only when
+  // a session has no `postToolUse` spelling at all.
+  it('coverage: a cursor call that fired postToolUse and an after-hook counts once', () => {
+    const { db, traceDb, team } = fixture();
+    const cursor = (over: Partial<TraceEvent>) =>
+      ev({ harness: 'cursor', tool_name: 'Shell', ...over });
+    ingestTraceEvents(traceDb, team.id, 'ryder', [
+      cursor({ detail: { hook_event: 'postToolUse' } }),
+      cursor({ detail: { hook_event: 'afterShellExecution' } }),
+      cursor({ tool_name: 'Read', detail: { hook_event: 'postToolUse' } }),
+      cursor({ tool_name: 'other', detail: { hook_event: 'afterMCPExecution' } }),
+      cursor({ tool_name: 'other', detail: { hook_event: 'postToolUse' } }),
+      cursor({ kind: 'usage', detail: { parser: 'cursor@1', tool_uses: 3 } }),
+      // a session that only ever fired the after-hooks: they are its whole record
+      cursor({ session_digest: 'cccccccccccc', detail: { hook_event: 'afterShellExecution' } }),
+      cursor({ session_digest: 'cccccccccccc', detail: { hook_event: 'afterShellExecution' } }),
+      cursor({
+        session_digest: 'cccccccccccc',
+        kind: 'usage',
+        detail: { parser: 'cursor@1', tool_uses: 2 },
+      }),
+    ]);
+    const r = deriveTraceReport(db, traceDb, team.id, ['ryder'], { days: 7, now: NOW });
+    expect(r.coverage).toEqual([
+      {
+        harness: 'cursor',
+        sessions: 2,
+        sessions_with_r2: 2,
+        post_tool_use: 5,
+        post_tool_use_r2: 5,
+        r2_tool_uses: 5,
+        coverage: 1,
+      },
+    ]);
+  });
+
   it('cost per lane: a usage row goes to the most recently claimed open lane; none → unattributed', () => {
     const { db, traceDb, team } = fixture();
     openLane(db, team.id, 'dawn', 'ryder', { title: 'lane A', claim: true }, NOW - 5 * H);

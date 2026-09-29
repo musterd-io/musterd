@@ -9,6 +9,7 @@ import {
 } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
 import type { z } from 'zod';
+import { POST_TOOL_USE_ONCE } from './traceCoverage.js';
 
 /**
  * `musterd report trace` (ADR 445 increment 4): three views over `trace_events`' structural
@@ -52,9 +53,9 @@ export function deriveTraceReport(
     >(
       `SELECT harness, session_digest,
               MAX(CASE WHEN kind IN ('reasoning','assistant_text','usage','unknown') THEN 1 ELSE 0 END) AS has_r2,
-              SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') THEN 1 ELSE 0 END) AS post,
-              SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NULL
-                       THEN 1 ELSE 0 END) AS post_main
+              SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NOT NULL
+                       THEN 1 ELSE 0 END) + ${POST_TOOL_USE_ONCE} AS post,
+              ${POST_TOOL_USE_ONCE} AS post_main
          FROM trace_events
         WHERE team_id = ? AND ts >= ? ${inSeats}
         GROUP BY harness, session_digest`,

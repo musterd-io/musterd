@@ -471,6 +471,16 @@ ADR 184's publication gate; a spans backend.
   transcript's `tool_use` count by more than 2% once shell/MCP after-hooks are excluded.
 
   Grok and opencode wait on a seat running on this build; re-read then, from the daemon.
+- **2026-09-28 — cursor's numerator counts one `PostToolUse` per call** (lane
+  `01M3N78KVY3ZR6RG50T2S5XM7K`). Both consumers — `report trace`'s coverage rows and the
+  `trace.coverage_low` sweep — now share one SQL aggregate (`POST_TOOL_USE_ONCE`): a row spelled
+  `afterShellExecution` / `afterMCPExecution` in `detail.hook_event` counts only when the session
+  has no `postToolUse` spelling at all, since then those rows are its whole record. On the dogfood
+  box's six cursor sessions the numerator drops from 831 to 585 and the ratio from 1.53 to 1.077;
+  the one session still over 1 (0e58c84e, 317/262) is the Read double-fire noted above, not the
+  after-hooks. The tap's note in `trace/hook.ts` no longer says cursor-agent fires the after-hooks
+  *instead of* `postToolUse` — it fires them beside. Falsifier: a cursor session whose report
+  numerator exceeds its `postToolUse`-spelled main-loop rows while it has any.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a

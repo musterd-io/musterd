@@ -83,9 +83,10 @@ const firstLine = (v: string | undefined): string | undefined => {
 
 /**
  * Cursor's hook events, onto the Claude Code spelling the column uses (ADR 445 §2 R1). Cursor fires
- * `afterShellExecution` / `afterMCPExecution` beside (and on cursor-agent, instead of) `postToolUse`,
- * so all three record as `PostToolUse` — the source name rides in `detail.hook_event`, which is what
- * lets a reader de-duplicate an IDE session that fired two of them for one call.
+ * `afterShellExecution` / `afterMCPExecution` beside `postToolUse` — on cursor-agent too, not only
+ * the IDE (wanderer's 0e58c84e: 86 + 91 rows for 92 shell calls, lane 01M3N78KVY) — so all three
+ * record as `PostToolUse`. The source name rides in `detail.hook_event`, which is what lets the
+ * coverage readers count a call that fired two of them once (`POST_TOOL_USE_ONCE`, server).
  */
 const CURSOR_KINDS: Record<string, TraceEventKind> = {
   sessionStart: 'SessionStart',

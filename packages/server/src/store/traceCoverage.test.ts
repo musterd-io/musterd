@@ -78,6 +78,49 @@ describe('findLowCoverageSessions (ADR 445 trace.coverage_low)', () => {
     expect(findLowCoverageSessions(db, traceDb, later)).toEqual([]);
   });
 
+  // Lane 01M3N78KVY: cursor's after-hooks fire beside `postToolUse` for one call; counting both
+  // reads a session at 200% and hides a real miss. The after-rows count only when a session has no
+  // `postToolUse` spelling at all.
+  it('counts a cursor call once when postToolUse and an after-hook both fired', () => {
+    const { db, traceDb, team } = fixture();
+    const row = (digest: string, hook_event: string): TraceEvent => ({
+      harness: 'cursor',
+      session_digest: digest,
+      ts: 1,
+      kind: 'PostToolUse',
+      tool_name: 'Shell',
+      detail: { hook_event },
+    });
+    const usage = (digest: string, tool_uses: number): TraceEvent => ({
+      harness: 'cursor',
+      session_digest: digest,
+      ts: 1,
+      kind: 'usage',
+      detail: { parser: 'cursor@1', tool_uses },
+    });
+    ingestTraceEvents(traceDb, team.id, 'ryder', [
+      // 9 calls, each fired twice: 18 rows over 10 transcript calls would read 1.8 and hide the miss
+      ...Array.from({ length: 9 }, () => row('aaaaaaaaaaaa', 'postToolUse')),
+      ...Array.from({ length: 9 }, () => row('aaaaaaaaaaaa', 'afterShellExecution')),
+      usage('aaaaaaaaaaaa', 10),
+      // after-hooks only: their 10 rows are the session's whole record → 10/10, fine
+      ...Array.from({ length: 10 }, () => row('bbbbbbbbbbbb', 'afterShellExecution')),
+      usage('bbbbbbbbbbbb', 10),
+    ]);
+    const found = findLowCoverageSessions(db, traceDb, Date.now() + TRACE_COVERAGE_QUIET_MS + 1000);
+    expect(found).toEqual([
+      {
+        team_id: team.id,
+        seat: 'ryder',
+        harness: 'cursor',
+        session_digest: 'aaaaaaaaaaaa',
+        post_tool_use: 9,
+        r2_tool_uses: 10,
+        coverage: 0.9,
+      },
+    ]);
+  });
+
   it('leaves sessions older than the lookback to the pass that saw them', () => {
     const { db, traceDb, team } = fixture();
     ingestTraceEvents(traceDb, team.id, 'ryder', session('eeeeeeeeeeee', 1, 10, 1));
