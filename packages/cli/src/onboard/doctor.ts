@@ -15,7 +15,14 @@ import { HttpClient, isSessionLeaseRefusal } from '../client.js';
 import { resolveRead } from '../commands/helpers.js';
 import { recoverAgentKey } from '../commands/team.js';
 import { harnessWiredFor, wireConfigures } from '../commands/wire.js';
-import { type Config, findBinding, loadBinding, loadConfig, readBindingAt } from '../config.js';
+import {
+  type Config,
+  findBinding,
+  loadBinding,
+  loadConfig,
+  readBindingAt,
+  saveBinding,
+} from '../config.js';
 import { CliError } from '../errors.js';
 import { inspectWakeMusterd } from '../host/pinnedBin.js';
 import { theme } from '../render/theme.js';
@@ -88,8 +95,12 @@ export interface DoctorReport {
    * the seat it claims. It outranks the other two, and `--fix` deliberately **cannot** perform it —
    * the remedy is either a rebind from a held credential or a re-issue that invalidates somebody's
    * live secret, and `musterd init` (the generic remedy) is the very command that wrote the binding.
+   *
+   * `'agent-key'` ⇒ `agent_key` holds the seat credential (a pre-#1820 `claim --detach`); `--fix`
+   * restores the team key from a local source ({@link repairTracedKey}), then re-checks. It ranks
+   * above `'init'` because that repair is local, headless and changes nobody's credential.
    */
-  repair?: 'wire' | 'init' | 'identity';
+  repair?: 'wire' | 'init' | 'identity' | 'agent-key';
   /** Warn-only notes (locally-edited guidance) — surfaced but never exit-1 (ADR 085). */
   notes: string[];
   /** True when at least one installed harness has the musterd server registered. */
@@ -1052,6 +1063,7 @@ export async function inspectProvisioning(
   const modelAttestation = await inspectModelAttestation(binding);
   const deadHookLease = await inspectDeadHookLease(binding);
   const seatIdentity = await inspectSeatIdentity(binding, cwd);
+  const tracedKey = inspectTracedKey(binding, cwd);
   // ADR 160/185: label coverage is per-capability (cross_rename / self_rename / none). Say so
   // plainly (a note, never drift — capability gaps are not misconfiguration).
   const noPeerSweep = HARNESSES.filter(
@@ -1093,14 +1105,16 @@ export async function inspectProvisioning(
   const repair: DoctorReport['repair'] =
     seatIdentity.drift.length > 0
       ? 'identity'
-      : drift.length > 0
-        ? 'init'
-        : entryDrift.length > 0
-          ? anyWireRepairable
-            ? 'wire'
-            : 'init'
-          : undefined;
-  drift.push(...seatIdentity.drift, ...entryDrift);
+      : tracedKey.length > 0
+        ? 'agent-key'
+        : drift.length > 0
+          ? 'init'
+          : entryDrift.length > 0
+            ? anyWireRepairable
+              ? 'wire'
+              : 'init'
+            : undefined;
+  drift.push(...seatIdentity.drift, ...tracedKey, ...entryDrift);
   return {
     primerManaged,
     harnesses,
@@ -1207,6 +1221,87 @@ export function agentKeyNotes(
       `\`musterd human\` cannot provision — but ${found.sources.length} seat binding(s) here still ` +
       `carry it. \`musterd team agent-key --team ${team}\` reads it back; nothing on the team changes.`,
   ];
+}
+
+/**
+ * The traced key (lane 01M3Q4Y8NG). `binding.agent_key` is the TEAM key a seat traces under
+ * (`sessionDigest(agent_key, session_id)`), and a pre-#1820 `claim --detach` re-occupy overwrote it
+ * with the seat credential it claimed with — `msac_…`, equal to `seat_credential`. #1820 stopped new
+ * writes; it repaired nothing on disk (ryder, 2026-09-29: still `msac_` after an explicit join).
+ *
+ * The key source is decided here, and only here: the team key this machine recorded
+ * (`config.agentKeys[team]`), else the one `mskey_` that every other seat binding for the team agrees
+ * on ({@link recoverAgentKey}). `host_key` is deliberately NOT a source — it is the wake actuator's
+ * credential (ADR 395), and nothing guarantees it is the team key. Neither secret is ever rendered
+ * (AGENTS.md rule 5): lines name the folders that vouched, never a key.
+ */
+export function tracedKeyInspection(
+  binding: Binding | null,
+  config: Pick<Config, 'agentKeys' | 'bindings'>,
+  read?: (dir: string) => Binding | null,
+): { corrupt: false } | { corrupt: true; key: string | null; source: string } {
+  const key = binding?.agent_key;
+  if (!binding?.team || !key) return { corrupt: false };
+  const corrupt =
+    key.startsWith(TOKEN_PREFIXES.agent_seat) ||
+    (binding.seat_credential !== undefined && key === binding.seat_credential);
+  if (!corrupt) return { corrupt: false };
+  const recorded = config.agentKeys[binding.team];
+  if (recorded?.startsWith(TOKEN_PREFIXES.agent_key)) {
+    return { corrupt: true, key: recorded, source: 'the team key this machine recorded' };
+  }
+  const found = recoverAgentKey(Object.keys(config.bindings), binding.team, read ?? readBindingAt);
+  if (found.key) {
+    return {
+      corrupt: true,
+      key: found.key,
+      source: `the team key ${found.sources.length} other seat binding(s) here agree on`,
+    };
+  }
+  return {
+    corrupt: true,
+    key: null,
+    source:
+      found.conflicts.length > 0
+        ? `nothing — the seat bindings here disagree on the team key`
+        : `nothing — no team key is held on this machine`,
+  };
+}
+
+function inspectTracedKey(binding: Binding | null, cwd: string): string[] {
+  const found = tracedKeyInspection(binding, loadConfig());
+  if (!found.corrupt) return [];
+  const remedy = found.key
+    ? `\`musterd init --check --fix\` restores it from ${found.source}`
+    : `${found.source}, so hold it first (\`musterd team agent-key --key <mskey_…> --team ${binding!.team}\`), then run \`musterd init --check --fix\``;
+  return [
+    `${cwd}/.musterd/binding.json carries the seat credential as agent_key — a pre-#1820 ` +
+      `\`claim --detach\` wrote it there. Traces digest under agent_key, so this seat's sessions split ` +
+      `and re-post under a new digest. ${remedy}.`,
+  ];
+}
+
+/**
+ * The `--fix` half of {@link tracedKeyInspection}: rewrite `agent_key` to the team key, carrying every
+ * other field (`saveBinding` keeps the credential, lease and host key beside it). Returns the line to
+ * print — never the key. Exit 0 when repaired or nothing to do, 1 when no key source exists.
+ */
+export function repairTracedKey(
+  cwd: string,
+  deps: {
+    find?: (cwd: string) => Binding | null;
+    config?: Pick<Config, 'agentKeys' | 'bindings'>;
+    read?: (dir: string) => Binding | null;
+    save?: (dir: string, binding: Binding) => unknown;
+  } = {},
+): { code: 0 | 1; line: string } {
+  const found = (deps.find ?? findBinding)(cwd);
+  const inspected = tracedKeyInspection(found, deps.config ?? loadConfig(), deps.read);
+  if (!inspected.corrupt)
+    return { code: 0, line: 'agent_key is already the team key — nothing to repair' };
+  if (!inspected.key) return { code: 1, line: `cannot restore agent_key: ${inspected.source}` };
+  (deps.save ?? saveBinding)(cwd, { ...found!, agent_key: inspected.key });
+  return { code: 0, line: `restored agent_key from ${inspected.source}` };
 }
 
 /** Render + exit-code for `musterd init --check`. Exit 1 on drift, 0 when healthy or unprovisioned. */

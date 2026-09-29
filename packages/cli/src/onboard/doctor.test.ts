@@ -35,6 +35,9 @@ vi.mock('./harnesses/index.js', () => ({
 vi.mock('./primer.js', () => ({ classifyPrimerTarget: () => h.primer }));
 vi.mock('../config.js', () => ({
   findBinding: () => h.binding,
+  // The traced-key check reads sibling bindings only when it must recover a key; none here.
+  readBindingAt: () => null,
+  saveBinding: () => '',
   // The classified read (ADR 282): a mocked plain-object binding is 'valid'; null is 'missing'.
   loadBinding: () =>
     h.binding === null ? { kind: 'missing' } : { kind: 'valid', value: h.binding },
@@ -71,8 +74,10 @@ const {
   buildSkewNotes,
   footprintNotes,
   inspectProvisioning,
+  repairTracedKey,
   runSessionProbe,
   sessionReachWallNotes,
+  tracedKeyInspection,
 } = await import('./doctor.js');
 const { writeGuidance, CANONICAL_SKILL_PATH } = await import('./guidance.js');
 const { writeProvisionManifest, saveProvisioning, loadProvisioning } =
@@ -2112,5 +2117,115 @@ describe('borrowedGitRootNotes — a seat folder that borrows its git root loses
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
+  });
+});
+
+describe('the traced key — agent_key left as the seat credential by a pre-#1820 claim --detach (lane 01M3Q4Y8NG)', () => {
+  const TEAM_KEY = 'mskey_team_secret';
+  const CRED = 'msac_seat_secret';
+  const corrupt = () => ({
+    version: 2,
+    server: 'http://127.0.0.1:1',
+    team: 'dawn',
+    agent_key: CRED,
+    seat_credential: CRED,
+    host_key: 'mskey_host_not_assumed',
+    session_lease: 'msls_live',
+    claim: { mode: 'seat', name: 'bo' },
+  });
+  const healthy = () => ({ ...corrupt(), agent_key: TEAM_KEY });
+
+  beforeEach(() => {
+    h.harnesses = [];
+    h.bindings = {};
+    h.agentKeys = {};
+    h.knownIdentities = [];
+    h.roster = { members: [] };
+  });
+
+  it('a corrupted binding is drift, repaired as agent-key, and the line names no secret', async () => {
+    h.binding = corrupt();
+    h.agentKeys = { dawn: TEAM_KEY };
+    const report = await inspectProvisioning('/w/bo');
+    expect(report.repair).toBe('agent-key');
+    const line = report.drift.find((d) => d.includes('agent_key'));
+    expect(line).toContain('musterd init --check --fix');
+    const all = JSON.stringify(report);
+    for (const secret of [TEAM_KEY, CRED, 'mskey_host_not_assumed'])
+      expect(all).not.toContain(secret);
+  });
+
+  it('a healthy binding is not drift', async () => {
+    h.binding = healthy();
+    h.agentKeys = { dawn: TEAM_KEY };
+    const report = await inspectProvisioning('/w/bo');
+    expect(report.drift.some((d) => d.includes('agent_key'))).toBe(false);
+  });
+
+  it('--fix restores the recorded team key and carries every other field', () => {
+    const saved: any[] = [];
+    const out = repairTracedKey('/w/bo', {
+      find: () => corrupt() as any,
+      config: { agentKeys: { dawn: TEAM_KEY }, bindings: {} },
+      save: (_dir, b) => saved.push(b),
+    });
+    expect(out.code).toBe(0);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toEqual({ ...corrupt(), agent_key: TEAM_KEY });
+    expect(out.line).not.toContain(TEAM_KEY);
+  });
+
+  it('--fix leaves a healthy binding untouched', () => {
+    const save = vi.fn();
+    const out = repairTracedKey('/w/bo', {
+      find: () => healthy() as any,
+      config: { agentKeys: { dawn: TEAM_KEY }, bindings: {} },
+      save,
+    });
+    expect(out.code).toBe(0);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the one key the other seat bindings agree on — never host_key', () => {
+    const others: Record<string, any> = {
+      '/w/a': { ...healthy(), claim: { mode: 'seat', name: 'a' } },
+      '/w/b': { ...healthy(), claim: { mode: 'seat', name: 'b' } },
+      '/w/bo': corrupt(),
+    };
+    const found = tracedKeyInspection(
+      corrupt() as any,
+      {
+        agentKeys: {},
+        bindings: Object.fromEntries(Object.keys(others).map((k) => [k, {}])) as any,
+      },
+      (dir) => others[dir] ?? null,
+    );
+    expect(found).toMatchObject({ corrupt: true, key: TEAM_KEY });
+  });
+
+  it('refuses when no source holds the team key, and does not fall back to host_key', () => {
+    const save = vi.fn();
+    const out = repairTracedKey('/w/bo', {
+      find: () => corrupt() as any,
+      config: { agentKeys: {}, bindings: {} },
+      read: () => null,
+      save,
+    });
+    expect(out.code).toBe(1);
+    expect(save).not.toHaveBeenCalled();
+    expect(out.line).not.toContain('mskey_');
+  });
+
+  it('refuses when the other bindings disagree on the team key', () => {
+    const others: Record<string, any> = {
+      '/w/a': { ...healthy(), agent_key: 'mskey_one' },
+      '/w/b': { ...healthy(), agent_key: 'mskey_two' },
+    };
+    const found = tracedKeyInspection(
+      corrupt() as any,
+      { agentKeys: {}, bindings: { '/w/a': {}, '/w/b': {} } as any },
+      (dir) => others[dir] ?? null,
+    );
+    expect(found).toMatchObject({ corrupt: true, key: null });
   });
 });

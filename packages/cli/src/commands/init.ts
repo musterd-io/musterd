@@ -2,6 +2,7 @@ import type { Parsed } from '../args.js';
 import {
   inspectProvisioning,
   refreshWorkspaceDrift,
+  repairTracedKey,
   runInitDoctor,
   runSessionProbe,
 } from '../onboard/doctor.js';
@@ -86,6 +87,13 @@ export async function initCommand(parsed: Parsed): Promise<number> {
           `\n${theme.meta('--fix cannot repair a seat-identity problem: both remedies change who this folder is, or invalidate someone’s credential. Run the command named above.')}\n`,
         );
         return code;
+      }
+      // The traced key (lane 01M3Q4Y8NG): agent_key holds the seat credential. Local and headless —
+      // restore the team key, then re-check, so any other drift still gets its own repair named.
+      if (repair === 'agent-key') {
+        const fixed = repairTracedKey(process.cwd());
+        process.stdout.write(`\n${theme.meta(fixed.line)}\n\n`);
+        return fixed.code === 0 ? runInitDoctor(false) : fixed.code;
       }
       if (repair === 'wire') {
         process.stdout.write(
