@@ -395,12 +395,16 @@ describe('serviceCommand', () => {
     over: {
       dirty?: string;
       buildStatus?: number;
+      /** Per-build statuses, in order (the refresh build, then the rollback build); wins over
+       *  `buildStatus`. */
+      buildStatuses?: number[];
       before?: string;
       after?: string;
       installStatus?: number;
     } = {},
   ): Runner {
     let head = 0;
+    let builds = 0;
     return (cmd, args) => {
       calls.push({ cmd, args });
       if (cmd === 'git') {
@@ -419,7 +423,11 @@ describe('serviceCommand', () => {
       if (cmd === 'pnpm')
         return args.includes('install')
           ? { status: over.installStatus ?? 0, stdout: '', stderr: 'install boom' }
-          : { status: over.buildStatus ?? 0, stdout: '', stderr: 'build boom' };
+          : {
+              status: over.buildStatuses?.[builds++] ?? over.buildStatus ?? 0,
+              stdout: '',
+              stderr: 'build boom',
+            };
       return { status: 0, stdout: '', stderr: '' }; // launchctl (restart)
     };
   }
@@ -990,6 +998,56 @@ describe('serviceCommand', () => {
       }),
     ).rejects.toThrow(/build failed/);
     expect(calls.some((x) => x.cmd === 'launchctl')).toBe(false); // daemon left running old code
+  });
+
+  // ADR 472. Measured 2026-09-28: the refresh to 66ed2df built protocol + server, then failed on
+  // web, leaving cli at the previous commit importing an export the new protocol no longer had —
+  // `musterd` crashed machine-wide and every hook went silently dead.
+  it('refresh leaves the web package out of the daemon build (the daemon serves the published bundle)', async () => {
+    const c = ctx(refreshRunner());
+    await capture(() =>
+      serviceCommand(parseArgs(['refresh', '--force']), {
+        platform: 'darwin',
+        ctx: c,
+        health: async () => ({ connections: 0 }),
+      }),
+    );
+    const build = calls.find((x) => x.cmd === 'pnpm' && x.args.includes('build'));
+    expect(build?.args).toEqual(['--dir', '/repo', '-r', '--filter', '!@musterd/web', 'build']);
+  });
+
+  it('refresh rolls back to the previous commit and rebuilds it when the build fails', async () => {
+    const c = ctx(refreshRunner({ buildStatuses: [1, 0], before: 'aaa111', after: 'bbb222' }));
+    await expect(
+      serviceCommand(parseArgs(['refresh', '--force']), {
+        platform: 'darwin',
+        ctx: c,
+        health: async () => ({ connections: 0 }),
+      }),
+    ).rejects.toThrow(/build failed at bbb222.*rolled back to aaa111 and rebuilt it/s);
+    const failed = calls.findIndex((x) => x.cmd === 'pnpm' && x.args.includes('build'));
+    const back = calls.findIndex(
+      (x, i) =>
+        i > failed && x.cmd === 'git' && x.args.join(' ').includes('switch --detach aaa111'),
+    );
+    expect(back).toBeGreaterThan(failed);
+    const rebuilt = calls.findIndex(
+      (x, i) => i > back && x.cmd === 'pnpm' && x.args.includes('build'),
+    );
+    expect(rebuilt).toBeGreaterThan(back);
+    expect(calls.some((x) => x.cmd === 'launchctl')).toBe(false);
+  });
+
+  it('refresh says the runtime may be mixed when the rollback build fails too', async () => {
+    const c = ctx(refreshRunner({ buildStatuses: [1, 1], before: 'aaa111', after: 'bbb222' }));
+    await expect(
+      serviceCommand(parseArgs(['refresh', '--force']), {
+        platform: 'darwin',
+        ctx: c,
+        health: async () => ({ connections: 0 }),
+      }),
+    ).rejects.toThrow(/rebuilding aaa111 failed too.*may not start/s);
+    expect(calls.some((x) => x.cmd === 'launchctl')).toBe(false);
   });
 
   it('uninstall removes the plist', async () => {
