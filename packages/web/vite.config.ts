@@ -117,7 +117,11 @@ export default defineConfig(({ command }) => {
       // crawl's own localhost server into a failed build. Under machine load (a live stream encode,
       // 2026-07-24) that killed `service refresh` mid-flight — and a transient build failure also
       // strands the auto-refresher, whose debounce skips the failed tip until the NEXT commit lands.
-      // Three retries a second apart absorb a busy machine.
+      // "Three retries a second apart absorb a busy machine" was the claim here, and it was FALSE
+      // (read 2026-09-29): the plugin re-queues a failed page through addCrawlPageTask, which returns
+      // at once for a path it has already seen, so no retry is ever requested. The retry that
+      // actually happens is scripts/prerender-diagnostics.ts's `withConnectRetry`, installed above
+      // for a request that threw. This setting still buys one thing: the `retrying:` log line.
       //
       // THE REST OF THAT COMMENT USED TO SAY "a page that fails four times is a real bug and still
       // fails the build (failOnError stays default-true)", AND IT WAS FALSE. Measured 2026-09-21 on
