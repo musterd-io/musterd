@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -14,6 +14,8 @@ import {
   buildTailEvent,
   readTailCursor,
   readTranscriptDelta,
+  TAIL_LOCK_FILE,
+  TAIL_LOCK_STALE_MS,
   TAIL_SESSION_CAP,
   tailTranscript,
   transcriptPathFor,
@@ -212,6 +214,44 @@ describe('tailTranscript', () => {
     vi.mocked(HttpClient.prototype.postTraceEvents).mockResolvedValue({ accepted: 1 });
     expect(await run()).toBe(true);
     expect(readTailCursor(dir, digest)?.offset).toBeGreaterThan(0);
+  });
+
+  it('waits out a post slower than the per-tool-call budget, so a stored delta is not re-posted', async () => {
+    // Codex 0cd68449 (2026-09-28): one 256-event chunk stored 8× — each post landed after the
+    // 1.5s hook budget, read as failed, cursor held, next hook re-posted the same span.
+    vi.useFakeTimers();
+    try {
+      vi.mocked(HttpClient.prototype.postTraceEvents).mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve({ accepted: 2 }), 3_000)),
+      );
+      writeFileSync(transcript, claudeLine('m1', { type: 'thinking', thinking: 'x' }));
+      const landed = run();
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(await landed).toBe(true);
+      expect(readTailCursor(dir, digest)?.offset).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('two hooks tailing one session at once post its delta once', async () => {
+    // Codex post-tool-use + end firing together read the same cursor before either advanced it.
+    writeFileSync(transcript, claudeLine('m1', { type: 'thinking', thinking: 'x' }));
+    await Promise.all([run(), run()]);
+    expect(posted()).toHaveLength(1);
+    // The lock is released: the next hook reads what appended since.
+    appendFileSync(transcript, claudeLine('m2', { type: 'text', text: 'y' }));
+    expect(await run()).toBe(true);
+    expect(posted()).toHaveLength(2);
+  });
+
+  it('breaks a lock left by a hook that died holding it', async () => {
+    writeFileSync(join(dir, '.musterd', TAIL_LOCK_FILE), '');
+    const old = (Date.now() - TAIL_LOCK_STALE_MS - 1_000) / 1000;
+    utimesSync(join(dir, '.musterd', TAIL_LOCK_FILE), old, old);
+    writeFileSync(transcript, claudeLine('m1', { type: 'thinking', thinking: 'x' }));
+    expect(await run()).toBe(true);
+    expect(posted()).toHaveLength(1);
   });
 
   it('downgrades on a truncated transcript: marker event, cursor flag, then structural-only', async () => {

@@ -1,4 +1,12 @@
-import { closeSync, openSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  openSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -71,6 +79,42 @@ export const TAIL_SESSION_CAP = 16;
  *  hundred KiB); this bound is for the catch-up read of a session that predates the tail. What lies
  *  past it is read by the following hooks, `offset` advancing each time. */
 export const TAIL_MAX_DELTA_BYTES = 16 * 1024 * 1024;
+
+/** A tail's post budget. Not the per-tool-call `TRACE_POST_BUDGET_MS`: the tail runs at turn
+ *  or session end, and a post that lands after the budget reads as failed — the cursor holds and the
+ *  next hook re-posts the whole delta (codex 0cd68449, 2026-09-28: one 256-event chunk stored 8×). */
+export const TAIL_POST_BUDGET_MS = 10_000;
+
+/** `.musterd/<this>` — held (O_EXCL) while a hook tails, so two hooks firing together (codex
+ *  post-tool-use + end, a Cursor IDE's doubled SessionEnd) cannot both read one cursor and post the
+ *  same delta. A hook that finds it held skips: the holder posts the delta, the next hook catches up. */
+export const TAIL_LOCK_FILE = 'trace-tail.lock';
+
+/** A lock older than this was left by a hook that died holding it, and is broken. Far longer than
+ *  a catch-up read posting chunk after chunk takes, so a live holder is not broken in practice. */
+export const TAIL_LOCK_STALE_MS = 5 * 60_000;
+
+function acquireTailLock(dir: string): (() => void) | null {
+  const path = join(dir, '.musterd', TAIL_LOCK_FILE);
+  const take = (): boolean => {
+    try {
+      closeSync(openSync(path, 'wx'));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (!take()) {
+    try {
+      if (Date.now() - statSync(path).mtimeMs <= TAIL_LOCK_STALE_MS) return null;
+      rmSync(path, { force: true });
+    } catch {
+      return null;
+    }
+    if (!take()) return null;
+  }
+  return () => rmSync(path, { force: true });
+}
 
 export function readTailCursor(dir: string, digest: string): TailCursor | undefined {
   return readTailFile(dir).sessions[digest];
@@ -246,61 +290,76 @@ export async function tailTranscript(opts: {
     const parse = transcriptParserFor(opts.harness);
     if (!parse) return false;
     const digest = sessionDigest(binding.agent_key, opts.sessionId);
-    const cursor = readTailCursor(opts.dir, digest);
-    if (cursor?.downgraded) return false;
-    const offset = cursor && cursor.path === opts.transcriptPath ? cursor.offset : 0;
-
-    const http = traceClient(binding, opts.dir);
-    if (!http) return false;
-    const post = (events: readonly TraceEvent[]): Promise<boolean> =>
-      emitTraceEvents(http, binding.team, events, undefined, (mode) =>
-        writeTraceContentMode(opts.dir, mode),
-      );
-
-    // A file shorter than the cursor is not append-only any more — the parser's ground assumption
-    // is gone, so the session downgrades rather than guess at what a re-read would duplicate.
-    let size: number;
+    const release = acquireTailLock(opts.dir);
+    if (!release) return false;
     try {
-      size = statSync(opts.transcriptPath).size;
-    } catch {
-      return false; // transient: transcript not on disk yet (SessionStart names it early)
+      return await tailLocked(opts, binding, parse, digest);
+    } finally {
+      release();
     }
-    if (size < offset) {
-      return await downgrade(opts, digest, 'transcript_truncated', post);
-    }
-
-    const delta = readTranscriptDelta(opts.transcriptPath, offset);
-    if (delta === null) return false;
-    if (delta.lines.length === 0) return true;
-
-    let records: TranscriptRecord[];
-    try {
-      records = parse(delta.lines);
-    } catch {
-      // The parsers are tolerant by construction; a throw is a defect, and the honest reading of
-      // one is "this format is beyond this parser" — the downgrade contract, not a silent retry.
-      return await downgrade(opts, digest, 'parse_failure', post);
-    }
-
-    const { allLanded, events } = await postTailRecords(records, {
-      binding,
-      dir: opts.dir,
-      harness: opts.harness,
-      digest,
-      post,
-    });
-    // Advance only when everything landed — a dropped delta is re-read by the next hook.
-    if (allLanded || events === 0) {
-      writeTailCursor(opts.dir, digest, {
-        path: opts.transcriptPath,
-        offset: delta.nextOffset,
-        updated_at: Date.now(),
-      });
-    }
-    return allLanded && events > 0;
   } catch {
     return false;
   }
+}
+
+async function tailLocked(
+  opts: { dir: string; harness: string; transcriptPath: string },
+  binding: Binding,
+  parse: (lines: readonly string[]) => TranscriptRecord[],
+  digest: string,
+): Promise<boolean> {
+  const cursor = readTailCursor(opts.dir, digest);
+  if (cursor?.downgraded) return false;
+  const offset = cursor && cursor.path === opts.transcriptPath ? cursor.offset : 0;
+
+  const http = traceClient(binding, opts.dir);
+  if (!http) return false;
+  const post = (events: readonly TraceEvent[]): Promise<boolean> =>
+    emitTraceEvents(http, binding.team, events, TAIL_POST_BUDGET_MS, (mode) =>
+      writeTraceContentMode(opts.dir, mode),
+    );
+
+  // A file shorter than the cursor is not append-only any more — the parser's ground assumption
+  // is gone, so the session downgrades rather than guess at what a re-read would duplicate.
+  let size: number;
+  try {
+    size = statSync(opts.transcriptPath).size;
+  } catch {
+    return false; // transient: transcript not on disk yet (SessionStart names it early)
+  }
+  if (size < offset) {
+    return await downgrade(opts, digest, 'transcript_truncated', post);
+  }
+
+  const delta = readTranscriptDelta(opts.transcriptPath, offset);
+  if (delta === null) return false;
+  if (delta.lines.length === 0) return true;
+
+  let records: TranscriptRecord[];
+  try {
+    records = parse(delta.lines);
+  } catch {
+    // The parsers are tolerant by construction; a throw is a defect, and the honest reading of
+    // one is "this format is beyond this parser" — the downgrade contract, not a silent retry.
+    return await downgrade(opts, digest, 'parse_failure', post);
+  }
+
+  const { allLanded, events } = await postTailRecords(records, {
+    binding,
+    dir: opts.dir,
+    harness: opts.harness,
+    digest,
+    post,
+  });
+  // Advance only when everything landed — a dropped delta is re-read by the next hook.
+  if (allLanded || events === 0) {
+    writeTailCursor(opts.dir, digest, {
+      path: opts.transcriptPath,
+      offset: delta.nextOffset,
+      updated_at: Date.now(),
+    });
+  }
+  return allLanded && events > 0;
 }
 
 /**
