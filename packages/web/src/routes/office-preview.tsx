@@ -4,10 +4,9 @@ import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
 import { MusterdWord } from '../brand/MusterdWord';
 import { memberColor } from '../live/format';
-import { OfficeOverlay } from '../live/OfficeOverlay';
+import { CaptionPill } from '../live/CaptionPill';
 import { isStill } from '../live/stillMode';
 import type { Caption } from '../live/captions';
-import type { RoomEntry } from '../live/workingOn';
 import type { OfficeData, OfficeEvent, OfficeHandle, OfficeNode } from '../live/office-scene';
 import { spritesFromUrl } from './broadcast';
 
@@ -265,72 +264,6 @@ const CAPTIONS: Caption[] = [
   { text: 'Ivy just walked in', who: 'Ivy', tone: 'presence' },
 ];
 
-/* The overlay's fixture reel — real-shaped titles (long, ADR-numbered, the kind that actually
-   truncate) plus the quiet cases, so the card is designed against the worst entry and not a tidy
-   one. `?reel=<n>` trims the list; `?reel=0` is the empty room. */
-const REEL: RoomEntry[] = [
-  {
-    name: 'Ivy',
-    kind: 'human',
-    color: memberColor('Ivy', 'human'),
-    posture: 'working',
-    title: 'ADR 169 inc 5 — spin-up/spin-down ephemeral cross-family reviewer',
-    source: 'lane',
-    laneState: 'active',
-    moreLanes: 0,
-  },
-  {
-    name: 'Bo',
-    kind: 'agent',
-    color: memberColor('Bo', 'agent'),
-    posture: 'working',
-    title: 'MCP RC 2026-07-28 readiness — seam canaries, version truth, ADR',
-    source: 'lane',
-    laneState: 'claimed',
-    moreLanes: 1,
-  },
-  {
-    name: 'Hana',
-    kind: 'agent',
-    color: memberColor('Hana', 'agent'),
-    posture: 'working',
-    title: 'Harness residency increment 6 — native backend reference row',
-    source: 'lane',
-    laneState: 'blocked',
-    moreLanes: 0,
-  },
-  {
-    name: 'Cy',
-    kind: 'human',
-    color: memberColor('Cy', 'human'),
-    posture: 'working',
-    title: 'wiring the firehose subscribe',
-    source: 'status',
-    laneState: null,
-    moreLanes: 0,
-  },
-  {
-    name: 'Dev',
-    kind: 'agent',
-    color: memberColor('Dev', 'agent'),
-    posture: 'active',
-    title: null,
-    source: null,
-    laneState: null,
-    moreLanes: 0,
-  },
-  {
-    name: 'Gus',
-    kind: 'human',
-    color: memberColor('Gus', 'human'),
-    posture: 'away',
-    title: null,
-    source: null,
-    laneState: null,
-    moreLanes: 0,
-  },
-];
-
 // This dev-fixture page reads its scenario from `?n=/?idle=/?stale=` query params, but its
 // useState initializers run during SSR prerender too — where `window` is undefined. On the
 // server there are no params anyway, so resolve to an empty query there.
@@ -382,13 +315,6 @@ function OfficePreviewPage() {
   const [dndSet] = useState<Set<string>>(() => {
     const raw = previewSearch().get('dnd');
     return raw ? new Set(raw.split(',').map((s) => s.trim())) : new Set(['Ivy']);
-  });
-
-  // `?reel=<0..6>` sizes the overlay's reel — 1 is the no-rail/no-nav case, 0 the empty room.
-  const [reelCount] = useState(() => {
-    const raw = previewSearch().get('reel');
-    const n = Number(raw);
-    return raw !== null && Number.isFinite(n) ? Math.max(0, Math.min(REEL.length, n)) : REEL.length;
   });
 
   /* `?team=<slug>` — the ambient seed's key material (E1). The room's idle life is a pure function
@@ -558,7 +484,7 @@ function OfficePreviewPage() {
          * Same shape as `?light=HH` above: a dev aid, inert unless explicitly present.
          */
         /* Via the shared reader, so this route and the three components that also honour the flag
-           (the scene's ambient scheduler, the overlay reel, the asks-strip) cannot drift apart on
+           (the scene's ambient scheduler, the asks-strip) cannot drift apart on
            what `?still` means — ADR 285. `search` above still serves `?quiet` and `?light`. */
         const still = isStill(window.location.search);
         if (still) {
@@ -860,23 +786,17 @@ function OfficePreviewPage() {
         >
           ☕
         </button>
+        {/* The narration pill, as the team column's header carries it on /live and /broadcast. */}
+        <CaptionPill
+          caption={caption}
+          color={caption ? memberColor(caption.who, kindOfMock(caption.who)) : undefined}
+        />
         <span className="lc__status lc__status--live">design preview</span>
       </header>
       <div className="lc__canvas lc__canvas--companion">
         <section className="lc-office">
           <div className="lc-gl-canvas" ref={hostRef} aria-hidden="true" />
           <div className="lc-gl-labels" ref={labelRef} aria-hidden="true" />
-          {/* The real shared chrome, not a mock of it — the overlay is scene furniture, so the design
-              fixture is where its cycle, truncation and empty state get looked at. */}
-          <OfficeOverlay
-            teamName="revive"
-            present={present.size}
-            entries={REEL.slice(0, reelCount)}
-            status="live"
-            caption={caption}
-            captionColor={caption ? memberColor(caption.who, kindOfMock(caption.who)) : undefined}
-            interactive
-          />
           <p className="lc-office__caption">office choreography preview</p>
         </section>
       </div>

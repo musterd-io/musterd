@@ -296,14 +296,14 @@ export interface OfficeOptions {
   interactiveLabels?: boolean;
   /**
    * Hybrid work cues under nameplates (spec §2). When false, always-on work lines are omitted — use
-   * the in-panel WorkStack fallback instead.
+   * the team column instead.
    */
   showWorkCues?: boolean;
   /**
    * The narration line (first-five-seconds §2) — one transient plain-language moment about what
    * just happened in the room. Called with the current caption, or null when it expires. The rail
    * used to be a floating lower-third element over the scene; it now reads as chrome, so the CHROME
-   * renders it (WorkStack's header) and the scene only says what the moment is (nick, 2026-08-31).
+   * renders it (the team column's header) and the scene only says what the moment is (nick, 2026-08-31).
    */
   onCaption?: (caption: Caption | null) => void;
   /** ADR 464: a plate under the pointer names its member (null on leave), so the team column can
@@ -407,7 +407,7 @@ export function mountOffice(
   let clock = 0;
   let placements = new Map<string, Placement>();
   // The caption rail (first-five-seconds §2): one transient plain-language line. The queue/hold
-  // logic lives here in the lazy chunk; the LINE renders in WorkStack's header via onCaption.
+  // logic lives here in the lazy chunk; the LINE renders in the team column's header via onCaption.
   let rail: CaptionRail = { current: null, shownAt: 0, queue: [] };
   let railTimer: ReturnType<typeof setInterval> | null = null;
   let onlineNames = new Set<string>();
@@ -522,7 +522,7 @@ export function mountOffice(
     }, 500);
   }
   function renderRail() {
-    // The line is chrome now, not scene DOM — hand it out and let WorkStack's header carry it.
+    // The line is chrome now, not scene DOM — hand it out and let the team column's header carry it.
     options.onCaption?.(rail.current);
     if (rail.current === null && rail.queue.length === 0) {
       if (railTimer) clearInterval(railTimer);

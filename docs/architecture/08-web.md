@@ -90,6 +90,9 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   (`SeatDetail`, exported from `live/RosterPanel.tsx`): posture chip with offline reason
   (ADR 138/141), account-status exceptions and capability deviations (ADR 070), residency (ADR 131),
   and the per-seat `trace` expander (ADR 445). Collapsed, it is a rail of avatars with logo pips.
+  `/broadcast` mounts the same column `still` beside the room, with the headline ticker under it
+  (ADR 464 lane 5): no hover, no expanding, no operator notes, sized off the 16:9 stage rather than
+  the window. The overlay reel and the floating work stack it replaced are gone.
 - **Ask banner** (`live/AsksStrip.tsx`, words from `live/askPhrase.ts`) — the top of the office
   (ADR 464 §6): "✋ ryder is asking nick: *question* · holding until answered · 4:12", Approve / Deny
   inline for an answerer, "+N more waiting" opens the sheet, a settled outcome for ~6s
@@ -166,7 +169,6 @@ live/
   TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type; click expands to `SeatDetail`
   teamCards.ts                  // roster + lane board + goals → ordered team cards in plain words (pure, node-tested)
   modelBadge.ts                 // presence → provider + readable model label; observed / declared / unknown / human / service — never a guess
-  broadcastChrome.ts            // one lazy chunk for the /broadcast-only overlay + work stack, off /live's eager graph
   TraceTimeline.tsx             // the per-seat trace timeline (ADR 445 inc 4b): pure TraceTimeline + default SeatTracePanel (fetch); a lazy chunk, never on /live's eager graph
   SeedsTray.tsx                 // read-only active/history Seed drawer; promoted history → focused Lane
   OfficeScene.tsx               // React wrapper: mounts the scene, feeds it envelopes → emit

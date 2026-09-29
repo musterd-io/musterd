@@ -934,6 +934,18 @@ Measured + 15%, following ADR 313. A loosening, approved by nick.
 The chunk is the join-page copy spec's strings verbatim plus the fragment/room-code helpers, so there is
 nothing to trim or delete; lazy-loading cannot move total (ADR 183); a re-baseline would loosen. New
 ceiling is measured + ~0.7 KB CI gzip delta + ~1.2%, per precedent.
+## 2026-09-29 — /broadcast adopts the team column + ticker; the overlay reel and work stack retire (ADR 464 lane 5)
+
+No budget moves. Deletion repays: `OfficeOverlay.tsx`, `WorkStack.tsx`, `broadcastChrome.ts` and
+their CSS (~550 lines of `Live.css`) are gone, and `/broadcast` now mounts `TeamColumn` (`still`)
+and `Ticker`, which `/live` already ships.
+
+| | before (as recorded after lane 4, not re-measured on 73b4af1c) | after |
+| --- | --- | --- |
+| total JS gzip | 260.0 KiB | 257.1 KiB (44 chunks) |
+| initial JS gzip (/live) | 136.0 KiB | 134.9 KiB |
+| live CSS gzip | 19.4 KiB | 17.7 KiB |
+
 ## 2026-09-29 — `initialJsGzipBytes` 139,500 → 141,700: the ask banner and the walk tags (ADR 464 lanes 3–4)
 
 Measured with Node zlib over `/live`'s modulepreload closure in `packages/web/dist/client`, as the

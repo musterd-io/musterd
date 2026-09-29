@@ -34,7 +34,7 @@
   --lc-accent-bright: var(--mustard-500, #e1ad01);
   --lc-success: #2f9e6a;
   --lc-danger: #d1503f;
-  /* Split for the same reason --lc-ov-accent is (see the overlay block): one amber cannot do both
+  /* Split for the same reason the retired broadcast overlay's accent was: one amber cannot do both
      jobs on paper. The fill is a DOT — a non-text mark whose job is to be seen as a colour, where
      1.0–1.4:1 against paper is the point rather than a failure. Text is not exempt, so it gets its
      own value. Before this pair existed --lc-warn was defined NOWHERE and its inline fallback was
@@ -57,9 +57,8 @@
      collide over the desks at twenty seats — see the note above `.lc-gl-label__plate`. It stays, and
      it stays documented as a decision so nobody "tidies" it into the scale later.
 
-     DEFINED ON `.lc`, not on the paper-set block below, and that is not tidiness. The workstack and
-     the caption rail are NOT inside `.lc-ov` / `.lc-gl-labels` — `.lc-office__work .lc-workstack`
-     redeclares the whole paper set locally for exactly that reason. Scoped with the paper set, three
+     DEFINED ON `.lc`, not on the paper-set block below, and that is not tidiness. The caption
+     pill and the team column are NOT inside `.lc-gl-labels`, the paper set's scope. Scoped with the paper set, three
      of these six tokens resolved to nothing on the two surfaces that most needed them, and an
      unresolved `font-size: var(…)` is not an error: the declaration is simply dropped and the element
      silently inherits. Caught here by checking where the elements actually mount rather than by
@@ -100,8 +99,8 @@
    * i.e. from invisible to merely failing. The fills are correct and are NOT touched here; the text
    * moves to these siblings, so a badge keeps its exact colour identity and gains a readable label.
    *
-   * Same split, same reason, as --lc-warn / --lc-warn-ink and --lc-ov-accent / --lc-ov-accent-ink.
-   * Reaching for a fill as a text colour is the mistake all three pairs exist to prevent.
+   * Same split, same reason, as --lc-warn / --lc-warn-ink.
+   * Reaching for a fill as a text colour is the mistake both pairs exist to prevent.
    *
    * Derived by scaling each fill in LINEAR LIGHT — the same pigment under less light — so hue and
    * saturation are preserved exactly and a green badge still reads green. Each clears 4.5:1 against
@@ -1315,89 +1314,6 @@
   overflow: hidden;
 }
 
-/* ─── work stack — floats over the office floor (bottom of the stage) ─────────────────────────── */
-.lc-office__work {
-  position: absolute;
-  left: var(--lc-4);
-  right: auto;
-  bottom: var(--lc-4);
-  z-index: var(--lc-z-overlay);
-  width: min(420px, calc(100% - 120px));
-  max-width: 48%;
-  pointer-events: none;
-  container-type: inline-size;
-}
-.lc-office__work .lc-workstack {
-  pointer-events: auto;
-  /* Inherit the scene-chrome paper set so the tray matches nameplates / speech bubbles */
-  --lc-paper: #f3e2c3;
-  --lc-paper-2: #e9d3ab;
-  --lc-paper-ink: #2b1f13;
-  --lc-paper-dim: rgba(43, 31, 19, 0.72);
-  --lc-paper-rim: rgba(120, 78, 42, 0.42);
-  --lc-paper-drop: rgba(58, 34, 12, 0.38);
-  --lc-paper-sheen: rgba(255, 252, 245, 0.55);
-  padding: 0;
-  max-height: min(32vh, 220px);
-  width: 100%;
-}
-.lc-workstack {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  display: flex;
-}
-.lc-workstack__frame {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 7px 9px 8px;
-  border-radius: 12px;
-  background: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--lc-paper) 94%, var(--lc-accent)) 0%,
-    color-mix(in srgb, var(--lc-paper) 91%, transparent) 48%,
-    color-mix(in srgb, var(--lc-paper-2) 90%, transparent) 100%
-  );
-  border: 1px solid color-mix(in srgb, var(--lc-accent) 30%, var(--lc-paper-rim));
-  box-shadow:
-    inset 0 1px 0 var(--lc-paper-sheen),
-    inset 0 0 22px -10px color-mix(in srgb, var(--lc-accent) 24%, transparent),
-    0 3px 10px -2px var(--lc-paper-drop),
-    0 0 20px -6px color-mix(in srgb, var(--lc-accent) 30%, transparent);
-}
-.lc-workstack__head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 2px 5px;
-  border-bottom: 1px solid color-mix(in srgb, var(--lc-accent) 18%, transparent);
-  margin-bottom: 5px;
-}
-.lc-workstack__mark {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--lc-accent-bright, #e1ad01);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--lc-accent) 70%, transparent);
-  flex: 0 0 auto;
-}
-.lc-workstack__title-label {
-  font-family: var(--font-mono, monospace);
-  font-size: var(--lc-type-meta);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  /* Measured on the panel's own composited paper (#f1dfbd), which is a gradient — only reachable by
-     sampling the painted pixel. #8a6508 read 4.06 there. */
-  color: #734a05;
-}
-/* The narration line (first-five-seconds §2) in the header, beside the title — it replaced a
-   floating lower-third element over the room (nick, 2026-08-31). One line, truncated, quiet:
-   the room's own sentence, not a headline. Fades on change; reduced-motion needs no branch
-   because the fade is a plain opacity transition. */
 /* ── the narration pill (CaptionPill.tsx) ───────────────────────────────────────────────────────
    One transient sentence about a real moment. It used to be flat grey italic, which made an
    acceptance and an urgent ask look identical (nick, 2026-08-31). Now: a dot in the actor's own
@@ -1462,9 +1378,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.lc-workstack__caption {
-  flex: 1 1 auto;
-}
 @keyframes lc-caption-in {
   from {
     opacity: 0;
@@ -1480,93 +1393,6 @@
     animation: none;
   }
 }
-.lc-workstack__count,
-.lc-workstack__quiet {
-  margin-left: auto;
-  font-family: var(--font-mono, monospace);
-  font-size: var(--lc-type-meta);
-  font-weight: 500;
-  color: var(--lc-paper-dim, rgba(43, 31, 19, 0.72));
-}
-.lc-workstack__list {
-  flex: 1;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.lc-workstack__row {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  min-width: 0;
-  padding: 4px 7px 4px 6px;
-  border-radius: 7px;
-  font-family: var(--font-mono, monospace);
-  font-size: var(--lc-type-aside);
-  color: var(--lc-paper-ink);
-  background: color-mix(in srgb, var(--lc-paper) 58%, transparent);
-  transition: background var(--lc-dur-1) ease;
-}
-.lc-workstack__row:hover {
-  background: color-mix(in srgb, var(--lc-accent) 12%, var(--lc-paper));
-}
-.lc-workstack__row.is-blocked {
-  background: color-mix(in srgb, var(--lc-danger) 8%, var(--lc-paper));
-}
-.lc-workstack__dot {
-  flex: 0 0 auto;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  align-self: center;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--lc-paper) 80%, transparent);
-}
-.lc-workstack__name {
-  flex: 0 0 auto;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-.lc-workstack__task {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
-  color: color-mix(in srgb, var(--lc-paper-ink) 78%, transparent);
-}
-.lc-workstack__state,
-.lc-workstack__said,
-.lc-workstack__more {
-  flex: 0 0 auto;
-  font-size: var(--lc-type-meta);
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  padding: 1px 6px;
-  border-radius: 999px;
-  /* Measured on the pill's own composited paper (#e6c799 over the office panel), not on --lc-paper:
-     #8a6508 read 3.29 there. The contrast gate's connected phase is what found it — a static sweep
-     never reaches this row. */
-  color: #734a05;
-  background: color-mix(in srgb, var(--lc-accent) 18%, transparent);
-}
-.lc-workstack__row.is-blocked .lc-workstack__state {
-  color: color-mix(in srgb, var(--lc-danger-ink) 85%, #3a2512);
-  background: color-mix(in srgb, var(--lc-danger) 14%, transparent);
-}
-.lc-workstack__said {
-  color: var(--lc-paper-dim, rgba(43, 31, 19, 0.72));
-  background: color-mix(in srgb, var(--lc-paper-ink) 8%, transparent);
-  font-weight: 500;
-}
-
-/* ─── (retired) under-room band for work — now an in-stage overlay (.lc-office__work) ─────────── */
 
 .lc-gl-canvas {
   position: absolute;
@@ -1589,7 +1415,6 @@
      near-dark, which no theme token knows about.
    Paper survives both: in daylight it reads as paper on a desk, after dark as something lamplit.
    A surface that tracked either signal would glare at midnight or dissolve at noon. */
-.lc-ov,
 .lc-gl-labels {
   /* One shade deeper than the first cut (nick, 2026-07-28: "slightly darker") — toward toast, not
      toward grey. Every ink below was RE-measured on this stock; three moved to hold AA. */
@@ -2120,7 +1945,7 @@
   text-transform: lowercase;
   color: color-mix(in srgb, var(--lc-paper-ink) 78%, transparent);
 }
-/* Work cues no longer ride the nameplate — see .lc-workstack. Keep class inert if hybrid is re-enabled. */
+/* Work cues no longer ride the nameplate — see the team column. Keep class inert if hybrid is re-enabled. */
 .lc-gl-label__work {
   display: none;
 }
@@ -3093,9 +2918,8 @@
   }
 }
 
-/* Retained for /office-preview's own caption. The live office no longer renders one: the shared
-   OfficeOverlay owns that corner, and the roster rail already names every member and their kind.
-   Parked on the RIGHT because the overlay card now occupies the left one on the fixture too. */
+/* Retained for /office-preview's own caption. The live office no longer renders one: the team
+   column already names every member and their kind. */
 .lc-office__caption {
   position: absolute;
   right: var(--lc-8);
@@ -6350,8 +6174,7 @@
  * each. So the rail needs ~850 whole; ~696 once the gist is out; ~476 once the counts and link go
  * too. Each step fires just below the width at which the previous arrangement stopped fitting.
  *
- * Precedent for the mechanism is two rules down the same file (`.lc-ov`, `@container (max-width:
- * 420px)`) and in `.lc-office__work` — both containers for the same reason, both inside this panel. */
+ * A size container because the rail's room is decided by the panel, not the window. */
 @container asks (max-width: 850px) {
   .lc-asks__q {
     display: none;
@@ -6654,469 +6477,6 @@
    change hue. */
 .lc-ask__note--lapsed {
   color: var(--lc-muted);
-}
-
-/* ─── the office overlay (shared by /live and /broadcast) ─────────────────
-   Broadcast chrome, not dashboard chrome: this sits over a rendered canvas that a stranger may land
-   on mid-stream, so its whole job is to answer "what am I looking at" in about three seconds — the
-   team, that it is live, who is in the room, and which lane is moving.
-
-   It is a **lower-third card**, not a scrim. The previous version darkened the whole bottom of the
-   room to buy contrast for four lines of text, which cost the rug, the lounge, and anyone walking
-   through frame. A contained card carries its own contrast in a fifth of the area, so the office is
-   whole again — and it can hold *more* lanes than the strap did, because it shows one at a time.
-
-   Four rules hold it together:
-   · The card is the only opaque thing. No backdrop-filter anywhere in this block — a blur here is a
-     per-frame GPU readback over a 1920×1080 canvas encoded at 30fps, forever, and a flat translucent
-     fill earns the same contrast for nothing.
-   · Its inks are theme-independent. The card is dark in both themes (it is scene chrome, never page
-     surface), so --text/--text-dim — which flip under data-theme="light" — would go invisible here.
-     The cream matches the scene's own dark-theme --ink.
-   · Motion is transform/opacity only. Nothing in here repaints: the sweep is a scaleX, the crossfade
-     is opacity, the one infinite loop is a 6px ring on a 6px dot.
-   · Colour is spent in exactly three places — the mark, the owner's own identity hue, and the rail.
-     Everything else is cream at four opacities. */
-
-.lc-ov {
-  position: absolute;
-  inset: auto 0 0 0;
-  z-index: var(--lc-z-overlay);
-  pointer-events: none;
-  container-type: inline-size;
-  /* The card's own accent set, pinned in both themes — but to the INK-ON-CREAM values, not the dusk
-     ones. This flipped when the card became paper: the dusk set (#f4cf52, #f59e0b) was chosen to
-     glow on a near-black fill, and on card stock those same values wash out to ~2.4:1. Same
-     principle as before, opposite answer — scene chrome is its own lighting condition, and its
-     lighting condition changed. */
-  --lc-ov-live: #a52d20; /* 4.80:1 on the darker stock */
-  --lc-ov-warn: #745005; /* 4.97:1 — the `blocked` word, so it is held to a text ratio */
-  /* Split, because one mustard cannot serve both jobs on paper: the rail is a non-text UI fill
-     (3:1 suffices and the brighter value reads as a progress bar), while `+N` is text and is not
-     exempt. Measured on --lc-paper-2. */
-  --lc-ov-accent: #a8790a; /* 2.96:1 — FILLS ONLY (the rail sweep) */
-  --lc-ov-accent-ink: #745005; /* 4.97:1 — anything that is read as text */
-  --lc-ov-mark: #c9970b;
-}
-
-/* The card sizes and insets itself in container units — `cqw` resolves against an ANCESTOR container,
-   so `.lc-ov` cannot use its own. A width in `cqw` (not `ch`) is deliberate: the card must not resize
-   as titles change length, or every cycle would twitch the frame. */
-.lc-ov__card {
-  --lc-ov-inset: clamp(12px, 1.15cqw, 28px);
-  position: relative;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: clamp(5px, 0.34cqw, 10px);
-  overflow: hidden;
-  width: clamp(288px, 40cqw, 560px);
-  max-width: calc(100% - var(--lc-ov-inset) * 2);
-  margin: var(--lc-ov-inset);
-  /* The extra bottom padding is the rail's lane — the text must not sit on top of it. */
-  padding: clamp(10px, 0.8cqw, 19px) clamp(13px, 1.05cqw, 24px) clamp(14px, 1.1cqw, 25px);
-  border-radius: clamp(11px, 0.8cqw, 16px);
-  background: linear-gradient(180deg, var(--lc-paper) 0%, var(--lc-paper-2) 100%);
-  /* A drop shadow seats it on the floor; the hairline is the card's own cut edge. The card is the
-     largest paper object in the room and had the softest edge of the three, which is why it read as
-     a pale rectangle *of* the floor rather than an object lying on it: a long soft shadow alone
-     gives a surface height but never a boundary. So — a defined rim, a tighter pool of contact
-     shade under the near edge, and one lit pixel along the top. */
-  box-shadow:
-    inset 0 0 0 1px var(--lc-paper-rim),
-    inset 0 1px 0 var(--lc-paper-sheen),
-    0 3px 8px -3px var(--lc-paper-seat),
-    0 20px 44px -20px var(--lc-paper-drop);
-  animation: lc-ov-card-in var(--lc-dur-4) var(--lc-ease-out) both;
-}
-
-.lc-ov__id {
-  display: flex;
-  align-items: center;
-  gap: clamp(7px, 0.5cqw, 12px);
-  font-family: var(--font-display);
-}
-
-/* The musterd mark — a stranger's only brand anchor on a stream with no page around it. */
-.lc-ov__mark {
-  flex: none;
-  width: clamp(7px, 0.42cqw, 10px);
-  height: clamp(7px, 0.42cqw, 10px);
-  border-radius: 3px;
-  background: var(--lc-ov-mark);
-}
-
-.lc-ov__team {
-  color: var(--lc-paper-ink);
-  font-size: clamp(13px, 0.95cqw, 21px);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.lc-ov__sig {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--lc-paper-muted);
-  font-family: var(--font-mono);
-  font-size: clamp(8px, 0.5cqw, 11px);
-  letter-spacing: 0.16em;
-}
-
-.lc-ov__sig.is-live {
-  color: var(--lc-paper-dim);
-}
-
-.lc-ov__dot {
-  position: relative;
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--zinc-500);
-}
-
-.lc-ov__sig.is-live .lc-ov__dot {
-  background: var(--lc-ov-live);
-}
-
-/* One slow breath on one dot — the whole motion budget for the resting state, and the only loop in
-   the overlay. It is a scaling ring, not an animated box-shadow: spread animation repaints every
-   frame, a transform/opacity pseudo-element composites. */
-.lc-ov__sig.is-live .lc-ov__dot::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 1px solid var(--lc-ov-live);
-  animation: lc-ov-breathe 2.4s var(--lc-ease-out) infinite;
-}
-
-@keyframes lc-ov-breathe {
-  from {
-    opacity: 0.55;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(3.4);
-  }
-}
-
-/* Pushed to the far end: the head row reads team-then-signal left to right, and the headcount is the
-   one fact that changes on its own, so it gets its own edge rather than jostling the wordmark. */
-.lc-ov__present {
-  margin-left: auto;
-  color: var(--lc-paper-muted);
-  font-family: var(--font-mono);
-  font-size: clamp(8px, 0.5cqw, 11px);
-  white-space: nowrap;
-}
-
-.lc-ov__present-unit {
-  opacity: 0.7;
-}
-
-/* ── steering ──
-   `/live` only. The card is a control there: wheel it, arrow it, or click the chevrons. `/broadcast`
-   never gets this class, so the stream keeps a card nothing can (or should) touch. */
-.lc-ov.is-interactive {
-  pointer-events: none; /* the empty strip beside the card still lets clicks reach the floor */
-}
-
-.lc-ov.is-interactive .lc-ov__card {
-  pointer-events: auto;
-  cursor: default;
-  transition:
-    box-shadow var(--lc-dur-2) var(--lc-ease-out),
-    transform var(--lc-dur-2) var(--lc-ease-out);
-}
-
-/* Rises a hair under the pointer — the whole "you can drive this" cue, at the cost of one transform. */
-.lc-ov.is-interactive .lc-ov__card:hover,
-.lc-ov.is-interactive .lc-ov__card:focus-visible {
-  transform: translateY(-2px);
-  box-shadow:
-    0 22px 50px -20px var(--lc-paper-cast),
-    inset 0 0 0 1px var(--lc-paper-edge-2);
-}
-
-.lc-ov.is-interactive .lc-ov__card:focus-visible {
-  outline: 2px solid var(--lc-ov-accent-ink);
-  outline-offset: 2px;
-}
-
-.lc-ov__nav {
-  display: flex;
-  align-items: center;
-  gap: clamp(2px, 0.15cqw, 5px);
-  margin-left: auto;
-}
-
-.lc-ov__step {
-  display: grid;
-  place-items: center;
-  width: clamp(18px, 1.25cqw, 26px);
-  height: clamp(18px, 1.25cqw, 26px);
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--lc-paper-dim);
-  font-family: var(--font-display);
-  /* The chevron glyph is small inside its em box, so it is sized and weighted up to read as a
-     control rather than punctuation. */
-  font-size: clamp(17px, 1.25cqw, 25px);
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    background-color var(--lc-dur-1) var(--lc-ease-out),
-    color var(--lc-dur-1) var(--lc-ease-out);
-}
-
-.lc-ov__step:hover {
-  background: color-mix(in srgb, var(--lc-paper-ink) 9%, transparent);
-  color: var(--lc-paper-ink);
-}
-
-.lc-ov__step:active {
-  background: color-mix(in srgb, var(--lc-paper-ink) 15%, transparent);
-}
-
-.lc-ov__step:focus-visible {
-  outline: 2px solid var(--lc-ov-accent-ink);
-  outline-offset: 1px;
-}
-
-/* Position, exactly — the rail shows it at a glance, this shows it when a glance is not enough
-   (twelve segments are hard to count; "4/12" never is). Tabular so stepping doesn't jiggle. */
-.lc-ov__count {
-  min-width: 4ch;
-  color: var(--lc-paper-dim);
-  font-family: var(--font-mono);
-  font-size: clamp(8px, 0.5cqw, 11px);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
-.lc-ov__count-of {
-  opacity: 0.62;
-}
-
-/* ── the lane on show ──
-   One lane at a time, seat tag then title — musterd's own unit of work, laid out the way it is
-   spoken. The node is keyed by lane id in the component, so this entrance plays on every change of
-   subject: the lift-and-fade IS how you know the card moved on. */
-/* The narration line on the broadcast card — the room's transient sentence, quieter than the
-   member reel above it (it replaced the floating lower-third rail, nick 2026-08-31). */
-.lc-ov__caption {
-  margin: 2px 0 0;
-  min-width: 0;
-}
-.lc-ov__now {
-  display: flex;
-  align-items: baseline;
-  gap: clamp(7px, 0.5cqw, 12px);
-  min-width: 0;
-  margin: 0;
-  animation: lc-ov-now-in var(--lc-dur-4) var(--lc-ease-out) both;
-}
-
-.lc-ov__who {
-  flex: none;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  max-width: 11ch;
-  overflow: hidden;
-  color: var(--lc-paper-dim);
-  font-family: var(--font-mono);
-  font-size: clamp(9px, 0.58cqw, 12px);
-  letter-spacing: 0.03em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* The owner's identity hue — the same value the floor paints their body with, so the eye travels
-   from this dot to that person. Falls back to the accent when the lane outlives its seat. */
-.lc-ov__seat {
-  flex: none;
-  align-self: center;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  /* The fill stays the member's EXACT `memberColor` — that identity match with their body on the
-     floor is the dot's whole job, so it is not darkened for contrast. The ring does that work
-     instead: same hue, deepened, so a 62%-lightness pastel still holds an edge on paper. */
-  background: var(--lc-ov-seat, var(--lc-ov-accent));
-  box-shadow: 0 0 0 1px
-    color-mix(in srgb, var(--lc-ov-seat, var(--lc-ov-accent)) 55%, var(--lc-paper-ink));
-}
-
-.lc-ov__now.is-blocked .lc-ov__seat {
-  background: var(--lc-ov-warn);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--lc-ov-warn) 55%, var(--lc-paper-ink));
-}
-
-/* Blocked is written as well as coloured — act meaning never rests on hue alone. */
-.lc-ov__flag {
-  flex: none;
-  color: var(--lc-ov-warn);
-  font-family: var(--font-mono);
-  font-size: clamp(9px, 0.55cqw, 11px);
-  letter-spacing: 0.04em;
-}
-
-/* `said` — this line is self-reported, not a claimed lane. Quiet, but never absent: the card must not
-   let an announcement pass as owned work. `+N` counts the member's further in-flight lanes. */
-.lc-ov__src,
-.lc-ov__more {
-  flex: none;
-  color: var(--lc-paper-muted);
-  font-family: var(--font-mono);
-  font-size: clamp(8px, 0.48cqw, 10px);
-  letter-spacing: 0.04em;
-}
-
-.lc-ov__more {
-  color: var(--lc-ov-accent-ink);
-}
-
-.lc-ov__title {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--lc-paper-ink);
-  font-family: var(--font-display);
-  font-size: clamp(12px, 0.82cqw, 18px);
-  font-weight: 500;
-  letter-spacing: -0.005em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* An empty board is a fact about the team, not a missing component — so it says so, in the room's
-   own voice, rather than collapsing the card to a lone wordmark. */
-.lc-ov__now.is-quiet .lc-ov__title {
-  color: var(--lc-paper-muted);
-  font-weight: 400;
-}
-
-/* ── the cycle rail ──
-   One segment per lane along the card's bottom edge, the live one sweeping out its dwell. It answers
-   the two questions an auto-rotating panel otherwise leaves open: how many are there, and when does
-   this change. Linear timing on purpose — an eased bar would misreport the time it has left. */
-.lc-ov__rail {
-  position: absolute;
-  /* Inset to the content gutter rather than run edge to edge: a bar that reaches the corners has to
-     be clipped by the radius, and a tapered segment reads as a rendering fault. Aligned with the
-     text above, it reads as that text's progress. */
-  inset: auto clamp(13px, 1.05cqw, 24px) clamp(6px, 0.4cqw, 9px) clamp(13px, 1.05cqw, 24px);
-  display: flex;
-  gap: 3px;
-  height: 3px;
-}
-
-/* 2px of 13%-ink track was invisible from a metre away — the rail answers "how many, and when does
-   this change", and a rail nobody can see answers neither. Half a pixel taller, with the unplayed
-   track, the played track and the live sweep each a clear step apart, so the three states read as
-   three states rather than one faint line. */
-.lc-ov__seg {
-  position: relative;
-  flex: 1 1 0;
-  overflow: hidden;
-  border-radius: 1.5px;
-  background: color-mix(in srgb, var(--lc-paper-ink) 24%, transparent);
-}
-
-.lc-ov__seg.is-past {
-  background: color-mix(in srgb, var(--lc-paper-ink) 46%, transparent);
-}
-
-.lc-ov__fill {
-  position: absolute;
-  inset: 0;
-  background: var(--lc-ov-accent);
-  /* The one moving thing on the card gets to glow a little — it is the only element here whose job
-     is to be noticed from across the room. */
-  box-shadow: 0 0 5px -1px color-mix(in srgb, var(--lc-ov-accent) 75%, transparent);
-  transform: scaleX(0);
-  transform-origin: left center;
-}
-
-.lc-ov__seg.is-live .lc-ov__fill {
-  animation-name: lc-ov-sweep;
-  animation-timing-function: linear;
-  animation-fill-mode: forwards;
-}
-
-/* Held by the viewer: the bar stops reporting a countdown that is not running and just marks the
-   place. A sweep that kept moving while the reel sat still would be a lie about what happens next. */
-.lc-ov__rail.is-paused .lc-ov__seg.is-live .lc-ov__fill {
-  animation: none;
-  transform: scaleX(1);
-}
-
-@keyframes lc-ov-sweep {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-
-@keyframes lc-ov-card-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes lc-ov-now-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* Narrow container (a collapsed-ish /live office column): the head row keeps team + signal, and the
-   headcount unit drops before the title does — the title is the reason the card exists. */
-@container (max-width: 420px) {
-  .lc-ov__present-unit {
-    display: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  /* The hover lift goes with the rest of the motion; the shadow change still reports the hover. */
-  .lc-ov.is-interactive .lc-ov__card {
-    transition: box-shadow var(--lc-dur-2) var(--lc-ease-out);
-  }
-  .lc-ov.is-interactive .lc-ov__card:hover,
-  .lc-ov.is-interactive .lc-ov__card:focus-visible {
-    transform: none;
-  }
-  .lc-ov__card,
-  .lc-ov__now,
-  .lc-ov__sig.is-live .lc-ov__dot::after {
-    animation: none;
-  }
-  /* The cycle still turns — it is content, not decoration — but the bar reports position instead of
-     animating: the live segment reads full the moment its lane arrives. */
-  .lc-ov__seg.is-live .lc-ov__fill {
-    animation: none;
-    transform: scaleX(1);
-  }
 }
 
 /* ── per-seat trace timeline (ADR 445 increment 4b) ─────────────────────────────────────
