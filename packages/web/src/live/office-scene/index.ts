@@ -929,18 +929,6 @@ export function mountOffice(
           wokenTag.textContent = 'woken';
           plate.appendChild(wokenTag);
         }
-        // The walk tag (ADR 464 §3.2): the verb over a walker, for exactly as long as their act
-        // walk is in flight. Read every rebuild from `walkTags` + the actor system, so an ambient
-        // stroll never wears one and a finished walk drops it on the next frame.
-        const walkVerb = walkTags.get(name);
-        if (walkVerb && actors.actWalkingFor(name)) {
-          const tag = document.createElement('span');
-          tag.className = 'lc-gl-label__walk';
-          tag.textContent = walkVerb;
-          plate.appendChild(tag);
-        } else if (walkVerb) {
-          walkTags.delete(name);
-        }
         if (node.service) {
           // A service seat has no model to attest (ADR 232 — it is pure code), so the provider
           // slot would render the unknown-"?" mark and read as a broken attestation. Say what it
@@ -1165,6 +1153,32 @@ export function mountOffice(
     asksSeeded = true;
   }
 
+  /**
+   * The walk tag (ADR 464 §3.2): the verb over a walker, for exactly as long as their act walk is
+   * in flight. Managed PER FRAME here rather than on a bake: a plate rebuilt only on bakes would
+   * gain the tag late and shed it late, and a plate whose width changes between two frames
+   * re-centres its name — which is what the contrast sweep photographed mid-shift. An ambient
+   * stroll never wears one; a finished walk loses it on the very next frame.
+   */
+  function syncWalkTags() {
+    for (const [name, el] of labels) {
+      const plate = el.querySelector('.lc-gl-label__plate');
+      if (!plate) continue;
+      const verb = walkTags.get(name);
+      const show = verb !== undefined && actors.actWalkingFor(name);
+      const tag = plate.querySelector('.lc-gl-label__walk');
+      if (show && !tag) {
+        const span = document.createElement('span');
+        span.className = 'lc-gl-label__walk';
+        span.textContent = verb;
+        plate.appendChild(span);
+      } else if (!show && tag) {
+        tag.remove();
+        if (verb !== undefined) walkTags.delete(name);
+      }
+    }
+  }
+
   /** Rest each card just above its human's plate (or the asker's, when the human has no plate). */
   function positionAskCards(placed: Map<string, { x: number; y: number }>) {
     const stacked = new Map<string, number>(); // cards already resting on this plate this frame
@@ -1186,6 +1200,7 @@ export function mountOffice(
 
   function positionLabels(headMap: Map<string, Pt>) {
     lastHeads = headMap;
+    syncWalkTags();
     const boxes: PlateBox[] = [];
     for (const name of labels.keys()) {
       const head = headMap.get(name);

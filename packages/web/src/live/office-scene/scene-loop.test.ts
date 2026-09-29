@@ -212,10 +212,11 @@ describe('motion means something (ADR 464, lane 4)', () => {
     expect(index).toContain("walkTags.set(ev.from, walkTag('help', null))");
     expect(index).toContain("walkTags.set(ev.from, walkTag('handoff', ev.to))");
     expect(index).toContain("walkTags.set(ev.from, walkTag('steer', ev.to))");
-    const plate = body('syncLabels');
-    expect(plate).toMatch(
-      /if \(walkVerb && actors\.actWalkingFor\(name\)\)[\s\S]*?'lc-gl-label__walk'/,
-    );
-    expect(plate).toContain('walkTags.delete(name)');
+    // Per frame, not per bake: a tag that arrived or left on a bake re-centred the plate between
+    // the sweep's measure and its shutter (found by the contrast gate on /office-preview).
+    const sync = body('syncWalkTags');
+    expect(sync).toMatch(/actors\.actWalkingFor\(name\)[\s\S]*?'lc-gl-label__walk'/);
+    expect(sync).toContain('walkTags.delete(name)');
+    expect(body('positionLabels')).toContain('syncWalkTags()');
   });
 });
