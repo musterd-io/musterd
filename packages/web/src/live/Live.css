@@ -5829,18 +5829,43 @@
   background: var(--lc-danger);
 }
 
-/* The one line. 30px of chrome, whatever is happening behind it. */
+/* The one line — the ask banner (ADR 464 §6): 34px of chrome, read from the back of a room. */
 .lc-asks__rail {
   display: flex;
   align-items: center;
   gap: var(--lc-4);
-  height: 30px;
+  height: 34px;
   padding: 0 var(--lc-3) 0 var(--lc-5);
-  font-size: 11.5px;
+  font-size: 13px;
   min-width: 0;
   /* Backstop: whatever the viewport does to the shrink chain, the rail stays one clean line and
      never spills past its own pill. */
   overflow: hidden;
+}
+.lc-asks__hand {
+  flex: none;
+  font-size: 15px;
+  line-height: 1;
+  animation: lc-asks-hand var(--lc-dur-5) var(--lc-ease-out) 1;
+}
+@keyframes lc-asks-hand {
+  from {
+    transform: translateY(6px) rotate(-12deg);
+    opacity: 0;
+  }
+}
+/* Settled: the verdict, said once, then the pill shrinks back (askPhrase SETTLED_MS). */
+.lc-asks--settled .lc-asks__lead {
+  cursor: default;
+}
+.lc-asks__outcome {
+  font-weight: 600;
+  color: var(--lc-success-ink);
+}
+/* Idle: a small quiet pill — the room has no open question. */
+.lc-asks--idle .lc-asks__rail {
+  height: 28px;
+  font-size: 11.5px;
 }
 .lc-asks__bell {
   width: 13px;
@@ -5921,7 +5946,7 @@
   background: none;
   padding: 0;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 13px;
   color: var(--lc-text);
   cursor: pointer;
   text-align: left;
@@ -5952,11 +5977,16 @@
   flex: none;
   font-weight: 650;
 }
-.lc-asks__gist {
+.lc-asks__q {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--lc-muted);
+  font-style: italic;
+  color: var(--lc-dim);
+}
+.lc-asks__clock {
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
 }
 /* Tier + clock sit inline on the rail; inside a card the clock is pushed right by margin auto. */
 .lc-asks__rail .lc-ask__clock {
@@ -6176,7 +6206,7 @@
  * Precedent for the mechanism is two rules down the same file (`.lc-ov`, `@container (max-width:
  * 420px)`) and in `.lc-office__work` — both containers for the same reason, both inside this panel. */
 @container asks (max-width: 850px) {
-  .lc-asks__gist {
+  .lc-asks__q {
     display: none;
   }
 }

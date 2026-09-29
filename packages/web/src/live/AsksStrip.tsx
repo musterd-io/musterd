@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { holdStateLine } from './holdState';
+import { askBanner } from './askPhrase';
 import type { Envelope, LaneBoard, MemberSummary } from '@musterd/protocol';
 import { askTierHolds } from '@musterd/protocol/wire';
 import {
@@ -52,6 +53,7 @@ export function AsksStrip({
   board = null,
   onOpenLane,
   liveIds = NO_LIVE_IDS,
+  onReveal = scrollToMessage,
 }: {
   envelopes: Envelope[];
   roster: MemberSummary[];
@@ -68,6 +70,9 @@ export function AsksStrip({
   onOpenLane?: (laneId: string) => void;
   /** Acts that arrived live over the socket, not in the backfill — the only ones the doorbell rings. */
   liveIds?: ReadonlySet<string>;
+  /** Show an act in the log. On /live the log is a drawer (ADR 464 lane 2), so the route opens it
+   *  first; the default is the bare reveal event, which is right wherever the stream is mounted. */
+  onReveal?: (id: string) => void;
 }) {
   // Answers this browser just sent: the firehose deliberately skips the sender, so the POST ack is the
   // only copy this client sees — fold it into the derivation so the card settles immediately.
@@ -116,8 +121,10 @@ export function AsksStrip({
   const lapsed = asks.filter((a) => a.state === 'lapsed');
   const closed = asks.length - loud.length - deferred.length - lapsed.length;
   const cards = [...loud, ...deferred, ...lapsed];
-  // The one the rail answers inline, and the one the sheet puts first: yours first, then urgency.
-  const lead = loud[0] ?? deferred[0];
+  // The banner (ADR 464 §6): one open ask in plain words, a settled outcome for a few seconds,
+  // else the idle pill. Its lead is the one the rail answers inline — a human's question first.
+  const bannerView = askBanner(asks, ctx, now);
+  const lead = bannerView.mode === 'idle' ? undefined : bannerView.lead;
   const leadAudience = lead ? askAudience(lead, ctx) : null;
   // Yours-or-anyone's: the only audiences whose asks this browser should be invited to answer.
   const leadIsOurs = leadAudience === 'you' || leadAudience === 'team';
@@ -166,9 +173,9 @@ export function AsksStrip({
   useEffect(() => {
     for (const env of newRings(openRings, rungIds.current, liveIds)) {
       rungIds.current.add(env.id);
-      notifyBrowser(ringNotice(env), scrollToMessage);
+      notifyBrowser(ringNotice(env), onReveal);
     }
-  }, [openRings, liveIds]);
+  }, [openRings, liveIds, onReveal]);
   const [notifyPermission, setNotifyPermission] = useState(() =>
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
   );
@@ -241,15 +248,13 @@ export function AsksStrip({
     [cfg],
   );
 
-  if (asks.length === 0 && reviews.length === 0) return null;
-
   const idx = new Map(roster.map((m) => [m.name, m]));
-  const rest = cards.length - (lead ? 1 : 0);
-  /* The rail wears the lead asker's colour — rim and bell — the way a bubble's ring wears its
+  const rest = cards.length - (lead && askIsLoud(lead.state) ? 1 : 0);
+  /* The banner wears the lead asker's colour — rim and hand — the way a bubble's ring wears its
      speaker's: "who is asking" is the same colour as their body on the floor. `memberColor` is the
      FILL (a ring, a stroke; never text — the fill/ink split in format.ts). The clock is the arc
-     round their avatar: how much of the tier is left, read off the same `now` the text clock reads,
-     so the two can never disagree. Both are inline variables, so the cost is CSS. */
+     round their avatar: how much of the tier is left, read off the same `now` the words read, so
+     the two can never disagree. Both are inline variables, so the cost is CSS. */
   const frac = lead ? clockFraction(lead, now) : null;
   const leadStyle = lead
     ? ({
@@ -260,20 +265,29 @@ export function AsksStrip({
         ),
       } as CSSProperties)
     : undefined;
+  const mode = bannerView.mode;
 
   return (
     <section
       ref={rootRef}
-      className={`lc-asks${loud.length > 0 ? ' lc-asks--loud' : ''}${open ? ' is-open' : ''}${
-        lead ? ' has-lead' : ''
-      }`}
+      className={`lc-asks lc-asks--${mode}${loud.length > 0 ? ' lc-asks--loud' : ''}${
+        open ? ' is-open' : ''
+      }${lead ? ' has-lead' : ''}`}
       style={leadStyle}
       aria-label="asks and approvals"
     >
       <div className="lc-asks__rail">
-        <BellIcon />
+        {/* The hand (ADR 464 §6): the same ✋ the asker raises at their desk. Settled, it is the
+            verdict's mark; idle, the bell the rail always carried. */}
+        {mode === 'open' ? (
+          <span className="lc-asks__hand" aria-hidden="true">
+            ✋
+          </span>
+        ) : (
+          <BellIcon />
+        )}
 
-        {lead ? (
+        {lead && bannerView.mode !== 'idle' ? (
           <>
             <span
               className={`lc-chip__avatar lc-asks__who${
@@ -296,22 +310,43 @@ export function AsksStrip({
             <button
               type="button"
               className="lc-asks__lead"
-              onClick={() => scrollToMessage(lead.env.id)}
-              title="Jump to this ask in the stream"
+              onClick={() => onReveal(lead.env.id)}
+              title="Open this ask in the log"
             >
-              <b>{lead.env.from}</b>
-              <span className="lc-asks__verb">
-                {leadAudience === 'you'
-                  ? SPECIES_VERB_YOU[lead.species]
-                  : SPECIES_VERB[lead.species]}
-              </span>
-              {/* Routed elsewhere: name the actual acceptor, so nobody reads an agent's queue as
-                  their own (lane 01KZ9GFHZ9 — the strip's wrong-acceptor bug was exactly this). */}
-              {!leadIsOurs && lead.to && <span className="lc-asks__routed">→ {lead.to}</span>}
-              {lead.env.body && <span className="lc-asks__gist">{lead.env.body}</span>}
+              {bannerView.mode === 'open' ? (
+                <>
+                  <b>{bannerView.who}</b>
+                  <span className="lc-asks__verb">
+                    is asking <b>{bannerView.to ?? 'the team'}</b>
+                    {bannerView.question ? ':' : ''}
+                  </span>
+                  {bannerView.question && <span className="lc-asks__q">{bannerView.question}</span>}
+                </>
+              ) : (
+                <>
+                  <b>{bannerView.who}</b>
+                  <span className="lc-asks__verb">asked {bannerView.to ?? 'the team'} ·</span>
+                  <span className="lc-asks__outcome">{bannerView.outcome}</span>
+                </>
+              )}
             </button>
-            <AskHold ask={lead} now={now} className="lc-asks__hold" />
-            <AskClock ask={lead} now={now} />
+            {bannerView.mode === 'open' && (
+              <>
+                <span
+                  className={`lc-asks__hold lc-ask__hold lc-ask__hold--${lead.tier}`}
+                  title={holdStateLine(lead, now)?.title}
+                >
+                  {bannerView.hold}
+                </span>
+                <span
+                  className={`lc-ask__clock lc-asks__clock${
+                    lead.state === 'held' || frac === 0 ? ' lc-ask__clock--over' : ''
+                  }`}
+                >
+                  {bannerView.clock}
+                </span>
+              </>
+            )}
             {askIsLoud(lead.state) && canAnswer && leadIsOurs && (
               <span className="lc-asks__quick">
                 <button
@@ -363,8 +398,7 @@ export function AsksStrip({
           </>
         ) : (
           <span className="lc-asks__lead lc-asks__lead--quiet">
-            <b>asks &amp; approvals</b>
-            <span className="lc-asks__verb">nothing waiting on a human</span>
+            <span className="lc-asks__verb">no open questions</span>
           </span>
         )}
 
@@ -386,7 +420,7 @@ export function AsksStrip({
           >
             {rest > 0 && <span className="lc-asks__restcount">+{rest}</span>}
             <span className="lc-asks__morelabel">
-              {open ? 'close' : rest > 0 ? 'see all' : 'details'}
+              {open ? 'close' : rest > 0 ? 'more waiting' : 'details'}
             </span>
             <ChevronIcon />
           </button>
@@ -398,11 +432,7 @@ export function AsksStrip({
         {/* Who you are about to answer as (ADR 222). Not decoration: with several teams on one
             machine you may be a different person on each, and approving as the wrong identity is
             unrecoverable — so the connected seat is never implicit. It is also the way back out,
-            the escape a cached seat never had.
-            Only rendered when you CAN answer. The chip answers "who would I be answering as?", and
-            where you cannot answer there is no such question — the sign-in button beside it already
-            names who you would become. Inside the office panel the rail is ~470px, and rendering
-            both spends ~60px it does not have. */}
+            the escape a cached seat never had. Only rendered when you CAN answer. */}
         {ringSeat && notifyPermission === 'default' && (
           <button
             type="button"
@@ -443,6 +473,7 @@ export function AsksStrip({
                   busy={busy === ask.env.id}
                   now={now}
                   onAnswer={(kind) => void answer(ask, kind)}
+                  onReveal={onReveal}
                   style={{ '--i': i } as React.CSSProperties}
                 />
               );
@@ -513,6 +544,7 @@ function AskCard({
   busy,
   now,
   onAnswer,
+  onReveal,
   style,
 }: {
   ask: AskView;
@@ -524,6 +556,7 @@ function AskCard({
   /** The strip's single clock — the same instant that decided this card's state. */
   now: number;
   onAnswer: (kind: 'accept' | 'decline' | 'deciding') => void;
+  onReveal: (id: string) => void;
   style?: React.CSSProperties;
 }) {
   const from = ask.env.from;
@@ -553,8 +586,8 @@ function AskCard({
           <button
             type="button"
             className="lc-ask__body"
-            onClick={() => scrollToMessage(ask.env.id)}
-            title="Jump to this ask in the stream"
+            onClick={() => onReveal(ask.env.id)}
+            title="Open this ask in the log"
           >
             {ask.env.body}
           </button>

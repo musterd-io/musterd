@@ -87,22 +87,36 @@ describe('the rail, rendered — a lapsed ask must not read as one waiting on yo
 
   it('still shouts for a BLOCKING ask past its clock — that agent is stopped', () => {
     const html = render([ask('a2', 'blocking', DAYS_3)]);
+    // The banner's words (ADR 464 §6), not the operator's: the asker is holding, and the reader can
+    // answer. The sheet underneath still carries "timed out — agent holding".
+    expect(html).toContain('is asking');
+    expect(html).toContain('holding until answered');
     expect(html).toContain('timed out');
-    expect(html).toContain('agent holding');
     expect(html).toContain('Approve');
   });
 
   it('leaves an ask with time left completely alone', () => {
     const html = render([ask('a3', 'standard', 1000)]);
-    expect(html).toContain('left'); // the running countdown
+    expect(html).toMatch(/lc-asks__clock[^>]*>\d+:\d\d</); // the running countdown, m:ss
+    expect(html).toContain('goes ahead in 5 min if unanswered');
     expect(html).toContain('Approve');
     expect(html).not.toContain('elapsed');
+  });
+
+  it('with nothing open, the banner is a quiet pill — not nothing', () => {
+    expect(render([])).toContain('no open questions');
+  });
+
+  it('a lapsed ask is not a lead and never approved: the banner idles over a sheet that lists it', () => {
+    const html = render([ask('a6', 'standard', DAYS_3)]);
+    expect(html).toContain('lc-asks--idle');
+    expect(html).not.toContain('approved');
   });
 
   /* The rail wears the lead asker's hue (rim + bell) and drains the tier clock as an arc round the
      avatar — both inline variables the CSS reads. Pinned at the wiring: the pure fraction has its
      own suite in asks.test.ts, and reverting the component to a bare avatar would leave it green. */
-  it('carries the asker\'s hue on the rail and the clock fraction on the avatar', () => {
+  it("carries the asker's hue on the rail and the clock fraction on the avatar", () => {
     const html = render([ask('a4', 'standard', 1000)]);
     expect(html).toMatch(/class="lc-asks[^"]* has-lead"[^>]*style="--lc-asks-hue:hsl\(/);
     expect(html).toMatch(/lc-asks__who is-timed"[^>]*--lc-ask-frac:0\.9\d+/);
