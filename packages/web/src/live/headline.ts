@@ -102,6 +102,11 @@ export function headline(env: Envelope, ctx: HeadlineContext): Headline | null {
       return to ? say('asked', to, 'for help', 'ask') : null;
     case 'ask': {
       if (!to) return null;
+      // A lane-review ask is composed by the daemon (ADR 192): its body opens with a machine
+      // prefix and the lane title in quotes. Say what it is rather than print the prefix
+      // (dolly, lane-2 acceptance).
+      const review = /^\[lane\] acceptance requested: "([^"]+)"/.exec(env.body);
+      if (review) return say('asked', to, `to accept ${review[1]}`, 'ask');
       const q = oneLine(env.body);
       return say('is asking', q ? `${to}: ${q}` : to, null, 'ask');
     }

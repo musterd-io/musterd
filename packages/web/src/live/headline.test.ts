@@ -111,6 +111,20 @@ describe('headline — one line a room can read (ADR 464 §5)', () => {
     expect(text(ask)).toBe('ryder is asking nick: may I merge #12?');
   });
 
+  it('a lane-review ask says whose acceptance was asked, never the machine prefix', () => {
+    const h = headline(
+      env({
+        act: 'ask',
+        to: to('big-body'),
+        body: '[lane] acceptance requested: "Cursor Read gap — one session" — Judge the LANDED OUTCOME…',
+        meta: { species: 'approve', tier: 'standard' },
+      }),
+      ctx,
+    );
+    expect(text(h)).toBe('ryder asked big-body to accept Cursor Read gap — one session');
+    expect(text(h)).not.toContain('[lane]');
+  });
+
   it('steer and resolve', () => {
     expect(text(headline(env({ act: 'steer', to: to('izzo') }), ctx))).toBe(
       'ryder redirected izzo',

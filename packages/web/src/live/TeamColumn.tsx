@@ -55,7 +55,8 @@ export function TeamColumn({
    *  "asking nick". */
   asks?: readonly AskView[];
   collapsed?: boolean;
-  onCollapse?: () => void;
+  /** Absent on a phone (spec §2): one full-width column, nothing to fold. */
+  onCollapse?: (() => void) | undefined;
   /** The member whose character is under the pointer on the floor (or whose card is hovered). */
   linked?: string | null;
   onLink?: (name: string | null) => void;
