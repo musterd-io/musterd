@@ -991,6 +991,36 @@ export function removeMusterdHooks(): void {
   removeMusterdStatusline(); // marker-exact, like every drop above — a user's own chip survives
 }
 
+/**
+ * `claude mcp get musterd` — the one read of this folder's registration, memoized per process
+ * (lane 01M3QFDDGM). It is the slow step of every doctor run: 7.4s of a 17.6s `init --check`,
+ * measured 2026-09-29 under load, and `--fix` re-ran it on every pass (detect, observe, re-check).
+ * The answer depends on the binary and the cwd `claude` resolves its local scope from, so both
+ * key the memo. Every mutation of the registration drops it ({@link forgetClaudeMcpGet}), so a
+ * read after a write is always fresh.
+ *
+ * Its own timeout, well above the shared 8s probe: at 7.4s the call sat just under that limit, and
+ * a timeout reads as "no musterd server" — a false drift line on a slow machine, not a slow one.
+ */
+const MCP_GET_TIMEOUT_MS = 30_000;
+let mcpGetMemo: { key: string; result: Promise<{ ok: boolean; out: string }> } | null = null;
+
+function claudeMcpGet(
+  bin: string,
+  run: (bin: string, args: string[], timeoutMs: number) => Promise<{ ok: boolean; out: string }>,
+): Promise<{ ok: boolean; out: string }> {
+  const key = `${bin}\0${process.cwd()}`;
+  if (mcpGetMemo?.key !== key) {
+    mcpGetMemo = { key, result: run(bin, ['mcp', 'get', 'musterd'], MCP_GET_TIMEOUT_MS) };
+  }
+  return mcpGetMemo.result;
+}
+
+/** Drop the memoized registration read — called by every path that adds or removes an entry. */
+export function forgetClaudeMcpGet(): void {
+  mcpGetMemo = null;
+}
+
 // `has`/`resolveClaudeBin` moved to the shared `claudeBin.ts` (ADR 131 inc 3): the wake actuator
 // (`musterd host`) needs the same PATH-robust resolution under launchd's minimal PATH.
 
@@ -1030,7 +1060,7 @@ export const claudeCode: Harness = {
       };
     }
     const ver = await has(bin, ['--version']);
-    const got = await has(bin, ['mcp', 'get', 'musterd']);
+    const got = await claudeMcpGet(bin, has);
     const where = bin === 'claude' ? '' : ` (${bin})`;
     // Read back a legacy baked `MUSTERD_CLAIM` (older provisioning materialized it) so the doctor can
     // catch it drifting from binding.json. `claude mcp get` prints env as `    MUSTERD_CLAIM=<value>`.
@@ -1060,6 +1090,7 @@ export const claudeCode: Harness = {
   },
 
   async configure(entry) {
+    forgetClaudeMcpGet();
     // claude mcp add musterd -s local -e K=V ... -- <command> <args...>
     const bin = (await resolveClaudeBin()) ?? 'claude';
     const envArgs = Object.entries(entry.env).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
@@ -1103,6 +1134,7 @@ export const claudeCode: Harness = {
   // at server-launch time (never resolved/baked by musterd). Permissions merge into
   // `.claude/settings.local.json` additively (not a clamp). Tokens are never logged — only names.
   async provision(plan: ProvisionPlan) {
+    forgetClaudeMcpGet();
     const bin = (await resolveClaudeBin()) ?? 'claude';
     const servers: string[] = [];
     for (const s of plan.servers) {
@@ -1125,6 +1157,7 @@ export const claudeCode: Harness = {
   // Reverse a provision (ADR 027): remove exactly the named servers, permissions, and musterd's
   // hooks (Notification + SessionStart) — marker-matched, so the user's own hooks are kept.
   async unprovision(plan: UnprovisionPlan) {
+    forgetClaudeMcpGet();
     const bin = (await resolveClaudeBin()) ?? 'claude';
     for (const name of plan.servers) {
       await exec(bin, ['mcp', 'remove', name, '-s', 'local']).catch(() => undefined);
@@ -1433,7 +1466,11 @@ export const claudeCodeAdapter: HarnessAdapter = {
       case 'mcp.musterd': {
         const exec = ctx.exec ?? nodeExec;
         const bin = await claudeBinFor(exec);
-        const got = await exec.run(bin, ['mcp', 'get', 'musterd']);
+        // Memoized only on the real exec: an injected seam is a test's own script of answers.
+        const got =
+          exec === nodeExec
+            ? await claudeMcpGet(bin, (b, a, timeoutMs) => exec.run(b, a, { timeoutMs }))
+            : await exec.run(bin, ['mcp', 'get', 'musterd']);
         if (!got.ok) return { state: 'absent' };
         const entry = parseClaudeMcpGet(got.out);
         if (!entry) {
@@ -1506,6 +1543,7 @@ export const claudeCodeAdapter: HarnessAdapter = {
   },
 
   async apply(ctx, mutation) {
+    forgetClaudeMcpGet();
     const { intent } = mutation;
     switch (intent.fragmentKey) {
       case 'mcp.musterd': {

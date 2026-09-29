@@ -18,12 +18,13 @@ const exec = promisify(execFile);
 export async function hasRunnable(
   cmd: string,
   args: string[],
+  timeoutMs = 8000,
 ): Promise<{ ok: boolean; out: string }> {
   // Both streams, stdout first: a CLI's `--help` is help on either stream (opencode 1.18.31 writes
   // `run --help` to stderr with an empty stdout), and a probe that reads stdout alone refuses a
   // working CLI. stdout leads so a version printed there is matched before any stderr noise.
   try {
-    const { stdout, stderr } = await exec(cmd, args, { timeout: 8000 });
+    const { stdout, stderr } = await exec(cmd, args, { timeout: timeoutMs });
     return { ok: true, out: `${stdout}${stderr}` };
     // reason: exec rejection is an untyped error-like with optional stdout/stderr/message.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
