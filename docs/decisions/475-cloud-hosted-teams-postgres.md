@@ -10,8 +10,14 @@
   [ADR 451](451-public-demo-ordinary-members.md) (the single-Machine host this supersedes),
   [ADR 439](439-bootstrap-adoption-explicit.md) / [ADR 440](440-successor-expiry-server-set.md)
   (the seat credential), [ADR 450](450-join-link-seat.md) (invite links),
-  [ADR 445](445-agent-traces-captured-local-first.md) (trace capture),
-  [`deployment-topology.md`](../design/deployment-topology.md) (Topology C).
+  [`deployment-topology.md`](../design/deployment-topology.md) (Topology C, reclassified here).
+- Amends: [ADR 445](445-agent-traces-captured-local-first.md) §3 and build note (2) — captured
+  content may travel from a seat to its hosted team's server of record, under per-author consent
+  (decision 9). ADR 184 is untouched.
+- Supersedes: ADR 451's one-Machine-plus-Volume host (decision 1); ADR 446's "the rest of the
+  remote tool set converges after rehearsal" for members (decision 8).
+- Reviewed 2026-09-29 by dolly, schmidt, big-body and wanderer on draft PR #1827; the required
+  changes are folded in and listed under Consequences.
 
 ## Context
 
@@ -49,34 +55,61 @@ constrains the others, so they were decided together.
    runs first**: pass → one SQL dialect and one store layer; fail → two backends behind one store
    interface.
 4. **Identity is split.** The console (`app.musterd.io`) proves who a person is (GitHub, Google,
-   magic link; `musterd login` is OAuth with browser-PKCE or device-code, auto-selected). Each
-   **team server keeps its own member list**, mints its own tokens after the console has
+   magic link; `musterd login` is OAuth with browser-PKCE or device-code, auto-selected). The
+   console returns an **identity-only** statement (account id, verified email) with decision 5's
+   token properties; it holds no membership. Each **team server keeps its own member list** with
+   the account binding on the member row, mints its own tokens after the console has
    authenticated the person, and issues the ADR 439/440 seat credential on `musterd claim <seat>
-   --team`. Headless machines join by ADR 450 invite link **or** device code.
+   --team`. A headless **agent** seat joins by a **seat authorization** — seat-scoped, expiring,
+   single-use, revocable, minted by a human with standing (an ADR 450 invite admits only a new
+   human member and is not this) — **or** by device code.
 5. **Console → team-server trust is a KMS-signed, 60-second, audience-bound, single-use token**
    verified against the console's JWKS; the signing key is created in a cloud KMS and never
-   exported. Every create / import / export / delete carries one. `POST /teams` is no longer open.
+   exported. Every create / import / export / delete carries one. `POST /teams` is no longer
+   open. The token proves identity; for import, export and delete the team server **also
+   requires the account to be bound to an owner** of that team. Single-use is an **atomic
+   database insert** of the `jti`, shared by every server. "Operators cannot read a team's data"
+   is policy plus audit in v1, not a technical guarantee; per-team keys are the guarantee and are
+   deferred.
 6. **Cloud mode drops every loopback trust rule.** Increment 1 includes an audit of each
-   `127.0.0.1` check with a test that fails if one reappears. Host-name isolation and per-team
-   rate limits apply; `/health` reports only ok/not-ok.
-7. **Hooks: hard ~1.5 s timeout, cached enforcement table, fail open *visibly*.** A call allowed
-   because the server was unreachable is recorded `unenforced` and shown in `team_status` and
-   `/live`.
+   `127.0.0.1` check with a test that fails if one reappears, run against a test issuer since
+   the console arrives in increment 2. Host-name isolation and per-team rate limits apply;
+   `/health` reports only ok/not-ok.
+7. **Hooks: hard ~1.5 s timeout, cached enforcement table, and the outage rule is per class.**
+   When the server is unreachable a call matching a `warn` class or no class is allowed and
+   recorded `unenforced` — per call, in the acting seat's tool result, counted locally and flushed
+   on recovery, shown in `team_status` and `/live`. A call matching a `block` class or a
+   costly-action class (ADR 150) is **denied**: those gates exist so a human decides, and an
+   outage may not turn them advisory.
 8. **The remote MCP endpoint exposes the full member tool set; role decides.** An invite carries
-   its role (guest / member / owner); a public join link defaults to guest.
-9. **Trace content capture is a per-team opt-in in v1.** Owner enables; each human may opt out
-   their own sessions and the agents they run. Readable by owners and by the seat for its own
-   sessions; operators need an owner-issued, logged support grant. Retention 30 days by default,
-   owner-set 7–365; backups purge within a further 7 days; secrets are redacted on the seat's
-   machine before upload. Per-team encryption is a later phase.
+   its role (guest / member / owner); a public join link defaults to guest. A guest is a Member
+   with a **talk-only ceiling**: the acts and tools are enumerated in the spec (§4.6) and
+   `tools/list` is filtered to them. This supersedes ADR 446's rehearsal-gated convergence of the
+   tool set for members.
+9. **Trace content capture on a hosted team: owner-enabled capability, per-author opt-in
+   consent.** The owner turns the capability on; nothing is captured for a human until they opt
+   in, recorded and revocable; an agent seat is captured only when its sponsoring human opts that
+   named seat in. Content travels only from the seat to the team's server of record — **this
+   amends ADR 445 §3 and its loopback-only build note**; ADR 184's emitted ≠ published line is
+   kept and governs publishing unchanged. Readable by owners and by the seat for its own sessions;
+   operators need an owner-issued, scoped, ≤ 7-day, logged support grant. Content lives in its
+   own database; retention 30 days by default, owner-set 7–365; its dumps are kept 7 days so
+   deletion reaches backups within 7 days. Secrets are redacted on the seat's machine and scrubbed
+   again on the server; prose is stored in plaintext in v1; per-team encryption is a later phase.
+   This widens ADR 445 from a dogfood substrate to a hosted-team capability, deliberately.
 10. **Schema changes are expand/contract**, run as a separate step rehearsed on a Neon branch,
     with a boot-time guard that refuses a schema newer than the binary.
 11. **Backups outside the vendor:** nightly encrypted `pg_dump` per team to R2 in a separate
-    account, 30 days, and a **monthly restore drill** whose result is recorded. A database outage
-    is an honest 503 — no stale serving, no local write queue.
-12. **Increment 1 is done only when all four pass:** ADR 451's load baseline (75 per population,
-    p95 < 1 s) through Cloudflare on Cloud; the tenancy leak test; the loopback audit test; a
-    restore drill plus a zero-downtime rolling schema deploy.
+    account (30 days coordination, 7 days captured content), and a **monthly restore drill**
+    whose result is recorded. A database outage is an honest 503 with a stable reason — no stale
+    serving, no local write queue; Cloud seats are thin clients, not ADR 325 replicas. The outage
+    alert pages a phone **out of band** first; the musterd `ask` is the second channel.
+12. **Increment 1 is done only when all four pass, each on its own:** 75 per population at
+    p95 < 1 s **through Cloudflare** on Cloud (a harder bar than ADR 451's, not the same
+    measurement); the tenancy leak test with an exhaustive table inventory, run as the app role
+    through the pooler with alternating tenants; the loopback audit test; a zero-downtime rolling
+    schema deploy with the old binary refusing the new schema. The restore drill is increment 3's
+    gate; the seat bar is increment 4's.
 
 ## Consequences
 
@@ -84,25 +117,48 @@ constrains the others, so they were decided together.
   re-decided the same day; the spec keeps the comparison (§3.1) so the reasoning survives.
 - Four new runtime dependencies will each need their ADR note (hard rule 6): a Postgres driver,
   PGlite (conditional on the spike), the KMS SDK, an OpenTelemetry exporter.
-- `PRIVACY.md` stays true for self-hosted; a hosted team is a different privacy posture and its
-  page on musterd.io must say what §9 says, in the same words.
+- `PRIVACY.md`'s opening line ("no musterd account, no musterd cloud … in the product") becomes
+  false when accounts ship. **The PR that lands increment 2 edits that sentence** and adds the
+  hosted section (what is stored, decision 9 in the same words, cloud-mode operator telemetry to
+  a vendor) — the ADR 461 precedent, not a separate page alone.
 - ADR 461's "hosted free for two humans" counts members by asking the team server (decision 4),
-  not from a console-held list.
-- ADR 463's sponsor-hosted agents remain the way an agent gets a process until increment 7.
-- Increment ordering: 0 PGlite spike → 1 app tier + Postgres + cloud mode → 2 accounts + console →
-  3 seat link → 4 import/export → 5 ops → 6 billing → 7 hosted agents. Dogfood = 0–5.
+  not from a console-held list. Talk-only members do not count toward that line (spec §4.2;
+  flagged for nick; ADR 461 gets a dated note at increment 7).
+- ADR 463's sponsor-hosted agents remain the way an agent gets a process until increment 8.
+- Increment ordering (reordered on review so import, export and dumps precede the cutover):
+  0 PGlite spike → 1 app tier + Postgres + cloud mode → 2 accounts + console → 3 import/export +
+  backups + first drill → 4 seat link and cutover (import-then-switch) → 5 trace capture → 6 ops
+  → 7 billing → 8 hosted agents. Dogfood = 0–6.
+- Protocol touches, each its own ADR when its increment starts (hard rule 1): the `unenforced`
+  hook outcome, `role` on an invite, the seat-authorization credential, `account_id` on a member
+  and the identity statement, per-author consent fields.
+- Same-PR notes landed with this ADR: `deployment-topology.md` Topology C reclassified relay →
+  hosted authority; ADR 451 Consequences (shape superseded); ADR 445 Consequences (§3 amended);
+  `brand.md` §5 secondary nouns Account / Console / Owner / Guest.
+- Review record (2026-09-29, PR #1827): dolly required five changes (per-author consent or a
+  stated amendment of ADR 445; identity-only statement; owner check on destructive tokens;
+  per-class outage rule; increment reorder with a test issuer) — all taken. schmidt required five
+  (split test 4; import before cutover; the 7-day purge vs 30-day dump contradiction; out-of-band
+  alerting; an enumerated talk-only ceiling) — all taken. big-body required two (the ADR 450
+  invite does not authorize an agent seat; the ADR 445 loopback boundary must be explicitly
+  amended, not "built on") — both taken; big-body's three follow-up lanes (RLS test conditions,
+  atomic `jti`, hosted trace redaction and support access) are folded into decisions 5, 9 and 12
+  and can close against this ADR. Two review-taken choices are flagged for nick in the spec:
+  fail-closed for block classes, and talk-only members outside the free-tier count.
 
 ## Observability & Evaluation
 
 - **Traces:** every hook call carries its `traceparent` to the team server and on to the
   OpenTelemetry exporter, so a slow gate is attributable to edge, app tier or Neon hop; the
-  server records `unenforced` per seat per day, the synthetic probe's success rate per minute, the
-  dated result of each restore drill, and per-team redaction counts for captured content.
-- **Eval:** the four acceptance tests of decision 12, each an automated check in CI or a recorded
-  drill: load p95 under 1 s at ADR 451's population; zero cross-team rows readable or writable
-  under RLS through the app's own paths; zero privileged paths reachable without a credential in
-  cloud mode; a restore from last night's dump passing the suite and a two-server schema deploy
-  with no refused request.
+  server records every `unenforced` call (seat, class, time — the per-seat-per-day count is a
+  view of it), the synthetic probe's success rate per minute, the dated result of each restore
+  drill, per-team redaction counts for captured content, and every read under a support grant.
+- **Eval:** the four acceptance tests of decision 12, each an automated check in CI: load p95
+  under 1 s at 75 per population through Cloudflare; zero cross-team rows readable or writable
+  under RLS through the app's own paths, over an exhaustive table inventory; zero privileged
+  paths reachable without a credential in cloud mode; a two-server expand-phase deploy with no
+  refused request and the old binary refusing the new schema. Later increments own the rest
+  (spec §8): token replay across two servers, the restore drill, the seat bar, consent.
 - **Experiment:** the PGlite spike (increment 0, two days). Pass = the server suite is green on
   PGlite and hook-path latency is within the internet hop a Cloud seat already pays; then
   decision 3 is "one dialect". Fail on either count and the two-backend interface is taken. Two

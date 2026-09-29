@@ -58,6 +58,8 @@ and the [public-demo runbook](../operations/public-demo-tunnel.md).
 
 **Topology C** is the eventual frictionless path — but it is a hosted product with its own threat model, ops burden, and cost. It is named here so we don't design A/B into a corner, not scheduled.
 
+> _Reclassified 2026-09-29 ([ADR 475](../decisions/475-cloud-hosted-teams-postgres.md), proposed)._ Topology C as first written was a **relay** — a rendezvous both sides dial out to, a dumb pipe on the same wire protocol (§10's open question). What is now scheduled is not a relay: **musterd Cloud is the team's hosted authority** — §2's one daemon, run by us, reached over HTTPS by every member — so a hosted team is Topology A with the operator being musterd. The relay reading is retired; no rendezvous protocol is planned.
+
 ## 4. Reachability & NAT — why this is mostly an addressing problem
 
 All musterd clients (CLI, MCP adapter) are **outbound WebSocket** connectors; the daemon is the only listener. That means:
@@ -112,7 +114,7 @@ Appendix A, via ADR 042) rather than being pure transport.
 
 1. **Document Topology B now** (overlay/tunnel) — a docs-only deliverable that makes cross-network teams *possible today* with no musterd code, by standing on Tailscale/WireGuard. Highest value per effort. ✅ **done** — decided in ADR 039, published as `../guides/cross-network-overlay.md`.
 2. **Topology A: secured bind** (§5) — the off-loopback-requires-TLS guard, `wss://` client support, Origin/Host checks, tunable timeouts (§6). ✅ **transport built** in ADR 040 (the guard, native TLS, Origin/Host gate, env-tunable timeouts). The credentialed remote join it carries is still the v0.3 credential model; the bind ships ready for it.
-3. **Topology C: hosted relay** — a rendezvous service and protocol so neither side needs a reachable address or an overlay. Largest build; its own threat model and ops. Named, not scheduled.
+3. **Topology C: hosted relay** — a rendezvous service and protocol so neither side needs a reachable address or an overlay. Largest build; its own threat model and ops. ~~Named, not scheduled.~~ **Reclassified and scheduled** 2026-09-29 as a hosted _authority_, not a relay — [ADR 475](../decisions/475-cloud-hosted-teams-postgres.md) (see §3's note).
 
 ## 10. Open questions
 
