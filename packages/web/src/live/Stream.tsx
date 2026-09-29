@@ -24,7 +24,7 @@ import {
   hueOf,
 } from './format';
 import { CollapseButton, PanelRail } from './PanelChrome';
-import { REVEAL_EVENT } from './reveal';
+import { REVEAL_EVENT, scrollToMessage } from './reveal';
 import {
   INITIAL_WINDOW,
   anchoredScrollTop,
@@ -252,7 +252,7 @@ export function Stream({
 
 // The reveal request lives in `./reveal` (ADR 464 lane 2); re-exported so existing callers keep
 // their import path.
-export { scrollToMessage } from './reveal';
+export { scrollToMessage };
 
 function flashRow(el: Element) {
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });

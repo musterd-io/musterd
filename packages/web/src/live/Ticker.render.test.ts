@@ -98,14 +98,24 @@ describe('TopMeter', () => {
 describe('LogDrawer', () => {
   it('renders a labelled dialog with a close control around its content when open, nothing when shut', () => {
     const open = renderToStaticMarkup(
-      createElement(LogDrawer, { open: true, onClose: () => {}, title: 'Team log' }, 'THE STREAM'),
+      createElement(LogDrawer, {
+        open: true,
+        onClose: () => {},
+        title: 'Team log',
+        children: 'THE STREAM',
+      }),
     );
     expect(open).toMatch(/role="dialog"[^>]*aria-modal="true"[^>]*aria-label="Team log"/);
     expect(open).toContain('aria-label="Close the log"');
     expect(open).toContain('THE STREAM');
     expect(
       renderToStaticMarkup(
-        createElement(LogDrawer, { open: false, onClose: () => {}, title: 'Team log' }, 'x'),
+        createElement(LogDrawer, {
+          open: false,
+          onClose: () => {},
+          title: 'Team log',
+          children: 'x',
+        }),
       ),
     ).toBe('');
   });
