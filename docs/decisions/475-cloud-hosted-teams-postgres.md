@@ -143,10 +143,14 @@ constrains the others, so they were decided together.
   spike says one dialect.** A first draft read "two backends" from a bench that timed `initdb` as
   boot and skipped `ANALYZE`; the whole-branch review caught it. The result page records the
   judgment on both sides (memory 310 MB vs 109 MB resident, out-of-process readers, PGlite
-  maturity, against one store layer and no native module) for nick to confirm; decision 3 stays
-  open until he does. Settled either way: the async store conversion is ~730 call sites in ~70
-  files, one pass; the Cloud `pg` driver's tests run on PGlite in CI. `@electric-sql/pglite` is a
-  devDependency until then.
+  maturity, against one store layer and no native module). **2026-09-29, nick chose two
+  backends** over the rule: laptop memory and disk are the binding constraint (the dev machine is
+  resource-constrained, and every self-hosted user would carry PGlite's ~200 MB extra resident),
+  and the laptop should run exactly what self-hosted users run. better-sqlite3 stays the local
+  driver; `pg` serves Cloud; both sit behind the async driver, and the store suite runs on both
+  (PGlite as the `pg` test double, in-memory, test-time only) so the dialects cannot drift
+  silently. Settled either way: the async store conversion is ~730 call sites in ~70 files, one
+  pass. `@electric-sql/pglite` stays a devDependency.
 - Same-PR notes landed with this ADR: `deployment-topology.md` Topology C reclassified relay →
   hosted authority; ADR 451 Consequences (shape superseded); ADR 445 Consequences (§3 amended);
   `brand.md` §5 secondary nouns Account / Console / Owner / Guest.

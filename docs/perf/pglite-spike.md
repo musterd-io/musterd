@@ -252,6 +252,13 @@ Nothing else in the port is engine-specific above the driver.
 
 ## Decision
 
+**2026-09-29 — nick chose two backends**, overruling the rule's "one dialect" below on footprint:
+the development laptop is memory- and disk-constrained, and the local daemon should be exactly
+what self-hosted users run. better-sqlite3 stays local, `pg` serves Cloud, the store suite runs on
+both drivers (PGlite as the `pg` test double, in-memory, test-time only). The two-backend
+falsifier below (translation layer under ~300 lines, nested-path and typed-compare sites tested)
+is now the one that applies. The rest of this section is the record the choice was made from.
+
 **By the plan's rule the spike says one dialect.** Q1 pass, Q2 pass (after the review's
 corrections), Q3 pass, Q4 counted. The first draft of this page said "two backends" on a Q2 fail
 that was the bench's error; that draft was reviewed, corrected, and is superseded here.
@@ -300,5 +307,4 @@ Whichever nick picks, three things are settled by the spike and carry into incre
 3. `pg`-driver tests run on **PGlite in CI** with no Postgres service, from a cloned template
    instance (~0.5 s per file). Under one dialect that is simply the suite.
 
-`@electric-sql/pglite` stays a root devDependency until the choice is made; under one dialect it
-becomes a runtime dependency of `@musterd/server` with its ADR 002-style note (hard rule 6).
+`@electric-sql/pglite` stays a root devDependency (test-time only) under the two-backend choice.
