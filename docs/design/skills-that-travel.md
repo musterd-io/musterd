@@ -561,3 +561,19 @@ daemon-internal benches; corpus and dataset export (schema-bound — ~1 week to 
 office, canvas, motion and web-perf wiki pages (off-brand); laptop-specific wiki pages;
 `agents-doing-research.md` (self-declared re-derive-before-use); the ontology as a skill; the
 frontier-cadence manifest (never run); Track B.
+
+## 8. The order changed: the whiteboard is parked (2026-09-29, stanley)
+
+**Skill 1 no longer ships first.** Lifting `agent-whiteboard` out for publish (#1835) found that
+`tldraw` and `@tldraw/sync` ship under the tldraw license, not MIT, and the package's `dist-web`
+bundles tldraw's code, so an npm publish redistributes it. No non-trial license is available now
+(nick), so lane `01M2PAMFW1` is parked. The work is kept: `SandRiseStudio/musterd-whiteboard` exists,
+private, as `@musterd/whiteboard`, verified from a clean install; the monorepo copy stays in place.
+The unpark route that needs no license is an MIT canvas (Excalidraw) behind ADR 330's
+provider-agnostic port, which would be its own lane.
+
+**The first three to travel are now skills 2–4**, `cross-family-review`, `board-loop` and
+`harness-inbox`, built on `musterd-skills` PR #1 (lanes `01M2PAMQX5`, `01M2PAN1F0`, `01M2PANKGP`).
+They still need the §5 reviews (a different model family for each `SKILL.md`, and
+product-communications for the copy) before nick flips the repo public. §3's "Ships" dates for the
+whiteboard no longer hold; skills 5–13 keep their order.
