@@ -12,7 +12,7 @@ describe('pglite dialect inventory', () => {
       join(root, 'store', 'a.ts'),
       [
         "import Database from 'better-sqlite3';",
-        "db.prepare(\"SELECT json_extract(detail, '$.x') FROM t\").all();",
+        'db.prepare("SELECT json_extract(detail, \'$.x\') FROM t").all();',
         'db.exec("PRAGMA foreign_keys = ON");',
         'db.transaction(() => db.prepare("INSERT OR IGNORE INTO t VALUES (?)").run(1))();',
         'db.pragma("journal_mode = WAL");',
