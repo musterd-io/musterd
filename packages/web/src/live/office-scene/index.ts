@@ -956,15 +956,12 @@ export function mountOffice(
         detailIn.className = 'lc-gl-label__detailin';
         // Services carry no model: the tag above already says what they are, so the expanded
         // detail is harness · role only, and broadcast (model crumb only) shows nothing extra.
+        // The model is already on the plate face beside its logo (ADR 464, lane 1), so the expanded
+        // detail carries harness · role only — before this it said the model a second time. Broadcast
+        // used to show the model crumb here as its only detail; with the name on the face it has none.
         const detailParts = interactiveLabels
-          ? plateDetailParts({
-              surface: node.surface,
-              model: node.service ? null : node.model,
-              role: node.role,
-            })
-          : plateDetailParts({ model: node.service ? null : node.model }).filter(
-              (p) => p.kind === 'model',
-            );
+          ? plateDetailParts({ surface: node.surface, role: node.role })
+          : [];
         for (const [i, part] of detailParts.entries()) {
           if (i > 0) {
             const divider = document.createElement('span');
@@ -1097,15 +1094,23 @@ export function mountOffice(
     const laid = layoutPlates(boxes, headMap, plateSlots, { scale: fit.scale });
     plateSlots = laid.slots;
     for (const [name, el] of labels) {
-      const at = laid.placements.get(name);
+      const laidAt = laid.placements.get(name);
       const head = headMap.get(name);
-      if (!at || !head) continue;
+      if (!laidAt || !head) continue;
+      // Clamp the plate's box to the stage's width. Plates grew a model name (ADR 464), and a seat
+      // near the left wall — or a walker at the door — now has a plate wider than the room to its
+      // left; before this its first word was cut off at x<0 (stanley, lane-1 acceptance).
+      const size = plateSize.get(name) ?? { w: 60, h: 14 };
+      const half = size.w / 2 + 2;
+      const at =
+        width > size.w + 4
+          ? { ...laidAt, x: Math.min(Math.max(laidAt.x, half), width - half) }
+          : laidAt;
       el.style.transform = `translate(-50%, -100%) translate(${at.x}px, ${at.y}px)`;
       el.classList.toggle('is-displaced', at.displaced);
       if (at.displaced) {
         // From the plate's nearest edge to just above the crown it belongs to, in the label's own
         // coordinates (its box is `translate(-50%, -100%)` from `at`).
-        const size = plateSize.get(name) ?? { w: 60, h: 14 };
         const lead = leaderFrom(at, size.w, size.h, { x: head.x, y: head.y + 6 * fit.scale });
         el.style.setProperty('--lead-x', `${(lead.start.x - (at.x - size.w / 2)).toFixed(1)}px`);
         el.style.setProperty('--lead-y', `${(lead.start.y - (at.y - size.h)).toFixed(1)}px`);
