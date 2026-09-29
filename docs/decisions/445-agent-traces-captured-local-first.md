@@ -190,6 +190,14 @@ ADR 184's publication gate; a spans backend.
 
 ## Consequences
 
+- _Amended 2026-09-29 by [ADR 475](475-cloud-hosted-teams-postgres.md) decision 9 (proposed):_
+  on a **hosted** team the seat's authority is not on its machine, so captured content may travel
+  from the seat to **the team's server of record** — and only there — under per-author, opt-in,
+  recorded consent. §3's "never cross the wire off-machine" and build note (2)'s "content goes
+  only to a loopback daemon" read "only to the team's own authority" for a hosted team; a
+  self-hosted daemon is unchanged. ADR 184's emitted ≠ published line is kept. ADR 475 also
+  widens this ADR's scope from a dogfood substrate to a capability any hosted team may enable,
+  with the retention and access rules that make that defensible recorded there.
 - `observability.md` §7 keeps its non-goal and gains a dated scope note pointing here (the first
   cut of this ADR, merged in #1691, struck the line as "reversed"; nick declined that framing the
   same day and the strike is undone); §4's "CLI and MCP adapter only get error/diagnostic logging"

@@ -142,7 +142,7 @@ What the gate enforces is narrower than what this table publishes, and the diffe
 | **Permissions** | The harness-native allow/ask/deny rules musterd compiles into the workspace (ADR 261). | not "capabilities" |
 | **Capability** | Team-granted authority on a member, enforced by musterd itself (`is_admin`, MCP tool scoping). Internal/protocol vocabulary; user-facing prose says what it means instead. | not tool wiring; not harness rules |
 
-Secondary nouns (consistent but not in the load-bearing set): **Inbox** (a Member's durable mailbox for messages received while offline), **Envelope** (the on-wire message structure), **Roster** (a Team's list of Members), **Lifecycle** (`forever | session | until <ts>`), **Availability** (a Member's schedule; v1 stores it, does not enforce it).
+Secondary nouns (consistent but not in the load-bearing set): **Inbox** (a Member's durable mailbox for messages received while offline), **Envelope** (the on-wire message structure), **Roster** (a Team's list of Members), **Lifecycle** (`forever | session | until <ts>`), **Availability** (a Member's schedule; v1 stores it, does not enforce it). Hosted-team nouns ([ADR 475](../decisions/475-cloud-hosted-teams-postgres.md), 2026-09-29): **Account** (a person's identity at the console; proves who, never membership), **Console** (`app.musterd.io`, the account service), **Owner** (the human-facing word for a Member holding `is_admin` — one thing, two words), **Guest** (the name of a talk-only role on an invite; in copy the person is a Member).
 
 ---
 

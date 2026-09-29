@@ -36,6 +36,7 @@ Keep the public endpoint narrow and the daemon isolated while supporting a persi
 
 ## Consequences
 
+- _2026-09-29:_ the one-Machine-plus-Volume host in decision 1 was never provisioned (the demo ran on the bench Machine with its database in `/tmp`) and is **superseded** by [ADR 475](475-cloud-hosted-teams-postgres.md) (proposed): a stateless app tier over managed Postgres, with the load figure re-measured through Cloudflare as increment 1's first acceptance test. ADR 448's edge and proxy controls, retained here in decision 3, carry over.
 - ADR 448 remains the source for Tunnel paths, proxy trust, TLS, edge policy, and request logging. This record changes only the host placement and the lifetime of Team state and membership.
 - The Fly Machine is a dedicated, persistent single-daemon deployment. Volume encryption at rest does not replace database backups or access controls; Fly’s [shared responsibility model](https://docs.fly.io/security/shared-responsibility/) leaves application and service configuration to the operator.
 - Reusing the Team preserves its roster, messages, lanes, audit history, and OAuth identity across demo dates. Routine lifecycle policy, credential revocation, and Team retirement remain the controls for ordinary membership.
