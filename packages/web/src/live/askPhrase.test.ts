@@ -79,6 +79,14 @@ describe('askBanner', () => {
     expect(b.clock).toBe('20:00');
   });
 
+  it('a lane-review ask names the lane, never the machine prefix', () => {
+    const b = banner([
+      ask('r', { body: '[lane] acceptance requested: "Roster fix" — Judge the LANDED OUTCOME…' }),
+    ]);
+    expect(b.mode === 'open' && b.reviewTitle).toBe('Roster fix');
+    expect(b.mode === 'open' && b.question).toBe('');
+  });
+
   it('a clock past an hour reads in hours and minutes', () => {
     const b = banner([
       ask('a', { ts: NOW - 331 * MIN, meta: { species: 'approve', tier: 'blocking' } }),

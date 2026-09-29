@@ -55,6 +55,9 @@ export type AskBanner =
       who: string;
       to: string | null;
       question: string;
+      /** A daemon-composed lane-review ask (ADR 192): the lane's title, so the banner can say
+       *  "ryder asked big-body to accept <title>" instead of printing the machine prefix. */
+      reviewTitle: string | null;
       /** The hold words for right now: with a running clock, "goes ahead in 4 min if unanswered". */
       hold: string;
       /** m:ss — time left on the clock, or time elapsed while holding. */
@@ -78,12 +81,14 @@ export function askBanner(asks: readonly AskView[], ctx: AudienceContext, now: n
   const human = loud.filter((a) => askAudience(a, ctx) !== 'agent');
   const lead = human[0] ?? loud[0];
   if (lead) {
+    const review = /^\[lane\] acceptance requested: "([^"]+)"/.exec(lead.env.body);
     return {
       mode: 'open',
       lead,
       who: lead.env.from,
       to: lead.to,
-      question: oneLine(lead.env.body),
+      reviewTitle: review?.[1] ?? null,
+      question: review ? '' : oneLine(lead.env.body),
       hold: holdNow(lead, now),
       clock: clock(lead, now),
       more: loud.length - 1,
