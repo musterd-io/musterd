@@ -36,18 +36,20 @@ export const TRACE_COVERAGE_FIRST_DELAY_MS = 2 * 60 * 1000;
  * lane 01M3N78KVY) and the tap records all three as `PostToolUse`, with the source in
  * `detail.hook_event`. So the after-rows count only when the session has no `postToolUse` spelling
  * at all — then they are its whole record. Other harnesses carry no `hook_event` and count as is.
+ *
+ * And one call id counts once however many rows carry it: cursor-agent re-emits `postToolUse` for
+ * a call it is still on (wanderer's 0e58c84e: one Read fired 26 times — 144 Read rows over 106
+ * ids, lane 01M3N8GF8D). A row with no `tool_use_id` (older taps, harnesses that send none) is its
+ * own call, so the count never drops below what such rows would have read before.
  */
+const MAIN_POST = `kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NULL`;
+const PRIMARY_SPELLING = `COALESCE(json_extract(detail, '$.hook_event'), '')
+                          NOT IN ('afterShellExecution', 'afterMCPExecution')`;
 export const POST_TOOL_USE_ONCE = `
-  CASE WHEN SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NULL
-                      AND COALESCE(json_extract(detail, '$.hook_event'), '')
-                          NOT IN ('afterShellExecution', 'afterMCPExecution')
-                     THEN 1 ELSE 0 END) > 0
-       THEN SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NULL
-                      AND COALESCE(json_extract(detail, '$.hook_event'), '')
-                          NOT IN ('afterShellExecution', 'afterMCPExecution')
-                     THEN 1 ELSE 0 END)
-       ELSE SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NULL
-                     THEN 1 ELSE 0 END)
+  CASE WHEN SUM(CASE WHEN ${MAIN_POST} AND ${PRIMARY_SPELLING} THEN 1 ELSE 0 END) > 0
+       THEN COUNT(DISTINCT CASE WHEN ${MAIN_POST} AND ${PRIMARY_SPELLING}
+                                THEN COALESCE(tool_use_id, id) END)
+       ELSE COUNT(DISTINCT CASE WHEN ${MAIN_POST} THEN COALESCE(tool_use_id, id) END)
   END`;
 
 export interface LowCoverageSession {
