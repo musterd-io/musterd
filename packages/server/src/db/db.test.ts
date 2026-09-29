@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,9 +19,118 @@ describe('db', () => {
     // Bumped with every migration, deliberately ABSOLUTE rather than read from the MIGRATIONS
     // array: a test written against the constant under test cannot fail (ryder's ADR 236 finding —
     // one of his five mutants survived for exactly that reason).
-    expect(ver?.value).toBe('79');
+    expect(ver?.value).toBe('80');
     const fk = db.prepare<[], { foreign_keys: number }>('PRAGMA foreign_keys').get();
     expect(fk?.foreign_keys).toBe(1);
+    db.close();
+  });
+
+  it('migrates OAuth clients into team bindings without losing existing grants', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    for (const migration of MIGRATIONS) {
+      if (migration.version > 77) break;
+      migration.up(db);
+    }
+    db.prepare(
+      "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '77') " +
+        'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    ).run();
+
+    const team = createTeam(db, { slug: 'dawn' });
+    const { row: member } = addMember(db, team, {
+      name: 'Nick',
+      kind: 'human',
+      role: '',
+    });
+    const now = Date.now();
+    const clientId = 'cid_legacy';
+    const codeHash = createHash('sha256').update('legacy-code').digest('hex');
+    const accessHash = createHash('sha256').update('legacy-access').digest('hex');
+    const refreshHash = createHash('sha256').update('legacy-refresh').digest('hex');
+    db.prepare(
+      `INSERT INTO oauth_clients
+       (client_id, team_id, client_name, redirect_uris, client_secret_hash, auth_method, created_at)
+       VALUES (?, ?, ?, ?, NULL, 'none', ?)`,
+    ).run(clientId, team.id, 'Legacy DCR', JSON.stringify(['https://app.example/cb']), now);
+    db.prepare(
+      `INSERT INTO oauth_codes
+       (code_hash, team_id, member_id, client_id, redirect_uri, code_challenge, scope,
+        created_at, expires_at, used_at, connected_by)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, NULL)`,
+    ).run(
+      codeHash,
+      team.id,
+      member.id,
+      clientId,
+      'https://app.example/cb',
+      'legacy-challenge',
+      now,
+      now + 90_000,
+    );
+    const insertToken = db.prepare(
+      `INSERT INTO oauth_tokens
+       (token_hash, kind, team_id, member_id, client_id, chain_id, scope, created_at,
+        expires_at, replaced_at, revoked_at, connected_by)
+       VALUES (?, ?, ?, ?, ?, 'legacy-chain', NULL, ?, ?, NULL, NULL, NULL)`,
+    );
+    insertToken.run(accessHash, 'access', team.id, member.id, clientId, now, now + 3_600_000);
+    insertToken.run(refreshHash, 'refresh', team.id, member.id, clientId, now, now + 86_400_000);
+
+    runMigrations(db);
+
+    expect(
+      db.prepare('SELECT client_id, team_id, client_name, redirect_uris FROM oauth_clients').all(),
+    ).toEqual([
+      {
+        client_id: clientId,
+        team_id: team.id,
+        client_name: 'Legacy DCR',
+        redirect_uris: JSON.stringify(['https://app.example/cb']),
+      },
+    ]);
+    expect(
+      db
+        .prepare('SELECT team_id, client_id, source FROM oauth_client_bindings WHERE client_id = ?')
+        .all(clientId),
+    ).toEqual([{ team_id: team.id, client_id: clientId, source: 'dcr' }]);
+    expect(db.prepare('SELECT code_hash, client_id FROM oauth_codes').all()).toEqual([
+      { code_hash: codeHash, client_id: clientId },
+    ]);
+    expect(
+      db.prepare('SELECT token_hash, client_id FROM oauth_tokens ORDER BY token_hash').all(),
+    ).toEqual(
+      [
+        { token_hash: accessHash, client_id: clientId },
+        { token_hash: refreshHash, client_id: clientId },
+      ].sort((a, b) => a.token_hash.localeCompare(b.token_hash)),
+    );
+    for (const table of ['oauth_codes', 'oauth_tokens']) {
+      const foreignKeys = db.pragma(`foreign_key_list(${table})`) as Array<{
+        table: string;
+        from: string;
+        to: string;
+      }>;
+      expect(
+        foreignKeys
+          .filter((key) => key.table === 'oauth_client_bindings')
+          .map(({ from, to }) => ({ from, to }))
+          .sort((a, b) => a.from.localeCompare(b.from)),
+      ).toEqual([
+        { from: 'client_id', to: 'client_id' },
+        { from: 'team_id', to: 'team_id' },
+      ]);
+    }
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+
+    // Migration tests may rewind only the version marker to replay an older migration. The latest
+    // OAuth rebuild must tolerate that replay and preserve every live binding and grant.
+    db.prepare("UPDATE schema_meta SET value = '79' WHERE key = 'schema_version'").run();
+    expect(runMigrations(db)).toBe(80);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM oauth_client_bindings').get()).toEqual({ n: 1 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM oauth_codes').get()).toEqual({ n: 1 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM oauth_tokens').get()).toEqual({ n: 2 });
+    expect(db.pragma('foreign_key_check')).toEqual([]);
     db.close();
   });
 
@@ -145,7 +255,7 @@ describe('db', () => {
       `INSERT INTO seed_thread_entries (id, seed_id, kind, body, member_id, created_at)
        VALUES ('t1', 's1', 'clarification', 'why?', ?, 2)`,
     ).run(member.id);
-    expect(runMigrations(db)).toBe(79);
+    expect(runMigrations(db)).toBe(80);
     const col = (db.pragma('table_info(seeds)') as { name: string; notnull: number }[]).find(
       (c) => c.name === 'slack_user_id',
     );
@@ -333,7 +443,7 @@ describe('db', () => {
     member(1, 'm-obs', 'web-legacy');
     member(0, 'm-reg', 'nick');
 
-    expect(runMigrations(db)).toBe(79); // runs v18…v79 (governed authorization substrate, audit actor attestation, guidance epoch, doorbell, in_reply_to column, oauth, member sponsorship, agent connect nonces, team invites, agent connectors, roster status index, lane parked state, host provisions)
+    expect(runMigrations(db)).toBe(80); // runs v18…v80 (governed authorization substrate, audit actor attestation, guidance epoch, doorbell, in_reply_to column, oauth, member sponsorship, agent connect nonces, team invites, agent connectors, roster status index, lane parked state, host provisions, Team-scoped OAuth client bindings)
 
     const scope = (id: string) =>
       db
@@ -397,7 +507,7 @@ describe('db', () => {
     );
     team('t2', 'dawn', null);
 
-    expect(runMigrations(db)).toBe(79);
+    expect(runMigrations(db)).toBe(80);
 
     const policy = (id: string) =>
       db
@@ -729,7 +839,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
     stage(db, 'm1', 1, 1);
 
     db.prepare("UPDATE schema_meta SET value = '49' WHERE key = 'schema_version'").run();
-    expect(runMigrations(db)).toBe(79);
+    expect(runMigrations(db)).toBe(80);
 
     expect(db.prepare('SELECT COUNT(*) AS n FROM sync_log').get()).toEqual({ n: 1 });
     db.close();
@@ -744,7 +854,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
     db.exec('DROP INDEX idx_messages_origin; DROP TABLE sync_pull_cursor;');
     db.prepare("UPDATE schema_meta SET value = '55' WHERE key = 'schema_version'").run();
 
-    expect(runMigrations(db)).toBe(79);
+    expect(runMigrations(db)).toBe(80);
 
     expect(
       db.prepare("SELECT name FROM sqlite_master WHERE name = 'sync_pull_cursor'").get(),
@@ -760,7 +870,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
   it('v58 stamps audit with the origin pair, unique only where a stamp exists', () => {
     const db = withRemoteNode();
     db.prepare("UPDATE schema_meta SET value = '57' WHERE key = 'schema_version'").run();
-    expect(runMigrations(db)).toBe(79);
+    expect(runMigrations(db)).toBe(80);
 
     const insert = db.prepare(
       `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq)
@@ -830,7 +940,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
       INSERT INTO seat_nodes VALUES ('m', 't', 'nA', 5);
     `);
     db.prepare("UPDATE schema_meta SET value = '62' WHERE key = 'schema_version'").run();
-    expect(runMigrations(db)).toBe(79);
+    expect(runMigrations(db)).toBe(80);
     expect(db.prepare('SELECT member_id, node_id, bound_at FROM seat_nodes').all()).toEqual([
       { member_id: 'm', node_id: 'nA', bound_at: 5 },
     ]);
@@ -871,7 +981,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
     expect(plan).toMatch(/idx_messages_in_reply_to \(team_id=\? AND in_reply_to=\?\)/);
     // A replay must not re-add the column: table_info hides a VIRTUAL column, table_xinfo shows it.
     db.prepare("UPDATE schema_meta SET value = '70' WHERE key = 'schema_version'").run();
-    expect(runMigrations(db)).toBe(79);
+    expect(runMigrations(db)).toBe(80);
     db.close();
   });
 });

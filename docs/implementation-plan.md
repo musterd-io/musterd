@@ -2,7 +2,7 @@
 
 > **Where we are now**, kept short and mostly derived. The decision record is `docs/decisions/` (the ADRs — the *why* and the per-change detail); what's next is `ROADMAP.md`; the protocol contract is `SPEC.md`. See AGENTS.md → “Where each doc lives” for how the docs fit together. Update this file only when the **milestone state** changes — not per PR (git + the ADRs are the per-change record).
 
-## Status — 2026-09-19
+## Status — 2026-09-29
 
 - **Product:** v0.2 behavior remains stable. The optional Tailscale + Aperture paved road is not a complete runtime path; its current boundary is reviewed artifacts, an opt-in authorization substrate, and a non-spawning CLI handoff adapter.
 - **Paved-road Increment 1:** implemented as the read-only `musterd integration doctor` for Tailscale transport and Aperture configuration posture ([ADR 385](decisions/385-optional-tailscale-aperture-doctor.md)).
@@ -11,6 +11,7 @@
 - **Paved-road Increment 3:** partially implemented as the protocol/server authorization substrate plus typed CLI and pure Claude Code/Codex handoff plan ([ADR 411](decisions/411-governed-model-authorization-substrate.md), [ADR 425](decisions/425-governed-launcher-adapter-handoff.md)). It covers server-owned policy, one-shot `msla_` launch handoffs, enrolled node and Presence checks, bounded Lane/Act context, structured refusal, metadata-only audit, endpoint validation, and direct-provider-credential stripping. It does not spawn a harness, consume a launch, bind a live Tailscale/Aperture runtime, route provider requests, or activate `required` enforcement.
 - **Paved-road Increment 4:** not implemented. There is no API-driven Tailscale/Aperture provisioning or apply surface.
 - **Sponsor-hosted agents (2026-09-29):** a member's agent is provisioned and woken on the sponsor's own `musterd host`, under sponsor-scoped authority; ADR 456's takeover residual is closed in code ([ADR 463](decisions/463-sponsor-hosted-agents.md), #1784–#1818, Scenario E). Not yet run against a real daemon outside the scenario.
+- **Remote MCP OAuth/CIMD (ADR 470):** implemented in the active increment 3 lane. The server advertises CIMD, resolves DCR before CIMD during authorization, and keeps code and refresh exchange network-free with Team-scoped client bindings. Real-client acceptance with Claude and an eligible ChatGPT account remains open; fixtures do not satisfy that acceptance.
 - **Protocol:** `SPEC.md` remains **`musterd/0.3`**; Appendix A.12 defines the strict governed policy, one-shot launch handoff, work contexts, and structured decisions from ADR 411.
 - **Published:** `@musterd/*@0.2.0` on npm (git tag `v0.2.0`).
 - **Quality:** Package-level tests cover the protocol schemas, generator/doctor behavior, and governed server routes. No automated end-to-end scenario currently proves the original full path from a supported Surface through Tailscale and Aperture to provider/cost evidence.

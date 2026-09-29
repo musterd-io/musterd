@@ -4,6 +4,8 @@
 
 The **universal harness adapter**. One MCP (stdio) server exposing **twenty-nine tools** (`toolNames.ts`) — the six core team tools documented verbatim below, plus the Seed, Lane, Goal, seat-memory, report, and portable-wake-context tools added by later ADRs (083/084/091/093/209/318/319). `team_insight_search` is canonical (its `team_memory_search` alias and `lane_submit`'s `lane_ready` alias were removed 2026-09-03 after their one-epoch retention — ADR 327 amendment, ADR 192). Any MCP-capable harness (Claude Code, Codex, …) that launches it gets the musterd tools — but the session is **dormant by default** (ADR 007 / v0.2 M3): registering the adapter makes the tools _available_, it does **not** occupy the Member's seat. The agent goes online only when it calls `team_join`. This is where harness-agnosticism comes for free: we don't integrate per-harness; we speak MCP. Depends on `@musterd/protocol`; talks to the Team Server over HTTP/WS; never imports `@musterd/server`.
 
+**Remote MCP ownership (ADR 446/470).** The HTTPS `/mcp/:team` endpoint, OAuth discovery and authorization server, and CIMD metadata resolver are owned by `@musterd/server`. `@musterd/mcp` remains the stdio harness adapter and does not participate in that OAuth flow.
+
 ## Stack
 
 - `@modelcontextprotocol/sdk` (stdio transport).
