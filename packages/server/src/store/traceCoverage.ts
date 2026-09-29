@@ -29,6 +29,27 @@ export const TRACE_COVERAGE_LOOKBACK_MS = 2 * 24 * 60 * 60 * 1000;
 export const TRACE_COVERAGE_INTERVAL_MS = 60 * 60 * 1000;
 export const TRACE_COVERAGE_FIRST_DELAY_MS = 2 * 60 * 1000;
 
+/**
+ * Rail R1's count of a session's main-loop tool calls, as a SQL aggregate over its rows: one call
+ * is one call. Cursor fires `afterShellExecution` / `afterMCPExecution` BESIDE `postToolUse` for the
+ * same call (on cursor-agent too — wanderer's 0e58c84e read 86 + 91 hook rows for 92 shell calls,
+ * lane 01M3N78KVY) and the tap records all three as `PostToolUse`, with the source in
+ * `detail.hook_event`. So the after-rows count only when the session has no `postToolUse` spelling
+ * at all — then they are its whole record. Other harnesses carry no `hook_event` and count as is.
+ */
+export const POST_TOOL_USE_ONCE = `
+  CASE WHEN SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NULL
+                      AND COALESCE(json_extract(detail, '$.hook_event'), '')
+                          NOT IN ('afterShellExecution', 'afterMCPExecution')
+                     THEN 1 ELSE 0 END) > 0
+       THEN SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NULL
+                      AND COALESCE(json_extract(detail, '$.hook_event'), '')
+                          NOT IN ('afterShellExecution', 'afterMCPExecution')
+                     THEN 1 ELSE 0 END)
+       ELSE SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NULL
+                     THEN 1 ELSE 0 END)
+  END`;
+
 export interface LowCoverageSession {
   team_id: string;
   seat: string;
@@ -60,8 +81,7 @@ export function findLowCoverageSessions(
       }
     >(
       `SELECT team_id, seat, MIN(harness) AS harness, session_digest,
-              SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NULL
-                       THEN 1 ELSE 0 END) AS post,
+              ${POST_TOOL_USE_ONCE} AS post,
               SUM(CASE WHEN kind = 'usage'
                        THEN COALESCE(json_extract(detail, '$.tool_uses'), 0) ELSE 0 END) AS r2,
               MAX(received_at) AS last
