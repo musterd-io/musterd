@@ -177,8 +177,17 @@ never provisioned a second time. `--no-provision` opts out; `musterd host provis
   reason). A known limit: `host_liveness` keeps one `sponsor_id` per label, so two sponsors
   sharing one label see only the last to poll. The other sponsor falls back to the connect link,
   which is safe.
+- 2026-09-29 (increment 3, Scenario): this ADR and its spec called the end-to-end acceptance
+  "Scenario D". `06-testing.md` already had a Scenario D (the multi-harness `worktree` selection, ADR
+  281/282/286), so this one is Scenario E, in `tests/scenarios/sponsor-hosted.test.ts`. It uses the
+  real daemon, real git, the real provisioner and the real wake loop, and fakes only the harness's
+  MCP registration and the woken session (a real `MusterdClient` claiming the seat with the
+  binding's own credentials). Falsifiers, run by mutation: disabling the one-time `provisioned` wake
+  fails step 5; skipping the cascade's residency revoke fails step 8. Step 8 removes the sponsor
+  rather than disabling them: disable and ban have no writer on a team that holds sponsored agents
+  (§4.2, amended 2026-09-28), so removal is the trigger the eval exercises.
 - The work lands in five PRs, each alone: (1) this ADR; (2) sponsor-scoped authority and host-key
-  scoping; (3) the residual closed in code; (4) provisions; (5) the provisioner, Scenario D, docs.
+  scoping; (3) the residual closed in code; (4) provisions; (5) the provisioner, Scenario E, docs.
 
 ## Observability & Evaluation
 
@@ -186,9 +195,9 @@ never provisioned a second time. `--no-provision` opts out; `musterd host provis
   with `detail.sponsor_scoped`; `host.provision_claimed`, `host.provision_ready`,
   `host.provision_failed` (with reason), `host.provision_cancelled`; the `provisioned` wake order
   and the new seat's first `team_send` to its sponsor.
-- **Eval:** Scenario D (`06-testing.md`): a non-admin member with a running `musterd host` calls
+- **Eval:** Scenario E (`06-testing.md`): a non-admin member with a running `musterd host` calls
   `team_agent_create`; within 2 minutes the new agent greets them by name from a seat enrolled on
-  that host; the member cannot OAuth-connect it; an admin disabling the member stops its wakes.
+  that host; the member cannot OAuth-connect it; an admin removing the member stops its wakes.
   Negative falsifiers: a sponsor host key sees zero wake orders for a seat it does not sponsor on
   a shared host label; a sponsor minting for another member's agent gets `forbidden`; a report
   after the sponsor is disabled is refused. Baseline: today no non-admin-created agent ever gets
