@@ -1,4 +1,9 @@
 import {
+  type HostProvision,
+  type HostProvisionReportBody,
+  HostProvisionSchema,
+  type HostProvisionsClaimResponse,
+  HostProvisionsClaimResponseSchema,
   AuditResponseSchema,
   DecideResponseSchema,
   ErrorBodySchema,
@@ -637,6 +642,35 @@ export class HttpClient {
       `/teams/${encodeURIComponent(slug)}/agent-bootstrap-credentials`,
       body,
     );
+  }
+  /**
+   * ADR 463 §2: the sponsor's host claims the provisions it may serve (host-key auth — the binding's
+   * `host_key`, never a seat key). One claimant per row, capped per host by the daemon.
+   */
+  async claimProvisions(slug: string, host: string): Promise<HostProvisionsClaimResponse> {
+    const json = await this.request('POST', `/teams/${encodeURIComponent(slug)}/host/provisions`, {
+      host,
+    });
+    const parsed = HostProvisionsClaimResponseSchema.safeParse(json);
+    if (!parsed.success)
+      throw new CliError('provision claim response did not match the protocol schema', 1);
+    return parsed.data;
+  }
+  /** ADR 463 §2: report a claimed provision `ready` or `failed {reason}`. */
+  async reportProvision(
+    slug: string,
+    id: string,
+    body: HostProvisionReportBody,
+  ): Promise<{ provision: HostProvision }> {
+    const json = await this.request(
+      'POST',
+      `/teams/${encodeURIComponent(slug)}/host/provisions/${encodeURIComponent(id)}/report`,
+      body,
+    );
+    const parsed = z.object({ provision: HostProvisionSchema }).safeParse(json);
+    if (!parsed.success)
+      throw new CliError('provision report response did not match the protocol schema', 1);
+    return parsed.data;
   }
   // ADR 450: team invites. The secret comes back once from mint and is never listed.
   mintInvite(

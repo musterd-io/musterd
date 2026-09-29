@@ -1,12 +1,10 @@
-import { type Binding, resolveAttestedModel } from '@musterd/protocol';
+import { resolveAttestedModel } from '@musterd/protocol';
 import { flagStr, type Parsed, flagHue } from '../args.js';
-import { loadConfig, saveBinding, saveWorkspaceSpec } from '../config.js';
+import { loadConfig } from '../config.js';
 import { CliError } from '../errors.js';
 import { infraTouchWarning } from '../infra-gate.js';
 import { HARNESSES } from '../onboard/harnesses/index.js';
-import { buildEntry } from '../onboard/mcpEntry.js';
-import { installSeatPermissions } from '../onboard/permissions.js';
-import { loadToolkit } from '../onboard/toolkit.js';
+import { provisionSeat } from '../onboard/provisionSeat.js';
 import { provisionWorkspace } from '../onboard/workspace.js';
 import { theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
@@ -129,113 +127,30 @@ export async function agentCommand(
     }
     reused = true;
   }
-  // ADR 344: every provisioned workspace receives a credential constrained to this one seat.
-  // Mint after declaration because the server validates the target against the live roster. Never
-  // fall back to the ambient legacy Team-wide key: that would silently preserve its blast radius.
-  // This field is the *claim* authenticator. The wake actuator authenticates with `binding.host_key`
-  // (ADR 395), minted at `residency on` — a claim-scoped key cannot poll `/residency/wake-leases`.
-  const agentKey = (
-    await http.mintBootstrapCredential(team, {
-      use: 'claim_seat',
-      target: name,
-      label: `${harness.id}:${name}`,
-    })
-  ).agent_key;
-
-  // Mint a standing grant for the seat so the workspace's autojoin occupies immediately on launch
-  // instead of opening an admin-approval request every session (ADR 077). Best-effort: if it fails
-  // (e.g. the caller isn't admin), the agent still comes online — its first claim just routes through
-  // the approval lane. Issuing here is safe: `addMember` above already required an admin identity.
-  let grant: string | undefined;
-  try {
-    const mint = await http.issueGrant(team, { scope: 'seat', target: name, lifetime: 'standing' });
-    grant = mint.token;
-  } catch {
-    grant = undefined;
-  }
-
+  // Steps 2–5 of ADR 065 — credential, grant, binding, permissions, spec, harness wiring — are one
+  // shared sequence (`provisionSeat`, ADR 463 §3), so a sponsor's host provisions exactly what this
+  // command does. The workspace is made after the credential is minted, as it always was.
   const here = Boolean(parsed.flags['here']);
-  const ws = provisionWorkspace(name, {
-    here,
+  const {
+    workspace: ws,
+    granted,
+    mcpError,
+  } = await provisionSeat({
     team,
-    ...(flagStr(parsed.flags, 'path') ? { path: flagStr(parsed.flags, 'path')! } : {}),
+    name,
+    server: config.server,
+    harness,
+    http,
+    workspace: () =>
+      provisionWorkspace(name, {
+        here,
+        team,
+        ...(flagStr(parsed.flags, 'path') ? { path: flagStr(parsed.flags, 'path')! } : {}),
+      }),
+    model,
+    driver,
+    profileName,
   });
-
-  const binding: Binding = {
-    version: 2,
-    server: config.server,
-    team,
-    agent_key: agentKey,
-    claim: { mode: 'seat', name },
-    ...(grant !== undefined ? { grant } : {}),
-    ...(model !== undefined ? { model } : {}),
-    // Per-worktree, NOT the shared harness entry (ADR 165 inc 2): the entry is keyed by repo root
-    // and shared by every sibling worktree, so autojoin/driver baked there applied family-wide —
-    // `--driver nick` marked every seat on the machine as driven by nick (ADR 155 corruption).
-    autojoin: true,
-    ...(driver ? { driver } : {}),
-  };
-  saveBinding(ws.dir, binding);
-  // ADR 261: the permissions floor — plus the profile's lists when --profile names one — lands
-  // with the binding, so a NON-INTERACTIVE session in this worktree can work on day one. Until this
-  // write, a fresh seat's first Write failed closed with no way to prompt and presented as a
-  // broken tool (the 2026-08-13 ryder incident). Best-effort like hook install: a permissions
-  // hiccup never fails seat creation. Dir-aware — ws.dir is never cwd().
-  try {
-    const template = profileName ? loadToolkit(ws.dir, profileName) : undefined;
-    installSeatPermissions(ws.dir, template);
-  } catch {
-    /* an unknown profile name or a broken settings file must not block the seat — init --check
-       (ADR 261 increment 2) is the surface that reports it */
-  }
-  // Also write the secret-free committed launch spec (ADR: committed launch spec) so this worktree
-  // self-wires via `musterd wire` on a fresh clone/machine — the key stays out of the committed file.
-  saveWorkspaceSpec(ws.dir, {
-    version: 2,
-    server: config.server,
-    team,
-    claim: { mode: 'seat', name },
-  });
-
-  // Register the MCP server *for the workspace folder*. No secret is baked into any harness config —
-  // binding.json stays the single source of truth (ADR 018/115) — and, critically, **we do not name the
-  // binding file in the env** (ADR 143).
-  //
-  // We used to set `MUSTERD_BINDING=<ws.dir>/.musterd/binding.json` here, on the assumption that chdir-ing
-  // into `ws.dir` scoped the registration to this worktree: "`claude mcp add -s local` keys off cwd".
-  // **That assumption is false.** Claude Code keys its local scope by **repo root**, and every seat
-  // worktree (`agents-miley`, `agents-dolly`, …) is a git worktree of the *same* repo — so all of them
-  // share one entry, and `MUSTERD_BINDING` was a single global slot that each `musterd agent` overwrote.
-  // Provisioning one seat therefore re-pointed *every live session on the machine* at that seat: on
-  // 2026-07-13 they all booted as `dolly` and superseded each other off their own seats, mid-task.
-  //
-  // The env var was never needed here anyway: the adapter anchors on the `.musterd/binding.json` it finds
-  // by walking up from its **cwd**, which the harness sets to the session's workspace — a signal that is
-  // genuinely per-worktree, unlike the shared config. Omitting it makes the shared entry identical for
-  // every seat, and therefore harmless. (The adapter also refuses a cross-workspace `MUSTERD_BINDING`
-  // outright now — see `mcp/binding.ts` — so this can't come back through another door.)
-  const agentBinding = {
-    server: config.server,
-    team,
-    agent_key: agentKey,
-    claim: { mode: 'seat', name } as const,
-    ...(grant !== undefined ? { grant } : {}),
-  };
-  // Seat-agnostic by construction (ADR 143, completed by ADR 165 + increment 2): this entry is keyed
-  // by repo root and therefore shared by every seat worktree, so it carries NOTHING — autojoin and
-  // driver, the last two baked names, now live in binding.json like everything else. `buildMcpEnv`
-  // is where the rule is written down and where the sharedEntry regression binds.
-  const entry = buildEntry(agentBinding);
-  let mcpError: string | null = null;
-  const prevCwd = process.cwd();
-  try {
-    process.chdir(ws.dir);
-    await harness.configure(entry, agentBinding);
-  } catch (err) {
-    mcpError = (err as Error).message;
-  } finally {
-    process.chdir(prevCwd);
-  }
 
   if (parsed.flags['json']) {
     process.stdout.write(
@@ -247,7 +162,7 @@ export async function agentCommand(
         branch: ws.branch ?? null,
         harness: harness.id,
         mcpRegistered: mcpError === null,
-        granted: grant !== undefined,
+        granted,
       }) + '\n',
     );
     return 0;
