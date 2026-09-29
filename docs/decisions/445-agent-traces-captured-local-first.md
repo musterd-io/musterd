@@ -481,6 +481,20 @@ ADR 184's publication gate; a spans backend.
   after-hooks. The tap's note in `trace/hook.ts` no longer says cursor-agent fires the after-hooks
   *instead of* `postToolUse` — it fires them beside. Falsifier: a cursor session whose report
   numerator exceeds its `postToolUse`-spelled main-loop rows while it has any.
+- **2026-09-29 — the Read double-fire is a re-emitted call id, and one call id counts once** (lane
+  `01M3N8GF8DTK2SQFSCV8WNMZK9`). The 144 Read rows of wanderer's 0e58c84e carry 106 distinct
+  `tool_use_id`s: three ids fired `postToolUse` 7, 8 and 26 times, seconds apart, with identical
+  input bytes — cursor-agent re-emits the hook for a call it is still on. Not a per-file fire
+  (a multi-path Read is one id per path, `_0…_3`) and not a duplicate hook install (no two rows
+  share a timestamp). `POST_TOOL_USE_ONCE` now counts distinct `COALESCE(tool_use_id, id)`, so a
+  row without an id is still its own call and no harness reads lower than before. On the six matrix
+  sessions the cursor numerator goes 585 → 505 (0e58c84e 317 → 249 against 262 in its transcript)
+  and the ratio 1.077 → **0.930** — under target now, and the remaining gap is the transcript's
+  side: calls with no hook at all (`Glob`, `GetDynamicTools`) and, on the IDE, a compacted
+  transcript. Two things this read also found and did not fix: the 106 distinct ids still exceed
+  the transcript's 73 Read blocks by 33, unexplained; and rows from that session's build carry a
+  `tool_use_id` of two ids joined by a newline (`call-…\nfc_…`), which the tap has since cut to its
+  first line. Falsifier: a session whose numerator exceeds its distinct main-loop call ids.
 - Risk: the trace store grows fast. `trace.db` isolates that growth from `musterd.db`'s lock and
   backup path; the 30-day content prune bounds it; `musterd status` reports the file's size.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a

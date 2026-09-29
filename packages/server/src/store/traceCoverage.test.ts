@@ -121,6 +121,35 @@ describe('findLowCoverageSessions (ADR 445 trace.coverage_low)', () => {
     ]);
   });
 
+  // Lane 01M3N8GF8D: cursor-agent re-emits `postToolUse` for one call id (wanderer 0e58c84e: one
+  // Read fired 26 times, 144 rows over 106 ids). One call id is one call, however often it fires.
+  it('counts a call id once however many times its hook fired', () => {
+    const { db, traceDb, team } = fixture();
+    const row = (tool_use_id: string): TraceEvent => ({
+      harness: 'cursor',
+      session_digest: 'aaaaaaaaaaaa',
+      ts: 1,
+      kind: 'PostToolUse',
+      tool_name: 'Read',
+      tool_use_id,
+      detail: { hook_event: 'postToolUse' },
+    });
+    ingestTraceEvents(traceDb, team.id, 'ryder', [
+      // 9 distinct calls, one of them fired 12 times: 20 rows over 10 transcript calls hides 0.9
+      ...Array.from({ length: 9 }, (_, i) => row(`call-${i}`)),
+      ...Array.from({ length: 11 }, () => row('call-0')),
+      {
+        harness: 'cursor',
+        session_digest: 'aaaaaaaaaaaa',
+        ts: 1,
+        kind: 'usage',
+        detail: { parser: 'cursor@1', tool_uses: 10 },
+      },
+    ]);
+    const found = findLowCoverageSessions(db, traceDb, Date.now() + TRACE_COVERAGE_QUIET_MS + 1000);
+    expect(found.map((s) => [s.post_tool_use, s.coverage])).toEqual([[9, 0.9]]);
+  });
+
   it('leaves sessions older than the lookback to the pass that saw them', () => {
     const { db, traceDb, team } = fixture();
     ingestTraceEvents(traceDb, team.id, 'ryder', session('eeeeeeeeeeee', 1, 10, 1));

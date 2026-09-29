@@ -90,7 +90,10 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
     ingestTraceEvents(traceDb, team.id, 'ryder', [
       cursor({ detail: { hook_event: 'postToolUse' } }),
       cursor({ detail: { hook_event: 'afterShellExecution' } }),
-      cursor({ tool_name: 'Read', detail: { hook_event: 'postToolUse' } }),
+      cursor({ tool_name: 'Read', tool_use_id: 'call-r1', detail: { hook_event: 'postToolUse' } }),
+      // lane 01M3N8GF8D: the same call id re-emitted (cursor-agent fired one Read 26 times)
+      cursor({ tool_name: 'Read', tool_use_id: 'call-r1', detail: { hook_event: 'postToolUse' } }),
+      cursor({ tool_name: 'Read', tool_use_id: 'call-r1', detail: { hook_event: 'postToolUse' } }),
       cursor({ tool_name: 'other', detail: { hook_event: 'afterMCPExecution' } }),
       cursor({ tool_name: 'other', detail: { hook_event: 'postToolUse' } }),
       cursor({ kind: 'usage', detail: { parser: 'cursor@1', tool_uses: 3 } }),
