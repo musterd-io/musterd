@@ -7,10 +7,10 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod';
+import { isEntryPoint } from '../entry.js';
 import { NOTE_TEXT_MAX, seatActor, type CreatedBy, type EditOp, type ItemInput } from '../port.js';
 import { WhiteboardServiceClient } from './client.js';
 import { formatOutline } from './format.js';
-import { isEntryPoint } from '../entry.js';
 
 const NO_ACTOR_MSG =
   'no seat has opened a board in this session — call whiteboard_open first (its `seat` parameter is what attributes your shapes)';

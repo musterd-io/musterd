@@ -14,11 +14,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { isEntryPoint } from './entry.js';
 import type { CreatedBy, EditOp, ItemInput } from './port.js';
 import { BOARD_NAME_RE } from './port.js';
 import { RoomManager } from './sync/roomManager.js';
 import { TldrawProvider } from './tldraw/provider.js';
-import { isEntryPoint } from './entry.js';
 
 export const DEFAULT_PORT = 4851;
 
