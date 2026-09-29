@@ -3,12 +3,18 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { officeRoom, type OfficeRoomProps } from './officeRoom';
 
-const src = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+const src = (rel: string): string =>
+  readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
 describe('officeRoom', () => {
   it('carries every room fact through', () => {
     const stream = {
-      teamWorkingHours: { timezone: 'America/Los_Angeles', days: ['mon'], start: '11:00', end: '15:00' },
+      teamWorkingHours: {
+        timezone: 'America/Los_Angeles',
+        days: ['mon'],
+        start: '11:00',
+        end: '15:00',
+      },
       roster: [{ name: 'miley' }],
       envelopes: [{ id: 'e1' }],
       liveIds: new Set(['miley']),
@@ -17,7 +23,7 @@ describe('officeRoom', () => {
     const entries = [{ name: 'miley' }] as unknown as OfficeRoomProps['entries'];
     const board = { lanes: [] } as unknown as OfficeRoomProps['board'];
 
-    const room = officeRoom('revive', stream, { entries, board });
+    const room = officeRoom('revive', stream, { entries, board, asks: [] });
     expect(room).toEqual({
       teamName: 'revive',
       teamWorkingHours: stream.teamWorkingHours,
@@ -26,6 +32,7 @@ describe('officeRoom', () => {
       liveIds: stream.liveIds,
       entries,
       board,
+      asks: [],
       status: stream.status,
     });
   });

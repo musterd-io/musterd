@@ -535,7 +535,7 @@ function LivePage() {
             inert={boardOpen || seedsOpen || logOpen}
           >
             <OfficeScene
-              {...officeRoom(team, stream, { entries, board })}
+              {...officeRoom(team, stream, { entries, board, asks })}
               collapsed={collapsed.office}
               onCollapse={() => toggleCollapse('office')}
               onActClick={onActClick}

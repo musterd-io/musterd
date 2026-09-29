@@ -102,6 +102,22 @@ export interface OfficeData {
   wallBoard?: WallBoard | null;
   /** Members taking turns in an open huddle (ADR 378) — they gather at the meeting table. */
   gathered?: string[];
+  /**
+   * Asks to a human, as the room sees them (ADR 464 §3.3): the asker raises a hand and a card rests
+   * at the human's desk while `state` is open; a settled one shows its outcome for a beat, then
+   * clears. Agent-routed review asks are filtered out upstream — they are reviews, not room moments.
+   */
+  asks?: OfficeAsk[];
+}
+
+export interface OfficeAsk {
+  id: string;
+  from: string;
+  /** The human asked, or null for a team-addressed ask (the card rests with the asker). */
+  to: string | null;
+  state: 'open' | 'settled';
+  /** What settled it — the card's mark. Absent while open. */
+  outcome?: 'accepted' | 'declined' | 'proceeded' | 'deferred' | 'expired' | 'resolved';
 }
 
 /** A thought/urgency bubble over an actor's head while it's mid-choreography. */

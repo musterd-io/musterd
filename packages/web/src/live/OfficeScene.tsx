@@ -4,7 +4,9 @@ import { MusterdWord } from '../brand/MusterdWord';
 import { memberColor, memberPosture } from './format';
 import { gatheredFrom } from './huddles';
 import { HuddleRail } from './HuddleRail';
-import type { OfficeData, OfficeHandle } from './office-scene';
+import type { OfficeAsk, OfficeData, OfficeHandle } from './office-scene/types';
+import { askIsLoud, type AskView } from './asks';
+import { SETTLED_MS } from './askPhrase';
 import { actToEvent, speechEventFor } from './office-scene/mapping';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { captionFor, type Caption } from './captions';
@@ -34,8 +36,10 @@ function computeData(
   entries: RoomEntry[],
   board: LaneBoard | null,
   envelopes: Envelope[],
+  asks: readonly AskView[],
 ): OfficeData {
   const byName = new Map(entries.map((e) => [e.name, e]));
+  const humans = new Set(roster.filter((m) => m.kind === 'human').map((m) => m.name));
   // ADR 449's `sponsored_by` is a member ID; the welcome caption says the sponsor's NAME.
   const nameById = new Map(roster.map((m) => [m.id, m.name]));
   return {
@@ -45,6 +49,7 @@ function computeData(
     // Who is in an open huddle right now (ADR 378 increment 2) — folded from the timeline the page
     // already holds, so both surfaces gather without either route wiring anything.
     gathered: [...gatheredFrom(envelopes)],
+    asks: roomAsks(asks, humans, Date.now()),
     nodes: roster.map((m) => {
       const kind = m.kind === 'human' ? 'human' : 'agent';
       const live =
@@ -84,6 +89,37 @@ function computeData(
 }
 
 /**
+ * The asks the ROOM plays (ADR 464 §3.3): to a human or the team only — an agent-routed review ask
+ * is a review, not a room moment — open while loud, settled for a beat after `settledAt`, then gone.
+ */
+function roomAsks(asks: readonly AskView[], humans: Set<string>, now: number): OfficeAsk[] {
+  const out: OfficeAsk[] = [];
+  for (const a of asks) {
+    if (a.to !== null && !humans.has(a.to)) continue;
+    if (askIsLoud(a.state)) {
+      out.push({ id: a.env.id, from: a.env.from, to: a.to, state: 'open' });
+      continue;
+    }
+    if (a.settledAt !== undefined && now - a.settledAt <= SETTLED_MS) {
+      const outcome =
+        a.state === 'accepted'
+          ? 'accepted'
+          : a.state === 'declined'
+            ? 'declined'
+            : a.state === 'deferred'
+              ? 'deferred'
+              : a.state === 'resolved'
+                ? 'resolved'
+                : a.state === 'lapsed'
+                  ? 'expired'
+                  : 'proceeded';
+      out.push({ id: a.env.id, from: a.env.from, to: a.to, state: 'settled', outcome });
+    }
+  }
+  return out;
+}
+
+/**
  * The live isometric office: every teammate sits at a desk (presence decides who's in the room and
  * whether they're working / idle / away), and each act plays as a cue over the floor. The scene is
  * dynamically imported (kept out of SSR); prefers-reduced-motion draws a static frame. Name labels are
@@ -105,6 +141,7 @@ export function OfficeScene({
   sprites = false,
   entries,
   board,
+  asks,
   status,
   onReady,
   topSlot,
@@ -167,8 +204,8 @@ export function OfficeScene({
   const emittedRef = useRef<Set<string>>(new Set());
 
   const data = useMemo(
-    () => computeData(teamName, teamWorkingHours, roster, entries, board, envelopes),
-    [teamName, teamWorkingHours, roster, entries, board, envelopes],
+    () => computeData(teamName, teamWorkingHours, roster, entries, board, envelopes, asks),
+    [teamName, teamWorkingHours, roster, entries, board, envelopes, asks],
   );
   // Latest-value refs for the mount effect below, which subscribes ONCE and must not re-run when a
   // prop identity changes (re-running it would tear down and rebuild the whole canvas scene).

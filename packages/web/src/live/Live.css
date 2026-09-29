@@ -1726,6 +1726,40 @@
 /* The provider mark as an enamel pin: a domed, colour-filled badge with a specular cap, seated into
    the paper with a shadow beneath. At 11px the highlight is doing the legibility work — a flat chip
    this size reads as a coloured square, where a lit dome reads as an object. */
+/* The ask card (ADR 464 §3.3): a small paper tag resting just above the human's plate while an
+   ask to them is open — the asker's hand, in the asker's hue. Settled, it wears the verdict's mark
+   for a beat (index.ts ASK_SETTLED_MS) and clears. Same stock as the plate; never text-on-fill. */
+.lc-gl-ask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px 2px 5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--lc-ask-hue, var(--lc-accent)) 60%, var(--lc-paper-rim));
+  background: var(--lc-paper);
+  color: var(--lc-paper-ink);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--lc-type-name);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 2px -0.5px var(--lc-paper-drop);
+  animation: lc-caption-in var(--lc-dur-2) ease-out;
+  transition: opacity var(--lc-dur-2) var(--lc-ease-out);
+}
+.lc-gl-ask__hand {
+  font-size: 12px;
+  line-height: 1;
+}
+.lc-gl-ask.is-settled {
+  border-color: color-mix(in srgb, var(--lc-success) 60%, var(--lc-paper-rim));
+}
+.lc-gl-ask.is-settled .lc-gl-ask__hand {
+  color: var(--lc-success-ink);
+  font-weight: 700;
+}
 .lc-gl-label__model {
   font-size: 11px;
   font-weight: 600;

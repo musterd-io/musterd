@@ -79,13 +79,22 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
 - **Team column** (`live/TeamColumn.tsx` + `live/TeamCard.tsx`) — who is here, read by a room
   (ADR 464): one card per present member with the provider logo and readable model name
   (`modelBadge.ts`: observed / declared / unknown / human — never a guess), a plain-language state
-  (`teamCards.ts`: working on · waiting for review · blocked on · between tasks · away, from the lane
-  board + posture), the lane title in large type with its goal and elapsed time, and offline seats
+  (`teamCards.ts`: working on · waiting for review · blocked on · asking nick · between tasks ·
+  away, from the lane board + posture + the derived asks), the lane title in large type with its goal and elapsed time, and offline seats
   folded to a count. Hovering a card rings the member's plate in the office and vice versa
   (`OfficeHandle.setLinked`). Click expands to the operator detail the roster rail used to carry
   (`SeatDetail`, exported from `live/RosterPanel.tsx`): posture chip with offline reason
   (ADR 138/141), account-status exceptions and capability deviations (ADR 070), residency (ADR 131),
   and the per-seat `trace` expander (ADR 445). Collapsed, it is a rail of avatars with logo pips.
+- **Ask banner** (`live/AsksStrip.tsx`, words from `live/askPhrase.ts`) — the top of the office
+  (ADR 464 §6): "✋ ryder is asking nick: *question* · holding until answered · 4:12", Approve / Deny
+  inline for an answerer, "+N more waiting" opens the sheet, a settled outcome for ~6s
+  (`AskView.settledAt`), else a quiet "no open questions" pill. The strip's machinery is unchanged
+  underneath — derivation and tier clock (`asks.ts`), answers, the sheet with the operator terms,
+  the review queue, browser notifications (ADR 443), sign-in offers (ADR 222). The room plays the
+  same ask (ADR 464 §3.3): `OfficeData.asks` raises the asker's hand with a `?` cue and rests an
+  `lc-gl-ask` card at the human's plate while it is open; settled, the card wears ✓ / ✗ / → for a
+  beat and clears. `/broadcast`'s `AsksReel` is untouched.
 - **Shared Seeds tray** (`live/SeedsTray.tsx`) — a read-only drawer from the `/live` top bar (ADR 319).
   Active uses the protocol's shared tray rule; history reveals completed/promoted work and links a
   promoted Seed to the ordinary focused Lane view. It refetches on firehose activity so promotion
@@ -147,6 +156,7 @@ live/
   Ticker.tsx                    // the headline ticker under the room: newest ~3 headlines in the actor's hue + "See every message"
 
   RosterPanel.tsx               // the roster rail (no route mounts it since ADR 464) + `SeatDetail`, the per-seat operator block the team card expands to; `trace` expander (ADR 445 inc 4b) lazy-loads the timeline
+  askPhrase.ts                  // the ask banner's words (spec §6 table) + askBanner() view-model: open / settled / idle (pure)
   TeamColumn.tsx                // the /live team column (ADR 464) + its collapsed avatar rail; `captionColorFor` (the narrator's colour)
   TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type; click expands to `SeatDetail`
   teamCards.ts                  // roster + lane board + goals → ordered team cards in plain words (pure, node-tested)
