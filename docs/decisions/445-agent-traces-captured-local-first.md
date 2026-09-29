@@ -620,6 +620,45 @@ ADR 184's publication gate; a spans backend.
   rows, 76 `cursor@1` and 32 `opencode@1` were stored as `other`, and every OpenCode tool name too.
   [ADR 474](474-trace-structural-values-grow-with-each-tap.md) makes the parser tag pattern-typed
   and gives OpenCode a tool namespace. Rows stored before the daemon runs that build stay `other`.
+- **2026-09-29 — coverage matrix, fourth read: one steered errand per harness on the fixed build**
+  (lane `01M3QQV53CC6EJ5PTQG1CANK89`). Daemon on `02a0e0a0` → `293e24db` (both carry #1820,
+  #1824, #1830, ADR 473 and ADR 474); `deriveTraceReport` over every seat, 1 day, then the errand
+  session on its own. The errand: fetch, read one ADR, run the protocol suite, post one status.
+
+  | Harness     | Report (1d)            | Errand session                   | What the number is                                                   |
+  | ----------- | ---------------------- | -------------------------------- | -------------------------------------------------------------------- |
+  | codex       | 1.024 (9 sessions)     | gptbot `ed335d68`: 8 / 7 = 1.14  | tailed once (one `SessionEnd`), tag `codex@2`; the re-post is gone   |
+  | opencode    | 0.938 (1 session)      | ghost `c1215543`: 8 / 9 = 0.89   | tag `opencode@1`, tools `bash` / `musterd_team_send`; not `other`    |
+  | grok        | null (1 session)       | grokbot `664ddb76`: 0 / 0        | 12 `PreToolUse`, 0 `PostToolUse`, 0 `usage` — see below              |
+  | cursor      | 0.011 (7 sessions, 1 with R2) | wanderer `0688c864`: 100 / 0 | an open IDE session; R2 posts only at `SessionEnd`                  |
+  | claude-code | 0.800 (65 sessions)    | —                                | not re-run; the dead-lease split-digest family (2026-09-29 above)    |
+
+  Read together: the two fixes this read was for hold. Codex is at target and tailed once, and
+  every codex `usage` row received after the 12:24 daemon refresh carries `codex@2` (the 993 `other`
+  rows received 17:19–18:13 yesterday are #1824's re-post, stored before ADR 474 ran). OpenCode's
+  tag and tool namespace are right on the first session after the fix. Three things it exposed:
+  1. **Grok's R1 is not in the numerator.** The Grok tap records every call as `PreToolUse` (its
+     probe has no matcher; 2026-09-28 above), and `POST_TOOL_USE_ONCE` counts `PostToolUse` /
+     `PostToolUseFailure` only — so a Grok session reads R1 = 0 by construction, whatever the tap
+     did. And a headless wake (`grok -p`) fires no `session_end`, so its R2 never posts either: the
+     "host-side read at wake exit" (2026-09-28 above) is still unbuilt. Grok's row stays `null`
+     until both land; neither is a tap gap. Disposition: deferred — until a Grok seat carries a
+     lane worth reading, then one lane for the numerator and the wake-exit tail (2026-09-29).
+  2. **A wake that starts before its Presence probes deaf.** grokbot's session has three
+     `HookOutcome {hook: interrupt, deaf: true}` rows at 16:36:21–16:36:30, before
+     `ws_claim_occupied` at 16:36:30, then four clean probes. The tap still posted (the corrected
+     mechanism above), so coverage is unaffected; the probes are.
+  3. **An actuator bounce mid-wake defers every lease it held.** The three steers went out at
+     16:35:50–53; autorefresh restarted the wake actuator at 16:36:23 (main had moved). grokbot's
+     run completed (status at 16:37:39) but its lease and ghost's never-spawned lease were both
+     reported `host_unreachable` at 16:37:57 and expired. A second steer to ghost at 16:42 woke it
+     in 8 s. Not a trace defect; a residency one — lane `01M3QRYZM2XTJSPWRGBYMSZ535`.
+  Cursor's number is the shape of the harness, not a regression: an attached IDE session tails R2
+  once, at its end, so a read taken while the session is open sees R1 only (wanderer's 100 hook
+  calls, 0 `usage`). The one cursor session with R2 in the window is yesterday's `f7d7bc1c` (94 + 94
+  re-post, pre-#1824). Falsifier for this read: a codex or opencode session on a build ≥ `293e24db`
+  whose ratio sits below 0.96 with one `SessionEnd`; or a cursor IDE session, ended after this note,
+  whose `usage.tool_uses` is not within 5% of its `postToolUse` count.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
   batched POST, so the per-call overhead is what the gate costs now. R2 is a file tail.
 
