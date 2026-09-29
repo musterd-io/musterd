@@ -4861,13 +4861,9 @@
 }
 
 /* ─── responsive (shed the ambient panels as width tightens) ──────────── */
-@media (max-width: 1080px) {
-  /* The team column is never hidden (ADR 464): it folds to the avatar rail, and the route starts
-     it folded below 1280px. */
-  .lc__canvas {
-    --col-team: 56px;
-  }
-}
+/* No width rule folds the team column: `.is-team-collapsed` is its only fold (ADR 464). The route
+   starts it folded below 1280px when nothing is saved; a forced 56px track here once clipped a
+   saved-expanded column into the rail at 881–1080px with its toggle off-screen (lane 01M3Q35SYW). */
 /* The ask banner's phone mount (ADR 464 §6): above the team list, since the office that frames it
    on a desk is hidden below 880px. */
 .lc__phone-asks {
