@@ -184,6 +184,9 @@ export function deriveNext(
     // goals-front-door design: goal-attached lanes served first (stable within each group).
     .sort((a, b) => Number(b.goal_id !== null) - Number(a.goal_id !== null))
     .slice(0, upNextLimit);
+  // ADR 466: parked lanes are kept, not offered — `up_next` already takes only `open`, so the brief
+  // carries their count and nothing a reader could mistake for an invitation.
+  const parked_total = all.filter((l) => l.state === 'parked').length;
 
   // ADR 373 increment 4: recorded intentions nobody started, above the open lanes. Fewer than the
   // lanes on purpose — the tray held 31 open Seeds the day this shipped, and a brief that leads with
@@ -363,6 +366,7 @@ export function deriveNext(
     in_flight,
     shipped,
     up_next,
+    parked_total,
     up_next_seeds,
     up_next_seeds_total,
     owed_reviews,

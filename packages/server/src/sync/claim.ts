@@ -356,6 +356,7 @@ export function decideLanePatch(
         `"${body.owner_seat}" is a service seat — a lane cannot be handed to a ledger seat (ADR 232)`,
       );
   }
+  decideParkPatch(member, before, body);
   // A CLAIM is distinguishable from a HANDOFF by who the new owner is: taking it for yourself is
   // a claim; naming someone else is a deliberate give-away that must keep working. Only a
   // self-directed takeover of a LIVE incumbent is refused — an offline or departed owner stays
@@ -735,4 +736,69 @@ export async function policyAtHub(
   }
   const parsed = body as { policy: Policy; stored: PolicyOverride };
   return { policy: parsed.policy, stored: parsed.stored };
+}
+
+/** States a lane may be parked from (ADR 466): live, not-yet-submitted work. */
+const PARKABLE_FROM: ReadonlySet<string> = new Set(['open', 'claimed', 'active', 'blocked']);
+
+/**
+ * The `parked` rules (ADR 466), shared by the local and hub paths like the rest of this policy.
+ *
+ * Parking and unparking are a HUMAN's call. That is what keeps `parked` meaning "a person chose
+ * not now" and never "stuck": an agent that cannot proceed — an unmet dependency, an outside wait
+ * — has `blocked`, which keeps its owner and says why in the lane. A parked lane refuses a claim
+ * outright (the one hard refusal on the board): the park is a decision already recorded against
+ * the lane, and a claim that overrode it would be the silent undo the state exists to prevent.
+ */
+export function decideParkPatch(
+  member: { name: string; kind: string },
+  before: Lane,
+  body: UpdateLane,
+): void {
+  const human = member.kind === 'human';
+  const parking = body.state === 'parked' && before.state !== 'parked';
+  const unparking =
+    before.state === 'parked' && body.state !== undefined && body.state !== 'parked';
+  if (parking) {
+    if (!human)
+      throw new MusterdError(
+        'forbidden',
+        `only a human may park lane "${before.id}" — parked means a person chose "not now". ` +
+          `If the lane cannot proceed (an unmet dependency, an outside wait), set it \`blocked\` ` +
+          `and say why in its detail; to suggest parking it, \`ask\` a human.`,
+      );
+    if (!PARKABLE_FROM.has(before.state))
+      throw new MusterdError(
+        'bad_request',
+        `lane "${before.id}" is ${before.state} — only open, claimed, active or blocked lanes ` +
+          `can be parked`,
+      );
+    if (body.park_reason === undefined || body.park_reason.trim() === '')
+      throw new MusterdError(
+        'bad_request',
+        `parking lane "${before.id}" needs a reason (park_reason) — it is what the next reader ` +
+          `sees in place of an owner`,
+      );
+  }
+  if (unparking) {
+    if (!human)
+      throw new MusterdError(
+        'forbidden',
+        `lane "${before.id}" is parked by ${before.parked?.by ?? 'a human'} ` +
+          `("${before.parked?.reason ?? ''}") — only a human may unpark it. \`ask\` one if it ` +
+          `should start now.`,
+      );
+    if (body.state !== 'open' && body.state !== 'abandoned')
+      throw new MusterdError(
+        'bad_request',
+        `a parked lane leaves to open (unpark) or abandoned, not ${body.state}`,
+      );
+  }
+  if (before.state === 'parked' && !unparking && body.owner_seat !== undefined)
+    throw new MusterdError(
+      'conflict',
+      `lane "${before.id}" is parked by ${before.parked?.by ?? 'a human'}: ` +
+        `"${before.parked?.reason ?? ''}". It is kept, not offered — it cannot be claimed or ` +
+        `handed off until a human unparks it (musterd lane unpark ${before.id}).`,
+    );
 }

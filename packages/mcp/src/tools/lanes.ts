@@ -31,7 +31,12 @@ function fmtLane(l: Lane): string {
   const deps = l.depends_on.length ? ` deps=[${l.depends_on.join(', ')}]` : '';
   const branch = l.branch ? ` branch=${l.branch}` : '';
   const goal = l.goal_id ? ` goal=${l.goal_id}` : '';
-  return `${l.id} [${l.state}] "${l.title}" — owner=${owner} project=${l.project}${goal}${scope}${deps}${branch}`;
+  // ADR 466: a parked lane says who shelved it and why, in place of an owner.
+  const parked = l.parked
+    ? ` parked by ${l.parked.by}: "${l.parked.reason}"` +
+      (l.parked.until ? ` (revisit ${new Date(l.parked.until).toISOString().slice(0, 10)})` : '')
+    : '';
+  return `${l.id} [${l.state}] "${l.title}" — owner=${owner} project=${l.project}${goal}${scope}${deps}${branch}${parked}`;
 }
 
 function fmtWarnings(warnings: LaneWarning[]): string {
@@ -262,6 +267,10 @@ export function registerLanes(
           .nullable()
           .optional()
           .describe('link (or clear, with null) this lane to a Goal'),
+        // ADR 466 — with state "parked" (humans only). The daemon requires and bounds the reason;
+        // until is a date string, advisory. Undescribed on purpose: the tools list is budgeted.
+        park_reason: z.string().optional(),
+        park_until: z.string().optional(),
         // ADR 305 amendment 2 (lane 01M2GR0434): the one verb for NONE. A lane stamped with the
         // wrong merge — someone else's PR, a SHA that was never this branch — had no way back.
         merged: z
@@ -275,7 +284,11 @@ export function registerLanes(
     },
     async (args) => {
       try {
-        const { id, ...patch } = args;
+        const { id, park_until, ...rest } = args;
+        const until = park_until !== undefined ? Date.parse(park_until) : undefined;
+        if (until !== undefined && Number.isNaN(until))
+          throw new Error(`park_until "${park_until}" is not a date (try 2026-10-15)`);
+        const patch = { ...rest, ...(until !== undefined ? { park_until: until } : {}) };
         const { lane, warnings } = await client.updateLane(id, patch);
         return laneResult('lane updated', lane, warnings);
       } catch (err) {
@@ -668,6 +681,10 @@ export function fmtNext(b: NextBrief, landed: ReadonlyMap<string, Landed> = new 
         lines.push('    (on no goal — link it: lane_update {goal_id})');
     }
   }
+  if ((b.parked_total ?? 0) > 0)
+    lines.push(
+      `\nparked: ${b.parked_total} — kept, not offered; a human unparks (lane_board {state:["parked"]})`,
+    );
   if (b.shipped.length) {
     lines.push('\nrecently shipped:');
     for (const l of b.shipped)

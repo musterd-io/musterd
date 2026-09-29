@@ -53,6 +53,8 @@ interface LaneRow {
   stakes_provenance: string | null;
   /** The worker's merge attestation captured at awaiting_acceptance (ADR 192); null until lane_submit. */
   merged_json: string | null;
+  /** Why the lane is parked (ADR 466, v78); null whenever `state !== 'parked'`. */
+  parked_json: string | null;
   state: string;
   created_by: string;
   created_at: number;
@@ -86,6 +88,7 @@ function rowToLane(row: LaneRow, teamSlug: string): Lane {
     stakes_provenance: (row.stakes_provenance as Lane['stakes_provenance']) ?? 'declared',
     merged: row.merged_json ? (JSON.parse(row.merged_json) as Lane['merged']) : null,
     state: row.state as LaneState,
+    ...(row.parked_json ? { parked: JSON.parse(row.parked_json) as Lane['parked'] } : {}),
     created_by: row.created_by,
     created_at: row.created_at,
     claimed_at: row.claimed_at,
@@ -246,6 +249,7 @@ export function openLane(
     // rule that fired even when it changed nothing, or "policy is inert here" becomes unfalsifiable.
     stakes_provenance: rule ? 'defaulted' : null,
     merged_json: null,
+    parked_json: null,
     state: claim ? 'claimed' : 'open',
     created_by: createdBy,
     created_at: now,
@@ -415,7 +419,22 @@ function updateLaneInTx(
   // and the board then states a false fact: a lane nobody is working, rendered as someone's. This
   // transition *is* the release verb (no `owner_seat: null` on the patch surface — that would also
   // let a caller assign an arbitrary owner, which lane_claim is for).
-  const ownerSeat = state === 'open' ? null : owned;
+  // ADR 466: `parked` is unowned too — shelved work is nobody's work in progress, so parking a
+  // claimed lane releases it exactly as the move to `open` does.
+  const ownerSeat = state === 'open' || state === 'parked' ? null : owned;
+  // The park record rides the state: written on the move in (from the patch; the transport has
+  // already required a reason), kept while it stays parked, cleared on any move out.
+  const parked =
+    state !== 'parked'
+      ? null
+      : existing.state === 'parked' && existing.parked
+        ? existing.parked
+        : {
+            by: audit?.actor ?? 'unknown',
+            at: now,
+            reason: patch.park_reason ?? '',
+            ...(patch.park_until !== undefined ? { until: patch.park_until } : {}),
+          };
   // ADR 192: a merge attestation on a patch that *enters or sits in* awaiting_acceptance is the
   // worker's stage-one claim — persist it so a counterpart's later accept carries it. A worker's
   // own terminal patch may still rewrite it (ADR 109). A counterpart terminal patch must not:
@@ -445,6 +464,7 @@ function updateLaneInTx(
     stakes: stakes !== 'normal' ? stakes : null,
     stakes_provenance: stakesProvenance,
     merged_json: merged ? JSON.stringify(merged) : null,
+    parked_json: parked ? JSON.stringify(parked) : null,
     state,
     // claimed_at describes the CURRENT tenure: sticky while held, cleared by the release above so a
     // re-claim stamps fresh rather than inheriting the previous holder's timestamp.
@@ -485,6 +505,7 @@ function updateLaneInTx(
     'stakes',
     'stakes_provenance',
     'merged_json',
+    'parked_json',
     'state',
     'claimed_at',
     'resolved_at',
@@ -514,6 +535,7 @@ const AUDITED_LANE_FIELDS = [
   'risk',
   'stakes',
   'merged',
+  'parked',
 ] as const;
 
 /** Which auditable fields differ between two reads of a lane (arrays/objects by value). */

@@ -18,6 +18,13 @@ export const LANE_STATES = [
   'ready_for_review',
   'done',
   'abandoned',
+  /**
+   * Kept, deliberately not now (ADR 466). Unowned and non-terminal, but NOT offered: pickup lists
+   * skip it and `lane_claim` refuses it. Only a human parks or unparks.
+   * Not `blocked` — a lane that cannot proceed (an unmet dependency, an outside wait) is `blocked`
+   * and keeps its owner; `parked` is a human's choice to shelve, and says so with a reason.
+   */
+  'parked',
 ] as const;
 export type LaneState = (typeof LANE_STATES)[number];
 

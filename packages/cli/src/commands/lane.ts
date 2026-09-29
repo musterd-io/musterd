@@ -14,7 +14,7 @@ import { theme } from '../render/theme.js';
 import { resolve } from './helpers.js';
 
 /**
- * `musterd lane <open|claim|release|handoff|update|resolve>` + `musterd lanes` — the CLI half of the lane
+ * `musterd lane <open|claim|release|park|unpark|handoff|update|resolve>` + `musterd lanes` — the CLI half of the lane
  * dual-surface (ADR 083, parity with the `lane_*` MCP tools). Every mutation prints the lane and any
  * contention warnings inline (warn-only; the verb never fails on contention).
  */
@@ -24,6 +24,8 @@ const USAGE =
   '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--claim]\n' +
   '  musterd lane claim <id> [--goal <id>]\n' +
   '  musterd lane release <id>\n' +
+  '  musterd lane park <id> --reason "<why not now>" [--until <date>]   (humans only, ADR 466)\n' +
+  '  musterd lane unpark <id>                                           (humans only)\n' +
   '  musterd lane handoff <id> --to <seat> [--branch <ref>] [--note <why>]\n' +
   '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--clear-merged]\n' +
   '  musterd lane submit <id> [--to <seat>] [--pr <n>] [--sha <sha>] [--authorized-by <human>]\n' +
@@ -66,7 +68,16 @@ function renderLane(l: Lane): string {
   const deps = l.depends_on.length ? theme.meta(` deps:${l.depends_on.length}`) : '';
   const branch = l.branch ? theme.meta(` ⎇ ${l.branch}`) : '';
   const goal = l.goal_id ? theme.meta(` ◆ ${l.goal_id}`) : '';
-  return `${theme.meta(l.id)} ${state} "${l.title}" — ${owner} · ${l.project}${goal}${surface}${deps}${branch}`;
+  // ADR 466: a parked lane shows who shelved it and why where an owner would be.
+  const parked = l.parked
+    ? theme.meta(
+        ` ⏸ ${l.parked.by}: "${l.parked.reason}"` +
+          (l.parked.until
+            ? ` (revisit ${new Date(l.parked.until).toISOString().slice(0, 10)})`
+            : ''),
+      )
+    : '';
+  return `${theme.meta(l.id)} ${state} "${l.title}" — ${owner} · ${l.project}${goal}${surface}${deps}${branch}${parked}`;
 }
 
 function renderWarnings(warnings: LaneWarning[]): void {
@@ -220,6 +231,38 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
     return 0;
   }
 
+  if (sub === 'park') {
+    // ADR 466: kept, deliberately not now. The daemon refuses a park from an agent and one without
+    // a reason; this side only shapes the patch.
+    const id = parsed.positionals[1];
+    const reason = flagStr(parsed.flags, 'reason');
+    if (!id || !reason) throw new CliError(USAGE, 2);
+    const untilRaw = flagStr(parsed.flags, 'until');
+    const until = untilRaw !== undefined ? Date.parse(untilRaw) : undefined;
+    if (until !== undefined && Number.isNaN(until))
+      throw new CliError(`--until must be a date, e.g. 2026-10-15 (got "${untilRaw}")`, 2);
+    const res = await http.updateLane(team, id, {
+      state: 'parked',
+      park_reason: reason,
+      ...(until !== undefined ? { park_until: until } : {}),
+    });
+    process.stdout.write(
+      `${theme.ok('✓')} lane parked — kept, not offered; agents cannot claim it\n${renderLane(res.lane)}\n`,
+    );
+    return 0;
+  }
+
+  if (sub === 'unpark') {
+    const id = parsed.positionals[1];
+    if (!id) throw new CliError(USAGE, 2);
+    const res = await http.updateLane(team, id, { state: 'open' });
+    process.stdout.write(
+      `${theme.ok('✓')} lane unparked — open for anyone\n${renderLane(res.lane)}\n`,
+    );
+    renderWarnings(res.warnings);
+    return 0;
+  }
+
   if (sub === 'handoff') {
     const id = parsed.positionals[1];
     const to = flagStr(parsed.flags, 'to');
@@ -309,7 +352,13 @@ export async function lanesCommand(parsed: Parsed): Promise<number> {
     );
     return 0;
   }
-  for (const l of board.lanes) process.stdout.write(renderLane(l) + '\n');
+  // ADR 466: parked lanes are kept, not offered — listed last, under their own heading.
+  const parked = board.lanes.filter((l) => l.state === 'parked');
+  for (const l of board.lanes) if (l.state !== 'parked') process.stdout.write(renderLane(l) + '\n');
+  if (parked.length > 0) {
+    process.stdout.write(theme.meta(`parked (${parked.length}) — kept, not offered:`) + '\n');
+    for (const l of parked) process.stdout.write(renderLane(l) + '\n');
+  }
   renderWarnings(board.warnings);
   return 0;
 }

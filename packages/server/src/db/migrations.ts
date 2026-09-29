@@ -1867,6 +1867,17 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    // v78 — lane `parked` state (ADR 466): who parked a lane, when, why, and an advisory revisit
+    // date, as one nullable JSON column beside `merged_json` (same shape, same reason: set and
+    // cleared as a unit on the move into and out of `parked`). No backfill — no lane is parked yet.
+    version: 78,
+    up: (db) => {
+      const laneCols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
+      if (!laneCols.includes('parked_json'))
+        db.exec('ALTER TABLE lanes ADD COLUMN parked_json TEXT');
+    },
+  },
 ];
 
 function currentVersion(db: Database): number {

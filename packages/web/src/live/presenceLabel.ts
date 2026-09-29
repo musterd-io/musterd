@@ -141,6 +141,7 @@ export function shortLaneState(state: LaneState | null | undefined): string | nu
     case 'open':
     case 'done':
     case 'abandoned':
+    case 'parked':
     case undefined:
     case null:
       return null;
