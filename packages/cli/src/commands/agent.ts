@@ -115,9 +115,17 @@ export async function agentCommand(
       ...(hue !== undefined ? { hue } : {}),
     });
   } catch (err) {
-    if (!(err instanceof CliError) || err.code !== 'conflict') throw err;
+    // `conflict`: already declared (re-run, or `team add` first). `forbidden`: the caller is not an
+    // admin — but a sponsor provisioning a Workspace for the agent they created (ADR 463 §3) is
+    // not adding a member, the agent already exists. Both fall through to the roster check; a
+    // `forbidden` for a name that is NOT an existing agent still fails with the daemon's message.
+    // Whether this caller may provision THIS agent is the daemon's call at the credential mint
+    // (ADR 463 §1), not the CLI's: a non-sponsor is refused there.
+    if (!(err instanceof CliError) || (err.code !== 'conflict' && err.code !== 'forbidden'))
+      throw err;
     const { members } = await http.roster(team);
     const existing = members.find((m) => m.name === name);
+    if (err.code === 'forbidden' && existing?.kind !== 'agent') throw err;
     if (existing && existing.kind !== 'agent') {
       throw new CliError(
         `"${name}" already exists in "${team}" as a ${existing.kind}, not an agent — ` +
