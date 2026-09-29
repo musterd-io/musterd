@@ -3,7 +3,7 @@ import { request as httpsRequest, type RequestOptions } from 'node:https';
 import { isIP } from 'node:net';
 import { OAuthClientMetadataSchema, type OAuthClientMetadata } from '@musterd/protocol';
 
-const MAX_CLIENT_ID_BYTES = 2_048;
+const MAX_CLIENT_ID_CHARACTERS = 2_048;
 const MAX_DOCUMENT_BYTES = 5_120;
 const REQUEST_TIMEOUT_MS = 3_000;
 const MAX_CACHE_AGE_MS = 5 * 60_000;
@@ -52,9 +52,49 @@ export class CimdResolverCapacityError extends Error {
 
 /** True only for the URL syntax and local policy that permits a CIMD lookup. */
 export function isCimdClientId(clientId: string): boolean {
-  if (Buffer.byteLength(clientId, 'utf8') > MAX_CLIENT_ID_BYTES || clientId.includes('\\'))
+  if (
+    Array.from(clientId).length > MAX_CLIENT_ID_CHARACTERS ||
+    clientId.includes('\\') ||
+    Array.from(clientId).some((character) => {
+      const codePoint = character.codePointAt(0)!;
+      return codePoint <= 0x1f || codePoint === 0x7f;
+    })
+  )
     return false;
   if (clientId.includes('?') || clientId.includes('#')) return false;
+
+  const schemeSeparator = clientId.indexOf('://');
+  if (schemeSeparator < 0 || clientId.slice(0, schemeSeparator).toLowerCase() !== 'https')
+    return false;
+  const authorityStart = schemeSeparator + 3;
+  const authorityBoundary = clientId.slice(authorityStart).search(/[/?#]/);
+  const authorityEnd = authorityBoundary < 0 ? clientId.length : authorityStart + authorityBoundary;
+  const rawAuthority = clientId.slice(authorityStart, authorityEnd);
+  if (!rawAuthority || rawAuthority.includes('@')) return false;
+
+  const rawSuffix = clientId.slice(authorityEnd);
+  const rawPathEnd = rawSuffix.search(/[?#]/);
+  const rawPath = rawPathEnd < 0 ? rawSuffix : rawSuffix.slice(0, rawPathEnd);
+  if (!rawPath.startsWith('/') || rawPath.length === 1) return false;
+  for (const segment of rawPath.split('/').slice(1)) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      return false;
+    }
+    while (decoded.includes('%')) {
+      let next: string;
+      try {
+        next = decodeURIComponent(decoded);
+      } catch {
+        break;
+      }
+      if (next === decoded) break;
+      decoded = next;
+    }
+    if (decoded === '.' || decoded === '..') return false;
+  }
 
   let url: URL;
   try {
@@ -66,28 +106,11 @@ export function isCimdClientId(clientId: string): boolean {
     url.protocol !== 'https:' ||
     (url.port !== '' && url.port !== '443') ||
     !url.hostname ||
-    url.username !== '' ||
-    url.password !== '' ||
     url.search !== '' ||
     url.hash !== ''
   )
     return false;
-
-  // WHATWG URL normalizes dot segments before exposing pathname. Inspect the supplied path too.
-  const authorityStart = clientId.indexOf('://') + 3;
-  const pathStart = clientId.indexOf('/', authorityStart);
-  if (pathStart < 0) return false;
-  const rawPath = clientId.slice(pathStart);
-  if (!rawPath.startsWith('/')) return false;
-  for (const segment of rawPath.split('/').slice(1)) {
-    let decoded: string;
-    try {
-      decoded = decodeURIComponent(segment);
-    } catch {
-      return false;
-    }
-    if (decoded === '.' || decoded === '..') return false;
-  }
+  if (isIP(url.hostname.replace(/^\[|\]$/g, '')) === 6) return false;
   return true;
 }
 
@@ -198,11 +221,10 @@ export function createPinnedHttpsRequest(
         fail();
       }, input.timeoutMs);
       timer.unref();
-      const lookup = ((
-        _hostname: string,
-        _options: unknown,
-        callback: (error: NodeJS.ErrnoException | null, address: string, family: number) => void,
-      ) => callback(null, input.address, family)) as RequestOptions['lookup'];
+      const lookup: NonNullable<RequestOptions['lookup']> = (_hostname, options, callback) => {
+        if (options.all) callback(null, [{ address: input.address, family }]);
+        else callback(null, input.address, family);
+      };
 
       try {
         request = requestImpl(
@@ -341,12 +363,15 @@ export function createCimdResolver(
 
   async function fetch(
     clientId: string,
+    deadlineAt: number,
   ): Promise<{ metadata: OAuthClientMetadata; ttlMs: number }> {
     if (!isCimdClientId(clientId)) throw new CimdResolutionError();
     const url = new URL(clientId);
     const answers = await deps.lookup(url.hostname).catch(() => {
       throw new CimdResolutionError();
     });
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) throw new CimdResolutionError();
     if (
       answers.length === 0 ||
       answers.some((answer) => !isGlobalUnicastAddress(answer.address, answer.family))
@@ -358,12 +383,13 @@ export function createCimdResolver(
       .request({
         url,
         address: address.address,
-        timeoutMs: REQUEST_TIMEOUT_MS,
+        timeoutMs: remainingMs,
         maxBytes: MAX_DOCUMENT_BYTES,
       })
       .catch(() => {
         throw new CimdResolutionError();
       });
+    if (Date.now() >= deadlineAt) throw new CimdResolutionError();
     if (
       response.statusCode !== 200 ||
       !response.contentType ||
@@ -401,7 +427,8 @@ export function createCimdResolver(
     if (shared) return cloneMetadata(await shared);
     if (inFlight.size >= MAX_IN_FLIGHT) throw new CimdResolverCapacityError();
 
-    const pending = fetch(clientId)
+    const deadlineAt = Date.now() + REQUEST_TIMEOUT_MS;
+    const work = fetch(clientId, deadlineAt)
       .then(({ metadata, ttlMs }) => {
         if (ttlMs > 0) {
           cache.delete(clientId);
@@ -414,7 +441,17 @@ export function createCimdResolver(
         }
         return metadata;
       })
-      .finally(() => inFlight.delete(clientId));
+      .finally(() => {
+        // DNS promises cannot be cancelled. Keep timed-out DNS work counted against the bound
+        // until it really settles, so a slow resolver cannot create unlimited orphan lookups.
+        if (inFlight.get(clientId) === pending) inFlight.delete(clientId);
+      });
+    let deadlineTimer: NodeJS.Timeout;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      deadlineTimer = setTimeout(() => reject(new CimdResolutionError()), REQUEST_TIMEOUT_MS);
+      deadlineTimer.unref();
+    });
+    const pending = Promise.race([work, deadline]).finally(() => clearTimeout(deadlineTimer));
     inFlight.set(clientId, pending);
     return cloneMetadata(await pending);
   };

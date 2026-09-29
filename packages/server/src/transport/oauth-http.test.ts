@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { OAUTH_RATE_LIMITS } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDb } from '../db/open.js';
 import { createServer, type RunningServer } from '../index.js';
@@ -281,6 +282,73 @@ describe('Client ID Metadata Documents (ADR 470)', () => {
     const unsafe = await get(authorizeUrl(clientId, 'javascript:alert(1)'));
     expect(unsafe.status).toBe(404);
     expect(unsafe.headers.get('location')).toBeNull();
+  });
+
+  it('requires exact CIMD redirect matching on both authorization legs', async () => {
+    let calls = 0;
+    __setCimdResolverForTest(async (id) => {
+      calls++;
+      return metadata(id);
+    });
+    const nearMatch = 'https://app.example/cb/';
+
+    const page = await get(authorizeUrl(clientId, nearMatch));
+    expect(page.status).toBe(400);
+    expect(page.headers.get('location')).toBeNull();
+
+    const consent = await postForm('/oauth/dawn/authorize', {
+      client_id: clientId,
+      redirect_uri: nearMatch,
+      state: 'state',
+      code_challenge: CHALLENGE,
+      code_challenge_method: 'S256',
+      member: 'nick',
+      credential: nickCred,
+    });
+    expect(consent.status).toBe(400);
+    expect(consent.headers.get('location')).toBeNull();
+    expect(calls).toBe(2);
+  });
+
+  it('rate-limits CIMD resolution before metadata lookup on GET and POST', async () => {
+    let calls = 0;
+    __setCimdResolverForTest(async (id) => {
+      calls++;
+      return metadata(id);
+    });
+
+    for (let i = 0; i < OAUTH_RATE_LIMITS.authorize; i++) {
+      expect((await get(authorizeUrl(clientId))).status).toBe(200);
+    }
+    expect(calls).toBe(OAUTH_RATE_LIMITS.authorize);
+    expect((await get(authorizeUrl(clientId))).status).toBe(429);
+    expect(calls).toBe(OAUTH_RATE_LIMITS.authorize);
+
+    __resetOAuthBucketsForTest();
+    for (let i = 0; i < OAUTH_RATE_LIMITS.authorize; i++) {
+      const consent = await postForm('/oauth/dawn/authorize', {
+        client_id: clientId,
+        redirect_uri: REDIRECT,
+        state: `state-${i}`,
+        code_challenge: CHALLENGE,
+        code_challenge_method: 'S256',
+        member: 'nick',
+        credential: nickCred,
+      });
+      expect(consent.status).toBe(302);
+    }
+    expect(calls).toBe(OAUTH_RATE_LIMITS.authorize * 2);
+    const deniedConsent = await postForm('/oauth/dawn/authorize', {
+      client_id: clientId,
+      redirect_uri: REDIRECT,
+      state: 'overflow',
+      code_challenge: CHALLENGE,
+      code_challenge_method: 'S256',
+      member: 'nick',
+      credential: nickCred,
+    });
+    expect(deniedConsent.status).toBe(429);
+    expect(calls).toBe(OAUTH_RATE_LIMITS.authorize * 2);
   });
 
   it('maps metadata failures to a generic client error and capacity pressure to retryable status', async () => {

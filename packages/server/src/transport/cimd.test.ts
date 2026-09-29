@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CimdResolverCapacityError,
   createCimdResolver,
@@ -18,6 +18,8 @@ const metadata = {
   token_endpoint_auth_methods_supported: ['none', 'private_key_jwt'],
   jwks_uri: 'https://chatgpt.com/oauth/jwks.json',
 };
+
+afterEach(() => vi.useRealTimers());
 
 function dependencies(input?: {
   answers?: Array<{ address: string; family: 4 | 6 }>;
@@ -50,9 +52,14 @@ describe('CIMD URL and address boundary (ADR 470)', () => {
       'https://client.example/%2e%2e/client.json',
       'https://client.example/%2E/client.json',
       'https://user:password@client.example/oauth/client.json',
+      'https://@client.example/oauth/client.json',
       'https://client.example:444/oauth/client.json',
       'https://client.example/oauth/client.json?',
       'https://client.example/oauth/client.json#',
+      'https://client.example/',
+      'https://[::1]/client.json',
+      'https://[2606:4700:4700::1111]/client.json',
+      'https://client.example/\t./client.json',
     ];
 
     for (const url of invalid) {
@@ -62,6 +69,13 @@ describe('CIMD URL and address boundary (ADR 470)', () => {
       expect(lookup).not.toHaveBeenCalled();
       expect(request).not.toHaveBeenCalled();
     }
+  });
+
+  it('measures the client ID limit in characters rather than UTF-8 bytes', () => {
+    const url = `https://client.example/${'😀'.repeat(600)}.json`;
+    expect(Array.from(url).length).toBeLessThan(2_048);
+    expect(Buffer.byteLength(url, 'utf8')).toBeGreaterThan(2_048);
+    expect(isCimdClientId(url)).toBe(true);
   });
 
   it('rejects a DNS answer set containing any non-public or special-use address', async () => {
@@ -167,15 +181,84 @@ describe('CIMD URL and address boundary (ADR 470)', () => {
     expect((options?.headers as Record<string, string>).host).toBe('chatgpt.com');
     const lookup = options?.lookup as (
       hostname: string,
-      options: unknown,
-      callback: (err: Error | null, address: string, family: number) => void,
+      options: { all?: boolean },
+      callback: (
+        err: Error | null,
+        address: string | Array<{ address: string; family: number }>,
+        family?: number,
+      ) => void,
     ) => void;
     const pinned = await new Promise<{ address: string; family: number }>((resolve, reject) => {
       lookup('chatgpt.com', {}, (err, address, family) =>
-        err ? reject(err) : resolve({ address, family }),
+        err
+          ? reject(err)
+          : typeof address === 'string' && family !== undefined
+            ? resolve({ address, family })
+            : reject(new Error('single-address lookup did not return one address')),
       );
     });
     expect(pinned).toEqual({ address: '8.8.8.8', family: 4 });
+
+    // Node's HTTPS Agent asks for all addresses when autoSelectFamily is on. Even though this
+    // resolver pins one validated address, the lookup callback must honor that overload's array
+    // result shape or Node fails before opening the connection.
+    const allAddresses = await new Promise<Array<{ address: string; family: number }>>(
+      (resolve, reject) =>
+        lookup('chatgpt.com', { all: true }, (err, address) =>
+          err
+            ? reject(err)
+            : Array.isArray(address)
+              ? resolve(address)
+              : reject(new Error('all-address lookup did not return an address array')),
+        ),
+    );
+    expect(allAddresses).toEqual([{ address: '8.8.8.8', family: 4 }]);
+  });
+
+  it('aborts a stalled request and a streamed response that exceeds the byte limit', async () => {
+    vi.useFakeTimers();
+    const stalledRequest = Object.assign(new EventEmitter(), {
+      destroy: vi.fn(),
+      end: vi.fn(),
+    });
+    const timedOut = createPinnedHttpsRequest(vi.fn(() => stalledRequest) as never)({
+      url: new URL(clientId),
+      address: '8.8.8.8',
+      timeoutMs: 3_000,
+      maxBytes: 5,
+    });
+    const timeoutAssertion = expect(timedOut).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(3_000);
+    await timeoutAssertion;
+    expect(stalledRequest.destroy).toHaveBeenCalledTimes(1);
+
+    const bodyResponse = Object.assign(new EventEmitter(), {
+      statusCode: 200,
+      headers: { 'content-type': 'application/json', 'content-length': '1' },
+      destroy: vi.fn(),
+    });
+    const oversizedRequest = Object.assign(new EventEmitter(), {
+      destroy: vi.fn(),
+      end: vi.fn(() => {
+        responseCallback?.(bodyResponse as never);
+        bodyResponse.emit('data', '123456');
+        bodyResponse.emit('end');
+      }),
+    });
+    let responseCallback: ((response: unknown) => void) | undefined;
+    const oversized = createPinnedHttpsRequest(
+      vi.fn((_url: URL, _options: unknown, callback: unknown) => {
+        responseCallback = callback as (response: unknown) => void;
+        return oversizedRequest;
+      }) as never,
+    )({
+      url: new URL(clientId),
+      address: '8.8.8.8',
+      timeoutMs: 3_000,
+      maxBytes: 5,
+    });
+    await expect(oversized).rejects.toThrow();
+    expect(bodyResponse.destroy).toHaveBeenCalledTimes(1);
   });
 
   it('rejects non-200, non-JSON, oversized, invalid JSON, and mismatched metadata', async () => {
@@ -261,6 +344,166 @@ describe('CIMD URL and address boundary (ADR 470)', () => {
     expect(noStoreRequest).toHaveBeenCalledTimes(2);
   });
 
+  it('caps freshness at five minutes, honors Expires, retries failures, and releases settled slots', async () => {
+    let now = 1_000;
+    const cappedRequest = vi.fn(async ({ url }: { url: URL }) => ({
+      statusCode: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...metadata, client_id: url.href }),
+      cacheControl: 'public, max-age=900',
+    }));
+    const capped = createCimdResolver({
+      lookup: async () => [{ address: '8.8.8.8', family: 4 }],
+      request: cappedRequest,
+      now: () => now,
+    });
+    await capped(clientId);
+    now += 299_999;
+    await capped(clientId);
+    expect(cappedRequest).toHaveBeenCalledTimes(1);
+    now += 1;
+    await capped(clientId);
+    expect(cappedRequest).toHaveBeenCalledTimes(2);
+
+    let expiresNow = Date.UTC(2026, 8, 29, 12, 0, 0);
+    const expiresRequest = vi.fn(async ({ url }: { url: URL }) => ({
+      statusCode: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...metadata, client_id: url.href }),
+      expires: new Date(expiresNow + 10_000).toUTCString(),
+      age: '2',
+    }));
+    const expires = createCimdResolver({
+      lookup: async () => [{ address: '8.8.8.8', family: 4 }],
+      request: expiresRequest,
+      now: () => expiresNow,
+    });
+    await expires(clientId);
+    expiresNow += 7_999;
+    await expires(clientId);
+    expect(expiresRequest).toHaveBeenCalledTimes(1);
+    expiresNow += 1;
+    await expires(clientId);
+    expect(expiresRequest).toHaveBeenCalledTimes(2);
+
+    let shouldFail = true;
+    const retryRequest = vi.fn(async ({ url }: { url: URL }) => {
+      if (shouldFail) throw new Error('transport failed');
+      return {
+        statusCode: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ...metadata, client_id: url.href }),
+      };
+    });
+    const retry = createCimdResolver({
+      lookup: async () => [{ address: '8.8.8.8', family: 4 }],
+      request: retryRequest,
+      now: () => expiresNow,
+    });
+    await expect(retry(clientId)).rejects.toThrow();
+    shouldFail = false;
+    await expect(retry(clientId)).resolves.toMatchObject({ client_id: clientId });
+    expect(retryRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it('applies one three-second deadline across DNS and HTTPS and bounds stalled DNS work', async () => {
+    vi.useFakeTimers();
+    const never = new Promise<Array<{ address: string; family: 4 | 6 }>>(() => {});
+    const lookup = vi.fn(() => never);
+    const request = vi.fn(async () => ({
+      statusCode: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(metadata),
+    }));
+    const resolver = createCimdResolver({ lookup, request, now: () => 1_000 });
+    const ids = Array.from({ length: 16 }, (_, i) => `https://client.example/${i}.json`);
+    const pending = ids.map((id) => resolver(id));
+    const settled = Promise.all(
+      pending.map((p) =>
+        p.then(
+          () => 'resolved',
+          () => 'rejected',
+        ),
+      ),
+    );
+    let completed = false;
+    void settled.then(() => {
+      completed = true;
+    });
+    await vi.advanceTimersByTimeAsync(3_000);
+    await Promise.resolve();
+    expect(completed).toBe(true);
+    const errors = await settled;
+    expect(errors).toEqual(Array.from({ length: 16 }, () => 'rejected'));
+    expect(request).not.toHaveBeenCalled();
+    await expect(resolver('https://client.example/overflow.json')).rejects.toBeInstanceOf(
+      CimdResolverCapacityError,
+    );
+  });
+
+  it('subtracts DNS time from the request budget and ignores DNS that completes after deadline', async () => {
+    vi.useFakeTimers();
+    const request = vi.fn(
+      () => new Promise<{ statusCode: number; contentType: string; body: string }>(() => {}),
+    );
+    const delayedLookup = vi.fn(
+      () =>
+        new Promise<Array<{ address: string; family: 4 | 6 }>>((resolve) =>
+          setTimeout(() => resolve([{ address: '8.8.8.8', family: 4 }]), 2_000),
+        ),
+    );
+    const resolver = createCimdResolver({
+      lookup: delayedLookup,
+      request,
+      now: () => 1_000,
+    });
+    const pending = resolver(clientId);
+    const outcome = pending.then(
+      () => 'resolved',
+      () => 'rejected',
+    );
+    let result: string | undefined;
+    void outcome.then((value) => {
+      result = value;
+    });
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 1_000 }));
+    await vi.advanceTimersByTimeAsync(1_000);
+    await Promise.resolve();
+    expect(result).toBe('rejected');
+
+    let finishLookup: ((addresses: Array<{ address: string; family: 4 | 6 }>) => void) | undefined;
+    const lateRequest = vi.fn(async () => ({
+      statusCode: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(metadata),
+    }));
+    const lateResolver = createCimdResolver({
+      lookup: () =>
+        new Promise((resolve) => {
+          finishLookup = resolve;
+        }),
+      request: lateRequest,
+      now: () => 1_000,
+    });
+    const late = lateResolver('https://late.example/client.json');
+    const lateOutcome = late.then(
+      () => 'resolved',
+      () => 'rejected',
+    );
+    let lateResult: string | undefined;
+    void lateOutcome.then((value) => {
+      lateResult = value;
+    });
+    await vi.advanceTimersByTimeAsync(3_000);
+    await Promise.resolve();
+    expect(lateResult).toBe('rejected');
+    finishLookup?.([{ address: '8.8.8.8', family: 4 }]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(lateRequest).not.toHaveBeenCalled();
+  });
+
   it('coalesces same-URL misses and caps unique in-flight fetches at sixteen', async () => {
     type Response = {
       statusCode: number;
@@ -319,7 +562,11 @@ describe('CIMD URL and address boundary (ADR 470)', () => {
     for (const id of ids) await resolver(id);
     await resolver(ids[1]); // Promote the second entry before the next insertion evicts the first.
     await resolver('https://client.example/257.json');
+    const afterInsert = request.mock.calls.length;
+    await resolver(ids[1]);
+    expect(request).toHaveBeenCalledTimes(afterInsert);
     await resolver(ids[0]);
+    expect(request).toHaveBeenCalledTimes(afterInsert + 1);
     expect(request).toHaveBeenCalledTimes(259);
   });
 });
