@@ -1,6 +1,6 @@
 # 478 — Local store retention: archive-then-prune audit churn, cap trace content at 7 days, leave sync_log until a joiner can bootstrap
 
-- Status: proposed — 2026-09-29 (nick to accept; deletes data)
+- Status: accepted — 2026-09-29 (nick, in session; deletes data, so a human call)
 - Date: 2026-09-29
 - Lane: `01M3QQ5BHYK5EC3GAJFR9FRMEE` (goal `cloud`) — the footprint investigation that found this
 - Deciders: nick (asked for a laptop that fits), fifty (guardian; owns the daemon's disk)
