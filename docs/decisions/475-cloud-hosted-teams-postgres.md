@@ -132,6 +132,15 @@ constrains the others, so they were decided together.
 - Protocol touches, each its own ADR when its increment starts (hard rule 1): the `unenforced`
   hook outcome, `role` on an invite, the seat-authorization credential, `account_id` on a member
   and the identity statement, per-author consent fields.
+- _2026-09-29 — increment 0 result:_ the PGlite spike ([`docs/perf/pglite-spike.md`](../perf/pglite-spike.md))
+  was reshaped from "boot the daemon on PGlite" — impossible in two days with 62 synchronous
+  better-sqlite3 store files against a Promise-only engine — to four measured questions. Schema
+  loads (106/106, one FTS5 hand-fix) and one SQL text serves both engines behind an async driver,
+  but PGlite boots in 3.5–4.2 s and the gate's `json_extract` query runs 18–38 ms p95, so decision
+  3 resolves to **two backends** behind one async store interface: better-sqlite3 on the laptop,
+  `pg` in Cloud, with PGlite kept as the Cloud driver's in-CI test double. The async store
+  conversion is owed either way and is sized there: ~1,000 call sites in ~70 files, one pass.
+  `@electric-sql/pglite` stays a devDependency (a test double, not a runtime dependency).
 - Same-PR notes landed with this ADR: `deployment-topology.md` Topology C reclassified relay →
   hosted authority; ADR 451 Consequences (shape superseded); ADR 445 Consequences (§3 amended);
   `brand.md` §5 secondary nouns Account / Console / Owner / Guest.

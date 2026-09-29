@@ -46,8 +46,11 @@ function countOccurrences(text, needle) {
   return n;
 }
 
+/** @returns {{ byConstruct: Record<string, number>, byFile: Record<string, number>, files: number }} */
 export function inventory(rootDir) {
+  /** @type {Record<string, number>} */
   const byConstruct = Object.fromEntries(CONSTRUCTS.map((c) => [c, 0]));
+  /** @type {Record<string, number>} */
   const byFile = {};
   let files = 0;
   for (const file of walk(rootDir)) {

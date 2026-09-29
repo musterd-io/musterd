@@ -13,8 +13,10 @@ describe('pglite hook-path bench', () => {
       expect(r.boot_ms).toBeGreaterThan(0);
       expect(r.rows.messages).toBeGreaterThan(0);
       for (const q of QUERY_NAMES) {
-        expect(r.queries[q].n).toBe(3); // rounds counted; the warm-up round is not
-        expect(r.queries[q].p95).toBeGreaterThanOrEqual(r.queries[q].p50);
+        const stats = r.queries[q];
+        expect(stats).toBeDefined();
+        expect(stats?.n).toBe(3); // rounds counted; the warm-up round is not
+        expect(stats?.p95).toBeGreaterThanOrEqual(stats?.p50 ?? Infinity);
       }
       expect(r.write_commit_ms.p50).toBeGreaterThan(0);
     }
@@ -25,4 +27,18 @@ describe('pglite hook-path bench', () => {
       "SELECT 'why?' AS s WHERE $1 = $2 AND t = 'a?b'",
     );
   });
+});
+
+describe('indexJson option', () => {
+  it('adds the json expression index and says so in the report', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hp-'));
+    const r = await runBench({
+      backend: 'pglite-memory',
+      dir,
+      scale: 0.001,
+      rounds: 1,
+      indexJson: true,
+    });
+    expect(r.indexJson).toBe(true);
+  }, 60_000);
 });

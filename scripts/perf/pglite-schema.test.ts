@@ -34,7 +34,7 @@ describe('loadSchema', () => {
     const r = await loadSchema(pg, ['CREATE TABLE a (x TEXT)', 'CREATE TABLE a (x TEXT)']);
     expect(r.ok).toEqual(['CREATE TABLE a (x TEXT)']);
     expect(r.failed).toHaveLength(1);
-    expect(r.failed[0].error).toMatch(/already exists/);
+    expect(r.failed[0]?.error).toMatch(/already exists/);
     await pg.close();
   });
 });

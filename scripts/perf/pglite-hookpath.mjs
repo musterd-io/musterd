@@ -196,13 +196,22 @@ function dirSizeMb(p) {
   return readdirSync(p).reduce((acc, f) => acc + dirSizeMb(join(p, f)), 0);
 }
 
-export async function runBench({ backend, dir, scale = 1, rounds = 200 }) {
+export async function runBench({ backend, dir, scale = 1, rounds = 200, indexJson = false }) {
   mkdirSync(dir, { recursive: true });
   const s = seedRows(scale);
   const b = await openBackend(backend, dir);
   const tSeed = performance.now();
   await seed(b, backend, s);
   const seed_ms = performance.now() - tSeed;
+  // Variant: the expression index a native-Postgres schema would carry for `findGateAsk` (SQLite
+  // supports the same shape). Without it Postgres casts text→jsonb on every candidate row.
+  if (indexJson)
+    await b.exec(
+      backend === 'sqlite'
+        ? "CREATE INDEX idx_audit_class ON audit(team_id, json_extract(detail, '$.class'), created_at)"
+        : "CREATE INDEX idx_audit_class ON audit(team_id, ((detail::jsonb ->> 'class')), created_at)",
+    );
+  /** @type {Record<string, { p50: number, p95: number, p99: number, n: number }>} */
   const queries = {};
   // Warm-up: one full pass, discarded (Review Focus 1 — WASM first-call compile is not query latency).
   for (const q of QUERY_NAMES) await b.all(QUERIES[q][0], QUERIES[q][1](s));
@@ -231,6 +240,7 @@ export async function runBench({ backend, dir, scale = 1, rounds = 200 }) {
   }
   const report = {
     backend,
+    indexJson,
     boot_ms: b.boot_ms,
     seed_ms,
     rows: { members: s.members, lanes: s.lanes, messages: s.messages, audit: s.audit },
@@ -255,7 +265,7 @@ export function renderMarkdown(reports) {
   const meta = `| boot ms · seed s · disk MB · rss MB | ${reports.map((r) => `${r.boot_ms.toFixed(0)} · ${(r.seed_ms / 1000).toFixed(1)} · ${r.disk_mb.toFixed(1)} · ${r.rss_mb.toFixed(0)}`).join(' | ')} |`;
   const r0 = reports[0];
   return [
-    `Seed: ${r0.rows.members} members · ${r0.rows.lanes} lanes · ${r0.rows.messages} messages · ${r0.rows.audit} audit rows; ${r0.queries.getPolicy.n} rounds after one warm-up.`,
+    `Seed: ${r0.rows.members} members · ${r0.rows.lanes} lanes · ${r0.rows.messages} messages · ${r0.rows.audit} audit rows; ${r0.queries.getPolicy.n} rounds after one warm-up${r0.indexJson ? '; with the json expression index' : ''}.`,
     '',
     head,
     sep,
@@ -268,9 +278,10 @@ export function renderMarkdown(reports) {
 if (process.argv[1] && process.argv[1].endsWith('pglite-hookpath.mjs')) {
   const scale = Number(process.argv[2] ?? 1);
   const rounds = Number(process.argv[3] ?? 200);
+  const indexJson = process.argv[4] === 'index';
   const dir = join(process.env.TMPDIR ?? '/tmp', `pglite-hookpath-${Date.now()}`);
   const reports = [];
   for (const backend of ['sqlite', 'pglite-file', 'pglite-memory'])
-    reports.push(await runBench({ backend, dir: join(dir, backend), scale, rounds }));
+    reports.push(await runBench({ backend, dir: join(dir, backend), scale, rounds, indexJson }));
   console.log(renderMarkdown(reports));
 }

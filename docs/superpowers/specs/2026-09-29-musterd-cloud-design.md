@@ -159,6 +159,10 @@ daemon on PGlite, run the server suite, measure hook-path latency against SQLite
 dialect. Fail → the two-backend interface. Either result shapes every store change after it,
 which is why it cannot run in parallel or later.
 
+_Result (2026-09-29): **two backends** — schema and SQL text port cleanly, but PGlite boots in
+3.5–4.2 s and the gate's JSON query misses the latency bar; PGlite becomes the Cloud driver's
+in-CI test double. [`docs/perf/pglite-spike.md`](../../perf/pglite-spike.md)._
+
 ## 4. Identity and data flow
 
 The split: the **console owns who a person is**; each **team server owns what they are on the
