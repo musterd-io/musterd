@@ -252,7 +252,8 @@ Nothing else in the port is engine-specific above the driver.
 
 ## Decision
 
-**2026-09-29 — nick chose two backends**, overruling the rule's "one dialect" below on footprint:
+**2026-09-29 — nick chose two backends** ([ADR 479](../decisions/479-two-store-backends.md), which
+supersedes ADR 475 decision 3's spike clause), overruling the rule's "one dialect" below on footprint:
 the development laptop is memory- and disk-constrained, and the local daemon should be exactly
 what self-hosted users run. better-sqlite3 stays local, `pg` serves Cloud, the store suite runs on
 both drivers (PGlite as the `pg` test double, in-memory, test-time only). The two-backend

@@ -53,7 +53,9 @@ constrains the others, so they were decided together.
    choice is revisited with dogfood performance data and again at billing, by `pg_dump`.
 3. **The self-hosted daemon stays in-process and never phones home.** A two-day **PGlite spike
    runs first**: pass → one SQL dialect and one store layer; fail → two backends behind one store
-   interface.
+   interface. _(Amended 2026-09-29: the spike passed and nick chose two backends anyway, on
+   footprint — [ADR 479](479-two-store-backends.md) supersedes this clause. See the amendment
+   below.)_
 4. **Identity is split.** The console (`app.musterd.io`) proves who a person is (GitHub, Google,
    magic link; `musterd login` is OAuth with browser-PKCE or device-code, auto-selected). The
    console returns an **identity-only** statement (account id, verified email) with decision 5's
@@ -144,7 +146,9 @@ constrains the others, so they were decided together.
   boot and skipped `ANALYZE`; the whole-branch review caught it. The result page records the
   judgment on both sides (memory 310 MB vs 109 MB resident, out-of-process readers, PGlite
   maturity, against one store layer and no native module). **2026-09-29, nick chose two
-  backends** over the rule: laptop memory and disk are the binding constraint (the dev machine is
+  backends** over the rule — recorded as its own ADR, [ADR 479](479-two-store-backends.md), which
+  supersedes decision 3's spike clause (a Consequences note cannot reverse a frozen Decision;
+  schmidt's acceptance decline on the spike lane, 2026-09-29): laptop memory and disk are the binding constraint (the dev machine is
   resource-constrained, and every self-hosted user would carry PGlite's ~200 MB extra resident),
   and the laptop should run exactly what self-hosted users run. better-sqlite3 stays the local
   driver; `pg` serves Cloud; both sit behind the async driver, and the store suite runs on both
@@ -180,7 +184,9 @@ constrains the others, so they were decided together.
   (spec §8): token replay across two servers, the restore drill, the seat bar, consent.
 - **Experiment:** the PGlite spike (increment 0, two days). Pass = the server suite is green on
   PGlite and hook-path latency is within the internet hop a Cloud seat already pays; then
-  decision 3 is "one dialect". Fail on either count and the two-backend interface is taken. Two
+  decision 3 is "one dialect". Fail on either count and the two-backend interface is taken.
+  _(Amended 2026-09-29: superseded by [ADR 479](479-two-store-backends.md) — the pass happened and
+  two backends were chosen; the bar's other falsifiers stand.)_ Two
   further falsifiers on the running system: if dogfood shows the Neon hop dominating p95,
   decision 2 is revisited early; if a month of `unenforced` counts shows outages switching gates
   off for more than a few minutes a week, decision 7's fail-open is too generous and the cached
