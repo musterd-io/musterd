@@ -614,6 +614,13 @@ export function makeDrawRateFloor(
         anchor = { at: nowMs, draws: s.draws, beats: s.beats };
         return;
       }
+      // Counters that went BACKWARDS mean the page reloaded and `stats()` restarted from zero. The
+      // delta across it is not a rate (it read -56.2 frames/s on the hosted box, 2026-09-30), and
+      // judging it would also spend the one-shot report. Re-anchor on the new page instead.
+      if (s.draws < anchor.draws || s.beats < anchor.beats) {
+        anchor = { at: nowMs, draws: s.draws, beats: s.beats };
+        return;
+      }
       const elapsed = nowMs - anchor.at;
       if (elapsed < windowMs) return;
       // The room parked somewhere in this window, so what it drew says nothing about what it
