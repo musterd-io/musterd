@@ -311,8 +311,8 @@ export interface OfficeOptions {
   onPlateHover?: (name: string | null) => void;
   /**
    * Rasterize the static furniture once per state and blit it, instead of redrawing the whole room
-   * every frame (spec 2026-09-17). Dark by default: `/broadcast` turns it on with `&sprites=1`, and
-   * the default flips only once the pixel gate is byte-equal and the box measures under 25 ms/draw.
+   * every frame (spec 2026-09-17). Off unless passed: `/broadcast` passes it by default (ADR 488,
+   * `&sprites=0` opts out) and `/live` never does, so viewers keep the direct render.
    * The baked idle frame never uses it — keeping `bake()` byte-identical is what makes the gate's
    * reference honest.
    */

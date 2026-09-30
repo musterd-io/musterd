@@ -49,15 +49,15 @@ describe('the stage survives hydration', () => {
 });
 
 describe('spritesFromUrl', () => {
-  it('is off unless the URL says exactly 1 — a stream must not opt itself in', () => {
-    expect(spritesFromUrl('')).toBe(false);
-    expect(spritesFromUrl('?fps=20')).toBe(false);
-    expect(spritesFromUrl('?sprites')).toBe(false);
-    expect(spritesFromUrl('?sprites=0')).toBe(false);
-    expect(spritesFromUrl('?sprites=true')).toBe(false);
-  });
-  it('turns on for &sprites=1, wherever it sits in the query', () => {
+  it('is ON for the stream by default (ADR 488)', () => {
+    expect(spritesFromUrl('')).toBe(true);
+    expect(spritesFromUrl('?fps=15')).toBe(true);
     expect(spritesFromUrl('?sprites=1')).toBe(true);
-    expect(spritesFromUrl('?h=1080&fps=20&sprites=1')).toBe(true);
+  });
+  it('turns off only for exactly &sprites=0, wherever it sits — the A/B arm and the escape hatch', () => {
+    expect(spritesFromUrl('?sprites=0')).toBe(false);
+    expect(spritesFromUrl('?h=1080&fps=15&sprites=0')).toBe(false);
+    expect(spritesFromUrl('?sprites')).toBe(true);
+    expect(spritesFromUrl('?sprites=false')).toBe(true);
   });
 });
