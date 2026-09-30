@@ -184,11 +184,10 @@
   color: var(--lc-text);
 }
 
-/* ─── top bar (glass over the ground) ─────────────────────────────────────
-   Follows the frame, not the room: a near-white glass with the warmth taken out, so the bar reads
-   as part of the cool surround rather than as one more cream band above a cream page. It keeps its
-   backdrop blur — the topbar is chrome that never appears on the /broadcast capture, so the
-   office-block no-blur rule does not reach it. */
+/* ─── top bar ─────────────────────────────────────────────────────────────
+   Follows the frame, not the room: a flat near-white with the warmth taken out, so the bar reads
+   as part of the cool surround rather than as one more cream band above a cream page. Flat, not
+   glass — frosted chrome is designer-skill tell 9, and nothing scrolls under this bar anyway. */
 .lc__topbar {
   display: flex;
   align-items: center;
@@ -196,9 +195,7 @@
   height: 52px;
   padding: 0 var(--lc-7);
   border-bottom: 1px solid var(--lc-border);
-  background: rgba(250, 251, 252, 0.68);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgb(250, 251, 252);
   flex: 0 0 auto;
   z-index: var(--lc-z-overlay);
 }
@@ -296,8 +293,7 @@
   z-index: calc(var(--lc-z-overlay) + 3);
   display: flex;
   justify-content: flex-end;
-  background: color-mix(in srgb, var(--lc-ground) 58%, transparent);
-  backdrop-filter: blur(3px);
+  background: color-mix(in srgb, var(--lc-ground) 72%, transparent);
   animation: lc-fade var(--lc-dur-2) var(--lc-ease-out) both;
 }
 .lc-seeds__panel {
@@ -499,9 +495,9 @@
   }
 }
 /* ─── office clock ────────────────────────────────────────────────────────
- * Wall time as a glass pill: tabular digits, each in a fixed-width slot that a changed glyph rolls
- * up through (the seconds column moves every tick, the hour once an hour). A sheen sweeps the pill on
- * a slow loop so it reads as lit glass rather than a label. */
+ * Wall time as a flat pill: tabular digits, each in a fixed-width slot that a changed glyph rolls
+ * up through (the seconds column moves every tick, the hour once an hour). No sheen or glass —
+ * designer-skill tells 3 and 9; the rolling digits are the only motion, and they mean time passed. */
 .lc-clock {
   display: inline-flex;
   align-items: baseline;
@@ -510,16 +506,8 @@
   padding: 4px 11px 5px;
   border: 1px solid var(--lc-border);
   border-radius: 999px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, #fff 55%, transparent),
-      color-mix(in srgb, var(--lc-accent) 7%, transparent)
-    ),
-    rgba(255, 255, 255, 0.04);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    0 1px 3px rgba(60, 40, 20, 0.07);
+  background: var(--lc-surface);
+  box-shadow: 0 1px 3px rgba(60, 40, 20, 0.07);
   overflow: hidden;
   isolation: isolate;
   transition:
@@ -529,32 +517,7 @@
 .lc-clock:hover {
   border-color: color-mix(in srgb, var(--lc-accent) 40%, transparent);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    0 0 18px color-mix(in srgb, var(--lc-accent) 22%, transparent);
-}
-/* the sheen — a slow diagonal glint across the glass */
-.lc-clock::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    100deg,
-    transparent 38%,
-    color-mix(in srgb, #fff 62%, transparent) 50%,
-    transparent 62%
-  );
-  transform: translateX(-120%);
-  animation: lc-clock-sheen 7s var(--lc-ease-out) infinite;
-  pointer-events: none;
-}
-@keyframes lc-clock-sheen {
-  0%,
-  62% {
-    transform: translateX(-120%);
-  }
-  100% {
-    transform: translateX(120%);
-  }
+    0 1px 3px rgba(60, 40, 20, 0.07);
 }
 .lc-clock__time {
   display: inline-flex;
@@ -614,7 +577,6 @@
 }
 /* Motion is decoration here — the time is legible without any of it. */
 @media (prefers-reduced-motion: reduce) {
-  .lc-clock::after,
   .lc-clock__digit,
   .lc-clock__colon {
     animation: none;
@@ -1090,13 +1052,11 @@
   max-width: 44%;
 }
 .lc-office__collapse .lc-collapse {
-  background: rgba(20, 15, 12, 0.55);
+  background: rgba(20, 15, 12, 0.82);
   border-color: rgba(255, 233, 208, 0.22);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
 }
 .lc-office__collapse .lc-collapse:hover {
-  background: color-mix(in srgb, var(--lc-accent) 22%, rgba(20, 15, 12, 0.55));
+  background: color-mix(in srgb, var(--lc-accent) 22%, rgba(20, 15, 12, 0.82));
 }
 
 .lc-roster__spacer,
@@ -1139,7 +1099,7 @@
   padding: var(--lc-6) 0;
   border: 0;
   border-inline-end: 1px solid var(--lc-border);
-  background: linear-gradient(180deg, var(--lc-ground-2), var(--lc-ground));
+  background: var(--lc-ground-2);
   color: var(--lc-muted);
   cursor: pointer;
   font: inherit;
@@ -1155,25 +1115,20 @@
 }
 .lc-rail:hover {
   color: var(--lc-text);
-  background: linear-gradient(180deg, var(--lc-surface), var(--lc-ground-2));
+  background: var(--lc-surface);
 }
 .lc-rail:focus-visible {
   outline: 2px solid var(--lc-focus);
   outline-offset: -3px;
 }
-/* a soft accent seam runs the height of the rail — brightens on hover, the "expand me" invitation */
+/* an accent seam runs the height of the rail — brightens on hover, the "expand me" invitation */
 .lc-rail::before {
   content: '';
   position: absolute;
   inset-block: 0;
   inset-inline-start: 0;
   width: 2px;
-  background: linear-gradient(
-    180deg,
-    transparent,
-    color-mix(in srgb, var(--lc-accent) 55%, transparent),
-    transparent
-  );
+  background: color-mix(in srgb, var(--lc-accent) 40%, transparent);
   opacity: 0.75;
   transition: opacity var(--lc-dur-2) var(--lc-ease-out);
 }
@@ -4045,11 +4000,7 @@
 .lc-now__line {
   flex: 1;
   height: 1px;
-  background: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--lc-accent) 38%, transparent),
-    transparent
-  );
+  background: color-mix(in srgb, var(--lc-accent) 30%, transparent);
 }
 
 /* day divider (Today / Yesterday / dated) */
@@ -4110,9 +4061,6 @@
   justify-content: center;
   padding: var(--lc-8);
   overflow: hidden;
-  background:
-    radial-gradient(70% 54% at 50% 42%, rgba(244, 207, 82, 0.13), transparent 60%),
-    radial-gradient(120% 80% at 50% 116%, rgba(255, 168, 92, 0.2), transparent 58%);
   animation: lc-fade var(--lc-dur-2) var(--lc-ease-out) both;
 }
 .lc-form__card {
@@ -4120,7 +4068,7 @@
   z-index: var(--lc-z-overlay);
   width: 100%;
   max-width: 412px;
-  background: linear-gradient(var(--lc-surface), var(--lc-ground-2));
+  background: var(--lc-surface);
   border: 1px solid var(--lc-border-2);
   border-radius: var(--lc-r-lg);
   padding: var(--lc-9);
@@ -4928,18 +4876,6 @@
   gap: var(--lc-5);
   overflow: hidden;
   padding: var(--lc-6);
-  /* ambient depth — the lc-form glow recipe, dialed down to a room's daylight */
-  background:
-    radial-gradient(
-      520px 300px at 18% -8%,
-      color-mix(in srgb, var(--lc-accent) 7%, transparent),
-      transparent 70%
-    ),
-    radial-gradient(
-      640px 380px at 88% 110%,
-      color-mix(in srgb, var(--lc-accent) 5%, transparent),
-      transparent 70%
-    );
 }
 .lc-board__main {
   flex: 1;
@@ -4960,13 +4896,7 @@
   min-height: 0;
   border: 1px solid var(--lc-border);
   border-radius: var(--lc-r-lg);
-  /* a shallow tray: light falls from above, the surface recedes toward the floor */
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--lc-surface) 62%, transparent),
-    color-mix(in srgb, var(--lc-ground) 40%, transparent)
-  );
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent);
+  background: color-mix(in srgb, var(--lc-surface) 52%, transparent);
 }
 .lc-col__head {
   display: flex;
@@ -6088,9 +6018,7 @@
   right: 0;
   border: 1px solid color-mix(in srgb, var(--lc-accent) 34%, var(--lc-border));
   border-radius: var(--lc-r-lg);
-  background: color-mix(in srgb, var(--lc-ground-2) 94%, transparent);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  background: var(--lc-ground-2);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.5) inset,
     0 18px 48px -22px rgba(60, 40, 20, 0.55);
