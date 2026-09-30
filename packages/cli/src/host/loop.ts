@@ -69,7 +69,19 @@ export interface HostPollDeps {
   endCapture?: typeof endWakeCapture;
   verifyWindowMs?: number;
   verifyPollMs?: number;
+  /**
+   * Lane 01M3QRYZM2: aborted when the actuator is told to stop (SIGTERM from `launchctl kickstart
+   * -k`, SIGINT). Orders are actuated one at a time, so a stop mid-poll used to strand every order
+   * behind the one being verified: never spawned, never reported, expiring at the lease TTL and
+   * then snoozing its seat. On abort each order not yet started is handed back at once as a
+   * budget-neutral deferral (`actuator_restart`, which the daemon does not snooze on); the order in
+   * progress is left to finish and report as usual.
+   */
+  signal?: AbortSignal;
 }
+
+/** The deferral reason an actuator sends for an order it was stopped before starting. */
+export const ACTUATOR_RESTART_REASON = 'actuator_restart';
 
 /** One tick's result: how many orders were claimed, and the in-flight actuations (`host --once`
  *  awaits them so the mandatory watchdog is never orphaned by a short-lived host process). */
@@ -263,7 +275,34 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
       continue;
     }
 
+    // Orders this poll has not started yet. On a stop, whatever is still here is handed back.
+    const pending = new Set(response.orders);
+    const handBack = () => {
+      for (const o of [...pending]) {
+        pending.delete(o);
+        orders += 1;
+        deps.log(`wake handed back: ${o.seat} — actuator stopping (lease ${o.lease_id})`);
+        settled.push(
+          client
+            .wakeReport(group.team, {
+              lease_id: o.lease_id,
+              occupied: false,
+              deferred: true,
+              reason: ACTUATOR_RESTART_REASON,
+            })
+            .then(
+              () => undefined,
+              (err: Error) =>
+                deps.log(`! wake-report failed for lease ${o.lease_id}: ${err.message}`),
+            ),
+        );
+      }
+    };
+    if (deps.signal?.aborted) handBack();
+    else deps.signal?.addEventListener('abort', handBack, { once: true });
+
     for (const order of response.orders) {
+      if (!pending.delete(order)) continue; // already handed back by a stop
       orders += 1;
       deps.log(
         `wake due: ${order.seat} [${order.lane}] — ${order.act ?? 'work_order'} from ${order.sender ?? 'board'} ` +
@@ -516,6 +555,7 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
         }),
       );
     }
+    deps.signal?.removeEventListener('abort', handBack);
   }
 
   return { registered: registry.entries.length, orders, settled };

@@ -188,10 +188,14 @@ export async function hostCommand(
 
   const log = deps.log ?? ((line: string) => process.stdout.write(theme.meta(`  ${line}`) + '\n'));
   const hostLabel = flagStr(parsed.flags, 'host');
+  // Lane 01M3QRYZM2: aborted on SIGTERM/SIGINT so a poll in progress hands back the orders it has
+  // not started instead of stranding them until the lease TTL.
+  const stop = new AbortController();
   const pollDeps: HostPollDeps = {
     backends,
     bounds: { timeout_ms: opts.timeoutMs },
     log,
+    signal: stop.signal,
     ...(hostLabel !== undefined ? { hostLabel } : {}),
     ...deps,
   };
@@ -270,6 +274,7 @@ export async function hostCommand(
   return new Promise<number>((resolveP) => {
     let timer: NodeJS.Timeout | undefined;
     const inFlight = new Set<Promise<void>>();
+    let stopping = false;
     const tick = async () => {
       void ringDoorbell();
       void provision();
@@ -283,10 +288,17 @@ export async function hostCommand(
         void p.finally(() => inFlight.delete(p));
       }
       // NB: not unref'd — nothing else holds the event loop open (the `notify` lesson).
-      timer = setTimeout(tick, opts.intervalMs);
+      if (!stopping) timer = setTimeout(tick, opts.intervalMs);
     };
     void tick();
-    process.on('SIGINT', () => {
+    // SIGTERM is what `launchctl kickstart -k` (autorefresh, `service restart --wake`) sends; it
+    // used to kill the actuator outright mid-poll (lane 01M3QRYZM2). Both signals now stop the
+    // ticks, hand back unstarted orders (the abort), and wait for in-flight runs — launchd's
+    // ExitTimeOut still bounds that wait.
+    const onStop = () => {
+      if (stopping) return;
+      stopping = true;
+      stop.abort();
       if (timer) clearTimeout(timer);
       process.stdout.write('\n');
       // In-flight wake runs keep their own watchdogs; report already went out per actuation.
@@ -296,6 +308,8 @@ export async function hostCommand(
           theme.meta(`waiting for ${inFlight.size} wake run(s) to settle…`) + '\n',
         );
       }
-    });
+    };
+    process.on('SIGINT', onStop);
+    process.on('SIGTERM', onStop);
   });
 }

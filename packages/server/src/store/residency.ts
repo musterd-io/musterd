@@ -64,6 +64,10 @@ export const WAKE_POLICY_DEFAULTS: ResidencyPolicy = ResidencyPolicySchema.parse
  *  every poll tick. Deferrals consume NO attempt/cooldown/hourly budget (they are neither
  *  `residency.woke` nor `residency.wake_failed`), so the act stays fully due afterwards. */
 export const WAKE_DEFER_SNOOZE_MS = 5 * 60_000;
+/** Lane 01M3QRYZM2: the deferral an actuator sends for an order it was stopped before starting
+ *  (`launchctl kickstart -k` mid-poll). It says nothing about the seat — a fresh actuator is up
+ *  within seconds — so it is the one deferral reason that does NOT snooze lease derivation. */
+export const WAKE_DEFER_ACTUATOR_RESTART = 'actuator_restart';
 /**
  * ADR 236: a gap between reaper ticks this long means the loop did not run — it was not merely late.
  * Six times `REAPER_INTERVAL_MS`: far above scheduler jitter or a long GC pause, far below the
@@ -715,12 +719,13 @@ function wakesSince(db: Database, teamId: string, seatName: string, sinceTs: num
  *  `wakesSince`/`attemptsForAct`: a deferral burns no rate or attempt budget, it only snoozes. */
 function deferredSince(db: Database, teamId: string, seatName: string, sinceTs: number): boolean {
   const row = db
-    .prepare<[string, string, number], { one: number }>(
+    .prepare<[string, string, number, string], { one: number }>(
       `SELECT 1 AS one FROM audit
         WHERE team_id = ? AND action = 'residency.wake_deferred'
-          AND target = ? AND ts > ? ${MINTED_HERE} LIMIT 1`,
+          AND target = ? AND ts > ? ${MINTED_HERE}
+          AND COALESCE(json_extract(detail, '$.reason'), '') <> ? LIMIT 1`,
     )
-    .get(teamId, seatName, sinceTs);
+    .get(teamId, seatName, sinceTs, WAKE_DEFER_ACTUATOR_RESTART);
   return row != null;
 }
 

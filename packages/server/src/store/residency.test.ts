@@ -9,6 +9,7 @@ import { saveMemory } from './memory.js';
 import { countOpenLoops, insertMessage } from './messages.js';
 import { attach } from './presence.js';
 import {
+  WAKE_DEFER_ACTUATOR_RESTART,
   WAKE_DEFER_SNOOZE_MS,
   WAKE_LEASE_TTL_MS,
   WAKE_POLICY_DEFAULTS,
@@ -1072,6 +1073,24 @@ describe('session capture (ADR 131 inc 4): attestation + the wake_deferred snooz
     db.prepare("UPDATE audit SET ts = ? WHERE action = 'residency.wake_deferred'").run(
       Date.now() - WAKE_DEFER_SNOOZE_MS - 1_000,
     );
+    const orders = claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+    expect(orders).toHaveLength(1);
+    expect(orders[0]!.act_id).toBe('u1');
+  });
+
+  it('an actuator_restart handback does NOT snooze: the next poll re-derives the lease (lane 01M3QRYZM2)', () => {
+    const { db, team, nick, ada } = seed();
+    enroll(db, team, ada);
+    msg(db, team, nick, ada, 'message', 'u1', 1_000, {
+      meta: { urgent: true, urgent_reason: 'wake me' },
+    });
+    appendAudit(db, team.id, {
+      actor: null,
+      action: 'residency.wake_deferred',
+      target: ada.name,
+      result: 'allow',
+      detail: { act: 'u1', lease_id: 'x', reason: WAKE_DEFER_ACTUATOR_RESTART },
+    });
     const orders = claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
     expect(orders).toHaveLength(1);
     expect(orders[0]!.act_id).toBe('u1');

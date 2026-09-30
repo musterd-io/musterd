@@ -111,6 +111,20 @@ checked.
 - `review_unanswered` still absorbs closes whose ask was never delivered. Narrowing that reason is
   a separate change on lane surfaces another seat owns, and is deliberately not made here.
 
+- **2026-09-29 — a daemon restart also reads as `host_unreachable`, and the actuator restart
+  that rides with it used to strand leases** (lane `01M3QRYZM2XTJSPWRGBYMSZ535`). `continuousSince`
+  starts at daemon boot, so a lease minted just before an autorefresh bounce is deferred as
+  `host_unreachable` when it expires. That is correct by this ADR. The loss was upstream: autorefresh
+  restarts the wake actuator with `launchctl kickstart -k` a second later. `musterd host` handled
+  SIGINT only, so the SIGTERM killed it partway through a serial poll. The order it was verifying was
+  never reported, and the orders queued behind it were never spawned. Each then expired to a deferral
+  and a 5-minute snooze. Measured: grokbot and ghost at 16:35:53, deferred at 16:37:57. Now SIGTERM
+  drains like SIGINT and aborts the poll. Every unstarted order is handed back at once as a deferral
+  with reason `actuator_restart`. The daemon does not snooze on that reason, because it says nothing
+  about the seat. The order in progress still finishes, bounded by launchd's ExitTimeOut. Falsifier:
+  a lease minted within 60 s before an actuator restart whose seat is not woken on the next lease
+  after the restart.
+
 ## Observability & Evaluation
 
 **Traces.** One new action, `residency.host_suspended` (`{gap_ms, from, to}`, target `daemon`,
