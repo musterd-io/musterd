@@ -299,6 +299,16 @@ export interface Harness {
      * a name nothing installs is a lie about the folder. Omitted means "none".
      */
     surfaces?: () => string[];
+    /**
+     * This harness's hook drift, read from files alone — no `detect()`, no network, no git — so the
+     * self-heal's cheap inspection (`inspectArtifactDrift`, ADR 408) can ask it at every session
+     * start and before every wake. Asked only where `applies` holds, the same line the repair draws,
+     * so the inspection and the repair agree on which folders are this harness's by construction.
+     * Omitted: Claude Code (read directly by `inspectClaudeHookDrift`) and harnesses whose
+     * inspector reaches outside the worktree (Codex's git common dir), which `withinWorktreeOnly`
+     * could never repair — a drift line the heal can only skip would repeat every session.
+     */
+    drift?: (dir: string) => string[];
   };
   /**
    * Observe the model this harness is *actually* running for the current session. An observation

@@ -210,6 +210,9 @@ export const opencode: Harness = {
 
   refreshHooks: {
     applies: (dir) => existsSync(projectConfigPath(dir)) || opencodePluginPresent(dir),
+    // Lane 01M3NMZ94D: a v1 doorbell plugin sat under a v2 build for a day because the self-heal's
+    // inspection never asked OpenCode — `drift.json` read `hooks: 0` while `init --check` saw it.
+    drift: (dir) => inspectOpencodePluginDrift(dir),
     run: (dir) => {
       const warnings = installMusterdOpencodePlugin(dir);
       return { files: [join(dir, '.opencode', 'plugins', 'musterd.js')], warnings, skipped: [] };

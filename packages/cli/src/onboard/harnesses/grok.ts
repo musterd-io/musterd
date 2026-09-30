@@ -474,6 +474,9 @@ export const grok: Harness = {
 
   refreshHooks: {
     applies: (dir) => existsSync(projectConfigPath(dir)) || existsSync(projectHooksPath(dir)),
+    // Lane 01M3NMZ94D: without this the self-heal's inspection read Claude Code hooks only, so a
+    // Grok folder with no .grok/hooks/musterd.json at all read `hooks: 0` and was never repaired.
+    drift: (dir) => inspectGrokHookDrift(dir),
     run: (dir) => {
       const warnings = installMusterdGrokHooks(dir);
       let toml = readText(projectConfigPath(dir)) ?? '';

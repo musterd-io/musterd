@@ -8,8 +8,11 @@ import { resolveWorkspace } from '@musterd/protocol/project';
 import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { HttpClient } from '../client.js';
 import { findBinding } from '../config.js';
+import { refreshWorkspaceDrift } from '../onboard/doctor.js';
+import { defaultSelfHealDeps, selfHealWorkspace } from '../onboard/selfHeal.js';
 import { attendedHarnessProcess } from '../session/attendedProcess.js';
 import { localSessionLiveness, type LocalSessionLiveness } from '../session/liveness.js';
+import { cliBuild } from '../version.js';
 import type {
   ActuatorBackend,
   VerifyResult,
@@ -19,6 +22,18 @@ import type {
 } from './backend.js';
 import { canonicalServer, loadHostRegistry, type HostRegistryEntry } from './registry.js';
 import { endWakeCapture } from './wakeCapture.js';
+
+/**
+ * The real pre-wake heal: the same inspect → repair → re-inspect the SessionStart probe runs, then
+ * a forced drift-cache write so the woken session's interrupt checks read what REMAINS (ADR 408
+ * inc 4). No audit row — the host holds no seat identity to attribute a `workspace.repair` to; the
+ * host log carries the line instead.
+ */
+function healBeforeWake(workspace: string): string {
+  const out = selfHealWorkspace(workspace, defaultSelfHealDeps(cliBuild() ?? 'unstamped'));
+  refreshWorkspaceDrift(workspace, undefined, { force: true });
+  return out.ran ? out.line.replace(/^musterd: /, '') : '';
+}
 
 /**
  * The host poll loop (ADR 131 §1) — the actuator half of harness residency, in the `musterd notify`
@@ -67,6 +82,8 @@ export interface HostPollDeps {
   attendedProcess?: (workspace: string, harness?: string) => { pid: number } | null | undefined;
   /** ADR 436 clause 4: stamp a settled wake's claimed capture ended. */
   endCapture?: typeof endWakeCapture;
+  /** ADR 408 before a wake: repair the workspace; returns the one line to log, or '' when clean. */
+  heal?: (workspace: string) => string;
   verifyWindowMs?: number;
   verifyPollMs?: number;
   /**
@@ -419,6 +436,18 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
         await report({ occupied: false, deferred: true, reason: 'attended-session-open' });
         span.end();
         continue;
+      }
+      // ADR 408 self-heal, run by the host before it spawns (lane 01M3NMZ94D). The SessionStart
+      // probe heals from INSIDE the harness's own hooks, so it cannot reach a harness that has no
+      // start hook (OpenCode's plugin), nor re-install a start hook that is itself missing (a Grok
+      // folder with no .grok/hooks/musterd.json). Running it here reaches every harness, and a
+      // folder the probe will also heal costs one clean inspection. Never a gate: a heal that
+      // throws is logged and the wake goes ahead.
+      try {
+        const healed = (deps.heal ?? healBeforeWake)(entry.workspace);
+        if (healed) deps.log(`wake self-heal: ${order.seat} — ${healed}`);
+      } catch (e) {
+        deps.log(`wake self-heal: ${order.seat} — skipped (${(e as Error).message})`);
       }
       // Effective bounds (increment 5 / ADR 199): reply wakes only tighten the operator
       // `--timeout` ceiling. Work-orders use the seat's `work_timeout_ms` without that clamp —

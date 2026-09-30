@@ -167,6 +167,23 @@ decision refuses both.
   both were already at the current epoch — a false alarm with an empty command, seen on miley's
   start. The audit row still records every skip; the session-start line names a shared file only
   while hook drift remains after the repair (lane 01M3DGTP4G).
+- **2026-09-30 — the heal reaches every harness, and it runs before every wake too** (lane
+  `01M3NMZ94D`). On 2026-09-28 two seats went unrepaired while `init --check` named both defects.
+  ghost (OpenCode) kept a v1 doorbell plugin under a v2 build through two wakes. grokbot had no
+  `.grok/hooks/musterd.json` at all. There were two gaps. (1) The cheap inspection read Claude Code
+  hooks only, so `drift.json` said `hooks: 0` for both. Each harness adapter now answers
+  `refreshHooks.drift(dir)` from its project files alone, and it is asked only where
+  `refreshHooks.applies(dir)` holds, which is the line the repair itself draws. Grok and OpenCode
+  implement it. Codex does not, because its common-dir copy is one the seat heal may only skip.
+  Cursor is not wired yet. (2) The heal ran only inside a harness's own SessionStart hook. OpenCode
+  has no such hook, and a Grok folder missing its hooks file has no hook left to run it. The host
+  loop now runs the same inspect → repair → re-inspect before it spawns any wake. It then force-writes
+  the drift cache and logs the heal's one line to the host log. It writes no audit row, because the
+  host holds no seat identity. A heal that throws never blocks the wake. `drift.json`'s empty
+  `build` is by design, not a third gap: the per-tool-call interrupt probe never learns the
+  daemon's build (driftCache.ts). Falsifier: a wake of a Grok or OpenCode seat whose hook file was
+  deliberately removed or made stale beforehand, after which `init --check` in that folder still
+  names hook drift.
 
 ## Observability & Evaluation
 
