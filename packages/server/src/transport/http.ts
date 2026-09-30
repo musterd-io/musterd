@@ -316,7 +316,13 @@ import {
   toResidency,
   wakeExhaustionKey,
 } from '../store/residency.js';
-import { defaultArchiveDir, storeSizes } from '../store/retention.js';
+import {
+  compactStore,
+  countPrunableAuditChurn,
+  defaultArchiveDir,
+  pruneAuditChurn,
+  storeSizes,
+} from '../store/retention.js';
 import {
   ACCEPTANCE_EXEMPT_SAMPLE_RATE,
   acceptanceExemption,
@@ -383,6 +389,7 @@ import {
   ingestTraceEvents,
   listSeatTrace,
   listSessionTrace,
+  pruneTraceContent,
 } from '../store/trace.js';
 import { deriveTraceReport } from '../store/traceReport.js';
 import {
@@ -1874,6 +1881,81 @@ export async function handleHttp(
      * The response deliberately omits the credential — it went to disk, and the CLI has no use for
      * it. Printing it would put a long-lived machine secret in a terminal's scrollback for no gain.
      */
+    /**
+     * `POST /store/prune[?dry_run=1]` and `POST /store/compact` (ADR 478 §4) — the operator's two
+     * store verbs, localhost-only like every other. `prune` is the daily pass run now (audit churn +
+     * trace content); `dry_run` counts and touches nothing. `compact` is the one-time `VACUUM` that
+     * flips the file to incremental auto-vacuum; it holds the write lock, so the CLI announces it and
+     * the daemon refuses it without 1.2× the file free (`conflict`, with the two numbers).
+     */
+    if (method === 'POST' && path === '/store/prune') {
+      requireLocalPeer(ctx, req, 'pruning the store');
+      const dryRun = url.searchParams.get('dry_run') === '1';
+      const archiveDir = defaultArchiveDir(ctx.config.dbPath);
+      const sizes = storeSizes(ctx.db, ctx.config.dbPath, archiveDir);
+      if (dryRun) {
+        const audit = countPrunableAuditChurn(ctx.db, {
+          maxAgeMs: ctx.config.auditChurnRetentionMs,
+        });
+        sendJson(res, 200, {
+          dry_run: true,
+          audit_churn: audit,
+          archive_dir: archiveDir,
+          ...sizes,
+        });
+        return;
+      }
+      const audit = pruneAuditChurn(ctx.db, {
+        archiveDir,
+        maxAgeMs: ctx.config.auditChurnRetentionMs,
+      });
+      const trace = pruneTraceContent(ctx.traceDb, Date.now(), {
+        maxAgeMs: ctx.config.traceContentRetentionMs,
+      });
+      for (const [teamId, rows] of Object.entries(audit.perTeam)) {
+        appendAudit(ctx.db, teamId, {
+          actor: null,
+          action: 'store.pruned',
+          target: null,
+          result: 'allow',
+          detail: {
+            class: 'audit_churn',
+            rows,
+            bytes: audit.archivedBytes,
+            archive: archiveDir,
+            via: 'cli',
+          },
+        });
+      }
+      if (audit.pruned > 0) ctx.db.pragma('incremental_vacuum');
+      sendJson(res, 200, {
+        dry_run: false,
+        audit_churn: audit,
+        trace_content: trace,
+        archive_dir: archiveDir,
+        ...storeSizes(ctx.db, ctx.config.dbPath, archiveDir),
+      });
+      return;
+    }
+    if (method === 'POST' && path === '/store/compact') {
+      requireLocalPeer(ctx, req, 'compacting the store');
+      const r = compactStore(ctx.db, ctx.config.dbPath);
+      if (!r.ok && r.reason === 'insufficient_disk') {
+        throw new MusterdError(
+          'conflict',
+          `compact rewrites the whole file and needs ${r.need_bytes} bytes free beside it; ` +
+            `${r.free_bytes} are — free some disk and re-run`,
+        );
+      }
+      if (!r.ok) {
+        throw new MusterdError(
+          'conflict',
+          'this daemon runs in memory — there is no file to compact',
+        );
+      }
+      sendJson(res, 200, r);
+      return;
+    }
     if (method === 'POST' && path === '/node/enroll') {
       requireLocalPeer(ctx, req, 'enrolling this machine with a hub');
       const body = parseOrBadRequest(NodeEnrollRequestSchema, await readJson(req));

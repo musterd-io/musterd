@@ -611,6 +611,18 @@ export const CATALOG: readonly CommandEntry[] = [
       'immediately and leaves its history alone.',
   },
   {
+    name: 'store',
+    signature: '<prune [--dry-run]|compact|archive ls>',
+    summary: 'the local store’s retention pass and one-time compaction (ADR 478)',
+    group: 'team',
+    detail:
+      'ADR 478: `prune` runs the daily retention pass now — churn-class audit rows past 30 days are ' +
+      'gzipped to ~/.musterd/archive/ and deleted, trace content past its window is nulled; ' +
+      '`--dry-run` only counts. `compact` is the one-time VACUUM that hands freed pages back and flips ' +
+      'the file to incremental auto-vacuum; it holds the write lock, so announce it, and the daemon ' +
+      'refuses it without 1.2× the file free. Both are localhost-only, like every operator verb.',
+  },
+  {
     name: 'next',
     signature: '[--json]',
     summary: 'the orientation brief — what you carry, what to pick up next',

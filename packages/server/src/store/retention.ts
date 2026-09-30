@@ -8,8 +8,15 @@
  * transaction, gated by the corpus watermark `corpus:snapshot` stamps so an archiving machine never
  * deletes the only copy of a row the corpus has not captured.
  */
-import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
-import { readFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statfsSync,
+  statSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -81,6 +88,21 @@ export interface AuditPruneResult {
 const churnList = () => [...AUDIT_CHURN_ACTIONS].map((a) => `'${a}'`).join(', ');
 const latestList = () => [...LATEST_PER_SEAT].map((a) => `'${a}'`).join(', ');
 
+/** The prunable set: churn, older than `?` (the cutoff), minus the rows kept whatever their age. */
+function prunableSql(): string {
+  return `
+    SELECT a.* FROM audit a
+     WHERE a.action IN (${churnList()})
+       AND a.ts < ?
+       AND NOT (a.origin_seq > 0 AND a.origin_seq =
+                (SELECT MAX(b.origin_seq) FROM audit b WHERE b.origin_node = a.origin_node))
+       AND NOT (a.action IN (${latestList()}) AND a.id =
+                (SELECT c.id FROM audit c
+                  WHERE c.team_id = a.team_id AND c.action = a.action AND c.target IS a.target
+                  ORDER BY c.ts DESC, c.id DESC LIMIT 1))
+     ORDER BY a.ts, a.id`;
+}
+
 /**
  * Archive-then-prune one pass of churn rows older than the window and below the watermark.
  *
@@ -117,19 +139,7 @@ export function pruneAuditChurn(
   }
   const batch = opts.batch ?? AUDIT_PRUNE_BATCH;
   const maxBatches = opts.maxBatches ?? AUDIT_PRUNE_MAX_BATCHES;
-  const select = db.prepare<[number, number], AuditRow>(`
-    SELECT a.* FROM audit a
-     WHERE a.action IN (${churnList()})
-       AND a.ts < ?
-       AND NOT (a.origin_seq > 0 AND a.origin_seq =
-                (SELECT MAX(b.origin_seq) FROM audit b WHERE b.origin_node = a.origin_node))
-       AND NOT (a.action IN (${latestList()}) AND a.id =
-                (SELECT c.id FROM audit c
-                  WHERE c.team_id = a.team_id AND c.action = a.action AND c.target IS a.target
-                  ORDER BY c.ts DESC, c.id DESC LIMIT 1))
-     ORDER BY a.ts, a.id
-     LIMIT ?
-  `);
+  const select = db.prepare<[number, number], AuditRow>(`${prunableSql()} LIMIT ?`);
   const del = db.prepare<[string]>('DELETE FROM audit WHERE id = ?');
   const deleteAll = db.transaction((ids: string[]) => {
     for (const id of ids) del.run(id);
@@ -234,6 +244,63 @@ export function storeSizes(
     );
   }
   return out;
+}
+
+/** How many churn rows a pass would take right now — `musterd store prune --dry-run`. */
+export function countPrunableAuditChurn(
+  db: Database.Database,
+  opts: { now?: number; maxAgeMs?: number } = {},
+): { rows: number; cutoff: number; capturedThrough: number | null } {
+  const now = opts.now ?? Date.now();
+  const windowCutoff = now - (opts.maxAgeMs ?? AUDIT_CHURN_MAX_AGE_MS);
+  const capturedThrough = auditCapturedThrough(db);
+  const cutoff = capturedThrough === null ? windowCutoff : Math.min(windowCutoff, capturedThrough);
+  const rows = db
+    .prepare<[number], { n: number }>(`SELECT COUNT(*) AS n FROM (${prunableSql()})`)
+    .get(cutoff)!.n;
+  return { rows, cutoff, capturedThrough };
+}
+
+/** Free space must cover this many copies of the file before `VACUUM` runs (ADR 478 §4). */
+export const COMPACT_MIN_FREE_RATIO = 1.2;
+
+export type CompactResult =
+  | { ok: true; before_bytes: number; after_bytes: number; auto_vacuum: 'incremental' }
+  | { ok: false; reason: 'in_memory' }
+  | { ok: false; reason: 'insufficient_disk'; need_bytes: number; free_bytes: number };
+
+/**
+ * The one-time reclaim (`musterd store compact`, ADR 478 §4): flip the file to
+ * `auto_vacuum = INCREMENTAL` — which only takes effect through a full `VACUUM` — and run that
+ * `VACUUM`. It rewrites the whole file, so it refuses unless free disk is at least
+ * {@link COMPACT_MIN_FREE_RATIO} × the file, and it holds the write lock for the duration: an
+ * operator verb, announced first, never a timer's.
+ */
+export function compactStore(
+  db: Database.Database,
+  dbPath: string,
+  opts: { freeBytes?: (dir: string) => number } = {},
+): CompactResult {
+  if (dbPath === ':memory:' || !existsSync(dbPath)) return { ok: false, reason: 'in_memory' };
+  const before = statSync(dbPath).size;
+  const free = (opts.freeBytes ?? defaultFreeBytes)(dirname(dbPath));
+  const need = Math.ceil(before * COMPACT_MIN_FREE_RATIO);
+  if (free < need)
+    return { ok: false, reason: 'insufficient_disk', need_bytes: need, free_bytes: free };
+  db.pragma('auto_vacuum = INCREMENTAL');
+  db.exec('VACUUM');
+  db.pragma('wal_checkpoint(TRUNCATE)');
+  return {
+    ok: true,
+    before_bytes: before,
+    after_bytes: statSync(dbPath).size,
+    auto_vacuum: 'incremental',
+  };
+}
+
+function defaultFreeBytes(dir: string): number {
+  const st = statfsSync(dir);
+  return Number(st.bavail) * Number(st.bsize);
 }
 
 /**

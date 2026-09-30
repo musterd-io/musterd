@@ -41,10 +41,19 @@
  *
  *   node --disable-warning=ExperimentalWarning scripts/corpus/snapshot.ts [--out <dir>] [--json]
  *                                                                        [--dry-run] [--force]
+ *                                                                        [--include-archive]
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createReadStream, createWriteStream, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import {
+  createReadStream,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -69,9 +78,31 @@ interface Source {
   optional?: boolean;
 }
 
-export function defaultSources(home = homedir()): Source[] {
+export function defaultSources(
+  home = homedir(),
+  opts: { includeArchive?: boolean } = {},
+): Source[] {
   const m = join(home, '.musterd');
+  // ADR 478: the daemon's own archive of pruned audit churn (`~/.musterd/archive/*.jsonl.gz`). Opt-in
+  // (`--include-archive`) because on an archiving machine every row there was already captured by an
+  // earlier snapshot; a machine that never archived — where the prune took the only live copy —
+  // passes it to capture whole. Listed here, not planned: the files are plain and already gzipped.
+  const archiveDir = join(m, 'archive');
+  const archive: Source[] =
+    opts.includeArchive && existsSync(archiveDir)
+      ? readdirSync(archiveDir)
+          .filter((f) => f.endsWith('.jsonl.gz'))
+          .sort()
+          .map((f) => ({
+            id: `archive/${f}`,
+            kind: 'file' as const,
+            path: join(archiveDir, f),
+            why: 'ADR 478 archive of pruned audit churn rows — the local copy of what the live store no longer holds.',
+            optional: true,
+          }))
+      : [];
   return [
+    ...archive,
     {
       id: 'musterd.db',
       kind: 'sqlite',
@@ -456,6 +487,7 @@ async function main(): Promise<void> {
   const json = argv.includes('--json');
   const dryRun = argv.includes('--dry-run');
   const force = argv.includes('--force');
+  const includeArchive = argv.includes('--include-archive');
   const outIdx = argv.indexOf('--out');
   const outRoot =
     outIdx >= 0 && argv[outIdx + 1] !== undefined
@@ -471,7 +503,7 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
-  const sources = [...defaultSources(), ...launchAgentSources()];
+  const sources = [...defaultSources(homedir(), { includeArchive }), ...launchAgentSources()];
 
   if (dryRun) {
     const { items, missing } = planSnapshot(sources, statBytes, listRootDbs);
