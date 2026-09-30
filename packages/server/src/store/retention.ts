@@ -89,18 +89,31 @@ export interface AuditPruneResult {
 const churnList = () => [...AUDIT_CHURN_ACTIONS].map((a) => `'${a}'`).join(', ');
 const latestList = () => [...LATEST_PER_SEAT].map((a) => `'${a}'`).join(', ');
 
-/** The prunable set: churn, older than `?` (the cutoff), minus the rows kept whatever their age. */
+/**
+ * The prunable set: churn, older than `?` (the cutoff), minus the rows kept whatever their age.
+ *
+ * The keep sets are computed ONCE as CTEs, not as per-row correlated subqueries: the correlated form
+ * stalled the live daemon on 2026-09-29 (300k rows; a `LIMIT 5000` batch did not return in 280 s,
+ * and SQLite work is synchronous, so the daemon answered nothing meanwhile). This form counts the
+ * whole prunable set of that store in ~4 s.
+ */
 function prunableSql(): string {
   return `
+    WITH hwm AS (
+      SELECT origin_node, MAX(origin_seq) AS seq FROM audit WHERE origin_seq > 0 GROUP BY origin_node
+    ),
+    latest AS (
+      SELECT id FROM (
+        SELECT id, row_number() OVER (PARTITION BY team_id, action, target ORDER BY ts DESC, id DESC) AS rn
+          FROM audit WHERE action IN (${latestList()})
+      ) WHERE rn = 1
+    )
     SELECT a.* FROM audit a
      WHERE a.action IN (${churnList()})
        AND a.ts < ?
-       AND NOT (a.origin_seq > 0 AND a.origin_seq =
-                (SELECT MAX(b.origin_seq) FROM audit b WHERE b.origin_node = a.origin_node))
-       AND NOT (a.action IN (${latestList()}) AND a.id =
-                (SELECT c.id FROM audit c
-                  WHERE c.team_id = a.team_id AND c.action = a.action AND c.target IS a.target
-                  ORDER BY c.ts DESC, c.id DESC LIMIT 1))
+       AND NOT EXISTS (SELECT 1 FROM hwm h
+                        WHERE a.origin_seq > 0 AND h.origin_node = a.origin_node AND h.seq = a.origin_seq)
+       AND a.id NOT IN (SELECT id FROM latest)
      ORDER BY a.ts, a.id`;
 }
 
