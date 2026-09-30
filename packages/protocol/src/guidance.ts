@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 36;
+export const GUIDANCE_CONTENT_VERSION = 37;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -221,6 +221,11 @@ export function renderSkillBody(opts: { team: string }): string {
     "of the six named no check. Humans are peers on this line too: a human's critique carries the weight",
     'of its evidence, no more, and is answered the same way.',
     '',
+    "- **Send a `challenge` when you doubt a peer's claim.** If a finding, premise, or number a teammate",
+    '  put on the record would change your work and you have evidence it is wrong, send `challenge` to them',
+    '  (`reply_to` the act) naming the claim and your evidence, not a `message`. A `message` can be left',
+    '  unanswered; a `challenge` owes an `accept` or `decline`, and so the disagreement goes on the record.',
+    '  Challenge the claim, not the person, and only with evidence: a hunch goes in a `request_help`.',
     "- **Commit before you ask.** When you want a peer's view on your finding, send the question and the",
     '  evidence, not your conclusion (`request_help` / `message` with an eligible set), and post your own',
     '  conclusion with its falsifier in a `status_update` first. If you then change your mind, it is a',
