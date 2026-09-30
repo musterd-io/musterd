@@ -50,8 +50,8 @@ sender from the store would break the record; hiding it nowhere leaves the lever
   handed over, not that it cannot be found.
 - A blind challenge from nick removes the deference effect only for seats that don't guess the
   author. The A/B measures what actually happens, not what should.
-- Building waits for ADR 476's thirty-day baseline, so that the A/B has a before to compare against.
-  Follows-up: deferred — ADR 476's thirty-day read (2026-10-29)
+- Building waits for ADR 476's five-day baseline, so that the A/B has a before to compare against.
+  Follows-up: deferred — ADR 476's five-day read (2026-10-04)
 
 ## Observability & Evaluation
 
@@ -63,6 +63,6 @@ sender from the store would break the record; hiding it nowhere leaves the lever
   seats hold when they are right and still give way when they are wrong.
 - **Failure:** no difference between the arms at n ≥ 20 per arm, or blind challenges get more
   declines that the ledger later shows were wrong (the seats became stubborn, not selective).
-- **Experiment:** decision 4's server-randomised 50/50 split of `challenge` acts, blind vs named, for 30 days.
+- **Experiment:** decision 4's server-randomised 50/50 split of `challenge` acts, blind vs named, for 5 days.
 - **Falsifier for the whole ADR:** at n ≥ 20 per arm, blind and named challenges concede at the
   same rate.

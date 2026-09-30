@@ -47,9 +47,9 @@ across reads: if the script and the server each keep their own copy of the phras
   [ADR 483](483-per-seat-sycophancy-readout-surface.md)'s decision.
 - The known false positive stays: a question answered with `accept` counts in the challenge channel
   (nick → tinybot, 2026-07-09). Fixing it would change the definition mid-trend, so it waits for the
-  thirty-day read. Follows-up: deferred — ADR 476's thirty-day read (2026-10-29)
+  five-day read. Follows-up: deferred — ADR 476's five-day read (2026-10-04)
 - Building waits for that read to show the numbers are worth a surface. Follows-up: deferred —
-  ADR 476's thirty-day read (2026-10-29)
+  ADR 476's five-day read (2026-10-04)
 
 ## Observability & Evaluation
 
