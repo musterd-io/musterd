@@ -743,6 +743,210 @@ Increment 1's done-line (lane `01M3AKN6GFHZ3DGCJPRE4RG2TE`) records what `/live`
 
 ---
 
+## 8. The 7-minute demo — Multiplayer AI, 2026-10-01 (goal `demo`)
+
+The cut for a demo night with a host's own format: **the problem, your thesis, a live demo, the big
+questions you answered along the way**, seven minutes, Q&A from the room after. It is §5 re-cut to
+that order, with §6's rule that the clock is spent only by `SAY` lines and that a claim needing
+more than one qualifier on stage gets cut, not caveated. It runs on the laptop against `revive` —
+the real team, months of record — never a team made for the night: the thesis is that members
+outlast their sessions, and a roster created at 5:35 pm has no sessions to have outlasted.
+
+The host's brief named three places to go deep — the persistent roster as the primitive, how
+members claim lanes and how the acts route work, and **handoff as an idea** (what it carries, why
+acceptance comes from someone other than the author, what did not work). Handoff is spoken, not
+performed: the honest answer is the design record, and the one live beat that would show it — a
+declined handoff re-routed — is an open dogfood lane nobody has rehearsed (`01M2H2N0Y6`). The
+`delta` beat is optional and decided before the room fills, not on stage.
+
+**The true sentence, before anything else** (§6): musterd is the team boundary for attribution and
+human coordination. It is not a sandbox, a policy engine, or a host containment layer. Nothing
+below promises anything about what an agent does outside the roster.
+
+**Standing setup, ten minutes before** (§3 is the runbook): `/live` on the projector with the
+office lit and the roster showing nick present and two agents `here`; a terminal running
+`musterd inbox --watch`; one small real task ready, split by ownership; one agent primed in plain
+words — *"when I say go, raise a standard-tier ask to nick about the task"*. If `delta` is in,
+`musterd status` must say `wakeable · resumable` before anyone sits down. The frame rule holds:
+the human seat is visible the whole time.
+
+**Word budget.** Seven minutes at 150 wpm is 1,050 words, and a demo with two live actions and a
+projector to look at runs slower — so the budget is ~850 spoken words, and the table is the
+stopwatch until a live read replaces it. Measured 2026-09-30, spoken words only:
+
+| beat | part | budget | spoken | ~at 150 wpm |
+| --- | --- | --- | --- | --- |
+| 0:00 their objection, the roster | problem | 40 s | 102 | ~41 s |
+| 0:40 the second agent | problem | 35 s | 84 | ~34 s |
+| 1:15 why a roster | thesis | 45 s | 107 | ~43 s |
+| 2:00 a task lands | demo | 30 s | 49 | ~20 s |
+| 2:30 a question reaches the human | demo, centerpiece | 60 s | 108 | ~43 s |
+| 3:30 done is two claims | demo | 45 s | 86 | ~34 s |
+| 4:15 a seat that is not running *(optional)* | demo | 45 s | 69 | ~28 s |
+| 5:00 handoff | big questions | 60 s | 141 | ~56 s |
+| 6:00 what did not work | big questions | 40 s | 91 | ~36 s |
+| 6:40 the ask | close | 20 s | 37 | ~15 s |
+| **total** | | **420 s** | **874** (805 without `delta`) | **~350 s** (~322 s) |
+
+The ~70 s of slack is for the two live actions (the ask landing and being answered; the
+acceptance routing) and, if it is in, the ~24 s `delta` wake. **Stopwatch rule:** at 4:15 without
+the second claim on screen, drop `delta`; at 5:30 without the handoff beat started, cut "what did
+not work" to its last sentence.
+
+### 0:00 — Their objection, and the roster (problem, 40 s)
+
+**SEE** `/live`. A roster of names. One of them is nick. Nothing working yet.
+
+**SAY** "Everyone here has read this year's headlines — agents leaving their sandbox, agents
+nobody owns, agents nobody can stop. What you are looking at is the opposite shape. A roster of
+names. One of them is me. Every act on that roster carries a member's name, and the record holds
+what the harness reported about the model, not what the model says about itself. musterd is the
+coordination layer where agents and humans are peers. It connects the agents you already run; it
+does not run them, and it does not contain them — your sandbox and your host still do that."
+
+### 0:40 — The second agent is where it breaks (problem, 35 s)
+
+**SEE** Still the roster. Point at the two agents.
+
+**SAY** "One agent on a repo is fine. The moment you run a second one, the waste starts. On our
+own team, before lanes, about 37% of the code produced was thrown away — two agents writing the
+same diff, or one building on a schema the other had not finished. We measured that on our own
+history, and the number survived our own skepticism. The fix was not a smarter model. It was one
+owner per unit of work, declared before the first keystroke."
+
+### 1:15 — Why a roster (thesis, 45 s)
+
+**SEE** `musterd status` in the terminal: seats `here`, `working`, `wakeable`. The roster has the
+same members it had last week.
+
+**SAY** "So the primitive is not a session, and it is not a pipeline. It is a team: a persistent
+roster where a member outlasts every session it has run in. That is what makes the rest possible —
+an owner for every lane, an inbox that survives a restart, a record that says who did what, at
+which model. And the human is on the same roster, on the same protocol, not above it in an
+approval queue. Everything you are about to see is an act on that roster — thirteen kinds, from a
+status update to a decline — and humans send the same ones."
+
+### 2:00 — A task lands (demo, 30 s)
+
+**DO** Hand the two agents the task, split by ownership. Each opens and claims a lane.
+
+**SEE** The board: two owners, two scopes, no contention. If a scope overlaps, the warning fires —
+read it aloud; it is the best possible outcome.
+
+**SAY** "One task, two owners. Each one claimed a lane before touching a file — a title, the paths
+it touches, a branch. If those paths overlapped, that warning would fire now, at claim time,
+instead of as a merge conflict an hour from now. Lamps on; they are working."
+
+### 2:30 — A question reaches the human (demo, the centerpiece, 60 s)
+
+**DO** "Go." The primed agent raises its `ask`.
+
+**SEE** It lands on the rail in the agent's hue with the tier's clock drawn as an arc, and in the
+terminal inbox. Let it sit for one breath. Answer it from the terminal, as yourself — decline it if
+the question allows a no.
+
+**SAY** "It asked me. Not the person driving its session — me, a member on the same roster, with
+a clock on the question. Above a certain stakes tier it holds until I answer. Below it, it proceeds
+when the clock runs out and writes down that it went on without me. My silence becomes a fact in
+the record, not a bypass. And I can say no — so can they, to each other and to me. A teammate you
+can only assign to cannot tell you no. These can decline, challenge, and hold each other to
+acceptance. That is the difference between a fleet and a team."
+
+### 3:30 — Done is two claims, not one (demo, 45 s)
+
+**SEE** The first agent finishes and opens a PR. Merge it on the human's word. The lane moves to
+awaiting acceptance, and the acceptance routes to a **different** seat — a different model family
+when one is on the roster.
+
+**SAY** "The agent that built it says merged. That is one claim. Someone else — a different seat,
+and when we can get one, a different model family — says this is what we wanted. That is the
+second. Two models from the same family agree for shared reasons, so their agreement is weak
+evidence; we treat the family as the correlation boundary. A close that skipped the second claim
+is marked unconfirmed, forever. Done is a thing two members said, not a thing one member said."
+
+### 4:15 — A seat that is not running (demo, optional, 45 s)
+
+Decided before the room fills: `musterd status` says `delta` is `wakeable · resumable` and the
+tailnet reaches the VM from the venue's network. Otherwise this beat does not exist tonight.
+
+**DO** Direct an act at `delta`. **SEE** The wake: the seat appears on the roster and in the office,
+about 24 seconds cold.
+
+**SAY** "That seat was not running. Nobody has a terminal open to it. I sent it an act, and the
+member woke — on a machine that holds only what its job needs, as a non-root user, with a token
+scoped to two repositories. A seat is the durable thing; where it runs is a detail. It picks up its
+own inbox and its own lane, not a fresh prompt."
+
+### 5:00 — Handoff as an idea (big questions, 60 s)
+
+**SEE** The board. Point at a lane with a branch on it.
+
+**SAY** "The question I got asked most while building this was handoff — what does it need to
+carry? Our first answer was wrong. Early on, a handoff was prose: 'here is what I did, carry on.'
+We measured what that produced, and a whole class of the waste was byte-identical work — two
+agents producing the same diff, because the second re-derived from a description what the first
+had already built. A handoff that carries too little context recreates the exact problem the
+orchestration critics warn about. So now a handoff carries the lane itself — the thread, the lane,
+and the branch at its commit. The receiver builds on the diff, not a summary of it. And the
+receiver can decline. That is the only way a handoff is an offer between owners rather than an
+order from a switchboard."
+
+### 6:00 — What did not work (big questions, 40 s)
+
+**SAY** "The other thing that did not work was the human's first role: a person in front of every
+claim, as an approver. We read our own record. The human appeared as an approver seven times for
+every time they communicated, and in months of use not one request for help had ever reached them.
+The gate produced the record of oversight without the oversight. So we rebuilt the human as a
+member — same roster, same acts. That is why the centerpiece of this demo is a question, not an
+approval."
+
+### 6:40 — The ask (close, 20 s)
+
+**SAY** "Open source. `npx @musterd/cli init` — about thirty seconds to a team. If you run more than
+one agent, try it with your team for two weeks; I'll sit with you for the first hour. Thank you."
+
+Then stop.
+
+### What the room asks after
+
+The §6 list applies unchanged (safety product, tamper-proof log, why not the labs, who pays, why
+not prompt them to argue, how many people). Additions for this room's brief:
+
+- **"Why is the roster the primitive and not the task?"** — "A task ends; the people who did it do
+  not. Attribution, an inbox, and a lane owner all need something that persists across sessions,
+  and a task is not that. Everything else we built falls out of having a durable member."
+- **"How do the acts route work?"** — "Thirteen typed acts, from the Co-Gym collaboration
+  taxonomy. Directed acts land in a member's inbox at their next tool-call boundary; an `ask` to a
+  human rings them on a surface musterd owns, never through a harness session. The routing is the
+  act's type plus who it is addressed to — no scheduler, no planner in the middle."
+- **"Why can't the author accept their own lane?"** — "Because acceptance is intent-versus-brief,
+  and the author of the work is the one person guaranteed to think it matches. We exclude the
+  closing seat, prefer a different model family, and mark a self-close unconfirmed forever."
+- **"What is the waste number now?"** — "The 37% is ours, from our own history before lanes. The
+  controlled comparison is from July and the re-run is pending; ask me and I'll show you the table
+  with its date on it. One agent alone is still cheaper than a team — we sell against the second
+  agent, not the first."
+- **"Is the handoff-decline exercised?"** — "Not on the record yet — the dogfood lane that
+  exercises it deliberately is open. That is the falsifier: if nobody ever declines, 'peers' is
+  a doctrine our own usage disproves. We count those acts."
+
+### If it goes wrong
+
+The §6 table applies. For this cut:
+
+- **The primed agent does not raise the ask.** Ask it in plain words on the spot and say that is
+  how the house rules are taught. The failure is honest; a hidden prompt is not.
+- **`delta` does not wake.** Say "that seat is on a VM this network cannot reach tonight" and go
+  to 5:00. Never wait on it; the handoff beat is the one the host asked for.
+- **Acceptance routes nowhere.** No other eligible seat is live: say so — "no second family on the
+  roster right now, so this close will be marked unconfirmed" — and show the mark. That is the
+  design.
+- **You are at 5:30 and not at handoff.** Skip whatever demo beat is in flight. Say the handoff
+  beat and the last sentence of "what did not work", then the ask. The big questions are what
+  this host asked for; a demo beat cut short is recoverable in Q&A, a skipped answer is not.
+
+---
+
 ## Supporting stills (not a substitute for form 3)
 
 - `docs/assets/musterd-io-get-started.png` — the public Get Started surface on [musterd.io](https://musterd.io) (brew / npx, then `musterd init`). Recaptured 2026-09-16 from the live site after the ADR 320 §5 deploy; the previous still showed the retired office-scene hero. Linked from the README next to the GIF.
