@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { inspectArtifactDrift } from './doctor.js';
+import { installMusterdCursorHooks } from './harnesses/cursor.js';
 import { renderOpencodePlugin } from './harnesses/opencodePlugin.js';
 import { defaultSelfHealDeps, selfHealWorkspace } from './selfHeal.js';
 
@@ -58,7 +59,23 @@ const staleOpencodeFolder = () => {
   );
 };
 
+/** A Cursor folder whose hooks file lost one musterd hook (wanderer, 2026-09-30: lane 01M3T7J6BE). */
+const cursorFolderMissingOne = () => {
+  mkdirSync(join(cwd, '.cursor'), { recursive: true });
+  writeFileSync(join(cwd, '.cursor', 'mcp.json'), '{"mcpServers":{"musterd":{"command":"x"}}}\n');
+  installMusterdCursorHooks(cwd);
+  const path = join(cwd, '.cursor', 'hooks.json');
+  const file = JSON.parse(readFileSync(path, 'utf8')) as { hooks: Record<string, unknown[]> };
+  delete file.hooks['preToolUse'];
+  writeFileSync(path, JSON.stringify(file, null, 2));
+};
+
 describe('inspectArtifactDrift — every provisioned harness, not Claude Code alone', () => {
+  it('a Cursor folder missing a musterd hook reads it as drift', () => {
+    cursorFolderMissingOne();
+    expect(inspectArtifactDrift(cwd).hooks).toEqual([expect.stringContaining('preToolUse')]);
+  });
+
   it('a Grok folder with no hooks file reads its missing hooks as drift', () => {
     grokFolder();
     const hooks = inspectArtifactDrift(cwd).hooks;
@@ -78,6 +95,7 @@ describe('inspectArtifactDrift — every provisioned harness, not Claude Code al
   it.each([
     ['Grok', grokFolder],
     ['OpenCode', staleOpencodeFolder],
+    ['Cursor', cursorFolderMissingOne],
   ])('the self-heal repairs %s hook drift and the re-inspection reads clean', (_name, setup) => {
     setup();
     const out = selfHealWorkspace(cwd, defaultSelfHealDeps('test'));

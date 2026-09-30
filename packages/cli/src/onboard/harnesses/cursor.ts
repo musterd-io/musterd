@@ -384,6 +384,9 @@ export const cursor: Harness = {
 
   refreshHooks: {
     applies: (dir) => existsSync(projectConfigPath(dir)) || existsSync(projectHooksPath(dir)),
+    // Lane 01M3T7J6BE: the #1882 follow-up. wanderer carried one missing and two STALE Cursor hooks
+    // that `init --check` named while the self-heal's inspection could not see them.
+    drift: (dir) => inspectCursorHookDrift(dir),
     run: (dir) => {
       const warnings = installMusterdCursorHooks(dir);
       return { files: [projectHooksPath(dir)], warnings, skipped: [] };
