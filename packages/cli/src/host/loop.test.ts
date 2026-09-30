@@ -1154,3 +1154,65 @@ describe('pollHostOnce — actuator credential (ADR 395)', () => {
     expect(calls.leases).toEqual([{ team: 'dawn', host: 'mac.lan' }]);
   });
 });
+
+/** Lane 01M3QRYZM2: `launchctl kickstart -k` SIGTERMs the actuator mid-poll. */
+describe('pollHostOnce — stopping mid-poll hands back what it has not started', () => {
+  it('an order not yet actuated when the stop signal fires is reported deferred as actuator_restart', async () => {
+    const stop = new AbortController();
+    const { client, calls } = fakeClient([
+      order({ lease_id: 'L1', seat: 'scout' }),
+      order({ lease_id: 'L2', seat: 'ghost' }),
+    ]);
+    const spawned: string[] = [];
+    const backend: ActuatorBackend = {
+      harness: 'claude-code',
+      wake: async (spec) => {
+        spawned.push(spec.order.lease_id);
+        stop.abort(); // the restart lands while the first wake is being verified
+        await new Promise((r) => setTimeout(r, 10));
+        return {
+          outcome: { occupied: true, session: 'fresh' },
+          settled: Promise.resolve(undefined),
+        };
+      },
+    };
+    const result = await pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', backend]]),
+        loadRegistry: () => ({
+          entries: [entryOf(), entryOf({ seat: 'ghost', workspace: '/ws/ghost' })],
+        }),
+        clientFor: () => client,
+        signal: stop.signal,
+      }),
+    );
+    await Promise.all(result.settled);
+    expect(spawned).toEqual(['L1']); // the wake in progress finishes
+    const l2 = calls.reports.filter((r) => r.lease_id === 'L2');
+    expect(l2).toHaveLength(1); // reported exactly once, never spawned
+    expect(l2[0]).toMatchObject({ occupied: false, deferred: true, reason: 'actuator_restart' });
+    // and it went out BEFORE the in-progress wake's report, not after the verify window
+    expect(calls.reports.findIndex((r) => r.lease_id === 'L2')).toBeLessThan(
+      calls.reports.findIndex((r) => r.lease_id === 'L1'),
+    );
+  });
+
+  it('an already-stopped poll spawns nothing and hands back every order', async () => {
+    const stop = new AbortController();
+    stop.abort();
+    const { client, calls } = fakeClient([order({ lease_id: 'L1' })]);
+    const { backend, specs } = fakeBackend();
+    await pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', backend]]),
+        loadRegistry: () => ({ entries: [entryOf()] }),
+        clientFor: () => client,
+        signal: stop.signal,
+      }),
+    );
+    expect(specs).toHaveLength(0);
+    expect(calls.reports).toEqual([
+      { lease_id: 'L1', occupied: false, deferred: true, reason: 'actuator_restart' },
+    ]);
+  });
+});
