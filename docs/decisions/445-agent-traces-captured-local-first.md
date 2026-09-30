@@ -653,6 +653,11 @@ ADR 184's publication gate; a spans backend.
      run completed (status at 16:37:39) but its lease and ghost's never-spawned lease were both
      reported `host_unreachable` at 16:37:57 and expired. A second steer to ghost at 16:42 woke it
      in 8 s. Not a trace defect; a residency one — lane `01M3QRYZM2XTJSPWRGBYMSZ535`.
+     **Corrected 2026-09-29** (lane `01M3QTE5235VK1NNQBSSZ28ZZ1`): the bounce is a candidate, not
+     the proven cause. Two stray actuators were polling from ryder's workspace through that window
+     — `musterd host status` was no subcommand, and `host` started a full actuator on any unknown
+     positional — and either could have claimed ghost's lease. `host` now refuses an unknown
+     positional with a usage error; the lease loss is to be reproduced with one actuator.
   Cursor's number is the shape of the harness, not a regression: an attached IDE session tails R2
   once, at its end, so a read taken while the session is open sees R1 only (wanderer's 100 hook
   calls, 0 `usage`). The one cursor session with R2 in the window is yesterday's `f7d7bc1c` (94 + 94

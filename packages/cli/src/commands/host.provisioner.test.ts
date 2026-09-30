@@ -156,3 +156,26 @@ describe('musterd host runs the provisioner each tick', () => {
     );
   });
 });
+
+/** Lane 01M3QTE5235VK1NNQBSSZ28ZZ1: `musterd host <anything but provisions>` must not start an actuator. */
+describe('musterd host — unknown positional', () => {
+  it('refuses `host status` with a usage error instead of polling as a second actuator', async () => {
+    const log = vi.fn();
+    await expect(
+      hostCommand(parseArgs(['status']), {
+        backends: new Map(),
+        log,
+        doorbell: false,
+        provisioner: null,
+        loadRegistry: () => ({ entries: [] }),
+      } as never),
+    ).rejects.toMatchObject({ exitCode: 2 });
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it('names what it does accept', async () => {
+    await expect(
+      hostCommand(parseArgs(['statsu']), { provisioner: null, doorbell: false } as never),
+    ).rejects.toThrow(/musterd host \[provisions\]/);
+  });
+});
