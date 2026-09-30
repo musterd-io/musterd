@@ -97,7 +97,10 @@ describe('adrStatus over docs/decisions as it actually is', () => {
     // `proposed` ADR that lands lowers it (2026-09-16: 407 and 408 landed proposed the same evening
     // and the merge commit read 0.846). The guard with teeth is the +80 above; this one only says
     // "a status-line style change did not silently un-protect a whole class".
-    expect(accepted.length / adrFiles.length).toBeGreaterThan(0.8);
+    // 2026-09-29: 0.8 → 0.75 when ADRs 481–484 landed proposed together (0.798). A style-change
+    // regression drops the ratio by a whole class of files at once (the old regex: 0.58), far below
+    // 0.75. Normal proposed-ADR decay does not.
+    expect(accepted.length / adrFiles.length).toBeGreaterThan(0.75);
   });
 
   // The specific files that motivated the fix — named so a regression points at a real ADR rather
