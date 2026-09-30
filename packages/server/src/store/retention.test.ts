@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -11,6 +11,8 @@ import {
   AUDIT_CHURN_MAX_AGE_MS,
   auditCapturedThrough,
   auditReadersOfChurnActions,
+  compactStore,
+  countPrunableAuditChurn,
   pruneAuditChurn,
   storeSizes,
 } from './retention.js';
@@ -168,6 +170,63 @@ describe('pruneAuditChurn (ADR 478)', () => {
       'occupancy.model_attested': ['store/review.ts'],
     });
     expect(AUDIT_CHURN_ACTIONS.has('lane.claimed' as AuditAction)).toBe(false);
+  });
+});
+
+describe('countPrunableAuditChurn', () => {
+  it('counts exactly what a pass would take, and takes nothing', () => {
+    const { db, put } = seeded();
+    put('presence.attached', 40, 'dolly');
+    put('occupancy.model_attested', 60, 'kimi'); // newest per seat: kept, so not counted
+    put('lane.claimed', 80, 'dolly');
+    expect(countPrunableAuditChurn(db, { now: NOW })).toEqual({
+      rows: 1,
+      cutoff: NOW - AUDIT_CHURN_MAX_AGE_MS,
+      capturedThrough: null,
+    });
+    expect(rows(db)).toHaveLength(3);
+  });
+});
+
+describe('compactStore', () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+
+  it('refuses an in-memory store, refuses without 1.2× the file free, and otherwise vacuums', () => {
+    expect(compactStore(openDb(':memory:'), ':memory:')).toEqual({
+      ok: false,
+      reason: 'in_memory',
+    });
+
+    const dir = mkdtempSync(join(tmpdir(), 'musterd-compact-'));
+    dirs.push(dir);
+    const path = join(dir, 'musterd.db');
+    const db = openDb(path);
+    const team = createTeam(db, { slug: 'revive' });
+    for (let i = 0; i < 2000; i++) {
+      appendAudit(db, team.id, {
+        actor: 'dolly',
+        action: 'presence.attached',
+        target: 'dolly',
+        result: 'allow',
+        detail: { pad: 'x'.repeat(200), i },
+      });
+    }
+    db.exec('DELETE FROM audit');
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    const before = statSync(path).size;
+
+    const tight = compactStore(db, path, { freeBytes: () => before });
+    expect(tight).toMatchObject({ ok: false, reason: 'insufficient_disk', free_bytes: before });
+    expect(statSync(path).size).toBe(before);
+
+    const r = compactStore(db, path, { freeBytes: () => before * 10 });
+    expect(r).toMatchObject({ ok: true, before_bytes: before, auto_vacuum: 'incremental' });
+    if (r.ok) expect(r.after_bytes).toBeLessThan(before);
+    expect(db.pragma('auto_vacuum', { simple: true })).toBe(2); // 2 = INCREMENTAL
+    db.close();
   });
 });
 

@@ -45,6 +45,7 @@ import { serveCommand } from './commands/serve.js';
 import { serviceCommand } from './commands/service.js';
 import { sessionCommand } from './commands/session.js';
 import { statusCommand } from './commands/status.js';
+import { storeCommand } from './commands/store.js';
 import { streamCommand } from './commands/stream.js';
 import { surfaceCommand } from './commands/surface.js';
 import { teamCommand } from './commands/team.js';
@@ -256,6 +257,8 @@ async function dispatch(command: string, rest: ReturnType<typeof parseArgs>): Pr
       return reapCommand(rest);
     case 'whoami':
       return whoamiCommand(rest);
+    case 'store':
+      return storeCommand(rest);
     case 'status':
       return statusCommand(rest);
     case 'availability':
