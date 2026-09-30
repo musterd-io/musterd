@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>replace-in-place fixture</title>
+<style>
+  body { background: #ffffff; margin: 0; font: 16px sans-serif; }
+  /* A plate whose ink genuinely fails: #bbbbbb on #ffffff is ~1.9:1. */
+  .plate { position: absolute; left: 40px; top: 40px; padding: 8px; background: #ffffff; }
+  .who { color: #bbbbbb; }
+  .ok { position: absolute; left: 40px; top: 120px; color: #111111; }
+</style></head>
+<body>
+  <div class="plate" id="plate"><span class="who">della</span></div>
+  <p class="ok">a normally measurable row</p>
+  <script>
+    // The office scene's nameplate rebuild, made deterministic: when the sweep freezes, replace the
+    // plate's contents with an identical span in the identical place. The paint never changes, so
+    // the vanish guard must NOT excuse it — the real failure underneath has to stay reported.
+    let real = window.requestAnimationFrame;
+    let armed = true;
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      get() { return real; },
+      set(v) {
+        real = v;
+        if (!armed) return;
+        armed = false;
+        setTimeout(() => {
+          document.getElementById('plate').innerHTML = '<span class="who">della</span>';
+        }, 100);
+      },
+    });
+  </script>
+</body>
+</html>
