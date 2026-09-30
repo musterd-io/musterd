@@ -61,6 +61,14 @@ the two latest-per-seat rows ADR 478 already keeps (checked query by query there
 - A daemon reader that needs churn between 5 and 30 days old would be the falsifier; the source-scan
   test would fail its build first.
 
+- **Result, 2026-09-29 18:50–19:05 (build `0b2887cc`):** dry-run 106,307 prunable (the restarted
+  daemon's own first pass had already taken ~100k); two `musterd store prune` runs took 100,000 +
+  6,318 rows in 4.9 s and 2 s (archive 8.4 MB); `musterd store compact` took **289.0 MB →
+  196.7 MB** in 6 s with the daemon answering `/health` throughout, `auto_vacuum` now
+  `INCREMENTAL`. `sync_log` is 111.9 MB of what remains, so `musterd.db` minus `sync_log` is
+  ~85 MB — the Eval bar (under 100 MB) passes. `trace.db` is 131 MB and starts shedding content
+  from 2026-10-02 under the 7-day window.
+
 ## Observability & Evaluation
 
 - **Traces:** same as ADR 478 — one `store.pruned` audit row per team per pass, `/health`

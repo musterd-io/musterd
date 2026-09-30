@@ -230,6 +230,45 @@ describe('compactStore', () => {
   });
 });
 
+describe('prunable-set cost at scale (the 2026-09-29 stall)', () => {
+  it('counts 200k churn rows in well under the daemon-stall range', () => {
+    const { db, teamId } = seeded();
+    const ins = db.prepare(
+      `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq)
+       VALUES (?, ?, ?, ?, ?, ?, 'allow', '{}', ?, ?, ?)`,
+    );
+    const actions = [
+      'presence.attached',
+      'presence.detached',
+      'bootstrap_credential.used',
+      'occupancy.model_attested',
+    ];
+    db.transaction(() => {
+      for (let i = 0; i < 200_000; i++) {
+        const seat = `seat${i % 40}`;
+        ins.run(
+          `id${String(i).padStart(7, '0')}`,
+          teamId,
+          NOW - (i % 60) * DAY,
+          seat,
+          actions[i % actions.length],
+          seat,
+          NOW,
+          i % 3 === 0 ? '' : `node${i % 5}`,
+          i % 3 === 0 ? 0 : i,
+        );
+      }
+    })();
+    const t0 = performance.now();
+    const r = countPrunableAuditChurn(db, { now: NOW });
+    const ms = performance.now() - t0;
+    expect(r.rows).toBeGreaterThan(100_000);
+    // The correlated form took >280 s for a 5,000-row batch on a table this size; the CTE form
+    // counts everything in ~1 s here and ~4 s on the 300 MB live store. 15 s is the tripwire.
+    expect(ms).toBeLessThan(15_000);
+  });
+});
+
 describe('storeSizes', () => {
   it('reports sync_log rows and bytes, and archive bytes when a dir exists', () => {
     const { db, teamId } = seeded();

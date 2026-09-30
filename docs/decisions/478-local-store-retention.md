@@ -133,6 +133,14 @@ backends run the same SQL (ADR 475).
   9,183 rows — 99% of churn was under 30 days old, so the window is 5 days. The rest of this ADR
   stands.
 
+- **Incident, 2026-09-29 18:26–18:50:** the first version of the prunable-set query computed the
+  two keep sets as per-row correlated subqueries; on the live 300k-row `audit` a `LIMIT 5000`
+  batch did not return in 280 s, and because SQLite work is synchronous the daemon answered
+  nothing for ~25 minutes until nick restarted it. Fixed by #1856 (CTE keep sets; the full count
+  on the same store takes ~4 s) and pinned by a timing test in `retention.test.ts`. Lesson for
+  every store loop: test the query's cost at the live table's size, not only its semantics — the
+  first live pass was fast only because the over-30-day set was small.
+
 ## Observability & Evaluation
 
 - **Traces:** each reaper run writes one decision-class `audit` row `store.pruned`
