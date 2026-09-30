@@ -184,6 +184,17 @@ decision refuses both.
   daemon's build (driftCache.ts). Falsifier: a wake of a Grok or OpenCode seat whose hook file was
   deliberately removed or made stale beforehand, after which `init --check` in that folder still
   names hook drift.
+- **2026-09-30 — the two follow-ups to the note above** (lane `01M3T7J6BE`). (1) Cursor now answers
+  `refreshHooks.drift` as well, so the cheap inspection covers Claude Code, Grok, OpenCode and
+  Cursor. Codex stays out, for the reason above. On the day this landed, wanderer carried one
+  missing and two STALE Cursor hooks that `init --check` named and the heal could not see. (2) A
+  host-run heal now writes its `workspace.repaired` row. The route takes the seat's own credential
+  with no lease, and the host already reads keys from the same binding. So the host posts with that
+  binding's `seat_credential`, and the row names the seat whose folder was repaired, exactly as the
+  probe's row does. It skips the row when the binding has no seat credential, because an agent key
+  names no seat. The post is fire-and-forget and never delays the spawn. The row does not say
+  whether the host or the SessionStart probe ran the heal. The body schema has no field for that,
+  and adding one is a protocol change this note does not make.
 
 ## Observability & Evaluation
 

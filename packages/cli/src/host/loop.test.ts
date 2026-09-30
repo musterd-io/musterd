@@ -5,7 +5,7 @@ import type { MemberSummary, WakeOrder, WakeReportBody } from '@musterd/protocol
 import { afterEach, describe, expect, it } from 'vitest';
 import { saveBinding } from '../config.js';
 import type { ActuatorBackend, BackendContext, WakeSpec } from './backend.js';
-import { pollHostOnce, type HostPollDeps, type WakeClient } from './loop.js';
+import { healBeforeWake, pollHostOnce, type HostPollDeps, type WakeClient } from './loop.js';
 import type { HostRegistryEntry } from './registry.js';
 
 /**
@@ -721,6 +721,51 @@ describe('pollHostOnce (ADR 131 inc 3 — lease → actuate → report)', () => 
     );
     expect(s2).toHaveLength(1); // the wake still went ahead
     expect(lines2).toContain('wake self-heal: scout — skipped (EACCES)');
+  });
+
+  it('healBeforeWake posts the audit row as the seat, forces the drift cache, and returns the line', async () => {
+    const posted: unknown[] = [];
+    const refreshed: string[] = [];
+    const report = {
+      build: 'abcdef1',
+      repaired: { guidance: 0, hooks: 5 },
+      skipped: [],
+      remaining: { guidance: 0, hooks: 0, permissions: 0 },
+    };
+    const line = healBeforeWake('/ws/grokbot', {
+      selfHeal: () => ({ ran: true, report, line: 'musterd: repaired 5 hooks.' }),
+      refreshDrift: (w) => refreshed.push(w),
+      postRepair: async (w, body) => void posted.push([w, body]),
+    });
+    expect(line).toBe('repaired 5 hooks.');
+    expect(posted).toEqual([['/ws/grokbot', report]]);
+    expect(refreshed).toEqual(['/ws/grokbot']);
+  });
+
+  it('healBeforeWake: a clean folder posts nothing; a failing post never throws into the wake', async () => {
+    const posted: unknown[] = [];
+    expect(
+      healBeforeWake('/ws/a', {
+        selfHeal: () => ({ ran: false, report: null, line: '' }),
+        refreshDrift: () => undefined,
+        postRepair: async (w) => void posted.push(w),
+      }),
+    ).toBe('');
+    expect(posted).toEqual([]);
+    const report = {
+      build: 'abcdef1',
+      repaired: { guidance: 1, hooks: 0 },
+      skipped: [],
+      remaining: { guidance: 0, hooks: 0, permissions: 0 },
+    };
+    expect(() =>
+      healBeforeWake('/ws/b', {
+        selfHeal: () => ({ ran: true, report, line: 'musterd: repaired 1 guidance file.' }),
+        refreshDrift: () => undefined,
+        postRepair: () => Promise.reject(new Error('daemon down')),
+      }),
+    ).not.toThrow();
+    await new Promise((r) => setTimeout(r, 0)); // the rejection settles without an unhandled error
   });
 
   it('does not heal a workspace whose wake is deferred — a live session owns the folder', async () => {

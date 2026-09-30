@@ -3,13 +3,18 @@ import {
   type MemberSummary,
   type WakeLeasesResponse,
   type WakeReportBody,
+  type WorkspaceRepairBody,
 } from '@musterd/protocol';
 import { resolveWorkspace } from '@musterd/protocol/project';
 import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { HttpClient } from '../client.js';
 import { findBinding } from '../config.js';
 import { refreshWorkspaceDrift } from '../onboard/doctor.js';
-import { defaultSelfHealDeps, selfHealWorkspace } from '../onboard/selfHeal.js';
+import {
+  defaultSelfHealDeps,
+  selfHealWorkspace,
+  type SelfHealOutcome,
+} from '../onboard/selfHeal.js';
 import { attendedHarnessProcess } from '../session/attendedProcess.js';
 import { localSessionLiveness, type LocalSessionLiveness } from '../session/liveness.js';
 import { cliBuild } from '../version.js';
@@ -23,15 +28,43 @@ import type {
 import { canonicalServer, loadHostRegistry, type HostRegistryEntry } from './registry.js';
 import { endWakeCapture } from './wakeCapture.js';
 
+export interface HealBeforeWakeDeps {
+  selfHeal: (workspace: string) => SelfHealOutcome;
+  refreshDrift: (workspace: string) => void;
+  /** Best-effort; a rejection is swallowed here and never reaches the wake. */
+  postRepair: (workspace: string, body: WorkspaceRepairBody) => Promise<void>;
+}
+
 /**
- * The real pre-wake heal: the same inspect → repair → re-inspect the SessionStart probe runs, then
- * a forced drift-cache write so the woken session's interrupt checks read what REMAINS (ADR 408
- * inc 4). No audit row — the host holds no seat identity to attribute a `workspace.repair` to; the
- * host log carries the line instead.
+ * The `workspace.repaired` audit row for a host-run heal (lane 01M3T7J6BE). The route takes the
+ * seat's own credential with no lease (ADR 408: "the credential hash proves whose workspace it
+ * was"), and the host already reads its keys from this same binding — so the row names the seat
+ * whose folder was repaired, exactly as the SessionStart probe's row does. A binding with no seat
+ * credential is skipped: an agent key names no seat, and a row attributed to nobody is not one.
  */
-function healBeforeWake(workspace: string): string {
-  const out = selfHealWorkspace(workspace, defaultSelfHealDeps(cliBuild() ?? 'unstamped'));
-  refreshWorkspaceDrift(workspace, undefined, { force: true });
+async function postRepairAsSeat(workspace: string, body: WorkspaceRepairBody): Promise<void> {
+  const binding = findBinding(workspace, {});
+  if (!binding?.seat_credential || !binding.team || !binding.server) return;
+  const http = new HttpClient({ server: binding.server, key: binding.seat_credential });
+  await http.presenceNeutral().workspaceRepair(binding.team, body);
+}
+
+const realHealDeps = (): HealBeforeWakeDeps => ({
+  selfHeal: (w) => selfHealWorkspace(w, defaultSelfHealDeps(cliBuild() ?? 'unstamped')),
+  refreshDrift: (w) => refreshWorkspaceDrift(w, undefined, { force: true }),
+  postRepair: postRepairAsSeat,
+});
+
+/**
+ * The real pre-wake heal: the same inspect → repair → re-inspect the SessionStart probe runs, its
+ * audit row posted as the seat (fire-and-forget: a dead daemon never delays the spawn), then a
+ * forced drift-cache write so the woken session's interrupt checks read what REMAINS (ADR 408
+ * inc 4). Returns the one line for the host log, or '' when there was nothing to do.
+ */
+export function healBeforeWake(workspace: string, d: HealBeforeWakeDeps = realHealDeps()): string {
+  const out = d.selfHeal(workspace);
+  if (out.ran && out.report) void d.postRepair(workspace, out.report).catch(() => undefined);
+  d.refreshDrift(workspace);
   return out.ran ? out.line.replace(/^musterd: /, '') : '';
 }
 
