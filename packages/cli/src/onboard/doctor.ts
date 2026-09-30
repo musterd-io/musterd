@@ -1384,8 +1384,9 @@ function sameCommit(a: string, b: string): boolean {
  *
  * The cheap half of the doctor, and cheap is the whole design constraint — this runs at every session
  * start. It is pure file I/O: no network, no git, and critically **no `detect()`**, which shells out
- * to `claude mcp get` and costs seconds. `inspectGuidance` needs only `existsSync` + stamp reads, and
- * `inspectClaudeHookDrift` only reads `.claude/settings.local.json`, so both qualify while
+ * to `claude mcp get` and costs seconds. `inspectGuidance` needs only `existsSync` + stamp reads,
+ * `inspectClaudeHookDrift` only reads `.claude/settings.local.json`, and each harness's
+ * `refreshHooks.drift` reads its own project hook file, so all three qualify while
  * `inspectProvisioning` as a whole does not.
  */
 export function inspectArtifactDrift(cwd: string): {
@@ -1396,7 +1397,15 @@ export function inspectArtifactDrift(cwd: string): {
   return {
     guidance: inspectGuidance(cwd, HARNESSES).drift,
     // Returns [] when there is no local settings file, so an unprovisioned folder stays silent.
-    hooks: inspectClaudeHookDrift(cwd),
+    // Then every other harness this folder is provisioned for, by the repair's own `applies` line
+    // (lane 01M3NMZ94D: a Grok folder missing its hooks file and a stale OpenCode plugin both read
+    // `hooks: 0` here while `init --check` named them, so the self-heal never ran for either).
+    hooks: [
+      ...inspectClaudeHookDrift(cwd),
+      ...HARNESSES.flatMap((h) =>
+        h.refreshHooks?.drift && h.refreshHooks.applies(cwd) ? h.refreshHooks.drift(cwd) : [],
+      ),
+    ],
     // ADR 261 increment 2 — the harness permission layer. Qualifies for the cheap half on the same
     // terms as the hook check: it reads the one settings file and nothing else.
     permissions: inspectSeatPermissions(cwd),

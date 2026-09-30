@@ -100,6 +100,8 @@ function deps(over: Partial<HostPollDeps> & Pick<HostPollDeps, 'backends'>): Hos
     // Deterministic guard state: default = no local session (the pre-capture world).
     liveness: () => ({ state: 'none' }),
     attendedProcess: () => null,
+    // Never the real heal in a unit test: it would inspect (and could write) a real folder.
+    heal: () => '',
     verifyWindowMs: 50,
     verifyPollMs: 5,
     ...over,
@@ -676,6 +678,68 @@ describe('pollHostOnce (ADR 131 inc 3 — lease → actuate → report)', () => 
       { lease_id: 'L1', occupied: false, deferred: true, reason: 'local-session-live' },
     ]);
     expect(lines.join('\n')).toContain('wake deferred: scout');
+  });
+
+  it('self-heals the workspace BEFORE the spawn, logs its line, and never lets a heal block the wake (lane 01M3NMZ94D)', async () => {
+    // OpenCode has no start hook and a Grok folder can be missing its own, so the SessionStart
+    // probe's heal never ran there. The host runs it, for every harness, before spawning.
+    const { client } = fakeClient([order()]);
+    const order_: string[] = [];
+    const { backend, specs } = fakeBackend();
+    const wake = backend.wake.bind(backend);
+    backend.wake = (spec, ctx) => (order_.push('wake'), wake(spec, ctx));
+    const lines: string[] = [];
+    await pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', backend]]),
+        loadRegistry: () => ({ entries: [entryOf()] }),
+        clientFor: () => client,
+        log: (l) => lines.push(l),
+        heal: (workspace) => {
+          order_.push(`heal ${workspace}`);
+          return 'repaired 5 hooks.';
+        },
+      }),
+    );
+    expect(order_).toEqual(['heal /ws/scout', 'wake']);
+    expect(lines).toContain('wake self-heal: scout — repaired 5 hooks.');
+    expect(specs).toHaveLength(1);
+
+    const { client: c2 } = fakeClient([order()]);
+    const { backend: b2, specs: s2 } = fakeBackend();
+    const lines2: string[] = [];
+    await pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', b2]]),
+        loadRegistry: () => ({ entries: [entryOf()] }),
+        clientFor: () => c2,
+        log: (l) => lines2.push(l),
+        heal: () => {
+          throw new Error('EACCES');
+        },
+      }),
+    );
+    expect(s2).toHaveLength(1); // the wake still went ahead
+    expect(lines2).toContain('wake self-heal: scout — skipped (EACCES)');
+  });
+
+  it('does not heal a workspace whose wake is deferred — a live session owns the folder', async () => {
+    const { client } = fakeClient([order()]);
+    const { backend } = fakeBackend();
+    let healed = 0;
+    await pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', backend]]),
+        loadRegistry: () => ({ entries: [entryOf()] }),
+        clientFor: () => client,
+        liveness: () => ({
+          state: 'live',
+          session: { harness: 'claude-code', id: 'c', started_at: 1 },
+        }),
+        heal: () => (healed++, ''),
+      }),
+    );
+    expect(healed).toBe(0);
   });
 
   it('defers when an attended session is open but idle — no fresh transcript (ADR 444 backstop)', async () => {
