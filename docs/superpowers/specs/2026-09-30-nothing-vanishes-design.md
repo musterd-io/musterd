@@ -187,31 +187,32 @@ A watch, `docs/watches/2026-09-30-nothing-vanishes.md`, `revisit_by` 2026-11-01:
 
 ## Appendix A — lost work found 2026-09-30
 
-Each row gets a disposition in lane 1. "Mine" rows are clear-cut and disposed by lane 1; "nick"
-rows are product calls sent to nick as one list with a recommendation each.
+Every row has a disposition, decided 2026-09-30: nick made the product calls; lane 1 disposed the
+clear-cut ones. "To park" rows are open lanes nick is parking — a seat cannot park (ADR 466; see
+ADR 487's Consequences) — with the unpark trigger in each lane's detail.
 
-| # | Item | Recorded in | Confidence | Call |
+| # | Item | Recorded in | Confidence | Disposition (2026-09-30) |
 | --- | --- | --- | --- | --- |
-| A1 | Guidance-currency increment 2 (refresh receipt, session-start line) and increment 3 (gate) | ADR 417, spec 2026-09-17 | high | nick |
-| A2 | ADR 250 backlog items 2–5: merge loop, capability-fit routing, acceptance absorption, pipe widening | ADR 250, ADR 179 | high | nick |
-| A3 | Incident-convergence wake edge: `wake_on_route` / `wake_on_resolve` are in the schema and CLI but read by nothing in `packages/server/src`; increment 3 CI watcher | ADR 266/271 | high | mine |
-| A4 | Research radar weekly digest: only W36 exists; goal reads shipped | ADR 056, radar README | high | nick |
-| A5 | Paved road: rest of increment 3 (governed launch, runtime binding) and increment 4 | spec 2026-09-02; ADRs 385/402/411/425 | high | nick |
-| A6 | Interactive Slack ask replies: designed, draft PR #906, lane `01M0E02ZHA` unowned | ADR 289 | high | nick |
-| A7 | Genesis snapshot at enrollment | ADR 381 | med-high | nick |
-| A8 | Cloud-seats increments 2–5 (`host enroll`, Linux footprint, burst, `host move`) — may be superseded by Cloud | spec 2026-08-06 | medium | nick |
-| A9 | Halt-as-revocation, one-button wake, category graduation | design 2026-09-01 codrive-graduation, human-surface | med-high | nick |
-| A10 | Skills 5, 6, 7, 10, 11, 12 | design skills-that-travel | medium | nick |
-| A11 | Doorbell webhook SSRF (resolve-and-pin) | ADR 443 | medium | **laned:** `01M3T8N55Z7WGEYT49VGJXGE3R` |
-| A12 | `presence.session_ended` audit row | ADR 164 increment 2 | medium | nick |
-| A13 | Delivery measurement (governs the wake host's deferral) | spec 2026-09-23 reach-and-boundaries §9 | medium | nick |
-| A14 | Live WebSocket push of folded remote events | design deployment-topology §11 | med-low | nick |
-| A15 | ADR 373 increment 3 (code-comment scan, ADR-status flag) | ADR 373 | med-high | mine — superseded by this design |
-| A16 | Dangling reference to "ADR 179 increment 5" | ADR 189 | high | mine |
-| A17 | Stale `research-intake` roadmap `building:` string | `content/roadmap.data.ts` | high | mine |
-| A18 | Model-family posture on roster/web | ADR 172 | low-med | nick |
-| A19 | Small gaps: single-use claim code (055), `role assign --remove` (261), CLI `next` without `review_debt` (276) | ADRs 055, 261, 276 | low | mine |
-| A20 | Quiet-set increment 2 (`ask` with `meta.eligible`) — parked with no trigger | ADRs 254/260/401 | medium | nick (needs a trigger) |
+| A1 | Guidance-currency increment 2 (refresh receipt, session-start line) and increment 3 (gate) | ADR 417, spec 2026-09-17 | high | open `01M3TAKF3Y` (inc 2); to park `01M3TAM9XH` (inc 3) |
+| A2 | ADR 250 backlog items 2–5: merge loop, capability-fit routing, acceptance absorption, pipe widening | ADR 250, ADR 179 | high | to park `01M3TAJ2S6`, `01M3TAMBQZ`, `01M3TAMDX9`, `01M3TAMGEF` |
+| A3 | Incident-convergence wake edge: `wake_on_route` / `wake_on_resolve` are in the schema and CLI but read by nothing in `packages/server/src`; increment 3 CI watcher | ADR 266/271 | high | open `01M3TAM0X3` |
+| A4 | Research radar weekly digest: only W36 exists; goal reads shipped | ADR 056, radar README | high | open `01M3TAKHQ4` |
+| A5 | Paved road: rest of increment 3 (governed launch, runtime binding) and increment 4 | spec 2026-09-02; ADRs 385/402/411/425 | high | to park `01M3TAMME1` |
+| A6 | Interactive Slack ask replies: designed, draft PR #906, lane `01M0E02ZHA` unowned | ADR 289 | high | to park `01M0E02ZHA`; draft PR #906 closed |
+| A7 | Genesis snapshot at enrollment | ADR 381 | med-high | to park `01M3TAMSP9` |
+| A8 | Cloud-seats increments 2–5 (`host enroll`, Linux footprint, burst, `host move`) — may be superseded by Cloud | spec 2026-08-06 | medium | dropped — superseded by ADR 463 and ADR 475 (`01M3TAN80E`) |
+| A9 | Halt-as-revocation, one-button wake, category graduation | design 2026-09-01 codrive-graduation, human-surface | med-high | open `01M3TAKKMM` (halt); to park `01M3TAMVZM` (graduation, one-button wake) |
+| A10 | Skills 5, 6, 7, 10, 11, 12 | design skills-that-travel | medium | to park `01M3TAMXRE` |
+| A11 | Doorbell webhook SSRF (resolve-and-pin) | ADR 443 | medium | open `01M3T8N55Z` |
+| A12 | `presence.session_ended` audit row | ADR 164 increment 2 | medium | open `01M3TAKNCF` |
+| A13 | Delivery measurement (governs the wake host's deferral) | spec 2026-09-23 reach-and-boundaries §9 | medium | open `01M3TAKT16` |
+| A14 | Live WebSocket push of folded remote events | design deployment-topology §11 | med-low | to park `01M3TAMZQH` |
+| A15 | ADR 373 increment 3 (code-comment scan, ADR-status flag) | ADR 373 | med-high | dropped — superseded by ADR 487 |
+| A16 | Dangling reference to "ADR 179 increment 5" | ADR 189 | high | fixed: ADR 189 `Follows-up: none` — the loop closed via ADR 191 |
+| A17 | Stale `research-intake` roadmap `building:` string | `content/roadmap.data.ts` | high | carried by `01M3TAKHQ4` |
+| A18 | Model-family posture on roster/web | ADR 172 | low-med | dropped — low value (`01M3TANBFV`) |
+| A19 | Small gaps: single-use claim code (055), `role assign --remove` (261), CLI `next` without `review_debt` (276) | ADRs 055, 261, 276 | low | open `01M3TAM44Q` |
+| A20 | Quiet-set increment 2 (`ask` with `meta.eligible`) — parked with no trigger | ADRs 254/260/401 | medium | to park `01M3TAN2BK` |
 
 **Stalled, not lost** (reported, not re-laned): dogfood runs 1–13 open and unowned since
 2026-09-14; PRs #864 and #1103 open for five to six weeks; lane `01KZVX17EN` (native harness
@@ -219,3 +220,46 @@ phase 2) claimed by nick since 2026-08-12.
 
 **At risk now:** Cloud 1C, 1D and increments 2–8 exist only as a table in the Cloud spec; only 1B
 has a lane (fifty). Lane 1 raises this with fifty rather than opening lanes in fifty's plan.
+
+## Appendix B — the 32 repo Seeds, dispositioned (2026-09-30)
+
+ADR 373's `intents:ingest` captured these from forward-reference sentences on 2026-09-04; none was
+ever explored. Each was checked against `origin/main` and the board. Lane 2
+(`01M3T8MQ6ZJQPC2MXD3RCK5YX9`) retires the repo source and closes these Seeds against this table.
+
+| Seed | Source | Disposition |
+| --- | --- | --- |
+| `01M1NC4WH30W` | ADR 027:37 per-folder uninstall | done — `packages/cli/src/commands/uninstall.ts` |
+| `01M1NC4WHH24` | ADR 047:91 install kickstart | deferred — `Follows-up:` in ADR 047 |
+| `01M1NC4WHRJY` | ADR 055:23 follow-ups | open `01M3TAM44Q` (claim code; reclaim wording check) |
+| `01M1NC4WJEMB` | ADR 066:64 A/B experiment | dropped — trigger (batond) retired by ADR 194; `Follows-up: none` in ADR 066 |
+| `01M1NC4WKQE9` | ADR 091:9 MAST views | done — #117 |
+| `01M1NC4WKYDS` | ADR 164:308 last-write-wins slot | done — lanes `01KZAEGF2K`, `01KYQF0STK`; ADRs 336, 455 |
+| `01M1NC4WM5J0` | ADR 167:261 typed-act adoption | open `01M3TB3C0D` |
+| `01M1NC4WMDVA` | ADR 173:222 `human_required` | done — `store/audit.ts` three-valued |
+| `01M1NC4WMPD4` | ADR 173:275 action index | done — migration v25 `idx_audit_team_action_ts` |
+| `01M1NC4WQAGP` | ADR 175:70 adoption checklist | done — #565 |
+| `01M1NC4WQGY5` | ADR 184:177 exporter | done — `pnpm dataset:export` |
+| `01M1NC4WQN5V` | ADR 189:30 "ADR 179 increment 5" | dropped — dangling; closed via ADR 191; `Follows-up: none` in ADR 189 |
+| `01M1NC4WQT65` | ADR 189:113 same | dropped — as above |
+| `01M1NC4WR11S` | ADR 200:111 custody barrier | deferred — `Follows-up:` in ADR 200 (ADR 341's prototype) |
+| `01M1NC4WR6C4` | ADR 232:209 increment 3 | done — lane `01M1Q9D90X` |
+| `01M1NC4WRB4Z` | ADR 233:114 picker concentration | deferred — `Follows-up:` in ADR 233 |
+| `01M1NC4WRSR8` | ADR 235:71 reviewer monoculture | done — ADR 404 and non-Claude seats on the roster (medium confidence) |
+| `01M1NC4WS14Y` | ADR 250:138 backlog | open/parked `01M3TAJ2S6`, `01M3TAMBQZ`, `01M3TAMDX9`, `01M3TAMGEF` |
+| `01M1NC4WS92Q` | ADR 259:70 memory migration | done — #787–#800, `docs/wiki/archive.md` |
+| `01M1NC4WSMST` | ADR 276:75 team-ask targeting | open `01M3TB3DA2` |
+| `01M1NC4WSX0J` | ADR 336:89 co-tenancy | open `01M3TB3EY9` |
+| `01M1NC4WT5T0` | ADR 354:110 `wake_lease_source` | deferred — `Follows-up:` in ADR 354 |
+| `01M1NC4WTJEY` | ADR 354:114 actuator kill | done — ADR 379, lane `01M1MMHJP3` |
+| `01M1NC4WVEY3` | ADR 378:169 | noise — an "Experiment: n/a" line |
+| `01M1NC4WVPC9` | wiki agent-permission-enforcement-patterns:21 | deferred — `Follows-up:` in the wiki page |
+| `01M1NC4WW09H` | wiki federation-data-census:32 | carried by blocked lane `01M1T3HT88` (ADR 390 §6) |
+| `01M1NC4WWJW1` | wiki wake-leases:60 | done — ADR 379 |
+| `01M1NC4WWZTS` | roadmap radar M4–M5 | open `01M3TAKHQ4` |
+| `01M1NC4WXFAC` | roadmap dataset release | carried by parked lane `01M12FKJBM` |
+| `01M1NC4WXTQH` | roadmap toolkit §5 | deferred — existing `Follows-up:` on the roadmap item |
+| `01M1ND82R2FX` | roadmap toolkit §5, duplicate | deferred — as above |
+| `01M2KNGPCEE6` | ADR 399 falsifier capture | noise — a test capture, not a promise |
+
+Totals: 12 done, 5 laned or carried, 3 newly laned, 7 deferred in their doc, 5 dropped or noise.

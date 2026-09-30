@@ -91,6 +91,12 @@ The five lanes under goal `nothing-vanishes` carry the build; the spec's §7 map
 - A plan that lives only in an agent's head — no to-do, no doc, no part marker — is not caught
   structurally. The stale-goal line and the weekly sweep are its backstop.
 - ADR 373 increment 3 (code-comment scan, ADR-status flag) is superseded by this decision, not built.
+- **2026-09-30 — parking stays human-only.** Found on the first use of Decision 1: the daemon refuses
+  a park from an agent ("parked means a person chose 'not now'", ADR 466). So a seat cannot defer by
+  itself. A seat that wants to defer opens the lane, writes the trigger in its detail, and asks a
+  human to park it; until then the lane stays `open`, which is still a visible disposition.
+  `follows_up` (lane 3) accepts an open lane for exactly this reason. Dropping (`abandoned`) stays
+  self-serve. The triage in lane 1 followed this: nick chose the parks, and he runs them.
 
 ## Observability & Evaluation
 
