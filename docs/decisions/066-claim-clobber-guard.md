@@ -61,6 +61,7 @@ claim repoints silently (the 2026-06-29 shared-folder collision). Unit coverage 
 `claim.test.ts`: refuse-on-live-clobber (no seat minted, binding intact), `--force` repoints,
 offline-bound is allowed, and own-seat re-occupy is never guarded.
 
+Follows-up: none — its trigger was batond landing, and ADR 194 retired batond; the A/B will not run as written (2026-09-30)
 **Experiment** — named, not yet built: once batond lands, A/B the guard (on vs `--force`-always) across
 seeded two-actor onboarding runs and measure clobber-incident rate and time-to-first-clean-`join` — does
 refusing-by-default cut "actors fight over one binding" (a MAST coordination failure mode) without

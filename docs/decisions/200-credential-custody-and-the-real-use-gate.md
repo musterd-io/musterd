@@ -111,6 +111,8 @@ Three barriers that do work, in rough order of how well they fit:
 Not chosen here. This ADR sets the requirement and the gate; the barrier is its own lane, and (1)
 should be prototyped first because a negative result there changes the shape of everything else.
 
+Follows-up: deferred — ADR 341 defers the barrier to its separate-OS-user prototype; reopen when seats on one machine must be treated as adversaries (2026-09-30)
+
 ## What this explicitly does not do
 
 - **Does not change the auth path.** There is no defect in credential validation to fix.

@@ -112,3 +112,5 @@ something other than this ADR moved them.
 not visibility but willingness, and the answer is a policy question about review as an obligation —
 not more surfacing. If `owed_reviews` routinely lists more than a couple of lanes per seat, the
 counterpart picker is over-concentrating and that is a separate defect worth its own lane.
+
+Follows-up: deferred — open a lane when `owed_reviews` routinely lists more than a couple of lanes per seat (2026-09-30)

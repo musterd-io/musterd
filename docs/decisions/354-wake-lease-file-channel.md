@@ -108,10 +108,12 @@ Rejected:
   adapter launched by a harness that strips env. Low enough to carry; a daemon-side
   `wake_lease_source: env | file` on the claim row would make the two channels distinguishable after
   the fact, and is the follow-up if this residual is ever observed.
+  Follows-up: deferred — add `wake_lease_source` if pid reuse within a wake-lease file's expiry window is observed (2026-09-30)
 - A residual, named rather than fixed: even with attestation right, the actuator's not-mine path
   kills a session the actuator itself spawned ninety seconds earlier, in its own workspace, whose
   thread id it just wrote into `binding.json`. That evidence exists and is not consulted before the
   kill. Left for a sibling lane; this ADR fixes the attestation, not the judgement.
+  Follows-up: 01M1MMHJP3PQY1QWNJCHV3XEMA
 
 ## Observability & Evaluation
 

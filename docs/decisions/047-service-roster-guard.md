@@ -89,6 +89,7 @@ as the rest of `service`.
   hazard. **Resolved at build time: not guarded.** `install`/`start` are setup/up intent, the guard wraps
   the two purely-destructive verbs (`stop`/`restart`) only; folding `install`'s kickstart in is a cheap
   follow-up if dogfood shows it bites.
+  Follows-up: deferred — fold `install`'s kickstart into the guard if dogfood shows it bounces a live agent (2026-09-30)
 - **Self-exclusion.** A CLI one-shot is not a WS presence, so the operator's own `service` call is never
   counted. But the operator may legitimately hold a separate `inbox --watch` session and still want to
   restart — the count includes them, and `--force` covers it. Naming-who would make this clearer (the

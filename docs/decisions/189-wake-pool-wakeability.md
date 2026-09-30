@@ -31,6 +31,8 @@ and dispatch cannot — not a safety hole. ADR 179 increment 5 will close the lo
 spending from the pool; spending a name you cannot wake is the failure mode this ADR
 removes.
 
+Follows-up: none — ADR 179 was rewritten 2026-07-29 and has no increment 5; the loop closed via ADR 191, the offline reviewer drawn from the marked `wake_pool` in `store/review.ts` (2026-09-30)
+
 ## Problem
 
 Two truths, no shared vocabulary:
@@ -111,6 +113,7 @@ the reason visible on non-wakeable entries (e.g. `grokbot (grok, 20d ago, not_en
 - Protocol schema change (ADR-gated): every `WakeCandidate` consumer updates in-repo.
 - Revive's posture line will keep naming `grokbot` / `compo` but mark them
   `not_enrolled`, so ADR 179 increment 5 will not pick them until enrolled.
+  Follows-up: none — superseded by ADR 191, which likewise skips `not_enrolled` seats (2026-09-30)
 - Host reports gain a typed wakeability axis without replacing the human-readable
   reason.
 
