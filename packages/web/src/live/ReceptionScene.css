@@ -36,7 +36,6 @@
   border-radius: 50%;
   background: var(--lc-chip-hue, var(--lc-accent));
   flex: 0 0 auto;
-  animation: lc-reception-bob 2.4s ease-in-out infinite;
 }
 .lc-reception__chip-ring {
   position: absolute;
@@ -45,15 +44,6 @@
   border: 1.5px solid var(--lc-chip-hue, var(--lc-accent));
   opacity: 0.5;
   animation: lc-reception-pulse 2.4s ease-in-out infinite;
-}
-@keyframes lc-reception-bob {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-3px);
-  }
 }
 @keyframes lc-reception-pulse {
   0%,
@@ -77,7 +67,6 @@
   color: var(--lc-dim);
 }
 @media (prefers-reduced-motion: reduce) {
-  .lc-reception__chip,
   .lc-reception__chip-ring {
     animation: none;
   }

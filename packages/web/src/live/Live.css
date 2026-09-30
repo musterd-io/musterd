@@ -555,18 +555,6 @@
   width: 0.34em;
   text-align: center;
   color: var(--lc-accent-ink);
-  animation: lc-clock-breathe 2s var(--lc-ease-out) infinite;
-}
-/* A breath, not a blink: the colons stay legible at the trough — a colon that vanishes reads as a
-   gap in the number rather than as a ticking clock. */
-@keyframes lc-clock-breathe {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.55;
-  }
 }
 .lc-clock__zone {
   font-family: var(--font-mono, monospace);
@@ -577,8 +565,7 @@
 }
 /* Motion is decoration here — the time is legible without any of it. */
 @media (prefers-reduced-motion: reduce) {
-  .lc-clock__digit,
-  .lc-clock__colon {
+  .lc-clock__digit {
     animation: none;
   }
 }

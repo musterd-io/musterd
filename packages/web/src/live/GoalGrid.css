@@ -77,7 +77,6 @@
   height: 6px;
   border-radius: 50%;
   background: #4a9d7f;
-  animation: gg-pulse 2s ease-in-out infinite;
 }
 @keyframes gg-pulse {
   0%,
@@ -207,23 +206,6 @@
   background: linear-gradient(90deg, #f0e6d3 0%, #eeddbe 55%, #cfe8db 100%);
   overflow: hidden;
 }
-.gg-runway__track::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
-  width: 40%;
-  animation: gg-shimmer 3.5s ease-in-out infinite;
-}
-@keyframes gg-shimmer {
-  0% {
-    transform: translateX(-120%);
-  }
-  60%,
-  100% {
-    transform: translateX(300%);
-  }
-}
 .gg-zone {
   position: absolute;
   top: 26px;
@@ -264,20 +246,10 @@
 }
 .gg-dot--review {
   background: #e8a33d;
-  animation: gg-wiggle 2.4s ease-in-out infinite;
 }
 .gg-dot--blocked {
   background: #cd6f6f;
   animation: gg-pulse 1.8s ease-in-out infinite;
-}
-@keyframes gg-wiggle {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-3px);
-  }
 }
 
 /* Review debt is lane-shaped, so it lands on the dot: a lane past the acceptance threshold stops
@@ -293,7 +265,6 @@
 .gg-rider {
   position: absolute;
   top: 0;
-  animation: gg-bob 2.8s ease-in-out infinite;
 }
 .gg-rider:nth-child(odd) {
   animation-delay: 0.7s;
@@ -319,15 +290,6 @@
   width: 2px;
   height: 4px;
   background: #d9cfc0;
-}
-@keyframes gg-bob {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-2px);
-  }
 }
 
 .gg-landed {
@@ -504,11 +466,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gg-pulse__dot,
-  .gg-runway__track::after,
-  .gg-dot--review,
-  .gg-dot--blocked,
-  .gg-rider,
+  .gg-dot--blocked {
+    animation: none;
+  }
   .gg-card,
   .gg-peek,
   .gg-slip {
