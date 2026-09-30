@@ -166,12 +166,17 @@ while :; do
   started=$SECONDS
   # The measured passing configuration — change it in the spec before changing it here.
   #
-  # 1080p20, not 720p25. Measured 2026-09-15 on the LIVE performance-4x box — the real machine, the
+  # 1080p15 (2026-09-30, lane 01M3STFRSD) — see the dated note in docs/perf/broadcast-baseline.md.
+  # The 20 below was chosen by eye against a 20 that was never delivered: the office draws 9-11
+  # frames/s on this box (the draw floor fires on every relaunch), so a 20fps stream was ~half
+  # repeats. 15 carries the same real motion in fewer padded frames and frees capture CPU.
+  #
+  # History: 1080p20, not 720p25. Measured 2026-09-15 on the LIVE performance-4x box — the real machine, the
   # real room, libx264 (the local harness composites at 60Hz with VideoToolbox and does not transfer):
   #
   #   720p25   fps 25.0  speed 1.00x  over 14 min   ~2900 kbit/s  0.92M px/frame
-  #   1080p15  fps 15.0  speed 1.00x  over 45 min   ~3334 kbit/s  2.07M px/frame
-  #   1080p20  fps 20.0  speed 0.998x over 6.5 min  ~3517 kbit/s  2.07M px/frame   ← this
+  #   1080p15  fps 15.0  speed 1.00x  over 45 min   ~3334 kbit/s  2.07M px/frame   ← this (2026-09-30)
+  #   1080p20  fps 20.0  speed 0.998x over 6.5 min  ~3517 kbit/s  2.07M px/frame
   #
   # docs/perf/broadcast-baseline.md had carried 1080p15 as a planned row of DASHES since July; the
   # arm had never been run, so 720p was never a measured choice. The box holds 1080p comfortably.
@@ -193,7 +198,7 @@ while :; do
     --server "$SERVER" \
     --twitch \
     --resolution 1080p \
-    --fps 20 \
+    --fps 15 \
     --encoder libx264 \
     --audio \
     ${BROADCAST_ARGS:-}
