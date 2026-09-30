@@ -17,6 +17,7 @@
  *
  * Usage:
  *   node scripts/perf/scene-pixel-check.mjs [baseUrl] [--json out.json] [--quiet]
+ *     [--stage 1920x1080] [--images <dir>]   (pass baseUrl FIRST when using any valued flag)
  *
  * Exit 0 = byte-equal across every state. Exit 1 = a difference (the report names the first
  * differing pixel and the delta histogram). Exit 2 = the harness could not measure (no Chrome, no
@@ -40,7 +41,15 @@
  * call can be made on evidence rather than on a feeling.
  */
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -54,6 +63,13 @@ const flag = (name) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const JSON_OUT = flag('json');
+/* `--stage 1920x1080` sizes the viewport like the stream's capture instead of this window. Parity
+   depends on the canvas: #1550's numbers were taken on /office-preview's 1600x1000-window canvas,
+   and the stream paints 1920x1080 (docs/wiki/canvas-sprite-caching.md). */
+const STAGE = flag('stage')?.split('x').map(Number);
+/* `--images <dir>` writes, per state, the direct frame, the cached frame and a readable diff
+   (`spriteImages()`), so the verdict can be looked at rather than only read. */
+const IMAGES = flag('images');
 const QUIET = args.includes('--quiet');
 
 /**
@@ -112,6 +128,9 @@ const CHROME_ARGS = [
   '--no-first-run',
   '--disable-extensions',
   '--window-size=1600,1000',
+  /* The capture's own Linux flags (broadcast.ts), so a run on the GPU-less box rasterizes under the
+     same Chrome the stream does — and can start at all as root in a container. */
+  ...(process.platform === 'darwin' ? [] : ['--no-sandbox', '--disable-dev-shm-usage']),
   'about:blank',
 ];
 const chrome = spawn(CHROME, [...CHROME_ARGS, `--user-data-dir=${profile}`], {
@@ -217,6 +236,15 @@ const send = (method, params = {}) =>
   });
 await send('Page.enable');
 await send('Runtime.enable');
+if (STAGE) {
+  await send('Emulation.setDeviceMetricsOverride', {
+    width: STAGE[0],
+    height: STAGE[1],
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+}
+if (IMAGES) mkdirSync(IMAGES, { recursive: true });
 
 const evaluate = async (expression) => {
   const { result, exceptionDetails } = await send('Runtime.evaluate', {
@@ -273,6 +301,19 @@ for (const state of MATRIX) {
   });
   if (!parity) break;
   results.push({ state: state.name, url, ...JSON.parse(parity) });
+  if (IMAGES) {
+    const imgs = await evaluate('JSON.stringify(window.__office.spriteImages?.() ?? null)');
+    const parsed = imgs ? JSON.parse(imgs) : null;
+    if (!parsed) {
+      harnessFailure = `${state.name}: --images needs spriteImages() (a DEV build of this commit)`;
+      break;
+    }
+    for (const [kind, url] of Object.entries(parsed))
+      writeFileSync(
+        join(IMAGES, `${state.name}.${kind}.png`),
+        Buffer.from(String(url).split(',')[1], 'base64'),
+      );
+  }
 }
 
 const line = (r) => {

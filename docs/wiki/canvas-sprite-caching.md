@@ -85,6 +85,8 @@ Run on the box against `/broadcast` (`spriteParity()`, both paths painted into f
 
 **One gap in the evidence, stated rather than buried:** the bench box was destroyed before capturing *where* the 1,488 beyond-rounding pixels sit. Scattered singles and one clump on a face are the same number and not the same product.
 
+**Gap closed 2026-09-30 (miley, lane 01M3STFRSD) — where they sit.** Re-run on a fresh `performance-4x` (Chromium 154, the capture image's base) with `scene-pixel-check.mjs --stage 1920x1080 --images`, over the gate's ten `/office-preview` states at a 1920x1028 canvas. Beyond rounding: **~3,080 px (0.156%) in every daylight state, ~650 (0.033%) at night**, max Δ91. This is not the 09-18 number's room, since `/office-preview` seats a synthetic 8-24, but the same order. The images answer the question above. The largest clusters are a **2-step speckle over the entrance door's glass** and the **daylight beams on the floor**, invisible side by side. Then there are desk-leg and rug edges. The **one spot above ~Δ10 is a pen cup on a desk at (964,364)**, whose green stem is drawn a few pixels differently, identically in every state. No clump lands on a face or a nameplate.
+
 ## Measure a sprite's box, do not estimate it (2026-09-17; falsify: set `SPRITE_PAD` to 200 and re-run the gate — the differences do not move) <!-- claim: other -->
 
 The spec planned to derive each sprite's bounding box from footprint geometry plus a fixed padding. `measureBounds` (in `sprite-cache.ts`) instead dry-runs the draw function against a context that tracks only the CTM and the extent of every point touched — path commands, rects, arcs, ellipses, images, and an estimate for text. It is JS-only and runs once per cache miss.

@@ -312,6 +312,8 @@ export interface OfficeHandle {
   /** DEV BUILDS ONLY: magnified PNG crops of one region, painted direct and through a cache — what
    * turns "maxDelta 88" into something a person can look at. */
   spriteCrops?: (cx: number, cy: number, r: number, zoom?: number) => Record<string, string>;
+  /** DEV only: whole-frame PNG data URLs — direct, sprite-cached, and a readable diff. */
+  spriteImages?: () => { direct: string; sprite: string; diff: string };
   /** The shared ambient beat log (E1 spec §5): one entry per fired slot — slot number, whose beat,
    * and whether this browser played it. Two visible viewers of the same team over the same interval
    * must agree on everything but `played`. Capped at the last 200 entries. */

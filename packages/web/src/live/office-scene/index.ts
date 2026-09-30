@@ -2594,10 +2594,83 @@ export function mountOffice(
     };
   }
 
+  /**
+   * DEBUG (gate only): the whole frame, painted direct and through a fresh cache, plus a DIFF a person
+   * can read — the direct frame dimmed to grey, with every pixel more than one step out painted red,
+   * brighter for a bigger delta. One-step differences are left grey on purpose: a blit composites
+   * where the direct path does not, so they are everywhere and localize nothing (see spriteParity).
+   * DEV only, like its siblings, so it costs the viewer bundle nothing.
+   */
+  function spriteImages(): { direct: string; sprite: string; diff: string } {
+    const paint = (o: RenderOpts = {}): HTMLCanvasElement => {
+      const c = document.createElement('canvas');
+      c.width = canvas.width;
+      c.height = canvas.height;
+      const g = c.getContext('2d')!;
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, width, height);
+      renderScene(
+        g,
+        fit,
+        placements,
+        actors.nodes(),
+        actors.poses(),
+        clock,
+        teamName,
+        lightEnv,
+        pet,
+        actors.sceneFx(),
+        recep,
+        wallBoard,
+        teamWorkingHours,
+        o,
+      );
+      return c;
+    };
+    setScenePalette(resolveScenePalette());
+    const a = paint();
+    const b = paint({ sprites: makeSpriteCache({ dpr }), dpr });
+    const w = canvas.width;
+    const h = canvas.height;
+    const da = a.getContext('2d')!.getImageData(0, 0, w, h).data;
+    const db = b.getContext('2d')!.getImageData(0, 0, w, h).data;
+    const d = document.createElement('canvas');
+    d.width = w;
+    d.height = h;
+    const dg = d.getContext('2d')!;
+    const out = dg.createImageData(w, h);
+    for (let i = 0; i < da.length; i += 4) {
+      // Same premultiplied comparison as spriteParity, so the picture and the numbers agree.
+      const aa = da[i + 3]!;
+      const ab = db[i + 3]!;
+      let delta = Math.abs(aa - ab);
+      for (let k = 0; k < 3; k++) {
+        delta = Math.max(
+          delta,
+          Math.abs(Math.round((da[i + k]! * aa) / 255) - Math.round((db[i + k]! * ab) / 255)),
+        );
+      }
+      const grey = Math.round(
+        (0.3 * da[i]! + 0.59 * da[i + 1]! + 0.11 * da[i + 2]!) * (aa / 255) * 0.35,
+      );
+      const red = delta > 1 ? Math.min(255, 110 + delta * 8) : 0;
+      out.data[i] = red || grey;
+      out.data[i + 1] = red ? 0 : grey;
+      out.data[i + 2] = red ? 0 : grey;
+      out.data[i + 3] = 255;
+    }
+    dg.putImageData(out, 0, 0);
+    return {
+      direct: a.toDataURL('image/png'),
+      sprite: b.toDataURL('image/png'),
+      diff: d.toDataURL('image/png'),
+    };
+  }
+
   ensureLoop(); // a room with anyone working is alive from the first frame (no-op under reduced-motion)
 
   return {
-    ...(import.meta.env.DEV ? { spriteParity, spriteCrops } : {}),
+    ...(import.meta.env.DEV ? { spriteParity, spriteCrops, spriteImages } : {}),
     update,
     emit,
     stats: () => ({ ticks, draws, beats, since, welcomes: welcomeRoom.started() }),
