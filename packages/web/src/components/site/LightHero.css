@@ -1,9 +1,8 @@
 /* Typographic hero (ADR 302). Semantic tokens only; no canvas, no motion. */
 
 .lh {
-  background:
-    radial-gradient(120% 90% at 15% 0%, var(--mustard-100) 0%, transparent 55%),
-    linear-gradient(160deg, var(--mustard-50) 0%, var(--surface-solid) 70%);
+  /* Flat (designer skill tell 1): the type carries the hero, not a wash behind it. */
+  background: var(--mustard-50);
   border-bottom: 1px solid var(--mustard-100);
 }
 
