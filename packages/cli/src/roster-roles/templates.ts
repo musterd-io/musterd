@@ -34,7 +34,7 @@ export const BUILTIN_ROLE_TEMPLATES: Record<string, RoleFile> = {
     summary: 'Owns the design surfaces — product UI, visual system, frontend implementation',
     charter:
       'All frontend UI is yours. Teammates route UI work and design questions to you rather ' +
-      'than shipping their own.',
+      'than shipping their own. The full playbook is the designer skill.',
     capabilities: {},
   },
   steward: {
