@@ -61,6 +61,12 @@ budget. Canvas painters need a real family name, because `ctx.font` cannot set v
   the lane.
 - 2026-09-29: the web lane (01M3QD3Q8) closes on the web half: #1833 plus the #1839 token-order
   fix. Decision 5's Figma scope is unchanged and moves to a dedicated lane. Follows-up: 01M3QQD3FB36JQGG14Z27T6J84
+- 2026-09-30: the Figma half landed (lane 01M3QQD3FB36JQGG14Z27T6J84). All three files (Brand,
+  Dashboard, Terminal UX) now use Recursive: weight 600 and up → Sans Casual, lighter Inter →
+  Sans Linear, JetBrains Mono → Mono Linear. The Brand text styles point at the same cuts. The
+  wordmark text (`musterd`) and the Brand Wordmark and Assets pages keep JetBrains Mono, so the
+  exported assets in `docs/design/assets/` are unchanged. The same pass fixed avatar frames that
+  were drawn 7–12 px wide instead of round.
 - Re-cutting (a new upstream version, another subset, another axis) means rerunning the script and
   committing its output. The allowlist does not change as long as the file names stay `recursive-*`.
 - Recursive's casual axis gives /live and the office a hand-drawn warmth, while body and data stay
