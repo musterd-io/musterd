@@ -99,8 +99,9 @@ export const SUPERSEDE_GRACE_MS = 10_000;
 export const FOOTPRINT_INTERVAL_MS = 60_000;
 /** Footprint samples older than this are pruned each tick — the table stays bounded. */
 export const FOOTPRINT_RETENTION_MS = 604_800_000; // 7d
-/** ADR 478 §1: how long churn-class audit rows stay in the live store. */
-export const AUDIT_CHURN_RETENTION_MS = 2_592_000_000; // 30d
+/** ADR 478 §1: how long churn-class audit rows stay in the live store — 5 days since ADR 480 (the
+ *  first live pass showed 99% of churn under 30 days old; 30 freed under 1 MB). */
+export const AUDIT_CHURN_RETENTION_MS = 432_000_000; // 5d
 /** ADR 478 §3: how long trace content stays locally — ~20 MB/day measured 2026-09-29, so 30 days
  *  (ADR 445's figure) would reach ~600 MB before the first prune; 7 caps it near 140 MB. */
 export const TRACE_CONTENT_RETENTION_MS = 604_800_000; // 7d
