@@ -156,6 +156,38 @@ for (let i = 1; i <= runs; i++) {
   );
 }
 
+/* ── The vanish arm (lane 01M3SQHXKA, 2026-09-30) ─────────────────────────────────────────────────
+ *
+ * The mirror of `born`: a row present at the rect pass and GONE by the shutter. `moved` compares
+ * only the rows the post-shutter reading still finds, so a row that unmounted was never compared and
+ * was sampled over whatever replaced it. The fixture drops an absolutely positioned card 100ms after
+ * the freeze — nothing else moves, exactly like ada's team card on connected /live when her CLI
+ * presence lapsed mid-sweep. Deterministic: 1 below AA (`#111111 on #1a1a1a`, 1.08) on 43f7ceda,
+ * every run; it must now be excluded every run. */
+for (let i = 1; i <= runs; i++) {
+  const { out } = await sweep(`${base}/vanish-after-rects.html`);
+  const fails = belowAA(out);
+  const excluded = /GONE by the shutter/.test(out);
+  const ok = fails === 0 && excluded;
+  if (!ok) failed++;
+  console.log(
+    `  ${ok ? '✓' : '✗'} vanish-after-rects run ${i}: ${fails} below AA, ${excluded ? 'excluded as gone' : 'NOT excluded — a row that left is being measured over its replacement'}`,
+  );
+}
+
+/* Its other edge: a node REPLACED like for like — same class, same text, same place — is the same
+   paint, as the office's nameplate rebuild is on every tick. The fixture's plate genuinely fails
+   (#bbbbbb on white), so an over-eager vanish guard shows up as that failure going missing. */
+for (let i = 1; i <= runs; i++) {
+  const { out } = await sweep(`${base}/replace-in-place.html`);
+  const fails = belowAA(out);
+  const ok = fails === 1 && !/GONE by the shutter/.test(out);
+  if (!ok) failed++;
+  console.log(
+    `  ${ok ? '✓' : '✗'} replace-in-place run ${i}: ${fails} below AA${ok ? ' — still measured' : ' — a re-rendered row was excused, and its real failure with it'}`,
+  );
+}
+
 /* ── The dedupe arm ──────────────────────────────────────────────────────────────────────────────
  *
  * Not a freeze race at all — no rAF, no birth, no motion. Two rows with the same class and ink, one

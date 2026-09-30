@@ -760,14 +760,33 @@ const RECTS_IN_PAGE = /* js */ `(() => {
     while (n && n.nodeType === 1) { o *= parseFloat(getComputedStyle(n).opacity); n = n.parentElement; }
     return o;
   };
-  const rects = [], clipped = [], covered = [], gone = [];
+  const rects = [], clipped = [], covered = [], gone = [], replaced = [];
   /* The rows the live walk measured, in its order, as the very same nodes — see __a11y_rows there.
      Re-walking here would re-derive identity from tree position, which is exactly what a page that
      re-renders between passes invalidates. */
-  for (const { node, el, key } of window.__a11y_rows ?? []) {
+  for (const [i, row] of (window.__a11y_rows ?? []).entries()) {
+    const { node, el, key } = row;
     /* Replaced or removed since the live walk: React swapped the node out, so whatever is at its
-       old coordinate now belongs to something else. No ink of ours is there to measure. */
-    if (!node.isConnected) { gone.push(key); continue; }
+       old coordinate now belongs to something else. No ink of ours is there to measure.
+
+       Except when the swap was like for like. The office scene rebuilds its nameplate DOM on its
+       tick, so a plate's node is replaced by one with the same class and text, painted where the old
+       one was. Reported as \`replaced\` (by row index) so the post-shutter check can tell a re-render
+       from a row that actually left the page. \`row.last\` is where the previous reading saw it. */
+    if (!node.isConnected) {
+      gone.push(key);
+      const l = row.last;
+      if (l && [...document.getElementsByClassName(l.cls.split(' ')[0] || '_')].some((e) => {
+        if (e.className !== l.cls || e.textContent !== l.text) return false;
+        const b = e.getBoundingClientRect();
+        return Math.abs(b.x - l.x) <= 1 && Math.abs(b.y - l.y) <= 1;
+      })) replaced.push(i);
+      continue;
+    }
+    {
+      const b = el.getBoundingClientRect();
+      row.last = { cls: typeof el.className === 'string' ? el.className : '', text: el.textContent, x: b.x, y: b.y };
+    }
     const cs = getComputedStyle(el);
     if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) continue;
     /* The TEXT's own box, not the element's: an element's bounding rect can include padding that
@@ -822,6 +841,9 @@ const RECTS_IN_PAGE = /* js */ `(() => {
     }
     rects.push({
       key,
+      /* The row's identity across readings. \`key\` is class|ink|paper and collides between siblings,
+         so a row that VANISHED would be vouched for by a same-key sibling that stayed. */
+      i,
       x: r.x + window.scrollX, y: r.y + window.scrollY, w: r.width, h: r.height,
       opacity: effOpacity(el),
       /* Born into the frozen room: connected after the freeze marked the living page's elements, so
@@ -835,6 +857,7 @@ const RECTS_IN_PAGE = /* js */ `(() => {
     clipped,
     covered,
     gone,
+    replaced,
     dpr: window.devicePixelRatio || 1,
     docW: Math.ceil(document.documentElement.scrollWidth),
     docH: Math.ceil(document.documentElement.scrollHeight),
@@ -1060,6 +1083,8 @@ let keysAfterShutter = null;
 const moved = [];
 /** Rows born after the freeze — stranded at (0,0), their geometry is the freeze's artifact. */
 const born = [];
+/** Rows gone by the shutter — unmounted, hidden or covered; the pixel belongs to what replaced them. */
+const vanished = [];
 try {
   /* Hold the scene still for the length of the capture. Everything that moves on these surfaces
      moves on a rAF loop — the office characters walk, and the speech bubbles are absolutely
@@ -1189,6 +1214,26 @@ try {
     }
   }
 
+  /* And a row that is simply NOT THERE after the shutter. `moved` compares the rows the second
+     reading found; a row it did not find — unmounted, hidden, or covered by the time the shutter
+     fired — was never compared, so it walked through and was sampled over whatever took its place.
+
+     That is the connected /live flake (lane 01M3SQHXKA). The fixture admin's CLI presence lingers
+     ~50s after each command, so on a slow runner `ada`'s team card unmounts mid-sweep and its avatar
+     is measured against the page ground: `1.1 #ffffff on #fbf3e6`, in 8 of 12 a11y-connected reds
+     between 2026-09-23 and 2026-09-30, with the same card's "blocked on" alongside.
+
+     The row is matched by INDEX, because `key` collides between siblings. But a missing index is not
+     yet a missing row: the office scene rebuilds its nameplate DOM on its tick, so a plate's node is
+     routinely replaced by an identical one in the identical place (9 plate rows on every steady
+     connected /live). The rect pass reports those as `replaced` — same class, same text, same spot
+     — and they are the same paint, so they stay measured. */
+  const vanishedRows = new Set();
+  {
+    const still = new Set([...geom2.rects.map((r) => r.i), ...geom2.replaced]);
+    for (const r of geom.rects) if (!still.has(r.i)) vanishedRows.add(r.i);
+  }
+
   const img = decodePng(Buffer.from(shot.data, 'base64'));
   // With a clip at scale 1 the image is CSS pixels; without one it is device pixels.
   const scale = tall ? geom.dpr : img.width / geom.docW;
@@ -1212,6 +1257,10 @@ try {
     }
     if (movedKeys.has(rc.key)) {
       moved.push(rc.key.split('|')[0] || '?');
+      continue;
+    }
+    if (vanishedRows.has(rc.i)) {
+      vanished.push(rc.key.split('|')[0] || '?');
       continue;
     }
     const now = opacity2[rc.key];
@@ -1286,6 +1335,12 @@ try {
       `${moved.length} element(s) MOVED between the rect pass and the shutter, so the pixel under` +
         ` their recorded line box is no longer what is behind them — excluded, not measured:` +
         ` ${[...new Set(moved)].join(', ')}`,
+    );
+  if (vanished.length)
+    notes.push(
+      `${vanished.length} element(s) were GONE by the shutter — unmounted, hidden or covered after` +
+        ` the rect pass, so the pixel at their line box belongs to whatever replaced them — excluded,` +
+        ` not measured: ${[...new Set(vanished)].join(', ')}`,
     );
   if (born.length)
     notes.push(

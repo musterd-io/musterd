@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>vanish fixture</title>
+<style>
+  /* Dark ground: whatever a vanished card leaves behind. */
+  body { background: #1a1a1a; margin: 0; font: 16px sans-serif; }
+  /* Cards: light paper, dark ink — 17:1 wherever the card actually is. */
+  .card { position: absolute; left: 40px; width: 360px; padding: 12px; background: #fbf3e6; }
+  .card span { color: #111111; }
+</style></head>
+<body>
+  <div class="card" style="top: 40px"><span class="who">a card that stays</span></div>
+  <!-- Absolutely positioned, so its leaving moves nothing else: the `moved` guard has no sibling
+       to notice, which is the /live shape — ada's card was the last in the column. -->
+  <div class="card" id="leaver" style="top: 120px"><span class="gone">a card that leaves</span></div>
+  <script>
+    // The unmount, made deterministic: trap the sweep's freeze (it overwrites requestAnimationFrame)
+    // and remove the card a beat later — after the rect pass has recorded it, before the shutter.
+    // This is a seat's presence lapsing mid-sweep, and React dropping its team card.
+    let real = window.requestAnimationFrame;
+    let armed = true;
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      get() { return real; },
+      set(v) {
+        real = v;
+        if (!armed) return;
+        armed = false;
+        setTimeout(() => document.getElementById('leaver')?.remove(), 100);
+      },
+    });
+  </script>
+</body>
+</html>
