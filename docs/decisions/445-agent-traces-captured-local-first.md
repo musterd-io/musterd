@@ -664,6 +664,14 @@ ADR 184's publication gate; a spans backend.
   re-post, pre-#1824). Falsifier for this read: a codex or opencode session on a build ≥ `293e24db`
   whose ratio sits below 0.96 with one `SessionEnd`; or a cursor IDE session, ended after this note,
   whose `usage.tool_uses` is not within 5% of its `postToolUse` count.
+- **2026-09-29 — Grok's coverage is computable** (lane `01M3R8G033HTF1KB11YV6FH3HP`), closing the
+  deferred item in the fourth read above. (1) The numerator now counts a Grok `PreToolUse` as that
+  call's R1 row (`CALL_ROW` in `traceCoverage.ts`), which is the one-row-per-call design of the
+  2026-09-28 note. A Claude Code `PreToolUse` still does not count. On live data the one Grok
+  session reads R1 = 12, where it read 0. (2) A settled Grok wake now tails its own `updates.jsonl`
+  from the host (`tailGrokSession`). It uses the hook's `tailTranscript`, so the digest, cursor and
+  lock are shared, and a SessionEnd that did fire cannot double-post. Falsifier: a steered grokbot
+  wake on a build carrying this whose `report trace` grok row is null, or outside 0.9–1.1.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
   batched POST, so the per-call overhead is what the gate costs now. R2 is a file tail.
 

@@ -126,6 +126,58 @@ describe('grok liveness (ADR 436 clause 4 — a wake that settled is over)', () 
   });
 });
 
+describe('grok R2 at wake exit (lane 01M3R8G033 — a headless wake fires no session_end)', () => {
+  it('the settled wake tails its own Grok transcript, for the real session id, in the workspace', async () => {
+    const child = new Child();
+    const tails: { workspace: string; sessionId: string }[] = [];
+    const backend = grokBackend({
+      resolveBin: async () => '/grok',
+      spawn: (() => child) as never,
+      readSession: () => ({ state: 'none', source: 'slot' }) as never,
+      recordFreshSession: () => undefined,
+      ensurePinned: () => undefined,
+      readUsage: () => undefined,
+      findSessionId: () => 'grok-real',
+      tailSession: async (workspace, sessionId) => {
+        tails.push({ workspace, sessionId });
+      },
+    });
+    const ctx: BackendContext = {
+      verifyOccupied: async () => ({ occupied: true, provenance: 'wake', lease_matched: true }),
+      log: () => {},
+    };
+    const result = await backend.wake(spec, ctx);
+    expect(tails).toEqual([]); // not before the child exits
+    child.exit(0);
+    await result.settled;
+    expect(tails).toEqual([{ workspace: '/tmp/ws', sessionId: 'grok-real' }]);
+  });
+
+  it('no session id found: nothing is tailed, and the wake still settles', async () => {
+    const child = new Child();
+    let tailed = false;
+    const backend = grokBackend({
+      resolveBin: async () => '/grok',
+      spawn: (() => child) as never,
+      readSession: () => ({ state: 'none', source: 'slot' }) as never,
+      recordFreshSession: () => undefined,
+      ensurePinned: () => undefined,
+      readUsage: () => undefined,
+      findSessionId: () => undefined,
+      tailSession: async () => {
+        tailed = true;
+      },
+    });
+    const result = await backend.wake(spec, {
+      verifyOccupied: async () => ({ occupied: true, provenance: 'wake', lease_matched: true }),
+      log: () => {},
+    });
+    child.exit(0);
+    expect((await result.settled)?.duration_ms).toBeTypeOf('number');
+    expect(tailed).toBe(false);
+  });
+});
+
 describe('grok capture (ADR 436 clause 3 — the spawned harness is stamped at spawn)', () => {
   it('stamps MUSTERD_WAKE_HARNESS=grok beside the lease, and nothing without one', () => {
     expect(grokWakeEnv({ HOME: '/h' }, 'L42')).toMatchObject({

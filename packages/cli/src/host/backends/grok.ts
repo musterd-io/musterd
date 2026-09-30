@@ -3,6 +3,7 @@ import type { WakeUsage } from '@musterd/protocol';
 import { findBinding, saveBinding } from '../../config.js';
 import { resolveGrokBin } from '../../grokBin.js';
 import { localSessionLiveness, type LocalSessionLiveness } from '../../session/liveness.js';
+import { tailTranscript, transcriptPathFor } from '../../trace/tail.js';
 import type { ActuatorBackend, WakeActuation, WakeCompletion } from '../backend.js';
 import { ensurePinnedMusterd, wakeEnv } from '../pinnedBin.js';
 import { findGrokWakeSessionId, readGrokWakeUsage } from './grokUsage.js';
@@ -64,7 +65,33 @@ function killTree(child: ChildProcess, graceMs: number): void {
   hard.unref();
 }
 
+/**
+ * Lane 01M3R8G033: ADR 445 R2 at wake exit. Grok's transcript is read at SessionEnd, and a
+ * headless `grok -p` wake never fires one, so a woken Grok session posted no `usage` rows and read
+ * null coverage by construction. The host is the one party that knows the run is over: it tails
+ * the session's `updates.jsonl` itself, through the same `tailTranscript` the hook uses (same
+ * digest, cursor and lock, so a SessionEnd that did fire and this read never double-post).
+ * Bounded and fail-open like the hook path.
+ */
+export async function tailGrokSession(workspace: string, sessionId: string): Promise<void> {
+  const transcriptPath = transcriptPathFor({
+    harness: 'grok',
+    session_id: sessionId,
+    cwd: workspace,
+  });
+  if (!transcriptPath) return;
+  await tailTranscript({
+    binding: findBinding(workspace, {}),
+    dir: workspace,
+    harness: 'grok',
+    sessionId,
+    transcriptPath,
+  });
+}
+
 export interface GrokDeps {
+  /** Lane 01M3R8G033: the wake-exit R2 read (tests inject; default {@link tailGrokSession}). */
+  tailSession?: (workspace: string, sessionId: string) => Promise<void>;
   resolveBin?: () => Promise<string | null>;
   spawn?: typeof nodeSpawn;
   readSession?: (workspace: string) => LocalSessionLiveness;
@@ -160,7 +187,7 @@ export function grokBackend(deps: GrokDeps = {}): ActuatorBackend {
           child.once('error', () => resolve(null));
         });
         const placeholder = `wake-${spec.order.lease_id}`;
-        const settled: Promise<WakeCompletion | undefined> = exited.then((code) => {
+        const settled: Promise<WakeCompletion | undefined> = exited.then(async (code) => {
           clearTimeout(watchdog);
           const duration_ms = Date.now() - startedAt;
           ctx.log(
@@ -177,6 +204,11 @@ export function grokBackend(deps: GrokDeps = {}): ActuatorBackend {
             label === 'fresh'
               ? (deps.findSessionId ?? findGrokWakeSessionId)(spec.workspace, startedAt)
               : undefined;
+          const tailId = realId ?? resumeId;
+          if (tailId)
+            await (deps.tailSession ?? tailGrokSession)(spec.workspace, tailId).catch(
+              () => undefined,
+            );
           return {
             duration_ms,
             ...(usage ? { usage } : {}),

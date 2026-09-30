@@ -9,7 +9,7 @@ import {
 } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
 import type { z } from 'zod';
-import { POST_TOOL_USE_ONCE } from './traceCoverage.js';
+import { CALL_ROW, POST_TOOL_USE_ONCE } from './traceCoverage.js';
 
 /**
  * `musterd report trace` (ADR 445 increment 4): three views over `trace_events`' structural
@@ -57,7 +57,7 @@ export function deriveTraceReport(
               -- the dogfood box, 11 of 11 sessions "with R2" over 1,289 calls (lane 01M3NMDWA9).
               MAX(CASE WHEN kind = 'usage' AND json_extract(detail, '$.tool_uses') IS NOT NULL
                        THEN 1 ELSE 0 END) AS has_r2,
-              SUM(CASE WHEN kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NOT NULL
+              SUM(CASE WHEN ${CALL_ROW} AND agent_id IS NOT NULL
                        THEN 1 ELSE 0 END) + ${POST_TOOL_USE_ONCE} AS post,
               ${POST_TOOL_USE_ONCE} AS post_main
          FROM trace_events
@@ -125,7 +125,7 @@ export function deriveTraceReport(
               SUM(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS errors,
               AVG(duration_ms) AS avg
          FROM trace_events
-        WHERE team_id = ? AND ts >= ? AND kind IN ('PostToolUse','PostToolUseFailure')
+        WHERE team_id = ? AND ts >= ? AND ${CALL_ROW}
           AND tool_name IS NOT NULL ${inSeats}
         GROUP BY harness, tool_name
         ORDER BY calls DESC, tool, harness
