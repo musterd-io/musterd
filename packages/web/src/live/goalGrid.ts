@@ -18,7 +18,7 @@ export interface RunwayDot {
   kind: 'dot' | 'rider';
   tone: 'idle' | 'working' | 'blocked' | 'review' | 'done';
   owner: string | null;
-  /** ✨ — the card's most recently resolved done lane. */
+  /** Ringed dot — the card's most recently resolved done lane. */
   latest: boolean;
   /**
    * value-layer design: this lane has been waiting on acceptance past the 12h threshold — review
@@ -69,7 +69,7 @@ export interface GoalCardModel {
    * touched while it waited, and the board would contradict `team_next`.
    */
   staleNote: string | null;
-  /** ⚡ pill — the card's most recently touched non-terminal lane. */
+  /** "moved" pill — the card's most recently touched non-terminal lane. */
   lastMoved: { lane: string; title: string; at: number } | null;
   /**
    * The daemon's per-goal flow (ADR 295), or null when it sent none — a pre-295 server, or a goal

@@ -130,9 +130,6 @@ export function GoalGrid({
       {model.shippedShelf.length > 0 && (
         <footer className="gg-shelf" aria-label="Shipped goals">
           <p className="gg-shelf__head">
-            <span className="gg-shelf__flag" aria-hidden="true">
-              🏁
-            </span>
             <span className="gg-shelf__label">shipped — and what changed</span>
           </p>
           <ul className="gg-shelf__list">
@@ -253,10 +250,10 @@ function GoalCard({
         </span>
         {card.lastMoved ? (
           <span className="gg-foot__tick">
-            ⚡ <b>{card.lastMoved.title}</b> · {ago(now, card.lastMoved.at)}
+            moved <b>{card.lastMoved.title}</b> · {ago(now, card.lastMoved.at)}
           </span>
         ) : card.id === null ? (
-          <span className="gg-foot__tick">🏷️ link them to a goal</span>
+          <span className="gg-foot__tick">link them to a goal</span>
         ) : null}
       </span>
     </button>
@@ -288,7 +285,7 @@ function Runway({
         review
       </span>
       <span className="gg-zone" style={{ right: 0 }}>
-        shipped&nbsp;🏁
+        shipped
       </span>
       {dots.map((d) =>
         d.kind === 'rider' && d.owner ? (
@@ -308,7 +305,7 @@ function Runway({
             style={{ left: `${d.x}%` }}
             className={`gg-dot gg-dot--${d.tone}${d.stale ? ' gg-dot--stale' : ''}`}
           >
-            {d.latest && <span className="gg-landed">✨</span>}
+            {d.latest && <span className="gg-landed" aria-hidden="true" />}
           </span>
         ),
       )}
