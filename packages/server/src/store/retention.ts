@@ -50,8 +50,9 @@ const LATEST_PER_SEAT: ReadonlySet<AuditAction> = new Set<AuditAction>([
   'mcp.surface_rendered',
 ]);
 
-/** How long churn stays in the live store (ADR 478 §1). */
-export const AUDIT_CHURN_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+/** How long churn stays in the live store (ADR 478 §1; 5 days since ADR 480). The daemon passes
+ *  `config.auditChurnRetentionMs`; this is the function's fallback. */
+export const AUDIT_CHURN_MAX_AGE_MS = 5 * 24 * 60 * 60 * 1000;
 
 /** Rows per prune transaction, and transactions per pass — same reasoning as the trace prune. */
 export const AUDIT_PRUNE_BATCH = 5_000;

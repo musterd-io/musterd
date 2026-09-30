@@ -63,7 +63,8 @@ where a `VACUUM` that needs a second copy of the file is itself a hazard.
   `agent_session_lease.minted`, `agent_session_lease.renewed`, `claim.occupied`,
   `claim.superseded`, `claim.duplicate_workspace`, `claim.reseated`, `occupancy.model_attested`,
   `mcp.surface_rendered`, `continuity.cursor_advanced`, `record.tool_calls`.
-- A churn row is pruned when it is **older than 30 days AND below the corpus watermark** — the
+- A churn row is pruned when it is **older than 30 days AND below the corpus watermark** _(Amended
+  2026-09-29: 5 days, not 30 — [ADR 480](480-audit-churn-five-days.md); see the amendment below)_ — the
   same two-part rule as ADR 445: on a machine `corpus:snapshot` has stamped, nothing the corpus has
   not captured is deleted; a machine that never archived gets the plain 30-day bound. The stamp
   is a second `settings` key beside `content_captured_through`, written by `snapshot.ts` from
@@ -127,6 +128,10 @@ backends run the same SQL (ADR 475).
 - `SPEC.md` is untouched — retention is a store policy, not protocol.
 - Not decided here, on purpose: any prune of `messages` (the acts are the product), of
   decision-class `audit`, or of `sync_log`.
+
+- **2026-09-29, amended by [ADR 480](480-audit-churn-five-days.md):** the first live pass archived
+  9,183 rows — 99% of churn was under 30 days old, so the window is 5 days. The rest of this ADR
+  stands.
 
 ## Observability & Evaluation
 
