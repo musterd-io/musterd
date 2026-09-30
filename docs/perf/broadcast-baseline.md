@@ -56,8 +56,8 @@ one line when the capture ends.
 | Config            | delivered fps | speed      | bitrate      | px/frame  | held for |
 | ----------------- | ------------- | ---------- | ------------ | --------- | -------- |
 | 720p25 (was)      | 25.0          | 1.00x      | ~2900 kbit/s | 0.92M     | 14 min   |
-| 1080p15           | 15.0          | 1.00x      | ~3334 kbit/s | 2.07M     | 45 min   |
-| **1080p20 (now)** | **20.0**      | **0.998x** | ~3517 kbit/s | **2.07M** | 6.5 min  |
+| **1080p15 (now)** | **15.0**      | **1.00x**  | ~3334 kbit/s | **2.07M** | 45 min   |
+| 1080p20 (was)     | 20.0          | 0.998x     | ~3517 kbit/s | 2.07M     | 6.5 min  |
 | 1080p30           | —             | —          | —            | 2.07M     | unrun (10.2 fps delivered, July spot check) |
 
 **Every 1080p arm sustains real time, so the box was never the reason for 720p.** `speed` is ffmpeg's
@@ -72,6 +72,15 @@ first if viewers ever report buffering. 1080p15 is the fallback with real headro
 menu carries a single entry — so a 720p ingest was upscaled to a 1080p surface on every viewer's
 screen. The spatial gain is certain: 2.25x the pixels and no upscale. The frame rate was settled by
 eye, not by the numbers — 15 read crisper but choppy on a walk; 20 read right (nick, 2026-09-15).
+
+**2026-09-30 — back to 1080p15** (nick; lane 01M3STFRSD). The 20 above was judged against a 20 the
+box never delivered. `fps` in this table is what ffmpeg *emitted*, and the pump re-emits the latest
+frame on a wall clock, so it reads 20 whatever the page draws. The office itself draws 9-11 frames/s
+on the hosted performance-4x: the draw floor (`DRAW_FLOOR_FPS` = 12) reported 9.x and 10.x on every
+relaunch that day, i.e. roughly half of each 20 fps second was repeats. At 15 the same real motion
+arrives in fewer padded frames, and the capture's share of the CPU drops. Raising the real draw rate
+is the scene's job, not this table's ([broadcast stream](../wiki/broadcast-stream.md)). The floor
+stays 12: it is an absolute draw rate and still fires while the room draws fewer.
 
 **What the first row is expected to show,** from #369's spot measurement: delivered ~35 fps at
 ~181 KB/frame, canvas drawing at ~60, so **draws/delivered ≈ 1.7–2.0**. If that holds, the page is
