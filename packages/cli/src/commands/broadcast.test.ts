@@ -1072,6 +1072,21 @@ describe('makeDrawRateFloor (the degradation every armed counter calls healthy)'
     ).toBe(10_000);
   });
 
+  it('treats counters that go BACKWARDS as a page reload, not a negative draw rate', () => {
+    // Observed on the hosted box 2026-09-30: "the office drew -56.2 frames/s … roughly -375% of
+    // 15fps". The /broadcast page reloaded mid-run, `stats()` restarted from zero, and the delta
+    // across the reload was judged. Worse, the one-shot report was spent on it, so a real
+    // degradation later in that run would have gone unreported.
+    const reports: number[] = [];
+    const f = makeDrawRateFloor((achieved) => reports.push(achieved), 12, 60_000);
+    f.sample({ draws: 60_000, beats: 0 }, 0);
+    f.sample({ draws: 300, beats: 0 }, 61_000); // reloaded: counters restarted
+    expect(reports, 'a reload is not a measurement').toEqual([]);
+    // …and the report is still there to spend on the real thing, measured from the new anchor.
+    f.sample({ draws: 300 + 8 * 61, beats: 0 }, 122_000);
+    expect(reports).toEqual([8]);
+  });
+
   it('stays quiet while the room is parked — a still office is not a degraded one', () => {
     const { reports, run } = setup();
     // The drift heartbeat draws ~4/s and ticks `beats`; that is the scene choosing to be calm.
