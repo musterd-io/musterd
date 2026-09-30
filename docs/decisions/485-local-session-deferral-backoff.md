@@ -63,8 +63,12 @@ wire shape changes, and a deferral still burns no attempt or rate budget.
 **Traces.** No new trace. The read is the existing `residency.wake_deferred` rows, which carry
 `reason`, `lane_id` and `edge`.
 
-**Eval.** Falsifier: after this ships, `pnpm adr250:repeat-wakes` shows no (member, lane, edge,
+**Eval.** Dataset: the `residency.wake_deferred` rows in `~/.musterd/musterd.db`. Baseline (2026-09-29): 933 DEFERRED outcomes, 80% of them repeats, with the largest cluster at 142 in 723 minutes. Falsifier: after this ships, `pnpm adr250:repeat-wakes` shows no (member, lane, edge,
 reason) DEFERRED cluster above **16** in any 12-hour window in which the session stayed open. The
 bound is 5 + 10 + 20 + 40 minutes, then 60 minutes a step. A cluster above 16 means the streak broke
 where it should not. The ADR 250 weekly-reads watch (`docs/watches/2026-09-29-adr-250-weekly-reads.md`)
 reads this series every Monday.
+
+**Experiment.** n/a. The change is deterministic and bounded by the unit tests (doubling, cap, reason
+change, wake break, quiet-gap break, `host_unreachable` unchanged). The eval above reads it in
+production.
