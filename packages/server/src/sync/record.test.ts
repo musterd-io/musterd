@@ -5,7 +5,8 @@ import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { appendReplicatedEvent } from '../store/audit.js';
@@ -64,25 +65,25 @@ async function call(
   const text = await response.text();
   return { status: response.status, json: text ? (JSON.parse(text) as any) : null };
 }
-const post = (base: string, path: string, body?: unknown, auth?: string) =>
-  call('POST', base, path, body, auth);
+const post = async (base: string, path: string, body?: unknown, auth?: string) =>
+  await call('POST', base, path, body, auth);
 
 const hubCtx = (): Ctx => ({
-  db: hub.db,
+  db: sqliteDriver(hub.db),
   hub: new Hub(),
   config: resolveConfig(),
   rosterRoots: [],
 });
-const hubTeam = () => getTeamBySlug(hub.db, 'bravo')!;
-const joinerTeam = () => getTeamBySlug(joiner.db, 'bravo')!;
-const member = (db: RunningServer['db'], team: { id: string }, name: string) =>
-  getMemberByName(db, team.id, name)!;
+const hubTeam = async () => (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
+const joinerTeam = async () => (await getTeamBySlug(sqliteDriver(joiner.db), 'bravo'))!;
+const member = async (db: RunningServer['db'], team: { id: string }, name: string) =>
+  (await getMemberByName(sqliteDriver(db), team.id, name))!;
 
 async function roundTrip() {
-  await pushTeam(joinerCtx, joinerTeam());
-  await pullTeam(hubCtx(), hubTeam());
-  await pushTeam(hubCtx(), hubTeam());
-  await pullTeam(joinerCtx, joinerTeam());
+  await pushTeam(joinerCtx, await joinerTeam());
+  await pullTeam(hubCtx(), await hubTeam());
+  await pushTeam(hubCtx(), await hubTeam());
+  await pullTeam(joinerCtx, await joinerTeam());
 }
 
 async function enrollJoiner() {
@@ -113,18 +114,18 @@ async function enrollSecondNode(label: string): Promise<{ credential: string; no
 }
 
 /** A message on the joiner FROM a seat, inserted directly — no route-time hooks run. */
-function messageOnJoiner(
+async function messageOnJoiner(
   from: string,
   id: string,
   ts: number,
   act: 'message' | 'status_update' = 'message',
   meta: Record<string, unknown> | null = null,
 ) {
-  const jt = joinerTeam();
-  insertMessage(
-    joiner.db,
+  const jt = await joinerTeam();
+  await insertMessage(
+    sqliteDriver(joiner.db),
     jt.id,
-    member(joiner.db, jt, from).id,
+    (await member(joiner.db, jt, from)).id,
     null,
     makeEnvelope({
       id,
@@ -158,11 +159,16 @@ const count = (db: RunningServer['db'], sql: string): number =>
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'musterd-record-sync-'));
   process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
-  hub = createServer({ db: openDb(':memory:'), port: 0 });
+  hub = createServer({ db: openTestDb(':memory:'), port: 0 });
   hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-  joiner = createServer({ db: openDb(':memory:'), port: 0 });
+  joiner = createServer({ db: openTestDb(':memory:'), port: 0 });
   joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
-  joinerCtx = { db: joiner.db, hub: new Hub(), config: resolveConfig(), rosterRoots: [] };
+  joinerCtx = {
+    db: sqliteDriver(joiner.db),
+    hub: new Hub(),
+    config: resolveConfig(),
+    rosterRoots: [],
+  };
   nickOnHub = (
     await post(hubBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } })
   ).json.human_credential;
@@ -171,13 +177,21 @@ beforeEach(async () => {
   ).json.human_credential;
   // The same roster on both machines (git-replicated in life, ADR 058): an agent seat and a human
   // with a Slack id, so the seed relay accepts a submitter and an agent can explore.
-  addMember(hub.db, hubTeam(), { name: 'ada', kind: 'agent' });
-  addMember(hub.db, hubTeam(), { name: 'sam', kind: 'human', slackUserId: 'U123' });
-  addMember(joiner.db, joinerTeam(), { name: 'ada', kind: 'agent' });
-  addMember(joiner.db, joinerTeam(), { name: 'sam', kind: 'human', slackUserId: 'U123' });
+  await addMember(sqliteDriver(hub.db), await hubTeam(), { name: 'ada', kind: 'agent' });
+  await addMember(sqliteDriver(hub.db), await hubTeam(), {
+    name: 'sam',
+    kind: 'human',
+    slackUserId: 'U123',
+  });
+  await addMember(sqliteDriver(joiner.db), await joinerTeam(), { name: 'ada', kind: 'agent' });
+  await addMember(sqliteDriver(joiner.db), await joinerTeam(), {
+    name: 'sam',
+    kind: 'human',
+    slackUserId: 'U123',
+  });
   // The joiner's node row is minted on its first logged act, and enrollment needs one. This also
   // makes nick resident on the joiner (the first pushed act binds), so nick acts from there below.
-  messageOnJoiner('nick', 'j-0', 1000);
+  await messageOnJoiner('nick', 'j-0', 1000);
   await enrollJoiner();
 });
 
@@ -214,11 +228,11 @@ describe('record.tool_calls (ADR 371 §1)', () => {
       nickOnJoiner,
     );
     expect(flushed.status).toBe(200);
-    expect(deriveToolCallMetrics(hub.db, hubTeam().id).calls).toBe(0);
+    expect((await deriveToolCallMetrics(sqliteDriver(hub.db), (await hubTeam()).id)).calls).toBe(0);
 
     await roundTrip();
 
-    const onHub = deriveToolCallMetrics(hub.db, hubTeam().id);
+    const onHub = await deriveToolCallMetrics(sqliteDriver(hub.db), (await hubTeam()).id);
     const teamSend = onHub.tools.find((t) => t.tool === 'team_send');
     expect(teamSend?.calls).toBe(4);
     expect(teamSend?.bounces).toBe(1);
@@ -235,17 +249,21 @@ describe('record.tool_calls (ADR 371 §1)', () => {
 
     // Re-delivering the whole staged log applies nothing: Rule 2 (the held pair) runs before the
     // additive UPSERT, which is what makes at-least-once delivery exactly-once for a counter.
-    const replay = foldBatch(hub.db, hubTeam().id, readStaged(hub.db, hubTeam().id, 0, 100));
+    const replay = await foldBatch(
+      sqliteDriver(hub.db),
+      (await hubTeam()).id,
+      await readStaged(sqliteDriver(hub.db), (await hubTeam()).id, 0, 100),
+    );
     expect(replay.applied).toBe(0);
-    expect(deriveToolCallMetrics(hub.db, hubTeam().id).calls).toBe(4);
+    expect((await deriveToolCallMetrics(sqliteDriver(hub.db), (await hubTeam()).id)).calls).toBe(4);
   });
 
   it('the raw primitive still ships nothing — the seam is the stamped writer', async () => {
-    recordToolCalls(joiner.db, joinerTeam().id, 'nick', null, [
+    await recordToolCalls(sqliteDriver(joiner.db), (await joinerTeam()).id, 'nick', null, [
       { tool: 'team_send', outcome: 'ok', calls: 7, total_duration_ms: 70, max_duration_ms: 10 },
     ]);
     await roundTrip();
-    expect(deriveToolCallMetrics(hub.db, hubTeam().id).calls).toBe(0);
+    expect((await deriveToolCallMetrics(sqliteDriver(hub.db), (await hubTeam()).id)).calls).toBe(0);
     expect(
       count(hub.db, "SELECT COUNT(*) AS n FROM audit WHERE action = 'record.tool_calls'"),
     ).toBe(0);
@@ -254,12 +272,12 @@ describe('record.tool_calls (ADR 371 §1)', () => {
 
 describe('record.seed_thread (ADR 371 §3)', () => {
   it('a clarification asked on the joiner appears in the hub’s seed thread, same entry id, by NAME', async () => {
-    const jt = joinerTeam();
-    const ht = hubTeam();
+    const jt = await joinerTeam();
+    const ht = await hubTeam();
     // ADR 399: the HUB relay-ingests and the capture crosses as a `seed` event — the joiner no
     // longer polls the relay, so this is how it comes to hold the seed at all. Before 399 this test
     // created the row independently on both daemons, which is the model 399 replaced.
-    const seedH = createSeedFromRelay(hub.db, ht.id, RELAY);
+    const seedH = await createSeedFromRelay(sqliteDriver(hub.db), ht.id, RELAY);
     await roundTrip();
     const seedJ = joiner.db
       .prepare<
@@ -269,14 +287,20 @@ describe('record.seed_thread (ADR 371 §3)', () => {
       .get(jt.id, RELAY.id)!;
     expect(seedJ.id).not.toBe(seedH.id); // daemon-private ids — the reason the event carries relay_id
 
-    claimSeed(joiner.db, jt.id, seedJ.id, member(joiner.db, jt, 'ada'));
-    askSeedClarification(joiner.db, jt.id, seedJ.id, member(joiner.db, jt, 'ada'), 'why this?');
-    const entryOnJoiner = getSeed(joiner.db, jt.id, seedJ.id)!.thread[0]!;
-    expect(getSeed(hub.db, ht.id, seedH.id)!.thread).toHaveLength(0);
+    await claimSeed(sqliteDriver(joiner.db), jt.id, seedJ.id, await member(joiner.db, jt, 'ada'));
+    await askSeedClarification(
+      sqliteDriver(joiner.db),
+      jt.id,
+      seedJ.id,
+      await member(joiner.db, jt, 'ada'),
+      'why this?',
+    );
+    const entryOnJoiner = (await getSeed(sqliteDriver(joiner.db), jt.id, seedJ.id))!.thread[0]!;
+    expect((await getSeed(sqliteDriver(hub.db), ht.id, seedH.id))!.thread).toHaveLength(0);
 
     await roundTrip();
 
-    const onHub = getSeed(hub.db, ht.id, seedH.id)!;
+    const onHub = (await getSeed(sqliteDriver(hub.db), ht.id, seedH.id))!;
     expect(onHub.thread).toHaveLength(1);
     expect(onHub.thread[0]).toMatchObject({
       id: entryOnJoiner.id,
@@ -286,11 +310,13 @@ describe('record.seed_thread (ADR 371 §3)', () => {
     });
     // Lifecycle state did NOT cross (§3): the hub's seed is still where the hub last moved it.
     expect(onHub.state).toBe('open');
-    expect(getSeed(joiner.db, jt.id, seedJ.id)!.state).toBe('needs_clarification');
+    expect((await getSeed(sqliteDriver(joiner.db), jt.id, seedJ.id))!.state).toBe(
+      'needs_clarification',
+    );
   });
 
   it('an entry for a seed this daemon holds no row for BLOCKS as seed_unborn, then applies once the seed lands', async () => {
-    const ht = hubTeam();
+    const ht = await hubTeam();
     // ADR 399 makes the ordinary joiner→hub path unable to reach this stop: a seat can only append
     // to a seed its daemon already folded, and the capture is ordered before the entry by
     // `origin_seq`. So the guard is exercised DIRECTLY — a thread entry folded against a daemon
@@ -322,16 +348,18 @@ describe('record.seed_thread (ADR 371 §3)', () => {
       },
     });
 
-    const orphan = foldBatch(hub.db, ht.id, [threadEvent(999_001, 1)]);
+    const orphan = await foldBatch(sqliteDriver(hub.db), ht.id, [threadEvent(999_001, 1)]);
     expect(orphan.stop?.kind).toBe('seed_unborn');
     expect(count(hub.db, 'SELECT COUNT(*) AS n FROM seed_thread_entries')).toBe(0);
 
     // Once the hub holds the seed — by its own relay ingest, or by folding a `seed` event from the
     // hub (ADR 399) — the very same entry applies, under the hub's own daemon-private seed id.
-    const seedH = createSeedFromRelay(hub.db, ht.id, RELAY);
-    const applied = foldBatch(hub.db, ht.id, [threadEvent(999_002, 1)]);
+    const seedH = await createSeedFromRelay(sqliteDriver(hub.db), ht.id, RELAY);
+    const applied = await foldBatch(sqliteDriver(hub.db), ht.id, [threadEvent(999_002, 1)]);
     expect(applied.stop ?? null).toBeNull();
-    expect(getSeed(hub.db, ht.id, seedH.id)!.thread).toMatchObject([{ body: 'why?', by: 'ada' }]);
+    expect((await getSeed(sqliteDriver(hub.db), ht.id, seedH.id))!.thread).toMatchObject([
+      { body: 'why?', by: 'ada' },
+    ]);
   });
 });
 
@@ -347,16 +375,16 @@ describe('record.incident_report — the pool is the hub’s (ADR 371 §2)', () 
       meta: blocked(over),
     });
   it('two seats on two machines open exactly ONE incident lane, on the hub; the pool mirrors back so reporters resolve on the joiner', async () => {
-    const ht = hubTeam();
-    const jt = joinerTeam();
+    const ht = await hubTeam();
+    const jt = await joinerTeam();
     // Report 1 routes on the hub (ada is hub-resident by loopback). Below the threshold: recorded.
-    routeEnvelope(
+    await routeEnvelope(
       hubCtx(),
       ht,
-      member(hub.db, ht, 'ada'),
+      await member(hub.db, ht, 'ada'),
       report('ada', 'r-ada', { ref: 'pr#829' }),
     );
-    expect(openIncidents(hub.db, ht.id, 'bravo')).toHaveLength(0);
+    expect(await openIncidents(sqliteDriver(hub.db), ht.id, 'bravo')).toHaveLength(0);
     expect(count(hub.db, 'SELECT COUNT(*) AS n FROM incident_reports')).toBe(1);
 
     // Report 2 posts to the JOINER, through the route — and the joiner writes NOTHING: the pool is
@@ -369,21 +397,26 @@ describe('record.incident_report — the pool is the hub’s (ADR 371 §2)', () 
     );
     expect(second.status).toBe(201);
     expect(count(joiner.db, 'SELECT COUNT(*) AS n FROM incident_reports')).toBe(0);
-    expect(openIncidents(joiner.db, jt.id, 'bravo')).toHaveLength(0);
+    expect(await openIncidents(sqliteDriver(joiner.db), jt.id, 'bravo')).toHaveLength(0);
 
     await roundTrip();
 
     // The hub folded nick's status_update and pooled it: threshold met, one lane, on the hub.
-    const onHub = openIncidents(hub.db, ht.id, 'bravo');
+    const onHub = await openIncidents(sqliteDriver(hub.db), ht.id, 'bravo');
     expect(onHub).toHaveLength(1);
     expect(onHub[0]!.title).toBe(`incident: ${GATE}`);
-    expect(incidentReporters(hub.db, ht.id, onHub[0]!.id).sort()).toEqual(['ada', 'nick']);
+    expect((await incidentReporters(sqliteDriver(hub.db), ht.id, onHub[0]!.id)).sort()).toEqual([
+      'ada',
+      'nick',
+    ]);
 
     await roundTrip(); // the lane's birth and the pool rows (with lane_id) cross back
-    const onJoiner = openIncidents(joiner.db, jt.id, 'bravo');
+    const onJoiner = await openIncidents(sqliteDriver(joiner.db), jt.id, 'bravo');
     expect(onJoiner).toHaveLength(1);
     expect(onJoiner[0]!.id).toBe(onHub[0]!.id); // one lane, not one per machine
-    expect(incidentReporters(joiner.db, jt.id, onJoiner[0]!.id).sort()).toEqual(['ada', 'nick']);
+    expect(
+      (await incidentReporters(sqliteDriver(joiner.db), jt.id, onJoiner[0]!.id)).sort(),
+    ).toEqual(['ada', 'nick']);
     expect(count(joiner.db, 'SELECT COUNT(*) AS n FROM incident_reports')).toBe(2);
     // Mirrored verbatim: the hub's ids and the hub's created_at.
     expect(
@@ -400,14 +433,18 @@ describe('record.incident_report — the pool is the hub’s (ADR 371 §2)', () 
   it('a joiner folding the same status_update does not count it — the pool exists on one machine', async () => {
     // Both reports originate on the joiner and cross to the hub; nothing pools on the joiner until
     // the hub's mirror rows come back, and the joiner never opens a lane of its own.
-    messageOnJoiner('ada', 'r-ada', 2000, 'status_update', blocked({ ref: 'pr#829' }));
-    messageOnJoiner('nick', 'r-nick', 2001, 'status_update', blocked());
+    await messageOnJoiner('ada', 'r-ada', 2000, 'status_update', blocked({ ref: 'pr#829' }));
+    await messageOnJoiner('nick', 'r-nick', 2001, 'status_update', blocked());
     await roundTrip();
-    expect(openIncidents(hub.db, hubTeam().id, 'bravo')).toHaveLength(1);
+    expect(await openIncidents(sqliteDriver(hub.db), (await hubTeam()).id, 'bravo')).toHaveLength(
+      1,
+    );
     await roundTrip();
-    const lanes = openIncidents(joiner.db, joinerTeam().id, 'bravo');
+    const lanes = await openIncidents(sqliteDriver(joiner.db), (await joinerTeam()).id, 'bravo');
     expect(lanes).toHaveLength(1);
-    expect(lanes[0]!.id).toBe(openIncidents(hub.db, hubTeam().id, 'bravo')[0]!.id);
+    expect(lanes[0]!.id).toBe(
+      (await openIncidents(sqliteDriver(hub.db), (await hubTeam()).id, 'bravo'))[0]!.id,
+    );
     expect(
       count(
         joiner.db,
@@ -451,8 +488,8 @@ describe('record.incident_report — the pool is the hub’s (ADR 371 §2)', () 
   });
 
   it('the same forgery stamped through the joiner’s own writer is refused too — the batch, not just the row', async () => {
-    const jt = joinerTeam();
-    appendReplicatedEvent(joiner.db, jt.id, {
+    const jt = await joinerTeam();
+    await appendReplicatedEvent(sqliteDriver(joiner.db), jt.id, {
       actor: 'nick',
       action: 'record.incident_report',
       target: GATE,

@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { appendAudit } from './audit.js';
 import { revokeGrant } from './grants.js';
 import { cascadeSponsoredRevocation } from './members.js';
@@ -28,35 +28,36 @@ export interface DescendantRevocation {
  * stops its wakes — but its enrollment and standing grant would linger, so revoke them here, then
  * cascade to anything it sponsored exactly as a removal would.
  */
-export function revokeExpiredMember(
-  db: Database,
+export async function revokeExpiredMember(
+  db: Driver,
   teamId: string,
   member: { id: string; name: string },
   now = Date.now(),
-): DescendantRevocation[] {
-  return db.transaction(() => {
-    const residency = revokeResidency(db, teamId, member.id);
-    if (residency?.grant_id) revokeGrant(db, teamId, residency.grant_id);
-    return revokeSponsoredDescendants(db, teamId, member, 'expired', null, now);
-  })();
+): Promise<DescendantRevocation[]> {
+  return db.tx(async (t) => {
+    const residency = await revokeResidency(t, teamId, member.id);
+    if (residency?.grant_id) await revokeGrant(t, teamId, residency.grant_id);
+    return await revokeSponsoredDescendants(t, teamId, member, 'expired', null, now);
+  });
 }
 
-export function revokeSponsoredDescendants(
-  db: Database,
+export async function revokeSponsoredDescendants(
+  db: Driver,
   teamId: string,
   root: { id: string; name: string },
   trigger: 'remove' | 'expired',
   actor: string | null,
   now = Date.now(),
-): DescendantRevocation[] {
-  return db.transaction(() =>
-    cascadeSponsoredRevocation(db, teamId, root.id).map((member) => {
-      const residency = revokeResidency(db, teamId, member.id);
-      if (residency?.grant_id) revokeGrant(db, teamId, residency.grant_id);
-      const oauth_revoked = revokeAllForMember(db, teamId, member.id, now);
-      burnUnexchangedCodes(db, teamId, member.id, now);
-      clearMemberPresence(db, member.id);
-      appendAudit(db, teamId, {
+): Promise<DescendantRevocation[]> {
+  return db.tx(async (t) => {
+    const out: DescendantRevocation[] = [];
+    for (const member of await cascadeSponsoredRevocation(t, teamId, root.id)) {
+      const residency = await revokeResidency(t, teamId, member.id);
+      if (residency?.grant_id) await revokeGrant(t, teamId, residency.grant_id);
+      const oauth_revoked = await revokeAllForMember(t, teamId, member.id, now);
+      await burnUnexchangedCodes(t, teamId, member.id, now);
+      await clearMemberPresence(t, member.id);
+      await appendAudit(t, teamId, {
         actor,
         action: 'member.revoked_cascade',
         target: member.name,
@@ -68,7 +69,8 @@ export function revokeSponsoredDescendants(
           ...(residency ? { residency_host: residency.host } : {}),
         },
       });
-      return { member, oauth_revoked, residency_host: residency?.host ?? null };
-    }),
-  )();
+      out.push({ member, oauth_revoked, residency_host: residency?.host ?? null });
+    }
+    return out;
+  });
 }

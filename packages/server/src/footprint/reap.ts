@@ -6,7 +6,7 @@
 // minute-old sample must never become a kill of whatever now wears that pid.
 // SIGTERM first, a grace, then SIGKILL for survivors; one audit row records
 // exactly what the verification let through.
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { appendAudit } from '../store/audit.js';
 import { buildStacks, isSidecar, type ProcSample } from './classify.js';
 import { scanProcesses as scanProcsDefault } from './scan.js';
@@ -25,7 +25,7 @@ export interface ReapResult {
 }
 
 export async function reapOrphans(
-  db: Database,
+  db: Driver,
   teamId: string,
   actor: string | null,
   pids: number[],
@@ -82,7 +82,7 @@ export async function reapOrphans(
         /* exited within the grace — normal */
       }
     }
-    appendAudit(db, teamId, {
+    await appendAudit(db, teamId, {
       actor,
       action: 'footprint.reaped',
       target: null,

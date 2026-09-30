@@ -2,6 +2,7 @@ import { hostname } from 'node:os';
 import { sparsifyPolicy } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
 import { monotonicFactory as monotonicUlid } from 'ulid';
+import type { Driver } from './driver.js';
 import { SCHEMA_V1_SQL } from './schema.js';
 
 export interface Migration {
@@ -1995,6 +1996,20 @@ function currentVersion(db: Database): number {
 /** The applied schema version (0 if unmigrated). Surfaced in `/health` + serve logs for diagnostics. */
 export function schemaVersion(db: Database): number {
   return tableExists(db, 'schema_meta') ? currentVersion(db) : 0;
+}
+
+/** {@link schemaVersion} through the Driver — what `/health` and the serve log read (plan 1A). */
+export async function schemaVersionOf(db: Driver): Promise<number> {
+  const table = await db.get<{ name: string }>(
+    db.dialect === 'sqlite'
+      ? "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'"
+      : "SELECT table_name AS name FROM information_schema.tables WHERE table_name = 'schema_meta'",
+  );
+  if (!table) return 0;
+  const row = await db.get<{ value: string }>(
+    "SELECT value FROM schema_meta WHERE key = 'schema_version'",
+  );
+  return row ? Number(row.value) : 0;
 }
 
 function tableExists(db: Database, name: string): boolean {

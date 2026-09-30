@@ -18,7 +18,13 @@ import { ringDoorbell } from '../notify/doorbell.js';
 import { appendAudit } from '../store/audit.js';
 import { incidentReporters, recordBlockedReport } from '../store/incidents.js';
 import { recordLaneClose } from '../store/laneClose.js';
-import { deriveHandoffLane, getLane, type HandoffLaneBasis, updateLane } from '../store/lanes.js';
+import {
+  deriveHandoffLane,
+  getLane,
+  type HandoffLaneBasis,
+  updateLane,
+  LaneConflictError,
+} from '../store/lanes.js';
 import { getMemberByName, getMemberById } from '../store/members.js';
 import { getMessageTs, insertMessage, rowToEnvelope } from '../store/messages.js';
 import { currentAttestation } from '../store/presence.js';
@@ -60,7 +66,7 @@ export interface RouteResult {
  * The single validate→persist→deliver path shared by WS `send` and HTTP POST messages.
  * The envelope must already be schema-valid; this enforces identity + resolves/persists/delivers.
  */
-export function routeEnvelope(
+export async function routeEnvelope(
   ctx: Ctx,
   team: TeamRow,
   sender: MemberRow,
@@ -74,20 +80,21 @@ export function routeEnvelope(
    *  strip fails closed** — a new client-facing route that forgets this cannot mint interrupts, and a
    *  daemon route that forgets it merely loses the interrupt (visible in tests, not exploitable). */
   daemonComposed = false,
-): RouteResult {
-  return withEnvelopeSpan(env, () =>
-    routeEnvelopeInner(ctx, team, sender, env, senderPresenceId, daemonComposed),
+): Promise<RouteResult> {
+  return withEnvelopeSpan(
+    env,
+    async () => await routeEnvelopeInner(ctx, team, sender, env, senderPresenceId, daemonComposed),
   );
 }
 
-function routeEnvelopeInner(
+async function routeEnvelopeInner(
   ctx: Ctx,
   team: TeamRow,
   sender: MemberRow,
   env: Envelope,
   senderPresenceId?: string,
   daemonComposed = false,
-): RouteResult {
+): Promise<RouteResult> {
   // ADR 231: a `handoff` that names no lane. Only `lane_handoff` ever wrote
   // `meta.lane_handoff.lane`, so a plain `team_send {act:'handoff'}` hands over work without saying
   // WHICH work — and the orientation `why`, which reads a handoff as a live instruction, then has
@@ -103,7 +110,7 @@ function routeEnvelopeInner(
     // ADR 243: the recipient is evidence. A handoff act directed at a seat, moments after a lane
     // was transferred to that seat, has a referent that "a lane the sender holds" cannot see — and
     // the held set is exactly where the intended lane is NOT, because lane_handoff already moved it.
-    const derived = deriveHandoffLane(
+    const derived = await deriveHandoffLane(
       ctx.db,
       team.id,
       team.slug,
@@ -164,12 +171,10 @@ function routeEnvelopeInner(
   if (env.act === 'wait') {
     const deferRef = (env.meta as { defer_ref?: unknown } | null | undefined)?.defer_ref;
     if (typeof deferRef === 'string' && deferRef.length > 0) {
-      const target = ctx.db
-        .prepare<
-          [string, string],
-          { to_kind: string; to_member: string | null }
-        >('SELECT to_kind, to_member FROM messages WHERE team_id = ? AND id = ?')
-        .get(team.id, deferRef);
+      const target = await ctx.db.get<{ to_kind: string; to_member: string | null }>(
+        'SELECT to_kind, to_member FROM messages WHERE team_id = ? AND id = ?',
+        [team.id, deferRef],
+      );
       const deliveredToSender =
         target &&
         (target.to_member === sender.id ||
@@ -191,7 +196,7 @@ function routeEnvelopeInner(
 
   // account_status: a disabled/banned/archived seat cannot send (provisioned/active send normally).
   if (status === 'disabled' || status === 'banned' || status === 'archived') {
-    appendAudit(ctx.db, team.id, {
+    await appendAudit(ctx.db, team.id, {
       actor: sender.name,
       action: 'send.denied',
       target,
@@ -203,7 +208,7 @@ function routeEnvelopeInner(
 
   // can_message: a muted seat (`none`) cannot address the team.
   if (caps.can_message === 'none') {
-    appendAudit(ctx.db, team.id, {
+    await appendAudit(ctx.db, team.id, {
       actor: sender.name,
       action: 'send.denied',
       target,
@@ -222,7 +227,7 @@ function routeEnvelopeInner(
     const rawReason = env.meta['urgent_reason'];
     const detail = typeof rawReason === 'string' ? { reason: rawReason } : {};
     if (caps.can_flag_urgent) {
-      appendAudit(ctx.db, team.id, {
+      await appendAudit(ctx.db, team.id, {
         actor: sender.name,
         action: 'urgent.flagged',
         target,
@@ -232,7 +237,7 @@ function routeEnvelopeInner(
     } else {
       const { urgent: _urgent, ...restMeta } = env.meta;
       outgoingEnv = { ...env, meta: { ...restMeta, wasnt_urgent: true } };
-      appendAudit(ctx.db, team.id, {
+      await appendAudit(ctx.db, team.id, {
         actor: sender.name,
         action: 'urgent.denied',
         target,
@@ -262,7 +267,7 @@ function routeEnvelopeInner(
   // Read as a pair from ONE row: `model_source` says which tier produced `model` — `observed` (a
   // harness probe saw it) vs a declaration. Without it a stamp cannot say whether it is a
   // measurement or an assumption, and an aggregate over both reports a number it cannot support.
-  const { model: attestedModel, source: attestedSource } = currentAttestation(
+  const { model: attestedModel, source: attestedSource } = await currentAttestation(
     ctx.db,
     sender.id,
     senderPresenceId,
@@ -296,7 +301,7 @@ function routeEnvelopeInner(
   const eligible = eligibleOf(outgoingEnv.meta);
   if (eligible) {
     for (const name of eligible) {
-      const seat = getMemberByName(ctx.db, team.id, name);
+      const seat = await getMemberByName(ctx.db, team.id, name);
       if (!seat || seat.left_at !== null) {
         throw new MusterdError('not_found', `no member "${name}" in ${team.slug}`);
       }
@@ -321,7 +326,7 @@ function routeEnvelopeInner(
   let toMemberId: string | null = null;
   let recipients: string[];
   if (env.to.kind === 'member') {
-    const target = getMemberByName(ctx.db, team.id, env.to.name);
+    const target = await getMemberByName(ctx.db, team.id, env.to.name);
     if (!target || target.left_at !== null) {
       throw new MusterdError('not_found', `no member "${env.to.name}" in ${team.slug}`);
     }
@@ -330,17 +335,17 @@ function routeEnvelopeInner(
   } else {
     // team or broadcast: every participant currently in the team except the sender. Observers (ADR
     // 063) aren't participants — they receive it via the firehose, not as addressed recipients.
-    recipients = ctx.db
-      .prepare<[string, string], { id: string }>(
+    recipients = (
+      await ctx.db.all<{ id: string }>(
         'SELECT id FROM members WHERE team_id = ? AND left_at IS NULL AND observer = 0 AND id != ?',
+        [team.id, sender.id],
       )
-      .all(team.id, sender.id)
-      .map((r) => r.id);
+    ).map((r) => r.id);
   }
 
   // Persist (append-only log) — the urgent-downgraded envelope when applicable, so the stored meta and
   // every delivery (direct + firehose, all derived from the row) carry the corrected flags.
-  const message = insertMessage(ctx.db, team.id, sender.id, toMemberId, outgoingEnv);
+  const message = await insertMessage(ctx.db, team.id, sender.id, toMemberId, outgoingEnv);
 
   // Coordination loop latency (ADR 082 slice 3): accept/decline close the directed act they answer
   // (meta.in_reply_to); resolve closes its thread root. Emitted first-party instead of reconstructed
@@ -354,7 +359,7 @@ function routeEnvelopeInner(
   };
   if (env.act === 'accept' || env.act === 'decline') {
     const ref = env.meta?.['in_reply_to'];
-    const refTs = typeof ref === 'string' ? getMessageTs(ctx.db, team.id, ref) : null;
+    const refTs = typeof ref === 'string' ? await getMessageTs(ctx.db, team.id, ref) : null;
     if (refTs !== null && env.ts >= refTs) recordLoopClosure(env.act, env.ts - refTs, loopDims);
     // ADR 188 stage two: a peer's accept on a risky lane's review ask fires the HUMAN ask, with
     // the peer's findings in the body — the human reviews an already-screened change. Best-effort
@@ -362,7 +367,7 @@ function routeEnvelopeInner(
     let escalatedToHuman = false;
     if (env.act === 'accept' && typeof ref === 'string') {
       try {
-        escalatedToHuman = fireGatedHumanAsk(ctx, team, sender, ref, env.body);
+        escalatedToHuman = await fireGatedHumanAsk(ctx, team, sender, ref, env.body);
       } catch (err) {
         log.warn({ msg: 'gated_human_ask_failed', err: String(err) });
       }
@@ -377,7 +382,7 @@ function routeEnvelopeInner(
     if ((env.act === 'accept' || env.act === 'decline') && typeof ref === 'string') {
       try {
         if (!escalatedToHuman)
-          laneVerdict = applyAcceptanceVerdict(ctx, team, sender, ref, env.act, env.body);
+          laneVerdict = await applyAcceptanceVerdict(ctx, team, sender, ref, env.act, env.body);
       } catch (err) {
         log.warn({ msg: 'acceptance_verdict_failed', err: String(err) });
       }
@@ -390,19 +395,19 @@ function routeEnvelopeInner(
     const ref = env.meta?.['in_reply_to'];
     if (typeof ref === 'string') {
       try {
-        laneAck = applyAcceptanceAck(ctx, team, sender, ref);
+        laneAck = await applyAcceptanceAck(ctx, team, sender, ref);
       } catch (err) {
         log.warn({ msg: 'acceptance_ack_failed', err: String(err) });
       }
     }
   } else if (env.act === 'resolve' && env.thread) {
-    const rootTs = getMessageTs(ctx.db, team.id, env.thread);
+    const rootTs = await getMessageTs(ctx.db, team.id, env.thread);
     if (rootTs !== null && env.ts >= rootTs)
       recordLoopClosure('resolve', env.ts - rootTs, loopDims);
   }
   // The to-human ask stream lifecycle (ADR 147). Append-only audit rows are the whole stream's trace;
   // the daemon runs no timer — the agent owns the clock (ADR 147 §2). Shapes only, never bodies (ADR 051).
-  recordAskLifecycle(ctx, team, sender.name, outgoingEnv);
+  await recordAskLifecycle(ctx, team, sender.name, outgoingEnv);
 
   // Incident convergence inc 1 (spec 2026-08-14): a `blocked_by` report on a status_update pools,
   // opens, or appends to an incident lane. Best-effort like every daemon-side hook here — a failure
@@ -416,10 +421,10 @@ function routeEnvelopeInner(
   if (
     !daemonComposed &&
     env.act === 'status_update' &&
-    !joinerEnrollment(ctx.db, team.id, team.slug)
+    !(await joinerEnrollment(ctx.db, team.id, team.slug))
   ) {
     try {
-      handleBlockedReport(ctx, team, sender, outgoingEnv);
+      await handleBlockedReport(ctx, team, sender, outgoingEnv);
     } catch (err) {
       log.warn({ msg: 'incident_hook_failed', err: String(err) });
     }
@@ -432,7 +437,7 @@ function routeEnvelopeInner(
   // recipient (live vs inboxed) is attempt history, recorded as span events (ADR 090), never rows.
   let delivered = 0;
   for (const recipientId of recipients) {
-    const recipient = getMemberById(ctx.db, recipientId);
+    const recipient = await getMemberById(ctx.db, recipientId);
     const toName = env.to.kind === 'member' && recipient ? recipient.name : null;
     const outgoing = rowToEnvelope(message, team.slug, sender.name, toName);
     const pushed = ctx.hub.deliver(recipientId, { type: 'deliver', envelope: outgoing });
@@ -472,7 +477,7 @@ function routeEnvelopeInner(
   }
   // The doorbell (ADR 443): ring any human this act rings, through musterd's own surfaces. Detached
   // and never throwing — the send has already persisted and delivered.
-  ringDoorbell(ctx, team, firehoseEnv);
+  await ringDoorbell(ctx, team, firehoseEnv);
 
   log.info({
     msg: 'route',
@@ -490,7 +495,7 @@ function routeEnvelopeInner(
   // is being ignored. The no-lane case is deliberately unlogged — it is the legal path, and logging
   // it would drown the two that matter.
   if (handoffLane) {
-    appendAudit(ctx.db, team.id, {
+    await appendAudit(ctx.db, team.id, {
       actor: sender.name,
       action: 'lane' in handoffLane ? 'handoff.lane_derived' : 'handoff.lane_ambiguous',
       target: message.id,
@@ -534,37 +539,54 @@ function routeEnvelopeInner(
  * of `messages`, which would re-fire on every tick). Only the incident hook lives here: every other
  * route-time hook is either residence-local by design or already replicated as its own kind.
  */
-export function handleFoldedMessages(ctx: Ctx, teamSlug: string, messageIds: string[]): void {
-  const team = getTeamBySlug(ctx.db, teamSlug);
+export async function handleFoldedMessages(
+  ctx: Ctx,
+  teamSlug: string,
+  messageIds: string[],
+): Promise<void> {
+  const team = await getTeamBySlug(ctx.db, teamSlug);
   if (!team) return;
   for (const id of messageIds) {
-    const row = ctx.db
-      .prepare<[string, string], MessageRow>('SELECT * FROM messages WHERE team_id = ? AND id = ?')
-      .get(team.id, id);
+    const row = await ctx.db.get<MessageRow>(
+      'SELECT * FROM messages WHERE team_id = ? AND id = ?',
+      [team.id, id],
+    );
     if (!row || row.act !== 'status_update' || !row.meta) continue;
-    const sender = getMemberById(ctx.db, row.from_member);
+    const sender = await getMemberById(ctx.db, row.from_member);
     if (!sender) continue;
-    const to = row.to_member ? getMemberById(ctx.db, row.to_member) : null;
+    const to = row.to_member ? await getMemberById(ctx.db, row.to_member) : null;
     const env = rowToEnvelope(row, team.slug, sender.name, to?.name ?? null);
     if (!blockedByOf(env.meta)) continue;
     try {
-      handleBlockedReport(ctx, team, sender, env);
+      await handleBlockedReport(ctx, team, sender, env);
     } catch (err) {
       log.warn({ msg: 'incident_hook_failed', message: id, err: String(err) });
     }
   }
 }
 
-function handleBlockedReport(ctx: Ctx, team: TeamRow, sender: MemberRow, env: Envelope): void {
+async function handleBlockedReport(
+  ctx: Ctx,
+  team: TeamRow,
+  sender: MemberRow,
+  env: Envelope,
+): Promise<void> {
   const report = blockedByOf(env.meta);
   if (!report) return;
-  const outcome = recordBlockedReport(ctx.db, team.id, team.slug, sender.name, report, env.id);
+  const outcome = await recordBlockedReport(
+    ctx.db,
+    team.id,
+    team.slug,
+    sender.name,
+    report,
+    env.id,
+  );
   // `disabled` (team opted out) and `recorded` (still pooling) both mean there is no lane to point
   // anyone at — and in the disabled case nothing was written down at all.
   if (outcome.kind === 'recorded' || outcome.kind === 'disabled') return;
 
   const lane = outcome.lane;
-  const fromRow = laneVoice(ctx, team, lane);
+  const fromRow = await laneVoice(ctx, team, lane);
   if (!fromRow) return; // nobody to speak as — the report itself is still durably recorded
 
   if (outcome.kind === 'appended') {
@@ -582,8 +604,8 @@ function handleBlockedReport(ctx: Ctx, team: TeamRow, sender: MemberRow, env: En
       thread: env.id,
       meta: { incident: { lane: lane.id, gate: report.gate } },
     });
-    routeEnvelope(ctx, team, fromRow, reply, undefined, true);
-    appendAudit(ctx.db, team.id, {
+    await routeEnvelope(ctx, team, fromRow, reply, undefined, true);
+    await appendAudit(ctx.db, team.id, {
       actor: sender.name,
       action: 'incident.duplicate_replied',
       target: lane.id,
@@ -596,16 +618,17 @@ function handleBlockedReport(ctx: Ctx, team: TeamRow, sender: MemberRow, env: En
   // opened: announce to every distinct reporter (the threshold pair, typically). A self-send never
   // reaches an inbox, so when the recipient IS the lane's voice (the tripping reporter created it),
   // speak as another reporter instead — the threshold guarantees at least two exist.
-  const reporters = incidentReporters(ctx.db, team.id, lane.id);
+  const reporters = await incidentReporters(ctx.db, team.id, lane.id);
   for (const reporter of reporters) {
     const voice =
       reporter === fromRow.name
-        ? (reporters
-            .filter((r) => r !== reporter)
-            .map((r) => getMemberByName(ctx.db, team.id, r))
-            .find((m) => m != null) ?? null)
+        ? await firstMemberNamed(
+            ctx,
+            team.id,
+            reporters.filter((r) => r !== reporter),
+          )
         : fromRow;
-    const to = getMemberByName(ctx.db, team.id, reporter);
+    const to = await getMemberByName(ctx.db, team.id, reporter);
     if (!to || !voice) continue;
     const announce = makeEnvelope({
       id: ulid(),
@@ -618,7 +641,7 @@ function handleBlockedReport(ctx: Ctx, team: TeamRow, sender: MemberRow, env: En
         `If your red matches, park behind it; any seat may claim.`,
       meta: { incident: { lane: lane.id, gate: report.gate } },
     });
-    routeEnvelope(ctx, team, voice, announce, undefined, true);
+    await routeEnvelope(ctx, team, voice, announce, undefined, true);
   }
 }
 
@@ -636,21 +659,22 @@ function handleBlockedReport(ctx: Ctx, team: TeamRow, sender: MemberRow, env: En
  * delivery-hint nudge for free. `daemonComposed` is set, which is also the recursion belt — these
  * are `message` acts and would otherwise re-enter the blocked-report hook.
  */
-export function announceIncidentRouted(
+export async function announceIncidentRouted(
   ctx: Ctx,
   team: TeamRow,
   lane: Lane,
   owner: string,
   waitedMs: number,
-): void {
-  const reporters = incidentReporters(ctx.db, team.id, lane.id);
-  const voiceFor = (recipient: string): MemberRow | null =>
-    reporters
-      .filter((r) => r !== recipient)
-      .map((r) => getMemberByName(ctx.db, team.id, r))
-      .find((m) => m != null) ??
+): Promise<void> {
+  const reporters = await incidentReporters(ctx.db, team.id, lane.id);
+  const voiceFor = async (recipient: string): Promise<MemberRow | null> =>
+    (await firstMemberNamed(
+      ctx,
+      team.id,
+      reporters.filter((r) => r !== recipient),
+    )) ??
     (lane.created_by !== recipient
-      ? (getMemberByName(ctx.db, team.id, lane.created_by) ?? null)
+      ? ((await getMemberByName(ctx.db, team.id, lane.created_by)) ?? null)
       : null);
 
   const minutes = Math.round(waitedMs / 60_000);
@@ -672,10 +696,10 @@ export function announceIncidentRouted(
   ];
 
   for (const [recipient, body] of recipients) {
-    const to = getMemberByName(ctx.db, team.id, recipient);
-    const voice = voiceFor(recipient);
+    const to = await getMemberByName(ctx.db, team.id, recipient);
+    const voice = await voiceFor(recipient);
     if (!to || !voice) continue;
-    routeEnvelope(
+    await routeEnvelope(
       ctx,
       team,
       voice,
@@ -707,23 +731,23 @@ export function announceIncidentRouted(
  * protocol layer both, and routing from it would make that a cycle). Non-incident lanes return
  * immediately, so both call sites can call it unconditionally.
  */
-export function announceIncidentResolved(
+export async function announceIncidentResolved(
   ctx: Ctx,
   team: TeamRow,
   lane: Lane,
   closedBy: string,
-): void {
+): Promise<void> {
   if (lane.kind !== 'incident') return;
-  const reporters = incidentReporters(ctx.db, team.id, lane.id);
-  const voice = getMemberByName(ctx.db, team.id, closedBy);
+  const reporters = await incidentReporters(ctx.db, team.id, lane.id);
+  const voice = await getMemberByName(ctx.db, team.id, closedBy);
   if (!voice) return;
 
   for (const reporter of reporters) {
     // The closer already knows; a self-send reaches no inbox anyway.
     if (reporter === closedBy) continue;
-    const to = getMemberByName(ctx.db, team.id, reporter);
+    const to = await getMemberByName(ctx.db, team.id, reporter);
     if (!to) continue;
-    routeEnvelope(
+    await routeEnvelope(
       ctx,
       team,
       voice,
@@ -745,10 +769,10 @@ export function announceIncidentResolved(
 }
 
 /** The seat incident traffic speaks as: the lane's owner, else its creator. */
-function laneVoice(ctx: Ctx, team: TeamRow, lane: Lane): MemberRow | null {
+async function laneVoice(ctx: Ctx, team: TeamRow, lane: Lane): Promise<MemberRow | null> {
   return (
-    (lane.owner_seat ? getMemberByName(ctx.db, team.id, lane.owner_seat) : null) ??
-    getMemberByName(ctx.db, team.id, lane.created_by) ??
+    (lane.owner_seat ? await getMemberByName(ctx.db, team.id, lane.owner_seat) : null) ??
+    (await getMemberByName(ctx.db, team.id, lane.created_by)) ??
     null
   );
 }
@@ -768,19 +792,17 @@ function laneVoice(ctx: Ctx, team: TeamRow, lane: Lane): MemberRow | null {
  * The caller needs that answer: since ADR 202 an accept also closes the lane it accepts, and a risky
  * lane whose peer review just escalated must stay open for the human whose verdict was demanded.
  */
-function fireGatedHumanAsk(
+async function fireGatedHumanAsk(
   ctx: Ctx,
   team: TeamRow,
   peer: MemberRow,
   repliedToId: string,
   peerFindings: string,
-): boolean {
-  const replied = ctx.db
-    .prepare<
-      [string, string],
-      { meta: string | null }
-    >('SELECT meta FROM messages WHERE team_id = ? AND id = ?')
-    .get(team.id, repliedToId);
+): Promise<boolean> {
+  const replied = await ctx.db.get<{ meta: string | null }>(
+    'SELECT meta FROM messages WHERE team_id = ? AND id = ?',
+    [team.id, repliedToId],
+  );
   if (!replied?.meta) return false;
   let laneReview: { lane?: string; title?: string; grade?: string } | undefined;
   try {
@@ -789,13 +811,13 @@ function fireGatedHumanAsk(
     return false;
   }
   if (!laneReview?.lane) return false;
-  const lane = getLane(ctx.db, team.id, laneReview.lane, team.slug);
+  const lane = await getLane(ctx.db, team.id, laneReview.lane, team.slug);
   if (!lane || lane.risk.length === 0 || !isAwaitingAcceptance(lane.state)) return false;
-  const owner = lane.owner_seat ? getMemberByName(ctx.db, team.id, lane.owner_seat) : null;
+  const owner = lane.owner_seat ? await getMemberByName(ctx.db, team.id, lane.owner_seat) : null;
   if (!owner) return false;
 
-  const human = pickHumanReviewer(ctx.db, team.id, owner.name, ctx.config.presenceTimeoutMs);
-  appendAudit(ctx.db, team.id, {
+  const human = await pickHumanReviewer(ctx.db, team.id, owner.name, ctx.config.presenceTimeoutMs);
+  await appendAudit(ctx.db, team.id, {
     actor: peer.name,
     action: 'lane.review_peer_confirmed',
     target: lane.id,
@@ -842,7 +864,7 @@ function fireGatedHumanAsk(
     },
   });
   // daemonComposed: the daemon authored this ask, so its `lane_review` is authentic (ADR 225).
-  routeEnvelope(ctx, team, owner, ask, undefined, true);
+  await routeEnvelope(ctx, team, owner, ask, undefined, true);
   return true;
 }
 
@@ -864,18 +886,16 @@ function fireGatedHumanAsk(
  * not touch lane state. An acknowledge that quietly changed something would be the defect it
  * replaces wearing a friendlier word.
  */
-function applyAcceptanceAck(
+async function applyAcceptanceAck(
   ctx: Ctx,
   team: TeamRow,
   acceptor: MemberRow,
   repliedToId: string,
-): RouteResult['lane_ack'] {
-  const replied = ctx.db
-    .prepare<
-      [string, string],
-      { meta: string | null }
-    >('SELECT meta FROM messages WHERE team_id = ? AND id = ?')
-    .get(team.id, repliedToId);
+): Promise<RouteResult['lane_ack']> {
+  const replied = await ctx.db.get<{ meta: string | null }>(
+    'SELECT meta FROM messages WHERE team_id = ? AND id = ?',
+    [team.id, repliedToId],
+  );
   if (!replied?.meta) return;
   let laneId: string | undefined;
   try {
@@ -884,10 +904,10 @@ function applyAcceptanceAck(
     return;
   }
   if (!laneId) return;
-  const lane = getLane(ctx.db, team.id, laneId, team.slug);
+  const lane = await getLane(ctx.db, team.id, laneId, team.slug);
   if (!lane || !isAwaitingAcceptance(lane.state)) return;
-  if (supersededAcceptanceAsks(ctx.db, team.id, laneId).has(repliedToId)) return;
-  appendAudit(ctx.db, team.id, {
+  if ((await supersededAcceptanceAsks(ctx.db, team.id, laneId)).has(repliedToId)) return;
+  await appendAudit(ctx.db, team.id, {
     actor: acceptor.name,
     action: 'lane.review_acknowledged',
     target: lane.id,
@@ -915,23 +935,21 @@ function applyAcceptanceAck(
  *   honesty is structural, not a check I have to remember to write here.
  *
  * Returns the move it made — lane and new state — or `undefined` when it made none, so the ack can
- * say so (lane 01M2GQFJXG): an accept that closes a lane must not look, to its sender, like an
+ * say so (lane 01M2GQFJXG): Promise<an accept that closes a lane must not look, to its sender, like an
  * accept that merely answered a message.
  */
-function applyAcceptanceVerdict(
+async function applyAcceptanceVerdict(
   ctx: Ctx,
   team: TeamRow,
   decider: MemberRow,
   repliedToId: string,
   act: 'accept' | 'decline',
   body: string,
-): RouteResult['lane_verdict'] {
-  const replied = ctx.db
-    .prepare<
-      [string, string],
-      { meta: string | null }
-    >('SELECT meta FROM messages WHERE team_id = ? AND id = ?')
-    .get(team.id, repliedToId);
+): Promise<RouteResult['lane_verdict']> {
+  const replied = await ctx.db.get<{ meta: string | null }>(
+    'SELECT meta FROM messages WHERE team_id = ? AND id = ?',
+    [team.id, repliedToId],
+  );
   if (!replied?.meta) return;
   let laneId: string | undefined;
   try {
@@ -940,13 +958,13 @@ function applyAcceptanceVerdict(
     return;
   }
   if (!laneId) return;
-  const before = getLane(ctx.db, team.id, laneId, team.slug);
+  const before = await getLane(ctx.db, team.id, laneId, team.slug);
   if (!before || !isAwaitingAcceptance(before.state)) return;
   // A re-route (lane 01M1QYHJFY) told this seat the acceptance moved to someone else and closed
   // its ask. Its verdict still lands as a message — it is not refused as an act — but it binds to
   // nothing: the lane's acceptance is the NEW seat's to give, and honouring both would let two
   // seats close one lane.
-  if (supersededAcceptanceAsks(ctx.db, team.id, laneId).has(repliedToId)) {
+  if ((await supersededAcceptanceAsks(ctx.db, team.id, laneId)).has(repliedToId)) {
     log.info({
       msg: 'acceptance_verdict_on_superseded_ask',
       lane: laneId,
@@ -956,30 +974,42 @@ function applyAcceptanceVerdict(
     return;
   }
 
-  const lane = updateLane(
-    ctx.db,
-    team.id,
-    laneId,
-    team.slug,
-    { state: act === 'accept' ? 'done' : 'active' },
-    Date.now(),
-    undefined,
-    { actor: decider.name },
-  );
+  // Guarded write: two verdicts racing on one lane (two acceptors, accept vs decline, or a board
+  // PATCH) both pass the state check above; only the first may move the lane. The loser reads the
+  // conflict as "already decided" — the same outcome the synchronous store gave it by ordering.
+  let lane: Lane | null;
+  try {
+    lane = await updateLane(
+      ctx.db,
+      team.id,
+      laneId,
+      team.slug,
+      { state: act === 'accept' ? 'done' : 'active' },
+      Date.now(),
+      { state: before.state, owner_seat: before.owner_seat },
+      { actor: decider.name },
+    );
+  } catch (err) {
+    if (err instanceof LaneConflictError) {
+      log.info({ msg: 'acceptance_verdict_already_decided', lane: laneId, decider: decider.name });
+      return;
+    }
+    throw err;
+  }
   if (!lane) return;
 
   if (act === 'accept') {
-    recordLaneClose(ctx.db, team.id, decider, before, lane);
+    await recordLaneClose(ctx.db, team.id, decider, before, lane);
     // ADR 271: the same fan-out the board's PATCH does. An incident closed by an acceptor's `accept`
     // owes its reporters exactly the same answer as one closed by a click — neither surface should
     // have to know the other exists. No-op for every ordinary lane.
-    announceIncidentResolved(ctx, team, lane, decider.name);
+    await announceIncidentResolved(ctx, team, lane, decider.name);
   } else {
     // ADR 192: an acceptor moving an awaiting_acceptance lane back to a live state is the rejection
     // — the counterpart said "not what we wanted". Audit action stays `lane.review_sent_back`
     // (frozen), and the reason rides along so a sent-back lane can be told from a manual reopen.
     const note = body.trim();
-    appendAudit(ctx.db, team.id, {
+    await appendAudit(ctx.db, team.id, {
       actor: decider.name,
       action: 'lane.review_sent_back',
       target: lane.id,
@@ -1008,7 +1038,7 @@ function applyAcceptanceVerdict(
           body: `[lane] "${lane.title}" → ${lane.state}`,
           meta: { lane_state: { lane: lane.id, title: lane.title, state: lane.state } },
         };
-  routeEnvelope(
+  await routeEnvelope(
     ctx,
     team,
     decider,
@@ -1031,11 +1061,16 @@ function applyAcceptanceVerdict(
  * clock, ADR 147 §2). The envelope is already schema-valid (`actMetaRules`), so the discriminating meta
  * is present when its act/field is; reads stay defensive anyway. Shapes only, never bodies (ADR 051).
  */
-function recordAskLifecycle(ctx: Ctx, team: TeamRow, actor: string, env: Envelope): void {
+async function recordAskLifecycle(
+  ctx: Ctx,
+  team: TeamRow,
+  actor: string,
+  env: Envelope,
+): Promise<void> {
   const meta = env.meta ?? {};
   // A new ask was raised — the species/tier that set its contract, and (if directed) whom it named.
   if (env.act === 'ask') {
-    appendAudit(ctx.db, team.id, {
+    await appendAudit(ctx.db, team.id, {
       actor,
       action: 'ask.raised',
       target: env.to.kind === 'member' ? env.to.name : null,
@@ -1048,7 +1083,7 @@ function recordAskLifecycle(ctx: Ctx, team: TeamRow, actor: string, env: Envelop
   const outcome = meta['ask_outcome'];
   const askRef = typeof meta['ask_ref'] === 'string' ? meta['ask_ref'] : null;
   if (outcome === 'held') {
-    appendAudit(ctx.db, team.id, {
+    await appendAudit(ctx.db, team.id, {
       actor,
       action: 'ask.held',
       target: askRef,
@@ -1061,7 +1096,7 @@ function recordAskLifecycle(ctx: Ctx, team: TeamRow, actor: string, env: Envelop
   // its lane (WIP recorded on the branch) and stopped, never proceeding. One append-only row makes the
   // dead-end queryable: "this seat legitimately could not proceed, and no unblocker existed."
   if (outcome === 'stranded') {
-    appendAudit(ctx.db, team.id, {
+    await appendAudit(ctx.db, team.id, {
       actor,
       action: 'ask.stranded',
       target: askRef,
@@ -1071,7 +1106,7 @@ function recordAskLifecycle(ctx: Ctx, team: TeamRow, actor: string, env: Envelop
     return;
   }
   if (outcome === 'risk_accepted') {
-    appendAudit(ctx.db, team.id, {
+    await appendAudit(ctx.db, team.id, {
       actor,
       action: 'ask.risk_accepted',
       target: askRef,
@@ -1089,7 +1124,7 @@ function recordAskLifecycle(ctx: Ctx, team: TeamRow, actor: string, env: Envelop
   }
   // The human "deciding — check back in ⟨until⟩" reply (rides `wait`, ADR 147 §5).
   if (env.act === 'wait' && askRef) {
-    appendAudit(ctx.db, team.id, {
+    await appendAudit(ctx.db, team.id, {
       actor,
       action: 'ask.deferred',
       target: askRef,
@@ -1109,7 +1144,7 @@ function recordAskLifecycle(ctx: Ctx, team: TeamRow, actor: string, env: Envelop
   if (env.act === 'wait' && typeof deferRef === 'string' && deferRef.length > 0) {
     const until = DeferUntilSchema.safeParse(meta['until']);
     if (until.success) {
-      appendAudit(ctx.db, team.id, {
+      await appendAudit(ctx.db, team.id, {
         actor,
         action: 'inbox.deferred',
         target: deferRef,
@@ -1118,4 +1153,17 @@ function recordAskLifecycle(ctx: Ctx, team: TeamRow, actor: string, env: Envelop
       });
     }
   }
+}
+
+/** The first of `names` that is a member row, in order — an async `find` over `getMemberByName`. */
+async function firstMemberNamed(
+  ctx: Ctx,
+  teamId: string,
+  names: string[],
+): Promise<MemberRow | null> {
+  for (const r of names) {
+    const m = await getMemberByName(ctx.db, teamId, r);
+    if (m) return m;
+  }
+  return null;
 }

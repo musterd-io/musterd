@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
 import { __resetHandoffs } from '../store/signinHandoff.js';
@@ -34,14 +35,14 @@ async function get(path: string, headers: Record<string, string> = {}) {
 }
 const bearer = (auth: string) => ({ authorization: `Bearer ${auth}` });
 
-const audits = (action: string) => {
-  const team = getTeamBySlug(server.db, 'dawn')!;
-  return listAudit(server.db, team.id).filter((r) => r.action === action);
+const audits = async (action: string) => {
+  const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+  return (await listAudit(sqliteDriver(server.db), team.id)).filter((r) => r.action === action);
 };
 
 beforeEach(async () => {
   __resetHandoffs();
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
@@ -66,7 +67,7 @@ describe('POST /signin-handoff — staging (ADR 170)', () => {
     expect(res.json.expires_in_ms).toBeGreaterThan(0);
     // The nonce is a handle, never a derivation of the secret.
     expect(res.json.nonce).not.toContain(nickCred);
-    expect(audits('signin.handoff_staged')).toHaveLength(1);
+    expect(await audits('signin.handoff_staged')).toHaveLength(1);
   });
 
   it('refuses to launder an identity — ada’s credential cannot stage a handoff for nick', async () => {
@@ -77,7 +78,7 @@ describe('POST /signin-handoff — staging (ADR 170)', () => {
     // 403, not 401: the credential authenticates fine, it simply may not act as another seat — the
     // acting-seat check inside authByCredential is what makes this route a courier, not an issuer.
     expect(res.status).toBe(403);
-    expect(audits('signin.handoff_staged')).toHaveLength(0);
+    expect(await audits('signin.handoff_staged')).toHaveLength(0);
   });
 
   it('refuses an unknown credential outright', async () => {
@@ -89,7 +90,7 @@ describe('POST /signin-handoff — staging (ADR 170)', () => {
   });
 });
 
-describe('GET /signin-handoff/:nonce — redemption (ADR 170)', () => {
+describe('GET /signin-handoff/:nonce — redemption (ADR 170)', async () => {
   const stage = async (member = 'nick', credential = () => nickCred) => {
     const res = await post('/teams/dawn/signin-handoff', { member, credential: credential() });
     return res.json.nonce as string;
@@ -100,7 +101,7 @@ describe('GET /signin-handoff/:nonce — redemption (ADR 170)', () => {
     const res = await get(`/teams/dawn/signin-handoff/${nonce}`);
     expect(res.status).toBe(200);
     expect(res.json).toEqual({ as: 'nick', credential: nickCred });
-    const rows = audits('signin.handoff_redeemed');
+    const rows = await audits('signin.handoff_redeemed');
     expect(rows).toHaveLength(1);
     expect(JSON.stringify(rows[0])).not.toContain(nonce);
   });
@@ -111,7 +112,7 @@ describe('GET /signin-handoff/:nonce — redemption (ADR 170)', () => {
     const second = await get(`/teams/dawn/signin-handoff/${nonce}`);
     expect(second.status).toBe(404);
     expect(second.json.error.message).toMatch(/already used or has expired/);
-    const missed = audits('signin.handoff_missed');
+    const missed = await audits('signin.handoff_missed');
     expect(missed).toHaveLength(1);
     expect(JSON.parse(missed[0]!.detail!).reason).toBe('unknown_or_spent');
   });

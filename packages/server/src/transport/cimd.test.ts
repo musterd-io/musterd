@@ -529,7 +529,7 @@ describe('CIMD URL and address boundary (ADR 470)', () => {
         contentType: 'application/json',
         body: JSON.stringify({ ...metadata, client_id: id }),
       });
-    release(clientId);
+    await release(clientId);
     await expect(Promise.all([one, two])).resolves.toHaveLength(2);
 
     const ids = Array.from({ length: 16 }, (_, i) => `https://client.example/${i}.json`);
@@ -542,7 +542,7 @@ describe('CIMD URL and address boundary (ADR 470)', () => {
     await Promise.all(active);
     const overflow = resolver('https://client.example/overflow.json');
     await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(18));
-    release('https://client.example/overflow.json');
+    await release('https://client.example/overflow.json');
     await overflow;
     expect(request).toHaveBeenCalledTimes(18);
   });

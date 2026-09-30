@@ -5,7 +5,9 @@ import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
-import { openDb, type Database } from '../db/open.js';
+import { type Database } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { readNodeState } from '../node/state.js';
 import { appendAudit } from '../store/audit.js';
@@ -57,20 +59,20 @@ async function post(base: string, path: string, body?: unknown, auth?: string) {
 }
 
 const hubCtx = (): Ctx => ({
-  db: hub.db,
+  db: sqliteDriver(hub.db),
   hub: new Hub(),
   config: resolveConfig(),
   rosterRoots: [],
 });
-const hubTeam = () => getTeamBySlug(hub.db, 'bravo')!;
-const joinerTeam = () => getTeamBySlug(joiner.db, 'bravo')!;
+const hubTeam = async () => (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
+const joinerTeam = async () => (await getTeamBySlug(sqliteDriver(joiner.db), 'bravo'))!;
 const joinerNode = () => readNodeState().nodes['bravo']!.node_id;
 
 async function roundTrip() {
-  await pushTeam(joinerCtx, joinerTeam());
-  await pullTeam(hubCtx(), hubTeam());
-  await pushTeam(hubCtx(), hubTeam());
-  await pullTeam(joinerCtx, joinerTeam());
+  await pushTeam(joinerCtx, await joinerTeam());
+  await pullTeam(hubCtx(), await hubTeam());
+  await pushTeam(hubCtx(), await hubTeam());
+  await pullTeam(joinerCtx, await joinerTeam());
 }
 
 /** Every `audit` row for an action, on one machine. */
@@ -83,8 +85,8 @@ const auditRows = (db: Database, teamId: string, action: string) =>
     .all(teamId, action);
 
 /** One wake row as the report path writes it: through `appendAudit`, on the joiner. */
-function wakeRow(action: string, seat: string, detail: Record<string, unknown>, ts?: number) {
-  appendAudit(joiner.db, joinerTeam().id, {
+async function wakeRow(action: string, seat: string, detail: Record<string, unknown>, ts?: number) {
+  await appendAudit(sqliteDriver(joiner.db), (await joinerTeam()).id, {
     actor: null,
     action,
     target: seat,
@@ -94,7 +96,7 @@ function wakeRow(action: string, seat: string, detail: Record<string, unknown>, 
   if (ts !== undefined) {
     joiner.db
       .prepare('UPDATE audit SET ts = ? WHERE team_id = ? AND action = ? AND ts != ?')
-      .run(ts, joinerTeam().id, action, ts);
+      .run(ts, (await joinerTeam()).id, action, ts);
   }
 }
 
@@ -102,11 +104,16 @@ beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'musterd-ledger-'));
   process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
 
-  hub = createServer({ db: openDb(':memory:'), port: 0 });
+  hub = createServer({ db: openTestDb(':memory:'), port: 0 });
   hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-  joiner = createServer({ db: openDb(':memory:'), port: 0 });
+  joiner = createServer({ db: openTestDb(':memory:'), port: 0 });
   joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
-  joinerCtx = { db: joiner.db, hub: new Hub(), config: resolveConfig(), rosterRoots: [] };
+  joinerCtx = {
+    db: sqliteDriver(joiner.db),
+    hub: new Hub(),
+    config: resolveConfig(),
+    rosterRoots: [],
+  };
 
   nickOnHub = (
     await post(hubBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } })
@@ -115,15 +122,15 @@ beforeEach(async () => {
     await post(joinerBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } })
   ).json.human_credential;
   // Roster identity replicates via git (ADR 058): the same agent seat exists on both.
-  addMember(hub.db, hubTeam(), { name: 'ada', kind: 'agent' });
-  addMember(joiner.db, joinerTeam(), { name: 'ada', kind: 'agent' });
+  await addMember(sqliteDriver(hub.db), await hubTeam(), { name: 'ada', kind: 'agent' });
+  await addMember(sqliteDriver(joiner.db), await joinerTeam(), { name: 'ada', kind: 'agent' });
 
   // The joiner's node row is minted on its first logged act; enrollment needs it to exist.
-  const jt = joinerTeam();
-  insertMessage(
-    joiner.db,
+  const jt = await joinerTeam();
+  await insertMessage(
+    sqliteDriver(joiner.db),
     jt.id,
-    getMemberByName(joiner.db, jt.id, 'nick')!.id,
+    (await getMemberByName(sqliteDriver(joiner.db), jt.id, 'nick'))!.id,
     null,
     makeEnvelope({
       id: 'j-0',
@@ -159,11 +166,11 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-describe('the ledger kind — the wake economy crosses, and decides nothing when it lands', () => {
+describe('the ledger kind — the wake economy crosses, and decides nothing when it lands', async () => {
   it('1. a wake paid for on the joiner is counted by the hub`s report', async () => {
     const now = Date.now();
-    wakeRow('residency.woke', 'ada', { act: 'a-1', lease_id: 'l-1' }, now - 1000);
-    wakeRow(
+    await wakeRow('residency.woke', 'ada', { act: 'a-1', lease_id: 'l-1' }, now - 1000);
+    await wakeRow(
       'residency.wake_cost',
       'ada',
       { act: 'a-1', lease_id: 'l-1', cost_usd: 0.42 },
@@ -171,25 +178,31 @@ describe('the ledger kind — the wake economy crosses, and decides nothing when
     );
 
     // Before the fold the hub's ledger is empty — the defect, stated as a precondition.
-    expect(deriveWakeMetrics(hub.db, hubTeam().id, now).cost_usd_total).toBe(null);
+    expect(
+      (await deriveWakeMetrics(sqliteDriver(hub.db), (await hubTeam()).id, now)).cost_usd_total,
+    ).toBe(null);
 
     await roundTrip();
 
-    const metrics = deriveWakeMetrics(hub.db, hubTeam().id, now);
+    const metrics = await deriveWakeMetrics(sqliteDriver(hub.db), (await hubTeam()).id, now);
     expect(metrics.cost_usd_total).toBeCloseTo(0.42);
     expect(metrics.cost_reported).toBe(1);
     expect(metrics.by_seat.find((s) => s.seat === 'ada')?.cost_usd_total).toBeCloseTo(0.42);
   });
 
   it('2. the row lands verbatim with the origin`s stamp, and projects into nothing', async () => {
-    wakeRow('residency.wake_failed', 'ada', { act: 'a-2', reason: 'lease_expired' });
-    const mintedOnJoiner = auditRows(joiner.db, joinerTeam().id, 'residency.wake_failed')[0]!;
+    await wakeRow('residency.wake_failed', 'ada', { act: 'a-2', reason: 'lease_expired' });
+    const mintedOnJoiner = auditRows(
+      joiner.db,
+      (await joinerTeam()).id,
+      'residency.wake_failed',
+    )[0]!;
     expect(mintedOnJoiner.origin_node).toBe(joinerNode());
     expect(mintedOnJoiner.origin_seq).toBeGreaterThan(0);
 
     await roundTrip();
 
-    const onHub = auditRows(hub.db, hubTeam().id, 'residency.wake_failed');
+    const onHub = auditRows(hub.db, (await hubTeam()).id, 'residency.wake_failed');
     expect(onHub).toHaveLength(1);
     // The origin's stamp verbatim — never re-minted from the hub's own allocator.
     expect(onHub[0]).toMatchObject({
@@ -209,11 +222,11 @@ describe('the ledger kind — the wake economy crosses, and decides nothing when
     const now = Date.now();
     // Six wakes on the joiner inside the hour: past any default hourly cap, if they counted.
     for (let i = 0; i < 6; i += 1) {
-      wakeRow('residency.woke', 'ada', { act: `cap-${i}`, lease_id: `l-${i}` }, now - 60_000);
+      await wakeRow('residency.woke', 'ada', { act: `cap-${i}`, lease_id: `l-${i}` }, now - 60_000);
     }
     await roundTrip();
     // The hub HOLDS them — this is not a test that the fold dropped the rows.
-    expect(auditRows(hub.db, hubTeam().id, 'residency.woke')).toHaveLength(6);
+    expect(auditRows(hub.db, (await hubTeam()).id, 'residency.woke')).toHaveLength(6);
 
     const wakesHere = hub.db
       .prepare<[string, string], { n: number }>(
@@ -222,13 +235,13 @@ describe('the ledger kind — the wake economy crosses, and decides nothing when
             AND target = ? AND ts > 0
             AND origin_node IN ('', COALESCE((SELECT node_id FROM local_node l WHERE l.team_id = audit.team_id), ''))`,
       )
-      .get(hubTeam().id, 'ada');
+      .get((await hubTeam()).id, 'ada');
     expect(wakesHere?.n).toBe(0);
   });
 
-  it('4. a projected verb wearing the ledger tag stops the fold', () => {
-    const team = hubTeam();
-    const result = foldBatch(hub.db, team.id, [
+  it('4. a projected verb wearing the ledger tag stops the fold', async () => {
+    const team = await hubTeam();
+    const result = await foldBatch(sqliteDriver(hub.db), team.id, [
       {
         kind: 'ledger',
         team: 'bravo',
@@ -259,20 +272,41 @@ describe('the ledger kind — the wake economy crosses, and decides nothing when
       nickOnJoiner,
     );
     expect(enroll.status).toBe(201);
-    const adaOnJoiner = getMemberByName(joiner.db, joinerTeam().id, 'ada')!;
-    const adaOnHub = getMemberByName(hub.db, hubTeam().id, 'ada')!;
-    expect(listWakeableMemberIds(joiner.db, joinerTeam().id).has(adaOnJoiner.id)).toBe(true);
-    expect(listWakeableMemberIds(hub.db, hubTeam().id).size).toBe(0);
+    const adaOnJoiner = (await getMemberByName(
+      sqliteDriver(joiner.db),
+      (await joinerTeam()).id,
+      'ada',
+    ))!;
+    const adaOnHub = (await getMemberByName(sqliteDriver(hub.db), (await hubTeam()).id, 'ada'))!;
+    expect(
+      (await listWakeableMemberIds(sqliteDriver(joiner.db), (await joinerTeam()).id)).has(
+        adaOnJoiner.id,
+      ),
+    ).toBe(true);
+    expect((await listWakeableMemberIds(sqliteDriver(hub.db), (await hubTeam()).id)).size).toBe(0);
 
     await roundTrip();
 
-    expect(listWakeableMemberIds(hub.db, hubTeam().id).has(adaOnHub.id)).toBe(true);
-    const folded = getResidency(hub.db, hubTeam().id, adaOnHub.id);
+    expect(
+      (await listWakeableMemberIds(sqliteDriver(hub.db), (await hubTeam()).id)).has(adaOnHub.id),
+    ).toBe(true);
+    const folded = await getResidency(sqliteDriver(hub.db), (await hubTeam()).id, adaOnHub.id);
     expect(folded?.host).toBe('joiner-host');
     expect(folded?.harness).toBe('claude-code');
     expect(folded?.grant_id).toBeNull();
-    expect(getResidency(joiner.db, joinerTeam().id, adaOnJoiner.id)?.grant_id).not.toBeNull();
-    expect(claimWakeLeases(hub.db, hubTeam().id, 'bravo', 'hub-host', 45_000)).toEqual([]);
+    expect(
+      (await getResidency(sqliteDriver(joiner.db), (await joinerTeam()).id, adaOnJoiner.id))
+        ?.grant_id,
+    ).not.toBeNull();
+    expect(
+      await claimWakeLeases(
+        sqliteDriver(hub.db),
+        (await hubTeam()).id,
+        'bravo',
+        'hub-host',
+        45_000,
+      ),
+    ).toEqual([]);
 
     const revoked = await post(
       joinerBase,
@@ -282,7 +316,7 @@ describe('the ledger kind — the wake economy crosses, and decides nothing when
     );
     expect(revoked.status).toBe(200);
     await roundTrip();
-    expect(listWakeableMemberIds(hub.db, hubTeam().id).size).toBe(0);
-    expect(getResidency(hub.db, hubTeam().id, adaOnHub.id)).toBeNull();
+    expect((await listWakeableMemberIds(sqliteDriver(hub.db), (await hubTeam()).id)).size).toBe(0);
+    expect(await getResidency(sqliteDriver(hub.db), (await hubTeam()).id, adaOnHub.id)).toBeNull();
   });
 });

@@ -25,20 +25,20 @@ import { broadcastMemberAdded } from './memberAdded.js';
  * the store's invariants (human-only, inherited expiry, cap, no revived names), the audit row, the
  * team notice, and the connect link.
  */
-export function mintSponsoredAgent(
+export async function mintSponsoredAgent(
   ctx: Ctx,
   team: TeamRow,
   sponsor: MemberRow,
   input: { name: string; role?: string | null | undefined },
   origin: string,
-): {
+): Promise<{
   member: MemberRow;
   hosting: SponsoredAgentHosting;
   /** The sponsor's host label that will run it, when `hosting` is `sponsor_host`. */
   host: string | null;
   connect_url: string;
   connect_expires_at: number;
-} {
+}> {
   // A file-backed team's seat files are the single writer (ADR 058): a db-originated seat would be
   // double-sourced there. Member-created agents need a team whose roster lives in the daemon.
   if (teamSpecForSlug([...new Set([...ctx.rosterRoots, ...resolveRosterRoots()])], team.slug))
@@ -47,31 +47,32 @@ export function mintSponsoredAgent(
       `"${team.slug}" keeps its roster in seat files — add an agent there (\`musterd agent\`); ` +
         'member-created agents need a team whose roster lives in the daemon',
     );
-  const { member, nonce, expires_at } = createSponsoredAgent(
+  const { member, nonce, expires_at } = await createSponsoredAgent(
     ctx.db,
     team,
     sponsor,
     input,
     Date.now(),
     {
-      cap: getPolicy(ctx.db, team.id).sponsored_agent_cap,
+      cap: (await getPolicy(ctx.db, team.id)).sponsored_agent_cap,
     },
   );
-  appendAudit(ctx.db, team.id, {
+  await appendAudit(ctx.db, team.id, {
     actor: sponsor.name,
     action: 'member.sponsored_agent_created',
     target: member.name,
     result: 'allow',
     detail: { lifecycle_until: member.lifecycle_until },
   });
-  announceAgentCreated(ctx, team, sponsor, member);
+  await announceAgentCreated(ctx, team, sponsor, member);
   broadcastMemberAdded(ctx.hub, team.id, member.name);
   // ADR 463 §2: a sponsor whose own host key polled in the last 10 minutes gets the agent stood up
   // there — one pending provision that host claims. Otherwise nothing is queued and the connect
   // link below is the way in. The link is returned either way; a caller leads with whichever applies.
-  const [host = null] = sponsorHostsSeen(ctx.db, team.id, sponsor.id);
+  const [host = null] = await sponsorHostsSeen(ctx.db, team.id, sponsor.id);
   const hosting: SponsoredAgentHosting = host !== null ? 'sponsor_host' : 'connect_link';
-  if (host !== null) insertProvision(ctx.db, team.id, member.id, sponsor.id, Date.now(), origin);
+  if (host !== null)
+    await insertProvision(ctx.db, team.id, member.id, sponsor.id, Date.now(), origin);
   return {
     member,
     hosting,
@@ -87,25 +88,25 @@ export function mintSponsoredAgent(
  * `agent_connect` policy decides who may (`connectRefusal`), the issuer is recorded on the nonce so
  * it bounds the session it starts (§3), and the issue is audited with the issuer as actor (§4).
  */
-export function issueAgentConnect(
+export async function issueAgentConnect(
   ctx: Ctx,
   team: TeamRow,
   caller: MemberRow,
   agentName: string,
   origin: string,
-): { member: string; connect_url: string; connect_expires_at: number } {
-  const agent = getMemberByName(ctx.db, team.id, agentName);
-  const hosted = agent ? (getResidency(ctx.db, team.id, agent.id)?.host ?? null) : null;
+): Promise<{ member: string; connect_url: string; connect_expires_at: number }> {
+  const agent = await getMemberByName(ctx.db, team.id, agentName);
+  const hosted = agent ? ((await getResidency(ctx.db, team.id, agent.id))?.host ?? null) : null;
   const refusal = connectRefusal(
     caller,
     agent,
-    getPolicy(ctx.db, team.id).agent_connect,
+    (await getPolicy(ctx.db, team.id)).agent_connect,
     team.slug,
     { hosted },
   );
   if (refusal) throw refusal;
-  const { nonce, expires_at } = issueAgentConnectNonce(ctx.db, team.id, agent!.id, caller.id);
-  appendAudit(ctx.db, team.id, {
+  const { nonce, expires_at } = await issueAgentConnectNonce(ctx.db, team.id, agent!.id, caller.id);
+  await appendAudit(ctx.db, team.id, {
     actor: caller.name,
     action: 'member.agent_connect_issued',
     target: agent!.name,
@@ -127,8 +128,13 @@ export function issueAgentConnect(
  * because the server wrote it, not a client. Only a successful mint reaches here: a refused one
  * threw in `createSponsoredAgent` above and announces nothing.
  */
-function announceAgentCreated(ctx: Ctx, team: TeamRow, sponsor: MemberRow, agent: MemberRow): void {
-  routeEnvelope(
+async function announceAgentCreated(
+  ctx: Ctx,
+  team: TeamRow,
+  sponsor: MemberRow,
+  agent: MemberRow,
+): Promise<void> {
+  await routeEnvelope(
     ctx,
     team,
     sponsor,
@@ -172,15 +178,15 @@ export const PROVISION_CANCEL_INTERVAL_MS = 60 * 1000;
  * sponsor's inbox never shows the sponsor's own acts, and the news is about that agent.
  * Daemon-composed from structured fields; `meta` lets a surface key off it without parsing.
  */
-export function tellSponsorOfProvision(
+export async function tellSponsorOfProvision(
   ctx: Ctx,
   team: TeamRow,
   agent: MemberRow,
   sponsorName: string,
   body: string,
   meta: Record<string, unknown>,
-): void {
-  routeEnvelope(
+): Promise<void> {
+  await routeEnvelope(
     ctx,
     team,
     agent,
@@ -203,16 +209,16 @@ export function tellSponsorOfProvision(
  * failed (or before it went quiet) has that enrollment and its standing grant revoked, so the
  * connect link the sponsor gets next can redeem (ADR 463 §4.1 refuses a hosted agent's link).
  */
-export function unhostFailedProvision(
+export async function unhostFailedProvision(
   ctx: Ctx,
   team: TeamRow,
   agent: MemberRow,
   reason: string,
-): void {
-  const removed = revokeResidency(ctx.db, team.id, agent.id);
+): Promise<void> {
+  const removed = await revokeResidency(ctx.db, team.id, agent.id);
   if (!removed) return;
-  if (removed.grant_id) revokeGrant(ctx.db, team.id, removed.grant_id);
-  appendAudit(ctx.db, team.id, {
+  if (removed.grant_id) await revokeGrant(ctx.db, team.id, removed.grant_id);
+  await appendAudit(ctx.db, team.id, {
     actor: null,
     action: 'residency.revoked',
     target: agent.name,
@@ -230,14 +236,14 @@ export function unhostFailedProvision(
  * settled and audited. A sponsor still in standing gets one message carrying a fresh connect link,
  * issued in their name — nothing is stuck waiting on a host that never came or never reported.
  */
-export function sweepProvisionsPass(ctx: Ctx, now = Date.now()): number {
-  const swept = sweepProvisions(ctx.db, now);
+export async function sweepProvisionsPass(ctx: Ctx, now = Date.now()): Promise<number> {
+  const swept = await sweepProvisions(ctx.db, now);
   for (const { row, reason } of swept) {
-    const team = getTeamById(ctx.db, row.team_id);
-    const agent = getMemberById(ctx.db, row.member_id);
-    const sponsor = getMemberById(ctx.db, row.sponsor_id);
+    const team = await getTeamById(ctx.db, row.team_id);
+    const agent = await getMemberById(ctx.db, row.member_id);
+    const sponsor = await getMemberById(ctx.db, row.sponsor_id);
     if (!team || !agent) continue;
-    appendAudit(ctx.db, team.id, {
+    await appendAudit(ctx.db, team.id, {
       actor: null,
       action: row.state === 'cancelled' ? 'host.provision_cancelled' : 'host.provision_failed',
       target: row.id,
@@ -245,14 +251,14 @@ export function sweepProvisionsPass(ctx: Ctx, now = Date.now()): number {
       detail: { agent: agent.name, reason, ...(row.host ? { host: row.host } : {}) },
     });
     if (reason === 'agent_left' || reason === 'sponsor_lost_standing' || !sponsor) continue;
-    if (reason === 'not_reported') unhostFailedProvision(ctx, team, agent, reason);
-    const { nonce } = issueAgentConnectNonce(ctx.db, team.id, agent.id, sponsor.id, now);
+    if (reason === 'not_reported') await unhostFailedProvision(ctx, team, agent, reason);
+    const { nonce } = await issueAgentConnectNonce(ctx.db, team.id, agent.id, sponsor.id, now);
     const url = agentConnectUrl(row.connect_origin ?? originFrom(null, null), team.slug, nonce);
     const what =
       reason === 'unclaimed'
         ? `No host of yours picked up ${agent.name} within 15 minutes.`
         : `Your host ${row.host} took ${agent.name} but never said it was ready.`;
-    tellSponsorOfProvision(
+    await tellSponsorOfProvision(
       ctx,
       team,
       agent,
@@ -266,9 +272,9 @@ export function sweepProvisionsPass(ctx: Ctx, now = Date.now()): number {
 
 /** The daemon's provision sweep loop; a failing pass logs and the loop keeps running. */
 export function startProvisionSweep(ctx: Ctx, onError: (err: unknown) => void): () => void {
-  const every = setInterval(() => {
+  const every = setInterval(async () => {
     try {
-      sweepProvisionsPass(ctx);
+      await sweepProvisionsPass(ctx);
     } catch (err) {
       onError(err);
     }

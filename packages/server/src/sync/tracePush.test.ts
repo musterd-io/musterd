@@ -6,8 +6,8 @@ import { makeEnvelope, type TraceEvent } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
-import { openDb } from '../db/open.js';
-import { openTraceDb } from '../db/traceDb.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb, openTestTraceDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { readNodeState, saveNodeEnrollment } from '../node/state.js';
 import { addMember } from '../store/members.js';
@@ -47,15 +47,15 @@ async function post(base: string, path: string, body?: unknown, auth?: string) {
   return { status: response.status, json: text ? (JSON.parse(text) as any) : null };
 }
 
-const hubTeam = () => getTeamBySlug(hub.db, 'bravo')!;
-const joinerTeam = () => getTeamBySlug(joiner.db, 'bravo')!;
-const memberId = (server: RunningServer, name: string) =>
+const hubTeam = async () => (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
+const joinerTeam = async () => (await getTeamBySlug(sqliteDriver(joiner.db), 'bravo'))!;
+const memberId = async (server: RunningServer, name: string) =>
   server.db
     .prepare<
       [string, string],
       { id: string }
     >('SELECT id FROM members WHERE team_id = ? AND name = ?')
-    .get(getTeamBySlug(server.db, 'bravo')!.id, name)!.id;
+    .get((await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!.id, name)!.id;
 
 const ev = (over: Partial<TraceEvent> = {}): TraceEvent => ({
   harness: 'claude-code',
@@ -69,19 +69,25 @@ const ev = (over: Partial<TraceEvent> = {}): TraceEvent => ({
 });
 
 /** Record trace rows on the joiner as its seat `nick` (the tap's path, minus HTTP). */
-function trace(seat: string, events: TraceEvent[], content = false) {
-  return ingestTraceEvents(joiner.traceDb, joinerTeam().id, seat, events, {
-    writeContent: content,
-  });
+async function trace(seat: string, events: TraceEvent[], content = false) {
+  return await ingestTraceEvents(
+    sqliteDriver(joiner.traceDb),
+    (await joinerTeam()).id,
+    seat,
+    events,
+    {
+      writeContent: content,
+    },
+  );
 }
 
 /** A coordination message on the joiner, so /sync/push has something to bind nick with. */
-function send(id: string) {
-  const team = joinerTeam();
-  insertMessage(
-    joiner.db,
+async function send(id: string) {
+  const team = await joinerTeam();
+  await insertMessage(
+    sqliteDriver(joiner.db),
     team.id,
-    memberId(joiner, 'nick'),
+    await memberId(joiner, 'nick'),
     null,
     makeEnvelope({
       id,
@@ -132,13 +138,17 @@ const hubMusterdRows = () => ({
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'musterd-tracepush-'));
   process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
-  hub = createServer({ db: openDb(':memory:'), traceDb: openTraceDb(':memory:'), port: 0 });
+  hub = createServer({ db: openTestDb(':memory:'), traceDb: openTestTraceDb(':memory:'), port: 0 });
   hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-  joiner = createServer({ db: openDb(':memory:'), traceDb: openTraceDb(':memory:'), port: 0 });
+  joiner = createServer({
+    db: openTestDb(':memory:'),
+    traceDb: openTestTraceDb(':memory:'),
+    port: 0,
+  });
   joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
   joinerCtx = {
-    db: joiner.db,
-    traceDb: joiner.traceDb,
+    db: sqliteDriver(joiner.db),
+    traceDb: sqliteDriver(joiner.traceDb),
     hub: new Hub(),
     config: resolveConfig(),
     rosterRoots: [],
@@ -158,28 +168,28 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-describe('/sync/trace — structural rows, joiner → hub (ADR 453)', () => {
+describe('/sync/trace — structural rows, joiner → hub (ADR 453)', async () => {
   it('does nothing before enrollment, and nothing on the hub for its own rows', async () => {
-    trace('nick', [ev()]);
-    expect(await pushTraceTeam(joinerCtx, joinerTeam())).toBeNull();
+    await trace('nick', [ev()]);
+    expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toBeNull();
     // the hub holds joiners' rows and forwards none: its own rows are never offered
-    ingestTraceEvents(hub.traceDb, hubTeam().id, 'nick', [ev()]);
+    await ingestTraceEvents(sqliteDriver(hub.traceDb), (await hubTeam()).id, 'nick', [ev()]);
     const hubCtx = {
-      db: hub.db,
-      traceDb: hub.traceDb,
+      db: sqliteDriver(hub.db),
+      traceDb: sqliteDriver(hub.traceDb),
       hub: new Hub(),
       config: resolveConfig(),
       rosterRoots: [],
     } as Ctx;
-    expect(await pushTraceTeam(hubCtx, hubTeam())).toBeNull();
+    expect(await pushTraceTeam(hubCtx, await hubTeam())).toBeNull();
   });
 
   it('pushes rows into the hub trace.db with origin_node and digested ids; musterd.db gains nothing', async () => {
-    send('m-1');
+    await send('m-1');
     await enrollJoiner();
-    await pushTeam(joinerCtx, joinerTeam()); // binds nick to the joiner the ordinary way
+    await pushTeam(joinerCtx, await joinerTeam()); // binds nick to the joiner the ordinary way
     const before = hubMusterdRows();
-    trace(
+    await trace(
       'nick',
       [
         ev(),
@@ -192,7 +202,7 @@ describe('/sync/trace — structural rows, joiner → hub (ADR 453)', () => {
       true,
     );
 
-    const out = await pushTraceTeam(joinerCtx, joinerTeam());
+    const out = await pushTraceTeam(joinerCtx, await joinerTeam());
     expect(out).toMatchObject({ pushed: 2, ignored: 0, collided: 0, refused: 0 });
 
     const rows = hubRows();
@@ -208,20 +218,22 @@ describe('/sync/trace — structural rows, joiner → hub (ADR 453)', () => {
     // zero new bytes in the coordination store
     expect(hubMusterdRows()).toEqual(before);
     // cursor moved to the last rowid
-    expect(readSyncTraceCursor(joiner.traceDb, joinerTeam().id)).toBe(2);
+    expect(await readSyncTraceCursor(sqliteDriver(joiner.traceDb), (await joinerTeam()).id)).toBe(
+      2,
+    );
   });
 
   it('a re-push is ignored, not duplicated; a digest collision under a new id is counted apart', async () => {
-    send('m-1');
+    await send('m-1');
     await enrollJoiner();
-    await pushTeam(joinerCtx, joinerTeam());
-    trace('nick', [ev()]);
-    await pushTraceTeam(joinerCtx, joinerTeam());
+    await pushTeam(joinerCtx, await joinerTeam());
+    await trace('nick', [ev()]);
+    await pushTraceTeam(joinerCtx, await joinerTeam());
     // replay the same batch by resetting the cursor
     joiner.traceDb
       .prepare("UPDATE schema_meta SET value = '0' WHERE key LIKE 'sync_trace_cursor:%'")
       .run();
-    expect(await pushTraceTeam(joinerCtx, joinerTeam())).toMatchObject({
+    expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toMatchObject({
       pushed: 0,
       ignored: 1,
       collided: 0,
@@ -232,7 +244,7 @@ describe('/sync/trace — structural rows, joiner → hub (ADR 453)', () => {
     joiner.traceDb
       .prepare("UPDATE schema_meta SET value = '0' WHERE key LIKE 'sync_trace_cursor:%'")
       .run();
-    expect(await pushTraceTeam(joinerCtx, joinerTeam())).toMatchObject({
+    expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toMatchObject({
       pushed: 0,
       ignored: 0,
       collided: 1,
@@ -240,77 +252,97 @@ describe('/sync/trace — structural rows, joiner → hub (ADR 453)', () => {
   });
 
   it('a seat bound elsewhere is refused per row: batch-mates land, the cursor advances, no audit row', async () => {
-    send('m-1');
+    await send('m-1');
     await enrollJoiner();
-    await pushTeam(joinerCtx, joinerTeam());
+    await pushTeam(joinerCtx, await joinerTeam());
     // hana lives on the hub; the joiner recorded a row of hers (a rebound seat's leftovers)
-    addMember(joiner.db, joinerTeam(), { name: 'hana', kind: 'human' });
-    addMember(hub.db, hubTeam(), { name: 'hana', kind: 'human' });
-    bindSeatToNode(
-      hub.db,
-      hubTeam().id,
-      memberId(hub, 'hana'),
-      localNodeForTeam(hub.db, hubTeam().id).id,
+    await addMember(sqliteDriver(joiner.db), await joinerTeam(), { name: 'hana', kind: 'human' });
+    await addMember(sqliteDriver(hub.db), await hubTeam(), { name: 'hana', kind: 'human' });
+    await bindSeatToNode(
+      sqliteDriver(hub.db),
+      (await hubTeam()).id,
+      await memberId(hub, 'hana'),
+      (await localNodeForTeam(sqliteDriver(hub.db), (await hubTeam()).id)).id,
     );
-    trace('nick', [ev({ session_digest: 'aaaaaaaaaaaa' })]);
-    trace('hana', [ev({ session_digest: 'bbbbbbbbbbbb' })]);
-    trace('nick', [ev({ session_digest: 'cccccccccccc' })]);
+    await trace('nick', [ev({ session_digest: 'aaaaaaaaaaaa' })]);
+    await trace('hana', [ev({ session_digest: 'bbbbbbbbbbbb' })]);
+    await trace('nick', [ev({ session_digest: 'cccccccccccc' })]);
 
     const auditBefore = hub.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM audit').get()!
       .n;
-    expect(await pushTraceTeam(joinerCtx, joinerTeam())).toMatchObject({ pushed: 2, refused: 1 });
+    expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toMatchObject({
+      pushed: 2,
+      refused: 1,
+    });
     expect(hubRows().map((r) => r.seat)).toEqual(['nick', 'nick']);
-    expect(readSyncTraceCursor(joiner.traceDb, joinerTeam().id)).toBe(3);
+    expect(await readSyncTraceCursor(sqliteDriver(joiner.traceDb), (await joinerTeam()).id)).toBe(
+      3,
+    );
     expect(hub.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM audit').get()!.n).toBe(
       auditBefore,
     );
     // hana's row is still on the joiner — nothing was lost locally
-    expect(listSessionTrace(joiner.traceDb, joinerTeam().id, 'bbbbbbbbbbbb')).toHaveLength(1);
+    expect(
+      await listSessionTrace(sqliteDriver(joiner.traceDb), (await joinerTeam()).id, 'bbbbbbbbbbbb'),
+    ).toHaveLength(1);
   });
 
   it('an unresolved or unbound seat holds the whole batch (409) and the cursor stays', async () => {
-    send('m-0'); // mints the local node row enrollment needs; NOT pushed, so nick stays unbound
+    await send('m-0'); // mints the local node row enrollment needs; NOT pushed, so nick stays unbound
     await enrollJoiner();
     // nick exists on the hub but no node has claimed her yet: unbound
-    trace('nick', [ev()]);
-    expect(await pushTraceTeam(joinerCtx, joinerTeam())).toMatchObject({ pushed: 0 });
-    expect(readSyncTraceCursor(joiner.traceDb, joinerTeam().id)).toBe(0);
+    await trace('nick', [ev()]);
+    expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toMatchObject({ pushed: 0 });
+    expect(await readSyncTraceCursor(sqliteDriver(joiner.traceDb), (await joinerTeam()).id)).toBe(
+      0,
+    );
     expect(hubRows()).toHaveLength(0);
     // a seat the hub's roster has not caught up to: unresolved
-    addMember(joiner.db, joinerTeam(), { name: 'zed', kind: 'agent' });
-    trace('zed', [ev()]);
-    expect(await pushTraceTeam(joinerCtx, joinerTeam())).toMatchObject({ pushed: 0 });
-    expect(readSyncTraceCursor(joiner.traceDb, joinerTeam().id)).toBe(0);
+    await addMember(sqliteDriver(joiner.db), await joinerTeam(), { name: 'zed', kind: 'agent' });
+    await trace('zed', [ev()]);
+    expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toMatchObject({ pushed: 0 });
+    expect(await readSyncTraceCursor(sqliteDriver(joiner.traceDb), (await joinerTeam()).id)).toBe(
+      0,
+    );
     // the trace surface never minted a binding for either
     expect(hub.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM seat_nodes').get()!.n).toBe(
       0,
     );
     // once nick binds the ordinary way, the same batch lands next tick
-    await pushTeam(joinerCtx, joinerTeam());
-    addMember(hub.db, hubTeam(), { name: 'zed', kind: 'agent' });
-    bindSeatToNode(
-      hub.db,
-      hubTeam().id,
-      memberId(hub, 'zed'),
+    await pushTeam(joinerCtx, await joinerTeam());
+    await addMember(sqliteDriver(hub.db), await hubTeam(), { name: 'zed', kind: 'agent' });
+    await bindSeatToNode(
+      sqliteDriver(hub.db),
+      (await hubTeam()).id,
+      await memberId(hub, 'zed'),
       readNodeState().nodes['bravo']!.node_id,
     );
-    expect(await pushTraceTeam(joinerCtx, joinerTeam())).toMatchObject({ pushed: 2 });
+    expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toMatchObject({ pushed: 2 });
   });
 
   it('a service seat (ADR 232) is resident everywhere: its rows are admitted from any node', async () => {
-    send('m-1');
+    await send('m-1');
     await enrollJoiner();
-    await pushTeam(joinerCtx, joinerTeam());
-    addMember(joiner.db, joinerTeam(), { name: 'autorefresh', kind: 'service' });
-    addMember(hub.db, hubTeam(), { name: 'autorefresh', kind: 'service' });
-    trace('autorefresh', [ev({ harness: 'codex', tool_name: 'Bash' })]);
-    expect(await pushTraceTeam(joinerCtx, joinerTeam())).toMatchObject({ pushed: 1, refused: 0 });
+    await pushTeam(joinerCtx, await joinerTeam());
+    await addMember(sqliteDriver(joiner.db), await joinerTeam(), {
+      name: 'autorefresh',
+      kind: 'service',
+    });
+    await addMember(sqliteDriver(hub.db), await hubTeam(), {
+      name: 'autorefresh',
+      kind: 'service',
+    });
+    await trace('autorefresh', [ev({ harness: 'codex', tool_name: 'Bash' })]);
+    expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toMatchObject({
+      pushed: 1,
+      refused: 0,
+    });
   });
 
   it('the hub rejects a batch that is not structural — content, prose, a credential — and writes nothing', async () => {
-    send('m-1');
+    await send('m-1');
     await enrollJoiner();
-    await pushTeam(joinerCtx, joinerTeam());
+    await pushTeam(joinerCtx, await joinerTeam());
     const cred = readNodeState().nodes['bravo']!.credential;
     const row = {
       id: '01J8ZK6Y3W6XQ2R9F4M2N7P8QA',
@@ -351,14 +383,17 @@ describe('/sync/trace — structural rows, joiner → hub (ADR 453)', () => {
     expect(ok.status).toBe(200);
     expect(ok.json).toEqual({ accepted: 1, ignored: 0, collided: 0, refused: [] });
     // the pusher normalizes what the hub would reject, so a legacy row cannot wedge the cursor
-    trace('nick', [ev({ session_digest: 'dddddddddddd' }), ev({ session_digest: 'eeeeeeeeeeee' })]);
+    await trace('nick', [
+      ev({ session_digest: 'dddddddddddd' }),
+      ev({ session_digest: 'eeeeeeeeeeee' }),
+    ]);
     joiner.traceDb
       .prepare(
         `UPDATE trace_events SET tool_name = 'see this', detail = '{"note":"x","tool_input_bytes":12}'
           WHERE session_digest = 'dddddddddddd'`,
       )
       .run();
-    expect(await pushTraceTeam(joinerCtx, joinerTeam())).toMatchObject({
+    expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toMatchObject({
       pushed: 2,
       normalized: 2,
     });
@@ -366,22 +401,22 @@ describe('/sync/trace — structural rows, joiner → hub (ADR 453)', () => {
   });
 
   it('refuses a caller without a machine credential', async () => {
-    send('m-0');
+    await send('m-0');
     await enrollJoiner();
     const r = await post(hubBase, '/teams/bravo/sync/trace', { rows: [] }, nickCredential);
     expect(r.status).toBe(401);
   });
 
   it('a stalled /sync/trace leaves /sync/push unaffected — the channels share no state', async () => {
-    send('m-1');
+    await send('m-1');
     await enrollJoiner();
     // A hub that answers /sync/push and hangs /sync/trace, in the joiner's node.json.
     const real = readNodeState().nodes['bravo']!;
-    const hanging = createHttpServer((req, res) => {
+    const hanging = createHttpServer(async (req, res) => {
       if (req.url?.endsWith('/sync/trace')) return; // never answers
       let body = '';
       req.on('data', (c) => (body += c));
-      req.on('end', () => {
+      req.on('end', async () => {
         void fetch(hubBase + req.url!, {
           method: 'POST',
           headers: {
@@ -402,14 +437,19 @@ describe('/sync/trace — structural rows, joiner → hub (ADR 453)', () => {
       }),
     );
     saveNodeEnrollment({ team: 'bravo', ...real, hub_url: url });
-    trace('nick', [ev()]);
-    const traceCursor = readSyncTraceCursor(joiner.traceDb, joinerTeam().id);
+    await trace('nick', [ev()]);
+    const traceCursor = await readSyncTraceCursor(
+      sqliteDriver(joiner.traceDb),
+      (await joinerTeam()).id,
+    );
     // the coordination push completes on its own while the trace push is still hanging
-    const hung = pushTraceTeam(joinerCtx, joinerTeam());
-    expect(await pushTeam(joinerCtx, joinerTeam())).toBe(1);
+    const hung = pushTraceTeam(joinerCtx, await joinerTeam());
+    expect(await pushTeam(joinerCtx, await joinerTeam())).toBe(1);
     // the trace push times out on its own AbortSignal; its cursor never moved
     await expect(hung).rejects.toThrow();
-    expect(readSyncTraceCursor(joiner.traceDb, joinerTeam().id)).toBe(traceCursor);
+    expect(await readSyncTraceCursor(sqliteDriver(joiner.traceDb), (await joinerTeam()).id)).toBe(
+      traceCursor,
+    );
     hanging.closeAllConnections?.();
     await new Promise<void>((r) => hanging.close(() => r()));
   }, 20_000);

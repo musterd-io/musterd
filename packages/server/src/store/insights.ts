@@ -13,7 +13,7 @@ import {
   type WakeMetrics,
   type WakeSeatCost,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { actAnswered, openDirectedLedger } from './delivery.js';
 import { listGoals } from './goals.js';
 import { rowsToEnvelopes } from './hydrate.js';
@@ -49,35 +49,32 @@ const STEERING_WINDOW_DAYS = 7;
 const STEERING_WINDOW_MS = STEERING_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
 /** Flow metrics from the lanes table (ADR 050 Part 5 / ADR 084). Single aggregate queries. */
-export function flowMetrics(db: Database, teamId: string, now: number = Date.now()): FlowMetrics {
-  const throughput = db
-    .prepare<
-      [string, number],
-      { n: number }
-    >(`SELECT COUNT(*) AS n FROM lanes WHERE team_id = ? AND state = 'done' AND resolved_at > ?`)
-    .get(teamId, now - WEEK_MS)!;
+export async function flowMetrics(
+  db: Driver,
+  teamId: string,
+  now: number = Date.now(),
+): Promise<FlowMetrics> {
+  const throughput = (await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM lanes WHERE team_id = ? AND state = 'done' AND resolved_at > ?`,
+    [teamId, now - WEEK_MS],
+  ))!;
 
-  const cycle = db
-    .prepare<[string], { avg: number | null }>(
-      `SELECT AVG(resolved_at - claimed_at) AS avg
+  const cycle = (await db.get<{ avg: number | null }>(
+    `SELECT AVG(resolved_at - claimed_at) AS avg
          FROM lanes
         WHERE team_id = ? AND state = 'done' AND resolved_at IS NOT NULL AND claimed_at IS NOT NULL`,
-    )
-    .get(teamId)!;
+    [teamId],
+  ))!;
 
-  const wip = db
-    .prepare<
-      [string],
-      { n: number; oldest: number | null }
-    >(`SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM lanes WHERE team_id = ? AND state IN ${CONTENDING}`)
-    .get(teamId)!;
+  const wip = (await db.get<{ n: number; oldest: number | null }>(
+    `SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM lanes WHERE team_id = ? AND state IN ${CONTENDING}`,
+    [teamId],
+  ))!;
 
-  const backlog = db
-    .prepare<
-      [string],
-      { n: number }
-    >(`SELECT COUNT(*) AS n FROM lanes WHERE team_id = ? AND state = 'open'`)
-    .get(teamId)!;
+  const backlog = (await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM lanes WHERE team_id = ? AND state = 'open'`,
+    [teamId],
+  ))!;
 
   return {
     throughput_7d: throughput.n,
@@ -109,14 +106,13 @@ interface GoalFlowRow {
  * that roster — free to drift from the first. Sorted oldest-WIP first so the dragging goal reads
  * first, never by throughput (see {@link GoalFlowSchema} on why that ordering is load-bearing).
  */
-export function goalFlowMetrics(
-  db: Database,
+export async function goalFlowMetrics(
+  db: Driver,
   teamId: string,
   now: number = Date.now(),
-): GoalFlow[] {
-  const rows = db
-    .prepare<[number, string], GoalFlowRow>(
-      `SELECT goal_id                                                             AS goal_id,
+): Promise<GoalFlow[]> {
+  const rows = await db.all<GoalFlowRow>(
+    `SELECT goal_id                                                             AS goal_id,
               COUNT(*) FILTER (WHERE state = 'done' AND resolved_at > ?)          AS throughput,
               AVG(CASE WHEN state = 'done' AND resolved_at IS NOT NULL AND claimed_at IS NOT NULL
                        THEN resolved_at - claimed_at END)                         AS cycle_avg,
@@ -126,8 +122,8 @@ export function goalFlowMetrics(
          FROM lanes
         WHERE team_id = ?
         GROUP BY goal_id`,
-    )
-    .all(now - WEEK_MS, teamId);
+    [now - WEEK_MS, teamId],
+  );
 
   return rows
     .map((r) => ({
@@ -156,29 +152,28 @@ interface DirectedRow {
  * member still owes. request_help (to `@team`, no single owner) is intentionally excluded — this names
  * *who* is the bottleneck. Counts distinct threads, never messages (no reward for re-pinging).
  */
-export function waitingOn(
-  db: Database,
+export async function waitingOn(
+  db: Driver,
   teamId: string,
   now: number = Date.now(),
-): WaitingOnEntry[] {
+): Promise<WaitingOnEntry[]> {
   const resolved = new Set(
-    db
-      .prepare<[string], { thread_id: string }>(
+    (
+      await db.all<{ thread_id: string }>(
         `SELECT DISTINCT thread_id FROM messages WHERE team_id = ? AND act = 'resolve' AND thread_id IS NOT NULL`,
+        [teamId],
       )
-      .all(teamId)
-      .map((r) => r.thread_id),
+    ).map((r) => r.thread_id),
   );
 
   // Directed, action-needy acts: to a specific member, not a resolve. thread_key = thread_id or own id.
-  const rows = db
-    .prepare<[string], DirectedRow>(
-      `SELECT mt.name AS recipient, COALESCE(m.thread_id, m.id) AS thread_key, m.ts AS ts
+  const rows = await db.all<DirectedRow>(
+    `SELECT mt.name AS recipient, COALESCE(m.thread_id, m.id) AS thread_key, m.ts AS ts
          FROM messages m
          JOIN members mt ON mt.id = m.to_member
         WHERE m.team_id = ? AND m.to_kind = 'member' AND m.act != 'resolve'`,
-    )
-    .all(teamId);
+    [teamId],
+  );
 
   // Per recipient → distinct unresolved threads, with the oldest ask's ts.
   const byMember = new Map<string, Map<string, number>>();
@@ -209,35 +204,29 @@ const COORD_MIN_ACTS = 10;
  * "coordination that only looks collaborative" when journal-heavy (≥50%) and exchange-light (<20%) over
  * a real sample. One grouped pass over the message log. Goodhart-safe: measures the shape, not volume.
  */
-export function coordinationDensity(
-  db: Database,
+export async function coordinationDensity(
+  db: Driver,
   teamId: string,
   now: number = Date.now(),
-): CoordinationDensity {
+): Promise<CoordinationDensity> {
   const since = now - COORD_WINDOW_DAYS * 24 * 60 * 60 * 1000;
-  const row = db
-    .prepare<
-      [string, number],
-      { acts: number; journal: number; directed: number; threaded: number }
-    >(
-      `SELECT COUNT(*) AS acts,
+  const row = (await db.get<{ acts: number; journal: number; directed: number; threaded: number }>(
+    `SELECT COUNT(*) AS acts,
               SUM(CASE WHEN act = 'status_update' AND to_kind IN ('team','broadcast') THEN 1 ELSE 0 END) AS journal,
               SUM(CASE WHEN to_kind = 'member' THEN 1 ELSE 0 END) AS directed,
               SUM(CASE WHEN thread_id IS NOT NULL THEN 1 ELSE 0 END) AS threaded
          FROM messages
         WHERE team_id = ? AND ts > ?`,
-    )
-    .get(teamId, since)!;
+    [teamId, since],
+  ))!;
 
   const acts = row.acts;
   const journal = row.journal ?? 0;
   // directed ∪ threaded — a message counts as exchange if it's either (avoid double-counting).
-  const exchange = db
-    .prepare<
-      [string, number],
-      { n: number }
-    >(`SELECT COUNT(*) AS n FROM messages WHERE team_id = ? AND ts > ? AND (to_kind = 'member' OR thread_id IS NOT NULL)`)
-    .get(teamId, since)!.n;
+  const exchange = (await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM messages WHERE team_id = ? AND ts > ? AND (to_kind = 'member' OR thread_id IS NOT NULL)`,
+    [teamId, since],
+  ))!.n;
 
   const journal_ratio = acts === 0 ? 0 : journal / acts;
   const exchange_ratio = acts === 0 ? 0 : exchange / acts;
@@ -262,35 +251,39 @@ export function coordinationDensity(
  * humans present, a non-trivial sample, and zero of both — the state in which "keeps you sharp"
  * comes off every surface.
  */
-export function peerDemand(db: Database, teamId: string, now: number = Date.now()): PeerDemand {
+export async function peerDemand(
+  db: Driver,
+  teamId: string,
+  now: number = Date.now(),
+): Promise<PeerDemand> {
   const since = now - COORD_WINDOW_DAYS * 24 * 60 * 60 * 1000;
-  const challenges = db
-    .prepare<
-      [string, number],
-      { to_human: number; to_agent: number; to_service: number; unaddressed: number }
-    >(
-      `SELECT SUM(CASE WHEN m.to_kind = 'member' AND r.kind = 'human' THEN 1 ELSE 0 END) AS to_human,
+  const challenges = (await db.get<{
+    to_human: number;
+    to_agent: number;
+    to_service: number;
+    unaddressed: number;
+  }>(
+    `SELECT SUM(CASE WHEN m.to_kind = 'member' AND r.kind = 'human' THEN 1 ELSE 0 END) AS to_human,
               SUM(CASE WHEN m.to_kind = 'member' AND r.kind = 'agent' THEN 1 ELSE 0 END) AS to_agent,
               SUM(CASE WHEN m.to_kind = 'member' AND r.kind = 'service' THEN 1 ELSE 0 END) AS to_service,
               SUM(CASE WHEN m.to_kind <> 'member' THEN 1 ELSE 0 END) AS unaddressed
          FROM messages m
          LEFT JOIN members r ON r.id = m.to_member
         WHERE m.team_id = ? AND m.ts > ? AND m.act = 'challenge'`,
-    )
-    .get(teamId, since)!;
-  const declines = db
-    .prepare<[string, number], { of_human: number; of_agent: number; of_service: number }>(
-      `SELECT SUM(CASE WHEN s.kind = 'human' THEN 1 ELSE 0 END) AS of_human,
+    [teamId, since],
+  ))!;
+  const declines = (await db.get<{ of_human: number; of_agent: number; of_service: number }>(
+    `SELECT SUM(CASE WHEN s.kind = 'human' THEN 1 ELSE 0 END) AS of_human,
               SUM(CASE WHEN s.kind = 'agent' THEN 1 ELSE 0 END) AS of_agent,
               SUM(CASE WHEN s.kind = 'service' THEN 1 ELSE 0 END) AS of_service
          FROM messages d
          JOIN messages h ON h.team_id = d.team_id AND h.id = d.in_reply_to
          JOIN members s ON s.id = h.from_member
         WHERE d.team_id = ? AND d.ts > ? AND d.act = 'decline' AND h.act = 'handoff'`,
-    )
-    .get(teamId, since)!;
-  const humans = db
-    .prepare<[number, string], { name: string; acts: number; accepts: number }>(
+    [teamId, since],
+  ))!;
+  const humans = (
+    await db.all<{ name: string; acts: number; accepts: number }>(
       `SELECT u.name,
               COUNT(m.id) AS acts,
               SUM(CASE WHEN m.act = 'accept' THEN 1 ELSE 0 END) AS accepts
@@ -299,15 +292,13 @@ export function peerDemand(db: Database, teamId: string, now: number = Date.now(
         WHERE u.team_id = ? AND u.kind = 'human' AND u.left_at IS NULL
         GROUP BY u.id
         ORDER BY u.name`,
+      [since, teamId],
     )
-    .all(since, teamId)
-    .map((h) => ({ name: h.name, acts: h.acts, accepts: h.accepts ?? 0 }));
-  const acts = db
-    .prepare<
-      [string, number],
-      { n: number }
-    >(`SELECT COUNT(*) AS n FROM messages WHERE team_id = ? AND ts > ?`)
-    .get(teamId, since)!.n;
+  ).map((h) => ({ name: h.name, acts: h.acts, accepts: h.accepts ?? 0 }));
+  const acts = (await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM messages WHERE team_id = ? AND ts > ?`,
+    [teamId, since],
+  ))!.n;
   const toHuman = challenges.to_human ?? 0;
   const ofHuman = declines.of_human ?? 0;
   return {
@@ -359,89 +350,69 @@ function percentile(sorted: number[], p: number): number | null {
  * Interrupt-line arc metrics (ADR 125): steering latency, supersession-correctness, stale-work-caught.
  * Pure read over messages + lanes — the launch-demo instrument panel.
  */
-export function deriveSteeringMetrics(
-  db: Database,
+export async function deriveSteeringMetrics(
+  db: Driver,
   teamId: string,
   now: number = Date.now(),
-): SteeringMetrics {
+): Promise<SteeringMetrics> {
   const since = now - STEERING_WINDOW_MS;
 
-  const steers = db
-    .prepare<[string, number], SteerRow>(
-      `SELECT m.id AS id, m.to_member AS recipient_id, m.ts AS ts
+  const steers = await db.all<SteerRow>(
+    `SELECT m.id AS id, m.to_member AS recipient_id, m.ts AS ts
          FROM messages m
         WHERE m.team_id = ? AND m.act = 'steer' AND m.to_kind = 'member'
           AND m.to_member IS NOT NULL AND m.ts > ?`,
-    )
-    .all(teamId, since);
+    [teamId, since],
+  );
 
   const latencies: number[] = [];
   for (const s of steers) {
     // Recipient's first act strictly after the steer (ts, then id) — the acknowledgment.
-    const later = db
-      .prepare<[string, string, number, number, string], { ts: number }>(
-        `SELECT ts FROM messages
+    const later = await db.get<{ ts: number }>(
+      `SELECT ts FROM messages
           WHERE team_id = ? AND from_member = ?
             AND (ts > ? OR (ts = ? AND id > ?))
           ORDER BY ts ASC, id ASC LIMIT 1`,
-      )
-      .get(teamId, s.recipient_id, s.ts, s.ts, s.id);
+      [teamId, s.recipient_id, s.ts, s.ts, s.id],
+    );
     if (later) latencies.push(later.ts - s.ts);
   }
 
   latencies.sort((a, b) => a - b);
 
   // Supersession-correctness: acts whose in_reply_to names a steer already superseded at act.ts.
-  const replyActs = db
-    .prepare<[string, number], ActRow>(
-      `SELECT m.id AS id, m.from_member AS from_member, m.ts AS ts,
+  const replyActs = await db.all<ActRow>(
+    `SELECT m.id AS id, m.from_member AS from_member, m.ts AS ts,
               m.in_reply_to AS in_reply_to
          FROM messages m
         WHERE m.team_id = ? AND m.ts > ?
           AND m.in_reply_to IS NOT NULL`,
-    )
-    .all(teamId, since);
+    [teamId, since],
+  );
 
   let superseded_acts = 0;
   for (const a of replyActs) {
     if (!a.in_reply_to) continue;
-    const named = db
-      .prepare<
-        [string, string],
-        { act: string; to_member: string | null; ts: number }
-      >(`SELECT act, to_member, ts FROM messages WHERE team_id = ? AND id = ?`)
-      .get(teamId, a.in_reply_to);
+    const named = await db.get<{ act: string; to_member: string | null; ts: number }>(
+      `SELECT act, to_member, ts FROM messages WHERE team_id = ? AND id = ?`,
+      [teamId, a.in_reply_to],
+    );
     if (!named || named.act !== 'steer' || !named.to_member) continue;
     // A newer steer to the same recipient before this act → the named one was superseded.
     // Tie-break equal timestamps with message id (ADR 103 / pendingInterrupts: higher id wins).
-    const newer = db
-      .prepare<
-        [string, string, string, number, number, string, number, number, string],
-        { n: number }
-      >(
-        `SELECT COUNT(*) AS n FROM messages
+    const newer = await db.get<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM messages
           WHERE team_id = ? AND act = 'steer' AND to_member = ?
             AND id != ?
             AND (ts > ? OR (ts = ? AND id > ?))
             AND (ts < ? OR (ts = ? AND id < ?))`,
-      )
-      .get(
-        teamId,
-        named.to_member,
-        a.in_reply_to,
-        named.ts,
-        named.ts,
-        a.in_reply_to,
-        a.ts,
-        a.ts,
-        a.id,
-      );
+      [teamId, named.to_member, a.in_reply_to, named.ts, named.ts, a.in_reply_to, a.ts, a.ts, a.id],
+    );
     if ((newer?.n ?? 0) > 0) superseded_acts += 1;
   }
 
-  const wakes = db
-    .prepare<[string, number], WakeRow>(
-      `SELECT m.id AS id, m.to_member AS recipient_id,
+  const wakes = await db.all<WakeRow>(
+    `SELECT m.id AS id, m.to_member AS recipient_id,
               json_extract(m.meta, '$.lane_warning.subject') AS subject,
               json_extract(m.meta, '$.lane_warning.with') AS with_ref,
               m.ts AS ts
@@ -450,17 +421,19 @@ export function deriveSteeringMetrics(
           AND json_extract(m.meta, '$.lane_warning.kind') IN ('stale_plan','stale_dependency')
           AND m.to_member IS NOT NULL
           AND json_extract(m.meta, '$.lane_warning.subject') IS NOT NULL`,
-    )
-    .all(teamId, since);
+    [teamId, since],
+  );
 
   let stale_caught = 0;
   for (const w of wakes) {
-    const lane = db
-      .prepare<
-        [string, string],
-        { state: string; resolved_at: number | null; goal_id: string | null }
-      >(`SELECT state, resolved_at, goal_id FROM lanes WHERE team_id = ? AND id = ?`)
-      .get(teamId, w.subject);
+    const lane = await db.get<{
+      state: string;
+      resolved_at: number | null;
+      goal_id: string | null;
+    }>(`SELECT state, resolved_at, goal_id FROM lanes WHERE team_id = ? AND id = ?`, [
+      teamId,
+      w.subject,
+    ]);
     const abandonedOrDone =
       lane !== undefined &&
       (lane.state === 'abandoned' || lane.state === 'done') &&
@@ -474,21 +447,8 @@ export function deriveSteeringMetrics(
     // lane's goal_id / the wake's `with` Goal id — not any owner chatter.
     const laneGoal = lane?.goal_id ?? null;
     const withRef = w.with_ref;
-    const course = db
-      .prepare<
-        [
-          string,
-          string,
-          number,
-          string,
-          string | null,
-          string | null,
-          string | null,
-          string | null,
-        ],
-        { n: number }
-      >(
-        `SELECT COUNT(*) AS n FROM messages
+    const course = await db.get<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM messages
           WHERE team_id = ? AND from_member = ? AND ts > ?
             AND act IN ('accept','handoff','status_update','resolve')
             AND (
@@ -496,8 +456,8 @@ export function deriveSteeringMetrics(
               OR (? IS NOT NULL AND json_extract(meta, '$.goal_id') = ?)
               OR (? IS NOT NULL AND json_extract(meta, '$.goal_id') = ?)
             )`,
-      )
-      .get(teamId, w.recipient_id, w.ts, w.id, laneGoal, laneGoal, withRef, withRef);
+      [teamId, w.recipient_id, w.ts, w.id, laneGoal, laneGoal, withRef, withRef],
+    );
     if ((course?.n ?? 0) > 0) stale_caught += 1;
   }
 
@@ -533,20 +493,19 @@ const REVIEW_WINDOW_MS = REVIEW_WINDOW_DAYS * 24 * 60 * 60 * 1000;
  * without it — a zero means "reviewers found nothing" or "no reviewer was ever eligible", and only
  * the first is a reason to call the feature decorative.
  */
-export function deriveReviewMetrics(
-  db: Database,
+export async function deriveReviewMetrics(
+  db: Driver,
   teamId: string,
   now: number = Date.now(),
-): ReviewMetrics {
+): Promise<ReviewMetrics> {
   const since = now - REVIEW_WINDOW_MS;
-  const rows = db
-    .prepare<[string, number], { action: string; detail: string | null }>(
-      `SELECT action, detail FROM audit
+  const rows = await db.all<{ action: string; detail: string | null }>(
+    `SELECT action, detail FROM audit
         WHERE team_id = ?
           AND action IN ('lane.ready_for_review','lane.closed','lane.review_sent_back')
           AND ts > ?`,
-    )
-    .all(teamId, since);
+    [teamId, since],
+  );
 
   const m: ReviewMetrics = {
     window_ms: REVIEW_WINDOW_MS,
@@ -687,17 +646,14 @@ interface WakeAuditRow {
  * `cost_reported` carries the honesty denominator. Per-seat economics flag `over_budget` against
  * the seat's effective `budget_usd` — a REPORT bound (nothing was stopped mid-run).
  */
-export function deriveWakeMetrics(
-  db: Database,
+export async function deriveWakeMetrics(
+  db: Driver,
   teamId: string,
   now: number = Date.now(),
-): WakeMetrics {
+): Promise<WakeMetrics> {
   const since = now - WAKE_WINDOW_MS;
-  const rows: WakeAuditRow[] = db
-    .prepare<
-      [string, number],
-      { action: string; target: string; ts: number; detail: string | null }
-    >(
+  const rows: WakeAuditRow[] = (
+    await db.all<{ action: string; target: string; ts: number; detail: string | null }>(
       `SELECT action, target, ts, detail FROM audit
         WHERE team_id = ?
           AND action IN ('residency.woke','residency.wake_failed','residency.wake_deferred',
@@ -705,17 +661,17 @@ export function deriveWakeMetrics(
                          'residency.wake_report_rejected')
           AND ts > ?
         ORDER BY ts ASC`,
+      [teamId, since],
     )
-    .all(teamId, since)
-    .map((r) => {
-      let detail: WakeAuditRow['detail'] = {};
-      try {
-        detail = r.detail ? (JSON.parse(r.detail) as WakeAuditRow['detail']) : {};
-      } catch {
-        /* best-effort rows stay countable */
-      }
-      return { action: r.action, target: r.target, ts: r.ts, detail };
-    });
+  ).map((r) => {
+    let detail: WakeAuditRow['detail'] = {};
+    try {
+      detail = r.detail ? (JSON.parse(r.detail) as WakeAuditRow['detail']) : {};
+    } catch {
+      /* best-effort rows stay countable */
+    }
+    return { action: r.action, target: r.target, ts: r.ts, detail };
+  });
 
   // ADR 273: reports the daemon REFUSED. Not a wake outcome — a wake whose outcome never got
   // recorded, which is worse, because the lease then expires and reads as "the host never
@@ -746,47 +702,49 @@ export function deriveWakeMetrics(
   const wakesBySeat = new Map<string, number>();
   for (const [actId, woke] of byAct) {
     wakesBySeat.set(woke.target, (wakesBySeat.get(woke.target) ?? 0) + 1);
-    const msg = db
-      .prepare<[string, string], MessageRow>('SELECT * FROM messages WHERE team_id = ? AND id = ?')
-      .get(teamId, actId);
-    const recipient = getMemberByName(db, teamId, woke.target);
+    const msg = await db.get<MessageRow>('SELECT * FROM messages WHERE team_id = ? AND id = ?', [
+      teamId,
+      actId,
+    ]);
+    const recipient = await getMemberByName(db, teamId, woke.target);
     if (!msg || !recipient) continue;
     // The seat's first act strictly after the trigger (ts, then id) — the steering tie-break.
-    const later = db
-      .prepare<[string, string, number, number, string], { ts: number }>(
-        `SELECT ts FROM messages
+    const later = await db.get<{ ts: number }>(
+      `SELECT ts FROM messages
           WHERE team_id = ? AND from_member = ?
             AND (ts > ? OR (ts = ? AND id > ?))
           ORDER BY ts ASC, id ASC LIMIT 1`,
-      )
-      .get(teamId, recipient.id, msg.ts, msg.ts, msg.id);
+      [teamId, recipient.id, msg.ts, msg.ts, msg.id],
+    );
     if (later) latencies.push(later.ts - msg.ts);
-    if (actAnswered(db, msg, recipient.id)) answered += 1;
+    if (await actAnswered(db, msg, recipient.id)) answered += 1;
   }
   latencies.sort((a, b) => a - b);
 
   // Per-seat economics against the effective budget_usd (a per-run report bound: over_budget
   // when any single wake's attested cost exceeded it).
-  const teamPolicy = getPolicy(db, teamId);
-  const by_seat: WakeSeatCost[] = [...wakesBySeat.entries()]
-    .map(([seat, wakes]) => {
-      const costs = [...costByLease.values()].filter((c) => c.seat === seat).map((c) => c.cost);
-      const total = costs.length > 0 ? costs.reduce((a, b) => a + b, 0) : null;
-      const member = getMemberByName(db, teamId, seat);
-      const enrollment = member ? getResidency(db, teamId, member.id) : null;
-      const budget = enrollment
-        ? (effectiveWakePolicy(seatWakeDefaults(teamPolicy, member), enrollment.policy)
-            .budget_usd ?? null)
-        : null;
-      return {
-        seat,
-        wakes,
-        cost_usd_total: total,
-        budget_usd: budget,
-        over_budget: budget !== null && costs.some((c) => c > budget),
-      };
-    })
-    .sort((a, b) => a.seat.localeCompare(b.seat));
+  const teamPolicy = await getPolicy(db, teamId);
+  const by_seat: WakeSeatCost[] = (
+    await Promise.all(
+      [...wakesBySeat.entries()].map(async ([seat, wakes]) => {
+        const costs = [...costByLease.values()].filter((c) => c.seat === seat).map((c) => c.cost);
+        const total = costs.length > 0 ? costs.reduce((a, b) => a + b, 0) : null;
+        const member = await getMemberByName(db, teamId, seat);
+        const enrollment = member ? await getResidency(db, teamId, member.id) : null;
+        const budget = enrollment
+          ? (effectiveWakePolicy(seatWakeDefaults(teamPolicy, member), enrollment.policy)
+              .budget_usd ?? null)
+          : null;
+        return {
+          seat,
+          wakes,
+          cost_usd_total: total,
+          budget_usd: budget,
+          over_budget: budget !== null && costs.some((c) => c > budget),
+        };
+      }),
+    )
+  ).sort((a, b) => a.seat.localeCompare(b.seat));
 
   const costs = [...costByLease.values()].map((c) => c.cost);
   const costTotal = costs.length > 0 ? costs.reduce((a, b) => a + b, 0) : null;
@@ -858,14 +816,14 @@ export function deriveWakeMetrics(
  * the whole mitigation: warn, never block, never auto-un-defer — the system does not decide on a
  * Member's behalf that their deferral has expired.
  */
-function deriveLongDeferred(
-  db: Database,
+async function deriveLongDeferred(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   now: number,
-): LongDeferred[] {
-  const rows = listTeamMessages(db, teamId, { limit: DEFERRAL_SCAN_LIMIT });
-  const envelopes = rowsToEnvelopes(db, teamSlug, rows);
+): Promise<LongDeferred[]> {
+  const rows = await listTeamMessages(db, teamId, { limit: DEFERRAL_SCAN_LIMIT });
+  const envelopes = await rowsToEnvelopes(db, teamSlug, rows);
   const seats = new Set(envelopes.filter((e) => e.act === 'wait').map((e) => e.from));
   const out: LongDeferred[] = [];
   for (const seat of seats) {
@@ -874,37 +832,37 @@ function deriveLongDeferred(
   return out.sort((a, b) => a.deferred_ts - b.deferred_ts);
 }
 
-export function deriveReport(
-  db: Database,
+export async function deriveReport(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   now: number = Date.now(),
   /** Presence liveness window for the family-posture snapshot (ADR 172); omitted ⇒ no posture. */
   presenceTimeoutMs?: number,
-): Report {
-  const blocked: BlockedLane[] = listBlockedLanes(db, teamId);
+): Promise<Report> {
+  const blocked: BlockedLane[] = await listBlockedLanes(db, teamId);
 
   return {
     team: teamSlug,
     generated_ts: now,
-    flow: flowMetrics(db, teamId, now),
-    goal_flow: goalFlowMetrics(db, teamId, now),
-    waiting_on: waitingOn(db, teamId, now),
-    goals: listGoals(db, teamId, teamSlug),
+    flow: await flowMetrics(db, teamId, now),
+    goal_flow: await goalFlowMetrics(db, teamId, now),
+    waiting_on: await waitingOn(db, teamId, now),
+    goals: await listGoals(db, teamId, teamSlug),
     blocked,
-    coordination: coordinationDensity(db, teamId, now),
-    peer_demand: peerDemand(db, teamId, now),
-    open_directed: openDirectedLedger(db, teamId, now),
-    mast: deriveMast(db, teamId, now),
-    steering: deriveSteeringMetrics(db, teamId, now),
-    wake: deriveWakeMetrics(db, teamId, now),
-    tool_calls: deriveToolCallMetrics(db, teamId, now),
-    review: deriveReviewMetrics(db, teamId, now),
-    long_deferred: deriveLongDeferred(db, teamId, teamSlug, now),
+    coordination: await coordinationDensity(db, teamId, now),
+    peer_demand: await peerDemand(db, teamId, now),
+    open_directed: await openDirectedLedger(db, teamId, now),
+    mast: await deriveMast(db, teamId, now),
+    steering: await deriveSteeringMetrics(db, teamId, now),
+    wake: await deriveWakeMetrics(db, teamId, now),
+    tool_calls: await deriveToolCallMetrics(db, teamId, now),
+    review: await deriveReviewMetrics(db, teamId, now),
+    long_deferred: await deriveLongDeferred(db, teamId, teamSlug, now),
     // ADR 172: the model-family posture snapshot — derived, never stored. Sustained monoculture is
     // read off the SERIES of reports, not off any single one.
     ...(presenceTimeoutMs !== undefined
-      ? { family_posture: teamFamilyPosture(db, teamId, presenceTimeoutMs) }
+      ? { family_posture: await teamFamilyPosture(db, teamId, presenceTimeoutMs) }
       : {}),
   };
 }

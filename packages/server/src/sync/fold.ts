@@ -5,8 +5,8 @@ import {
   type SyncPullLaneEvent,
   isWireAttestationSource,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { z } from 'zod';
+import type { Driver } from '../db/driver.js';
 import { getMemberByName } from '../store/members.js';
 import { upsertForeignNode } from '../store/nodes.js';
 import {
@@ -113,17 +113,18 @@ const LANE_VERBS = new Set([
  * store did to its row when it wrote this verb, this does to ours. `null` when the lane has no row
  * here and the verb is not its birth.
  */
-function projectLaneEvent(
-  db: Database,
+async function projectLaneEvent(
+  db: Driver,
   teamId: string,
   event: SyncPullLaneEvent['event'],
-): 'applied' | 'unborn' {
+): Promise<'applied' | 'unborn'> {
   const d = (event.detail ?? {}) as Record<string, unknown>;
   const laneId = (typeof d['lane'] === 'string' ? d['lane'] : event.target) ?? '';
   const ts = event.ts;
-  const held = db
-    .prepare<[string, string], { id: string }>('SELECT id FROM lanes WHERE team_id = ? AND id = ?')
-    .get(teamId, laneId);
+  const held = await db.get<{ id: string }>('SELECT id FROM lanes WHERE team_id = ? AND id = ?', [
+    teamId,
+    laneId,
+  ]);
 
   if (event.action === 'lane.opened') {
     // The birth carries the whole declaration (Finding 4). A replay past the idempotence check
@@ -135,29 +136,30 @@ function projectLaneEvent(
     const risk = Array.isArray(d['risk']) ? d['risk'] : [];
     const stakes = typeof d['stakes'] === 'string' ? d['stakes'] : 'normal';
     const provenance = typeof d['stakes_provenance'] === 'string' ? d['stakes_provenance'] : null;
-    db.prepare(
+    await db.run(
       `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs,
                           depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, state,
                           created_by, created_at, claimed_at, resolved_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'open', ?, ?, NULL, NULL, ?)`,
-    ).run(
-      laneId,
-      teamId,
-      typeof d['project'] === 'string' ? d['project'] : 'default',
-      typeof d['title'] === 'string' ? d['title'] : '',
-      typeof d['detail'] === 'string' ? d['detail'] : null,
-      typeof d['kind'] === 'string' ? d['kind'] : null,
-      typeof d['role'] === 'string' ? d['role'] : null,
-      JSON.stringify(scope),
-      JSON.stringify(dependsOn),
-      typeof d['branch'] === 'string' ? d['branch'] : null,
-      typeof d['goal_id'] === 'string' ? d['goal_id'] : null,
-      risk.length > 0 ? JSON.stringify(risk) : null,
-      stakes !== 'normal' ? stakes : null,
-      provenance === 'defaulted' ? 'defaulted' : null,
-      typeof d['created_by'] === 'string' ? d['created_by'] : (event.actor ?? ''),
-      typeof d['created_at'] === 'number' ? d['created_at'] : ts,
-      typeof d['created_at'] === 'number' ? d['created_at'] : ts,
+      [
+        laneId,
+        teamId,
+        typeof d['project'] === 'string' ? d['project'] : 'default',
+        typeof d['title'] === 'string' ? d['title'] : '',
+        typeof d['detail'] === 'string' ? d['detail'] : null,
+        typeof d['kind'] === 'string' ? d['kind'] : null,
+        typeof d['role'] === 'string' ? d['role'] : null,
+        JSON.stringify(scope),
+        JSON.stringify(dependsOn),
+        typeof d['branch'] === 'string' ? d['branch'] : null,
+        typeof d['goal_id'] === 'string' ? d['goal_id'] : null,
+        risk.length > 0 ? JSON.stringify(risk) : null,
+        stakes !== 'normal' ? stakes : null,
+        provenance === 'defaulted' ? 'defaulted' : null,
+        typeof d['created_by'] === 'string' ? d['created_by'] : (event.actor ?? ''),
+        typeof d['created_at'] === 'number' ? d['created_at'] : ts,
+        typeof d['created_at'] === 'number' ? d['created_at'] : ts,
+      ],
     );
     return 'applied';
   }
@@ -166,17 +168,19 @@ function projectLaneEvent(
   switch (event.action) {
     case 'lane.claimed': {
       const owner = typeof d['owner'] === 'string' ? d['owner'] : event.actor;
-      db.prepare(
+      await db.run(
         `UPDATE lanes SET owner_seat = ?, state = CASE WHEN state = 'open' THEN 'claimed' ELSE state END,
                           claimed_at = ?, updated_at = ? WHERE team_id = ? AND id = ?`,
-      ).run(owner, ts, ts, teamId, laneId);
+        [owner, ts, ts, teamId, laneId],
+      );
       return 'applied';
     }
     case 'lane.released':
-      db.prepare(
+      await db.run(
         `UPDATE lanes SET owner_seat = NULL, state = 'open', claimed_at = NULL, updated_at = ?
           WHERE team_id = ? AND id = ?`,
-      ).run(ts, teamId, laneId);
+        [ts, teamId, laneId],
+      );
       return 'applied';
     case 'lane.state_changed': {
       const to = typeof d['to'] === 'string' ? d['to'] : null;
@@ -184,29 +188,32 @@ function projectLaneEvent(
       // ADR 466: parking releases the owner (the origin store's release invariant); the park
       // record itself follows in the same write's `lane.updated` row (`parked` field).
       if (to === 'parked')
-        db.prepare(
+        await db.run(
           `UPDATE lanes SET state = ?, owner_seat = NULL, claimed_at = NULL, updated_at = ?
             WHERE team_id = ? AND id = ?`,
-        ).run(to, ts, teamId, laneId);
+          [to, ts, teamId, laneId],
+        );
       else
-        db.prepare('UPDATE lanes SET state = ?, updated_at = ? WHERE team_id = ? AND id = ?').run(
+        await db.run('UPDATE lanes SET state = ?, updated_at = ? WHERE team_id = ? AND id = ?', [
           to,
           ts,
           teamId,
           laneId,
-        );
+        ]);
       return 'applied';
     }
     case 'lane.ready_for_review':
-      db.prepare(
+      await db.run(
         "UPDATE lanes SET state = 'awaiting_acceptance', updated_at = ? WHERE team_id = ? AND id = ?",
-      ).run(ts, teamId, laneId);
+        [ts, teamId, laneId],
+      );
       return 'applied';
     case 'lane.closed': {
       const state = typeof d['state'] === 'string' ? d['state'] : 'done';
-      db.prepare(
+      await db.run(
         'UPDATE lanes SET state = ?, resolved_at = ?, updated_at = ? WHERE team_id = ? AND id = ?',
-      ).run(state, ts, ts, teamId, laneId);
+        [state, ts, ts, teamId, laneId],
+      );
       return 'applied';
     }
     case 'lane.updated': {
@@ -238,12 +245,12 @@ function projectLaneEvent(
         else if (field === 'stakes') value = value === 'normal' ? null : value;
         else if (field === 'merged' || field === 'parked')
           value = value === null ? null : JSON.stringify(value);
-        db.prepare(`UPDATE lanes SET ${col} = ?, updated_at = ? WHERE team_id = ? AND id = ?`).run(
+        await db.run(`UPDATE lanes SET ${col} = ?, updated_at = ? WHERE team_id = ? AND id = ?`, [
           value,
           ts,
           teamId,
           laneId,
-        );
+        ]);
       }
       return 'applied';
     }
@@ -267,19 +274,19 @@ const POLICY_VERBS = new Set(['policy.change']);
  * is no per-machine value to reconcile against. `updated_at` is the local clock at fold time, like
  * every other folded row's receipt stamp.
  */
-function projectPolicyEvent(
-  db: Database,
+async function projectPolicyEvent(
+  db: Driver,
   teamId: string,
   event: SyncPullLaneEvent['event'],
   now: number,
-): 'applied' | 'unknown' {
+): Promise<'applied' | 'unknown'> {
   if (event.action !== 'policy.change') return 'unknown';
   const stored = event.detail ?? {};
-  db.prepare('UPDATE teams SET policy = ?, updated_at = ? WHERE id = ?').run(
+  await db.run('UPDATE teams SET policy = ?, updated_at = ? WHERE id = ?', [
     JSON.stringify(stored),
     now,
     teamId,
-  );
+  ]);
   return 'applied';
 }
 
@@ -296,13 +303,13 @@ const SEED_VERBS = new Set(['seed.captured']);
  * born promoted against. An explorer claim is "exactly one holder" and stays a residence-1 question
  * for the federation increment.
  */
-function projectSeedEvent(
-  db: Database,
+async function projectSeedEvent(
+  db: Driver,
   teamId: string,
   event: SyncPullLaneEvent['event'],
   submitterId: string,
   now: number,
-): 'applied' | 'unknown' {
+): Promise<'applied' | 'unknown'> {
   if (event.action !== 'seed.captured') return 'unknown';
   const d = event.detail ?? {};
   const relayId = d['relay_id'];
@@ -311,7 +318,7 @@ function projectSeedEvent(
   if (typeof relayId !== 'string' || typeof body !== 'string' || typeof source !== 'string') {
     return 'unknown';
   }
-  applySeedCapture(
+  await applySeedCapture(
     db,
     teamId,
     {
@@ -345,19 +352,19 @@ const RECORD_VERBS = new Set(['record.tool_calls', 'record.seed_thread', 'record
  * - `incident_report`: the hub's pool row, mirrored read-only so `incidentReporters` answers on a
  *   joiner. The same verb carries the later `lane_id` stamp, hence the upsert on the id.
  */
-function projectRecordEvent(
-  db: Database,
+async function projectRecordEvent(
+  db: Driver,
   teamId: string,
   event: SyncPullLaneEvent['event'],
   memberId: string | null,
-): 'applied' | 'unknown' | 'seed_unborn' {
+): Promise<'applied' | 'unknown' | 'seed_unborn'> {
   const d = event.detail ?? {};
   if (event.action === 'record.tool_calls') {
     const seat = typeof d['seat'] === 'string' ? d['seat'] : event.actor;
     const bucket = typeof d['bucket_start'] === 'number' ? d['bucket_start'] : event.ts;
     const parsed = z.array(ToolCallEventSchema).safeParse(d['events']);
     if (!seat || !parsed.success) return 'unknown';
-    recordToolCalls(
+    await recordToolCalls(
       db,
       teamId,
       seat,
@@ -381,17 +388,16 @@ function projectRecordEvent(
       !memberId
     )
       return 'unknown';
-    const seed = db
-      .prepare<
-        [string, string],
-        { id: string }
-      >('SELECT id FROM seeds WHERE team_id = ? AND relay_id = ?')
-      .get(teamId, relayId);
+    const seed = await db.get<{ id: string }>(
+      'SELECT id FROM seeds WHERE team_id = ? AND relay_id = ?',
+      [teamId, relayId],
+    );
     if (!seed) return 'seed_unborn';
-    db.prepare(
+    await db.run(
       `INSERT OR IGNORE INTO seed_thread_entries (id, seed_id, kind, body, member_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(entryId, seed.id, kind, body, memberId, createdAt);
+      [entryId, seed.id, kind, body, memberId, createdAt],
+    );
     return 'applied';
   }
   if (event.action === 'record.incident_report') {
@@ -399,20 +405,21 @@ function projectRecordEvent(
     const gate = d['gate'];
     const seat = typeof d['seat'] === 'string' ? d['seat'] : event.actor;
     if (typeof reportId !== 'string' || typeof gate !== 'string' || !seat) return 'unknown';
-    db.prepare(
+    await db.run(
       `INSERT INTO incident_reports (id, team_id, gate, seat, sig, ref, message_id, lane_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET lane_id = COALESCE(excluded.lane_id, lane_id)`,
-    ).run(
-      reportId,
-      teamId,
-      gate,
-      seat,
-      typeof d['sig'] === 'string' ? d['sig'] : null,
-      typeof d['ref'] === 'string' ? d['ref'] : null,
-      typeof d['message_id'] === 'string' ? d['message_id'] : null,
-      typeof d['lane_id'] === 'string' ? d['lane_id'] : null,
-      typeof d['created_at'] === 'number' ? d['created_at'] : event.ts,
+      [
+        reportId,
+        teamId,
+        gate,
+        seat,
+        typeof d['sig'] === 'string' ? d['sig'] : null,
+        typeof d['ref'] === 'string' ? d['ref'] : null,
+        typeof d['message_id'] === 'string' ? d['message_id'] : null,
+        typeof d['lane_id'] === 'string' ? d['lane_id'] : null,
+        typeof d['created_at'] === 'number' ? d['created_at'] : event.ts,
+      ],
     );
     return 'applied';
   }
@@ -446,22 +453,20 @@ const CONTINUITY_VERBS = new Set([
  * max-merging the raw number would move the cursor to a position no local row ever occupied and
  * swallow the unread acts in between. A cursor is a place in the log; the place is re-read here.
  */
-function projectContinuityEvent(
-  db: Database,
+async function projectContinuityEvent(
+  db: Driver,
   teamId: string,
   seat: { id: string; name: string },
   event: SyncPullLaneEvent['event'],
   now: number,
-): 'applied' | 'unknown' | 'cursor_unborn' {
+): Promise<'applied' | 'unknown' | 'cursor_unborn'> {
   const detail = event.detail ?? {};
   if (event.action === 'continuity.memory_saved') {
     const savedAt = typeof detail['saved_at'] === 'number' ? detail['saved_at'] : event.ts;
-    const local = db
-      .prepare<
-        [string],
-        { saved_at: number }
-      >('SELECT saved_at FROM seat_memory WHERE member_id = ?')
-      .get(seat.id);
+    const local = await db.get<{ saved_at: number }>(
+      'SELECT saved_at FROM seat_memory WHERE member_id = ?',
+      [seat.id],
+    );
     if (local && local.saved_at >= savedAt) return 'applied';
     // No local note is NOT "nothing to compare against" (gptbot's decline of lane 01M1JNY14F,
     // 2026-09-03): a clear deleted the row, and a save minted BEFORE that clear on another machine
@@ -469,54 +474,51 @@ function projectContinuityEvent(
     // audit row with `cleared_at`, this daemon's own included — so the delayed older save loses to
     // it here exactly as it would have lost to the row the clear removed. ADR 366 decision 4.
     if (!local) {
-      const cleared = db
-        .prepare<[string, string], { t: number | null }>(
-          `SELECT MAX(json_extract(detail, '$.cleared_at')) AS t FROM audit
+      const cleared = await db.get<{ t: number | null }>(
+        `SELECT MAX(json_extract(detail, '$.cleared_at')) AS t FROM audit
             WHERE team_id = ? AND action = 'continuity.memory_cleared' AND actor = ?`,
-        )
-        .get(teamId, seat.name);
+        [teamId, seat.name],
+      );
       if (cleared?.t != null && cleared.t >= savedAt) return 'applied';
     }
-    db.prepare(
+    await db.run(
       `INSERT INTO seat_memory (member_id, headline, body, saved_at)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(member_id) DO UPDATE SET
          headline = excluded.headline, body = excluded.body, saved_at = excluded.saved_at`,
-    ).run(
-      seat.id,
-      typeof detail['headline'] === 'string' ? detail['headline'] : '',
-      typeof detail['body'] === 'string' ? detail['body'] : '',
-      savedAt,
+      [
+        seat.id,
+        typeof detail['headline'] === 'string' ? detail['headline'] : '',
+        typeof detail['body'] === 'string' ? detail['body'] : '',
+        savedAt,
+      ],
     );
     return 'applied';
   }
   if (event.action === 'continuity.memory_cleared') {
     const clearedAt = typeof detail['cleared_at'] === 'number' ? detail['cleared_at'] : event.ts;
-    const local = db
-      .prepare<
-        [string],
-        { saved_at: number }
-      >('SELECT saved_at FROM seat_memory WHERE member_id = ?')
-      .get(seat.id);
+    const local = await db.get<{ saved_at: number }>(
+      'SELECT saved_at FROM seat_memory WHERE member_id = ?',
+      [seat.id],
+    );
     // A save made after the clear wins: the seat wrote a new note on another machine, and the
     // clear it raced is about the note that note replaced.
     if (local && local.saved_at > clearedAt) return 'applied';
-    db.prepare('DELETE FROM seat_memory WHERE member_id = ?').run(seat.id);
+    await db.run('DELETE FROM seat_memory WHERE member_id = ?', [seat.id]);
     return 'applied';
   }
   if (event.action === 'continuity.cursor_advanced') {
     const messageId = detail['last_read_message_id'];
     if (typeof messageId !== 'string') return 'unknown';
-    const row = db
-      .prepare<[string], { created_at: number }>('SELECT created_at FROM messages WHERE id = ?')
-      .get(messageId);
+    const row = await db.get<{ created_at: number }>(
+      'SELECT created_at FROM messages WHERE id = ?',
+      [messageId],
+    );
     if (!row) return 'cursor_unborn';
-    const local = db
-      .prepare<
-        [string],
-        { last_read_ts: number; last_read_message_id: string | null }
-      >('SELECT last_read_ts, last_read_message_id FROM inbox_cursors WHERE member_id = ?')
-      .get(seat.id);
+    const local = await db.get<{ last_read_ts: number; last_read_message_id: string | null }>(
+      'SELECT last_read_ts, last_read_message_id FROM inbox_cursors WHERE member_id = ?',
+      [seat.id],
+    );
     // Forward only, measured in this daemon's own order — and that order is the `(created_at, id)`
     // point `listMessages` reads unread against (store/messages.ts), not `created_at` alone. Two
     // messages folded in one batch share a millisecond, and a cursor that compared only the clock
@@ -530,14 +532,15 @@ function projectContinuityEvent(
     ) {
       return 'applied';
     }
-    db.prepare(
+    await db.run(
       `INSERT INTO inbox_cursors (member_id, last_read_message_id, last_read_ts, updated_at)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(member_id) DO UPDATE SET
          last_read_message_id = excluded.last_read_message_id,
          last_read_ts = excluded.last_read_ts,
          updated_at = excluded.updated_at`,
-    ).run(seat.id, messageId, row.created_at, now);
+      [seat.id, messageId, row.created_at, now],
+    );
     return 'applied';
   }
   return 'unknown';
@@ -567,12 +570,12 @@ const STORABLE_SURFACES = new Set([
  * same fact arriving after our stale-node sweep — applied as a no-op. A reattest for a row we never
  * held is a hole, and stops.
  */
-function projectPresenceEvent(
-  db: Database,
+async function projectPresenceEvent(
+  db: Driver,
   teamId: string,
   originNode: string,
   event: SyncPullLaneEvent['event'],
-): 'applied' | 'unborn' | 'unknown' {
+): Promise<'applied' | 'unborn' | 'unknown'> {
   const d = (event.detail ?? {}) as Record<string, unknown>;
   const presenceId = typeof d['presence'] === 'string' ? d['presence'] : '';
   if (!presenceId) return 'unknown';
@@ -581,48 +584,47 @@ function projectPresenceEvent(
     case 'presence.attached': {
       const surface = str('surface');
       if (!surface || !STORABLE_SURFACES.has(surface)) return 'unknown';
-      const member = getMemberByName(db, teamId, event.actor ?? '');
+      const member = await getMemberByName(db, teamId, event.actor ?? '');
       if (!member) return 'unknown'; // the caller resolved the seat already; defensive
       // Two origins minting one presence id cannot happen (ULIDs); a held row here is a replay
       // that slipped the pair check, so keep ours.
-      if (db.prepare('SELECT 1 FROM presence WHERE id = ?').get(presenceId)) return 'applied';
+      if (await db.get('SELECT 1 FROM presence WHERE id = ?', [presenceId])) return 'applied';
       const model = str('model');
-      db.prepare(
+      await db.run(
         `INSERT INTO presence (id, member_id, surface, status, conn_id, last_seen_at, held_until, provenance, workspace, driver, model, model_source, build, epoch, guidance_epoch, wake_lease, node, created_at)
          VALUES (?, ?, ?, 'online', NULL, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
-      ).run(
-        presenceId,
-        member.id,
-        surface,
-        event.ts,
-        str('provenance'),
-        str('workspace'),
-        str('driver'),
-        model,
-        model ? str('model_source') : null,
-        str('build'),
-        typeof d['epoch'] === 'number' ? d['epoch'] : null,
-        // ADR 417. Folded like `epoch`: a remote seat's guidance epoch is a fact about THAT seat's
-        // workspace, and a census that silently reads null for every replicated row would report the
-        // rest of the fleet as unstamped rather than as unmeasured.
-        typeof d['guidance_epoch'] === 'number' ? d['guidance_epoch'] : null,
-        originNode,
-        event.ts,
+        [
+          presenceId,
+          member.id,
+          surface,
+          event.ts,
+          str('provenance'),
+          str('workspace'),
+          str('driver'),
+          model,
+          model ? str('model_source') : null,
+          str('build'),
+          typeof d['epoch'] === 'number' ? d['epoch'] : null,
+          // ADR 417. Folded like `epoch`: a remote seat's guidance epoch is a fact about THAT seat's
+          // workspace, and a census that silently reads null for every replicated row would report the
+          // rest of the fleet as unstamped rather than as unmeasured.
+          typeof d['guidance_epoch'] === 'number' ? d['guidance_epoch'] : null,
+          originNode,
+          event.ts,
+        ],
       );
       return 'applied';
     }
     case 'presence.detached':
-      db.prepare('DELETE FROM presence WHERE id = ? AND node = ?').run(presenceId, originNode);
+      await db.run('DELETE FROM presence WHERE id = ? AND node = ?', [presenceId, originNode]);
       return 'applied';
     case 'presence.reattested': {
       const surface = str('surface');
       if (surface && !STORABLE_SURFACES.has(surface)) return 'unknown';
       const model = str('model');
-      const r = db
-        .prepare(
-          'UPDATE presence SET model = ?, model_source = ?, surface = COALESCE(?, surface), guidance_epoch = COALESCE(?, guidance_epoch) WHERE id = ? AND node = ?',
-        )
-        .run(
+      const r = await db.run(
+        'UPDATE presence SET model = ?, model_source = ?, surface = COALESCE(?, surface), guidance_epoch = COALESCE(?, guidance_epoch) WHERE id = ? AND node = ?',
+        [
           model,
           model ? str('model_source') : null,
           surface,
@@ -631,7 +633,8 @@ function projectPresenceEvent(
           typeof d['guidance_epoch'] === 'number' ? d['guidance_epoch'] : null,
           presenceId,
           originNode,
-        );
+        ],
+      );
       return r.changes === 0 ? 'unborn' : 'applied';
     }
     default:
@@ -640,13 +643,13 @@ function projectPresenceEvent(
 }
 
 /** The pull response's `nodes` summary, applied before the events it accompanies (spec §3). */
-export function foldNodeLiveness(
-  db: Database,
+export async function foldNodeLiveness(
+  db: Driver,
   teamId: string,
   nodes: { id: string; label: string; last_seen_at: number | null }[],
-): void {
+): Promise<void> {
   // Safe for the local node too: `upsertForeignNode` touches only label and last_seen_at.
-  for (const n of nodes) upsertForeignNode(db, teamId, n);
+  for (const n of nodes) await upsertForeignNode(db, teamId, n);
 }
 
 export interface FoldResult {
@@ -663,14 +666,14 @@ export interface FoldResult {
   messages: string[];
 }
 
-export function readPullCursor(db: Database, teamId: string): number {
+export async function readPullCursor(db: Driver, teamId: string): Promise<number> {
   return (
-    db
-      .prepare<
-        [string],
-        { last_hub_seq: number }
-      >('SELECT last_hub_seq FROM sync_pull_cursor WHERE team_id = ?')
-      .get(teamId)?.last_hub_seq ?? 0
+    (
+      await db.get<{ last_hub_seq: number }>(
+        'SELECT last_hub_seq FROM sync_pull_cursor WHERE team_id = ?',
+        [teamId],
+      )
+    )?.last_hub_seq ?? 0
   );
 }
 
@@ -680,8 +683,8 @@ export function readPullCursor(db: Database, teamId: string): number {
  * resumable stamp when a row is already here; missing the row is a no-op, as on the origin.
  * An unknown seat on enroll/revoke is git lag — stop, don't skip.
  */
-function projectResidencyLedger(
-  db: Database,
+async function projectResidencyLedger(
+  db: Driver,
   teamId: string,
   e: {
     action: string;
@@ -691,7 +694,7 @@ function projectResidencyLedger(
     detail: Record<string, unknown> | null;
   },
   hubSeq: number,
-): { stop?: FoldStop } {
+): Promise<{ stop?: FoldStop }> {
   if (
     e.action !== 'residency.enrolled' &&
     e.action !== 'residency.revoked' &&
@@ -700,18 +703,18 @@ function projectResidencyLedger(
     return {};
   }
   if (e.action === 'residency.session_captured') {
-    const seat = getMemberByName(db, teamId, e.target ?? '');
+    const seat = await getMemberByName(db, teamId, e.target ?? '');
     const harness = typeof e.detail?.['harness'] === 'string' ? e.detail['harness'] : '';
-    if (seat && harness) recordSessionAttestation(db, teamId, seat.id, harness, e.ts);
+    if (seat && harness) await recordSessionAttestation(db, teamId, seat.id, harness, e.ts);
     return {};
   }
   const seatName = e.target ?? '';
-  const member = getMemberByName(db, teamId, seatName);
+  const member = await getMemberByName(db, teamId, seatName);
   if (!member) {
     return { stop: { kind: 'unresolved_seat', seat: seatName, hub_seq: hubSeq } };
   }
   if (e.action === 'residency.revoked') {
-    revokeResidency(db, teamId, member.id);
+    await revokeResidency(db, teamId, member.id);
     return {};
   }
   const harness = typeof e.detail?.['harness'] === 'string' ? e.detail['harness'] : '';
@@ -724,7 +727,7 @@ function projectResidencyLedger(
     policyRaw && typeof policyRaw === 'object' && !Array.isArray(policyRaw)
       ? (policyRaw as Record<string, unknown>)
       : undefined;
-  applyFoldedEnrollment(db, teamId, {
+  await applyFoldedEnrollment(db, teamId, {
     member_id: member.id,
     harness,
     host,
@@ -734,18 +737,26 @@ function projectResidencyLedger(
   return {};
 }
 
-function writePullCursor(db: Database, teamId: string, hubSeq: number, now: number): void {
-  db.prepare(
+async function writePullCursor(
+  db: Driver,
+  teamId: string,
+  hubSeq: number,
+  now: number,
+): Promise<void> {
+  await db.run(
     `INSERT INTO sync_pull_cursor (team_id, last_hub_seq, updated_at) VALUES (?, ?, ?)
      ON CONFLICT(team_id) DO UPDATE SET last_hub_seq = excluded.last_hub_seq, updated_at = excluded.updated_at`,
-  ).run(teamId, hubSeq, now);
+    [teamId, hubSeq, now],
+  );
 }
 
-function localNodeId(db: Database, teamId: string): string | null {
+async function localNodeId(db: Driver, teamId: string): Promise<string | null> {
   return (
-    db
-      .prepare<[string], { node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?')
-      .get(teamId)?.node_id ?? null
+    (
+      await db.get<{ node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?', [
+        teamId,
+      ])
+    )?.node_id ?? null
   );
 }
 
@@ -754,44 +765,40 @@ function localNodeId(db: Database, teamId: string): string | null {
  * Across BOTH replicated kinds: one allocator serves messages and lane rows (ADR 335 §8), so a head
  * read from one table alone under-reports and trips the gap check on a legitimate sequence.
  */
-function heldHead(db: Database, originNode: string): number {
+async function heldHead(db: Driver, originNode: string): Promise<number> {
   const m =
-    db
-      .prepare<
-        [string],
-        { high: number | null }
-      >('SELECT MAX(origin_seq) AS high FROM messages WHERE origin_node = ?')
-      .get(originNode)?.high ?? 0;
+    (
+      await db.get<{ high: number | null }>(
+        'SELECT MAX(origin_seq) AS high FROM messages WHERE origin_node = ?',
+        [originNode],
+      )
+    )?.high ?? 0;
   const a =
-    db
-      .prepare<
-        [string],
-        { high: number | null }
-      >('SELECT MAX(origin_seq) AS high FROM audit WHERE origin_node = ?')
-      .get(originNode)?.high ?? 0;
+    (
+      await db.get<{ high: number | null }>(
+        'SELECT MAX(origin_seq) AS high FROM audit WHERE origin_node = ?',
+        [originNode],
+      )
+    )?.high ?? 0;
   return Math.max(m, a);
 }
 
 /** Rule 2 for both kinds: is the pair already held here? */
-function heldPair(db: Database, originNode: string, originSeq: number): boolean {
+async function heldPair(db: Driver, originNode: string, originSeq: number): Promise<boolean> {
   return (
-    db
-      .prepare<
-        [string, number],
-        { id: string }
-      >('SELECT id FROM messages WHERE origin_node = ? AND origin_seq = ?')
-      .get(originNode, originSeq) !== undefined ||
-    db
-      .prepare<
-        [string, number],
-        { id: string }
-      >('SELECT id FROM audit WHERE origin_node = ? AND origin_seq = ?')
-      .get(originNode, originSeq) !== undefined
+    (await db.get<{ id: string }>(
+      'SELECT id FROM messages WHERE origin_node = ? AND origin_seq = ?',
+      [originNode, originSeq],
+    )) !== undefined ||
+    (await db.get<{ id: string }>('SELECT id FROM audit WHERE origin_node = ? AND origin_seq = ?', [
+      originNode,
+      originSeq,
+    ])) !== undefined
   );
 }
 
-export function foldBatch(
-  db: Database,
+export async function foldBatch(
+  db: Driver,
   teamId: string,
   events: SyncPullEvent[],
   now: number = Date.now(),
@@ -801,20 +808,20 @@ export function foldBatch(
    * branch. `null` keeps the pre-2026-09-04 behaviour: block on every unborn lane.
    */
   laneGenesis: string | null = null,
-): FoldResult {
-  return db.transaction((): FoldResult => {
-    const local = localNodeId(db, teamId);
-    const startCursor = readPullCursor(db, teamId);
+): Promise<FoldResult> {
+  return db.tx(async (t): Promise<FoldResult> => {
+    const local = await localNodeId(t, teamId);
+    const startCursor = await readPullCursor(t, teamId);
     let cursor = startCursor;
     let applied = 0;
     let skipped = 0;
     let stop: FoldStop | null = null;
     const messages: string[] = [];
 
-    // A `return finish()` inside db.transaction COMMITS what ran before it: the prefix and the
+    // A `return finish()` inside t.transaction COMMITS what ran before it: the prefix and the
     // cursor go together. Only an unclassified throw rolls the batch back.
-    const finish = (): FoldResult => {
-      if (cursor !== startCursor) writePullCursor(db, teamId, cursor, now);
+    const finish = async (): Promise<FoldResult> => {
+      if (cursor !== startCursor) await writePullCursor(t, teamId, cursor, now);
       return { applied, skipped, last_hub_seq: cursor, stop, messages };
     };
 
@@ -827,7 +834,7 @@ export function foldBatch(
       }
 
       // Rule 2 — replay: the pair is the idempotence key, whichever kind holds it.
-      if (heldPair(db, event.origin_node, event.origin_seq)) {
+      if (await heldPair(t, event.origin_node, event.origin_seq)) {
         skipped += 1;
         cursor = event.hub_seq;
         continue;
@@ -835,7 +842,7 @@ export function foldBatch(
 
       // Read-side gap: the hub ingests gaplessly and we walk hub_seq in order, so this cannot trip
       // unless the hub's own invariant broke. Terminal — it is that invariant's falsifier from here.
-      const expected = heldHead(db, event.origin_node) + 1;
+      const expected = (await heldHead(t, event.origin_node)) + 1;
       if (event.origin_seq !== expected) {
         stop = {
           kind: 'origin_gap',
@@ -844,7 +851,7 @@ export function foldBatch(
           got: event.origin_seq,
           hub_seq: event.hub_seq,
         };
-        return finish();
+        return await finish();
       }
 
       // The fourth kind: a ledger row (ADR 365). Held in `audit` with its stamp, projected into
@@ -855,33 +862,34 @@ export function foldBatch(
         const e = event.event;
         if (e.action.startsWith('lane.') || e.action.startsWith('presence.')) {
           stop = { kind: 'mistagged_ledger_event', action: e.action, hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
-        const projected = projectResidencyLedger(db, teamId, e, event.hub_seq);
+        const projected = await projectResidencyLedger(t, teamId, e, event.hub_seq);
         if (projected.stop) {
           stop = projected.stop;
-          return finish();
+          return await finish();
         }
-        db.prepare(
+        await t.run(
           `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq, actor_model, actor_model_source)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-          e.id,
-          teamId,
-          e.ts,
-          e.actor,
-          e.action,
-          e.target,
-          e.result,
-          e.detail ? JSON.stringify(e.detail) : null,
-          now,
-          event.origin_node,
-          event.origin_seq,
-          // The origin's stamp (lane 01M2PAFNAS): it saw the actor's model; this node may not.
-          e.actor_model ?? null,
-          e.actor_model && isWireAttestationSource(e.actor_model_source)
-            ? e.actor_model_source
-            : null,
+          [
+            e.id,
+            teamId,
+            e.ts,
+            e.actor,
+            e.action,
+            e.target,
+            e.result,
+            e.detail ? JSON.stringify(e.detail) : null,
+            now,
+            event.origin_node,
+            event.origin_seq,
+            // The origin's stamp (lane 01M2PAFNAS): it saw the actor's model; this node may not.
+            e.actor_model ?? null,
+            e.actor_model && isWireAttestationSource(e.actor_model_source)
+              ? e.actor_model_source
+              : null,
+          ],
         );
         applied += 1;
         cursor = event.hub_seq;
@@ -896,32 +904,33 @@ export function foldBatch(
         const e = event.event;
         if (!POLICY_VERBS.has(e.action)) {
           stop = { kind: 'unknown_policy_event', action: e.action, hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
-        if (projectPolicyEvent(db, teamId, e, now) === 'unknown') {
+        if ((await projectPolicyEvent(t, teamId, e, now)) === 'unknown') {
           stop = { kind: 'unknown_policy_event', action: e.action, hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
-        db.prepare(
+        await t.run(
           `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq, actor_model, actor_model_source)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-          e.id,
-          teamId,
-          e.ts,
-          e.actor,
-          e.action,
-          e.target,
-          e.result,
-          e.detail ? JSON.stringify(e.detail) : null,
-          now,
-          event.origin_node,
-          event.origin_seq,
-          // The origin's stamp (lane 01M2PAFNAS): it saw the actor's model; this node may not.
-          e.actor_model ?? null,
-          e.actor_model && isWireAttestationSource(e.actor_model_source)
-            ? e.actor_model_source
-            : null,
+          [
+            e.id,
+            teamId,
+            e.ts,
+            e.actor,
+            e.action,
+            e.target,
+            e.result,
+            e.detail ? JSON.stringify(e.detail) : null,
+            now,
+            event.origin_node,
+            event.origin_seq,
+            // The origin's stamp (lane 01M2PAFNAS): it saw the actor's model; this node may not.
+            e.actor_model ?? null,
+            e.actor_model && isWireAttestationSource(e.actor_model_source)
+              ? e.actor_model_source
+              : null,
+          ],
         );
         applied += 1;
         cursor = event.hub_seq;
@@ -937,26 +946,30 @@ export function foldBatch(
         const e = event.event;
         if (!RECORD_VERBS.has(e.action)) {
           stop = { kind: 'unknown_record_event', action: e.action, hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
         let memberId: string | null = null;
         if (e.action === 'record.seed_thread') {
           const by = e.detail?.['by'];
-          const member = getMemberByName(db, teamId, typeof by === 'string' ? by : (e.actor ?? ''));
+          const member = await getMemberByName(
+            t,
+            teamId,
+            typeof by === 'string' ? by : (e.actor ?? ''),
+          );
           if (!member) {
             stop = {
               kind: 'unresolved_seat',
               seat: typeof by === 'string' ? by : (e.actor ?? ''),
               hub_seq: event.hub_seq,
             };
-            return finish();
+            return await finish();
           }
           memberId = member.id;
         }
-        const outcome = projectRecordEvent(db, teamId, e, memberId);
+        const outcome = await projectRecordEvent(t, teamId, e, memberId);
         if (outcome === 'unknown') {
           stop = { kind: 'unknown_record_event', action: e.action, hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
         if (outcome === 'seed_unborn') {
           const relayId = e.detail?.['relay_id'];
@@ -965,28 +978,29 @@ export function foldBatch(
             relay_id: typeof relayId === 'string' ? relayId : '',
             hub_seq: event.hub_seq,
           };
-          return finish();
+          return await finish();
         }
-        db.prepare(
+        await t.run(
           `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq, actor_model, actor_model_source)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-          e.id,
-          teamId,
-          e.ts,
-          e.actor,
-          e.action,
-          e.target,
-          e.result,
-          e.detail ? JSON.stringify(e.detail) : null,
-          now,
-          event.origin_node,
-          event.origin_seq,
-          // The origin's stamp (lane 01M2PAFNAS): it saw the actor's model; this node may not.
-          e.actor_model ?? null,
-          e.actor_model && isWireAttestationSource(e.actor_model_source)
-            ? e.actor_model_source
-            : null,
+          [
+            e.id,
+            teamId,
+            e.ts,
+            e.actor,
+            e.action,
+            e.target,
+            e.result,
+            e.detail ? JSON.stringify(e.detail) : null,
+            now,
+            event.origin_node,
+            event.origin_seq,
+            // The origin's stamp (lane 01M2PAFNAS): it saw the actor's model; this node may not.
+            e.actor_model ?? null,
+            e.actor_model && isWireAttestationSource(e.actor_model_source)
+              ? e.actor_model_source
+              : null,
+          ],
         );
         applied += 1;
         cursor = event.hub_seq;
@@ -1000,19 +1014,19 @@ export function foldBatch(
         const e = event.event;
         if (!CONTINUITY_VERBS.has(e.action)) {
           stop = { kind: 'unknown_continuity_event', action: e.action, hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
-        const seat = getMemberByName(db, teamId, e.actor ?? '');
+        const seat = await getMemberByName(t, teamId, e.actor ?? '');
         if (!seat) {
           stop = { kind: 'unresolved_seat', seat: e.actor ?? '', hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
         // Project first, so a stop lands BEFORE the audit row does — a row present for an event
         // this daemon never applied would advance heldHead past it.
-        const outcome = projectContinuityEvent(db, teamId, seat, e, now);
+        const outcome = await projectContinuityEvent(t, teamId, seat, e, now);
         if (outcome === 'unknown') {
           stop = { kind: 'unknown_continuity_event', action: e.action, hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
         if (outcome === 'cursor_unborn') {
           const messageId = e.detail?.['last_read_message_id'];
@@ -1022,28 +1036,29 @@ export function foldBatch(
             seat: seat.name,
             hub_seq: event.hub_seq,
           };
-          return finish();
+          return await finish();
         }
-        db.prepare(
+        await t.run(
           `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq, actor_model, actor_model_source)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-          e.id,
-          teamId,
-          e.ts,
-          e.actor,
-          e.action,
-          e.target,
-          e.result,
-          e.detail ? JSON.stringify(e.detail) : null,
-          now,
-          event.origin_node,
-          event.origin_seq,
-          // The origin's stamp (lane 01M2PAFNAS): it saw the actor's model; this node may not.
-          e.actor_model ?? null,
-          e.actor_model && isWireAttestationSource(e.actor_model_source)
-            ? e.actor_model_source
-            : null,
+          [
+            e.id,
+            teamId,
+            e.ts,
+            e.actor,
+            e.action,
+            e.target,
+            e.result,
+            e.detail ? JSON.stringify(e.detail) : null,
+            now,
+            event.origin_node,
+            event.origin_seq,
+            // The origin's stamp (lane 01M2PAFNAS): it saw the actor's model; this node may not.
+            e.actor_model ?? null,
+            e.actor_model && isWireAttestationSource(e.actor_model_source)
+              ? e.actor_model_source
+              : null,
+          ],
         );
         applied += 1;
         cursor = event.hub_seq;
@@ -1057,7 +1072,7 @@ export function foldBatch(
         const e = event.event;
         if (!PRESENCE_VERBS.has(e.action)) {
           stop = { kind: 'unknown_presence_event', action: e.action, hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
         // THE PRESENCE KIND NEVER BLOCKS THE FOLD (ADR 384, superseding ADR 382's narrower rule).
         // Every other kind may stop, because every other kind decides something here: an inbox
@@ -1077,36 +1092,37 @@ export function foldBatch(
         // Nothing is invented either way: a re-attestation carries partial facets, so a row built
         // from one would be a lie with a schema. The audit row below still lands, so the transition
         // is kept as evidence. One presence stop survives, below: a build too old to store the fact.
-        if (getMemberByName(db, teamId, e.actor ?? '')) {
+        if (await getMemberByName(t, teamId, e.actor ?? '')) {
           // `unknown` is the one presence stop that stays: a verb or surface this build cannot
           // store means the ORIGIN runs a newer build, which is transient and fixed by upgrading —
           // the same reason `unknown_lane_event` and `unknown_record_event` block. It is the
           // never-arrives cases that must not.
-          if (projectPresenceEvent(db, teamId, event.origin_node, e) === 'unknown') {
+          if ((await projectPresenceEvent(t, teamId, event.origin_node, e)) === 'unknown') {
             stop = { kind: 'unknown_presence_event', action: e.action, hub_seq: event.hub_seq };
-            return finish();
+            return await finish();
           }
         }
-        db.prepare(
+        await t.run(
           `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq, actor_model, actor_model_source)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-          e.id,
-          teamId,
-          e.ts,
-          e.actor,
-          e.action,
-          e.target,
-          e.result,
-          e.detail ? JSON.stringify(e.detail) : null,
-          now,
-          event.origin_node,
-          event.origin_seq,
-          // The origin's stamp (lane 01M2PAFNAS): it saw the actor's model; this node may not.
-          e.actor_model ?? null,
-          e.actor_model && isWireAttestationSource(e.actor_model_source)
-            ? e.actor_model_source
-            : null,
+          [
+            e.id,
+            teamId,
+            e.ts,
+            e.actor,
+            e.action,
+            e.target,
+            e.result,
+            e.detail ? JSON.stringify(e.detail) : null,
+            now,
+            event.origin_node,
+            event.origin_seq,
+            // The origin's stamp (lane 01M2PAFNAS): it saw the actor's model; this node may not.
+            e.actor_model ?? null,
+            e.actor_model && isWireAttestationSource(e.actor_model_source)
+              ? e.actor_model_source
+              : null,
+          ],
         );
         applied += 1;
         cursor = event.hub_seq;
@@ -1119,42 +1135,43 @@ export function foldBatch(
         const e = event.event;
         if (!SEED_VERBS.has(e.action)) {
           stop = { kind: 'unknown_seed_event', action: e.action, hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
         // The submitter names a seat, resolved HERE — `members.id` is daemon-private, so the event
         // carries the name, as every seat-fact kind does. Unresolved is git lag, not a hole.
         const by = e.detail?.['by'];
         const name = typeof by === 'string' ? by : (e.actor ?? '');
-        const member = getMemberByName(db, teamId, name);
+        const member = await getMemberByName(t, teamId, name);
         if (!member) {
           stop = { kind: 'unresolved_seat', seat: name, hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
-        const outcome = projectSeedEvent(db, teamId, e, member.id, now);
+        const outcome = await projectSeedEvent(t, teamId, e, member.id, now);
         if (outcome === 'unknown') {
           stop = { kind: 'unknown_seed_event', action: e.action, hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
-        db.prepare(
+        await t.run(
           `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq, actor_model, actor_model_source)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-          e.id,
-          teamId,
-          e.ts,
-          e.actor,
-          e.action,
-          e.target,
-          e.result,
-          e.detail ? JSON.stringify(e.detail) : null,
-          now,
-          event.origin_node,
-          event.origin_seq,
-          // The origin's stamp (lane 01M2PAFNAS): it saw the actor's model; this node may not.
-          e.actor_model ?? null,
-          e.actor_model && isWireAttestationSource(e.actor_model_source)
-            ? e.actor_model_source
-            : null,
+          [
+            e.id,
+            teamId,
+            e.ts,
+            e.actor,
+            e.action,
+            e.target,
+            e.result,
+            e.detail ? JSON.stringify(e.detail) : null,
+            now,
+            event.origin_node,
+            event.origin_seq,
+            // The origin's stamp (lane 01M2PAFNAS): it saw the actor's model; this node may not.
+            e.actor_model ?? null,
+            e.actor_model && isWireAttestationSource(e.actor_model_source)
+              ? e.actor_model_source
+              : null,
+          ],
         );
         applied += 1;
         cursor = event.hub_seq;
@@ -1165,13 +1182,13 @@ export function foldBatch(
         const e = event.event;
         if (!LANE_VERBS.has(e.action)) {
           stop = { kind: 'unknown_lane_event', action: e.action, hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
         const laneId =
           (typeof e.detail?.['lane'] === 'string' ? (e.detail['lane'] as string) : e.target) ?? '';
         // Project first: an unborn lane must stop BEFORE the audit row lands, or the row's presence
         // would advance heldHead past an event this daemon never applied.
-        const outcome = projectLaneEvent(db, teamId, e);
+        const outcome = await projectLaneEvent(t, teamId, e);
         // A lane older than the log's first `lane.opened` has no birth anywhere to wait for: the
         // log contains none for anything older, by construction (ULIDs sort by birth time). Waiting
         // is waiting forever — which is precisely how the first real joiner wedged, 9,393 events in.
@@ -1182,28 +1199,29 @@ export function foldBatch(
           outcome === 'unborn' && laneGenesis !== null && laneId !== '' && laneId < laneGenesis;
         if (outcome === 'unborn' && !preHistory) {
           stop = { kind: 'lane_unborn', lane: laneId, action: e.action, hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
-        db.prepare(
+        await t.run(
           `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq, actor_model, actor_model_source)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-          e.id,
-          teamId,
-          e.ts,
-          e.actor,
-          e.action,
-          e.target,
-          e.result,
-          e.detail ? JSON.stringify(e.detail) : null,
-          now,
-          event.origin_node,
-          event.origin_seq,
-          // The origin's stamp (lane 01M2PAFNAS): it saw the actor's model; this node may not.
-          e.actor_model ?? null,
-          e.actor_model && isWireAttestationSource(e.actor_model_source)
-            ? e.actor_model_source
-            : null,
+          [
+            e.id,
+            teamId,
+            e.ts,
+            e.actor,
+            e.action,
+            e.target,
+            e.result,
+            e.detail ? JSON.stringify(e.detail) : null,
+            now,
+            event.origin_node,
+            event.origin_seq,
+            // The origin's stamp (lane 01M2PAFNAS): it saw the actor's model; this node may not.
+            e.actor_model ?? null,
+            e.actor_model && isWireAttestationSource(e.actor_model_source)
+              ? e.actor_model_source
+              : null,
+          ],
         );
         applied += 1;
         cursor = event.hub_seq;
@@ -1214,25 +1232,26 @@ export function foldBatch(
 
       // Rule 3 — resolve every seat the envelope names, or stop here. `to` blocks too: NULL would
       // silently turn a directed act into a broadcast.
-      const from = getMemberByName(db, teamId, env.from);
+      const from = await getMemberByName(t, teamId, env.from);
       if (!from) {
         stop = { kind: 'unresolved_seat', seat: env.from, hub_seq: event.hub_seq };
-        return finish();
+        return await finish();
       }
       let toMember: string | null = null;
       if (env.to.kind === 'member') {
-        const to = getMemberByName(db, teamId, env.to.name);
+        const to = await getMemberByName(t, teamId, env.to.name);
         if (!to) {
           stop = { kind: 'unresolved_seat', seat: env.to.name, hub_seq: event.hub_seq };
-          return finish();
+          return await finish();
         }
         toMember = to.id;
       }
 
       // Rule 5 — the id is held under a different pair (rule 2 passed, so it is not a replay).
-      const collision = db
-        .prepare<[string], { origin_node: string }>('SELECT origin_node FROM messages WHERE id = ?')
-        .get(env.id);
+      const collision = await t.get<{ origin_node: string }>(
+        'SELECT origin_node FROM messages WHERE id = ?',
+        [env.id],
+      );
       if (collision) {
         stop = {
           kind: 'id_collision',
@@ -1240,7 +1259,7 @@ export function foldBatch(
           hub_seq: event.hub_seq,
           held_origin: collision.origin_node,
         };
-        return finish();
+        return await finish();
       }
 
       // Unknown act — the wire outran the reader: the origin runs a newer build. messages.act
@@ -1249,7 +1268,7 @@ export function foldBatch(
       // upgraded; skipping would drop an event a peer considers sent.
       if (!ActSchema.safeParse(env.act).success) {
         stop = { kind: 'unknown_act', act: env.act, hub_seq: event.hub_seq };
-        return finish();
+        return await finish();
       }
 
       // Rule 4 — insert with the origin stamp verbatim. NEVER reads or writes nodes.next_seq.
@@ -1269,16 +1288,32 @@ export function foldBatch(
         ts: env.ts,
         created_at: now,
       };
-      db.prepare(
+      await t.run(
         `INSERT INTO messages
            (id, team_id, from_member, to_kind, to_member, act, body, thread_id, meta, from_provenance, origin_node, origin_seq, ts, created_at)
          VALUES
-           (@id, @team_id, @from_member, @to_kind, @to_member, @act, @body, @thread_id, @meta, @from_provenance, @origin_node, @origin_seq, @ts, @created_at)`,
-      ).run(row);
+           (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          row.id,
+          row.team_id,
+          row.from_member,
+          row.to_kind,
+          row.to_member,
+          row.act,
+          row.body,
+          row.thread_id,
+          row.meta,
+          row.from_provenance,
+          row.origin_node,
+          row.origin_seq,
+          row.ts,
+          row.created_at,
+        ],
+      );
       messages.push(row.id);
       applied += 1;
       cursor = event.hub_seq;
     }
-    return finish();
-  })();
+    return await finish();
+  });
 }

@@ -5,7 +5,8 @@ import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { appendReplicatedEvent } from '../store/audit.js';
 import { addMember, getMemberByName } from '../store/members.js';
@@ -64,25 +65,25 @@ async function call(
   const text = await response.text();
   return { status: response.status, json: text ? (JSON.parse(text) as any) : null };
 }
-const post = (base: string, path: string, body?: unknown, auth?: string) =>
-  call('POST', base, path, body, auth);
+const post = async (base: string, path: string, body?: unknown, auth?: string) =>
+  await call('POST', base, path, body, auth);
 
 const hubCtx = (): Ctx => ({
-  db: hub.db,
+  db: sqliteDriver(hub.db),
   hub: new Hub(),
   config: resolveConfig(),
   rosterRoots: [],
 });
-const hubTeam = () => getTeamBySlug(hub.db, 'bravo')!;
-const joinerTeam = () => getTeamBySlug(joiner.db, 'bravo')!;
-const member = (db: RunningServer['db'], team: { id: string }, name: string) =>
-  getMemberByName(db, team.id, name)!;
+const hubTeam = async () => (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
+const joinerTeam = async () => (await getTeamBySlug(sqliteDriver(joiner.db), 'bravo'))!;
+const member = async (db: RunningServer['db'], team: { id: string }, name: string) =>
+  (await getMemberByName(sqliteDriver(db), team.id, name))!;
 
 async function roundTrip() {
-  await pushTeam(joinerCtx, joinerTeam());
-  await pullTeam(hubCtx(), hubTeam());
-  await pushTeam(hubCtx(), hubTeam());
-  await pullTeam(joinerCtx, joinerTeam());
+  await pushTeam(joinerCtx, await joinerTeam());
+  await pullTeam(hubCtx(), await hubTeam());
+  await pushTeam(hubCtx(), await hubTeam());
+  await pullTeam(joinerCtx, await joinerTeam());
 }
 
 async function enrollJoiner() {
@@ -101,18 +102,18 @@ async function enrollJoiner() {
 }
 
 /** A message on the joiner FROM a seat, inserted directly — no route-time hooks run. */
-function messageOnJoiner(
+async function messageOnJoiner(
   from: string,
   id: string,
   ts: number,
   act: 'message' | 'status_update' = 'message',
   meta: Record<string, unknown> | null = null,
 ) {
-  const jt = joinerTeam();
-  insertMessage(
-    joiner.db,
+  const jt = await joinerTeam();
+  await insertMessage(
+    sqliteDriver(joiner.db),
     jt.id,
-    member(joiner.db, jt, from).id,
+    (await member(joiner.db, jt, from)).id,
     null,
     makeEnvelope({
       id,
@@ -141,11 +142,16 @@ const count = (db: RunningServer['db'], sql: string): number =>
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'musterd-record-sync-'));
   process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
-  hub = createServer({ db: openDb(':memory:'), port: 0 });
+  hub = createServer({ db: openTestDb(':memory:'), port: 0 });
   hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-  joiner = createServer({ db: openDb(':memory:'), port: 0 });
+  joiner = createServer({ db: openTestDb(':memory:'), port: 0 });
   joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
-  joinerCtx = { db: joiner.db, hub: new Hub(), config: resolveConfig(), rosterRoots: [] };
+  joinerCtx = {
+    db: sqliteDriver(joiner.db),
+    hub: new Hub(),
+    config: resolveConfig(),
+    rosterRoots: [],
+  };
   nickOnHub = (
     await post(hubBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } })
   ).json.human_credential;
@@ -154,13 +160,21 @@ beforeEach(async () => {
   ).json.human_credential;
   // The same roster on both machines (git-replicated in life, ADR 058): an agent seat and a human
   // with a Slack id, so the seed relay accepts a submitter and an agent can explore.
-  addMember(hub.db, hubTeam(), { name: 'ada', kind: 'agent' });
-  addMember(hub.db, hubTeam(), { name: 'sam', kind: 'human', slackUserId: 'U123' });
-  addMember(joiner.db, joinerTeam(), { name: 'ada', kind: 'agent' });
-  addMember(joiner.db, joinerTeam(), { name: 'sam', kind: 'human', slackUserId: 'U123' });
+  await addMember(sqliteDriver(hub.db), await hubTeam(), { name: 'ada', kind: 'agent' });
+  await addMember(sqliteDriver(hub.db), await hubTeam(), {
+    name: 'sam',
+    kind: 'human',
+    slackUserId: 'U123',
+  });
+  await addMember(sqliteDriver(joiner.db), await joinerTeam(), { name: 'ada', kind: 'agent' });
+  await addMember(sqliteDriver(joiner.db), await joinerTeam(), {
+    name: 'sam',
+    kind: 'human',
+    slackUserId: 'U123',
+  });
   // The joiner's node row is minted on its first logged act, and enrollment needs one. This also
   // makes nick resident on the joiner (the first pushed act binds), so nick acts from there below.
-  messageOnJoiner('nick', 'j-0', 1000);
+  await messageOnJoiner('nick', 'j-0', 1000);
   await enrollJoiner();
 });
 
@@ -181,11 +195,11 @@ const seedRow = (db: RunningServer['db'], teamId: string, relayId: string) =>
 
 describe('the seed kind (ADR 399)', () => {
   it('a capture ingested at the hub reaches the joiner under the same relay_id', async () => {
-    const ht = hubTeam();
-    const jt = joinerTeam();
+    const ht = await hubTeam();
+    const jt = await joinerTeam();
     expect(count(joiner.db, 'SELECT COUNT(*) AS n FROM seeds')).toBe(0);
 
-    const onHub = createSeedFromRelay(hub.db, ht.id, RELAY);
+    const onHub = await createSeedFromRelay(sqliteDriver(hub.db), ht.id, RELAY);
     await roundTrip();
 
     const onJoiner = seedRow(joiner.db, jt.id, RELAY.id)!;
@@ -195,41 +209,45 @@ describe('the seed kind (ADR 399)', () => {
     // Daemon-private ids — which is exactly why the event is keyed by relay_id.
     expect(onJoiner.id).not.toBe(onHub.id);
     // The submitter resolved to the joiner's OWN member row for the same human.
-    expect(onJoiner.submitted_by).toBe(member(joiner.db, jt, 'sam').id);
+    expect(onJoiner.submitted_by).toBe((await member(joiner.db, jt, 'sam')).id);
   });
 
   it('re-delivering the same batch does not duplicate the seed', async () => {
-    const ht = hubTeam();
-    const jt = joinerTeam();
-    createSeedFromRelay(hub.db, ht.id, RELAY);
+    const ht = await hubTeam();
+    const jt = await joinerTeam();
+    await createSeedFromRelay(sqliteDriver(hub.db), ht.id, RELAY);
     await roundTrip();
     expect(count(joiner.db, 'SELECT COUNT(*) AS n FROM seeds')).toBe(1);
 
-    const replay = foldBatch(joiner.db, jt.id, readStaged(joiner.db, jt.id, 0, 200));
+    const replay = await foldBatch(
+      sqliteDriver(joiner.db),
+      jt.id,
+      await readStaged(sqliteDriver(joiner.db), jt.id, 0, 200),
+    );
     expect(replay.applied).toBe(0);
     expect(count(joiner.db, 'SELECT COUNT(*) AS n FROM seeds')).toBe(1);
   });
 
   it('lifecycle does NOT cross with the capture — the claim stays where it was made', async () => {
-    const ht = hubTeam();
-    const jt = joinerTeam();
-    const onHub = createSeedFromRelay(hub.db, ht.id, RELAY);
+    const ht = await hubTeam();
+    const jt = await joinerTeam();
+    const onHub = await createSeedFromRelay(sqliteDriver(hub.db), ht.id, RELAY);
     await roundTrip();
 
     // Claim it on the HUB. The explorer claim is "exactly one holder", a residence-1 question this
     // ADR deliberately leaves to the federation increment (ADR 371 §3 stands).
-    claimSeed(hub.db, ht.id, onHub.id, member(hub.db, ht, 'ada'));
+    await claimSeed(sqliteDriver(hub.db), ht.id, onHub.id, await member(hub.db, ht, 'ada'));
     await roundTrip();
 
-    expect(getSeed(hub.db, ht.id, onHub.id)!.state).toBe('exploring');
+    expect((await getSeed(sqliteDriver(hub.db), ht.id, onHub.id))!.state).toBe('exploring');
     expect(seedRow(joiner.db, jt.id, RELAY.id)!.state).toBe('open');
   });
 
   it('a joiner-minted seed event is refused at ingest, as a policy event is', async () => {
-    const jt = joinerTeam();
+    const jt = await joinerTeam();
     // Stamped through the joiner's OWN writer, so the batch is well-formed and the refusal is the
     // origin rule rather than a validation accident.
-    appendReplicatedEvent(joiner.db, jt.id, {
+    await appendReplicatedEvent(sqliteDriver(joiner.db), jt.id, {
       actor: 'sam',
       action: 'seed.captured',
       target: 'relay-forged',
@@ -246,7 +264,7 @@ describe('the seed kind (ADR 399)', () => {
       },
     });
 
-    await expect(pushTeam(joinerCtx, joinerTeam())).rejects.toThrow();
+    await expect(pushTeam(joinerCtx, await joinerTeam())).rejects.toThrow();
     expect(count(hub.db, "SELECT COUNT(*) AS n FROM seeds WHERE relay_id = 'relay-forged'")).toBe(
       0,
     );

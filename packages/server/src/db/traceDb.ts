@@ -1,7 +1,9 @@
 import { chmodSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
-import { type Migration, runMigrations, schemaVersion } from './migrations.js';
+import type { Driver } from './driver.js';
+import { type Migration, runMigrations, schemaVersionOf } from './migrations.js';
+import { sqliteDriver, type SqliteDriver } from './sqliteDriver.js';
 
 /**
  * The trace store (ADR 445 §3): a **separate database file**, `trace.db` beside `musterd.db`, with
@@ -124,8 +126,8 @@ export function openTraceDb(path: string): Database.Database {
 }
 
 /** The trace ladder's applied version (0 if unmigrated) — for `/health` and the serve log. */
-export function traceSchemaVersion(db: Database.Database): number {
-  return schemaVersion(db);
+export async function traceSchemaVersion(db: Driver): Promise<number> {
+  return await schemaVersionOf(db);
 }
 
 /**
@@ -144,4 +146,9 @@ export function traceDbBytes(path: string): number | undefined {
     }
   }
   return total;
+}
+
+/** The trace store behind the async Driver (ADR 479): `openTraceDb` + the SQLite driver. */
+export function openTraceDriver(path: string): SqliteDriver {
+  return sqliteDriver(openTraceDb(path));
 }

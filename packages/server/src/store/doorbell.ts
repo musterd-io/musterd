@@ -9,8 +9,8 @@ import {
   DoorbellRecordSchema,
   type DoorbellSink,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
+import type { Driver } from '../db/driver.js';
 import { answeredByAnyoneSql, resolvedThreadSql } from './discharge.js';
 import type { MemberRow } from './rows.js';
 import { getPolicy, getStoredPolicy } from './teams.js';
@@ -57,10 +57,10 @@ function toRing(row: RingRow): Ring {
   };
 }
 
-export function insertRing(
-  db: Database,
+export async function insertRing(
+  db: Driver,
   ring: Omit<Ring, 'id' | 'created_at'> & { created_at?: number },
-): Ring {
+): Promise<Ring> {
   const row: RingRow = {
     id: ulid(),
     team_id: ring.team_id,
@@ -72,36 +72,45 @@ export function insertRing(
     host: ring.host,
     created_at: ring.created_at ?? Date.now(),
   };
-  db.prepare(
+  await db.run(
     `INSERT INTO doorbell_rings (id, team_id, member_id, act_id, record, sinks, state, host, created_at)
-     VALUES (@id, @team_id, @member_id, @act_id, @record, @sinks, @state, @host, @created_at)`,
-  ).run(row);
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      row.id,
+      row.team_id,
+      row.member_id,
+      row.act_id,
+      row.record,
+      row.sinks,
+      row.state,
+      row.host,
+      row.created_at,
+    ],
+  );
   return toRing(row);
 }
 
-export function setRingState(db: Database, id: string, state: RingState): void {
-  db.prepare('UPDATE doorbell_rings SET state = ? WHERE id = ?').run(state, id);
+export async function setRingState(db: Driver, id: string, state: RingState): Promise<void> {
+  await db.run('UPDATE doorbell_rings SET state = ? WHERE id = ?', [state, id]);
 }
 
 /** Every held ring for one member, oldest first. */
-export function listHeldRings(db: Database, memberId: string): Ring[] {
-  return db
-    .prepare<
-      [string],
-      RingRow
-    >("SELECT * FROM doorbell_rings WHERE member_id = ? AND state = 'held' ORDER BY created_at, id")
-    .all(memberId)
-    .map(toRing);
+export async function listHeldRings(db: Driver, memberId: string): Promise<Ring[]> {
+  return (
+    await db.all<RingRow>(
+      "SELECT * FROM doorbell_rings WHERE member_id = ? AND state = 'held' ORDER BY created_at, id",
+      [memberId],
+    )
+  ).map(toRing);
 }
 
 /** Members (any team) with at least one held ring — the sweep's candidates for a lapsed hold. */
-export function listMembersWithHeldRings(db: Database): { member_id: string; team_id: string }[] {
-  return db
-    .prepare<
-      [],
-      { member_id: string; team_id: string }
-    >("SELECT DISTINCT member_id, team_id FROM doorbell_rings WHERE state = 'held'")
-    .all();
+export async function listMembersWithHeldRings(
+  db: Driver,
+): Promise<{ member_id: string; team_id: string }[]> {
+  return await db.all<{ member_id: string; team_id: string }>(
+    "SELECT DISTINCT member_id, team_id FROM doorbell_rings WHERE state = 'held'",
+  );
 }
 
 /** How long a finished or never-claimed ring is kept (ADR 443 §4, retention). */
@@ -112,22 +121,24 @@ export const DOORBELL_RING_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
  * grow. A `queued` ring that old has no host left to claim it. `held` rings are kept: they wait on
  * a human's own hold, however long. Returns the number deleted.
  */
-export function pruneRings(db: Database, now: number): number {
+export async function pruneRings(db: Driver, now: number): Promise<number> {
   const cutoff = now - DOORBELL_RING_RETENTION_MS;
-  return db
-    .prepare("DELETE FROM doorbell_rings WHERE state IN ('done', 'queued') AND created_at < ?")
-    .run(cutoff).changes;
+  return (
+    await db.run(
+      "DELETE FROM doorbell_rings WHERE state IN ('done', 'queued') AND created_at < ?",
+      [cutoff],
+    )
+  ).changes;
 }
 
 /** Every ring for a team, oldest first (tests and the audit-side read). */
-export function listRings(db: Database, teamId: string): Ring[] {
-  return db
-    .prepare<
-      [string],
-      RingRow
-    >('SELECT * FROM doorbell_rings WHERE team_id = ? ORDER BY created_at, id')
-    .all(teamId)
-    .map(toRing);
+export async function listRings(db: Driver, teamId: string): Promise<Ring[]> {
+  return (
+    await db.all<RingRow>(
+      'SELECT * FROM doorbell_rings WHERE team_id = ? ORDER BY created_at, id',
+      [teamId],
+    )
+  ).map(toRing);
 }
 
 /**
@@ -137,21 +148,22 @@ export function listRings(db: Database, teamId: string): Ring[] {
  * was answered or its thread resolved, the ask's deadline passed, or (with no deadline) it is older
  * than {@link DOORBELL_OS_MAX_AGE_MS}.
  */
-export function claimHostRings(
-  db: Database,
+export async function claimHostRings(
+  db: Driver,
   teamId: string,
   host: string,
   now: number,
   opts: { memberId?: string | null } = {},
-): { ring: Ring; member: string }[] {
-  return db.transaction(() => {
-    const rows = db
-      .prepare<[string, string], RingRow & { member: string }>(
+): Promise<{ ring: Ring; member: string }[]> {
+  return db.tx(async (t) => {
+    const rows = (
+      await t.all<RingRow & { member: string }>(
         `SELECT r.*, m.name AS member FROM doorbell_rings r JOIN members m ON m.id = r.member_id
           WHERE r.team_id = ? AND r.host = ? AND r.state = 'queued'
           ORDER BY r.created_at, r.id`,
+        [teamId, host],
       )
-      .all(teamId, host)
+    )
       // ADR 463 §1: a sponsor's host key raises only its creator's own banners — a label is not
       // proof of whose machine it is, so another member's rings on the same label stay queued.
       .filter((row) => !opts.memberId || row.member_id === opts.memberId);
@@ -159,36 +171,40 @@ export function claimHostRings(
     for (const row of rows) {
       const ring = toRing(row);
       const expiry = ring.record.deadline_ms ?? ring.created_at + DOORBELL_OS_MAX_AGE_MS;
-      const stale = expiry <= now || actAnsweredOrResolved(db, teamId, ring.act_id);
+      const stale = expiry <= now || (await actAnsweredOrResolved(t, teamId, ring.act_id));
       // A returned ring keeps its host label until the host reports it (`markRingReported`); one
       // claimed but not returned loses it at once, so there is nothing for the host to report.
-      db.prepare("UPDATE doorbell_rings SET state = 'done', host = ? WHERE id = ?").run(
+      await t.run("UPDATE doorbell_rings SET state = 'done', host = ? WHERE id = ?", [
         stale ? null : row.host,
         row.id,
-      );
+      ]);
       if (!stale) out.push({ ring, member: row.member });
     }
     return out;
-  })();
+  });
 }
 
 /**
  * Record that a host reported its banner: the ring's host label is cleared, so a second report
  * finds nothing awaiting one. Returns false when the ring was not awaiting a report from this host.
  */
-export function markRingReported(db: Database, id: string, host: string): boolean {
+export async function markRingReported(db: Driver, id: string, host: string): Promise<boolean> {
   return (
-    db
-      .prepare("UPDATE doorbell_rings SET host = NULL WHERE id = ? AND host = ? AND state = 'done'")
-      .run(id, host).changes > 0
+    (
+      await db.run(
+        "UPDATE doorbell_rings SET host = NULL WHERE id = ? AND host = ? AND state = 'done'",
+        [id, host],
+      )
+    ).changes > 0
   );
 }
 
 /** One ring by id, scoped to its team. */
-export function getRing(db: Database, teamId: string, id: string): Ring | undefined {
-  const row = db
-    .prepare<[string, string], RingRow>('SELECT * FROM doorbell_rings WHERE team_id = ? AND id = ?')
-    .get(teamId, id);
+export async function getRing(db: Driver, teamId: string, id: string): Promise<Ring | undefined> {
+  const row = await db.get<RingRow>('SELECT * FROM doorbell_rings WHERE team_id = ? AND id = ?', [
+    teamId,
+    id,
+  ]);
   return row ? toRing(row) : undefined;
 }
 
@@ -197,14 +213,17 @@ export function getRing(db: Database, teamId: string, id: string): Ring | undefi
  * `resolve` of its thread (dolly's review of ADR 443, change d)? The same two shapes the discharge
  * ledger uses, so a held ring and the open-loops gauge cannot disagree about what "answered" means.
  */
-export function actAnsweredOrResolved(db: Database, teamId: string, actId: string): boolean {
-  const row = db
-    .prepare<[string, string], { n: number }>(
-      `SELECT COUNT(*) AS n FROM messages m
+export async function actAnsweredOrResolved(
+  db: Driver,
+  teamId: string,
+  actId: string,
+): Promise<boolean> {
+  const row = await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM messages m
         WHERE m.team_id = ? AND m.id = ?
           AND (EXISTS (${answeredByAnyoneSql('m')}) OR EXISTS (${resolvedThreadSql('m')}))`,
-    )
-    .get(teamId, actId);
+    [teamId, actId],
+  );
   return (row?.n ?? 0) > 0;
 }
 
@@ -228,12 +247,16 @@ export function memberDoorbellPrefs(m: MemberRow): DoorbellPrefs | undefined {
   }
 }
 
-export function setDoorbellPrefs(db: Database, memberId: string, prefs: DoorbellPrefs): void {
-  db.prepare('UPDATE members SET doorbell_prefs = ?, updated_at = ? WHERE id = ?').run(
+export async function setDoorbellPrefs(
+  db: Driver,
+  memberId: string,
+  prefs: DoorbellPrefs,
+): Promise<void> {
+  await db.run('UPDATE members SET doorbell_prefs = ?, updated_at = ? WHERE id = ?', [
     JSON.stringify(prefs),
     Date.now(),
     memberId,
-  );
+  ]);
 }
 
 /**
@@ -242,11 +265,11 @@ export function setDoorbellPrefs(db: Database, memberId: string, prefs: Doorbell
  * doorbell defaults, `slack` joins them, so a team that set the old knob keeps posting to Slack with
  * no admin action. The stored blob is never rewritten.
  */
-export function getDoorbellPolicy(db: Database, teamId: string): DoorbellPolicy {
-  const policy = getPolicy(db, teamId);
+export async function getDoorbellPolicy(db: Driver, teamId: string): Promise<DoorbellPolicy> {
+  const policy = await getPolicy(db, teamId);
   const doorbell = policy.doorbell;
   if (doorbell.slack_url || !policy.ask_slack_webhook) return doorbell;
-  const storedDefaults = getStoredPolicy(db, teamId).doorbell?.defaults;
+  const storedDefaults = (await getStoredPolicy(db, teamId)).doorbell?.defaults;
   const defaults =
     storedDefaults || doorbell.defaults.includes('slack')
       ? doorbell.defaults

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
-import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 
 /**
@@ -39,7 +39,7 @@ async function connect(port: number): Promise<WebSocket> {
 
 describe('RunningServer.close() with live WebSocket clients', () => {
   it('resolves promptly while a client is connected (the daemon must always be able to exit)', async () => {
-    server = createServer({ db: openDb(':memory:'), port: 0 });
+    server = createServer({ db: openTestDb(':memory:'), port: 0 });
     const { port } = await server.listen();
     const ws = await connect(port);
     expect(ws.readyState).toBe(WebSocket.OPEN);
@@ -51,7 +51,7 @@ describe('RunningServer.close() with live WebSocket clients', () => {
   }, 5_000);
 
   it('disconnects the client rather than leaving an orphaned socket', async () => {
-    server = createServer({ db: openDb(':memory:'), port: 0 });
+    server = createServer({ db: openTestDb(':memory:'), port: 0 });
     const { port } = await server.listen();
     const ws = await connect(port);
     const closed = new Promise<void>((resolve) => ws.once('close', () => resolve()));
@@ -63,9 +63,13 @@ describe('RunningServer.close() with live WebSocket clients', () => {
   }, 5_000);
 
   it('still resolves with several clients connected (a full team, not one seat)', async () => {
-    server = createServer({ db: openDb(':memory:'), port: 0 });
+    server = createServer({ db: openTestDb(':memory:'), port: 0 });
     const { port } = await server.listen();
-    const clients = await Promise.all([connect(port), connect(port), connect(port)]);
+    const clients = await Promise.all([
+      await connect(port),
+      await connect(port),
+      await connect(port),
+    ]);
 
     await server.close();
 
@@ -73,7 +77,7 @@ describe('RunningServer.close() with live WebSocket clients', () => {
   }, 5_000);
 
   it('is idempotent — a second signal must not throw or hang', async () => {
-    server = createServer({ db: openDb(':memory:'), port: 0 });
+    server = createServer({ db: openTestDb(':memory:'), port: 0 });
     const { port } = await server.listen();
     const ws = await connect(port);
 

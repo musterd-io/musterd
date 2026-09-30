@@ -2,8 +2,8 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
+import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 
 /**
@@ -207,12 +207,12 @@ export interface MintInviteInput {
 }
 
 /** Mint one invite. Returns the plaintext link value and room code exactly once. */
-export function mintInvite(
-  db: Database,
+export async function mintInvite(
+  db: Driver,
   input: MintInviteInput,
   now = Date.now(),
   key: Buffer = loadInviteKey(),
-): { invite: TeamInviteSummary; link_secret: string; room_code: string } {
+): Promise<{ invite: TeamInviteSummary; link_secret: string; room_code: string }> {
   const maxUses = input.maxUses ?? INVITE_DEFAULTS.maxUses;
   const failBudget = input.failBudget ?? INVITE_DEFAULTS.failBudget;
   const expiresAt = input.expiresAt ?? now + INVITE_DEFAULTS.expiresInMs;
@@ -229,12 +229,12 @@ export function mintInvite(
 
   // A selector is unique among the team's unrevoked invites; 32^3 = 32768 slots, retry on collision.
   const live = new Set(
-    db
-      .prepare<[string], { selector: string }>(
+    (
+      await db.all<{ selector: string }>(
         'SELECT selector FROM team_invites WHERE team_id = ? AND revoked_at IS NULL',
+        [input.teamId],
       )
-      .all(input.teamId)
-      .map((r) => r.selector),
+    ).map((r) => r.selector),
   );
   let selector = '';
   for (let i = 0; i < 64; i++) {
@@ -265,10 +265,26 @@ export function mintInvite(
     created_at: now,
     revoked_at: null,
   };
-  db.prepare(
+  await db.run(
     `INSERT INTO team_invites (id, team_id, selector, secret_hash, code_mac, max_uses, uses, fail_budget, failures, expires_at, member_until, created_by, created_at, revoked_at)
-     VALUES (@id, @team_id, @selector, @secret_hash, @code_mac, @max_uses, @uses, @fail_budget, @failures, @expires_at, @member_until, @created_by, @created_at, @revoked_at)`,
-  ).run(row);
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      row.id,
+      row.team_id,
+      row.selector,
+      row.secret_hash,
+      row.code_mac,
+      row.max_uses,
+      row.uses,
+      row.fail_budget,
+      row.failures,
+      row.expires_at,
+      row.member_until,
+      row.created_by,
+      row.created_at,
+      row.revoked_at,
+    ],
+  );
   return {
     invite: summarizeInvite(row, now),
     link_secret: `${selector}.${linkSecret}`,
@@ -276,22 +292,30 @@ export function mintInvite(
   };
 }
 
-export function listInvites(db: Database, teamId: string, now = Date.now()): TeamInviteSummary[] {
-  return db
-    .prepare<[string], TeamInviteRow>(
+export async function listInvites(
+  db: Driver,
+  teamId: string,
+  now = Date.now(),
+): Promise<TeamInviteSummary[]> {
+  return (
+    await db.all<TeamInviteRow>(
       'SELECT * FROM team_invites WHERE team_id = ? ORDER BY created_at DESC, id DESC',
+      [teamId],
     )
-    .all(teamId)
-    .map((r) => summarizeInvite(r, now));
+  ).map((r) => summarizeInvite(r, now));
 }
 
 /** Revoke one invite; `false` when there is no unrevoked invite by that id on the team. */
-export function revokeInvite(db: Database, teamId: string, id: string, now = Date.now()): boolean {
-  const res = db
-    .prepare(
-      'UPDATE team_invites SET revoked_at = ? WHERE team_id = ? AND id = ? AND revoked_at IS NULL',
-    )
-    .run(now, teamId, id);
+export async function revokeInvite(
+  db: Driver,
+  teamId: string,
+  id: string,
+  now = Date.now(),
+): Promise<boolean> {
+  const res = await db.run(
+    'UPDATE team_invites SET revoked_at = ? WHERE team_id = ? AND id = ? AND revoked_at IS NULL',
+    [now, teamId, id],
+  );
   return res.changes === 1;
 }
 
@@ -305,22 +329,20 @@ export type RedeemOutcome =
  * with {@link consumeInvite} inside the same transaction once the member row exists, so a refused
  * name (taken / tombstoned) costs the invite nothing (ADR 450 §2.3).
  */
-export function checkInvite(
-  db: Database,
+export async function checkInvite(
+  db: Driver,
   teamId: string,
   rawSecret: string,
   now = Date.now(),
   key: Buffer = loadInviteKey(),
-): RedeemOutcome {
+): Promise<RedeemOutcome> {
   const parsed = parseInviteSecret(rawSecret);
   if (!parsed) return { ok: false, selector: null, via: null, charged: false };
   const via: 'link' | 'code' = parsed.link !== undefined ? 'link' : 'code';
-  const row = db
-    .prepare<
-      [string, string],
-      TeamInviteRow
-    >('SELECT * FROM team_invites WHERE team_id = ? AND selector = ? AND revoked_at IS NULL')
-    .get(teamId, parsed.selector);
+  const row = await db.get<TeamInviteRow>(
+    'SELECT * FROM team_invites WHERE team_id = ? AND selector = ? AND revoked_at IS NULL',
+    [teamId, parsed.selector],
+  );
   if (!row) return { ok: false, selector: parsed.selector, via, charged: false };
   if (inviteState(row, now) !== 'live')
     return { ok: false, selector: parsed.selector, via, charged: false };
@@ -329,11 +351,11 @@ export function checkInvite(
       ? eqHex(row.secret_hash, sha256(parsed.link))
       : eqHex(row.code_mac, codeMac(key, teamId, row.selector, parsed.code));
   if (hit) return { ok: true, invite: row, via };
-  db.prepare('UPDATE team_invites SET failures = failures + 1 WHERE id = ?').run(row.id);
+  await db.run('UPDATE team_invites SET failures = failures + 1 WHERE id = ?', [row.id]);
   return { ok: false, selector: parsed.selector, via, charged: true };
 }
 
 /** Count one admission against the invite (call inside the admitting transaction). */
-export function consumeInvite(db: Database, inviteId: string): void {
-  db.prepare('UPDATE team_invites SET uses = uses + 1 WHERE id = ?').run(inviteId);
+export async function consumeInvite(db: Driver, inviteId: string): Promise<void> {
+  await db.run('UPDATE team_invites SET uses = uses + 1 WHERE id = ?', [inviteId]);
 }

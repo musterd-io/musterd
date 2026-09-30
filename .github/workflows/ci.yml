@@ -70,6 +70,10 @@ jobs:
 
       - name: Tests + coverage
         run: pnpm coverage
+        env:
+          # ADR 479 §3: every `withDrivers` block runs on SQLite AND the PGlite test double here —
+          # the default already, named so a local `MUSTERD_TEST_DRIVER=sqlite` habit never reaches CI.
+          MUSTERD_TEST_DRIVER: both
 
   # The other half of web a11y. `pnpm lint` gates the STRUCTURAL half (jsx-a11y as errors, #493);
   # that eslint block names colour contrast as the first thing it cannot see, and until now

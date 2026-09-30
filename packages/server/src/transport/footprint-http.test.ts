@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { insertFootprintTick } from '../store/footprint.js';
 import { claimAgentHttp, type AgentHttpAuth } from './test-auth.js';
@@ -49,7 +50,7 @@ async function post(path: string, body: unknown, auth?: string | AgentHttpAuth) 
 }
 
 beforeEach(async () => {
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const res = await fetch(`${base}/teams`, {
@@ -67,15 +68,15 @@ afterEach(async () => {
   await server.close();
 });
 
-describe('GET /teams/:slug/footprint', () => {
+describe('GET /teams/:slug/footprint', async () => {
   it('is 404 while no tick exists — clients read any non-200 as "no data"', async () => {
     const res = await get('/teams/dawn/footprint', adaAuth);
     expect(res.status).toBe(404);
   });
 
   it('returns the latest tick once the sampler has written one', async () => {
-    insertFootprintTick(
-      server.db,
+    await insertFootprintTick(
+      sqliteDriver(server.db),
       [{ ts: 7000, classification: 'orphaned', seat: null, procs: 5, rss_kb: 50_000, pids: '[3]' }],
       { ts: 7000, swap_used_mb: 1500, swap_total_mb: 2048, free_mem_mb: 140 },
     );
@@ -92,7 +93,7 @@ describe('GET /teams/:slug/footprint', () => {
   });
 });
 
-describe('POST /teams/:slug/footprint/reap', () => {
+describe('POST /teams/:slug/footprint/reap', async () => {
   it('re-verifies against the live process table — nonexistent pids are refused, not killed', async () => {
     // Pid 1 is launchd and 2^22 is beyond macOS's pid range; neither matches the
     // sidecar allowlist even if present, so this cannot kill anything real.

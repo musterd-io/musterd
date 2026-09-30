@@ -1,12 +1,12 @@
-import type { Database } from 'better-sqlite3';
 import type { ResolvedConfig } from './config.js';
+import type { Driver } from './db/driver.js';
 import type { Hub } from './transport/hub.js';
 
 /** Shared server context threaded through transports and the router. */
 export interface Ctx {
-  db: Database;
+  db: Driver;
   /** The trace store (ADR 445 §3) — a separate file; nothing joins it to `db` at write time. */
-  traceDb: Database;
+  traceDb: Driver;
   hub: Hub;
   config: ResolvedConfig;
   /** Durable roster roots (ADR 058). Empty ⇒ no file-backed teams; the legacy db-authoritative

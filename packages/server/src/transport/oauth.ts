@@ -10,11 +10,11 @@ import {
   type OAuthAuthorizationServerMetadata,
   type OAuthProtectedResourceMetadata,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
 import { z } from 'zod';
 import { isLocalPeer } from '../config.js';
 import type { Ctx } from '../context.js';
+import type { Driver } from '../db/driver.js';
 import { asMusterdError, MusterdError } from '../errors.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { appendAudit } from '../store/audit.js';
@@ -77,9 +77,9 @@ export function __resetOAuthBucketsForTest(): void {
  * slug is attacker-controlled path input and may itself be credential-shaped (`/mcp/mscr_…`),
  * so `requireTeam`'s `no team "X"` message would write the secret into the response body.
  */
-export function requireTeamRedacted(db: Database, slug: string) {
+export async function requireTeamRedacted(db: Driver, slug: string) {
   try {
-    return requireTeam(db, slug);
+    return await requireTeam(db, slug);
   } catch (err) {
     if (err instanceof MusterdError && err.code === 'not_found')
       throw new MusterdError('not_found', 'no such team');
@@ -453,7 +453,7 @@ export async function handleOAuthRoutes(
   if (method === 'GET' && prm) {
     requireTlsPeer(ctx, req, 'OAuth discovery');
     const slug = decodeURIComponent(prm[1]!);
-    requireTeamRedacted(ctx.db, slug);
+    await requireTeamRedacted(ctx.db, slug);
     sendOAuthJson(res, 200, metadataFor(ctx, req, slug).resource);
     return true;
   }
@@ -461,7 +461,7 @@ export async function handleOAuthRoutes(
   if (method === 'GET' && asmTeam) {
     requireTlsPeer(ctx, req, 'OAuth discovery');
     const slug = decodeURIComponent(asmTeam[1]!);
-    requireTeamRedacted(ctx.db, slug);
+    await requireTeamRedacted(ctx.db, slug);
     sendOAuthJson(res, 200, metadataFor(ctx, req, slug).server);
     return true;
   }
@@ -492,7 +492,7 @@ export async function handleOAuthRoutes(
   if (method === 'GET' && asmInserted) {
     requireTlsPeer(ctx, req, 'OAuth discovery');
     const slug = decodeURIComponent((asmInserted[1] ?? asmInserted[2])!);
-    requireTeamRedacted(ctx.db, slug);
+    await requireTeamRedacted(ctx.db, slug);
     sendOAuthJson(res, 200, metadataFor(ctx, req, slug).server);
     return true;
   }
@@ -502,7 +502,7 @@ export async function handleOAuthRoutes(
   if (!m) return false;
   const slug = decodeURIComponent(m[1]!);
   const rest = m[2] ?? '';
-  const team = requireTeamRedacted(ctx.db, slug);
+  const team = await requireTeamRedacted(ctx.db, slug);
 
   const parseOrOAuth = <S extends z.ZodTypeAny>(schema: S, raw: unknown): z.infer<S> => {
     const parsed = schema.safeParse(raw);
@@ -548,12 +548,12 @@ export async function handleOAuthRoutes(
       sendTokenError(res, 400, 'invalid_redirect_uri', asMusterdError(err).message);
       return true;
     }
-    const { client_id } = registerClient(ctx.db, {
+    const { client_id } = await registerClient(ctx.db, {
       teamId: team.id,
       clientName: body.client_name,
       redirectUris: body.redirect_uris,
     });
-    appendAudit(ctx.db, team.id, {
+    await appendAudit(ctx.db, team.id, {
       actor: null,
       action: 'oauth.client_registered',
       target: client_id,
@@ -648,7 +648,7 @@ export async function handleOAuthRoutes(
       );
       return true;
     }
-    let member: ReturnType<typeof getMemberByName>;
+    let member: Awaited<ReturnType<typeof getMemberByName>>;
     let admittedVia: 'link' | 'code' | null = null;
     // ADR 452 §2.3: an agent connect issues its code INSIDE the supersede transaction, so no
     // earlier connect's code or chain can outlive this one (big-body 01M3DM1CQ2).
@@ -659,13 +659,16 @@ export async function handleOAuthRoutes(
       const redirectUri = body.redirect_uri;
       const codeChallenge = body.code_challenge;
       const scope = body.scope;
-      const outcome = ctx.db.transaction(
-        ():
+      const outcome = await ctx.db.tx(
+        async (
+          t,
+        ): Promise<
           | { err: MusterdError }
-          | { agent: MemberRow; connector: MemberRow; code: string; notify: string[] } => {
-          const redeemed = nonce ? redeemAgentConnectNonce(ctx.db, team.id, nonce) : null;
+          | { agent: MemberRow; connector: MemberRow; code: string; notify: string[] }
+        > => {
+          const redeemed = nonce ? await redeemAgentConnectNonce(t, team.id, nonce) : null;
           if (!redeemed) {
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(t, team.id, {
               actor: null,
               action: 'member.agent_connect_refused',
               target: null,
@@ -684,18 +687,19 @@ export async function handleOAuthRoutes(
           }
           const { agent, issuedBy: connector } = redeemed;
           // ADR 456 §4: who this connect displaces — read BEFORE the supersede revokes them.
-          const displaced = ctx.db
-            .prepare<[string, string], { connected_by: string | null }>(
+          const displaced = (
+            await t.all<{ connected_by: string | null }>(
               'SELECT DISTINCT connected_by FROM oauth_tokens WHERE team_id = ? AND member_id = ? AND revoked_at IS NULL',
+              [team.id, agent.id],
             )
-            .all(team.id, agent.id)
+          )
             .map((r) => r.connected_by)
             .filter((id): id is string => id !== null);
           // One OAuth occupant per agent: every prior chain AND every unexchanged code goes.
-          const chains = revokeAllForMember(ctx.db, team.id, agent.id);
-          const codes = burnUnexchangedCodes(ctx.db, team.id, agent.id);
+          const chains = await revokeAllForMember(t, team.id, agent.id);
+          const codes = await burnUnexchangedCodes(t, team.id, agent.id);
           if (chains + codes > 0)
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(t, team.id, {
               actor: agent.name,
               action: 'oauth.revoked',
               target: auditClientId(clientId),
@@ -703,7 +707,7 @@ export async function handleOAuthRoutes(
               detail: { reason: 'superseded', chains, codes },
             });
           // ADR 456 §3: the issuer rides the code onto the chain and bounds it.
-          const { code } = issueCode(ctx.db, {
+          const { code } = await issueCode(t, {
             teamId: team.id,
             memberId: agent.id,
             clientId,
@@ -713,7 +717,7 @@ export async function handleOAuthRoutes(
             connectedBy: connector.id,
             ...(scope ? { scope } : {}),
           });
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(t, team.id, {
             actor: connector.name,
             action: 'member.agent_connected',
             target: agent.name,
@@ -732,7 +736,7 @@ export async function handleOAuthRoutes(
               : [];
           return { agent, connector, code, notify };
         },
-      )();
+      );
       if ('err' in outcome) {
         sendOAuthError(res, outcome.err);
         return true;
@@ -740,15 +744,15 @@ export async function handleOAuthRoutes(
       member = outcome.agent;
       agentCode = outcome.code;
       for (const id of outcome.notify) {
-        const to = ctx.db
-          .prepare<
-            [string],
-            { name: string }
-          >('SELECT name FROM members WHERE id = ? AND left_at IS NULL')
-          .get(id)?.name;
+        const to = (
+          await ctx.db.get<{ name: string }>(
+            'SELECT name FROM members WHERE id = ? AND left_at IS NULL',
+            [id],
+          )
+        )?.name;
         if (!to) continue;
         try {
-          routeEnvelope(
+          await routeEnvelope(
             ctx,
             team,
             outcome.connector,
@@ -772,11 +776,11 @@ export async function handleOAuthRoutes(
       // member — one transaction: check-and-charge, name refusal, addMember, consume, audit.
       const proof = body.proof;
       const clientId = body.client_id;
-      const teamRow = requireTeam(ctx.db, slug);
-      const outcome = ctx.db.transaction(() => {
-        const check = checkInvite(ctx.db, team.id, proof.secret);
+      const teamRow = await requireTeam(ctx.db, slug);
+      const outcome = await ctx.db.tx(async (t) => {
+        const check = await checkInvite(t, team.id, proof.secret);
         if (!check.ok) {
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(t, team.id, {
             actor: null,
             action: 'member.invite_refused',
             target: check.selector,
@@ -791,10 +795,10 @@ export async function handleOAuthRoutes(
         }
         // Any row by that name — live OR tombstoned — refuses: `addMember` would revive a removed
         // seat (ADR 065), and a stranger must never inherit someone else's history. Not charged.
-        if (getMemberByName(ctx.db, team.id, proof.name)) {
+        if (await getMemberByName(t, team.id, proof.name)) {
           return { err: new MusterdError('conflict', 'that name is taken — pick another') };
         }
-        const added = addMember(ctx.db, teamRow, {
+        const added = await addMember(t, teamRow, {
           name: proof.name,
           kind: 'human',
           ...(check.invite.member_until !== null
@@ -802,8 +806,8 @@ export async function handleOAuthRoutes(
             : {}),
         });
         // `added.token` (the member's mscr_) is dropped here on purpose: never shown, never logged.
-        consumeInvite(ctx.db, check.invite.id);
-        appendAudit(ctx.db, team.id, {
+        await consumeInvite(t, check.invite.id);
+        await appendAudit(t, team.id, {
           actor: added.row.name,
           action: 'member.invite_admitted',
           target: check.invite.id,
@@ -811,7 +815,7 @@ export async function handleOAuthRoutes(
           detail: { ...auditClientKind(clientId), via: check.via },
         });
         return { row: added.row, via: check.via };
-      })();
+      });
       if ('err' in outcome) {
         sendOAuthError(res, outcome.err);
         return true;
@@ -823,7 +827,7 @@ export async function handleOAuthRoutes(
       // handshake runs (self-identifying, acting-seat must match, departed seats refused).
       let memberName: string;
       try {
-        const auth = authMember(
+        const auth = await authMember(
           ctx.db,
           slug,
           body.proof.credential,
@@ -834,7 +838,7 @@ export async function handleOAuthRoutes(
         sendOAuthError(res, err);
         return true;
       }
-      member = getMemberByName(ctx.db, team.id, memberName);
+      member = await getMemberByName(ctx.db, team.id, memberName);
     }
     if (!member) {
       sendOAuthError(res, new MusterdError('unauthorized', 'seat is gone'));
@@ -843,16 +847,18 @@ export async function handleOAuthRoutes(
     const memberName = member.name;
     const code =
       agentCode ??
-      issueCode(ctx.db, {
-        teamId: team.id,
-        memberId: member.id,
-        clientId: body.client_id,
-        clientSource: client.client_source,
-        redirectUri: body.redirect_uri,
-        codeChallenge: body.code_challenge,
-        ...(body.scope ? { scope: body.scope } : {}),
-      }).code;
-    appendAudit(ctx.db, team.id, {
+      (
+        await issueCode(ctx.db, {
+          teamId: team.id,
+          memberId: member.id,
+          clientId: body.client_id,
+          clientSource: client.client_source,
+          redirectUri: body.redirect_uri,
+          codeChallenge: body.code_challenge,
+          ...(body.scope ? { scope: body.scope } : {}),
+        })
+      ).code;
+    await appendAudit(ctx.db, team.id, {
       actor: memberName,
       action: 'oauth.code_issued',
       target: auditClientId(body.client_id),
@@ -892,7 +898,7 @@ export async function handleOAuthRoutes(
     }
     // Unknown client is 401 invalid_client on both grants (RFC 6749 §5.2) — never an oracle.
     try {
-      getClient(ctx.db, team.id, tokenReq.client_id);
+      await getClient(ctx.db, team.id, tokenReq.client_id);
     } catch {
       // CIMD is syntax-checked only here. Grant redemption below is the authority; do not fetch.
       if (!isCimdClientId(tokenReq.client_id)) {
@@ -902,7 +908,7 @@ export async function handleOAuthRoutes(
     }
     if (tokenReq.grant_type === 'authorization_code') {
       try {
-        const { memberId, scope, connectedBy } = redeemCode(ctx.db, {
+        const { memberId, scope, connectedBy } = await redeemCode(ctx.db, {
           teamId: team.id,
           clientId: tokenReq.client_id,
           code: tokenReq.code,
@@ -911,24 +917,22 @@ export async function handleOAuthRoutes(
         });
         // ADR 452 §4: a member who left, was disabled, or expired in the 90s since authorize gets
         // no chain (the code is already burned). Same rule as authMember, one statement of it.
-        const owner = ctx.db
-          .prepare<[string], MemberRow>('SELECT * FROM members WHERE id = ?')
-          .get(memberId);
+        const owner = await ctx.db.get<MemberRow>('SELECT * FROM members WHERE id = ?', [memberId]);
         const ended = owner
-          ? (memberStandingRefusal(owner) ?? connectorRefusal(ctx.db, connectedBy))
+          ? (memberStandingRefusal(owner) ?? (await connectorRefusal(ctx.db, connectedBy)))
           : new MusterdError('unauthorized', 'seat is gone');
         if (ended) throw ended;
-        const pair = mintTokenPair(ctx.db, {
+        const pair = await mintTokenPair(ctx.db, {
           teamId: team.id,
           memberId,
           clientId: tokenReq.client_id,
           scope,
           connectedBy,
         });
-        const memberName = ctx.db
-          .prepare<[string], { name: string }>('SELECT name FROM members WHERE id = ?')
-          .get(memberId)?.name;
-        appendAudit(ctx.db, team.id, {
+        const memberName = (
+          await ctx.db.get<{ name: string }>('SELECT name FROM members WHERE id = ?', [memberId])
+        )?.name;
+        await appendAudit(ctx.db, team.id, {
           actor: memberName ?? null,
           action: 'oauth.token_issued',
           target: auditClientId(tokenReq.client_id),
@@ -951,13 +955,13 @@ export async function handleOAuthRoutes(
     }
     // refresh_token rotation — reuse of a burned refresh revokes the chain (the store throws).
     try {
-      const pair = rotateRefresh(ctx.db, {
+      const pair = await rotateRefresh(ctx.db, {
         teamId: team.id,
         clientId: tokenReq.client_id,
         refreshToken: tokenReq.refresh_token,
       });
-      const owner = chainMember(ctx.db, team.id, tokenReq.client_id, tokenReq.refresh_token);
-      appendAudit(ctx.db, team.id, {
+      const owner = await chainMember(ctx.db, team.id, tokenReq.client_id, tokenReq.refresh_token);
+      await appendAudit(ctx.db, team.id, {
         actor: owner,
         action: 'oauth.token_rotated',
         target: auditClientId(tokenReq.client_id),
@@ -975,8 +979,8 @@ export async function handleOAuthRoutes(
       const me = asMusterdError(err);
       const reused = /reused/.test(me.message);
       if (reused) {
-        appendAudit(ctx.db, team.id, {
-          actor: chainMember(ctx.db, team.id, tokenReq.client_id, tokenReq.refresh_token),
+        await appendAudit(ctx.db, team.id, {
+          actor: await chainMember(ctx.db, team.id, tokenReq.client_id, tokenReq.refresh_token),
           action: 'oauth.token_reused_revoked',
           target: auditClientId(tokenReq.client_id),
           result: 'deny',
@@ -1011,9 +1015,9 @@ export async function handleOAuthRoutes(
           ? ((raw as Record<string, unknown>)['token'] as string)
           : '';
       // RFC 7009 §2.2.1: an invalid token still answers 200 — revocation is not an oracle.
-      const owner = token ? chainMember(ctx.db, team.id, null, token) : null;
-      const revoked = token ? revokeToken(ctx.db, team.id, token) : false;
-      appendAudit(ctx.db, team.id, {
+      const owner = token ? await chainMember(ctx.db, team.id, null, token) : null;
+      const revoked = token ? await revokeToken(ctx.db, team.id, token) : false;
+      await appendAudit(ctx.db, team.id, {
         actor: owner,
         action: 'oauth.revoked',
         target: null,
@@ -1030,7 +1034,7 @@ export async function handleOAuthRoutes(
 
 /** Unknown client on the browser legs is a musterd-shaped 401, not a redirect (never bounce). */
 async function getClientOrOAuth(
-  db: Database,
+  db: Driver,
   teamId: string,
   clientId: string,
   res: ServerResponse,
@@ -1042,7 +1046,7 @@ async function getClientOrOAuth(
   client_id_host?: string;
 } | null> {
   try {
-    const row = getClient(db, teamId, clientId);
+    const row = await getClient(db, teamId, clientId);
     return {
       client_id: row.client_id,
       client_name: row.client_name,

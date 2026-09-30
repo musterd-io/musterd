@@ -1,6 +1,6 @@
 import { TOKEN_PREFIXES, type NodeSummary } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
+import type { Driver } from '../db/driver.js';
 import { hashToken, newSecret } from './members.js';
 
 /**
@@ -27,19 +27,20 @@ export const NODE_INVITE_TTL_MS = 15 * 60 * 1000;
  * Mint a single-use enrollment code. The plaintext is returned once and never persisted — only its
  * sha256, the same handling the four token kinds before it get (SPEC A.2).
  */
-export function mintInvite(
-  db: Database,
+export async function mintInvite(
+  db: Driver,
   teamId: string,
   label: string,
   createdBy: string,
   now: number = Date.now(),
-): { invite: string; expires_at: number } {
+): Promise<{ invite: string; expires_at: number }> {
   const invite = newSecret(TOKEN_PREFIXES.node_invite);
   const expires_at = now + NODE_INVITE_TTL_MS;
-  db.prepare(
+  await db.run(
     `INSERT INTO node_invites (id, team_id, code_hash, label, created_by, created_at, expires_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(ulid(), teamId, hashToken(invite), label, createdBy, now, expires_at);
+    [ulid(), teamId, hashToken(invite), label, createdBy, now, expires_at],
+  );
   return { invite, expires_at };
 }
 
@@ -53,21 +54,20 @@ export function mintInvite(
  * both enroll (ADR 328 §2) — SQLite's single writer serialises them, and the loser's UPDATE matches
  * no row.
  */
-export function consumeInvite(
-  db: Database,
+export async function consumeInvite(
+  db: Driver,
   teamId: string,
   code: string,
   nodeId: string,
   now: number = Date.now(),
-): { id: string } | null {
+): Promise<{ id: string } | null> {
   return (
-    db
-      .prepare<[number, string, string, string, number], { id: string }>(
-        `UPDATE node_invites SET consumed_at = ?, consumed_by = ?
+    (await db.get<{ id: string }>(
+      `UPDATE node_invites SET consumed_at = ?, consumed_by = ?
           WHERE team_id = ? AND code_hash = ? AND consumed_at IS NULL AND expires_at > ?
         RETURNING id`,
-      )
-      .get(now, nodeId, teamId, hashToken(code), now) ?? null
+      [now, nodeId, teamId, hashToken(code), now],
+    )) ?? null
   );
 }
 
@@ -106,22 +106,21 @@ export function consumeInvite(
  * `local_node` remains load-bearing for `insertMessage` (v48) — it is simply no longer part of this
  * guard.
  */
-export function bindNode(
-  db: Database,
+export async function bindNode(
+  db: Driver,
   teamId: string,
   nodeId: string,
   label: string,
   credential: string,
   enrolledBy: string,
   now: number = Date.now(),
-): { id: string } | null {
-  const res = db
-    .prepare(
-      `INSERT INTO nodes (id, team_id, label, next_seq, credential_hash, enrolled_at, enrolled_by)
+): Promise<{ id: string } | null> {
+  const res = await db.run(
+    `INSERT INTO nodes (id, team_id, label, next_seq, credential_hash, enrolled_at, enrolled_by)
        VALUES (?, ?, ?, 1, ?, ?, ?)
        ON CONFLICT(id) DO NOTHING`,
-    )
-    .run(nodeId, teamId, label, hashToken(credential), now, enrolledBy);
+    [nodeId, teamId, label, hashToken(credential), now, enrolledBy],
+  );
   return res.changes === 0 ? null : { id: nodeId };
 }
 
@@ -134,19 +133,18 @@ export function bindNode(
  * from `bindNode` and gated on admin authority at the route rather than on an invite. Refuses a
  * revoked node: re-arming a retired credential is an enrollment decision, not a rotation.
  */
-export function rotateNode(
-  db: Database,
+export async function rotateNode(
+  db: Driver,
   teamId: string,
   nodeId: string,
   now: number = Date.now(),
-): { credential: string } | null {
+): Promise<{ credential: string } | null> {
   const credential = newSecret(TOKEN_PREFIXES.node);
-  const res = db
-    .prepare(
-      `UPDATE nodes SET credential_hash = ?, enrolled_at = ?
+  const res = await db.run(
+    `UPDATE nodes SET credential_hash = ?, enrolled_at = ?
         WHERE id = ? AND team_id = ? AND revoked_at IS NULL`,
-    )
-    .run(hashToken(credential), now, nodeId, teamId);
+    [hashToken(credential), now, nodeId, teamId],
+  );
   return res.changes === 0 ? null : { credential };
 }
 
@@ -160,18 +158,19 @@ export function rotateNode(
  *
  * `false` means already revoked or unknown — idempotent without claiming to have acted.
  */
-export function revokeNode(
-  db: Database,
+export async function revokeNode(
+  db: Driver,
   teamId: string,
   nodeId: string,
   now: number = Date.now(),
-): boolean {
+): Promise<boolean> {
   return (
-    db
-      .prepare(
+    (
+      await db.run(
         'UPDATE nodes SET revoked_at = ? WHERE id = ? AND team_id = ? AND revoked_at IS NULL',
+        [now, nodeId, teamId],
       )
-      .run(now, nodeId, teamId).changes > 0
+    ).changes > 0
   );
 }
 
@@ -185,19 +184,18 @@ export function revokeNode(
  * enforced at the routes, since a machine being admitted and a seat being authorized are
  * independent axes.
  */
-export function authenticateNode(
-  db: Database,
+export async function authenticateNode(
+  db: Driver,
   teamId: string,
   token: string,
-): { id: string; label: string } | null {
+): Promise<{ id: string; label: string } | null> {
   if (!token) return null;
   return (
-    db
-      .prepare<[string, string], { id: string; label: string }>(
-        `SELECT id, label FROM nodes
+    (await db.get<{ id: string; label: string }>(
+      `SELECT id, label FROM nodes
           WHERE team_id = ? AND credential_hash = ? AND revoked_at IS NULL`,
-      )
-      .get(teamId, hashToken(token)) ?? null
+      [teamId, hashToken(token)],
+    )) ?? null
   );
 }
 
@@ -217,43 +215,43 @@ export function authenticateNode(
  * Applies to every seat kind. Human seats fan out across surfaces (ADR 042) and, after ADR 358,
  * across the machines they have trusted; agents stay one-node, which `trustNodeForSeat` enforces.
  */
-export function bindSeatToNode(
-  db: Database,
+export async function bindSeatToNode(
+  db: Driver,
   teamId: string,
   memberId: string,
   nodeId: string,
   now: number = Date.now(),
-): { bound: true } | { bound: false; node_id: string; label: string } {
-  db.prepare(
+): Promise<{ bound: true } | { bound: false; node_id: string; label: string }> {
+  await db.run(
     `INSERT INTO seat_nodes (member_id, team_id, node_id, bound_at)
      SELECT ?, ?, ?, ?
       WHERE NOT EXISTS (SELECT 1 FROM seat_nodes WHERE member_id = ?)`,
-  ).run(memberId, teamId, nodeId, now, memberId);
-  const holders = seatBindings(db, memberId);
+    [memberId, teamId, nodeId, now, memberId],
+  );
+  const holders = await seatBindings(db, memberId);
   if (holders.some((h) => h.node_id === nodeId)) return { bound: true };
   const first = holders[0]!;
   return { bound: false, node_id: first.node_id, label: first.label };
 }
 
 /** Where the hub believes this seat lives — the first-bound node — or undefined when unbound. */
-export function seatBinding(
-  db: Database,
+export async function seatBinding(
+  db: Driver,
   memberId: string,
-): { node_id: string; label: string; bound_at: number } | undefined {
-  return seatBindings(db, memberId)[0];
+): Promise<{ node_id: string; label: string; bound_at: number } | undefined> {
+  return (await seatBindings(db, memberId))[0];
 }
 
 /** Every node the seat is bound to, earliest first; empty when no node has spoken for it yet. */
-export function seatBindings(
-  db: Database,
+export async function seatBindings(
+  db: Driver,
   memberId: string,
-): { node_id: string; label: string; bound_at: number }[] {
-  return db
-    .prepare<[string], { node_id: string; label: string; bound_at: number }>(
-      `SELECT s.node_id, n.label, s.bound_at FROM seat_nodes s JOIN nodes n ON n.id = s.node_id
+): Promise<{ node_id: string; label: string; bound_at: number }[]> {
+  return await db.all<{ node_id: string; label: string; bound_at: number }>(
+    `SELECT s.node_id, n.label, s.bound_at FROM seat_nodes s JOIN nodes n ON n.id = s.node_id
         WHERE s.member_id = ? ORDER BY s.bound_at, s.node_id`,
-    )
-    .all(memberId);
+    [memberId],
+  );
 }
 
 /**
@@ -266,50 +264,51 @@ export function seatBindings(
  *  - `not_human`: agents stay one-node (ADR 042's kind scope, carried to machines).
  *  - `unknown_node`: the target is not an unrevoked node of this team.
  */
-export function trustNodeForSeat(
-  db: Database,
+export async function trustNodeForSeat(
+  db: Driver,
   teamId: string,
   seat: { id: string; kind: string },
   speakingNodeId: string,
   targetNodeId: string,
   now: number = Date.now(),
-):
+): Promise<
   | { trusted: true; already: boolean }
-  | { trusted: false; reason: 'not_resident' | 'not_human' | 'unknown_node' } {
+  | { trusted: false; reason: 'not_resident' | 'not_human' | 'unknown_node' }
+> {
   if (seat.kind !== 'human') return { trusted: false, reason: 'not_human' };
-  const holders = seatBindings(db, seat.id);
+  const holders = await seatBindings(db, seat.id);
   if (!holders.some((h) => h.node_id === speakingNodeId)) {
     return { trusted: false, reason: 'not_resident' };
   }
-  const target = db
-    .prepare<
-      [string, string],
-      { id: string }
-    >('SELECT id FROM nodes WHERE id = ? AND team_id = ? AND revoked_at IS NULL')
-    .get(targetNodeId, teamId);
+  const target = await db.get<{ id: string }>(
+    'SELECT id FROM nodes WHERE id = ? AND team_id = ? AND revoked_at IS NULL',
+    [targetNodeId, teamId],
+  );
   if (!target) return { trusted: false, reason: 'unknown_node' };
   if (holders.some((h) => h.node_id === targetNodeId)) return { trusted: true, already: true };
-  db.prepare(
+  await db.run(
     `INSERT INTO seat_nodes (member_id, team_id, node_id, bound_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(member_id, node_id) DO NOTHING`,
-  ).run(seat.id, teamId, targetNodeId, now);
+    [seat.id, teamId, targetNodeId, now],
+  );
   return { trusted: true, already: false };
 }
 
 /** The explicit re-bind act (ADR 328 §4): drop every binding so the next node to speak may take it. */
-export function unbindSeat(db: Database, memberId: string): { node_id: string } | null {
-  const rows = db
-    .prepare<
-      [string],
-      { node_id: string }
-    >('DELETE FROM seat_nodes WHERE member_id = ? RETURNING node_id')
-    .all(memberId);
+export async function unbindSeat(
+  db: Driver,
+  memberId: string,
+): Promise<{ node_id: string } | null> {
+  const rows = await db.all<{ node_id: string }>(
+    'DELETE FROM seat_nodes WHERE member_id = ? RETURNING node_id',
+    [memberId],
+  );
   return rows[0] ?? null;
 }
 
 /** The hub's stamp on every authenticated sync contact (push, pull, claim): the node is alive now. */
-export function touchNode(db: Database, nodeId: string, now: number): void {
-  db.prepare('UPDATE nodes SET last_seen_at = ? WHERE id = ?').run(now, nodeId);
+export async function touchNode(db: Driver, nodeId: string, now: number): Promise<void> {
+  await db.run('UPDATE nodes SET last_seen_at = ? WHERE id = ?', [now, nodeId]);
 }
 
 /**
@@ -317,28 +316,27 @@ export function touchNode(db: Database, nodeId: string, now: number): void {
  * Writes identity and liveness ONLY: `next_seq` is an allocator this daemon must never mint from
  * for a foreign node, and the credential columns are the hub's business (ADR 328).
  */
-export function upsertForeignNode(
-  db: Database,
+export async function upsertForeignNode(
+  db: Driver,
   teamId: string,
   node: { id: string; label: string; last_seen_at: number | null },
-): void {
-  db.prepare(
+): Promise<void> {
+  await db.run(
     `INSERT INTO nodes (id, team_id, label, next_seq, last_seen_at) VALUES (?, ?, ?, 1, ?)
      ON CONFLICT(id) DO UPDATE SET label = excluded.label, last_seen_at = excluded.last_seen_at`,
-  ).run(node.id, teamId, node.label, node.last_seen_at);
+    [node.id, teamId, node.label, node.last_seen_at],
+  );
 }
 
 /** Every node of the team with its liveness stamp — the pull response's `nodes`. */
-export function listNodeLiveness(
-  db: Database,
+export async function listNodeLiveness(
+  db: Driver,
   teamId: string,
-): { id: string; label: string; last_seen_at: number | null }[] {
-  return db
-    .prepare<
-      [string],
-      { id: string; label: string; last_seen_at: number | null }
-    >('SELECT id, label, last_seen_at FROM nodes WHERE team_id = ? ORDER BY id')
-    .all(teamId);
+): Promise<{ id: string; label: string; last_seen_at: number | null }[]> {
+  return await db.all<{ id: string; label: string; last_seen_at: number | null }>(
+    'SELECT id, label, last_seen_at FROM nodes WHERE team_id = ? ORDER BY id',
+    [teamId],
+  );
 }
 
 /**
@@ -347,29 +345,26 @@ export function listNodeLiveness(
  * Unenrolled rows (this daemon's own, and any minted-but-never-joined) list with nulls: "enrolled"
  * is a state to check, not one the row's existence guarantees (ADR 331 §Consequences).
  */
-export function listNodes(db: Database, teamId: string): NodeSummary[] {
-  return db
-    .prepare<
-      [string],
-      {
-        id: string;
-        label: string;
-        enrolled_at: number | null;
-        revoked_at: number | null;
-        last_seen_at: number | null;
-        credential_hash: string | null;
-      }
-    >(
+export async function listNodes(db: Driver, teamId: string): Promise<NodeSummary[]> {
+  return (
+    await db.all<{
+      id: string;
+      label: string;
+      enrolled_at: number | null;
+      revoked_at: number | null;
+      last_seen_at: number | null;
+      credential_hash: string | null;
+    }>(
       `SELECT id, label, enrolled_at, revoked_at, last_seen_at, credential_hash
          FROM nodes WHERE team_id = ? ORDER BY enrolled_at IS NULL, enrolled_at DESC, id`,
+      [teamId],
     )
-    .all(teamId)
-    .map((r) => ({
-      id: r.id,
-      label: r.label,
-      enrolled_at: r.enrolled_at,
-      revoked_at: r.revoked_at,
-      last_seen_at: r.last_seen_at,
-      credential_prefix: r.credential_hash ? TOKEN_PREFIXES.node : null,
-    }));
+  ).map((r) => ({
+    id: r.id,
+    label: r.label,
+    enrolled_at: r.enrolled_at,
+    revoked_at: r.revoked_at,
+    last_seen_at: r.last_seen_at,
+    credential_prefix: r.credential_hash ? TOKEN_PREFIXES.node : null,
+  }));
 }

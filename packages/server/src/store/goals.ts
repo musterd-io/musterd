@@ -5,7 +5,7 @@ import {
   GoalOutcomeMetaSchema,
   GoalRetractMetaSchema,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { deriveGoalStatus, laneStatesByGoal } from './lanes.js';
 
 /**
@@ -51,14 +51,13 @@ interface GoalAccumulator {
  * §5) counts how many landed after a lane was claimed to tell a fresh lane from one building against a
  * superseded plan. Same derivation rule as {@link listGoals}'s epoch, so the two never disagree.
  */
-export function goalEpochBumps(db: Database, teamId: string): Map<string, number[]> {
-  const rows = db
-    .prepare<[string], { meta: string; ts: number }>(
-      `SELECT meta, ts FROM messages
+export async function goalEpochBumps(db: Driver, teamId: string): Promise<Map<string, number[]>> {
+  const rows = await db.all<{ meta: string; ts: number }>(
+    `SELECT meta, ts FROM messages
         WHERE team_id = ? AND act IN ('defer','steer') AND meta IS NOT NULL
         ORDER BY ts ASC, id ASC`,
-    )
-    .all(teamId);
+    [teamId],
+  );
   const bumps = new Map<string, number[]>();
   for (const r of rows) {
     let meta: unknown;
@@ -99,18 +98,17 @@ function normalizeDeclaredWave(wave: number | 'later' | undefined): Wave {
  *   - each **`defer`** and each goal-scoped **`steer`** (one that names `meta.goal_id`) bumps the epoch.
  * This is the same read-side-projection posture as steer supersession and derived Goal status.
  */
-export function listGoals(db: Database, teamId: string, _teamSlug: string): Goal[] {
+export async function listGoals(db: Driver, teamId: string, _teamSlug: string): Promise<Goal[]> {
   // Declarations (message→team+meta.goal) and the two direction-changing acts, in one ts-ordered scan.
-  const rows = db
-    .prepare<[string], GoalSignalRow>(
-      `SELECT mf.name AS from_name, m.act AS act, m.meta AS meta, m.ts AS ts
+  const rows = await db.all<GoalSignalRow>(
+    `SELECT mf.name AS from_name, m.act AS act, m.meta AS meta, m.ts AS ts
          FROM messages m
          JOIN members mf ON mf.id = m.from_member
         WHERE m.team_id = ? AND m.meta IS NOT NULL
           AND ((m.act = 'message' AND m.to_kind = 'team') OR m.act IN ('defer','steer'))
         ORDER BY m.ts ASC, m.id ASC`,
-    )
-    .all(teamId);
+    [teamId],
+  );
 
   const byId = new Map<string, GoalAccumulator>();
   // Deferred/steered signals whose target Goal we may not have declared yet — replayed after the scan
@@ -210,7 +208,7 @@ export function listGoals(db: Database, teamId: string, _teamSlug: string): Goal
   }
 
   // Derive status from lanes joined by goal_id — one narrow (goal_id, state) scan, not the board.
-  const lanesByGoal = laneStatesByGoal(db, teamId);
+  const lanesByGoal = await laneStatesByGoal(db, teamId);
 
   return [...byId.values()].map((g) => ({
     id: g.id,

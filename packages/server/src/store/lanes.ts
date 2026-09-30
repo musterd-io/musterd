@@ -16,8 +16,8 @@ import {
   type OpenLane,
   type UpdateLane,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
+import type { Driver } from '../db/driver.js';
 import { appendLaneEventRequired, type AuditAction, type AuditRow } from './audit.js';
 import { listGoals } from './goals.js';
 import { getPolicy } from './teams.js';
@@ -120,15 +120,15 @@ export interface LaneAudit {
   node?: string;
 }
 
-function laneAuditRow(
-  db: Database,
+async function laneAuditRow(
+  db: Driver,
   teamId: string,
   audit: LaneAudit,
   action: AuditAction,
   laneId: string,
   detail: Record<string, unknown>,
-): void {
-  appendLaneEventRequired(db, teamId, {
+): Promise<void> {
+  await appendLaneEventRequired(db, teamId, {
     actor: audit.actor,
     action,
     target: laneId,
@@ -144,18 +144,18 @@ function laneAuditRow(
  * on the origin; a hub-arbitrated submit also records `lane.state_changed` so the fold can apply
  * the state (lane 01M2HNSVA79).
  */
-function recordLaneEdges(
-  db: Database,
+async function recordLaneEdges(
+  db: Driver,
   teamId: string,
   before: Lane,
   after: Lane,
   ownerPatched: boolean,
   audit: LaneAudit,
-): void {
+): Promise<void> {
   const claimed =
     ownerPatched && after.owner_seat !== null && after.owner_seat !== before.owner_seat;
   if (claimed) {
-    laneAuditRow(db, teamId, audit, 'lane.claimed', after.id, {
+    await laneAuditRow(db, teamId, audit, 'lane.claimed', after.id, {
       lane: after.id,
       owner: after.owner_seat,
       previous_owner: before.owner_seat,
@@ -166,7 +166,7 @@ function recordLaneEdges(
   }
   const changed = laneFieldChanges(before, after);
   if (changed.length > 0) {
-    laneAuditRow(db, teamId, audit, 'lane.updated', after.id, {
+    await laneAuditRow(db, teamId, audit, 'lane.updated', after.id, {
       lane: after.id,
       fields: changed,
       changes: laneFieldDiff(before, after),
@@ -174,7 +174,7 @@ function recordLaneEdges(
   }
   const released = before.owner_seat !== null && after.state === 'open' && before.state !== 'open';
   if (released) {
-    laneAuditRow(db, teamId, audit, 'lane.released', after.id, {
+    await laneAuditRow(db, teamId, audit, 'lane.released', after.id, {
       lane: after.id,
       released_by: audit.actor,
       owner_before: before.owner_seat,
@@ -193,7 +193,7 @@ function recordLaneEdges(
     !(enteringAcceptance && audit.node === undefined) &&
     !claimed
   ) {
-    laneAuditRow(db, teamId, audit, 'lane.state_changed', after.id, {
+    await laneAuditRow(db, teamId, audit, 'lane.state_changed', after.id, {
       lane: after.id,
       from: before.state,
       to: after.state,
@@ -201,14 +201,14 @@ function recordLaneEdges(
   }
 }
 
-export function openLane(
-  db: Database,
+export async function openLane(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   createdBy: string,
   input: OpenLane,
   now: number = Date.now(),
-): Lane {
+): Promise<Lane> {
   const claim = input.claim === true;
   // The birth's actor IS the creator — every caller passed the same name twice, and two of three
   // (incidents, seeds) passed nothing and were born with no first event (dolly, #1179 decline). So
@@ -223,7 +223,7 @@ export function openLane(
   const surfaces = input.scope ?? [];
   const rule =
     input.stakes === undefined
-      ? resolveStakesDefault(getPolicy(db, teamId).stakes_defaults, surfaces)
+      ? resolveStakesDefault((await getPolicy(db, teamId)).stakes_defaults, surfaces)
       : undefined;
   const stakes = input.stakes ?? rule?.stakes ?? 'normal';
   const row: LaneRow = {
@@ -257,18 +257,37 @@ export function openLane(
     resolved_at: null,
     updated_at: now,
   };
-  const insert = db.prepare(
-    `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs,
-                        depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-     VALUES (@id, @team_id, @project, @title, @detail, @kind, @owner_seat, @role, @surface_globs,
-             @depends_on, @branch, @goal_id, @risk, @stakes, @stakes_provenance, @merged_json, @state, @created_by, @created_at, @claimed_at, @resolved_at, @updated_at)`,
-  );
-  db.transaction(() => {
-    insert.run(row);
+  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  await db.tx(async (t) => {
+    await t.run(INSERT, [
+      row.id,
+      row.team_id,
+      row.project,
+      row.title,
+      row.detail,
+      row.kind,
+      row.owner_seat,
+      row.role,
+      row.surface_globs,
+      row.depends_on,
+      row.branch,
+      row.goal_id,
+      row.risk,
+      row.stakes,
+      row.stakes_provenance,
+      row.merged_json,
+      row.state,
+      row.created_by,
+      row.created_at,
+      row.claimed_at,
+      row.resolved_at,
+      row.updated_at,
+    ]);
     // Finding 4 (lane-replication spec): the birth is the first event, and it carries the whole
     // declaration — the fields `lane.updated` will later diff against. Without it the log describes
     // what happened to a lane and never what the lane is.
-    laneAuditRow(db, teamId, audit, 'lane.opened', row.id, {
+    await laneAuditRow(t, teamId, audit, 'lane.opened', row.id, {
       lane: row.id,
       title: row.title,
       project: row.project,
@@ -289,7 +308,7 @@ export function openLane(
     // the lane did not exist — so no guard: just the row, `at_open` so a reader can tell a birth
     // from a takeover.
     if (row.owner_seat) {
-      laneAuditRow(db, teamId, audit, 'lane.claimed', row.id, {
+      await laneAuditRow(t, teamId, audit, 'lane.claimed', row.id, {
         lane: row.id,
         owner: row.owner_seat,
         previous_owner: null,
@@ -297,7 +316,7 @@ export function openLane(
         at_open: true,
       });
     }
-  })();
+  });
   return rowToLane(row, teamSlug);
 }
 
@@ -309,26 +328,32 @@ export function openLane(
  * `json_extract` on `merged_json`, which the store alone writes as JSON, so ADR 173's malformed-detail
  * hazard does not apply.
  */
-export function lanesAttestedBy(
-  db: Database,
+export async function lanesAttestedBy(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   sha: string,
   exceptId: string,
-): Lane[] {
-  return db
-    .prepare<[string, string, string], LaneRow>(
+): Promise<Lane[]> {
+  return (
+    await db.all<LaneRow>(
       `SELECT * FROM lanes WHERE team_id = ? AND id != ? AND merged_json IS NOT NULL
          AND json_extract(merged_json, '$.sha') = ? ORDER BY created_at`,
+      [teamId, exceptId, sha],
     )
-    .all(teamId, exceptId, sha)
-    .map((r) => rowToLane(r, teamSlug));
+  ).map((r) => rowToLane(r, teamSlug));
 }
 
-export function getLane(db: Database, teamId: string, id: string, teamSlug: string): Lane | null {
-  const row = db
-    .prepare<[string, string], LaneRow>('SELECT * FROM lanes WHERE team_id = ? AND id = ?')
-    .get(teamId, id);
+export async function getLane(
+  db: Driver,
+  teamId: string,
+  id: string,
+  teamSlug: string,
+): Promise<Lane | null> {
+  const row = await db.get<LaneRow>('SELECT * FROM lanes WHERE team_id = ? AND id = ?', [
+    teamId,
+    id,
+  ]);
   return row ? rowToLane(row, teamSlug) : null;
 }
 
@@ -369,8 +394,8 @@ export class LaneConflictError extends Error {
  * prerequisites, each also correct under today's single daemon (a future `await` between a
  * caller's read and this write must not silently reintroduce the blind overwrite).
  */
-export function updateLane(
-  db: Database,
+export async function updateLane(
+  db: Driver,
   teamId: string,
   id: string,
   teamSlug: string,
@@ -378,14 +403,12 @@ export function updateLane(
   now: number = Date.now(),
   expect?: LaneExpectation,
   audit?: LaneAudit,
-): Lane | null {
-  return db.transaction(() =>
-    updateLaneInTx(db, teamId, id, teamSlug, patch, now, expect, audit),
-  )();
+): Promise<Lane | null> {
+  return db.tx((t) => updateLaneInTx(t, teamId, id, teamSlug, patch, now, expect, audit));
 }
 
-function updateLaneInTx(
-  db: Database,
+async function updateLaneInTx(
+  db: Driver,
   teamId: string,
   id: string,
   teamSlug: string,
@@ -393,8 +416,8 @@ function updateLaneInTx(
   now: number,
   expect?: LaneExpectation,
   audit?: LaneAudit,
-): Lane | null {
-  const existing = getLane(db, teamId, id, teamSlug);
+): Promise<Lane | null> {
+  const existing = await getLane(db, teamId, id, teamSlug);
   if (!existing) return null;
   if (expect) {
     const ownerMismatch =
@@ -489,9 +512,10 @@ function updateLaneInTx(
   // Per-field write (ADR 325 prereq): assign only the columns that actually change, so a patch's
   // blast radius is its own fields — never a blind LWW of the whole row. Diffed against the raw
   // row, not the parsed Lane, so JSON-serialization round-trips cannot fake a change.
-  const rawRow = db
-    .prepare<[string, string], LaneRow>('SELECT * FROM lanes WHERE team_id = ? AND id = ?')
-    .get(teamId, id)!;
+  const rawRow = (await db.get<LaneRow>('SELECT * FROM lanes WHERE team_id = ? AND id = ?', [
+    teamId,
+    id,
+  ]))!;
   const columns = [
     'project',
     'title',
@@ -511,14 +535,14 @@ function updateLaneInTx(
     'resolved_at',
   ] as const;
   const changed = columns.filter((c) => next[c] !== rawRow[c]);
-  const bind: Record<string, unknown> = { team_id: teamId, id, updated_at: now };
-  for (const c of changed) bind[c] = next[c];
-  db.prepare(
-    `UPDATE lanes SET ${[...changed.map((c) => `${c}=@${c}`), 'updated_at=@updated_at'].join(', ')}
-     WHERE team_id=@team_id AND id=@id`,
-  ).run(bind);
-  const after = getLane(db, teamId, id, teamSlug)!;
-  if (audit) recordLaneEdges(db, teamId, existing, after, patch.owner_seat !== undefined, audit);
+  await db.run(
+    `UPDATE lanes SET ${[...changed.map((c) => `${c}=?`), 'updated_at=?'].join(', ')}
+     WHERE team_id=? AND id=?`,
+    [...changed.map((c) => next[c]), now, teamId, id],
+  );
+  const after = (await getLane(db, teamId, id, teamSlug))!;
+  if (audit)
+    await recordLaneEdges(db, teamId, existing, after, patch.owner_seat !== undefined, audit);
   return after;
 }
 
@@ -576,15 +600,15 @@ export interface LaneFilter {
   states?: LaneState[];
 }
 
-export function listLanes(
-  db: Database,
+export async function listLanes(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   filter: LaneFilter = {},
-): Lane[] {
-  const rows = db
-    .prepare<[string], LaneRow>('SELECT * FROM lanes WHERE team_id = ? ORDER BY created_at')
-    .all(teamId);
+): Promise<Lane[]> {
+  const rows = await db.all<LaneRow>('SELECT * FROM lanes WHERE team_id = ? ORDER BY created_at', [
+    teamId,
+  ]);
   return filterLanes(
     rows.map((r) => rowToLane(r, teamSlug)),
     filter,
@@ -671,21 +695,21 @@ function hasWorkLeftToHandOver(state: LaneState): boolean {
   return !LANE_TERMINAL_STATES.has(state) && !isAwaitingAcceptance(state);
 }
 
-export function deriveHandoffLane(
-  db: Database,
+export async function deriveHandoffLane(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   seat: string,
   /** The seat this handoff act is directed at, when it is directed at one. */
   recipient?: string,
-): HandoffLaneDerivation {
+): Promise<HandoffLaneDerivation> {
   if (recipient !== undefined && recipient !== seat) {
-    const handed = lanesHandedTo(db, teamId, teamSlug, seat, recipient);
+    const handed = await lanesHandedTo(db, teamId, teamSlug, seat, recipient);
     const basis = 'handed_to_recipient' as const;
     if (handed.length === 1) return { kind: 'attach', lane: handed[0]!, basis };
     if (handed.length > 1) return { kind: 'ambiguous', candidates: handed, basis };
   }
-  const held = listLanes(db, teamId, teamSlug, { owner: seat }).filter((l) =>
+  const held = (await listLanes(db, teamId, teamSlug, { owner: seat })).filter((l) =>
     hasWorkLeftToHandOver(l.state),
   );
   if (held.length === 0) return { kind: 'none' };
@@ -710,19 +734,18 @@ const HANDOFF_LEDGER_SCAN = 200;
  * `detail` is parsed in JS rather than filtered with `json_extract`, on ADR 173's evidence: a single
  * malformed `detail` makes SQLite raise from the QUERY and takes down every read that scans it.
  */
-function lanesHandedTo(
-  db: Database,
+async function lanesHandedTo(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   sender: string,
   recipient: string,
-): Lane[] {
-  const rows = db
-    .prepare<[string, string, number], AuditRow>(
-      `SELECT * FROM audit WHERE team_id = ? AND action = 'lane.claimed' AND actor = ?
+): Promise<Lane[]> {
+  const rows = await db.all<AuditRow>(
+    `SELECT * FROM audit WHERE team_id = ? AND action = 'lane.claimed' AND actor = ?
        ORDER BY ts DESC, id DESC LIMIT ?`,
-    )
-    .all(teamId, sender, HANDOFF_LEDGER_SCAN);
+    [teamId, sender, HANDOFF_LEDGER_SCAN],
+  );
   const handedIds = new Set<string>();
   for (const row of rows) {
     let detail: { kind?: unknown; owner?: unknown; lane?: unknown };
@@ -736,19 +759,19 @@ function lanesHandedTo(
     if (lane) handedIds.add(lane);
   }
   if (handedIds.size === 0) return [];
-  return listLanes(db, teamId, teamSlug, { owner: recipient }).filter(
+  return (await listLanes(db, teamId, teamSlug, { owner: recipient })).filter(
     (l) => handedIds.has(l.id) && hasWorkLeftToHandOver(l.state),
   );
 }
 
 /** Lanes joined to a Goal (ADR 084) — the input to {@link deriveGoalStatus}. */
-export function lanesForGoal(
-  db: Database,
+export async function lanesForGoal(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   goalId: string,
-): Lane[] {
-  return listLanes(db, teamId, teamSlug, { goalId });
+): Promise<Lane[]> {
+  return await listLanes(db, teamId, teamSlug, { goalId });
 }
 
 /** Lane states that are terminal — a lane no longer being worked (ADR 169: shared constant). */
@@ -770,13 +793,14 @@ const TERMINAL: ReadonlySet<string> = LANE_TERMINAL_STATES;
  * columns) for two columns made each `GET /report` ~20 ms slower at a 1200-lane board, and every
  * open /live viewer refetches the report on every lane act.
  */
-export function laneStatesByGoal(db: Database, teamId: string): Map<string, Pick<Lane, 'state'>[]> {
-  const rows = db
-    .prepare<
-      [string],
-      { goal_id: string; state: LaneState }
-    >('SELECT goal_id, state FROM lanes WHERE team_id = ? AND goal_id IS NOT NULL')
-    .all(teamId);
+export async function laneStatesByGoal(
+  db: Driver,
+  teamId: string,
+): Promise<Map<string, Pick<Lane, 'state'>[]>> {
+  const rows = await db.all<{ goal_id: string; state: LaneState }>(
+    'SELECT goal_id, state FROM lanes WHERE team_id = ? AND goal_id IS NOT NULL',
+    [teamId],
+  );
   const byGoal = new Map<string, Pick<Lane, 'state'>[]>();
   for (const { goal_id, state } of rows) {
     const group = byGoal.get(goal_id);
@@ -787,16 +811,14 @@ export function laneStatesByGoal(db: Database, teamId: string): Map<string, Pick
 }
 
 /** The blocked lanes, board order — the report's exception list, without hydrating the board. */
-export function listBlockedLanes(
-  db: Database,
+export async function listBlockedLanes(
+  db: Driver,
   teamId: string,
-): Pick<Lane, 'id' | 'title' | 'owner_seat' | 'goal_id'>[] {
-  return db
-    .prepare<
-      [string],
-      Pick<Lane, 'id' | 'title' | 'owner_seat' | 'goal_id'>
-    >(`SELECT id, title, owner_seat, goal_id FROM lanes WHERE team_id = ? AND state = 'blocked' ORDER BY created_at`)
-    .all(teamId);
+): Promise<Pick<Lane, 'id' | 'title' | 'owner_seat' | 'goal_id'>[]> {
+  return await db.all<Pick<Lane, 'id' | 'title' | 'owner_seat' | 'goal_id'>>(
+    `SELECT id, title, owner_seat, goal_id FROM lanes WHERE team_id = ? AND state = 'blocked' ORDER BY created_at`,
+    [teamId],
+  );
 }
 
 export function deriveGoalStatus(
@@ -831,16 +853,18 @@ export function globsOverlap(a: string, b: string): boolean {
  * "is any seat's lane covering it?" (omit `owner`, for the denial's "owned by X" vs "claim one" copy).
  * The path must arrive repo-relative (the hook normalizes it), matching how lanes declare their globs.
  */
-export function laneCoveringPath(
-  db: Database,
+export async function laneCoveringPath(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   path: string,
   opts: { owner?: string } = {},
-): Lane | null {
-  const lanes = listLanes(db, teamId, teamSlug, {
-    ...(opts.owner ? { owner: opts.owner } : {}),
-  }).filter((l) => CONTENDING.has(l.state));
+): Promise<Lane | null> {
+  const lanes = (
+    await listLanes(db, teamId, teamSlug, {
+      ...(opts.owner ? { owner: opts.owner } : {}),
+    })
+  ).filter((l) => CONTENDING.has(l.state));
   for (const lane of lanes) {
     for (const glob of lane.scope) {
       if (globToRegExp(glob, 'path').test(path)) return lane;
@@ -883,14 +907,13 @@ export function noGoalWarning(lane: Lane, goals: Goal[]): LaneWarning | null {
 
 /** When a lane entered the acceptance stage: the latest `lane.ready_for_review` audit row, falling
  *  back to `updated_at` for pre-audit lanes (value-layer design — shared by the warning + brief). */
-export function acceptanceEnteredAt(db: Database, teamId: string, lane: Lane): number {
-  const row = db
-    .prepare<[string, string], { ts: number }>(
-      `SELECT ts FROM audit
+export async function acceptanceEnteredAt(db: Driver, teamId: string, lane: Lane): Promise<number> {
+  const row = await db.get<{ ts: number }>(
+    `SELECT ts FROM audit
         WHERE team_id = ? AND action = 'lane.ready_for_review' AND target = ?
         ORDER BY ts DESC LIMIT 1`,
-    )
-    .get(teamId, lane.id);
+    [teamId, lane.id],
+  );
   return row?.ts ?? lane.updated_at;
 }
 
@@ -907,18 +930,17 @@ export function acceptanceEnteredAt(db: Database, teamId: string, lane: Lane): n
  * verdict is stale. Unreadable or absent detail ⇒ false — an old lane predating the field is
  * reported as routed rather than as a silence nobody can confirm.
  */
-export function readyForReviewHadNoCandidate(
-  db: Database,
+export async function readyForReviewHadNoCandidate(
+  db: Driver,
   teamId: string,
   laneId: string,
-): boolean {
-  const row = db
-    .prepare<[string, string], { detail: string | null }>(
-      `SELECT detail FROM audit
+): Promise<boolean> {
+  const row = await db.get<{ detail: string | null }>(
+    `SELECT detail FROM audit
         WHERE team_id = ? AND action = 'lane.ready_for_review' AND target = ?
         ORDER BY ts DESC LIMIT 1`,
-    )
-    .get(teamId, laneId);
+    [teamId, laneId],
+  );
   if (!row?.detail) return false;
   try {
     return (JSON.parse(row.detail) as { no_candidate?: unknown }).no_candidate === true;
@@ -931,18 +953,17 @@ export function readyForReviewHadNoCandidate(
  * ADR 404: why the submit asked nobody, derived from the ready-row snapshot so historical
  * `no_candidate` rows still classify (busy vs empty room) without a new audit field.
  */
-export function emptyPoolFromSubmitAudit(
-  db: Database,
+export async function emptyPoolFromSubmitAudit(
+  db: Driver,
   teamId: string,
   laneId: string,
-): EmptyPool | null {
-  const row = db
-    .prepare<[string, string], { detail: string | null }>(
-      `SELECT detail FROM audit
+): Promise<EmptyPool | null> {
+  const row = await db.get<{ detail: string | null }>(
+    `SELECT detail FROM audit
         WHERE team_id = ? AND action = 'lane.ready_for_review' AND target = ?
         ORDER BY ts DESC LIMIT 1`,
-    )
-    .get(teamId, laneId);
+    [teamId, laneId],
+  );
   if (!row?.detail) return null;
   try {
     const d = JSON.parse(row.detail) as {
@@ -965,14 +986,14 @@ export function emptyPoolFromSubmitAudit(
  *  Advisory like `no_goal`: owner null, never a directed wake. Entry time = the latest
  *  `lane.ready_for_review` audit row; falls back to `updated_at` for pre-audit lanes. A negative
  *  wait (clock skew) never emits. */
-export function staleAcceptanceWarning(
-  db: Database,
+export async function staleAcceptanceWarning(
+  db: Driver,
   teamId: string,
   lane: Lane,
   now: number,
-): LaneWarning | null {
+): Promise<LaneWarning | null> {
   if (!isAwaitingAcceptance(lane.state)) return null;
-  const waited = now - acceptanceEnteredAt(db, teamId, lane);
+  const waited = now - (await acceptanceEnteredAt(db, teamId, lane));
   if (waited < ACCEPTANCE_STALE_MS) return null;
   const hours = Math.floor(waited / 3_600_000);
   return {
@@ -984,8 +1005,8 @@ export function staleAcceptanceWarning(
   };
 }
 
-export function laneWarnings(
-  db: Database,
+export async function laneWarnings(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   lane: Lane,
@@ -994,11 +1015,11 @@ export function laneWarnings(
   /** The whole board, when the caller already read it — contention is checked against every lane,
    *  so without this each lane's warnings re-read the table (lane 01M3ANEQVR). */
   board?: Lane[],
-): LaneWarning[] {
+): Promise<LaneWarning[]> {
   const warnings: LaneWarning[] = [];
   const byId = board ? new Map(board.map((l) => [l.id, l])) : null;
   for (const depId of lane.depends_on) {
-    const dep = byId ? (byId.get(depId) ?? null) : getLane(db, teamId, depId, teamSlug);
+    const dep = byId ? (byId.get(depId) ?? null) : await getLane(db, teamId, depId, teamSlug);
     if (!dep || dep.state === 'done') continue;
     warnings.push({
       kind: 'unmet_dependency',
@@ -1009,7 +1030,7 @@ export function laneWarnings(
     });
   }
   if (lane.scope.length > 0 && CONTENDING.has(lane.state)) {
-    for (const other of board ?? listLanes(db, teamId, teamSlug)) {
+    for (const other of board ?? (await listLanes(db, teamId, teamSlug))) {
       if (other.id === lane.id || !CONTENDING.has(other.state)) continue;
       if (!projectsContend(lane.project, other.project)) continue;
       const shared = lane.scope.flatMap((g) =>
@@ -1027,30 +1048,31 @@ export function laneWarnings(
     }
   }
   if (CONTENDING.has(lane.state)) {
-    const w = noGoalWarning(lane, goals ?? listGoals(db, teamId, teamSlug));
+    const w = noGoalWarning(lane, goals ?? (await listGoals(db, teamId, teamSlug)));
     if (w) warnings.push(w);
   }
   // Independent of the CONTENDING gate: awaiting states are the review queue, not contention.
-  const stale = staleAcceptanceWarning(db, teamId, lane, now);
+  const stale = await staleAcceptanceWarning(db, teamId, lane, now);
   if (stale) warnings.push(stale);
   return warnings;
 }
 
 /** Board-wide warnings: every contending lane's live warnings (GET /lanes annotates with these). */
-export function boardWarnings(
-  db: Database,
+export async function boardWarnings(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   lanes: Lane[],
   /** The unfiltered board, if the caller has it; `lanes` may be a filtered view (`?mine=1`), and
    *  contention must still be judged against every lane. Read once here otherwise. */
-  board: Lane[] = listLanes(db, teamId, teamSlug),
-): LaneWarning[] {
+  board?: Lane[],
+): Promise<LaneWarning[]> {
+  board ??= await listLanes(db, teamId, teamSlug);
   const out: LaneWarning[] = [];
   const seen = new Set<string>();
-  const goals = listGoals(db, teamId, teamSlug);
+  const goals = await listGoals(db, teamId, teamSlug);
   for (const lane of lanes) {
-    for (const w of laneWarnings(db, teamId, teamSlug, lane, goals, Date.now(), board)) {
+    for (const w of await laneWarnings(db, teamId, teamSlug, lane, goals, Date.now(), board)) {
       // A surface overlap is symmetric — report each pair once (keyed order-independently).
       const key =
         w.kind === 'surface_overlap'
@@ -1084,19 +1106,20 @@ const SYSTEM_RELEASER = 'musterd';
  * or why (lane-replication spec §Finding 3). `appendAuditRequired`, not `appendAudit`: the release
  * and its record are one transaction, so a peer can never see the first without the second.
  */
-function releaseLaneWithRecord(
-  db: Database,
+async function releaseLaneWithRecord(
+  db: Driver,
   teamId: string,
   laneId: string,
   ownerBefore: string,
   reason: 'seat_left' | 'seat_departed_sweep',
   now: number,
-): void {
-  db.prepare(
+): Promise<void> {
+  await db.run(
     `UPDATE lanes SET state = 'open', owner_seat = NULL, claimed_at = NULL, updated_at = ?
      WHERE team_id = ? AND id = ?`,
-  ).run(now, teamId, laneId);
-  appendLaneEventRequired(db, teamId, {
+    [now, teamId, laneId],
+  );
+  await appendLaneEventRequired(db, teamId, {
     actor: SYSTEM_RELEASER,
     action: 'lane.released',
     target: laneId,
@@ -1110,46 +1133,46 @@ function releaseLaneWithRecord(
  * soft-leaves the roster so the board cannot assert ownership for a name every list filter drops.
  * Returns the released lane ids + prior state for logging/audit.
  */
-export function releaseInFlightClaimsForSeat(
-  db: Database,
+export async function releaseInFlightClaimsForSeat(
+  db: Driver,
   teamId: string,
   seatName: string,
   now: number = Date.now(),
-): { id: string; state_before: string }[] {
-  const rows = db
-    .prepare<[string, string], { id: string; state: string }>(
+): Promise<{ id: string; state_before: string }[]> {
+  // Read and release inside one transaction: a lane re-owned between the read and the write must
+  // not be released from its new owner (review I5, 2026-09-30).
+  return await db.tx(async (t) => {
+    const rows = await t.all<{ id: string; state: string }>(
       `SELECT id, state FROM lanes
-       WHERE team_id = ? AND owner_seat = ? AND state IN ${RELEASE_ON_DEPART}`,
-    )
-    .all(teamId, seatName);
-  if (rows.length === 0) return [];
-  db.transaction(() => {
-    for (const r of rows) releaseLaneWithRecord(db, teamId, r.id, seatName, 'seat_left', now);
-  })();
-  return rows.map((r) => ({ id: r.id, state_before: r.state }));
+         WHERE team_id = ? AND owner_seat = ? AND state IN ${RELEASE_ON_DEPART}`,
+      [teamId, seatName],
+    );
+    for (const r of rows) await releaseLaneWithRecord(t, teamId, r.id, seatName, 'seat_left', now);
+    return rows.map((r) => ({ id: r.id, state_before: r.state }));
+  });
 }
 
 /**
  * Sweep in-flight lanes whose owner has already soft-left (ADR 196). Clears historical ghosts
  * left by pre-fix `leaveMember` calls; the reaper runs this every tick.
  */
-export function releaseDepartedSeatClaims(
-  db: Database,
+export async function releaseDepartedSeatClaims(
+  db: Driver,
   now: number = Date.now(),
-): { team_id: string; seat: string; lane: string; state_before: string }[] {
-  const rows = db
-    .prepare<[], { lane: string; team_id: string; seat: string; state_before: string }>(
-      `SELECT l.id AS lane, l.team_id, l.owner_seat AS seat, l.state AS state_before
-       FROM lanes l
-       JOIN members m ON m.team_id = l.team_id AND m.name = l.owner_seat
-       WHERE m.left_at IS NOT NULL
-         AND l.state IN ${RELEASE_ON_DEPART}`,
-    )
-    .all();
-  if (rows.length === 0) return [];
-  db.transaction(() => {
+): Promise<{ team_id: string; seat: string; lane: string; state_before: string }[]> {
+  return await db.tx(async (t) => {
+    const rows = await t.all<{
+      lane: string;
+      team_id: string;
+      seat: string;
+      state_before: string;
+    }>(`SELECT l.id AS lane, l.team_id, l.owner_seat AS seat, l.state AS state_before
+         FROM lanes l
+         JOIN members m ON m.team_id = l.team_id AND m.name = l.owner_seat
+         WHERE m.left_at IS NOT NULL
+           AND l.state IN ${RELEASE_ON_DEPART}`);
     for (const r of rows)
-      releaseLaneWithRecord(db, r.team_id, r.lane, r.seat, 'seat_departed_sweep', now);
-  })();
-  return rows;
+      await releaseLaneWithRecord(t, r.team_id, r.lane, r.seat, 'seat_departed_sweep', now);
+    return rows;
+  });
 }

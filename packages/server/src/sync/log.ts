@@ -5,7 +5,7 @@ import {
   type SyncEvent,
   type SyncPullEvent,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { getMemberByName } from '../store/members.js';
 import { bindSeatToNode } from '../store/nodes.js';
 
@@ -86,26 +86,22 @@ export class SyncResidenceError extends Error {
  * exactly one team, so the node IS the partition. Adding a team predicate here would invent a
  * second, weaker key and let the same origin carry two sequences.
  */
-export function highestContiguousSeq(db: Database, nodeId: string): number {
+export async function highestContiguousSeq(db: Driver, nodeId: string): Promise<number> {
   // The log is gapless per origin by construction — ingest refuses anything else — so MAX is the
   // contiguous head rather than merely the largest value seen.
-  const row = db
-    .prepare<
-      [string],
-      { high: number | null }
-    >('SELECT MAX(origin_seq) AS high FROM sync_log WHERE origin_node = ?')
-    .get(nodeId);
+  const row = await db.get<{ high: number | null }>(
+    'SELECT MAX(origin_seq) AS high FROM sync_log WHERE origin_node = ?',
+    [nodeId],
+  );
   return row?.high ?? 0;
 }
 
 /** The team's canonical order head — the highest `hub_seq` assigned, or 0 before the first ingest. */
-export function hubHead(db: Database, teamId: string): number {
-  const row = db
-    .prepare<
-      [string],
-      { high: number | null }
-    >('SELECT MAX(hub_seq) AS high FROM sync_log WHERE team_id = ?')
-    .get(teamId);
+export async function hubHead(db: Driver, teamId: string): Promise<number> {
+  const row = await db.get<{ high: number | null }>(
+    'SELECT MAX(hub_seq) AS high FROM sync_log WHERE team_id = ?',
+    [teamId],
+  );
   return row?.high ?? 0;
 }
 
@@ -116,24 +112,23 @@ export function hubHead(db: Database, teamId: string): number {
  * of them rolls the whole batch back, because a partially applied batch leaves a hole the pusher
  * believes it has closed.
  */
-export function ingestBatch(
-  db: Database,
+export async function ingestBatch(
+  db: Driver,
   teamId: string,
   nodeId: string,
   events: SyncEvent[],
   now: number = Date.now(),
-): { accepted: number; hub_seq_high: number } {
-  return db.transaction(() => {
+): Promise<{ accepted: number; hub_seq_high: number }> {
+  return db.tx(async (t) => {
     // Authentication proves WHICH node is pushing; it does not prove the node may write to THIS
     // team's log, because `nodes.id` is global while a node belongs to one team. Increment 3a's one
     // confirmed hole was exactly this confusion between a global id and a team-scoped check.
-    const node = db
-      .prepare<[string], { team_id: string; slug: string }>(
-        `SELECT n.team_id AS team_id, t.slug AS slug
+    const node = await t.get<{ team_id: string; slug: string }>(
+      `SELECT n.team_id AS team_id, t.slug AS slug
            FROM nodes n JOIN teams t ON t.id = n.team_id
           WHERE n.id = ?`,
-      )
-      .get(nodeId);
+      [nodeId],
+    );
     if (!node || node.team_id !== teamId) {
       throw new SyncOriginError('node is not a member of this team');
     }
@@ -144,11 +139,13 @@ export function ingestBatch(
     // authority for any of them. It still binds an unbound seat to the hub, so a hub resident who
     // has only ever messaged here is the hub's before a joiner can name them.
     const loopback =
-      db
-        .prepare<[string], { node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?')
-        .get(teamId)?.node_id === nodeId;
+      (
+        await t.get<{ node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?', [
+          teamId,
+        ])
+      )?.node_id === nodeId;
 
-    let expected = highestContiguousSeq(db, nodeId) + 1;
+    let expected = (await highestContiguousSeq(t, nodeId)) + 1;
     let accepted = 0;
 
     for (const event of events) {
@@ -219,9 +216,9 @@ export function ingestBatch(
         event.kind === 'policy' || event.kind === 'seed' || hubRecord
           ? null
           : syncEventActor(event);
-      const seat = actor ? getMemberByName(db, teamId, actor) : undefined;
+      const seat = actor ? await getMemberByName(t, teamId, actor) : undefined;
       if (seat && seat.kind !== 'service') {
-        const bound = bindSeatToNode(db, teamId, seat.id, nodeId, now);
+        const bound = await bindSeatToNode(t, teamId, seat.id, nodeId, now);
         if (!bound.bound && !loopback) {
           throw new SyncResidenceError(
             seat.name,
@@ -246,26 +243,26 @@ export function ingestBatch(
       // upsert seeds 2 and returns the PRE-increment value, so the first event gets hub_seq 1 —
       // copying the schema's DEFAULT 1 here would hand out 1 twice. Because nothing below can
       // silently decline to insert, every number allocated is a number stored: the order is dense.
-      const hubSeq = db
-        .prepare<[string], { hub_seq: number }>(
-          `INSERT INTO sync_meta (team_id, next_hub_seq) VALUES (?, 2)
+      const hubSeq = (await t.get<{ hub_seq: number }>(
+        `INSERT INTO sync_meta (team_id, next_hub_seq) VALUES (?, 2)
            ON CONFLICT(team_id) DO UPDATE SET next_hub_seq = next_hub_seq + 1
            RETURNING next_hub_seq - 1 AS hub_seq`,
-        )
-        .get(teamId)!.hub_seq;
+        [teamId],
+      ))!.hub_seq;
 
       try {
-        db.prepare(
+        await t.run(
           `INSERT INTO sync_log (id, team_id, origin_node, origin_seq, hub_seq, payload, received_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-          syncEventId(event),
-          teamId,
-          nodeId,
-          event.origin_seq,
-          hubSeq,
-          JSON.stringify(event),
-          now,
+          [
+            syncEventId(event),
+            teamId,
+            nodeId,
+            event.origin_seq,
+            hubSeq,
+            JSON.stringify(event),
+            now,
+          ],
         );
       } catch (err) {
         // Classified rather than allowed to surface raw: an unnamed SQLITE_CONSTRAINT reaches the
@@ -280,8 +277,8 @@ export function ingestBatch(
       expected += 1;
     }
 
-    return { accepted, hub_seq_high: hubHead(db, teamId) };
-  })();
+    return { accepted, hub_seq_high: await hubHead(t, teamId) };
+  });
 }
 
 /**
@@ -290,15 +287,18 @@ export function ingestBatch(
  * nothing; flips true at the first enrollment and the push cursor (starting at 0) backfills the
  * hub's whole history through the same gapless path a joiner uses.
  */
-export function hasEnrolledJoiners(db: Database, teamId: string, localNodeId: string): boolean {
+export async function hasEnrolledJoiners(
+  db: Driver,
+  teamId: string,
+  localNodeId: string,
+): Promise<boolean> {
   return Boolean(
-    db
-      .prepare<[string, string], { one: number }>(
-        `SELECT 1 AS one FROM nodes
+    await db.get<{ one: number }>(
+      `SELECT 1 AS one FROM nodes
           WHERE team_id = ? AND id != ? AND credential_hash IS NOT NULL AND revoked_at IS NULL
           LIMIT 1`,
-      )
-      .get(teamId, localNodeId),
+      [teamId, localNodeId],
+    ),
   );
 }
 
@@ -318,31 +318,32 @@ export function hasEnrolledJoiners(db: Database, teamId: string, localNodeId: st
  * flight" (block): see `foldBatch`. Found by the first real joiner, which stopped dead on a lane
  * born minutes before lane replication began (2026-09-04).
  */
-export function laneGenesis(db: Database, teamId: string): string | null {
+export async function laneGenesis(db: Driver, teamId: string): Promise<string | null> {
   return (
-    db
-      .prepare<[string], { id: string | null }>(
+    (
+      await db.get<{ id: string | null }>(
         `SELECT MIN(COALESCE(json_extract(payload, '$.event.detail.lane'),
                              json_extract(payload, '$.event.target'))) AS id
            FROM sync_log
           WHERE team_id = ?
             AND json_extract(payload, '$.kind') = 'lane'
             AND json_extract(payload, '$.event.action') = 'lane.opened'`,
+        [teamId],
       )
-      .get(teamId)?.id ?? null
+    )?.id ?? null
   );
 }
 
-export function readStaged(
-  db: Database,
+export async function readStaged(
+  db: Driver,
   teamId: string,
   after: number,
   limit: number,
-): SyncPullEvent[] {
-  return db
-    .prepare<[string, number, number], { hub_seq: number; payload: string }>(
+): Promise<SyncPullEvent[]> {
+  return (
+    await db.all<{ hub_seq: number; payload: string }>(
       'SELECT hub_seq, payload FROM sync_log WHERE team_id = ? AND hub_seq > ? ORDER BY hub_seq LIMIT ?',
+      [teamId, after, limit],
     )
-    .all(teamId, after, limit)
-    .map((r) => ({ ...(JSON.parse(r.payload) as SyncEvent), hub_seq: r.hub_seq }));
+  ).map((r) => ({ ...(JSON.parse(r.payload) as SyncEvent), hub_seq: r.hub_seq }));
 }

@@ -115,12 +115,12 @@ import {
   TRACE_SEAT_TIMELINE_MAX,
   TraceSeatTimelineResponseSchema,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
 import { z } from 'zod';
 import { checkUpgrade, isLocalPeer, readLocalIdentity, resolveRosterRoots } from '../config.js';
 import type { Ctx } from '../context.js';
-import { schemaVersion } from '../db/migrations.js';
+import type { Driver } from '../db/driver.js';
+import { schemaVersionOf } from '../db/migrations.js';
 import { traceDbBytes, traceSchemaVersion } from '../db/traceDb.js';
 import { MusterdError, SessionLeaseRefused, asMusterdError } from '../errors.js';
 import { reapOrphans } from '../footprint/reap.js';
@@ -744,7 +744,11 @@ function parseSeedPathId(segment: string): string {
  * The throw is delegated to {@link parseOrBadRequest} so the 400 the host sees is byte-identical to
  * what it saw before this ADR: auditing a refusal must not change what a refusal means.
  */
-function parseWakeReportOrAudit(db: Database, teamId: string, raw: unknown): WakeReportBody {
+async function parseWakeReportOrAudit(
+  db: Driver,
+  teamId: string,
+  raw: unknown,
+): Promise<WakeReportBody> {
   const result = WakeReportBodySchema.safeParse(raw);
   if (result.success) return result.data;
 
@@ -757,23 +761,21 @@ function parseWakeReportOrAudit(db: Database, teamId: string, raw: unknown): Wak
   const lease =
     rawLeaseId === undefined
       ? undefined
-      : db
-          .prepare<
-            [string, string],
-            {
-              member_id: string;
-              act_id: string | null;
-              lane_id: string | null;
-              edge: string | null;
-            }
-          >('SELECT member_id, act_id, lane_id, edge FROM wake_leases WHERE team_id = ? AND id = ?')
-          .get(teamId, rawLeaseId);
+      : await db.get<{
+          member_id: string;
+          act_id: string | null;
+          lane_id: string | null;
+          edge: string | null;
+        }>(
+          'SELECT member_id, act_id, lane_id, edge FROM wake_leases WHERE team_id = ? AND id = ?',
+          [teamId, rawLeaseId],
+        );
 
-  appendAudit(db, teamId, {
+  await appendAudit(db, teamId, {
     actor: null,
     action: 'residency.wake_report_rejected',
     // No seat is invented for a lease id that names nothing — absence stays absence (ADR 236).
-    target: lease ? (getMemberById(db, lease.member_id)?.name ?? '?') : '?',
+    target: lease ? ((await getMemberById(db, lease.member_id))?.name ?? '?') : '?',
     result: 'deny',
     detail: {
       ...(lease ? { act: wakeExhaustionKey(lease.act_id, lease.lane_id) } : {}),
@@ -1117,11 +1119,11 @@ function attestedModelSourceHeader(req: IncomingMessage): string | undefined {
  * that day (they run the shared daemon checkout's), and only a stamp on the row settles it per
  * wake rather than per argument. Both keys are omitted, never null, when unknown.
  */
-function adapterBuildStamp(
+async function adapterBuildStamp(
   ctx: Ctx,
   memberId: string,
-): { adapter_build?: string; daemon_build?: string } {
-  const adapter = currentBuild(ctx.db, memberId);
+): Promise<{ adapter_build?: string; daemon_build?: string }> {
+  const adapter = await currentBuild(ctx.db, memberId);
   return {
     ...(adapter ? { adapter_build: adapter } : {}),
     ...(ctx.config.buildRef ? { daemon_build: ctx.config.buildRef } : {}),
@@ -1176,12 +1178,12 @@ function wakeLeaseHeader(req: IncomingMessage): string | undefined {
  * (ADR 119) — closing the CLI stamp gap after the claim presence expires (issue #172). Human seats
  * ignore the header (ADR 121): attestation is a harness fact, not a human-shell env leak.
  */
-function authTouch(
+async function authTouch(
   ctx: Ctx,
   slug: string,
   req: IncomingMessage,
-): { team: TeamRow; member: MemberRow } {
-  const auth = authMember(ctx.db, slug, bearer(req), actingSeat(req), agentSessionLease(req));
+): Promise<{ team: TeamRow; member: MemberRow }> {
+  const auth = await authMember(ctx.db, slug, bearer(req), actingSeat(req), agentSessionLease(req));
   // Observer seats (ADR 063) watch without participating — never flip present, no presence event.
   if (auth.member.observer === 1) return auth;
   // A background poller (the notifier reads inbox on an away human's behalf) opts out: marking them
@@ -1206,13 +1208,11 @@ function authTouch(
   // ADR 246: taken UNCONDITIONALLY now. It used to be read only when a model header was present,
   // which made the one case that mattered invisible — a touch carrying NO model that attaches a
   // brand-new row is exactly the born-unattested occupancy, and there was nothing to compare it to.
-  const before = ctx.db
-    .prepare<
-      [string],
-      { id: string; model: string | null }
-    >('SELECT id, model FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1')
-    .get(auth.member.id);
-  const flipped = touchAmbientPresence(
+  const before = await ctx.db.get<{ id: string; model: string | null }>(
+    'SELECT id, model FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1',
+    [auth.member.id],
+  );
+  const flipped = await touchAmbientPresence(
     ctx.db,
     auth.member.id,
     surface,
@@ -1225,22 +1225,20 @@ function authTouch(
       ...(wakeLease !== undefined ? { wake_lease: wakeLease } : {}),
     },
   );
-  const after = ctx.db
-    .prepare<
-      [string],
-      { id: string; model: string | null }
-    >('SELECT id, model FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1')
-    .get(auth.member.id);
+  const after = await ctx.db.get<{ id: string; model: string | null }>(
+    'SELECT id, model FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1',
+    [auth.member.id],
+  );
   // ADR 246: a touch that attached a NEW row attesting nothing is a de-attestation, and it is the
   // one transition the old model-gated branch below could never see. Gated on the row being new
   // (`after.id !== before.id`) so a steady stream of unattested touches records the event ONCE
   // rather than on every heartbeat.
   if (after && after.model === null && after.id !== before?.id) {
-    recordUnattestedOccupancy(ctx.db, auth.team.id, auth.member, after.id, 'ambient');
+    await recordUnattestedOccupancy(ctx.db, auth.team.id, auth.member, after.id, 'ambient');
   }
   if (model) {
     if (after && (before?.model ?? null) !== after.model) {
-      appendAudit(ctx.db, auth.team.id, {
+      await appendAudit(ctx.db, auth.team.id, {
         actor: auth.member.name,
         action: 'occupancy.model_attested',
         target: auth.member.name,
@@ -1294,7 +1292,7 @@ function laneWarningKey(w: LaneWarning): string {
  * Surface-overlap advisories keep the default — waking an offline seat to tell it two lanes touch the
  * same glob is exactly the spend this default exists to prevent.
  */
-function deliverLaneAct(
+async function deliverLaneAct(
   ctx: Ctx,
   team: TeamRow,
   from: MemberRow,
@@ -1302,7 +1300,7 @@ function deliverLaneAct(
   body: string,
   meta: Record<string, unknown>,
   act: Act = 'message',
-): void {
+): Promise<void> {
   try {
     const env = makeEnvelope({
       id: ulid(),
@@ -1313,7 +1311,7 @@ function deliverLaneAct(
       body,
       meta,
     });
-    routeEnvelope(ctx, team, from, env, undefined, true);
+    await routeEnvelope(ctx, team, from, env, undefined, true);
   } catch {
     /* advisory only — the lane verb already succeeded */
   }
@@ -1339,13 +1337,13 @@ function deliverLaneAct(
  * since open/resolve are board-shape changes every member benefits from seeing on the shared feed and
  * office view, unlike warnings and handoffs which stay directed.
  */
-function deliverLaneTeamAct(
+async function deliverLaneTeamAct(
   ctx: Ctx,
   team: TeamRow,
   from: MemberRow,
   body: string,
   meta: Record<string, unknown>,
-): void {
+): Promise<void> {
   const env = makeEnvelope({
     id: ulid(),
     team: team.slug,
@@ -1355,20 +1353,20 @@ function deliverLaneTeamAct(
     body,
     meta,
   });
-  routeEnvelope(ctx, team, from, env, undefined, true);
+  await routeEnvelope(ctx, team, from, env, undefined, true);
 }
 
 /** ADR 291: a promoted Seed opens an ordinary Lane and announces that edge on the normal Team rail. */
-function deliverSeedPromotion(
+async function deliverSeedPromotion(
   ctx: Ctx,
   team: TeamRow,
   from: MemberRow,
   seed: { id: string; linked_lane_id: string | null },
-): void {
+): Promise<void> {
   if (!seed.linked_lane_id) return;
-  const lane = getLane(ctx.db, team.id, seed.linked_lane_id, team.slug);
+  const lane = await getLane(ctx.db, team.id, seed.linked_lane_id, team.slug);
   if (!lane) return;
-  deliverLaneTeamAct(
+  await deliverLaneTeamAct(
     ctx,
     team,
     from,
@@ -1389,15 +1387,15 @@ function deliverSeedPromotion(
  * Directed wakes for fresh lane warnings (ADR 083 §4): the *affected* owner gets one targeted act —
  * never the team, never the firehose. The actor already saw the warning inline in the verb response.
  */
-function deliverLaneWarnings(
+async function deliverLaneWarnings(
   ctx: Ctx,
   team: TeamRow,
   actor: MemberRow,
   warnings: LaneWarning[],
-): void {
+): Promise<void> {
   for (const w of warnings) {
     if (!w.owner || w.owner === actor.name) continue;
-    deliverLaneAct(ctx, team, actor, w.owner, `[lane] ${w.detail}`, { lane_warning: w });
+    await deliverLaneAct(ctx, team, actor, w.owner, `[lane] ${w.detail}`, { lane_warning: w });
   }
 }
 
@@ -1407,25 +1405,25 @@ function deliverLaneWarnings(
  * stays on the v0.2 open behaviour so enforcement never breaks an un-migrated team (the fallback is
  * recorded in the audit `detail`). Returns the authed seat + whether the fallback applied.
  */
-function authGovernance(
+async function authGovernance(
   ctx: Ctx,
   slug: string,
   req: IncomingMessage,
-): { team: TeamRow; member: MemberRow; viaFallback: boolean } {
-  const { team, member } = authTouch(ctx, slug, req);
+): Promise<{ team: TeamRow; member: MemberRow; viaFallback: boolean }> {
+  const { team, member } = await authTouch(ctx, slug, req);
   if (resolveCapabilities(member).is_admin) return { team, member, viaFallback: false };
-  if (!teamHasAdmin(ctx.db, team.id)) return { team, member, viaFallback: true };
+  if (!(await teamHasAdmin(ctx.db, team.id))) return { team, member, viaFallback: true };
   throw new MusterdError('forbidden', 'this operation requires an admin seat (is_admin)');
 }
 
 /** Authorize an **admin-only read** (e.g. the audit log). Strict `is_admin` — no empty-admin fallback,
  *  since there is no prior open behaviour to preserve for a v0.3-only endpoint. */
-function authAdmin(
+async function authAdmin(
   ctx: Ctx,
   slug: string,
   req: IncomingMessage,
-): { team: TeamRow; member: MemberRow } {
-  const auth = authMember(ctx.db, slug, bearer(req), actingSeat(req), agentSessionLease(req));
+): Promise<{ team: TeamRow; member: MemberRow }> {
+  const auth = await authMember(ctx.db, slug, bearer(req), actingSeat(req), agentSessionLease(req));
   if (!resolveCapabilities(auth.member).is_admin)
     throw new MusterdError('forbidden', 'this resource is admin-only (visibility_level: admin)');
   return auth;
@@ -1435,13 +1433,13 @@ function authAdmin(
  * ADR 463 §1: an admin, or the sponsor of `agentName` acting only for that agent. Strict like
  * {@link authAdmin} (no empty-admin fallback). `sponsorScoped` rides into the audit `detail`.
  */
-function authAdminOrSponsorOf(
+async function authAdminOrSponsorOf(
   ctx: Ctx,
   slug: string,
   req: IncomingMessage,
   agentName: string,
-): { team: TeamRow; member: MemberRow; sponsorScoped: boolean } {
-  const { team, member } = authMember(
+): Promise<{ team: TeamRow; member: MemberRow; sponsorScoped: boolean }> {
+  const { team, member } = await authMember(
     ctx.db,
     slug,
     bearer(req),
@@ -1449,17 +1447,17 @@ function authAdminOrSponsorOf(
     agentSessionLease(req),
   );
   if (resolveCapabilities(member).is_admin) return { team, member, sponsorScoped: false };
-  assertSponsorOf(ctx.db, team, member, agentName);
+  await assertSponsorOf(ctx.db, team, member, agentName);
   return { team, member, sponsorScoped: true };
 }
 
 /** ADR 463 §1: an admin, or any member who may sponsor (a sponsor host key is scoped at use). */
-function authAdminOrSponsorCaller(
+async function authAdminOrSponsorCaller(
   ctx: Ctx,
   slug: string,
   req: IncomingMessage,
-): { team: TeamRow; member: MemberRow; sponsorScoped: boolean } {
-  const { team, member } = authMember(
+): Promise<{ team: TeamRow; member: MemberRow; sponsorScoped: boolean }> {
+  const { team, member } = await authMember(
     ctx.db,
     slug,
     bearer(req),
@@ -1472,18 +1470,18 @@ function authAdminOrSponsorCaller(
 }
 
 /** {@link authGovernance}, widened by ADR 463 §1 to the sponsor of `agentName`. */
-function authGovernanceOrSponsorOf(
+async function authGovernanceOrSponsorOf(
   ctx: Ctx,
   slug: string,
   req: IncomingMessage,
   agentName: string,
-): { team: TeamRow; member: MemberRow; viaFallback: boolean; sponsorScoped: boolean } {
-  const { team, member } = authTouch(ctx, slug, req);
+): Promise<{ team: TeamRow; member: MemberRow; viaFallback: boolean; sponsorScoped: boolean }> {
+  const { team, member } = await authTouch(ctx, slug, req);
   if (resolveCapabilities(member).is_admin)
     return { team, member, viaFallback: false, sponsorScoped: false };
-  if (!teamHasAdmin(ctx.db, team.id))
+  if (!(await teamHasAdmin(ctx.db, team.id)))
     return { team, member, viaFallback: true, sponsorScoped: false };
-  assertSponsorOf(ctx.db, team, member, agentName);
+  await assertSponsorOf(ctx.db, team, member, agentName);
   return { team, member, viaFallback: false, sponsorScoped: true };
 }
 
@@ -1494,20 +1492,20 @@ function authGovernanceOrSponsorOf(
  * impersonate. Presence-neutral by construction (the woken session announces itself by occupying
  * via the seat's own grant).
  */
-function authAgentKeyOnly(
+async function authAgentKeyOnly(
   ctx: Ctx,
   slug: string,
   req: IncomingMessage,
   host?: string,
-): { team: TeamRow; scope: HostScope } {
-  const team = requireTeam(ctx.db, slug);
-  const credential = findBootstrapCredential(ctx.db, team.id, bearer(req));
+): Promise<{ team: TeamRow; scope: HostScope }> {
+  const team = await requireTeam(ctx.db, slug);
+  const credential = await findBootstrapCredential(ctx.db, team.id, bearer(req));
   const credentialRecord =
-    credential ?? findBootstrapCredentialRecord(ctx.db, team.id, bearer(req));
+    credential ?? (await findBootstrapCredentialRecord(ctx.db, team.id, bearer(req)));
   if (credentialRecord && !credential) {
     const expired =
       credentialRecord.expires_at !== null && credentialRecord.expires_at <= Date.now();
-    appendAudit(ctx.db, team.id, {
+    await appendAudit(ctx.db, team.id, {
       actor: null,
       action: expired ? 'bootstrap_credential.expired' : 'bootstrap_credential.refused',
       target: credentialRecord.id,
@@ -1519,18 +1517,18 @@ function authAgentKeyOnly(
     });
   }
   if (credential?.use_kind === 'host' && host !== undefined && credential.target === host) {
-    recordBootstrapCredentialUse(ctx.db, credential.id);
-    appendAudit(ctx.db, team.id, {
+    await recordBootstrapCredentialUse(ctx.db, credential.id);
+    await appendAudit(ctx.db, team.id, {
       actor: null,
       action: 'bootstrap_credential.used',
       target: credential.id,
       result: 'allow',
       detail: { use: 'host', target: credential.target },
     });
-    return { team, scope: hostKeyScope(ctx, team, credential.created_by) };
+    return { team, scope: await hostKeyScope(ctx, team, credential.created_by) };
   }
   if (credential && credential.use_kind !== 'legacy') {
-    appendAudit(ctx.db, team.id, {
+    await appendAudit(ctx.db, team.id, {
       actor: null,
       action: 'bootstrap_credential.refused',
       target: credential.id,
@@ -1538,7 +1536,7 @@ function authAgentKeyOnly(
       detail: { reason: 'host_mismatch', target: credential.target },
     });
   }
-  const keyHash = getAgentKeyHash(ctx.db, team.id);
+  const keyHash = await getAgentKeyHash(ctx.db, team.id);
   if (!keyHash || hashToken(bearer(req)) !== keyHash) {
     throw new MusterdError(
       'unauthorized',
@@ -1563,9 +1561,9 @@ function authAgentKeyOnly(
  * creator has left is refused; a non-admin sponsor's key is also refused once its creator loses
  * standing or has can_create_agents withdrawn. An admin-minted key keeps its team-wide reach.
  */
-function hostKeyScope(ctx: Ctx, team: TeamRow, createdBy: string | null): HostScope {
+async function hostKeyScope(ctx: Ctx, team: TeamRow, createdBy: string | null): Promise<HostScope> {
   if (createdBy === null) return TEAM_WIDE_HOST;
-  const creator = getMemberByName(ctx.db, team.id, createdBy);
+  const creator = await getMemberByName(ctx.db, team.id, createdBy);
   if (!creator || creator.left_at !== null)
     throw new MusterdError('unauthorized', 'this host credential’s creator has left the team');
   const teamWide = resolveCapabilities(creator).is_admin;
@@ -1576,37 +1574,44 @@ function hostKeyScope(ctx: Ctx, team: TeamRow, createdBy: string | null): HostSc
 }
 
 /** ADR 463 §1: a host key reports only on leases of seats it may serve. */
-function assertLeaseInScope(ctx: Ctx, teamId: string, leaseId: string, scope: HostScope): void {
-  const row = ctx.db
-    .prepare<
-      [string, string],
-      { member_id: string }
-    >('SELECT member_id FROM wake_leases WHERE team_id = ? AND id = ?')
-    .get(teamId, leaseId);
-  const member = row ? getMemberById(ctx.db, row.member_id) : undefined;
+async function assertLeaseInScope(
+  ctx: Ctx,
+  teamId: string,
+  leaseId: string,
+  scope: HostScope,
+): Promise<void> {
+  const row = await ctx.db.get<{ member_id: string }>(
+    'SELECT member_id FROM wake_leases WHERE team_id = ? AND id = ?',
+    [teamId, leaseId],
+  );
+  const member = row ? await getMemberById(ctx.db, row.member_id) : undefined;
   if (member && !hostMayServe(scope, member))
     throw new MusterdError('not_found', `no wake lease "${leaseId}" for this host`);
 }
 
 /** The lease's server-recorded host is the authority for host-scoped credentials. */
-function hostForWakeLease(ctx: Ctx, teamId: string, leaseId: string): string | undefined {
+async function hostForWakeLease(
+  ctx: Ctx,
+  teamId: string,
+  leaseId: string,
+): Promise<string | undefined> {
   return (
-    ctx.db
-      .prepare<
-        [string, string],
-        { host: string }
-      >('SELECT host FROM wake_leases WHERE team_id = ? AND id = ?')
-      .get(teamId, leaseId)?.host ?? undefined
+    (
+      await ctx.db.get<{ host: string }>(
+        'SELECT host FROM wake_leases WHERE team_id = ? AND id = ?',
+        [teamId, leaseId],
+      )
+    )?.host ?? undefined
   );
 }
 
 /** Authorize an agent's routine HTTP action with its credential and live Presence lease (ADR 337). */
-function authClaimedAgent(
+async function authClaimedAgent(
   ctx: Ctx,
   slug: string,
   req: IncomingMessage,
-): { team: TeamRow; member: MemberRow } {
-  const auth = authMember(ctx.db, slug, bearer(req), actingSeat(req), agentSessionLease(req));
+): Promise<{ team: TeamRow; member: MemberRow }> {
+  const auth = await authMember(ctx.db, slug, bearer(req), actingSeat(req), agentSessionLease(req));
   if (auth.member.kind !== 'agent' || auth.member.observer === 1)
     throw new MusterdError('forbidden', 'this operation requires a claimed agent seat');
   return auth;
@@ -1650,10 +1655,10 @@ function requireLocalPeer(
   );
 }
 
-function authProvision(ctx: Ctx, slug: string, req: IncomingMessage): void {
+async function authProvision(ctx: Ctx, slug: string, req: IncomingMessage): Promise<void> {
   if (isLocalPeer(req.socket.remoteAddress, ctx.config.trustProxy)) return;
   try {
-    authAdmin(ctx, slug, req);
+    await authAdmin(ctx, slug, req);
   } catch (e) {
     // Re-frame the generic admin refusal: the caller's real problem is *where they are*, not their role.
     if (e instanceof MusterdError && (e.code === 'unauthorized' || e.code === 'forbidden')) {
@@ -1670,16 +1675,18 @@ function authProvision(ctx: Ctx, slug: string, req: IncomingMessage): void {
 
 /** Best-effort: resolve the calling seat from a bearer token if one is present and valid, else null.
  *  Used by the roster reads to scope the projection (ADR 071) without making them require auth. */
-function tryAuth(ctx: Ctx, slug: string, req: IncomingMessage): MemberRow | null {
+async function tryAuth(ctx: Ctx, slug: string, req: IncomingMessage): Promise<MemberRow | null> {
   const h = req.headers['authorization'];
   if (!h || !h.startsWith('Bearer ')) return null;
   try {
-    return authMember(
-      ctx.db,
-      slug,
-      h.slice('Bearer '.length).trim(),
-      actingSeat(req),
-      agentSessionLease(req),
+    return (
+      await authMember(
+        ctx.db,
+        slug,
+        h.slice('Bearer '.length).trim(),
+        actingSeat(req),
+        agentSessionLease(req),
+      )
     ).member;
   } catch {
     return null;
@@ -1694,17 +1701,19 @@ function tryAuth(ctx: Ctx, slug: string, req: IncomingMessage): MemberRow | null
  * capabilities (the authority map: who is admin, who is muted, who is narrowed). Permissive by default —
  * no token still yields a usable roster, just without the authority detail that only an admin dashboard needs.
  */
-function summarize(
+async function summarize(
   ctx: Ctx,
   teamSlug: string,
   teamId: string,
   viewer: MemberRow | null = null,
-): MemberSummary[] {
-  const teamWorkingHours = parseWorkingHours(getTeamBySlug(ctx.db, teamSlug)?.working_hours);
+): Promise<MemberSummary[]> {
+  const teamWorkingHours = parseWorkingHours(
+    (await getTeamBySlug(ctx.db, teamSlug))?.working_hours,
+  );
   const viewerIsAdmin = viewer ? resolveCapabilities(viewer).is_admin : false;
   // Seats held within their ADR 010 reclaim grace — read `offline` above, but a reservation the clobber
   // guard (ADR 066/105) must treat as occupied. Computed once for the team, not per-member.
-  const reclaimable = listReclaimableMemberIds(ctx.db, teamId, Date.now());
+  const reclaimable = await listReclaimableMemberIds(ctx.db, teamId, Date.now());
   // Seats enrolled in harness residency (ADR 131) — offline reads `offline · wakeable`, and the
   // capture timestamp feeds the `resumable` badge (inc 5: a timestamp, so renderers apply the GC
   // freshness instead of trusting a stale boolean). One listResidency pass covers both facts.
@@ -1712,84 +1721,86 @@ function summarize(
   // workspace readability (from the last wake report), so the roster can say WHY an enrolled seat
   // is not wakeable instead of labelling enrolment as reachability.
   const rosterNow = Date.now();
-  const residency = seatWakeabilityFacts(ctx.db, teamId, rosterNow);
+  const residency = await seatWakeabilityFacts(ctx.db, teamId, rosterNow);
   // Steering marks you present (ADR 155 Inc 1): the humans named as `driver` on a live agent seat.
   // Derived here at read time — no synthetic presence row for the steering human (ADR 155 decision 1).
-  const liveDrivers = listLiveDrivers(ctx.db, teamId, ctx.config.presenceTimeoutMs);
+  const liveDrivers = await listLiveDrivers(ctx.db, teamId, ctx.config.presenceTimeoutMs);
   // Quiescence (ADR 219): the decision-grade busy read, beside — never folded into — the
   // display fields below. One audit read for the whole roster; a seat with no evidence is absent
   // from the map and reports `unknown` rather than borrowing the shape of quiet.
-  const lastAction = lastActionBySubject(ctx.db, teamId);
+  const lastAction = await lastActionBySubject(ctx.db, teamId);
   const quiescenceNow = Date.now();
-  return listPresence(ctx.db, teamId, ctx.config.presenceTimeoutMs).map((s) => {
-    // Two-clocks rule (M2): liveness from presence, working-label from the latest status_update — plus
-    // steering (ADR 155): a human steering a live agent seat reads working + present without their own
-    // heartbeat, so a driving human stops showing offline on the roster (driver-copresence-gap).
-    const steering = s.member.kind === 'human' && liveDrivers.has(s.member.name);
-    const live = s.status !== 'offline' || steering;
-    const presenceStatus = steering && s.status === 'offline' ? 'online' : s.status;
-    // The ADR 155 Inc 3 decay window now applies to everyone (presence-honesty §2.1): humans keep
-    // the presence timeout; agents get their own generous window — `working` requires fresh
-    // evidence, and past it the read decays to `active` with the claim kept, aged.
-    const activity = resolveActivity(
-      live,
-      latestStatusUpdate(ctx.db, s.member.id),
-      steering,
-      s.member.kind === 'human' ? ctx.config.presenceTimeoutMs : ctx.config.agentIdleMs,
-    );
-    const member = toMember(s.member, teamSlug);
-    const effectiveWorkingHours = member.working_hours ?? teamWorkingHours;
-    const seesCaps = viewerIsAdmin || viewer?.id === s.member.id;
-    const { capabilities: _caps, ...needToKnow } = member;
-    const isReclaimable = reclaimable.has(s.member.id);
-    const sticky = s.member.last_offline_reason;
-    const offlineReason = resolveOfflineReason({
-      live,
-      reclaimable: isReclaimable,
-      availability: member.availability ?? null,
-      lastOfflineReason: STICKY_OFFLINE_REASONS.has(sticky ?? '')
-        ? (sticky as OfflineReason)
-        : null,
-    });
-    return {
-      ...(seesCaps ? member : needToKnow),
-      working_hours: effectiveWorkingHours,
-      presence: presenceStatus,
-      presences: s.presences,
-      ...activity,
-      posture: resolvePosture({
-        activity: activity.activity,
+  return Promise.all(
+    (await listPresence(ctx.db, teamId, ctx.config.presenceTimeoutMs)).map(async (s) => {
+      // Two-clocks rule (M2): liveness from presence, working-label from the latest status_update — plus
+      // steering (ADR 155): a human steering a live agent seat reads working + present without their own
+      // heartbeat, so a driving human stops showing offline on the roster (driver-copresence-gap).
+      const steering = s.member.kind === 'human' && liveDrivers.has(s.member.name);
+      const live = s.status !== 'offline' || steering;
+      const presenceStatus = steering && s.status === 'offline' ? 'online' : s.status;
+      // The ADR 155 Inc 3 decay window now applies to everyone (presence-honesty §2.1): humans keep
+      // the presence timeout; agents get their own generous window — `working` requires fresh
+      // evidence, and past it the read decays to `active` with the claim kept, aged.
+      const activity = resolveActivity(
+        live,
+        await latestStatusUpdate(ctx.db, s.member.id),
+        steering,
+        s.member.kind === 'human' ? ctx.config.presenceTimeoutMs : ctx.config.agentIdleMs,
+      );
+      const member = toMember(s.member, teamSlug);
+      const effectiveWorkingHours = member.working_hours ?? teamWorkingHours;
+      const seesCaps = viewerIsAdmin || viewer?.id === s.member.id;
+      const { capabilities: _caps, ...needToKnow } = member;
+      const isReclaimable = reclaimable.has(s.member.id);
+      const sticky = s.member.last_offline_reason;
+      const offlineReason = resolveOfflineReason({
+        live,
+        reclaimable: isReclaimable,
         availability: member.availability ?? null,
-      }),
-      ...(offlineReason ? { offline_reason: offlineReason } : {}),
-      reclaimable: isReclaimable,
-      wakeable: residency.has(s.member.id),
-      resumable_at: residency.get(s.member.id)?.resumable_at ?? null,
-      // ADR 357: the ADR 189 enum beside the boolean. `wakeable` stays "enrolled" for every
-      // consumer that reads it today; `wakeability` is the honest answer to "can a directed act
-      // reach this seat right now" — and it is the SAME derivation the ADR 191 offline-acceptor
-      // pick uses (review.ts), so the roster and the picker cannot disagree.
-      wakeability: wakeabilityFromFacts({
-        enrolled: residency.has(s.member.id),
-        ...wakeabilityInputs(residency.get(s.member.id)),
-        ...(lastAction.get(s.member.name) === undefined
-          ? {}
-          : {
-              seat_quiet:
-                resolveQuiescence(
-                  lastAction.get(s.member.name) ?? null,
-                  quiescenceNow,
-                  QUIESCENCE_DEFAULT_QUIET_AFTER_MS,
-                ).state === 'quiet',
-            }),
-      }),
-      quiescence: resolveQuiescence(
-        lastAction.get(s.member.name) ?? null,
-        quiescenceNow,
-        QUIESCENCE_DEFAULT_QUIET_AFTER_MS,
-      ),
-    };
-  });
+        lastOfflineReason: STICKY_OFFLINE_REASONS.has(sticky ?? '')
+          ? (sticky as OfflineReason)
+          : null,
+      });
+      return {
+        ...(seesCaps ? member : needToKnow),
+        working_hours: effectiveWorkingHours,
+        presence: presenceStatus,
+        presences: s.presences,
+        ...activity,
+        posture: resolvePosture({
+          activity: activity.activity,
+          availability: member.availability ?? null,
+        }),
+        ...(offlineReason ? { offline_reason: offlineReason } : {}),
+        reclaimable: isReclaimable,
+        wakeable: residency.has(s.member.id),
+        resumable_at: residency.get(s.member.id)?.resumable_at ?? null,
+        // ADR 357: the ADR 189 enum beside the boolean. `wakeable` stays "enrolled" for every
+        // consumer that reads it today; `wakeability` is the honest answer to "can a directed act
+        // reach this seat right now" — and it is the SAME derivation the ADR 191 offline-acceptor
+        // pick uses (review.ts), so the roster and the picker cannot disagree.
+        wakeability: wakeabilityFromFacts({
+          enrolled: residency.has(s.member.id),
+          ...wakeabilityInputs(residency.get(s.member.id)),
+          ...(lastAction.get(s.member.name) === undefined
+            ? {}
+            : {
+                seat_quiet:
+                  resolveQuiescence(
+                    lastAction.get(s.member.name) ?? null,
+                    quiescenceNow,
+                    QUIESCENCE_DEFAULT_QUIET_AFTER_MS,
+                  ).state === 'quiet',
+              }),
+        }),
+        quiescence: resolveQuiescence(
+          lastAction.get(s.member.name) ?? null,
+          quiescenceNow,
+          QUIESCENCE_DEFAULT_QUIET_AFTER_MS,
+        ),
+      };
+    }),
+  );
 }
 
 /** Dispatch an HTTP request. Returns true if it handled the request (always, except non-matching upgrade). */
@@ -1837,11 +1848,11 @@ export async function handleHttp(
         ok: true,
         v: PROTOCOL_VERSION,
         db: ctx.config.dbPath,
-        schema: schemaVersion(ctx.db),
+        schema: await schemaVersionOf(ctx.db),
         // The trace store (ADR 445 §3) is a separate file with its own ladder; named here so a
         // `wrong_db` diagnosis can see both halves.
         trace_db: ctx.config.traceDbPath,
-        trace_schema: traceSchemaVersion(ctx.traceDb),
+        trace_schema: await traceSchemaVersion(ctx.traceDb),
         // …and sized (increment 3a) — the store grows fast, and this is where `musterd status` reads
         // it. Omitted for an in-memory store.
         ...(() => {
@@ -1849,16 +1860,18 @@ export async function handleHttp(
           return bytes === undefined ? {} : { trace_db_bytes: bytes };
         })(),
         // ADR 478 §Observability: store sizes, so growth is watched rather than discovered.
-        ...storeSizes(ctx.db, ctx.config.dbPath, defaultArchiveDir(ctx.config.dbPath)),
-        connections: countLivePresences(ctx.db, ctx.config.presenceTimeoutMs),
+        ...(await storeSizes(ctx.db, ctx.config.dbPath, defaultArchiveDir(ctx.config.dbPath))),
+        connections: await countLivePresences(ctx.db, ctx.config.presenceTimeoutMs),
         // Quiescence (2026-08-03 design): age of the newest audited action across live agent seats,
         // for the auto-refresher's quiet-floor — `connections` says who is ATTACHED, this says who
         // is WORKING (measured: gating a bounce on connections would defer 95% of refreshes).
         // Omitted when unknown (no live agent action in the lookback) — absence, never zero.
-        ...(() => {
-          const q = quietestBusyMs(ctx.db, { presenceTimeoutMs: ctx.config.presenceTimeoutMs });
+        ...(await (async () => {
+          const q = await quietestBusyMs(ctx.db, {
+            presenceTimeoutMs: ctx.config.presenceTimeoutMs,
+          });
           return q === null ? {} : { quietest_busy_ms: q };
-        })(),
+        })()),
         // The commit this daemon booted from (ADR 130) — lets `service status` name build skew
         // against origin/main. Omitted when not running from a git checkout.
         ...(ctx.config.buildRef ? { build: ctx.config.buildRef } : {}),
@@ -1892,9 +1905,9 @@ export async function handleHttp(
       requireLocalPeer(ctx, req, 'pruning the store');
       const dryRun = url.searchParams.get('dry_run') === '1';
       const archiveDir = defaultArchiveDir(ctx.config.dbPath);
-      const sizes = storeSizes(ctx.db, ctx.config.dbPath, archiveDir);
+      const sizes = await storeSizes(ctx.db, ctx.config.dbPath, archiveDir);
       if (dryRun) {
-        const audit = countPrunableAuditChurn(ctx.db, {
+        const audit = await countPrunableAuditChurn(ctx.db, {
           maxAgeMs: ctx.config.auditChurnRetentionMs,
         });
         sendJson(res, 200, {
@@ -1905,15 +1918,15 @@ export async function handleHttp(
         });
         return;
       }
-      const audit = pruneAuditChurn(ctx.db, {
+      const audit = await pruneAuditChurn(ctx.db, {
         archiveDir,
         maxAgeMs: ctx.config.auditChurnRetentionMs,
       });
-      const trace = pruneTraceContent(ctx.traceDb, Date.now(), {
+      const trace = await pruneTraceContent(ctx.traceDb, Date.now(), {
         maxAgeMs: ctx.config.traceContentRetentionMs,
       });
       for (const [teamId, rows] of Object.entries(audit.perTeam)) {
-        appendAudit(ctx.db, teamId, {
+        await appendAudit(ctx.db, teamId, {
           actor: null,
           action: 'store.pruned',
           target: null,
@@ -1927,19 +1940,20 @@ export async function handleHttp(
           },
         });
       }
-      if (audit.pruned > 0) ctx.db.pragma('incremental_vacuum');
+      if (audit.pruned > 0 && ctx.db.dialect === 'sqlite')
+        await ctx.db.exec('PRAGMA incremental_vacuum');
       sendJson(res, 200, {
         dry_run: false,
         audit_churn: audit,
         trace_content: trace,
         archive_dir: archiveDir,
-        ...storeSizes(ctx.db, ctx.config.dbPath, archiveDir),
+        ...(await storeSizes(ctx.db, ctx.config.dbPath, archiveDir)),
       });
       return;
     }
     if (method === 'POST' && path === '/store/compact') {
       requireLocalPeer(ctx, req, 'compacting the store');
-      const r = compactStore(ctx.db, ctx.config.dbPath);
+      const r = await compactStore(ctx.db, ctx.config.dbPath);
       if (!r.ok && r.reason === 'insufficient_disk') {
         throw new MusterdError(
           'conflict',
@@ -1959,10 +1973,11 @@ export async function handleHttp(
     if (method === 'POST' && path === '/node/enroll') {
       requireLocalPeer(ctx, req, 'enrolling this machine with a hub');
       const body = parseOrBadRequest(NodeEnrollRequestSchema, await readJson(req));
-      const team = requireTeam(ctx.db, body.team);
-      const local = ctx.db
-        .prepare<[string], { node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?')
-        .get(team.id);
+      const team = await requireTeam(ctx.db, body.team);
+      const local = await ctx.db.get<{ node_id: string }>(
+        'SELECT node_id FROM local_node WHERE team_id = ?',
+        [team.id],
+      );
       if (!local) {
         throw new MusterdError(
           'conflict',
@@ -1973,7 +1988,7 @@ export async function handleHttp(
       // A hub cannot enroll (ADR 376 §3): a machine with joiners attached is the team's authority,
       // and flipping its loops to the joiner branch would strand every event they push. Refused
       // here, before any secret leaves the machine — the target hub is never contacted.
-      if (hasEnrolledJoiners(ctx.db, team.id, local.node_id)) {
+      if (await hasEnrolledJoiners(ctx.db, team.id, local.node_id)) {
         throw new MusterdError(
           'conflict',
           `this machine is the hub of "${body.team}" — it has enrolled joiners, and a hub does not ` +
@@ -2010,8 +2025,8 @@ export async function handleHttp(
 
     if (method === 'POST' && path === '/teams') {
       const body = parseOrBadRequest(CreateTeamBody, await readJson(req));
-      const team = createTeam(ctx.db, { slug: body.slug, display: body.display ?? null });
-      const { row, token } = addMember(ctx.db, team, {
+      const team = await createTeam(ctx.db, { slug: body.slug, display: body.display ?? null });
+      const { row, token } = await addMember(ctx.db, team, {
         name: body.creator.name,
         kind: 'human',
         role: body.creator.role ?? '',
@@ -2020,20 +2035,20 @@ export async function handleHttp(
       // governance routes have an authority from birth (the ADR 070 stated default, implemented here).
       // The team is db-only at create time (no seat-file yet), so this write is uncontended by reconcile;
       // a later `team export` carries the resolved caps into the creator's seat-file.
-      setMemberGovernance(
+      await setMemberGovernance(
         ctx.db,
         row.id,
         null,
         JSON.stringify({ ...GENERALIST_CAPABILITIES, is_admin: true }),
       );
-      const creator = getMemberById(ctx.db, row.id) ?? row;
+      const creator = (await getMemberById(ctx.db, row.id)) ?? row;
       // v0.3 P3 composite mint (SPEC A.7): the team agent key (agents present it to claim a seat) + the
       // creator's human credential (the admin authenticates with it) + the default policy. Each secret is
       // shown ONCE. Additive during the flip — `member`/`token` stay until the cutover removes hello/token;
       // `seat` is the A.7 name (== member in the transition). `agent_key`/`human_credential` are inert
       // until the claim handler (ADR 077) is wired, so this stays Model-B-additive.
-      const { agent_key } = rotateAgentKey(ctx.db, team.id);
-      const { credential } = mintCredential(ctx.db, creator.id);
+      const { agent_key } = await rotateAgentKey(ctx.db, team.id);
+      const { credential } = await mintCredential(ctx.db, creator.id);
       return sendJson(res, 201, {
         team: { id: team.id, slug: team.slug, display: team.display },
         member: toMember(creator, team.slug),
@@ -2041,19 +2056,19 @@ export async function handleHttp(
         token,
         human_credential: credential,
         agent_key,
-        policy: getPolicy(ctx.db, team.id),
+        policy: await getPolicy(ctx.db, team.id),
       });
     }
 
     if (method === 'POST' && path === '/agent-bootstrap-migrations') {
       const body = parseOrBadRequest(BootstrapMigrationRequestSchema, await readJson(req));
-      const migrated = migrateLegacyBootstrapCredential(ctx.db, {
+      const migrated = await migrateLegacyBootstrapCredential(ctx.db, {
         legacyKey: body.legacy_key,
         seatCredential: body.seat_credential,
       });
       const credential = migrated.credential;
       if (migrated.replaced_credential_id) {
-        appendAudit(ctx.db, credential.team_id, {
+        await appendAudit(ctx.db, credential.team_id, {
           actor: credential.created_by,
           action: 'bootstrap_credential.migration_replaced',
           target: migrated.replaced_credential_id,
@@ -2064,7 +2079,7 @@ export async function handleHttp(
           },
         });
       }
-      appendAudit(ctx.db, credential.team_id, {
+      await appendAudit(ctx.db, credential.team_id, {
         actor: credential.created_by,
         action: 'bootstrap_credential.migrated',
         target: credential.id,
@@ -2104,7 +2119,7 @@ export async function handleHttp(
       const rest = teamMatch[2] ?? '';
 
       if (method === 'GET' && rest === '') {
-        const team = requireTeam(ctx.db, slug);
+        const team = await requireTeam(ctx.db, slug);
         return sendJson(res, 200, {
           team: {
             id: team.id,
@@ -2112,12 +2127,12 @@ export async function handleHttp(
             display: team.display,
             working_hours: parseWorkingHours(team.working_hours),
           },
-          members: summarize(ctx, slug, team.id, tryAuth(ctx, slug, req)),
+          members: await summarize(ctx, slug, team.id, await tryAuth(ctx, slug, req)),
         });
       }
 
       if (method === 'POST' && rest === '/members') {
-        authProvision(ctx, slug, req);
+        await authProvision(ctx, slug, req);
         const body = parseOrBadRequest(AddMemberBody, await readJson(req));
         // ADR 058 project-and-return: for a *file-backed* team the file is the single writer — the CLI
         // has already written `seats/<name>.toml`; the daemon reconciles it and hands back the token,
@@ -2137,9 +2152,9 @@ export async function handleHttp(
           : [...new Set([...ctx.rosterRoots, ...resolveRosterRoots()])];
         const spec = teamSpecForSlug(roots, slug);
         if (spec) {
-          const result = reconcileTeam(ctx.db, spec);
-          const team = requireTeam(ctx.db, slug);
-          const row = getMemberByName(ctx.db, team.id, body.name);
+          const result = await reconcileTeam(ctx.db, spec);
+          const team = await requireTeam(ctx.db, slug);
+          const row = await getMemberByName(ctx.db, team.id, body.name);
           if (!row || row.left_at !== null) {
             throw new MusterdError(
               'not_found',
@@ -2157,10 +2172,10 @@ export async function handleHttp(
                 `seat "${body.name}" in "${slug}" is already held — adopt it with \`claim ${body.name} --token <code>\` or take a pool seat`,
               );
             }
-            token = rotateToken(ctx.db, row.id);
+            token = await rotateToken(ctx.db, row.id);
           }
           const sharedWith =
-            row.hue === null ? null : hueSharedWith(ctx.db, team.id, row.hue, row.id);
+            row.hue === null ? null : await hueSharedWith(ctx.db, team.id, row.hue, row.id);
           // A fresh or revived seat is news to the room; a re-mint of an existing one is not.
           if (result.added.includes(body.name) || result.revived.includes(body.name))
             broadcastMemberAdded(ctx.hub, team.id, body.name);
@@ -2172,13 +2187,13 @@ export async function handleHttp(
             // can't auth" gap the cutover surfaced. Agents stay credential-less (they claim with the team
             // agent key + a grant).
             ...(row.kind === 'human'
-              ? { human_credential: mintCredential(ctx.db, row.id).credential }
+              ? { human_credential: (await mintCredential(ctx.db, row.id)).credential }
               : {}),
             ...(sharedWith !== null ? { hue_shared_with: sharedWith } : {}),
           });
         }
-        const team = requireTeam(ctx.db, slug);
-        const { row, token, hue_shared_with } = addMember(ctx.db, team, {
+        const team = await requireTeam(ctx.db, slug);
+        const { row, token, hue_shared_with } = await addMember(ctx.db, team, {
           name: body.name,
           kind: body.kind,
           role: body.role ?? '',
@@ -2199,7 +2214,7 @@ export async function handleHttp(
           // can't auth" gap the cutover surfaced. Agents stay credential-less (they claim with the team
           // agent key + a grant).
           ...(row.kind === 'human'
-            ? { human_credential: mintCredential(ctx.db, row.id).credential }
+            ? { human_credential: (await mintCredential(ctx.db, row.id)).credential }
             : {}),
           // ADR 374 Decision 4 / lane 01M2P43WQ7: past a full wheel the colour is shared, and the
           // caller says so out loud — the name rides the response instead of a 409.
@@ -2215,9 +2230,14 @@ export async function handleHttp(
         // ADR 459 §2: per-IP mint bucket, checked before auth — attempts cost a DB write + audit
         // row even when refused, so the bound sits in front of the work, not behind it.
         checkRateLimit(ctx, req, 'agent_mint');
-        const { team, member: sponsor } = authMember(ctx.db, slug, bearer(req), actingSeat(req));
+        const { team, member: sponsor } = await authMember(
+          ctx.db,
+          slug,
+          bearer(req),
+          actingSeat(req),
+        );
         const body = parseOrBadRequest(SponsoredAgentBody, await readJson(req));
-        const minted = mintSponsoredAgent(ctx, team, sponsor, body, requestOrigin(req));
+        const minted = await mintSponsoredAgent(ctx, team, sponsor, body, requestOrigin(req));
         return sendJson(res, 201, { ...minted, member: toMember(minted.member, team.slug) });
       }
 
@@ -2225,11 +2245,16 @@ export async function handleHttp(
       // the team's `agent_connect` policy; the prior unused link dies with the re-issue.
       const connectMatch = rest.match(/^\/members\/agents\/([^/]+)\/connect$/);
       if (method === 'POST' && connectMatch) {
-        const { team, member: caller } = authMember(ctx.db, slug, bearer(req), actingSeat(req));
+        const { team, member: caller } = await authMember(
+          ctx.db,
+          slug,
+          bearer(req),
+          actingSeat(req),
+        );
         return sendJson(
           res,
           200,
-          issueAgentConnect(
+          await issueAgentConnect(
             ctx,
             team,
             caller,
@@ -2245,9 +2270,9 @@ export async function handleHttp(
        * whole check degrades to silence when anything here is missing. Watcher, never gatekeeper:
        * the answer is a warning (or null) — nothing blocks, and the CLI proceeds either way. */
       if (method === 'GET' && rest.startsWith('/infra-gate')) {
-        const team = requireTeam(ctx.db, slug);
+        const team = await requireTeam(ctx.db, slug);
         const verb = new URL(req.url ?? '', 'http://local').searchParams.get('verb') ?? 'unknown';
-        const caller = tryAuth(ctx, slug, req);
+        const caller = await tryAuth(ctx, slug, req);
         // Silent unless the caller is a known NON-HUMAN seat: unauthenticated shells and humans are
         // not the audience — the operator touching their own infra is exactly who this must not nag.
         // ADR 232 widened the audience from "agent seats" to "non-human seats": a service touching
@@ -2256,7 +2281,7 @@ export async function handleHttp(
         if (toMember(caller, team.slug).roles.includes('platform')) {
           return sendJson(res, 200, { warn: null });
         }
-        const holders = listMembers(ctx.db, team.id)
+        const holders = (await listMembers(ctx.db, team.id))
           .filter((m) => m.observer !== 1 && toMember(m, team.slug).roles.includes('platform'))
           .map((m) => m.name)
           .sort();
@@ -2266,7 +2291,7 @@ export async function handleHttp(
         const text = holders.length
           ? `${holders.join(', ')} ${holders.length === 1 ? 'holds' : 'hold'} platform — route an ask instead of touching this yourself (ADR 227)`
           : 'no seat holds platform yet — this team has no designated infra toucher (ADR 227)';
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: caller.name,
           action: 'infra.touch.warned',
           target: null,
@@ -2277,9 +2302,9 @@ export async function handleHttp(
       }
 
       if (method === 'GET' && rest === '/members') {
-        const team = requireTeam(ctx.db, slug);
-        const viewer = tryAuth(ctx, slug, req);
-        let members = summarize(ctx, slug, team.id, viewer);
+        const team = await requireTeam(ctx.db, slug);
+        const viewer = await tryAuth(ctx, slug, req);
+        let members = await summarize(ctx, slug, team.id, viewer);
         // ADR 227 close-out: the discovery filter runs HERE, not in the client, so the daemon can
         // see role queries at all. Each authenticated filtered read leaves a `roster.role_query`
         // row — the countable inc-1 signal, and half of the role-addressed-send reopening trigger
@@ -2289,7 +2314,7 @@ export async function handleHttp(
         if (role) {
           members = members.filter((m) => (m.roles ?? []).includes(role));
           if (viewer) {
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: viewer.name,
               action: 'roster.role_query',
               target: null,
@@ -2303,11 +2328,11 @@ export async function handleHttp(
           // The team's role library (ADR 227 discovery): the roster answers "who can do X" only if
           // the roles themselves are visible beside the seats that hold them. Additive — an older
           // client ignores it.
-          roles: listRoles(ctx.db, team.id),
+          roles: await listRoles(ctx.db, team.id),
           // ADR 360 follow-on: a joiner whose push the hub refuses says so on the roster — the one
           // payload every seat session on this machine reads — naming the seat and the remedy.
           // Null on a machine whose sync is fine (or that has no hub). Additive.
-          sync: { wedged: readPushRefusal(ctx.db, team.id) },
+          sync: { wedged: await readPushRefusal(ctx.db, team.id) },
         });
       }
 
@@ -2323,18 +2348,18 @@ export async function handleHttp(
        * deliberately out of scope — it surfaces here as a loud refusal, not a silent success.
        */
       if (method === 'POST' && rest === '/signin-handoff') {
-        const team = requireTeam(ctx.db, slug);
+        const team = await requireTeam(ctx.db, slug);
         requireLocalPeer(ctx, req, 'stage a sign-in handoff');
         const body = parseOrBadRequest(StageHandoffSchema, await readJson(req));
         // The caller must already hold this member's credential: the relay moves an authority, it
         // never issues one. A mismatch is the same `unauthorized` any bad credential gets.
-        const { member } = authMember(ctx.db, slug, body.credential, body.member);
+        const { member } = await authMember(ctx.db, slug, body.credential, body.member);
         const staged = stageHandoff({
           team: team.slug,
           member: member.name,
           credential: body.credential,
         });
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'signin.handoff_staged',
           target: member.name,
@@ -2359,21 +2384,25 @@ export async function handleHttp(
        * pre-registered signal that earns the bounded-credential work both ADRs declined to do.
        */
       if (method === 'GET' && rest === '/local-identity') {
-        const team = requireTeam(ctx.db, slug);
-        requireLocalPeer(ctx, req, "read this machine's sign-in identity", () =>
-          appendAudit(ctx.db, team.id, {
-            actor: null,
-            action: 'signin.handoff_missed',
-            target: null,
-            result: 'deny',
-            detail: { reason: 'off_machine' },
-          }),
+        const team = await requireTeam(ctx.db, slug);
+        requireLocalPeer(
+          ctx,
+          req,
+          "read this machine's sign-in identity",
+          async () =>
+            await appendAudit(ctx.db, team.id, {
+              actor: null,
+              action: 'signin.handoff_missed',
+              target: null,
+              result: 'deny',
+              detail: { reason: 'off_machine' },
+            }),
         );
         const local = readLocalIdentity(team.slug);
         // The vault can name a seat this team has never heard of — a stale entry, a renamed seat, a
         // team recreated under the same slug. Confirm before offering, so the page is never handed a
         // credential that cannot connect and then blamed for the failure.
-        if (!local || !getMemberByName(ctx.db, team.id, local.name)) {
+        if (!local || !(await getMemberByName(ctx.db, team.id, local.name))) {
           return sendJson(res, 200, { available: false });
         }
         // **The successful offer is deliberately NOT audited.** ADR 170's rows record discrete human
@@ -2393,21 +2422,25 @@ export async function handleHttp(
 
       const handoffMatch = rest.match(/^\/signin-handoff\/([^/]+)$/);
       if (method === 'GET' && handoffMatch) {
-        const team = requireTeam(ctx.db, slug);
-        requireLocalPeer(ctx, req, 'redeem a sign-in link', () =>
-          appendAudit(ctx.db, team.id, {
-            actor: null,
-            action: 'signin.handoff_missed',
-            target: null,
-            result: 'deny',
-            detail: { reason: 'off_machine' },
-          }),
+        const team = await requireTeam(ctx.db, slug);
+        requireLocalPeer(
+          ctx,
+          req,
+          'redeem a sign-in link',
+          async () =>
+            await appendAudit(ctx.db, team.id, {
+              actor: null,
+              action: 'signin.handoff_missed',
+              target: null,
+              result: 'deny',
+              detail: { reason: 'off_machine' },
+            }),
         );
         const redeemed = redeemHandoff(team.slug, decodeURIComponent(handoffMatch[1]!));
         if (!redeemed) {
           // Unknown, expired, and already-redeemed are one answer on purpose — a caller holding a
           // nonce learns nothing from the difference, and the CLI's remedy is the same for all three.
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: null,
             action: 'signin.handoff_missed',
             target: null,
@@ -2423,7 +2456,7 @@ export async function handleHttp(
               '`musterd live` again',
           );
         }
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: redeemed.as,
           action: 'signin.handoff_redeemed',
           target: redeemed.as,
@@ -2437,11 +2470,11 @@ export async function handleHttp(
       // team. Newest-first, capped; `?limit=` and `?before=<ts>` page older entries. `detail` is parsed
       // back to an object for the client.
       if (method === 'GET' && rest === '/audit') {
-        const { team } = authAdmin(ctx, slug, req);
+        const { team } = await authAdmin(ctx, slug, req);
         const limit = Number(url.searchParams.get('limit') ?? '');
         const before = Number(url.searchParams.get('before') ?? '');
         const authorizedBy = url.searchParams.get('authorized_by');
-        const rows = listAudit(ctx.db, team.id, {
+        const rows = await listAudit(ctx.db, team.id, {
           ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}),
           ...(Number.isFinite(before) && before > 0 ? { before } : {}),
           ...(authorizedBy ? { authorized_by: authorizedBy } : {}),
@@ -2468,18 +2501,18 @@ export async function handleHttp(
 
       // P3.2 request lane (ADR 077) — claim requests + admin decide. Strict is_admin.
       if (method === 'GET' && rest === '/requests') {
-        const { team } = authAdmin(ctx, slug, req);
+        const { team } = await authAdmin(ctx, slug, req);
         const pendingOnly = url.searchParams.get('status') === 'pending';
-        const requests = listRequests(ctx.db, team.id, { pendingOnly });
+        const requests = await listRequests(ctx.db, team.id, { pendingOnly });
         return sendJson(res, 200, { requests });
       }
 
       const requestDecideMatch = rest.match(/^\/requests\/([^/]+)\/decide$/);
       if (method === 'POST' && requestDecideMatch) {
-        const { team, member: admin } = authAdmin(ctx, slug, req);
+        const { team, member: admin } = await authAdmin(ctx, slug, req);
         const requestId = decodeURIComponent(requestDecideMatch[1]!);
         const body = parseOrBadRequest(DecideRequestSchema, await readJson(req));
-        const existing = getRequest(ctx.db, team.id, requestId);
+        const existing = await getRequest(ctx.db, team.id, requestId);
         if (!existing) throw new MusterdError('not_found', `no request "${requestId}"`);
         if (existing.status !== 'pending')
           throw new MusterdError(
@@ -2493,16 +2526,14 @@ export async function handleHttp(
           if (existing.target) {
             if (existing.target.startsWith('seat:')) {
               const seatName = existing.target.slice(5);
-              targetMember = getMemberByName(ctx.db, team.id, seatName) ?? null;
+              targetMember = (await getMemberByName(ctx.db, team.id, seatName)) ?? null;
             } else if (existing.target.startsWith('role:')) {
               const roleName = existing.target.slice(5);
               targetMember =
-                ctx.db
-                  .prepare<
-                    [string, string],
-                    MemberRow
-                  >('SELECT * FROM members WHERE team_id = ? AND role = ? AND left_at IS NULL LIMIT 1')
-                  .get(team.id, roleName) ?? null;
+                (await ctx.db.get<MemberRow>(
+                  'SELECT * FROM members WHERE team_id = ? AND role = ? AND left_at IS NULL LIMIT 1',
+                  [team.id, roleName],
+                )) ?? null;
             }
           }
           if (!targetMember) {
@@ -2523,7 +2554,7 @@ export async function handleHttp(
           // safety lives in this order, not in the absence of a yield between the read above and here —
           // an `await` introduced anywhere in between makes both admins pass the pending check, and this
           // is the line that keeps the second one from minting a duplicate grant.
-          if (!decideRequest(ctx.db, team.id, requestId, 'approved', admin.name)) {
+          if (!(await decideRequest(ctx.db, team.id, requestId, 'approved', admin.name))) {
             throw new MusterdError(
               'conflict',
               `request "${requestId}" was settled by another decision`,
@@ -2538,7 +2569,7 @@ export async function handleHttp(
             body.lifetime === 'ttl'
               ? (body.ttl_hours ?? ctx.config.resumeTtlMs / 3_600_000)
               : undefined;
-          const mint = issueGrant(
+          const mint = await issueGrant(
             ctx.db,
             team.id,
             {
@@ -2563,7 +2594,7 @@ export async function handleHttp(
             !existing.from_session.startsWith('http:') &&
             (!pendingConn?._claimApproved || !pendingConn.isOpen?.())
           ) {
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: admin.name,
               action: 'request.decide',
               target: targetMember.name,
@@ -2575,7 +2606,7 @@ export async function handleHttp(
                 authorized_by: admin.name,
               },
             });
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: admin.name,
               action: 'grant.issue',
               target: targetMember.name,
@@ -2589,7 +2620,7 @@ export async function handleHttp(
                 authorized_by: admin.name,
               },
             });
-            if (body.lifetime === 'once') consumeGrant(ctx.db, mint.grant.id);
+            if (body.lifetime === 'once') await consumeGrant(ctx.db, mint.grant.id);
             return sendJson(res, 200, {
               request_id: requestId,
               decision: 'approve',
@@ -2607,18 +2638,18 @@ export async function handleHttp(
           if (targetMember.kind === 'agent' && targetMember.observer === 0) {
             const liveConns = ctx.hub.connsForMember(targetMember.id);
             displacedModel =
-              ctx.db
-                .prepare<
-                  [string],
-                  { model: string }
-                >('SELECT model FROM presence WHERE member_id = ? AND model IS NOT NULL ORDER BY last_seen_at DESC LIMIT 1')
-                .get(targetMember.id)?.model ?? null;
-            const orphaned = ctx.db
-              .prepare<
-                [string],
-                { count: number }
-              >('SELECT count(*) AS count FROM presence WHERE member_id = ? AND conn_id IS NULL')
-              .get(targetMember.id)?.count;
+              (
+                await ctx.db.get<{ model: string }>(
+                  'SELECT model FROM presence WHERE member_id = ? AND model IS NOT NULL ORDER BY last_seen_at DESC LIMIT 1',
+                  [targetMember.id],
+                )
+              )?.model ?? null;
+            const orphaned = (
+              await ctx.db.get<{ count: number }>(
+                'SELECT count(*) AS count FROM presence WHERE member_id = ? AND conn_id IS NULL',
+                [targetMember.id],
+              )
+            )?.count;
             const sameWorkspace = (workspace?: string | null): boolean =>
               workspace != null &&
               pendingConn?.workspace != null &&
@@ -2636,12 +2667,12 @@ export async function handleHttp(
               });
               old.close?.();
               ctx.hub.remove(old.connId);
-              clearPresenceById(ctx.db, old.presenceId);
+              await clearPresenceById(ctx.db, old.presenceId);
               displaced++;
             }
             const evicted = displaced + (orphaned ?? 0);
             if (evicted > 0) {
-              appendAudit(ctx.db, team.id, {
+              await appendAudit(ctx.db, team.id, {
                 actor: targetMember.name,
                 action: 'claim.superseded',
                 target: targetMember.name,
@@ -2649,12 +2680,12 @@ export async function handleHttp(
                 detail: { same_workspace: false, evicted, via: 'request.approve' },
               });
             }
-            clearOrphanPresence(ctx.db, targetMember.id);
+            await clearOrphanPresence(ctx.db, targetMember.id);
           }
 
           // Attach presence for the approved session — carrying the claimant's attestation (ADR 101)
           // so the approved occupancy isn't born `unknown`.
-          const presence = attach(
+          const presence = await attach(
             ctx.db,
             targetMember.id,
             existing.surface as import('@musterd/protocol').Surface,
@@ -2673,15 +2704,15 @@ export async function handleHttp(
           if (targetMember.kind === 'agent' && targetMember.observer === 0) {
             const credential =
               targetMember.credential_hash === null
-                ? mintAgentSeatCredential(ctx.db, targetMember.id).seat_credential
+                ? (await mintAgentSeatCredential(ctx.db, targetMember.id)).seat_credential
                 : undefined;
-            const lease = mintSessionLease(ctx.db, {
+            const lease = await mintSessionLease(ctx.db, {
               teamId: team.id,
               memberId: targetMember.id,
               presenceId: presence.id,
             });
             if (credential) {
-              appendAudit(ctx.db, team.id, {
+              await appendAudit(ctx.db, team.id, {
                 actor: targetMember.name,
                 action: 'agent_seat_credential.minted',
                 target: targetMember.name,
@@ -2689,7 +2720,7 @@ export async function handleHttp(
                 detail: { source: 'request.approve' },
               });
             }
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: targetMember.name,
               action: 'agent_session_lease.minted',
               target: targetMember.name,
@@ -2702,7 +2733,7 @@ export async function handleHttp(
             };
           }
           if (!existing.model && displacedModel && sameWorkspacePredecessors.length === 0) {
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: targetMember.name,
               action: 'occupancy.model_attested',
               target: targetMember.name,
@@ -2710,14 +2741,24 @@ export async function handleHttp(
               detail: { occupancy: presence.id, old: displacedModel, new: null, source: 'claim' },
             });
           } else {
-            recordClaimAttestation(ctx.db, team.id, targetMember, presence.id, existing.model);
+            await recordClaimAttestation(
+              ctx.db,
+              team.id,
+              targetMember,
+              presence.id,
+              existing.model,
+            );
           }
 
           // (The request was settled above, before the mint.)
 
           // Flip the waiting WS: find the pending connection and call _claimApproved.
           if (pendingConn?._claimApproved) {
-            pendingConn._claimApproved(presence.id, sameWorkspacePredecessors);
+            void Promise.resolve(
+              pendingConn._claimApproved(presence.id, sameWorkspacePredecessors),
+            ).catch((err: unknown) =>
+              log.warn({ msg: 'claim_approved_flip_failed', err: String(err) }),
+            );
           }
 
           // Push the terminal occupied frame to the waiting WS, carrying the resume token (ADR 087).
@@ -2727,9 +2768,9 @@ export async function handleHttp(
             presence_id: presence.id,
             server_time: Date.now(),
             ...(resumeToken ? { grant: resumeToken } : {}),
-            charter: getRoleCharter(ctx.db, team.id, targetMember.role) ?? undefined,
+            charter: (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined,
             ...agentAuthority,
-            memory: memoryEnvelope(ctx.db, targetMember.id),
+            memory: await memoryEnvelope(ctx.db, targetMember.id),
           });
 
           // Broadcast presence online for non-observers.
@@ -2741,7 +2782,7 @@ export async function handleHttp(
             );
           }
 
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: admin.name,
             action: 'request.decide',
             target: targetMember.name,
@@ -2754,7 +2795,7 @@ export async function handleHttp(
             },
           });
           // ADR 127: the minted grant also gets a grant.issue row so the grant→authorizer join exists.
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: admin.name,
             action: 'grant.issue',
             target: targetMember.name,
@@ -2769,7 +2810,7 @@ export async function handleHttp(
             },
           });
           // Also consume the grant if once (it was issued for the seat; the approve itself IS the use).
-          if (body.lifetime === 'once') consumeGrant(ctx.db, mint.grant.id);
+          if (body.lifetime === 'once') await consumeGrant(ctx.db, mint.grant.id);
           return sendJson(res, 200, {
             request_id: requestId,
             decision: 'approve',
@@ -2780,7 +2821,7 @@ export async function handleHttp(
         } else {
           // Deny: settle the request and push a refused frame to the waiting WS. Same compare-and-set;
           // a deny that loses to a concurrent decision must not push a refusal over an approval.
-          if (!decideRequest(ctx.db, team.id, requestId, 'denied', admin.name)) {
+          if (!(await decideRequest(ctx.db, team.id, requestId, 'denied', admin.name))) {
             throw new MusterdError(
               'conflict',
               `request "${requestId}" was settled by another decision`,
@@ -2793,7 +2834,7 @@ export async function handleHttp(
             claimable: [],
             hint: `contact ${admin.name} for details`,
           });
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: admin.name,
             action: 'request.decide',
             target: existing.target,
@@ -2813,8 +2854,8 @@ export async function handleHttp(
       // each audited. The grant/key/policy substrate; additive (the claim flow that consumes grants
       // is P3.2 / the cutover). Secrets (msgr_/mskey_) are returned once and never re-fetchable.
       if (method === 'GET' && rest === '/grants') {
-        const { team } = authAdmin(ctx, slug, req);
-        return sendJson(res, 200, { grants: listGrants(ctx.db, team.id) });
+        const { team } = await authAdmin(ctx, slug, req);
+        return sendJson(res, 200, { grants: await listGrants(ctx.db, team.id) });
       }
 
       if (method === 'POST' && rest === '/grants') {
@@ -2822,10 +2863,10 @@ export async function handleHttp(
         // ADR 463 §1: a sponsor may issue a SEAT grant for an agent they sponsor; all else is admin.
         const { team, member, sponsorScoped } =
           body.scope === 'seat'
-            ? authAdminOrSponsorOf(ctx, slug, req, body.target)
-            : { ...authAdmin(ctx, slug, req), sponsorScoped: false };
-        const mint = issueGrant(ctx.db, team.id, body, member.name);
-        appendAudit(ctx.db, team.id, {
+            ? await authAdminOrSponsorOf(ctx, slug, req, body.target)
+            : { ...(await authAdmin(ctx, slug, req)), sponsorScoped: false };
+        const mint = await issueGrant(ctx.db, team.id, body, member.name);
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'grant.issue',
           target: body.target,
@@ -2844,11 +2885,11 @@ export async function handleHttp(
       const grantMatch = rest.match(/^\/grants\/([^/]+)$/);
       if (method === 'DELETE' && grantMatch) {
         const grantId = decodeURIComponent(grantMatch[1]!);
-        const { team, member } = authAdmin(ctx, slug, req);
-        if (!revokeGrant(ctx.db, team.id, grantId)) {
+        const { team, member } = await authAdmin(ctx, slug, req);
+        if (!(await revokeGrant(ctx.db, team.id, grantId))) {
           throw new MusterdError('not_found', `no active grant "${grantId}" on ${slug}`);
         }
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'grant.revoke',
           target: grantId,
@@ -2862,9 +2903,9 @@ export async function handleHttp(
       // authority bar as the other governance writes. Auth resolves BEFORE the archive lands, so the
       // admin of a live team can always reach this; a second call 404s on auth ("team is archived").
       if (method === 'POST' && rest === '/archive') {
-        const { team, member } = authAdmin(ctx, slug, req);
-        const { archived_at } = archiveTeam(ctx.db, slug);
-        appendAudit(ctx.db, team.id, {
+        const { team, member } = await authAdmin(ctx, slug, req);
+        const { archived_at } = await archiveTeam(ctx.db, slug);
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'team.archive',
           target: slug,
@@ -2874,9 +2915,9 @@ export async function handleHttp(
       }
 
       if (method === 'POST' && rest === '/agent-key/rotate') {
-        const { team, member } = authAdmin(ctx, slug, req);
-        const mint = rotateAgentKey(ctx.db, team.id);
-        appendAudit(ctx.db, team.id, {
+        const { team, member } = await authAdmin(ctx, slug, req);
+        const mint = await rotateAgentKey(ctx.db, team.id);
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'key.rotate',
           target: null,
@@ -2918,25 +2959,23 @@ export async function handleHttp(
         // …and a `host` key, which the wake/doorbell routes then scope to that sponsor's seats.
         const { team, member, sponsorScoped } =
           body.use === 'claim_seat'
-            ? authAdminOrSponsorOf(ctx, slug, req, body.target)
+            ? await authAdminOrSponsorOf(ctx, slug, req, body.target)
             : body.use === 'host'
-              ? authAdminOrSponsorCaller(ctx, slug, req)
-              : { ...authAdmin(ctx, slug, req), sponsorScoped: false };
-        if (body.use === 'claim_seat' && !getMemberByName(ctx.db, team.id, body.target)) {
+              ? await authAdminOrSponsorCaller(ctx, slug, req)
+              : { ...(await authAdmin(ctx, slug, req)), sponsorScoped: false };
+        if (body.use === 'claim_seat' && !(await getMemberByName(ctx.db, team.id, body.target))) {
           throw new MusterdError('not_found', `no seat "${body.target}" in team "${slug}"`);
         }
         if (
           body.use === 'claim_role' &&
-          !ctx.db
-            .prepare<
-              [string, string],
-              { name: string }
-            >('SELECT name FROM roles WHERE team_id = ? AND name = ?')
-            .get(team.id, body.target)
+          !(await ctx.db.get<{ name: string }>(
+            'SELECT name FROM roles WHERE team_id = ? AND name = ?',
+            [team.id, body.target],
+          ))
         ) {
           throw new MusterdError('not_found', `no role "${body.target}" in team "${slug}"`);
         }
-        const minted = mintBootstrapCredential(ctx.db, {
+        const minted = await mintBootstrapCredential(ctx.db, {
           teamId: team.id,
           useKind: body.use,
           target: body.target,
@@ -2944,7 +2983,7 @@ export async function handleHttp(
           ...(body.expires_at !== undefined ? { expiresAt: body.expires_at } : {}),
           createdBy: member.name,
         });
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'bootstrap_credential.minted',
           target: minted.credential.id,
@@ -2952,7 +2991,7 @@ export async function handleHttp(
           detail: { use: body.use, target: body.target, sponsor_scoped: sponsorScoped },
         });
         for (const predecessorId of minted.rotated) {
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: member.name,
             action: 'bootstrap_credential.rotated',
             target: predecessorId,
@@ -2967,21 +3006,21 @@ export async function handleHttp(
       }
 
       if (method === 'GET' && rest === '/agent-bootstrap-credentials') {
-        const { team } = authAdmin(ctx, slug, req);
+        const { team } = await authAdmin(ctx, slug, req);
         return sendJson(res, 200, {
-          credentials: listBootstrapCredentials(ctx.db, team.id).map(credentialProjection),
+          credentials: (await listBootstrapCredentials(ctx.db, team.id)).map(credentialProjection),
         });
       }
 
       if (method === 'GET' && rest === '/agent-bootstrap-cutover') {
-        const { team } = authAdmin(ctx, slug, req);
-        return sendJson(res, 200, bootstrapCutoverReadiness(ctx.db, team.id));
+        const { team } = await authAdmin(ctx, slug, req);
+        return sendJson(res, 200, await bootstrapCutoverReadiness(ctx.db, team.id));
       }
 
       if (method === 'POST' && rest === '/agent-bootstrap-cutover') {
-        const { team, member } = authAdmin(ctx, slug, req);
+        const { team, member } = await authAdmin(ctx, slug, req);
         const body = parseOrBadRequest(BootstrapCutoverRequestSchema, await readJson(req));
-        const readiness = cutoverLegacyBootstrap(ctx.db, {
+        const readiness = await cutoverLegacyBootstrap(ctx.db, {
           teamId: team.id,
           actor: member.name,
           force: body.force,
@@ -2996,7 +3035,7 @@ export async function handleHttp(
 
       // ── ADR 450: team invites (admin-only). The secret is returned once at mint, never listed. ──
       if (method === 'POST' && rest === '/invites') {
-        const { team, member } = authAdmin(ctx, slug, req);
+        const { team, member } = await authAdmin(ctx, slug, req);
         const InviteBody = z
           .object({
             max_uses: z.number().int().min(1).optional(),
@@ -3009,13 +3048,13 @@ export async function handleHttp(
         // ADR 463 §4.3: a team that requires expiring invites refuses one that would admit forever.
         if (
           (body.member_until === undefined || body.member_until === null) &&
-          getPolicy(ctx.db, team.id).invite_requires_expiry
+          (await getPolicy(ctx.db, team.id)).invite_requires_expiry
         )
           throw new MusterdError(
             'validation',
             `team "${slug}" requires member_until on every invite (policy invite_requires_expiry)`,
           );
-        const minted = mintTeamInvite(ctx.db, {
+        const minted = await mintTeamInvite(ctx.db, {
           teamId: team.id,
           createdBy: member.name,
           ...(body.max_uses !== undefined ? { maxUses: body.max_uses } : {}),
@@ -3023,7 +3062,7 @@ export async function handleHttp(
           ...(body.expires_at !== undefined ? { expiresAt: body.expires_at } : {}),
           ...(body.member_until !== undefined ? { memberUntil: body.member_until } : {}),
         });
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'invite.minted',
           target: minted.invite.id,
@@ -3039,16 +3078,16 @@ export async function handleHttp(
         return sendJson(res, 201, minted);
       }
       if (method === 'GET' && rest === '/invites') {
-        const { team } = authAdmin(ctx, slug, req);
-        return sendJson(res, 200, { invites: listTeamInvites(ctx.db, team.id) });
+        const { team } = await authAdmin(ctx, slug, req);
+        return sendJson(res, 200, { invites: await listTeamInvites(ctx.db, team.id) });
       }
       const inviteMatch = rest.match(/^\/invites\/([^/]+)$/);
       if (method === 'DELETE' && inviteMatch) {
         const inviteId = decodeURIComponent(inviteMatch[1]!);
-        const { team, member } = authAdmin(ctx, slug, req);
-        if (!revokeTeamInvite(ctx.db, team.id, inviteId))
+        const { team, member } = await authAdmin(ctx, slug, req);
+        if (!(await revokeTeamInvite(ctx.db, team.id, inviteId)))
           throw new MusterdError('not_found', `no live invite "${inviteId}" on ${slug}`);
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'invite.revoked',
           target: inviteId,
@@ -3060,14 +3099,14 @@ export async function handleHttp(
       const bootstrapCredentialMatch = rest.match(/^\/agent-bootstrap-credentials\/([^/]+)$/);
       if (method === 'DELETE' && bootstrapCredentialMatch) {
         const credentialId = decodeURIComponent(bootstrapCredentialMatch[1]!);
-        const { team, member } = authAdmin(ctx, slug, req);
-        if (!revokeBootstrapCredential(ctx.db, team.id, credentialId)) {
+        const { team, member } = await authAdmin(ctx, slug, req);
+        if (!(await revokeBootstrapCredential(ctx.db, team.id, credentialId))) {
           throw new MusterdError(
             'not_found',
             `no active scoped bootstrap credential "${credentialId}" on ${slug}`,
           );
         }
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'bootstrap_credential.revoked',
           target: credentialId,
@@ -3077,7 +3116,7 @@ export async function handleHttp(
       }
 
       if (method === 'POST' && rest === '/policy') {
-        const { team, member } = authAdmin(ctx, slug, req);
+        const { team, member } = await authAdmin(ctx, slug, req);
         // ADR 185: the wire carries the SPARSE doc — only the knobs an admin chose — and the row
         // stores it verbatim. Replace semantics, so an omitted key is unset and its default comes
         // back to life. The audit records the request, not the parsed result: the old row wrote
@@ -3101,7 +3140,7 @@ export async function handleHttp(
           const problem = url === undefined ? null : publicHttpsUrlProblem(url);
           if (problem) throw new MusterdError('validation', `the team ${sink} url ${problem}`);
         }
-        const enrollment = joinerEnrollment(ctx.db, team.id, team.slug);
+        const enrollment = await joinerEnrollment(ctx.db, team.id, team.slug);
         if (enrollment) {
           let answer: { policy: Policy; stored: PolicyOverride };
           try {
@@ -3119,7 +3158,7 @@ export async function handleHttp(
           await pullTeam(ctx, team).catch(() => undefined);
           return sendJson(res, 200, answer);
         }
-        const applied = applyPolicyChange(ctx.db, team.id, member.name, stored);
+        const applied = await applyPolicyChange(ctx.db, team.id, member.name, stored);
         await pushTeam(ctx, team).catch(() => undefined);
         return sendJson(res, 200, applied);
       }
@@ -3128,10 +3167,10 @@ export async function handleHttp(
       // read → merge → POST, so admins can set one knob without re-stating the rest. It merges into
       // `stored` (ADR 185) — merging into `policy` is what re-densified the row on every write.
       if (method === 'GET' && rest === '/policy') {
-        const { team } = authAdmin(ctx, slug, req);
+        const { team } = await authAdmin(ctx, slug, req);
         return sendJson(res, 200, {
-          policy: getPolicy(ctx.db, team.id),
-          stored: getStoredPolicy(ctx.db, team.id),
+          policy: await getPolicy(ctx.db, team.id),
+          stored: await getStoredPolicy(ctx.db, team.id),
         });
       }
 
@@ -3139,10 +3178,10 @@ export async function handleHttp(
       // seat-claim policy above: a human starts one bounded agent launch, and the node later redeems
       // it without ever receiving a human credential. Nothing here activates required enforcement.
       if (method === 'POST' && rest === '/governed/policy') {
-        const { team, member } = authAdmin(ctx, slug, req);
+        const { team, member } = await authAdmin(ctx, slug, req);
         const policy = parseOrBadRequest(GovernedPolicySchema, await readJson(req));
-        const applied = setGovernedPolicy(ctx.db, team.id, policy);
-        appendAudit(ctx.db, team.id, {
+        const applied = await setGovernedPolicy(ctx.db, team.id, policy);
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'governed.policy.change',
           target: null,
@@ -3157,8 +3196,8 @@ export async function handleHttp(
       }
 
       if (method === 'GET' && rest === '/governed/policy') {
-        const { team } = authAdmin(ctx, slug, req);
-        const stored = getGovernedPolicy(ctx.db, team.id);
+        const { team } = await authAdmin(ctx, slug, req);
+        const stored = await getGovernedPolicy(ctx.db, team.id);
         return sendJson(
           res,
           200,
@@ -3167,7 +3206,7 @@ export async function handleHttp(
       }
 
       if (method === 'POST' && rest === '/governed/launches') {
-        const { team, member } = authMember(
+        const { team, member } = await authMember(
           ctx.db,
           slug,
           bearer(req),
@@ -3178,8 +3217,8 @@ export async function handleHttp(
           GovernedLaunchAuthorizationIssueSchema,
           await readJson(req),
         );
-        const mint = issueGovernedLaunch(ctx.db, team.id, member, input);
-        appendAudit(ctx.db, team.id, {
+        const mint = await issueGovernedLaunch(ctx.db, team.id, member, input);
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'governed.launch.issue',
           target: mint.authorization.member,
@@ -3200,7 +3239,11 @@ export async function handleHttp(
           GovernedLaunchAuthorizationConsumeSchema,
           await readJson(req),
         );
-        const node = authenticateGovernedNode(ctx.db, requireTeam(ctx.db, slug).id, bearer(req));
+        const node = await authenticateGovernedNode(
+          ctx.db,
+          (await requireTeam(ctx.db, slug)).id,
+          bearer(req),
+        );
         const decision = !node
           ? GovernedDecisionSchema.parse({
               decision: 'deny',
@@ -3226,9 +3269,9 @@ export async function handleHttp(
                   node_id: input.node_id,
                   member: input.member,
                 })
-              : (() => {
-                  const team = requireTeam(ctx.db, slug);
-                  const consumed = consumeGovernedLaunch(ctx.db, team.id, input);
+              : await (async () => {
+                  const team = await requireTeam(ctx.db, slug);
+                  const consumed = await consumeGovernedLaunch(ctx.db, team.id, input);
                   return consumed.ok
                     ? GovernedDecisionSchema.parse({
                         decision: 'allow',
@@ -3247,8 +3290,8 @@ export async function handleHttp(
                         node_id: input.node_id,
                       });
                 })();
-        const team = requireTeam(ctx.db, slug);
-        appendAudit(ctx.db, team.id, {
+        const team = await requireTeam(ctx.db, slug);
+        await appendAudit(ctx.db, team.id, {
           actor: decision.decision === 'allow' ? (decision.member ?? null) : null,
           action:
             decision.decision === 'allow' ? 'governed.launch.consume' : 'governed.launch.refused',
@@ -3265,11 +3308,11 @@ export async function handleHttp(
       }
 
       if (method === 'DELETE' && rest.match(/^\/governed\/launches\/[^/]+$/)) {
-        const { team, member } = authAdmin(ctx, slug, req);
+        const { team, member } = await authAdmin(ctx, slug, req);
         const launchId = decodeURIComponent(rest.slice('/governed/launches/'.length));
-        if (!revokeGovernedLaunch(ctx.db, team.id, launchId))
+        if (!(await revokeGovernedLaunch(ctx.db, team.id, launchId)))
           throw new MusterdError('not_found', `no active governed launch "${launchId}"`);
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'governed.launch.revoke',
           target: launchId,
@@ -3280,12 +3323,12 @@ export async function handleHttp(
       }
 
       if (method === 'POST' && rest === '/governed/authorize') {
-        const team = requireTeam(ctx.db, slug);
+        const team = await requireTeam(ctx.db, slug);
         const input = parseOrBadRequest(GovernedAuthorizationRequestSchema, await readJson(req));
-        const decision = authorizeGovernedRequest(ctx.db, team.id, bearer(req), input, {
+        const decision = await authorizeGovernedRequest(ctx.db, team.id, bearer(req), input, {
           livePresenceMs: ctx.config.presenceTimeoutMs,
         });
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: decision.decision === 'allow' ? (decision.member ?? null) : null,
           action:
             decision.decision === 'allow' ? 'governed.request.allow' : 'governed.request.deny',
@@ -3298,7 +3341,7 @@ export async function handleHttp(
             correlation: input.correlation,
             provider: input.provider,
             model: input.model,
-            policy_version: getGovernedPolicy(ctx.db, team.id)?.policy.version ?? null,
+            policy_version: (await getGovernedPolicy(ctx.db, team.id))?.policy.version ?? null,
             reason: decision.reason,
           },
         });
@@ -3315,15 +3358,17 @@ export async function handleHttp(
       // reached the probe and every tick fell back to shipped defaults. Same posture as
       // `/enforcement` below: a scoped member read of one non-secret sub-field, nothing else.
       if (method === 'GET' && rest === '/guardian-tiers') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
-        return sendJson(res, 200, { guardian_tiers: getPolicy(ctx.db, team.id).guardian_tiers });
+        return sendJson(res, 200, {
+          guardian_tiers: (await getPolicy(ctx.db, team.id)).guardian_tiers,
+        });
       }
 
       if (method === 'GET' && rest === '/enforcement') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
-        return sendJson(res, 200, { enforcement: getPolicy(ctx.db, team.id).enforcement });
+        return sendJson(res, 200, { enforcement: (await getPolicy(ctx.db, team.id)).enforcement });
       }
 
       // The gate ingest: the hook POSTs the shapes of a MATCHED tool call (never an undeclared one), the
@@ -3332,10 +3377,10 @@ export async function handleHttp(
       // ask is raised through the seat's own credential. Best-effort semantics live in the hook, not
       // here: this route answers honestly, and the hook fails OPEN on any error (never wedge a seat).
       if (method === 'POST' && rest === '/gate') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
         const gateReq = parseOrBadRequest(GateCheckRequestSchema, await readJson(req));
-        const decision = adjudicateGate(ctx, team, member, gateReq);
+        const decision = await adjudicateGate(ctx, team, member, gateReq);
         return sendJson(res, 200, decision);
       }
 
@@ -3347,10 +3392,10 @@ export async function handleHttp(
       // UNDECLARED calls by design, which the amended ADR 150 §Gate B boundary permits precisely
       // because nothing here can change whether the call proceeds.
       if (method === 'POST' && rest === '/actor') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
         const att = parseOrBadRequest(ActorAttestationSchema, await readJson(req));
-        recordActorAttestation(ctx, team, member, att);
+        await recordActorAttestation(ctx, team, member, att);
         return sendJson(res, 202, {});
       }
 
@@ -3367,8 +3412,8 @@ export async function handleHttp(
           member: authorizer,
           viaFallback,
           sponsorScoped,
-        } = authGovernanceOrSponsorOf(ctx, slug, req, body.seat);
-        const target = getMemberByName(ctx.db, team.id, body.seat);
+        } = await authGovernanceOrSponsorOf(ctx, slug, req, body.seat);
+        const target = await getMemberByName(ctx.db, team.id, body.seat);
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no seat "${body.seat}" in team "${slug}"`);
         // Residency resurrects *harness* sessions — an agent-seat concept. A human's reachability
@@ -3390,13 +3435,13 @@ export async function handleHttp(
 
         // Standing-while-enrolled (the considered ADR 087 exception): a quiet week must not make
         // the seat unwakeable, so control moves from TTL decay to explicit revocation.
-        const mint = issueGrant(
+        const mint = await issueGrant(
           ctx.db,
           team.id,
           { scope: 'seat', target: target.name, lifetime: 'standing', single_use: false },
           authorizer.name,
         );
-        const { row, previous } = enrollResidency(ctx.db, team.id, {
+        const { row, previous } = await enrollResidency(ctx.db, team.id, {
           member_id: target.id,
           harness: body.harness,
           host: body.host,
@@ -3407,8 +3452,8 @@ export async function handleHttp(
         });
         // Last-enrolled-wins: the superseded enrollment's grant dies with it (no orphan standing
         // grants), and the host swap is named in the audit detail.
-        if (previous?.grant_id) revokeGrant(ctx.db, team.id, previous.grant_id);
-        appendAudit(ctx.db, team.id, {
+        if (previous?.grant_id) await revokeGrant(ctx.db, team.id, previous.grant_id);
+        await appendAudit(ctx.db, team.id, {
           actor: authorizer.name,
           action: 'residency.enrolled',
           target: target.name,
@@ -3424,7 +3469,7 @@ export async function handleHttp(
             sponsor_scoped: sponsorScoped,
           },
         });
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: authorizer.name,
           action: 'grant.issue',
           target: target.name,
@@ -3441,14 +3486,14 @@ export async function handleHttp(
         // Grant-rotation trap (dogfood 2026-07-13): a re-enroll revokes the previous standing
         // grant, but a LIVE session still holds it in its adapter — name that so the operator
         // knows the new grant/policy only govern from the seat's next wake/claim.
-        const seatLive = hasLivePresence(ctx.db, target.id, ctx.config.presenceTimeoutMs);
+        const seatLive = await hasLivePresence(ctx.db, target.id, ctx.config.presenceTimeoutMs);
         // ADR 434 §c: a fresh enrollment stamps the wake horizon (the `residency.enrolled` row
         // above, with no `previous_host`). Say what it leaves behind — the obligations this seat
         // is still owed and will now NOT be woken for — so the operator can re-send what matters
         // instead of discovering the silence. Read once, at enrollment; never on the poll.
         const predating = previous
           ? undefined
-          : openDirectedLedger(ctx.db, team.id).filter((d) =>
+          : (await openDirectedLedger(ctx.db, team.id)).filter((d) =>
               d.recipients.some((r) => r.seat === target.name && r.state !== 'answered'),
             ).length;
         return sendJson(res, 201, {
@@ -3464,8 +3509,8 @@ export async function handleHttp(
       if (method === 'POST' && rest === '/residency/revoke') {
         // Parse before auth, like the other sponsor-widened routes: a bad body is a 400, not a 401.
         const body = parseOrBadRequest(RevokeResidencyBodySchema, await readJson(req));
-        const { team, member } = authTouch(ctx, slug, req);
-        const target = getMemberByName(ctx.db, team.id, body.seat);
+        const { team, member } = await authTouch(ctx, slug, req);
+        const target = await getMemberByName(ctx.db, team.id, body.seat);
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no seat "${body.seat}" in team "${slug}"`);
         const selfRevoke = member.id === target.id;
@@ -3478,17 +3523,17 @@ export async function handleHttp(
           !selfRevoke &&
           !sponsorRevoke &&
           !resolveCapabilities(member).is_admin &&
-          teamHasAdmin(ctx.db, team.id)
+          (await teamHasAdmin(ctx.db, team.id))
         )
           throw new MusterdError(
             'forbidden',
             `revoking another seat's residency requires an admin seat (is_admin) or its sponsor`,
           );
-        const removed = revokeResidency(ctx.db, team.id, target.id);
+        const removed = await revokeResidency(ctx.db, team.id, target.id);
         if (!removed)
           throw new MusterdError('not_found', `seat "${body.seat}" is not enrolled in residency`);
-        if (removed.grant_id) revokeGrant(ctx.db, team.id, removed.grant_id);
-        appendAudit(ctx.db, team.id, {
+        if (removed.grant_id) await revokeGrant(ctx.db, team.id, removed.grant_id);
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'residency.revoked',
           target: target.name,
@@ -3506,15 +3551,17 @@ export async function handleHttp(
       // The team's enrollments (`musterd residency status`) — any authenticated member may read;
       // the roster already shows the same fact as `wakeable`.
       if (method === 'GET' && rest === '/residency') {
-        const { team } = authTouch(ctx, slug, req);
-        const residency = listResidency(ctx.db, team.id).map((r) =>
-          toResidency(r, team.slug, getMemberById(ctx.db, r.member_id)?.name ?? '?'),
+        const { team } = await authTouch(ctx, slug, req);
+        const residency = await Promise.all(
+          (await listResidency(ctx.db, team.id)).map(async (r) =>
+            toResidency(r, team.slug, (await getMemberById(ctx.db, r.member_id))?.name ?? '?'),
+          ),
         );
         // Team wake-policy defaults ride along (increment 5) so `residency status` can render the
         // effective policy per seat and star the overridden knobs — one read, no drift.
         return sendJson(res, 200, {
           residency,
-          policy_defaults: getPolicy(ctx.db, team.id).residency,
+          policy_defaults: (await getPolicy(ctx.db, team.id)).residency,
         });
       }
 
@@ -3523,12 +3570,12 @@ export async function handleHttp(
       // infrastructure); the response carries structured fields only, never message bodies.
       if (method === 'POST' && rest === '/residency/wake-leases') {
         const body = parseOrBadRequest(WakeLeasesBodySchema, await readJson(req));
-        const { team, scope } = authAgentKeyOnly(ctx, slug, req, body.host);
+        const { team, scope } = await authAgentKeyOnly(ctx, slug, req, body.host);
         // ADR 357: this poll is the host's heartbeat. Recorded before the lease claim so a host
         // that polls and gets nothing still counts as alive — the roster's `enrolled_host_stale`
         // is derived from it.
-        recordHostSeen(ctx.db, team.id, body.host, Date.now(), scope.creatorId);
-        const orders = claimWakeLeases(
+        await recordHostSeen(ctx.db, team.id, body.host, Date.now(), scope.creatorId);
+        const orders = await claimWakeLeases(
           ctx.db,
           team.id,
           team.slug,
@@ -3546,11 +3593,11 @@ export async function handleHttp(
       // row fails `no_budget` at once and the sponsor is told which setting to change.
       if (method === 'POST' && rest === '/host/provisions') {
         const body = parseOrBadRequest(HostProvisionsClaimBodySchema, await readJson(req));
-        const { team, scope } = authAgentKeyOnly(ctx, slug, req, body.host);
+        const { team, scope } = await authAgentKeyOnly(ctx, slug, req, body.host);
         const now = Date.now();
-        recordHostSeen(ctx.db, team.id, body.host, now, scope.creatorId);
-        const agentHost = getPolicy(ctx.db, team.id).agent_host;
-        const claimed = claimProvisions(
+        await recordHostSeen(ctx.db, team.id, body.host, now, scope.creatorId);
+        const agentHost = (await getPolicy(ctx.db, team.id)).agent_host;
+        const claimed = await claimProvisions(
           ctx.db,
           team.id,
           body.host,
@@ -3560,9 +3607,9 @@ export async function handleHttp(
         );
         const ready: ReturnType<typeof toProvision>[] = [];
         for (const row of claimed) {
-          const agent = getMemberById(ctx.db, row.member_id)!;
-          const sponsor = getMemberById(ctx.db, row.sponsor_id);
-          appendAudit(ctx.db, team.id, {
+          const agent = (await getMemberById(ctx.db, row.member_id))!;
+          const sponsor = await getMemberById(ctx.db, row.sponsor_id);
+          await appendAudit(ctx.db, team.id, {
             actor: null,
             action: 'host.provision_claimed',
             target: row.id,
@@ -3570,8 +3617,8 @@ export async function handleHttp(
             detail: { host: body.host, agent: agent.name },
           });
           if (agentHost.policy.budget_usd === undefined) {
-            failProvision(ctx.db, row.id, 'no_budget');
-            appendAudit(ctx.db, team.id, {
+            await failProvision(ctx.db, row.id, 'no_budget');
+            await appendAudit(ctx.db, team.id, {
               actor: null,
               action: 'host.provision_failed',
               target: row.id,
@@ -3579,7 +3626,7 @@ export async function handleHttp(
               detail: { host: body.host, agent: agent.name, reason: 'no_budget' },
             });
             if (sponsor)
-              tellSponsorOfProvision(
+              await tellSponsorOfProvision(
                 ctx,
                 team,
                 agent,
@@ -3600,13 +3647,17 @@ export async function handleHttp(
       if (method === 'GET' && rest === '/host/provisions') {
         const host = url.searchParams.get('host');
         if (!host) throw new MusterdError('validation', 'host query parameter required');
-        const { team, scope } = authAgentKeyOnly(ctx, slug, req, host);
-        const provisions = listProvisions(ctx.db, team.id).flatMap((row) => {
-          const agent = getMemberById(ctx.db, row.member_id);
-          if (!agent || !hostMayServe(scope, agent)) return [];
-          const sponsor = getMemberById(ctx.db, row.sponsor_id);
-          return [toProvision(row, team.slug, agent.name, sponsor?.name ?? '?')];
-        });
+        const { team, scope } = await authAgentKeyOnly(ctx, slug, req, host);
+        const provisions = (
+          await Promise.all(
+            (await listProvisions(ctx.db, team.id)).map(async (row) => {
+              const agent = await getMemberById(ctx.db, row.member_id);
+              if (!agent || !hostMayServe(scope, agent)) return [];
+              const sponsor = await getMemberById(ctx.db, row.sponsor_id);
+              return [toProvision(row, team.slug, agent.name, sponsor?.name ?? '?')];
+            }),
+          )
+        ).flat();
         return sendJson(res, 200, { provisions });
       }
 
@@ -3617,16 +3668,18 @@ export async function handleHttp(
       if (method === 'POST' && provisionReport) {
         const body = parseOrBadRequest(HostProvisionReportBodySchema, await readJson(req));
         const id = decodeURIComponent(provisionReport[1]!);
-        const known = getTeamBySlug(ctx.db, slug);
-        const claimant = known ? (getProvision(ctx.db, known.id, id)?.claimed_by ?? '') : '';
-        const { team, scope } = authAgentKeyOnly(ctx, slug, req, claimant);
-        const existing = getProvision(ctx.db, team.id, id);
-        const agent = existing ? getMemberById(ctx.db, existing.member_id) : undefined;
+        const known = await getTeamBySlug(ctx.db, slug);
+        const claimant = known
+          ? ((await getProvision(ctx.db, known.id, id))?.claimed_by ?? '')
+          : '';
+        const { team, scope } = await authAgentKeyOnly(ctx, slug, req, claimant);
+        const existing = await getProvision(ctx.db, team.id, id);
+        const agent = existing ? await getMemberById(ctx.db, existing.member_id) : undefined;
         if (!existing || !agent || !hostMayServe(scope, agent))
           throw new MusterdError('not_found', `no provision "${id}" for this host`);
-        const { row, refused } = reportProvision(ctx.db, team.id, id, claimant, body);
-        const sponsor = getMemberById(ctx.db, row.sponsor_id);
-        appendAudit(ctx.db, team.id, {
+        const { row, refused } = await reportProvision(ctx.db, team.id, id, claimant, body);
+        const sponsor = await getMemberById(ctx.db, row.sponsor_id);
+        await appendAudit(ctx.db, team.id, {
           actor: null,
           action: row.state === 'ready' ? 'host.provision_ready' : 'host.provision_failed',
           target: row.id,
@@ -3640,9 +3693,9 @@ export async function handleHttp(
         if (refused)
           throw new MusterdError('forbidden', `provision "${id}" cannot go ready: ${refused}`);
         if (row.state === 'failed' && sponsor && !memberStandingRefusal(sponsor)) {
-          unhostFailedProvision(ctx, team, agent, row.failed_reason ?? 'failed');
-          const { nonce } = issueAgentConnectNonce(ctx.db, team.id, agent.id, sponsor.id);
-          tellSponsorOfProvision(
+          await unhostFailedProvision(ctx, team, agent, row.failed_reason ?? 'failed');
+          const { nonce } = await issueAgentConnectNonce(ctx.db, team.id, agent.id, sponsor.id);
+          await tellSponsorOfProvision(
             ctx,
             team,
             agent,
@@ -3664,26 +3717,28 @@ export async function handleHttp(
       // shape: a ring is the record, never a message body.
       if (method === 'POST' && rest === '/doorbell/rings') {
         const body = parseOrBadRequest(DoorbellRingsBodySchema, await readJson(req));
-        const { team, scope } = authAgentKeyOnly(ctx, slug, req, body.host);
+        const { team, scope } = await authAgentKeyOnly(ctx, slug, req, body.host);
         // A non-admin's key raises only its creator's own banners; a team-wide key, as before.
         const ringsOf = scope.teamWide ? null : scope.creatorId;
-        const rings = claimHostRings(ctx.db, team.id, body.host, Date.now(), {
-          memberId: ringsOf,
-        }).map(({ ring, member }) => ({ id: ring.id, member, record: ring.record }));
+        const rings = (
+          await claimHostRings(ctx.db, team.id, body.host, Date.now(), {
+            memberId: ringsOf,
+          })
+        ).map(({ ring, member }) => ({ id: ring.id, member, record: ring.record }));
         return sendJson(res, 200, { rings });
       }
 
       const surfacedRing = rest.match(/^\/doorbell\/rings\/([^/]+)\/surfaced$/);
       if (method === 'POST' && surfacedRing) {
         const body = parseOrBadRequest(DoorbellSurfacedBodySchema, await readJson(req));
-        const { team, scope } = authAgentKeyOnly(ctx, slug, req, body.host);
+        const { team, scope } = await authAgentKeyOnly(ctx, slug, req, body.host);
         let ringId: string;
         try {
           ringId = decodeURIComponent(surfacedRing[1]!);
         } catch {
           throw new MusterdError('bad_request', 'ring id has invalid URL encoding');
         }
-        const ring = getRing(ctx.db, team.id, ringId);
+        const ring = await getRing(ctx.db, team.id, ringId);
         // A host reports only its own rings — a label cannot speak for another machine's banner.
         // The label is cleared once reported (or never returned), so that ring answers 409.
         if (
@@ -3692,10 +3747,10 @@ export async function handleHttp(
           (!scope.teamWide && ring.member_id !== scope.creatorId)
         )
           throw new MusterdError('not_found', 'no such ring for this host');
-        if (!markRingReported(ctx.db, ring.id, body.host))
+        if (!(await markRingReported(ctx.db, ring.id, body.host)))
           throw new MusterdError('conflict', 'this ring is not awaiting a report');
-        const member = getMemberById(ctx.db, ring.member_id);
-        appendAudit(ctx.db, team.id, {
+        const member = await getMemberById(ctx.db, ring.member_id);
+        await appendAudit(ctx.db, team.id, {
           actor: ring.record.from,
           action: 'doorbell.surfaced',
           target: member?.name ?? null,
@@ -3715,14 +3770,14 @@ export async function handleHttp(
       // one audit row per model turn would bloat the ledger the O&E reads.
       if (method === 'POST' && rest === '/residency/wake-turn') {
         const body = parseOrBadRequest(WakeTurnBodySchema, await readJson(req));
-        const team = requireTeam(ctx.db, slug);
-        const turnHost = hostForWakeLease(ctx, team.id, body.lease_id);
-        const { scope: turnScope } = authAgentKeyOnly(ctx, slug, req, turnHost);
-        assertLeaseInScope(ctx, team.id, body.lease_id, turnScope);
+        const team = await requireTeam(ctx.db, slug);
+        const turnHost = await hostForWakeLease(ctx, team.id, body.lease_id);
+        const { scope: turnScope } = await authAgentKeyOnly(ctx, slug, req, turnHost);
+        await assertLeaseInScope(ctx, team.id, body.lease_id, turnScope);
         // ADR 357 correction: a host mid-actuation is not polling, but it is talking — every
         // host-authenticated residency request is a sighting.
-        if (turnHost) recordHostSeen(ctx.db, team.id, turnHost, Date.now());
-        const appended = appendWakeTurn(ctx.db, team.id, body);
+        if (turnHost) await recordHostSeen(ctx.db, team.id, turnHost, Date.now());
+        const appended = await appendWakeTurn(ctx.db, team.id, body);
         if (!appended)
           throw new MusterdError('not_found', `no wake lease "${body.lease_id}" on ${slug}`);
         return sendJson(res, 200, { ok: true, lease_id: body.lease_id, turn: body.turn });
@@ -3730,12 +3785,12 @@ export async function handleHttp(
 
       if (method === 'POST' && rest === '/residency/wake-progress') {
         const body = parseOrBadRequest(WakeProgressBodySchema, await readJson(req));
-        const team = requireTeam(ctx.db, slug);
-        const progressHost = hostForWakeLease(ctx, team.id, body.lease_id);
-        const { scope: progressScope } = authAgentKeyOnly(ctx, slug, req, progressHost);
-        assertLeaseInScope(ctx, team.id, body.lease_id, progressScope);
-        if (progressHost) recordHostSeen(ctx.db, team.id, progressHost, Date.now()); // ADR 357 correction
-        const row = markWakeSpawned(ctx.db, team.id, body.lease_id);
+        const team = await requireTeam(ctx.db, slug);
+        const progressHost = await hostForWakeLease(ctx, team.id, body.lease_id);
+        const { scope: progressScope } = await authAgentKeyOnly(ctx, slug, req, progressHost);
+        await assertLeaseInScope(ctx, team.id, body.lease_id, progressScope);
+        if (progressHost) await recordHostSeen(ctx.db, team.id, progressHost, Date.now()); // ADR 357 correction
+        const row = await markWakeSpawned(ctx.db, team.id, body.lease_id);
         if (!row)
           throw new MusterdError('not_found', `no wake lease "${body.lease_id}" on ${slug}`);
         return sendJson(res, 200, {
@@ -3747,32 +3802,29 @@ export async function handleHttp(
 
       if (method === 'POST' && rest === '/residency/wake-report') {
         const rawBody = await readJson(req);
-        const team = requireTeam(ctx.db, slug);
+        const team = await requireTeam(ctx.db, slug);
         const authBody = WakeReportBodySchema.safeParse(rawBody);
         const reportHost = authBody.success
-          ? hostForWakeLease(ctx, team.id, authBody.data.lease_id)
+          ? await hostForWakeLease(ctx, team.id, authBody.data.lease_id)
           : undefined;
-        const { scope: reportScope } = authAgentKeyOnly(ctx, slug, req, reportHost);
-        if (authBody.success) assertLeaseInScope(ctx, team.id, authBody.data.lease_id, reportScope);
+        const { scope: reportScope } = await authAgentKeyOnly(ctx, slug, req, reportHost);
+        if (authBody.success)
+          await assertLeaseInScope(ctx, team.id, authBody.data.lease_id, reportScope);
         // ADR 357 correction: the report is the LAST thing a serial actuation says before it polls
         // again — stamping it here is what keeps a busy host from reading `enrolled_host_stale`.
-        if (reportHost) recordHostSeen(ctx.db, team.id, reportHost, Date.now());
-        const body = parseWakeReportOrAudit(ctx.db, team.id, rawBody);
-        const lease = settleWakeLease(ctx.db, team.id, body.lease_id);
+        if (reportHost) await recordHostSeen(ctx.db, team.id, reportHost, Date.now());
+        const body = await parseWakeReportOrAudit(ctx.db, team.id, rawBody);
+        const lease = await settleWakeLease(ctx.db, team.id, body.lease_id);
         if (!lease) {
-          const settled = ctx.db
-            .prepare<
-              [string, string],
-              {
-                member_id: string;
-                act_id: string | null;
-                lane_id: string | null;
-                edge: string | null;
-              }
-            >(
-              'SELECT member_id, act_id, lane_id, edge FROM wake_leases WHERE team_id = ? AND id = ?',
-            )
-            .get(team.id, body.lease_id);
+          const settled = await ctx.db.get<{
+            member_id: string;
+            act_id: string | null;
+            lane_id: string | null;
+            edge: string | null;
+          }>(
+            'SELECT member_id, act_id, lane_id, edge FROM wake_leases WHERE team_id = ? AND id = ?',
+            [team.id, body.lease_id],
+          );
           if (!settled)
             throw new MusterdError('not_found', `no wake lease "${body.lease_id}" on ${slug}`);
           // The supplementary cost record (increment 5): the primary report landed at verification,
@@ -3781,10 +3833,10 @@ export async function handleHttp(
           // metrics dedupe by lease_id). A cost-less duplicate is still a conflict — the mutual-
           // exclusion guard against a double-reporting host stays intact.
           if (body.cost_usd !== undefined || body.duration_ms !== undefined) {
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: null,
               action: 'residency.wake_cost',
-              target: getMemberById(ctx.db, settled.member_id)?.name ?? '?',
+              target: (await getMemberById(ctx.db, settled.member_id))?.name ?? '?',
               result: 'allow',
               detail: {
                 act: wakeExhaustionKey(settled.act_id, settled.lane_id),
@@ -3799,7 +3851,7 @@ export async function handleHttp(
                 ...(body.harness_cost_usd !== undefined
                   ? { harness_cost_usd: body.harness_cost_usd }
                   : {}),
-                ...adapterBuildStamp(ctx, settled.member_id),
+                ...(await adapterBuildStamp(ctx, settled.member_id)),
                 ...(body.delivery_outcome ? { delivery_outcome: body.delivery_outcome } : {}),
                 ...(body.exact_match ? { exact_match: body.exact_match } : {}),
                 ...(body.transcript_bytes !== undefined
@@ -3821,16 +3873,15 @@ export async function handleHttp(
           }
           throw new MusterdError('conflict', `lease "${body.lease_id}" is already reported`);
         }
-        const seat = getMemberById(ctx.db, lease.member_id);
+        const seat = await getMemberById(ctx.db, lease.member_id);
         const sender = lease.act_id
-          ? ctx.db
-              .prepare<[string, string], { name: string }>(
-                `SELECT mem.name AS name FROM messages m JOIN members mem ON mem.id = m.from_member
+          ? await ctx.db.get<{ name: string }>(
+              `SELECT mem.name AS name FROM messages m JOIN members mem ON mem.id = m.from_member
               WHERE m.team_id = ? AND m.id = ?`,
-              )
-              .get(team.id, lease.act_id)
+              [team.id, lease.act_id],
+            )
           : undefined;
-        const enrollment = getResidency(ctx.db, team.id, lease.member_id);
+        const enrollment = await getResidency(ctx.db, team.id, lease.member_id);
         // A deferral (increment 4's local-session guard) is its own verb, NOT a failure: it is
         // excluded by construction from the derived rate/attempt reads (they count woke+wake_failed
         // only), so a human working in the worktree can never exhaust the act — and it feeds the
@@ -3840,7 +3891,7 @@ export async function handleHttp(
           : body.occupied
             ? 'residency.woke'
             : 'residency.wake_failed';
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: null,
           action,
           target: seat?.name ?? '?',
@@ -3853,7 +3904,7 @@ export async function handleHttp(
             ...(lease.lane_id ? { lane_id: lease.lane_id } : {}),
             ...(lease.edge ? { edge: lease.edge } : {}),
             ...(enrollment?.grant_id ? { grant_id: enrollment.grant_id } : {}),
-            ...adapterBuildStamp(ctx, lease.member_id),
+            ...(await adapterBuildStamp(ctx, lease.member_id)),
             ...(body.session ? { session: body.session } : {}),
             ...(body.delivery_outcome ? { delivery_outcome: body.delivery_outcome } : {}),
             // ADR 210: WHY an eligible wake resumed or did not. `delivery_outcome` says what
@@ -3884,9 +3935,9 @@ export async function handleHttp(
       // presence-neutral by nature (this handler touches no presence row) and it never claims —
       // a hook must never displace the live occupant (ADR 108).
       if (method === 'POST' && rest === '/residency/session') {
-        const { team, member } = authClaimedAgent(ctx, slug, req);
+        const { team, member } = await authClaimedAgent(ctx, slug, req);
         const body = parseOrBadRequest(SessionAttestationBodySchema, await readJson(req));
-        const target = getMemberByName(ctx.db, team.id, body.seat);
+        const target = await getMemberByName(ctx.db, team.id, body.seat);
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no seat "${body.seat}" in team "${slug}"`);
         if (target.id !== member.id)
@@ -3896,19 +3947,19 @@ export async function handleHttp(
           );
         const enrolled =
           body.event === 'start'
-            ? recordSessionAttestation(ctx.db, team.id, target.id, body.harness)
-            : getResidency(ctx.db, team.id, target.id) !== null;
+            ? await recordSessionAttestation(ctx.db, team.id, target.id, body.harness)
+            : (await getResidency(ctx.db, team.id, target.id)) !== null;
         // Presence-honesty §2.3 carve-out: `end` is the daemon's only clean-exit goodbye, so it
         // stamps the sticky reason — nothing else here moves; presence rows stay untouched, so
         // the route's presence-neutrality (comment above) holds.
         if (body.event === 'end') {
-          markSessionEnded(ctx.db, target.id);
+          await markSessionEnded(ctx.db, target.id);
           // An acceptance must not leave with the session that was holding it (lane
           // 01M2RNBRGRWCSD89JTE1BVQ3QG). Presence-neutrality above is untouched: this moves asks
           // and audit rows, never a presence row.
-          rerouteDepartedAcceptances(ctx, team, target);
+          await rerouteDepartedAcceptances(ctx, team, target);
         }
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: null,
           action: body.event === 'start' ? 'residency.session_captured' : 'residency.session_ended',
           target: target.name,
@@ -3978,20 +4029,20 @@ export async function handleHttp(
           provenance: ProvenanceSchema.optional(),
         });
         const body = parseOrBadRequest(ClaimBody, await readJson(req));
-        const team = requireTeam(ctx.db, slug);
+        const team = await requireTeam(ctx.db, slug);
 
         // Step 1: verify bootstrap key, human credential, or an agent's own credential. The latter
         // is valid only here to reconnect and obtain a fresh Presence lease (ADR 337).
         let authenticatedMember: MemberRow | null = null;
-        const bootstrapCredential = findBootstrapCredential(ctx.db, team.id, body.key);
+        const bootstrapCredential = await findBootstrapCredential(ctx.db, team.id, body.key);
         const bootstrapRecord =
-          bootstrapCredential ?? findBootstrapCredentialRecord(ctx.db, team.id, body.key);
+          bootstrapCredential ?? (await findBootstrapCredentialRecord(ctx.db, team.id, body.key));
         if (bootstrapRecord && !bootstrapCredential) {
           const expired =
             bootstrapRecord.expires_at !== null && bootstrapRecord.expires_at <= Date.now();
           const retiredLegacy =
             bootstrapRecord.use_kind === 'legacy' && team.bootstrap_cutover_at !== null;
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: null,
             action: expired ? 'bootstrap_credential.expired' : 'bootstrap_credential.refused',
             target: bootstrapRecord.id,
@@ -4017,15 +4068,13 @@ export async function handleHttp(
               : 'ask a team admin to mint a replacement credential',
           });
         }
-        const keyHash = getAgentKeyHash(ctx.db, team.id);
+        const keyHash = await getAgentKeyHash(ctx.db, team.id);
         if (!bootstrapCredential && (!keyHash || hashToken(body.key) !== keyHash)) {
           authenticatedMember =
-            ctx.db
-              .prepare<
-                [string, string],
-                MemberRow
-              >("SELECT * FROM members WHERE team_id = ? AND credential_hash = ? AND left_at IS NULL AND kind IN ('human', 'agent')")
-              .get(team.id, hashToken(body.key)) ?? null;
+            (await ctx.db.get<MemberRow>(
+              "SELECT * FROM members WHERE team_id = ? AND credential_hash = ? AND left_at IS NULL AND kind IN ('human', 'agent')",
+              [team.id, hashToken(body.key)],
+            )) ?? null;
           if (!authenticatedMember) {
             return sendJson(res, 403, {
               type: 'refused',
@@ -4041,7 +4090,7 @@ export async function handleHttp(
         // Step 2: resolve target member.
         let targetMember: MemberRow | null = null;
         if ('seat' in body.target) {
-          targetMember = getMemberByName(ctx.db, team.id, body.target.seat) ?? null;
+          targetMember = (await getMemberByName(ctx.db, team.id, body.target.seat)) ?? null;
           if (!targetMember || targetMember.left_at !== null) {
             return sendJson(res, 404, {
               type: 'refused',
@@ -4062,12 +4111,10 @@ export async function handleHttp(
           }
         } else if ('role' in body.target) {
           targetMember =
-            ctx.db
-              .prepare<
-                [string, string],
-                MemberRow
-              >('SELECT * FROM members WHERE team_id = ? AND role = ? AND left_at IS NULL LIMIT 1')
-              .get(team.id, body.target.role) ?? null;
+            (await ctx.db.get<MemberRow>(
+              'SELECT * FROM members WHERE team_id = ? AND role = ? AND left_at IS NULL LIMIT 1',
+              [team.id, body.target.role],
+            )) ?? null;
           if (!targetMember) {
             return sendJson(res, 404, {
               type: 'refused',
@@ -4110,7 +4157,7 @@ export async function handleHttp(
             body.target.seat !== bootstrapCredential.target ||
             targetMember.name !== bootstrapCredential.target)
         ) {
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: null,
             action: 'bootstrap_credential.refused',
             target: bootstrapCredential.id,
@@ -4129,7 +4176,7 @@ export async function handleHttp(
           bootstrapCredential?.use_kind === 'claim_role' &&
           (!('role' in body.target) || body.target.role !== bootstrapCredential.target)
         ) {
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: null,
             action: 'bootstrap_credential.refused',
             target: bootstrapCredential.id,
@@ -4145,7 +4192,7 @@ export async function handleHttp(
           });
         }
         if (bootstrapCredential?.use_kind === 'host') {
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: null,
             action: 'bootstrap_credential.refused',
             target: bootstrapCredential.id,
@@ -4161,8 +4208,8 @@ export async function handleHttp(
           });
         }
         if (bootstrapCredential) {
-          recordBootstrapCredentialUse(ctx.db, bootstrapCredential.id);
-          appendAudit(ctx.db, team.id, {
+          await recordBootstrapCredentialUse(ctx.db, bootstrapCredential.id);
+          await appendAudit(ctx.db, team.id, {
             actor: null,
             action: 'bootstrap_credential.used',
             target: bootstrapCredential.id,
@@ -4189,12 +4236,12 @@ export async function handleHttp(
           targetMember.kind === 'agent' &&
           targetMember.observer === 0 &&
           body.provenance === 'wake' &&
-          heldByAttendedSession(
+          (await heldByAttendedSession(
             ctx.db,
             ctx.hub.connsForMember(targetMember.id).map((c) => c.presenceId),
-          )
+          ))
         ) {
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: null,
             action: 'claim.refused',
             target: targetMember.name,
@@ -4253,22 +4300,22 @@ export async function handleHttp(
           );
         };
         let sparedSameWorkspace = 0;
-        const displaceAgentIncumbent = (): void => {
+        const displaceAgentIncumbent = async (): Promise<void> => {
           const liveConns = ctx.hub.connsForMember(targetMember.id);
           if (targetMember.kind !== 'agent' || targetMember.observer === 1) return;
           displacedModel =
-            ctx.db
-              .prepare<
-                [string],
-                { model: string }
-              >('SELECT model FROM presence WHERE member_id = ? AND model IS NOT NULL ORDER BY last_seen_at DESC LIMIT 1')
-              .get(targetMember.id)?.model ?? null;
-          const orphaned = ctx.db
-            .prepare<
-              [string],
-              { count: number }
-            >('SELECT count(*) AS count FROM presence WHERE member_id = ? AND conn_id IS NULL')
-            .get(targetMember.id)?.count;
+            (
+              await ctx.db.get<{ model: string }>(
+                'SELECT model FROM presence WHERE member_id = ? AND model IS NOT NULL ORDER BY last_seen_at DESC LIMIT 1',
+                [targetMember.id],
+              )
+            )?.model ?? null;
+          const orphaned = (
+            await ctx.db.get<{ count: number }>(
+              'SELECT count(*) AS count FROM presence WHERE member_id = ? AND conn_id IS NULL',
+              [targetMember.id],
+            )
+          )?.count;
           let displaced = 0;
           for (const old of liveConns) {
             // ADR 068/092: a same-workspace successor does not evict its predecessor — it is the
@@ -4285,7 +4332,7 @@ export async function handleHttp(
             });
             old.close?.();
             ctx.hub.remove(old.connId);
-            clearPresenceById(ctx.db, old.presenceId);
+            await clearPresenceById(ctx.db, old.presenceId);
             displaced++;
           }
           // Rows with no socket are cleared whatever their workspace, including this claim's own:
@@ -4294,12 +4341,12 @@ export async function handleHttp(
           // fixture re-claims every few seconds to hold a Presence, ADR 377.) Only a LIVE session is
           // spared above, which is the case ADR 092 is about: someone is actually working there —
           // so this must NOT be `clearMemberPresence`, which would take the row just spared.
-          clearOrphanPresence(ctx.db, targetMember.id);
+          await clearOrphanPresence(ctx.db, targetMember.id);
           // ADR 237: every displacement writes a ledger row — this branch used to evict silently,
           // leaving only the winner's claim.occupied behind.
           const evicted = displaced + (orphaned ?? 0);
           if (evicted > 0) {
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: targetMember.name,
               action: 'claim.superseded',
               target: targetMember.name,
@@ -4308,12 +4355,12 @@ export async function handleHttp(
             });
           }
         };
-        const recordHttpClaimAttestation = (
+        const recordHttpClaimAttestation = async (
           presenceId: string,
           model: string | null | undefined,
-        ): void => {
+        ): Promise<void> => {
           if (!model && displacedModel) {
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: targetMember.name,
               action: 'occupancy.model_attested',
               target: targetMember.name,
@@ -4322,23 +4369,23 @@ export async function handleHttp(
             });
             return;
           }
-          recordClaimAttestation(ctx.db, team.id, targetMember, presenceId, model);
+          await recordClaimAttestation(ctx.db, team.id, targetMember, presenceId, model);
         };
-        const agentAuthorityFor = (
+        const agentAuthorityFor = async (
           presenceId: string,
-        ): { seat_credential?: string; session_lease?: string } => {
+        ): Promise<{ seat_credential?: string; session_lease?: string }> => {
           if (targetMember.kind !== 'agent' || targetMember.observer === 1) return {};
           const credential =
             targetMember.credential_hash === null
-              ? mintAgentSeatCredential(ctx.db, targetMember.id).seat_credential
+              ? (await mintAgentSeatCredential(ctx.db, targetMember.id)).seat_credential
               : undefined;
-          const lease = mintSessionLease(ctx.db, {
+          const lease = await mintSessionLease(ctx.db, {
             teamId: team.id,
             memberId: targetMember.id,
             presenceId,
           });
           if (credential) {
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: targetMember.name,
               action: 'agent_seat_credential.minted',
               target: targetMember.name,
@@ -4346,7 +4393,7 @@ export async function handleHttp(
               detail: { source: 'claim' },
             });
           }
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: targetMember.name,
             action: 'agent_session_lease.minted',
             target: targetMember.name,
@@ -4361,7 +4408,7 @@ export async function handleHttp(
 
         // Step 5: grant path — validate + consume, then occupy.
         if (body.grant) {
-          const gv = validateGrant(ctx.db, team.id, body.grant);
+          const gv = await validateGrant(ctx.db, team.id, body.grant);
           if (!gv.ok) {
             const code = gv.reason === 'expired' ? 'expired_grant' : 'forbidden';
             return sendJson(res, 403, {
@@ -4389,21 +4436,27 @@ export async function handleHttp(
               hint: 'request a grant that matches your target seat/role',
             });
           }
-          consumeGrant(ctx.db, gv.grant.id);
+          await consumeGrant(ctx.db, gv.grant.id);
           // Resume token (ADR 087): refresh a reusable grant's TTL on occupy (no-op for single_use).
-          refreshGrant(ctx.db, gv.grant.id, ctx.config.resumeTtlMs);
-          displaceAgentIncumbent();
+          await refreshGrant(ctx.db, gv.grant.id, ctx.config.resumeTtlMs);
+          await displaceAgentIncumbent();
           // OCCUPY: stateless — attach presence with null connId (no persistent socket).
-          const presence = attach(ctx.db, targetMember.id, body.surface, null, claimAttachContext);
-          markBound(ctx.db, targetMember.id);
-          appendAudit(ctx.db, team.id, {
+          const presence = await attach(
+            ctx.db,
+            targetMember.id,
+            body.surface,
+            null,
+            claimAttachContext,
+          );
+          await markBound(ctx.db, targetMember.id);
+          await appendAudit(ctx.db, team.id, {
             actor: targetMember.name,
             action: 'claim.occupied',
             target: targetMember.name,
             result: 'allow',
             detail: { via: 'http', surface: body.surface },
           });
-          recordHttpClaimAttestation(presence.id, body.model);
+          await recordHttpClaimAttestation(presence.id, body.model);
           ctx.hub.broadcastTeam(
             team.id,
             { type: 'presence', member: targetMember.name, status: 'online' },
@@ -4414,9 +4467,9 @@ export async function handleHttp(
             seat: toMember(targetMember, team.slug),
             presence_id: presence.id,
             server_time: Date.now(),
-            charter: getRoleCharter(ctx.db, team.id, targetMember.role) ?? undefined,
-            ...agentAuthorityFor(presence.id),
-            memory: memoryEnvelope(ctx.db, targetMember.id),
+            charter: (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined,
+            ...(await agentAuthorityFor(presence.id)),
+            memory: await memoryEnvelope(ctx.db, targetMember.id),
           });
         }
 
@@ -4425,17 +4478,23 @@ export async function handleHttp(
         // so there is no grant and no admin-approval request. Occupy directly (Step 2 already enforced
         // the credential matches the target seat for a seat-target claim).
         if (authenticatedMember && authenticatedMember.id === targetMember.id) {
-          displaceAgentIncumbent();
-          const presence = attach(ctx.db, targetMember.id, body.surface, null, claimAttachContext);
-          markBound(ctx.db, targetMember.id);
-          appendAudit(ctx.db, team.id, {
+          await displaceAgentIncumbent();
+          const presence = await attach(
+            ctx.db,
+            targetMember.id,
+            body.surface,
+            null,
+            claimAttachContext,
+          );
+          await markBound(ctx.db, targetMember.id);
+          await appendAudit(ctx.db, team.id, {
             actor: targetMember.name,
             action: 'claim.occupied',
             target: targetMember.name,
             result: 'allow',
             detail: { via: 'http', surface: body.surface, auth: 'credential' },
           });
-          recordHttpClaimAttestation(presence.id, body.model);
+          await recordHttpClaimAttestation(presence.id, body.model);
           ctx.hub.broadcastTeam(
             team.id,
             { type: 'presence', member: targetMember.name, status: 'online' },
@@ -4446,9 +4505,9 @@ export async function handleHttp(
             seat: toMember(targetMember, team.slug),
             presence_id: presence.id,
             server_time: Date.now(),
-            charter: getRoleCharter(ctx.db, team.id, targetMember.role) ?? undefined,
-            ...agentAuthorityFor(presence.id),
-            memory: memoryEnvelope(ctx.db, targetMember.id),
+            charter: (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined,
+            ...(await agentAuthorityFor(presence.id)),
+            memory: await memoryEnvelope(ctx.db, targetMember.id),
           });
         }
 
@@ -4462,19 +4521,25 @@ export async function handleHttp(
           'seat' in body.target &&
           targetMember.kind === 'agent' &&
           isHeld(targetMember) &&
-          getPolicy(ctx.db, team.id).standing_reseat_known_agents
+          (await getPolicy(ctx.db, team.id)).standing_reseat_known_agents
         ) {
-          displaceAgentIncumbent();
-          const presence = attach(ctx.db, targetMember.id, body.surface, null, claimAttachContext);
-          markBound(ctx.db, targetMember.id);
-          appendAudit(ctx.db, team.id, {
+          await displaceAgentIncumbent();
+          const presence = await attach(
+            ctx.db,
+            targetMember.id,
+            body.surface,
+            null,
+            claimAttachContext,
+          );
+          await markBound(ctx.db, targetMember.id);
+          await appendAudit(ctx.db, team.id, {
             actor: targetMember.name,
             action: 'claim.reseated',
             target: targetMember.name,
             result: 'allow',
             detail: { via: 'http', surface: body.surface, policy: 'standing_reseat_known_agents' },
           });
-          recordHttpClaimAttestation(presence.id, body.model);
+          await recordHttpClaimAttestation(presence.id, body.model);
           ctx.hub.broadcastTeam(
             team.id,
             { type: 'presence', member: targetMember.name, status: 'online' },
@@ -4485,9 +4550,9 @@ export async function handleHttp(
             seat: toMember(targetMember, team.slug),
             presence_id: presence.id,
             server_time: Date.now(),
-            charter: getRoleCharter(ctx.db, team.id, targetMember.role) ?? undefined,
-            ...agentAuthorityFor(presence.id),
-            memory: memoryEnvelope(ctx.db, targetMember.id),
+            charter: (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined,
+            ...(await agentAuthorityFor(presence.id)),
+            memory: await memoryEnvelope(ctx.db, targetMember.id),
           });
         }
 
@@ -4498,7 +4563,7 @@ export async function handleHttp(
             : 'role' in body.target
               ? `role:${body.target.role}`
               : 'observe';
-        const claimReq = createRequest(ctx.db, team.id, {
+        const claimReq = await createRequest(ctx.db, team.id, {
           kind: 'claim',
           from_session: `http:${ulid()}`,
           target: encodedTarget,
@@ -4510,7 +4575,7 @@ export async function handleHttp(
           // A specific-seat claim collapses to one pending request per seat (no reconnect pile-up).
           collapseByTarget: 'seat' in body.target,
         });
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: null,
           action: 'claim.pending',
           target: targetMember.name,
@@ -4532,21 +4597,21 @@ export async function handleHttp(
       // Seat-footprint design: the sampler's latest tick. 404 while no tick exists (fresh daemon,
       // pre-v34 data, or non-darwin sampler self-disable) — clients treat any non-200 as "no data".
       if (method === 'GET' && rest === '/footprint') {
-        authTouch(ctx, slug, req);
-        const tick = latestFootprint(ctx.db);
+        await authTouch(ctx, slug, req);
+        const tick = await latestFootprint(ctx.db);
         if (!tick) return sendJson(res, 404, { error: 'no footprint data yet' });
         return sendJson(res, 200, tick);
       }
 
       if (method === 'POST' && rest === '/footprint/reap') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const body = parseOrBadRequest(FootprintReapBody, await readJson(req));
         const result = await reapOrphans(ctx.db, team.id, member.name, body.pids);
         return sendJson(res, 200, result);
       }
 
       if (method === 'POST' && rest === '/messages') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const body = (await readJson(req)) as { envelope?: unknown };
         const env = parseEnvelope(body.envelope);
         // No sender occupancy id here by design (ADR 101): a POST is stateless — it authenticates a
@@ -4556,7 +4621,7 @@ export async function handleHttp(
         // re-attested from `x-musterd-model` after that claim ages out. (A human fanned out over
         // several attested sessions on different models is the one ambiguous case; the stateless
         // request carries nothing to disambiguate it.)
-        const result = routeEnvelope(ctx, team, member, env);
+        const result = await routeEnvelope(ctx, team, member, env);
         // Dependency-targeted invalidation (ADR 111, ADR 088 §5): a `defer` — or a `steer` that names a
         // Goal — bumps that Goal's epoch, so any live lane claimed against the older epoch (on the Goal,
         // or building on a lane on it) is now stale. Wake exactly those owners, never the team. Rides the
@@ -4564,11 +4629,11 @@ export async function handleHttp(
         if (env.act === 'defer' || env.act === 'steer') {
           const goalId = (env.meta as { goal_id?: unknown } | null | undefined)?.goal_id;
           if (typeof goalId === 'string' && goalId.trim().length > 0) {
-            deliverLaneWarnings(
+            await deliverLaneWarnings(
               ctx,
               team,
               member,
-              staleLaneWarnings(ctx.db, team.id, team.slug, goalId),
+              await staleLaneWarnings(ctx.db, team.id, team.slug, goalId),
             );
           }
         }
@@ -4593,7 +4658,7 @@ export async function handleHttp(
             ack,
             ask_contract: {
               ...askContract(askTier.data),
-              unblocker_reachable: unblockerReachable(
+              unblocker_reachable: await unblockerReachable(
                 ctx.db,
                 team.id,
                 member.name,
@@ -4624,12 +4689,12 @@ export async function handleHttp(
       // surface (3b) and nothing else, so no route on this file authenticates one. A machine being
       // admitted and a seat being authorized are independent axes (§3).
       if (method === 'POST' && rest === '/nodes/invite') {
-        const { team, member } = authAdmin(ctx, slug, req);
+        const { team, member } = await authAdmin(ctx, slug, req);
         // The hub is the machine the team was created on (ADR 376 §2): there is one door into a
         // team's federation and it is the hub's. An enrolled joiner minting an invite would let a
         // third machine join IT — and a joiner's pull loop never reads its own staging, so every
         // event that third machine pushed would sit in `sync_log` folded by nobody, silently.
-        const enrolledAt = joinerEnrollment(ctx.db, team.id, team.slug);
+        const enrolledAt = await joinerEnrollment(ctx.db, team.id, team.slug);
         if (enrolledAt) {
           throw new MusterdError(
             'conflict',
@@ -4640,8 +4705,8 @@ export async function handleHttp(
         const body = (await readJson(req)) as { label?: unknown };
         const label =
           typeof body?.label === 'string' && body.label ? body.label : 'unnamed machine';
-        const minted = mintInvite(ctx.db, team.id, label, member.name);
-        appendAudit(ctx.db, team.id, {
+        const minted = await mintInvite(ctx.db, team.id, label, member.name);
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'node.invited',
           target: label,
@@ -4657,7 +4722,7 @@ export async function handleHttp(
         // An unknown slug must fail as ONE refusal with everything else (ryder, 2026-08-27). This
         // route is unauthenticated by design, so a 404-before-the-code-is-checked answers "does
         // team X exist on this hub?" to anyone who asks — a free team-slug oracle on a public bind.
-        const team = getTeamBySlug(ctx.db, slug);
+        const team = await getTeamBySlug(ctx.db, slug);
 
         // Consume-then-bind is ONE transaction: a consumed invite whose bind then fails would burn
         // the operator's code and enroll nobody, which is the worst of both outcomes.
@@ -4666,17 +4731,17 @@ export async function handleHttp(
         // whose function returns normally — a returned null would leave the consumption standing,
         // so a mistyped node id would silently cost an invite and the operator would have to mint
         // another to discover why. Throwing is what rolls the consumption back with the bind.
-        const bound = ((): { id: string } | null => {
+        const bound = await (async (): Promise<{ id: string } | null> => {
           if (!team) return null;
           try {
-            return ctx.db.transaction(() => {
+            return await ctx.db.tx(async (t) => {
               // `enrolled_by` carries the invite's row id, not the literal 'invite' (ryder,
               // 2026-08-27): it makes node.invited → node.enrolled a joinable chain, so an auditor
               // can say WHICH code admitted a machine and who minted it.
-              const invite = consumeInvite(ctx.db, team.id, body.code, body.node_id);
+              const invite = await consumeInvite(t, team.id, body.code, body.node_id);
               if (!invite) throw ENROLL_REFUSED;
-              const b = bindNode(
-                ctx.db,
+              const b = await bindNode(
+                t,
                 team.id,
                 body.node_id,
                 body.label,
@@ -4685,7 +4750,7 @@ export async function handleHttp(
               );
               if (!b) throw ENROLL_REFUSED;
               return b;
-            })();
+            });
           } catch (err) {
             if (err === ENROLL_REFUSED) return null;
             throw err;
@@ -4697,7 +4762,7 @@ export async function handleHttp(
         // mean "refuse" in one place.
         if (!bound || !team) {
           if (team)
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: null,
               action: 'node.enrollment_refused',
               target: body.label,
@@ -4715,7 +4780,7 @@ export async function handleHttp(
           );
         }
 
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: null,
           action: 'node.enrolled',
           target: body.label,
@@ -4736,11 +4801,11 @@ export async function handleHttp(
 
       const nodeVerb = rest.match(/^\/nodes\/([^/]+)\/(rotate|revoke)$/);
       if (method === 'POST' && nodeVerb) {
-        const { team, member } = authAdmin(ctx, slug, req);
+        const { team, member } = await authAdmin(ctx, slug, req);
         const nodeId = decodeURIComponent(nodeVerb[1]!);
 
         if (nodeVerb[2] === 'rotate') {
-          const rotated = rotateNode(ctx.db, team.id, nodeId);
+          const rotated = await rotateNode(ctx.db, team.id, nodeId);
           if (!rotated) {
             throw new MusterdError(
               'conflict',
@@ -4748,7 +4813,7 @@ export async function handleHttp(
                 'enrolling it again, not by rotating',
             );
           }
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: member.name,
             action: 'node.rotated',
             target: nodeId,
@@ -4758,9 +4823,9 @@ export async function handleHttp(
           return sendJson(res, 200, { node_credential: rotated.credential, node_id: nodeId });
         }
 
-        const revoked = revokeNode(ctx.db, team.id, nodeId);
+        const revoked = await revokeNode(ctx.db, team.id, nodeId);
         if (revoked) {
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: member.name,
             action: 'node.revoked',
             target: nodeId,
@@ -4773,13 +4838,13 @@ export async function handleHttp(
       }
 
       if (method === 'GET' && rest === '/nodes') {
-        const { team } = authAdmin(ctx, slug, req);
+        const { team } = await authAdmin(ctx, slug, req);
         return sendJson(
           res,
           200,
           NodeListSchema.parse({
-            nodes: listNodes(ctx.db, team.id),
-            push: { wedged: readPushRefusal(ctx.db, team.id) },
+            nodes: await listNodes(ctx.db, team.id),
+            push: { wedged: await readPushRefusal(ctx.db, team.id) },
           }),
         );
       }
@@ -4792,8 +4857,8 @@ export async function handleHttp(
       // credential as the sync surface; the guarded CAS and the live-incumbent rule run against the
       // hub's row, and the hub's own `lane.claimed` event carries the decision back out.
       if (method === 'POST' && rest === '/sync/claim') {
-        const team = requireTeam(ctx.db, slug);
-        const node = authenticateNode(ctx.db, team.id, bearer(req));
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
         if (!node) {
           throw new MusterdError(
             'unauthorized',
@@ -4802,10 +4867,10 @@ export async function handleHttp(
         }
         // Every authenticated sync contact stamps the node alive (presence replication §3): this
         // is the clock a remote presence row's liveness reads.
-        touchNode(ctx.db, node.id, Date.now());
+        await touchNode(ctx.db, node.id, Date.now());
         const body = parseOrBadRequest(SyncClaimRequestSchema, await readJson(req));
         try {
-          const lane = arbitrateClaim(ctx, team, node, body);
+          const lane = await arbitrateClaim(ctx, team, node, body);
           // Stage the decision now rather than on the push timer, so the joiner's pull — which it
           // runs the moment it has our answer — finds the row it was just told about. Best effort:
           // the timer stages it anyway if this fails. No act is emitted here: the origin speaks
@@ -4839,18 +4904,18 @@ export async function handleHttp(
       // the hub's row with the joiner's expectation as the CAS. Refusals carry the same fields the
       // claim's do; the joiner relays them verbatim and runs the post-effects on the answer.
       if (method === 'POST' && rest === '/sync/lane') {
-        const team = requireTeam(ctx.db, slug);
-        const node = authenticateNode(ctx.db, team.id, bearer(req));
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
         if (!node) {
           throw new MusterdError(
             'unauthorized',
             'the sync surface authenticates with a machine credential (msnode_) for this team',
           );
         }
-        touchNode(ctx.db, node.id, Date.now());
+        await touchNode(ctx.db, node.id, Date.now());
         const body = parseOrBadRequest(SyncLanePatchRequestSchema, await readJson(req));
         try {
-          const { lane, closed } = arbitrateLanePatch(ctx, team, node, body);
+          const { lane, closed } = await arbitrateLanePatch(ctx, team, node, body);
           await pushTeam(ctx, team).catch(() => undefined);
           return sendJson(res, 200, { lane, ...(closed ? { closed } : {}) });
         } catch (err) {
@@ -4876,17 +4941,17 @@ export async function handleHttp(
       // credential proves the MACHINE; the actor is re-authorized against the hub's own roster,
       // because a joiner saying "this seat is an admin" is a claim about a roster it does not own.
       if (method === 'POST' && rest === '/sync/policy') {
-        const team = requireTeam(ctx.db, slug);
-        const node = authenticateNode(ctx.db, team.id, bearer(req));
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
         if (!node) {
           throw new MusterdError(
             'unauthorized',
             'the sync surface authenticates with a machine credential (msnode_) for this team',
           );
         }
-        touchNode(ctx.db, node.id, Date.now());
+        await touchNode(ctx.db, node.id, Date.now());
         const body = parseOrBadRequest(SyncPolicyRequestSchema, await readJson(req));
-        const actor = getMemberByName(ctx.db, team.id, body.actor);
+        const actor = await getMemberByName(ctx.db, team.id, body.actor);
         if (!actor) throw new MusterdError('not_found', `no seat "${body.actor}" on this roster`);
         try {
           // Residence before capability, the order `/sync/lane` uses: an unentitled node learns
@@ -4898,7 +4963,7 @@ export async function handleHttp(
           // The STRICT form, not `assertSeatResident`: this act changes the team, so an unbound
           // seat must not be claimable by whoever names it first. For a human admin trusted on
           // several machines (ADR 358) every one of them is in the set and passes.
-          assertSeatAlreadyResident(ctx.db, team.id, actor, node, 'policy change');
+          await assertSeatAlreadyResident(ctx.db, team.id, actor, node, 'policy change');
         } catch (err) {
           if (err instanceof TrustRefusedError) return sendTrustRefusal(res, err);
           throw err;
@@ -4908,7 +4973,7 @@ export async function handleHttp(
         if (!resolveCapabilities(actor).is_admin) {
           throw new MusterdError('forbidden', `"${body.actor}" is not an admin on ${slug}`);
         }
-        const applied = applyPolicyChange(ctx.db, team.id, actor.name, body.policy);
+        const applied = await applyPolicyChange(ctx.db, team.id, actor.name, body.policy);
         await pushTeam(ctx, team).catch(() => undefined);
         return sendJson(res, 200, applied);
       }
@@ -4917,20 +4982,20 @@ export async function handleHttp(
       // node is the speaker and must already be in the seat's set — the check that stops a fresh
       // machine, or any admitted credential, from widening a seat it does not hold.
       if (method === 'POST' && rest === '/sync/trust') {
-        const team = requireTeam(ctx.db, slug);
-        const node = authenticateNode(ctx.db, team.id, bearer(req));
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
         if (!node) {
           throw new MusterdError(
             'unauthorized',
             'the sync surface authenticates with a machine credential (msnode_) for this team',
           );
         }
-        touchNode(ctx.db, node.id, Date.now());
+        await touchNode(ctx.db, node.id, Date.now());
         const body = parseOrBadRequest(SyncTrustRequestSchema, await readJson(req));
-        const seat = getMemberByName(ctx.db, team.id, body.seat);
+        const seat = await getMemberByName(ctx.db, team.id, body.seat);
         if (!seat) throw new MusterdError('not_found', `no seat "${body.seat}" on this roster`);
         try {
-          return sendJson(res, 200, applyTrust(ctx.db, team.id, seat, node, body.node_id));
+          return sendJson(res, 200, await applyTrust(ctx.db, team.id, seat, node, body.node_id));
         } catch (err) {
           if (err instanceof TrustRefusedError) return sendTrustRefusal(res, err);
           throw err;
@@ -4942,12 +5007,12 @@ export async function handleHttp(
       // enrolled joiner it is forwarded to the hub (the binding lives there); otherwise it is
       // decided here with the local row as speaker.
       if (method === 'POST' && rest === '/nodes/trust') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const body = parseOrBadRequest(
           SyncTrustRequestSchema.pick({ node_id: true }),
           await readJson(req),
         );
-        const enrollment = joinerEnrollment(ctx.db, team.id, team.slug);
+        const enrollment = await joinerEnrollment(ctx.db, team.id, team.slug);
         try {
           if (enrollment) {
             const trusted = await trustAtHub(enrollment, team.slug, {
@@ -4959,7 +5024,13 @@ export async function handleHttp(
           return sendJson(
             res,
             200,
-            applyTrust(ctx.db, team.id, member, localNodeWithLabel(ctx.db, team.id), body.node_id),
+            await applyTrust(
+              ctx.db,
+              team.id,
+              member,
+              await localNodeWithLabel(ctx.db, team.id),
+              body.node_id,
+            ),
           );
         } catch (err) {
           if (err instanceof TrustRefusedError) return sendTrustRefusal(res, err);
@@ -4973,13 +5044,13 @@ export async function handleHttp(
       // node to speak for it may take it. Idempotent — `unbound: null` for a seat nobody held.
       const unbindMatch = rest.match(/^\/nodes\/bindings\/([^/]+)$/);
       if (method === 'DELETE' && unbindMatch) {
-        const { team, member } = authAdmin(ctx, slug, req);
+        const { team, member } = await authAdmin(ctx, slug, req);
         const seatName = decodeURIComponent(unbindMatch[1]!);
-        const seat = getMemberByName(ctx.db, team.id, seatName);
+        const seat = await getMemberByName(ctx.db, team.id, seatName);
         if (!seat) throw new MusterdError('not_found', `no seat "${seatName}" on this roster`);
-        const unbound = unbindSeat(ctx.db, seat.id);
+        const unbound = await unbindSeat(ctx.db, seat.id);
         if (unbound) {
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: member.name,
             action: 'seat.unbound',
             target: seat.name,
@@ -4993,15 +5064,15 @@ export async function handleHttp(
       // ADR 453: a joiner's structural trace rows, trace.db → trace.db. Machine credential, the
       // same refusal shape as /sync/push. Never touches sync_log or audit; never fans out.
       if (method === 'POST' && rest === '/sync/trace') {
-        const team = requireTeam(ctx.db, slug);
-        const node = authenticateNode(ctx.db, team.id, bearer(req));
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
         if (!node) {
           throw new MusterdError(
             'unauthorized',
             'the sync surface authenticates with a machine credential (msnode_) for this team',
           );
         }
-        touchNode(ctx.db, node.id, Date.now());
+        await touchNode(ctx.db, node.id, Date.now());
         // The structural-only schema is the boundary (ADR 453 §2, rule 1): a content field, a
         // credential-shaped value, prose in any field, an unlisted detail key — all 400, nothing
         // written. The hub REJECTS; only the pusher and local ingest normalize.
@@ -5018,7 +5089,7 @@ export async function handleHttp(
         for (const row of body.rows) {
           let member = memberCache.get(row.seat);
           if (member === undefined) {
-            const m = getMemberByName(ctx.db, team.id, row.seat);
+            const m = await getMemberByName(ctx.db, team.id, row.seat);
             member = m ? { id: m.id, kind: m.kind } : null;
             memberCache.set(row.seat, member);
           }
@@ -5035,7 +5106,7 @@ export async function handleHttp(
             admitted.push(row);
             continue;
           }
-          const holders = seatBindings(ctx.db, member.id);
+          const holders = await seatBindings(ctx.db, member.id);
           if (holders.length === 0) {
             return sendJson(res, 409, {
               error: {
@@ -5051,7 +5122,7 @@ export async function handleHttp(
         }
         const counts =
           admitted.length > 0
-            ? ingestSyncedTraceRows(ctx.traceDb, team.id, node.id, admitted)
+            ? await ingestSyncedTraceRows(ctx.traceDb, team.id, node.id, admitted)
             : { accepted: 0, ignored: 0, collided: 0 };
         recordTraceReplicated(node.id, 'accepted', counts.accepted);
         recordTraceReplicated(node.id, 'ignored', counts.ignored);
@@ -5061,8 +5132,8 @@ export async function handleHttp(
       }
 
       if (method === 'POST' && rest === '/sync/push') {
-        const team = requireTeam(ctx.db, slug);
-        const node = authenticateNode(ctx.db, team.id, bearer(req));
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
         if (!node) {
           // Deliberately the same refusal for an absent, a wrong-kind and a revoked credential: the
           // sync surface must not tell an unauthenticated caller which of those it is holding.
@@ -5071,10 +5142,10 @@ export async function handleHttp(
             'the sync surface authenticates with a machine credential (msnode_) for this team',
           );
         }
-        touchNode(ctx.db, node.id, Date.now());
+        await touchNode(ctx.db, node.id, Date.now());
         const body = parseOrBadRequest(SyncPushRequestSchema, await readJson(req));
         try {
-          const result = ingestBatch(ctx.db, team.id, node.id, body.events);
+          const result = await ingestBatch(ctx.db, team.id, node.id, body.events);
           return sendJson(res, 200, SyncPushResponseSchema.parse(result));
         } catch (err) {
           if (err instanceof SyncResidenceError) {
@@ -5120,15 +5191,15 @@ export async function handleHttp(
       // The pull side (3b-ii): one page of the canonical order after a hub_seq. Same credential,
       // same refusal shape. The fold that consumes it runs on the puller (sync/pull.ts).
       if (method === 'GET' && rest === '/sync/pull') {
-        const team = requireTeam(ctx.db, slug);
-        const node = authenticateNode(ctx.db, team.id, bearer(req));
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
         if (!node) {
           throw new MusterdError(
             'unauthorized',
             'the sync surface authenticates with a machine credential (msnode_) for this team',
           );
         }
-        touchNode(ctx.db, node.id, Date.now());
+        await touchNode(ctx.db, node.id, Date.now());
         const after = Number(url.searchParams.get('after') ?? '0');
         const limit = Math.min(
           Number(url.searchParams.get('limit') ?? SYNC_PULL_MAX_BATCH),
@@ -5140,7 +5211,7 @@ export async function handleHttp(
             'after must be a non-negative integer and limit a positive one',
           );
         }
-        const head = hubHead(ctx.db, team.id);
+        const head = await hubHead(ctx.db, team.id);
         // Mirrors push's 409/expected_seq: the hub is the authority on what it holds, and a puller
         // asking to resume past that is out of step with it — hand back the head so it can re-anchor.
         if (after > head) {
@@ -5155,18 +5226,18 @@ export async function handleHttp(
         // Node liveness rides the page (presence replication §3). The hub's own row reads "now":
         // a hub answering a pull is alive by definition, and nothing else stamps it.
         const now = Date.now();
-        const self = localNodeForTeam(ctx.db, team.id).id;
-        const nodes = listNodeLiveness(ctx.db, team.id).map((n) =>
+        const self = (await localNodeForTeam(ctx.db, team.id)).id;
+        const nodes = (await listNodeLiveness(ctx.db, team.id)).map((n) =>
           n.id === self ? { ...n, last_seen_at: now } : n,
         );
         return sendJson(
           res,
           200,
           SyncPullResponseSchema.parse({
-            events: readStaged(ctx.db, team.id, after, limit),
+            events: await readStaged(ctx.db, team.id, after, limit),
             hub_seq_high: head,
             nodes,
-            lane_genesis: laneGenesis(ctx.db, team.id),
+            lane_genesis: await laneGenesis(ctx.db, team.id),
           }),
         );
       }
@@ -5174,16 +5245,20 @@ export async function handleHttp(
       // ── Coordination lanes, Phase 1 (ADR 083) — the { work-item × owner × surface } board. All
       // member-authed; every mutation returns { lane, warnings } (warn-only, never a rejection).
       if (method === 'GET' && rest === '/seeds') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
-        return sendJson(res, 200, SeedListSchema.parse({ seeds: listSeeds(ctx.db, team.id) }));
+        return sendJson(
+          res,
+          200,
+          SeedListSchema.parse({ seeds: await listSeeds(ctx.db, team.id) }),
+        );
       }
 
       // ── Team memory search (ADR 327): pull-only retrieval over `insight` acts via the derived
       // FTS fold (store/teamMemory.ts). Read like every team-scoped GET; no write path here —
       // insights are saved as ordinary acts through the message routes.
       if (method === 'GET' && rest === '/memory/search') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
         const url = new URL(req.url ?? '/', 'http://localhost');
         const limitRaw = Number(url.searchParams.get('limit') ?? '');
@@ -5191,7 +5266,7 @@ export async function handleHttp(
           res,
           200,
           TeamMemorySearchResponseSchema.parse({
-            results: searchInsights(
+            results: await searchInsights(
               ctx.db,
               team.id,
               url.searchParams.get('q') ?? '',
@@ -5204,18 +5279,16 @@ export async function handleHttp(
       // ADR 373 increment 2: a document-recorded intention enters as a Seed through the front door
       // of its own repo, the way a Slack idea enters through the relay. Idempotent on `ref`.
       if (method === 'POST' && rest === '/seeds/repo') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
         const body = parseOrBadRequest(CaptureRepoSeedSchema, await readJson(req));
-        const before = ctx.db
-          .prepare<
-            [string, string],
-            { id: string }
-          >('SELECT id FROM seeds WHERE team_id = ? AND relay_id = ?')
-          .get(team.id, `repo:${body.ref.trim()}`);
-        const seed = captureRepoSeed(ctx.db, team.id, member, body);
+        const before = await ctx.db.get<{ id: string }>(
+          'SELECT id FROM seeds WHERE team_id = ? AND relay_id = ?',
+          [team.id, `repo:${body.ref.trim()}`],
+        );
+        const seed = await captureRepoSeed(ctx.db, team.id, member, body);
         if (!before) {
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: member.name,
             action: 'seed.ingested',
             target: seed.id,
@@ -5228,10 +5301,10 @@ export async function handleHttp(
 
       const seedReadMatch = rest.match(/^\/seeds\/([^/]+)$/);
       if (method === 'GET' && seedReadMatch) {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
         const seedId = parseSeedPathId(seedReadMatch[1]!);
-        const seed = getSeed(ctx.db, team.id, seedId);
+        const seed = await getSeed(ctx.db, team.id, seedId);
         if (!seed) throw new MusterdError('not_found', `Seed "${seedId}" not found`);
         return sendJson(res, 200, SeedResultSchema.parse({ seed }));
       }
@@ -5240,17 +5313,17 @@ export async function handleHttp(
         /^\/seeds\/([^/]+)\/(claim|clarification|answer|brief|promote)$/,
       );
       if (method === 'POST' && seedMutationMatch) {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
         const seedId = parseSeedPathId(seedMutationMatch[1]!);
         const operation = seedMutationMatch[2]!;
         const raw = await readJson(req);
-        const before = getSeed(ctx.db, team.id, seedId);
-        let seed: ReturnType<typeof claimSeed>;
+        const before = await getSeed(ctx.db, team.id, seedId);
+        let seed: Awaited<ReturnType<typeof claimSeed>>;
         if (operation === 'claim') {
           parseOrBadRequest(ClaimSeedSchema, raw);
-          seed = claimSeed(ctx.db, team.id, seedId, member);
-          appendAudit(ctx.db, team.id, {
+          seed = await claimSeed(ctx.db, team.id, seedId, member);
+          await appendAudit(ctx.db, team.id, {
             actor: member.name,
             action: 'seed.claimed',
             target: seed.id,
@@ -5259,8 +5332,8 @@ export async function handleHttp(
           });
         } else if (operation === 'clarification') {
           const body = parseOrBadRequest(AskSeedClarificationSchema, raw);
-          seed = askSeedClarification(ctx.db, team.id, seedId, member, body.body);
-          appendAudit(ctx.db, team.id, {
+          seed = await askSeedClarification(ctx.db, team.id, seedId, member, body.body);
+          await appendAudit(ctx.db, team.id, {
             actor: member.name,
             action: 'seed.clarification_asked',
             target: seed.id,
@@ -5269,8 +5342,8 @@ export async function handleHttp(
           });
         } else if (operation === 'answer') {
           const body = parseOrBadRequest(AnswerSeedClarificationSchema, raw);
-          seed = answerSeedClarification(ctx.db, team.id, seedId, member, body.body);
-          appendAudit(ctx.db, team.id, {
+          seed = await answerSeedClarification(ctx.db, team.id, seedId, member, body.body);
+          await appendAudit(ctx.db, team.id, {
             actor: member.name,
             action: 'seed.clarification_answered',
             target: seed.id,
@@ -5279,17 +5352,17 @@ export async function handleHttp(
           });
         } else if (operation === 'brief') {
           const body = parseOrBadRequest(SubmitSeedBriefSchema, raw);
-          seed = ctx.db.transaction(() => {
-            const transitioned = submitSeedBrief(ctx.db, team.id, team.slug, seedId, member, body);
+          seed = await ctx.db.tx(async (t) => {
+            const transitioned = await submitSeedBrief(t, team.id, team.slug, seedId, member, body);
             if (before?.state !== 'promoted') {
-              appendAudit(ctx.db, team.id, {
+              await appendAudit(t, team.id, {
                 actor: member.name,
                 action: 'seed.brief_submitted',
                 target: transitioned.id,
                 result: 'allow',
                 detail: { seed_id: transitioned.id, result: body.result },
               });
-              appendAudit(ctx.db, team.id, {
+              await appendAudit(t, team.id, {
                 actor: member.name,
                 action: body.result === 'promote' ? 'seed.promoted' : 'seed.completed',
                 target: transitioned.id,
@@ -5302,17 +5375,21 @@ export async function handleHttp(
                   ...(transitioned.promotion ? { promotion: transitioned.promotion.kind } : {}),
                 },
               });
+              // ADR 291: the "[lane] opened" activity is part of the promotion's atomic unit —
+              // if it cannot persist, the promotion rolls back (seeds-http pins it). The tx handle
+              // rides in ctx for the insert; anything the delivery defers past the commit (the
+              // doorbell's webhook audit) goes through `db.connection()`.
               if (transitioned.state === 'promoted')
-                deliverSeedPromotion(ctx, team, member, transitioned);
+                await deliverSeedPromotion({ ...ctx, db: t }, team, member, transitioned);
             }
             return transitioned;
-          })();
+          });
         } else {
           const body = parseOrBadRequest(PromoteSeedSchema, raw);
-          seed = ctx.db.transaction(() => {
-            const transitioned = promoteSeed(ctx.db, team.id, team.slug, seedId, member, body);
+          seed = await ctx.db.tx(async (t) => {
+            const transitioned = await promoteSeed(t, team.id, team.slug, seedId, member, body);
             if (before?.state !== 'promoted') {
-              appendAudit(ctx.db, team.id, {
+              await appendAudit(t, team.id, {
                 actor: member.name,
                 action: 'seed.promoted',
                 target: transitioned.id,
@@ -5326,16 +5403,16 @@ export async function handleHttp(
                   research_skipped: transitioned.promotion?.research_skipped ?? false,
                 },
               });
-              deliverSeedPromotion(ctx, team, member, transitioned);
+              await deliverSeedPromotion({ ...ctx, db: t }, team, member, transitioned);
             }
             return transitioned;
-          })();
+          });
         }
         return sendJson(res, 200, SeedResultSchema.parse({ seed }));
       }
 
       if (method === 'GET' && rest === '/lanes') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         // Repeatable `?state=` — validated against the canonical state enum at the boundary,
         // so `?state=bogus` is a 400 naming the value, never a silent empty board.
         const states: LaneState[] = [];
@@ -5357,7 +5434,7 @@ export async function handleHttp(
         // One board read per request (lane 01M3ANEQVR): the filtered view, the contention pass and
         // the staleness pass all derive from it. It used to be read 16 times here — 116 ms of the
         // endpoint's 267 ms on the live copy.
-        const board = listLanes(ctx.db, team.id, team.slug);
+        const board = await listLanes(ctx.db, team.id, team.slug);
         const lanes = filterLanes(board, {
           ...(url.searchParams.get('project') !== null
             ? { project: url.searchParams.get('project')! }
@@ -5374,14 +5451,14 @@ export async function handleHttp(
         // so `?mine=1` / `?goal=` scopes carry only their own stale flags.
         const shown = new Set(lanes.map((l) => l.id));
         const warnings = [
-          ...boardWarnings(ctx.db, team.id, team.slug, lanes, board),
-          ...staleLaneWarnings(ctx.db, team.id, team.slug, undefined, board).filter((w) =>
+          ...(await boardWarnings(ctx.db, team.id, team.slug, lanes, board)),
+          ...(await staleLaneWarnings(ctx.db, team.id, team.slug, undefined, board)).filter((w) =>
             shown.has(w.subject),
           ),
         ];
         // ADR 169: annotate done lanes with the derived verified-ness of their close — read from the
         // lane.closed audit rows, never stored on the lane. Absent = unknown (pre-169 closes).
-        const verdicts = closeVerdicts(ctx.db, team.id);
+        const verdicts = await closeVerdicts(ctx.db, team.id);
         const annotated = lanes.map((l) =>
           l.state === 'done' ? annotateClose(l, verdicts.get(l.id)) : l,
         );
@@ -5391,29 +5468,29 @@ export async function handleHttp(
       // The brief's per-turn numbers (lane 01M2GTB0RA): what the statusline and the orient nudge
       // actually read, from three bounded queries — never the whole brief on every turn.
       if (method === 'GET' && rest === '/next/summary') {
-        const { team, member } = authTouch(ctx, slug, req);
-        return sendJson(res, 200, deriveNextSummary(ctx.db, team.id, team.slug, member.name));
+        const { team, member } = await authTouch(ctx, slug, req);
+        return sendJson(res, 200, await deriveNextSummary(ctx.db, team.id, team.slug, member.name));
       }
 
       // The orientation brief (ADR 049/084) — derived floor over the daemon's own lane/act state.
       if (method === 'GET' && rest === '/next') {
-        const { team, member } = authTouch(ctx, slug, req);
-        return sendJson(res, 200, deriveNext(ctx.db, team.id, team.slug, member.name));
+        const { team, member } = await authTouch(ctx, slug, req);
+        return sendJson(res, 200, await deriveNext(ctx.db, team.id, team.slug, member.name));
       }
 
       // Portable wake context (ADR 209): the recipient gets a bounded, server-derived index after
       // occupying. It names explicit reads but never carries an Act or memory body.
       if (method === 'POST' && rest === '/wake-context') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const target = parseOrBadRequest(WakeContextRequestSchema, await readJson(req));
         // Audit both allow and deny (ADR 209 follow-up): an authorization boundary that only records
         // successes cannot answer "did anyone probe for lanes they do not own". The deny row uses the
         // request's named id as `target` — same shape as allow — without disclosing whether it exists
         // (the HTTP response stays a uniform forbidden).
         try {
-          const context = buildWakeContext(ctx.db, team, member, target);
+          const context = await buildWakeContext(ctx.db, team, member, target);
           const response = WakeContextResponseSchema.parse({ context });
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: member.name,
             action: 'residency.context_read',
             target: target.act_id ?? target.lane_id ?? '?',
@@ -5451,7 +5528,7 @@ export async function handleHttp(
           return sendJson(res, 200, response);
         } catch (e) {
           if (e instanceof MusterdError && e.code === 'forbidden') {
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: member.name,
               action: 'residency.context_read',
               target: target.act_id ?? target.lane_id ?? '?',
@@ -5474,24 +5551,26 @@ export async function handleHttp(
       // columns only. ADR 128 scoping resolved HERE and handed to the derivation: an admin reads
       // every seat, a seat reads its own — filtered, never refused, like /trace/sessions.
       if (method === 'GET' && rest === '/report/trace') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const raw = Number(url.searchParams.get('days') ?? TRACE_REPORT_DEFAULT_DAYS);
         const days =
           Number.isInteger(raw) && raw >= 1 && raw <= TRACE_REPORT_MAX_DAYS
             ? raw
             : TRACE_REPORT_DEFAULT_DAYS;
         const seats = resolveCapabilities(member).is_admin
-          ? listMembers(ctx.db, team.id).map((m) => m.name)
+          ? (await listMembers(ctx.db, team.id)).map((m) => m.name)
           : [member.name];
         return sendJson(
           res,
           200,
-          TraceReportSchema.parse(deriveTraceReport(ctx.db, ctx.traceDb, team.id, seats, { days })),
+          TraceReportSchema.parse(
+            await deriveTraceReport(ctx.db, ctx.traceDb, team.id, seats, { days }),
+          ),
         );
       }
 
       if (method === 'GET' && rest === '/report') {
-        const { team, member: _member } = authTouch(ctx, slug, req);
+        const { team, member: _member } = await authTouch(ctx, slug, req);
         // Off the loop and shared across viewers (store/reportCache.ts, lane 01M3D4069F).
         const report = await reportServiceFor(ctx.db, ctx.config.presenceTimeoutMs).get(
           team.id,
@@ -5506,11 +5585,11 @@ export async function handleHttp(
       // role is stamped HERE from the member row (the from_provenance rule — never a wire field).
       // The adapter sends x-musterd-no-touch: telemetry is presence-neutral by contract.
       if (method === 'POST' && rest === '/telemetry/tool-calls') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const body = parseOrBadRequest(ToolTelemetryReportSchema, await readJson(req));
         // Stamped and replicated (ADR 371 §1): the report on every machine counts this flush.
-        applyToolCalls(ctx.db, team.id, member.name, member.role || null, body.events);
-        if (body.surface) recordSurfaceRender(ctx.db, team.id, member.name, body.surface);
+        await applyToolCalls(ctx.db, team.id, member.name, member.role || null, body.events);
+        if (body.surface) await recordSurfaceRender(ctx.db, team.id, member.name, body.surface);
         return sendJson(res, 200, {});
       }
 
@@ -5523,16 +5602,23 @@ export async function handleHttp(
       // hook's content part is stored only under the team's `trace.content` policy (1b). 202, counts
       // and the content mode — the tap is fire-and-forget and nothing downstream reads more.
       if (method === 'POST' && rest === '/trace/events') {
-        const { team, member } = authMember(ctx.db, slug, bearer(req), actingSeat(req), undefined, {
-          leaseless: true,
-        });
+        const { team, member } = await authMember(
+          ctx.db,
+          slug,
+          bearer(req),
+          actingSeat(req),
+          undefined,
+          {
+            leaseless: true,
+          },
+        );
         assertSeatCanRead(member);
         const body = parseOrBadRequest(TraceEventBatchSchema, await readJson(req));
         // Increment 1b: the team's `trace.content` decides whether a content part is stored or
         // dropped, and the mode rides back on the response — that echo is how a tap learns the
         // policy without a second round trip (it sends content from its NEXT hook on).
-        const contentMode = getPolicy(ctx.db, team.id).trace.content;
-        const { accepted, normalized } = ingestTraceEvents(
+        const contentMode = (await getPolicy(ctx.db, team.id)).trace.content;
+        const { accepted, normalized } = await ingestTraceEvents(
           ctx.traceDb,
           team.id,
           member.name,
@@ -5547,7 +5633,7 @@ export async function handleHttp(
         // coordination ledger, where the coverage eval and a human will actually look for it.
         for (const e of body.events) {
           if (e.kind !== 'unknown' || e.detail?.['downgraded'] !== true) continue;
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: member.name,
             action: 'trace.downgraded',
             target: member.name,
@@ -5581,7 +5667,7 @@ export async function handleHttp(
       // are the same empty answer — and the store read never selects the content column, so this
       // wire cannot carry it whatever the team's trace.content policy says.
       if (method === 'GET' && rest.startsWith('/trace/seats/')) {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const seat = decodeURIComponent(rest.slice('/trace/seats/'.length));
         const rawLimit = Number(url.searchParams.get('limit') ?? TRACE_SEAT_TIMELINE_DEFAULT);
         const limit =
@@ -5589,7 +5675,7 @@ export async function handleHttp(
             ? rawLimit
             : TRACE_SEAT_TIMELINE_DEFAULT;
         const allowed = resolveCapabilities(member).is_admin || seat === member.name;
-        const rows = allowed ? listSeatTrace(ctx.traceDb, team.id, seat, limit) : [];
+        const rows = allowed ? await listSeatTrace(ctx.traceDb, team.id, seat, limit) : [];
         const events = rows.map((r) => ({
           seq: r.seq,
           ts: r.ts,
@@ -5613,13 +5699,13 @@ export async function handleHttp(
       }
 
       if (method === 'GET' && rest.startsWith('/trace/sessions/')) {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const digest = parseOrBadRequest(
           SessionDigestSchema,
           decodeURIComponent(rest.slice('/trace/sessions/'.length)),
         );
         const isAdmin = resolveCapabilities(member).is_admin;
-        const rows = listSessionTrace(ctx.traceDb, team.id, digest).filter(
+        const rows = (await listSessionTrace(ctx.traceDb, team.id, digest)).filter(
           (r) => isAdmin || r.seat === member.name,
         );
         const events = rows.map((r) => ({
@@ -5648,12 +5734,12 @@ export async function handleHttp(
       // `message` act to `@team` carrying `meta.goal`; no new act, no new table. Status is derived,
       // never stored, same as everything else in the orientation spine.
       if (method === 'GET' && rest === '/goals') {
-        const { team, member: _member } = authTouch(ctx, slug, req);
-        return sendJson(res, 200, { goals: listGoals(ctx.db, team.id, team.slug) });
+        const { team, member: _member } = await authTouch(ctx, slug, req);
+        return sendJson(res, 200, { goals: await listGoals(ctx.db, team.id, team.slug) });
       }
 
       if (method === 'POST' && rest === '/goals') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const body = parseOrBadRequest(DeclareGoalSchema, await readJson(req));
         const env = makeEnvelope({
           id: ulid(),
@@ -5672,8 +5758,8 @@ export async function handleHttp(
             },
           },
         });
-        routeEnvelope(ctx, team, member, env);
-        const goal = listGoals(ctx.db, team.id, team.slug).find((g) => g.id === body.id)!;
+        await routeEnvelope(ctx, team, member, env);
+        const goal = (await listGoals(ctx.db, team.id, team.slug)).find((g) => g.id === body.id)!;
         return sendJson(res, 201, { goal });
       }
 
@@ -5681,7 +5767,7 @@ export async function handleHttp(
       // `meta.goal_outcome`, replayed by listGoals beside defer/steer. Deliberately NOT a
       // re-declaration: the skeleton replaces wholesale, and an outcome must survive that.
       if (method === 'POST' && rest === '/goals/outcome') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const body = parseOrBadRequest(PostGoalOutcomeSchema, await readJson(req));
         const env = makeEnvelope({
           id: ulid(),
@@ -5692,9 +5778,11 @@ export async function handleHttp(
           body: `[goal] outcome — ${body.goal_id}: ${body.outcome}`,
           meta: { goal_outcome: { goal_id: body.goal_id, outcome: body.outcome } },
         });
-        routeEnvelope(ctx, team, member, env);
+        await routeEnvelope(ctx, team, member, env);
         // Pre-declaration notes are queued by the replay, not lost — `goal: null` says so honestly.
-        const goal = listGoals(ctx.db, team.id, team.slug).find((g) => g.id === body.goal_id);
+        const goal = (await listGoals(ctx.db, team.id, team.slug)).find(
+          (g) => g.id === body.goal_id,
+        );
         return sendJson(res, 201, { goal: goal ?? null });
       }
 
@@ -5702,7 +5790,7 @@ export async function handleHttp(
       // `meta.goal_retract`, folded on read. Never a row deletion (ADR 048's bet): declaration and
       // retraction both stay in the append-only log, and a later re-declaration un-retracts.
       if (method === 'POST' && rest === '/goals/retract') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const body = parseOrBadRequest(PostGoalRetractSchema, await readJson(req));
         const env = makeEnvelope({
           id: ulid(),
@@ -5713,14 +5801,16 @@ export async function handleHttp(
           body: `[goal] retracted — ${body.goal_id}`,
           meta: { goal_retract: { goal_id: body.goal_id } },
         });
-        routeEnvelope(ctx, team, member, env);
+        await routeEnvelope(ctx, team, member, env);
         // Pre-declaration retractions queue in the replay, not lost — `goal: null` says so honestly.
-        const goal = listGoals(ctx.db, team.id, team.slug).find((g) => g.id === body.goal_id);
+        const goal = (await listGoals(ctx.db, team.id, team.slug)).find(
+          (g) => g.id === body.goal_id,
+        );
         return sendJson(res, 201, { goal: goal ?? null });
       }
 
       if (method === 'POST' && rest === '/lanes') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         // Ledger seats hold no lanes (ADR 232 §1) — a service is an accountable actor, never a
         // negotiator: it cannot decline, hold, or raise, so giving it work would recreate the
         // anonymous-worker problem under a name.
@@ -5733,16 +5823,16 @@ export async function handleHttp(
         // The `lane.opened` birth row and the `lane.claimed at_open` row (ADR 203's third
         // acquisition edge) are written by the store inside the insert's transaction, as the
         // creator (lane-replication spec §Hole 3, Finding 4).
-        const lane = openLane(ctx.db, team.id, team.slug, member.name, body, Date.now());
-        const warnings = laneWarnings(ctx.db, team.id, team.slug, lane);
-        deliverLaneWarnings(ctx, team, member, warnings); // all warnings are fresh at open
+        const lane = await openLane(ctx.db, team.id, team.slug, member.name, body, Date.now());
+        const warnings = await laneWarnings(ctx.db, team.id, team.slug, lane);
+        await deliverLaneWarnings(ctx, team, member, warnings); // all warnings are fresh at open
         // goals-front-door design: an unclaimed open isn't contending, so laneWarnings stays quiet —
         // but the opener still gets the advisory in their own result. Nobody is woken (owner: null).
         if (lane.state === 'open' && !warnings.some((w) => w.kind === 'no_goal')) {
-          const openNudge = noGoalWarning(lane, listGoals(ctx.db, team.id, team.slug));
+          const openNudge = noGoalWarning(lane, await listGoals(ctx.db, team.id, team.slug));
           if (openNudge) warnings.push(openNudge);
         }
-        deliverLaneTeamAct(ctx, team, member, `[lane] opened "${lane.title}"`, {
+        await deliverLaneTeamAct(ctx, team, member, `[lane] opened "${lane.title}"`, {
           lane_open: { lane: lane.id, title: lane.title, project: lane.project },
         });
         return sendJson(res, 201, { lane, warnings });
@@ -5750,10 +5840,10 @@ export async function handleHttp(
 
       const laneMatch = rest.match(/^\/lanes\/([^/]+)$/);
       if (method === 'PATCH' && laneMatch) {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const laneId = decodeURIComponent(laneMatch[1]!);
         const body = parseOrBadRequest(UpdateLaneSchema, await readJson(req));
-        const before = getLane(ctx.db, team.id, laneId, team.slug);
+        const before = await getLane(ctx.db, team.id, laneId, team.slug);
         if (!before) throw new MusterdError('not_found', `no lane "${laneId}" on ${slug}`);
         // The policy before the write — service seats, the live-incumbent rule, the ADR 305
         // merged-strip — lives in `decideLanePatch`, shared with the hub's arbitration so both
@@ -5773,7 +5863,7 @@ export async function handleHttp(
           body.owner_seat === member.name &&
           before.owner_seat !== member.name;
         const enrollment = isOwnershipOrStatePatch(body)
-          ? joinerEnrollment(ctx.db, team.id, team.slug)
+          ? await joinerEnrollment(ctx.db, team.id, team.slug)
           : null;
         let arbitrated: ArbitratedLanePatch | undefined;
         if (enrollment) {
@@ -5812,7 +5902,12 @@ export async function handleHttp(
           // speak for them — and a seat a joiner has bound is refused here with the same code.
           // On a single-machine install this is a no-op in effect and a binding in the record.
           try {
-            assertSeatResident(ctx.db, team.id, member, localNodeWithLabel(ctx.db, team.id));
+            await assertSeatResident(
+              ctx.db,
+              team.id,
+              member,
+              await localNodeWithLabel(ctx.db, team.id),
+            );
           } catch (err) {
             if (err instanceof SeatBoundElsewhereError) {
               return sendJson(res, 403, {
@@ -5829,15 +5924,23 @@ export async function handleHttp(
         // stale row could refuse what the hub just allowed.
         const decided = arbitrated
           ? { patch: body, guard: undefined }
-          : decideLanePatch(ctx.db, team.id, member, before, body, ctx.config.presenceTimeoutMs);
+          : await decideLanePatch(
+              ctx.db,
+              team.id,
+              member,
+              before,
+              body,
+              ctx.config.presenceTimeoutMs,
+            );
         const beforeKeys = new Set(
-          laneWarnings(ctx.db, team.id, team.slug, before).map(laneWarningKey),
+          (await laneWarnings(ctx.db, team.id, team.slug, before)).map(laneWarningKey),
         );
         // value-layer design: the goal's derived status BEFORE the mutation — half of the flip
         // detector behind the ship nudge (composed at the terminal edge below).
         const goalShippedBefore =
           before.goal_id !== null &&
-          deriveGoalStatus(lanesForGoal(ctx.db, team.id, team.slug, before.goal_id)) === 'shipped';
+          deriveGoalStatus(await lanesForGoal(ctx.db, team.id, team.slug, before.goal_id)) ===
+            'shipped';
         // Resolve a named acceptor BEFORE the state write. The routing itself happens after (it
         // needs the updated lane), but validating there would move the lane into
         // awaiting_acceptance and *then* refuse — leaving a submitted lane with no ask and no
@@ -5845,7 +5948,7 @@ export async function handleHttp(
         // rollback on this path: the write is not in a transaction with what follows it.
         const namedAcceptorPick =
           body.acceptor !== undefined
-            ? namedAcceptor(ctx.db, team.id, before.owner_seat ?? member.name, body.acceptor)
+            ? await namedAcceptor(ctx.db, team.id, before.owner_seat ?? member.name, body.acceptor)
             : undefined;
         if (namedAcceptorPick && 'refused' in namedAcceptorPick) {
           throw new MusterdError(
@@ -5879,10 +5982,10 @@ export async function handleHttp(
               // the test until lane 01M2GPX0HP: a close keeps the owner, so the stale local row
               // (still `active`) passed it and was echoed back as the resolve's own result, and
               // every terminal post-effect below keyed off that row and never ran.
-              laneAgreesWith(getLane(ctx.db, team.id, laneId, team.slug), arbitrated.lane)
-              ? getLane(ctx.db, team.id, laneId, team.slug)!
+              laneAgreesWith(await getLane(ctx.db, team.id, laneId, team.slug), arbitrated.lane)
+              ? (await getLane(ctx.db, team.id, laneId, team.slug))!
               : arbitrated.lane
-            : updateLane(
+            : (await updateLane(
                 ctx.db,
                 team.id,
                 laneId,
@@ -5893,7 +5996,7 @@ export async function handleHttp(
                 {
                   actor: member.name,
                 },
-              )!;
+              ))!;
         } catch (err) {
           if (err instanceof LaneConflictError) {
             throw new MusterdError(
@@ -5909,10 +6012,10 @@ export async function handleHttp(
         // the store inside the write's transaction (lane-replication spec §Hole 3): a row that
         // cannot be written fails the transition rather than leaving the log behind the table.
         // This handler keeps only the team-visible notes.
-        const warnings = laneWarnings(ctx.db, team.id, team.slug, lane);
+        const warnings = await laneWarnings(ctx.db, team.id, team.slug, lane);
         // Directed-wake dedup (ADR 083 §4): only warnings the mutation *introduced* wake the other
         // owner — re-surfacing unchanged conditions is the board's job, not the inbox's.
-        deliverLaneWarnings(
+        await deliverLaneWarnings(
           ctx,
           team,
           member,
@@ -5933,7 +6036,7 @@ export async function handleHttp(
           // explaining a handoff took a second `team_send {act:'handoff'}` — which names no lane and
           // derives one from the lanes the sender still holds, the one set this transfer has just
           // removed the right answer from. One act carries the why and the what it is about.
-          deliverLaneAct(
+          await deliverLaneAct(
             ctx,
             team,
             member,
@@ -5952,7 +6055,7 @@ export async function handleHttp(
           body.owner_seat === member.name &&
           before.owner_seat !== member.name
         ) {
-          deliverLaneTeamAct(ctx, team, member, `[lane] claimed "${lane.title}"`, {
+          await deliverLaneTeamAct(ctx, team, member, `[lane] claimed "${lane.title}"`, {
             lane_claim: { lane: lane.id, title: lane.title },
           });
         }
@@ -5961,9 +6064,15 @@ export async function handleHttp(
         // same pair: a team-visible note and an audit row naming who held it. The `lane_state`
         // broadcast below is suppressed for this edge — one event, not two.
         if (before.owner_seat !== null && lane.state === 'open' && before.state !== 'open') {
-          deliverLaneTeamAct(ctx, team, member, `[lane] released "${lane.title}" — open again`, {
-            lane_release: { lane: lane.id, title: lane.title, owner_before: before.owner_seat },
-          });
+          await deliverLaneTeamAct(
+            ctx,
+            team,
+            member,
+            `[lane] released "${lane.title}" — open again`,
+            {
+              lane_release: { lane: lane.id, title: lane.title, owner_before: before.owner_seat },
+            },
+          );
         }
         // A non-terminal state move (e.g. active↔blocked) — the "it's blocked / unblocked" transition,
         // noteless and daemon-composed (ADR 102). Terminal moves fall to the resolve emit below instead.
@@ -5973,7 +6082,7 @@ export async function handleHttp(
           !LANE_TERMINAL_STATES.has(lane.state) &&
           !(lane.state === 'open' && before.owner_seat !== null) // the release emit above owns this edge
         ) {
-          deliverLaneTeamAct(ctx, team, member, `[lane] "${lane.title}" → ${lane.state}`, {
+          await deliverLaneTeamAct(ctx, team, member, `[lane] "${lane.title}" → ${lane.state}`, {
             lane_state: { lane: lane.id, title: lane.title, state: lane.state },
           });
         }
@@ -6009,11 +6118,11 @@ export async function handleHttp(
                   pick: null,
                   snapshot: {
                     selected: null,
-                    worker_family: workerFamily(ctx.db, team.id, worker),
+                    worker_family: await workerFamily(ctx.db, team.id, worker),
                     candidates: [],
                   },
                 }
-              : selectReviewCounterpart(
+              : await selectReviewCounterpart(
                   ctx.db,
                   team.id,
                   lane,
@@ -6023,14 +6132,14 @@ export async function handleHttp(
           const peerPick = named ?? peerSelection.pick;
           const humanFallback =
             lane.risk.length > 0 && !peerPick
-              ? pickHumanReviewer(ctx.db, team.id, worker, ctx.config.presenceTimeoutMs)
+              ? await pickHumanReviewer(ctx.db, team.id, worker, ctx.config.presenceTimeoutMs)
               : null;
           let pick = peerPick ?? humanFallback;
           let wakeQueued = false;
           let breakerTripped = false;
           // ADR 191: when nobody live is eligible, try a marked-wakeable offline seat — only if the
           // review loop is enabled AND that seat is flow:auto AND the circuit breaker has not tripped.
-          const teamPolicy = getPolicy(ctx.db, team.id);
+          const teamPolicy = await getPolicy(ctx.db, team.id);
           // ADR 234 increment 2: an exempt lane has no posture to explain. `family_posture` began
           // as the answer to "why was nobody eligible" (ADR 172), but recording it ONLY on the
           // degraded paths conditioned the sample on routing having already failed — miley's
@@ -6042,18 +6151,20 @@ export async function handleHttp(
           // consulted, and a diagnosis on that row would still be advice about a non-problem.
           const posture = exemption.exempt
             ? undefined
-            : teamFamilyPosture(ctx.db, team.id, ctx.config.presenceTimeoutMs);
+            : await teamFamilyPosture(ctx.db, team.id, ctx.config.presenceTimeoutMs);
           if (!pick && !exemption.exempt && lane.risk.length === 0 && posture) {
-            if (reviewLoopBounceCount(ctx.db, team.id, lane.id) >= REVIEW_LOOP_BREAKER_N) {
+            if ((await reviewLoopBounceCount(ctx.db, team.id, lane.id)) >= REVIEW_LOOP_BREAKER_N) {
               breakerTripped = true;
               // ADR 253: a non-risky breaker trip stops spending wakes. It does not ask a human —
               // that would reintroduce the ask the agents-only live pick just refused. Degradation
               // is sanctioned self-close with breaker_tripped, same as no_candidate.
             } else if (teamPolicy.loops?.review === true) {
-              const wakePick = pickWakeReviewer(ctx.db, team.id, worker, posture);
+              const wakePick = await pickWakeReviewer(ctx.db, team.id, worker, posture);
               if (wakePick) {
-                const wakeMember = getMemberByName(ctx.db, team.id, wakePick.reviewer);
-                const enrollment = wakeMember ? getResidency(ctx.db, team.id, wakeMember.id) : null;
+                const wakeMember = await getMemberByName(ctx.db, team.id, wakePick.reviewer);
+                const enrollment = wakeMember
+                  ? await getResidency(ctx.db, team.id, wakeMember.id)
+                  : null;
                 const seatPolicy = enrollment
                   ? effectiveWakePolicy(
                       seatWakeDefaults(teamPolicy, wakeMember ?? undefined),
@@ -6093,7 +6204,7 @@ export async function handleHttp(
               ? 'blocking'
               : 'standard';
           // A lane transition: the replicated, required form (lane-replication spec §Hole 3).
-          appendLaneEventRequired(ctx.db, team.id, {
+          await appendLaneEventRequired(ctx.db, team.id, {
             actor: member.name,
             action: 'lane.ready_for_review',
             target: lane.id,
@@ -6208,9 +6319,9 @@ export async function handleHttp(
             // Name the overlap when the picked acceptor previously owned this lane (see
             // `priorOwnerNotice`). Read from the `lane.claimed` ledger, so it costs one indexed
             // audit query and never narrows the candidate pool.
-            const priorOwners = laneOwnerHistory(ctx.db, team.id, lane.id);
+            const priorOwners = await laneOwnerHistory(ctx.db, team.id, lane.id);
             const overlapNotice = priorOwnerNotice(pick.reviewer, priorOwners);
-            const minted = deliverLaneAskAct(
+            const minted = await deliverLaneAskAct(
               ctx,
               team,
               member,
@@ -6340,10 +6451,10 @@ export async function handleHttp(
           //   · naming the seat that ALREADY holds the open ask mints nothing and reports the
           //     standing state — a re-route to the same seat is a repeat submit, not a new ask.
           const worker = lane.owner_seat ?? member.name;
-          const standingAsk = openAcceptanceAsk(ctx.db, team.id, lane.id);
+          const standingAsk = await openAcceptanceAsk(ctx.db, team.id, lane.id);
           if (standingAsk && standingAsk.to === named.reviewer) {
             namedAskMinted = true;
-            const standing = standingAcceptance(ctx.db, team.id, lane.id);
+            const standing = await standingAcceptance(ctx.db, team.id, lane.id);
             review = {
               standing: true,
               ...(standing ?? { reviewer: named.reviewer, route: 'named' }),
@@ -6352,7 +6463,7 @@ export async function handleHttp(
             const humanRequired = lane.risk.length > 0;
             const acceptanceTier: AskTier =
               humanRequired && named.grade === 'human' ? 'blocking' : 'standard';
-            appendLaneEventRequired(ctx.db, team.id, {
+            await appendLaneEventRequired(ctx.db, team.id, {
               actor: member.name,
               action: 'lane.review_rerouted',
               target: lane.id,
@@ -6376,7 +6487,7 @@ export async function handleHttp(
               },
             });
             if (standingAsk) {
-              deliverLaneAskSuperseded(
+              await deliverLaneAskSuperseded(
                 ctx,
                 team,
                 member,
@@ -6386,8 +6497,8 @@ export async function handleHttp(
                 named.reviewer,
               );
             }
-            const priorOwners = laneOwnerHistory(ctx.db, team.id, lane.id);
-            namedAskMinted = deliverLaneAskAct(
+            const priorOwners = await laneOwnerHistory(ctx.db, team.id, lane.id);
+            namedAskMinted = await deliverLaneAskAct(
               ctx,
               team,
               member,
@@ -6438,8 +6549,8 @@ export async function handleHttp(
           // had a pending ask. The daemon holds the fact the clients were guessing at, so it says
           // it: what the ready edge actually recorded, marked `standing` so no consumer mistakes a
           // report of the existing state for a fresh routing decision.
-          const standing = standingAcceptance(ctx.db, team.id, lane.id);
-          const empty_pool = emptyPoolFromSubmitAudit(ctx.db, team.id, lane.id);
+          const standing = await standingAcceptance(ctx.db, team.id, lane.id);
+          const empty_pool = await emptyPoolFromSubmitAudit(ctx.db, team.id, lane.id);
           review = standing
             ? { standing: true, ...standing }
             : // Nothing standing to report — the original submit found no candidate (or predates
@@ -6473,7 +6584,7 @@ export async function handleHttp(
           !isAwaitingAcceptance(lane.state) &&
           member.name !== before.owner_seat
         ) {
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor: member.name,
             action: 'lane.review_sent_back',
             target: lane.id,
@@ -6488,7 +6599,7 @@ export async function handleHttp(
         let closed: LaneCloseVerdict | undefined;
         if (LANE_TERMINAL_STATES.has(lane.state) && !LANE_TERMINAL_STATES.has(before.state)) {
           const verb = lane.state === 'abandoned' ? 'abandoned' : 'resolved';
-          deliverLaneTeamAct(ctx, team, member, `[lane] ${verb} "${lane.title}"`, {
+          await deliverLaneTeamAct(ctx, team, member, `[lane] ${verb} "${lane.title}"`, {
             lane_resolve: { lane: lane.id, title: lane.title, state: lane.state },
           });
           // The close's whole audit — verified-ness, reason, the ADR 172/173 abstentions, the ADR
@@ -6499,7 +6610,7 @@ export async function handleHttp(
           // back as a duplicate transition) and reports the ledger's own label (ADR 283).
           closed =
             arbitrated?.closed ??
-            recordLaneClose(
+            (await recordLaneClose(
               ctx.db,
               team.id,
               member,
@@ -6508,12 +6619,12 @@ export async function handleHttp(
               // ADR 305: a counterpart's close carries no merge attestation of its own — unless
               // the lane has none (amendment 1); `decideLanePatch` already stripped it if so.
               decided.patch.merged ?? undefined,
-            );
+            ));
           // ADR 271: a resolved incident owes its reporters an answer — they parked work behind it.
           // Best-effort and after the close: the resolve is already durable and a delivery failure
           // must not undo it. No-op for every ordinary lane.
           try {
-            announceIncidentResolved(ctx, team, lane, member.name);
+            await announceIncidentResolved(ctx, team, lane, member.name);
           } catch (err) {
             log.warn({ msg: 'incident_resolve_announce_failed', lane: lane.id, err: String(err) });
           }
@@ -6521,7 +6632,9 @@ export async function handleHttp(
           // carries the outcome nudge — appended, never blocking, never a wake. A goal that ships
           // without an outcome stays visibly outcome-less; the daemon does not nag twice.
           if (lane.goal_id !== null && !goalShippedBefore) {
-            const after = deriveGoalStatus(lanesForGoal(ctx.db, team.id, team.slug, lane.goal_id));
+            const after = deriveGoalStatus(
+              await lanesForGoal(ctx.db, team.id, team.slug, lane.goal_id),
+            );
             if (after === 'shipped')
               notices.push(
                 `goal "${lane.goal_id}" just shipped — say what changed for a user: ` +
@@ -6541,7 +6654,7 @@ export async function handleHttp(
         const backstop =
           review &&
           typeof review['reviewer'] === 'string' &&
-          getPolicy(ctx.db, team.id).loops?.sweep
+          (await getPolicy(ctx.db, team.id)).loops?.sweep
             ? { backstop: { armed: true as const, grace_ms: SWEEP_GRACE_MS } }
             : {};
         return sendJson(res, 200, {
@@ -6570,11 +6683,18 @@ export async function handleHttp(
         // Best-effort on the client; here it is an ordinary audited write. Counts and classes only:
         // the body schema has no field for a file's contents, so a workspace cannot leak through
         // its own repair record.
-        const { team, member } = authMember(ctx.db, slug, bearer(req), actingSeat(req), undefined, {
-          leaseless: true,
-        });
+        const { team, member } = await authMember(
+          ctx.db,
+          slug,
+          bearer(req),
+          actingSeat(req),
+          undefined,
+          {
+            leaseless: true,
+          },
+        );
         const body = parseOrBadRequest(WorkspaceRepairBodySchema, await readJson(req));
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: member.name,
           action: 'workspace.repaired',
           target: member.name,
@@ -6587,7 +6707,7 @@ export async function handleHttp(
       if (method === 'GET' && rest === '/inbox/interrupt-check') {
         let auth: { team: TeamRow; member: MemberRow };
         try {
-          auth = authTouch(ctx, slug, req);
+          auth = await authTouch(ctx, slug, req);
         } catch (err) {
           // ADR 391: this is the ONE route where "who was refused" is the finding. A valid seat
           // credential with a missing or dead lease is a live session whose bell is silently off —
@@ -6596,15 +6716,15 @@ export async function handleHttp(
           // never from `x-musterd-seat` (a header proves nothing); the row carries a two-word lease
           // state and no token. Every other route's 401 stays exactly as it was.
           if (err instanceof SessionLeaseRefused) {
-            const team = getTeamBySlug(ctx.db, slug);
+            const team = await getTeamBySlug(ctx.db, slug);
             log.warn({
               msg: 'interrupt_probe_refused',
               seat: err.seat,
               lease: err.leaseState,
               ...(team ? { team: team.slug } : {}),
             });
-            if (team && !hasRecentInterruptRefusal(ctx.db, team.id, err.seat)) {
-              appendAudit(ctx.db, team.id, {
+            if (team && !(await hasRecentInterruptRefusal(ctx.db, team.id, err.seat))) {
+              await appendAudit(ctx.db, team.id, {
                 actor: err.seat,
                 action: 'interrupt.refused',
                 target: err.seat,
@@ -6617,12 +6737,14 @@ export async function handleHttp(
         }
         const { team, member } = auth;
         assertSeatCanRead(member);
-        const cursor = getCursor(ctx.db, member.id);
+        const cursor = await getCursor(ctx.db, member.id);
         // Only the shapes the fold can use (see `listInterruptCandidates`): this route runs at every
         // tool boundary of every live agent, so it must not carry the seat's whole unread window back
         // into V8 to discover that nothing is raised.
-        const rows = listInterruptCandidates(ctx.db, member, { cursorTs: cursor.last_read_ts });
-        const messages = rowsToEnvelopes(ctx.db, team.slug, rows);
+        const rows = await listInterruptCandidates(ctx.db, member, {
+          cursorTs: cursor.last_read_ts,
+        });
+        const messages = await rowsToEnvelopes(ctx.db, team.slug, rows);
         // obligations: true — this is the live rail (ADR 225). A routed acceptance belongs on it and
         // costs nothing here; the wake rail keeps its ADR 191 policy gate by NOT passing this.
         const pending = pendingInterrupts(messages, member.name, {
@@ -6656,8 +6778,8 @@ export async function handleHttp(
         const railParsed = railRaw === null ? null : HarnessIdSchema.safeParse(railRaw);
         const rail = railParsed?.success === true ? railParsed.data : null;
         // Audit the delivery once per (recipient, act) — who grabbed the mic, when, at whom (§Obs).
-        if (!hasInterruptRaised(ctx.db, team.id, member.name, latest.id)) {
-          appendAudit(ctx.db, team.id, {
+        if (!(await hasInterruptRaised(ctx.db, team.id, member.name, latest.id))) {
+          await appendAudit(ctx.db, team.id, {
             actor: latest.from,
             action: 'interrupt.raised',
             target: member.name,
@@ -6681,7 +6803,7 @@ export async function handleHttp(
       }
 
       if (method === 'GET' && rest === '/inbox') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
         // `?ids=a,b,c` reads named acts back and nothing else — the retrieval path for a body
         // `team_inbox_check` clipped to stay inside its byte budget (lane 01M2JZYTAH). No cursor
@@ -6689,24 +6811,24 @@ export async function handleHttp(
         const idsRaw = url.searchParams.get('ids');
         if (idsRaw !== null) {
           const ids = idsRaw.split(',').filter((id) => id.length > 0);
-          const named = listInbox(ctx.db, member, { ids });
+          const named = await listInbox(ctx.db, member, { ids });
           return sendJson(res, 200, {
-            messages: rowsToEnvelopes(ctx.db, team.slug, named),
-            cursor: getCursor(ctx.db, member.id),
+            messages: await rowsToEnvelopes(ctx.db, team.slug, named),
+            cursor: await getCursor(ctx.db, member.id),
           });
         }
         const unread = url.searchParams.get('unread') === '1';
         const since = url.searchParams.get('since');
         const limitRaw = Number(url.searchParams.get('limit') ?? '');
         const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : undefined;
-        const cursor = getCursor(ctx.db, member.id);
+        const cursor = await getCursor(ctx.db, member.id);
         // A caller that named no limit still gets a bounded response: this read was the last
         // unbounded one on the request path, and a seat returning after time away pulled its whole
         // unread history in a single reply. The bound is a PREFIX (`headLimit`), never the newest
         // tail — see InboxOpts: truncating to the tail and letting the reader advance its cursor to
         // the newest row it received would step over everything cut, which is ADR 287's loss
         // reintroduced by a latency fix. `truncated` tells the caller to come back for the rest.
-        const rows = listInbox(ctx.db, member, {
+        const rows = await listInbox(ctx.db, member, {
           unreadOnly: unread,
           cursorTs: cursor.last_read_ts,
           cursorId: cursor.last_read_message_id,
@@ -6738,12 +6860,12 @@ export async function handleHttp(
           rows.length > 0 && (limit !== undefined || full)
             ? Math.max(
                 0,
-                countUnread(
+                (await countUnread(
                   ctx.db,
                   member,
                   unreadFloor,
                   useCursorId ? cursor.last_read_message_id : null,
-                ) -
+                )) -
                   rows.filter(
                     (r) =>
                       r.created_at > unreadFloor ||
@@ -6755,7 +6877,7 @@ export async function handleHttp(
               )
             : 0;
         const truncated = limit === undefined && full;
-        const messages = rowsToEnvelopes(ctx.db, team.slug, rows);
+        const messages = await rowsToEnvelopes(ctx.db, team.slug, rows);
 
         // ADR 211 §3: pendingness is unread-by-cursor OR deferred-and-raised. The cursor is a single
         // monotonic ts and is NOT touched here — a raised act is re-included after the query, so an
@@ -6766,13 +6888,18 @@ export async function handleHttp(
         // so folding over the inbox would find no deferrals at all. The scan is bounded — a deferral
         // older than this many messages stops being tracked, which degrades to today's behaviour
         // (the act is simply unread) rather than to a wrong answer.
-        const { held, raised, own } = deferralFold(ctx.db, team.slug, member, DEFERRAL_SCAN_LIMIT);
+        const { held, raised, own } = await deferralFold(
+          ctx.db,
+          team.slug,
+          member,
+          DEFERRAL_SCAN_LIMIT,
+        );
         if (raised.size > 0) {
           const shown = new Set(messages.map((m) => m.id));
-          const back = listInbox(ctx.db, member, {}).filter(
+          const back = (await listInbox(ctx.db, member, {})).filter(
             (r) => raised.has(r.id) && !shown.has(r.id),
           );
-          messages.push(...rowsToEnvelopes(ctx.db, team.slug, back));
+          messages.push(...(await rowsToEnvelopes(ctx.db, team.slug, back)));
           messages.sort((a, b) => a.ts - b.ts || (a.id < b.id ? -1 : 1));
         }
         const deferred = [...held.values()].map((d) => ({
@@ -6801,7 +6928,7 @@ export async function handleHttp(
         const shownBeforeThisRead =
           renderable.length === 0
             ? new Set<string>()
-            : listRenderedActs(
+            : await listRenderedActs(
                 ctx.db,
                 team.id,
                 member.name,
@@ -6811,7 +6938,7 @@ export async function handleHttp(
           const already = shownBeforeThisRead;
           for (const m of renderable) {
             if (already.has(m.id)) continue;
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: member.name,
               action: 'inbox.rendered',
               target: member.name,
@@ -6869,17 +6996,17 @@ export async function handleHttp(
         const discharged =
           owed.length === 0
             ? []
-            : ctx.db
-                .prepare<unknown[], { ref: string; by: string }>(
+            : (
+                await ctx.db.all<{ ref: string; by: string }>(
                   `SELECT m.in_reply_to AS ref, mem.name AS by, MIN(m.ts) AS first_ts
                      FROM messages m JOIN members mem ON mem.id = m.from_member
                     WHERE m.team_id = ?
                       AND m.act IN ('accept','decline')
                       AND m.in_reply_to IN (${owed.map(() => '?').join(',')})
                     GROUP BY ref`,
+                  [team.id, ...owed],
                 )
-                .all(team.id, ...owed)
-                .map((r) => ({ id: r.ref, by: r.by, reason: 'answered' as const }));
+              ).map((r) => ({ id: r.ref, by: r.by, reason: 'answered' as const }));
 
         // Doorbell contract clause 7, shapes (ii) and (iv), on the OTHER surface. #1383 taught the
         // interrupt line to drop these in `listInterruptCandidates`; the human-facing count is
@@ -6908,14 +7035,14 @@ export async function handleHttp(
         if (laneOfAsk.size > 0) {
           const laneIds = [...new Set(laneOfAsk.values())];
           const states = new Map(
-            ctx.db
-              .prepare<unknown[], { id: string; state: string }>(
+            (
+              await ctx.db.all<{ id: string; state: string }>(
                 `SELECT id, state FROM lanes WHERE team_id = ? AND id IN (${laneIds
                   .map(() => '?')
                   .join(',')})`,
+                [team.id, ...laneIds],
               )
-              .all(team.id, ...laneIds)
-              .map((l) => [l.id, l.state] as const),
+            ).map((l) => [l.id, l.state] as const),
           );
           for (const [askId, laneId] of laneOfAsk) {
             const state = states.get(laneId);
@@ -6945,18 +7072,19 @@ export async function handleHttp(
         // settled and no seat answered — so the stand-down trace renders it with no answerer
         // invented. Deriving it, never storing it, keeps the ADR 090 property: if the lane returns
         // to an active state the handoff is owed again on the next read, with nothing to un-set.
-        const handoffSettled = messages
-          .filter(
-            (m) =>
-              m.act === 'handoff' &&
-              handoffNamedLaneOutOfPlay(
-                ctx.db,
-                team.id,
-                m.meta === null || m.meta === undefined ? null : JSON.stringify(m.meta),
-                m.body,
-              ),
+        const handoffSettled: { id: string; reason: 'lane_closed' }[] = [];
+        for (const m of messages) {
+          if (m.act !== 'handoff') continue;
+          if (
+            await handoffNamedLaneOutOfPlay(
+              ctx.db,
+              team.id,
+              m.meta === null || m.meta === undefined ? null : JSON.stringify(m.meta),
+              m.body,
+            )
           )
-          .map((m) => ({ id: m.id, reason: 'lane_closed' as const }));
+            handoffSettled.push({ id: m.id, reason: 'lane_closed' });
+        }
 
         // (iv) A steer or urgent act this seat had already been SHOWN before this read — the set
         // `shownBeforeThisRead` captured above, so the first read counts the act and every read
@@ -6967,7 +7095,7 @@ export async function handleHttp(
         return sendJson(res, 200, {
           messages,
           cursor,
-          total: countInbox(ctx.db, member),
+          total: await countInbox(ctx.db, member),
           deferred,
           answered,
           discharged: [...discharged, ...laneClosed, ...handoffSettled, ...readAlready],
@@ -6987,7 +7115,7 @@ export async function handleHttp(
       // `to_kind IN ('team','broadcast')` — plus anything explicitly addressed to it, which is
       // legitimately its own mail. No separate "public" query: not exempting it *is* the scoping.
       if (method === 'GET' && rest === '/messages') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
         const since = url.searchParams.get('since');
         const limit = url.searchParams.get('limit');
@@ -6995,33 +7123,33 @@ export async function handleHttp(
         // its team; the one act hidden from a `team`-grade reader is a to-human ask naming a seat
         // (§3), and a public watch-link stays on team/broadcast traffic (ADR 136). Delivery — the
         // inbox, its cursor, the interrupt line — is a different question and is not asked here.
-        const rows = listTeamMessages(ctx.db, team.id, {
+        const rows = await listTeamMessages(ctx.db, team.id, {
           ...(since ? { since: Number(since) } : {}),
           ...(limit ? { limit: Math.min(Math.max(Number(limit), 1), 1000) } : {}),
           scope: { grade: messageVisibilityOf(member), readerId: member.id },
         });
-        const messages = rowsToEnvelopes(ctx.db, team.slug, rows);
+        const messages = await rowsToEnvelopes(ctx.db, team.slug, rows);
         return sendJson(res, 200, { messages });
       }
 
       if (method === 'POST' && rest === '/inbox/cursor') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const body = (await readJson(req)) as { last_read_message_id?: string };
         if (!body.last_read_message_id)
           throw new MusterdError('bad_request', 'last_read_message_id required');
-        const exists = ctx.db
-          .prepare<[string], { id: string }>('SELECT id FROM messages WHERE id = ?')
-          .get(body.last_read_message_id);
+        const exists = await ctx.db.get<{ id: string }>('SELECT id FROM messages WHERE id = ?', [
+          body.last_read_message_id,
+        ]);
         if (!exists) throw new MusterdError('not_found', 'unknown message id');
-        const prev = getCursor(ctx.db, member.id);
+        const prev = await getCursor(ctx.db, member.id);
         // The position is the row's `created_at`, read by setCursor itself — receipt order, never
         // the envelope's `ts` (see store/cursors.ts). Stamped for replication (ADR 366) carrying
         // the MESSAGE ID only: the receiver re-reads the position against its own rows.
-        const cursor = applyCursorAdvance(ctx.db, team.id, member, body.last_read_message_id);
+        const cursor = await applyCursorAdvance(ctx.db, team.id, member, body.last_read_message_id);
         // seen_latency (ADR 090): each act this advance crossed was just "seen" — emit the
         // send→seen histogram, the read-side twin of loop_latency. Watermark semantics: every act
         // covered by one advance shares this instant. Scope lives in crossedBySeen (store).
-        for (const m of crossedBySeen(
+        for (const m of await crossedBySeen(
           ctx.db,
           team.id,
           member.id,
@@ -7042,16 +7170,16 @@ export async function handleHttp(
       // The per-act delivery ledger (ADR 090): where in logged→seen→answered each recipient sits,
       // derived from the log + cursors + the interrupt audit — never stored.
       if (method === 'GET' && rest.startsWith('/messages/') && rest.endsWith('/delivery')) {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
         const id = rest.slice('/messages/'.length, -'/delivery'.length);
-        const ledger = actDelivery(ctx.db, team.id, id);
+        const ledger = await actDelivery(ctx.db, team.id, id);
         if (!ledger) throw new MusterdError('not_found', 'unknown message id');
         return sendJson(res, 200, ledger);
       }
 
       if (method === 'POST' && rest === '/presence') {
-        const { member } = authMember(
+        const { member } = await authMember(
           ctx.db,
           slug,
           bearer(req),
@@ -7059,13 +7187,13 @@ export async function handleHttp(
           agentSessionLease(req),
         );
         const body = parseOrBadRequest(PresenceBody, await readJson(req));
-        const p = attach(ctx.db, member.id, body.surface, null, {
+        const p = await attach(ctx.db, member.id, body.surface, null, {
           provenance: body.provenance ?? null,
           workspace: body.workspace ?? null,
           driver: body.driver ?? null,
         });
         if (body.status) {
-          ctx.db.prepare('UPDATE presence SET status = ? WHERE id = ?').run(body.status, p.id);
+          await ctx.db.run('UPDATE presence SET status = ? WHERE id = ?', [body.status, p.id]);
         }
         return sendJson(res, 200, {
           presence: { id: p.id, surface: p.surface, status: body.status ?? p.status },
@@ -7074,7 +7202,7 @@ export async function handleHttp(
       }
 
       if (method === 'POST' && rest === '/availability') {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const body = parseOrBadRequest(AvailabilityBody, await readJson(req));
         // `until` rides only `away` (the away_until encoding); drop it otherwise so the stored shape
         // can't claim "back at 5pm" while available/dnd.
@@ -7082,11 +7210,13 @@ export async function handleHttp(
           body.status === 'away' && body.until != null
             ? { status: body.status, until: body.until }
             : { status: body.status };
-        setAvailability(ctx.db, member.id, availability);
+        await setAvailability(ctx.db, member.id, availability);
         // ADR 443 §4: leaving away/dnd releases the rings held for you.
-        const updated = getMemberById(ctx.db, member.id);
-        if (updated) flushHeldRings(ctx, team, updated);
-        const me = summarize(ctx, team.slug, team.id, member).find((m) => m.name === member.name);
+        const updated = await getMemberById(ctx.db, member.id);
+        if (updated) await flushHeldRings(ctx, team, updated);
+        const me = (await summarize(ctx, team.slug, team.id, member)).find(
+          (m) => m.name === member.name,
+        );
         return sendJson(res, 200, { member: me });
       }
 
@@ -7094,7 +7224,7 @@ export async function handleHttp(
       // a personal URL is readable by its owner and nobody else. Agents have no doorbell: they do
       // not choose where a human is rung (§7).
       if ((method === 'GET' || method === 'PUT') && rest === '/members/me/doorbell') {
-        const { team, member } = authMember(
+        const { team, member } = await authMember(
           ctx.db,
           slug,
           bearer(req),
@@ -7103,14 +7233,14 @@ export async function handleHttp(
         );
         if (member.kind !== 'human')
           throw new MusterdError('forbidden', 'the doorbell is for human members');
-        const policy = getDoorbellPolicy(ctx.db, team.id);
+        const policy = await getDoorbellPolicy(ctx.db, team.id);
         if (method === 'PUT') {
           const prefs = parseOrBadRequest(DoorbellPrefsSchema, await readJson(req));
           const problem = doorbellPrefsProblem(prefs, policy.allow);
           if (problem) throw new MusterdError('validation', problem);
-          setDoorbellPrefs(ctx.db, member.id, prefs);
+          await setDoorbellPrefs(ctx.db, member.id, prefs);
         }
-        const fresh = getMemberById(ctx.db, member.id) ?? member;
+        const fresh = (await getMemberById(ctx.db, member.id)) ?? member;
         const prefs = memberDoorbellPrefs(fresh) ?? DoorbellPrefsSchema.parse({});
         return sendJson(res, 200, {
           member: member.name,
@@ -7127,15 +7257,15 @@ export async function handleHttp(
       // never its URL (ADR 443 §5, `maskPrefs`).
       const doorbellOf = rest.match(/^\/members\/([^/]+)\/doorbell$/);
       if (method === 'GET' && doorbellOf) {
-        const { team } = authAdmin(ctx, slug, req);
-        const target = getMemberByName(ctx.db, team.id, decodeURIComponent(doorbellOf[1]!));
+        const { team } = await authAdmin(ctx, slug, req);
+        const target = await getMemberByName(ctx.db, team.id, decodeURIComponent(doorbellOf[1]!));
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', 'no such member');
         const prefs = memberDoorbellPrefs(target);
         return sendJson(res, 200, {
           member: target.name,
           sinks: maskPrefs(prefs),
-          route: resolveRoute(getDoorbellPolicy(ctx.db, team.id), prefs, undefined),
+          route: resolveRoute(await getDoorbellPolicy(ctx.db, team.id), prefs, undefined),
         });
       }
 
@@ -7144,7 +7274,7 @@ export async function handleHttp(
       // cross-seat read path (team admins included, ADR 093 §4). `authMember` resolves the seat from
       // the presented token; a mismatched/absent token is its own 401/403.
       if (method === 'PUT' && rest === '/memory') {
-        const { team, member } = authMember(
+        const { team, member } = await authMember(
           ctx.db,
           slug,
           bearer(req),
@@ -7160,7 +7290,7 @@ export async function handleHttp(
         // overturned here by decision (nick, 2026-09-03): a headline is not continuity, and a human
         // on a second machine (ADR 358) needs the note itself. Daemon-side only, never git; bounded
         // by the 8 KiB cap `saveMemory` still enforces (it throws bad_request naming the limit).
-        applyMemorySave(ctx.db, team.id, member, input);
+        await applyMemorySave(ctx.db, team.id, member, input);
         return sendNoContent(res);
       }
 
@@ -7168,7 +7298,7 @@ export async function handleHttp(
       // the ADR 093 §3 delivery shape for surfaces that render the one-line pointer without occupying
       // (`musterd status`). The bare GET stays the explicit full-body read.
       if (method === 'GET' && rest === '/memory') {
-        const { member } = authMember(
+        const { member } = await authMember(
           ctx.db,
           slug,
           bearer(req),
@@ -7177,17 +7307,17 @@ export async function handleHttp(
         );
         assertSeatCanRead(member);
         if (url.searchParams.get('envelope') === '1') {
-          const env = memoryEnvelope(ctx.db, member.id);
+          const env = await memoryEnvelope(ctx.db, member.id);
           if (!env) throw new MusterdError('not_found', 'no memory saved for this seat');
           return sendJson(res, 200, env);
         }
-        const mem = getMemory(ctx.db, member.id);
+        const mem = await getMemory(ctx.db, member.id);
         if (!mem) throw new MusterdError('not_found', 'no memory saved for this seat');
         return sendJson(res, 200, mem);
       }
 
       if (method === 'DELETE' && rest === '/memory') {
-        const { team, member } = authMember(
+        const { team, member } = await authMember(
           ctx.db,
           slug,
           bearer(req),
@@ -7199,7 +7329,7 @@ export async function handleHttp(
         // even when nothing was here to clear (ADR 366) — a peer may hold a note this daemon has
         // not folded yet, and the clear is a fact with a clock that must reach it. `had_memory`
         // says which case this was.
-        applyMemoryClear(ctx.db, team.id, member);
+        await applyMemoryClear(ctx.db, team.id, member);
         return sendNoContent(res);
       }
 
@@ -7211,10 +7341,10 @@ export async function handleHttp(
       // route points at the file rather than writing a value reconcile would overwrite.
       const hueMatch = rest.match(/^\/members\/([^/]+)\/hue$/);
       if (method === 'POST' && hueMatch) {
-        const { team, member } = authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const body = parseOrBadRequest(HueBody, await readJson(req));
         const targetName = decodeURIComponent(hueMatch[1]!);
-        const target = getMemberByName(ctx.db, team.id, targetName);
+        const target = await getMemberByName(ctx.db, team.id, targetName);
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no member "${targetName}" in "${slug}"`);
         if (target.id !== member.id && !resolveCapabilities(member).is_admin)
@@ -7228,8 +7358,10 @@ export async function handleHttp(
             'conflict',
             `"${slug}" is file-backed — set \`hue = ${body.hue}\` in seats/${targetName}.toml (the file owns it; \`musterd team hue\` does this)`,
           );
-        const sharedWith = setMemberHue(ctx.db, target, body.hue);
-        const me = summarize(ctx, team.slug, team.id, member).find((m) => m.name === targetName);
+        const sharedWith = await setMemberHue(ctx.db, target, body.hue);
+        const me = (await summarize(ctx, team.slug, team.id, member)).find(
+          (m) => m.name === targetName,
+        );
         return sendJson(res, 200, {
           member: me,
           ...(sharedWith !== null ? { hue_shared_with: sharedWith } : {}),
@@ -7238,9 +7370,9 @@ export async function handleHttp(
 
       const reclaimMatch = rest.match(/^\/members\/([^/]+)\/reclaim$/);
       if (method === 'POST' && reclaimMatch) {
-        const { team, member: caller, viaFallback } = authGovernance(ctx, slug, req);
+        const { team, member: caller, viaFallback } = await authGovernance(ctx, slug, req);
         const targetName = decodeURIComponent(reclaimMatch[1]!);
-        const target = getMemberByName(ctx.db, team.id, targetName);
+        const target = await getMemberByName(ctx.db, team.id, targetName);
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no member "${targetName}" in ${slug}`);
         // Displace any live session (same mechanism as a newer hello), then free the seat + go offline.
@@ -7253,16 +7385,16 @@ export async function handleHttp(
           old.close?.();
           ctx.hub.remove(old.connId);
         }
-        clearMemberPresence(ctx.db, target.id);
+        await clearMemberPresence(ctx.db, target.id);
         // Operator reclaim also force-frees the seat's *held* state (ADR 058) — back to declared, so a
         // fresh `claim` (without --token) may rotate it; the durable seat file is untouched.
-        clearBound(ctx.db, target.id);
+        await clearBound(ctx.db, target.id);
         ctx.hub.broadcastTeam(team.id, {
           type: 'presence',
           member: target.name,
           status: 'offline',
         });
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: caller.name,
           action: 'member.reclaim',
           target: target.name,
@@ -7278,7 +7410,7 @@ export async function handleHttp(
       // `remove` (deletes the seat) and `reclaim` (operator force-frees someone else's).
       if (method === 'POST' && rest === '/unbind') {
         // authMember (not authTouch) so we don't write an ambient presence row we're about to clear.
-        const { team, member } = authMember(
+        const { team, member } = await authMember(
           ctx.db,
           slug,
           bearer(req),
@@ -7289,9 +7421,9 @@ export async function handleHttp(
           old.close?.();
           ctx.hub.remove(old.connId);
         }
-        clearMemberPresence(ctx.db, member.id);
-        markSeatReleased(ctx.db, member.id);
-        clearBound(ctx.db, member.id);
+        await clearMemberPresence(ctx.db, member.id);
+        await markSeatReleased(ctx.db, member.id);
+        await clearBound(ctx.db, member.id);
         ctx.hub.broadcastTeam(team.id, {
           type: 'presence',
           member: member.name,
@@ -7326,18 +7458,18 @@ export async function handleHttp(
         /^\/members\/([^/]+)\/agent-seat-credential\/rotate$/,
       );
       if (method === 'POST' && agentCredentialRotateMatch) {
-        const team = requireTeam(ctx.db, slug);
-        authProvision(ctx, slug, req);
+        const team = await requireTeam(ctx.db, slug);
+        await authProvision(ctx, slug, req);
         const targetName = decodeURIComponent(agentCredentialRotateMatch[1]!);
-        const target = getMemberByName(ctx.db, team.id, targetName);
+        const target = await getMemberByName(ctx.db, team.id, targetName);
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no member "${targetName}" in ${slug}`);
         if (target.kind !== 'agent' || target.observer === 1)
           throw new MusterdError('bad_request', `"${target.name}" is not an agent seat`);
-        const { seat_credential } = mintAgentSeatCredential(ctx.db, target.id);
-        const revoked = revokeMemberSessionLeases(ctx.db, target.id);
-        const actor = tryAuth(ctx, slug, req)?.name ?? null;
-        appendAudit(ctx.db, team.id, {
+        const { seat_credential } = await mintAgentSeatCredential(ctx.db, target.id);
+        const revoked = await revokeMemberSessionLeases(ctx.db, target.id);
+        const actor = (await tryAuth(ctx, slug, req))?.name ?? null;
+        await appendAudit(ctx.db, team.id, {
           actor,
           action: 'agent_seat_credential.rotated',
           target: target.name,
@@ -7347,7 +7479,7 @@ export async function handleHttp(
           },
         });
         for (const leaseId of revoked) {
-          appendAudit(ctx.db, team.id, {
+          await appendAudit(ctx.db, team.id, {
             actor,
             action: 'agent_session_lease.revoked',
             target: target.name,
@@ -7360,10 +7492,10 @@ export async function handleHttp(
 
       const credentialRotateMatch = rest.match(/^\/members\/([^/]+)\/credential\/rotate$/);
       if (method === 'POST' && credentialRotateMatch) {
-        const team = requireTeam(ctx.db, slug);
-        authProvision(ctx, slug, req);
+        const team = await requireTeam(ctx.db, slug);
+        await authProvision(ctx, slug, req);
         const targetName = decodeURIComponent(credentialRotateMatch[1]!);
-        const target = getMemberByName(ctx.db, team.id, targetName);
+        const target = await getMemberByName(ctx.db, team.id, targetName);
         if (!target || target.left_at !== null) {
           throw new MusterdError('not_found', `no member "${targetName}" in ${slug}`);
         }
@@ -7374,15 +7506,15 @@ export async function handleHttp(
               `per-seat credential, so there is nothing here to rotate (POST /teams/${slug}/agent-key/rotate rotates the key).`,
           );
         }
-        const { credential } = mintCredential(ctx.db, target.id);
+        const { credential } = await mintCredential(ctx.db, target.id);
         // ADR 446 §3: rotation kills the seat's phone sessions too — the old mscr_ is dead, so
         // every msat_/msrt_ chain minted under it dies with it (admin revoke-all rides this path).
-        const oauthRevoked = revokeAllForMember(ctx.db, team.id, target.id);
+        const oauthRevoked = await revokeAllForMember(ctx.db, team.id, target.id);
         // Attribute honestly: an off-host caller is an authenticated admin (authProvision just proved
         // it); a loopback caller is anonymous by design, so the actor is null and `via` says where the
         // authority came from. `detail` never carries the secret or its hash.
-        appendAudit(ctx.db, team.id, {
-          actor: tryAuth(ctx, slug, req)?.name ?? null,
+        await appendAudit(ctx.db, team.id, {
+          actor: (await tryAuth(ctx, slug, req))?.name ?? null,
           action: 'credential.rotate',
           target: target.name,
           result: 'allow',
@@ -7391,8 +7523,8 @@ export async function handleHttp(
           },
         });
         if (oauthRevoked > 0) {
-          appendAudit(ctx.db, team.id, {
-            actor: tryAuth(ctx, slug, req)?.name ?? null,
+          await appendAudit(ctx.db, team.id, {
+            actor: (await tryAuth(ctx, slug, req))?.name ?? null,
             action: 'oauth.revoked',
             target: target.name,
             result: 'allow',
@@ -7408,16 +7540,16 @@ export async function handleHttp(
       // P2) with the same empty-admin fallback as reclaim.
       const removeMatch = rest.match(/^\/members\/([^/]+)\/remove$/);
       if (method === 'POST' && removeMatch) {
-        const { team, member: caller, viaFallback } = authGovernance(ctx, slug, req);
+        const { team, member: caller, viaFallback } = await authGovernance(ctx, slug, req);
         const targetName = decodeURIComponent(removeMatch[1]!);
-        const target = getMemberByName(ctx.db, team.id, targetName);
+        const target = await getMemberByName(ctx.db, team.id, targetName);
         if (!target || target.left_at !== null)
           throw new MusterdError('not_found', `no member "${targetName}" in ${slug}`);
-        leaveMember(ctx.db, target.id);
+        await leaveMember(ctx.db, target.id);
         // ADR 449 §3 / ADR 463 §4.2: authority must not outlive the authorizer — removal disables
         // every live member the target sponsored, transitively, and takes residency, OAuth chains
         // and presence with it (one audit row each, naming the root). The hub is ours to drop.
-        for (const { member: revoked } of revokeSponsoredDescendants(
+        for (const { member: revoked } of await revokeSponsoredDescendants(
           ctx.db,
           team.id,
           target,
@@ -7445,13 +7577,13 @@ export async function handleHttp(
           old.close?.();
           ctx.hub.remove(old.connId);
         }
-        clearMemberPresence(ctx.db, target.id);
+        await clearMemberPresence(ctx.db, target.id);
         ctx.hub.broadcastTeam(team.id, {
           type: 'presence',
           member: target.name,
           status: 'offline',
         });
-        appendAudit(ctx.db, team.id, {
+        await appendAudit(ctx.db, team.id, {
           actor: caller.name,
           action: 'member.remove',
           target: target.name,

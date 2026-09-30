@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { PROTOCOL_VERSION, type WSServerFrame } from '@musterd/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
-import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 
 const hasOpenssl = (() => {
@@ -100,14 +100,19 @@ async function standingGrant(base: string, adminCred: string, seat: string): Pro
 
 describe('secured off-loopback bind (ADR 040)', () => {
   it('refuses to construct a non-loopback plaintext daemon', () => {
-    expect(() => createServer({ db: openDb(':memory:'), host: '10.0.0.1', port: 0 })).toThrow(
+    expect(() => createServer({ db: openTestDb(':memory:'), host: '10.0.0.1', port: 0 })).toThrow(
       /refusing to bind 10\.0\.0\.1 in plaintext/,
     );
   });
 
   it('allows a non-loopback bind when a TLS-terminating proxy is acknowledged', () => {
     // The guard runs at construction; trusting a proxy lets it through without actually exposing a port.
-    const s = createServer({ db: openDb(':memory:'), host: '10.0.0.1', port: 0, trustProxy: true });
+    const s = createServer({
+      db: openTestDb(':memory:'),
+      host: '10.0.0.1',
+      port: 0,
+      trustProxy: true,
+    });
     running = s;
     expect(s.scheme).toBe('ws');
   });
@@ -136,7 +141,7 @@ describe('secured off-loopback bind (ADR 040)', () => {
       { stdio: 'ignore' },
     );
     const s = createServer({
-      db: openDb(':memory:'),
+      db: openTestDb(':memory:'),
       host: '127.0.0.1',
       port: 0,
       tlsCert: certPath,
@@ -157,7 +162,7 @@ describe('secured off-loopback bind (ADR 040)', () => {
 
 describe('WS upgrade Origin/Host gate (ADR 040)', () => {
   it('rejects an upgrade carrying a browser Origin (cross-site / DNS-rebinding)', async () => {
-    const s = createServer({ db: openDb(':memory:'), port: 0 });
+    const s = createServer({ db: openTestDb(':memory:'), port: 0 });
     running = s;
     const { port } = await s.listen();
     const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, { origin: 'https://evil.example' });
@@ -166,7 +171,7 @@ describe('WS upgrade Origin/Host gate (ADR 040)', () => {
   });
 
   it('admits the no-Origin CLI/MCP client on a loopback Host', async () => {
-    const s = createServer({ db: openDb(':memory:'), port: 0 });
+    const s = createServer({ db: openTestDb(':memory:'), port: 0 });
     running = s;
     const { port } = await s.listen();
     const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
@@ -178,7 +183,7 @@ describe('WS upgrade Origin/Host gate (ADR 040)', () => {
   });
 
   it('admits a same-origin browser Origin — the daemon-served page (ADR 062)', async () => {
-    const s = createServer({ db: openDb(':memory:'), port: 0 });
+    const s = createServer({ db: openTestDb(':memory:'), port: 0 });
     running = s;
     const { port } = await s.listen();
     // Origin host:port == the Host header the browser connected to → same-origin, allowed.
@@ -196,7 +201,7 @@ describe('newest-wins self-heal at WAN-tuned timeouts (ADR 017 / 040 §6)', () =
     // WAN tuning: widen presence timeout + reclaim grace well past any test-introduced latency.
     setEnv('MUSTERD_PRESENCE_TIMEOUT_MS', '120000');
     setEnv('MUSTERD_RECLAIM_GRACE_MS', '120000');
-    const s = createServer({ db: openDb(':memory:'), port: 0 });
+    const s = createServer({ db: openTestDb(':memory:'), port: 0 });
     running = s;
     const { port } = await s.listen();
     const base = `http://127.0.0.1:${port}`;

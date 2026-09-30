@@ -1,6 +1,6 @@
 import { isWireAttestationSource } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
+import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
 import { localNodeForTeam } from './messages.js';
 
@@ -770,31 +770,30 @@ export interface AuditRow {
  * seat attesting nothing all read `{ null, null }`. `source` is null beside a real model when the
  * tier is unknown; it is never guessed. Mirrors `currentAttestation` in presence.ts, joined by name.
  */
-function actorAttestation(
-  db: Database,
+async function actorAttestation(
+  db: Driver,
   teamId: string,
   actor: string | null,
-): { model: string | null; source: string | null } {
+): Promise<{ model: string | null; source: string | null }> {
   if (actor === null) return { model: null, source: null };
-  const row = db
-    .prepare<[string, string], { model: string | null; model_source: string | null }>(
-      `SELECT p.model, p.model_source FROM presence p
+  const row = await db.get<{ model: string | null; model_source: string | null }>(
+    `SELECT p.model, p.model_source FROM presence p
          JOIN members m ON m.id = p.member_id
         WHERE m.team_id = ? AND m.name = ? AND m.left_at IS NULL AND p.model IS NOT NULL
         ORDER BY p.last_seen_at DESC, p.id DESC LIMIT 1`,
-    )
-    .get(teamId, actor);
+    [teamId, actor],
+  );
   const model = row?.model ?? null;
   const source = row?.model_source;
   return { model, source: model && isWireAttestationSource(source) ? source : null };
 }
 
 /** The stamp for a row about to be written: the entry's own if it carries one, else read now. */
-function stampFor(
-  db: Database,
+async function stampFor(
+  db: Driver,
   teamId: string,
   entry: AuditEntry,
-): { actor_model: string | null; actor_model_source: string | null } {
+): Promise<{ actor_model: string | null; actor_model_source: string | null }> {
   if (entry.actor_model !== undefined || entry.actor_model_source !== undefined) {
     const model = entry.actor_model ?? null;
     const source = entry.actor_model_source;
@@ -803,7 +802,7 @@ function stampFor(
       actor_model_source: model && isWireAttestationSource(source) ? source : null,
     };
   }
-  const now = actorAttestation(db, teamId, entry.actor);
+  const now = await actorAttestation(db, teamId, entry.actor);
   return { actor_model: now.model, actor_model_source: now.source };
 }
 
@@ -818,16 +817,18 @@ function stampFor(
  * Every `lane.*` and `presence.*` writer goes through here. A row written through the plain append
  * would be a transition the origin holds and no peer ever sees — exactly the hole this closes.
  */
-export function appendReplicatedEvent(db: Database, teamId: string, entry: AuditEntry): void {
+export async function appendReplicatedEvent(
+  db: Driver,
+  teamId: string,
+  entry: AuditEntry,
+): Promise<void> {
   assertAuditSubjectDeclared(entry.action);
-  db.transaction(() => {
-    const node = localNodeForTeam(db, teamId);
-    const seq = db
-      .prepare<
-        [string],
-        { seq: number }
-      >('UPDATE nodes SET next_seq = next_seq + 1 WHERE id = ? RETURNING next_seq - 1 AS seq')
-      .get(node.id)!.seq;
+  await db.tx(async (t) => {
+    const node = await localNodeForTeam(t, teamId);
+    const seq = (await t.get<{ seq: number }>(
+      'UPDATE nodes SET next_seq = next_seq + 1 WHERE id = ? RETURNING next_seq - 1 AS seq',
+      [node.id],
+    ))!.seq;
     const now = Date.now();
     const row: AuditRow = {
       id: ulid(),
@@ -841,13 +842,28 @@ export function appendReplicatedEvent(db: Database, teamId: string, entry: Audit
       created_at: now,
       origin_node: node.id,
       origin_seq: seq,
-      ...stampFor(db, teamId, entry),
+      ...(await stampFor(t, teamId, entry)),
     };
-    db.prepare(
+    await t.run(
       `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq, actor_model, actor_model_source)
-       VALUES (@id, @team_id, @ts, @actor, @action, @target, @result, @detail, @created_at, @origin_node, @origin_seq, @actor_model, @actor_model_source)`,
-    ).run(row);
-  })();
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        row.id,
+        row.team_id,
+        row.ts,
+        row.actor,
+        row.action,
+        row.target,
+        row.result,
+        row.detail,
+        row.created_at,
+        row.origin_node,
+        row.origin_seq,
+        row.actor_model,
+        row.actor_model_source,
+      ],
+    );
+  });
 }
 
 /** `lane.*` writers keep their name; the allocator and the SAVEPOINT are the same. */
@@ -892,7 +908,11 @@ export const REPLICATED_LEDGER_VERBS = new Set([
 ]);
 
 /** Insert an audit row and surface failure when the caller's transaction requires the evidence. */
-export function appendAuditRequired(db: Database, teamId: string, entry: AuditEntry): void {
+export async function appendAuditRequired(
+  db: Driver,
+  teamId: string,
+  entry: AuditEntry,
+): Promise<void> {
   assertAuditSubjectDeclared(entry.action);
   const now = Date.now();
   const row: AuditRow = {
@@ -907,26 +927,39 @@ export function appendAuditRequired(db: Database, teamId: string, entry: AuditEn
     created_at: now,
     origin_node: '',
     origin_seq: 0,
-    ...stampFor(db, teamId, entry),
+    ...(await stampFor(db, teamId, entry)),
   };
-  db.prepare(
+  await db.run(
     `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, actor_model, actor_model_source)
-     VALUES (@id, @team_id, @ts, @actor, @action, @target, @result, @detail, @created_at, @actor_model, @actor_model_source)`,
-  ).run(row);
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      row.id,
+      row.team_id,
+      row.ts,
+      row.actor,
+      row.action,
+      row.target,
+      row.result,
+      row.detail,
+      row.created_at,
+      row.actor_model,
+      row.actor_model_source,
+    ],
+  );
 }
 
 /**
  * Append an audit entry. **Best-effort observability, never a gate**: a failure here is logged and
  * swallowed so it can never break the request path it is recording.
  */
-export function appendAudit(db: Database, teamId: string, entry: AuditEntry): void {
+export async function appendAudit(db: Driver, teamId: string, entry: AuditEntry): Promise<void> {
   // Before the try, deliberately: the undeclared-action refusal is a programming error, and the
   // catch below exists to swallow STORAGE failures so observability can never break a request path.
   // Inside it, decision 2 would be logged and walked past — which is the decay it exists to stop.
   assertAuditSubjectDeclared(entry.action);
   if (REPLICATED_LEDGER_VERBS.has(entry.action)) {
     try {
-      appendReplicatedEvent(db, teamId, entry);
+      await appendReplicatedEvent(db, teamId, entry);
       return;
     } catch (err) {
       // The stamp is a nice-to-have; the ROW is the observability contract. A daemon with no
@@ -937,7 +970,7 @@ export function appendAudit(db: Database, teamId: string, entry: AuditEntry): vo
     }
   }
   try {
-    appendAuditRequired(db, teamId, entry);
+    await appendAuditRequired(db, teamId, entry);
   } catch (err) {
     log.warn({ msg: 'audit_append_failed', action: entry.action, err: String(err) });
   }
@@ -947,21 +980,20 @@ export function appendAudit(db: Database, teamId: string, entry: AuditEntry): vo
  * Which of `actIds` have an `inbox.rendered` row for `target` — the acts this seat has already been
  * shown by an inbox read (clause 7(iv)). One query for the whole set; empty in, empty out.
  */
-export function listRenderedActs(
-  db: Database,
+export async function listRenderedActs(
+  db: Driver,
   teamId: string,
   target: string,
   actIds: string[],
-): Set<string> {
+): Promise<Set<string>> {
   if (actIds.length === 0) return new Set();
   try {
-    const rows = db
-      .prepare<unknown[], { act: string }>(
-        `SELECT DISTINCT json_extract(detail, '$.act') AS act FROM audit
+    const rows = await db.all<{ act: string }>(
+      `SELECT DISTINCT json_extract(detail, '$.act') AS act FROM audit
           WHERE team_id = ? AND action = 'inbox.rendered' AND target = ?
             AND json_extract(detail, '$.act') IN (${actIds.map(() => '?').join(',')})`,
-      )
-      .all(teamId, target, ...actIds);
+      [teamId, target, ...actIds],
+    );
     return new Set(rows.map((r) => r.act));
   } catch {
     return new Set();
@@ -975,20 +1007,19 @@ export function listRenderedActs(
  * per tool call. DB-backed (not in-memory) so it survives a daemon restart. Best-effort: a read error
  * degrades to "not yet raised" (at worst one extra row), never a gate on the probe.
  */
-export function hasInterruptRaised(
-  db: Database,
+export async function hasInterruptRaised(
+  db: Driver,
   teamId: string,
   target: string,
   actId: string,
-): boolean {
+): Promise<boolean> {
   try {
-    const row = db
-      .prepare<[string, string, string], { one: number }>(
-        `SELECT 1 AS one FROM audit
+    const row = await db.get<{ one: number }>(
+      `SELECT 1 AS one FROM audit
           WHERE team_id = ? AND action = 'interrupt.raised' AND target = ?
             AND json_extract(detail, '$.act') = ? LIMIT 1`,
-      )
-      .get(teamId, target, actId);
+      [teamId, target, actId],
+    );
     return row != null;
   } catch {
     return false;
@@ -1005,19 +1036,18 @@ export function hasInterruptRaised(
 export const REFUSAL_WINDOW_MS = 10 * 60_000;
 
 /** True when `seat` already has an `interrupt.refused` row inside the window ending at `now`. */
-export function hasRecentInterruptRefusal(
-  db: Database,
+export async function hasRecentInterruptRefusal(
+  db: Driver,
   teamId: string,
   seat: string,
   now = Date.now(),
-): boolean {
+): Promise<boolean> {
   try {
-    const row = db
-      .prepare<[string, string, number], { one: number }>(
-        `SELECT 1 AS one FROM audit
+    const row = await db.get<{ one: number }>(
+      `SELECT 1 AS one FROM audit
           WHERE team_id = ? AND action = 'interrupt.refused' AND target = ? AND ts > ? LIMIT 1`,
-      )
-      .get(teamId, seat, now - REFUSAL_WINDOW_MS);
+      [teamId, seat, now - REFUSAL_WINDOW_MS],
+    );
     return row != null;
   } catch {
     return false;
@@ -1026,45 +1056,39 @@ export function hasRecentInterruptRefusal(
 
 /** Read the audit log for a team, newest-first, capped. `before` pages older than a given ts.
  *  `authorized_by` keeps rows whose detail.authorized_by matches (ADR 127). */
-export function listAudit(
-  db: Database,
+export async function listAudit(
+  db: Driver,
   teamId: string,
   opts: { limit?: number; before?: number; authorized_by?: string } = {},
-): AuditRow[] {
+): Promise<AuditRow[]> {
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 500);
   const by = opts.authorized_by;
   if (by != null && by.length > 0) {
     if (opts.before != null) {
-      return db
-        .prepare<[string, number, string, number], AuditRow>(
-          `SELECT * FROM audit WHERE team_id = ? AND ts < ?
+      return await db.all<AuditRow>(
+        `SELECT * FROM audit WHERE team_id = ? AND ts < ?
              AND json_extract(detail, '$.authorized_by') = ?
            ORDER BY ts DESC, id DESC LIMIT ?`,
-        )
-        .all(teamId, opts.before, by, limit);
+        [teamId, opts.before, by, limit],
+      );
     }
-    return db
-      .prepare<[string, string, number], AuditRow>(
-        `SELECT * FROM audit WHERE team_id = ?
+    return await db.all<AuditRow>(
+      `SELECT * FROM audit WHERE team_id = ?
            AND json_extract(detail, '$.authorized_by') = ?
          ORDER BY ts DESC, id DESC LIMIT ?`,
-      )
-      .all(teamId, by, limit);
+      [teamId, by, limit],
+    );
   }
   if (opts.before != null) {
-    return db
-      .prepare<
-        [string, number, number],
-        AuditRow
-      >('SELECT * FROM audit WHERE team_id = ? AND ts < ? ORDER BY ts DESC, id DESC LIMIT ?')
-      .all(teamId, opts.before, limit);
+    return await db.all<AuditRow>(
+      'SELECT * FROM audit WHERE team_id = ? AND ts < ? ORDER BY ts DESC, id DESC LIMIT ?',
+      [teamId, opts.before, limit],
+    );
   }
-  return db
-    .prepare<
-      [string, number],
-      AuditRow
-    >('SELECT * FROM audit WHERE team_id = ? ORDER BY ts DESC, id DESC LIMIT ?')
-    .all(teamId, limit);
+  return await db.all<AuditRow>(
+    'SELECT * FROM audit WHERE team_id = ? ORDER BY ts DESC, id DESC LIMIT ?',
+    [teamId, limit],
+  );
 }
 
 /**
@@ -1097,11 +1121,11 @@ export function listAudit(
  *   over every ordinary no-risk lane. It now always writes the boolean, so absence means exactly
  *   "written before that change" — clause 2, record the distinction where it is known.
  */
-export function reviewRouting(
-  db: Database,
+export async function reviewRouting(
+  db: Driver,
   teamId: string,
   laneId: string,
-): {
+): Promise<{
   routed: boolean | undefined;
   human_required: boolean | undefined;
   /** ADR 217: the wait the acceptor was promised (the ask tier's timeout), or `undefined` when the
@@ -1115,24 +1139,22 @@ export function reviewRouting(
    * abstains like every other field here.
    */
   exempt: boolean | undefined;
-} {
+}> {
   const unknown = {
     routed: undefined,
     human_required: undefined,
     promised_ms: undefined,
     exempt: undefined,
   };
-  const row = db
-    .prepare<[string, string], { detail: string | null }>(
-      // A hand re-route (`lane.review_rerouted`, lane 01M1QYHJFY) is the newer routing decision
-      // on the same acceptance: it carries `reviewer`, `human_required` and the promised wait for
-      // the seat that now holds the ask. Reading only the submit row here would grade a re-routed
-      // lane against the wrong seat — and call a re-route of a no-candidate submit a self-close.
-      `SELECT detail FROM audit
+  const row = await db.get<{ detail: string | null }>( // A hand re-route (`lane.review_rerouted`, lane 01M1QYHJFY) is the newer routing decision
+    // on the same acceptance: it carries `reviewer`, `human_required` and the promised wait for
+    // the seat that now holds the ask. Reading only the submit row here would grade a re-routed
+    // lane against the wrong seat — and call a re-route of a no-candidate submit a self-close.
+    `SELECT detail FROM audit
          WHERE team_id = ? AND action IN ('lane.ready_for_review','lane.review_rerouted') AND target = ?
        ORDER BY ts DESC, id DESC LIMIT 1`,
-    )
-    .get(teamId, laneId);
+    [teamId, laneId],
+  );
   if (!row?.detail) return unknown;
   try {
     const d = JSON.parse(row.detail) as {
@@ -1181,21 +1203,24 @@ export function reviewRouting(
  * IS true instead. Distinct from `reviewRouting` above, which answers the close edge's narrower
  * question and deliberately omits the reviewer's name.
  */
-export function standingAcceptance(
-  db: Database,
+export async function standingAcceptance(
+  db: Driver,
   teamId: string,
   laneId: string,
-): { reviewer?: string; route?: string; grade?: string; acceptance_exempt?: boolean } | null {
-  const row = db
-    .prepare<[string, string], { detail: string | null }>(
-      // A re-route (`lane.review_rerouted`) is a later routing decision on the same standing
-      // acceptance, so the newest of EITHER verb is what stands — a reader that saw only the submit
-      // row would name the seat whose ask was superseded.
-      `SELECT detail FROM audit
+): Promise<{
+  reviewer?: string;
+  route?: string;
+  grade?: string;
+  acceptance_exempt?: boolean;
+} | null> {
+  const row = await db.get<{ detail: string | null }>( // A re-route (`lane.review_rerouted`) is a later routing decision on the same standing
+    // acceptance, so the newest of EITHER verb is what stands — a reader that saw only the submit
+    // row would name the seat whose ask was superseded.
+    `SELECT detail FROM audit
          WHERE team_id = ? AND action IN ('lane.ready_for_review','lane.review_rerouted') AND target = ?
        ORDER BY ts DESC, id DESC LIMIT 1`,
-    )
-    .get(teamId, laneId);
+    [teamId, laneId],
+  );
   if (!row?.detail) return null;
   try {
     const d = JSON.parse(row.detail) as {
@@ -1221,14 +1246,17 @@ export function standingAcceptance(
  * The newest `lane.review_peer_confirmed` grade for a lane, or 'none' (ADR 188). The close edge
  * writes this on risky lanes so the two-review pair (peer + human) is legible in one row.
  */
-export function peerReviewGradeOf(db: Database, teamId: string, laneId: string): string {
-  const row = db
-    .prepare<[string, string], { detail: string | null }>(
-      `SELECT detail FROM audit
+export async function peerReviewGradeOf(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+): Promise<string> {
+  const row = await db.get<{ detail: string | null }>(
+    `SELECT detail FROM audit
          WHERE team_id = ? AND action = 'lane.review_peer_confirmed' AND target = ?
        ORDER BY ts DESC, id DESC LIMIT 1`,
-    )
-    .get(teamId, laneId);
+    [teamId, laneId],
+  );
   if (!row?.detail) return 'none';
   try {
     const g = (JSON.parse(row.detail) as { grade?: unknown }).grade;
@@ -1259,14 +1287,17 @@ export function peerReviewGradeOf(db: Database, teamId: string, laneId: string):
  * an empty history. That is an honest absence — it under-reports, and the failure mode of
  * under-reporting here is the status quo, never a false accusation.
  */
-export function laneOwnerHistory(db: Database, teamId: string, laneId: string): string[] {
-  const rows = db
-    .prepare<[string, string], { detail: string | null }>(
-      `SELECT detail FROM audit
+export async function laneOwnerHistory(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+): Promise<string[]> {
+  const rows = await db.all<{ detail: string | null }>(
+    `SELECT detail FROM audit
          WHERE team_id = ? AND action = 'lane.claimed' AND target = ?
        ORDER BY ts DESC, id DESC`,
-    )
-    .all(teamId, laneId);
+    [teamId, laneId],
+  );
   const seen: string[] = [];
   for (const r of rows) {
     if (!r.detail) continue;

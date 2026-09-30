@@ -57,13 +57,13 @@ export interface GateContext {
  * `req.target` arrives repo-relative (the hook normalizes it) so it compares against lane globs, which
  * are repo-relative by convention.
  */
-export function gateA(ctx: GateContext): GateDecision {
+export async function gateA(ctx: GateContext): Promise<GateDecision> {
   const { db } = ctx.srv;
   const { id: teamId, slug } = ctx.team;
   const path = ctx.req.target;
   const cls = ctx.req.class;
 
-  const owned = laneCoveringPath(db, teamId, slug, path, { owner: ctx.member.name });
+  const owned = await laneCoveringPath(db, teamId, slug, path, { owner: ctx.member.name });
   if (owned) {
     return {
       decision: 'allow',
@@ -81,7 +81,7 @@ export function gateA(ctx: GateContext): GateDecision {
   }
 
   // block: the forcing function. Name whether someone else holds it, or it's simply unclaimed.
-  const otherLane = laneCoveringPath(db, teamId, slug, path);
+  const otherLane = await laneCoveringPath(db, teamId, slug, path);
   const detail = otherLane
     ? `it is owned by ${otherLane.owner_seat ?? 'another seat'} (lane "${otherLane.title}") — coordinate with them, take a different surface, or hand off`
     : `no lane covers it — claim one first: lane_open "<what>" --surface ${path} --claim`;
@@ -110,8 +110,8 @@ function blockingContractReason(cls: string, askId: string, unblockerReachable: 
 
 /** The ADR 153 reachability projection at the gate: the acting seat is the raiser, the daemon's presence
  *  timeout is the liveness window. A pure read of team + policy state — no timer, nothing stored. */
-function gateUnblockerReachable(ctx: GateContext): boolean {
-  return unblockerReachable(
+async function gateUnblockerReachable(ctx: GateContext): Promise<boolean> {
+  return await unblockerReachable(
     ctx.srv.db,
     ctx.team.id,
     ctx.member.name,
@@ -124,7 +124,7 @@ function gateUnblockerReachable(ctx: GateContext): boolean {
  *  reads it back) and a gate-emitted ask is distinguishable from an agent-authored one. Returns the ask
  *  id. Reuses the one validate→persist→deliver path, so admin push (ADR 147), Slack (ADR 149), and the
  *  `ask.raised` lifecycle row all fall out for free — the deny IS the emission. */
-function emitGateAsk(ctx: GateContext): string {
+async function emitGateAsk(ctx: GateContext): Promise<string> {
   const { srv, team, member, req } = ctx;
   const id = ulid();
   const env = makeEnvelope({
@@ -140,7 +140,7 @@ function emitGateAsk(ctx: GateContext): string {
       gate: { class: req.class, fingerprint: req.fingerprint },
     },
   });
-  routeEnvelope(srv, team, member, env, undefined, true);
+  await routeEnvelope(srv, team, member, env, undefined, true);
   return id;
 }
 
@@ -156,7 +156,7 @@ function emitGateAsk(ctx: GateContext): string {
  *   - **block, re-attempt, still unanswered** → deny (`denied_awaiting`), contract restated, no 2nd ask.
  * Release requires a **human** accept (ADR 150 defers admin-only release to `multi-human-admin`).
  */
-export function gateB(ctx: GateContext): GateDecision {
+export async function gateB(ctx: GateContext): Promise<GateDecision> {
   if (ctx.req.posture === 'warn') {
     return {
       decision: 'allow',
@@ -166,10 +166,10 @@ export function gateB(ctx: GateContext): GateDecision {
   }
 
   const { db } = ctx.srv;
-  const existing = findGateAsk(db, ctx.team.id, ctx.req.fingerprint);
+  const existing = await findGateAsk(db, ctx.team.id, ctx.req.fingerprint);
   if (existing) {
     // Re-attempt of an already-raised action: re-check the ask thread rather than raise a second ask.
-    const answer = gateAskHumanAnswer(db, ctx.team.id, existing.id);
+    const answer = await gateAskHumanAnswer(db, ctx.team.id, existing.id);
     if (answer?.act === 'accept') {
       return {
         decision: 'allow',
@@ -192,7 +192,7 @@ export function gateB(ctx: GateContext): GateDecision {
     return {
       decision: 'deny',
       outcome: 'denied_awaiting',
-      reason: blockingContractReason(ctx.req.class, existing.id, gateUnblockerReachable(ctx)),
+      reason: blockingContractReason(ctx.req.class, existing.id, await gateUnblockerReachable(ctx)),
       ask_ref: existing.id,
     };
   }
@@ -201,11 +201,11 @@ export function gateB(ctx: GateContext): GateDecision {
   // contract carries the reachability-gated terminal (ADR 153): a headless solo seat is told to STRAND
   // (release the lane with WIP, never proceed) instead of holding a room that will never answer — the
   // FB3 fix. Either branch is non-proceed; the wedge-guard is untouched.
-  const askId = emitGateAsk(ctx);
+  const askId = await emitGateAsk(ctx);
   return {
     decision: 'deny',
     outcome: 'denied_ask_raised',
-    reason: blockingContractReason(ctx.req.class, askId, gateUnblockerReachable(ctx)),
+    reason: blockingContractReason(ctx.req.class, askId, await gateUnblockerReachable(ctx)),
     ask_ref: askId,
   };
 }
@@ -216,16 +216,16 @@ export function gateB(ctx: GateContext): GateDecision {
  * carries class + fingerprint + posture + tool + outcome. The raw `req.target` is used solely to make the
  * decision (and, for a future Gate B, to fill an ask body) and is never persisted to audit.
  */
-export function adjudicateGate(
+export async function adjudicateGate(
   srv: Ctx,
   team: TeamRow,
   member: MemberRow,
   req: GateCheckRequest,
-): GateDecision {
+): Promise<GateDecision> {
   const ctx: GateContext = { srv, team, member, req };
-  const decision = req.kind === 'contended-surface' ? gateA(ctx) : gateB(ctx);
+  const decision = req.kind === 'contended-surface' ? await gateA(ctx) : await gateB(ctx);
   const action = req.kind === 'contended-surface' ? 'lane.gate' : 'action.gate';
-  appendAudit(srv.db, team.id, {
+  await appendAudit(srv.db, team.id, {
     actor: member.name,
     action,
     target: req.class,
@@ -257,17 +257,17 @@ export function adjudicateGate(
  * de-duplicates repeat attempts without retaining the text. ADR 163 §Mechanism says "target" loosely;
  * this is the careful reading of it.
  */
-export function recordActorAttestation(
+export async function recordActorAttestation(
   srv: Ctx,
   team: TeamRow,
   member: MemberRow,
   att: ActorAttestation,
-): void {
+): Promise<void> {
   // ADR 442 (the wall) — the gate refused a session-reaching tool. The one attestation that records a
   // `deny`: the refusal itself happened client-side, before any round trip (a daemon outage cannot open
   // it), so this row is its only durable trace. Tool and harness only — no body, target or session id.
   if (att.kind === 'session-denied') {
-    appendAudit(srv.db, team.id, {
+    await appendAudit(srv.db, team.id, {
       actor: member.name,
       action: 'gate.session_denied',
       target: null,
@@ -283,7 +283,7 @@ export function recordActorAttestation(
   // ADR 442 retired increment 2's confirmation loop with the relay: nothing is a sanctioned relay any
   // more, so a `nudgeRef` is recorded as observed and never resolved.
   if (att.kind === 'session-message') {
-    appendAudit(srv.db, team.id, {
+    await appendAudit(srv.db, team.id, {
       actor: member.name,
       action: 'actor.session_message',
       target: null,
@@ -298,7 +298,7 @@ export function recordActorAttestation(
     return;
   }
   const isSpawn = att.kind === 'subagent-spawn';
-  appendAudit(srv.db, team.id, {
+  await appendAudit(srv.db, team.id, {
     actor: member.name,
     action: isSpawn ? 'actor.subagent_spawn' : 'actor.subagent_write',
     target: att.actorType ?? att.spawnType ?? null,

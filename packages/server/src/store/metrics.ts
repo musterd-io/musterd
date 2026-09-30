@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 
 /**
  * DB-sampling aggregates behind the observable gauges (observability.md §4). Read-only; called from
@@ -6,18 +6,16 @@ import type { Database } from 'better-sqlite3';
  */
 
 /** Live presences (connected, within timeout, not a reclaim hold) grouped by surface. */
-export function activePresenceBySurface(
-  db: Database,
+export async function activePresenceBySurface(
+  db: Driver,
   timeoutMs: number,
   now: number = Date.now(),
-): { surface: string; count: number }[] {
+): Promise<{ surface: string; count: number }[]> {
   const cutoff = now - timeoutMs;
-  return db
-    .prepare<
-      [number],
-      { surface: string; count: number }
-    >('SELECT surface, COUNT(*) AS count FROM presence WHERE held_until IS NULL AND last_seen_at > ? GROUP BY surface')
-    .all(cutoff);
+  return await db.all<{ surface: string; count: number }>(
+    'SELECT surface, COUNT(*) AS count FROM presence WHERE held_until IS NULL AND last_seen_at > ? GROUP BY surface',
+    [cutoff],
+  );
 }
 
 /**
@@ -31,10 +29,8 @@ export function activePresenceBySurface(
  * while a message waited. Age is measured from receipt too: how long THIS daemon has held it
  * unread, which is the only clock the gauge can vouch for.
  */
-export function slowestInboxLagMs(db: Database, now: number = Date.now()): number {
-  const row = db
-    .prepare<[], { oldest: number | null }>(
-      `SELECT MIN(msg.created_at) AS oldest
+export async function slowestInboxLagMs(db: Driver, now: number = Date.now()): Promise<number> {
+  const row = await db.get<{ oldest: number | null }>(`SELECT MIN(msg.created_at) AS oldest
          FROM members m
          LEFT JOIN inbox_cursors c ON c.member_id = m.id
          JOIN messages msg
@@ -47,9 +43,7 @@ export function slowestInboxLagMs(db: Database, now: number = Date.now()): numbe
         WHERE m.left_at IS NULL
         GROUP BY m.id
         ORDER BY oldest ASC
-        LIMIT 1`,
-    )
-    .get();
+        LIMIT 1`);
   if (!row || row.oldest == null) return 0;
   return Math.max(0, now - row.oldest);
 }

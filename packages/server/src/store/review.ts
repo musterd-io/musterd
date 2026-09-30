@@ -12,7 +12,7 @@ import {
   type WakeCandidate,
   type Lane,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { getMemberByName, listMembers } from './members.js';
 import { hasLivePresence } from './presence.js';
 import {
@@ -175,15 +175,14 @@ const NO_ATTESTATION: Attestation = { model: null, at: null };
  * it stays cheap for years; if that ever stops being true the fix is a per-seat projection, not a
  * different source.
  */
-function durableAttestations(db: Database, teamId: string): Map<string, Attestation> {
-  const rows = db
-    .prepare<[string], { target: string | null; model: string | null; ts: number }>(
-      `SELECT target, json_extract(detail, '$.new') AS model, ts
+async function durableAttestations(db: Driver, teamId: string): Promise<Map<string, Attestation>> {
+  const rows = await db.all<{ target: string | null; model: string | null; ts: number }>(
+    `SELECT target, json_extract(detail, '$.new') AS model, ts
          FROM audit
         WHERE team_id = ? AND action = 'occupancy.model_attested'
         ORDER BY ts ASC`,
-    )
-    .all(teamId);
+    [teamId],
+  );
   const out = new Map<string, Attestation>();
   for (const r of rows) {
     if (!r.target || !r.model) continue; // a de-attestation (new: null) proves nothing
@@ -193,13 +192,11 @@ function durableAttestations(db: Database, teamId: string): Map<string, Attestat
 }
 
 /** The attested model of a member's most recent live occupancy (ADR 101/158), or null. */
-function latestAttestedModel(db: Database, memberId: string): string | null {
-  const row = db
-    .prepare<
-      [string],
-      { model: string | null }
-    >('SELECT model FROM presence WHERE member_id = ? AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1')
-    .get(memberId);
+async function latestAttestedModel(db: Driver, memberId: string): Promise<string | null> {
+  const row = await db.get<{ model: string | null }>(
+    'SELECT model FROM presence WHERE member_id = ? AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1',
+    [memberId],
+  );
   return row?.model ?? null;
 }
 
@@ -215,14 +212,14 @@ function latestAttestedModel(db: Database, memberId: string): string | null {
  * answers a different question — "what would waking this idle seat bring" — and lives in
  * {@link durableAttestations}, reachable only from the wake pool.
  */
-export function memberFamily(db: Database, member: MemberRow): string {
-  return member.kind === 'human' ? 'human' : modelFamily(latestAttestedModel(db, member.id));
+export async function memberFamily(db: Driver, member: MemberRow): Promise<string> {
+  return member.kind === 'human' ? 'human' : modelFamily(await latestAttestedModel(db, member.id));
 }
 
 /** The worker's family looked up by seat name — the `worker_family` half of the audit pair. */
-export function workerFamily(db: Database, teamId: string, worker: string): string {
-  const m = listMembers(db, teamId).find((x) => x.name === worker);
-  return m ? memberFamily(db, m) : MODEL_UNKNOWN;
+export async function workerFamily(db: Driver, teamId: string, worker: string): Promise<string> {
+  const m = (await listMembers(db, teamId)).find((x) => x.name === worker);
+  return m ? await memberFamily(db, m) : MODEL_UNKNOWN;
 }
 
 /**
@@ -230,14 +227,18 @@ export function workerFamily(db: Database, teamId: string, worker: string): stri
  * the durable record answers "what would waking this seat bring", never "what is it running now").
  * The close edge grades with this (ADR 188); a human seat has no model and grades as 'human' there.
  */
-export function memberModelByName(db: Database, teamId: string, name: string): string | null {
-  const m = listMembers(db, teamId).find((x) => x.name === name);
-  return m ? latestAttestedModel(db, m.id) : null;
+export async function memberModelByName(
+  db: Driver,
+  teamId: string,
+  name: string,
+): Promise<string | null> {
+  const m = (await listMembers(db, teamId)).find((x) => x.name === name);
+  return m ? await latestAttestedModel(db, m.id) : null;
 }
 
 /** Is this seat name a human? The close edge needs the kind, not just the model. */
-export function memberIsHuman(db: Database, teamId: string, name: string): boolean {
-  return listMembers(db, teamId).find((x) => x.name === name)?.kind === 'human';
+export async function memberIsHuman(db: Driver, teamId: string, name: string): Promise<boolean> {
+  return (await listMembers(db, teamId)).find((x) => x.name === name)?.kind === 'human';
 }
 
 /**
@@ -261,33 +262,33 @@ export function memberIsHuman(db: Database, teamId: string, name: string): boole
  * `unknown` (<2 attesting — with one or zero data points you cannot tell, and saying `monoculture`
  * would collapse "everyone HERE is claude" into "everyone ON THE TEAM is claude").
  */
-export function teamFamilyPosture(
-  db: Database,
+export async function teamFamilyPosture(
+  db: Driver,
   teamId: string,
   presenceTimeoutMs: number,
-): FamilyPosture {
+): Promise<FamilyPosture> {
   const families: Record<string, number> = {};
   const wake_pool: WakeCandidate[] = [];
-  const durable = durableAttestations(db, teamId);
-  const enrolled = listWakeableMemberIds(db, teamId);
-  const facts = seatWakeabilityFacts(db, teamId, Date.now());
+  const durable = await durableAttestations(db, teamId);
+  const enrolled = await listWakeableMemberIds(db, teamId);
+  const facts = await seatWakeabilityFacts(db, teamId, Date.now());
   // ADR 219: the wake pool is built from seats PRESENCE calls offline — but presence lapses
   // for reasons other than going away, and a seat whose audit trail shows it acting seconds ago is
   // not idle, it is mid-something with a stale heartbeat. Waking it is not a remedy, it is a
   // duplicate. Read once for the whole roster; the per-seat lookup below is a Map hit.
-  const lastAction = lastActionBySubject(db, teamId);
+  const lastAction = await lastActionBySubject(db, teamId);
   const now = Date.now();
   let attesting = 0;
   let unattested = 0;
   let humans_live = 0;
-  for (const m of listMembers(db, teamId)) {
+  for (const m of await listMembers(db, teamId)) {
     if (m.observer) continue;
     // Ledger seats (ADR 232) attest no model, correctly — they are not evidence holes, not
     // wake-pool candidates (you cannot wake a LaunchAgent, and trying costs a lease), and never
     // rungs on the review ladder. Counting one as `unattested` would be the exact "just reuse
     // kind: agent" bug the kind exists to prevent.
     if (m.kind === 'service') continue;
-    const live = hasLivePresence(db, m.id, presenceTimeoutMs);
+    const live = await hasLivePresence(db, m.id, presenceTimeoutMs);
     if (m.kind === 'human') {
       if (live) humans_live += 1;
       continue;
@@ -322,7 +323,7 @@ export function teamFamilyPosture(
       });
       continue;
     }
-    const family = modelFamily(latestAttestedModel(db, m.id));
+    const family = modelFamily(await latestAttestedModel(db, m.id));
     if (family === MODEL_UNKNOWN) {
       unattested += 1;
     } else {
@@ -363,13 +364,14 @@ export interface CloseVerdict {
  * claim the ledger never made — and it is precisely the "unconfirmed" word with nothing behind it
  * that ADR 283 exists to take apart.
  */
-export function closeVerdicts(db: Database, teamId: string): Map<string, CloseVerdict> {
-  const rows = db
-    .prepare<
-      [string],
-      { target: string | null; detail: string | null }
-    >("SELECT target, detail FROM audit WHERE team_id = ? AND action = 'lane.closed' ORDER BY ts")
-    .all(teamId);
+export async function closeVerdicts(
+  db: Driver,
+  teamId: string,
+): Promise<Map<string, CloseVerdict>> {
+  const rows = await db.all<{ target: string | null; detail: string | null }>(
+    "SELECT target, detail FROM audit WHERE team_id = ? AND action = 'lane.closed' ORDER BY ts",
+    [teamId],
+  );
   const out = new Map<string, CloseVerdict>();
   for (const r of rows) {
     if (!r.target || !r.detail) continue;
@@ -453,14 +455,14 @@ export function acceptanceExemption(
   return { exempt: !sampled, sampled };
 }
 
-export function pickReviewCounterpart(
-  db: Database,
+export async function pickReviewCounterpart(
+  db: Driver,
   teamId: string,
   lane: Lane,
   worker: string,
   presenceTimeoutMs: number,
-): ReviewPick | null {
-  return selectReviewCounterpart(db, teamId, lane, worker, presenceTimeoutMs).pick;
+): Promise<ReviewPick | null> {
+  return (await selectReviewCounterpart(db, teamId, lane, worker, presenceTimeoutMs)).pick;
 }
 
 /**
@@ -471,47 +473,48 @@ export function pickReviewCounterpart(
  * (576 asks in an 11.5k-row table on the live daemon), joined to `lanes` so a closed lane's stale
  * ask counts for nothing.
  */
-export function openAcceptanceLoad(db: Database, teamId: string): Map<string, number> {
+export async function openAcceptanceLoad(db: Driver, teamId: string): Promise<Map<string, number>> {
   // Three single-pass scans joined here rather than one query with correlated NOT EXISTS: the
   // correlated form re-ran json_extract over the whole messages table per candidate ask and
   // measured 3.2s on a copy of the live daemon (2026-09-05, 11.5k rows) — a cost paid on EVERY
   // submit. This shape measured well under 100ms on the same copy.
   const awaiting = new Set(
-    db
-      .prepare<[string], { id: string }>(
+    (
+      await db.all<{ id: string }>(
         `SELECT id FROM lanes WHERE team_id = ? AND state IN ('awaiting_acceptance','ready_for_review')`,
+        [teamId],
       )
-      .all(teamId)
-      .map((r) => r.id),
+    ).map((r) => r.id),
   );
   if (awaiting.size === 0) return new Map();
   const answered = new Set(
-    db
-      .prepare<[string], { ref: string | null }>(
+    (
+      await db.all<{ ref: string | null }>(
         `SELECT in_reply_to AS ref FROM messages
           WHERE team_id = ? AND act IN ('accept','decline') AND meta IS NOT NULL`,
+        [teamId],
       )
-      .all(teamId)
+    )
       .map((r) => r.ref)
       .filter((r): r is string => typeof r === 'string'),
   );
   const resolved = new Set(
-    db
-      .prepare<[string], { thread_id: string | null }>(
+    (
+      await db.all<{ thread_id: string | null }>(
         `SELECT thread_id FROM messages WHERE team_id = ? AND act = 'resolve' AND thread_id IS NOT NULL`,
+        [teamId],
       )
-      .all(teamId)
+    )
       .map((r) => r.thread_id)
       .filter((r): r is string => typeof r === 'string'),
   );
-  const asks = db
-    .prepare<[string], { id: string; holder: string | null; lane: string | null }>(
-      `SELECT m.id AS id, mem.name AS holder, json_extract(m.meta, '$.lane_review.lane') AS lane
+  const asks = await db.all<{ id: string; holder: string | null; lane: string | null }>(
+    `SELECT m.id AS id, mem.name AS holder, json_extract(m.meta, '$.lane_review.lane') AS lane
          FROM messages m
          LEFT JOIN members mem ON mem.id = m.to_member
         WHERE m.team_id = ? AND m.act = 'ask' AND m.meta LIKE '%lane_review%'`,
-    )
-    .all(teamId);
+    [teamId],
+  );
   const load = new Map<string, number>();
   for (const a of asks) {
     if (!a.holder || !a.lane || !awaiting.has(a.lane)) continue;
@@ -522,16 +525,15 @@ export function openAcceptanceLoad(db: Database, teamId: string): Map<string, nu
 }
 
 /** When each seat was last handed an acceptance (newest ready/re-route row naming it as reviewer). */
-export function lastPickedAt(db: Database, teamId: string): Map<string, number> {
-  const rows = db
-    .prepare<[string], { reviewer: string; at: number }>(
-      `SELECT json_extract(detail, '$.reviewer') AS reviewer, MAX(ts) AS at
+export async function lastPickedAt(db: Driver, teamId: string): Promise<Map<string, number>> {
+  const rows = await db.all<{ reviewer: string; at: number }>(
+    `SELECT json_extract(detail, '$.reviewer') AS reviewer, MAX(ts) AS at
          FROM audit
         WHERE team_id = ? AND action IN ('lane.ready_for_review','lane.review_rerouted')
           AND json_extract(detail, '$.reviewer') IS NOT NULL
         GROUP BY 1`,
-    )
-    .all(teamId);
+    [teamId],
+  );
   return new Map(rows.map((r) => [r.reviewer, r.at]));
 }
 
@@ -568,15 +570,15 @@ function tieBreaker(
  * This is intentionally a peer-picker only: risky human escalation and wake routing remain distinct
  * paths in the transport, whose explicit outcome is recorded alongside this snapshot.
  */
-export function selectReviewCounterpart(
-  db: Database,
+export async function selectReviewCounterpart(
+  db: Driver,
   teamId: string,
   _lane: Lane,
   worker: string,
   presenceTimeoutMs: number,
   opts: { departing?: string } = {},
-): ReviewSelection {
-  const lastWork = lastActionBySubject(db, teamId, {
+): Promise<ReviewSelection> {
+  const lastWork = await lastActionBySubject(db, teamId, {
     // Claims, credentials, and leases establish authority/Presence; none is work that should make
     // a counterpart busy. This keeps review selection orthogonal to the lease-bound HTTP authority.
     excludeActions: [
@@ -590,9 +592,9 @@ export function selectReviewCounterpart(
     ],
   });
   const now = Date.now();
-  const workerSeat = listMembers(db, teamId).find((x) => x.name === worker);
-  const workerModel = workerSeat ? latestAttestedModel(db, workerSeat.id) : null;
-  const worker_family = workerSeat ? memberFamily(db, workerSeat) : MODEL_UNKNOWN;
+  const workerSeat = (await listMembers(db, teamId)).find((x) => x.name === worker);
+  const workerModel = workerSeat ? await latestAttestedModel(db, workerSeat.id) : null;
+  const worker_family = workerSeat ? await memberFamily(db, workerSeat) : MODEL_UNKNOWN;
   // A worker whose live occupancy attests nothing cannot be graded against ANY candidate. That is
   // one fact about the asker, not a fact about each candidate — see `worker_unattested`.
   const workerUnattested = normalizeModelId(workerModel) === MODEL_UNKNOWN;
@@ -600,10 +602,10 @@ export function selectReviewCounterpart(
   const selectable: Array<{ index: number; member: MemberRow; grade: SnapshotGrade }> = [];
   const busySelectable: Array<{ index: number; member: MemberRow; grade: SnapshotGrade }> = [];
 
-  for (const member of listMembers(db, teamId)) {
+  for (const member of await listMembers(db, teamId)) {
     const candidate: ReviewSelectionCandidate = {
       member: member.name,
-      family: memberFamily(db, member),
+      family: await memberFamily(db, member),
       eligible: false,
     };
     candidates.push(candidate);
@@ -619,7 +621,7 @@ export function selectReviewCounterpart(
       candidate.exclusion = 'service_or_observer';
       continue;
     }
-    if (!hasLivePresence(db, member.id, presenceTimeoutMs)) {
+    if (!(await hasLivePresence(db, member.id, presenceTimeoutMs))) {
       candidate.exclusion = 'no_live_presence';
       continue;
     }
@@ -642,7 +644,7 @@ export function selectReviewCounterpart(
         selectable.push({ index: candidates.length - 1, member, grade });
       }
     };
-    const candidateModel = latestAttestedModel(db, member.id);
+    const candidateModel = await latestAttestedModel(db, member.id);
     const grade = reviewGrade(workerModel, candidateModel);
     if (grade === null) {
       // Attribute the null to the side that owns it. A candidate that attests nothing is its own
@@ -671,7 +673,7 @@ export function selectReviewCounterpart(
   // Grade first (ADR 188), and among equal grades the load rung (lane 01M1S6GZ96). Array.sort is
   // stable, so a full tie still falls to roster order — the pre-ADR-303 policy — but now it is the
   // LAST resort, not the only one, and the snapshot says which rung decided.
-  const tie = tieBreaker(openAcceptanceLoad(db, teamId), lastPickedAt(db, teamId));
+  const tie = tieBreaker(await openAcceptanceLoad(db, teamId), await lastPickedAt(db, teamId));
   // Quiet peers win when any exist. If the only live gradeable peers are busy, ask one of them
   // anyway (ADR 404) — busy is a preference, not a hard miss.
   const pool = selectable.length > 0 ? selectable : busySelectable;
@@ -710,7 +712,7 @@ export function selectReviewCounterpart(
     // enter the denominator of a diversity claim by silence.
     route: best.grade === UNGRADED ? UNGRADED : 'cross_family',
     grade: best.grade,
-    reviewer_family: memberFamily(db, best.member),
+    reviewer_family: await memberFamily(db, best.member),
   };
   return {
     pick,
@@ -726,25 +728,31 @@ export function selectReviewCounterpart(
  * The stage-two (or no-peer fallback) human reviewer for a risky lane (ADR 172/188): a live human
  * seat, kind-only — never `is_admin`, which a stale agent row can still carry.
  */
-export function pickHumanReviewer(
-  db: Database,
+export async function pickHumanReviewer(
+  db: Driver,
   teamId: string,
   worker: string,
   presenceTimeoutMs: number,
-): ReviewPick | null {
-  const human = listMembers(db, teamId).find(
-    (m) =>
+): Promise<ReviewPick | null> {
+  const members = await listMembers(db, teamId);
+  let human: (typeof members)[number] | undefined;
+  for (const m of members) {
+    if (
       m.name !== worker &&
       !m.observer &&
       m.kind === 'human' &&
-      hasLivePresence(db, m.id, presenceTimeoutMs),
-  );
+      (await hasLivePresence(db, m.id, presenceTimeoutMs))
+    ) {
+      human = m;
+      break;
+    }
+  }
   if (!human) return null;
   return {
     reviewer: human.name,
     route: 'human_admin',
     grade: 'human',
-    reviewer_family: memberFamily(db, human),
+    reviewer_family: await memberFamily(db, human),
   };
 }
 
@@ -764,13 +772,13 @@ export type NamedAcceptorRefusal = 'unknown_seat' | 'observer' | 'is_the_worker'
  * (`same_model`, honestly) when it cannot prove better. Nothing is filtered on it — the namer's
  * judgement is the authority, and `route: 'named'` is what tells every later reader that.
  */
-export function namedAcceptor(
-  db: Database,
+export async function namedAcceptor(
+  db: Driver,
   teamId: string,
   worker: string,
   name: string,
-): ReviewPick | { refused: NamedAcceptorRefusal } {
-  const member = getMemberByName(db, teamId, name);
+): Promise<ReviewPick | { refused: NamedAcceptorRefusal }> {
+  const member = await getMemberByName(db, teamId, name);
   if (!member) return { refused: 'unknown_seat' };
   if (member.observer) return { refused: 'observer' };
   // An owner naming themselves can never produce a confirmed close — `verified` is derived from
@@ -780,13 +788,15 @@ export function namedAcceptor(
   const grade =
     member.kind === 'human'
       ? ('human' as const)
-      : (reviewGrade(memberModelByName(db, teamId, worker), latestAttestedModel(db, member.id)) ??
-        'same_model');
+      : (reviewGrade(
+          await memberModelByName(db, teamId, worker),
+          await latestAttestedModel(db, member.id),
+        ) ?? 'same_model');
   return {
     reviewer: member.name,
     route: 'named',
     grade,
-    reviewer_family: memberFamily(db, member),
+    reviewer_family: await memberFamily(db, member),
   };
 }
 
@@ -796,17 +806,17 @@ export function namedAcceptor(
  * Only `wakeability === 'wakeable'` seats are spendable (ADR 189). Never routes same_model /
  * ungradeable / the worker themselves.
  */
-export function pickWakeReviewer(
-  db: Database,
+export async function pickWakeReviewer(
+  db: Driver,
   teamId: string,
   worker: string,
   posture: FamilyPosture,
-): ReviewPick | null {
-  const workerSeat = listMembers(db, teamId).find((x) => x.name === worker);
-  const workerModel = workerSeat ? latestAttestedModel(db, workerSeat.id) : null;
-  const durable = durableAttestations(db, teamId);
+): Promise<ReviewPick | null> {
+  const workerSeat = (await listMembers(db, teamId)).find((x) => x.name === worker);
+  const workerModel = workerSeat ? await latestAttestedModel(db, workerSeat.id) : null;
+  const durable = await durableAttestations(db, teamId);
   const LADDER = ['cross_family', 'cross_model'] as const;
-  const tie = tieBreaker(openAcceptanceLoad(db, teamId), lastPickedAt(db, teamId));
+  const tie = tieBreaker(await openAcceptanceLoad(db, teamId), await lastPickedAt(db, teamId));
   const graded = posture.wake_pool
     .filter((c) => c.wakeability === 'wakeable' && c.seat !== worker)
     .map((c) => ({
@@ -842,14 +852,13 @@ export function pickWakeReviewer(
  * ask was answered). Read by the re-route arm so the seat being replaced can be told, and so naming
  * the seat that already holds the ask mints no duplicate.
  */
-export function openAcceptanceAsk(
-  db: Database,
+export async function openAcceptanceAsk(
+  db: Driver,
   teamId: string,
   laneId: string,
-): { id: string; to: string } | null {
-  const row = db
-    .prepare<[string, string], { id: string; to: string | null }>(
-      `SELECT m.id AS id, mem.name AS "to" FROM messages m
+): Promise<{ id: string; to: string } | null> {
+  const row = await db.get<{ id: string; to: string | null }>(
+    `SELECT m.id AS id, mem.name AS "to" FROM messages m
          LEFT JOIN members mem ON mem.id = m.to_member
         WHERE m.team_id = ? AND m.act = 'ask'
           AND json_extract(m.meta, '$.lane_review.lane') = ?
@@ -864,10 +873,10 @@ export function openAcceptanceAsk(
                AND v.act = 'resolve'
                AND v.thread_id = m.id)
         ORDER BY m.ts DESC, m.id DESC LIMIT 1`,
-    )
-    .get(teamId, laneId);
+    [teamId, laneId],
+  );
   if (!row || !row.to) return null;
-  const superseded = supersededAcceptanceAsks(db, teamId, laneId);
+  const superseded = await supersededAcceptanceAsks(db, teamId, laneId);
   return superseded.has(row.id) ? null : { id: row.id, to: row.to };
 }
 
@@ -878,17 +887,16 @@ export function openAcceptanceAsk(
  * verdicts bind to one acceptance — the "both believe they hold it" state the re-route exists to
  * end. Read at the verdict edge (route.ts) and by {@link openAcceptanceAsk}.
  */
-export function supersededAcceptanceAsks(
-  db: Database,
+export async function supersededAcceptanceAsks(
+  db: Driver,
   teamId: string,
   laneId: string,
-): Set<string> {
-  const rows = db
-    .prepare<[string, string], { detail: string | null }>(
-      `SELECT detail FROM audit
+): Promise<Set<string>> {
+  const rows = await db.all<{ detail: string | null }>(
+    `SELECT detail FROM audit
         WHERE team_id = ? AND action = 'lane.review_rerouted' AND target = ?`,
-    )
-    .all(teamId, laneId);
+    [teamId, laneId],
+  );
   const out = new Set<string>();
   for (const r of rows) {
     if (!r.detail) continue;
@@ -907,13 +915,16 @@ export function supersededAcceptanceAsks(
 export const REVIEW_LOOP_BREAKER_N = 3;
 
 /** How many times this lane has entered `ready_for_review` (each is one bounce into the review loop). */
-export function reviewLoopBounceCount(db: Database, teamId: string, laneId: string): number {
-  const row = db
-    .prepare<[string, string], { n: number }>(
-      `SELECT COUNT(*) AS n FROM audit
+export async function reviewLoopBounceCount(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+): Promise<number> {
+  const row = await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM audit
         WHERE team_id = ? AND action = 'lane.ready_for_review' AND target = ?`,
-    )
-    .get(teamId, laneId);
+    [teamId, laneId],
+  );
   return row?.n ?? 0;
 }
 
@@ -934,24 +945,27 @@ export interface HeldAcceptance {
  * never said goodbye has no such statement and must infer departure, which is
  * {@link abandonedAcceptances}.
  */
-export function heldAcceptances(db: Database, teamId: string, seat: string): HeldAcceptance[] {
-  const member = getMemberByName(db, teamId, seat);
+export async function heldAcceptances(
+  db: Driver,
+  teamId: string,
+  seat: string,
+): Promise<HeldAcceptance[]> {
+  const member = await getMemberByName(db, teamId, seat);
   if (!member) return [];
-  const lanes = db
-    .prepare<[string, string], { lane: string }>(
-      `SELECT DISTINCT json_extract(m.meta, '$.lane_review.lane') AS lane
+  const lanes = await db.all<{ lane: string }>(
+    `SELECT DISTINCT json_extract(m.meta, '$.lane_review.lane') AS lane
          FROM messages m
          JOIN lanes l ON l.id = json_extract(m.meta, '$.lane_review.lane')
         WHERE m.team_id = ? AND m.act = 'ask' AND m.to_member = ?
           AND l.team_id = m.team_id AND l.state = 'awaiting_acceptance'`,
-    )
-    .all(teamId, member.id);
+    [teamId, member.id],
+  );
   const out: HeldAcceptance[] = [];
   for (const row of lanes) {
     if (!row.lane) continue;
     // `openAcceptanceAsk` is the vetted predicate for "still owed": it already discounts answered,
     // resolved and superseded asks, so this cannot name an acceptance that has moved on.
-    const open = openAcceptanceAsk(db, teamId, row.lane);
+    const open = await openAcceptanceAsk(db, teamId, row.lane);
     if (open && open.to === seat) out.push({ lane: row.lane, ask: open.id, holder: seat });
   }
   return out;
@@ -968,14 +982,14 @@ export function heldAcceptances(db: Database, teamId: string, seat: string): Hel
  * Liveness is `hasLivePresence`, the same predicate `selectReviewCounterpart` excludes candidates
  * by, so a seat this names is a seat the picker would not have picked.
  */
-export function abandonedAcceptances(
-  db: Database,
+export async function abandonedAcceptances(
+  db: Driver,
   teamId: string,
   seat: string,
   presenceTimeoutMs: number,
-): HeldAcceptance[] {
-  const member = getMemberByName(db, teamId, seat);
+): Promise<HeldAcceptance[]> {
+  const member = await getMemberByName(db, teamId, seat);
   if (!member) return [];
-  if (hasLivePresence(db, member.id, presenceTimeoutMs)) return [];
-  return heldAcceptances(db, teamId, seat);
+  if (await hasLivePresence(db, member.id, presenceTimeoutMs)) return [];
+  return await heldAcceptances(db, teamId, seat);
 }

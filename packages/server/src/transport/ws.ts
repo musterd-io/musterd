@@ -6,7 +6,7 @@ import {
   type ClaimTarget,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
-import { WebSocketServer, type WebSocket } from 'ws';
+import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import { checkUpgrade } from '../config.js';
 import type { Ctx } from '../context.js';
 import { MusterdError, asMusterdError } from '../errors.js';
@@ -72,13 +72,13 @@ function encodeTarget(t: ClaimTarget): string {
 }
 
 /** Return claimable seat names for the refused frame hint (ADR 055 no-dead-end rule). */
-function claimableSeats(ctx: Ctx, teamId: string): string[] {
-  return ctx.db
-    .prepare<[string], { name: string }>(
+async function claimableSeats(ctx: Ctx, teamId: string): Promise<string[]> {
+  return (
+    await ctx.db.all<{ name: string }>(
       "SELECT name FROM members WHERE team_id = ? AND left_at IS NULL AND kind = 'agent' AND observer = 0 ORDER BY name",
+      [teamId],
     )
-    .all(teamId)
-    .map((r) => r.name);
+  ).map((r) => r.name);
 }
 
 interface ConnState {
@@ -102,24 +102,24 @@ interface ConnState {
  * so the gate finds the successor gone and keeps the incumbent untouched. Returns the timer so the
  * successor's own close can cancel it. No-op when there were no same-workspace predecessors.
  */
-function scheduleSameWorkspaceEviction(
+async function scheduleSameWorkspaceEviction(
   ctx: Ctx,
   teamId: string,
   successorConnId: string,
   memberName: string,
   predecessorConnIds: string[],
-): NodeJS.Timeout | undefined {
+): Promise<NodeJS.Timeout | undefined> {
   if (predecessorConnIds.length === 0) return undefined;
   // Drift signal (ADR 092 §C): the duplicate same-workspace adapter is observable in the audit log
   // now, even before — or if — the eviction fires.
-  appendAudit(ctx.db, teamId, {
+  await appendAudit(ctx.db, teamId, {
     actor: memberName,
     action: 'claim.duplicate_workspace',
     target: memberName,
     result: 'allow',
     detail: { predecessors: predecessorConnIds.length, grace_ms: ctx.config.supersedeGraceMs },
   });
-  const timer = setTimeout(() => {
+  const timer = setTimeout(async () => {
     // Reap only if the successor is still attached — a probe that disconnected within the grace never
     // reaches here (its conn is gone), so the incumbent is preserved (ADR 068's anti-flap intact).
     if (!ctx.hub.getConn(successorConnId)) return;
@@ -135,11 +135,11 @@ function scheduleSameWorkspaceEviction(
       });
       old.close?.();
       ctx.hub.remove(old.connId);
-      clearPresenceById(ctx.db, old.presenceId);
+      await clearPresenceById(ctx.db, old.presenceId);
       evicted++;
     }
     if (evicted > 0) {
-      appendAudit(ctx.db, teamId, {
+      await appendAudit(ctx.db, teamId, {
         actor: memberName,
         action: 'claim.superseded',
         target: memberName,
@@ -202,10 +202,12 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   });
 
-  wss.on('connection', (ws: WebSocket) => {
+  wss.on('connection', async (ws: WebSocket) => {
     const state: ConnState = { connId: ulid(), authenticated: false };
 
-    ws.on('message', (data) => {
+    // Plan 1A: the frame handler is async (store calls await), so a per-connection chain keeps one
+    // socket's frames in arrival order — the synchronous handler serialised them for free before.
+    const handleMessage = async (data: RawData): Promise<void> => {
       let parsed: unknown;
       try {
         parsed = JSON.parse(data.toString());
@@ -228,18 +230,19 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
           if (frame.v !== PROTOCOL_VERSION) {
             throw new MusterdError('version_mismatch', `server speaks ${PROTOCOL_VERSION}`);
           }
-          const team = requireTeam(ctx.db, frame.team);
+          const team = await requireTeam(ctx.db, frame.team);
 
           // Step 1: authenticate the bootstrap key or a self-identifying seat credential. An agent
           // seat credential is accepted only to reconnect through this claim handshake (ADR 337).
           let authenticatedAs: import('../store/rows.js').MemberRow | null = null;
-          const bootstrapCredential = findBootstrapCredential(ctx.db, team.id, frame.key);
+          const bootstrapCredential = await findBootstrapCredential(ctx.db, team.id, frame.key);
           const bootstrapRecord =
-            bootstrapCredential ?? findBootstrapCredentialRecord(ctx.db, team.id, frame.key);
+            bootstrapCredential ??
+            (await findBootstrapCredentialRecord(ctx.db, team.id, frame.key));
           if (bootstrapRecord && !bootstrapCredential) {
             const expired =
               bootstrapRecord.expires_at !== null && bootstrapRecord.expires_at <= Date.now();
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: null,
               action: expired ? 'bootstrap_credential.expired' : 'bootstrap_credential.refused',
               target: bootstrapRecord.id,
@@ -258,21 +261,19 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             });
             return;
           }
-          const keyHash = getAgentKeyHash(ctx.db, team.id);
+          const keyHash = await getAgentKeyHash(ctx.db, team.id);
           if (bootstrapCredential || (keyHash && hashToken(frame.key) === keyHash)) {
             // Agent harness: key validates against the team secret. No specific member identity yet.
           } else {
             // Human credential: look up by hash.
             const credHash = hashToken(frame.key);
             authenticatedAs =
-              ctx.db
-                .prepare<
-                  [string, string],
-                  import('../store/rows.js').MemberRow
-                >("SELECT * FROM members WHERE team_id = ? AND credential_hash = ? AND left_at IS NULL AND kind IN ('human', 'agent')")
-                .get(team.id, credHash) ?? null;
+              (await ctx.db.get<import('../store/rows.js').MemberRow>(
+                "SELECT * FROM members WHERE team_id = ? AND credential_hash = ? AND left_at IS NULL AND kind IN ('human', 'agent')",
+                [team.id, credHash],
+              )) ?? null;
             if (!authenticatedAs) {
-              const claimable = claimableSeats(ctx, team.id);
+              const claimable = await claimableSeats(ctx, team.id);
               send(ws, {
                 type: 'refused',
                 code: 'forbidden',
@@ -281,7 +282,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
                 claimable,
                 hint: `musterd claim <seat> --key <mskey_...|msac_...>`,
               });
-              appendAudit(ctx.db, team.id, {
+              await appendAudit(ctx.db, team.id, {
                 actor: null,
                 action: 'claim.refused',
                 target: null,
@@ -295,9 +296,9 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
           // Step 2: resolve the target member.
           let targetMember: import('../store/rows.js').MemberRow | null = null;
           if ('seat' in frame.target) {
-            targetMember = getMemberByName(ctx.db, team.id, frame.target.seat) ?? null;
+            targetMember = (await getMemberByName(ctx.db, team.id, frame.target.seat)) ?? null;
             if (!targetMember || targetMember.left_at !== null) {
-              const claimable = claimableSeats(ctx, team.id);
+              const claimable = await claimableSeats(ctx, team.id);
               send(ws, {
                 type: 'refused',
                 code: 'not_found',
@@ -307,7 +308,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
                   ? `available: ${claimable.join(', ')}`
                   : `musterd team add <seat> --team ${team.slug}`,
               });
-              appendAudit(ctx.db, team.id, {
+              await appendAudit(ctx.db, team.id, {
                 actor: null,
                 action: 'claim.refused',
                 target: frame.target.seat,
@@ -330,14 +331,12 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             }
           } else if ('role' in frame.target) {
             targetMember =
-              ctx.db
-                .prepare<
-                  [string, string],
-                  import('../store/rows.js').MemberRow
-                >('SELECT * FROM members WHERE team_id = ? AND role = ? AND left_at IS NULL LIMIT 1')
-                .get(team.id, frame.target.role) ?? null;
+              (await ctx.db.get<import('../store/rows.js').MemberRow>(
+                'SELECT * FROM members WHERE team_id = ? AND role = ? AND left_at IS NULL LIMIT 1',
+                [team.id, frame.target.role],
+              )) ?? null;
             if (!targetMember) {
-              const claimable = claimableSeats(ctx, team.id);
+              const claimable = await claimableSeats(ctx, team.id);
               send(ws, {
                 type: 'refused',
                 code: 'not_found',
@@ -347,7 +346,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
                   ? `available seats: ${claimable.join(', ')}`
                   : `musterd team add <seat> --role ${frame.target.role} --team ${team.slug}`,
               });
-              appendAudit(ctx.db, team.id, {
+              await appendAudit(ctx.db, team.id, {
                 actor: null,
                 action: 'claim.refused',
                 target: frame.target.role,
@@ -374,7 +373,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
               claimable: [],
               hint: refusal.hint,
             });
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: null,
               action: 'claim.refused',
               target: targetMember.name,
@@ -390,7 +389,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
               frame.target.seat !== bootstrapCredential.target ||
               targetMember?.name !== bootstrapCredential.target)
           ) {
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: null,
               action: 'bootstrap_credential.refused',
               target: bootstrapCredential.id,
@@ -410,7 +409,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             bootstrapCredential?.use_kind === 'claim_role' &&
             (!('role' in frame.target) || frame.target.role !== bootstrapCredential.target)
           ) {
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: null,
               action: 'bootstrap_credential.refused',
               target: bootstrapCredential.id,
@@ -427,7 +426,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             return;
           }
           if (bootstrapCredential?.use_kind === 'host') {
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: null,
               action: 'bootstrap_credential.refused',
               target: bootstrapCredential.id,
@@ -444,8 +443,8 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             return;
           }
           if (bootstrapCredential) {
-            recordBootstrapCredentialUse(ctx.db, bootstrapCredential.id);
-            appendAudit(ctx.db, team.id, {
+            await recordBootstrapCredentialUse(ctx.db, bootstrapCredential.id);
+            await appendAudit(ctx.db, team.id, {
               actor: null,
               action: 'bootstrap_credential.used',
               target: bootstrapCredential.id,
@@ -458,7 +457,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
           if (targetMember) {
             const status = resolveAccountStatus(targetMember);
             if (status === 'disabled' || status === 'banned') {
-              const claimable = claimableSeats(ctx, team.id);
+              const claimable = await claimableSeats(ctx, team.id);
               send(ws, {
                 type: 'refused',
                 code: status,
@@ -466,7 +465,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
                 claimable,
                 hint: `contact a team admin to re-enable this seat`,
               });
-              appendAudit(ctx.db, team.id, {
+              await appendAudit(ctx.db, team.id, {
                 actor: null,
                 action: 'claim.refused',
                 target: targetMember.name,
@@ -484,19 +483,19 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             targetMember.kind === 'agent' &&
             targetMember.observer === 0 &&
             frame.provenance === 'wake' &&
-            heldByAttendedSession(
+            (await heldByAttendedSession(
               ctx.db,
               ctx.hub.connsForMember(targetMember.id).map((c) => c.presenceId),
-            )
+            ))
           ) {
             send(ws, {
               type: 'refused',
               code: 'claim_conflict',
               message: `seat "${targetMember.name}" is held by an attended session — a wake does not displace it`,
-              claimable: claimableSeats(ctx, team.id),
+              claimable: await claimableSeats(ctx, team.id),
               hint: 'the act stays due; the wake is retried once the seat is idle',
             });
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: null,
               action: 'claim.refused',
               target: targetMember.name,
@@ -511,10 +510,10 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
           // Step 4: authorize. Refused and pending claims must not mutate the incumbent.
           let reseated = false;
           if (frame.grant) {
-            const gv = validateGrant(ctx.db, team.id, frame.grant);
+            const gv = await validateGrant(ctx.db, team.id, frame.grant);
             if (!gv.ok) {
               const code = gv.reason === 'expired' ? 'expired_grant' : 'forbidden';
-              const claimable = claimableSeats(ctx, team.id);
+              const claimable = await claimableSeats(ctx, team.id);
               send(ws, {
                 type: 'refused',
                 code,
@@ -522,7 +521,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
                 claimable,
                 hint: 'request a new grant from a team admin',
               });
-              appendAudit(ctx.db, team.id, {
+              await appendAudit(ctx.db, team.id, {
                 actor: null,
                 action: 'claim.refused',
                 target: targetMember?.name ?? null,
@@ -541,7 +540,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
                 gv.grant.scope === 'role' &&
                 grantTarget === frame.target.role);
             if (!targetOk) {
-              const claimable = claimableSeats(ctx, team.id);
+              const claimable = await claimableSeats(ctx, team.id);
               send(ws, {
                 type: 'refused',
                 code: 'forbidden',
@@ -551,10 +550,10 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
               });
               return;
             }
-            consumeGrant(ctx.db, gv.grant.id);
+            await consumeGrant(ctx.db, gv.grant.id);
             // Resume token (ADR 087): a reusable grant survives consumeGrant — refresh its TTL so an
             // actively-reconnecting seat never expires. No-op for single_use/standing grants.
-            refreshGrant(ctx.db, gv.grant.id, ctx.config.resumeTtlMs);
+            await refreshGrant(ctx.db, gv.grant.id, ctx.config.resumeTtlMs);
             // OCCUPY — fall through to the common occupy block below.
           } else if (authenticatedAs && targetMember && authenticatedAs.id === targetMember.id) {
             // Credential self-authorize (ADR 077): a human authenticated by their own mscr_ credential
@@ -566,7 +565,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             targetMember.kind === 'agent' &&
             'seat' in frame.target &&
             isHeld(targetMember) &&
-            getPolicy(ctx.db, team.id).standing_reseat_known_agents
+            (await getPolicy(ctx.db, team.id)).standing_reseat_known_agents
           ) {
             // Dogfood-mode re-seat (ADR 146, on ADR 145 §7). The seat-claim wall is a gate meant for
             // *strangers* firing on *teammates*: 27 claim requests in the record, 7 expired unanswered
@@ -583,7 +582,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
           } else {
             // Step 6: no grant → open a claim request and hold the WS open.
             const encodedTarget = 'observe' in frame.target ? null : encodeTarget(frame.target);
-            const req = createRequest(ctx.db, team.id, {
+            const req = await createRequest(ctx.db, team.id, {
               kind: 'claim',
               from_session: state.connId,
               target: encodedTarget,
@@ -611,7 +610,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
               isOpen: () => ws.readyState === ws.OPEN,
               send: (f) => send(ws, f),
               close: () => ws.close(),
-              _claimApproved: (presenceId, sameWorkspacePredecessors = []) => {
+              _claimApproved: async (presenceId, sameWorkspacePredecessors = []) => {
                 state.authenticated = true;
                 state.conn = {
                   connId: state.connId,
@@ -631,7 +630,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
                 // Promote from pending to full member slot in hub.
                 ctx.hub.remove(state.connId);
                 ctx.hub.add(state.conn);
-                const evictionTimer = scheduleSameWorkspaceEviction(
+                const evictionTimer = await scheduleSameWorkspaceEviction(
                   ctx,
                   team.id,
                   state.connId,
@@ -653,7 +652,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
               request_id: req.id,
               message: `seat claim request from ${frame.surface}: ${encodedTarget ?? 'teammate'}`,
             });
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: null,
               action: 'claim.pending',
               target: targetMember?.name ?? null,
@@ -697,18 +696,18 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
               );
             };
             displacedModel =
-              ctx.db
-                .prepare<
-                  [string],
-                  { model: string }
-                >('SELECT model FROM presence WHERE member_id = ? AND model IS NOT NULL ORDER BY last_seen_at DESC LIMIT 1')
-                .get(targetMember.id)?.model ?? null;
-            const orphaned = ctx.db
-              .prepare<
-                [string],
-                { count: number }
-              >('SELECT count(*) AS count FROM presence WHERE member_id = ? AND conn_id IS NULL')
-              .get(targetMember.id)?.count;
+              (
+                await ctx.db.get<{ model: string }>(
+                  'SELECT model FROM presence WHERE member_id = ? AND model IS NOT NULL ORDER BY last_seen_at DESC LIMIT 1',
+                  [targetMember.id],
+                )
+              )?.model ?? null;
+            const orphaned = (
+              await ctx.db.get<{ count: number }>(
+                'SELECT count(*) AS count FROM presence WHERE member_id = ? AND conn_id IS NULL',
+                [targetMember.id],
+              )
+            )?.count;
             let displaced = 0;
             for (const old of ctx.hub.connsForMember(targetMember.id)) {
               if (sameWorkspace(old)) {
@@ -722,12 +721,12 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
               });
               old.close?.();
               ctx.hub.remove(old.connId);
-              clearPresenceById(ctx.db, old.presenceId);
+              await clearPresenceById(ctx.db, old.presenceId);
               displaced++;
             }
             const evicted = displaced + (orphaned ?? 0);
             if (evicted > 0) {
-              appendAudit(ctx.db, team.id, {
+              await appendAudit(ctx.db, team.id, {
                 actor: targetMember.name,
                 action: 'claim.superseded',
                 target: targetMember.name,
@@ -735,7 +734,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
                 detail: { same_workspace: false, evicted, via: 'ws' },
               });
             }
-            clearOrphanPresence(ctx.db, targetMember.id);
+            await clearOrphanPresence(ctx.db, targetMember.id);
           }
 
           // OCCUPY: attach presence and complete the handshake.
@@ -751,7 +750,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             });
             return;
           }
-          const presence = attach(ctx.db, targetMember.id, frame.surface, state.connId, {
+          const presence = await attach(ctx.db, targetMember.id, frame.surface, state.connId, {
             // ADR 121/131 §6: provenance is stamped on AGENT seats only — the same gate
             // `ambientTouch` applies in http.ts and the stateless claim mirror applies since #1309.
             // This was the last claim path without it: a human frame could declare itself `wake`,
@@ -773,21 +772,21 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
           });
           // First occupancy stamps the durable *held* marker (ADR 058) — the claim path is the v0.3
           // successor to the v0.2 first-token-touch that used to do this; keeps the ADR 070 derivation.
-          markBound(ctx.db, targetMember.id);
+          await markBound(ctx.db, targetMember.id);
           let agentAuthority: { seat_credential?: string; session_lease?: string } = {};
           if (targetMember.kind === 'agent' && targetMember.observer === 0) {
             const credential =
               targetMember.credential_hash === null
-                ? mintAgentSeatCredential(ctx.db, targetMember.id).seat_credential
+                ? (await mintAgentSeatCredential(ctx.db, targetMember.id)).seat_credential
                 : undefined;
-            const lease = mintSessionLease(ctx.db, {
+            const lease = await mintSessionLease(ctx.db, {
               teamId: team.id,
               memberId: targetMember.id,
               presenceId: presence.id,
             });
             state.lease = { id: lease.id };
             if (credential) {
-              appendAudit(ctx.db, team.id, {
+              await appendAudit(ctx.db, team.id, {
                 actor: targetMember.name,
                 action: 'agent_seat_credential.minted',
                 target: targetMember.name,
@@ -795,7 +794,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
                 detail: { source: 'claim' },
               });
             }
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: targetMember.name,
               action: 'agent_session_lease.minted',
               target: targetMember.name,
@@ -832,14 +831,14 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             seat: toMember(targetMember, team.slug),
             presence_id: presence.id,
             server_time: Date.now(),
-            charter: getRoleCharter(ctx.db, team.id, targetMember.role) ?? undefined,
+            charter: (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined,
             ...agentAuthority,
-            memory: memoryEnvelope(ctx.db, targetMember.id),
+            memory: await memoryEnvelope(ctx.db, targetMember.id),
           });
           if (!conn.observer) emitPresence(ctx, conn, 'online', frame.surface);
           // ADR 092: now that this successor is occupied, arm the grace-gated reap of any same-workspace
           // predecessor it displaced (the orphaned pre-reload sessions). Cancelled if it closes first.
-          const evictionTimer = scheduleSameWorkspaceEviction(
+          const evictionTimer = await scheduleSameWorkspaceEviction(
             ctx,
             team.id,
             state.connId,
@@ -851,7 +850,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             // Dogfood-mode re-seat (ADR 146): the durable notification-not-a-decision record. The
             // presence-online emit above already tells the team (admins included) the seat is live; the
             // loud, directed admin surface for asks/approvals is the next item (ask-stream, ADR 145 §3).
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: targetMember.name,
               action: 'claim.reseated',
               target: targetMember.name,
@@ -859,7 +858,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
               detail: { surface: frame.surface, policy: 'standing_reseat_known_agents' },
             });
           } else {
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: targetMember.name,
               action: 'claim.occupied',
               target: targetMember.name,
@@ -874,7 +873,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
           // seat has just left the ADR 188 pool, and before ADR 246 the ledger could not say so
           // even in hindsight, because an occupancy born null has no old→new transition to audit.
           if (!frame.model && displacedModel && sameWorkspacePredecessors.length === 0) {
-            appendAudit(ctx.db, team.id, {
+            await appendAudit(ctx.db, team.id, {
               actor: targetMember.name,
               action: 'occupancy.model_attested',
               target: targetMember.name,
@@ -882,7 +881,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
               detail: { occupancy: presence.id, old: displacedModel, new: null, source: 'claim' },
             });
           } else {
-            recordClaimAttestation(ctx.db, team.id, targetMember, presence.id, frame.model);
+            await recordClaimAttestation(ctx.db, team.id, targetMember, presence.id, frame.model);
           }
           log.info({
             msg: 'ws_claim_occupied',
@@ -905,9 +904,9 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             // Gated on `can_observe` (ADR 071, P2): a seat narrowed to `can_observe:false` is refused the
             // firehose. Generalist `can_observe:true` keeps every observer/dashboard working.
             if (frame.scope === 'team-all') {
-              const subscriber = getMemberById(ctx.db, conn.memberId);
+              const subscriber = await getMemberById(ctx.db, conn.memberId);
               if (subscriber && !resolveCapabilities(subscriber).can_observe) {
-                appendAudit(ctx.db, conn.teamId, {
+                await appendAudit(ctx.db, conn.teamId, {
                   actor: conn.memberName,
                   action: 'observe.denied',
                   target: null,
@@ -924,8 +923,8 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             break;
           }
           case 'heartbeat': {
-            if (presenceById(ctx.db, conn.presenceId)) {
-              heartbeat(ctx.db, conn.presenceId, frame.status);
+            if (await presenceById(ctx.db, conn.presenceId)) {
+              await heartbeat(ctx.db, conn.presenceId, frame.status);
               // ADR 347: renew the agent session lease over the live socket before it expires. The
               // adapter's HTTP tools present `config.sessionLease`, which was minted once at claim
               // and lived five minutes — after which every tool call was refused until a reconnect
@@ -933,18 +932,18 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
               // revoked: it dies at its own expiry, so a call in flight under it still lands.
               if (
                 state.lease &&
-                sessionLeaseDueForRenewal(
+                (await sessionLeaseDueForRenewal(
                   ctx.db,
                   state.lease.id,
                   AGENT_SESSION_LEASE_RENEW_AHEAD_MS,
-                )
+                ))
               ) {
-                const renewed = mintSessionLease(ctx.db, {
+                const renewed = await mintSessionLease(ctx.db, {
                   teamId: conn.teamId,
                   memberId: conn.memberId,
                   presenceId: conn.presenceId,
                 });
-                appendAudit(ctx.db, conn.teamId, {
+                await appendAudit(ctx.db, conn.teamId, {
                   actor: conn.memberName,
                   action: 'agent_session_lease.renewed',
                   target: conn.memberName,
@@ -961,7 +960,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
               // ADR 101 re-attestation: a mid-occupancy model switch rides the heartbeat. Only a
               // real change writes + audits (occupancy.model_attested, old → new).
               if (frame.model) {
-                const changed = reattestModel(
+                const changed = await reattestModel(
                   ctx.db,
                   conn.presenceId,
                   frame.model,
@@ -970,7 +969,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
                   frame.model_source,
                 );
                 if (changed) {
-                  appendAudit(ctx.db, conn.teamId, {
+                  await appendAudit(ctx.db, conn.teamId, {
                     actor: conn.memberName,
                     action: 'occupancy.model_attested',
                     target: conn.memberName,
@@ -987,13 +986,13 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
               // ADR 275: occupancy follows capture. Absent ⇒ no change (never a clear). No
               // audit row — presence.surface is the instrument.
               if (frame.surface) {
-                reattestSurface(ctx.db, conn.presenceId, frame.surface);
+                await reattestSurface(ctx.db, conn.presenceId, frame.surface);
               }
               // ADR 417: the guidance a seat RUNS can change under a live session — self-heal fires
               // once, at session start, so a long session outlives the rule it started under and a
               // refresh rewrites its files while the socket stays open. Absent ⇒ no change. No audit
               // row by design (ADR 417 §Observability): this is occupancy state, not an event.
-              reattestGuidanceEpoch(ctx.db, conn.presenceId, frame.guidance_epoch);
+              await reattestGuidanceEpoch(ctx.db, conn.presenceId, frame.guidance_epoch);
             } else {
               // The row behind this socket is gone — the reaper removed it while the socket stayed
               // open — and the session lease that joined on it is dead with it, so every hook probe
@@ -1016,26 +1015,22 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
           }
           case 'send': {
             const env = parseEnvelope(frame.envelope);
-            const team = ctx.db
-              .prepare<[string], { slug: string }>('SELECT slug FROM teams WHERE id = ?')
-              .get(conn.teamId);
-            const member = ctx.db
-              .prepare<
-                [string],
-                import('../store/rows.js').MemberRow
-              >('SELECT * FROM members WHERE id = ?')
-              .get(conn.memberId);
+            const team = await ctx.db.get<{ slug: string }>('SELECT slug FROM teams WHERE id = ?', [
+              conn.teamId,
+            ]);
+            const member = await ctx.db.get<import('../store/rows.js').MemberRow>(
+              'SELECT * FROM members WHERE id = ?',
+              [conn.memberId],
+            );
             if (!team || !member)
               throw new MusterdError('server_error', 'connection lost its identity');
-            const teamRow = ctx.db
-              .prepare<
-                [string],
-                import('../store/rows.js').TeamRow
-              >('SELECT * FROM teams WHERE id = ?')
-              .get(conn.teamId)!;
+            const teamRow = (await ctx.db.get<import('../store/rows.js').TeamRow>(
+              'SELECT * FROM teams WHERE id = ?',
+              [conn.teamId],
+            ))!;
             // Pass this connection's occupancy id so the per-act model stamp reads *this* session's
             // attestation, not the member's newest presence (ADR 101).
-            const result = routeEnvelope(ctx, teamRow, member, env, conn.presenceId);
+            const result = await routeEnvelope(ctx, teamRow, member, env, conn.presenceId);
             send(ws, { type: 'ack', id: result.message.id });
             break;
           }
@@ -1053,8 +1048,8 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
         // from an agent's transcript rather than from the ledger.
         if (frame.type === 'claim' && !state.authenticated) {
           try {
-            const team = requireTeam(ctx.db, frame.team);
-            appendAudit(ctx.db, team.id, {
+            const team = await requireTeam(ctx.db, frame.team);
+            await appendAudit(ctx.db, team.id, {
               actor: null,
               action: 'claim.failed',
               target: encodeTarget(frame.target),
@@ -1077,9 +1072,15 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
           ws.close();
         }
       }
+    };
+    let chain: Promise<void> = Promise.resolve();
+    ws.on('message', async (data) => {
+      chain = chain
+        .then(() => handleMessage(data))
+        .catch((err) => log.warn({ msg: 'ws_frame_failed', err: String(err) }));
     });
 
-    const cleanup = () => {
+    const cleanup = async () => {
       // Cancel any pending same-workspace reap this connection armed (ADR 092): a successor that drops
       // within the grace must not evict on behalf of a now-dead session (the getConn gate also guards
       // this, but clearing the timer is tidier and stops the audit row).
@@ -1098,16 +1099,23 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
       ctx.hub.remove(conn.connId);
       recordPresenceChurn('detach');
       // Keep the row as a reclaim hold for the grace window instead of deleting it (ADR 010).
-      release(ctx.db, conn.presenceId, ctx.config.reclaimGraceMs);
+      await release(ctx.db, conn.presenceId, ctx.config.reclaimGraceMs);
       // Emit offline only if the member now has no live presence anywhere — never for an observer.
-      if (!conn.observer && !hasLivePresence(ctx.db, conn.memberId, ctx.config.presenceTimeoutMs)) {
+      if (
+        !conn.observer &&
+        !(await hasLivePresence(ctx.db, conn.memberId, ctx.config.presenceTimeoutMs))
+      ) {
         emitPresence(ctx, conn, 'offline');
       }
       log.info({ msg: 'ws_close', member: conn.memberName, conn: conn.connId });
     };
 
-    ws.on('close', cleanup);
-    ws.on('error', cleanup);
+    // Behind the frame chain: a frame still in flight must settle before the row is released.
+    const closeAfterFrames = () => {
+      chain = chain.then(cleanup, cleanup);
+    };
+    ws.on('close', closeAfterFrames);
+    ws.on('error', closeAfterFrames);
   });
 
   return wss;

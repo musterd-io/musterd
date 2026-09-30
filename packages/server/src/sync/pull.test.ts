@@ -5,7 +5,9 @@ import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
-import { openDb, type Database } from '../db/open.js';
+import { type Database } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { readNodeState } from '../node/state.js';
 import { addMember } from '../store/members.js';
@@ -47,13 +49,13 @@ async function post(base: string, path: string, body?: unknown, auth?: string) {
 }
 
 /** Send on the joiner, the way a live daemon mints its local node row and stamps an origin_seq. */
-function send(server: RunningServer, id: string, body = 'hi') {
-  const team = getTeamBySlug(server.db, 'bravo')!;
+async function send(server: RunningServer, id: string, body = 'hi') {
+  const team = (await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!;
   const member = server.db
     .prepare<[string], { id: string }>('SELECT id FROM members WHERE team_id = ? LIMIT 1')
     .get(team.id)!;
-  insertMessage(
-    server.db,
+  await insertMessage(
+    sqliteDriver(server.db),
     team.id,
     member.id,
     null,
@@ -117,17 +119,22 @@ async function captureLogs(fn: () => Promise<unknown>): Promise<Record<string, u
   return lines;
 }
 
-const joinerTeam = () => getTeamBySlug(joiner.db, 'bravo')!;
+const joinerTeam = async () => (await getTeamBySlug(sqliteDriver(joiner.db), 'bravo'))!;
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'musterd-push-'));
   process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
 
-  hub = createServer({ db: openDb(':memory:'), port: 0 });
+  hub = createServer({ db: openTestDb(':memory:'), port: 0 });
   hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-  joiner = createServer({ db: openDb(':memory:'), port: 0 });
+  joiner = createServer({ db: openTestDb(':memory:'), port: 0 });
   joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
-  joinerCtx = { db: joiner.db, hub: new Hub(), config: resolveConfig(), rosterRoots: [] };
+  joinerCtx = {
+    db: sqliteDriver(joiner.db),
+    hub: new Hub(),
+    config: resolveConfig(),
+    rosterRoots: [],
+  };
 
   // The same team on both daemons — roster identity replicates via git (ADR 058), so this is what
   // two machines hosting one team actually look like.
@@ -162,11 +169,11 @@ describe('GET /sync/pull', () => {
   });
 
   it('pages the canonical order after a hub_seq, bounded, with the head', async () => {
-    send(joiner, 'j-1');
+    await send(joiner, 'j-1');
     await enrollJoiner();
-    send(joiner, 'j-2');
-    send(joiner, 'j-3');
-    await pushTeam(joinerCtx, joinerTeam());
+    await send(joiner, 'j-2');
+    await send(joiner, 'j-3');
+    await pushTeam(joinerCtx, await joinerTeam());
     const page = await get(hubBase, '/teams/bravo/sync/pull?after=1&limit=1', joinerCredential());
     expect(page.status).toBe(200);
     expect(page.json.hub_seq_high).toBe(3);
@@ -176,17 +183,22 @@ describe('GET /sync/pull', () => {
   });
 
   it('answers 409 with the head when asked to resume past it', async () => {
-    send(joiner, 'j-1');
+    await send(joiner, 'j-1');
     await enrollJoiner();
-    await pushTeam(joinerCtx, joinerTeam());
+    await pushTeam(joinerCtx, await joinerTeam());
     const res = await get(hubBase, '/teams/bravo/sync/pull?after=5', joinerCredential());
     expect(res.status).toBe(409);
     expect(res.json.hub_seq_high).toBe(1);
   });
 });
 
-const hubCtx = () => ({ db: hub.db, hub: new Hub(), config: resolveConfig(), rosterRoots: [] });
-const hubTeam = () => getTeamBySlug(hub.db, 'bravo')!;
+const hubCtx = () => ({
+  db: sqliteDriver(hub.db),
+  hub: new Hub(),
+  config: resolveConfig(),
+  rosterRoots: [],
+});
+const hubTeam = async () => (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
 const originsIn = (db: Database, teamId: string) =>
   db
     .prepare<
@@ -195,32 +207,38 @@ const originsIn = (db: Database, teamId: string) =>
     >('SELECT id, origin_seq FROM messages WHERE team_id = ? ORDER BY origin_node, origin_seq')
     .all(teamId);
 /** A seat that exists on one daemon only — roster lag, the ordinary case the fold blocks on. */
-const addSeat = (server: RunningServer, name: string) =>
-  addMember(server.db, getTeamBySlug(server.db, 'bravo')!, { name, kind: 'agent' }).row;
+const addSeat = async (server: RunningServer, name: string) =>
+  (
+    await addMember(
+      sqliteDriver(server.db),
+      await (await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!,
+      { name, kind: 'agent' },
+    )
+  ).row;
 
 describe('the pull loop', () => {
   it('the hub folds joiner events into its own messages from its own sync_log', async () => {
-    send(joiner, 'j-1');
+    await send(joiner, 'j-1');
     await enrollJoiner();
-    send(joiner, 'j-2');
-    await pushTeam(joinerCtx, joinerTeam());
-    expect(await pullTeam(hubCtx(), hubTeam())).toBe(2);
+    await send(joiner, 'j-2');
+    await pushTeam(joinerCtx, await joinerTeam());
+    expect(await pullTeam(hubCtx(), await hubTeam())).toBe(2);
     expect(
       hub.db.prepare('SELECT COUNT(*) AS n FROM messages WHERE id IN (?, ?)').get('j-1', 'j-2'),
     ).toEqual({ n: 2 });
     // Second pass: nothing new.
-    expect(await pullTeam(hubCtx(), hubTeam())).toBe(0);
+    expect(await pullTeam(hubCtx(), await hubTeam())).toBe(0);
   });
 
   it("a joiner receives the hub's own history AND its own events back, stamps verbatim, ids local", async () => {
-    send(hub, 'h-1');
-    send(joiner, 'j-1');
+    await send(hub, 'h-1');
+    await send(joiner, 'j-1');
     await enrollJoiner();
     // Hub stages its own history (loopback) and ingests the joiner's push.
-    await pushTeam(joinerCtx, joinerTeam());
-    await pushTeam(hubCtx(), hubTeam());
+    await pushTeam(joinerCtx, await joinerTeam());
+    await pushTeam(hubCtx(), await hubTeam());
     // Joiner pulls: gets h-1 (foreign to it) and j-1 (its own — skipped, rule 1).
-    expect(await pullTeam(joinerCtx, joinerTeam())).toBe(1);
+    expect(await pullTeam(joinerCtx, await joinerTeam())).toBe(1);
     const h1 = joiner.db
       .prepare<
         [string],
@@ -229,7 +247,7 @@ describe('the pull loop', () => {
       .get('h-1')!;
     const hubLocal = hub.db
       .prepare<[string], { node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?')
-      .get(hubTeam().id)!.node_id;
+      .get((await hubTeam()).id)!.node_id;
     expect(h1.origin_node).toBe(hubLocal);
     expect(h1.origin_seq).toBe(1);
     const joinerNick = joiner.db
@@ -237,19 +255,21 @@ describe('the pull loop', () => {
         [string, string],
         { id: string }
       >('SELECT id FROM members WHERE team_id = ? AND name = ?')
-      .get(joinerTeam().id, 'nick')!.id;
+      .get((await joinerTeam()).id, 'nick')!.id;
     expect(h1.from_member).toBe(joinerNick);
     // And the joiner's own row is still the one insertMessage wrote — not a second copy.
-    expect(originsIn(joiner.db, joinerTeam().id).filter((r) => r.id === 'j-1')).toHaveLength(1);
+    expect(
+      originsIn(joiner.db, (await joinerTeam()).id).filter((r) => r.id === 'j-1'),
+    ).toHaveLength(1);
   });
 
   it('logs the blocker at error, once per seat, and resumes after the roster catches up', async () => {
-    send(joiner, 'j-0');
+    await send(joiner, 'j-0');
     await enrollJoiner();
-    const late = addSeat(joiner, 'late');
-    insertMessage(
-      joiner.db,
-      joinerTeam().id,
+    const late = await addSeat(joiner, 'late');
+    await insertMessage(
+      sqliteDriver(joiner.db),
+      (await joinerTeam()).id,
       late.id,
       null,
       makeEnvelope({
@@ -262,9 +282,9 @@ describe('the pull loop', () => {
         ts: 1,
       }),
     );
-    await pushTeam(joinerCtx, joinerTeam());
+    await pushTeam(joinerCtx, await joinerTeam());
 
-    const lines = await captureLogs(() => pullTeam(hubCtx(), hubTeam()));
+    const lines = await captureLogs(async () => await pullTeam(hubCtx(), await hubTeam()));
     const blocked = lines.filter((l) => l['msg'] === 'sync_fold_blocked');
     expect(blocked).toHaveLength(1);
     expect(blocked[0]).toMatchObject({ level: 'error', seat: 'late' });
@@ -273,11 +293,11 @@ describe('the pull loop', () => {
       n: 0,
     });
     // Same blocker again: no second error line.
-    const again = await captureLogs(() => pullTeam(hubCtx(), hubTeam()));
+    const again = await captureLogs(async () => await pullTeam(hubCtx(), await hubTeam()));
     expect(again.filter((l) => l['msg'] === 'sync_fold_blocked')).toHaveLength(0);
 
-    addSeat(hub, 'late');
-    expect(await pullTeam(hubCtx(), hubTeam())).toBe(1);
+    await addSeat(hub, 'late');
+    expect(await pullTeam(hubCtx(), await hubTeam())).toBe(1);
   });
 
   /**
@@ -290,20 +310,20 @@ describe('the pull loop', () => {
    * same log. The wire now carries what the log holds; both feeders converge on the fold's stop.
    */
   it('an act this build cannot name reaches the fold over the wire — prefix applied, stop classified, no 500', async () => {
-    send(hub, 'h-1');
-    send(hub, 'h-2');
-    send(hub, 'h-3');
-    send(joiner, 'j-1'); // the joiner needs a node row before it can enroll
+    await send(hub, 'h-1');
+    await send(hub, 'h-2');
+    await send(hub, 'h-3');
+    await send(joiner, 'j-1'); // the joiner needs a node row before it can enroll
     await enrollJoiner();
-    await pushTeam(hubCtx(), hubTeam()); // hub stages its own history
+    await pushTeam(hubCtx(), await hubTeam()); // hub stages its own history
     // A hub on a newer build staged h-2 with an act this puller's ActSchema does not hold.
     hub.db
       .prepare(
         "UPDATE sync_log SET payload = json_set(payload, '$.envelope.act', 'frobnicate') WHERE team_id = ? AND json_extract(payload, '$.envelope.id') = 'h-2'",
       )
-      .run(hubTeam().id);
+      .run((await hubTeam()).id);
 
-    const lines = await captureLogs(() => pullTeam(joinerCtx, joinerTeam()));
+    const lines = await captureLogs(async () => await pullTeam(joinerCtx, await joinerTeam()));
     const unknown = lines.filter((l) => l['msg'] === 'sync_fold_unknown_act');
     expect(unknown).toHaveLength(1);
     expect(unknown[0]).toMatchObject({ level: 'error', act: 'frobnicate' });
@@ -318,33 +338,33 @@ describe('the pull loop', () => {
     expect(held('h-2')).toBe(0);
     expect(held('h-3')).toBe(0);
     // Same stop next tick: no second line, and still not a transport failure.
-    const again = await captureLogs(() => pullTeam(joinerCtx, joinerTeam()));
+    const again = await captureLogs(async () => await pullTeam(joinerCtx, await joinerTeam()));
     expect(again.filter((l) => l['msg'] === 'sync_fold_unknown_act')).toHaveLength(0);
     // Once "upgraded" — the staged act is one this build knows — the fold resumes past it.
     hub.db
       .prepare(
         "UPDATE sync_log SET payload = json_set(payload, '$.envelope.act', 'message') WHERE team_id = ? AND json_extract(payload, '$.envelope.id') = 'h-2'",
       )
-      .run(hubTeam().id);
-    expect(await pullTeam(joinerCtx, joinerTeam())).toBe(2);
+      .run((await hubTeam()).id);
+    expect(await pullTeam(joinerCtx, await joinerTeam())).toBe(2);
   });
 
   it('a puller refuses a hub head below its own cursor as impossible', async () => {
-    send(joiner, 'j-0');
+    await send(joiner, 'j-0');
     await enrollJoiner();
     // Pretend the joiner has applied further than the hub has ever held.
     joiner.db
       .prepare('INSERT INTO sync_pull_cursor (team_id, last_hub_seq, updated_at) VALUES (?, 99, 1)')
-      .run(joinerTeam().id);
-    const lines = await captureLogs(() => pullTeam(joinerCtx, joinerTeam()));
+      .run((await joinerTeam()).id);
+    const lines = await captureLogs(async () => await pullTeam(joinerCtx, await joinerTeam()));
     expect(lines.some((l) => l['msg'] === 'sync_pull_impossible_resume')).toBe(true);
-    await expect(pullTeam(joinerCtx, joinerTeam())).rejects.toThrow(/impossible/);
+    await expect(pullTeam(joinerCtx, await joinerTeam())).rejects.toThrow(/impossible/);
   });
 
   it('does nothing on a single-machine install', async () => {
-    send(hub, 'h-1');
-    expect(await pullTeam(hubCtx(), hubTeam())).toBe(0);
-    expect(foldBatch(hub.db, hubTeam().id, [])).toMatchObject({
+    await send(hub, 'h-1');
+    expect(await pullTeam(hubCtx(), await hubTeam())).toBe(0);
+    expect(await foldBatch(sqliteDriver(hub.db), (await hubTeam()).id, [])).toMatchObject({
       applied: 0,
       skipped: 0,
       last_hub_seq: 0,

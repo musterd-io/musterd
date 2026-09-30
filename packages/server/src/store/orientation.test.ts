@@ -1,6 +1,6 @@
 import { makeEnvelope } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { appendAudit } from './audit.js';
 import { recordBlockedReport } from './incidents.js';
 import { openLane, updateLane } from './lanes.js';
@@ -10,27 +10,33 @@ import { WHY_BARE_MAX_AGE_MS, deriveNext, deriveNextSummary } from './orientatio
 import { captureRepoSeed, createSeedFromRelay } from './seeds.js';
 import { createTeam } from './teams.js';
 
-function seed() {
-  const db = openDb(':memory:');
-  const team = createTeam(db, { slug: 'revive' });
-  const nick = addMember(db, team, { name: 'nick', kind: 'human' }).row;
-  const stanley = addMember(db, team, { name: 'stanley', kind: 'agent' }).row;
+async function seed() {
+  const db = openTestDb(':memory:');
+  const team = await createTeam(db, { slug: 'revive' });
+  const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+  const stanley = (await addMember(db, team, { name: 'stanley', kind: 'agent' })).row;
   return { db, team, nick, stanley };
 }
 
-describe('deriveNext — the orientation brief (ADR 049/084)', () => {
-  it('sorts lanes into carrying / shipped / up_next from the daemon state alone', () => {
-    const { db, team } = seed();
+describe('deriveNext — the orientation brief (ADR 049/084)', async () => {
+  it('sorts lanes into carrying / shipped / up_next from the daemon state alone', async () => {
+    const { db, team } = await seed();
     // stanley is carrying one active lane...
-    const active = openLane(db, team.id, 'revive', 'stanley', { title: 'spine', claim: true });
-    updateLane(db, team.id, active.id, 'revive', { state: 'active' });
+    const active = await openLane(db, team.id, 'revive', 'stanley', {
+      title: 'spine',
+      claim: true,
+    });
+    await updateLane(db, team.id, active.id, 'revive', { state: 'active' });
     // ...has shipped one...
-    const shipped = openLane(db, team.id, 'revive', 'stanley', { title: 'migration', claim: true });
-    updateLane(db, team.id, shipped.id, 'revive', { state: 'done' });
+    const shipped = await openLane(db, team.id, 'revive', 'stanley', {
+      title: 'migration',
+      claim: true,
+    });
+    await updateLane(db, team.id, shipped.id, 'revive', { state: 'done' });
     // ...and there's an unowned lane anyone could pick up.
-    const open = openLane(db, team.id, 'revive', 'nick', { title: 'backlog item' });
+    const open = await openLane(db, team.id, 'revive', 'nick', { title: 'backlog item' });
 
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.member).toBe('stanley');
     expect(brief.in_flight.map((l) => l.id)).toEqual([active.id]);
     expect(brief.shipped.map((l) => l.id)).toEqual([shipped.id]);
@@ -41,18 +47,24 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
   // Lane 01M2GTB0RA: the statusline and the per-turn orient nudge called /next — the whole brief,
   // 0.5 s on the live db and 1.8 s under load — nine sessions at a time, for three numbers. The
   // summary is those numbers from three bounded queries, and must agree with the brief.
-  it('deriveNextSummary agrees with the brief on carrying, incidents and owed, from bounded queries', () => {
-    const { db, team } = seed();
-    const active = openLane(db, team.id, 'revive', 'stanley', { title: 'spine', claim: true });
-    updateLane(db, team.id, active.id, 'revive', { state: 'active' });
-    const shipped = openLane(db, team.id, 'revive', 'stanley', { title: 'done one', claim: true });
-    updateLane(db, team.id, shipped.id, 'revive', { state: 'done' });
-    const incident = openLane(db, team.id, 'revive', 'nick', {
+  it('deriveNextSummary agrees with the brief on carrying, incidents and owed, from bounded queries', async () => {
+    const { db, team } = await seed();
+    const active = await openLane(db, team.id, 'revive', 'stanley', {
+      title: 'spine',
+      claim: true,
+    });
+    await updateLane(db, team.id, active.id, 'revive', { state: 'active' });
+    const shipped = await openLane(db, team.id, 'revive', 'stanley', {
+      title: 'done one',
+      claim: true,
+    });
+    await updateLane(db, team.id, shipped.id, 'revive', { state: 'done' });
+    const incident = await openLane(db, team.id, 'revive', 'nick', {
       title: 'incident: daemon_down',
       kind: 'incident',
     });
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
-    const summary = deriveNextSummary(db, team.id, 'revive', 'stanley');
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
+    const summary = await deriveNextSummary(db, team.id, 'revive', 'stanley');
     expect(summary.carrying).toBe(brief.in_flight.length);
     expect(summary.carrying).toBe(1);
     expect(summary.incidents).toEqual(brief.incidents.map((i) => i.lane));
@@ -60,9 +72,9 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
     expect(summary.owed).toEqual(brief.owed_reviews.map((r) => ({ lane: r.lane.id, ts: r.ts })));
   });
 
-  it('surfaces the latest handoff to me or @team as the why, with its goal_id', () => {
-    const { db, team, nick } = seed();
-    insertMessage(
+  it('surfaces the latest handoff to me or @team as the why, with its goal_id', async () => {
+    const { db, team, nick } = await seed();
+    await insertMessage(
       db,
       team.id,
       nick.id,
@@ -80,7 +92,7 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
     );
     // Pinned to the handoff's own clock: this one names no lane, so it is subject to the
     // WHY_BARE_MAX_AGE_MS bound and would otherwise age out against a real `Date.now()`.
-    const brief = deriveNext(db, team.id, 'revive', 'stanley', 3, 5, { now: 1_000 });
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley', 3, 5, { now: 1_000 });
     expect(brief.why).not.toBeNull();
     expect(brief.why!.from).toBe('nick');
     expect(brief.why!.body).toContain('orientation spine');
@@ -92,15 +104,15 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
   // it at all. Four of dolly's lanes sat that way for days (01KYN3CKJE, 01KYX7YGNK, 01KYX89VFB).
   // NextBriefSchema has always documented in_flight as carrying awaiting_acceptance; only the
   // implementation disagreed.
-  it('carries a lane awaiting acceptance — the owner is still on the hook for it', () => {
-    const { db, team } = seed();
-    const submitted = openLane(db, team.id, 'revive', 'stanley', {
+  it('carries a lane awaiting acceptance — the owner is still on the hook for it', async () => {
+    const { db, team } = await seed();
+    const submitted = await openLane(db, team.id, 'revive', 'stanley', {
       title: 'merged days ago',
       claim: true,
     });
-    updateLane(db, team.id, submitted.id, 'revive', { state: 'awaiting_acceptance' });
+    await updateLane(db, team.id, submitted.id, 'revive', { state: 'awaiting_acceptance' });
 
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.in_flight.map((l) => l.id)).toEqual([submitted.id]);
     // ...and it must NOT read as pickup-able work for anyone else.
     expect(brief.up_next).toHaveLength(0);
@@ -109,18 +121,21 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
   // The `why` is enrichment for what you are carrying. A handoff whose lane has since closed is
   // describing finished work, and reads as a live instruction: this brief told dolly that step 7 of
   // the MCP adoption was outstanding four days after the PR carrying step 7 had merged.
-  it('skips a handoff whose lane has since resolved, and falls back to the newest live one', () => {
-    const { db, team, nick } = seed();
-    const stale = openLane(db, team.id, 'revive', 'stanley', {
+  it('skips a handoff whose lane has since resolved, and falls back to the newest live one', async () => {
+    const { db, team, nick } = await seed();
+    const stale = await openLane(db, team.id, 'revive', 'stanley', {
       title: 'already merged',
       claim: true,
     });
-    const live = openLane(db, team.id, 'revive', 'stanley', { title: 'still going', claim: true });
+    const live = await openLane(db, team.id, 'revive', 'stanley', {
+      title: 'still going',
+      claim: true,
+    });
     for (const [id, lane, ts, body] of [
       ['h-live', live.id, 1_000, 'this one is still real'],
       ['h-stale', stale.id, 2_000, 'finish step 7'],
     ] as const) {
-      insertMessage(
+      await insertMessage(
         db,
         team.id,
         nick.id,
@@ -138,9 +153,9 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
       );
     }
     // The newest handoff is the stale one — without the join it wins on ts alone.
-    updateLane(db, team.id, stale.id, 'revive', { state: 'done' });
+    await updateLane(db, team.id, stale.id, 'revive', { state: 'done' });
 
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.why).not.toBeNull();
     expect(brief.why!.body).toBe('this one is still real');
   });
@@ -148,18 +163,21 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
   // #745: a named lane that has been submitted is already off the recipient's plate. The why used
   // to skip only `done`/`abandoned`, so a handoff whose PR had merged but whose lane was still
   // awaiting_acceptance kept reading as a live instruction.
-  it('skips a handoff whose lane is awaiting acceptance — same #745 out-of-play rule as wakes', () => {
-    const { db, team, nick } = seed();
-    const submitted = openLane(db, team.id, 'revive', 'stanley', {
+  it('skips a handoff whose lane is awaiting acceptance — same #745 out-of-play rule as wakes', async () => {
+    const { db, team, nick } = await seed();
+    const submitted = await openLane(db, team.id, 'revive', 'stanley', {
       title: 'merged, waiting on accept',
       claim: true,
     });
-    const live = openLane(db, team.id, 'revive', 'stanley', { title: 'still going', claim: true });
+    const live = await openLane(db, team.id, 'revive', 'stanley', {
+      title: 'still going',
+      claim: true,
+    });
     for (const [id, lane, ts, body] of [
       ['h-live', live.id, 1_000, 'this one is still real'],
       ['h-submitted', submitted.id, 2_000, 'finish the merged one'],
     ] as const) {
-      insertMessage(
+      await insertMessage(
         db,
         team.id,
         nick.id,
@@ -176,18 +194,21 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
         }),
       );
     }
-    updateLane(db, team.id, submitted.id, 'revive', { state: 'awaiting_acceptance' });
+    await updateLane(db, team.id, submitted.id, 'revive', { state: 'awaiting_acceptance' });
 
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.why!.body).toBe('this one is still real');
   });
 
   // The property that makes DERIVING this (rather than storing a flag) the right shape: a rejected
   // acceptance sends the lane back to active and the why becomes that handoff again.
-  it('re-serves the why when acceptance sends the named lane back to active', () => {
-    const { db, team, nick } = seed();
-    const lane = openLane(db, team.id, 'revive', 'stanley', { title: 'bounced', claim: true });
-    insertMessage(
+  it('re-serves the why when acceptance sends the named lane back to active', async () => {
+    const { db, team, nick } = await seed();
+    const lane = await openLane(db, team.id, 'revive', 'stanley', {
+      title: 'bounced',
+      claim: true,
+    });
+    await insertMessage(
       db,
       team.id,
       nick.id,
@@ -203,19 +224,19 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
         meta: { lane_handoff: { lane: lane.id } },
       }),
     );
-    updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
-    expect(deriveNext(db, team.id, 'revive', 'stanley').why).toBeNull();
+    await updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
+    expect((await deriveNext(db, team.id, 'revive', 'stanley')).why).toBeNull();
 
-    updateLane(db, team.id, lane.id, 'revive', { state: 'active' });
-    expect(deriveNext(db, team.id, 'revive', 'stanley').why!.body).toBe('this came back');
+    await updateLane(db, team.id, lane.id, 'revive', { state: 'active' });
+    expect((await deriveNext(db, team.id, 'revive', 'stanley')).why!.body).toBe('this came back');
   });
 
   // A handoff that names no lane cannot be checked, so it must still be served: abstain by showing
   // it, never by hiding it (ADR 173 — an unknown is not a falsy). Bounded by age, not unbounded:
   // see the WHY_BARE_MAX_AGE_MS pair below.
-  it('still serves a handoff that carries no lane reference', () => {
-    const { db, team, nick } = seed();
-    insertMessage(
+  it('still serves a handoff that carries no lane reference', async () => {
+    const { db, team, nick } = await seed();
+    await insertMessage(
       db,
       team.id,
       nick.id,
@@ -231,7 +252,7 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
         meta: {},
       }),
     );
-    const brief = deriveNext(db, team.id, 'revive', 'stanley', 3, 5, { now: 3_000 });
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley', 3, 5, { now: 3_000 });
     expect(brief.why?.body).toBe('no lane on this one');
   });
 
@@ -242,9 +263,9 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
   // set above the whole observed distribution of live handoffs (max 12.8d, p95 6.6d) — it retires
   // nothing that was ever live. Wakes are untouched: this is the why slot only, where showing a
   // dead instruction is not abstention but misdirection.
-  it('stops serving a bare handoff once it is older than the age bound', () => {
-    const { db, team, nick } = seed();
-    insertMessage(
+  it('stops serving a bare handoff once it is older than the age bound', async () => {
+    const { db, team, nick } = await seed();
+    await insertMessage(
       db,
       team.id,
       nick.id,
@@ -260,12 +281,12 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
         meta: {},
       }),
     );
-    const fresh = deriveNext(db, team.id, 'revive', 'stanley', 3, 5, {
+    const fresh = await deriveNext(db, team.id, 'revive', 'stanley', 3, 5, {
       now: 1_000 + WHY_BARE_MAX_AGE_MS,
     });
     expect(fresh.why?.body).toBe('a premise that died two weeks ago');
 
-    const stale = deriveNext(db, team.id, 'revive', 'stanley', 3, 5, {
+    const stale = await deriveNext(db, team.id, 'revive', 'stanley', 3, 5, {
       now: 1_000 + WHY_BARE_MAX_AGE_MS + 1,
     });
     expect(stale.why).toBeNull();
@@ -273,10 +294,13 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
 
   // The bound is the fallback for the uncheckable case only. A handoff that names a live lane is a
   // recorded fact and outranks age — it keeps its slot however old it gets.
-  it('does not age out a handoff whose named lane is still live', () => {
-    const { db, team, nick } = seed();
-    const lane = openLane(db, team.id, 'revive', 'stanley', { title: 'still going', claim: true });
-    insertMessage(
+  it('does not age out a handoff whose named lane is still live', async () => {
+    const { db, team, nick } = await seed();
+    const lane = await openLane(db, team.id, 'revive', 'stanley', {
+      title: 'still going',
+      claim: true,
+    });
+    await insertMessage(
       db,
       team.id,
       nick.id,
@@ -292,15 +316,15 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
         meta: { lane_handoff: { lane: lane.id } },
       }),
     );
-    const brief = deriveNext(db, team.id, 'revive', 'stanley', 3, 5, {
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley', 3, 5, {
       now: 1_000 + WHY_BARE_MAX_AGE_MS * 10,
     });
     expect(brief.why?.body).toBe('this one is still real');
   });
 
-  it('is the zero-compliance floor: empty when nothing is declared', () => {
-    const { db, team } = seed();
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+  it('is the zero-compliance floor: empty when nothing is declared', async () => {
+    const { db, team } = await seed();
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.in_flight).toHaveLength(0);
     expect(brief.shipped).toHaveLength(0);
     expect(brief.up_next).toHaveLength(0);
@@ -312,8 +336,8 @@ describe('deriveNext — the orientation brief (ADR 049/084)', () => {
 // across an 18h window and still never answered — more awake time than the reviewers who did answer
 // (0.67h vs 0.22h). Having time was not the problem; being reminded was. The ask lands once in the
 // inbox and is never re-surfaced, and the brief a working seat actually reads had no field for it.
-describe('owed_reviews — the verdicts someone is waiting on from ME (ADR 233)', () => {
-  function askReview(
+describe('owed_reviews — the verdicts someone is waiting on from ME (ADR 233)', async () => {
+  async function askReview(
     db: ReturnType<typeof seed>['db'],
     teamId: string,
     from: { id: string; name: string },
@@ -322,7 +346,7 @@ describe('owed_reviews — the verdicts someone is waiting on from ME (ADR 233)'
     id: string,
     ts = 1_000,
   ) {
-    insertMessage(
+    await insertMessage(
       db,
       teamId,
       from.id,
@@ -340,13 +364,16 @@ describe('owed_reviews — the verdicts someone is waiting on from ME (ADR 233)'
     );
   }
 
-  it('names a lane whose review ask was routed to me, with who is waiting and since when', () => {
-    const { db, team, nick, stanley } = seed();
-    const lane = openLane(db, team.id, 'revive', 'nick', { title: 'nick built this', claim: true });
-    updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
-    askReview(db, team.id, nick, stanley.id, lane.id, 'ask-1', 5_000);
+  it('names a lane whose review ask was routed to me, with who is waiting and since when', async () => {
+    const { db, team, nick, stanley } = await seed();
+    const lane = await openLane(db, team.id, 'revive', 'nick', {
+      title: 'nick built this',
+      claim: true,
+    });
+    await updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
+    await askReview(db, team.id, nick, stanley.id, lane.id, 'ask-1', 5_000);
 
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.owed_reviews).toHaveLength(1);
     expect(brief.owed_reviews[0]!.lane.id).toBe(lane.id);
     expect(brief.owed_reviews[0]!.from).toBe('nick');
@@ -356,45 +383,48 @@ describe('owed_reviews — the verdicts someone is waiting on from ME (ADR 233)'
 
   // The whole point: this must survive the seat being heads-down. The inbox scrolls; the brief does
   // not. A seat carrying its own work still owes the verdict.
-  it('shows the owed review even while I am carrying my own lanes', () => {
-    const { db, team, nick, stanley } = seed();
-    const mine = openLane(db, team.id, 'revive', 'stanley', { title: 'my work', claim: true });
-    updateLane(db, team.id, mine.id, 'revive', { state: 'active' });
-    const theirs = openLane(db, team.id, 'revive', 'nick', { title: 'theirs', claim: true });
-    updateLane(db, team.id, theirs.id, 'revive', { state: 'awaiting_acceptance' });
-    askReview(db, team.id, nick, stanley.id, theirs.id, 'ask-2');
+  it('shows the owed review even while I am carrying my own lanes', async () => {
+    const { db, team, nick, stanley } = await seed();
+    const mine = await openLane(db, team.id, 'revive', 'stanley', {
+      title: 'my work',
+      claim: true,
+    });
+    await updateLane(db, team.id, mine.id, 'revive', { state: 'active' });
+    const theirs = await openLane(db, team.id, 'revive', 'nick', { title: 'theirs', claim: true });
+    await updateLane(db, team.id, theirs.id, 'revive', { state: 'awaiting_acceptance' });
+    await askReview(db, team.id, nick, stanley.id, theirs.id, 'ask-2');
 
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.in_flight.map((l) => l.id)).toEqual([mine.id]);
     expect(brief.owed_reviews.map((r) => r.lane.id)).toEqual([theirs.id]);
   });
 
   // Answering IS closing the lane (ADR 192, as repaired) — so "still awaiting" is the whole
   // unanswered test. No accept-message bookkeeping to drift out of sync with the lane state.
-  it('drops the review once the lane leaves awaiting_acceptance', () => {
-    const { db, team, nick, stanley } = seed();
-    const lane = openLane(db, team.id, 'revive', 'nick', { title: 'reviewed', claim: true });
-    updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
-    askReview(db, team.id, nick, stanley.id, lane.id, 'ask-3');
-    expect(deriveNext(db, team.id, 'revive', 'stanley').owed_reviews).toHaveLength(1);
+  it('drops the review once the lane leaves awaiting_acceptance', async () => {
+    const { db, team, nick, stanley } = await seed();
+    const lane = await openLane(db, team.id, 'revive', 'nick', { title: 'reviewed', claim: true });
+    await updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
+    await askReview(db, team.id, nick, stanley.id, lane.id, 'ask-3');
+    expect((await deriveNext(db, team.id, 'revive', 'stanley')).owed_reviews).toHaveLength(1);
 
-    updateLane(db, team.id, lane.id, 'revive', { state: 'done' });
-    expect(deriveNext(db, team.id, 'revive', 'stanley').owed_reviews).toEqual([]);
+    await updateLane(db, team.id, lane.id, 'revive', { state: 'done' });
+    expect((await deriveNext(db, team.id, 'revive', 'stanley')).owed_reviews).toEqual([]);
   });
 
   // Lane 01M2TNWK0K: after a re-route the relieved seat's brief still named the lane as owed.
   // The verdict edge and `openAcceptanceAsk` already exclude superseded asks; the brief did not,
   // so wanderer's `next` said "verdict owed" on #1541 and both wanderer and ryder judged it.
-  it('drops the review once a re-route has superseded my ask — the new acceptor alone owes it', () => {
-    const { db, team, nick, stanley } = seed();
-    const miley = addMember(db, team, { name: 'miley', kind: 'agent' }).row;
-    const lane = openLane(db, team.id, 'revive', 'nick', { title: 'rerouted', claim: true });
-    updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
-    askReview(db, team.id, nick, stanley.id, lane.id, 'ask-old', 1_000);
-    expect(deriveNext(db, team.id, 'revive', 'stanley').owed_reviews).toHaveLength(1);
+  it('drops the review once a re-route has superseded my ask — the new acceptor alone owes it', async () => {
+    const { db, team, nick, stanley } = await seed();
+    const miley = (await addMember(db, team, { name: 'miley', kind: 'agent' })).row;
+    const lane = await openLane(db, team.id, 'revive', 'nick', { title: 'rerouted', claim: true });
+    await updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
+    await askReview(db, team.id, nick, stanley.id, lane.id, 'ask-old', 1_000);
+    expect((await deriveNext(db, team.id, 'revive', 'stanley')).owed_reviews).toHaveLength(1);
 
     // The re-route: audit row names the superseded ask, and a fresh ask goes to miley.
-    appendAudit(db, team.id, {
+    await appendAudit(db, team.id, {
       actor: 'stanley',
       action: 'lane.review_rerouted',
       target: lane.id,
@@ -406,71 +436,71 @@ describe('owed_reviews — the verdicts someone is waiting on from ME (ADR 233)'
         superseded_ask: 'ask-old',
       },
     });
-    askReview(db, team.id, nick, miley.id, lane.id, 'ask-new', 2_000);
+    await askReview(db, team.id, nick, miley.id, lane.id, 'ask-new', 2_000);
 
-    expect(deriveNext(db, team.id, 'revive', 'stanley').owed_reviews).toEqual([]);
-    expect(deriveNext(db, team.id, 'revive', 'miley').owed_reviews.map((r) => r.ask_id)).toEqual([
-      'ask-new',
-    ]);
+    expect((await deriveNext(db, team.id, 'revive', 'stanley')).owed_reviews).toEqual([]);
+    expect(
+      (await deriveNext(db, team.id, 'revive', 'miley')).owed_reviews.map((r) => r.ask_id),
+    ).toEqual(['ask-new']);
     // The statusline / orient-nudge summary is a separate bounded query and must agree.
-    expect(deriveNextSummary(db, team.id, 'revive', 'stanley').owed).toEqual([]);
-    expect(deriveNextSummary(db, team.id, 'revive', 'miley').owed).toEqual([
+    expect((await deriveNextSummary(db, team.id, 'revive', 'stanley')).owed).toEqual([]);
+    expect((await deriveNextSummary(db, team.id, 'revive', 'miley')).owed).toEqual([
       { lane: lane.id, ts: 2_000 },
     ]);
   });
 
-  it('never asks me to review my own lane, even if an ask names me', () => {
-    const { db, team, nick, stanley } = seed();
-    const mine = openLane(db, team.id, 'revive', 'stanley', { title: 'mine', claim: true });
-    updateLane(db, team.id, mine.id, 'revive', { state: 'awaiting_acceptance' });
-    askReview(db, team.id, nick, stanley.id, mine.id, 'ask-4');
+  it('never asks me to review my own lane, even if an ask names me', async () => {
+    const { db, team, nick, stanley } = await seed();
+    const mine = await openLane(db, team.id, 'revive', 'stanley', { title: 'mine', claim: true });
+    await updateLane(db, team.id, mine.id, 'revive', { state: 'awaiting_acceptance' });
+    await askReview(db, team.id, nick, stanley.id, mine.id, 'ask-4');
 
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.owed_reviews).toEqual([]);
     expect(brief.in_flight.map((l) => l.id)).toEqual([mine.id]); // still MY lane to carry
   });
 
-  it('ignores a review routed to someone else', () => {
-    const { db, team, nick } = seed();
-    const other = addMember(db, team, { name: 'miley', kind: 'agent' }).row;
-    const lane = openLane(db, team.id, 'revive', 'nick', { title: 'not mine', claim: true });
-    updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
-    askReview(db, team.id, nick, other.id, lane.id, 'ask-5');
+  it('ignores a review routed to someone else', async () => {
+    const { db, team, nick } = await seed();
+    const other = (await addMember(db, team, { name: 'miley', kind: 'agent' })).row;
+    const lane = await openLane(db, team.id, 'revive', 'nick', { title: 'not mine', claim: true });
+    await updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
+    await askReview(db, team.id, nick, other.id, lane.id, 'ask-5');
 
-    expect(deriveNext(db, team.id, 'revive', 'stanley').owed_reviews).toEqual([]);
-    expect(deriveNext(db, team.id, 'revive', 'miley').owed_reviews).toHaveLength(1);
+    expect((await deriveNext(db, team.id, 'revive', 'stanley')).owed_reviews).toEqual([]);
+    expect((await deriveNext(db, team.id, 'revive', 'miley')).owed_reviews).toHaveLength(1);
   });
 
-  it('is empty when nothing is owed — the common case stays quiet', () => {
-    const { db, team } = seed();
-    expect(deriveNext(db, team.id, 'revive', 'stanley').owed_reviews).toEqual([]);
+  it('is empty when nothing is owed — the common case stays quiet', async () => {
+    const { db, team } = await seed();
+    expect((await deriveNext(db, team.id, 'revive', 'stanley')).owed_reviews).toEqual([]);
   });
 
   // Oldest first: the one that has been waiting longest is the one most likely to be swept
   // unverified, so it is the one to answer first.
-  it('sorts oldest ask first', () => {
-    const { db, team, nick, stanley } = seed();
-    const a = openLane(db, team.id, 'revive', 'nick', { title: 'a', claim: true });
-    const b = openLane(db, team.id, 'revive', 'nick', { title: 'b', claim: true });
-    updateLane(db, team.id, a.id, 'revive', { state: 'awaiting_acceptance' });
-    updateLane(db, team.id, b.id, 'revive', { state: 'awaiting_acceptance' });
-    askReview(db, team.id, nick, stanley.id, b.id, 'ask-new', 9_000);
-    askReview(db, team.id, nick, stanley.id, a.id, 'ask-old', 1_000);
+  it('sorts oldest ask first', async () => {
+    const { db, team, nick, stanley } = await seed();
+    const a = await openLane(db, team.id, 'revive', 'nick', { title: 'a', claim: true });
+    const b = await openLane(db, team.id, 'revive', 'nick', { title: 'b', claim: true });
+    await updateLane(db, team.id, a.id, 'revive', { state: 'awaiting_acceptance' });
+    await updateLane(db, team.id, b.id, 'revive', { state: 'awaiting_acceptance' });
+    await askReview(db, team.id, nick, stanley.id, b.id, 'ask-new', 9_000);
+    await askReview(db, team.id, nick, stanley.id, a.id, 'ask-old', 1_000);
 
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.owed_reviews.map((r) => r.ask_id)).toEqual(['ask-old', 'ask-new']);
   });
 });
 
-describe('brief leads with goals (goals-front-door design)', () => {
-  function declareGoal(
+describe('brief leads with goals (goals-front-door design)', async () => {
+  async function declareGoal(
     db: ReturnType<typeof seed>['db'],
     teamId: string,
     fromId: string,
     goal: { id: string; title: string; story?: string; wave?: number | 'later' },
     ts: number,
   ) {
-    insertMessage(
+    await insertMessage(
       db,
       teamId,
       fromId,
@@ -488,36 +518,36 @@ describe('brief leads with goals (goals-front-door design)', () => {
     );
   }
 
-  it('brief leads with unshipped goals, wave-ordered, and up_next puts goal-attached lanes first', () => {
-    const { db, team, nick } = seed();
-    declareGoal(db, team.id, nick.id, { id: 'g2', title: 'Second', wave: 2 }, 10);
-    declareGoal(db, team.id, nick.id, { id: 'g1', title: 'First', wave: 1 }, 20);
+  it('brief leads with unshipped goals, wave-ordered, and up_next puts goal-attached lanes first', async () => {
+    const { db, team, nick } = await seed();
+    await declareGoal(db, team.id, nick.id, { id: 'g2', title: 'Second', wave: 2 }, 10);
+    await declareGoal(db, team.id, nick.id, { id: 'g1', title: 'First', wave: 1 }, 20);
     // Two open lanes, the ungrouped one created first — attachment must still win the sort.
-    openLane(db, team.id, 'revive', 'nick', { title: 'ungrouped' });
-    openLane(db, team.id, 'revive', 'nick', { title: 'on g1', goal_id: 'g1' });
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+    await openLane(db, team.id, 'revive', 'nick', { title: 'ungrouped' });
+    await openLane(db, team.id, 'revive', 'nick', { title: 'on g1', goal_id: 'g1' });
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.goals.map((g) => g.id)).toEqual(['g1', 'g2']);
     expect(brief.up_next[0]!.goal_id).toBe('g1');
   });
 
-  it('shipped goals are excluded and in-flight sorts before planned at equal wave', () => {
-    const { db, team, nick } = seed();
-    declareGoal(db, team.id, nick.id, { id: 'ga', title: 'A planned', wave: 1 }, 10);
-    declareGoal(db, team.id, nick.id, { id: 'gb', title: 'B in flight', wave: 1 }, 20);
-    declareGoal(db, team.id, nick.id, { id: 'gc', title: 'C shipped', wave: 1 }, 30);
-    const flight = openLane(db, team.id, 'revive', 'stanley', {
+  it('shipped goals are excluded and in-flight sorts before planned at equal wave', async () => {
+    const { db, team, nick } = await seed();
+    await declareGoal(db, team.id, nick.id, { id: 'ga', title: 'A planned', wave: 1 }, 10);
+    await declareGoal(db, team.id, nick.id, { id: 'gb', title: 'B in flight', wave: 1 }, 20);
+    await declareGoal(db, team.id, nick.id, { id: 'gc', title: 'C shipped', wave: 1 }, 30);
+    const flight = await openLane(db, team.id, 'revive', 'stanley', {
       title: 'w',
       goal_id: 'gb',
       claim: true,
     });
-    updateLane(db, team.id, flight.id, 'revive', { state: 'active' });
-    const done = openLane(db, team.id, 'revive', 'stanley', {
+    await updateLane(db, team.id, flight.id, 'revive', { state: 'active' });
+    const done = await openLane(db, team.id, 'revive', 'stanley', {
       title: 'd',
       goal_id: 'gc',
       claim: true,
     });
-    updateLane(db, team.id, done.id, 'revive', { state: 'done' });
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+    await updateLane(db, team.id, done.id, 'revive', { state: 'done' });
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.goals.map((g) => g.id)).toEqual(['gb', 'ga']);
   });
 });
@@ -533,7 +563,7 @@ describe('brief leads with goals (goals-front-door design)', () => {
  * Measured 2026-08-15: lane 01M016D5GA — 44 files joining typecheck, every CI-deciding gate among
  * them — was swept at 24h with `verified: false` and listed under "recently shipped" unmarked.
  */
-describe('shipped carries the verified-ness of its close', () => {
+describe('shipped carries the verified-ness of its close', async () => {
   function closedRow(
     db: ReturnType<typeof seed>['db'],
     teamId: string,
@@ -553,44 +583,47 @@ describe('shipped carries the verified-ness of its close', () => {
       Date.now(),
     );
   }
-  function shippedLane(
+  async function shippedLane(
     db: ReturnType<typeof seed>['db'],
     teamId: string,
     title: string,
     verified: boolean,
   ) {
-    const lane = openLane(db, teamId, 'revive', 'stanley', { title, claim: true });
-    updateLane(db, teamId, lane.id, 'revive', { state: 'done' });
+    const lane = await openLane(db, teamId, 'revive', 'stanley', { title, claim: true });
+    await updateLane(db, teamId, lane.id, 'revive', { state: 'done' });
     closedRow(db, teamId, lane.id, verified);
     return lane;
   }
 
-  it('marks a close nobody confirmed, so the brief stops calling it shipped-and-fine', () => {
-    const { db, team } = seed();
-    shippedLane(db, team.id, 'swept', false);
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+  it('marks a close nobody confirmed, so the brief stops calling it shipped-and-fine', async () => {
+    const { db, team } = await seed();
+    await shippedLane(db, team.id, 'swept', false);
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.shipped.find((l) => l.title === 'swept')?.verified).toBe(false);
   });
 
-  it('marks a counterpart-accepted close as verified', () => {
-    const { db, team } = seed();
-    shippedLane(db, team.id, 'accepted', true);
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+  it('marks a counterpart-accepted close as verified', async () => {
+    const { db, team } = await seed();
+    await shippedLane(db, team.id, 'accepted', true);
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.shipped.find((l) => l.title === 'accepted')?.verified).toBe(true);
   });
 
-  it('ABSTAINS on a close that recorded no verdict — pre-ADR-169 lanes invent nothing', () => {
-    const { db, team } = seed();
-    const lane = openLane(db, team.id, 'revive', 'stanley', { title: 'ancient', claim: true });
-    updateLane(db, team.id, lane.id, 'revive', { state: 'done' });
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+  it('ABSTAINS on a close that recorded no verdict — pre-ADR-169 lanes invent nothing', async () => {
+    const { db, team } = await seed();
+    const lane = await openLane(db, team.id, 'revive', 'stanley', {
+      title: 'ancient',
+      claim: true,
+    });
+    await updateLane(db, team.id, lane.id, 'revive', { state: 'done' });
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     // Absent, never defaulted to false: "we do not know" and "nobody confirmed it" are different
     // claims, and only one of them is true here.
     expect(brief.shipped.find((l) => l.title === 'ancient')).not.toHaveProperty('verified');
   });
 });
 
-describe('review_debt (value-layer design)', () => {
+describe('review_debt (value-layer design)', async () => {
   function insertReadyAudit(
     db: ReturnType<typeof seed>['db'],
     teamId: string,
@@ -613,7 +646,7 @@ describe('review_debt (value-layer design)', () => {
       ts,
     );
   }
-  function awaiting(
+  async function awaiting(
     db: ReturnType<typeof seed>['db'],
     teamId: string,
     title: string,
@@ -621,8 +654,10 @@ describe('review_debt (value-layer design)', () => {
     owner = 'stanley',
     detail: Record<string, unknown> | null = null,
   ) {
-    const lane = openLane(db, teamId, 'revive', owner, { title, claim: true });
-    const moved = updateLane(db, teamId, lane.id, 'revive', { state: 'awaiting_acceptance' })!;
+    const lane = await openLane(db, teamId, 'revive', owner, { title, claim: true });
+    const moved = (await updateLane(db, teamId, lane.id, 'revive', {
+      state: 'awaiting_acceptance',
+    }))!;
     insertReadyAudit(
       db,
       teamId,
@@ -636,18 +671,18 @@ describe('review_debt (value-layer design)', () => {
   // C — the cap lied by omission. Three rows and no total is indistinguishable from three rows and
   // nothing else, so a seat clears the queue, looks again, and finds more. Measured 2026-08-15:
   // cleared 3, two more appeared, and only then was the depth knowable.
-  it('reports the TOTAL waiting, not just the three it shows', () => {
-    const { db, team } = seed();
-    for (let i = 0; i < 5; i++) awaiting(db, team.id, `l${i}`, (30 - i) * 3_600_000);
-    const brief = deriveNext(db, team.id, 'revive', 'nick');
+  it('reports the TOTAL waiting, not just the three it shows', async () => {
+    const { db, team } = await seed();
+    for (let i = 0; i < 5; i++) await awaiting(db, team.id, `l${i}`, (30 - i) * 3_600_000);
+    const brief = await deriveNext(db, team.id, 'revive', 'nick');
     expect(brief.review_debt).toHaveLength(3);
     expect(brief.review_debt_total).toBe(5);
   });
 
-  it('total equals the shown count when the queue is shallow — no phantom depth', () => {
-    const { db, team } = seed();
-    awaiting(db, team.id, 'only', 5 * 3_600_000);
-    const brief = deriveNext(db, team.id, 'revive', 'nick');
+  it('total equals the shown count when the queue is shallow — no phantom depth', async () => {
+    const { db, team } = await seed();
+    await awaiting(db, team.id, 'only', 5 * 3_600_000);
+    const brief = await deriveNext(db, team.id, 'revive', 'nick');
     expect(brief.review_debt_total).toBe(1);
   });
 
@@ -655,9 +690,9 @@ describe('review_debt (value-layer design)', () => {
   // same-model monoculture (ADR 188/253 refuse same_model), the submit records
   // `no_candidate: true`, and then nothing says so: the lane simply waits, looking identical to
   // one with a named reviewer who is merely slow. Three of five lanes on 2026-08-15.
-  it('marks a lane that no reviewer was ever asked to review', () => {
-    const { db, team } = seed();
-    awaiting(db, team.id, 'nobody-asked', 20 * 3_600_000, 'stanley', {
+  it('marks a lane that no reviewer was ever asked to review', async () => {
+    const { db, team } = await seed();
+    await awaiting(db, team.id, 'nobody-asked', 20 * 3_600_000, 'stanley', {
       no_candidate: true,
       review_selection: {
         selected: null,
@@ -667,8 +702,8 @@ describe('review_debt (value-layer design)', () => {
         ],
       },
     });
-    awaiting(db, team.id, 'routed', 10 * 3_600_000, 'stanley', { reviewer: 'miley' });
-    const brief = deriveNext(db, team.id, 'revive', 'nick');
+    await awaiting(db, team.id, 'routed', 10 * 3_600_000, 'stanley', { reviewer: 'miley' });
+    const brief = await deriveNext(db, team.id, 'revive', 'nick');
     const byTitle = new Map(brief.review_debt!.map((r) => [r.title, r]));
     expect(byTitle.get('nobody-asked')!.no_candidate).toBe(true);
     expect(byTitle.get('nobody-asked')!.empty_pool).toEqual({
@@ -679,119 +714,145 @@ describe('review_debt (value-layer design)', () => {
     expect(byTitle.get('routed')!.empty_pool).toBeUndefined();
   });
 
-  it('lists the 3 oldest awaiting-acceptance lanes, oldest first', () => {
-    const { db, team } = seed();
-    const old1 = awaiting(db, team.id, 'a', 30 * 3_600_000);
-    const old2 = awaiting(db, team.id, 'b', 20 * 3_600_000);
-    const old3 = awaiting(db, team.id, 'c', 10 * 3_600_000);
-    awaiting(db, team.id, 'd', 1_000); // freshest — capped out
-    const brief = deriveNext(db, team.id, 'revive', 'nick');
+  it('lists the 3 oldest awaiting-acceptance lanes, oldest first', async () => {
+    const { db, team } = await seed();
+    const old1 = await awaiting(db, team.id, 'a', 30 * 3_600_000);
+    const old2 = await awaiting(db, team.id, 'b', 20 * 3_600_000);
+    const old3 = await awaiting(db, team.id, 'c', 10 * 3_600_000);
+    await awaiting(db, team.id, 'd', 1_000); // freshest — capped out
+    const brief = await deriveNext(db, team.id, 'revive', 'nick');
     expect(brief.review_debt!.map((r) => r.id)).toEqual([old1.id, old2.id, old3.id]);
     expect(brief.review_debt![0]!.owner).toBe('stanley');
     expect(brief.review_debt![0]!.waited_ms).toBeGreaterThan(29 * 3_600_000);
   });
 
-  it("excludes the requesting seat's own lanes — self-acceptance is never invited", () => {
-    const { db, team } = seed();
-    awaiting(db, team.id, 'mine-a', 30 * 3_600_000);
-    awaiting(db, team.id, 'mine-b', 20 * 3_600_000);
+  it("excludes the requesting seat's own lanes — self-acceptance is never invited", async () => {
+    const { db, team } = await seed();
+    await awaiting(db, team.id, 'mine-a', 30 * 3_600_000);
+    await awaiting(db, team.id, 'mine-b', 20 * 3_600_000);
     // ADR 192: `verified` requires closer ≠ owner, so a seat's own lane is never its
     // candidate review work — the whole field disappears when nothing else waits.
-    expect(deriveNext(db, team.id, 'revive', 'stanley').review_debt).toBeUndefined();
-    expect(deriveNext(db, team.id, 'revive', 'nick').review_debt).toHaveLength(2);
+    expect((await deriveNext(db, team.id, 'revive', 'stanley')).review_debt).toBeUndefined();
+    expect((await deriveNext(db, team.id, 'revive', 'nick')).review_debt).toHaveLength(2);
   });
 
-  it("an excluded own lane frees its cap slot for the next-oldest teammate's lane", () => {
-    const { db, team } = seed();
-    awaiting(db, team.id, 'mine', 40 * 3_600_000); // oldest, but requester-owned
-    const o1 = awaiting(db, team.id, 'a', 30 * 3_600_000, 'nick');
-    const o2 = awaiting(db, team.id, 'b', 20 * 3_600_000, 'nick');
-    const o3 = awaiting(db, team.id, 'c', 10 * 3_600_000, 'nick');
-    awaiting(db, team.id, 'd', 1_000, 'nick'); // freshest — capped out
-    const debt = deriveNext(db, team.id, 'revive', 'stanley').review_debt!;
+  it("an excluded own lane frees its cap slot for the next-oldest teammate's lane", async () => {
+    const { db, team } = await seed();
+    await awaiting(db, team.id, 'mine', 40 * 3_600_000); // oldest, but requester-owned
+    const o1 = await awaiting(db, team.id, 'a', 30 * 3_600_000, 'nick');
+    const o2 = await awaiting(db, team.id, 'b', 20 * 3_600_000, 'nick');
+    const o3 = await awaiting(db, team.id, 'c', 10 * 3_600_000, 'nick');
+    await awaiting(db, team.id, 'd', 1_000, 'nick'); // freshest — capped out
+    const debt = (await deriveNext(db, team.id, 'revive', 'stanley')).review_debt!;
     expect(debt.map((r) => r.id)).toEqual([o1.id, o2.id, o3.id]);
   });
 
-  it('is absent when nothing waits', () => {
-    const { db, team } = seed();
-    openLane(db, team.id, 'revive', 'stanley', { title: 'live', claim: true });
-    expect(deriveNext(db, team.id, 'revive', 'nick').review_debt).toBeUndefined();
+  it('is absent when nothing waits', async () => {
+    const { db, team } = await seed();
+    await openLane(db, team.id, 'revive', 'stanley', { title: 'live', claim: true });
+    expect((await deriveNext(db, team.id, 'revive', 'nick')).review_debt).toBeUndefined();
   });
 });
 
-describe('incidents lead the brief (spec 2026-08-14 inc 1)', () => {
-  it('an open incident appears for every member; a terminal one does not', () => {
-    const db = openDb(':memory:');
-    const team = createTeam(db, { slug: 'revive' });
-    addMember(db, team, { name: 'miley', kind: 'agent' });
-    recordBlockedReport(db, team.id, 'revive', 'izzo', { gate: 'ci:gates/A11y contrast' }, 'm1');
-    recordBlockedReport(db, team.id, 'revive', 'dolly', { gate: 'ci:gates/A11y contrast' }, 'm2');
-    const brief = deriveNext(db, team.id, 'revive', 'miley');
+describe('incidents lead the brief (spec 2026-08-14 inc 1)', async () => {
+  it('an open incident appears for every member; a terminal one does not', async () => {
+    const db = openTestDb(':memory:');
+    const team = await createTeam(db, { slug: 'revive' });
+    await addMember(db, team, { name: 'miley', kind: 'agent' });
+    await recordBlockedReport(
+      db,
+      team.id,
+      'revive',
+      'izzo',
+      { gate: 'ci:gates/A11y contrast' },
+      'm1',
+    );
+    await recordBlockedReport(
+      db,
+      team.id,
+      'revive',
+      'dolly',
+      { gate: 'ci:gates/A11y contrast' },
+      'm2',
+    );
+    const brief = await deriveNext(db, team.id, 'revive', 'miley');
     expect(brief.incidents).toHaveLength(1);
     expect(brief.incidents[0]).toMatchObject({
       gate: 'ci:gates/A11y contrast',
       owner_seat: null,
     });
-    updateLane(db, team.id, brief.incidents[0]!.lane, 'revive', { state: 'abandoned' });
-    expect(deriveNext(db, team.id, 'revive', 'miley').incidents).toHaveLength(0);
+    await updateLane(db, team.id, brief.incidents[0]!.lane, 'revive', { state: 'abandoned' });
+    expect((await deriveNext(db, team.id, 'revive', 'miley')).incidents).toHaveLength(0);
   });
 });
 
-describe('review_debt unlanded badge (merge-verified submit)', () => {
-  it('marks a lane whose attestation has no SHA as unlanded, and an attested one as not', () => {
-    const { db, team } = seed();
-    const bare = openLane(db, team.id, 'revive', 'nick', { title: 'no attestation', claim: true });
-    updateLane(db, team.id, bare.id, 'revive', { state: 'awaiting_acceptance' });
-    const attested = openLane(db, team.id, 'revive', 'nick', { title: 'landed', claim: true });
-    updateLane(db, team.id, attested.id, 'revive', {
+describe('review_debt unlanded badge (merge-verified submit)', async () => {
+  it('marks a lane whose attestation has no SHA as unlanded, and an attested one as not', async () => {
+    const { db, team } = await seed();
+    const bare = await openLane(db, team.id, 'revive', 'nick', {
+      title: 'no attestation',
+      claim: true,
+    });
+    await updateLane(db, team.id, bare.id, 'revive', { state: 'awaiting_acceptance' });
+    const attested = await openLane(db, team.id, 'revive', 'nick', {
+      title: 'landed',
+      claim: true,
+    });
+    await updateLane(db, team.id, attested.id, 'revive', {
       state: 'awaiting_acceptance',
       merged: { sha: 'abc123f', verification: 'ancestor' },
     });
 
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     const byId = new Map((brief.review_debt ?? []).map((r) => [r.id, r]));
     expect(byId.get(bare.id)?.unlanded).toBe(true);
     expect(byId.get(attested.id)?.unlanded).toBe(false);
   });
 });
 
-describe('deriveNext — recorded intentions above the open lanes (ADR 373 increment 4)', () => {
-  function capture(
+describe('deriveNext — recorded intentions above the open lanes (ADR 373 increment 4)', async () => {
+  async function capture(
     db: ReturnType<typeof seed>['db'],
     teamId: string,
     ref: string,
     body: string,
     at: number,
   ) {
-    return captureRepoSeed(
+    return await captureRepoSeed(
       db,
       teamId,
-      getMemberByName(db, teamId, 'nick')!,
+      await (await getMemberByName(db, teamId, 'nick'))!,
       { ref, body, captured_at: at },
       at,
     );
   }
 
-  it('lists open Seeds oldest first, source-tagged, with the total behind the window', () => {
-    const { db, team } = seed();
-    const first = capture(
+  it('lists open Seeds oldest first, source-tagged, with the total behind the window', async () => {
+    const { db, team } = await seed();
+    const first = await capture(
       db,
       team.id,
       'docs/decisions/354-x.md#left-for-a-sibling-lane',
       'Left for a sibling lane; this ADR fixes the attestation.\n— docs/decisions/354-x.md:12',
       100,
     );
-    const second = capture(
+    const second = await capture(
       db,
       team.id,
       'docs/wiki/wake-leases.md#still-true',
       'still true, and not fixed here\n— docs/wiki/wake-leases.md:40',
       200,
     );
-    capture(db, team.id, 'content/roadmap.data.ts#building-a', "building: 'increments 3–5'", 300);
-    capture(db, team.id, 'content/roadmap.data.ts#building-b', "building: 'M4–M5'", 400);
+    await capture(
+      db,
+      team.id,
+      'content/roadmap.data.ts#building-a',
+      "building: 'increments 3–5'",
+      300,
+    );
+    await capture(db, team.id, 'content/roadmap.data.ts#building-b', "building: 'M4–M5'", 400);
 
-    const brief = deriveNext(db, team.id, 'revive', 'stanley', 3, 5, { upNextSeedLimit: 2 });
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley', 3, 5, { upNextSeedLimit: 2 });
     expect(brief.up_next_seeds.map((s) => s.id)).toEqual([first.id, second.id]);
     expect(brief.up_next_seeds_total).toBe(4);
     expect(brief.up_next_seeds[0]).toMatchObject({
@@ -803,27 +864,27 @@ describe('deriveNext — recorded intentions above the open lanes (ADR 373 incre
     });
   });
 
-  it('drops a Seed once it is promoted — a started intention is a lane, not an intention', () => {
-    const { db, team } = seed();
-    const lane = openLane(db, team.id, 'revive', 'nick', { title: 'the sibling lane' });
-    capture(db, team.id, 'docs/wiki/a.md#b', 'not yet built', 100);
-    captureRepoSeed(db, team.id, getMemberByName(db, team.id, 'nick')!, {
+  it('drops a Seed once it is promoted — a started intention is a lane, not an intention', async () => {
+    const { db, team } = await seed();
+    const lane = await openLane(db, team.id, 'revive', 'nick', { title: 'the sibling lane' });
+    await capture(db, team.id, 'docs/wiki/a.md#b', 'not yet built', 100);
+    await captureRepoSeed(db, team.id, await (await getMemberByName(db, team.id, 'nick'))!, {
       ref: 'docs/decisions/354-x.md#c',
       body: 'Left for a sibling lane',
       lane_id: lane.id,
     });
 
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.up_next_seeds.map((s) => s.ref)).toEqual(['docs/wiki/a.md#b']);
     expect(brief.up_next_seeds_total).toBe(1);
   });
 
-  it('carries a relay Seed with a null ref — its source is a person, not a document', () => {
-    const { db, team } = seed();
+  it('carries a relay Seed with a null ref — its source is a person, not a document', async () => {
+    const { db, team } = await seed();
     db.prepare("UPDATE members SET slack_user_id = 'U1' WHERE team_id = ? AND name = 'nick'").run(
       team.id,
     );
-    createSeedFromRelay(db, team.id, {
+    await createSeedFromRelay(db, team.id, {
       id: 'relay-1',
       source: 'slack',
       body: 'Which Surface should own this?',
@@ -831,7 +892,7 @@ describe('deriveNext — recorded intentions above the open lanes (ADR 373 incre
       meta: { user: 'U1' },
     });
 
-    const brief = deriveNext(db, team.id, 'revive', 'stanley');
+    const brief = await deriveNext(db, team.id, 'revive', 'stanley');
     expect(brief.up_next_seeds).toMatchObject([
       { source: 'slack', ref: null, summary: 'Which Surface should own this?' },
     ]);

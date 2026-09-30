@@ -1,6 +1,6 @@
 import type { HostProvision, HostProvisionReportBody, HostProvisionState } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
+import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { getMemberById, memberStandingRefusal } from './members.js';
 import { type HostScope, hostMayServe } from './residency.js';
@@ -35,14 +35,14 @@ export interface HostProvisionRow {
   created_at: number;
 }
 
-export function insertProvision(
-  db: Database,
+export async function insertProvision(
+  db: Driver,
   teamId: string,
   memberId: string,
   sponsorId: string,
   now = Date.now(),
   connectOrigin: string | null = null,
-): HostProvisionRow {
+): Promise<HostProvisionRow> {
   const row: HostProvisionRow = {
     id: ulid(),
     team_id: teamId,
@@ -58,63 +58,74 @@ export function insertProvision(
     connect_origin: connectOrigin,
     created_at: now,
   };
-  db.prepare(
+  await db.run(
     `INSERT INTO host_provisions (id, team_id, member_id, sponsor_id, host, state, claimed_by,
        claimed_at, ready_at, first_wake_at, failed_reason, connect_origin, created_at)
-     VALUES (@id, @team_id, @member_id, @sponsor_id, @host, @state, @claimed_by, @claimed_at,
-       @ready_at, @first_wake_at, @failed_reason, @connect_origin, @created_at)`,
-  ).run(row);
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?,
+       ?, ?, ?, ?, ?)`,
+    [
+      row.id,
+      row.team_id,
+      row.member_id,
+      row.sponsor_id,
+      row.host,
+      row.state,
+      row.claimed_by,
+      row.claimed_at,
+      row.ready_at,
+      row.first_wake_at,
+      row.failed_reason,
+      row.connect_origin,
+      row.created_at,
+    ],
+  );
   return row;
 }
 
-export function getProvision(
-  db: Database,
+export async function getProvision(
+  db: Driver,
   teamId: string,
   id: string,
-): HostProvisionRow | undefined {
-  return db
-    .prepare<
-      [string, string],
-      HostProvisionRow
-    >('SELECT * FROM host_provisions WHERE team_id = ? AND id = ?')
-    .get(teamId, id);
+): Promise<HostProvisionRow | undefined> {
+  return await db.get<HostProvisionRow>(
+    'SELECT * FROM host_provisions WHERE team_id = ? AND id = ?',
+    [teamId, id],
+  );
 }
 
 /** Host labels this sponsor's host keys polled from within `withinMs` — newest first. */
-export function sponsorHostsSeen(
-  db: Database,
+export async function sponsorHostsSeen(
+  db: Driver,
   teamId: string,
   sponsorId: string,
   now = Date.now(),
   withinMs = SPONSOR_HOST_LIVE_MS,
-): string[] {
-  return db
-    .prepare<[string, string, number], { host: string }>(
+): Promise<string[]> {
+  return (
+    await db.all<{ host: string }>(
       `SELECT host FROM host_liveness WHERE team_id = ? AND sponsor_id = ? AND seen_at >= ?
        ORDER BY seen_at DESC`,
+      [teamId, sponsorId, now - withinMs],
     )
-    .all(teamId, sponsorId, now - withinMs)
-    .map((r) => r.host);
+  ).map((r) => r.host);
 }
 
 /**
  * Sponsored seats this host label already runs or is standing up — the `max_per_host` count.
  * Live hosted enrollments plus in-flight claims, so a burst of claims cannot overshoot the cap.
  */
-export function liveHostedCount(db: Database, teamId: string, host: string): number {
-  const hosted = db
-    .prepare<[string, string], { n: number }>(
-      `SELECT COUNT(*) AS n FROM residency r JOIN members m ON m.id = r.member_id
+export async function liveHostedCount(db: Driver, teamId: string, host: string): Promise<number> {
+  const hosted = (await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM residency r JOIN members m ON m.id = r.member_id
        WHERE r.team_id = ? AND r.host = ? AND m.sponsored_by IS NOT NULL AND m.left_at IS NULL`,
-    )
-    .get(teamId, host)!.n;
-  const inFlight = db
-    .prepare<[string, string], { n: number }>(
-      `SELECT COUNT(*) AS n FROM host_provisions p
+    [teamId, host],
+  ))!.n;
+  const inFlight = (await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM host_provisions p
        WHERE p.team_id = ? AND p.claimed_by = ? AND p.state = 'claimed'
          AND NOT EXISTS (SELECT 1 FROM residency r WHERE r.member_id = p.member_id AND r.host = p.claimed_by)`,
-    )
-    .get(teamId, host)!.n;
+    [teamId, host],
+  ))!.n;
   return hosted + inFlight;
 }
 
@@ -123,45 +134,43 @@ export function liveHostedCount(db: Database, teamId: string, host: string): num
  * sponsor's own key) become `claimed` by `host`, oldest first, up to `maxPerHost` hosted seats on
  * the label. Rows past the cap stay pending for a later poll or another host of the sponsor's.
  */
-export function claimProvisions(
-  db: Database,
+export async function claimProvisions(
+  db: Driver,
   teamId: string,
   host: string,
   scope: HostScope,
   maxPerHost: number,
   now = Date.now(),
-): HostProvisionRow[] {
-  return db.transaction((): HostProvisionRow[] => {
-    const pending = db
-      .prepare<
-        [string],
-        HostProvisionRow
-      >("SELECT * FROM host_provisions WHERE team_id = ? AND state = 'pending' ORDER BY created_at ASC, id ASC")
-      .all(teamId);
-    let room = maxPerHost - liveHostedCount(db, teamId, host);
+): Promise<HostProvisionRow[]> {
+  return db.tx(async (t): Promise<HostProvisionRow[]> => {
+    const pending = await t.all<HostProvisionRow>(
+      "SELECT * FROM host_provisions WHERE team_id = ? AND state = 'pending' ORDER BY created_at ASC, id ASC",
+      [teamId],
+    );
+    let room = maxPerHost - (await liveHostedCount(t, teamId, host));
     const claimed: HostProvisionRow[] = [];
     for (const row of pending) {
       if (room <= 0) break;
-      const agent = getMemberById(db, row.member_id);
+      const agent = await getMemberById(t, row.member_id);
       if (!agent || agent.left_at !== null || !hostMayServe(scope, agent)) continue;
-      const took = db
-        .prepare(
-          `UPDATE host_provisions SET state = 'claimed', host = ?, claimed_by = ?, claimed_at = ?
+      const took = await t.run(
+        `UPDATE host_provisions SET state = 'claimed', host = ?, claimed_by = ?, claimed_at = ?
            WHERE id = ? AND state = 'pending'`,
-        )
-        .run(host, host, now, row.id);
+        [host, host, now, row.id],
+      );
       if (took.changes !== 1) continue;
       room -= 1;
       claimed.push({ ...row, state: 'claimed', host, claimed_by: host, claimed_at: now });
     }
     return claimed;
-  })();
+  });
 }
 
-export function failProvision(db: Database, id: string, reason: string): void {
-  db.prepare(
+export async function failProvision(db: Driver, id: string, reason: string): Promise<void> {
+  await db.run(
     "UPDATE host_provisions SET state = 'failed', failed_reason = ? WHERE id = ? AND state IN ('pending','claimed')",
-  ).run(reason, id);
+    [reason, id],
+  );
 }
 
 /**
@@ -170,30 +179,33 @@ export function failProvision(db: Database, id: string, reason: string): void {
  * refusal returned, never thrown, so the failure commits — if either lost standing since the claim
  * (ADR 463 §2, Review Focus 2).
  */
-export function reportProvision(
-  db: Database,
+export async function reportProvision(
+  db: Driver,
   teamId: string,
   id: string,
   host: string,
   body: HostProvisionReportBody,
   now = Date.now(),
-): { row: HostProvisionRow; refused: 'sponsor_lost_standing' | 'agent_lost_standing' | null } {
-  return db.transaction(() => {
-    const row = getProvision(db, teamId, id);
+): Promise<{
+  row: HostProvisionRow;
+  refused: 'sponsor_lost_standing' | 'agent_lost_standing' | null;
+}> {
+  return db.tx(async (t) => {
+    const row = await getProvision(t, teamId, id);
     if (!row) throw new MusterdError('not_found', `no provision "${id}"`);
     if (row.claimed_by !== host)
       throw new MusterdError('conflict', `provision "${id}" is not claimed by host "${host}"`);
     if (row.state !== 'claimed')
       throw new MusterdError('conflict', `provision "${id}" was already reported (${row.state})`);
     if (body.state === 'failed') {
-      failProvision(db, id, body.reason);
+      await failProvision(t, id, body.reason);
       return {
         row: { ...row, state: 'failed' as const, failed_reason: body.reason },
         refused: null,
       };
     }
-    const sponsor = getMemberById(db, row.sponsor_id);
-    const agent = getMemberById(db, row.member_id);
+    const sponsor = await getMemberById(t, row.sponsor_id);
+    const agent = await getMemberById(t, row.member_id);
     const sponsorLost = !sponsor || memberStandingRefusal(sponsor, now) !== null;
     const agentStatus = agent ? resolveAccountStatus(agent) : null;
     const agentLost =
@@ -202,25 +214,24 @@ export function reportProvision(
       const reason = sponsorLost
         ? ('sponsor_lost_standing' as const)
         : ('agent_lost_standing' as const);
-      failProvision(db, id, reason);
+      await failProvision(t, id, reason);
       return { row: { ...row, state: 'failed' as const, failed_reason: reason }, refused: reason };
     }
-    db.prepare("UPDATE host_provisions SET state = 'ready', ready_at = ? WHERE id = ?").run(
-      now,
-      id,
-    );
+    await t.run("UPDATE host_provisions SET state = 'ready', ready_at = ? WHERE id = ?", [now, id]);
     return { row: { ...row, state: 'ready' as const, ready_at: now }, refused: null };
-  })();
+  });
 }
 
 /** The newest provisions, for `musterd host provisions` — unclaimed and claimed rows included. */
-export function listProvisions(db: Database, teamId: string, limit = 50): HostProvisionRow[] {
-  return db
-    .prepare<
-      [string, number],
-      HostProvisionRow
-    >('SELECT * FROM host_provisions WHERE team_id = ? ORDER BY created_at DESC, id DESC LIMIT ?')
-    .all(teamId, limit);
+export async function listProvisions(
+  db: Driver,
+  teamId: string,
+  limit = 50,
+): Promise<HostProvisionRow[]> {
+  return await db.all<HostProvisionRow>(
+    'SELECT * FROM host_provisions WHERE team_id = ? ORDER BY created_at DESC, id DESC LIMIT ?',
+    [teamId, limit],
+  );
 }
 
 /** What the sweep did to one row, and why. */
@@ -238,19 +249,16 @@ export interface SweptProvision {
  * - `claimed` past the TTL with no report → `failed` (`not_reported`).
  * The caller hands a sponsor still in standing the connect link instead.
  */
-export function sweepProvisions(db: Database, now = Date.now()): SweptProvision[] {
-  return db.transaction((): SweptProvision[] => {
-    const open = db
-      .prepare<
-        [],
-        HostProvisionRow
-      >("SELECT * FROM host_provisions WHERE state IN ('pending','claimed') ORDER BY created_at ASC")
-      .all();
+export async function sweepProvisions(db: Driver, now = Date.now()): Promise<SweptProvision[]> {
+  return db.tx(async (t): Promise<SweptProvision[]> => {
+    const open = await t.all<HostProvisionRow>(
+      "SELECT * FROM host_provisions WHERE state IN ('pending','claimed') ORDER BY created_at ASC",
+    );
     const cutoff = now - PROVISION_PENDING_TTL_MS;
     const out: SweptProvision[] = [];
     for (const row of open) {
-      const agent = getMemberById(db, row.member_id);
-      const sponsor = getMemberById(db, row.sponsor_id);
+      const agent = await getMemberById(t, row.member_id);
+      const sponsor = await getMemberById(t, row.sponsor_id);
       let reason: SweptProvision['reason'] | null = null;
       if (!agent || agent.left_at !== null) reason = 'agent_left';
       else if (!sponsor || memberStandingRefusal(sponsor, now) !== null)
@@ -260,12 +268,11 @@ export function sweepProvisions(db: Database, now = Date.now()): SweptProvision[
         reason = 'not_reported';
       if (reason === null) continue;
       const state = reason === 'unclaimed' || reason === 'agent_left' ? 'cancelled' : 'failed';
-      const changed = db
-        .prepare(
-          `UPDATE host_provisions SET state = ?, failed_reason = ?
+      const changed = await t.run(
+        `UPDATE host_provisions SET state = ?, failed_reason = ?
            WHERE id = ? AND state IN ('pending','claimed')`,
-        )
-        .run(state, state === 'failed' ? reason : null, row.id);
+        [state, state === 'failed' ? reason : null, row.id],
+      );
       if (changed.changes !== 1) continue;
       out.push({
         row: { ...row, state, failed_reason: state === 'failed' ? reason : null },
@@ -273,7 +280,7 @@ export function sweepProvisions(db: Database, now = Date.now()): SweptProvision[
       });
     }
     return out;
-  })();
+  });
 }
 
 export function toProvision(

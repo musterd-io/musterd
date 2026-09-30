@@ -7,7 +7,7 @@ import {
   type StalledThread,
   type TimeToUnblock,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { openDirectedLedger } from './delivery.js';
 
 /**
@@ -33,10 +33,14 @@ const MAX_ENTRIES = 10;
  * request_help/handoff via meta.in_reply_to, or a resolve closing its thread root. The lived,
  * retroactive counterpart of the emitted loop_latency histogram.
  */
-export function timeToUnblock(db: Database, teamId: string, now: number): TimeToUnblock {
+export async function timeToUnblock(
+  db: Driver,
+  teamId: string,
+  now: number,
+): Promise<TimeToUnblock> {
   const since = now - WINDOW_MS;
-  const latencies = db
-    .prepare<[string, number], { ms: number }>(
+  const latencies = (
+    await db.all<{ ms: number }>(
       `SELECT (c.ts - o.ts) AS ms
          FROM messages c
          JOIN messages o
@@ -50,8 +54,9 @@ export function timeToUnblock(db: Database, teamId: string, now: number): TimeTo
           )
         WHERE c.team_id = ? AND c.ts > ? AND c.act IN ('accept','decline','resolve')
           AND c.ts >= o.ts`,
+      [teamId, since],
     )
-    .all(teamId, since)
+  )
     .map((r) => r.ms)
     .sort((a, b) => a - b);
   const q = (p: number) =>
@@ -65,9 +70,13 @@ export function timeToUnblock(db: Database, teamId: string, now: number): TimeTo
  * Stalled threads (MAST coordination breakdown): ≥ 2 acts on the thread, no resolve, quiet past
  * the threshold. Oldest-stall first, capped.
  */
-export function stalledThreads(db: Database, teamId: string, now: number): StalledThread[] {
-  const rows = db
-    .prepare<[string, number, number], StalledThread & { last_ts: number }>(
+export async function stalledThreads(
+  db: Driver,
+  teamId: string,
+  now: number,
+): Promise<StalledThread[]> {
+  const rows = (
+    await db.all<StalledThread & { last_ts: number }>(
       `SELECT m.thread_id AS thread,
               COUNT(*) AS acts,
               MAX(m.ts) AS last_ts,
@@ -77,14 +86,14 @@ export function stalledThreads(db: Database, teamId: string, now: number): Stall
               COUNT(DISTINCT m.from_member) AS participants
          FROM messages m
         WHERE m.team_id = ? AND m.thread_id IS NOT NULL AND m.ts > ?
-        GROUP BY m.thread_id
+        GROUP BY m.team_id, m.thread_id
        HAVING COUNT(*) >= 2
           AND SUM(CASE WHEN m.act = 'resolve' THEN 1 ELSE 0 END) = 0
           AND MAX(m.ts) < ?
         ORDER BY last_ts ASC`,
+      [teamId, now - WINDOW_MS, now - STALLED_MS],
     )
-    .all(teamId, now - WINDOW_MS, now - STALLED_MS)
-    .slice(0, MAX_ENTRIES);
+  ).slice(0, MAX_ENTRIES);
   return rows.map((r) => ({
     thread: r.thread,
     acts: r.acts,
@@ -98,18 +107,18 @@ export function stalledThreads(db: Database, teamId: string, now: number): Stall
  * Circular handoffs (MAST step repetition): within one thread, a handoff whose recipient already
  * sent or received an earlier handoff in that thread — work going in circles (A→B→…→A).
  */
-export function circularHandoffs(db: Database, teamId: string, now: number): CircularHandoff[] {
-  const rows = db
-    .prepare<
-      [string, number],
-      { thread: string; from_id: string; to_id: string | null; ts: number }
-    >(
-      `SELECT COALESCE(m.thread_id, m.id) AS thread, m.from_member AS from_id, m.to_member AS to_id, m.ts
+export async function circularHandoffs(
+  db: Driver,
+  teamId: string,
+  now: number,
+): Promise<CircularHandoff[]> {
+  const rows = await db.all<{ thread: string; from_id: string; to_id: string | null; ts: number }>(
+    `SELECT COALESCE(m.thread_id, m.id) AS thread, m.from_member AS from_id, m.to_member AS to_id, m.ts
          FROM messages m
         WHERE m.team_id = ? AND m.act = 'handoff' AND m.ts > ?
         ORDER BY thread, m.ts ASC`,
-    )
-    .all(teamId, now - WINDOW_MS);
+    [teamId, now - WINDOW_MS],
+  );
   const out: CircularHandoff[] = [];
   let thread = '';
   let involved = new Set<string>();
@@ -140,21 +149,21 @@ export function circularHandoffs(db: Database, teamId: string, now: number): Cir
  * whose known families all match is `flagged`; a cross-family chain is silent (the flag stays
  * scarce). Warn-never-block, watcher-not-gatekeeper.
  */
-export function diversityFlags(db: Database, teamId: string, now: number): DiversityFlag[] {
-  const pairs = db
-    .prepare<
-      [string, number],
-      {
-        thread: string;
-        kind: string;
-        ts: number;
-        opener: string;
-        closer: string;
-        opener_model: string | null;
-        closer_model: string | null;
-      }
-    >(
-      `SELECT COALESCE(o.thread_id, o.id) AS thread,
+export async function diversityFlags(
+  db: Driver,
+  teamId: string,
+  now: number,
+): Promise<DiversityFlag[]> {
+  const pairs = await db.all<{
+    thread: string;
+    kind: string;
+    ts: number;
+    opener: string;
+    closer: string;
+    opener_model: string | null;
+    closer_model: string | null;
+  }>(
+    `SELECT COALESCE(o.thread_id, o.id) AS thread,
               o.act AS kind,
               c.ts AS ts,
               o.from_member AS opener,
@@ -169,8 +178,8 @@ export function diversityFlags(db: Database, teamId: string, now: number): Diver
         WHERE c.team_id = ? AND c.ts > ? AND c.act IN ('accept','decline')
           AND c.from_member != o.from_member
         ORDER BY c.ts ASC`,
-    )
-    .all(teamId, now - WINDOW_MS);
+    [teamId, now - WINDOW_MS],
+  );
 
   // Aggregate per thread: one verdict per chain, over every answered pair on it.
   const chains = new Map<
@@ -222,11 +231,11 @@ export function diversityFlags(db: Database, teamId: string, now: number): Diver
  * report-derive (which would conflate scarcity with poll frequency). Cheap: teams are few and each
  * `diversityFlags` scan is windowed + capped.
  */
-export function countDiversityFlags(db: Database, now: number = Date.now()): number {
-  const teams = db
-    .prepare<[], { id: string }>('SELECT id FROM teams WHERE archived_at IS NULL')
-    .all();
-  return teams.reduce((n, t) => n + diversityFlags(db, t.id, now).length, 0);
+export async function countDiversityFlags(db: Driver, now: number = Date.now()): Promise<number> {
+  const teams = await db.all<{ id: string }>('SELECT id FROM teams WHERE archived_at IS NULL');
+  let n = 0;
+  for (const t of teams) n += (await diversityFlags(db, t.id, now)).length;
+  return n;
 }
 
 /**
@@ -234,33 +243,37 @@ export function countDiversityFlags(db: Database, now: number = Date.now()): num
  * for the `diversity_flags` observable gauge, so the gauge is queryable per team. Only teams with ≥1
  * live flag appear (a clean team is simply absent this cycle).
  */
-export function countDiversityFlagsByTeam(
-  db: Database,
+export async function countDiversityFlagsByTeam(
+  db: Driver,
   now: number = Date.now(),
-): { team: string; count: number }[] {
-  const teams = db
-    .prepare<
-      [],
-      { id: string; slug: string }
-    >('SELECT id, slug FROM teams WHERE archived_at IS NULL')
-    .all();
-  return teams
-    .map((t) => ({ team: t.slug, count: diversityFlags(db, t.id, now).length }))
-    .filter((r) => r.count > 0);
+): Promise<{ team: string; count: number }[]> {
+  const teams = await db.all<{ id: string; slug: string }>(
+    'SELECT id, slug FROM teams WHERE archived_at IS NULL',
+  );
+  const out: { team: string; count: number }[] = [];
+  for (const t of teams) {
+    const count = (await diversityFlags(db, t.id, now)).length;
+    if (count > 0) out.push({ team: t.slug, count });
+  }
+  return out;
 }
 
 /** The whole mast block for the report (ADR 091). */
-export function deriveMast(db: Database, teamId: string, now: number = Date.now()): MastBlock {
+export async function deriveMast(
+  db: Driver,
+  teamId: string,
+  now: number = Date.now(),
+): Promise<MastBlock> {
   return {
     window_days: WINDOW_DAYS,
-    time_to_unblock: timeToUnblock(db, teamId, now),
+    time_to_unblock: await timeToUnblock(db, teamId, now),
     // MAST's ignored-input lens: the ADR 090 ledger filtered, not a second derivation.
-    ignored_help: openDirectedLedger(db, teamId, now).filter(
+    ignored_help: (await openDirectedLedger(db, teamId, now)).filter(
       (d) => d.act === 'request_help' && d.age_ms > IGNORED_HELP_MS,
     ),
-    stalled_threads: stalledThreads(db, teamId, now),
-    circular_handoffs: circularHandoffs(db, teamId, now),
+    stalled_threads: await stalledThreads(db, teamId, now),
+    circular_handoffs: await circularHandoffs(db, teamId, now),
     // ADR 101: single-family / unverifiable review-approval chains — agreement as weak evidence.
-    diversity: diversityFlags(db, teamId, now),
+    diversity: await diversityFlags(db, teamId, now),
   };
 }

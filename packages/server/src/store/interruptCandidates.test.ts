@@ -1,7 +1,7 @@
 import { makeEnvelope } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { appendAudit } from './audit.js';
 import { rowsToEnvelopes } from './hydrate.js';
 import { listInterruptCandidates } from './interruptCandidates.js';
@@ -30,17 +30,17 @@ import { createTeam } from './teams.js';
  * forgot changes the answer, so the test that matters is equivalence against the unnarrowed read over
  * a corpus that contains every one of those shapes — not a demonstration that the fast path is fast.
  */
-function seed() {
-  const db = openDb(':memory:');
-  const team = createTeam(db, { slug: 'revive' });
-  const nick = addMember(db, team, { name: 'nick', kind: 'human' }).row;
-  const ada = addMember(db, team, { name: 'Ada', kind: 'agent' }).row;
-  const bob = addMember(db, team, { name: 'bob', kind: 'agent' }).row;
+async function seed() {
+  const db = openTestDb(':memory:');
+  const team = await createTeam(db, { slug: 'revive' });
+  const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+  const ada = (await addMember(db, team, { name: 'Ada', kind: 'agent' })).row;
+  const bob = (await addMember(db, team, { name: 'bob', kind: 'agent' })).row;
   return { db, team, nick, ada, bob };
 }
 
 let ts = 1_000;
-function say(
+async function say(
   db: Database,
   team: TeamRow,
   from: MemberRow,
@@ -49,7 +49,7 @@ function say(
   id: string,
   opts: { meta?: Record<string, unknown>; thread?: string; now?: number } = {},
 ) {
-  insertMessage(
+  await insertMessage(
     db,
     team.id,
     from.id,
@@ -70,104 +70,106 @@ function say(
 }
 
 /** The unnarrowed read the route used to do — the reference answer. */
-function viaWholeWindow(
+async function viaWholeWindow(
   db: Database,
   team: TeamRow,
   member: MemberRow,
   obligations: boolean,
 ): string[] {
-  const rows = listInbox(db, member, { unreadOnly: true, cursorTs: 0 });
-  return pendingInterrupts(rowsToEnvelopes(db, team.slug, rows), member.name, { obligations }).map(
-    (e) => e.id,
-  );
+  const rows = await listInbox(db, member, { unreadOnly: true, cursorTs: 0 });
+  return pendingInterrupts(await rowsToEnvelopes(db, team.slug, rows), member.name, {
+    obligations,
+  }).map((e) => e.id);
 }
 
-function viaCandidates(
+async function viaCandidates(
   db: Database,
   team: TeamRow,
   member: MemberRow,
   obligations: boolean,
 ): string[] {
-  const rows = listInterruptCandidates(db, member, { cursorTs: 0 });
-  return pendingInterrupts(rowsToEnvelopes(db, team.slug, rows), member.name, { obligations }).map(
-    (e) => e.id,
-  );
+  const rows = await listInterruptCandidates(db, member, { cursorTs: 0 });
+  return pendingInterrupts(await rowsToEnvelopes(db, team.slug, rows), member.name, {
+    obligations,
+  }).map((e) => e.id);
 }
 
 /** Every shape the fold can read, plus a lot of noise that it cannot. */
-function corpus() {
-  const s = seed();
+async function corpus() {
+  const s = await seed();
   const { db, team, nick, ada, bob } = s;
   // Inert bulk: the overwhelming majority of a real window.
-  for (let i = 0; i < 200; i++) say(db, team, nick, null, 'status_update', `noise${i}`);
-  for (let i = 0; i < 50; i++) say(db, team, bob, ada, 'message', `chat${i}`);
+  for (let i = 0; i < 200; i++) await say(db, team, nick, null, 'status_update', `noise${i}`);
+  for (let i = 0; i < 50; i++) await say(db, team, bob, ada, 'message', `chat${i}`);
 
   // Urgent directed act — raises.
-  say(db, team, nick, ada, 'message', 'urgent-live', {
+  await say(db, team, nick, ada, 'message', 'urgent-live', {
     meta: { urgent: true, urgent_reason: 'r' },
   });
   // Urgent directed act whose thread is later resolved — must NOT raise.
-  say(db, team, nick, ada, 'message', 'urgent-closed', {
+  await say(db, team, nick, ada, 'message', 'urgent-closed', {
     meta: { urgent: true, urgent_reason: 'r' },
     thread: 'T1',
   });
-  say(db, team, nick, null, 'resolve', 'res-1', { thread: 'T1' });
+  await say(db, team, nick, null, 'resolve', 'res-1', { thread: 'T1' });
   // Urgent act addressed to someone else — never mine.
-  say(db, team, nick, bob, 'message', 'urgent-not-mine', {
+  await say(db, team, nick, bob, 'message', 'urgent-not-mine', {
     meta: { urgent: true, urgent_reason: 'r' },
   });
 
   // Steer supersession: only the newest directed steer survives.
-  say(db, team, nick, ada, 'steer', 'steer-old');
-  say(db, team, nick, ada, 'steer', 'steer-new');
+  await say(db, team, nick, ada, 'steer', 'steer-old');
+  await say(db, team, nick, ada, 'steer', 'steer-new');
 
   // Eligible-set act, discharged by an accept naming it — must NOT raise.
-  say(db, team, nick, null, 'request_help', 'help-taken', {
+  await say(db, team, nick, null, 'request_help', 'help-taken', {
     meta: { urgent: true, urgent_reason: 'r', eligible: ['Ada', 'bob'] },
   });
-  say(db, team, bob, null, 'accept', 'acc-1', { meta: { in_reply_to: 'help-taken' } });
+  await say(db, team, bob, null, 'accept', 'acc-1', { meta: { in_reply_to: 'help-taken' } });
   // Eligible-set act still open — raises.
-  say(db, team, nick, null, 'request_help', 'help-open', {
+  await say(db, team, nick, null, 'request_help', 'help-open', {
     meta: { urgent: true, urgent_reason: 'r', eligible: ['Ada', 'bob'] },
   });
   // Eligible set that does not name me.
-  say(db, team, nick, null, 'request_help', 'help-not-mine', {
+  await say(db, team, nick, null, 'request_help', 'help-not-mine', {
     meta: { urgent: true, urgent_reason: 'r', eligible: ['bob', 'nick'] },
   });
 
   // Obligation class: a routed acceptance, admitted only when obligations:true.
-  say(db, team, nick, ada, 'ask', 'oblig-1', {
+  await say(db, team, nick, ada, 'ask', 'oblig-1', {
     meta: { species: 'approve', tier: 'standard', lane_review: { lane: 'L1' } },
   });
   // A plain directed ask must never raise the line.
-  say(db, team, nick, ada, 'ask', 'plain-ask', { meta: { species: 'consult', tier: 'advisory' } });
+  await say(db, team, nick, ada, 'ask', 'plain-ask', {
+    meta: { species: 'consult', tier: 'advisory' },
+  });
   return s;
 }
 
-describe('listInterruptCandidates', () => {
-  it('gives pendingInterrupts the same answer as reading the whole window', () => {
-    const { db, team, ada } = corpus();
+describe('listInterruptCandidates', async () => {
+  it('gives pendingInterrupts the same answer as reading the whole window', async () => {
+    const { db, team, ada } = await corpus();
     for (const obligations of [true, false]) {
-      expect(viaCandidates(db, team, ada, obligations)).toEqual(
-        viaWholeWindow(db, team, ada, obligations),
+      expect(await viaCandidates(db, team, ada, obligations)).toEqual(
+        await viaWholeWindow(db, team, ada, obligations),
       );
     }
   });
 
-  it('finds the answer the corpus was built to produce, so the equivalence is not two empty lists', () => {
-    const { db, team, ada } = corpus();
-    expect(viaCandidates(db, team, ada, true)).toEqual(
+  it('finds the answer the corpus was built to produce, so the equivalence is not two empty lists', async () => {
+    const { db, team, ada } = await corpus();
+    expect(await viaCandidates(db, team, ada, true)).toEqual(
       expect.arrayContaining(['urgent-live', 'steer-new', 'help-open', 'oblig-1']),
     );
-    expect(viaCandidates(db, team, ada, true)).not.toEqual(
+    expect(await viaCandidates(db, team, ada, true)).not.toEqual(
       expect.arrayContaining(['urgent-closed', 'steer-old', 'help-taken', 'plain-ask']),
     );
   });
 
-  it('reads only the shapes the fold can use, not the window', () => {
-    const { db, ada } = corpus();
-    const whole = listInbox(db, ada, { unreadOnly: true, cursorTs: 0 });
-    const candidates = listInterruptCandidates(db, ada, { cursorTs: 0 });
+  it('reads only the shapes the fold can use, not the window', async () => {
+    const { db, ada } = await corpus();
+    const whole = await listInbox(db, ada, { unreadOnly: true, cursorTs: 0 });
+    const candidates = await listInterruptCandidates(db, ada, { cursorTs: 0 });
     expect(whole.length).toBeGreaterThan(250);
     // The handful of acts above, not the 250 inert rows they are buried in.
     expect(candidates.length).toBeLessThan(20);
@@ -179,30 +181,30 @@ describe('listInterruptCandidates', () => {
    * handed, so a self-answered obligation kept ringing the live rail (wanderer, 2026-09-06:
    * three accepted lane_review asks, lanes done, interrupt-check still raised them).
    */
-  it("silences a routed acceptance this seat already accepted — the fold sees the seat's own suppress act", () => {
-    const { db, team, nick, ada } = seed();
-    say(db, team, nick, ada, 'ask', 'oblig-mine', {
+  it("silences a routed acceptance this seat already accepted — the fold sees the seat's own suppress act", async () => {
+    const { db, team, nick, ada } = await seed();
+    await say(db, team, nick, ada, 'ask', 'oblig-mine', {
       meta: { species: 'approve', tier: 'standard', lane_review: { lane: 'L1' } },
     });
-    say(db, team, ada, nick, 'accept', 'acc-mine', { meta: { in_reply_to: 'oblig-mine' } });
-    expect(viaCandidates(db, team, ada, true)).not.toContain('oblig-mine');
+    await say(db, team, ada, nick, 'accept', 'acc-mine', { meta: { in_reply_to: 'oblig-mine' } });
+    expect(await viaCandidates(db, team, ada, true)).not.toContain('oblig-mine');
     // The unnarrowed inbox cannot see the accept either (listInbox excludes own sends), so this
     // is a case where the candidate path must be *strictly better* than the whole-window path.
-    expect(viaWholeWindow(db, team, ada, true)).toContain('oblig-mine');
+    expect(await viaWholeWindow(db, team, ada, true)).toContain('oblig-mine');
   });
 
-  it('silences a routed acceptance this seat declined, and a thread this seat resolved', () => {
-    const { db, team, nick, ada } = seed();
-    say(db, team, nick, ada, 'ask', 'oblig-no', {
+  it('silences a routed acceptance this seat declined, and a thread this seat resolved', async () => {
+    const { db, team, nick, ada } = await seed();
+    await say(db, team, nick, ada, 'ask', 'oblig-no', {
       meta: { species: 'approve', tier: 'standard', lane_review: { lane: 'L2' } },
     });
-    say(db, team, ada, nick, 'decline', 'dec-mine', { meta: { in_reply_to: 'oblig-no' } });
-    say(db, team, nick, ada, 'ask', 'oblig-thread', {
+    await say(db, team, ada, nick, 'decline', 'dec-mine', { meta: { in_reply_to: 'oblig-no' } });
+    await say(db, team, nick, ada, 'ask', 'oblig-thread', {
       meta: { species: 'approve', tier: 'standard', lane_review: { lane: 'L3' } },
       thread: 'T-self',
     });
-    say(db, team, ada, null, 'resolve', 'res-mine', { thread: 'T-self' });
-    const raised = viaCandidates(db, team, ada, true);
+    await say(db, team, ada, null, 'resolve', 'res-mine', { thread: 'T-self' });
+    const raised = await viaCandidates(db, team, ada, true);
     expect(raised).not.toContain('oblig-no');
     expect(raised).not.toContain('oblig-thread');
   });
@@ -211,69 +213,69 @@ describe('listInterruptCandidates', () => {
   // delivery and none governed discharge. Three live falsifiers on c8e89dd8, 2026-09-14 — an act
   // that is perfectly delivered and rings forever teaches the model to ignore the bell.
 
-  it('clause 7(ii): a routed acceptance whose lane has left awaiting_acceptance stops ringing — nobody answered it, the lane simply closed', () => {
-    const { db, team, nick, ada } = seed();
+  it('clause 7(ii): a routed acceptance whose lane has left awaiting_acceptance stops ringing — nobody answered it, the lane simply closed', async () => {
+    const { db, team, nick, ada } = await seed();
     // ryder's fixture: ask 01M1N2DDRY for lane 01M1MM1Y, self-closed by its owner on 2026-09-04 with
     // no accept naming the ask; it rang at every tool boundary of two sessions for eight days.
-    const lane = openLane(db, team.id, team.slug, 'nick', { title: 'office hue' });
+    const lane = await openLane(db, team.id, team.slug, 'nick', { title: 'office hue' });
     db.prepare("UPDATE lanes SET state = 'awaiting_acceptance' WHERE id = ?").run(lane.id);
-    say(db, team, nick, ada, 'ask', 'oblig-live', {
+    await say(db, team, nick, ada, 'ask', 'oblig-live', {
       meta: { species: 'approve', tier: 'standard', lane_review: { lane: lane.id } },
     });
-    expect(viaCandidates(db, team, ada, true)).toContain('oblig-live');
+    expect(await viaCandidates(db, team, ada, true)).toContain('oblig-live');
 
     db.prepare("UPDATE lanes SET state = 'done' WHERE id = ?").run(lane.id);
-    expect(viaCandidates(db, team, ada, true)).not.toContain('oblig-live');
+    expect(await viaCandidates(db, team, ada, true)).not.toContain('oblig-live');
   });
 
-  it("clause 7(iii): a co-addressee's accept discharges an eligible-set act — the accept is a DM to the asker, outside this seat's window", () => {
-    const { db, team, nick, ada, bob } = seed();
-    say(db, team, nick, null, 'request_help', 'help-shared', {
+  it("clause 7(iii): a co-addressee's accept discharges an eligible-set act — the accept is a DM to the asker, outside this seat's window", async () => {
+    const { db, team, nick, ada, bob } = await seed();
+    await say(db, team, nick, null, 'request_help', 'help-shared', {
       meta: { urgent: true, urgent_reason: 'r', eligible: ['Ada', 'bob'] },
     });
-    expect(viaCandidates(db, team, ada, true)).toContain('help-shared');
+    expect(await viaCandidates(db, team, ada, true)).toContain('help-shared');
     // bob answers. The corpus above sends his accept to the team, but a real accept with reply_to is
     // a DM to the asker (nick): Ada's window is `to_member = Ada OR team` and `from_member != Ada`,
     // so the act that stands her down never reaches her fold without a fetch by ref.
-    say(db, team, bob, nick, 'accept', 'acc-bob', { meta: { in_reply_to: 'help-shared' } });
-    expect(viaCandidates(db, team, ada, true)).not.toContain('help-shared');
+    await say(db, team, bob, nick, 'accept', 'acc-bob', { meta: { in_reply_to: 'help-shared' } });
+    expect(await viaCandidates(db, team, ada, true)).not.toContain('help-shared');
   });
 
-  it('clause 7(iv): a steer this seat replied to is discharged — a steer has no accept/decline, the reply is the answer', () => {
-    const { db, team, nick, ada } = seed();
+  it('clause 7(iv): a steer this seat replied to is discharged — a steer has no accept/decline, the reply is the answer', async () => {
+    const { db, team, nick, ada } = await seed();
     // delta's fixture: stanley's steer 01M2GC25MN rang ~20 boundaries after delta read it, acted on
     // it, and replied on it with reply_to — because only accept/decline fed `discharged`.
-    say(db, team, nick, ada, 'steer', 'steer-1');
-    expect(viaCandidates(db, team, ada, true)).toContain('steer-1');
-    say(db, team, ada, nick, 'message', 'reply-1', { meta: { in_reply_to: 'steer-1' } });
-    expect(viaCandidates(db, team, ada, true)).not.toContain('steer-1');
+    await say(db, team, nick, ada, 'steer', 'steer-1');
+    expect(await viaCandidates(db, team, ada, true)).toContain('steer-1');
+    await say(db, team, ada, nick, 'message', 'reply-1', { meta: { in_reply_to: 'steer-1' } });
+    expect(await viaCandidates(db, team, ada, true)).not.toContain('steer-1');
   });
 
-  it('clause 7(iv): a steer this seat has been shown in an inbox read is discharged, and the superseded steers under it do not rise in its place', () => {
-    const { db, team, nick, ada } = seed();
-    say(db, team, nick, ada, 'steer', 'steer-old');
-    say(db, team, nick, ada, 'steer', 'steer-new');
-    expect(viaCandidates(db, team, ada, true)).toEqual(['steer-new']);
+  it('clause 7(iv): a steer this seat has been shown in an inbox read is discharged, and the superseded steers under it do not rise in its place', async () => {
+    const { db, team, nick, ada } = await seed();
+    await say(db, team, nick, ada, 'steer', 'steer-old');
+    await say(db, team, nick, ada, 'steer', 'steer-new');
+    expect(await viaCandidates(db, team, ada, true)).toEqual(['steer-new']);
     // GET /inbox rendered it to Ada (the watermark cursor may still hold behind it, ADR 287).
-    appendAudit(db, team.id, {
+    await appendAudit(db, team.id, {
       actor: ada.name,
       action: 'inbox.rendered',
       target: ada.name,
       result: 'allow',
       detail: { act: 'steer-new', act_kind: 'steer' },
     });
-    const raised = viaCandidates(db, team, ada, true);
+    const raised = await viaCandidates(db, team, ada, true);
     expect(raised).not.toContain('steer-new');
     expect(raised).not.toContain('steer-old');
   });
 
-  it('ADR 378 amendment: a huddle turn that folded BEFORE its root is admitted once the root lands, even under the cursor', () => {
+  it('ADR 378 amendment: a huddle turn that folded BEFORE its root is admitted once the root lands, even under the cursor', async () => {
     // Cross-host, the two rows arrive out of order: the turn at receipt T1, an unrelated inbox
     // read moves the cursor to T2 > T1, then the root lands at T3 > T2. The turn is below the
     // cursor as if it were self-describing — it is not: its admission depends on the root, so
     // it "arrives" when the root does. Measured on delta 2026-09-04: turn 1 at 1788561769690,
     // cursor at 1788562249698, silent forever.
-    const { db, team, nick, ada, bob } = seed();
+    const { db, team, nick, ada, bob } = await seed();
     const huddle = {
       huddle: {
         topic: { kind: 'design', id: 'bell' },
@@ -281,17 +283,17 @@ describe('listInterruptCandidates', () => {
         anchor: 'docs/wiki/huddles.md',
       },
     };
-    say(db, team, bob, null, 'message', 'turn-early', { thread: 'h1', now: 100 });
-    say(db, team, nick, ada, 'message', 'h1', { meta: huddle, now: 300 });
-    const rows = listInterruptCandidates(db, ada, { cursorTs: 200 });
-    const raised = pendingInterrupts(rowsToEnvelopes(db, team.slug, rows), ada.name, {
+    await say(db, team, bob, null, 'message', 'turn-early', { thread: 'h1', now: 100 });
+    await say(db, team, nick, ada, 'message', 'h1', { meta: huddle, now: 300 });
+    const rows = await listInterruptCandidates(db, ada, { cursorTs: 200 });
+    const raised = pendingInterrupts(await rowsToEnvelopes(db, team.slug, rows), ada.name, {
       huddles: true,
     }).map((e) => e.id);
     expect(raised).toEqual(['turn-early']);
   });
 
-  it('ADR 378 amendment: once the cursor passes the root, the buried turn is discharged like any read row', () => {
-    const { db, team, nick, ada, bob } = seed();
+  it('ADR 378 amendment: once the cursor passes the root, the buried turn is discharged like any read row', async () => {
+    const { db, team, nick, ada, bob } = await seed();
     const huddle = {
       huddle: {
         topic: { kind: 'design', id: 'bell' },
@@ -299,40 +301,42 @@ describe('listInterruptCandidates', () => {
         anchor: 'docs/wiki/huddles.md',
       },
     };
-    say(db, team, bob, null, 'message', 'turn-early', { thread: 'h1', now: 100 });
-    say(db, team, nick, ada, 'message', 'h1', { meta: huddle, now: 300 });
-    const rows = listInterruptCandidates(db, ada, { cursorTs: 300 });
-    expect(rowsToEnvelopes(db, team.slug, rows).map((e) => e.id)).not.toContain('turn-early');
+    await say(db, team, bob, null, 'message', 'turn-early', { thread: 'h1', now: 100 });
+    await say(db, team, nick, ada, 'message', 'h1', { meta: huddle, now: 300 });
+    const rows = await listInterruptCandidates(db, ada, { cursorTs: 300 });
+    expect((await rowsToEnvelopes(db, team.slug, rows)).map((e) => e.id)).not.toContain(
+      'turn-early',
+    );
   });
 });
 
-describe("ADR 434: a steer answered IN ITS THREAD is discharged — ryder's 13:21 reply", () => {
-  it("a plain message from the addressee in the steer's thread, with no in_reply_to, answers it", () => {
-    const { db, team, nick, ada } = seed();
+describe("ADR 434: a steer answered IN ITS THREAD is discharged — ryder's 13:21 reply", async () => {
+  it("a plain message from the addressee in the steer's thread, with no in_reply_to, answers it", async () => {
+    const { db, team, nick, ada } = await seed();
     // stanley opened a thread, then steered ryder inside it; she replied in the thread at 13:21:44
     // and was leased for the same steer at 13:37:25 (lease 01M32V0618C2A3R81Z093V6HWC).
-    say(db, team, nick, null, 'message', 'root');
-    say(db, team, nick, ada, 'steer', 'steer-t', { thread: 'root' });
-    expect(viaCandidates(db, team, ada, true)).toContain('steer-t');
+    await say(db, team, nick, null, 'message', 'root');
+    await say(db, team, nick, ada, 'steer', 'steer-t', { thread: 'root' });
+    expect(await viaCandidates(db, team, ada, true)).toContain('steer-t');
     // Her reply is her OWN send, which the inbox omits by construction — so the candidate read
     // fetches it by thread key (the same reason the clause 7(iv) fetch above exists).
-    say(db, team, ada, null, 'message', 'her-reply', { thread: 'root' });
-    expect(viaCandidates(db, team, ada, true)).not.toContain('steer-t');
+    await say(db, team, ada, null, 'message', 'her-reply', { thread: 'root' });
+    expect(await viaCandidates(db, team, ada, true)).not.toContain('steer-t');
   });
 
-  it("a reply threaded on the steer's own id answers a steer that opened its thread", () => {
-    const { db, team, nick, ada } = seed();
-    say(db, team, nick, ada, 'steer', 'steer-root');
-    say(db, team, ada, null, 'status_update', 'r', { thread: 'steer-root' });
-    expect(viaCandidates(db, team, ada, true)).not.toContain('steer-root');
+  it("a reply threaded on the steer's own id answers a steer that opened its thread", async () => {
+    const { db, team, nick, ada } = await seed();
+    await say(db, team, nick, ada, 'steer', 'steer-root');
+    await say(db, team, ada, null, 'status_update', 'r', { thread: 'steer-root' });
+    expect(await viaCandidates(db, team, ada, true)).not.toContain('steer-root');
   });
 
-  it("a thread turn OLDER than the steer, or a third party's turn, answers nothing", () => {
-    const { db, team, nick, ada, bob } = seed();
-    say(db, team, nick, null, 'message', 'root');
-    say(db, team, ada, null, 'message', 'before', { thread: 'root' });
-    say(db, team, nick, ada, 'steer', 'steer-t', { thread: 'root' });
-    say(db, team, bob, null, 'message', 'bobs', { thread: 'root' });
-    expect(viaCandidates(db, team, ada, true)).toContain('steer-t');
+  it("a thread turn OLDER than the steer, or a third party's turn, answers nothing", async () => {
+    const { db, team, nick, ada, bob } = await seed();
+    await say(db, team, nick, null, 'message', 'root');
+    await say(db, team, ada, null, 'message', 'before', { thread: 'root' });
+    await say(db, team, nick, ada, 'steer', 'steer-t', { thread: 'root' });
+    await say(db, team, bob, null, 'message', 'bobs', { thread: 'root' });
+    expect(await viaCandidates(db, team, ada, true)).toContain('steer-t');
   });
 });

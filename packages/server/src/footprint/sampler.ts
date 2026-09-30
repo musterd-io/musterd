@@ -22,7 +22,7 @@ export interface SamplerDeps {
 export function startFootprintSampler(ctx: Ctx, deps: SamplerDeps = {}): () => void {
   const scanProcs = deps.scanProcs ?? scanProcsDefault;
   const scanMachine = deps.scanMachine ?? scanMachineDefault;
-  const tick = () => {
+  const tick = async () => {
     try {
       const ts = Date.now();
       const stacks = buildStacks(scanProcs()).map((s) => ({
@@ -34,18 +34,27 @@ export function startFootprintSampler(ctx: Ctx, deps: SamplerDeps = {}): () => v
         pids: JSON.stringify(s.pids),
       }));
       const machine = scanMachine();
-      insertFootprintTick(ctx.db, stacks, {
+      await insertFootprintTick(ctx.db, stacks, {
         ts,
         swap_used_mb: machine.swapUsedMb,
         swap_total_mb: machine.swapTotalMb,
         free_mem_mb: machine.freeMemMb,
       });
-      pruneFootprint(ctx.db, ts - ctx.config.footprintRetentionMs);
+      await pruneFootprint(ctx.db, ts - ctx.config.footprintRetentionMs);
     } catch (err) {
       log.info({ msg: 'footprint_skip', err: String(err) });
     }
   };
-  const handle = setInterval(tick, ctx.config.footprintIntervalMs);
+  // One tick at a time: an async tick can straddle the next interval (a slow sweep, a queue wait),
+  // and two overlapping ticks would each act on the same rows (review I2, 2026-09-30).
+  let running = false;
+  const handle = setInterval(() => {
+    if (running) return;
+    running = true;
+    void tick().finally(() => {
+      running = false;
+    });
+  }, ctx.config.footprintIntervalMs);
   handle.unref?.();
   return () => clearInterval(handle);
 }

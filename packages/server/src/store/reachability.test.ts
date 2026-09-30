@@ -2,7 +2,7 @@ import { GENERALIST_CAPABILITIES } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { PRESENCE_TIMEOUT_MS } from '../config.js';
-import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { setDoorbellPrefs } from './doorbell.js';
 import { addMember, setAvailability } from './members.js';
 import { attach } from './presence.js';
@@ -25,114 +25,114 @@ function makeAdmin(db: Database, m: MemberRow): void {
   );
 }
 
-function seed() {
-  const db = openDb(':memory:');
-  const team = createTeam(db, { slug: 'revive' });
-  const raiser = addMember(db, team, { name: 'stanley', kind: 'agent' }).row;
+async function seed() {
+  const db = openTestDb(':memory:');
+  const team = await createTeam(db, { slug: 'revive' });
+  const raiser = (await addMember(db, team, { name: 'stanley', kind: 'agent' })).row;
   return { db, team, raiser };
 }
 
-describe('unblockerReachable (ADR 153 §1)', () => {
-  it('a headless solo seat — no human, no teammate — is unreachable (the FB3 shape)', () => {
-    const { db, team, raiser } = seed();
-    expect(unblockerReachable(db, team.id, raiser.name, T)).toBe(false);
+describe('unblockerReachable (ADR 153 §1)', async () => {
+  it('a headless solo seat — no human, no teammate — is unreachable (the FB3 shape)', async () => {
+    const { db, team, raiser } = await seed();
+    expect(await unblockerReachable(db, team.id, raiser.name, T)).toBe(false);
   });
 
-  it('human term: a PRESENT admin human settles it', () => {
-    const { db, team, raiser } = seed();
-    const nick = addMember(db, team, { name: 'nick', kind: 'human' }).row;
+  it('human term: a PRESENT admin human settles it', async () => {
+    const { db, team, raiser } = await seed();
+    const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
     makeAdmin(db, nick);
-    expect(unblockerReachable(db, team.id, raiser.name, T)).toBe(false); // exists but offline, no loud reach
-    attach(db, nick.id, 'web', null);
-    expect(unblockerReachable(db, team.id, raiser.name, T)).toBe(true);
+    expect(await unblockerReachable(db, team.id, raiser.name, T)).toBe(false); // exists but offline, no loud reach
+    await attach(db, nick.id, 'web', null);
+    expect(await unblockerReachable(db, team.id, raiser.name, T)).toBe(true);
   });
 
-  it('human term: an OFFLINE admin human counts once the loud reach (ask_slack_webhook) is wired', () => {
-    const { db, team, raiser } = seed();
-    const nick = addMember(db, team, { name: 'nick', kind: 'human' }).row;
+  it('human term: an OFFLINE admin human counts once the loud reach (ask_slack_webhook) is wired', async () => {
+    const { db, team, raiser } = await seed();
+    const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
     makeAdmin(db, nick);
-    setPolicy(db, team.id, { ask_slack_webhook: 'https://hooks.slack.example/x' });
-    expect(adminHumanReachable(db, team.id, T)).toBe(true);
-    expect(unblockerReachable(db, team.id, raiser.name, T)).toBe(true);
+    await setPolicy(db, team.id, { ask_slack_webhook: 'https://hooks.slack.example/x' });
+    expect(await adminHumanReachable(db, team.id, T)).toBe(true);
+    expect(await unblockerReachable(db, team.id, raiser.name, T)).toBe(true);
   });
 
-  it('human term (ADR 443): an OFFLINE admin whose only off-machine sink is their own personal webhook counts', () => {
-    const { db, team, raiser } = seed();
-    const nick = addMember(db, team, { name: 'nick', kind: 'human' }).row;
+  it('human term (ADR 443): an OFFLINE admin whose only off-machine sink is their own personal webhook counts', async () => {
+    const { db, team, raiser } = await seed();
+    const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
     makeAdmin(db, nick);
-    expect(adminHumanReachable(db, team.id, T)).toBe(false);
-    setDoorbellPrefs(db, nick.id, {
+    expect(await adminHumanReachable(db, team.id, T)).toBe(false);
+    await setDoorbellPrefs(db, nick.id, {
       sinks: { webhook: { on: true, url: 'https://ntfy.sh/nick' } },
     });
-    expect(adminHumanReachable(db, team.id, T)).toBe(true);
-    expect(unblockerReachable(db, team.id, raiser.name, T)).toBe(true);
+    expect(await adminHumanReachable(db, team.id, T)).toBe(true);
+    expect(await unblockerReachable(db, team.id, raiser.name, T)).toBe(true);
   });
 
-  it('human term (ADR 443): a team URL the admin switched off, or a sink the team does not allow, does not count', () => {
-    const { db, team } = seed();
-    const nick = addMember(db, team, { name: 'nick', kind: 'human' }).row;
+  it('human term (ADR 443): a team URL the admin switched off, or a sink the team does not allow, does not count', async () => {
+    const { db, team } = await seed();
+    const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
     makeAdmin(db, nick);
-    setPolicy(db, team.id, { ask_slack_webhook: 'https://hooks.slack.example/x' });
-    setDoorbellPrefs(db, nick.id, { sinks: { slack: { on: false } } });
-    expect(adminHumanReachable(db, team.id, T)).toBe(false);
-    setPolicy(db, team.id, { doorbell: { allow: ['live', 'os'] } });
-    setDoorbellPrefs(db, nick.id, {
+    await setPolicy(db, team.id, { ask_slack_webhook: 'https://hooks.slack.example/x' });
+    await setDoorbellPrefs(db, nick.id, { sinks: { slack: { on: false } } });
+    expect(await adminHumanReachable(db, team.id, T)).toBe(false);
+    await setPolicy(db, team.id, { doorbell: { allow: ['live', 'os'] } });
+    await setDoorbellPrefs(db, nick.id, {
       sinks: { webhook: { on: true, url: 'https://ntfy.sh/nick' } },
     });
-    expect(adminHumanReachable(db, team.id, T)).toBe(false);
+    expect(await adminHumanReachable(db, team.id, T)).toBe(false);
   });
 
-  it('the webhook alone is NOT reachability — with no admin human seat there is nobody to notify', () => {
-    const { db, team, raiser } = seed();
-    setPolicy(db, team.id, { ask_slack_webhook: 'https://hooks.slack.example/x' });
-    expect(unblockerReachable(db, team.id, raiser.name, T)).toBe(false);
+  it('the webhook alone is NOT reachability — with no admin human seat there is nobody to notify', async () => {
+    const { db, team, raiser } = await seed();
+    await setPolicy(db, team.id, { ask_slack_webhook: 'https://hooks.slack.example/x' });
+    expect(await unblockerReachable(db, team.id, raiser.name, T)).toBe(false);
   });
 
-  it('a non-admin human does not satisfy the human term (only an admin can settle a top-tier ask)', () => {
-    const { db, team, raiser } = seed();
-    const guest = addMember(db, team, { name: 'guest', kind: 'human' }).row;
-    attach(db, guest.id, 'web', null);
-    expect(adminHumanReachable(db, team.id, T)).toBe(false);
-    expect(unblockerReachable(db, team.id, raiser.name, T)).toBe(false);
+  it('a non-admin human does not satisfy the human term (only an admin can settle a top-tier ask)', async () => {
+    const { db, team, raiser } = await seed();
+    const guest = (await addMember(db, team, { name: 'guest', kind: 'human' })).row;
+    await attach(db, guest.id, 'web', null);
+    expect(await adminHumanReachable(db, team.id, T)).toBe(false);
+    expect(await unblockerReachable(db, team.id, raiser.name, T)).toBe(false);
   });
 
-  it('teammate term: a LIVE agent seat other than the raiser reaches while the route-around is open (D5)', () => {
-    const { db, team, raiser } = seed();
-    const del = addMember(db, team, { name: 'del', kind: 'agent' }).row;
-    expect(unblockerReachable(db, team.id, raiser.name, T)).toBe(false); // exists but not live
-    attach(db, del.id, 'claude-code', null);
-    expect(liveTeammateExists(db, team.id, raiser.name, T)).toBe(true);
-    expect(unblockerReachable(db, team.id, raiser.name, T)).toBe(true);
+  it('teammate term: a LIVE agent seat other than the raiser reaches while the route-around is open (D5)', async () => {
+    const { db, team, raiser } = await seed();
+    const del = (await addMember(db, team, { name: 'del', kind: 'agent' })).row;
+    expect(await unblockerReachable(db, team.id, raiser.name, T)).toBe(false); // exists but not live
+    await attach(db, del.id, 'claude-code', null);
+    expect(await liveTeammateExists(db, team.id, raiser.name, T)).toBe(true);
+    expect(await unblockerReachable(db, team.id, raiser.name, T)).toBe(true);
   });
 
-  it('the raiser itself never counts as its own teammate', () => {
-    const { db, team, raiser } = seed();
-    attach(db, raiser.id, 'claude-code', null);
-    expect(liveTeammateExists(db, team.id, raiser.name, T)).toBe(false);
-    expect(unblockerReachable(db, team.id, raiser.name, T)).toBe(false);
+  it('the raiser itself never counts as its own teammate', async () => {
+    const { db, team, raiser } = await seed();
+    await attach(db, raiser.id, 'claude-code', null);
+    expect(await liveTeammateExists(db, team.id, raiser.name, T)).toBe(false);
+    expect(await unblockerReachable(db, team.id, raiser.name, T)).toBe(false);
   });
 
-  it('teammate term drops when item 2 closes the local-merge route-around (block-posture class) — reachability collapses to human-only', () => {
-    const { db, team, raiser } = seed();
-    const del = addMember(db, team, { name: 'del', kind: 'agent' }).row;
-    attach(db, del.id, 'claude-code', null);
-    setPolicy(db, team.id, {
+  it('teammate term drops when item 2 closes the local-merge route-around (block-posture class) — reachability collapses to human-only', async () => {
+    const { db, team, raiser } = await seed();
+    const del = (await addMember(db, team, { name: 'del', kind: 'agent' })).row;
+    await attach(db, del.id, 'claude-code', null);
+    await setPolicy(db, team.id, {
       enforcement: {
         classes: [
           { class: 'local-merge', kind: 'costly-action', match: ['git merge *'], posture: 'block' },
         ],
       },
     });
-    expect(unblockerReachable(db, team.id, raiser.name, T)).toBe(false);
+    expect(await unblockerReachable(db, team.id, raiser.name, T)).toBe(false);
     // …but a warn-posture class leaves the route open.
-    setPolicy(db, team.id, {
+    await setPolicy(db, team.id, {
       enforcement: {
         classes: [
           { class: 'local-merge', kind: 'costly-action', match: ['git merge *'], posture: 'warn' },
         ],
       },
     });
-    expect(unblockerReachable(db, team.id, raiser.name, T)).toBe(true);
+    expect(await unblockerReachable(db, team.id, raiser.name, T)).toBe(true);
   });
 
   it('teammateRouteOpen: open on an empty policy, closed only by a matching block-posture class', () => {
@@ -169,46 +169,46 @@ describe('unblockerReachable (ADR 153 §1)', () => {
   });
 });
 
-describe('adminHumanPresent (ADR 155 Increment 2)', () => {
-  it('false with no admin human, and false when the admin exists but is offline — even with the webhook wired', () => {
-    const { db, team } = seed();
-    expect(adminHumanPresent(db, team.id, T)).toBe(false);
-    const nick = addMember(db, team, { name: 'nick', kind: 'human' }).row;
+describe('adminHumanPresent (ADR 155 Increment 2)', async () => {
+  it('false with no admin human, and false when the admin exists but is offline — even with the webhook wired', async () => {
+    const { db, team } = await seed();
+    expect(await adminHumanPresent(db, team.id, T)).toBe(false);
+    const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
     makeAdmin(db, nick);
-    setPolicy(db, team.id, { ask_slack_webhook: 'https://hooks.slack.example/x' });
+    await setPolicy(db, team.id, { ask_slack_webhook: 'https://hooks.slack.example/x' });
     // Notifiable ≠ present: the webhook makes nick REACHABLE (the ADR 153 settle term) but eager-
     // escalation still applies — presence is strictly narrower than reachability.
-    expect(adminHumanReachable(db, team.id, T)).toBe(true);
-    expect(adminHumanPresent(db, team.id, T)).toBe(false);
+    expect(await adminHumanReachable(db, team.id, T)).toBe(true);
+    expect(await adminHumanPresent(db, team.id, T)).toBe(false);
   });
 
-  it('a live presence row composes present; self-set away/dnd/off_hours overrides it (availability outranks)', () => {
-    const { db, team } = seed();
-    const nick = addMember(db, team, { name: 'nick', kind: 'human' }).row;
+  it('a live presence row composes present; self-set away/dnd/off_hours overrides it (availability outranks)', async () => {
+    const { db, team } = await seed();
+    const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
     makeAdmin(db, nick);
-    attach(db, nick.id, 'web', null);
-    expect(adminHumanPresent(db, team.id, T)).toBe(true);
+    await attach(db, nick.id, 'web', null);
+    expect(await adminHumanPresent(db, team.id, T)).toBe(true);
     for (const status of ['away', 'dnd', 'off_hours'] as const) {
-      setAvailability(db, nick.id, { status });
-      expect(adminHumanPresent(db, team.id, T)).toBe(false);
+      await setAvailability(db, nick.id, { status });
+      expect(await adminHumanPresent(db, team.id, T)).toBe(false);
     }
-    setAvailability(db, nick.id, { status: 'available' });
-    expect(adminHumanPresent(db, team.id, T)).toBe(true);
+    await setAvailability(db, nick.id, { status: 'available' });
+    expect(await adminHumanPresent(db, team.id, T)).toBe(true);
   });
 
-  it('steering marks you present (Inc 1): a live driver link composes the admin present without their own heartbeat', () => {
-    const { db, team, raiser } = seed();
-    const nick = addMember(db, team, { name: 'nick', kind: 'human' }).row;
+  it('steering marks you present (Inc 1): a live driver link composes the admin present without their own heartbeat', async () => {
+    const { db, team, raiser } = await seed();
+    const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
     makeAdmin(db, nick);
-    expect(adminHumanPresent(db, team.id, T)).toBe(false);
-    attach(db, raiser.id, 'claude-code', null, { driver: 'nick' });
-    expect(adminHumanPresent(db, team.id, T)).toBe(true);
+    expect(await adminHumanPresent(db, team.id, T)).toBe(false);
+    await attach(db, raiser.id, 'claude-code', null, { driver: 'nick' });
+    expect(await adminHumanPresent(db, team.id, T)).toBe(true);
   });
 
-  it('a present NON-admin human never composes (only an admin modulates the ask clock)', () => {
-    const { db, team } = seed();
-    const guest = addMember(db, team, { name: 'guest', kind: 'human' }).row;
-    attach(db, guest.id, 'web', null);
-    expect(adminHumanPresent(db, team.id, T)).toBe(false);
+  it('a present NON-admin human never composes (only an admin modulates the ask clock)', async () => {
+    const { db, team } = await seed();
+    const guest = (await addMember(db, team, { name: 'guest', kind: 'human' })).row;
+    await attach(db, guest.id, 'web', null);
+    expect(await adminHumanPresent(db, team.id, T)).toBe(false);
   });
 });

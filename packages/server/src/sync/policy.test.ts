@@ -5,7 +5,8 @@ import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { getMemberByName } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
@@ -50,19 +51,19 @@ async function post(base: string, path: string, body?: unknown, auth?: string) {
 }
 
 const hubCtx = (): Ctx => ({
-  db: hub.db,
+  db: sqliteDriver(hub.db),
   hub: new Hub(),
   config: resolveConfig(),
   rosterRoots: [],
 });
-const hubTeam = () => getTeamBySlug(hub.db, 'bravo')!;
-const joinerTeam = () => getTeamBySlug(joiner.db, 'bravo')!;
+const hubTeam = async () => (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
+const joinerTeam = async () => (await getTeamBySlug(sqliteDriver(joiner.db), 'bravo'))!;
 
 async function roundTrip() {
-  await pushTeam(joinerCtx, joinerTeam());
-  await pullTeam(hubCtx(), hubTeam());
-  await pushTeam(hubCtx(), hubTeam());
-  await pullTeam(joinerCtx, joinerTeam());
+  await pushTeam(joinerCtx, await joinerTeam());
+  await pullTeam(hubCtx(), await hubTeam());
+  await pushTeam(hubCtx(), await hubTeam());
+  await pullTeam(joinerCtx, await joinerTeam());
 }
 
 async function enrollJoiner() {
@@ -122,11 +123,16 @@ async function residentOnJoiner() {
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'musterd-policy-sync-'));
   process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
-  hub = createServer({ db: openDb(':memory:'), port: 0 });
+  hub = createServer({ db: openTestDb(':memory:'), port: 0 });
   hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-  joiner = createServer({ db: openDb(':memory:'), port: 0 });
+  joiner = createServer({ db: openTestDb(':memory:'), port: 0 });
   joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
-  joinerCtx = { db: joiner.db, hub: new Hub(), config: resolveConfig(), rosterRoots: [] };
+  joinerCtx = {
+    db: sqliteDriver(joiner.db),
+    hub: new Hub(),
+    config: resolveConfig(),
+    rosterRoots: [],
+  };
   nickOnHub = (
     await post(hubBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } })
   ).json.human_credential;
@@ -134,11 +140,11 @@ beforeEach(async () => {
     await post(joinerBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } })
   ).json.human_credential;
   // The joiner's node row is minted on its first logged act, and enrollment needs one.
-  const jt = joinerTeam();
-  insertMessage(
-    joiner.db,
+  const jt = await joinerTeam();
+  await insertMessage(
+    sqliteDriver(joiner.db),
     jt.id,
-    getMemberByName(joiner.db, jt.id, 'nick')!.id,
+    (await getMemberByName(sqliteDriver(joiner.db), jt.id, 'nick'))!.id,
     null,
     makeEnvelope({
       id: 'j-0',
@@ -166,7 +172,9 @@ describe('policy replication (ADR 367)', () => {
     // silent `setPolicy`), so the joiner's `teams.policy` stayed null and every wake derived as a
     // 5-minute reply doorbell. A stamped `policy.change` would already have crossed; this is the
     // case with none.
-    setPolicy(hub.db, hubTeam().id, { loops: { dispatch: true, review: true, sweep: true } });
+    await setPolicy(sqliteDriver(hub.db), (await hubTeam()).id, {
+      loops: { dispatch: true, review: true, sweep: true },
+    });
     expect(
       hub.db
         .prepare<
@@ -175,12 +183,16 @@ describe('policy replication (ADR 367)', () => {
         >("SELECT COUNT(*) AS n FROM audit WHERE action = 'policy.change' AND origin_seq > 0")
         .get(),
     ).toEqual({ n: 0 });
-    expect(getPolicy(joiner.db, joinerTeam().id).loops.dispatch).toBe(false);
+    expect((await getPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).loops.dispatch).toBe(
+      false,
+    );
 
     await roundTrip();
 
-    expect(getPolicy(joiner.db, joinerTeam().id).loops.dispatch).toBe(true);
-    expect(getStoredPolicy(joiner.db, joinerTeam().id)).toEqual({
+    expect((await getPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).loops.dispatch).toBe(
+      true,
+    );
+    expect(await getStoredPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).toEqual({
       loops: { dispatch: true, review: true, sweep: true },
     });
   });
@@ -193,12 +205,16 @@ describe('policy replication (ADR 367)', () => {
       nickOnHub,
     );
     expect(set.status).toBe(200);
-    expect(getPolicy(joiner.db, joinerTeam().id).residency.hourly_cap).not.toBe(1);
+    expect(
+      (await getPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).residency.hourly_cap,
+    ).not.toBe(1);
 
     await roundTrip();
 
     // The census's measured gap, now closed: the joiner's host caps wakes by the HUB's number.
-    expect(getPolicy(joiner.db, joinerTeam().id).residency.hourly_cap).toBe(1);
+    expect(
+      (await getPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).residency.hourly_cap,
+    ).toBe(1);
   });
 
   it('the folded row is the SPARSE doc — a knob nobody chose keeps this build’s default alive', async () => {
@@ -207,22 +223,28 @@ describe('policy replication (ADR 367)', () => {
     // ADR 185's whole point, carried across the wire: only the chosen key is stored. Shipping the
     // effective policy would bake the hub build's defaults into this row and kill the schema
     // default here for every other knob — the #530 failure, replicated.
-    expect(getStoredPolicy(joiner.db, joinerTeam().id)).toEqual({ residency: { hourly_cap: 1 } });
+    expect(await getStoredPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).toEqual({
+      residency: { hourly_cap: 1 },
+    });
   });
 
   it('replace semantics survive the fold: a knob cleared on the hub is cleared on the joiner', async () => {
     await post(hubBase, '/teams/bravo/policy', { residency: { hourly_cap: 1 } }, nickOnHub);
     await roundTrip();
-    expect(getPolicy(joiner.db, joinerTeam().id).residency.hourly_cap).toBe(1);
+    expect(
+      (await getPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).residency.hourly_cap,
+    ).toBe(1);
 
-    const cleared = getPolicy(hub.db, hubTeam().id); // the default the reset must restore
+    const cleared = await getPolicy(sqliteDriver(hub.db), (await hubTeam()).id); // the default the reset must restore
     await post(hubBase, '/teams/bravo/policy', {}, nickOnHub);
     await roundTrip();
-    expect(getStoredPolicy(joiner.db, joinerTeam().id)).toEqual({});
-    expect(getPolicy(joiner.db, joinerTeam().id).residency.hourly_cap).not.toBe(1);
-    expect(getPolicy(joiner.db, joinerTeam().id).residency.hourly_cap).toBe(
-      getPolicy(hub.db, hubTeam().id).residency.hourly_cap,
-    );
+    expect(await getStoredPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).toEqual({});
+    expect(
+      (await getPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).residency.hourly_cap,
+    ).not.toBe(1);
+    expect(
+      (await getPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).residency.hourly_cap,
+    ).toBe((await getPolicy(sqliteDriver(hub.db), (await hubTeam()).id)).residency.hourly_cap);
     expect(cleared.residency.hourly_cap).toBe(1); // the read above was taken BEFORE the reset
   });
 
@@ -242,7 +264,9 @@ describe('policy replication (ADR 367)', () => {
     expect(set.json.policy.residency.cooldown_ms).toBe(2_400_000);
 
     // The hub decided it — the event is the hub's, and the joiner minted nothing.
-    expect(getPolicy(hub.db, hubTeam().id).residency.cooldown_ms).toBe(2_400_000);
+    expect(
+      (await getPolicy(sqliteDriver(hub.db), (await hubTeam()).id)).residency.cooldown_ms,
+    ).toBe(2_400_000);
     const hubStamped = hub.db
       .prepare<
         [],
@@ -256,15 +280,17 @@ describe('policy replication (ADR 367)', () => {
           `SELECT COUNT(*) AS n FROM audit WHERE action = 'policy.change'
              AND origin_node = (SELECT node_id FROM local_node WHERE team_id = ?)`,
         )
-        .get(joinerTeam().id),
+        .get((await joinerTeam()).id),
     ).toEqual({ n: 0 });
 
     await roundTrip();
-    expect(getPolicy(joiner.db, joinerTeam().id).residency.cooldown_ms).toBe(2_400_000);
+    expect(
+      (await getPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).residency.cooldown_ms,
+    ).toBe(2_400_000);
   });
 
   it('a joiner-side change with the hub down REFUSES hub_unreachable and changes nothing', async () => {
-    const before = getStoredPolicy(joiner.db, joinerTeam().id);
+    const before = await getStoredPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id);
     await hub.close();
 
     const res = await post(
@@ -276,12 +302,12 @@ describe('policy replication (ADR 367)', () => {
     // ADR 325 §Offline semantics: policy is not an act that may fork, so the refusal is the answer.
     expect(res.status).toBe(503);
     expect(res.json.error.code).toBe('hub_unreachable');
-    expect(getStoredPolicy(joiner.db, joinerTeam().id)).toEqual(before);
+    expect(await getStoredPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).toEqual(before);
     expect(
       joiner.db.prepare("SELECT COUNT(*) AS n FROM audit WHERE action = 'policy.change'").get(),
     ).toEqual({ n: 0 });
 
-    hub = createServer({ db: openDb(':memory:'), port: 0 }); // afterEach closes a live server
+    hub = createServer({ db: openTestDb(':memory:'), port: 0 }); // afterEach closes a live server
     await hub.listen();
   });
 
@@ -313,7 +339,7 @@ describe('policy replication (ADR 367)', () => {
     it('the forward is refused when the actor lives on a DIFFERENT machine', async () => {
       // nick's ordinary work on the joiner replicates, and binds the seat to that node on the hub.
       await residentOnJoiner();
-      const before = getStoredPolicy(hub.db, hubTeam().id);
+      const before = await getStoredPolicy(sqliteDriver(hub.db), (await hubTeam()).id);
 
       const evil = await enrollSecondNode('someone elses laptop');
       const res = await post(
@@ -329,7 +355,7 @@ describe('policy replication (ADR 367)', () => {
       expect(res.status).toBe(403);
       expect(res.json.error.code).toBe('bound_elsewhere');
       expect(res.json.error.message).toMatch(/lives on/);
-      expect(getStoredPolicy(hub.db, hubTeam().id)).toEqual(before);
+      expect(await getStoredPolicy(sqliteDriver(hub.db), (await hubTeam()).id)).toEqual(before);
       expect(
         hub.db.prepare("SELECT COUNT(*) AS n FROM audit WHERE action = 'policy.change'").get(),
       ).toEqual({ n: 0 });
@@ -346,7 +372,7 @@ describe('policy replication (ADR 367)', () => {
         { name: 'ada', kind: 'human', role: 'admin' },
         nickOnHub,
       );
-      const before = getStoredPolicy(hub.db, hubTeam().id);
+      const before = await getStoredPolicy(sqliteDriver(hub.db), (await hubTeam()).id);
 
       const evil = await enrollSecondNode('a CI box');
       const res = await post(
@@ -358,7 +384,7 @@ describe('policy replication (ADR 367)', () => {
 
       expect(res.status).toBe(403);
       expect(res.json.error.message).toMatch(/not resident on any machine yet/);
-      expect(getStoredPolicy(hub.db, hubTeam().id)).toEqual(before);
+      expect(await getStoredPolicy(sqliteDriver(hub.db), (await hubTeam()).id)).toEqual(before);
       // The refusal must not have created the binding it refused for want of.
       expect(
         hub.db
@@ -366,12 +392,12 @@ describe('policy replication (ADR 367)', () => {
             [string],
             { n: number }
           >("SELECT COUNT(*) AS n FROM seat_nodes WHERE member_id = (SELECT id FROM members WHERE team_id = ? AND name = 'ada')")
-          .get(hubTeam().id),
+          .get((await hubTeam()).id),
       ).toEqual({ n: 0 });
     });
 
     it('a hand-built policy event pushed straight into the log is refused at ingest', async () => {
-      const before = getStoredPolicy(hub.db, hubTeam().id);
+      const before = await getStoredPolicy(sqliteDriver(hub.db), (await hubTeam()).id);
       const evil = await enrollSecondNode('a CI box');
 
       // The forward above is the front door; this is the window beside it. `SyncPushRequestSchema`
@@ -405,7 +431,7 @@ describe('policy replication (ADR 367)', () => {
 
       expect(res.status).toBe(403);
       expect(res.json.error.message).toMatch(/policy event is the hub's to mint/);
-      expect(getStoredPolicy(hub.db, hubTeam().id)).toEqual(before);
+      expect(await getStoredPolicy(sqliteDriver(hub.db), (await hubTeam()).id)).toEqual(before);
       expect(
         hub.db.prepare("SELECT COUNT(*) AS n FROM sync_log WHERE id = 'forged-policy-1'").get(),
       ).toEqual({ n: 0 });
@@ -416,14 +442,16 @@ describe('policy replication (ADR 367)', () => {
       // just as happily against a build that dropped the policy kind altogether.
       await post(hubBase, '/teams/bravo/policy', { residency: { hourly_cap: 7 } }, nickOnHub);
       await roundTrip();
-      expect(getPolicy(joiner.db, joinerTeam().id).residency.hourly_cap).toBe(7);
+      expect(
+        (await getPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).residency.hourly_cap,
+      ).toBe(7);
     });
   });
 
   it('a policy verb this build cannot project STOPS the fold rather than storing it', async () => {
     // The discipline every kind shares: an unknown verb from a newer origin blocks at that event,
     // retried each tick, instead of landing a transition nothing can apply.
-    const result = foldBatch(joiner.db, joinerTeam().id, [
+    const result = await foldBatch(sqliteDriver(joiner.db), (await joinerTeam()).id, [
       {
         kind: 'policy',
         team: 'bravo',

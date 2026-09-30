@@ -112,6 +112,23 @@ CREATE TABLE schema_meta (
 - **Messages are append-only.** No edits/deletes in v1. `accept`/`decline` reference the original via `thread_id`/`meta.in_reply_to`, they don't mutate it.
 - **Every message carries `(origin_node, origin_seq)`** (v47, ADR 331): the local `nodes` row for its team and a per-node gapless counter (`nodes.next_seq` holds the next value), both stamped inside `insertMessage`'s own transaction — server-derived, no wire field. `nodes` holds one self-minted row per (daemon, team), unenrolled (`credential_hash` NULL) until ADR 328's enrollment adopts it.
 
+## Two dialects, one SQL text (ADR 479)
+
+The store is written once, in SQLite's SQL, against the async `Driver` (`03-server.md` §db/). The
+Postgres side never sees hand-written Postgres: `db/dialect.ts` translates each statement's text,
+memoised per statement — `?` → `$n` outside literals, `json_extract` → `->>` / `#>>` (a `= 1` /
+`<> 0` flag test compares as jsonb so JSON `true`/`false` qualify; an ordering compare casts to
+numeric), `LIKE` → `ILIKE`, `INSERT OR IGNORE` → `ON CONFLICT DO NOTHING`, `instr` → `strpos`,
+two-argument `MAX`/`MIN` → `GREATEST`/`LEAST`. What the translator will not paper over, the SQL
+avoids: positional `?` params only (never better-sqlite3's `@name` objects), `CAST(? AS TEXT)`
+where a bare `? IS NULL` would leave Postgres unable to type the parameter, columns qualified in
+`ON CONFLICT … DO UPDATE`, no SELECT alias reused in `WHERE`, every grouped-query column in its
+`GROUP BY`, and `SUM(CASE WHEN … THEN 1 ELSE 0 END)` rather than summing a boolean. The one
+dialect branch above the driver is `store/teamMemory.ts` (FTS5 `MATCH` locally, the tsvector
+table in Postgres). `withDrivers` runs a store test on both engines by default, and the PGlite
+double loads `db/pgSchema.ts` — the SQLite ladder's current DDL translated, interim until plan 1B
+gives Postgres a ladder of its own.
+
 ## Migrations
 
 ### Shared Seeds (unreleased — ADR 291)

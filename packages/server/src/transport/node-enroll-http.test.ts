@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { readNodeState } from '../node/state.js';
 import { insertMessage } from '../store/messages.js';
@@ -40,13 +41,13 @@ async function post(base: string, path: string, body?: unknown, auth?: string) {
 }
 
 /** Give a daemon its own local node row for the team, the way a live one gets it — by writing. */
-function mintLocalRow(server: RunningServer, slug: string, id: string) {
-  const team = getTeamBySlug(server.db, slug)!;
+async function mintLocalRow(server: RunningServer, slug: string, id: string) {
+  const team = (await getTeamBySlug(sqliteDriver(server.db), slug))!;
   const member = server.db
     .prepare<[string], { id: string }>('SELECT id FROM members WHERE team_id = ? LIMIT 1')
     .get(team.id)!;
-  insertMessage(
-    server.db,
+  await insertMessage(
+    sqliteDriver(server.db),
     team.id,
     member.id,
     null,
@@ -70,9 +71,9 @@ beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'musterd-enroll-'));
   process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
 
-  hub = createServer({ db: openDb(':memory:'), port: 0 });
+  hub = createServer({ db: openTestDb(':memory:'), port: 0 });
   hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-  joiner = createServer({ db: openDb(':memory:'), port: 0 });
+  joiner = createServer({ db: openTestDb(':memory:'), port: 0 });
   joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
 
   // The same team exists on both daemons — roster identity replicates via git (ADR 058), so this
@@ -96,7 +97,7 @@ afterEach(async () => {
 
 describe('POST /node/enroll — the joiner daemon enrolls itself at a hub', () => {
   it('presents its OWN node id and writes the credential to node.json', async () => {
-    const joinerNodeId = mintLocalRow(joiner, 'bravo', 'm-joiner');
+    const joinerNodeId = await mintLocalRow(joiner, 'bravo', 'm-joiner');
     const { json: minted } = await post(
       hubBase,
       '/teams/bravo/nodes/invite',
@@ -121,7 +122,7 @@ describe('POST /node/enroll — the joiner daemon enrolls itself at a hub', () =
     expect(saved?.hub_url).toBe(hubBase);
 
     // And the hub now knows it, under the id the joiner presented.
-    const hubTeam = getTeamBySlug(hub.db, 'bravo')!;
+    const hubTeam = (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
     const row = hub.db
       .prepare<
         [string, string],
@@ -132,7 +133,7 @@ describe('POST /node/enroll — the joiner daemon enrolls itself at a hub', () =
   });
 
   it('does not return the credential to the caller — it went to disk, not to the CLI', async () => {
-    mintLocalRow(joiner, 'bravo', 'm-joiner');
+    await mintLocalRow(joiner, 'bravo', 'm-joiner');
     const { json: minted } = await post(
       hubBase,
       '/teams/bravo/nodes/invite',
@@ -151,7 +152,7 @@ describe('POST /node/enroll — the joiner daemon enrolls itself at a hub', () =
   });
 
   it("relays the hub's refusal rather than inventing success", async () => {
-    mintLocalRow(joiner, 'bravo', 'm-joiner');
+    await mintLocalRow(joiner, 'bravo', 'm-joiner');
 
     const res = await post(joinerBase, '/node/enroll', {
       hub_url: hubBase,
@@ -187,10 +188,10 @@ describe('POST /node/enroll — the joiner daemon enrolls itself at a hub', () =
     // pattern integration.test.ts and secured-bind.test.ts use for the same ADR 040 predicate).
     // Without this case the localhost gate is untested: every other request here comes from
     // 127.0.0.1, so deleting the gate entirely would leave the suite green.
-    const proxied = createServer({ db: openDb(':memory:'), port: 0, trustProxy: true });
+    const proxied = createServer({ db: openTestDb(':memory:'), port: 0, trustProxy: true });
     const proxiedBase = `http://127.0.0.1:${(await proxied.listen()).port}`;
     await post(proxiedBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } });
-    mintLocalRow(proxied, 'bravo', 'm-proxied');
+    await mintLocalRow(proxied, 'bravo', 'm-proxied');
 
     try {
       const res = await post(proxiedBase, '/node/enroll', {
@@ -206,7 +207,7 @@ describe('POST /node/enroll — the joiner daemon enrolls itself at a hub', () =
   });
 
   it('rejects a hub_url that is not a url before any secret leaves the machine', async () => {
-    mintLocalRow(joiner, 'bravo', 'm-joiner');
+    await mintLocalRow(joiner, 'bravo', 'm-joiner');
     const res = await post(joinerBase, '/node/enroll', {
       hub_url: 'hub.example',
       code: 'msinv_abc',
@@ -220,7 +221,7 @@ describe('POST /node/enroll — the joiner daemon enrolls itself at a hub', () =
 
 describe('the hub is the machine the team was created on (ADR 376)', () => {
   async function enrolled() {
-    mintLocalRow(joiner, 'bravo', 'm-joiner');
+    await mintLocalRow(joiner, 'bravo', 'm-joiner');
     const { json: minted } = await post(
       hubBase,
       '/teams/bravo/nodes/invite',
@@ -255,7 +256,7 @@ describe('the hub is the machine the team was created on (ADR 376)', () => {
 
   it('a hub cannot enroll — refused before any request leaves the machine (§3)', async () => {
     await enrolled();
-    mintLocalRow(hub, 'bravo', 'm-hub');
+    await mintLocalRow(hub, 'bravo', 'm-hub');
     // Point the hub at a URL nothing listens on: if the refusal came AFTER the outbound call, this
     // would be a connection error, not a 409.
     const res = await post(hubBase, '/node/enroll', {

@@ -26,11 +26,13 @@ export const SYNC_TRACE_INTERVAL_MS = 60_000;
 const TRACE_PUSH_TIMEOUT_MS = 10_000;
 
 /** This daemon's `nodes` row for the team, or null — the same read `sync/push.ts` makes. */
-function localNodeId(ctx: Ctx, teamId: string): string | null {
+async function localNodeId(ctx: Ctx, teamId: string): Promise<string | null> {
   return (
-    ctx.db
-      .prepare<[string], { node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?')
-      .get(teamId)?.node_id ?? null
+    (
+      await ctx.db.get<{ node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?', [
+        teamId,
+      ])
+    )?.node_id ?? null
   );
 }
 
@@ -52,13 +54,13 @@ export async function pushTraceTeam(
   ctx: Ctx,
   team: { id: string; slug: string },
 ): Promise<TracePushOutcome | null> {
-  const nodeId = localNodeId(ctx, team.id);
+  const nodeId = await localNodeId(ctx, team.id);
   const record = readNodeState().nodes[team.slug];
   const enrollment = record && nodeId && record.node_id === nodeId ? record : undefined;
   if (!enrollment) return null;
 
-  const cursor = readSyncTraceCursor(ctx.traceDb, team.id);
-  const { rows, last, normalized } = unpushedTraceRows(
+  const cursor = await readSyncTraceCursor(ctx.traceDb, team.id);
+  const { rows, last, normalized } = await unpushedTraceRows(
     ctx.traceDb,
     team.id,
     cursor,
@@ -98,7 +100,7 @@ export async function pushTraceTeam(
   const ack = SyncTracePushResponseSchema.parse(await res.json());
   // Only past what the hub answered 200 to — refused rows included (§3: they are not written on
   // the hub, they stay here, and they never block the rows behind them).
-  advanceSyncTraceCursor(ctx.traceDb, team.id, last);
+  await advanceSyncTraceCursor(ctx.traceDb, team.id, last);
   if (ack.refused.length > 0) {
     const seats = new Set(
       rows.filter((r) => ack.refused.some((f) => f.id === r.id)).map((r) => r.seat),
@@ -126,7 +128,7 @@ export function startTracePush(ctx: Ctx): () => void {
     if (running) return;
     running = true;
     try {
-      for (const team of listActiveTeams(ctx.db)) {
+      for (const team of await listActiveTeams(ctx.db)) {
         try {
           const out = await pushTraceTeam(ctx, team);
           if (out && (out.pushed > 0 || out.refused > 0 || out.collided > 0 || out.normalized > 0))
@@ -135,7 +137,7 @@ export function startTracePush(ctx: Ctx): () => void {
           log.warn({
             msg: 'trace_push_failed',
             team: team.slug,
-            cursor: readSyncTraceCursor(ctx.traceDb, team.id),
+            cursor: await readSyncTraceCursor(ctx.traceDb, team.id),
             error: String(error),
           });
         }

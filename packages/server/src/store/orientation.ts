@@ -5,7 +5,7 @@ import {
   type NextBrief,
   type NextSummary,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { handoffNamedLaneOutOfPlay, handoffNamesNoLane } from './delivery.js';
 import { listGoals, nextGoal } from './goals.js';
 import { incidentPolicy, openIncidents } from './incidents.js';
@@ -98,29 +98,27 @@ interface HandoffRow {
  * every close verdict, scanning handoffs, or deriving goals, which is what the brief does and what
  * nine sessions were paying for on every turn.
  */
-export function deriveNextSummary(
-  db: Database,
+export async function deriveNextSummary(
+  db: Driver,
   teamId: string,
   _teamSlug: string,
   member: string,
-): NextSummary {
-  const carrying = db
-    .prepare<[string, string], { n: number }>(
-      `SELECT COUNT(*) AS n FROM lanes
+): Promise<NextSummary> {
+  const carrying = (await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM lanes
         WHERE team_id = ? AND owner_seat = ?
           AND state IN ('claimed', 'active', 'blocked', 'awaiting_acceptance', 'ready_for_review')`,
-    )
-    .get(teamId, member)!.n;
-  const incidents = db
-    .prepare<[string], { id: string }>(
+    [teamId, member],
+  ))!.n;
+  const incidents = (
+    await db.all<{ id: string }>(
       `SELECT id FROM lanes WHERE team_id = ? AND kind = 'incident'
           AND state NOT IN ('done', 'abandoned') ORDER BY created_at`,
+      [teamId],
     )
-    .all(teamId)
-    .map((r) => r.id);
-  const owed = db
-    .prepare<[string, string, string], { lane: string; ts: number }>(
-      `SELECT l.id AS lane, m.ts AS ts
+  ).map((r) => r.id);
+  const owed = await db.all<{ lane: string; ts: number }>(
+    `SELECT l.id AS lane, m.ts AS ts
          FROM messages m
          JOIN members mt ON mt.id = m.to_member
          JOIN lanes l ON l.team_id = m.team_id
@@ -129,7 +127,7 @@ export function deriveNextSummary(
           AND l.state IN ('awaiting_acceptance', 'ready_for_review')
           AND (l.owner_seat IS NULL OR l.owner_seat != ?)
           -- Lane 01M2TNWK0K: the same superseded-ask exclusion the brief applies, kept in SQL so
-          -- the summary stays one bounded query. Mirrors supersededAcceptanceAsks() in review.ts.
+          -- the summary stays one bounded query. Mirrors await supersededAcceptanceAsks() in review.ts.
           AND NOT EXISTS (
             SELECT 1 FROM audit a
              WHERE a.team_id = m.team_id
@@ -137,22 +135,22 @@ export function deriveNextSummary(
                AND a.target = l.id
                AND json_extract(a.detail, '$.superseded_ask') = m.id)
         ORDER BY m.ts ASC, m.id ASC`,
-    )
-    .all(teamId, member, member);
+    [teamId, member, member],
+  );
   return { member, carrying, incidents, owed };
 }
 
-export function deriveNext(
-  db: Database,
+export async function deriveNext(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   member: string,
   shippedLimit = 3,
   upNextLimit = 5,
   opts: { now?: number; upNextSeedLimit?: number } = {},
-): NextBrief {
+): Promise<NextBrief> {
   const now = opts.now ?? Date.now();
-  const all = listLanes(db, teamId, teamSlug);
+  const all = await listLanes(db, teamId, teamSlug);
   const mine = all.filter((l) => l.owner_seat === member);
 
   const in_flight = mine.filter((l) => LIVE.has(l.state));
@@ -172,7 +170,7 @@ export function deriveNext(
   // readings of `unconfirmed` send a seat in opposite directions: `review_timeout` means go chase
   // the person who was asked, `no_candidate` means nobody was ever asked and the roster is the
   // thing to look at. Same audit row, same abstain-by-absence rule, one more field.
-  const verdicts = closeVerdicts(db, teamId);
+  const verdicts = await closeVerdicts(db, teamId);
   const shipped = mine
     .filter((l) => l.state === 'done')
     .sort((a, b) => (b.resolved_at ?? b.updated_at) - (a.resolved_at ?? a.updated_at))
@@ -192,7 +190,7 @@ export function deriveNext(
   // lanes on purpose — the tray held 31 open Seeds the day this shipped, and a brief that leads with
   // 31 of anything is a brief nobody reads to the end. The total rides along so the window does not
   // read as the whole tray.
-  const { seeds: up_next_seeds, total: up_next_seeds_total } = openSeedsForBrief(
+  const { seeds: up_next_seeds, total: up_next_seeds_total } = await openSeedsForBrief(
     db,
     teamId,
     opts.upNextSeedLimit ?? 3,
@@ -209,9 +207,11 @@ export function deriveNext(
   // the lane it accepts). So there is no accept-message bookkeeping to drift out of sync with the
   // lane — the lane state is the single source, and a review answered any way at all disappears
   // from here for free.
-  const owed_reviews = db
-    .prepare<[string, string], OwedRow>(
-      `SELECT m.id AS ask_id, m.ts AS ts, mf.name AS from_name,
+  const owed_reviews = (
+    await Promise.all(
+      (
+        await db.all<OwedRow>(
+          `SELECT m.id AS ask_id, m.ts AS ts, mf.name AS from_name,
               json_extract(m.meta, '$.lane_review.lane') AS lane_id
          FROM messages m
          JOIN members mf ON mf.id = m.from_member
@@ -219,23 +219,25 @@ export function deriveNext(
         WHERE m.team_id = ?
           AND m.act = 'ask'
           AND mt.name = ?
-          AND lane_id IS NOT NULL
+          AND json_extract(m.meta, '$.lane_review.lane') IS NOT NULL
         ORDER BY m.ts ASC, m.id ASC`,
+          [teamId, member],
+        )
+      ).map(async (r) => {
+        const lane = all.find((l) => l.id === r.lane_id);
+        // Gone, closed, or mine. Never ask a seat to review its own lane: the ask can name you (a
+        // self-submitted lane on a one-seat team), but reviewing your own work is the thing the
+        // counterpart exists to prevent, so it is not a reminder — it is a wrong instruction.
+        if (!lane || !isAwaitingAcceptance(lane.state) || lane.owner_seat === member) return [];
+        // Lane 01M2TNWK0K: a re-route leaves TWO ask rows on one lane, and lane state alone cannot
+        // say which is standing. The verdict edge and `openAcceptanceAsk` already refuse the
+        // superseded one; the brief must too, or the relieved seat's `next` keeps saying "verdict
+        // owed" — which is how wanderer and ryder both judged #1541, nine minutes apart.
+        if ((await supersededAcceptanceAsks(db, teamId, lane.id)).has(r.ask_id)) return [];
+        return [{ lane, from: r.from_name, ask_id: r.ask_id, ts: r.ts }];
+      }),
     )
-    .all(teamId, member)
-    .flatMap((r) => {
-      const lane = all.find((l) => l.id === r.lane_id);
-      // Gone, closed, or mine. Never ask a seat to review its own lane: the ask can name you (a
-      // self-submitted lane on a one-seat team), but reviewing your own work is the thing the
-      // counterpart exists to prevent, so it is not a reminder — it is a wrong instruction.
-      if (!lane || !isAwaitingAcceptance(lane.state) || lane.owner_seat === member) return [];
-      // Lane 01M2TNWK0K: a re-route leaves TWO ask rows on one lane, and lane state alone cannot
-      // say which is standing. The verdict edge and `openAcceptanceAsk` already refuse the
-      // superseded one; the brief must too, or the relieved seat's `next` keeps saying "verdict
-      // owed" — which is how wanderer and ryder both judged #1541, nine minutes apart.
-      if (supersededAcceptanceAsks(db, teamId, lane.id).has(r.ask_id)) return [];
-      return [{ lane, from: r.from_name, ask_id: r.ask_id, ts: r.ts }];
-    });
+  ).flat();
 
   // The why: the latest handoff addressed to me or the team (not one I sent). Enrichment, never
   // required — but it is read as a live instruction, so a handoff whose named lane has left the
@@ -250,9 +252,8 @@ export function deriveNext(
   // handoff naming no resolvable lane gives up the slot (ADR 264), because that is the only case
   // where nothing else can ever retire it. CLI `musterd next` and MCP `team_next` render this
   // projection — they do not re-derive it (ADR 084).
-  const rows = db
-    .prepare<[string, string, string, number], HandoffRow>(
-      `SELECT mf.name AS from_name, m.body AS body, m.meta AS meta, m.ts AS ts
+  const rows = await db.all<HandoffRow>(
+    `SELECT mf.name AS from_name, m.body AS body, m.meta AS meta, m.ts AS ts
          FROM messages m
          JOIN members mf ON mf.id = m.from_member
          LEFT JOIN members mt ON mt.id = m.to_member
@@ -262,19 +263,24 @@ export function deriveNext(
           AND mf.name != ?
         ORDER BY m.ts DESC, m.id DESC
         LIMIT ?`,
-    )
-    .all(teamId, member, member, WHY_SCAN_DEPTH);
+    [teamId, member, member, WHY_SCAN_DEPTH],
+  );
 
   // The body is passed as well as the meta: every handoff since ADR 231 (#662) names its lane in
   // meta, but the 24 that predate it never will, and a bare row is always "in play" — so without
   // this the newest bare handoff holds the `why` slot permanently. See
   // `handoffNamedLaneOutOfPlay` for why resolving an id out of prose is a recorded fact and not a
   // guess, and why it is all-or-nothing across every lane the body names.
-  const row = rows.find(
-    (r) =>
-      !handoffNamedLaneOutOfPlay(db, teamId, r.meta, r.body) &&
-      !(now - r.ts > WHY_BARE_MAX_AGE_MS && handoffNamesNoLane(db, teamId, r.meta, r.body)),
-  );
+  let row: (typeof rows)[number] | undefined;
+  for (const r of rows) {
+    if (
+      !(await handoffNamedLaneOutOfPlay(db, teamId, r.meta, r.body)) &&
+      !(now - r.ts > WHY_BARE_MAX_AGE_MS && (await handoffNamesNoLane(db, teamId, r.meta, r.body)))
+    ) {
+      row = r;
+      break;
+    }
+  }
 
   const why = row
     ? {
@@ -290,7 +296,7 @@ export function deriveNext(
 
   // The Goal-source seam (ADR 048/084): general-team declared Goals, if any exist. musterd's own
   // dogfood uses roadmap.data.ts instead, so this is null there — not every team opts into it.
-  const allGoals = listGoals(db, teamId, teamSlug);
+  const allGoals = await listGoals(db, teamId, teamSlug);
   const next_goal = nextGoal(allGoals);
 
   // goals-front-door design: the brief leads with the unshipped Goals — the missions frame the lane
@@ -303,33 +309,38 @@ export function deriveNext(
   // A seat's own lane is never its candidate review work: ADR 192 grades a same-seat close as
   // unconfirmed (`verified` requires closer ≠ owner), so serving it here invites the one
   // acceptance the model refuses to count.
-  const waiting = all
-    .filter((l) => isAwaitingAcceptance(l.state) && l.owner_seat !== member)
-    .map((l) => ({ lane: l, entered: acceptanceEnteredAt(db, teamId, l) }))
-    .sort((a, b) => a.entered - b.entered);
-  const review_debt = waiting.slice(0, 3).map(({ lane, entered }) => {
-    const no_candidate = readyForReviewHadNoCandidate(db, teamId, lane.id);
-    const empty_pool = no_candidate ? emptyPoolFromSubmitAudit(db, teamId, lane.id) : null;
-    return {
-      id: lane.id,
-      title: lane.title,
-      owner: lane.owner_seat,
-      waited_ms: Math.max(0, now - entered),
-      // Whether ANYONE was asked. `pickReviewCounterpart` returns null on a same-model monoculture —
-      // ADR 188/253 refuse `same_model` and ungradeable seats on purpose — and the submit records
-      // `no_candidate: true` and then says nothing more. The lane sits in this list looking exactly
-      // like one whose named reviewer is merely slow, and a seat reading the brief cannot tell the
-      // difference. Measured 2026-08-15: three of five waiting lanes had never been routed to anyone,
-      // all three on an all-claude roster. Reporting it does not change the routing doctrine — it
-      // stops the silence from reading as health. ADR 404 adds *why* (empty room vs live-ineligible).
-      no_candidate,
-      ...(empty_pool ? { empty_pool } : {}),
-      // Merge-verified submit: an attestation without a SHA means nothing landed — the wait is
-      // on the author's merge, not a reviewer. New submits can't reach this state (refused
-      // seat-side); this badge covers grandfathered lanes and older clients.
-      unlanded: lane.merged?.sha === undefined,
-    };
-  });
+  const waiting = (
+    await Promise.all(
+      all
+        .filter((l) => isAwaitingAcceptance(l.state) && l.owner_seat !== member)
+        .map(async (l) => ({ lane: l, entered: await acceptanceEnteredAt(db, teamId, l) })),
+    )
+  ).sort((a, b) => a.entered - b.entered);
+  const review_debt = await Promise.all(
+    waiting.slice(0, 3).map(async ({ lane, entered }) => {
+      const no_candidate = await readyForReviewHadNoCandidate(db, teamId, lane.id);
+      const empty_pool = no_candidate ? await emptyPoolFromSubmitAudit(db, teamId, lane.id) : null;
+      return {
+        id: lane.id,
+        title: lane.title,
+        owner: lane.owner_seat,
+        waited_ms: Math.max(0, now - entered),
+        // Whether ANYONE was asked. `pickReviewCounterpart` returns null on a same-model monoculture —
+        // ADR 188/253 refuse `same_model` and ungradeable seats on purpose — and the submit records
+        // `no_candidate: true` and then says nothing more. The lane sits in this list looking exactly
+        // like one whose named reviewer is merely slow, and a seat reading the brief cannot tell the
+        // difference. Measured 2026-08-15: three of five waiting lanes had never been routed to anyone,
+        // all three on an all-claude roster. Reporting it does not change the routing doctrine — it
+        // stops the silence from reading as health. ADR 404 adds *why* (empty room vs live-ineligible).
+        no_candidate,
+        ...(empty_pool ? { empty_pool } : {}),
+        // Merge-verified submit: an attestation without a SHA means nothing landed — the wait is
+        // on the author's merge, not a reviewer. New submits can't reach this state (refused
+        // seat-side); this badge covers grandfathered lanes and older clients.
+        unlanded: lane.merged?.sha === undefined,
+      };
+    }),
+  );
   // The TOTAL, not the shown count. A cap with no total is a queue that looks as deep as its
   // window: clear the three on offer and the next three appear, with nothing having said they were
   // there. Same 2026-08-15 session — three cleared, two more surfaced.
@@ -342,24 +353,26 @@ export function deriveNext(
   // whether taking it is still their decision: in ten minutes it stops being an invitation and
   // becomes someone's assignment. The countdown is what makes "any seat may claim — context beats
   // role" actionable rather than merely true.
-  const incPolicy = incidentPolicy(db, teamId);
-  const incidents = openIncidents(db, teamId, teamSlug).map((l) => ({
-    lane: l.id,
-    gate: l.title.replace(/^incident: /, ''),
-    owner_seat: l.owner_seat,
-    opened_at: l.created_at,
-    // Owned ⇒ no window left to state; disabled ⇒ nothing will ever route it.
-    claim_closes_at:
-      l.owner_seat || !incPolicy.enabled ? null : l.created_at + incPolicy.claim_window_ms,
-    // Null when NOBODY holds the role: this incident will sit unowned, and a seat deciding whether
-    // to take it should know that rather than assume the countdown ends with it handled.
-    fallback_role:
-      l.owner_seat || !incPolicy.enabled
-        ? null
-        : getMemberByRole(db, teamId, incPolicy.fallback_role)
-          ? incPolicy.fallback_role
-          : null,
-  }));
+  const incPolicy = await incidentPolicy(db, teamId);
+  const incidents = await Promise.all(
+    (await openIncidents(db, teamId, teamSlug)).map(async (l) => ({
+      lane: l.id,
+      gate: l.title.replace(/^incident: /, ''),
+      owner_seat: l.owner_seat,
+      opened_at: l.created_at,
+      // Owned ⇒ no window left to state; disabled ⇒ nothing will ever route it.
+      claim_closes_at:
+        l.owner_seat || !incPolicy.enabled ? null : l.created_at + incPolicy.claim_window_ms,
+      // Null when NOBODY holds the role: this incident will sit unowned, and a seat deciding whether
+      // to take it should know that rather than assume the countdown ends with it handled.
+      fallback_role:
+        l.owner_seat || !incPolicy.enabled
+          ? null
+          : (await getMemberByRole(db, teamId, incPolicy.fallback_role))
+            ? incPolicy.fallback_role
+            : null,
+    })),
+  );
 
   return {
     member,

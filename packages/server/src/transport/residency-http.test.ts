@@ -1,6 +1,7 @@
 import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
 import { openLane, updateLane } from '../store/lanes.js';
@@ -51,7 +52,7 @@ async function get(path: string, auth?: string | AgentHttpAuth) {
 }
 
 beforeEach(async () => {
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
@@ -64,9 +65,9 @@ afterEach(async () => {
   await server.close();
 });
 
-const audits = (action: string) => {
-  const team = getTeamBySlug(server.db, 'dawn')!;
-  return listAudit(server.db, team.id).filter((r) => r.action === action);
+const audits = async (action: string) => {
+  const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+  return (await listAudit(sqliteDriver(server.db), team.id)).filter((r) => r.action === action);
 };
 
 async function enrollAda(): Promise<void> {
@@ -114,8 +115,8 @@ describe('host-scoped bootstrap credentials', () => {
   );
 
   it('accepts only its recorded host label for wake lease polling', async () => {
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const hostKey = mintBootstrapCredential(server.db, {
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const hostKey = await mintBootstrapCredential(sqliteDriver(server.db), {
       teamId: team.id,
       useKind: 'host',
       target: 'laptop.local',
@@ -163,7 +164,7 @@ describe('POST /teams/:slug/residency/session — the resumable attestation', ()
     const list = await get('/teams/dawn/residency', nickCred);
     expect(list.json.residency[0].resumable_at).toBeGreaterThan(0);
 
-    const captured = audits('residency.session_captured');
+    const captured = await audits('residency.session_captured');
     expect(captured).toHaveLength(1);
     expect(captured[0]!.target).toBe('Ada');
     expect(JSON.parse(captured[0]!.detail as string)).toEqual({
@@ -186,7 +187,7 @@ describe('POST /teams/:slug/residency/session — the resumable attestation', ()
       expect(r.status).toBe(200);
     }
     for (const action of ['residency.session_captured', 'residency.session_ended'] as const) {
-      const rows = audits(action);
+      const rows = await audits(action);
       expect(rows).toHaveLength(1);
       expect(JSON.parse(rows[0]!.detail as string)).toEqual({
         harness: 'claude-code',
@@ -201,22 +202,22 @@ describe('POST /teams/:slug/residency/session — the resumable attestation', ()
   // The route stays presence-neutral: only the sticky member stamp moves, no presence row.
   it('end stamps session_ended as the sticky offline reason; start does not', async () => {
     await enrollAda();
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const ada = () => getMemberByName(server.db, team.id, 'Ada')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const ada = async () => (await getMemberByName(sqliteDriver(server.db), team.id, 'Ada'))!;
 
     await post(
       '/teams/dawn/residency/session',
       { seat: 'Ada', harness: 'claude-code', event: 'start' },
       adaAuth,
     );
-    expect(ada().last_offline_reason).toBeNull();
+    expect((await ada()).last_offline_reason).toBeNull();
 
     await post(
       '/teams/dawn/residency/session',
       { seat: 'Ada', harness: 'claude-code', event: 'end' },
       adaAuth,
     );
-    expect(ada().last_offline_reason).toBe('session_ended');
+    expect((await ada()).last_offline_reason).toBe('session_ended');
 
     const roster = await get('/teams/dawn/members', nickCred);
     // The claimed Presence is still live, so the roster correctly suppresses an offline-only label.
@@ -237,7 +238,9 @@ describe('POST /teams/:slug/residency/session — the resumable attestation', ()
       expect(r.status).toBe(200);
     }
     for (const action of ['residency.session_captured', 'residency.session_ended'] as const) {
-      expect(JSON.parse(audits(action)[0]!.detail as string)).toMatchObject({ wake_lease: 'L-42' });
+      expect(JSON.parse((await audits(action))[0]!.detail as string)).toMatchObject({
+        wake_lease: 'L-42',
+      });
     }
 
     // An ordinary session carries no token and asserts nothing (ADR 236) — the field is absent,
@@ -247,7 +250,7 @@ describe('POST /teams/:slug/residency/session — the resumable attestation', ()
       { seat: 'Ada', harness: 'claude-code', event: 'start' },
       adaAuth,
     );
-    const captured = audits('residency.session_captured').map(
+    const captured = (await audits('residency.session_captured')).map(
       (r) => JSON.parse(r.detail as string) as Record<string, unknown>,
     );
     expect(captured).toHaveLength(2);
@@ -262,7 +265,7 @@ describe('POST /teams/:slug/residency/session — the resumable attestation', ()
       adaAuth,
     );
     expect(r.status).toBe(400);
-    expect(audits('residency.session_captured')).toHaveLength(0);
+    expect(await audits('residency.session_captured')).toHaveLength(0);
   });
 
   it('is presence-neutral and never changes the claimed Presence', async () => {
@@ -286,7 +289,7 @@ describe('POST /teams/:slug/residency/session — the resumable attestation', ()
       adaAuth,
     );
     expect(r.json).toEqual({ ok: true, enrolled: false });
-    expect(audits('residency.session_ended')).toHaveLength(1);
+    expect(await audits('residency.session_ended')).toHaveLength(1);
   });
 
   it('refuses a bad key and an unknown seat', async () => {
@@ -342,10 +345,13 @@ describe('wake-report deferred:true — the local-session guard settles honestly
     );
     expect(r.status).toBe(200);
 
-    expect(audits('residency.wake_deferred')).toHaveLength(1);
-    expect(audits('residency.wake_failed')).toHaveLength(0);
+    expect(await audits('residency.wake_deferred')).toHaveLength(1);
+    expect(await audits('residency.wake_failed')).toHaveLength(0);
     expect(
-      JSON.parse(audits('residency.wake_deferred')[0]!.detail as string) as Record<string, unknown>,
+      JSON.parse((await audits('residency.wake_deferred'))[0]!.detail as string) as Record<
+        string,
+        unknown
+      >,
     ).toMatchObject({ reason: 'local-session-live' });
 
     // The act is still due — but the deferral snoozes derivation (WAKE_DEFER_SNOOZE_MS), so a
@@ -368,7 +374,7 @@ describe('wake policy knobs over HTTP (ADR 131 inc 5)', () => {
     );
     expect(first.status).toBe(201);
     expect(first.json.residency.policy).toEqual({ hourly_cap: 4 });
-    const enrolled = audits('residency.enrolled');
+    const enrolled = await audits('residency.enrolled');
     expect(JSON.parse(enrolled[0]!.detail as string)).toMatchObject({
       policy: { hourly_cap: 4 },
     });
@@ -588,7 +594,7 @@ describe('supplementary wake-cost report (ADR 131 inc 5)', () => {
       agentKey,
     );
     expect(primary.status).toBe(200);
-    expect(JSON.parse(audits('residency.woke')[0]!.detail as string)).toMatchObject({
+    expect(JSON.parse((await audits('residency.woke'))[0]!.detail as string)).toMatchObject({
       exact_match: 'stale',
     });
 
@@ -598,7 +604,7 @@ describe('supplementary wake-cost report (ADR 131 inc 5)', () => {
       agentKey,
     );
     expect(supplement.status).toBe(200);
-    expect(JSON.parse(audits('residency.wake_cost')[0]!.detail as string)).toMatchObject({
+    expect(JSON.parse((await audits('residency.wake_cost'))[0]!.detail as string)).toMatchObject({
       exact_match: 'stale',
     });
   });
@@ -620,7 +626,7 @@ describe('supplementary wake-cost report (ADR 131 inc 5)', () => {
       agentKey,
     );
     expect(primary.status).toBe(200);
-    expect(JSON.parse(audits('residency.woke')[0]!.detail as string)).toMatchObject({
+    expect(JSON.parse((await audits('residency.woke'))[0]!.detail as string)).toMatchObject({
       adapter_build: 'feedface',
     });
     const supplement = await post(
@@ -629,7 +635,7 @@ describe('supplementary wake-cost report (ADR 131 inc 5)', () => {
       agentKey,
     );
     expect(supplement.status).toBe(200);
-    expect(JSON.parse(audits('residency.wake_cost')[0]!.detail as string)).toMatchObject({
+    expect(JSON.parse((await audits('residency.wake_cost'))[0]!.detail as string)).toMatchObject({
       adapter_build: 'feedface',
     });
   });
@@ -641,7 +647,7 @@ describe('supplementary wake-cost report (ADR 131 inc 5)', () => {
       { lease_id: leaseId, occupied: true, session: 'fresh' },
       agentKey,
     );
-    expect(JSON.parse(audits('residency.woke')[0]!.detail as string)).not.toHaveProperty(
+    expect(JSON.parse((await audits('residency.woke'))[0]!.detail as string)).not.toHaveProperty(
       'adapter_build',
     );
   });
@@ -653,7 +659,7 @@ describe('supplementary wake-cost report (ADR 131 inc 5)', () => {
       { lease_id: leaseId, occupied: true, session: 'fresh' },
       agentKey,
     );
-    expect(JSON.parse(audits('residency.woke')[0]!.detail as string)).not.toHaveProperty(
+    expect(JSON.parse((await audits('residency.woke'))[0]!.detail as string)).not.toHaveProperty(
       'exact_match',
     );
   });
@@ -674,7 +680,7 @@ describe('supplementary wake-cost report (ADR 131 inc 5)', () => {
     );
     expect(supplement.status).toBe(200);
     expect(supplement.json.status).toBe('cost_recorded');
-    const rows = audits('residency.wake_cost');
+    const rows = await audits('residency.wake_cost');
     expect(rows).toHaveLength(1);
     const detail = JSON.parse(rows[0]!.detail as string);
     expect(detail).toMatchObject({
@@ -716,7 +722,7 @@ describe('supplementary wake-cost report (ADR 131 inc 5)', () => {
     );
     expect(supplement.status).toBe(200);
     expect(supplement.json.status).toBe('cost_recorded');
-    const rows = audits('residency.wake_cost');
+    const rows = await audits('residency.wake_cost');
     expect(rows).toHaveLength(1);
     expect(JSON.parse(rows[0]!.detail as string)).toMatchObject({
       lease_id: leaseId,
@@ -740,7 +746,7 @@ describe('supplementary wake-cost report (ADR 131 inc 5)', () => {
       agentKey,
     );
     expect(dup.status).toBe(409);
-    expect(audits('residency.wake_cost')).toHaveLength(0);
+    expect(await audits('residency.wake_cost')).toHaveLength(0);
   });
 
   // ADR 273. The ledger could not say "I refused this", and that silence — not the type error —
@@ -758,7 +764,7 @@ describe('supplementary wake-cost report (ADR 131 inc 5)', () => {
         agentKey,
       );
       expect(bad.status).toBe(400);
-      const rows = audits('residency.wake_report_rejected');
+      const rows = await audits('residency.wake_report_rejected');
       expect(rows).toHaveLength(1);
       expect(rows[0]!.result).toBe('deny');
       expect(rows[0]!.target).toBe('Ada');
@@ -775,7 +781,7 @@ describe('supplementary wake-cost report (ADR 131 inc 5)', () => {
         { lease_id: leaseId, occupied: true, reason: 12345, transcript_bytes: 'sk-secret-value' },
         agentKey,
       );
-      const detail = audits('residency.wake_report_rejected')[0]!.detail as string;
+      const detail = (await audits('residency.wake_report_rejected'))[0]!.detail as string;
       expect(detail).not.toContain('sk-secret-value');
       expect(detail).not.toContain('12345');
       expect(detail).toContain('transcript_bytes');
@@ -793,7 +799,7 @@ describe('supplementary wake-cost report (ADR 131 inc 5)', () => {
       await enrollAda();
       const bad = await post('/teams/dawn/residency/wake-report', { occupied: true }, agentKey);
       expect(bad.status).toBe(400);
-      const rows = audits('residency.wake_report_rejected');
+      const rows = await audits('residency.wake_report_rejected');
       expect(rows).toHaveLength(1);
       const detail = JSON.parse(rows[0]!.detail as string);
       expect(detail).not.toHaveProperty('lease_id');
@@ -807,7 +813,7 @@ describe('supplementary wake-cost report (ADR 131 inc 5)', () => {
         { lease_id: 'nosuchlease', occupied: 'yes' },
         agentKey,
       );
-      const rows = audits('residency.wake_report_rejected');
+      const rows = await audits('residency.wake_report_rejected');
       expect(rows).toHaveLength(1);
       expect(rows[0]!.target).toBe('?');
       expect(JSON.parse(rows[0]!.detail as string).lease_id).toBe('nosuchlease');
@@ -815,7 +821,7 @@ describe('supplementary wake-cost report (ADR 131 inc 5)', () => {
 
     it('a report the schema accepts writes no rejection row', async () => {
       await reportedLease();
-      expect(audits('residency.wake_report_rejected')).toHaveLength(0);
+      expect(await audits('residency.wake_report_rejected')).toHaveLength(0);
     });
 
     it('the wake report counts refusals so the ledger says it out loud', async () => {
@@ -889,7 +895,7 @@ describe('POST /wake-context — residency.context_read audit (ADR 209 follow-up
     const res = await postAsAda('/teams/dawn/wake-context', { act_id: 'wc9' });
     expect(res.status).toBe(200);
     expect(res.json.context.version).toBe(2);
-    const rows = audits('residency.context_read');
+    const rows = await audits('residency.context_read');
     expect(rows).toHaveLength(1);
     const detail = JSON.parse(rows[0]!.detail as string);
     expect(detail).toMatchObject({ version: 2, thread_acts: 1, omitted: 0 });
@@ -909,7 +915,7 @@ describe('POST /wake-context — residency.context_read audit (ADR 209 follow-up
     expect(r.status).toBe(200);
     expect(r.json.context.wake.kind).toBe('reply');
 
-    const rows = audits('residency.context_read');
+    const rows = await audits('residency.context_read');
     expect(rows).toHaveLength(1);
     expect(rows[0]!.actor).toBe('Ada');
     expect(rows[0]!.target).toBe('wc1');
@@ -944,7 +950,7 @@ describe('POST /wake-context — residency.context_read audit (ADR 209 follow-up
     const body = await res.json();
     expect(body.error?.code ?? body.code).toBe('forbidden');
 
-    const rows = audits('residency.context_read');
+    const rows = await audits('residency.context_read');
     expect(rows).toHaveLength(1);
     expect(rows[0]!.actor).toBe('Bob');
     expect(rows[0]!.target).toBe('secret-act');
@@ -959,7 +965,7 @@ describe('POST /wake-context — residency.context_read audit (ADR 209 follow-up
     await claimAda();
     const r = await postAsAda('/teams/dawn/wake-context', { act_id: 'no-such-act' });
     expect(r.status).toBe(403);
-    const rows = audits('residency.context_read');
+    const rows = await audits('residency.context_read');
     expect(rows).toHaveLength(1);
     expect(rows[0]!.result).toBe('deny');
     expect(JSON.parse(rows[0]!.detail as string)).toEqual({
@@ -1008,7 +1014,7 @@ describe('POST /teams/:slug/residency/wake-turn — per-turn telemetry + capture
 
   it('appends turn rows against a live lease, idempotent per (lease, turn)', async () => {
     const leaseId = await leaseForUrgentAct();
-    const team = getTeamBySlug(server.db, 'dawn')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
 
     const r1 = await post(
       '/teams/dawn/residency/wake-turn',
@@ -1026,7 +1032,7 @@ describe('POST /teams/:slug/residency/wake-turn — per-turn telemetry + capture
     );
     expect(retry.status).toBe(200);
 
-    const rows = listWakeTurns(server.db, team.id, leaseId);
+    const rows = await listWakeTurns(sqliteDriver(server.db), team.id, leaseId);
     expect(rows).toHaveLength(2);
     expect(rows.map((r) => r.turn)).toEqual([1, 2]);
     expect(rows[1]!.cost_usd).toBeCloseTo(0.016, 9);
@@ -1044,8 +1050,8 @@ describe('POST /teams/:slug/residency/wake-turn — per-turn telemetry + capture
     expect(settle.status).toBe(200);
     const r = await post('/teams/dawn/residency/wake-turn', turnBody(leaseId, 1, 0.01), agentKey);
     expect(r.status).toBe(200);
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    expect(listWakeTurns(server.db, team.id, leaseId)).toHaveLength(1);
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    expect(await listWakeTurns(sqliteDriver(server.db), team.id, leaseId)).toHaveLength(1);
   });
 
   it('404s an unknown lease and rejects a missing key', async () => {
@@ -1078,17 +1084,19 @@ describe('POST /teams/:slug/residency/wake-progress (ADR 262)', () => {
       nickCred,
     );
     expect(enroll.status).toBe(201);
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    setPolicy(server.db, team.id, { loops: { review: true } });
-    const nick = getMemberByName(server.db, team.id, 'nick')!;
-    const ada = getMemberByName(server.db, team.id, 'Ada')!;
-    const lane = openLane(server.db, team.id, team.slug, nick.name, {
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    await setPolicy(sqliteDriver(server.db), team.id, { loops: { review: true } });
+    const nick = (await getMemberByName(sqliteDriver(server.db), team.id, 'nick'))!;
+    const ada = (await getMemberByName(sqliteDriver(server.db), team.id, 'Ada'))!;
+    const lane = await openLane(sqliteDriver(server.db), team.id, team.slug, nick.name, {
       title: 'a change',
       claim: true,
     });
-    updateLane(server.db, team.id, lane.id, team.slug, { state: 'ready_for_review' });
-    insertMessage(
-      server.db,
+    await updateLane(sqliteDriver(server.db), team.id, lane.id, team.slug, {
+      state: 'ready_for_review',
+    });
+    await insertMessage(
+      sqliteDriver(server.db),
       team.id,
       nick.id,
       ada.id,
@@ -1154,8 +1162,8 @@ describe('POST /teams/:slug/residency/wake-progress (ADR 262)', () => {
 
   it('accepts a host credential across the lifecycle of a lease assigned to its recorded host', async () => {
     const leaseId = await leaseReviewOrder();
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const hostKey = mintBootstrapCredential(server.db, {
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const hostKey = await mintBootstrapCredential(sqliteDriver(server.db), {
       teamId: team.id,
       useKind: 'host',
       target: 'laptop.local',
@@ -1214,7 +1222,7 @@ describe('roster wakeability (ADR 357) — the wake-leases poll is the host hear
       agentKey,
     );
     expect(polled.status).toBe(200);
-    const team = getTeamBySlug(server.db, 'dawn')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
     const seen = server.db
       .prepare<
         [string, string],
@@ -1270,7 +1278,7 @@ describe('roster wakeability (ADR 357 correction) — a busy host is not a quiet
     );
     expect(leases.json.orders).toHaveLength(1);
     const leaseId = leases.json.orders[0].lease_id as string;
-    const team = getTeamBySlug(server.db, 'dawn')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
     // The actuator goes quiet for longer than the line while it works the lease — no polls.
     server.db
       .prepare('UPDATE host_liveness SET seen_at = ? WHERE team_id = ? AND host = ?')
@@ -1313,13 +1321,13 @@ describe('POST /residency/session end — an acceptance ask does not leave with 
   });
 
   it('re-routes the acceptance Ada was holding when Ada reports her session ended', async () => {
-    const team = getTeamBySlug(server.db, 'dawn')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
     await post('/teams/dawn/members', { name: 'Kim', kind: 'agent' }, nickCred);
     await post('/teams/dawn/members', { name: 'Lin', kind: 'agent' }, nickCred);
     await claimAgentHttp(base, 'dawn', agentKey, nickCred, 'Lin');
-    const kim = getMemberByName(server.db, team.id, 'Kim')!;
-    const ada = getMemberByName(server.db, team.id, 'Ada')!;
-    const lin = getMemberByName(server.db, team.id, 'Lin')!;
+    const kim = (await getMemberByName(sqliteDriver(server.db), team.id, 'Kim'))!;
+    const ada = (await getMemberByName(sqliteDriver(server.db), team.id, 'Ada'))!;
+    const lin = (await getMemberByName(sqliteDriver(server.db), team.id, 'Lin'))!;
     // A live occupancy that attests nothing is never routable (ADR 101/187 — the picker reads the
     // model off the LIVE presence row, never a durable memory). Without this the test would assert
     // "the picker found nobody" rather than the re-route.
@@ -1327,10 +1335,15 @@ describe('POST /residency/session end — an acceptance ask does not leave with 
       .prepare('UPDATE presence SET model = ? WHERE member_id = ?')
       .run('gpt-5.6-sol', lin.id);
 
-    const lane = openLane(server.db, team.id, 'dawn', 'Kim', { title: 'kim lane', claim: true });
-    updateLane(server.db, team.id, lane.id, 'dawn', { state: 'awaiting_acceptance' });
-    insertMessage(
-      server.db,
+    const lane = await openLane(sqliteDriver(server.db), team.id, 'dawn', 'Kim', {
+      title: 'kim lane',
+      claim: true,
+    });
+    await updateLane(sqliteDriver(server.db), team.id, lane.id, 'dawn', {
+      state: 'awaiting_acceptance',
+    });
+    await insertMessage(
+      sqliteDriver(server.db),
       team.id,
       kim.id,
       ada.id,
@@ -1353,7 +1366,7 @@ describe('POST /residency/session end — an acceptance ask does not leave with 
     );
     expect(ended.status).toBe(200);
 
-    const rerouted = audits('lane.review_rerouted');
+    const rerouted = await audits('lane.review_rerouted');
     expect(rerouted).toHaveLength(1);
     const detail = JSON.parse(rerouted[0]!.detail as string);
     expect(detail.lane).toBe(lane.id);

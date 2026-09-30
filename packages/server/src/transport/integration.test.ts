@@ -16,6 +16,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import type { Ctx } from '../context.js';
 import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { flushLapsedHolds } from '../notify/doorbell.js';
 import { appendAudit, listAudit } from '../store/audit.js';
@@ -41,7 +43,7 @@ let db: ReturnType<typeof openDb>;
 beforeEach(async () => {
   teamBootstraps.clear();
   agentAuthorities.clear();
-  db = openDb(':memory:');
+  db = openTestDb(':memory:');
   server = createServer({ db, port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
@@ -53,10 +55,10 @@ afterEach(async () => {
 });
 
 /** Poll a predicate until it's true or we time out (for state the server reaches asynchronously). */
-async function pollUntil(pred: () => boolean, ms = 1000): Promise<void> {
+async function pollUntil(pred: () => boolean | Promise<boolean>, ms = 1000): Promise<void> {
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {
-    if (pred()) return;
+    if (await pred()) return;
     await new Promise((r) => setTimeout(r, 10));
   }
   throw new Error('pollUntil timed out');
@@ -304,7 +306,7 @@ class TestWs {
   }
 }
 
-describe('HTTP API', () => {
+describe('HTTP API', async () => {
   it('health responds with the protocol version, db path, schema version, and live-session count', async () => {
     const r = await get('/health');
     expect(r.json).toMatchObject({ ok: true, v: PROTOCOL_VERSION });
@@ -328,7 +330,7 @@ describe('HTTP API', () => {
 
   it('health names the boot commit when the embedder passes buildRef (ADR 130)', async () => {
     const sha = 'b'.repeat(40);
-    const s = createServer({ db: openDb(':memory:'), port: 0, buildRef: sha });
+    const s = createServer({ db: openTestDb(':memory:'), port: 0, buildRef: sha });
     const { port } = await s.listen();
     try {
       const res = await fetch(`http://127.0.0.1:${port}/health`);
@@ -429,14 +431,14 @@ describe('HTTP API', () => {
 
   // ADR 254: the eligible set. The roster half of validation — `actMetaRules` proved the shape, only
   // the daemon can prove the names.
-  describe('meta.eligible roster validation', () => {
+  describe('meta.eligible roster validation', async () => {
     const sendEligible = async (
       tok: unknown,
       eligible: string[],
       from = 'nick',
       id = 'el' + Math.random().toString(36).slice(2, 8),
     ) =>
-      post(
+      await post(
         '/teams/dawn/messages',
         {
           envelope: {
@@ -548,9 +550,9 @@ describe('HTTP API', () => {
       // reading it. `unreadOnly` filters the caller's cursor against `messages`, so nothing
       // asserted below depends on the POST route having run; the route keeps its own coverage
       // elsewhere in this file.
-      const teamRow = getTeamBySlug(server.db, 'dawn')!;
-      const nick = getMemberByName(server.db, teamRow.id, 'nick')!;
-      const boRow = getMemberByName(server.db, teamRow.id, 'bo')!;
+      const teamRow = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+      const nick = (await getMemberByName(sqliteDriver(server.db), teamRow.id, 'nick'))!;
+      const boRow = (await getMemberByName(sqliteDriver(server.db), teamRow.id, 'bo'))!;
       for (let i = 0; i < n; i++) {
         const envelope: Envelope = {
           id: `b${String(i).padStart(4, '0')}`,
@@ -564,7 +566,9 @@ describe('HTTP API', () => {
         };
         // Receipt order is what the cursor walks; pin created_at to the same shape as ts so the
         // tie the fixture constructs is a tie in the order that matters.
-        insertMessage(server.db, teamRow.id, nick.id, boRow.id, envelope, { now: envelope.ts });
+        await insertMessage(sqliteDriver(server.db), teamRow.id, nick.id, boRow.id, envelope, {
+          now: envelope.ts,
+        });
       }
       return { boTok: bo.json.human_credential as unknown };
     };
@@ -748,7 +752,7 @@ describe('HTTP API', () => {
     });
   });
 
-  describe('meta.eligible stand-down trace on GET /inbox', () => {
+  describe('meta.eligible stand-down trace on GET /inbox', async () => {
     /** nick (sender) + bo, cy (eligible) + dee (not eligible), each with its own credential. */
     const teamOfFour = async () => {
       const team = await post('/teams', {
@@ -765,7 +769,7 @@ describe('HTTP API', () => {
     };
 
     const ask = async (tok: unknown, id: string, eligible: string[]) =>
-      post(
+      await post(
         '/teams/dawn/messages',
         {
           envelope: {
@@ -784,7 +788,7 @@ describe('HTTP API', () => {
       );
 
     const answer = async (tok: unknown, from: string, id: string, ref: string, act = 'accept') =>
-      post(
+      await post(
         '/teams/dawn/messages',
         {
           envelope: {
@@ -1045,7 +1049,7 @@ describe('static web serving (ADR 062)', () => {
     mkdirSync(join(dir, 'assets'));
     writeFileSync(join(dir, 'assets', 'app.js'), 'console.log("hi")');
 
-    const s = createServer({ db: openDb(':memory:'), port: 0, webRoot: dir });
+    const s = createServer({ db: openTestDb(':memory:'), port: 0, webRoot: dir });
     const { port } = await s.listen();
     const b = `http://127.0.0.1:${port}`;
     try {
@@ -1103,7 +1107,7 @@ describe('static web serving (ADR 062)', () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...Array(64).fill(0)]);
     writeFileSync(join(dir, 'assets', 'logo-def456.png'), png);
 
-    const s = createServer({ db: openDb(':memory:'), port: 0, webRoot: dir });
+    const s = createServer({ db: openTestDb(':memory:'), port: 0, webRoot: dir });
     const { port } = await s.listen();
     const b = `http://127.0.0.1:${port}`;
     try {
@@ -1146,7 +1150,7 @@ describe('static web serving (ADR 062)', () => {
   });
 
   it('stays API-only (404s the web root) when no webRoot is configured', async () => {
-    const s = createServer({ db: openDb(':memory:'), port: 0 });
+    const s = createServer({ db: openTestDb(':memory:'), port: 0 });
     const { port } = await s.listen();
     try {
       const r = await fetch(`http://127.0.0.1:${port}/`);
@@ -1206,7 +1210,7 @@ describe('API response compression', () => {
   });
 });
 
-describe('WebSocket', () => {
+describe('WebSocket', async () => {
   it('/health connections reflects a live session (ADR 047)', async () => {
     const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
     await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, team.json.human_credential);
@@ -1266,7 +1270,7 @@ describe('WebSocket', () => {
     await a.closed();
     // 3. The failure is in the ledger. A claim that fails left NO trace before this fix, so the
     //    only evidence of the four-round hunt was in the agent's own transcript.
-    const audit = listAudit(db, getTeamBySlug(db, 'dawn')!.id, 50);
+    const audit = await listAudit(db, (await getTeamBySlug(db, 'dawn'))!.id, 50);
     const failed = audit.find((r) => r.action === 'claim.failed');
     expect(failed).toBeDefined();
     expect(failed!.result).toBe('deny');
@@ -1434,12 +1438,12 @@ describe('WebSocket', () => {
     // A directed Ada→Lin DM (nick is neither sender nor recipient) + a team broadcast from Lin.
     await post(
       '/teams/dawn/messages',
-      { envelope: mk('t1', 'Ada', { kind: 'member', name: 'Lin' }, 'dm', 1000) },
+      { envelope: await mk('t1', 'Ada', { kind: 'member', name: 'Lin' }, 'dm', 1000) },
       { key: team.json.agent_key, seat: 'Ada' },
     );
     await post(
       '/teams/dawn/messages',
-      { envelope: mk('t2', 'Lin', { kind: 'team' }, 'all', 2000) },
+      { envelope: await mk('t2', 'Lin', { kind: 'team' }, 'all', 2000) },
       { key: team.json.agent_key, seat: 'Lin' },
     );
 
@@ -1478,17 +1482,17 @@ describe('WebSocket', () => {
     // m1 Ada→Lin (Bo not party) · m2 Bo→Ada (Bo party) · m3 Lin→team (public).
     await post(
       '/teams/dawn/messages',
-      { envelope: mk('m1', 'Ada', { kind: 'member', name: 'Lin' }, 'ada->lin', 1000) },
+      { envelope: await mk('m1', 'Ada', { kind: 'member', name: 'Lin' }, 'ada->lin', 1000) },
       { key, seat: 'Ada' },
     );
     await post(
       '/teams/dawn/messages',
-      { envelope: mk('m2', 'Bo', { kind: 'member', name: 'Ada' }, 'bo->ada', 2000) },
+      { envelope: await mk('m2', 'Bo', { kind: 'member', name: 'Ada' }, 'bo->ada', 2000) },
       { key, seat: 'Bo' },
     );
     await post(
       '/teams/dawn/messages',
-      { envelope: mk('m3', 'Lin', { kind: 'team' }, 'all', 3000) },
+      { envelope: await mk('m3', 'Lin', { kind: 'team' }, 'all', 3000) },
       { key, seat: 'Lin' },
     );
 
@@ -1795,15 +1799,15 @@ describe('WebSocket', () => {
 
     const roster = await get('/teams/dawn/members', nickTok);
     const by = (name: string) => roster.json.members.find((m: any) => m.name === name);
-    expect(by('Ada').activity).toBe('working');
-    expect(by('Ada').state).toBe('refactoring auth');
-    expect(by('Ada').posture).toBe('working');
-    expect(by('nick').activity).toBe('active');
-    expect(by('nick').state).toBeNull();
-    expect(by('nick').posture).toBe('active');
-    expect(by('Lin').activity).toBe('offline');
-    expect(by('Lin').posture).toBe('offline');
-    expect(by('Lin').offline_reason).toBe('unknown');
+    expect((await by('Ada')).activity).toBe('working');
+    expect((await by('Ada')).state).toBe('refactoring auth');
+    expect((await by('Ada')).posture).toBe('working');
+    expect((await by('nick')).activity).toBe('active');
+    expect((await by('nick')).state).toBeNull();
+    expect((await by('nick')).posture).toBe('active');
+    expect((await by('Lin')).activity).toBe('offline');
+    expect((await by('Lin')).posture).toBe('offline');
+    expect((await by('Lin')).offline_reason).toBe('unknown');
 
     n.close();
     a.close();
@@ -1831,13 +1835,13 @@ describe('WebSocket', () => {
     const roster = await get('/teams/dawn/members', nickTok);
     const by = (name: string) => roster.json.members.find((m: any) => m.name === name);
     // Steering nick reads working + online, derived from Ada's live driver link — no presence row of his own.
-    expect(by('nick').activity).toBe('working');
-    expect(by('nick').presence).toBe('online');
-    expect(by('nick').posture).toBe('working');
-    expect(by('nick').offline_reason).toBeUndefined();
+    expect((await by('nick')).activity).toBe('working');
+    expect((await by('nick')).presence).toBe('online');
+    expect((await by('nick')).posture).toBe('working');
+    expect((await by('nick')).offline_reason).toBeUndefined();
     // bo, a human who is not steering anyone, still reads offline.
-    expect(by('bo').activity).toBe('offline');
-    expect(by('bo').presence).toBe('offline');
+    expect((await by('bo')).activity).toBe('offline');
+    expect((await by('bo')).presence).toBe('offline');
 
     a.close();
   });
@@ -1902,8 +1906,8 @@ describe('WebSocket', () => {
     // Fresh status: both read working.
     let roster = await get('/teams/dawn/members', nickTok);
     const by = (r: any, name: string) => r.json.members.find((m: any) => m.name === name);
-    expect(by(roster, 'nick').activity).toBe('working');
-    expect(by(roster, 'Ada').activity).toBe('working');
+    expect((await by(roster, 'nick')).activity).toBe('working');
+    expect((await by(roster, 'Ada')).activity).toBe('working');
 
     // Age both statuses past the presence timeout while the presences stay live (the persistent-tab
     // shape: heartbeats keep the human online for hours after the last thing they reported).
@@ -1914,23 +1918,23 @@ describe('WebSocket', () => {
     roster = await get('/teams/dawn/members', nickTok);
     // The human decays to active — still online, and the claim is kept with its age
     // (presence-honesty §2.1): state + last_status_at survive for the `last: …` render.
-    expect(by(roster, 'nick').presence).toBe('online');
-    expect(by(roster, 'nick').activity).toBe('active');
-    expect(by(roster, 'nick').state).toBe('shipping inc 3');
-    expect(by(roster, 'nick').last_status_at).not.toBeNull();
-    expect(by(roster, 'nick').posture).toBe('active');
+    expect((await by(roster, 'nick')).presence).toBe('online');
+    expect((await by(roster, 'nick')).activity).toBe('active');
+    expect((await by(roster, 'nick')).state).toBe('shipping inc 3');
+    expect((await by(roster, 'nick')).last_status_at).not.toBeNull();
+    expect((await by(roster, 'nick')).posture).toBe('active');
     // The agent's window is minutes, not seconds — 60s stale is still fresh evidence.
-    expect(by(roster, 'Ada').activity).toBe('working');
-    expect(by(roster, 'Ada').state).toBe('shipping inc 3');
+    expect((await by(roster, 'Ada')).activity).toBe('working');
+    expect((await by(roster, 'Ada')).state).toBe('shipping inc 3');
 
     // Past the agent window (15 min default) the agent decays too, claim kept.
     server.db
       .prepare("UPDATE messages SET ts = ? WHERE act = 'status_update'")
       .run(Date.now() - 16 * 60_000);
     roster = await get('/teams/dawn/members', nickTok);
-    expect(by(roster, 'Ada').activity).toBe('active');
-    expect(by(roster, 'Ada').state).toBe('shipping inc 3');
-    expect(by(roster, 'Ada').last_status_at).not.toBeNull();
+    expect((await by(roster, 'Ada')).activity).toBe('active');
+    expect((await by(roster, 'Ada')).state).toBe('shipping inc 3');
+    expect((await by(roster, 'Ada')).last_status_at).not.toBeNull();
 
     tab.close();
     a.close();
@@ -2018,8 +2022,8 @@ describe('WebSocket', () => {
     const nickTok = team.json.human_credential;
     await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, nickTok);
     await post('/teams/dawn/members', { name: 'Lin', kind: 'agent' }, nickTok);
-    const scoped = mintBootstrapCredential(server.db, {
-      teamId: getTeamBySlug(server.db, 'dawn')!.id,
+    const scoped = await mintBootstrapCredential(sqliteDriver(server.db), {
+      teamId: (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id,
       useKind: 'claim_seat',
       target: 'Ada',
     });
@@ -2283,9 +2287,9 @@ describe('WebSocket', () => {
     expect((await afterDetach.waitFor('occupied')).type).toBe('occupied');
 
     await expect(live.waitFor('error', 300)).rejects.toThrow(/timeout/);
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
     expect(
-      listAudit(server.db, teamId).some(
+      (await listAudit(sqliteDriver(server.db), teamId)).some(
         (r) => r.action === 'claim.superseded' && JSON.parse(r.detail ?? '{}').via === 'ws',
       ),
     ).toBe(false);
@@ -2415,8 +2419,10 @@ describe('WebSocket', () => {
 
     // ADR 237: the displacement itself is a ledger fact — this branch used to evict silently,
     // leaving only the winner's claim.occupied (the 2026-08-05 ryder incident's diagnostic gap).
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    const row = listAudit(server.db, teamId).find((r) => r.action === 'claim.superseded');
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    const row = (await listAudit(sqliteDriver(server.db), teamId)).find(
+      (r) => r.action === 'claim.superseded',
+    );
     expect(row).toBeDefined();
     const detail = JSON.parse(row!.detail ?? '{}');
     expect(detail).toMatchObject({ same_workspace: false, evicted: 1, via: 'ws' });
@@ -2563,9 +2569,9 @@ describe('WebSocket', () => {
     expect(decided.status).toBe(200);
     expect((await challenger.waitFor('occupied')).type).toBe('occupied');
     expect(await incumbent.waitFor('error')).toMatchObject({ code: 'superseded' });
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
     expect(
-      listAudit(server.db, teamId)
+      (await listAudit(sqliteDriver(server.db), teamId))
         .filter((row) => row.action === 'occupancy.model_attested')
         .map((row) => JSON.parse(row.detail ?? '{}')),
     ).toContainEqual(
@@ -2650,8 +2656,10 @@ describe('WebSocket', () => {
     const superseded = await first.waitFor('error');
     expect((superseded as any).code).toBe('superseded');
 
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    const row = listAudit(server.db, teamId).find((a) => a.action === 'claim.superseded');
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    const row = (await listAudit(sqliteDriver(server.db), teamId)).find(
+      (a) => a.action === 'claim.superseded',
+    );
     expect(row).toBeDefined();
     const detail = JSON.parse(row!.detail ?? '{}');
     expect(detail).toMatchObject({ same_workspace: false, evicted: 1, via: 'http' });
@@ -2677,8 +2685,10 @@ describe('WebSocket', () => {
     const adaRow = roster.json.members.find((m: any) => m.name === 'Ada');
     expect(adaRow.presences).toHaveLength(1);
 
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    const eviction = listAudit(server.db, teamId).find((row) => row.action === 'claim.superseded');
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    const eviction = (await listAudit(sqliteDriver(server.db), teamId)).find(
+      (row) => row.action === 'claim.superseded',
+    );
     expect(JSON.parse(eviction!.detail ?? '{}')).toMatchObject({
       same_workspace: false,
       evicted: 1,
@@ -2854,8 +2864,8 @@ describe('WebSocket', () => {
       await standingGrant(team.json.human_credential, 'Ada'),
     );
 
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    const eviction = listAudit(server.db, teamId).find(
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    const eviction = (await listAudit(sqliteDriver(server.db), teamId)).find(
       (row) => row.action === 'claim.superseded' && JSON.parse(row.detail ?? '{}').via === 'ws',
     )!;
     expect(JSON.parse(eviction.detail ?? '{}')).toMatchObject({ evicted: 1 });
@@ -2863,11 +2873,11 @@ describe('WebSocket', () => {
     ws.close();
   });
 
-  describe('a wake never displaces an attended session (ADR 444)', () => {
+  describe('a wake never displaces an attended session (ADR 444)', async () => {
     beforeEach(async () => {
       await server.close();
       process.env['MUSTERD_SUPERSEDE_GRACE_MS'] = '120';
-      server = createServer({ db: openDb(':memory:'), port: 0 });
+      server = createServer({ db: openTestDb(':memory:'), port: 0 });
       const { port } = await server.listen();
       base = `http://127.0.0.1:${port}`;
       wsUrl = `ws://127.0.0.1:${port}/ws`;
@@ -2902,10 +2912,13 @@ describe('WebSocket', () => {
       };
     }
 
-    const refusals = () =>
-      listAudit(server.db, getTeamBySlug(server.db, 'dawn')!.id).filter(
-        (r) => r.action === 'claim.refused',
-      );
+    const refusals = async () =>
+      (
+        await listAudit(
+          sqliteDriver(server.db),
+          (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id,
+        )
+      ).filter((r) => r.action === 'claim.refused');
 
     it('refuses a same-workspace wake claim with claim_conflict and never reaps the attended session', async () => {
       const { team, grant } = await seatAda();
@@ -2921,7 +2934,7 @@ describe('WebSocket', () => {
 
       // Well past the ADR 092 grace: the attended session is still the occupant.
       await expect(attended.waitFor('error', 400)).rejects.toThrow(/timeout/);
-      const rows = refusals();
+      const rows = await refusals();
       expect(rows).toHaveLength(1);
       expect(JSON.parse(rows[0]!.detail ?? '{}')).toMatchObject({
         code: 'claim_conflict',
@@ -2966,8 +2979,12 @@ describe('WebSocket', () => {
       expect(r.status).toBe(409);
       expect(r.json).toMatchObject({ type: 'refused', code: 'claim_conflict' });
       await expect(attended.waitFor('error', 200)).rejects.toThrow(/timeout/);
-      const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-      expect(listAudit(server.db, teamId).some((a) => a.action === 'claim.superseded')).toBe(false);
+      const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+      expect(
+        (await listAudit(sqliteDriver(server.db), teamId)).some(
+          (a) => a.action === 'claim.superseded',
+        ),
+      ).toBe(false);
       attended.close();
     });
 
@@ -2989,7 +3006,7 @@ describe('WebSocket', () => {
       attended.send(claimFrame(team.json.agent_key, grant, 'repo@main', 'session'));
       await attended.waitFor('occupied');
       expect(await wake2.waitFor('error')).toMatchObject({ code: 'superseded' });
-      expect(refusals()).toHaveLength(0);
+      expect(await refusals()).toHaveLength(0);
       wake1.close();
       wake2.close();
       attended.close();
@@ -3002,7 +3019,7 @@ describe('WebSocket', () => {
     beforeEach(async () => {
       await server.close();
       process.env['MUSTERD_SUPERSEDE_GRACE_MS'] = '120';
-      server = createServer({ db: openDb(':memory:'), port: 0 });
+      server = createServer({ db: openTestDb(':memory:'), port: 0 });
       const { port } = await server.listen();
       base = `http://127.0.0.1:${port}`;
       wsUrl = `ws://127.0.0.1:${port}/ws`;
@@ -3045,9 +3062,11 @@ describe('WebSocket', () => {
       expect((superseded as any).same_workspace).toBe(true);
 
       // The duplicate was audited when the reap was armed (ADR 092 §C drift signal).
-      const teamId = getTeamBySlug(server.db, 'dawn')!.id;
+      const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
       expect(
-        listAudit(server.db, teamId).some((r) => r.action === 'claim.duplicate_workspace'),
+        (await listAudit(sqliteDriver(server.db), teamId)).some(
+          (r) => r.action === 'claim.duplicate_workspace',
+        ),
       ).toBe(true);
 
       successor.close();
@@ -3613,15 +3632,17 @@ describe('model attestation (ADR 101)', () => {
           ts: Date.now(),
         },
       });
-    const teamRow = getTeamBySlug(server.db, 'dawn')!;
-    const attestAudits = () =>
-      listAudit(server.db, teamRow.id).filter((r) => r.action === 'occupancy.model_attested');
+    const teamRow = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const attestAudits = async () =>
+      (await listAudit(sqliteDriver(server.db), teamRow.id)).filter(
+        (r) => r.action === 'occupancy.model_attested',
+      );
 
     // 1. The steady-state heartbeat: same id, same tier. Nothing changed, so nothing is written
     //    and nothing audits — and the tier is still on the next act.
     a.send({ type: 'heartbeat', model: 'claude-opus-5', model_source: 'observed' });
     await new Promise((r) => setTimeout(r, 50));
-    expect(attestAudits().length).toBe(1); // claim-time only
+    expect((await attestAudits()).length).toBe(1); // claim-time only
     say('hb1');
     const afterSteady = await deliverOf(l, 'hb1');
     expect(afterSteady.envelope.meta.model).toBe('claude-opus-5');
@@ -3751,9 +3772,11 @@ describe('model attestation (ADR 101)', () => {
 
     // 4. No audit row, by design (ADR 417 §Observability): a guidance epoch is occupancy state, not
     //    an event. `presence` is where occupancy state lives, and the roster is its instrument.
-    const teamRow = getTeamBySlug(server.db, 'dawn')!;
+    const teamRow = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
     expect(
-      listAudit(server.db, teamRow.id).filter((r) => r.action.startsWith('occupancy.guidance')),
+      (await listAudit(sqliteDriver(server.db), teamRow.id)).filter((r) =>
+        r.action.startsWith('occupancy.guidance'),
+      ),
     ).toEqual([]);
     a.close();
   });
@@ -3817,8 +3840,8 @@ describe('model attestation (ADR 101)', () => {
     // Re-attestation rides the heartbeat; only a real change audits (old → new).
     a.send({ type: 'heartbeat', model: 'claude-fable-5' });
     await new Promise((r) => setTimeout(r, 50));
-    const teamRow = getTeamBySlug(server.db, 'dawn')!;
-    const attests = listAudit(server.db, teamRow.id).filter(
+    const teamRow = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const attests = (await listAudit(sqliteDriver(server.db), teamRow.id)).filter(
       (r) => r.action === 'occupancy.model_attested',
     );
     expect(attests.length).toBe(2); // claim-time initial + the heartbeat switch
@@ -3888,7 +3911,11 @@ describe('model attestation (ADR 101)', () => {
     expect(((await first.json()) as any).ack.meta.model).toBe('qwen2.5:3b-instruct');
 
     // Reap the claim occupancy — the fire-and-exit gap in finding 003 / issue #172.
-    const adaId = getMemberByName(server.db, getTeamBySlug(server.db, 'dawn')!.id, 'Ada')!.id;
+    const adaId = (await getMemberByName(
+      sqliteDriver(server.db),
+      (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id,
+      'Ada',
+    ))!.id;
     const removed = server.db.prepare('DELETE FROM presence WHERE member_id = ?').run(adaId);
     expect(removed.changes).toBeGreaterThan(0);
     const renewed = await post('/teams/dawn/claim', {
@@ -3955,8 +3982,8 @@ describe('model attestation (ADR 101)', () => {
     expect(later.status).toBe(201);
     expect(((await later.json()) as any).ack.meta.model).toBe('qwen2.5:3b-instruct');
 
-    const teamRow = getTeamBySlug(server.db, 'dawn')!;
-    const renewedClaim = listAudit(server.db, teamRow.id).filter((r) => {
+    const teamRow = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const renewedClaim = (await listAudit(sqliteDriver(server.db), teamRow.id)).filter((r) => {
       if (r.action !== 'occupancy.model_attested') return false;
       const d = JSON.parse(r.detail!) as { source: string };
       return d.source === 'claim';
@@ -4000,8 +4027,8 @@ describe('model attestation (ADR 101)', () => {
     expect(nickRow?.presence).toBe('online');
     expect(nickRow?.presences?.[0]?.model ?? null).toBeNull();
 
-    const teamRow = getTeamBySlug(server.db, 'dawn')!;
-    const ambient = listAudit(server.db, teamRow.id).filter((r) => {
+    const teamRow = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const ambient = (await listAudit(sqliteDriver(server.db), teamRow.id)).filter((r) => {
       if (r.action !== 'occupancy.model_attested') return false;
       const d = JSON.parse(r.detail!) as { source: string };
       return d.source === 'ambient';
@@ -4114,7 +4141,11 @@ describe('build attestation (ADR 135)', () => {
     const tok = team.json.human_credential;
     await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, tok);
     // Give the human seat a role an agent might legitimately ask for.
-    const nickRow = getMemberByName(server.db, getTeamBySlug(server.db, 'dawn')!.id, 'nick')!;
+    const nickRow = (await getMemberByName(
+      sqliteDriver(server.db),
+      (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id,
+      'nick',
+    ))!;
     server.db.prepare('UPDATE members SET role = ? WHERE id = ?').run('steward', nickRow.id);
 
     const r = await post('/teams/dawn/claim', {
@@ -4171,23 +4202,26 @@ describe('build attestation (ADR 135)', () => {
 
 describe('v0.3 P2 governance enforcement (ADR 071)', () => {
   /** Narrow a seat's effective caps directly (in P1 reconcile is the only writer; tests stand in for it). */
-  function setCaps(
+  async function setCaps(
     slug: string,
     name: string,
     partial: Partial<typeof GENERALIST_CAPABILITIES>,
     accountStatus: string | null = null,
   ): void {
-    const team = getTeamBySlug(server.db, slug)!;
-    const m = getMemberByName(server.db, team.id, name)!;
-    setMemberGovernance(
-      server.db,
+    const team = (await getTeamBySlug(sqliteDriver(server.db), slug))!;
+    const m = (await getMemberByName(sqliteDriver(server.db), team.id, name))!;
+    await setMemberGovernance(
+      sqliteDriver(server.db),
       m.id,
       accountStatus,
       JSON.stringify({ ...GENERALIST_CAPABILITIES, ...partial }),
     );
   }
-  function auditRows(slug: string) {
-    return listAudit(server.db, getTeamBySlug(server.db, slug)!.id);
+  async function auditRows(slug: string) {
+    return await listAudit(
+      sqliteDriver(server.db),
+      (await getTeamBySlug(sqliteDriver(server.db), slug))!.id,
+    );
   }
   function urgentEnv(from: string, to: string, id: string) {
     return {
@@ -4222,9 +4256,9 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     // The admin may.
     const ok = await post('/teams/dawn/members/Bob/reclaim', {}, nickTok);
     expect(ok.status).toBe(200);
-    expect(auditRows('dawn').some((r) => r.action === 'member.reclaim' && r.actor === 'nick')).toBe(
-      true,
-    );
+    expect(
+      (await auditRows('dawn')).some((r) => r.action === 'member.reclaim' && r.actor === 'nick'),
+    ).toBe(true);
   });
 
   it('empty-admin fallback: with no admin on the team, any member may reclaim (no flag day)', async () => {
@@ -4235,11 +4269,11 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     const ada = { key: team.json.agent_key, seat: 'Ada' };
     await get('/teams/dawn/inbox', ada);
     // Strip the only admin → the team has zero admins → governance falls back to v0.2 open behaviour.
-    setCaps('dawn', 'nick', { is_admin: false });
+    await setCaps('dawn', 'nick', { is_admin: false });
 
     const ok = await post('/teams/dawn/members/Bob/reclaim', {}, ada);
     expect(ok.status).toBe(200);
-    const entry = auditRows('dawn').find((r) => r.action === 'member.reclaim');
+    const entry = (await auditRows('dawn')).find((r) => r.action === 'member.reclaim');
     expect(entry?.detail).toContain('no-admin');
   });
 
@@ -4273,16 +4307,18 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     // A non-admin seat is refused; the team is untouched.
     const denied = await post('/teams/dawn/archive', {}, { key: team.json.agent_key, seat: 'Ada' });
     expect(denied.status).toBe(403);
-    expect(getTeamBySlug(server.db, 'dawn')!.archived_at).toBeNull();
+    expect((await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.archived_at).toBeNull();
 
     // The admin archives — audited, archived_at lands.
     const ok = await post('/teams/dawn/archive', {}, nickTok);
     expect(ok.status).toBe(200);
     expect(ok.json).toMatchObject({ ok: true, team: 'dawn' });
-    expect(getTeamBySlug(server.db, 'dawn')!.archived_at).toBe(ok.json.archived_at);
-    expect(auditRows('dawn').some((r) => r.action === 'team.archive' && r.actor === 'nick')).toBe(
-      true,
+    expect((await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.archived_at).toBe(
+      ok.json.archived_at,
     );
+    expect(
+      (await auditRows('dawn')).some((r) => r.action === 'team.archive' && r.actor === 'nick'),
+    ).toBe(true);
 
     // Every team-scoped surface now reads the team as gone — status, roster, even re-auth.
     const status = await get('/teams/dawn');
@@ -4320,7 +4356,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     expect(allowed.status).toBe(201);
 
     // Mut is narrowed to can_flag_urgent:false → the message still lands, just downgraded.
-    setCaps('dawn', 'Mut', { can_flag_urgent: false });
+    await setCaps('dawn', 'Mut', { can_flag_urgent: false });
     const downgraded = await post(
       '/teams/dawn/messages',
       { envelope: urgentEnv('Mut', 'Bob', 'u-deny') },
@@ -4336,7 +4372,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     expect(down.meta.urgent).toBeUndefined();
     expect(down.meta.wasnt_urgent).toBe(true);
 
-    const audit = auditRows('dawn');
+    const audit = await auditRows('dawn');
     expect(audit.some((r) => r.action === 'urgent.flagged' && r.actor === 'nick')).toBe(true);
     expect(audit.some((r) => r.action === 'urgent.denied' && r.actor === 'Mut')).toBe(true);
   });
@@ -4352,7 +4388,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     const bob = await post('/teams/dawn/members', { name: 'Bob', kind: 'human' }, nickTok);
     const bobTok = bob.json.human_credential;
     await post('/teams/dawn/members', { name: 'Mut', kind: 'agent' }, nickTok);
-    setCaps('dawn', 'Mut', { can_flag_urgent: false });
+    await setCaps('dawn', 'Mut', { can_flag_urgent: false });
 
     const forged = await post(
       '/teams/dawn/messages',
@@ -4481,7 +4517,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     expect(raised.json.line).not.toContain('ping'); // §4: never the raw message body
 
     // Delivery is audited once per (recipient, act) — who grabbed the mic, when, at whom.
-    const afterFirst = auditRows('dawn').filter((r) => r.action === 'interrupt.raised');
+    const afterFirst = (await auditRows('dawn')).filter((r) => r.action === 'interrupt.raised');
     expect(afterFirst).toHaveLength(1);
     expect(afterFirst[0]).toMatchObject({ actor: 'nick', target: 'Bob', result: 'allow' });
     expect(afterFirst[0]!.detail).toContain('u-1');
@@ -4491,7 +4527,9 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
       'x-musterd-no-touch': '1',
     });
     expect(again.json.raised).toBe(true);
-    expect(auditRows('dawn').filter((r) => r.action === 'interrupt.raised')).toHaveLength(1);
+    expect((await auditRows('dawn')).filter((r) => r.action === 'interrupt.raised')).toHaveLength(
+      1,
+    );
   });
 
   it('steer act (ADR 103): persists through the DB and raises the interrupt line without an urgent flag', async () => {
@@ -4525,7 +4563,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     expect(raised.json.line).not.toContain('v2 schema'); // §4: never the raw body
 
     // Audited with the steer raise class, not a hardcoded 'urgent'.
-    const audit = auditRows('dawn').filter((r) => r.action === 'interrupt.raised');
+    const audit = (await auditRows('dawn')).filter((r) => r.action === 'interrupt.raised');
     expect(audit).toHaveLength(1);
     expect(audit[0]!.detail).toContain('steer');
   });
@@ -4547,7 +4585,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     });
     expect(raised.json.raised).toBe(true);
 
-    const audit = auditRows('dawn').filter((r) => r.action === 'interrupt.raised');
+    const audit = (await auditRows('dawn')).filter((r) => r.action === 'interrupt.raised');
     expect(audit).toHaveLength(1);
     const detail = JSON.parse(audit[0]!.detail as string) as { line?: string; rail?: string };
     // The line is the only field that is NOT reconstructable later: it depends on the queue state
@@ -4578,7 +4616,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     );
     expect(raised.json.raised).toBe(true);
 
-    const audit = auditRows('dawn').filter((r) => r.action === 'interrupt.raised');
+    const audit = (await auditRows('dawn')).filter((r) => r.action === 'interrupt.raised');
     const detail = JSON.parse(audit[0]!.detail as string) as {
       line?: string;
       rail?: string | null;
@@ -4606,7 +4644,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     });
     expect(raised.json.raised).toBe(true);
 
-    const audit = auditRows('dawn').filter((r) => r.action === 'interrupt.raised');
+    const audit = (await auditRows('dawn')).filter((r) => r.action === 'interrupt.raised');
     const detail = JSON.parse(audit[0]!.detail as string) as { rail?: string | null };
     expect('rail' in detail).toBe(true);
     expect(detail.rail).toBeNull();
@@ -4802,14 +4840,14 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
       const live = await get('/teams/dawn/inbox/interrupt-check', ada);
       expect(live.status).toBe(200);
       // …then kill the lease the way an autorefresh bounce does: the row stays, revoked.
-      const adaRow = getMemberByName(db, getTeamBySlug(db, 'dawn')!.id, 'Ada')!;
+      const adaRow = (await getMemberByName(db, (await getTeamBySlug(db, 'dawn'))!.id, 'Ada'))!;
       db.prepare('UPDATE session_leases SET revoked_at = ? WHERE member_id = ?').run(
         Date.now(),
         adaRow.id,
       );
-      const teamId = getTeamBySlug(db, 'dawn')!.id;
-      const refusals = () =>
-        listAudit(db, teamId)
+      const teamId = (await getTeamBySlug(db, 'dawn'))!.id;
+      const refusals = async () =>
+        (await listAudit(db, teamId))
           .filter((r) => r.action === 'interrupt.refused')
           .map((r) => ({
             ...r,
@@ -4825,7 +4863,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
       // The caller learns nothing new — the body is the same generic sentence as before.
       expect(probe.json.error.message).toMatch(/agent session lease/);
       expect(JSON.stringify(probe.json)).not.toContain('msac_');
-      const rows = refusals();
+      const rows = await refusals();
       expect(rows).toHaveLength(1);
       expect(rows[0]!.target).toBe('Ada');
       expect(rows[0]!.detail).toMatchObject({ lease: 'dead' });
@@ -4838,7 +4876,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
       for (let i = 0; i < 5; i++) {
         expect((await get('/teams/dawn/inbox/interrupt-check', ada)).status).toBe(401);
       }
-      expect(refusals()).toHaveLength(1);
+      expect(await refusals()).toHaveLength(1);
     });
 
     it('control: a spoofed x-musterd-seat on an INVALID credential names nobody', async () => {
@@ -4847,7 +4885,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
       const probe = await get('/teams/dawn/inbox/interrupt-check', forged);
       expect(probe.status).toBe(401);
       // The header said Ada. The credential proved nothing. No row may take the header's word.
-      expect(refusals()).toHaveLength(0);
+      expect(await refusals()).toHaveLength(0);
     });
 
     it('control: a missing lease is refused with its own reason', async () => {
@@ -4855,15 +4893,15 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
       const noLease = { key: ada.key, seat: ada.seat }; // credential valid, no msls_ header at all
       const probe = await get('/teams/dawn/inbox/interrupt-check', noLease);
       expect(probe.status).toBe(401);
-      expect(refusals()).toHaveLength(1);
-      expect(refusals()[0]!.detail).toMatchObject({ lease: 'missing' });
+      expect(await refusals()).toHaveLength(1);
+      expect((await refusals())[0]!.detail).toMatchObject({ lease: 'missing' });
     });
 
     it('control: only the interrupt route audits — an ordinary read with a dead lease stays a plain 401', async () => {
       const { ada, refusals } = await deafAda();
       const read = await get('/teams/dawn/inbox', ada);
       expect(read.status).toBe(401);
-      expect(refusals()).toHaveLength(0);
+      expect(await refusals()).toHaveLength(0);
     });
   });
 
@@ -4929,9 +4967,11 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
       const sent = await post('/teams/dawn/messages', { envelope: handoff('h-231c') }, nickTok);
       expect(sent.status).toBe(201);
       expect(sent.json.handoff_lane).toBeUndefined();
-      const team = getTeamBySlug(server.db, 'dawn')!;
+      const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
       expect(
-        listAudit(server.db, team.id, {}).filter((a) => a.action.startsWith('handoff.lane_')),
+        (await listAudit(sqliteDriver(server.db), team.id, {})).filter((a) =>
+          a.action.startsWith('handoff.lane_'),
+        ),
       ).toHaveLength(0);
     });
 
@@ -4952,8 +4992,8 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
       await post('/teams/dawn/messages', { envelope: handoff('h-231e') }, nickTok);
       await post('/teams/dawn/lanes', { title: 'second', claim: true }, nickTok);
       await post('/teams/dawn/messages', { envelope: handoff('h-231f') }, nickTok);
-      const team = getTeamBySlug(server.db, 'dawn')!;
-      const rows = listAudit(server.db, team.id, {}).filter((a) =>
+      const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+      const rows = (await listAudit(sqliteDriver(server.db), team.id, {})).filter((a) =>
         a.action.startsWith('handoff.lane_'),
       );
       expect(rows.map((r) => r.action).sort()).toEqual([
@@ -5093,8 +5133,8 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     await get('/teams/dawn/inbox', disAuth);
     await get('/teams/dawn/inbox', muteAuth);
 
-    setCaps('dawn', 'Dis', {}, 'disabled');
-    setCaps('dawn', 'Mute', { can_message: 'none' });
+    await setCaps('dawn', 'Dis', {}, 'disabled');
+    await setCaps('dawn', 'Mute', { can_message: 'none' });
 
     const baseEnv = (from: string, id: string) => ({
       id,
@@ -5114,7 +5154,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     expect(disabled.status).toBe(403);
     const muted = await post('/teams/dawn/messages', { envelope: baseEnv('Mute', 'm1') }, muteAuth);
     expect(muted.status).toBe(403);
-    const audit = auditRows('dawn');
+    const audit = await auditRows('dawn');
     // An inert account is refused at authentication, before the send route has an action to audit.
     expect(audit.filter((r) => r.action === 'send.denied').length).toBe(1);
   });
@@ -5130,7 +5170,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     expect((await get('/teams/dawn/messages', auth)).status).toBe(200);
 
     // ...then disabling it closes BOTH reads (the send gate already blocked its sends). Banned means out.
-    setCaps('dawn', 'Dis', {}, 'disabled');
+    await setCaps('dawn', 'Dis', {}, 'disabled');
     expect((await get('/teams/dawn/inbox', auth)).status).toBe(403);
     expect((await get('/teams/dawn/messages', auth)).status).toBe(403);
   });
@@ -5143,7 +5183,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
       await post('/teams/dawn/members', { name: 'Dis', kind: 'agent' }, nickTok);
       const disAuth = { key: team.json.agent_key as string, seat: 'Dis' };
       await get('/teams/dawn/inbox', disAuth);
-      setCaps('dawn', 'Dis', {}, accountStatus);
+      await setCaps('dawn', 'Dis', {}, accountStatus);
 
       const res = await post('/teams/dawn/availability', { status: 'away' }, disAuth);
       expect(res.status).toBe(403);
@@ -5153,7 +5193,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
   it('a banned admin credential cannot change team policy', async () => {
     const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
     const nickTok = team.json.human_credential;
-    setCaps('dawn', 'nick', { is_admin: true }, 'banned');
+    await setCaps('dawn', 'nick', { is_admin: true }, 'banned');
 
     const res = await post('/teams/dawn/policy', { allow_pre_issued_grants: true }, nickTok);
     expect(res.status).toBe(403);
@@ -5188,7 +5228,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     // human seat with the team agent key — which the install-topology L1 seat-kind guard now
     // refuses. The kind was incidental to what is being asserted here.
     await post('/teams/dawn/members', { name: 'Watcher', kind: 'agent' }, nickTok);
-    setCaps('dawn', 'Watcher', { can_observe: false });
+    await setCaps('dawn', 'Watcher', { can_observe: false });
 
     const w = new TestWs();
     await w.open();
@@ -5202,7 +5242,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     w.send({ type: 'subscribe', scope: 'team-all' });
     const err = await w.waitFor('error');
     expect((err as any).code).toBe('forbidden');
-    expect(auditRows('dawn').some((r) => r.action === 'observe.denied')).toBe(true);
+    expect((await auditRows('dawn')).some((r) => r.action === 'observe.denied')).toBe(true);
     w.close();
   });
 
@@ -5219,10 +5259,10 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     expect(issued.status).toBe(201);
     expect(issued.json.token).toMatch(/^msgr_/);
     expect(issued.json.grant.single_use).toBe(true);
-    expect(auditRows('dawn').some((r) => r.action === 'grant.issue' && r.actor === 'nick')).toBe(
-      true,
-    );
-    const issue = auditRows('dawn').find((r) => r.action === 'grant.issue')!;
+    expect(
+      (await auditRows('dawn')).some((r) => r.action === 'grant.issue' && r.actor === 'nick'),
+    ).toBe(true);
+    const issue = (await auditRows('dawn')).find((r) => r.action === 'grant.issue')!;
     expect(JSON.parse(issue.detail!).authorized_by).toBe('nick');
 
     // listed without the secret token/hash
@@ -5238,7 +5278,7 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
       headers: { authorization: `Bearer ${nickTok}` },
     });
     expect(revoked.status).toBe(200);
-    expect(auditRows('dawn').some((r) => r.action === 'grant.revoke')).toBe(true);
+    expect((await auditRows('dawn')).some((r) => r.action === 'grant.revoke')).toBe(true);
     // a second revoke of the same id is a 404 (already revoked)
     const again = await fetch(`${base}/teams/dawn/grants/${id}`, {
       method: 'DELETE',
@@ -5254,12 +5294,12 @@ describe('v0.3 P2 governance enforcement (ADR 071)', () => {
     const key = await post('/teams/dawn/agent-key/rotate', {}, nickTok);
     expect(key.status).toBe(200);
     expect(key.json.agent_key).toMatch(/^mskey_/);
-    expect(auditRows('dawn').some((r) => r.action === 'key.rotate')).toBe(true);
+    expect((await auditRows('dawn')).some((r) => r.action === 'key.rotate')).toBe(true);
 
     const pol = await post('/teams/dawn/policy', { allow_pre_issued_grants: true }, nickTok);
     expect(pol.status).toBe(200);
     expect(pol.json.policy.allow_pre_issued_grants).toBe(true);
-    expect(auditRows('dawn').some((r) => r.action === 'policy.change')).toBe(true);
+    expect((await auditRows('dawn')).some((r) => r.action === 'policy.change')).toBe(true);
   });
 
   it('the P3.1 admin endpoints are is_admin-only (a non-admin is 403)', async () => {
@@ -5339,9 +5379,9 @@ describe('coordination lanes, Phase 1 (ADR 083)', () => {
     const team = await post('/teams', { slug: 'ledger', creator: { name: 'nick', kind: 'human' } });
     const nickTok = team.json.human_credential;
     await post('/teams/ledger/members', { name: 'bo', kind: 'human' }, nickTok);
-    const teamId = getTeamBySlug(server.db, 'ledger')!.id;
-    const claimedRows = () =>
-      listAudit(server.db, teamId)
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'ledger'))!.id;
+    const claimedRows = async () =>
+      (await listAudit(sqliteDriver(server.db), teamId))
         .filter((r) => r.action === 'lane.claimed')
         .map((r) => ({
           actor: r.actor,
@@ -5356,7 +5396,7 @@ describe('coordination lanes, Phase 1 (ADR 083)', () => {
 
     // Edge 1: born owned — lane_open {claim:true}.
     const born = await post('/teams/ledger/lanes', { title: 'born owned', claim: true }, nickTok);
-    const atOpen = claimedRows().find((r) => r.target === born.json.lane.id);
+    const atOpen = (await claimedRows()).find((r) => r.target === born.json.lane.id);
     expect(atOpen).toBeDefined();
     expect(atOpen!.actor).toBe('nick');
     expect(atOpen!.detail.kind).toBe('claim');
@@ -5369,13 +5409,13 @@ describe('coordination lanes, Phase 1 (ADR 083)', () => {
     // sibling because a guard tested on one path and not the other is how the birth-edge gap
     // survived #574 in the first place.
     const open = await post('/teams/ledger/lanes', { title: 'left open' }, nickTok);
-    expect(claimedRows().find((r) => r.target === open.json.lane.id)).toBeUndefined();
+    expect((await claimedRows()).find((r) => r.target === open.json.lane.id)).toBeUndefined();
     await fetch(base + `/teams/ledger/lanes/${open.json.lane.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', ...authHeaders(nickTok) },
       body: JSON.stringify({ owner_seat: 'nick' }),
     });
-    const patchClaim = claimedRows().find((r) => r.target === open.json.lane.id);
+    const patchClaim = (await claimedRows()).find((r) => r.target === open.json.lane.id);
     expect(patchClaim?.detail.kind).toBe('claim');
     expect(patchClaim?.detail.previous_owner ?? null).toBeNull();
     expect(patchClaim?.detail.at_open).toBeUndefined();
@@ -5386,14 +5426,14 @@ describe('coordination lanes, Phase 1 (ADR 083)', () => {
       headers: { 'content-type': 'application/json', ...authHeaders(nickTok) },
       body: JSON.stringify({ owner_seat: 'bo' }),
     });
-    const handoff = claimedRows().find(
+    const handoff = (await claimedRows()).find(
       (r) => r.target === born.json.lane.id && r.detail.kind === 'handoff',
     );
     expect(handoff).toBeDefined();
     expect(handoff!.detail.owner).toBe('bo');
     expect(handoff!.detail.previous_owner).toBe('nick');
     // …and the birth row is still the only OTHER acquisition of that lane — no double-write.
-    expect(claimedRows().filter((r) => r.target === born.json.lane.id)).toHaveLength(2);
+    expect((await claimedRows()).filter((r) => r.target === born.json.lane.id)).toHaveLength(2);
   });
 
   // ADR 325 prereq: EVERY lane transition leaves a durable row, not just the ownership edges. A
@@ -5403,9 +5443,9 @@ describe('coordination lanes, Phase 1 (ADR 083)', () => {
   it('audits field edits and non-terminal state moves (ADR 325 prereq)', async () => {
     const team = await post('/teams', { slug: 'ledgr2', creator: { name: 'nick', kind: 'human' } });
     const nickTok = team.json.human_credential;
-    const teamId = getTeamBySlug(server.db, 'ledgr2')!.id;
-    const rows = (action: string) =>
-      listAudit(server.db, teamId)
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'ledgr2'))!.id;
+    const rows = async (action: string) =>
+      (await listAudit(sqliteDriver(server.db), teamId))
         .filter((r) => r.action === action)
         .map((r) => ({
           target: r.target,
@@ -5428,7 +5468,7 @@ describe('coordination lanes, Phase 1 (ADR 083)', () => {
 
     // A field edit writes lane.updated naming exactly what changed.
     await patch(id, { branch: 'nick/branch', detail: 'now with detail' });
-    const edit = rows('lane.updated').find((r) => r.target === id);
+    const edit = (await rows('lane.updated')).find((r) => r.target === id);
     expect(edit).toBeDefined();
     expect(edit!.detail.fields?.sort()).toEqual(['branch', 'detail']);
     // …and the values, so a replicating peer can fold the edit rather than only know it happened
@@ -5440,11 +5480,11 @@ describe('coordination lanes, Phase 1 (ADR 083)', () => {
 
     // A no-change patch writes nothing.
     await patch(id, { branch: 'nick/branch' });
-    expect(rows('lane.updated').filter((r) => r.target === id)).toHaveLength(1);
+    expect((await rows('lane.updated')).filter((r) => r.target === id)).toHaveLength(1);
 
     // A non-terminal state move writes lane.state_changed with the edge.
     await patch(id, { state: 'active' });
-    const move = rows('lane.state_changed').find((r) => r.target === id);
+    const move = (await rows('lane.state_changed')).find((r) => r.target === id);
     expect(move).toBeDefined();
     expect(move!.detail.from).toBe('claimed');
     expect(move!.detail.to).toBe('active');
@@ -5454,11 +5494,11 @@ describe('coordination lanes, Phase 1 (ADR 083)', () => {
     const open = await post('/teams/ledgr2/lanes', { title: 'claim edge' }, nickTok);
     const openId = open.json.lane.id as string;
     await patch(openId, { owner_seat: 'nick' });
-    expect(rows('lane.state_changed').filter((r) => r.target === openId)).toHaveLength(0);
+    expect((await rows('lane.state_changed')).filter((r) => r.target === openId)).toHaveLength(0);
     await patch(openId, { state: 'open' }); // the release verb
-    expect(rows('lane.state_changed').filter((r) => r.target === openId)).toHaveLength(0);
+    expect((await rows('lane.state_changed')).filter((r) => r.target === openId)).toHaveLength(0);
     expect(
-      listAudit(server.db, teamId).filter(
+      (await listAudit(sqliteDriver(server.db), teamId)).filter(
         (r) => r.action === 'lane.released' && r.target === openId,
       ),
     ).toHaveLength(1);
@@ -5589,8 +5629,8 @@ describe('coordination lanes, Phase 1 (ADR 083)', () => {
     // what the tool description promised and did not deliver (measured 2026-07-29: 10 minutes of
     // host polling, zero leases).
     expect(msg.act).toBe('handoff');
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    const ledger = openDirectedLedger(server.db, teamId);
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    const ledger = await openDirectedLedger(sqliteDriver(server.db), teamId);
     const entry = ledger.find((d) => d.id === msg.id);
     expect(entry).toBeDefined();
     expect(entry!.recipients.map((r) => r.seat)).toContain('bo');
@@ -5713,8 +5753,10 @@ describe('coordination lanes, Phase 1 (ADR 083)', () => {
     // advisory. Naming the act on the shared helper instead of at the handoff call site would make
     // "your lane overlaps someone's" wake offline seats — strictly worse than the bug it fixes.
     expect(warn.act).toBe('message');
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    expect(openDirectedLedger(server.db, teamId).map((d) => d.id)).not.toContain(warn.id);
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    expect(
+      (await openDirectedLedger(sqliteDriver(server.db), teamId)).map((d) => d.id),
+    ).not.toContain(warn.id);
   });
 
   it('resolving a branch-carrying lane audits git.pr_merged with the attested merge detail (ADR 109)', async () => {
@@ -5924,7 +5966,7 @@ describe('two-stage close (ADR 169)', () => {
   }
 
   async function auditRows(nickTok: string, action: string) {
-    return auditRowsFor(nickTok, 'dawn', action);
+    return await auditRowsFor(nickTok, 'dawn', action);
   }
   /** Same, for a team other than the shared `dawn` fixture (the solo-team degradation cases). */
   async function auditRowsFor(tok: string, slug: string, action: string) {
@@ -6127,9 +6169,12 @@ describe('two-stage close (ADR 169)', () => {
     expect(probe.json.line).not.toContain('gee, are you there'); // §4: never the body
 
     // The audit names the headlined act and its class, so "who grabbed the mic" stays legible.
-    const raised = listAudit(server.db, getTeamBySlug(server.db, 'dawn')!.id).filter(
-      (r) => r.action === 'interrupt.raised',
-    );
+    const raised = (
+      await listAudit(
+        sqliteDriver(server.db),
+        (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id,
+      )
+    ).filter((r) => r.action === 'interrupt.raised');
     expect(raised).toHaveLength(1);
     expect(raised[0]).toMatchObject({ actor: 'nick', target: 'gee' });
     expect(raised[0]!.detail).toContain('"tier":"huddle"');
@@ -6747,7 +6792,7 @@ describe('two-stage close (ADR 169)', () => {
     const a = await mk('alpha');
     const b = await mk('beta');
     const lane = await post('/teams/twins/lanes', { title: 'twinned', claim: true }, a);
-    const patch = (body: unknown, auth: Auth) =>
+    const patch = async (body: unknown, auth: Auth) =>
       fetch(base + `/teams/twins/lanes/${lane.json.lane.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json', ...authHeaders(auth) },
@@ -6787,7 +6832,7 @@ describe('two-stage close (ADR 169)', () => {
     // n4 stays offline so the human rung cannot outrank the cross_model one under test.
 
     const lane = await post('/teams/switch/lanes', { title: 'switched', claim: true }, worker);
-    const patch = (body: unknown, auth: Auth) =>
+    const patch = async (body: unknown, auth: Auth) =>
       fetch(base + `/teams/switch/lanes/${lane.json.lane.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json', ...authHeaders(auth) },
@@ -7061,7 +7106,7 @@ describe('two-stage close (ADR 169)', () => {
   describe('an acceptance verdict moves the lane (ADR 202)', () => {
     /** Post `act` as `who`, answering the acceptance ask `askId`. */
     async function verdict(who: Auth | string, from: string, askId: string, act: string) {
-      return post(
+      return await post(
         '/teams/dawn/messages',
         {
           envelope: {
@@ -8058,9 +8103,9 @@ describe('two-stage close (ADR 169)', () => {
     });
     const lane = await post('/teams/brk/lanes', { title: 'bounced', claim: true }, solo);
     const laneId = lane.json.lane.id as string;
-    const teamId = getTeamBySlug(server.db, 'brk')!.id;
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'brk'))!.id;
     for (let i = 0; i < REVIEW_LOOP_BREAKER_N; i++) {
-      appendAudit(server.db, teamId, {
+      await appendAudit(sqliteDriver(server.db), teamId, {
         actor: 'solo',
         action: 'lane.ready_for_review',
         target: laneId,
@@ -8336,19 +8381,24 @@ describe('seat memory endpoints + occupy envelope (ADR 093)', () => {
     const { ada } = await dawn();
     await req('PUT', '/teams/dawn/memory', { headline: 'before', body: 'note' }, ada);
 
-    const setStatus = (status: string | null) => {
-      const teamRow = getTeamBySlug(server.db, 'dawn')!;
-      const m = getMemberByName(server.db, teamRow.id, 'Ada')!;
-      setMemberGovernance(server.db, m.id, status, JSON.stringify(GENERALIST_CAPABILITIES));
+    const setStatus = async (status: string | null) => {
+      const teamRow = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+      const m = (await getMemberByName(sqliteDriver(server.db), teamRow.id, 'Ada'))!;
+      await setMemberGovernance(
+        sqliteDriver(server.db),
+        m.id,
+        status,
+        JSON.stringify(GENERALIST_CAPABILITIES),
+      );
     };
-    setStatus('disabled');
+    await setStatus('disabled');
     expect((await get('/teams/dawn/memory', ada)).status).toBe(403);
     expect((await get('/teams/dawn/memory?envelope=1', ada)).status).toBe(403);
     expect((await req('PUT', '/teams/dawn/memory', { headline: 'after' }, ada)).status).toBe(403);
     expect((await req('DELETE', '/teams/dawn/memory', undefined, ada)).status).toBe(403);
 
     // Re-enabling restores access and the note survived untouched.
-    setStatus('active');
+    await setStatus('active');
     expect((await get('/teams/dawn/memory', ada)).json.headline).toBe('before');
   });
 
@@ -8430,9 +8480,13 @@ describe('seat memory endpoints + occupy envelope (ADR 093)', () => {
       ada,
     );
 
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    expect(listAudit(server.db, teamId).filter((r) => r.action === 'memory.save')).toHaveLength(0);
-    const rows = listAudit(server.db, teamId).filter((r) => r.action === 'continuity.memory_saved');
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    expect(
+      (await listAudit(sqliteDriver(server.db), teamId)).filter((r) => r.action === 'memory.save'),
+    ).toHaveLength(0);
+    const rows = (await listAudit(sqliteDriver(server.db), teamId)).filter(
+      (r) => r.action === 'continuity.memory_saved',
+    );
     expect(rows).toHaveLength(1);
     const detail = JSON.parse(rows[0]!.detail!);
     expect(detail).toMatchObject({ headline: 'sensitive subject', body: 'PASSWORD=hunter2' });
@@ -8441,8 +8495,10 @@ describe('seat memory endpoints + occupy envelope (ADR 093)', () => {
     expect(rows[0]!.origin_seq).toBeGreaterThan(0);
 
     await req('DELETE', '/teams/dawn/memory', undefined, ada);
-    expect(listAudit(server.db, teamId).filter((r) => r.action === 'memory.clear')).toHaveLength(0);
-    const clears = listAudit(server.db, teamId).filter(
+    expect(
+      (await listAudit(sqliteDriver(server.db), teamId)).filter((r) => r.action === 'memory.clear'),
+    ).toHaveLength(0);
+    const clears = (await listAudit(sqliteDriver(server.db), teamId)).filter(
       (r) => r.action === 'continuity.memory_cleared',
     );
     expect(clears).toHaveLength(1);
@@ -8468,7 +8524,7 @@ describe('provisioning is localhost-trust, enforced (observer DM disclosure)', (
   let pbase: string;
 
   beforeEach(async () => {
-    proxied = createServer({ db: openDb(':memory:'), port: 0, trustProxy: true });
+    proxied = createServer({ db: openTestDb(':memory:'), port: 0, trustProxy: true });
     const { port } = await proxied.listen();
     pbase = `http://127.0.0.1:${port}`;
   });
@@ -8773,8 +8829,8 @@ describe('tool-call telemetry ingest (ADR 144 inc 1)', () => {
       expect.objectContaining({ seat: 'Ada', tools: 18, bytes: 40_000, est_tokens: 10_000 }),
     ]);
     // The attestation is an ordinary append-only audit row (the wake_cost precedent).
-    const teamRow = getTeamBySlug(server.db, 'dawn')!;
-    const audit = listAudit(server.db, teamRow.id).filter(
+    const teamRow = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const audit = (await listAudit(sqliteDriver(server.db), teamRow.id)).filter(
       (r) => r.action === 'mcp.surface_rendered',
     );
     expect(audit).toHaveLength(1);
@@ -8805,8 +8861,10 @@ describe('dogfood re-seat (ADR 146)', () => {
     expect(occ.type).toBe('occupied');
     expect((occ as any).seat.name).toBe('Ada');
 
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    await pollUntil(() => listAudit(server.db, teamId).some((x) => x.action === 'claim.reseated'));
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    await pollUntil(async () =>
+      (await listAudit(sqliteDriver(server.db), teamId)).some((x) => x.action === 'claim.reseated'),
+    );
     a2.close();
   });
 
@@ -8860,8 +8918,10 @@ describe('the to-human ask stream (ADR 147)', () => {
     );
     expect(sent.status).toBe(201);
 
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    const raised = listAudit(server.db, teamId).find((r) => r.action === 'ask.raised');
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    const raised = (await listAudit(sqliteDriver(server.db), teamId)).find(
+      (r) => r.action === 'ask.raised',
+    );
     expect(raised).toBeDefined();
     expect(JSON.parse(raised!.detail!)).toMatchObject({ species: 'escalate', tier: 'blocking' });
 
@@ -8907,7 +8967,7 @@ describe('the to-human ask stream (ADR 147)', () => {
     const nickCred = team.json.human_credential;
     await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, nickCred);
     const ada = { key: team.json.agent_key, seat: 'Ada' };
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
 
     // Below-top ask timed out unanswered → the agent proceeds, recording what it risked.
     await post(
@@ -8957,7 +9017,7 @@ describe('the to-human ask stream (ADR 147)', () => {
       nickCred,
     );
 
-    const audit = listAudit(server.db, teamId);
+    const audit = await listAudit(sqliteDriver(server.db), teamId);
     const risk = audit.find((r) => r.action === 'ask.risk_accepted');
     expect(JSON.parse(risk!.detail!)).toMatchObject({
       ask_ref: 'ask-x',
@@ -8984,7 +9044,9 @@ describe('the to-human ask stream (ADR 147)', () => {
       },
       ada,
     );
-    const stranded = listAudit(server.db, teamId).find((r) => r.action === 'ask.stranded');
+    const stranded = (await listAudit(sqliteDriver(server.db), teamId)).find(
+      (r) => r.action === 'ask.stranded',
+    );
     expect(JSON.parse(stranded!.detail!)).toMatchObject({
       ask_ref: 'ask-z',
       reason: 'no_reachable_unblocker',
@@ -9104,11 +9166,15 @@ describe('ask surfaces — Slack delivery (ADR 149, via the ADR 443 doorbell)', 
     );
     expect(sent.status).toBe(201);
 
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    await pollUntil(() =>
-      listAudit(server.db, teamId).some((r) => r.action === 'doorbell.surfaced'),
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    await pollUntil(async () =>
+      (await listAudit(sqliteDriver(server.db), teamId)).some(
+        (r) => r.action === 'doorbell.surfaced',
+      ),
     );
-    const surfaced = listAudit(server.db, teamId).find((r) => r.action === 'doorbell.surfaced')!;
+    const surfaced = (await listAudit(sqliteDriver(server.db), teamId)).find(
+      (r) => r.action === 'doorbell.surfaced',
+    )!;
     expect(JSON.parse(surfaced.detail!)).toMatchObject({ surface: 'slack', ok: true, status: 200 });
     // The URL is a secret — the audit row must not carry it.
     expect(surfaced.detail).not.toContain('hooks.slack.test');
@@ -9148,11 +9214,15 @@ describe('ask surfaces — Slack delivery (ADR 149, via the ADR 443 doorbell)', 
     );
     expect(sent.status).toBe(201);
 
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    await pollUntil(() =>
-      listAudit(server.db, teamId).some((r) => r.action === 'doorbell.surfaced'),
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    await pollUntil(async () =>
+      (await listAudit(sqliteDriver(server.db), teamId)).some(
+        (r) => r.action === 'doorbell.surfaced',
+      ),
     );
-    const surfaced = listAudit(server.db, teamId).find((r) => r.action === 'doorbell.surfaced')!;
+    const surfaced = (await listAudit(sqliteDriver(server.db), teamId)).find(
+      (r) => r.action === 'doorbell.surfaced',
+    )!;
     expect(JSON.parse(surfaced.detail!)).toMatchObject({ surface: 'slack', ok: false });
   });
 
@@ -9176,12 +9246,18 @@ describe('ask surfaces — Slack delivery (ADR 149, via the ADR 443 doorbell)', 
       { key: team.json.agent_key, seat: 'Ada' },
     );
 
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
     // The raised row proves the ask routed; give the (nonexistent) dispatch a beat, then assert silence.
-    expect(listAudit(server.db, teamId).some((r) => r.action === 'ask.raised')).toBe(true);
+    expect(
+      (await listAudit(sqliteDriver(server.db), teamId)).some((r) => r.action === 'ask.raised'),
+    ).toBe(true);
     await new Promise((r) => setTimeout(r, 50));
     expect(calls).toHaveLength(0);
-    expect(listAudit(server.db, teamId).some((r) => r.action === 'doorbell.surfaced')).toBe(false);
+    expect(
+      (await listAudit(sqliteDriver(server.db), teamId)).some(
+        (r) => r.action === 'doorbell.surfaced',
+      ),
+    ).toBe(false);
   });
 
   // ── ADR 155 Increment 2: presence informs the ask clock, never the ceiling ──
@@ -9214,11 +9290,17 @@ describe('ask surfaces — Slack delivery (ADR 149, via the ADR 443 doorbell)', 
     );
     expect(sent.status).toBe(201);
 
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    expect(listAudit(server.db, teamId).some((r) => r.action === 'ask.raised')).toBe(true);
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    expect(
+      (await listAudit(sqliteDriver(server.db), teamId)).some((r) => r.action === 'ask.raised'),
+    ).toBe(true);
     await new Promise((r) => setTimeout(r, 50));
     expect(calls).toHaveLength(0);
-    expect(listAudit(server.db, teamId).some((r) => r.action === 'doorbell.surfaced')).toBe(false);
+    expect(
+      (await listAudit(sqliteDriver(server.db), teamId)).some(
+        (r) => r.action === 'doorbell.surfaced',
+      ),
+    ).toBe(false);
 
     // The agent's re-notify — an in-thread ask — always fires the loud surface, present admin or not:
     // the human's silence despite presence is exactly what earns the escalation.
@@ -9239,8 +9321,10 @@ describe('ask surfaces — Slack delivery (ADR 149, via the ADR 443 doorbell)', 
       { key: team.json.agent_key, seat: 'Ada' },
     );
     expect(renotify.status).toBe(201);
-    await pollUntil(() =>
-      listAudit(server.db, teamId).some((r) => r.action === 'doorbell.surfaced'),
+    await pollUntil(async () =>
+      (await listAudit(sqliteDriver(server.db), teamId)).some(
+        (r) => r.action === 'doorbell.surfaced',
+      ),
     );
     expect(calls).toHaveLength(1);
   });
@@ -9298,7 +9382,7 @@ describe('ask surfaces — Slack delivery (ADR 149, via the ADR 443 doorbell)', 
   });
 });
 
-describe('the doorbell (ADR 443)', () => {
+describe('the doorbell (ADR 443)', async () => {
   function env(
     from: string,
     to: unknown,
@@ -9331,7 +9415,7 @@ describe('the doorbell (ADR 443)', () => {
     await post('/teams/dawn/members', { name: 'Bob', kind: 'agent' }, nick);
     // A human who is NOT an admin, so "directed rings its human" is apart from "asks ring admins".
     const dee = await post('/teams/dawn/members', { name: 'Dee', kind: 'human' }, nick);
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
     return {
       nick,
       dee: dee.json.human_credential as string,
@@ -9339,16 +9423,20 @@ describe('the doorbell (ADR 443)', () => {
       teamId,
     };
   }
-  const send = (auth: Auth, envelope: Record<string, unknown>) =>
-    post('/teams/dawn/messages', { envelope }, auth);
-  const rings = (teamId: string) =>
-    listRings(server.db, teamId).map((r) => ({
-      member: getMemberById(server.db, r.member_id)!.name,
-      state: r.state,
-      act: r.act_id,
-    }));
-  const surfaced = (teamId: string) =>
-    listAudit(server.db, teamId).filter((r) => r.action === 'doorbell.surfaced');
+  const send = async (auth: Auth, envelope: Record<string, unknown>) =>
+    await post('/teams/dawn/messages', { envelope }, auth);
+  const rings = async (teamId: string) =>
+    Promise.all(
+      (await listRings(sqliteDriver(server.db), teamId)).map(async (r) => ({
+        member: (await getMemberById(sqliteDriver(server.db), r.member_id))!.name,
+        state: r.state,
+        act: r.act_id,
+      })),
+    );
+  const surfaced = async (teamId: string) =>
+    (await listAudit(sqliteDriver(server.db), teamId)).filter(
+      (r) => r.action === 'doorbell.surfaced',
+    );
   const tick = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   const realFetch = globalThis.fetch;
@@ -9376,7 +9464,7 @@ describe('the doorbell (ADR 443)', () => {
     await send(t.ada, env('Ada', { kind: 'team' }, 'ask', 'd3', consult));
     await send(t.ada, env('Ada', { kind: 'team' }, 'request_help', 'd4'));
     await send(t.ada, env('Ada', toDee, 'handoff', 'd5'));
-    expect(rings(t.teamId).map((r) => [r.member, r.act])).toEqual([
+    expect((await rings(t.teamId)).map((r) => [r.member, r.act])).toEqual([
       ['Dee', 'd1'],
       ['nick', 'd3'],
       ['Dee', 'd5'],
@@ -9399,23 +9487,23 @@ describe('the doorbell (ADR 443)', () => {
     const t = await team();
     await post('/teams/dawn/availability', { status: 'dnd' }, t.dee);
     await send(t.ada, env('Ada', toDee, 'ask', 'h1', consult));
-    expect(rings(t.teamId)[0]!.state).toBe('held');
+    expect((await rings(t.teamId))[0]!.state).toBe('held');
     await post('/teams/dawn/availability', { status: 'available' }, t.dee);
-    expect(rings(t.teamId)[0]!.state).not.toBe('held');
+    expect((await rings(t.teamId))[0]!.state).not.toBe('held');
   });
 
   it('a blocking ask pierces dnd', async () => {
     const t = await team();
     await post('/teams/dawn/availability', { status: 'dnd' }, t.dee);
     await send(t.ada, env('Ada', toDee, 'ask', 'p1', { species: 'approve', tier: 'blocking' }));
-    expect(rings(t.teamId)[0]!.state).not.toBe('held');
+    expect((await rings(t.teamId))[0]!.state).not.toBe('held');
   });
 
   it('off_hours does not hold (no schedule enforcement in v1)', async () => {
     const t = await team();
     await post('/teams/dawn/availability', { status: 'off_hours' }, t.dee);
     await send(t.ada, env('Ada', toDee, 'ask', 'o1', consult));
-    expect(rings(t.teamId)[0]!.state).not.toBe('held');
+    expect((await rings(t.teamId))[0]!.state).not.toBe('held');
   });
 
   it('a held ring whose act was answered meanwhile is dropped, not rung', async () => {
@@ -9429,10 +9517,10 @@ describe('the doorbell (ADR 443)', () => {
       env('Dee', { kind: 'member', name: 'Ada' }, 'accept', 'a2', { in_reply_to: 'a1' }),
     );
     await post('/teams/dawn/availability', { status: 'available' }, t.dee);
-    expect(rings(t.teamId).find((r) => r.act === 'a1')!.state).toBe('done');
+    expect((await rings(t.teamId)).find((r) => r.act === 'a1')!.state).toBe('done');
     await tick(50);
     expect(calls).toHaveLength(0);
-    expect(surfaced(t.teamId)).toHaveLength(0);
+    expect(await surfaced(t.teamId)).toHaveLength(0);
   });
 
   it('a held ring whose thread was resolved meanwhile is dropped, not rung', async () => {
@@ -9443,7 +9531,7 @@ describe('the doorbell (ADR 443)', () => {
     await send(t.ada, env('Ada', toDee, 'ask', 'r1', consult));
     await send(t.ada, env('Ada', toDee, 'resolve', 'r2', null, { thread: 'r1' }));
     await post('/teams/dawn/availability', { status: 'available' }, t.dee);
-    expect(rings(t.teamId).find((r) => r.act === 'r1')!.state).toBe('done');
+    expect((await rings(t.teamId)).find((r) => r.act === 'r1')!.state).toBe('done');
     await tick(50);
     expect(calls).toHaveLength(0);
   });
@@ -9457,10 +9545,10 @@ describe('the doorbell (ADR 443)', () => {
     await tick(30);
     expect(calls).toHaveLength(0);
     await post('/teams/dawn/availability', { status: 'available' }, t.dee);
-    await pollUntil(() => surfaced(t.teamId).length === 1);
+    await pollUntil(async () => (await surfaced(t.teamId)).length === 1);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.text).toContain('the secret plan');
-    expect(surfaced(t.teamId)[0]!.detail).not.toContain('hooks.slack.test');
+    expect((await surfaced(t.teamId))[0]!.detail).not.toContain('hooks.slack.test');
   });
 
   it('a hold that lapses by its until is flushed on the sweep, with no availability POST', async () => {
@@ -9468,34 +9556,40 @@ describe('the doorbell (ADR 443)', () => {
     // A generous until, then move the deadline — a real 40 ms window loses the race under coverage.
     await post('/teams/dawn/availability', { status: 'away', until: Date.now() + 5_000 }, t.dee);
     await send(t.ada, env('Ada', toDee, 'ask', 'u1', consult));
-    expect(rings(t.teamId)[0]!.state).toBe('held');
-    const ctx = { db: server.db, config: { presenceTimeoutMs: 45_000 } } as unknown as Ctx;
-    flushLapsedHolds(ctx, (id) => getTeamById(server.db, id));
-    expect(rings(t.teamId)[0]!.state).toBe('held'); // not lapsed yet
+    expect((await rings(t.teamId))[0]!.state).toBe('held');
+    const ctx = {
+      db: sqliteDriver(server.db),
+      config: { presenceTimeoutMs: 45_000 },
+    } as unknown as Ctx;
+    await flushLapsedHolds(ctx, async (id) => await getTeamById(sqliteDriver(server.db), id));
+    expect((await rings(t.teamId))[0]!.state).toBe('held'); // not lapsed yet
     server.db
       .prepare("UPDATE members SET availability = ? WHERE team_id = ? AND name = 'Dee'")
       .run(JSON.stringify({ status: 'away', until: Date.now() - 1 }), t.teamId);
-    flushLapsedHolds(ctx, (id) => getTeamById(server.db, id));
-    expect(rings(t.teamId)[0]!.state).not.toBe('held');
+    await flushLapsedHolds(ctx, async (id) => await getTeamById(sqliteDriver(server.db), id));
+    expect((await rings(t.teamId))[0]!.state).not.toBe('held');
   });
 
   it('a held ring for a member who left is closed on the sweep, not rung', async () => {
     const t = await team();
     await post('/teams/dawn/availability', { status: 'away', until: Date.now() + 5_000 }, t.dee);
     await send(t.ada, env('Ada', toDee, 'ask', 'l1', consult));
-    expect(rings(t.teamId)[0]!.state).toBe('held');
+    expect((await rings(t.teamId))[0]!.state).toBe('held');
     server.db
       .prepare("UPDATE members SET left_at = ? WHERE team_id = ? AND name = 'Dee'")
       .run(Date.now(), t.teamId);
-    const ctx = { db: server.db, config: { presenceTimeoutMs: 45_000 } } as unknown as Ctx;
-    flushLapsedHolds(ctx, (id) => getTeamById(server.db, id));
-    expect(rings(t.teamId)[0]!.state).toBe('done');
-    expect(surfaced(t.teamId)).toHaveLength(0);
+    const ctx = {
+      db: sqliteDriver(server.db),
+      config: { presenceTimeoutMs: 45_000 },
+    } as unknown as Ctx;
+    await flushLapsedHolds(ctx, async (id) => await getTeamById(sqliteDriver(server.db), id));
+    expect((await rings(t.teamId))[0]!.state).toBe('done');
+    expect(await surfaced(t.teamId)).toHaveLength(0);
   });
 
   it('prunes done and queued rings past retention, and keeps held ones', async () => {
     const t = await team();
-    const dee = getMemberByName(server.db, t.teamId, 'Dee')!;
+    const dee = (await getMemberByName(sqliteDriver(server.db), t.teamId, 'Dee'))!;
     const old = Date.now() - DOORBELL_RING_RETENTION_MS - 1;
     const record = {
       team: 'dawn',
@@ -9505,7 +9599,7 @@ describe('the doorbell (ADR 443)', () => {
       answer_path: '/live?act=x',
     } as const;
     for (const state of ['done', 'queued', 'held'] as const) {
-      insertRing(server.db, {
+      await insertRing(sqliteDriver(server.db), {
         team_id: t.teamId,
         member_id: dee.id,
         act_id: 'x',
@@ -9516,7 +9610,7 @@ describe('the doorbell (ADR 443)', () => {
         created_at: old,
       });
     }
-    insertRing(server.db, {
+    await insertRing(sqliteDriver(server.db), {
       team_id: t.teamId,
       member_id: dee.id,
       act_id: 'y',
@@ -9525,12 +9619,8 @@ describe('the doorbell (ADR 443)', () => {
       state: 'done',
       host: null,
     });
-    expect(pruneRings(server.db, Date.now())).toBe(2);
-    expect(
-      rings(t.teamId)
-        .map((r) => r.state)
-        .sort(),
-    ).toEqual(['done', 'held']);
+    expect(await pruneRings(sqliteDriver(server.db), Date.now())).toBe(2);
+    expect(await (await rings(t.teamId)).map((r) => r.state).sort()).toEqual(['done', 'held']);
   });
 
   it('a Slack handoff ring names who and what, never the body', async () => {
@@ -9539,7 +9629,7 @@ describe('the doorbell (ADR 443)', () => {
     const calls = stubHooks();
     await post('/teams/dawn/availability', { status: 'off_hours' }, t.dee);
     await send(t.ada, env('Ada', toDee, 'handoff', 'f1'));
-    await pollUntil(() => surfaced(t.teamId).length === 1);
+    await pollUntil(async () => (await surfaced(t.teamId)).length === 1);
     expect(calls[0]!.text).toContain('[dawn] Ada handed you work');
     expect(calls[0]!.text).toContain('/live?act=f1');
     expect(calls[0]!.text).not.toContain('secret plan');
@@ -9548,9 +9638,9 @@ describe('the doorbell (ADR 443)', () => {
   it('a team Slack URL shared by several rung admins posts once per act', async () => {
     const t = await team();
     const ana = await post('/teams/dawn/members', { name: 'Ana', kind: 'human' }, t.nick);
-    const anaRow = getMemberByName(server.db, t.teamId, 'Ana')!;
-    setMemberGovernance(
-      server.db,
+    const anaRow = (await getMemberByName(sqliteDriver(server.db), t.teamId, 'Ana'))!;
+    await setMemberGovernance(
+      sqliteDriver(server.db),
       anaRow.id,
       null,
       JSON.stringify({ ...GENERALIST_CAPABILITIES, is_admin: true }),
@@ -9560,30 +9650,26 @@ describe('the doorbell (ADR 443)', () => {
     await post('/teams/dawn/availability', { status: 'off_hours' }, ana.json.human_credential);
     const calls = stubHooks();
     await send(t.ada, env('Ada', { kind: 'team' }, 'ask', 'm1', consult));
-    await pollUntil(() => surfaced(t.teamId).length === 1);
+    await pollUntil(async () => (await surfaced(t.teamId)).length === 1);
     await tick(30);
-    expect(
-      rings(t.teamId)
-        .map((r) => r.member)
-        .sort(),
-    ).toEqual(['Ana', 'nick']);
+    expect(await (await rings(t.teamId)).map((r) => r.member).sort()).toEqual(['Ana', 'nick']);
     expect(calls).toHaveLength(1);
   });
 
   it('a personal webhook gets the record as JSON, with no body key', async () => {
     const t = await team();
-    const dee = getMemberByName(server.db, t.teamId, 'Dee')!;
-    setDoorbellPrefs(server.db, dee.id, {
+    const dee = (await getMemberByName(sqliteDriver(server.db), t.teamId, 'Dee'))!;
+    await setDoorbellPrefs(sqliteDriver(server.db), dee.id, {
       sinks: { webhook: { on: true, url: 'https://hooks.slack.test/personal' } },
     });
     const bodies: unknown[] = [];
     stubHooks((raw) => bodies.push(raw));
     await post('/teams/dawn/availability', { status: 'off_hours' }, t.dee);
     await send(t.ada, env('Ada', toDee, 'ask', 'w1', consult));
-    await pollUntil(() => surfaced(t.teamId).length === 1);
+    await pollUntil(async () => (await surfaced(t.teamId)).length === 1);
     expect(bodies[0]).toMatchObject({ team: 'dawn', from: 'Ada', act: 'ask', act_id: 'w1' });
     expect(bodies[0]).not.toHaveProperty('body');
-    expect(JSON.parse(surfaced(t.teamId)[0]!.detail!)).toMatchObject({
+    expect(JSON.parse((await surfaced(t.teamId))[0]!.detail!)).toMatchObject({
       surface: 'webhook',
       ok: true,
     });
@@ -9606,8 +9692,8 @@ describe('the doorbell (ADR 443)', () => {
     const sent = await send(t.ada, env('Ada', toDee, 'ask', 'x1', consult));
     expect(sent.status).toBe(201);
     expect(Date.now() - started).toBeLessThan(250);
-    await pollUntil(() => surfaced(t.teamId).length === 1, 2000);
-    expect(JSON.parse(surfaced(t.teamId)[0]!.detail!)).toMatchObject({
+    await pollUntil(async () => (await surfaced(t.teamId)).length === 1, 2000);
+    expect(JSON.parse((await surfaced(t.teamId))[0]!.detail!)).toMatchObject({
       surface: 'slack',
       ok: false,
     });
@@ -9617,7 +9703,7 @@ describe('the doorbell (ADR 443)', () => {
 
   // ── prefs, privacy and URL checks (ADR 443 §5) ──
 
-  const put = (path: string, body: unknown, auth: Auth) => req('PUT', path, body, auth);
+  const put = async (path: string, body: unknown, auth: Auth) => await req('PUT', path, body, auth);
   const personal = { sinks: { webhook: { on: true, url: 'https://ntfy.sh/dee-secret-topic' } } };
 
   it('a human sets and reads back their own prefs, personal URL included', async () => {
@@ -9716,12 +9802,13 @@ describe('the doorbell (ADR 443)', () => {
     );
     return { ...t, key: created.agentKey };
   }
-  const claim = (key: string, host: string) => post('/teams/dawn/doorbell/rings', { host }, key);
+  const claim = async (key: string, host: string) =>
+    await post('/teams/dawn/doorbell/rings', { host }, key);
 
   it('a ring is handed to the host enrolled under its label, and to no other', async () => {
     const t = await osTeam();
     await send(t.ada, env('Ada', toDee, 'ask', 'os1', consult));
-    expect(rings(t.teamId)[0]!.state).toBe('queued');
+    expect((await rings(t.teamId))[0]!.state).toBe('queued');
     const other = await claim(t.key, 'mac-b');
     expect(other.json.rings).toEqual([]);
     const mine = await claim(t.key, 'mac-a');
@@ -9739,7 +9826,7 @@ describe('the doorbell (ADR 443)', () => {
     await send(t.ada, env('Ada', toDee, 'handoff', 'os2'));
     expect((await claim(t.key, 'mac-a')).json.rings).toHaveLength(1);
     expect((await claim(t.key, 'mac-a')).json.rings).toEqual([]);
-    expect(rings(t.teamId)[0]!.state).toBe('done');
+    expect((await rings(t.teamId))[0]!.state).toBe('done');
   });
 
   it('a ring answered meanwhile, or too old to matter, is claimed without a banner', async () => {
@@ -9752,7 +9839,7 @@ describe('the doorbell (ADR 443)', () => {
     await send(t.ada, env('Ada', toDee, 'handoff', 'os5'));
     server.db.prepare("UPDATE doorbell_rings SET created_at = 0 WHERE act_id = 'os5'").run();
     expect((await claim(t.key, 'mac-a')).json.rings).toEqual([]);
-    expect(rings(t.teamId).every((r) => r.state === 'done')).toBe(true);
+    expect((await rings(t.teamId)).every((r) => r.state === 'done')).toBe(true);
   });
 
   it('the host reports a banner as doorbell.surfaced {surface: os}; another host cannot', async () => {
@@ -9771,7 +9858,7 @@ describe('the doorbell (ADR 443)', () => {
       t.key,
     );
     expect(ok.status).toBe(200);
-    expect(surfaced(t.teamId).map((r) => JSON.parse(r.detail!))).toEqual([
+    expect((await surfaced(t.teamId)).map((r) => JSON.parse(r.detail!))).toEqual([
       { surface: 'os', ok: true },
     ]);
   });
@@ -9782,14 +9869,16 @@ describe('the doorbell (ADR 443)', () => {
     await send(t.ada, env('Ada', toDee, 'handoff', 'os8'));
     server.db.prepare("UPDATE doorbell_rings SET created_at = 0 WHERE act_id = 'os8'").run();
     const [ring] = (await claim(t.key, 'mac-a')).json.rings;
-    const stale = listRings(server.db, t.teamId).find((r) => r.act_id === 'os8')!;
-    const report = (id: string) =>
-      post(`/teams/dawn/doorbell/rings/${id}/surfaced`, { host: 'mac-a', ok: true }, t.key);
+    const stale = (await listRings(sqliteDriver(server.db), t.teamId)).find(
+      (r) => r.act_id === 'os8',
+    )!;
+    const report = async (id: string) =>
+      await post(`/teams/dawn/doorbell/rings/${id}/surfaced`, { host: 'mac-a', ok: true }, t.key);
     expect((await report(ring.id)).status).toBe(200);
     expect((await report(ring.id)).status).toBe(409);
     expect((await report(stale.id)).status).toBe(409);
     expect((await report('%E0%A4%A')).status).toBe(400);
-    expect(surfaced(t.teamId)).toHaveLength(1);
+    expect(await surfaced(t.teamId)).toHaveLength(1);
   });
 
   it('the ring poll refuses a caller without the team agent key', async () => {
@@ -9913,8 +10002,10 @@ describe('human credential rotate-in-place', () => {
   it('writes one `credential.rotate` audit row — and never the secret', async () => {
     await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
     const res = await post(rotatePath('dawn', 'nick'), {});
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    const rows = listAudit(server.db, teamId).filter((r) => r.action === 'credential.rotate');
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    const rows = (await listAudit(sqliteDriver(server.db), teamId)).filter(
+      (r) => r.action === 'credential.rotate',
+    );
     expect(rows).toHaveLength(1);
     expect(rows[0]!.target).toBe('nick');
     expect(rows[0]!.result).toBe('allow');
@@ -9934,11 +10025,18 @@ describe('human credential rotate-in-place', () => {
     expect(res.status).toBe(400);
     expect(res.json.error.message).toMatch(/agent seat/i);
     // Nothing was minted: Ada still has no credential, so nothing new authenticates as her.
-    const ada = getMemberByName(server.db, getTeamBySlug(server.db, 'dawn')!.id, 'Ada')!;
+    const ada = (await getMemberByName(
+      sqliteDriver(server.db),
+      (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id,
+      'Ada',
+    ))!;
     expect(ada.credential_hash).toBeNull();
-    const rows = listAudit(server.db, getTeamBySlug(server.db, 'dawn')!.id).filter(
-      (r) => r.action === 'credential.rotate',
-    );
+    const rows = (
+      await listAudit(
+        sqliteDriver(server.db),
+        (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id,
+      )
+    ).filter((r) => r.action === 'credential.rotate');
     expect(rows).toHaveLength(0);
   });
 
@@ -9965,7 +10063,7 @@ describe('human credential rotate: off-host requires an admin credential', () =>
   let pbase: string;
 
   beforeEach(async () => {
-    proxied = createServer({ db: openDb(':memory:'), port: 0, trustProxy: true });
+    proxied = createServer({ db: openTestDb(':memory:'), port: 0, trustProxy: true });
     const { port } = await proxied.listen();
     pbase = `http://127.0.0.1:${port}`;
   });
@@ -10008,8 +10106,10 @@ describe('human credential rotate: off-host requires an admin credential', () =>
     expect(byAdmin.json.credential).toMatch(/^mscr_/);
     expect(byAdmin.json.credential).not.toBe(linTok);
 
-    const teamId = getTeamBySlug(proxied.db, 'dawn')!.id;
-    const rows = listAudit(proxied.db, teamId).filter((r) => r.action === 'credential.rotate');
+    const teamId = (await getTeamBySlug(sqliteDriver(proxied.db), 'dawn'))!.id;
+    const rows = (await listAudit(sqliteDriver(proxied.db), teamId)).filter(
+      (r) => r.action === 'credential.rotate',
+    );
     expect(rows).toHaveLength(1);
     // Off-host, the actor is the admin who proved themselves — the local anonymity does not carry over.
     expect(rows[0]!.actor).toBe('nick');
@@ -10104,7 +10204,7 @@ describe('local sign-in identity is refused off this machine (ADR 222)', () => {
 
   beforeEach(async () => {
     process.env['MUSTERD_CONFIG'] = configPath;
-    proxied = createServer({ db: openDb(':memory:'), port: 0, trustProxy: true });
+    proxied = createServer({ db: openTestDb(':memory:'), port: 0, trustProxy: true });
     const { port } = await proxied.listen();
     pbase = `http://127.0.0.1:${port}`;
   });
@@ -10183,23 +10283,27 @@ describe('infra-touch gate (ADR 227 inc 2): GET /teams/:slug/infra-gate', () => 
     return { tok, key: team.json.agent_key as string };
   }
 
-  function holdPlatform(name: string) {
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const m = getMemberByName(server.db, team.id, name)!;
-    setMemberGovernance(server.db, m.id, null, JSON.stringify(GENERALIST_CAPABILITIES), [
-      'platform',
-    ]);
+  async function holdPlatform(name: string) {
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const m = (await getMemberByName(sqliteDriver(server.db), team.id, name))!;
+    await setMemberGovernance(
+      sqliteDriver(server.db),
+      m.id,
+      null,
+      JSON.stringify(GENERALIST_CAPABILITIES),
+      ['platform'],
+    );
   }
 
   it('warns a non-holder agent seat, naming the current holders, and audits infra.touch.warned', async () => {
     const { key } = await seedTeam();
-    holdPlatform('izzo');
+    await holdPlatform('izzo');
     const r = await get('/teams/dawn/infra-gate?verb=restart', { key, seat: 'dolly' });
     expect(r.status).toBe(200);
     expect(r.json.warn.holders).toEqual(['izzo']);
     expect(r.json.warn.text).toContain('izzo holds platform');
     expect(r.json.warn.text).toContain('route an ask');
-    const team = getTeamBySlug(server.db, 'dawn')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
     const rows = server.db
       .prepare(
         "SELECT actor, action, detail FROM audit WHERE team_id = ? AND action = 'infra.touch.warned'",
@@ -10216,8 +10320,8 @@ describe('infra-touch gate (ADR 227 inc 2): GET /teams/:slug/infra-gate', () => 
     // the one message whose whole job is to be trusted enough to redirect someone.
     const { key, tok } = await seedTeam();
     await post('/teams/dawn/members', { name: 'stanley', kind: 'agent' }, tok);
-    holdPlatform('izzo');
-    holdPlatform('stanley');
+    await holdPlatform('izzo');
+    await holdPlatform('stanley');
     const r = await get('/teams/dawn/infra-gate?verb=restart', { key, seat: 'dolly' });
     expect(r.status).toBe(200);
     expect(r.json.warn.holders).toEqual(['izzo', 'stanley']);
@@ -10227,11 +10331,11 @@ describe('infra-touch gate (ADR 227 inc 2): GET /teams/:slug/infra-gate', () => 
 
   it('stays silent for a platform holder — no warn, no audit row', async () => {
     const { key } = await seedTeam();
-    holdPlatform('izzo');
+    await holdPlatform('izzo');
     const r = await get('/teams/dawn/infra-gate?verb=refresh', { key, seat: 'izzo' });
     expect(r.status).toBe(200);
     expect(r.json.warn).toBeNull();
-    const team = getTeamBySlug(server.db, 'dawn')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
     const rows = server.db
       .prepare("SELECT id FROM audit WHERE team_id = ? AND action = 'infra.touch.warned'")
       .all(team.id);
@@ -10240,7 +10344,7 @@ describe('infra-touch gate (ADR 227 inc 2): GET /teams/:slug/infra-gate', () => 
 
   it('stays silent for a human seat — the audience is agents, not the operator in their own shell', async () => {
     const { tok } = await seedTeam();
-    holdPlatform('izzo');
+    await holdPlatform('izzo');
     const r = await get('/teams/dawn/infra-gate?verb=install', tok);
     expect(r.status).toBe(200);
     expect(r.json.warn).toBeNull();

@@ -44,11 +44,13 @@ function reportedFor(ctx: Ctx): Set<string> {
   return set;
 }
 
-function localNodeId(ctx: Ctx, teamId: string): string | null {
+async function localNodeId(ctx: Ctx, teamId: string): Promise<string | null> {
   return (
-    ctx.db
-      .prepare<[string], { node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?')
-      .get(teamId)?.node_id ?? null
+    (
+      await ctx.db.get<{ node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?', [
+        teamId,
+      ])
+    )?.node_id ?? null
   );
 }
 
@@ -221,45 +223,45 @@ export async function pullTeam(
   team: { id: string; slug: string },
   now: number = Date.now(),
 ): Promise<number> {
-  const nodeId = localNodeId(ctx, team.id);
+  const nodeId = await localNodeId(ctx, team.id);
   // Same rule as push.ts: an enrollment is this daemon's only if it names this daemon's node row.
   const record = readNodeState().nodes[team.slug];
   const enrollment = record && record.node_id === nodeId ? record : undefined;
   // A hub that has never sent anything has no node row yet, and it hosts joiners all the same —
   // a hub is defined by who is enrolled WITH it, not by whether it has spoken. (push.ts needs the
   // row because it has nothing to push without one; the fold has plenty to apply.)
-  const isHub = !enrollment && hasEnrolledJoiners(ctx.db, team.id, nodeId ?? '');
+  const isHub = !enrollment && (await hasEnrolledJoiners(ctx.db, team.id, nodeId ?? ''));
   if (!enrollment && !isHub) return 0;
 
-  const cursor = readPullCursor(ctx.db, team.id);
+  const cursor = await readPullCursor(ctx.db, team.id);
   // The hub sends its watermark; folding our own staged log (the loopback arm) reads it from the
   // same table the events came from — either way it describes the log being folded, not this daemon.
   const page: Pick<SyncPullResponse, 'events' | 'nodes' | 'lane_genesis'> = enrollment
     ? await fetchPage(enrollment.hub_url, enrollment.credential, team.slug, cursor)
     : {
-        events: readStaged(ctx.db, team.id, cursor, SYNC_PULL_MAX_BATCH),
+        events: await readStaged(ctx.db, team.id, cursor, SYNC_PULL_MAX_BATCH),
         nodes: [],
-        lane_genesis: laneGenesis(ctx.db, team.id),
+        lane_genesis: await laneGenesis(ctx.db, team.id),
       };
   // Node liveness lands even when the page is empty: a quiet team still needs to know its
   // machines are alive (presence replication §3). The hub reads its own table and folds none.
-  if (page.nodes.length > 0) foldNodeLiveness(ctx.db, team.id, page.nodes);
+  if (page.nodes.length > 0) await foldNodeLiveness(ctx.db, team.id, page.nodes);
   if (page.events.length === 0) return 0;
 
-  const result = foldBatch(ctx.db, team.id, page.events, now, page.lane_genesis);
+  const result = await foldBatch(ctx.db, team.id, page.events, now, page.lane_genesis);
   if (result.stop) {
     reportStop(ctx, team.slug, result.stop);
   } else {
     const reported = reportedFor(ctx);
     for (const key of reported) if (key.startsWith(`${team.slug}:`)) reported.delete(key);
   }
-  // The incident pool is the hub's (ADR 371 §2): a joiner's `blocked_by` report crosses on the
+  // The incident pool is the hub's async (ADR 371 §2): a joiner's `blocked_by` report crosses on the
   // status_update it rides, and the hub records it HERE, when that message folds — the route-time
   // hook a message posted directly to the hub gets, fired for a folded one. Only the hub: a joiner
   // folding the same message must not count it, or there would be one pool per machine again.
   if (isHub && result.messages.length > 0) {
     try {
-      handleFoldedMessages(ctx, team.slug, result.messages);
+      await handleFoldedMessages(ctx, team.slug, result.messages);
     } catch (err) {
       log.warn({ msg: 'incident_hook_failed', team: team.slug, err: String(err) });
     }
@@ -274,7 +276,7 @@ export function startSyncPull(ctx: Ctx): () => void {
     if (running) return;
     running = true;
     try {
-      for (const team of listActiveTeams(ctx.db)) {
+      for (const team of await listActiveTeams(ctx.db)) {
         try {
           const applied = await pullTeam(ctx, team);
           if (applied > 0) log.info({ msg: 'sync_pulled', team: team.slug, applied });

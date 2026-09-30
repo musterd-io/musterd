@@ -4,7 +4,7 @@ import {
   mergeRoleDefaults,
   seatRoles,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import {
@@ -56,17 +56,17 @@ function resolveLifecycle(
 }
 
 /** Reconcile one team spec into the db. Returns the delta applied + any tokens minted. */
-export function reconcileTeam(db: Database, spec: TeamSpec): ReconcileResult {
+export async function reconcileTeam(db: Driver, spec: TeamSpec): Promise<ReconcileResult> {
   const teamLifecycle = spec.team.lifecycle as Lifecycle;
   // Upsert the team identity (durable fields only; id + created_at preserved).
-  let team = getTeamBySlug(db, spec.team.slug);
+  let team = await getTeamBySlug(db, spec.team.slug);
   // ADR 463 §4.2: sponsored agents live only on daemon-rostered teams. A seat file carries no
   // `sponsored_by`, and reconcile is the account-status writer on a file-backed team, so projecting
   // files over a team that still holds sponsored agents would disable/ban a sponsor with no cascade
   // — and the descendant's own seat file would re-enable it on the same pass. Refuse the whole
   // projection (fail closed: the prior db state stays) until those agents are removed.
   if (team) {
-    const sponsored = listMembers(db, team.id).filter((m) => m.sponsored_by !== null);
+    const sponsored = (await listMembers(db, team.id)).filter((m) => m.sponsored_by !== null);
     if (sponsored.length > 0)
       throw new MusterdError(
         'conflict',
@@ -76,14 +76,14 @@ export function reconcileTeam(db: Database, spec: TeamSpec): ReconcileResult {
       );
   }
   if (!team) {
-    team = createTeam(db, {
+    team = await createTeam(db, {
       slug: spec.team.slug,
       display: spec.team.display ?? null,
       defaultLifecycle: teamLifecycle,
       workingHours: spec.team.working_hours ?? null,
     });
   } else {
-    updateTeam(db, team.id, {
+    await updateTeam(db, team.id, {
       display: spec.team.display ?? null,
       defaultLifecycle: teamLifecycle,
       workingHours: spec.team.working_hours ?? null,
@@ -93,7 +93,7 @@ export function reconcileTeam(db: Database, spec: TeamSpec): ReconcileResult {
   // Project role defaults (ADR 070): upsert the roles present in the files, drop the ones absent.
   const desiredRoles = new Set(spec.roles.map((r) => r.name));
   for (const { name, role } of spec.roles) {
-    upsertRole(
+    await upsertRole(
       db,
       team.id,
       name,
@@ -102,12 +102,12 @@ export function reconcileTeam(db: Database, spec: TeamSpec): ReconcileResult {
       role.summary ?? null,
     );
   }
-  deleteRoles(
+  await deleteRoles(
     db,
     team.id,
-    listRoleNames(db, team.id).filter((n) => !desiredRoles.has(n)),
+    (await listRoleNames(db, team.id)).filter((n) => !desiredRoles.has(n)),
   );
-  const roleDefaults = roleDefaultsMap(db, team.id);
+  const roleDefaults = await roleDefaultsMap(db, team.id);
 
   const result: ReconcileResult = {
     slug: spec.team.slug,
@@ -135,10 +135,10 @@ export function reconcileTeam(db: Database, spec: TeamSpec): ReconcileResult {
       // the daemon to fill; otherwise two machines reconciling the same roster would disagree.
       hue: seat.hue ?? null,
     };
-    const existing = getMemberByName(db, team.id, name); // includes tombstoned rows
+    const existing = await getMemberByName(db, team.id, name); // includes tombstoned rows
     if (!existing) {
       // ADD — the only path (besides REVIVE) that originates a secret.
-      const { token } = addMember(db, team, {
+      const { token } = await addMember(db, team, {
         name,
         kind: fields.kind,
         role: fields.role,
@@ -155,7 +155,7 @@ export function reconcileTeam(db: Database, spec: TeamSpec): ReconcileResult {
       result.minted[name] = token;
     } else if (existing.left_at !== null) {
       // REVIVE — same id (log continuity), re-minted token (deletion was a revocation), back to declared.
-      const token = reviveMember(db, existing.id, fields);
+      const token = await reviveMember(db, existing.id, fields);
       result.revived.push(name);
       result.minted[name] = token;
     } else if (
@@ -169,7 +169,7 @@ export function reconcileTeam(db: Database, spec: TeamSpec): ReconcileResult {
       existing.hue !== (fields.hue ?? null)
     ) {
       // UPDATE in place — id, token_hash, bound_at preserved (live session unaffected).
-      updateMemberIdentity(db, existing.id, fields);
+      await updateMemberIdentity(db, existing.id, fields);
       result.updated.push(name);
     }
   }
@@ -180,12 +180,12 @@ export function reconcileTeam(db: Database, spec: TeamSpec): ReconcileResult {
   // taken straight from the file (provisioned/active are derived at read time, not stored).
   // Count the authority we hold BEFORE projecting, so the check below can tell a LOSS from a team
   // that simply never had an admin. Only the loss is worth saying out loud.
-  const adminsBefore = listMembers(db, team.id).filter(
+  const adminsBefore = (await listMembers(db, team.id)).filter(
     (m) => resolveCapabilities(m).is_admin,
   ).length;
 
   for (const { name, seat } of spec.seats) {
-    const m = getMemberByName(db, team.id, name);
+    const m = await getMemberByName(db, team.id, name);
     if (!m) continue;
     // Multi-role (ADR 227): the ceiling is the restrictive merge of every held role's defaults.
     // Roster truth is validated on the NEW `roles = [...]` form only — an unknown name there is
@@ -208,7 +208,7 @@ export function reconcileTeam(db: Database, spec: TeamSpec): ReconcileResult {
       seat.capabilities ?? {},
     );
     // Admins can only be humans (ADR 145's authority overlay, made explicit by nick 2026-07-28 in
-    // ADR 172). An agent seat file declaring `is_admin` — directly or via an admin role — is
+    // ADR 172)). An agent seat file declaring `is_admin` — directly or via an admin role — is
     // clamped here, at the single writer, and loudly: every admin-gated surface (governance ops,
     // audit reads, risky-lane human review) assumes an admin is a human, so projecting an agent
     // admin would let a seat file quietly manufacture the authority those gates exist to check.
@@ -218,16 +218,16 @@ export function reconcileTeam(db: Database, spec: TeamSpec): ReconcileResult {
         `seat "${name}" is ${m.kind === 'service' ? 'a service' : 'an agent'} declaring is_admin — clamped to false (admins are human-only, ADR 172)`,
       );
     }
-    setMemberGovernance(db, m.id, seat.account_status ?? null, JSON.stringify(caps), held);
+    await setMemberGovernance(db, m.id, seat.account_status ?? null, JSON.stringify(caps), held);
   }
 
   // REMOVE — a live member with no file is soft-tombstoned (never hard-deleted: the message log FK
   // and the audit history require the row to persist; auth already excludes left_at rows).
-  for (const m of listMembers(db, team.id)) {
+  for (const m of await listMembers(db, team.id)) {
     // Observer seats (ADR 063) are runtime watchers, not seat files — never tombstone them for being
     // absent from the roster files.
     if (!desired.has(m.name) && m.observer !== 1) {
-      leaveMember(db, m.id);
+      await leaveMember(db, m.id);
       result.removed.push(m.name);
     }
   }
@@ -240,7 +240,7 @@ export function reconcileTeam(db: Database, spec: TeamSpec): ReconcileResult {
   // clamp above is loud: reconcile's contract is that the files win, so refusing would wedge a
   // roster its owner may have meant to write. Saying so is what was missing.
   if (adminsBefore > 0) {
-    const adminsAfter = listMembers(db, team.id).filter(
+    const adminsAfter = (await listMembers(db, team.id)).filter(
       (m) => resolveCapabilities(m).is_admin,
     ).length;
     if (adminsAfter === 0) {
@@ -276,7 +276,7 @@ export function teamSpecForSlug(roots: string[], slug: string): TeamSpec | null 
  * Reconcile every roster root into the one global projection. A team whose `team.toml` is invalid is
  * skipped with its prior projection intact (fail-closed); db-only teams (no root) are never touched.
  */
-export function reconcileAll(db: Database, roots: string[]): ReconcileResult[] {
+export async function reconcileAll(db: Driver, roots: string[]): Promise<ReconcileResult[]> {
   const results: ReconcileResult[] = [];
   for (const root of roots) {
     let spec: TeamSpec | null = null;
@@ -288,7 +288,7 @@ export function reconcileAll(db: Database, roots: string[]): ReconcileResult[] {
     }
     if (!spec) continue;
     try {
-      const result = reconcileTeam(db, spec);
+      const result = await reconcileTeam(db, spec);
       // SURFACE what the pass found. Until 2026-08-21 nothing did: `errors` was collected here,
       // returned, asserted in tests, and read by no production caller — so a fail-closed skipped
       // seat, the case load.ts calls "never silently dropped", was in fact reported to nobody. Both

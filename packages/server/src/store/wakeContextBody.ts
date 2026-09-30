@@ -1,6 +1,6 @@
 import type { WakeContextContext, WakeContextFetch, WakeContextOpenItem } from '@musterd/protocol';
 import { WAKE_CONTEXT_BUDGET as B } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { getLane } from './lanes.js';
 import { getMemberById } from './members.js';
 import { getMemory } from './memory.js';
@@ -55,26 +55,26 @@ const bytesOf = (v: unknown): number => Buffer.byteLength(JSON.stringify(v), 'ut
 const OPEN_ACTS = ['ask', 'request_help', 'handoff'] as const;
 const TITLE_CHARS = 120;
 
-export function deriveContext(
-  db: Database,
+export async function deriveContext(
+  db: Driver,
   team: { id: string; slug: string },
   recipient: MemberRow,
   target: DeriveTarget,
-): DerivedContext {
+): Promise<DerivedContext> {
   const fetch: WakeContextFetch[] = [];
   const bytes = { memory: 0, thread: 0, lane: 0, open: 0 };
   const context: WakeContextContext = { open: [] };
   const names = new Map<string, string>();
-  const nameOf = (memberId: string): string => {
+  const nameOf = async (memberId: string): Promise<string> => {
     const hit = names.get(memberId);
     if (hit !== undefined) return hit;
-    const name = getMemberById(db, memberId)?.name ?? memberId;
+    const name = (await getMemberById(db, memberId))?.name ?? memberId;
     names.set(memberId, name);
     return name;
   };
 
   // 1. memory — the seat's own note, whole when it fits (≤ 3,072 bytes)
-  const memory = getMemory(db, recipient.id);
+  const memory = await getMemory(db, recipient.id);
   if (memory) {
     const cut = truncateBytes(memory.body, B.memory);
     context.memory = { body: cut.text, truncated: cut.truncated };
@@ -84,26 +84,26 @@ export function deriveContext(
 
   // 2. thread — the last 8 acts of the waking thread, oldest first (≤ 6,144 bytes)
   if (target.threadId !== undefined) {
-    const rows = db
-      .prepare<
-        [string, string, string],
-        MessageRow
-      >(`SELECT * FROM messages WHERE team_id = ? AND (id = ? OR thread_id = ?) ORDER BY ts DESC`)
-      .all(team.id, target.threadId, target.threadId);
-    let acts = rows
-      .slice(0, B.thread_acts)
-      .reverse()
-      .map((r) => {
-        const cut = truncateChars(r.body, B.act_body_chars);
-        return {
-          id: r.id,
-          from: nameOf(r.from_member),
-          act: r.act,
-          ts: r.ts,
-          body: cut.text,
-          truncated: cut.truncated,
-        };
-      });
+    const rows = await db.all<MessageRow>(
+      `SELECT * FROM messages WHERE team_id = ? AND (id = ? OR thread_id = ?) ORDER BY ts DESC`,
+      [team.id, target.threadId, target.threadId],
+    );
+    let acts = await Promise.all(
+      rows
+        .slice(0, B.thread_acts)
+        .reverse()
+        .map(async (r) => {
+          const cut = truncateChars(r.body, B.act_body_chars);
+          return {
+            id: r.id,
+            from: await nameOf(r.from_member),
+            act: r.act,
+            ts: r.ts,
+            body: cut.text,
+            truncated: cut.truncated,
+          };
+        }),
+    );
     let omitted = rows.length - acts.length;
     // Drop the OLDEST first — the newest act is why the seat is awake.
     while (acts.length > 1 && bytesOf({ acts, omitted }) > B.thread) {
@@ -117,15 +117,14 @@ export function deriveContext(
 
   // 3. lane — its detail and the seat's own last word on it (≤ 1,536 bytes)
   if (target.laneId !== undefined) {
-    const lane = getLane(db, team.id, target.laneId, team.slug);
+    const lane = await getLane(db, team.id, target.laneId, team.slug);
     if (lane) {
       const detail = truncateChars(lane.detail ?? '', B.lane_detail_chars);
-      const last = db
-        .prepare<[string, string, string], MessageRow>(
-          `SELECT * FROM messages WHERE team_id = ? AND from_member = ? AND act = 'status_update'
+      const last = await db.get<MessageRow>(
+        `SELECT * FROM messages WHERE team_id = ? AND from_member = ? AND act = 'status_update'
              AND instr(body, ?) > 0 ORDER BY ts DESC LIMIT 1`,
-        )
-        .get(team.id, recipient.id, lane.id);
+        [team.id, recipient.id, lane.id],
+      );
       const status = last ? truncateChars(last.body, B.act_body_chars) : undefined;
       context.lane = {
         detail: detail.text,
@@ -149,9 +148,8 @@ export function deriveContext(
 
   // 4. open ledger — what else is waiting on this seat, oldest first (≤ 12 items, ≤ 2,048 bytes)
   const now = Date.now();
-  const directed = db
-    .prepare<[string, string, ...string[]], MessageRow>(
-      `SELECT m.* FROM messages m
+  const directed = await db.all<MessageRow>(
+    `SELECT m.* FROM messages m
         WHERE m.team_id = ? AND m.to_kind = 'member' AND m.to_member = ?
           AND m.act IN (${OPEN_ACTS.map(() => '?').join(',')})
           AND NOT EXISTS (
@@ -160,30 +158,31 @@ export function deriveContext(
                AND (r.thread_id = m.id OR (m.thread_id IS NOT NULL AND r.thread_id = m.thread_id))
           )
         ORDER BY m.ts ASC`,
-    )
-    .all(team.id, recipient.id, ...OPEN_ACTS);
-  const items: WakeContextOpenItem[] = directed.map((r) => {
-    const meta = JSON.parse(r.meta ?? '{}') as { lane_review?: unknown; lane_handoff?: unknown };
-    const kind: WakeContextOpenItem['kind'] = meta.lane_review
-      ? 'review'
-      : meta.lane_handoff || r.act === 'handoff'
-        ? 'handoff'
-        : (r.act as 'ask' | 'request_help');
-    return {
-      kind,
-      id: r.id,
-      from: nameOf(r.from_member),
-      title: truncateChars(r.body.split('\n')[0] ?? '', TITLE_CHARS).text,
-      age_ms: Math.max(0, now - r.ts),
-    };
-  });
-  const lanes = db
-    .prepare<[string, string], { id: string; title: string; created_at: number }>(
-      `SELECT id, title, created_at FROM lanes
+    [team.id, recipient.id, ...OPEN_ACTS],
+  );
+  const items: WakeContextOpenItem[] = await Promise.all(
+    directed.map(async (r) => {
+      const meta = JSON.parse(r.meta ?? '{}') as { lane_review?: unknown; lane_handoff?: unknown };
+      const kind: WakeContextOpenItem['kind'] = meta.lane_review
+        ? 'review'
+        : meta.lane_handoff || r.act === 'handoff'
+          ? 'handoff'
+          : (r.act as 'ask' | 'request_help');
+      return {
+        kind,
+        id: r.id,
+        from: await nameOf(r.from_member),
+        title: truncateChars(r.body.split('\n')[0] ?? '', TITLE_CHARS).text,
+        age_ms: Math.max(0, now - r.ts),
+      };
+    }),
+  );
+  const lanes = await db.all<{ id: string; title: string; created_at: number }>(
+    `SELECT id, title, created_at FROM lanes
         WHERE team_id = ? AND owner_seat = ? AND state IN ('claimed','active','blocked')
         ORDER BY created_at ASC`,
-    )
-    .all(team.id, recipient.name);
+    [team.id, recipient.name],
+  );
   for (const l of lanes)
     items.push({
       kind: 'lane',

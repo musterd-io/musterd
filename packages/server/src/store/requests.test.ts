@@ -1,163 +1,217 @@
-import { describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { Driver } from '../db/driver.js';
 import { seedDawn } from '../db/seed.js';
+import { withDrivers } from '../db/testing.js';
 import { createRequest, decideRequest, expireRequests, listRequests } from './requests.js';
 
-function setup() {
-  const db = openDb(':memory:');
-  const { teamId } = seedDawn(db);
+let openStore: () => Promise<Driver>;
+
+async function setup() {
+  const db = await openStore();
+  const { teamId } = await seedDawn(db);
   return { db, teamId };
 }
 
-describe('requests store (ADR 076)', () => {
-  it('creates a pending request with surface + a computed expires_at', () => {
-    const { db, teamId } = setup();
-    const r = createRequest(db, teamId, {
-      kind: 'claim',
-      from_session: 's1',
-      target: 'seat:Ada',
-      surface: 'claude-code',
-    });
-    expect(r.status).toBe('pending');
-    expect(r.kind).toBe('claim');
-    expect(r.target).toBe('seat:Ada');
-    expect(r.surface).toBe('claude-code');
-    expect(r.expires_at).toBeGreaterThan(r.ts); // expires_at = ts + 1h
-    // surface defaults to 'cli' when unspecified
-    const d = createRequest(db, teamId, { kind: 'teammate', from_session: 's2', target: null });
-    expect(d.surface).toBe('cli');
+withDrivers('requests', (o) => {
+  // Set per test, not at collection: describe.each collects every driver before any test runs.
+  beforeEach(() => {
+    openStore = o;
   });
 
-  it('carries the claimant model (ADR 101) and refreshes it to the newest collapsed claimer', () => {
-    const { db, teamId } = setup();
-    // A grant-less claim stores its attestation so the approved occupancy isn't born unknown.
-    const r = createRequest(db, teamId, {
-      kind: 'claim',
-      from_session: 's1',
-      target: 'seat:Ada',
-      model: 'claude-opus-4-8',
+  describe('requests store (ADR 076)', async () => {
+    it('creates a pending request with surface + a computed expires_at', async () => {
+      const { db, teamId } = await setup();
+      const r = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's1',
+        target: 'seat:Ada',
+        surface: 'claude-code',
+      });
+      expect(r.status).toBe('pending');
+      expect(r.kind).toBe('claim');
+      expect(r.target).toBe('seat:Ada');
+      expect(r.surface).toBe('claude-code');
+      expect(r.expires_at).toBeGreaterThan(r.ts); // expires_at = ts + 1h
+      // surface defaults to 'cli' when unspecified
+      const d = await createRequest(db, teamId, {
+        kind: 'teammate',
+        from_session: 's2',
+        target: null,
+      });
+      expect(d.surface).toBe('cli');
     });
-    expect(r.model).toBe('claude-opus-4-8');
-    // An un-attested claim stores null (legal).
-    const bare = createRequest(db, teamId, {
-      kind: 'claim',
-      from_session: 's9',
-      target: 'seat:Bo',
-    });
-    expect(bare.model ?? null).toBeNull();
-    // collapseByTarget refreshes the model to the newest claimer (whose session will occupy).
-    const collapsed = createRequest(db, teamId, {
-      kind: 'claim',
-      from_session: 's2',
-      target: 'seat:Ada',
-      model: 'gpt-5.2',
-      collapseByTarget: true,
-    });
-    expect(collapsed.id).toBe(r.id);
-    expect(collapsed.model).toBe('gpt-5.2');
-    // An explicit null from a newer unattested claimer must OVERRIDE, not inherit the stale model.
-    const cleared = createRequest(db, teamId, {
-      kind: 'claim',
-      from_session: 's3',
-      target: 'seat:Ada',
-      model: null,
-      collapseByTarget: true,
-    });
-    expect(cleared.id).toBe(r.id);
-    expect(cleared.model).toBeNull();
-  });
 
-  it('dedups by (team, from_session, target) while open — incl. null target', () => {
-    const { db, teamId } = setup();
-    const a = createRequest(db, teamId, { kind: 'claim', from_session: 's1', target: 'Ada' });
-    const b = createRequest(db, teamId, { kind: 'claim', from_session: 's1', target: 'Ada' });
-    expect(b.id).toBe(a.id); // same open request, not a duplicate
-    const t1 = createRequest(db, teamId, { kind: 'teammate', from_session: 's2', target: null });
-    const t2 = createRequest(db, teamId, { kind: 'teammate', from_session: 's2', target: null });
-    expect(t2.id).toBe(t1.id); // null target dedups too
-    // a different session is a distinct request
-    const other = createRequest(db, teamId, { kind: 'claim', from_session: 's3', target: 'Ada' });
-    expect(other.id).not.toBe(a.id);
-  });
-
-  it('collapseByTarget collapses seat claims across sessions + refreshes the waiter to the newest', () => {
-    const { db, teamId } = setup();
-    const a = createRequest(db, teamId, {
-      kind: 'claim',
-      from_session: 's1',
-      target: 'seat:Ada',
-      surface: 'claude-code',
-      collapseByTarget: true,
+    it('carries the claimant model (ADR 101) and refreshes it to the newest collapsed claimer', async () => {
+      const { db, teamId } = await setup();
+      // A grant-less claim stores its attestation so the approved occupancy isn't born unknown.
+      const r = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's1',
+        target: 'seat:Ada',
+        model: 'claude-opus-4-8',
+      });
+      expect(r.model).toBe('claude-opus-4-8');
+      // An un-attested claim stores null (legal).
+      const bare = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's9',
+        target: 'seat:Bo',
+      });
+      expect(bare.model ?? null).toBeNull();
+      // collapseByTarget refreshes the model to the newest claimer (whose session will occupy).
+      const collapsed = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's2',
+        target: 'seat:Ada',
+        model: 'gpt-5.2',
+        collapseByTarget: true,
+      });
+      expect(collapsed.id).toBe(r.id);
+      expect(collapsed.model).toBe('gpt-5.2');
+      // An explicit null from a newer unattested claimer must OVERRIDE, not inherit the stale model.
+      const cleared = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's3',
+        target: 'seat:Ada',
+        model: null,
+        collapseByTarget: true,
+      });
+      expect(cleared.id).toBe(r.id);
+      expect(cleared.model).toBeNull();
     });
-    // A different session reclaiming the same seat reuses the one open request (no pile-up)...
-    const b = createRequest(db, teamId, {
-      kind: 'claim',
-      from_session: 's2',
-      target: 'seat:Ada',
-      surface: 'cursor',
-      collapseByTarget: true,
-    });
-    expect(b.id).toBe(a.id);
-    expect(listRequests(db, teamId, { pendingOnly: true })).toHaveLength(1);
-    // ...and the waiter pointer is refreshed to the newest claimer so approve delivers to it.
-    expect(b.from_session).toBe('s2');
-    expect(b.surface).toBe('cursor');
-    // A different seat is still its own request.
-    const other = createRequest(db, teamId, {
-      kind: 'claim',
-      from_session: 's3',
-      target: 'seat:Lin',
-      collapseByTarget: true,
-    });
-    expect(other.id).not.toBe(a.id);
-  });
 
-  it('without collapseByTarget, distinct sessions stay distinct (role pools / teammate joins)', () => {
-    const { db, teamId } = setup();
-    const a = createRequest(db, teamId, {
-      kind: 'claim',
-      from_session: 's1',
-      target: 'role:backend',
+    it('dedups by (team, from_session, target) while open — incl. null target', async () => {
+      const { db, teamId } = await setup();
+      const a = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's1',
+        target: 'Ada',
+      });
+      const b = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's1',
+        target: 'Ada',
+      });
+      expect(b.id).toBe(a.id); // same open request, not a duplicate
+      const t1 = await createRequest(db, teamId, {
+        kind: 'teammate',
+        from_session: 's2',
+        target: null,
+      });
+      const t2 = await createRequest(db, teamId, {
+        kind: 'teammate',
+        from_session: 's2',
+        target: null,
+      });
+      expect(t2.id).toBe(t1.id); // null target dedups too
+      // a different session is a distinct request
+      const other = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's3',
+        target: 'Ada',
+      });
+      expect(other.id).not.toBe(a.id);
     });
-    const b = createRequest(db, teamId, {
-      kind: 'claim',
-      from_session: 's2',
-      target: 'role:backend',
+
+    it('collapseByTarget collapses seat claims across sessions + refreshes the waiter to the newest', async () => {
+      const { db, teamId } = await setup();
+      const a = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's1',
+        target: 'seat:Ada',
+        surface: 'claude-code',
+        collapseByTarget: true,
+      });
+      // A different session reclaiming the same seat reuses the one open request (no pile-up)...
+      const b = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's2',
+        target: 'seat:Ada',
+        surface: 'cursor',
+        collapseByTarget: true,
+      });
+      expect(b.id).toBe(a.id);
+      expect(await listRequests(db, teamId, { pendingOnly: true })).toHaveLength(1);
+      // ...and the waiter pointer is refreshed to the newest claimer so approve delivers to it.
+      expect(b.from_session).toBe('s2');
+      expect(b.surface).toBe('cursor');
+      // A different seat is still its own request.
+      const other = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's3',
+        target: 'seat:Lin',
+        collapseByTarget: true,
+      });
+      expect(other.id).not.toBe(a.id);
     });
-    expect(b.id).not.toBe(a.id); // two agents can both wait to join the pool
-  });
 
-  it('decide settles a pending request once; a re-decide is a no-op (null)', () => {
-    const { db, teamId } = setup();
-    const r = createRequest(db, teamId, { kind: 'claim', from_session: 's1', target: 'Ada' });
-    const approved = decideRequest(db, teamId, r.id, 'approved', 'nick');
-    expect(approved?.status).toBe('approved');
-    expect(approved?.decided_by).toBe('nick');
-    // already settled → null
-    expect(decideRequest(db, teamId, r.id, 'denied', 'nick')).toBeNull();
-    // a settled request no longer dedups — a re-claim opens a fresh one
-    const fresh = createRequest(db, teamId, { kind: 'claim', from_session: 's1', target: 'Ada' });
-    expect(fresh.id).not.toBe(r.id);
-  });
+    it('without collapseByTarget, distinct sessions stay distinct (role pools / teammate joins)', async () => {
+      const { db, teamId } = await setup();
+      const a = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's1',
+        target: 'role:backend',
+      });
+      const b = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's2',
+        target: 'role:backend',
+      });
+      expect(b.id).not.toBe(a.id); // two agents can both wait to join the pool
+    });
 
-  it('expireRequests reaps pending requests past the ttl', () => {
-    const { db, teamId } = setup();
-    const r = createRequest(db, teamId, { kind: 'claim', from_session: 's1', target: 'Ada' });
-    // nothing expired yet (expires_at = created_at + 1h, in the future)
-    expect(expireRequests(db, Date.now())).toBe(0);
-    // jump now forward past the stored expires_at
-    const future = Date.now() + 2 * 60 * 60 * 1000;
-    expect(expireRequests(db, future)).toBe(1);
-    const after = listRequests(db, teamId).find((x) => x.id === r.id);
-    expect(after?.status).toBe('expired');
-  });
+    it('decide settles a pending request once; a re-decide is a no-op (null)', async () => {
+      const { db, teamId } = await setup();
+      const r = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's1',
+        target: 'Ada',
+      });
+      const approved = await decideRequest(db, teamId, r.id, 'approved', 'nick');
+      expect(approved?.status).toBe('approved');
+      expect(approved?.decided_by).toBe('nick');
+      // already settled → null
+      expect(await decideRequest(db, teamId, r.id, 'denied', 'nick')).toBeNull();
+      // a settled request no longer dedups — a re-claim opens a fresh one
+      const fresh = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's1',
+        target: 'Ada',
+      });
+      expect(fresh.id).not.toBe(r.id);
+    });
 
-  it('listRequests pendingOnly filters settled/expired', () => {
-    const { db, teamId } = setup();
-    const a = createRequest(db, teamId, { kind: 'claim', from_session: 's1', target: 'Ada' });
-    createRequest(db, teamId, { kind: 'claim', from_session: 's2', target: 'Lin' });
-    decideRequest(db, teamId, a.id, 'denied', 'nick');
-    expect(listRequests(db, teamId)).toHaveLength(2);
-    expect(listRequests(db, teamId, { pendingOnly: true })).toHaveLength(1);
+    it('expireRequests reaps pending requests past the ttl', async () => {
+      const { db, teamId } = await setup();
+      const r = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's1',
+        target: 'Ada',
+      });
+      // nothing expired yet (expires_at = created_at + 1h, in the future)
+      expect(await expireRequests(db, Date.now())).toBe(0);
+      // jump now forward past the stored expires_at
+      const future = Date.now() + 2 * 60 * 60 * 1000;
+      expect(await expireRequests(db, future)).toBe(1);
+      const after = (await listRequests(db, teamId)).find((x) => x.id === r.id);
+      expect(after?.status).toBe('expired');
+    });
+
+    it('listRequests pendingOnly filters settled/expired', async () => {
+      const { db, teamId } = await setup();
+      const a = await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's1',
+        target: 'Ada',
+      });
+      await createRequest(db, teamId, {
+        kind: 'claim',
+        from_session: 's2',
+        target: 'Lin',
+      });
+      await decideRequest(db, teamId, a.id, 'denied', 'nick');
+      expect(await listRequests(db, teamId)).toHaveLength(2);
+      expect(await listRequests(db, teamId, { pendingOnly: true })).toHaveLength(1);
+    });
   });
 });

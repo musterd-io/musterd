@@ -20,8 +20,8 @@ import {
   ResidencyPolicyOverrideSchema,
   ResidencyPolicySchema,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
+import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { appendAudit } from './audit.js';
 import { getCursor } from './cursors.js';
@@ -239,16 +239,17 @@ export function effectiveWakePolicy(
  * waking thread's recent acts, the recipient's own memory — under `context`; the audit that records
  * the read never carries them. An unauthorized target is indistinguishable from a missing one.
  */
-export function buildWakeContext(
-  db: Database,
+export async function buildWakeContext(
+  db: Driver,
   team: { id: string; slug: string },
   recipient: MemberRow,
   request: WakeContextRequest,
-): WakeContextPacket {
+): Promise<WakeContextPacket> {
   if (request.act_id !== undefined) {
-    const row = db
-      .prepare<[string, string], MessageRow>('SELECT * FROM messages WHERE team_id = ? AND id = ?')
-      .get(team.id, request.act_id);
+    const row = await db.get<MessageRow>('SELECT * FROM messages WHERE team_id = ? AND id = ?', [
+      team.id,
+      request.act_id,
+    ]);
     if (!row || row.to_kind !== 'member' || row.to_member !== recipient.id)
       throw new MusterdError('forbidden', 'forbidden wake context target');
     const threadId = row.thread_id ?? row.id;
@@ -257,17 +258,16 @@ export function buildWakeContext(
       lane_review?: { lane?: string };
     };
     const laneId = meta.lane_review?.lane ?? meta.lane_handoff?.lane;
-    const lane = laneId ? getLane(db, team.id, laneId, team.slug) : null;
-    const counts = db
-      .prepare<[string, string, string, string], { participants: number; unread: number }>(
-        `SELECT COUNT(DISTINCT from_member) AS participants,
+    const lane = laneId ? await getLane(db, team.id, laneId, team.slug) : null;
+    const counts = await db.get<{ participants: number; unread: number }>(
+      `SELECT COUNT(DISTINCT from_member) AS participants,
                 SUM(CASE WHEN to_member = ? THEN 1 ELSE 0 END) AS unread
            FROM messages WHERE team_id = ? AND (id = ? OR thread_id = ?)`,
-      )
-      .get(recipient.id, team.id, row.id, threadId);
-    const memory = memoryEnvelope(db, recipient.id);
+      [recipient.id, team.id, row.id, threadId],
+    );
+    const memory = await memoryEnvelope(db, recipient.id);
     const kind = meta.lane_review ? 'review' : meta.lane_handoff ? 'handoff' : 'reply';
-    const derived = deriveContext(db, team, recipient, {
+    const derived = await deriveContext(db, team, recipient, {
       threadId,
       ...(lane ? { laneId: lane.id } : {}),
     });
@@ -303,11 +303,11 @@ export function buildWakeContext(
       delivery: { requirement: 'portable', intended: 'fresh' },
     };
   }
-  const lane = getLane(db, team.id, request.lane_id!, team.slug);
+  const lane = await getLane(db, team.id, request.lane_id!, team.slug);
   if (!lane || lane.owner_seat !== recipient.name)
     throw new MusterdError('forbidden', 'forbidden wake context target');
-  const memory = memoryEnvelope(db, recipient.id);
-  const derived = deriveContext(db, team, recipient, { laneId: lane.id });
+  const memory = await memoryEnvelope(db, recipient.id);
+  const derived = await deriveContext(db, team, recipient, { laneId: lane.id });
   return {
     version: 2,
     wake: { kind: 'work_order', lane_id: lane.id },
@@ -352,8 +352,8 @@ export function toResidency(row: ResidencyRow, teamSlug: string, seatName: strin
  * Returns the row plus the previous enrollment (if any) so the route can revoke the superseded
  * grant and audit the host swap.
  */
-export function enrollResidency(
-  db: Database,
+export async function enrollResidency(
+  db: Driver,
   teamId: string,
   input: {
     member_id: string;
@@ -366,7 +366,7 @@ export function enrollResidency(
      *  wholesale; `{}` = clear back to team defaults (stored as NULL, not `'{}'`). */
     policy?: Record<string, unknown>;
   },
-): { row: ResidencyRow; previous: ResidencyRow | null } {
+): Promise<{ row: ResidencyRow; previous: ResidencyRow | null }> {
   const now = Date.now();
   const policyJson =
     input.policy === undefined
@@ -375,25 +375,26 @@ export function enrollResidency(
         ? null
         : JSON.stringify(input.policy);
   const previous =
-    db
-      .prepare<[string], ResidencyRow>('SELECT * FROM residency WHERE member_id = ?')
-      .get(input.member_id) ?? null;
+    (await db.get<ResidencyRow>('SELECT * FROM residency WHERE member_id = ?', [
+      input.member_id,
+    ])) ?? null;
   if (previous) {
-    db.prepare(
+    await db.run(
       `UPDATE residency SET harness = ?, host = ?, grant_id = ?, authorized_by = ?, policy = ?, updated_at = ?
        WHERE id = ?`,
-    ).run(
-      input.harness,
-      input.host,
-      input.grant_id,
-      input.authorized_by,
-      policyJson === undefined ? previous.policy : policyJson,
-      now,
-      previous.id,
+      [
+        input.harness,
+        input.host,
+        input.grant_id,
+        input.authorized_by,
+        policyJson === undefined ? previous.policy : policyJson,
+        now,
+        previous.id,
+      ],
     );
-    const row = db
-      .prepare<[string], ResidencyRow>('SELECT * FROM residency WHERE id = ?')
-      .get(previous.id)!;
+    const row = (await db.get<ResidencyRow>('SELECT * FROM residency WHERE id = ?', [
+      previous.id,
+    ]))!;
     return { row, previous };
   }
   const row: ResidencyRow = {
@@ -410,10 +411,24 @@ export function enrollResidency(
     created_at: now,
     updated_at: now,
   };
-  db.prepare(
+  await db.run(
     `INSERT INTO residency (id, team_id, member_id, harness, host, grant_id, authorized_by, policy, resumable_harness, resumable_at, created_at, updated_at)
-     VALUES (@id, @team_id, @member_id, @harness, @host, @grant_id, @authorized_by, @policy, @resumable_harness, @resumable_at, @created_at, @updated_at)`,
-  ).run(row);
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      row.id,
+      row.team_id,
+      row.member_id,
+      row.harness,
+      row.host,
+      row.grant_id,
+      row.authorized_by,
+      row.policy,
+      row.resumable_harness,
+      row.resumable_at,
+      row.created_at,
+      row.updated_at,
+    ],
+  );
   return { row, previous: null };
 }
 
@@ -423,36 +438,33 @@ export function enrollResidency(
  * is enrolled (an unenrolled capture updates nothing but the caller still audits it). Only the
  * `start` event lands here — `end` is advisory and audit-only (resumability never depends on it).
  */
-export function recordSessionAttestation(
-  db: Database,
+export async function recordSessionAttestation(
+  db: Driver,
   teamId: string,
   memberId: string,
   harness: string,
   now = Date.now(),
-): boolean {
-  const info = db
-    .prepare(
-      `UPDATE residency SET resumable_harness = ?, resumable_at = ?
+): Promise<boolean> {
+  const info = await db.run(
+    `UPDATE residency SET resumable_harness = ?, resumable_at = ?
         WHERE team_id = ? AND member_id = ?`,
-    )
-    .run(harness, now, teamId, memberId);
+    [harness, now, teamId, memberId],
+  );
   return info.changes > 0;
 }
 
 /** Revoke a seat's enrollment (the `residency off` kill switch). Returns the removed row, or null. */
-export function revokeResidency(
-  db: Database,
+export async function revokeResidency(
+  db: Driver,
   teamId: string,
   memberId: string,
-): ResidencyRow | null {
-  const row = db
-    .prepare<
-      [string, string],
-      ResidencyRow
-    >('SELECT * FROM residency WHERE team_id = ? AND member_id = ?')
-    .get(teamId, memberId);
+): Promise<ResidencyRow | null> {
+  const row = await db.get<ResidencyRow>(
+    'SELECT * FROM residency WHERE team_id = ? AND member_id = ?',
+    [teamId, memberId],
+  );
   if (!row) return null;
-  db.prepare('DELETE FROM residency WHERE id = ?').run(row.id);
+  await db.run('DELETE FROM residency WHERE id = ?', [row.id]);
   return row;
 }
 
@@ -463,8 +475,8 @@ export function revokeResidency(
  * Wake derivation still filters `host === this host`, so the hub holding the row does not become
  * the actuator.
  */
-export function applyFoldedEnrollment(
-  db: Database,
+export async function applyFoldedEnrollment(
+  db: Driver,
   teamId: string,
   input: {
     member_id: string;
@@ -474,8 +486,8 @@ export function applyFoldedEnrollment(
     policy?: Record<string, unknown>;
   },
   now = Date.now(),
-): void {
-  const previous = getResidency(db, teamId, input.member_id);
+): Promise<void> {
+  const previous = await getResidency(db, teamId, input.member_id);
   if (previous) {
     const policyJson =
       input.policy === undefined
@@ -483,13 +495,14 @@ export function applyFoldedEnrollment(
         : Object.keys(input.policy).length === 0
           ? null
           : JSON.stringify(input.policy);
-    db.prepare(
+    await db.run(
       `UPDATE residency SET harness = ?, host = ?, authorized_by = ?, policy = ?, updated_at = ?
        WHERE id = ?`,
-    ).run(input.harness, input.host, input.authorized_by, policyJson, now, previous.id);
+      [input.harness, input.host, input.authorized_by, policyJson, now, previous.id],
+    );
     return;
   }
-  enrollResidency(db, teamId, {
+  await enrollResidency(db, teamId, {
     member_id: input.member_id,
     harness: input.harness,
     host: input.host,
@@ -499,24 +512,24 @@ export function applyFoldedEnrollment(
   });
 }
 
-export function getResidency(db: Database, teamId: string, memberId: string): ResidencyRow | null {
+export async function getResidency(
+  db: Driver,
+  teamId: string,
+  memberId: string,
+): Promise<ResidencyRow | null> {
   return (
-    db
-      .prepare<
-        [string, string],
-        ResidencyRow
-      >('SELECT * FROM residency WHERE team_id = ? AND member_id = ?')
-      .get(teamId, memberId) ?? null
+    (await db.get<ResidencyRow>('SELECT * FROM residency WHERE team_id = ? AND member_id = ?', [
+      teamId,
+      memberId,
+    ])) ?? null
   );
 }
 
-export function listResidency(db: Database, teamId: string): ResidencyRow[] {
-  return db
-    .prepare<
-      [string],
-      ResidencyRow
-    >('SELECT * FROM residency WHERE team_id = ? ORDER BY created_at ASC, id ASC')
-    .all(teamId);
+export async function listResidency(db: Driver, teamId: string): Promise<ResidencyRow[]> {
+  return await db.all<ResidencyRow>(
+    'SELECT * FROM residency WHERE team_id = ? ORDER BY created_at ASC, id ASC',
+    [teamId],
+  );
 }
 
 /**
@@ -540,30 +553,29 @@ export const HOST_STALE_MS = 300_000;
  * `enrolled_host_stale` could only ever appear on a wake report after the wake had failed. Newest
  * wins; an out-of-order old poll never moves a sighting backwards.
  */
-export function recordHostSeen(
-  db: Database,
+export async function recordHostSeen(
+  db: Driver,
   teamId: string,
   host: string,
   now: number,
   /** ADR 463 §2: the member whose host key polled, if any. A team-wide poll never clears it —
    *  a shared label keeps the last sponsor seen there. */
   sponsorId: string | null = null,
-): void {
-  db.prepare(
+): Promise<void> {
+  await db.run(
     `INSERT INTO host_liveness (team_id, host, seen_at, sponsor_id) VALUES (?, ?, ?, ?)
-     ON CONFLICT(team_id, host) DO UPDATE SET seen_at = MAX(seen_at, excluded.seen_at),
-       sponsor_id = COALESCE(excluded.sponsor_id, sponsor_id)`,
-  ).run(teamId, host, now, sponsorId);
+     ON CONFLICT(team_id, host) DO UPDATE SET seen_at = MAX(host_liveness.seen_at, excluded.seen_at),
+       sponsor_id = COALESCE(excluded.sponsor_id, host_liveness.sponsor_id)`,
+    [teamId, host, now, sponsorId],
+  );
 }
 
 /** Every host this team has ever heard from, and when — nearest reading of "is the actuator up". */
-export function listHostSeen(db: Database, teamId: string): Map<string, number> {
-  const rows = db
-    .prepare<
-      [string],
-      { host: string; seen_at: number }
-    >('SELECT host, seen_at FROM host_liveness WHERE team_id = ?')
-    .all(teamId);
+export async function listHostSeen(db: Driver, teamId: string): Promise<Map<string, number>> {
+  const rows = await db.all<{ host: string; seen_at: number }>(
+    'SELECT host, seen_at FROM host_liveness WHERE team_id = ?',
+    [teamId],
+  );
   return new Map(rows.map((r) => [r.host, r.seen_at]));
 }
 
@@ -622,27 +634,27 @@ export function wakeabilityInputs(
   };
 }
 
-export function seatWakeabilityFacts(
-  db: Database,
+export async function seatWakeabilityFacts(
+  db: Driver,
   teamId: string,
   now: number,
-): Map<string, SeatWakeabilityFacts> {
-  const hosts = listHostSeen(db, teamId);
-  const lastFailure = db.prepare<[string, string], { detail: string; ts: number }>(
-    `SELECT detail, ts FROM audit
+): Promise<Map<string, SeatWakeabilityFacts>> {
+  const hosts = await listHostSeen(db, teamId);
+  const LAST_FAILURE = `SELECT detail, ts FROM audit
       WHERE team_id = ? AND action = 'residency.wake_failed' AND target = ?
         ${MINTED_HERE}
-      ORDER BY ts DESC, id DESC LIMIT 1`,
-  );
-  const lastWoke = db.prepare<[string, string], { ts: number; detail: string }>(
-    `SELECT ts, detail FROM audit
+      ORDER BY ts DESC, id DESC LIMIT 1`;
+  const LAST_WOKE = `SELECT ts, detail FROM audit
       WHERE team_id = ? AND action = 'residency.woke' AND target = ?
         ${MINTED_HERE}
-      ORDER BY ts DESC, id DESC LIMIT 1`,
-  );
+      ORDER BY ts DESC, id DESC LIMIT 1`;
+  const lastFailure = (name: string) =>
+    db.get<{ detail: string; ts: number }>(LAST_FAILURE, [teamId, name]);
+  const lastWoke = (name: string) =>
+    db.get<{ ts: number; detail: string }>(LAST_WOKE, [teamId, name]);
   const out = new Map<string, SeatWakeabilityFacts>();
-  for (const r of listResidency(db, teamId)) {
-    const member = getMemberById(db, r.member_id);
+  for (const r of await listResidency(db, teamId)) {
+    const member = await getMemberById(db, r.member_id);
     const seen = hosts.get(r.host);
     // Never heard from ⇒ unknown, and unknown never demotes: a fresh install, an older host build,
     // or a registry entry nobody has polled for yet all read exactly as they did before this table
@@ -659,7 +671,7 @@ export function seatWakeabilityFacts(
       // seat read `resumable`. The enrollment row keeps the true attestation time; only what the
       // roster asserts changes. A resumed wake, or none since the capture, leaves it standing.
       if (resumable_at != null) {
-        const woke = lastWoke.get(teamId, member.name);
+        const woke = await lastWoke(member.name);
         if (woke !== undefined && woke.ts > resumable_at) {
           let session: string | undefined;
           try {
@@ -670,7 +682,7 @@ export function seatWakeabilityFacts(
           if (session === 'fresh') resumable_at = null;
         }
       }
-      const failed = lastFailure.get(teamId, member.name);
+      const failed = await lastFailure(member.name);
       if (failed) {
         let wakeability: string | undefined;
         try {
@@ -679,7 +691,7 @@ export function seatWakeabilityFacts(
           /* unreadable detail is not evidence of anything */
         }
         if (wakeability === 'enrolled_dead_workspace') {
-          const woke = lastWoke.get(teamId, member.name);
+          const woke = await lastWoke(member.name);
           workspace_readable = woke !== undefined && woke.ts > failed.ts;
         }
       }
@@ -696,35 +708,38 @@ export function seatWakeabilityFacts(
 }
 
 /** Member ids enrolled in residency — the roster's `wakeable` flag (`offline · wakeable`). */
-export function listWakeableMemberIds(db: Database, teamId: string): Set<string> {
-  const rows = db
-    .prepare<[string], { member_id: string }>('SELECT member_id FROM residency WHERE team_id = ?')
-    .all(teamId);
+export async function listWakeableMemberIds(db: Driver, teamId: string): Promise<Set<string>> {
+  const rows = await db.all<{ member_id: string }>(
+    'SELECT member_id FROM residency WHERE team_id = ?',
+    [teamId],
+  );
   return new Set(rows.map((r) => r.member_id));
 }
 
 /** A seat's live (unexpired, unreported) lease, if any — the mutual-exclusion read. */
-function liveLease(db: Database, memberId: string, now: number): WakeLeaseRow | null {
+async function liveLease(db: Driver, memberId: string, now: number): Promise<WakeLeaseRow | null> {
   return (
-    db
-      .prepare<
-        [string, number],
-        WakeLeaseRow
-      >("SELECT * FROM wake_leases WHERE member_id = ? AND status = 'leased' AND expires_at > ? LIMIT 1")
-      .get(memberId, now) ?? null
+    (await db.get<WakeLeaseRow>(
+      "SELECT * FROM wake_leases WHERE member_id = ? AND status = 'leased' AND expires_at > ? LIMIT 1",
+      [memberId, now],
+    )) ?? null
   );
 }
 
 /** Completed wake actuations (reported or expired-as-failed) for a seat since `sinceTs` — the
  *  derived rate-policy read (ADR 131 §4: `residency.woke`/`wake_failed` rows ARE the rate state). */
-function wakesSince(db: Database, teamId: string, seatName: string, sinceTs: number): number {
-  const row = db
-    .prepare<[string, string, number], { n: number }>(
-      `SELECT COUNT(*) AS n FROM audit
+async function wakesSince(
+  db: Driver,
+  teamId: string,
+  seatName: string,
+  sinceTs: number,
+): Promise<number> {
+  const row = await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM audit
         WHERE team_id = ? AND action IN ('residency.woke','residency.wake_failed')
           AND target = ? AND ts > ? ${MINTED_HERE}`,
-    )
-    .get(teamId, seatName, sinceTs);
+    [teamId, seatName, sinceTs],
+  );
   return row?.n ?? 0;
 }
 
@@ -736,27 +751,31 @@ function wakesSince(db: Database, teamId: string, seatName: string, sinceTs: num
  *  same local-session reason, broken by a different reason, by a woke/failed wake after it, or by a
  *  gap longer than the cap plus the base (the session closed and a later one opened). The window is
  *  base × 2^(streak − 1), capped. Every other reason keeps the flat base window. */
-function deferralSnoozeUntil(db: Database, teamId: string, seatName: string): number | null {
-  const rows = db
-    .prepare<[string, string, string, number], { ts: number; reason: string }>(
-      `SELECT ts, COALESCE(json_extract(detail, '$.reason'), '') AS reason FROM audit
+async function deferralSnoozeUntil(
+  db: Driver,
+  teamId: string,
+  seatName: string,
+): Promise<number | null> {
+  const rows = await db.all<{ ts: number; reason: string }>(
+    `SELECT ts, COALESCE(json_extract(detail, '$.reason'), '') AS reason FROM audit
         WHERE team_id = ? AND action = 'residency.wake_deferred'
           AND target = ? ${MINTED_HERE}
           AND COALESCE(json_extract(detail, '$.reason'), '') <> ?
         ORDER BY ts DESC LIMIT ?`,
-    )
-    .all(teamId, seatName, WAKE_DEFER_ACTUATOR_RESTART, DEFER_STREAK_SCAN);
+    [teamId, seatName, WAKE_DEFER_ACTUATOR_RESTART, DEFER_STREAK_SCAN],
+  );
   const newest = rows[0];
   if (!newest) return null;
   if (!LOCAL_SESSION_DEFER_REASONS.includes(newest.reason)) return newest.ts + WAKE_DEFER_SNOOZE_MS;
   const lastWake =
-    db
-      .prepare<[string, string], { ts: number | null }>(
+    (
+      await db.get<{ ts: number | null }>(
         `SELECT MAX(ts) AS ts FROM audit
           WHERE team_id = ? AND action IN ('residency.woke','residency.wake_failed')
             AND target = ? ${MINTED_HERE}`,
+        [teamId, seatName],
       )
-      .get(teamId, seatName)?.ts ?? 0;
+    )?.ts ?? 0;
   let streak = 1;
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i]!;
@@ -770,26 +789,24 @@ function deferralSnoozeUntil(db: Database, teamId: string, seatName: string): nu
 }
 
 /** Actuation attempts recorded for one act (woke + failed) — drives the per-act attempt cap. */
-function attemptsForAct(db: Database, teamId: string, actId: string): number {
-  const row = db
-    .prepare<[string, string], { n: number }>(
-      `SELECT COUNT(*) AS n FROM audit
+async function attemptsForAct(db: Driver, teamId: string, actId: string): Promise<number> {
+  const row = await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM audit
         WHERE team_id = ? AND action IN ('residency.woke','residency.wake_failed')
           AND json_extract(detail, '$.act') = ? ${MINTED_HERE}`,
-    )
-    .get(teamId, actId);
+    [teamId, actId],
+  );
   return row?.n ?? 0;
 }
 
 /** Has this act already been declared exhausted? (One terminal row per act, ever.) */
-function isExhausted(db: Database, teamId: string, actId: string): boolean {
-  const row = db
-    .prepare<[string, string], { one: number }>(
-      `SELECT 1 AS one FROM audit
+async function isExhausted(db: Driver, teamId: string, actId: string): Promise<boolean> {
+  const row = await db.get<{ one: number }>(
+    `SELECT 1 AS one FROM audit
         WHERE team_id = ? AND action = 'residency.wake_exhausted'
           AND json_extract(detail, '$.act') = ? ${MINTED_HERE} LIMIT 1`,
-    )
-    .get(teamId, actId);
+    [teamId, actId],
+  );
   return row != null;
 }
 
@@ -798,19 +815,18 @@ function isExhausted(db: Database, teamId: string, actId: string): boolean {
  * or null if it never has (ADR 434 §b). A `wake_failed` is deliberately not counted: a spawn that
  * never ran did not spend the act, and the attempt cap still governs those.
  */
-function lastWokeForAct(
-  db: Database,
+async function lastWokeForAct(
+  db: Driver,
   teamId: string,
   seatName: string,
   actId: string,
-): number | null {
-  const row = db
-    .prepare<[string, string, string], { ts: number }>(
-      `SELECT MAX(ts) AS ts FROM audit
+): Promise<number | null> {
+  const row = await db.get<{ ts: number }>(
+    `SELECT MAX(ts) AS ts FROM audit
         WHERE team_id = ? AND action = 'residency.woke' AND target = ?
           AND json_extract(detail, '$.act') = ? ${MINTED_HERE}`,
-    )
-    .get(teamId, seatName, actId);
+    [teamId, seatName, actId],
+  );
   return row?.ts ?? null;
 }
 
@@ -819,23 +835,22 @@ function lastWokeForAct(
  * `sinceTs`? That is what makes a spent act live again (ADR 434 §b): the sender nudging, a peer
  * adding to the exchange. The seat's own later turn is not a reason to wake the seat.
  */
-function threadReopenedSince(
-  db: Database,
+async function threadReopenedSince(
+  db: Driver,
   teamId: string,
   memberId: string,
   actId: string,
   sinceTs: number,
-): boolean {
-  const row = db
-    .prepare<[string, string, string, number], { one: number }>(
-      `SELECT 1 AS one FROM messages x
+): Promise<boolean> {
+  const row = await db.get<{ one: number }>(
+    `SELECT 1 AS one FROM messages x
          JOIN messages a ON a.id = ?
         WHERE x.team_id = ? AND x.from_member != ? AND x.created_at > ?
           AND (x.thread_id = COALESCE(a.thread_id, a.id)
                OR x.in_reply_to = a.id)
         LIMIT 1`,
-    )
-    .get(actId, teamId, memberId, sinceTs);
+    [actId, teamId, memberId, sinceTs],
+  );
   return row != null;
 }
 
@@ -850,25 +865,26 @@ function threadReopenedSince(
  * wake per window, ahead of anything current. An enrollment says "from now"; the enroll response
  * reports what it left behind so the operator can re-send what still matters.
  */
-export function wakeHorizon(db: Database, teamId: string, seatName: string): number | null {
-  const row = db
-    .prepare<[string, string], { ts: number }>(
-      `SELECT MAX(ts) AS ts FROM audit
+export async function wakeHorizon(
+  db: Driver,
+  teamId: string,
+  seatName: string,
+): Promise<number | null> {
+  const row = await db.get<{ ts: number }>(
+    `SELECT MAX(ts) AS ts FROM audit
         WHERE team_id = ? AND action = 'residency.enrolled' AND target = ?
           AND json_extract(detail, '$.previous_host') IS NULL`,
-    )
-    .get(teamId, seatName);
+    [teamId, seatName],
+  );
   return row?.ts ?? null;
 }
 
 /** Receipt time of one act, for the horizon test; null for an unknown id. */
-function actReceivedAt(db: Database, teamId: string, actId: string): number | null {
-  const row = db
-    .prepare<
-      [string, string],
-      { created_at: number }
-    >('SELECT created_at FROM messages WHERE team_id = ? AND id = ?')
-    .get(teamId, actId);
+async function actReceivedAt(db: Driver, teamId: string, actId: string): Promise<number | null> {
+  const row = await db.get<{ created_at: number }>(
+    'SELECT created_at FROM messages WHERE team_id = ? AND id = ?',
+    [teamId, actId],
+  );
   return row?.created_at ?? null;
 }
 
@@ -972,38 +988,36 @@ function loopEdgeOf(candidate: WakeCandidate): LoopEdge | null {
   return null;
 }
 
-function workOrderEdgeFailureCount(
-  db: Database,
+async function workOrderEdgeFailureCount(
+  db: Driver,
   teamId: string,
   laneId: string,
   edge: LoopEdge,
-): number {
-  const row = db
-    .prepare<[string, string, string], { n: number }>(
-      `SELECT COUNT(*) AS n FROM audit
+): Promise<number> {
+  const row = await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM audit
         WHERE team_id = ? AND action = 'residency.wake_failed'
           AND json_extract(detail, '$.lane_id') = ?
           AND json_extract(detail, '$.edge') = ? ${MINTED_HERE}`,
-    )
-    .get(teamId, laneId, edge);
+    [teamId, laneId, edge],
+  );
   return row?.n ?? 0;
 }
 
 /** ADR 306: successful wakes already spent on this (lane, edge) — the succeeding-chain bound. */
-function workOrderEdgeWokeCount(
-  db: Database,
+async function workOrderEdgeWokeCount(
+  db: Driver,
   teamId: string,
   laneId: string,
   edge: LoopEdge,
-): number {
-  const row = db
-    .prepare<[string, string, string], { n: number }>(
-      `SELECT COUNT(*) AS n FROM audit
+): Promise<number> {
+  const row = await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM audit
         WHERE team_id = ? AND action = 'residency.woke'
           AND json_extract(detail, '$.lane_id') = ?
           AND json_extract(detail, '$.edge') = ? ${MINTED_HERE}`,
-    )
-    .get(teamId, laneId, edge);
+    [teamId, laneId, edge],
+  );
   return row?.n ?? 0;
 }
 
@@ -1013,47 +1027,43 @@ function workOrderEdgeWokeCount(
  * heartbeat that burns spend while nothing changed). No prior woke ⇒ nothing to have stalled since,
  * so the first firing is always permitted.
  */
-function laneMovedSinceLastWoke(
-  db: Database,
+async function laneMovedSinceLastWoke(
+  db: Driver,
   teamId: string,
   laneId: string,
   edge: LoopEdge,
-): boolean {
-  const last = db
-    .prepare<[string, string, string], { ts: number }>(
-      `SELECT ts FROM audit
+): Promise<boolean> {
+  const last = await db.get<{ ts: number }>(
+    `SELECT ts FROM audit
         WHERE team_id = ? AND action = 'residency.woke'
           AND json_extract(detail, '$.lane_id') = ? ${MINTED_HERE}
           AND json_extract(detail, '$.edge') = ?
         ORDER BY ts DESC, id DESC LIMIT 1`,
-    )
-    .get(teamId, laneId, edge);
+    [teamId, laneId, edge],
+  );
   if (!last) return true;
-  const lane = db
-    .prepare<
-      [string, string],
-      { updated_at: number }
-    >('SELECT updated_at FROM lanes WHERE team_id = ? AND id = ?')
-    .get(teamId, laneId);
+  const lane = await db.get<{ updated_at: number }>(
+    'SELECT updated_at FROM lanes WHERE team_id = ? AND id = ?',
+    [teamId, laneId],
+  );
   if (!lane) return false;
   return lane.updated_at > last.ts;
 }
 
-function workOrderEdgeStillTrue(
-  db: Database,
+async function workOrderEdgeStillTrue(
+  db: Driver,
   teamId: string,
   laneId: string,
   edge: LoopEdge,
-): boolean {
-  const row = db
-    .prepare<[string, string, string], { detail: string }>(
-      `SELECT detail FROM audit
+): Promise<boolean> {
+  const row = await db.get<{ detail: string }>(
+    `SELECT detail FROM audit
         WHERE team_id = ? AND action = 'residency.wake_failed'
           AND json_extract(detail, '$.lane_id') = ? ${MINTED_HERE}
           AND json_extract(detail, '$.edge') = ?
         ORDER BY ts DESC, id DESC LIMIT 1`,
-    )
-    .get(teamId, laneId, edge);
+    [teamId, laneId, edge],
+  );
   if (!row) return false;
   let parsed: { wakeability?: string };
   try {
@@ -1119,15 +1129,14 @@ function isResumeEligible(
  * (ADR 191 work_order derivation / ADR 192 vocab). Oldest first. Deliberately NOT folded into
  * `openDirectedLedger` — arbitrary asks stay non-wakeable; only this board edge spends.
  */
-function dueReviewWorkOrders(
-  db: Database,
+async function dueReviewWorkOrders(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   member: MemberRow,
-): WakeCandidate[] {
-  const rows = db
-    .prepare<[string, string], MessageRow>(
-      `SELECT m.* FROM messages m
+): Promise<WakeCandidate[]> {
+  const rows = await db.all<MessageRow>(
+    `SELECT m.* FROM messages m
         WHERE m.team_id = ?
           AND m.act = 'ask'
           AND m.to_kind = 'member'
@@ -1142,8 +1151,8 @@ function dueReviewWorkOrders(
              WHERE v.team_id = m.team_id AND v.act = 'resolve'
                AND v.thread_id = COALESCE(m.thread_id, m.id))
         ORDER BY m.created_at ASC`,
-    )
-    .all(teamId, member.id);
+    [teamId, member.id],
+  );
   const out: WakeCandidate[] = [];
   for (const row of rows) {
     let laneId: string | undefined;
@@ -1154,9 +1163,9 @@ function dueReviewWorkOrders(
       continue;
     }
     if (!laneId) continue;
-    const lane = getLane(db, teamId, laneId, teamSlug);
+    const lane = await getLane(db, teamId, laneId, teamSlug);
     if (!lane || !isAwaitingAcceptance(lane.state)) continue;
-    const sender = getMemberById(db, row.from_member);
+    const sender = await getMemberById(db, row.from_member);
     out.push({
       act_id: row.id,
       act: row.act,
@@ -1175,15 +1184,14 @@ function dueReviewWorkOrders(
  * into inbox candidates — when the dispatch loop is on they become work_orders; when off they
  * still wake as reply doorbells via `dueCandidates` / `openDirectedLedger`.
  */
-function dueDispatchHandoffWorkOrders(
-  db: Database,
+async function dueDispatchHandoffWorkOrders(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   member: MemberRow,
-): WakeCandidate[] {
-  const rows = db
-    .prepare<[string, string], MessageRow>(
-      `SELECT m.* FROM messages m
+): Promise<WakeCandidate[]> {
+  const rows = await db.all<MessageRow>(
+    `SELECT m.* FROM messages m
         WHERE m.team_id = ?
           AND m.act = 'handoff'
           AND m.to_kind = 'member'
@@ -1198,8 +1206,8 @@ function dueDispatchHandoffWorkOrders(
              WHERE v.team_id = m.team_id AND v.act = 'resolve'
                AND v.thread_id = COALESCE(m.thread_id, m.id))
         ORDER BY m.created_at ASC`,
-    )
-    .all(teamId, member.id);
+    [teamId, member.id],
+  );
   const out: WakeCandidate[] = [];
   for (const row of rows) {
     let laneId: string | undefined;
@@ -1210,10 +1218,10 @@ function dueDispatchHandoffWorkOrders(
       continue;
     }
     if (!laneId) continue;
-    const lane = getLane(db, teamId, laneId, teamSlug);
+    const lane = await getLane(db, teamId, laneId, teamSlug);
     if (!lane || lane.owner_seat !== member.name) continue;
     if (isAwaitingAcceptance(lane.state) || LANE_TERMINAL_STATES.has(lane.state)) continue;
-    const sender = getMemberById(db, row.from_member);
+    const sender = await getMemberById(db, row.from_member);
     out.push({
       act_id: row.id,
       act: row.act,
@@ -1231,14 +1239,14 @@ function dueDispatchHandoffWorkOrders(
  * Board-owned claimed/active lanes with no triggering act (ADR 199 continuation edge).
  * Never wakes for unowned open work.
  */
-function dueDispatchContinuationWorkOrders(
-  db: Database,
+async function dueDispatchContinuationWorkOrders(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   member: MemberRow,
-): WakeCandidate[] {
+): Promise<WakeCandidate[]> {
   const out: WakeCandidate[] = [];
-  for (const lane of listLanes(db, teamId, teamSlug, { owner: member.name })) {
+  for (const lane of await listLanes(db, teamId, teamSlug, { owner: member.name })) {
     if (lane.state !== 'claimed' && lane.state !== 'active') continue;
     if (isAwaitingAcceptance(lane.state) || LANE_TERMINAL_STATES.has(lane.state)) continue;
     out.push({
@@ -1253,13 +1261,11 @@ function dueDispatchContinuationWorkOrders(
 
 /** Was this act sent from a provenance-`wake` occupancy? Server-stamped at insert (v21) — the
  *  ping-pong demotion read (ADR 131 §4). Null (pre-v21 rows, no live presence at send) ⇒ not wake. */
-function sentFromWake(db: Database, actId: string): boolean {
-  const row = db
-    .prepare<
-      [string],
-      { from_provenance: string | null }
-    >('SELECT from_provenance FROM messages WHERE id = ?')
-    .get(actId);
+async function sentFromWake(db: Driver, actId: string): Promise<boolean> {
+  const row = await db.get<{ from_provenance: string | null }>(
+    'SELECT from_provenance FROM messages WHERE id = ?',
+    [actId],
+  );
   return row?.from_provenance === 'wake';
 }
 
@@ -1277,8 +1283,8 @@ function sentFromWake(db: Database, actId: string): boolean {
  * lane (kept as a candidate there, ahead of the ledger's, since it is still interrupt-class), so
  * machine-to-machine chains run at cooldown cadence under the caps, without lineage tracking.
  */
-function dueCandidates(
-  db: Database,
+async function dueCandidates(
+  db: Driver,
   teamSlug: string,
   member: MemberRow,
   lanes: {
@@ -1303,8 +1309,8 @@ function dueCandidates(
    * Passed in rather than memoised behind a module-level cache on purpose: the lifetime that is
    * correct here is exactly one poll transaction, and a parameter cannot outlive it or go stale.
    */
-  ledger: () => ActDelivery[],
-): WakeCandidate[] {
+  ledger: () => Promise<ActDelivery[]>,
+): Promise<WakeCandidate[]> {
   const immediate: WakeCandidate[] = [];
   const batched: WakeCandidate[] = [];
   const seen = new Set<string>();
@@ -1314,22 +1320,24 @@ function dueCandidates(
   // life of this derivation only: membership cannot change inside the poll's transaction, and the
   // map dies with the call, so there is no cache to invalidate.
   const names = new Map<string, string | undefined>();
-  const nameOf = (id: string): string | undefined => {
-    if (!names.has(id)) names.set(id, getMemberById(db, id)?.name);
+  const nameOf = async (id: string): Promise<string | undefined> => {
+    if (!names.has(id)) names.set(id, (await getMemberById(db, id))?.name);
     return names.get(id);
   };
 
   if (lanes.immediate || lanes.batched) {
-    const cursor = getCursor(db, member.id);
+    const cursor = await getCursor(db, member.id);
     // Only the shapes `pendingInterrupts` can use — the seat's unread depth is not this poll's
     // business, and it is the last term that still grew with it.
-    const rows = listInterruptCandidates(db, member, { cursorTs: cursor.last_read_ts });
-    const envelopes = rows.map((r) =>
-      rowToEnvelope(
-        r,
-        teamSlug,
-        nameOf(r.from_member) ?? '?',
-        r.to_member ? (nameOf(r.to_member) ?? null) : null,
+    const rows = await listInterruptCandidates(db, member, { cursorTs: cursor.last_read_ts });
+    const envelopes = await Promise.all(
+      rows.map(async (r) =>
+        rowToEnvelope(
+          r,
+          teamSlug,
+          (await nameOf(r.from_member)) ?? '?',
+          r.to_member ? ((await nameOf(r.to_member)) ?? null) : null,
+        ),
       ),
     );
     // The ONLY opt-in this rail makes to the shared predicate. `obligations` and `huddles` stay off
@@ -1341,7 +1349,7 @@ function dueCandidates(
     })) {
       if (seen.has(env.id)) continue;
       seen.add(env.id);
-      const demoted = sentFromWake(db, env.id);
+      const demoted = await sentFromWake(db, env.id);
       const candidate: WakeCandidate = {
         act_id: env.id,
         act: env.act,
@@ -1362,7 +1370,7 @@ function dueCandidates(
   }
 
   if (lanes.batched) {
-    for (const delivery of ledger()) {
+    for (const delivery of await ledger()) {
       if (seen.has(delivery.id)) continue;
       const mine = delivery.recipients.find((r) => r.seat === member.name);
       if (!mine || mine.state === 'answered') continue;
@@ -1390,7 +1398,7 @@ function dueCandidates(
   // common case at idle, and pure cost. An earlier fix narrowed the HYDRATION of this window (see
   // the note below) but left the query itself running unconditionally.
   if (due.length === 0) return due;
-  const window = listTeamMessages(db, member.team_id, {
+  const window = await listTeamMessages(db, member.team_id, {
     forMemberId: member.id,
     limit: DEFERRAL_SCAN_LIMIT,
   });
@@ -1399,25 +1407,27 @@ function dueCandidates(
   // that scales with the window rather than with what is due starves the event loop for every other
   // request as the log grows (measured: 840ms and 8000+ lookups at idle, `/health` timing out behind
   // it). Same window, same limit, same order — only the hydration is narrowed.
-  const hydrate = (rows: MessageRow[]): Envelope[] =>
-    rows.map((r) =>
-      rowToEnvelope(
-        r,
-        teamSlug,
-        nameOf(r.from_member) ?? '?',
-        r.to_member ? (nameOf(r.to_member) ?? null) : null,
+  const hydrate = (rows: MessageRow[]): Promise<Envelope[]> =>
+    Promise.all(
+      rows.map(async (r) =>
+        rowToEnvelope(
+          r,
+          teamSlug,
+          (await nameOf(r.from_member)) ?? '?',
+          r.to_member ? ((await nameOf(r.to_member)) ?? null) : null,
+        ),
       ),
     );
   // `deferrals` reads exactly one shape — the seat's OWN `wait` acts — so the rest of the window is
   // hydrated for nothing on the overwhelmingly common path where the seat has deferred nothing.
   const held = deferrals(
-    hydrate(window.filter((r) => r.act === 'wait' && r.from_member === member.id)),
+    await hydrate(window.filter((r) => r.act === 'wait' && r.from_member === member.id)),
     member.name,
   );
   if (held.size === 0) return due;
   // A deferral IS held: `raisedDeferrals` reads the whole window (it needs every act on the deferred
   // subjects, and their threads), so the full hydration is paid here — where it is load-bearing.
-  const scan = hydrate(window);
+  const scan = await hydrate(window);
 
   // ADR 214 (ADR 211 inc 2): once a deferral's condition fires the act is pending again, and
   // `raised_deferral_wakes`
@@ -1492,20 +1502,19 @@ export function hostMayServe(scope: HostScope, member: MemberRow): boolean {
  * for it. Marks it taken in the same call, so a second poll never derives it again. Runs inside
  * the wake-lease transaction. No act backs it (no fake directed act is written).
  */
-export function takeProvisionedWake(
-  db: Database,
+export async function takeProvisionedWake(
+  db: Driver,
   teamId: string,
   memberId: string,
   now = Date.now(),
-): { id: string; sponsor_id: string } | undefined {
-  const row = db
-    .prepare<[string, string], { id: string; sponsor_id: string }>(
-      `SELECT id, sponsor_id FROM host_provisions WHERE team_id = ? AND member_id = ?
+): Promise<{ id: string; sponsor_id: string } | undefined> {
+  const row = await db.get<{ id: string; sponsor_id: string }>(
+    `SELECT id, sponsor_id FROM host_provisions WHERE team_id = ? AND member_id = ?
          AND state = 'ready' AND first_wake_at IS NULL ORDER BY ready_at ASC LIMIT 1`,
-    )
-    .get(teamId, memberId);
+    [teamId, memberId],
+  );
   if (!row) return undefined;
-  db.prepare('UPDATE host_provisions SET first_wake_at = ? WHERE id = ?').run(now, row.id);
+  await db.run('UPDATE host_provisions SET first_wake_at = ? WHERE id = ?', [now, row.id]);
   return row;
 }
 
@@ -1517,205 +1526,204 @@ function composeProvisionedLine(seat: string, teamSlug: string, sponsor: string)
   );
 }
 
-export function claimWakeLeases(
-  db: Database,
+export async function claimWakeLeases(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   host: string,
   presenceTimeoutMs: number,
   now = Date.now(),
   scope: HostScope = TEAM_WIDE_HOST,
-): WakeOrder[] {
-  const tx = db.transaction((): WakeOrder[] => {
-    const orders: WakeOrder[] = [];
-    const reclaimable = listReclaimableMemberIds(db, teamId, now);
-    const enrollments = listResidency(db, teamId).filter((r) => r.host === host);
-    const teamPolicy = getPolicy(db, teamId);
-    // One ledger read for the whole poll, and only if some seat actually reaches the batched lane —
-    // a team where every enrolled seat is on the interrupt lane, or is inside its cooldown, pays
-    // nothing. Lazy rather than eager for exactly that case; memoised for exactly this transaction.
-    let ledgerMemo: ActDelivery[] | null = null;
-    const teamLedger = (): ActDelivery[] => (ledgerMemo ??= openDirectedLedger(db, teamId));
-    const reviewLoopOn = teamPolicy.loops?.review === true;
-    const dispatchLoopOn = teamPolicy.loops?.dispatch === true;
-    for (const enrollment of enrollments) {
-      const member = getMemberById(db, enrollment.member_id);
-      if (!member || member.left_at !== null) continue;
-      // ADR 463 §1 (Review Focus 1): whatever else shares the host label, a key wakes only the
-      // seats it may serve — a sponsored seat only from its sponsor's own key.
-      if (!hostMayServe(scope, member)) continue;
-      if (hasLivePresence(db, member.id, presenceTimeoutMs)) continue;
-      if (reclaimable.has(member.id)) continue;
-      if (liveLease(db, member.id, now)) continue;
-      // Local-session guard snooze (increment 4): the host reported a live local session in this
-      // seat's workspace — don't re-derive a lease every tick while someone is plainly working there.
-      // ADR 485: a repeated local-session deferral backs off instead of re-deriving every 5 min.
-      const snoozeUntil = deferralSnoozeUntil(db, teamId, member.name);
-      if (snoozeUntil !== null && now < snoozeUntil) continue;
-      const policy = effectiveWakePolicy(seatWakeDefaults(teamPolicy, member), enrollment.policy);
-      // ADR 463 §2: a freshly provisioned seat's first wake — once, ahead of everything else, and
-      // outside the rate gates (it is the seat's first wake, so they cannot have been spent).
-      const provisioned = takeProvisionedWake(db, teamId, member.id, now);
-      if (provisioned) {
-        const sponsorName = getMemberById(db, provisioned.sponsor_id)?.name ?? '?';
-        const lease: WakeLeaseRow = {
-          id: ulid(),
-          team_id: teamId,
-          member_id: member.id,
-          act_id: null,
-          lane_id: null,
-          host,
-          lane: 'immediate',
-          status: 'leased',
-          created_at: now,
-          expires_at: now + WAKE_LEASE_TTL_MS,
-          edge: null,
-          spawned_at: null,
-        };
-        db.prepare(
-          `INSERT INTO wake_leases (id, team_id, member_id, act_id, lane_id, host, lane, status, created_at, expires_at, edge, spawned_at)
-           VALUES (@id, @team_id, @member_id, @act_id, @lane_id, @host, @lane, @status, @created_at, @expires_at, @edge, @spawned_at)`,
-        ).run(lease);
-        appendAudit(db, teamId, {
-          actor: null,
-          action: 'residency.wake_leased',
-          target: member.name,
-          result: 'allow',
-          detail: {
-            lease_id: lease.id,
-            reason: 'provisioned',
-            provision_id: provisioned.id,
-            sponsor: sponsorName,
-            lane: 'immediate',
+): Promise<WakeOrder[]> {
+  const tx = () =>
+    db.tx(async (t): Promise<WakeOrder[]> => {
+      const orders: WakeOrder[] = [];
+      const reclaimable = await listReclaimableMemberIds(t, teamId, now);
+      const enrollments = (await listResidency(t, teamId)).filter((r) => r.host === host);
+      const teamPolicy = await getPolicy(t, teamId);
+      // One ledger read for the whole poll, and only if some seat actually reaches the batched lane —
+      // a team where every enrolled seat is on the interrupt lane, or is inside its cooldown, pays
+      // nothing. Lazy rather than eager for exactly that case; memoised for exactly this transaction.
+      let ledgerMemo: ActDelivery[] | null = null;
+      const teamLedger = async (): Promise<ActDelivery[]> =>
+        (ledgerMemo ??= await openDirectedLedger(t, teamId));
+      const reviewLoopOn = teamPolicy.loops?.review === true;
+      const dispatchLoopOn = teamPolicy.loops?.dispatch === true;
+      for (const enrollment of enrollments) {
+        const member = await getMemberById(t, enrollment.member_id);
+        if (!member || member.left_at !== null) continue;
+        // ADR 463 §1 (Review Focus 1): whatever else shares the host label, a key wakes only the
+        // seats it may serve — a sponsored seat only from its sponsor's own key.
+        if (!hostMayServe(scope, member)) continue;
+        if (await hasLivePresence(t, member.id, presenceTimeoutMs)) continue;
+        if (reclaimable.has(member.id)) continue;
+        if (await liveLease(t, member.id, now)) continue;
+        // Local-session guard snooze (increment 4): the host reported a live local session in this
+        // seat's workspace — don't re-derive a lease every tick while someone is plainly working there.
+        // ADR 485: a repeated local-session deferral backs off instead of re-deriving every 5 min.
+        const snoozeUntil = await deferralSnoozeUntil(t, teamId, member.name);
+        if (snoozeUntil !== null && now < snoozeUntil) continue;
+        const policy = effectiveWakePolicy(seatWakeDefaults(teamPolicy, member), enrollment.policy);
+        // ADR 463 §2: a freshly provisioned seat's first wake — once, ahead of everything else, and
+        // outside the rate gates (it is the seat's first wake, so they cannot have been spent).
+        const provisioned = await takeProvisionedWake(t, teamId, member.id, now);
+        if (provisioned) {
+          const sponsorName = (await getMemberById(t, provisioned.sponsor_id))?.name ?? '?';
+          const lease: WakeLeaseRow = {
+            id: ulid(),
+            team_id: teamId,
+            member_id: member.id,
+            act_id: null,
+            lane_id: null,
             host,
+            lane: 'immediate',
+            status: 'leased',
+            created_at: now,
+            expires_at: now + WAKE_LEASE_TTL_MS,
+            edge: null,
+            spawned_at: null,
+          };
+          await t.run(
+            `INSERT INTO wake_leases (id, team_id, member_id, act_id, lane_id, host, lane, status, created_at, expires_at, edge, spawned_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              lease.id,
+              lease.team_id,
+              lease.member_id,
+              lease.act_id,
+              lease.lane_id,
+              lease.host,
+              lease.lane,
+              lease.status,
+              lease.created_at,
+              lease.expires_at,
+              lease.edge,
+              lease.spawned_at,
+            ],
+          );
+          await appendAudit(t, teamId, {
+            actor: null,
+            action: 'residency.wake_leased',
+            target: member.name,
+            result: 'allow',
+            detail: {
+              lease_id: lease.id,
+              reason: 'provisioned',
+              provision_id: provisioned.id,
+              sponsor: sponsorName,
+              lane: 'immediate',
+              host,
+              derivation: 'immediate',
+            },
+          });
+          orders.push({
+            lease_id: lease.id,
+            seat: member.name,
+            lane: 'immediate',
+            composed_line: composeProvisionedLine(member.name, teamSlug, sponsorName),
+            expires_at: lease.expires_at,
+            tool_policy: policy.tool_policy,
+            bounds: {
+              timeout_ms: policy.timeout_ms,
+              ...(policy.max_turns !== undefined ? { max_turns: policy.max_turns } : {}),
+              ...(policy.budget_usd !== undefined ? { budget_usd: policy.budget_usd } : {}),
+            },
+            transcript_max_bytes: policy.transcript_max_bytes,
+            continuity_requirement: 'portable',
+            intended_delivery: 'fresh',
             derivation: 'immediate',
-          },
-        });
-        orders.push({
-          lease_id: lease.id,
-          seat: member.name,
-          lane: 'immediate',
-          composed_line: composeProvisionedLine(member.name, teamSlug, sponsorName),
-          expires_at: lease.expires_at,
-          tool_policy: policy.tool_policy,
-          bounds: {
-            timeout_ms: policy.timeout_ms,
-            ...(policy.max_turns !== undefined ? { max_turns: policy.max_turns } : {}),
-            ...(policy.budget_usd !== undefined ? { budget_usd: policy.budget_usd } : {}),
-          },
-          transcript_max_bytes: policy.transcript_max_bytes,
-          continuity_requirement: 'portable',
-          intended_delivery: 'fresh',
-          derivation: 'immediate',
-          reason: 'provisioned',
-        });
-        continue;
-      }
-      if (wakesSince(db, teamId, member.name, now - 3_600_000) >= policy.hourly_cap) continue;
+            reason: 'provisioned',
+          });
+          continue;
+        }
+        if ((await wakesSince(t, teamId, member.name, now - 3_600_000)) >= policy.hourly_cap)
+          continue;
 
-      const cooled = wakesSince(db, teamId, member.name, now - policy.cooldown_ms) === 0;
-      const candidates = dueCandidates(
-        db,
-        teamSlug,
-        member,
-        {
-          immediate: policy.lane !== 'batched',
-          batched: cooled && policy.lane !== 'interrupt',
-          raisedDeferralWakes: policy.raised_deferral_wakes,
-          conveneHuddles: policy.convene_huddles,
-        },
-        teamLedger,
-      );
-      // ADR 199: dispatch work-orders (continuation then handoff — handoff unshifted last so it
-      // leads). ADR 191: review work-orders prefer ahead of both + inbox.
-      if (dispatchLoopOn && policy.flow === 'auto' && cooled) {
-        candidates.unshift(...dueDispatchContinuationWorkOrders(db, teamId, teamSlug, member));
-        candidates.unshift(...dueDispatchHandoffWorkOrders(db, teamId, teamSlug, member));
-      }
-      if (reviewLoopOn && policy.flow === 'auto' && cooled) {
-        candidates.unshift(...dueReviewWorkOrders(db, teamId, teamSlug, member));
-      }
-      // ADR 434 §c, read once per seat per poll and only when something is due.
-      const horizon = candidates.length > 0 ? wakeHorizon(db, teamId, member.name) : null;
-      for (const candidate of candidates) {
-        const exhKey = wakeExhaustionKey(candidate.act_id, candidate.lane_id);
-        const edge = loopEdgeOf(candidate);
-        // ADR 434, inbox wakes only (an edge-bearing work order is a lane fact, not an act):
-        //  §c — an act received before the seat's fresh enrollment is not this enrollment's to
-        //       wake for; §b — an act that already completed a wake is spent, unless someone else
-        //       has since added to its thread. Both silent, like the still-true skip: a spent act
-        //       is the resting state of an answered inbox, not an event.
-        if (edge === null && candidate.act_id) {
-          const received = actReceivedAt(db, teamId, candidate.act_id);
-          if (horizon !== null && received !== null && received < horizon) continue;
-          const woke = lastWokeForAct(db, teamId, member.name, candidate.act_id);
-          if (woke !== null && !threadReopenedSince(db, teamId, member.id, candidate.act_id, woke))
-            continue;
+        const cooled = (await wakesSince(t, teamId, member.name, now - policy.cooldown_ms)) === 0;
+        const candidates = await dueCandidates(
+          t,
+          teamSlug,
+          member,
+          {
+            immediate: policy.lane !== 'batched',
+            batched: cooled && policy.lane !== 'interrupt',
+            raisedDeferralWakes: policy.raised_deferral_wakes,
+            conveneHuddles: policy.convene_huddles,
+          },
+          teamLedger,
+        );
+        // ADR 199: dispatch work-orders (continuation then handoff — handoff unshifted last so it
+        // leads). ADR 191: review work-orders prefer ahead of both + inbox.
+        if (dispatchLoopOn && policy.flow === 'auto' && cooled) {
+          candidates.unshift(
+            ...(await dueDispatchContinuationWorkOrders(t, teamId, teamSlug, member)),
+          );
+          candidates.unshift(...(await dueDispatchHandoffWorkOrders(t, teamId, teamSlug, member)));
         }
-        /**
-         * ADR 306 §1. An edge-bearing work order is bounded by the ADR 262 (lane, edge) rules
-         * below and by nothing else. The per-act cap does NOT apply to it, for two reasons the
-         * live ledger showed on 2026-08-21:
-         *
-         *  - it counts `residency.woke` alongside `wake_failed` against a LIFETIME terminal row,
-         *    so three SUCCESSFUL continuations exhausted a lane forever — the exact case ADR 262
-         *    §4.1 promised would keep deriving, dead on two real lanes;
-         *  - keyed `act_id` else `lane:<id>`, it is coarser than (lane, edge) at the same
-         *    threshold of 3 while counting a SUPERSET of the rows. A subset counter behind a
-         *    superset counter at an equal threshold is unreachable: the ADR 262 breaker fired
-         *    zero times in eight days while five (lane, edge) pairs reached its threshold.
-         *
-         * Inbox wakes (edge NULL) are untouched — there a success SHOULD retire the act.
-         */
-        const edgeBound = edge !== null && candidate.lane_id !== undefined;
-        if (!edgeBound) {
-          if (isExhausted(db, teamId, exhKey)) continue;
-          if (attemptsForAct(db, teamId, exhKey) >= policy.attempt_cap) {
-            appendAudit(db, teamId, {
-              actor: null,
-              action: 'residency.wake_exhausted',
-              target: member.name,
-              result: 'deny',
-              detail: {
-                act: exhKey,
-                sender: candidate.sender ?? 'board',
-                attempts: policy.attempt_cap,
-                derivation: candidate.derivation,
-                ...(candidate.lane_id !== undefined ? { lane_id: candidate.lane_id } : {}),
-              },
-            });
-            continue;
-          }
+        if (reviewLoopOn && policy.flow === 'auto' && cooled) {
+          candidates.unshift(...(await dueReviewWorkOrders(t, teamId, teamSlug, member)));
         }
-        if (edge && candidate.lane_id) {
-          if (
-            workOrderEdgeFailureCount(db, teamId, candidate.lane_id, edge) >=
-            WORK_ORDER_EDGE_BREAKER_N
-          ) {
-            appendAudit(db, teamId, {
-              actor: null,
-              action: 'residency.wake_exhausted',
-              target: member.name,
-              result: 'deny',
-              detail: {
-                act: exhKey,
-                edge,
-                lane_id: candidate.lane_id,
-                breaker: true,
-                attempts: WORK_ORDER_EDGE_BREAKER_N,
-                derivation: candidate.derivation,
-              },
-            });
-            continue;
-          }
-          if (workOrderEdgeStillTrue(db, teamId, candidate.lane_id, edge)) continue;
-          if (edge === 'dispatch_continuation') {
-            // ADR 306 §3 — the succeeding chain has a ceiling too.
+        // ADR 434 §c, read once per seat per poll and only when something is due.
+        const horizon = candidates.length > 0 ? await wakeHorizon(t, teamId, member.name) : null;
+        for (const candidate of candidates) {
+          const exhKey = wakeExhaustionKey(candidate.act_id, candidate.lane_id);
+          const edge = loopEdgeOf(candidate);
+          // ADR 434, inbox wakes only (an edge-bearing work order is a lane fact, not an act):
+          //  §c — an act received before the seat's fresh enrollment is not this enrollment's to
+          //       wake for; §b — an act that already completed a wake is spent, unless someone else
+          //       has since added to its thread. Both silent, like the still-true skip: a spent act
+          //       is the resting state of an answered inbox, not an event.
+          if (edge === null && candidate.act_id) {
+            const received = await actReceivedAt(t, teamId, candidate.act_id);
+            if (horizon !== null && received !== null && received < horizon) continue;
+            const woke = await lastWokeForAct(t, teamId, member.name, candidate.act_id);
             if (
-              workOrderEdgeWokeCount(db, teamId, candidate.lane_id, edge) >=
-              WORK_ORDER_CONTINUATION_SUCCESS_CAP
+              woke !== null &&
+              !(await threadReopenedSince(t, teamId, member.id, candidate.act_id, woke))
+            )
+              continue;
+          }
+          /**
+           * ADR 306 §1. An edge-bearing work order is bounded by the ADR 262 (lane, edge) rules
+           * below and by nothing else. The per-act cap does NOT apply to it, for two reasons the
+           * live ledger showed on 2026-08-21:
+           *
+           *  - it counts `residency.woke` alongside `wake_failed` against a LIFETIME terminal row,
+           *    so three SUCCESSFUL continuations exhausted a lane forever — the exact case ADR 262
+           *    §4.1 promised would keep deriving, dead on two real lanes;
+           *  - keyed `act_id` else `lane:<id>`, it is coarser than (lane, edge) at the same
+           *    threshold of 3 while counting a SUPERSET of the rows. A subset counter behind a
+           *    superset counter at an equal threshold is unreachable: the ADR 262 breaker fired
+           *    zero times in eight days while five (lane, edge) pairs reached its threshold.
+           *
+           * Inbox wakes (edge NULL) are untouched — there a success SHOULD retire the act.
+           */
+          const edgeBound = edge !== null && candidate.lane_id !== undefined;
+          if (!edgeBound) {
+            if (await isExhausted(t, teamId, exhKey)) continue;
+            if ((await attemptsForAct(t, teamId, exhKey)) >= policy.attempt_cap) {
+              await appendAudit(t, teamId, {
+                actor: null,
+                action: 'residency.wake_exhausted',
+                target: member.name,
+                result: 'deny',
+                detail: {
+                  act: exhKey,
+                  sender: candidate.sender ?? 'board',
+                  attempts: policy.attempt_cap,
+                  derivation: candidate.derivation,
+                  ...(candidate.lane_id !== undefined ? { lane_id: candidate.lane_id } : {}),
+                },
+              });
+              continue;
+            }
+          }
+          if (edge && candidate.lane_id) {
+            if (
+              (await workOrderEdgeFailureCount(t, teamId, candidate.lane_id, edge)) >=
+              WORK_ORDER_EDGE_BREAKER_N
             ) {
-              appendAudit(db, teamId, {
+              await appendAudit(t, teamId, {
                 actor: null,
                 action: 'residency.wake_exhausted',
                 target: member.name,
@@ -1724,108 +1732,145 @@ export function claimWakeLeases(
                   act: exhKey,
                   edge,
                   lane_id: candidate.lane_id,
-                  reason: 'continuation_cap',
-                  attempts: WORK_ORDER_CONTINUATION_SUCCESS_CAP,
+                  breaker: true,
+                  attempts: WORK_ORDER_EDGE_BREAKER_N,
                   derivation: candidate.derivation,
                 },
               });
               continue;
             }
-            // ADR 306 §2 — a wake that moved nothing does not buy the next one. Silent, like the
-            // still-true skip: a stalled lane is the normal resting state of a claimed board, not
-            // an event worth a row on every poll.
-            if (!laneMovedSinceLastWoke(db, teamId, candidate.lane_id, edge)) continue;
+            if (await workOrderEdgeStillTrue(t, teamId, candidate.lane_id, edge)) continue;
+            if (edge === 'dispatch_continuation') {
+              // ADR 306 §3 — the succeeding chain has a ceiling too.
+              if (
+                (await workOrderEdgeWokeCount(t, teamId, candidate.lane_id, edge)) >=
+                WORK_ORDER_CONTINUATION_SUCCESS_CAP
+              ) {
+                await appendAudit(t, teamId, {
+                  actor: null,
+                  action: 'residency.wake_exhausted',
+                  target: member.name,
+                  result: 'deny',
+                  detail: {
+                    act: exhKey,
+                    edge,
+                    lane_id: candidate.lane_id,
+                    reason: 'continuation_cap',
+                    attempts: WORK_ORDER_CONTINUATION_SUCCESS_CAP,
+                    derivation: candidate.derivation,
+                  },
+                });
+                continue;
+              }
+              // ADR 306 §2 — a wake that moved nothing does not buy the next one. Silent, like the
+              // still-true skip: a stalled lane is the normal resting state of a claimed board, not
+              // an event worth a row on every poll.
+              if (!(await laneMovedSinceLastWoke(t, teamId, candidate.lane_id, edge))) continue;
+            }
           }
-        }
-        const lease: WakeLeaseRow = {
-          id: ulid(),
-          team_id: teamId,
-          member_id: member.id,
-          act_id: candidate.act_id ?? null,
-          lane_id: candidate.lane_id ?? null,
-          host,
-          lane: candidate.lane,
-          status: 'leased',
-          created_at: now,
-          expires_at: now + WAKE_LEASE_TTL_MS,
-          edge,
-          spawned_at: null,
-        };
-        db.prepare(
-          `INSERT INTO wake_leases (id, team_id, member_id, act_id, lane_id, host, lane, status, created_at, expires_at, edge, spawned_at)
-           VALUES (@id, @team_id, @member_id, @act_id, @lane_id, @host, @lane, @status, @created_at, @expires_at, @edge, @spawned_at)`,
-        ).run(lease);
-        appendAudit(db, teamId, {
-          actor: null,
-          action: 'residency.wake_leased',
-          target: member.name,
-          result: 'allow',
-          detail: {
-            lease_id: lease.id,
-            act: exhKey,
-            sender: candidate.sender ?? 'board',
-            lane: candidate.lane,
+          const lease: WakeLeaseRow = {
+            id: ulid(),
+            team_id: teamId,
+            member_id: member.id,
+            act_id: candidate.act_id ?? null,
+            lane_id: candidate.lane_id ?? null,
             host,
-            derivation: candidate.derivation,
-            ...(isPortableWakeCandidate(candidate, policy.portable_inbox_replies)
-              ? { continuity_requirement: 'portable', intended_delivery: 'fresh' }
+            lane: candidate.lane,
+            status: 'leased',
+            created_at: now,
+            expires_at: now + WAKE_LEASE_TTL_MS,
+            edge,
+            spawned_at: null,
+          };
+          await t.run(
+            `INSERT INTO wake_leases (id, team_id, member_id, act_id, lane_id, host, lane, status, created_at, expires_at, edge, spawned_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              lease.id,
+              lease.team_id,
+              lease.member_id,
+              lease.act_id,
+              lease.lane_id,
+              lease.host,
+              lease.lane,
+              lease.status,
+              lease.created_at,
+              lease.expires_at,
+              lease.edge,
+              lease.spawned_at,
+            ],
+          );
+          await appendAudit(t, teamId, {
+            actor: null,
+            action: 'residency.wake_leased',
+            target: member.name,
+            result: 'allow',
+            detail: {
+              lease_id: lease.id,
+              act: exhKey,
+              sender: candidate.sender ?? 'board',
+              lane: candidate.lane,
+              host,
+              derivation: candidate.derivation,
+              ...(isPortableWakeCandidate(candidate, policy.portable_inbox_replies)
+                ? { continuity_requirement: 'portable', intended_delivery: 'fresh' }
+                : {}),
+              // ADR 210: the eligibility BIT is audited; the thread id that produced it is not. The
+              // ledger records that a resume was permitted, never anything about the local session.
+              ...(isResumeEligible(candidate, policy, now) ? { resume_eligible: true } : {}),
+              ...(candidate.lane_id !== undefined ? { lane_id: candidate.lane_id } : {}),
+              ...(edge !== null ? { edge } : {}),
+            },
+          });
+          const isWorkOrder = candidate.derivation === 'work_order';
+          const isPortable = isPortableWakeCandidate(candidate, policy.portable_inbox_replies);
+          const kind = candidate.work_order_kind ?? 'dispatch';
+          orders.push({
+            lease_id: lease.id,
+            seat: member.name,
+            ...(candidate.act_id !== undefined ? { act_id: candidate.act_id } : {}),
+            ...(candidate.act !== undefined ? { act: candidate.act } : {}),
+            ...(candidate.sender !== undefined ? { sender: candidate.sender } : {}),
+            lane: candidate.lane,
+            composed_line: isWorkOrder
+              ? composeWorkOrderLine(
+                  member.name,
+                  teamSlug,
+                  candidate.lane_id!,
+                  kind,
+                  candidate.act_id,
+                )
+              : composeWakeLine(
+                  member.name,
+                  teamSlug,
+                  candidate.act ?? 'message',
+                  candidate.sender ?? '?',
+                  candidate.act_id,
+                ),
+            expires_at: lease.expires_at,
+            tool_policy: isWorkOrder ? 'seat-policy' : policy.tool_policy,
+            bounds: {
+              timeout_ms: isWorkOrder ? policy.work_timeout_ms : policy.timeout_ms,
+              ...(policy.max_turns !== undefined ? { max_turns: policy.max_turns } : {}),
+              ...(policy.budget_usd !== undefined ? { budget_usd: policy.budget_usd } : {}),
+            },
+            transcript_max_bytes: policy.transcript_max_bytes,
+            ...(isPortable
+              ? { continuity_requirement: 'portable' as const, intended_delivery: 'fresh' as const }
               : {}),
-            // ADR 210: the eligibility BIT is audited; the thread id that produced it is not. The
-            // ledger records that a resume was permitted, never anything about the local session.
-            ...(isResumeEligible(candidate, policy, now) ? { resume_eligible: true } : {}),
+            // The mark and the key it needs travel together: an eligible wake carries the thread id
+            // so the host can look for an exact local binding. Never audited, never returned.
+            ...(isResumeEligible(candidate, policy, now)
+              ? { resume_eligible: true as const, thread_id: candidate.thread_id! }
+              : {}),
+            derivation: candidate.derivation,
             ...(candidate.lane_id !== undefined ? { lane_id: candidate.lane_id } : {}),
-            ...(edge !== null ? { edge } : {}),
-          },
-        });
-        const isWorkOrder = candidate.derivation === 'work_order';
-        const isPortable = isPortableWakeCandidate(candidate, policy.portable_inbox_replies);
-        const kind = candidate.work_order_kind ?? 'dispatch';
-        orders.push({
-          lease_id: lease.id,
-          seat: member.name,
-          ...(candidate.act_id !== undefined ? { act_id: candidate.act_id } : {}),
-          ...(candidate.act !== undefined ? { act: candidate.act } : {}),
-          ...(candidate.sender !== undefined ? { sender: candidate.sender } : {}),
-          lane: candidate.lane,
-          composed_line: isWorkOrder
-            ? composeWorkOrderLine(
-                member.name,
-                teamSlug,
-                candidate.lane_id!,
-                kind,
-                candidate.act_id,
-              )
-            : composeWakeLine(
-                member.name,
-                teamSlug,
-                candidate.act ?? 'message',
-                candidate.sender ?? '?',
-                candidate.act_id,
-              ),
-          expires_at: lease.expires_at,
-          tool_policy: isWorkOrder ? 'seat-policy' : policy.tool_policy,
-          bounds: {
-            timeout_ms: isWorkOrder ? policy.work_timeout_ms : policy.timeout_ms,
-            ...(policy.max_turns !== undefined ? { max_turns: policy.max_turns } : {}),
-            ...(policy.budget_usd !== undefined ? { budget_usd: policy.budget_usd } : {}),
-          },
-          transcript_max_bytes: policy.transcript_max_bytes,
-          ...(isPortable
-            ? { continuity_requirement: 'portable' as const, intended_delivery: 'fresh' as const }
-            : {}),
-          // The mark and the key it needs travel together: an eligible wake carries the thread id
-          // so the host can look for an exact local binding. Never audited, never returned.
-          ...(isResumeEligible(candidate, policy, now)
-            ? { resume_eligible: true as const, thread_id: candidate.thread_id! }
-            : {}),
-          derivation: candidate.derivation,
-          ...(candidate.lane_id !== undefined ? { lane_id: candidate.lane_id } : {}),
-        });
-        break; // one lease per seat per poll
+          });
+          break; // one lease per seat per poll
+        }
       }
-    }
-    return orders;
-  });
+      return orders;
+    });
   return tx();
 }
 
@@ -1835,38 +1880,34 @@ export function claimWakeLeases(
  * for unknown/already-reported (the caller 404s/409s). The route writes the outcome audit
  * (`residency.woke` / `residency.wake_failed`) — this only settles the stored bit.
  */
-export function settleWakeLease(
-  db: Database,
+export async function settleWakeLease(
+  db: Driver,
   teamId: string,
   leaseId: string,
-): WakeLeaseRow | null {
-  const row = db
-    .prepare<
-      [string, string],
-      WakeLeaseRow
-    >('SELECT * FROM wake_leases WHERE team_id = ? AND id = ?')
-    .get(teamId, leaseId);
+): Promise<WakeLeaseRow | null> {
+  const row = await db.get<WakeLeaseRow>('SELECT * FROM wake_leases WHERE team_id = ? AND id = ?', [
+    teamId,
+    leaseId,
+  ]);
   if (!row || row.status === 'reported') return null;
-  db.prepare("UPDATE wake_leases SET status = 'reported' WHERE id = ?").run(row.id);
+  await db.run("UPDATE wake_leases SET status = 'reported' WHERE id = ?", [row.id]);
   return row;
 }
 
 /** Stamp spawned_at if null. Returns the lease row, or null if unknown id. Never settles. */
-export function markWakeSpawned(
-  db: Database,
+export async function markWakeSpawned(
+  db: Driver,
   teamId: string,
   leaseId: string,
   now = Date.now(),
-): WakeLeaseRow | null {
-  const row = db
-    .prepare<
-      [string, string],
-      WakeLeaseRow
-    >('SELECT * FROM wake_leases WHERE team_id = ? AND id = ?')
-    .get(teamId, leaseId);
+): Promise<WakeLeaseRow | null> {
+  const row = await db.get<WakeLeaseRow>('SELECT * FROM wake_leases WHERE team_id = ? AND id = ?', [
+    teamId,
+    leaseId,
+  ]);
   if (!row) return null;
   if (row.spawned_at === null) {
-    db.prepare('UPDATE wake_leases SET spawned_at = ? WHERE id = ?').run(now, row.id);
+    await db.run('UPDATE wake_leases SET spawned_at = ? WHERE id = ?', [now, row.id]);
     row.spawned_at = now;
   }
   return row;
@@ -1895,8 +1936,8 @@ export interface WakeTurnRow {
  * lease. Idempotent per (lease, turn): a retried post overwrites. Returns null for an unknown
  * lease (the route 404s).
  */
-export function appendWakeTurn(
-  db: Database,
+export async function appendWakeTurn(
+  db: Driver,
   teamId: string,
   body: {
     lease_id: string;
@@ -1907,15 +1948,13 @@ export function appendWakeTurn(
     transcript?: unknown;
   },
   now = Date.now(),
-): { member_id: string } | null {
-  const lease = db
-    .prepare<
-      [string, string],
-      { member_id: string }
-    >('SELECT member_id FROM wake_leases WHERE team_id = ? AND id = ?')
-    .get(teamId, body.lease_id);
+): Promise<{ member_id: string } | null> {
+  const lease = await db.get<{ member_id: string }>(
+    'SELECT member_id FROM wake_leases WHERE team_id = ? AND id = ?',
+    [teamId, body.lease_id],
+  );
   if (!lease) return null;
-  db.prepare(
+  await db.run(
     `INSERT INTO wake_turns (id, team_id, lease_id, member_id, turn, usage_json, cost_usd, stop_reason, transcript_json, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(lease_id, turn) DO UPDATE SET
@@ -1924,48 +1963,52 @@ export function appendWakeTurn(
        stop_reason = excluded.stop_reason,
        transcript_json = excluded.transcript_json,
        created_at = excluded.created_at`,
-  ).run(
-    ulid(),
-    teamId,
-    body.lease_id,
-    lease.member_id,
-    body.turn,
-    JSON.stringify(body.usage),
-    body.cost_usd ?? null,
-    body.stop_reason ?? null,
-    body.transcript === undefined ? null : JSON.stringify(body.transcript),
-    now,
+    [
+      ulid(),
+      teamId,
+      body.lease_id,
+      lease.member_id,
+      body.turn,
+      JSON.stringify(body.usage),
+      body.cost_usd ?? null,
+      body.stop_reason ?? null,
+      body.transcript === undefined ? null : JSON.stringify(body.transcript),
+      now,
+    ],
   );
   return { member_id: lease.member_id };
 }
 
 /** The captured turns for one lease, in turn order — the resume substrate and the cost ledger. */
-export function listWakeTurns(db: Database, teamId: string, leaseId: string): WakeTurnRow[] {
-  return db
-    .prepare<
-      [string, string],
-      {
-        lease_id: string;
-        member_id: string;
-        turn: number;
-        usage_json: string;
-        cost_usd: number | null;
-        stop_reason: string | null;
-        transcript_json: string | null;
-        created_at: number;
-      }
-    >('SELECT * FROM wake_turns WHERE team_id = ? AND lease_id = ? ORDER BY turn ASC')
-    .all(teamId, leaseId)
-    .map((r) => ({
-      lease_id: r.lease_id,
-      member_id: r.member_id,
-      turn: r.turn,
-      usage: JSON.parse(r.usage_json) as WakeTurnRow['usage'],
-      cost_usd: r.cost_usd,
-      stop_reason: r.stop_reason,
-      transcript: r.transcript_json === null ? null : (JSON.parse(r.transcript_json) as unknown),
-      created_at: r.created_at,
-    }));
+export async function listWakeTurns(
+  db: Driver,
+  teamId: string,
+  leaseId: string,
+): Promise<WakeTurnRow[]> {
+  return (
+    await db.all<{
+      lease_id: string;
+      member_id: string;
+      turn: number;
+      usage_json: string;
+      cost_usd: number | null;
+      stop_reason: string | null;
+      transcript_json: string | null;
+      created_at: number;
+    }>('SELECT * FROM wake_turns WHERE team_id = ? AND lease_id = ? ORDER BY turn ASC', [
+      teamId,
+      leaseId,
+    ])
+  ).map((r) => ({
+    lease_id: r.lease_id,
+    member_id: r.member_id,
+    turn: r.turn,
+    usage: JSON.parse(r.usage_json) as WakeTurnRow['usage'],
+    cost_usd: r.cost_usd,
+    stop_reason: r.stop_reason,
+    transcript: r.transcript_json === null ? null : (JSON.parse(r.transcript_json) as unknown),
+    created_at: r.created_at,
+  }));
 }
 
 /**
@@ -1976,11 +2019,10 @@ export function listWakeTurns(db: Database, teamId: string, leaseId: string): Wa
  * act re-becomes due, still bounded by the derived rate policy.
  */
 /** Teams with at least one residency enrollment — who a host suspension concerns (ADR 236). */
-export function listResidencyTeamIds(db: Database): string[] {
-  return db
-    .prepare<[], { team_id: string }>('SELECT DISTINCT team_id FROM residency')
-    .all()
-    .map((r) => r.team_id);
+export async function listResidencyTeamIds(db: Driver): Promise<string[]> {
+  return (await db.all<{ team_id: string }>('SELECT DISTINCT team_id FROM residency')).map(
+    (r) => r.team_id,
+  );
 }
 
 /**
@@ -1994,32 +2036,45 @@ export function listResidencyTeamIds(db: Database): string[] {
  * the hub believe it was asleep while a laptop's lid was shut. The same pin on `firstWakeLeaseTs`
  * and `leaseCapturedSession` below: a lease is host-scoped by construction (ADR 361).
  */
-export function hostAsleepMs(db: Database, teamId: string, from: number, to: number): number {
-  const row = db
-    .prepare<[number, number, string, number], { ms: number }>(
-      `SELECT COALESCE(SUM(MAX(0,
-                MIN(json_extract(detail, '$.to'), ?) - MAX(json_extract(detail, '$.from'), ?))), 0) AS ms
+export async function hostAsleepMs(
+  db: Driver,
+  teamId: string,
+  from: number,
+  to: number,
+): Promise<number> {
+  const row = await db.get<{ ms: number }>(
+    `SELECT COALESCE(SUM(MAX(0,
+                MIN(CAST(json_extract(detail, '$.to') AS INTEGER), ?)
+                - MAX(CAST(json_extract(detail, '$.from') AS INTEGER), ?))), 0) AS ms
          FROM audit
         WHERE team_id = ? AND action = 'residency.host_suspended' AND ts >= ? ${MINTED_HERE}`,
-    )
-    .get(to, from, teamId, from);
+    [to, from, teamId, from],
+  );
   return row?.ms ?? 0;
 }
 
 /** Host-awake milliseconds since `since` (ADR 236): elapsed time minus every recorded suspension. */
-export function awakeMsSince(db: Database, teamId: string, since: number, now: number): number {
-  return Math.max(0, now - since - hostAsleepMs(db, teamId, since, now));
+export async function awakeMsSince(
+  db: Driver,
+  teamId: string,
+  since: number,
+  now: number,
+): Promise<number> {
+  return Math.max(0, now - since - (await hostAsleepMs(db, teamId, since, now)));
 }
 
 /** When this act was FIRST leased for actuation, from the ledger — the ceiling's clock start. */
-export function firstWakeLeaseTs(db: Database, teamId: string, actKey: string): number | null {
-  const row = db
-    .prepare<[string, string], { ts: number }>(
-      `SELECT MIN(ts) AS ts FROM audit
+export async function firstWakeLeaseTs(
+  db: Driver,
+  teamId: string,
+  actKey: string,
+): Promise<number | null> {
+  const row = await db.get<{ ts: number }>(
+    `SELECT MIN(ts) AS ts FROM audit
         WHERE team_id = ? AND action = 'residency.wake_leased'
           AND json_extract(detail, '$.act') = ? ${MINTED_HERE}`,
-    )
-    .get(teamId, actKey);
+    [teamId, actKey],
+  );
   return row?.ts ?? null;
 }
 
@@ -2033,28 +2088,30 @@ export function firstWakeLeaseTs(db: Database, teamId: string, actKey: string): 
  * means "no session claimed this lease", not "no session ran". Every counter derived from this must
  * read as a floor.
  */
-export function leaseCapturedSession(db: Database, teamId: string, leaseId: string): boolean {
-  const row = db
-    .prepare<[string, string], { n: number }>(
-      `SELECT COUNT(*) AS n FROM audit
+export async function leaseCapturedSession(
+  db: Driver,
+  teamId: string,
+  leaseId: string,
+): Promise<boolean> {
+  const row = await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM audit
         WHERE team_id = ? AND action = 'residency.session_captured'
           AND json_extract(detail, '$.wake_lease') = ? ${MINTED_HERE}`,
-    )
-    .get(teamId, leaseId);
+    [teamId, leaseId],
+  );
   return (row?.n ?? 0) > 0;
 }
 
-export function expireWakeLeases(db: Database, now = Date.now()): WakeLeaseRow[] {
-  const rows = db
-    .prepare<
-      [number],
-      WakeLeaseRow
-    >("SELECT * FROM wake_leases WHERE status = 'leased' AND expires_at < ?")
-    .all(now);
+export async function expireWakeLeases(db: Driver, now = Date.now()): Promise<WakeLeaseRow[]> {
+  const rows = await db.all<WakeLeaseRow>(
+    "SELECT * FROM wake_leases WHERE status = 'leased' AND expires_at < ?",
+    [now],
+  );
   if (rows.length > 0) {
-    db.prepare(
+    await db.run(
       "UPDATE wake_leases SET status = 'expired' WHERE status = 'leased' AND expires_at < ?",
-    ).run(now);
+      [now],
+    );
   }
   return rows;
 }

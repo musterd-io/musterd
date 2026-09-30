@@ -5,7 +5,8 @@ import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { readNodeState } from '../node/state.js';
 import { getLane, updateLane } from '../store/lanes.js';
@@ -54,10 +55,10 @@ async function call(base: string, method: string, path: string, body?: unknown, 
   const text = await response.text();
   return { status: response.status, json: text ? (JSON.parse(text) as any) : null };
 }
-const post = (base: string, path: string, body?: unknown, auth?: string) =>
-  call(base, 'POST', path, body, auth);
-const patch = (base: string, path: string, body?: unknown, auth?: string) =>
-  call(base, 'PATCH', path, body, auth);
+const post = async (base: string, path: string, body?: unknown, auth?: string) =>
+  await call(base, 'POST', path, body, auth);
+const patch = async (base: string, path: string, body?: unknown, auth?: string) =>
+  await call(base, 'PATCH', path, body, auth);
 
 async function enrollJoiner() {
   const { json: minted } = await post(
@@ -75,18 +76,18 @@ async function enrollJoiner() {
 }
 
 const hubCtx = (): Ctx => ({
-  db: hub.db,
+  db: sqliteDriver(hub.db),
   hub: new Hub(),
   config: resolveConfig(),
   rosterRoots: [],
 });
-const hubTeam = () => getTeamBySlug(hub.db, 'bravo')!;
-const joinerTeam = () => getTeamBySlug(joiner.db, 'bravo')!;
+const hubTeam = async () => (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
+const joinerTeam = async () => (await getTeamBySlug(sqliteDriver(joiner.db), 'bravo'))!;
 
 /** Hub → joiner: the hub stages its own history (loopback), the joiner folds it. */
 async function hubToJoiner() {
-  await pushTeam(hubCtx(), hubTeam());
-  await pullTeam(joinerCtx, joinerTeam());
+  await pushTeam(hubCtx(), await hubTeam());
+  await pullTeam(joinerCtx, await joinerTeam());
 }
 
 /** A lane born on the hub, unowned, visible on both machines. */
@@ -99,7 +100,9 @@ async function laneOnBoth(title = 'shared'): Promise<string> {
   expect(opened.status).toBe(201);
   const id: string = opened.json.lane.id;
   await hubToJoiner();
-  expect(getLane(joiner.db, joinerTeam().id, id, 'bravo')).toMatchObject({ id, owner_seat: null });
+  expect(
+    await getLane(sqliteDriver(joiner.db), (await joinerTeam()).id, id, 'bravo'),
+  ).toMatchObject({ id, owner_seat: null });
   return id;
 }
 
@@ -107,11 +110,16 @@ beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'musterd-claim-'));
   process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
 
-  hub = createServer({ db: openDb(':memory:'), port: 0 });
+  hub = createServer({ db: openTestDb(':memory:'), port: 0 });
   hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-  joiner = createServer({ db: openDb(':memory:'), port: 0 });
+  joiner = createServer({ db: openTestDb(':memory:'), port: 0 });
   joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
-  joinerCtx = { db: joiner.db, hub: new Hub(), config: resolveConfig(), rosterRoots: [] };
+  joinerCtx = {
+    db: sqliteDriver(joiner.db),
+    hub: new Hub(),
+    config: resolveConfig(),
+    rosterRoots: [],
+  };
 
   const onHub = await post(hubBase, '/teams', {
     slug: 'bravo',
@@ -124,20 +132,23 @@ beforeEach(async () => {
   });
   nickOnJoiner = onJoiner.json.human_credential;
   // Roster identity replicates via git (ADR 058): the same second seat exists on both.
-  addMember(hub.db, hubTeam(), { name: 'ada', kind: 'agent' });
-  addMember(joiner.db, joinerTeam(), { name: 'ada', kind: 'agent' });
-  hanaOnHub = mintCredential(
-    hub.db,
-    addMember(hub.db, hubTeam(), { name: 'hana', kind: 'human' }).row.id,
+  await addMember(sqliteDriver(hub.db), await hubTeam(), { name: 'ada', kind: 'agent' });
+  await addMember(sqliteDriver(joiner.db), await joinerTeam(), { name: 'ada', kind: 'agent' });
+  hanaOnHub = (
+    await mintCredential(
+      sqliteDriver(hub.db),
+      (await addMember(sqliteDriver(hub.db), await hubTeam(), { name: 'hana', kind: 'human' })).row
+        .id,
+    )
   ).credential;
-  addMember(joiner.db, joinerTeam(), { name: 'hana', kind: 'human' });
+  await addMember(sqliteDriver(joiner.db), await joinerTeam(), { name: 'hana', kind: 'human' });
   // The joiner's node row is minted on its first logged act; enrollment needs it to exist.
-  const jt = joinerTeam();
+  const jt = await joinerTeam();
   const nick = joiner.db
     .prepare<[string], { id: string }>('SELECT id FROM members WHERE team_id = ? LIMIT 1')
     .get(jt.id)!;
-  insertMessage(
-    joiner.db,
+  await insertMessage(
+    sqliteDriver(joiner.db),
     jt.id,
     nick.id,
     null,
@@ -158,10 +169,10 @@ beforeEach(async () => {
   // joiner, so take that first touch now, stage it, and release the fixture's binding — the same
   // admin unbind a human on two machines uses. Later touches refresh the row and emit nothing, so
   // nothing re-binds behind the tests' backs.
-  const nickOnHubRow = getMemberByName(hub.db, hubTeam().id, 'nick')!;
-  touchAmbientPresence(hub.db, nickOnHubRow.id, 'cli', 45_000);
-  await pushTeam(hubCtx(), hubTeam());
-  unbindSeat(hub.db, nickOnHubRow.id);
+  const nickOnHubRow = (await getMemberByName(sqliteDriver(hub.db), (await hubTeam()).id, 'nick'))!;
+  await touchAmbientPresence(sqliteDriver(hub.db), nickOnHubRow.id, 'cli', 45_000);
+  await pushTeam(hubCtx(), await hubTeam());
+  await unbindSeat(sqliteDriver(hub.db), nickOnHubRow.id);
 });
 
 afterEach(async () => {
@@ -184,7 +195,9 @@ describe('federation 3c — the hub arbitrates a claim', () => {
     expect(res.json.lane).toMatchObject({ id: laneId, owner_seat: 'nick', state: 'claimed' });
 
     // The hub holds the decision.
-    expect(getLane(hub.db, hubTeam().id, laneId, 'bravo')).toMatchObject({
+    expect(
+      await getLane(sqliteDriver(hub.db), (await hubTeam()).id, laneId, 'bravo'),
+    ).toMatchObject({
       owner_seat: 'nick',
       state: 'claimed',
     });
@@ -208,7 +221,9 @@ describe('federation 3c — the hub arbitrates a claim', () => {
         .get(laneId),
     ).toEqual({ n: 1 });
     await hubToJoiner();
-    expect(getLane(joiner.db, joinerTeam().id, laneId, 'bravo')).toMatchObject({
+    expect(
+      await getLane(sqliteDriver(joiner.db), (await joinerTeam()).id, laneId, 'bravo'),
+    ).toMatchObject({
       owner_seat: 'nick',
       state: 'claimed',
     });
@@ -217,9 +232,18 @@ describe('federation 3c — the hub arbitrates a claim', () => {
   it("a competing claim is refused with a distinguishable error naming the holder, and the joiner's row is untouched", async () => {
     const laneId = await laneOnBoth();
     // ada takes it on the hub first; the joiner has not yet seen that.
-    updateLane(hub.db, hubTeam().id, laneId, 'bravo', { owner_seat: 'ada' }, 5, undefined, {
-      actor: 'ada',
-    });
+    await updateLane(
+      sqliteDriver(hub.db),
+      (await hubTeam()).id,
+      laneId,
+      'bravo',
+      { owner_seat: 'ada' },
+      5,
+      undefined,
+      {
+        actor: 'ada',
+      },
+    );
     const res = await patch(
       joinerBase,
       `/teams/bravo/lanes/${laneId}`,
@@ -230,8 +254,13 @@ describe('federation 3c — the hub arbitrates a claim', () => {
     expect(res.json.error.code).toBe('conflict');
     expect(res.json.error.message).toContain('ada');
     expect(res.json.holder).toBe('ada');
-    expect(getLane(hub.db, hubTeam().id, laneId, 'bravo')!.owner_seat).toBe('ada');
-    expect(getLane(joiner.db, joinerTeam().id, laneId, 'bravo')!.owner_seat).toBeNull();
+    expect(
+      (await getLane(sqliteDriver(hub.db), (await hubTeam()).id, laneId, 'bravo'))!.owner_seat,
+    ).toBe('ada');
+    expect(
+      (await getLane(sqliteDriver(joiner.db), (await joinerTeam()).id, laneId, 'bravo'))!
+        .owner_seat,
+    ).toBeNull();
   });
 
   it('refuses, with its own error, while the hub is unreachable — never a provisional claim', async () => {
@@ -245,7 +274,10 @@ describe('federation 3c — the hub arbitrates a claim', () => {
     );
     expect(res.status).toBe(503);
     expect(res.json.error.code).toBe('hub_unreachable');
-    expect(getLane(joiner.db, joinerTeam().id, laneId, 'bravo')!.owner_seat).toBeNull();
+    expect(
+      (await getLane(sqliteDriver(joiner.db), (await joinerTeam()).id, laneId, 'bravo'))!
+        .owner_seat,
+    ).toBeNull();
   });
 
   it("a handoff while the hub is unreachable refuses hub_unreachable — every ownership edge is the hub's (ADR 361); a title edit stays local", async () => {
@@ -259,7 +291,10 @@ describe('federation 3c — the hub arbitrates a claim', () => {
     );
     expect(res.status).toBe(503);
     expect(res.json.error.code).toBe('hub_unreachable');
-    expect(getLane(joiner.db, joinerTeam().id, laneId, 'bravo')!.owner_seat).toBeNull();
+    expect(
+      (await getLane(sqliteDriver(joiner.db), (await joinerTeam()).id, laneId, 'bravo'))!
+        .owner_seat,
+    ).toBeNull();
     // Residence 2 stays available while partitioned: an edit that moves neither owner nor state.
     const edit = await patch(
       joinerBase,
@@ -268,7 +303,9 @@ describe('federation 3c — the hub arbitrates a claim', () => {
       nickOnJoiner,
     );
     expect(edit.status).toBe(200);
-    expect(getLane(joiner.db, joinerTeam().id, laneId, 'bravo')!.title).toBe('renamed offline');
+    expect(
+      (await getLane(sqliteDriver(joiner.db), (await joinerTeam()).id, laneId, 'bravo'))!.title,
+    ).toBe('renamed offline');
   });
 
   it('a claim binds the seat to the claiming node; a claim for a seat bound elsewhere is refused 403 naming that node (ADR 328 §4)', async () => {
@@ -292,7 +329,9 @@ describe('federation 3c — the hub arbitrates a claim', () => {
     expect(res.status).toBe(403);
     expect(res.json.error.code).toBe('bound_elsewhere');
     expect(res.json.node_label).toBe(hostname());
-    expect(getLane(hub.db, hubTeam().id, laneB, 'bravo')!.owner_seat).toBeNull();
+    expect(
+      (await getLane(sqliteDriver(hub.db), (await hubTeam()).id, laneB, 'bravo'))!.owner_seat,
+    ).toBeNull();
     // The binding is a hub fact, and the ledger says so.
     expect(
       hub.db
@@ -329,7 +368,7 @@ describe('federation 3c — the hub arbitrates a claim', () => {
         [string],
         { id: string }
       >("SELECT id FROM members WHERE team_id = ? AND name = 'nick'")
-      .get(hubTeam().id)!;
+      .get((await hubTeam()).id)!;
     expect(
       hub.db
         .prepare<
@@ -369,22 +408,22 @@ describe('federation 3c — the hub arbitrates a claim', () => {
   });
 });
 
-describe('ADR 358 — a human seat trusts a set of machines by an explicit act from a bound session', () => {
-  const bindingsOf = (name: string) =>
+describe('ADR 358 — a human seat trusts a set of machines by an explicit act from a bound session', async () => {
+  const bindingsOf = async (name: string) =>
     hub.db
       .prepare<[string, string], { node_id: string }>(
         `SELECT s.node_id FROM seat_nodes s JOIN members m ON m.id = s.member_id
           WHERE m.team_id = ? AND m.name = ? ORDER BY s.bound_at, s.node_id`,
       )
-      .all(hubTeam().id, name)
+      .all((await hubTeam()).id, name)
       .map((r) => r.node_id);
 
   it('a fresh machine cannot self-trust: the joiner asking for itself is refused with the bound node named, and nothing changes', async () => {
     const laneA = await laneOnBoth('a');
     await patch(hubBase, `/teams/bravo/lanes/${laneA}`, { owner_seat: 'nick' }, nickOnHub);
-    const hubNode = localNodeForTeam(hub.db, hubTeam().id).id;
+    const hubNode = (await localNodeForTeam(sqliteDriver(hub.db), (await hubTeam()).id)).id;
     const joinerNode = readNodeState().nodes['bravo']!.node_id;
-    expect(bindingsOf('nick')).toEqual([hubNode]);
+    expect(await bindingsOf('nick')).toEqual([hubNode]);
 
     const res = await post(
       joinerBase,
@@ -395,7 +434,7 @@ describe('ADR 358 — a human seat trusts a set of machines by an explicit act f
     expect(res.status).toBe(403);
     expect(res.json.error.code).toBe('bound_elsewhere');
     expect(res.json.node_id).toBe(hubNode);
-    expect(bindingsOf('nick')).toEqual([hubNode]);
+    expect(await bindingsOf('nick')).toEqual([hubNode]);
     const denied = hub.db
       .prepare<
         [],
@@ -412,7 +451,7 @@ describe('ADR 358 — a human seat trusts a set of machines by an explicit act f
   it('from the bound machine the seat trusts the joiner; both then claim as it, and the act forwarded from the joiner is idempotent', async () => {
     const laneA = await laneOnBoth('a');
     await patch(hubBase, `/teams/bravo/lanes/${laneA}`, { owner_seat: 'nick' }, nickOnHub);
-    const hubNode = localNodeForTeam(hub.db, hubTeam().id).id;
+    const hubNode = (await localNodeForTeam(sqliteDriver(hub.db), (await hubTeam()).id)).id;
     const joinerNode = readNodeState().nodes['bravo']!.node_id;
 
     const trusted = await post(
@@ -423,7 +462,7 @@ describe('ADR 358 — a human seat trusts a set of machines by an explicit act f
     );
     expect(trusted.status).toBe(200);
     expect(trusted.json).toEqual({ seat: 'nick', node_id: joinerNode, already: false });
-    expect(bindingsOf('nick')).toEqual([hubNode, joinerNode]);
+    expect(await bindingsOf('nick')).toEqual([hubNode, joinerNode]);
     expect(
       hub.db
         .prepare<
@@ -460,7 +499,7 @@ describe('ADR 358 — a human seat trusts a set of machines by an explicit act f
     );
     expect(again.status).toBe(200);
     expect(again.json).toEqual({ seat: 'nick', node_id: hubNode, already: true });
-    expect(bindingsOf('nick')).toEqual([hubNode, joinerNode]);
+    expect(await bindingsOf('nick')).toEqual([hubNode, joinerNode]);
   });
 
   it('a node the hub does not know is refused 404, and the admin unbind clears the whole set', async () => {
@@ -471,7 +510,7 @@ describe('ADR 358 — a human seat trusts a set of machines by an explicit act f
     expect(unknown.json.error.code).toBe('not_found');
     const joinerNode = readNodeState().nodes['bravo']!.node_id;
     await post(hubBase, '/teams/bravo/nodes/trust', { node_id: joinerNode }, nickOnHub);
-    expect(bindingsOf('nick')).toHaveLength(2);
+    expect(await bindingsOf('nick')).toHaveLength(2);
     const unbound = await call(
       hubBase,
       'DELETE',
@@ -480,7 +519,7 @@ describe('ADR 358 — a human seat trusts a set of machines by an explicit act f
       nickOnHub,
     );
     expect(unbound.status).toBe(200);
-    expect(bindingsOf('nick')).toEqual([]);
+    expect(await bindingsOf('nick')).toEqual([]);
   });
 });
 
@@ -493,7 +532,7 @@ describe('ADR 361 — release, handoff and close on a joiner are decided by the 
         { actor: string; origin_node: string | null; detail: string }
       >('SELECT actor, origin_node, detail FROM audit WHERE action = ? AND target = ?')
       .all(action, laneId);
-  const actsOn = (db: RunningServer['db'], teamId: string, metaKey: string, laneId: string) =>
+  const actsOn = async (db: RunningServer['db'], teamId: string, metaKey: string, laneId: string) =>
     db
       .prepare<
         [string, string],
@@ -523,7 +562,9 @@ describe('ADR 361 — release, handoff and close on a joiner are decided by the 
     );
     expect(res.status).toBe(200);
     expect(res.json.lane).toMatchObject({ id: laneId, owner_seat: null, state: 'open' });
-    expect(getLane(hub.db, hubTeam().id, laneId, 'bravo')).toMatchObject({
+    expect(
+      await getLane(sqliteDriver(hub.db), (await hubTeam()).id, laneId, 'bravo'),
+    ).toMatchObject({
       owner_seat: null,
       state: 'open',
     });
@@ -534,9 +575,11 @@ describe('ADR 361 — release, handoff and close on a joiner are decided by the 
       laneAudit(joiner.db, laneId, 'lane.released').filter((r) => r.origin_node === joinerNode()),
     ).toHaveLength(0);
     // The origin speaks: one `[lane] released` act, minted on the joiner as nick.
-    expect(actsOn(joiner.db, joinerTeam().id, 'lane_release', laneId)).toBe(1);
+    expect(await actsOn(joiner.db, (await joinerTeam()).id, 'lane_release', laneId)).toBe(1);
     await hubToJoiner();
-    expect(getLane(joiner.db, joinerTeam().id, laneId, 'bravo')).toMatchObject({
+    expect(
+      await getLane(sqliteDriver(joiner.db), (await joinerTeam()).id, laneId, 'bravo'),
+    ).toMatchObject({
       owner_seat: null,
       state: 'open',
     });
@@ -545,9 +588,18 @@ describe('ADR 361 — release, handoff and close on a joiner are decided by the 
   it('a handoff on a stale joiner row is refused by the hub naming the real holder; the joiner row is untouched', async () => {
     const laneId = await claimedOnJoiner('h');
     // The hub's row moves under the joiner: ada takes it there, the joiner has not pulled.
-    updateLane(hub.db, hubTeam().id, laneId, 'bravo', { owner_seat: 'ada' }, 7, undefined, {
-      actor: 'ada',
-    });
+    await updateLane(
+      sqliteDriver(hub.db),
+      (await hubTeam()).id,
+      laneId,
+      'bravo',
+      { owner_seat: 'ada' },
+      7,
+      undefined,
+      {
+        actor: 'ada',
+      },
+    );
     const res = await patch(
       joinerBase,
       `/teams/bravo/lanes/${laneId}`,
@@ -557,8 +609,11 @@ describe('ADR 361 — release, handoff and close on a joiner are decided by the 
     expect(res.status).toBe(409);
     expect(res.json.error.code).toBe('conflict');
     expect(res.json.holder).toBe('ada');
-    expect(getLane(joiner.db, joinerTeam().id, laneId, 'bravo')!.owner_seat).toBe('nick');
-    expect(actsOn(joiner.db, joinerTeam().id, 'lane_handoff', laneId)).toBe(0);
+    expect(
+      (await getLane(sqliteDriver(joiner.db), (await joinerTeam()).id, laneId, 'bravo'))!
+        .owner_seat,
+    ).toBe('nick');
+    expect(await actsOn(joiner.db, (await joinerTeam()).id, 'lane_handoff', laneId)).toBe(0);
   });
 
   it("a handoff on the joiner lands on the hub with the joiner named, and the recipient's handoff act is minted once, on the joiner", async () => {
@@ -571,13 +626,15 @@ describe('ADR 361 — release, handoff and close on a joiner are decided by the 
     );
     expect(res.status).toBe(200);
     expect(res.json.lane).toMatchObject({ owner_seat: 'ada' });
-    expect(getLane(hub.db, hubTeam().id, laneId, 'bravo')!.owner_seat).toBe('ada');
+    expect(
+      (await getLane(sqliteDriver(hub.db), (await hubTeam()).id, laneId, 'bravo'))!.owner_seat,
+    ).toBe('ada');
     const handoffs = joiner.db
       .prepare<
         [string],
         { n: number }
       >("SELECT COUNT(*) AS n FROM messages WHERE team_id = ? AND act = 'handoff' AND body LIKE '%yours now%'")
-      .get(joinerTeam().id)!.n;
+      .get((await joinerTeam()).id)!.n;
     expect(handoffs).toBe(1);
     expect(
       hub.db
@@ -585,7 +642,7 @@ describe('ADR 361 — release, handoff and close on a joiner are decided by the 
           [string],
           { n: number }
         >("SELECT COUNT(*) AS n FROM messages WHERE team_id = ? AND act = 'handoff' AND body LIKE '%yours now%'")
-        .get(hubTeam().id)!.n,
+        .get((await hubTeam()).id)!.n,
     ).toBe(0); // the hub emitted nothing of its own
   });
 
@@ -602,7 +659,9 @@ describe('ADR 361 — release, handoff and close on a joiner are decided by the 
     expect(res.json.lane).toMatchObject({ id: laneId, owner_seat: 'nick', state: 'done' });
     expect(res.json.lane.resolved_at).not.toBeNull();
     expect(res.json.closed).toMatchObject({ verified: false, reason: 'self_close' });
-    expect(getLane(hub.db, hubTeam().id, laneId, 'bravo')).toMatchObject({ state: 'done' });
+    expect(
+      await getLane(sqliteDriver(hub.db), (await hubTeam()).id, laneId, 'bravo'),
+    ).toMatchObject({ state: 'done' });
     // The terminal transition is recorded once, on the hub, as the seat, naming the joiner —
     // the same shape a release takes. Without it nothing ever folds the close back.
     const closed = laneAudit(hub.db, laneId, 'lane.closed');
@@ -619,14 +678,19 @@ describe('ADR 361 — release, handoff and close on a joiner are decided by the 
       laneAudit(joiner.db, laneId, 'lane.closed').filter((r) => r.origin_node === joinerNode()),
     ).toHaveLength(0);
     // The origin speaks: one `[lane] resolved` act, minted on the joiner as nick.
-    expect(actsOn(joiner.db, joinerTeam().id, 'lane_resolve', laneId)).toBe(1);
+    expect(await actsOn(joiner.db, (await joinerTeam()).id, 'lane_resolve', laneId)).toBe(1);
     // (2)/(3): the board and the wake context read this row — after the fold it says done.
     await hubToJoiner();
-    expect(getLane(joiner.db, joinerTeam().id, laneId, 'bravo')).toMatchObject({
+    expect(
+      await getLane(sqliteDriver(joiner.db), (await joinerTeam()).id, laneId, 'bravo'),
+    ).toMatchObject({
       owner_seat: 'nick',
       state: 'done',
     });
-    expect(getLane(joiner.db, joinerTeam().id, laneId, 'bravo')!.resolved_at).not.toBeNull();
+    expect(
+      (await getLane(sqliteDriver(joiner.db), (await joinerTeam()).id, laneId, 'bravo'))!
+        .resolved_at,
+    ).not.toBeNull();
   });
 
   it("a submit on the joiner is decided by the hub: the answer says awaiting_acceptance, the hub's log carries a foldable state move naming the joiner, and every read on the joiner agrees after the fold", async () => {
@@ -646,7 +710,9 @@ describe('ADR 361 — release, handoff and close on a joiner are decided by the 
       state: 'awaiting_acceptance',
       merged: { pr: 1, sha: 'abc', authorized_by: 'nick' },
     });
-    expect(getLane(hub.db, hubTeam().id, laneId, 'bravo')).toMatchObject({
+    expect(
+      await getLane(sqliteDriver(hub.db), (await hubTeam()).id, laneId, 'bravo'),
+    ).toMatchObject({
       owner_seat: 'nick',
       state: 'awaiting_acceptance',
       merged: { pr: 1, sha: 'abc', authorized_by: 'nick' },
@@ -671,7 +737,9 @@ describe('ADR 361 — release, handoff and close on a joiner are decided by the 
       ),
     ).toHaveLength(0);
     await hubToJoiner();
-    expect(getLane(joiner.db, joinerTeam().id, laneId, 'bravo')).toMatchObject({
+    expect(
+      await getLane(sqliteDriver(joiner.db), (await joinerTeam()).id, laneId, 'bravo'),
+    ).toMatchObject({
       owner_seat: 'nick',
       state: 'awaiting_acceptance',
       merged: { pr: 1, sha: 'abc', authorized_by: 'nick' },
@@ -697,7 +765,9 @@ describe('ADR 361 — release, handoff and close on a joiner are decided by the 
     );
     expect(res.status).toBe(503);
     expect(res.json.error.code).toBe('hub_unreachable');
-    expect(getLane(joiner.db, joinerTeam().id, laneId, 'bravo')).toMatchObject({
+    expect(
+      await getLane(sqliteDriver(joiner.db), (await joinerTeam()).id, laneId, 'bravo'),
+    ).toMatchObject({
       owner_seat: 'nick',
       state: 'claimed',
     });
@@ -712,21 +782,21 @@ describe('ADR 361 — release, handoff and close on a joiner are decided by the 
       nickOnJoiner,
     );
     expect(res.status).toBe(200);
-    expect(actsOn(joiner.db, joinerTeam().id, 'lane_claim', laneId)).toBe(1);
-    await pushTeam(joinerCtx, joinerTeam());
-    await pullTeam(hubCtx(), hubTeam()); // the hub folds its own staged log on its pull tick
+    expect(await actsOn(joiner.db, (await joinerTeam()).id, 'lane_claim', laneId)).toBe(1);
+    await pushTeam(joinerCtx, await joinerTeam());
+    await pullTeam(hubCtx(), await hubTeam()); // the hub folds its own staged log on its pull tick
     await hubToJoiner();
-    expect(actsOn(hub.db, hubTeam().id, 'lane_claim', laneId)).toBe(1);
-    expect(actsOn(joiner.db, joinerTeam().id, 'lane_claim', laneId)).toBe(1);
+    expect(await actsOn(hub.db, (await hubTeam()).id, 'lane_claim', laneId)).toBe(1);
+    expect(await actsOn(joiner.db, (await joinerTeam()).id, 'lane_claim', laneId)).toBe(1);
   });
 });
 
-describe('a directed act folded from another machine wakes the recipient where they live (residence 3 stays local)', () => {
+describe('a directed act folded from another machine wakes the recipient where they live (residence 3 stays local)', async () => {
   const HOST = 'joiner-laptop.local';
-  const enrollOn = (server: RunningServer, name: string) => {
-    const team = getTeamBySlug(server.db, 'bravo')!;
-    const member = getMemberByName(server.db, team.id, name)!;
-    enrollResidency(server.db, team.id, {
+  const enrollOn = async (server: RunningServer, name: string) => {
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!;
+    const member = (await getMemberByName(sqliteDriver(server.db), team.id, name))!;
+    await enrollResidency(sqliteDriver(server.db), team.id, {
       member_id: member.id,
       harness: 'claude-code',
       host: HOST,
@@ -736,7 +806,7 @@ describe('a directed act folded from another machine wakes the recipient where t
   };
 
   it("a handoff minted on the hub for a seat resident on the joiner folds there and the joiner's host poll leases a wake for it; the hub, where the seat is not resident, leases nothing", async () => {
-    enrollOn(joiner, 'ada'); // ada lives on the joiner and is offline there
+    await enrollOn(joiner, 'ada'); // ada lives on the joiner and is offline there
     const laneId = await laneOnBoth('w');
     // nick, resident on the hub, claims and hands the lane to ada — the act is minted on the hub.
     const claimed = await patch(
@@ -758,10 +828,12 @@ describe('a directed act folded from another machine wakes the recipient where t
         [string],
         { id: string }
       >("SELECT id FROM messages WHERE team_id = ? AND act = 'handoff' ORDER BY ts DESC LIMIT 1")
-      .get(hubTeam().id)!.id;
+      .get((await hubTeam()).id)!.id;
 
     // The hub cannot wake ada: no residency row here.
-    expect(claimWakeLeases(hub.db, hubTeam().id, 'bravo', HOST, 45_000)).toEqual([]);
+    expect(
+      await claimWakeLeases(sqliteDriver(hub.db), (await hubTeam()).id, 'bravo', HOST, 45_000),
+    ).toEqual([]);
 
     await hubToJoiner();
     expect(
@@ -769,7 +841,13 @@ describe('a directed act folded from another machine wakes the recipient where t
         .prepare<[string], { n: number }>('SELECT COUNT(*) AS n FROM messages WHERE id = ?')
         .get(handoffId),
     ).toEqual({ n: 1 });
-    const orders = claimWakeLeases(joiner.db, joinerTeam().id, 'bravo', HOST, 45_000);
+    const orders = await claimWakeLeases(
+      sqliteDriver(joiner.db),
+      (await joinerTeam()).id,
+      'bravo',
+      HOST,
+      45_000,
+    );
     expect(orders).toHaveLength(1);
     expect(orders[0]).toMatchObject({ seat: 'ada', act_id: handoffId, sender: 'nick' });
     expect(
@@ -783,7 +861,7 @@ describe('a directed act folded from another machine wakes the recipient where t
   });
 
   it('a folded reply discharges the sender-side ledger: after ada accepts on the joiner and it folds back, the hub no longer lists the handoff as open', async () => {
-    enrollOn(joiner, 'ada');
+    await enrollOn(joiner, 'ada');
     const laneId = await laneOnBoth('d');
     await patch(hubBase, `/teams/bravo/lanes/${laneId}`, { owner_seat: 'nick' }, nickOnHub);
     await patch(hubBase, `/teams/bravo/lanes/${laneId}`, { owner_seat: 'ada' }, nickOnHub);
@@ -792,16 +870,18 @@ describe('a directed act folded from another machine wakes the recipient where t
         [string],
         { id: string }
       >("SELECT id FROM messages WHERE team_id = ? AND act = 'handoff' ORDER BY ts DESC LIMIT 1")
-      .get(hubTeam().id)!.id;
+      .get((await hubTeam()).id)!.id;
     await hubToJoiner();
     const { openDirectedLedger } = await import('../store/delivery.js');
-    expect(openDirectedLedger(hub.db, hubTeam().id).map((d) => d.id)).toContain(handoffId);
+    expect(
+      (await openDirectedLedger(sqliteDriver(hub.db), (await hubTeam()).id)).map((d) => d.id),
+    ).toContain(handoffId);
     // ada answers on the joiner (a store-level accept, as her session would send it).
-    const jt = joinerTeam();
-    const ada = getMemberByName(joiner.db, jt.id, 'ada')!;
-    const nickOnJoinerRow = getMemberByName(joiner.db, jt.id, 'nick')!;
-    insertMessage(
-      joiner.db,
+    const jt = await joinerTeam();
+    const ada = (await getMemberByName(sqliteDriver(joiner.db), jt.id, 'ada'))!;
+    const nickOnJoinerRow = (await getMemberByName(sqliteDriver(joiner.db), jt.id, 'nick'))!;
+    await insertMessage(
+      sqliteDriver(joiner.db),
       jt.id,
       ada.id,
       nickOnJoinerRow.id,
@@ -823,7 +903,9 @@ describe('a directed act folded from another machine wakes the recipient where t
       (await post(hubBase, '/teams/bravo/nodes/trust', { node_id: joinerNode }, nickOnHub)).status,
     ).toBe(200);
     await pushTeam(joinerCtx, jt);
-    await pullTeam(hubCtx(), hubTeam());
-    expect(openDirectedLedger(hub.db, hubTeam().id).map((d) => d.id)).not.toContain(handoffId);
+    await pullTeam(hubCtx(), await hubTeam());
+    expect(
+      (await openDirectedLedger(sqliteDriver(hub.db), (await hubTeam()).id)).map((d) => d.id),
+    ).not.toContain(handoffId);
   });
 });

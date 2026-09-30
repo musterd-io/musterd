@@ -1,6 +1,7 @@
 import { GENERALIST_CAPABILITIES, makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { insertRing } from '../store/doorbell.js';
 import { getMemberByName, setMemberGovernance } from '../store/members.js';
@@ -53,11 +54,11 @@ async function directedTo(seat: string, id: string): Promise<void> {
   expect(r.status).toBe(201);
 }
 
-function ringFor(name: string, host: string): void {
-  const team = requireTeam(server.db, 'hk-t');
-  insertRing(server.db, {
+async function ringFor(name: string, host: string): void {
+  const team = await requireTeam(sqliteDriver(server.db), 'hk-t');
+  await insertRing(sqliteDriver(server.db), {
     team_id: team.id,
-    member_id: getMemberByName(server.db, team.id, name)!.id,
+    member_id: (await getMemberByName(sqliteDriver(server.db), team.id, name))!.id,
     act_id: `ring-${name}`,
     record: {
       team: 'hk-t',
@@ -96,7 +97,7 @@ async function sharedHost(): Promise<{ dana: string; eve: string }> {
 
 beforeEach(async () => {
   __resetOAuthBucketsForTest();
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const r = await post('/teams', { slug: 'hk-t', creator: { name: 'nick', kind: 'human' } });
@@ -111,10 +112,10 @@ afterEach(async () => {
 describe('sponsor host key (ADR 463 §1, Review Focus 1)', () => {
   it('a sponsor mints a host key; a member with creation withdrawn cannot', async () => {
     const eve = await addHuman('eve');
-    const team = requireTeam(server.db, 'hk-t');
-    setMemberGovernance(
-      server.db,
-      getMemberByName(server.db, team.id, 'eve')!.id,
+    const team = await requireTeam(sqliteDriver(server.db), 'hk-t');
+    await setMemberGovernance(
+      sqliteDriver(server.db),
+      (await getMemberByName(sqliteDriver(server.db), team.id, 'eve'))!.id,
       null,
       JSON.stringify({ ...GENERALIST_CAPABILITIES, can_create_agents: false }),
     );
@@ -173,10 +174,10 @@ describe('sponsor host key (ADR 463 §1, Review Focus 1)', () => {
         hk.json.agent_key,
       );
       expect(ok.status).toBe(200);
-      const team = requireTeam(server.db, 'hk-t');
-      setMemberGovernance(
-        server.db,
-        getMemberByName(server.db, team.id, 'dana')!.id,
+      const team = await requireTeam(sqliteDriver(server.db), 'hk-t');
+      await setMemberGovernance(
+        sqliteDriver(server.db),
+        (await getMemberByName(sqliteDriver(server.db), team.id, 'dana'))!.id,
         change.account,
         JSON.stringify({ ...GENERALIST_CAPABILITIES, ...change.caps }),
       );
@@ -271,8 +272,8 @@ describe('sponsor host key (ADR 463 §1, Review Focus 1)', () => {
   it('claims only the sponsor’s own doorbell rings on its label', async () => {
     const dana = await addHuman('dana');
     await addHuman('eve');
-    ringFor('dana', 'shared');
-    ringFor('eve', 'shared');
+    await ringFor('dana', 'shared');
+    await ringFor('eve', 'shared');
     const hk = await post(
       '/teams/hk-t/agent-bootstrap-credentials',
       { use: 'host', target: 'shared' },

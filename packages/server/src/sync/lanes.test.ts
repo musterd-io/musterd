@@ -5,7 +5,8 @@ import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { getLane, updateLane } from '../store/lanes.js';
 import { insertMessage } from '../store/messages.js';
@@ -63,29 +64,34 @@ async function enrollJoiner() {
 }
 
 const hubCtx = (): Ctx => ({
-  db: hub.db,
+  db: sqliteDriver(hub.db),
   hub: new Hub(),
   config: resolveConfig(),
   rosterRoots: [],
 });
-const hubTeam = () => getTeamBySlug(hub.db, 'bravo')!;
-const joinerTeam = () => getTeamBySlug(joiner.db, 'bravo')!;
+const hubTeam = async () => (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
+const joinerTeam = async () => (await getTeamBySlug(sqliteDriver(joiner.db), 'bravo'))!;
 
 /** Joiner pushes to the hub; the hub folds its own staged log (the loopback of pull.ts). */
 async function replicate() {
-  await pushTeam(joinerCtx, joinerTeam());
-  await pullTeam(hubCtx(), hubTeam());
+  await pushTeam(joinerCtx, await joinerTeam());
+  await pullTeam(hubCtx(), await hubTeam());
 }
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'musterd-lanes-'));
   process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
 
-  hub = createServer({ db: openDb(':memory:'), port: 0 });
+  hub = createServer({ db: openTestDb(':memory:'), port: 0 });
   hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-  joiner = createServer({ db: openDb(':memory:'), port: 0 });
+  joiner = createServer({ db: openTestDb(':memory:'), port: 0 });
   joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
-  joinerCtx = { db: joiner.db, hub: new Hub(), config: resolveConfig(), rosterRoots: [] };
+  joinerCtx = {
+    db: sqliteDriver(joiner.db),
+    hub: new Hub(),
+    config: resolveConfig(),
+    rosterRoots: [],
+  };
 
   const onHub = await post(hubBase, '/teams', {
     slug: 'bravo',
@@ -98,12 +104,12 @@ beforeEach(async () => {
   });
   nickOnJoiner = onJoiner.json.human_credential;
   // The joiner's node row is minted on its first logged act; enrollment needs it to exist.
-  const jt = joinerTeam();
+  const jt = await joinerTeam();
   const nick = joiner.db
     .prepare<[string], { id: string }>('SELECT id FROM members WHERE team_id = ? LIMIT 1')
     .get(jt.id)!;
-  insertMessage(
-    joiner.db,
+  await insertMessage(
+    sqliteDriver(joiner.db),
     jt.id,
     nick.id,
     null,
@@ -140,7 +146,7 @@ describe('lane replication (spec 2026-09-01) — the falsifier', () => {
 
     await replicate();
 
-    const onHub = getLane(hub.db, hubTeam().id, laneId, 'bravo');
+    const onHub = await getLane(sqliteDriver(hub.db), (await hubTeam()).id, laneId, 'bravo');
     expect(onHub).toMatchObject({
       id: laneId,
       title: 'born on the joiner',
@@ -160,10 +166,10 @@ describe('lane replication (spec 2026-09-01) — the falsifier', () => {
       nickOnJoiner,
     );
     const laneId: string = opened.json.lane.id;
-    const jt = joinerTeam();
+    const jt = await joinerTeam();
     const audit = { actor: 'nick' };
-    updateLane(
-      joiner.db,
+    await updateLane(
+      sqliteDriver(joiner.db),
       jt.id,
       laneId,
       'bravo',
@@ -172,19 +178,41 @@ describe('lane replication (spec 2026-09-01) — the falsifier', () => {
       undefined,
       audit,
     );
-    updateLane(joiner.db, jt.id, laneId, 'bravo', { state: 'active' }, 3, undefined, audit);
+    await updateLane(
+      sqliteDriver(joiner.db),
+      jt.id,
+      laneId,
+      'bravo',
+      { state: 'active' },
+      3,
+      undefined,
+      audit,
+    );
 
     await replicate();
-    expect(getLane(hub.db, hubTeam().id, laneId, 'bravo')).toMatchObject({
+    expect(
+      await getLane(sqliteDriver(hub.db), (await hubTeam()).id, laneId, 'bravo'),
+    ).toMatchObject({
       branch: 'nick/x',
       scope: ['a/**'],
       state: 'active',
       owner_seat: 'nick',
     });
 
-    updateLane(joiner.db, jt.id, laneId, 'bravo', { state: 'open' }, 4, undefined, audit);
+    await updateLane(
+      sqliteDriver(joiner.db),
+      jt.id,
+      laneId,
+      'bravo',
+      { state: 'open' },
+      4,
+      undefined,
+      audit,
+    );
     await replicate();
-    expect(getLane(hub.db, hubTeam().id, laneId, 'bravo')).toMatchObject({
+    expect(
+      await getLane(sqliteDriver(hub.db), (await hubTeam()).id, laneId, 'bravo'),
+    ).toMatchObject({
       state: 'open',
       owner_seat: null,
     });
@@ -220,7 +248,7 @@ describe('lane replication (spec 2026-09-01) — the falsifier', () => {
       >('SELECT next_seq FROM nodes ORDER BY next_seq DESC LIMIT 1')
       .get()!.next_seq;
     // Pull the hub's log into the joiner: its own lane comes back and must be skipped, not re-applied.
-    await pullTeam(joinerCtx, joinerTeam());
+    await pullTeam(joinerCtx, await joinerTeam());
     const after = joiner.db
       .prepare<
         [],
@@ -252,7 +280,7 @@ describe('lane replication (spec 2026-09-01) — the falsifier', () => {
  * watermark skips (the audit row still lands, so the transition is not lost); anything else still
  * blocks, because a missing birth there is a hole or an open still in flight.
  */
-describe('genesis watermark — pre-history lanes skip, holes still block', () => {
+describe('genesis watermark — pre-history lanes skip, holes still block', async () => {
   /**
    * A lane that exists here with no replicated birth — the shape of every lane born before
    * `lane.opened` was carried on the wire. Inserted straight into `lanes`, deliberately: those
@@ -260,7 +288,7 @@ describe('genesis watermark — pre-history lanes skip, holes still block', () =
    * origin sequence. (Deleting a stamped birth instead would fabricate a gap, which the hub
    * rightly refuses — a different failure entirely.)
    */
-  function bornBeforeReplication(laneId: string, title: string) {
+  async function bornBeforeReplication(laneId: string, title: string) {
     joiner.db
       .prepare(
         `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role,
@@ -270,13 +298,22 @@ describe('genesis watermark — pre-history lanes skip, holes still block', () =
          VALUES (?, ?, 'default', ?, NULL, NULL, NULL, NULL, '[]', '[]', NULL, NULL, NULL, NULL,
                  NULL, NULL, 'open', 'nick', 1, NULL, NULL, 1)`,
       )
-      .run(laneId, joinerTeam().id, title);
+      .run(laneId, (await joinerTeam()).id, title);
   }
 
-  const edit = (laneId: string, branch: string) =>
-    updateLane(joiner.db, joinerTeam().id, laneId, 'bravo', { branch }, 2, undefined, {
-      actor: 'nick',
-    });
+  const edit = async (laneId: string, branch: string) =>
+    await updateLane(
+      sqliteDriver(joiner.db),
+      (await joinerTeam()).id,
+      laneId,
+      'bravo',
+      { branch },
+      2,
+      undefined,
+      {
+        actor: 'nick',
+      },
+    );
 
   it('a transition for a lane older than the log advances the fold instead of wedging it', async () => {
     // The watermark: a normally-born lane, so the log holds one `lane.opened`. `ancient` sorts
@@ -290,16 +327,20 @@ describe('genesis watermark — pre-history lanes skip, holes still block', () =
     const laterId: string = later.json.lane.id;
     const ancientId = '01M0000000000000000000000A';
     expect(ancientId < laterId).toBe(true);
-    bornBeforeReplication(ancientId, 'pre-history');
-    edit(ancientId, 'nick/x');
+    await bornBeforeReplication(ancientId, 'pre-history');
+    await edit(ancientId, 'nick/x');
 
     await replicate();
 
     // The fold got all the way through: the watermark lane landed, which it cannot do if the batch
     // stopped on the older lane's transition.
-    expect(getLane(hub.db, hubTeam().id, laterId, 'bravo')).toMatchObject({ title: 'watermark' });
+    expect(
+      await getLane(sqliteDriver(hub.db), (await hubTeam()).id, laterId, 'bravo'),
+    ).toMatchObject({ title: 'watermark' });
     // The pre-history lane is NOT invented here — a row with no title would be worse than no row.
-    expect(getLane(hub.db, hubTeam().id, ancientId, 'bravo')).toBeNull();
+    expect(
+      await getLane(sqliteDriver(hub.db), (await hubTeam()).id, ancientId, 'bravo'),
+    ).toBeNull();
     // The transition is not lost either: the audit row carries it, which is what makes this a skip
     // with evidence rather than a hole this daemon opened in its own trail.
     expect(
@@ -321,8 +362,8 @@ describe('genesis watermark — pre-history lanes skip, holes still block', () =
     );
     const holeId = '01ZZZZZZZZZZZZZZZZZZZZZZZZ';
     expect(first.json.lane.id < holeId).toBe(true);
-    bornBeforeReplication(holeId, 'hole');
-    edit(holeId, 'nick/y');
+    await bornBeforeReplication(holeId, 'hole');
+    await edit(holeId, 'nick/y');
 
     await replicate();
 

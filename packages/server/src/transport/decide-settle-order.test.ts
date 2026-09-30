@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
 import { getTeamBySlug } from '../store/teams.js';
@@ -34,8 +35,8 @@ async function post(path: string, body: unknown, cred?: string) {
   return { status: res.status, json: text ? (JSON.parse(text) as any) : null };
 }
 
-function grantCount(): number {
-  const teamId = getTeamBySlug(server.db, 'dawn')!.id;
+async function grantCount(): number {
+  const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
   return (
     server.db
       .prepare<[string], { n: number }>('SELECT count(*) AS n FROM grants WHERE team_id = ?')
@@ -44,7 +45,7 @@ function grantCount(): number {
 }
 
 beforeEach(async () => {
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
@@ -66,18 +67,26 @@ async function openPending(): Promise<string> {
   return r.json.request_id as string;
 }
 
-describe('decide settles before it mints (ADR 343 decision 3)', () => {
+describe('decide settles before it mints (ADR 343 decision 3)', async () => {
   it('two concurrent approvals of one request mint exactly one grant and settle it once', async () => {
     const id = await openPending();
-    const before = grantCount();
+    const before = await grantCount();
     const [a, b] = await Promise.all([
-      post(`/teams/dawn/requests/${id}/decide`, { decision: 'approve', lifetime: 'ttl' }, nickCred),
-      post(`/teams/dawn/requests/${id}/decide`, { decision: 'approve', lifetime: 'ttl' }, nickCred),
+      await post(
+        `/teams/dawn/requests/${id}/decide`,
+        { decision: 'approve', lifetime: 'ttl' },
+        nickCred,
+      ),
+      await post(
+        `/teams/dawn/requests/${id}/decide`,
+        { decision: 'approve', lifetime: 'ttl' },
+        nickCred,
+      ),
     ]);
     expect([a.status, b.status].sort()).toEqual([200, 409]);
-    expect(grantCount() - before).toBe(1);
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    const decides = listAudit(server.db, teamId).filter(
+    expect((await grantCount()) - before).toBe(1);
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    const decides = (await listAudit(sqliteDriver(server.db), teamId)).filter(
       (row) => row.action === 'request.decide' && JSON.parse(row.detail ?? '{}').request_id === id,
     );
     expect(decides).toHaveLength(1);
@@ -86,7 +95,7 @@ describe('decide settles before it mints (ADR 343 decision 3)', () => {
   it('an approval that loses the settle mints nothing — the 409 carries no grant', async () => {
     const id = await openPending();
     await post(`/teams/dawn/requests/${id}/decide`, { decision: 'deny' }, nickCred);
-    const before = grantCount();
+    const before = await grantCount();
     const late = await post(
       `/teams/dawn/requests/${id}/decide`,
       { decision: 'approve', lifetime: 'standing' },
@@ -94,10 +103,10 @@ describe('decide settles before it mints (ADR 343 decision 3)', () => {
     );
     expect(late.status).toBe(409);
     expect(late.json?.grant).toBeUndefined();
-    expect(grantCount()).toBe(before);
+    expect(await grantCount()).toBe(before);
   });
 
-  it('in the handler source, every settle precedes the mint — the order is the guard, not the absence of a yield', () => {
+  it('in the handler source, every settle precedes the mint — the order is the guard, not the absence of a yield', async () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const src = readFileSync(join(here, 'http.ts'), 'utf8');
     const start = src.indexOf('rest.match(/^\\/requests\\/([^/]+)\\/decide$/)');
@@ -105,8 +114,8 @@ describe('decide settles before it mints (ADR 343 decision 3)', () => {
     // The handler ends at the next route match after it.
     const end = src.indexOf('rest.match(', start + 1);
     const handler = src.slice(start, end);
-    const mint = handler.indexOf('issueGrant(');
-    const settle = handler.indexOf('decideRequest(');
+    const mint = handler.indexOf('await issueGrant(');
+    const settle = handler.indexOf('await decideRequest(');
     expect(mint).toBeGreaterThan(0);
     expect(settle).toBeGreaterThan(0);
     expect(settle).toBeLessThan(mint);

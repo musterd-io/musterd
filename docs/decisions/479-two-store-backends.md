@@ -70,6 +70,15 @@ that declined the spike lane.
   readers keep working, no PGlite maturity bet carried by every user, and the ADR 002 engine
   choice stands.
 - Increment 1 of the Cloud goal is planned against this shape.
+- **2026-09-30 (plan 1A landed, lane 01M3R7F6H0):** the translator is 111 lines against the 300
+  budget; every store, sync, projection and transport module is on the Driver; 24 store test
+  files (405 tests) run on both engines by default, the rest stay on the SQLite hybrid handle
+  until plan 1B converts them with the real Postgres ladder. The first both-driver run found eight
+  SQLite-isms the SQLite-only suite had never seen — `@name` object binding, `SUM(boolean)`, an
+  unqualified column in `ON CONFLICT … DO UPDATE`, a bare `? IS NULL`, a SELECT alias in `WHERE`,
+  an ungrouped correlated column, `instr`, scalar `MAX(a, b)` — which is decision 3 doing its job
+  (rules and the source fixes: `01-data-model.md` §Two dialects). Hook-path cost of the async
+  layer: 1.05× worst at p95 ([`docs/perf/async-store-layer.md`](../perf/async-store-layer.md)).
 
 ## Observability & Evaluation
 

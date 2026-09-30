@@ -1,6 +1,7 @@
 import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { insertMessage } from '../store/messages.js';
 import { getTeamBySlug } from '../store/teams.js';
@@ -52,7 +53,7 @@ async function invite(label = 'joiner laptop'): Promise<string> {
 }
 
 beforeEach(async () => {
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
 
@@ -102,8 +103,8 @@ describe('node enrollment routes (ADR 328)', () => {
     const code = await invite();
 
     const [a, b] = await Promise.all([
-      request('POST', '/teams/bravo/nodes/join', { code, node_id: 'node-a', label: 'a' }),
-      request('POST', '/teams/bravo/nodes/join', { code, node_id: 'node-b', label: 'b' }),
+      await request('POST', '/teams/bravo/nodes/join', { code, node_id: 'node-a', label: 'a' }),
+      await request('POST', '/teams/bravo/nodes/join', { code, node_id: 'node-b', label: 'b' }),
     ]);
 
     const statuses = [a.status, b.status].sort();
@@ -219,7 +220,7 @@ describe('node enrollment routes (ADR 328)', () => {
       label: 'laptop',
     });
 
-    const team = getTeamBySlug(server.db, 'bravo')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!;
     const enrolledBy = server.db
       .prepare<[string], { enrolled_by: string }>('SELECT enrolled_by FROM nodes WHERE id = ?')
       .get('node-remote')!.enrolled_by;
@@ -232,12 +233,12 @@ describe('node enrollment routes (ADR 328)', () => {
 
   it("refuses a joiner presenting the hub's own node id", async () => {
     // Make the hub mint its own local row the way a live daemon does — by writing to its log.
-    const team = getTeamBySlug(server.db, 'bravo')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!;
     const nick = server.db
       .prepare<[string], { id: string }>('SELECT id FROM members WHERE team_id = ? AND name = ?')
       .get(team.id, 'nick')!;
-    insertMessage(
-      server.db,
+    await insertMessage(
+      sqliteDriver(server.db),
       team.id,
       nick.id,
       null,
@@ -328,7 +329,7 @@ describe('node enrollment routes (ADR 328)', () => {
     expect(rotated.json.node_credential).toMatch(/^msnode_/);
     expect(rotated.json.node_credential).not.toBe(old);
 
-    const team = getTeamBySlug(server.db, 'bravo')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!;
     const row = server.db
       .prepare<[string], { id: string }>('SELECT id FROM nodes WHERE team_id = ? AND id = ?')
       .get(team.id, 'node-remote');

@@ -1,5 +1,5 @@
 import type { InsightHit } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 
 /**
  * Team memory retrieval (ADR 327) — the daemon's fold over the `insight` acts in the message log.
@@ -36,31 +36,38 @@ interface SearchRow {
 }
 
 /** Full-text search over the team's insight acts; relevance rank first, newest wins ties. */
-export function searchInsights(
-  db: Database,
+export async function searchInsights(
+  db: Driver,
   teamId: string,
   query: string,
   limit: number = INSIGHT_SEARCH_LIMIT,
-): InsightHit[] {
+): Promise<InsightHit[]> {
   const match = ftsQuery(query);
   if (!match) return [];
   const capped = Math.max(1, Math.min(Math.floor(limit) || INSIGHT_SEARCH_LIMIT, MAX_LIMIT));
-  const rows = db
-    .prepare<[string, string, number], SearchRow>(
-      `SELECT m.id,
-              mem.name    AS name,
-              json_extract(m.meta, '$.headline') AS headline,
-              m.body      AS body,
-              json_extract(m.meta, '$.tags')     AS tags,
-              m.ts        AS ts
+  // The one dialect branch above the driver (ADR 479 Consequences): SQLite's FTS5 `MATCH` + `rank`
+  // has no portable form, so Postgres gets the tsvector table pgSchema.ts builds in its place.
+  const search =
+    db.dialect === 'sqlite'
+      ? `WHERE insights_fts MATCH ? AND f.team_id = ?
+       ORDER BY rank, m.ts DESC`
+      : `WHERE f.tsv @@ plainto_tsquery('english', ?) AND f.team_id = ?
+       ORDER BY ts_rank(f.tsv, plainto_tsquery('english', ?)) DESC, m.ts DESC`;
+  const params = db.dialect === 'sqlite' ? [match, teamId, capped] : [query, teamId, query, capped];
+  const rows = await db.all<SearchRow>(
+    `SELECT m.id,
+            mem.name    AS name,
+            json_extract(m.meta, '$.headline') AS headline,
+            m.body      AS body,
+            json_extract(m.meta, '$.tags')     AS tags,
+            m.ts        AS ts
        FROM insights_fts f
        JOIN messages m ON m.id = f.message_id
        JOIN members mem ON mem.id = m.from_member
-       WHERE insights_fts MATCH ? AND f.team_id = ?
-       ORDER BY rank, m.ts DESC
+       ${search}
        LIMIT ?`,
-    )
-    .all(match, teamId, capped);
+    params,
+  );
   return rows.map((r) => ({
     id: r.id,
     from: r.name,
@@ -72,9 +79,9 @@ export function searchInsights(
 }
 
 /** Recreate the fold from the log alone — the property that makes it a cache, not a store. */
-export function rebuildInsightsFts(db: Database): number {
-  db.exec('DELETE FROM insights_fts');
-  db.exec(`
+export async function rebuildInsightsFts(db: Driver): Promise<number> {
+  await db.exec('DELETE FROM insights_fts');
+  await db.exec(`
     INSERT INTO insights_fts (message_id, team_id, headline, body, tags)
     SELECT m.id,
            m.team_id,
@@ -84,6 +91,6 @@ export function rebuildInsightsFts(db: Database): number {
     FROM messages m
     WHERE m.act = 'insight'
   `);
-  const row = db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM insights_fts').get();
+  const row = await db.get<{ n: number }>('SELECT COUNT(*) AS n FROM insights_fts');
   return row?.n ?? 0;
 }

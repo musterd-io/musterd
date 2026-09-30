@@ -1,11 +1,13 @@
 import { makeEnvelope } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
-import { describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { Driver } from '../db/driver.js';
+import { withDrivers } from '../db/testing.js';
 import { rowsToEnvelopes } from './hydrate.js';
 import { addMember } from './members.js';
 import { insertMessage, listTeamMessages } from './messages.js';
 import { createTeam } from './teams.js';
+
+let openStore: () => Promise<Driver>;
 
 /**
  * Turning message rows into Envelopes needs each row's sender and recipient NAME, and every call site
@@ -22,116 +24,122 @@ import { createTeam } from './teams.js';
  * So the property under test is not "it is fast" but the shape that makes it fast: cost is a function
  * of how many DISTINCT members appear, never of how many rows there are.
  */
-function seed() {
-  const db = openDb(':memory:');
-  const team = createTeam(db, { slug: 'revive' });
-  const nick = addMember(db, team, { name: 'nick', kind: 'human' }).row;
-  const ada = addMember(db, team, { name: 'Ada', kind: 'agent' }).row;
+async function seed() {
+  const db = await openStore();
+  const team = await createTeam(db, { slug: 'revive' });
+  const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+  const ada = (await addMember(db, team, { name: 'Ada', kind: 'agent' })).row;
   return { db, team, nick, ada };
 }
 
 /** Counts the per-member lookup the old per-row hydration drove. */
-function countMemberLookups(db: Database, run: () => void): number {
+async function countMemberLookups(db: Driver, run: () => void | Promise<void>): Promise<number> {
   let n = 0;
-  const orig = db.prepare.bind(db);
-  (db as unknown as { prepare: unknown }).prepare = (sql: string) => {
-    const stmt = orig(sql);
-    if (/FROM members WHERE id = \?/.test(sql)) {
-      const get = stmt.get.bind(stmt);
-      (stmt as unknown as { get: unknown }).get = (...args: unknown[]) => {
-        n++;
-        return (get as (...a: unknown[]) => unknown)(...args);
-      };
-    }
-    return stmt;
-  };
+  const off = db.onStatement((sql) => {
+    if (/FROM members WHERE id = \?/.test(sql)) n++;
+  });
   try {
-    run();
+    await run();
   } finally {
-    (db as unknown as { prepare: unknown }).prepare = orig;
+    off();
   }
   return n;
 }
 
-describe('rowsToEnvelopes', () => {
-  it('asks each distinct member for its name once, not once per row', () => {
-    const { db, team, nick, ada } = seed();
-    for (let i = 0; i < 200; i++) {
-      insertMessage(
+withDrivers('hydrate', (o, kind) => {
+  // Set per test, not at collection: describe.each collects every driver before any test runs.
+  beforeEach(() => {
+    openStore = o;
+  });
+
+  describe('rowsToEnvelopes', async () => {
+    // Counts statements through the SQLite driver's seam; the property itself is driver-neutral.
+    it.runIf(kind === 'sqlite')(
+      'asks each distinct member for its name once, not once per row',
+      async () => {
+        const { db, team, nick, ada } = await seed();
+        for (let i = 0; i < 200; i++) {
+          await insertMessage(
+            db,
+            team.id,
+            i % 2 === 0 ? nick.id : ada.id,
+            i % 2 === 0 ? ada.id : nick.id,
+            makeEnvelope({
+              id: `m${i}`,
+              team: team.slug,
+              from: i % 2 === 0 ? 'nick' : 'Ada',
+              to: { kind: 'member', name: i % 2 === 0 ? 'Ada' : 'nick' },
+              act: 'message',
+              body: 'x',
+              thread: null,
+              meta: null,
+              ts: 1_000 + i,
+            }),
+          );
+        }
+        const rows = await listTeamMessages(db, team.id, { limit: 500 });
+        expect(rows).toHaveLength(200);
+
+        let out: unknown[] = [];
+        const lookups = await countMemberLookups(db, async () => {
+          out = await rowsToEnvelopes(db, team.slug, rows);
+        });
+
+        expect(out).toHaveLength(200);
+        // Two distinct members across 200 rows.
+        expect(lookups).toBe(2);
+      },
+    );
+
+    it('names the sender and recipient exactly as the per-row hydration did', async () => {
+      const { db, team, nick, ada } = await seed();
+      await insertMessage(
         db,
         team.id,
-        i % 2 === 0 ? nick.id : ada.id,
-        i % 2 === 0 ? ada.id : nick.id,
+        nick.id,
+        ada.id,
         makeEnvelope({
-          id: `m${i}`,
+          id: 'directed',
           team: team.slug,
-          from: i % 2 === 0 ? 'nick' : 'Ada',
-          to: { kind: 'member', name: i % 2 === 0 ? 'Ada' : 'nick' },
+          from: 'nick',
+          to: { kind: 'member', name: 'Ada' },
           act: 'message',
           body: 'x',
           thread: null,
           meta: null,
-          ts: 1_000 + i,
+          ts: 1_000,
         }),
       );
-    }
-    const rows = listTeamMessages(db, team.id, { limit: 500 });
-    expect(rows).toHaveLength(200);
+      await insertMessage(
+        db,
+        team.id,
+        ada.id,
+        null,
+        makeEnvelope({
+          id: 'to-team',
+          team: team.slug,
+          from: 'Ada',
+          to: { kind: 'team' },
+          act: 'status_update',
+          body: 'x',
+          thread: null,
+          meta: null,
+          ts: 1_001,
+        }),
+      );
 
-    let out: unknown[] = [];
-    const lookups = countMemberLookups(db, () => {
-      out = rowsToEnvelopes(db, team.slug, rows);
+      const envelopes = await rowsToEnvelopes(
+        db,
+        team.slug,
+        await listTeamMessages(db, team.id, { limit: 10 }),
+      );
+      const directed = envelopes.find((e) => e.id === 'directed')!;
+      const toTeam = envelopes.find((e) => e.id === 'to-team')!;
+
+      expect(directed.from).toBe('nick');
+      expect(directed.to).toEqual({ kind: 'member', name: 'Ada' });
+      expect(toTeam.from).toBe('Ada');
+      expect(toTeam.to).toEqual({ kind: 'team' });
     });
-
-    expect(out).toHaveLength(200);
-    // Two distinct members across 200 rows.
-    expect(lookups).toBe(2);
-  });
-
-  it('names the sender and recipient exactly as the per-row hydration did', () => {
-    const { db, team, nick, ada } = seed();
-    insertMessage(
-      db,
-      team.id,
-      nick.id,
-      ada.id,
-      makeEnvelope({
-        id: 'directed',
-        team: team.slug,
-        from: 'nick',
-        to: { kind: 'member', name: 'Ada' },
-        act: 'message',
-        body: 'x',
-        thread: null,
-        meta: null,
-        ts: 1_000,
-      }),
-    );
-    insertMessage(
-      db,
-      team.id,
-      ada.id,
-      null,
-      makeEnvelope({
-        id: 'to-team',
-        team: team.slug,
-        from: 'Ada',
-        to: { kind: 'team' },
-        act: 'status_update',
-        body: 'x',
-        thread: null,
-        meta: null,
-        ts: 1_001,
-      }),
-    );
-
-    const envelopes = rowsToEnvelopes(db, team.slug, listTeamMessages(db, team.id, { limit: 10 }));
-    const directed = envelopes.find((e) => e.id === 'directed')!;
-    const toTeam = envelopes.find((e) => e.id === 'to-team')!;
-
-    expect(directed.from).toBe('nick');
-    expect(directed.to).toEqual({ kind: 'member', name: 'Ada' });
-    expect(toTeam.from).toBe('Ada');
-    expect(toTeam.to).toEqual({ kind: 'team' });
   });
 });

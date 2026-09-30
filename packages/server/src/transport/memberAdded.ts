@@ -21,14 +21,14 @@ export function broadcastMemberAdded(
 }
 
 /** The seat-file projection's version: every seat a reconcile pass added or revived is announced. */
-export function broadcastReconciled(
+export async function broadcastReconciled(
   ctx: Pick<Ctx, 'db' | 'hub'>,
   results: readonly Pick<ReconcileResult, 'slug' | 'added' | 'revived'>[],
-): void {
+): Promise<void> {
   for (const r of results) {
     const names = [...r.added, ...r.revived];
     if (names.length === 0) continue;
-    const team = getTeamBySlug(ctx.db, r.slug);
+    const team = await getTeamBySlug(ctx.db, r.slug);
     if (!team) continue;
     for (const name of names) broadcastMemberAdded(ctx.hub, team.id, name);
   }

@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 
 /**
  * ADR 445 §Observability: "a session below [0.98 tool coverage] is audited as
@@ -67,49 +67,45 @@ export interface LowCoverageSession {
   coverage: number;
 }
 
-export function findLowCoverageSessions(
-  db: Database,
-  traceDb: Database,
+export async function findLowCoverageSessions(
+  db: Driver,
+  traceDb: Driver,
   now: number = Date.now(),
-): LowCoverageSession[] {
+): Promise<LowCoverageSession[]> {
   const quietBefore = now - TRACE_COVERAGE_QUIET_MS;
   const since = now - TRACE_COVERAGE_LOOKBACK_MS;
-  const sessions = traceDb
-    .prepare<
-      [number, number, number],
-      {
-        team_id: string;
-        seat: string;
-        harness: string;
-        session_digest: string;
-        post: number;
-        r2: number;
-        last: number;
-      }
-    >(
-      `SELECT team_id, seat, MIN(harness) AS harness, session_digest,
-              ${POST_TOOL_USE_ONCE} AS post,
-              SUM(CASE WHEN kind = 'usage'
-                       THEN COALESCE(json_extract(detail, '$.tool_uses'), 0) ELSE 0 END) AS r2,
-              MAX(received_at) AS last
-         FROM trace_events
-        WHERE received_at >= ?
-        GROUP BY team_id, seat, session_digest
-       HAVING last >= ? AND last < ? AND r2 > 0`,
-    )
-    // Rows are read one window further back than sessions are judged, so a long session's early
-    // R1 rows are still counted: a truncated numerator would read as a false low.
-    .all(since - TRACE_COVERAGE_LOOKBACK_MS, since, quietBefore);
+  // Rows are read one window further back than sessions are judged, so a long session's early
+  // R1 rows are still counted: a truncated numerator would read as a false low.
+  const sessions = await traceDb.all<{
+    team_id: string;
+    seat: string;
+    harness: string;
+    session_digest: string;
+    post: number;
+    r2: number;
+    last: number;
+  }>(
+    `SELECT team_id, seat, MIN(harness) AS harness, session_digest,
+            ${POST_TOOL_USE_ONCE} AS post,
+            SUM(CASE WHEN kind = 'usage'
+                     THEN COALESCE(json_extract(detail, '$.tool_uses'), 0) ELSE 0 END) AS r2,
+            MAX(received_at) AS last
+       FROM trace_events
+      WHERE received_at >= ?
+      GROUP BY team_id, seat, session_digest
+     HAVING last >= ? AND last < ? AND r2 > 0`,
+    [since - TRACE_COVERAGE_LOOKBACK_MS, since, quietBefore],
+  );
   const low = sessions.filter((s) => s.post / s.r2 < TRACE_COVERAGE_TARGET);
   if (low.length === 0) return [];
   const audited = new Set(
-    db
-      .prepare<[number], { team_id: string; digest: string | null }>(
+    (
+      await db.all<{ team_id: string; digest: string | null }>(
         `SELECT team_id, json_extract(detail, '$.session_digest') AS digest FROM audit
           WHERE action = 'trace.coverage_low' AND ts >= ?`,
+        [since - TRACE_COVERAGE_LOOKBACK_MS],
       )
-      .all(since - TRACE_COVERAGE_LOOKBACK_MS)
-      .map((r) => `${r.team_id}\u0000${r.digest ?? ''}`),
+    ).map((r) => `${r.team_id}\u0000${r.digest ?? ''}`),
   );
   return low
     .filter((s) => !audited.has(`${s.team_id}\u0000${s.session_digest}`))
@@ -129,22 +125,23 @@ export function findLowCoverageSessions(
  * function `close()` calls.
  */
 export function startTraceCoverageSweep(
-  db: Database,
-  traceDb: Database,
+  db: Driver,
+  traceDb: Driver,
   onFound: (sessions: LowCoverageSession[]) => void,
   onError: (err: unknown) => void,
 ): () => void {
-  const pass = () => {
+  const pass = async () => {
     try {
-      const found = findLowCoverageSessions(db, traceDb);
+      const found = await findLowCoverageSessions(db, traceDb);
       if (found.length > 0) onFound(found);
     } catch (err) {
       onError(err);
     }
   };
-  const first = setTimeout(pass, TRACE_COVERAGE_FIRST_DELAY_MS);
+  const tick = () => void pass();
+  const first = setTimeout(tick, TRACE_COVERAGE_FIRST_DELAY_MS);
   first.unref?.();
-  const every = setInterval(pass, TRACE_COVERAGE_INTERVAL_MS);
+  const every = setInterval(tick, TRACE_COVERAGE_INTERVAL_MS);
   every.unref?.();
   return () => {
     clearTimeout(first);

@@ -1,6 +1,6 @@
 import { type Grant, type GrantMint, type IssueGrant, TOKEN_PREFIXES } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
+import type { Driver } from '../db/driver.js';
 import { hashToken, newSecret } from './members.js';
 
 /**
@@ -44,12 +44,12 @@ export function toGrant(row: GrantRow): Grant {
  * Issue a grant: mint a fresh `msgr_` token, store its hash, and return the grant + plaintext token
  * (shown **once**). `once` lifetime implies `single_use`; `ttl` sets `expires_at = now + ttl_hours`.
  */
-export function issueGrant(
-  db: Database,
+export async function issueGrant(
+  db: Driver,
   teamId: string,
   input: IssueGrant,
   issuedBy: string | null,
-): GrantMint {
+): Promise<GrantMint> {
   const now = Date.now();
   const token = newSecret(TOKEN_PREFIXES.grant);
   const expiresAt =
@@ -70,12 +70,25 @@ export function issueGrant(
     revoked: 0,
     created_at: now,
   };
-  db.prepare(
+  await db.run(
     `INSERT INTO grants (id, team_id, scope, target, token_hash, issued_by, lifetime, expires_at,
                          single_use, revoked, created_at)
-     VALUES (@id, @team_id, @scope, @target, @token_hash, @issued_by, @lifetime, @expires_at,
-             @single_use, @revoked, @created_at)`,
-  ).run(row);
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?,
+             ?, ?, ?)`,
+    [
+      row.id,
+      row.team_id,
+      row.scope,
+      row.target,
+      row.token_hash,
+      row.issued_by,
+      row.lifetime,
+      row.expires_at,
+      row.single_use,
+      row.revoked,
+      row.created_at,
+    ],
+  );
   return { grant: toGrant(row), token };
 }
 
@@ -87,17 +100,15 @@ export type GrantInvalid = 'not_found' | 'revoked' | 'expired';
  * row on success (the caller consumes a `single_use` grant via {@link consumeGrant} on a successful
  * claim — separating validation from consumption so a failed claim doesn't burn a once-grant).
  */
-export function validateGrant(
-  db: Database,
+export async function validateGrant(
+  db: Driver,
   teamId: string,
   token: string,
-): { ok: true; grant: GrantRow } | { ok: false; reason: GrantInvalid } {
-  const row = db
-    .prepare<
-      [string, string],
-      GrantRow
-    >('SELECT * FROM grants WHERE team_id = ? AND token_hash = ?')
-    .get(teamId, hashToken(token));
+): Promise<{ ok: true; grant: GrantRow } | { ok: false; reason: GrantInvalid }> {
+  const row = await db.get<GrantRow>('SELECT * FROM grants WHERE team_id = ? AND token_hash = ?', [
+    teamId,
+    hashToken(token),
+  ]);
   if (!row) return { ok: false, reason: 'not_found' };
   if (row.revoked === 1) return { ok: false, reason: 'revoked' };
   if (row.expires_at != null && row.expires_at <= Date.now())
@@ -106,8 +117,8 @@ export function validateGrant(
 }
 
 /** Consume a `single_use` grant after a successful claim — marks it revoked so it can't be reused. */
-export function consumeGrant(db: Database, id: string): void {
-  db.prepare('UPDATE grants SET revoked = 1 WHERE id = ? AND single_use = 1').run(id);
+export async function consumeGrant(db: Driver, id: string): Promise<void> {
+  await db.run('UPDATE grants SET revoked = 1 WHERE id = ? AND single_use = 1', [id]);
 }
 
 /**
@@ -116,27 +127,28 @@ export function consumeGrant(db: Database, id: string): void {
  * Guarded to non-single-use, non-revoked, TTL-bearing grants (a `standing` grant has `expires_at NULL`
  * and is left untouched; a `once` grant is never refreshed). No-op if none match.
  */
-export function refreshGrant(db: Database, id: string, ttlMs: number): void {
-  db.prepare(
+export async function refreshGrant(db: Driver, id: string, ttlMs: number): Promise<void> {
+  await db.run(
     'UPDATE grants SET expires_at = ? WHERE id = ? AND single_use = 0 AND revoked = 0 AND expires_at IS NOT NULL',
-  ).run(Date.now() + ttlMs, id);
+    [Date.now() + ttlMs, id],
+  );
 }
 
 /** Admin revoke. Returns true if a matching, not-already-revoked grant was revoked. */
-export function revokeGrant(db: Database, teamId: string, id: string): boolean {
-  const res = db
-    .prepare('UPDATE grants SET revoked = 1 WHERE team_id = ? AND id = ? AND revoked = 0')
-    .run(teamId, id);
+export async function revokeGrant(db: Driver, teamId: string, id: string): Promise<boolean> {
+  const res = await db.run(
+    'UPDATE grants SET revoked = 1 WHERE team_id = ? AND id = ? AND revoked = 0',
+    [teamId, id],
+  );
   return res.changes > 0;
 }
 
 /** List a team's grants (public shape), newest-first. */
-export function listGrants(db: Database, teamId: string): Grant[] {
-  return db
-    .prepare<
-      [string],
-      GrantRow
-    >('SELECT * FROM grants WHERE team_id = ? ORDER BY created_at DESC, id DESC')
-    .all(teamId)
-    .map(toGrant);
+export async function listGrants(db: Driver, teamId: string): Promise<Grant[]> {
+  return (
+    await db.all<GrantRow>(
+      'SELECT * FROM grants WHERE team_id = ? ORDER BY created_at DESC, id DESC',
+      [teamId],
+    )
+  ).map(toGrant);
 }

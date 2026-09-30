@@ -1,7 +1,7 @@
 import type { TraceEvent } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
-import { openTraceDb } from '../db/traceDb.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb, openTestTraceDb } from '../db/testing.js';
 import { openLane } from './lanes.js';
 import { addMember } from './members.js';
 import { createTeam } from './teams.js';
@@ -21,20 +21,20 @@ const ev = (over: Partial<TraceEvent>): TraceEvent => ({
 const usage = (seat: string, ts: number, tokens: Record<string, number>, digest = 'aaaaaaaaaaaa') =>
   ev({ kind: 'usage', ts, session_digest: digest, detail: { parser: 'claude-code@1', ...tokens } });
 
-function fixture() {
-  const db = openDb(':memory:');
-  const traceDb = openTraceDb(':memory:');
-  const team = createTeam(db, { slug: 'dawn' });
-  addMember(db, team, { name: 'nick', kind: 'human', role: 'admin' });
-  addMember(db, team, { name: 'ryder', kind: 'agent' });
-  addMember(db, team, { name: 'izzo', kind: 'agent' });
+async function fixture() {
+  const db = openTestDb(':memory:');
+  const traceDb = openTestTraceDb(':memory:');
+  const team = await createTeam(db, { slug: 'dawn' });
+  await addMember(db, team, { name: 'nick', kind: 'human', role: 'admin' });
+  await addMember(db, team, { name: 'ryder', kind: 'agent' });
+  await addMember(db, team, { name: 'izzo', kind: 'agent' });
   return { db, traceDb, team };
 }
 
-describe('deriveTraceReport (ADR 445 increment 4)', () => {
-  it('coverage: R1 PostToolUse over R2 tool_uses, per harness, with the R2-rail session count', () => {
-    const { db, traceDb, team } = fixture();
-    ingestTraceEvents(traceDb, team.id, 'ryder', [
+describe('deriveTraceReport (ADR 445 increment 4)', async () => {
+  it('coverage: R1 PostToolUse over R2 tool_uses, per harness, with the R2-rail session count', async () => {
+    const { db, traceDb, team } = await fixture();
+    await ingestTraceEvents(sqliteDriver(traceDb), team.id, 'ryder', [
       ev({ tool_name: 'Bash' }),
       ev({ tool_name: 'Read' }),
       ev({ tool_name: 'Bash', outcome: 'error', kind: 'PostToolUseFailure' }),
@@ -48,7 +48,10 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
       ev({ session_digest: 'ffffffffffff', tool_name: 'Read' }),
       ev({ session_digest: 'ffffffffffff', tool_name: 'Edit' }),
     ]);
-    const r = deriveTraceReport(db, traceDb, team.id, ['ryder', 'izzo'], { days: 7, now: NOW });
+    const r = await deriveTraceReport(db, traceDb, team.id, ['ryder', 'izzo'], {
+      days: 7,
+      now: NOW,
+    });
     expect(r.coverage).toEqual([
       {
         harness: 'claude-code',
@@ -83,11 +86,11 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
   // for one call (cursor-agent too — wanderer 0e58c84e: 86 + 91 hook rows for 92 shell calls), and
   // the tap records all three as PostToolUse. One call is one call: the after-rows count only when
   // a session has no `postToolUse` spelling at all.
-  it('coverage: a cursor call that fired postToolUse and an after-hook counts once', () => {
-    const { db, traceDb, team } = fixture();
+  it('coverage: a cursor call that fired postToolUse and an after-hook counts once', async () => {
+    const { db, traceDb, team } = await fixture();
     const cursor = (over: Partial<TraceEvent>) =>
       ev({ harness: 'cursor', tool_name: 'Shell', ...over });
-    ingestTraceEvents(traceDb, team.id, 'ryder', [
+    await ingestTraceEvents(sqliteDriver(traceDb), team.id, 'ryder', [
       cursor({ detail: { hook_event: 'postToolUse' } }),
       cursor({ detail: { hook_event: 'afterShellExecution' } }),
       cursor({ tool_name: 'Read', tool_use_id: 'call-r1', detail: { hook_event: 'postToolUse' } }),
@@ -106,7 +109,7 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
         detail: { parser: 'cursor@1', tool_uses: 2 },
       }),
     ]);
-    const r = deriveTraceReport(db, traceDb, team.id, ['ryder'], { days: 7, now: NOW });
+    const r = await deriveTraceReport(db, traceDb, team.id, ['ryder'], { days: 7, now: NOW });
     expect(r.coverage).toEqual([
       {
         harness: 'cursor',
@@ -124,11 +127,11 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
   // Counting it as an R2 session put its hook calls over an empty denominator — codex read 1.47
   // on the dogfood box (1,890 / 1,289) with 11 of 11 sessions "with R2". A transcript rail that
   // cannot count calls is no denominator: the session is R1-only for the ratio.
-  it('coverage: a Grok session counts its PreToolUse rows as R1 — the probe is its one row per call', () => {
-    const { db, traceDb, team } = fixture();
+  it('coverage: a Grok session counts its PreToolUse rows as R1 — the probe is its one row per call', async () => {
+    const { db, traceDb, team } = await fixture();
     const g = (over: Partial<TraceEvent>) =>
       ev({ harness: 'grok', session_digest: 'gggggggggggg', ...over });
-    ingestTraceEvents(traceDb, team.id, 'ryder', [
+    await ingestTraceEvents(sqliteDriver(traceDb), team.id, 'ryder', [
       g({ kind: 'PreToolUse', tool_name: 'read_file', tool_use_id: 'c1' }),
       g({ kind: 'PreToolUse', tool_name: 'run_terminal_command', tool_use_id: 'c2' }),
       g({ kind: 'PreToolUse', tool_name: 'run_terminal_command', tool_use_id: 'c3' }),
@@ -136,7 +139,10 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
       // a claude-code PreToolUse (the gate's observed event there) is NOT a call row
       ev({ kind: 'PreToolUse', tool_name: 'Bash', session_digest: 'hhhhhhhhhhhh' }),
     ]);
-    const r = deriveTraceReport(db, traceDb, team.id, ['ryder'], { days: 7, now: NOW });
+    const r = await deriveTraceReport(sqliteDriver(db), sqliteDriver(traceDb), team.id, ['ryder'], {
+      days: 7,
+      now: NOW,
+    });
     const grok = r.coverage.find((c) => c.harness === 'grok')!;
     expect(grok).toMatchObject({
       sessions: 1,
@@ -148,9 +154,9 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
     expect(r.coverage.find((c) => c.harness === 'claude-code')?.post_tool_use).toBe(0);
   });
 
-  it('coverage: a session whose usage rows carry no tool_uses is not an R2 session', () => {
-    const { db, traceDb, team } = fixture();
-    ingestTraceEvents(traceDb, team.id, 'ryder', [
+  it('coverage: a session whose usage rows carry no tool_uses is not an R2 session', async () => {
+    const { db, traceDb, team } = await fixture();
+    await ingestTraceEvents(sqliteDriver(traceDb), team.id, 'ryder', [
       ev({ harness: 'codex', session_digest: 'c1c1c1c1c1c1', tool_name: 'Bash' }),
       ev({ harness: 'codex', session_digest: 'c1c1c1c1c1c1', tool_name: 'Bash' }),
       ev({
@@ -167,7 +173,7 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
         detail: { parser: 'codex@2', tool_uses: 1 },
       }),
     ]);
-    const r = deriveTraceReport(db, traceDb, team.id, ['ryder'], { days: 7, now: NOW });
+    const r = await deriveTraceReport(db, traceDb, team.id, ['ryder'], { days: 7, now: NOW });
     expect(r.coverage).toEqual([
       {
         harness: 'codex',
@@ -181,19 +187,22 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
     ]);
   });
 
-  it('cost per lane: a usage row goes to the most recently claimed open lane; none → unattributed', () => {
-    const { db, traceDb, team } = fixture();
-    openLane(db, team.id, 'dawn', 'ryder', { title: 'lane A', claim: true }, NOW - 5 * H);
-    openLane(db, team.id, 'dawn', 'ryder', { title: 'lane B', claim: true }, NOW - 2 * H);
-    ingestTraceEvents(traceDb, team.id, 'ryder', [
+  it('cost per lane: a usage row goes to the most recently claimed open lane; none → unattributed', async () => {
+    const { db, traceDb, team } = await fixture();
+    await openLane(db, team.id, 'dawn', 'ryder', { title: 'lane A', claim: true }, NOW - 5 * H);
+    await openLane(db, team.id, 'dawn', 'ryder', { title: 'lane B', claim: true }, NOW - 2 * H);
+    await ingestTraceEvents(sqliteDriver(traceDb), team.id, 'ryder', [
       usage('ryder', NOW - 6 * H, { input_tokens: 1, output_tokens: 1 }), // before any claim
       usage('ryder', NOW - 4 * H, { input_tokens: 10, output_tokens: 20 }), // only A open
       usage('ryder', NOW - 1 * H, { input_tokens: 100, output_tokens: 200, cache_read_tokens: 7 }), // A and B open → B
     ]);
-    ingestTraceEvents(traceDb, team.id, 'izzo', [
+    await ingestTraceEvents(sqliteDriver(traceDb), team.id, 'izzo', [
       usage('izzo', NOW - 1 * H, { input_tokens: 3, output_tokens: 3 }, 'cccccccccccc'), // izzo owns nothing
     ]);
-    const r = deriveTraceReport(db, traceDb, team.id, ['ryder', 'izzo'], { days: 7, now: NOW });
+    const r = await deriveTraceReport(db, traceDb, team.id, ['ryder', 'izzo'], {
+      days: 7,
+      now: NOW,
+    });
     expect(
       r.lane_cost.map((l) => [
         l.title,
@@ -214,9 +223,16 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
     });
   });
 
-  it('cost per lane: a submitted lane stops collecting at its submit, not at its acceptor resolve', () => {
-    const { db, traceDb, team } = fixture();
-    const a = openLane(db, team.id, 'dawn', 'ryder', { title: 'lane A', claim: true }, NOW - 5 * H);
+  it('cost per lane: a submitted lane stops collecting at its submit, not at its acceptor resolve', async () => {
+    const { db, traceDb, team } = await fixture();
+    const a = await openLane(
+      db,
+      team.id,
+      'dawn',
+      'ryder',
+      { title: 'lane A', claim: true },
+      NOW - 5 * H,
+    );
     // A merged and was submitted at -3h; its acceptor has not resolved it yet (resolved_at null).
     const submit = (laneId: string, ts: number, n: number) =>
       db
@@ -229,16 +245,26 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
     db.prepare(`UPDATE lanes SET state = 'awaiting_acceptance' WHERE id = ?`).run(a.id);
     // A second lane that was submitted, rejected back to claimed, and is being worked again: its
     // submit row is history, not a bound.
-    const c = openLane(db, team.id, 'dawn', 'izzo', { title: 'lane C', claim: true }, NOW - 5 * H);
+    const c = await openLane(
+      db,
+      team.id,
+      'dawn',
+      'izzo',
+      { title: 'lane C', claim: true },
+      NOW - 5 * H,
+    );
     submit(c.id, NOW - 4 * H, 1);
-    ingestTraceEvents(traceDb, team.id, 'ryder', [
+    await ingestTraceEvents(sqliteDriver(traceDb), team.id, 'ryder', [
       usage('ryder', NOW - 4 * H, { input_tokens: 10, output_tokens: 20 }), // A, before submit
       usage('ryder', NOW - 2 * H, { input_tokens: 5, output_tokens: 5 }), // after A's submit → next work
     ]);
-    ingestTraceEvents(traceDb, team.id, 'izzo', [
+    await ingestTraceEvents(sqliteDriver(traceDb), team.id, 'izzo', [
       usage('izzo', NOW - 1 * H, { input_tokens: 7, output_tokens: 7 }, 'cccccccccccc'), // C, resumed
     ]);
-    const r = deriveTraceReport(db, traceDb, team.id, ['ryder', 'izzo'], { days: 7, now: NOW });
+    const r = await deriveTraceReport(db, traceDb, team.id, ['ryder', 'izzo'], {
+      days: 7,
+      now: NOW,
+    });
     expect(r.lane_cost.map((l) => [l.title, l.turns, l.input_tokens])).toEqual([
       ['lane A', 1, 10],
       ['lane C', 1, 7],
@@ -247,20 +273,20 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
     expect(r.unattributed.input_tokens).toBe(5);
   });
 
-  it('scopes to the seats given, and the window', () => {
-    const { db, traceDb, team } = fixture();
-    ingestTraceEvents(traceDb, team.id, 'ryder', [ev({ tool_name: 'Bash' })]);
-    ingestTraceEvents(traceDb, team.id, 'izzo', [
+  it('scopes to the seats given, and the window', async () => {
+    const { db, traceDb, team } = await fixture();
+    await ingestTraceEvents(sqliteDriver(traceDb), team.id, 'ryder', [ev({ tool_name: 'Bash' })]);
+    await ingestTraceEvents(sqliteDriver(traceDb), team.id, 'izzo', [
       ev({ tool_name: 'Edit', session_digest: 'dddddddddddd' }),
       ev({ tool_name: 'Edit', session_digest: 'eeeeeeeeeeee', ts: NOW - 10 * 24 * H }),
     ]);
-    const own = deriveTraceReport(db, traceDb, team.id, ['izzo'], { days: 7, now: NOW });
+    const own = await deriveTraceReport(db, traceDb, team.id, ['izzo'], { days: 7, now: NOW });
     expect(own.seats).toEqual(['izzo']);
     expect(own.tool_mix).toEqual([
       { harness: 'claude-code', tool: 'Edit', calls: 1, errors: 0, avg_duration_ms: null },
     ]);
     expect(own.coverage[0]!.sessions).toBe(1);
-    const none = deriveTraceReport(db, traceDb, team.id, [], { days: 7, now: NOW });
+    const none = await deriveTraceReport(db, traceDb, team.id, [], { days: 7, now: NOW });
     expect(none.coverage).toEqual([]);
     expect(none.tool_mix).toEqual([]);
   });

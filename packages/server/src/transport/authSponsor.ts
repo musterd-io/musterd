@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { getMemberByName, memberStandingRefusal } from '../store/members.js';
 import {
@@ -32,15 +32,15 @@ export function assertSponsorCaller(member: MemberRow, now = Date.now()): void {
  * agent. A name that is not a live agent is `not_found` (a removed or disabled agent is never
  * minted for, Review Focus 4); a live agent someone else sponsors — or nobody does — is `forbidden`.
  */
-export function assertSponsorOf(
-  db: Database,
+export async function assertSponsorOf(
+  db: Driver,
   team: TeamRow,
   member: MemberRow,
   agentName: string,
   now = Date.now(),
-): MemberRow {
+): Promise<MemberRow> {
   assertSponsorCaller(member, now);
-  const agent = getMemberByName(db, team.id, agentName);
+  const agent = await getMemberByName(db, team.id, agentName);
   const status = agent ? resolveAccountStatus(agent) : null;
   if (
     !agent ||

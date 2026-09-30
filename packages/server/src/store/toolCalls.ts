@@ -5,7 +5,7 @@ import type {
   ToolCallMetrics,
   ToolUsageRow,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { appendAudit, appendReplicatedEvent } from './audit.js';
 
 /**
@@ -26,42 +26,39 @@ const WINDOW_MS = WINDOW_DAYS * 24 * 60 * 60 * 1000;
  * isn't worth per-event timestamps on the wire). `role` is the caller's role at ingest,
  * server-resolved: it annotates the row (last write wins), it never keys it.
  */
-export function recordToolCalls(
-  db: Database,
+export async function recordToolCalls(
+  db: Driver,
   teamId: string,
   seat: string,
   role: string | null,
   events: ToolCallEvent[],
   now: number = Date.now(),
-): void {
+): Promise<void> {
   if (events.length === 0) return;
   const bucket = now - (now % BUCKET_MS);
-  const upsert = db.prepare(
-    `INSERT INTO tool_call_stats
+  const UPSERT = `INSERT INTO tool_call_stats
        (team_id, seat, role, tool, outcome, bucket_start, calls, total_duration_ms, max_duration_ms)
-     VALUES (@team_id, @seat, @role, @tool, @outcome, @bucket_start, @calls, @total_duration_ms, @max_duration_ms)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (team_id, seat, tool, outcome, bucket_start) DO UPDATE SET
        calls = calls + excluded.calls,
        total_duration_ms = total_duration_ms + excluded.total_duration_ms,
        max_duration_ms = MAX(max_duration_ms, excluded.max_duration_ms),
-       role = COALESCE(excluded.role, role)`,
-  );
-  const tx = db.transaction((batch: ToolCallEvent[]) => {
-    for (const e of batch) {
-      upsert.run({
-        team_id: teamId,
+       role = COALESCE(excluded.role, role)`;
+  await db.tx(async (t) => {
+    for (const e of events) {
+      await t.run(UPSERT, [
+        teamId,
         seat,
         role,
-        tool: e.tool,
-        outcome: e.outcome,
-        bucket_start: bucket,
-        calls: e.calls,
-        total_duration_ms: e.total_duration_ms,
-        max_duration_ms: e.max_duration_ms,
-      });
+        e.tool,
+        e.outcome,
+        bucket,
+        e.calls,
+        e.total_duration_ms,
+        e.max_duration_ms,
+      ]);
     }
   });
-  tx(events);
 }
 
 /**
@@ -72,25 +69,25 @@ export function recordToolCalls(
  * would be a report that disagrees with itself across machines. `recordToolCalls` stays the fold's
  * silent projector primitive (the `setPolicy` / `saveMemory` shape).
  */
-export function applyToolCalls(
-  db: Database,
+export async function applyToolCalls(
+  db: Driver,
   teamId: string,
   seat: string,
   role: string | null,
   events: ToolCallEvent[],
   now: number = Date.now(),
-): void {
+): Promise<void> {
   if (events.length === 0) return;
-  db.transaction(() => {
-    recordToolCalls(db, teamId, seat, role, events, now);
-    appendReplicatedEvent(db, teamId, {
+  await db.tx(async (t) => {
+    await recordToolCalls(t, teamId, seat, role, events, now);
+    await appendReplicatedEvent(t, teamId, {
       actor: seat,
       action: 'record.tool_calls',
       target: seat,
       result: 'allow',
       detail: { seat, role, bucket_start: now - (now % BUCKET_MS), events },
     });
-  })();
+  });
 }
 
 /**
@@ -98,13 +95,13 @@ export function applyToolCalls(
  * row (the `residency.wake_cost` precedent: a measured cost the ledger carries). Once per adapter
  * session by contract (the adapter sends it on its first flush only), so the ledger stays legible.
  */
-export function recordSurfaceRender(
-  db: Database,
+export async function recordSurfaceRender(
+  db: Driver,
   teamId: string,
   seat: string,
   surface: SurfaceRender,
-): void {
-  appendAudit(db, teamId, {
+): Promise<void> {
+  await appendAudit(db, teamId, {
     actor: seat,
     action: 'mcp.surface_rendered',
     target: seat,
@@ -133,23 +130,22 @@ interface StatRow {
  * the latest attested surface weight per seat. One grouped pass over the aggregate + one over the
  * `mcp.surface_rendered` trail; diagnostic instruments, never a score.
  */
-export function deriveToolCallMetrics(
-  db: Database,
+export async function deriveToolCallMetrics(
+  db: Driver,
   teamId: string,
   now: number = Date.now(),
-): ToolCallMetrics {
+): Promise<ToolCallMetrics> {
   const since = now - WINDOW_MS;
-  const rows = db
-    .prepare<[string, number], StatRow>(
-      `SELECT seat, role, tool, outcome,
+  const rows = await db.all<StatRow>(
+    `SELECT seat, role, tool, outcome,
               SUM(calls) AS calls,
               SUM(total_duration_ms) AS total_duration_ms,
               MAX(max_duration_ms) AS max_duration_ms
          FROM tool_call_stats
         WHERE team_id = ? AND bucket_start > ?
         GROUP BY seat, role, tool, outcome`,
-    )
-    .all(teamId, since);
+    [teamId, since],
+  );
 
   interface ToolAcc {
     calls: number;
@@ -204,13 +200,12 @@ export function deriveToolCallMetrics(
 
   // Latest attested weight per seat — an attestation like `presence.build`, so it is not
   // window-bound: the newest row per seat stands until the next session re-attests.
-  const surfaceRows = db
-    .prepare<[string], { target: string | null; ts: number; detail: string | null }>(
-      `SELECT target, ts, detail FROM audit
+  const surfaceRows = await db.all<{ target: string | null; ts: number; detail: string | null }>(
+    `SELECT target, ts, detail FROM audit
         WHERE team_id = ? AND action = 'mcp.surface_rendered'
         ORDER BY ts DESC, id DESC`,
-    )
-    .all(teamId);
+    [teamId],
+  );
   const surface: SeatSurfaceWeight[] = [];
   const seen = new Set<string>();
   for (const r of surfaceRows) {

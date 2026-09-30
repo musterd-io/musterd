@@ -1,5 +1,5 @@
 import { type PartialCapabilities, PartialCapabilitiesSchema } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 
 /**
  * The `roles` table (ADR 070, v0.3 P1) — a projection of `roles/<name>.toml`, the durable role
@@ -20,84 +20,95 @@ export interface RoleRow {
 }
 
 /** Upsert a role's defaults for a team (id/created_at preserved on update). */
-export function upsertRole(
-  db: Database,
+export async function upsertRole(
+  db: Driver,
   teamId: string,
   name: string,
   capabilities: PartialCapabilities,
   charter: string | null,
   summary: string | null = null,
-): void {
+): Promise<void> {
   const now = Date.now();
-  db.prepare(
+  await db.run(
     `INSERT INTO roles (team_id, name, capabilities, charter, summary, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(team_id, name) DO UPDATE SET
        capabilities = excluded.capabilities, charter = excluded.charter, summary = excluded.summary,
        updated_at = excluded.updated_at`,
-  ).run(teamId, name, JSON.stringify(capabilities), charter, summary, now, now);
+    [teamId, name, JSON.stringify(capabilities), charter, summary, now, now],
+  );
 }
 
 /** All role names declared for a team (for reconcile's drop-absent sweep). */
-export function listRoleNames(db: Database, teamId: string): string[] {
-  return db
-    .prepare<[string], { name: string }>('SELECT name FROM roles WHERE team_id = ?')
-    .all(teamId)
-    .map((r) => r.name);
+export async function listRoleNames(db: Driver, teamId: string): Promise<string[]> {
+  return (await db.all<{ name: string }>('SELECT name FROM roles WHERE team_id = ?', [teamId])).map(
+    (r) => r.name,
+  );
 }
 
 /** Drop the named roles for a team (reconcile removes roles absent from the files). */
-export function deleteRoles(db: Database, teamId: string, names: string[]): void {
+export async function deleteRoles(db: Driver, teamId: string, names: string[]): Promise<void> {
   if (names.length === 0) return;
-  const stmt = db.prepare('DELETE FROM roles WHERE team_id = ? AND name = ?');
-  for (const name of names) stmt.run(teamId, name);
+  for (const name of names) {
+    await db.run('DELETE FROM roles WHERE team_id = ? AND name = ?', [teamId, name]);
+  }
 }
 
 /** The team's role library for the roster read (ADR 227 discovery): name-ordered so the response
  *  is stable. Charter + capability defaults ride along (close-out, additive) so `role show` can
  *  render a team role without a second route — they were always in the row. */
-export function listRoles(
-  db: Database,
+export async function listRoles(
+  db: Driver,
   teamId: string,
-): Array<{ name: string; summary: string | null; charter: string | null; capabilities: unknown }> {
-  return db
-    .prepare<
-      [string],
-      { name: string; summary: string | null; charter: string | null; capabilities: string | null }
-    >('SELECT name, summary, charter, capabilities FROM roles WHERE team_id = ? ORDER BY name')
-    .all(teamId)
-    .map((r) => ({ ...r, capabilities: r.capabilities ? JSON.parse(r.capabilities) : {} }));
+): Promise<
+  Array<{ name: string; summary: string | null; charter: string | null; capabilities: unknown }>
+> {
+  return (
+    await db.all<{
+      name: string;
+      summary: string | null;
+      charter: string | null;
+      capabilities: string | null;
+    }>('SELECT name, summary, charter, capabilities FROM roles WHERE team_id = ? ORDER BY name', [
+      teamId,
+    ])
+  ).map((r) => ({ ...r, capabilities: r.capabilities ? JSON.parse(r.capabilities) : {} }));
 }
 
 /** The authenticated occupancy charter for a Member's Team Role, when that role declares one. */
-export function getRoleCharter(db: Database, teamId: string, role: string): string | null {
+export async function getRoleCharter(
+  db: Driver,
+  teamId: string,
+  role: string,
+): Promise<string | null> {
   return (
-    db
-      .prepare<
-        [string, string],
-        { charter: string | null }
-      >('SELECT charter FROM roles WHERE team_id = ? AND name = ?')
-      .get(teamId, role)?.charter ?? null
+    (
+      await db.get<{ charter: string | null }>(
+        'SELECT charter FROM roles WHERE team_id = ? AND name = ?',
+        [teamId, role],
+      )
+    )?.charter ?? null
   );
 }
 
 /** A team's role summaries as a name→summary map (ADR 227 discovery — the roster's one-line face
  *  per role; roles without a summary are absent). */
-export function roleSummariesMap(db: Database, teamId: string): Map<string, string> {
-  const rows = db
-    .prepare<
-      [string],
-      { name: string; summary: string | null }
-    >('SELECT name, summary FROM roles WHERE team_id = ?')
-    .all(teamId);
+export async function roleSummariesMap(db: Driver, teamId: string): Promise<Map<string, string>> {
+  const rows = await db.all<{ name: string; summary: string | null }>(
+    'SELECT name, summary FROM roles WHERE team_id = ?',
+    [teamId],
+  );
   const map = new Map<string, string>();
   for (const r of rows) if (r.summary) map.set(r.name, r.summary);
   return map;
 }
 
 /** A team's role defaults as a name→partial-capabilities map (reconcile uses it to resolve seats). */
-export function roleDefaultsMap(db: Database, teamId: string): Map<string, PartialCapabilities> {
-  const rows = db.prepare<[string], RoleRow>('SELECT * FROM roles WHERE team_id = ?').all(teamId);
+export async function roleDefaultsMap(
+  db: Driver,
+  teamId: string,
+): Promise<Map<string, PartialCapabilities>> {
+  const rows = await db.all<RoleRow>('SELECT * FROM roles WHERE team_id = ?', [teamId]);
   const map = new Map<string, PartialCapabilities>();
   for (const r of rows) {
     // Defensive parse: a corrupt blob degrades to no-defaults (generalist) rather than throwing.

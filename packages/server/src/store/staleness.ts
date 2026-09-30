@@ -1,5 +1,5 @@
 import type { Lane, LaneWarning } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { goalEpochBumps } from './goals.js';
 import { listLanes } from './lanes.js';
 
@@ -42,17 +42,17 @@ function epochAt(bumps: number[] | undefined, ts: number): number {
  * single Goal — the just-deferred/steered one — for the directed push a `defer`/`steer` fires; omitted,
  * it returns the whole current stale set (the board read, and `team_next` enrichment).
  */
-export function staleLaneWarnings(
-  db: Database,
+export async function staleLaneWarnings(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   onlyGoal?: string,
   /** The board, when the caller already read it (lane 01M3ANEQVR: one read per request). */
   board?: Lane[],
-): LaneWarning[] {
-  const bumps = goalEpochBumps(db, teamId);
+): Promise<LaneWarning[]> {
+  const bumps = await goalEpochBumps(db, teamId);
   if (bumps.size === 0) return []; // no direction has changed on any Goal — nothing can be stale.
-  const lanes = board ?? listLanes(db, teamId, teamSlug);
+  const lanes = board ?? (await listLanes(db, teamId, teamSlug));
   const byId = new Map(lanes.map((l) => [l.id, l]));
   const out: LaneWarning[] = [];
 

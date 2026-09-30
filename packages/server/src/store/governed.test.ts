@@ -1,6 +1,6 @@
 import { GovernedPolicySchema, PROTOCOL_VERSION } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import {
   authorizeGovernedRequest,
   consumeGovernedLaunch,
@@ -15,14 +15,14 @@ import { bindNode, bindSeatToNode, revokeNode } from './nodes.js';
 import { attach, release } from './presence.js';
 import { createTeam } from './teams.js';
 
-function fixture() {
-  const db = openDb(':memory:');
-  const team = createTeam(db, { slug: 'governed' });
-  const human = addMember(db, team, { name: 'nick', kind: 'human' }).row;
-  const agent = addMember(db, team, { name: 'ada', kind: 'agent' }).row;
-  bindNode(db, team.id, 'node-a', 'laptop', 'msnode_node-a', human.name);
-  bindSeatToNode(db, team.id, agent.id, 'node-a', 10);
-  const presence = attach(db, agent.id, 'claude-code', 'conn-1');
+async function fixture() {
+  const db = openTestDb(':memory:');
+  const team = await createTeam(db, { slug: 'governed' });
+  const human = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+  const agent = (await addMember(db, team, { name: 'ada', kind: 'agent' })).row;
+  await bindNode(db, team.id, 'node-a', 'laptop', 'msnode_node-a', human.name);
+  await bindSeatToNode(db, team.id, agent.id, 'node-a', 10);
+  const presence = await attach(db, agent.id, 'claude-code', 'conn-1');
   return { db, team, human, agent, presence };
 }
 
@@ -54,16 +54,16 @@ function requestFor(
   };
 }
 
-describe('governed authorization store (ADR 411)', () => {
-  it('issues and consumes a launch handoff exactly once for a bound agent', () => {
-    const db = openDb(':memory:');
-    const team = createTeam(db, { slug: 'governed' });
-    const human = addMember(db, team, { name: 'nick', kind: 'human' }).row;
-    const agent = addMember(db, team, { name: 'ada', kind: 'agent' }).row;
-    bindNode(db, team.id, 'node-a', 'laptop', 'msnode_node-a', human.name);
-    bindSeatToNode(db, team.id, agent.id, 'node-a', 10);
-    const presence = attach(db, agent.id, 'claude-code', 'conn-1');
-    const mint = issueGovernedLaunch(
+describe('governed authorization store (ADR 411)', async () => {
+  it('issues and consumes a launch handoff exactly once for a bound agent', async () => {
+    const db = openTestDb(':memory:');
+    const team = await createTeam(db, { slug: 'governed' });
+    const human = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+    const agent = (await addMember(db, team, { name: 'ada', kind: 'agent' })).row;
+    await bindNode(db, team.id, 'node-a', 'laptop', 'msnode_node-a', human.name);
+    await bindSeatToNode(db, team.id, agent.id, 'node-a', 10);
+    const presence = await attach(db, agent.id, 'claude-code', 'conn-1');
+    const mint = await issueGovernedLaunch(
       db,
       team.id,
       human,
@@ -92,7 +92,7 @@ describe('governed authorization store (ADR 411)', () => {
       node_id: 'node-a',
       consumed_at: null,
     });
-    const consumed = consumeGovernedLaunch(
+    const consumed = await consumeGovernedLaunch(
       db,
       team.id,
       {
@@ -107,7 +107,7 @@ describe('governed authorization store (ADR 411)', () => {
     );
     expect(consumed.ok).toBe(true);
     expect(
-      consumeGovernedLaunch(
+      await consumeGovernedLaunch(
         db,
         team.id,
         {
@@ -121,13 +121,13 @@ describe('governed authorization store (ADR 411)', () => {
         300,
       ),
     ).toMatchObject({ ok: false, reason: 'denied_launch_replayed' });
-    db.close();
+    await db.close();
   });
 
-  it('refuses a model request when the launch is bound to a different node or model', () => {
-    const { db, team, human, presence } = fixture();
-    setGovernedPolicy(db, team.id, policy, Date.now());
-    const mint = issueGovernedLaunch(db, team.id, human, {
+  it('refuses a model request when the launch is bound to a different node or model', async () => {
+    const { db, team, human, presence } = await fixture();
+    await setGovernedPolicy(db, team.id, policy, Date.now());
+    const mint = await issueGovernedLaunch(db, team.id, human, {
       member: 'ada',
       node_id: 'node-a',
       correlation: 'corr-1',
@@ -135,22 +135,24 @@ describe('governed authorization store (ADR 411)', () => {
       ttl_ms: 60_000,
     });
     expect(
-      consumeGovernedLaunch(
-        db,
-        team.id,
-        {
-          token: mint.token,
-          launch_id: mint.authorization.id,
-          presence_id: presence.id,
-          member: 'ada',
-          node_id: 'node-a',
-          correlation: 'corr-1',
-        },
-        200,
+      (
+        await consumeGovernedLaunch(
+          db,
+          team.id,
+          {
+            token: mint.token,
+            launch_id: mint.authorization.id,
+            presence_id: presence.id,
+            member: 'ada',
+            node_id: 'node-a',
+            correlation: 'corr-1',
+          },
+          200,
+        )
       ).ok,
     ).toBe(true);
     expect(
-      authorizeGovernedRequest(
+      await authorizeGovernedRequest(
         db,
         team.id,
         'msnode_node-a',
@@ -160,12 +162,12 @@ describe('governed authorization store (ADR 411)', () => {
       decision: 'deny',
       reason: 'denied_node_binding',
     });
-    db.close();
+    await db.close();
   });
 
-  it('requires the exact live Presence and refuses expiry, revoke, and replay attempts', () => {
-    const { db, team, human, agent, presence } = fixture();
-    const expired = issueGovernedLaunch(
+  it('requires the exact live Presence and refuses expiry, revoke, and replay attempts', async () => {
+    const { db, team, human, agent, presence } = await fixture();
+    const expired = await issueGovernedLaunch(
       db,
       team.id,
       human,
@@ -179,7 +181,7 @@ describe('governed authorization store (ADR 411)', () => {
       100,
     );
     expect(
-      consumeGovernedLaunch(
+      await consumeGovernedLaunch(
         db,
         team.id,
         {
@@ -194,7 +196,7 @@ describe('governed authorization store (ADR 411)', () => {
       ),
     ).toEqual({ ok: false, reason: 'denied_presence_unknown' });
     expect(
-      consumeGovernedLaunch(
+      await consumeGovernedLaunch(
         db,
         team.id,
         {
@@ -209,16 +211,18 @@ describe('governed authorization store (ADR 411)', () => {
       ),
     ).toEqual({ ok: false, reason: 'denied_launch_expired' });
 
-    const revoked = issueGovernedLaunch(db, team.id, human, {
+    const revoked = await issueGovernedLaunch(db, team.id, human, {
       member: agent.name,
       node_id: 'node-a',
       correlation: 'revoked',
       context: { kind: 'orientation', allowance_id: 'allow-2' },
       ttl_ms: 60_000,
     });
-    expect(revokeGovernedLaunch(db, team.id, revoked.authorization.id, Date.now())).toBe(true);
+    expect(await revokeGovernedLaunch(db, team.id, revoked.authorization.id, Date.now())).toBe(
+      true,
+    );
     expect(
-      consumeGovernedLaunch(db, team.id, {
+      await consumeGovernedLaunch(db, team.id, {
         token: revoked.token,
         launch_id: revoked.authorization.id,
         presence_id: presence.id,
@@ -227,13 +231,13 @@ describe('governed authorization store (ADR 411)', () => {
         correlation: 'revoked',
       }),
     ).toEqual({ ok: false, reason: 'denied_launch_revoked' });
-    db.close();
+    await db.close();
   });
 
-  it('distinguishes a revoked node and a model outside the server-owned policy', () => {
-    const { db, team, human, agent, presence } = fixture();
-    setGovernedPolicy(db, team.id, policy);
-    const lane = openLane(
+  it('distinguishes a revoked node and a model outside the server-owned policy', async () => {
+    const { db, team, human, agent, presence } = await fixture();
+    await setGovernedPolicy(db, team.id, policy);
+    const lane = await openLane(
       db,
       team.id,
       team.slug,
@@ -241,7 +245,7 @@ describe('governed authorization store (ADR 411)', () => {
       { title: 'model refusal context', claim: true },
       Date.now(),
     );
-    const mint = issueGovernedLaunch(db, team.id, human, {
+    const mint = await issueGovernedLaunch(db, team.id, human, {
       member: agent.name,
       node_id: 'node-a',
       correlation: 'corr-node',
@@ -249,17 +253,19 @@ describe('governed authorization store (ADR 411)', () => {
       ttl_ms: 60_000,
     });
     expect(
-      consumeGovernedLaunch(db, team.id, {
-        token: mint.token,
-        launch_id: mint.authorization.id,
-        presence_id: presence.id,
-        member: agent.name,
-        node_id: 'node-a',
-        correlation: 'corr-node',
-      }).ok,
+      (
+        await consumeGovernedLaunch(db, team.id, {
+          token: mint.token,
+          launch_id: mint.authorization.id,
+          presence_id: presence.id,
+          member: agent.name,
+          node_id: 'node-a',
+          correlation: 'corr-node',
+        })
+      ).ok,
     ).toBe(true);
     expect(
-      authorizeGovernedRequest(
+      await authorizeGovernedRequest(
         db,
         team.id,
         'msnode_node-a',
@@ -270,22 +276,22 @@ describe('governed authorization store (ADR 411)', () => {
         }),
       ),
     ).toMatchObject({ decision: 'deny', reason: 'denied_model' });
-    revokeNode(db, team.id, 'node-a');
+    await revokeNode(db, team.id, 'node-a');
     expect(
-      authorizeGovernedRequest(
+      await authorizeGovernedRequest(
         db,
         team.id,
         'msnode_node-a',
         requestFor(mint.authorization.id, presence.id, { correlation: 'corr-node' }),
       ),
     ).toMatchObject({ decision: 'deny', reason: 'denied_node_revoked' });
-    db.close();
+    await db.close();
   });
 
-  it('authorizes active Lane and unresolved directed Act contexts, then closes the Lane', () => {
-    const { db, team, human, agent, presence } = fixture();
-    setGovernedPolicy(db, team.id, policy);
-    const lane = openLane(
+  it('authorizes active Lane and unresolved directed Act contexts, then closes the Lane', async () => {
+    const { db, team, human, agent, presence } = await fixture();
+    await setGovernedPolicy(db, team.id, policy);
+    const lane = await openLane(
       db,
       team.id,
       team.slug,
@@ -296,7 +302,7 @@ describe('governed authorization store (ADR 411)', () => {
       },
       Date.now(),
     );
-    const laneLaunch = issueGovernedLaunch(db, team.id, human, {
+    const laneLaunch = await issueGovernedLaunch(db, team.id, human, {
       member: agent.name,
       node_id: 'node-a',
       correlation: 'corr-lane',
@@ -304,26 +310,28 @@ describe('governed authorization store (ADR 411)', () => {
       ttl_ms: 60_000,
     });
     expect(
-      consumeGovernedLaunch(db, team.id, {
-        token: laneLaunch.token,
-        launch_id: laneLaunch.authorization.id,
-        presence_id: presence.id,
-        member: agent.name,
-        node_id: 'node-a',
-        correlation: 'corr-lane',
-      }).ok,
+      (
+        await consumeGovernedLaunch(db, team.id, {
+          token: laneLaunch.token,
+          launch_id: laneLaunch.authorization.id,
+          presence_id: presence.id,
+          member: agent.name,
+          node_id: 'node-a',
+          correlation: 'corr-lane',
+        })
+      ).ok,
     ).toBe(true);
     expect(
-      authorizeGovernedRequest(
+      await authorizeGovernedRequest(
         db,
         team.id,
         'msnode_node-a',
         requestFor(laneLaunch.authorization.id, presence.id, { correlation: 'corr-lane' }),
       ),
     ).toMatchObject({ decision: 'allow', reason: 'allowed' });
-    updateLane(db, team.id, lane.id, team.slug, { state: 'done' });
+    await updateLane(db, team.id, lane.id, team.slug, { state: 'done' });
     expect(
-      authorizeGovernedRequest(
+      await authorizeGovernedRequest(
         db,
         team.id,
         'msnode_node-a',
@@ -341,8 +349,8 @@ describe('governed authorization store (ADR 411)', () => {
       body: 'need review',
       ts: Date.now(),
     };
-    insertMessage(db, team.id, human.id, agent.id, act);
-    const actLaunch = issueGovernedLaunch(db, team.id, human, {
+    await insertMessage(db, team.id, human.id, agent.id, act);
+    const actLaunch = await issueGovernedLaunch(db, team.id, human, {
       member: agent.name,
       node_id: 'node-a',
       correlation: 'corr-act',
@@ -350,30 +358,32 @@ describe('governed authorization store (ADR 411)', () => {
       ttl_ms: 60_000,
     });
     expect(
-      consumeGovernedLaunch(db, team.id, {
-        token: actLaunch.token,
-        launch_id: actLaunch.authorization.id,
-        presence_id: presence.id,
-        member: agent.name,
-        node_id: 'node-a',
-        correlation: 'corr-act',
-      }).ok,
+      (
+        await consumeGovernedLaunch(db, team.id, {
+          token: actLaunch.token,
+          launch_id: actLaunch.authorization.id,
+          presence_id: presence.id,
+          member: agent.name,
+          node_id: 'node-a',
+          correlation: 'corr-act',
+        })
+      ).ok,
     ).toBe(true);
     expect(
-      authorizeGovernedRequest(
+      await authorizeGovernedRequest(
         db,
         team.id,
         'msnode_node-a',
         requestFor(actLaunch.authorization.id, presence.id, { correlation: 'corr-act' }),
       ),
     ).toMatchObject({ decision: 'allow', reason: 'allowed' });
-    db.close();
+    await db.close();
   });
 
-  it('denies an orientation context because allowance records are not issued yet', () => {
-    const { db, team, human, presence } = fixture();
-    setGovernedPolicy(db, team.id, policy);
-    const launch = issueGovernedLaunch(db, team.id, human, {
+  it('denies an orientation context because allowance records are not issued yet', async () => {
+    const { db, team, human, presence } = await fixture();
+    await setGovernedPolicy(db, team.id, policy);
+    const launch = await issueGovernedLaunch(db, team.id, human, {
       member: 'ada',
       node_id: 'node-a',
       correlation: 'corr-orientation',
@@ -381,30 +391,32 @@ describe('governed authorization store (ADR 411)', () => {
       ttl_ms: 60_000,
     });
     expect(
-      consumeGovernedLaunch(db, team.id, {
-        token: launch.token,
-        launch_id: launch.authorization.id,
-        presence_id: presence.id,
-        member: 'ada',
-        node_id: 'node-a',
-        correlation: 'corr-orientation',
-      }).ok,
+      (
+        await consumeGovernedLaunch(db, team.id, {
+          token: launch.token,
+          launch_id: launch.authorization.id,
+          presence_id: presence.id,
+          member: 'ada',
+          node_id: 'node-a',
+          correlation: 'corr-orientation',
+        })
+      ).ok,
     ).toBe(true);
     expect(
-      authorizeGovernedRequest(
+      await authorizeGovernedRequest(
         db,
         team.id,
         'msnode_node-a',
         requestFor(launch.authorization.id, presence.id, { correlation: 'corr-orientation' }),
       ),
     ).toMatchObject({ decision: 'deny', reason: 'denied_context_orientation' });
-    db.close();
+    await db.close();
   });
 
-  it('refuses a held Presence and a model outside the effective Member ceiling', () => {
-    const { db, team, human, agent, presence } = fixture();
-    setGovernedPolicy(db, team.id, policy);
-    const lane = openLane(
+  it('refuses a held Presence and a model outside the effective Member ceiling', async () => {
+    const { db, team, human, agent, presence } = await fixture();
+    await setGovernedPolicy(db, team.id, policy);
+    const lane = await openLane(
       db,
       team.id,
       team.slug,
@@ -412,16 +424,16 @@ describe('governed authorization store (ADR 411)', () => {
       { title: 'held Presence context', claim: true },
       Date.now(),
     );
-    const launch = issueGovernedLaunch(db, team.id, human, {
+    const launch = await issueGovernedLaunch(db, team.id, human, {
       member: agent.name,
       node_id: 'node-a',
       correlation: 'corr-stale',
       context: { kind: 'lane', lane_id: lane.id },
       ttl_ms: 60_000,
     });
-    release(db, presence.id, 60_000);
+    await release(db, presence.id, 60_000);
     expect(
-      consumeGovernedLaunch(db, team.id, {
+      await consumeGovernedLaunch(db, team.id, {
         token: launch.token,
         launch_id: launch.authorization.id,
         presence_id: presence.id,
@@ -431,8 +443,8 @@ describe('governed authorization store (ADR 411)', () => {
       }),
     ).toEqual({ ok: false, reason: 'denied_presence_stale' });
 
-    const live = attach(db, agent.id, 'claude-code', 'conn-2');
-    const allowedLaunch = issueGovernedLaunch(db, team.id, human, {
+    const live = await attach(db, agent.id, 'claude-code', 'conn-2');
+    const allowedLaunch = await issueGovernedLaunch(db, team.id, human, {
       member: agent.name,
       node_id: 'node-a',
       correlation: 'corr-model',
@@ -440,17 +452,19 @@ describe('governed authorization store (ADR 411)', () => {
       ttl_ms: 60_000,
     });
     expect(
-      consumeGovernedLaunch(db, team.id, {
-        token: allowedLaunch.token,
-        launch_id: allowedLaunch.authorization.id,
-        presence_id: live.id,
-        member: agent.name,
-        node_id: 'node-a',
-        correlation: 'corr-model',
-      }).ok,
+      (
+        await consumeGovernedLaunch(db, team.id, {
+          token: allowedLaunch.token,
+          launch_id: allowedLaunch.authorization.id,
+          presence_id: live.id,
+          member: agent.name,
+          node_id: 'node-a',
+          correlation: 'corr-model',
+        })
+      ).ok,
     ).toBe(true);
     expect(
-      authorizeGovernedRequest(
+      await authorizeGovernedRequest(
         db,
         team.id,
         'msnode_node-a',
@@ -461,6 +475,6 @@ describe('governed authorization store (ADR 411)', () => {
         }),
       ),
     ).toMatchObject({ decision: 'deny', reason: 'denied_model' });
-    db.close();
+    await db.close();
   });
 });

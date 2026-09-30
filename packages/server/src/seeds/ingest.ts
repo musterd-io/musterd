@@ -1,5 +1,6 @@
 import { RelaySeedListSchema, type RelaySeed } from '@musterd/protocol';
 import type { Ctx } from '../context.js';
+import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
 import { appendAudit } from '../store/audit.js';
 import { createSeedFromRelay } from '../store/seeds.js';
@@ -25,13 +26,11 @@ export const SEEDS_POLL_INTERVAL_MS = 60_000;
 /** Abandon a slow relay rather than let it stack ticks. */
 const PULL_TIMEOUT_MS = 10_000;
 
-function lastSeedId(ctx: Ctx, teamId: string): string {
-  const row = ctx.db
-    .prepare<
-      [string],
-      { last_seed_id: string }
-    >('SELECT last_seed_id FROM seeds_ingest_cursor WHERE team_id = ?')
-    .get(teamId);
+async function lastSeedId(ctx: Ctx, teamId: string): Promise<string> {
+  const row = await ctx.db.get<{ last_seed_id: string }>(
+    'SELECT last_seed_id FROM seeds_ingest_cursor WHERE team_id = ?',
+    [teamId],
+  );
   return row?.last_seed_id ?? '';
 }
 
@@ -46,13 +45,17 @@ async function pullSeeds(url: string, token: string, after: string): Promise<Rel
   return RelaySeedListSchema.parse(await res.json()).seeds;
 }
 
-function advanceCursor(ctx: Ctx, teamId: string, relayId: string, now: number): void {
-  ctx.db
-    .prepare(
-      `INSERT INTO seeds_ingest_cursor (team_id, last_seed_id, updated_at) VALUES (?, ?, ?)
+async function advanceCursor(
+  db: Driver,
+  teamId: string,
+  relayId: string,
+  now: number,
+): Promise<void> {
+  await db.run(
+    `INSERT INTO seeds_ingest_cursor (team_id, last_seed_id, updated_at) VALUES (?, ?, ?)
        ON CONFLICT(team_id) DO UPDATE SET last_seed_id = excluded.last_seed_id, updated_at = excluded.updated_at`,
-    )
-    .run(teamId, relayId, now);
+    [teamId, relayId, now],
+  );
 }
 
 /** One team's ingest pass: pull everything past the cursor, create one shared Seed per record. Exported for
@@ -62,50 +65,49 @@ export async function ingestTeamSeeds(
   team: { id: string; slug: string },
   now: number = Date.now(),
 ): Promise<number> {
-  const policy = getPolicy(ctx.db, team.id);
+  const policy = await getPolicy(ctx.db, team.id);
   const url = policy.seeds_relay_url;
   const token = policy.seeds_relay_token;
   if (!url || !token) return 0;
 
-  const seeds = await pullSeeds(url, token, lastSeedId(ctx, team.id));
+  const seeds = await pullSeeds(url, token, await lastSeedId(ctx, team.id));
   let created = 0;
   for (const seed of seeds) {
-    const tx = ctx.db.transaction(() => {
-      const prior = ctx.db
-        .prepare<
-          [string, string],
-          { id: string }
-        >('SELECT id FROM seeds WHERE team_id = ? AND relay_id = ?')
-        .get(team.id, seed.id);
-      if (prior) {
-        advanceCursor(ctx, team.id, seed.id, now);
-        return false;
-      }
-      try {
-        const stored = createSeedFromRelay(ctx.db, team.id, seed, now);
-        advanceCursor(ctx, team.id, seed.id, now);
-        appendAudit(ctx.db, team.id, {
-          actor: stored.submitted_by,
-          action: 'seed.ingested',
-          target: stored.id,
-          result: 'allow',
-          detail: { seed_id: seed.id, source: seed.source },
-        });
-        return true;
-      } catch (error) {
-        if (!(error instanceof Error) || error.message !== 'unknown_submitter') throw error;
-        advanceCursor(ctx, team.id, seed.id, now);
-        appendAudit(ctx.db, team.id, {
-          actor: null,
-          action: 'seed.ingested',
-          target: seed.id,
-          result: 'deny',
-          detail: { seed_id: seed.id, source: seed.source, reason: 'unknown_submitter' },
-        });
-        return false;
-      }
-    });
-    if (tx()) created += 1;
+    const tx = () =>
+      ctx.db.tx(async (t) => {
+        const prior = await t.get<{ id: string }>(
+          'SELECT id FROM seeds WHERE team_id = ? AND relay_id = ?',
+          [team.id, seed.id],
+        );
+        if (prior) {
+          await advanceCursor(t, team.id, seed.id, now);
+          return false;
+        }
+        try {
+          const stored = await createSeedFromRelay(t, team.id, seed, now);
+          await advanceCursor(t, team.id, seed.id, now);
+          await appendAudit(t, team.id, {
+            actor: stored.submitted_by,
+            action: 'seed.ingested',
+            target: stored.id,
+            result: 'allow',
+            detail: { seed_id: seed.id, source: seed.source },
+          });
+          return true;
+        } catch (error) {
+          if (!(error instanceof Error) || error.message !== 'unknown_submitter') throw error;
+          await advanceCursor(t, team.id, seed.id, now);
+          await appendAudit(t, team.id, {
+            actor: null,
+            action: 'seed.ingested',
+            target: seed.id,
+            result: 'deny',
+            detail: { seed_id: seed.id, source: seed.source, reason: 'unknown_submitter' },
+          });
+          return false;
+        }
+      });
+    if (await tx()) created += 1;
   }
   return created;
 }
@@ -117,7 +119,7 @@ export function startSeedsIngest(ctx: Ctx): () => void {
     if (running) return; // a slow relay must not stack passes
     running = true;
     try {
-      for (const team of listActiveTeams(ctx.db)) {
+      for (const team of await listActiveTeams(ctx.db)) {
         try {
           const created = await ingestTeamSeeds(ctx, team);
           if (created > 0) log.info({ msg: 'seeds_ingested', team: team.slug, created });

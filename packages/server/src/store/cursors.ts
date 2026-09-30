@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { appendReplicatedEvent } from './audit.js';
 
 /**
@@ -20,10 +20,8 @@ export interface Cursor {
   updated_at: number;
 }
 
-export function getCursor(db: Database, memberId: string): Cursor {
-  const row = db
-    .prepare<[string], Cursor>('SELECT * FROM inbox_cursors WHERE member_id = ?')
-    .get(memberId);
+export async function getCursor(db: Driver, memberId: string): Promise<Cursor> {
+  const row = await db.get<Cursor>('SELECT * FROM inbox_cursors WHERE member_id = ?', [memberId]);
   return row ?? { member_id: memberId, last_read_message_id: null, last_read_ts: 0, updated_at: 0 };
 }
 
@@ -32,20 +30,25 @@ export function getCursor(db: Database, memberId: string): Cursor {
  * the log, and the one thing a caller may say about it is which row — so no caller can hand this a
  * clock of its own choosing. Throws on an unknown id; the HTTP route turns that into a 404.
  */
-export function setCursor(db: Database, memberId: string, lastReadMessageId: string): Cursor {
-  const row = db
-    .prepare<[string], { created_at: number }>('SELECT created_at FROM messages WHERE id = ?')
-    .get(lastReadMessageId);
+export async function setCursor(
+  db: Driver,
+  memberId: string,
+  lastReadMessageId: string,
+): Promise<Cursor> {
+  const row = await db.get<{ created_at: number }>('SELECT created_at FROM messages WHERE id = ?', [
+    lastReadMessageId,
+  ]);
   if (!row) throw new Error(`setCursor: unknown message id ${lastReadMessageId}`);
   const now = Date.now();
-  db.prepare(
+  await db.run(
     `INSERT INTO inbox_cursors (member_id, last_read_message_id, last_read_ts, updated_at)
      VALUES (?, ?, ?, ?)
      ON CONFLICT(member_id) DO UPDATE SET
        last_read_message_id = excluded.last_read_message_id,
        last_read_ts = excluded.last_read_ts,
        updated_at = excluded.updated_at`,
-  ).run(memberId, lastReadMessageId, row.created_at, now);
+    [memberId, lastReadMessageId, row.created_at, now],
+  );
   return {
     member_id: memberId,
     last_read_message_id: lastReadMessageId,
@@ -65,15 +68,15 @@ export function setCursor(db: Database, memberId: string, lastReadMessageId: str
  * acts. The receiver resolves the id against its OWN `messages.created_at` and takes the max there
  * — a place in the log, re-read locally, which is what a cursor has always been.
  */
-export function applyCursorAdvance(
-  db: Database,
+export async function applyCursorAdvance(
+  db: Driver,
   teamId: string,
   seat: { id: string; name: string },
   lastReadMessageId: string,
-): Cursor {
-  return db.transaction(() => {
-    const cursor = setCursor(db, seat.id, lastReadMessageId);
-    appendReplicatedEvent(db, teamId, {
+): Promise<Cursor> {
+  return db.tx(async (t) => {
+    const cursor = await setCursor(t, seat.id, lastReadMessageId);
+    await appendReplicatedEvent(t, teamId, {
       actor: seat.name,
       action: 'continuity.cursor_advanced',
       target: seat.name,
@@ -81,5 +84,5 @@ export function applyCursorAdvance(
       detail: { last_read_message_id: lastReadMessageId },
     });
     return cursor;
-  })();
+  });
 }

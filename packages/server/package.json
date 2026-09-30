@@ -55,6 +55,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@opentelemetry/context-async-hooks": "^2.8.0",
     "@opentelemetry/sdk-metrics": "^2.8.0",
     "@opentelemetry/sdk-trace-base": "^2.8.0",

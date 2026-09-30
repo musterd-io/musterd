@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { addMember } from '../store/members.js';
 import { parseWorkingHours } from '../store/rows.js';
@@ -14,7 +14,7 @@ afterEach(async () => {
 
 describe('working-hours roster projection (ADR 206)', () => {
   it('inherits Team hours and lets a Member replace them', async () => {
-    const db = openDb(':memory:');
+    const db = openTestDb(':memory:');
     const teamHours = {
       timezone: 'America/Los_Angeles',
       days: ['mon', 'tue', 'wed', 'thu', 'fri'] as const,
@@ -27,10 +27,10 @@ describe('working-hours roster projection (ADR 206)', () => {
       start: '09:00',
       end: '12:00',
     };
-    const team = createTeam(db, { slug: 'revive', workingHours: teamHours });
+    const team = await createTeam(db, { slug: 'revive', workingHours: teamHours });
     expect(parseWorkingHours(team.working_hours)).toEqual(teamHours);
-    addMember(db, team, { name: 'inherited', kind: 'agent' });
-    addMember(db, team, { name: 'custom', kind: 'agent', workingHours: memberHours });
+    await addMember(db, team, { name: 'inherited', kind: 'agent' });
+    await addMember(db, team, { name: 'custom', kind: 'agent', workingHours: memberHours });
     server = createServer({ db, port: 0, rosterRoots: [] });
     const { port } = await server.listen();
 
@@ -47,6 +47,6 @@ describe('working-hours roster projection (ADR 206)', () => {
         expect.objectContaining({ name: 'custom', working_hours: memberHours }),
       ]),
     );
-    db.close();
+    await db.close();
   });
 });

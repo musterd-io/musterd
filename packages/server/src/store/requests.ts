@@ -4,8 +4,8 @@ import {
   type RequestKind,
   type RequestStatus,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
+import type { Driver } from '../db/driver.js';
 
 /**
  * The request/approval-lane store (ADR 076, P3.1 of ADR 069). A request is a session asking to claim a
@@ -69,8 +69,8 @@ export function toRequest(row: RequestRow): Request {
  *   sessions stay distinct (e.g. two agents both waiting to join a role pool). `target` matches with
  *   NULL equality so a bare teammate-join request dedups too.
  */
-export function createRequest(
-  db: Database,
+export async function createRequest(
+  db: Driver,
   teamId: string,
   input: {
     kind: RequestKind;
@@ -83,14 +83,12 @@ export function createRequest(
     /** The tier behind that model; meaningless without it, so stored only beside one. */
     model_source?: string | null;
   },
-): Request {
+): Promise<Request> {
   if (input.collapseByTarget && input.target !== null) {
-    const existing = db
-      .prepare<
-        [string, string],
-        RequestRow
-      >("SELECT * FROM requests WHERE team_id = ? AND status = 'pending' AND target = ?")
-      .get(teamId, input.target);
+    const existing = await db.get<RequestRow>(
+      "SELECT * FROM requests WHERE team_id = ? AND status = 'pending' AND target = ?",
+      [teamId, input.target],
+    );
     if (existing) {
       const surface = input.surface ?? existing.surface;
       // Refresh to the latest claimer's attestation too — the newest session's model is what occupies.
@@ -104,9 +102,10 @@ export function createRequest(
         : input.model !== undefined
           ? (input.model_source ?? null)
           : (existing.model_source ?? null);
-      db.prepare(
+      await db.run(
         'UPDATE requests SET from_session = ?, surface = ?, model = ?, model_source = ? WHERE id = ?',
-      ).run(input.from_session, surface, model, modelSource, existing.id);
+        [input.from_session, surface, model, modelSource, existing.id],
+      );
       return toRequest({
         ...existing,
         from_session: input.from_session,
@@ -116,13 +115,12 @@ export function createRequest(
       });
     }
   } else {
-    const existing = db
-      .prepare<[string, string, string | null, string | null], RequestRow>(
-        `SELECT * FROM requests
+    const existing = await db.get<RequestRow>(
+      `SELECT * FROM requests
        WHERE team_id = ? AND status = 'pending' AND from_session = ?
-         AND ((target IS NULL AND ? IS NULL) OR target = ?)`,
-      )
-      .get(teamId, input.from_session, input.target, input.target);
+         AND ((target IS NULL AND CAST(? AS TEXT) IS NULL) OR target = ?)`,
+      [teamId, input.from_session, input.target, input.target],
+    );
     if (existing) return toRequest(existing);
   }
 
@@ -141,17 +139,32 @@ export function createRequest(
     model: input.model ?? null,
     model_source: input.model ? (input.model_source ?? null) : null,
   };
-  db.prepare(
+  await db.run(
     `INSERT INTO requests (id, team_id, kind, from_session, target, surface, status, decided_by, created_at, expires_at, model, model_source)
-     VALUES (@id, @team_id, @kind, @from_session, @target, @surface, @status, @decided_by, @created_at, @expires_at, @model, @model_source)`,
-  ).run(row);
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      row.id,
+      row.team_id,
+      row.kind,
+      row.from_session,
+      row.target,
+      row.surface,
+      row.status,
+      row.decided_by,
+      row.created_at,
+      row.expires_at,
+      row.model,
+      row.model_source,
+    ],
+  );
   return toRequest(row);
 }
 
-export function getRequest(db: Database, teamId: string, id: string): Request | null {
-  const row = db
-    .prepare<[string, string], RequestRow>('SELECT * FROM requests WHERE team_id = ? AND id = ?')
-    .get(teamId, id);
+export async function getRequest(db: Driver, teamId: string, id: string): Promise<Request | null> {
+  const row = await db.get<RequestRow>('SELECT * FROM requests WHERE team_id = ? AND id = ?', [
+    teamId,
+    id,
+  ]);
   return row ? toRequest(row) : null;
 }
 
@@ -159,42 +172,42 @@ export function getRequest(db: Database, teamId: string, id: string): Request | 
  * Decide a pending request. Only a `pending` request transitions; returns the updated request, or null
  * if it was missing or already settled (so the caller can 404/409 appropriately).
  */
-export function decideRequest(
-  db: Database,
+export async function decideRequest(
+  db: Driver,
   teamId: string,
   id: string,
   decision: 'approved' | 'denied',
   decidedBy: string,
-): Request | null {
-  const res = db
-    .prepare(
-      `UPDATE requests SET status = ?, decided_by = ?
+): Promise<Request | null> {
+  const res = await db.run(
+    `UPDATE requests SET status = ?, decided_by = ?
        WHERE team_id = ? AND id = ? AND status = 'pending'`,
-    )
-    .run(decision, decidedBy, teamId, id);
+    [decision, decidedBy, teamId, id],
+  );
   if (res.changes === 0) return null;
-  return getRequest(db, teamId, id);
+  return await getRequest(db, teamId, id);
 }
 
 /** List a team's requests (public shape), newest-first; optionally only the open (`pending`) ones. */
-export function listRequests(
-  db: Database,
+export async function listRequests(
+  db: Driver,
   teamId: string,
   opts: { pendingOnly?: boolean } = {},
-): Request[] {
+): Promise<Request[]> {
   const sql = opts.pendingOnly
     ? "SELECT * FROM requests WHERE team_id = ? AND status = 'pending' ORDER BY created_at DESC, id DESC"
     : 'SELECT * FROM requests WHERE team_id = ? ORDER BY created_at DESC, id DESC';
-  return db.prepare<[string], RequestRow>(sql).all(teamId).map(toRequest);
+  return (await db.all<RequestRow>(sql, [teamId])).map(toRequest);
 }
 
 /**
  * Expire pending requests past their stored `expires_at` (the reaper, ADR 069 decision 2). Returns the
  * count expired. Wired to a timer by ADR 077; pure + idempotent so it is safe to call on any cadence.
  */
-export function expireRequests(db: Database, now = Date.now()): number {
-  const res = db
-    .prepare("UPDATE requests SET status = 'expired' WHERE status = 'pending' AND expires_at < ?")
-    .run(now);
+export async function expireRequests(db: Driver, now = Date.now()): Promise<number> {
+  const res = await db.run(
+    "UPDATE requests SET status = 'expired' WHERE status = 'pending' AND expires_at < ?",
+    [now],
+  );
   return res.changes;
 }
