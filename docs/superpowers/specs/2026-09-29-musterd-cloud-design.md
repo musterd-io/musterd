@@ -162,7 +162,8 @@ which is why it cannot run in parallel or later.
 _Result (2026-09-29): the spike's rule read **one dialect** — the schema loads, one SQL text serves
 both engines, every gate-path query is ≤ 1.2 ms p95 on PGlite and reopen is 93 ms. The judgment
 (memory, out-of-process readers, maturity) is on the result page, and on it nick chose **two
-backends** (2026-09-29): better-sqlite3 local, `pg` in Cloud, one async driver interface, the
+backends** (2026-09-29, [ADR 479](../../decisions/479-two-store-backends.md), superseding ADR 475
+decision 3's spike clause): better-sqlite3 local, `pg` in Cloud, one async driver interface, the
 store suite run on both. [`docs/perf/pglite-spike.md`](../../perf/pglite-spike.md)._
 
 ## 4. Identity and data flow
