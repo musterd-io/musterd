@@ -150,6 +150,11 @@ async function provisionsCommand(parsed: Parsed): Promise<number> {
   return 0;
 }
 
+const HOST_USAGE =
+  'usage: musterd host [provisions] [--once] [--interval <s>] [--timeout <s>] [--host <label>] [--no-provision] [--clone] — ' +
+  '`musterd host` runs the wake actuator; `musterd host provisions` lists claimable provisions. ' +
+  'There is no `host status`: read ~/.musterd/host.log, or `musterd service status --wake`.';
+
 export async function hostCommand(
   parsed: Parsed,
   deps: Partial<HostPollDeps & DoorbellPollDeps> & {
@@ -160,6 +165,11 @@ export async function hostCommand(
   } = {},
 ): Promise<number> {
   if (parsed.positionals[0] === 'provisions') return provisionsCommand(parsed);
+  // Lane 01M3QTE5235VK1NNQBSSZ28ZZ1: `host` runs the actuator when it has no positional, so a
+  // mistyped or imagined subcommand (`host status`) used to start a SECOND actuator in this
+  // workspace, silently, forever — polling leases and provisioning under this seat's key. An
+  // unknown positional is a usage error, before any backend or key is touched.
+  if (parsed.positionals.length > 0) throw new CliError(HOST_USAGE, 2);
   const opts = parseOptions(parsed.flags);
   const backends = new Map<string, ActuatorBackend>();
   const claude = claudeCodeBackend();
