@@ -13,6 +13,7 @@ import {
   launchAgentSources,
   parseFreeSwapMb,
   planSnapshot,
+  AUDIT_WATERMARK_KEY,
   TRACE_WATERMARK_KEY,
   traceWatermarkStamp,
 } from './snapshot.ts';
@@ -106,6 +107,11 @@ describe('trace.db capture (ADR 445 increment 3a)', () => {
     const { CONTENT_CAPTURED_THROUGH_KEY } =
       await import('../../packages/server/src/db/traceDb.ts');
     expect(TRACE_WATERMARK_KEY).toBe(CONTENT_CAPTURED_THROUGH_KEY);
+    // ADR 478: the audit prune reads its own key from the coordination store's schema_meta.
+    const { AUDIT_CAPTURED_THROUGH_KEY } =
+      await import('../../packages/server/src/store/retention.ts');
+    expect(AUDIT_WATERMARK_KEY).toBe(AUDIT_CAPTURED_THROUGH_KEY);
+    expect(traceWatermarkStamp(5, AUDIT_WATERMARK_KEY)).toContain(`'${AUDIT_WATERMARK_KEY}', '5'`);
     const sql = traceWatermarkStamp(1_790_380_691_082);
     expect(sql).toContain(`'${CONTENT_CAPTURED_THROUGH_KEY}', '1790380691082'`);
     // Monotonic: the upsert keeps the larger of the held and offered values.

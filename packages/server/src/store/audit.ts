@@ -102,6 +102,9 @@ export type AuditAction =
   // target = the seat whose session it was; detail = { harness, session_digest, post_tool_use,
   // r2_tool_uses, coverage }.
   | 'trace.coverage_low'
+  // ADR 478: one retention pass pruned churn-class audit rows for this team. Written by the daemon's
+  // daily reaper; detail = { class, rows, bytes, archive }. Decision class itself, so it stays.
+  | 'store.pruned'
   | 'request.decide'
   | 'request.expired'
   // ADR 088: an interrupt-class act was surfaced to a busy agent at a tool boundary (delivery, not
@@ -672,6 +675,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'governed.request.deny': 'actor',
   'trace.downgraded': 'actor',
   'trace.coverage_low': 'none',
+  'store.pruned': 'none',
 };
 
 /** The actions whose acting seat is in `target`, and those where no seat acted. */

@@ -27,6 +27,10 @@ export interface ResolvedConfig {
   footprintIntervalMs: number;
   /** Footprint samples older than this are pruned each tick. */
   footprintRetentionMs: number;
+  /** ADR 478 §1: churn-class `audit` rows older than this are archived and pruned (daily). */
+  auditChurnRetentionMs: number;
+  /** ADR 478 §3: trace CONTENT older than this is nulled (ADR 445's mechanism, a 7-day local window). */
+  traceContentRetentionMs: number;
   reclaimGraceMs: number;
   /** TTL (ms) of a seat resume grant issued on approval + refreshed on each clean occupy (ADR 087). */
   resumeTtlMs: number;
@@ -95,6 +99,11 @@ export const SUPERSEDE_GRACE_MS = 10_000;
 export const FOOTPRINT_INTERVAL_MS = 60_000;
 /** Footprint samples older than this are pruned each tick — the table stays bounded. */
 export const FOOTPRINT_RETENTION_MS = 604_800_000; // 7d
+/** ADR 478 §1: how long churn-class audit rows stay in the live store. */
+export const AUDIT_CHURN_RETENTION_MS = 2_592_000_000; // 30d
+/** ADR 478 §3: how long trace content stays locally — ~20 MB/day measured 2026-09-29, so 30 days
+ *  (ADR 445's figure) would reach ~600 MB before the first prune; 7 caps it near 140 MB. */
+export const TRACE_CONTENT_RETENTION_MS = 604_800_000; // 7d
 export const DEFAULT_PORT = 4849;
 export const DEFAULT_HOST = '127.0.0.1';
 
@@ -249,6 +258,11 @@ export function resolveConfig(opts?: ConfigOptions): ResolvedConfig {
     reaperIntervalMs: envMs('MUSTERD_REAPER_INTERVAL_MS', REAPER_INTERVAL_MS),
     footprintIntervalMs: envMs('MUSTERD_FOOTPRINT_INTERVAL_MS', FOOTPRINT_INTERVAL_MS),
     footprintRetentionMs: envMs('MUSTERD_FOOTPRINT_RETENTION_MS', FOOTPRINT_RETENTION_MS),
+    auditChurnRetentionMs: envMs('MUSTERD_AUDIT_CHURN_RETENTION_MS', AUDIT_CHURN_RETENTION_MS),
+    traceContentRetentionMs: envMs(
+      'MUSTERD_TRACE_CONTENT_RETENTION_MS',
+      TRACE_CONTENT_RETENTION_MS,
+    ),
     reclaimGraceMs: envMs('MUSTERD_RECLAIM_GRACE_MS', RECLAIM_GRACE_MS),
     resumeTtlMs: envMs('MUSTERD_RESUME_TTL_MS', RESUME_TTL_MS),
     observerTtlMs: envMs('MUSTERD_OBSERVER_TTL_MS', OBSERVER_TTL_MS),

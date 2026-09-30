@@ -316,6 +316,7 @@ import {
   toResidency,
   wakeExhaustionKey,
 } from '../store/residency.js';
+import { defaultArchiveDir, storeSizes } from '../store/retention.js';
 import {
   ACCEPTANCE_EXEMPT_SAMPLE_RATE,
   acceptanceExemption,
@@ -1840,6 +1841,8 @@ export async function handleHttp(
           const bytes = traceDbBytes(ctx.config.traceDbPath);
           return bytes === undefined ? {} : { trace_db_bytes: bytes };
         })(),
+        // ADR 478 §Observability: store sizes, so growth is watched rather than discovered.
+        ...storeSizes(ctx.db, ctx.config.dbPath, defaultArchiveDir(ctx.config.dbPath)),
         connections: countLivePresences(ctx.db, ctx.config.presenceTimeoutMs),
         // Quiescence (2026-08-03 design): age of the newest audited action across live agent seats,
         // for the auto-refresher's quiet-floor — `connections` says who is ATTACHED, this says who
