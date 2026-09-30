@@ -49,7 +49,7 @@ that declined the spike lane.
    transaction queue or synchronous transaction bodies (Q3's finding); the spike's
    BEGIN/COMMIT-around-`await` is not safe.
 3. **The store suite runs on both drivers** — better-sqlite3 and PGlite in-memory, cloned from a
-   template instance (~0.5 s per file) — in CI with no Postgres service, so the two dialects cannot
+   pre-seeded instance (~0.5 s per file) — in CI with no Postgres service, so the two dialects cannot
    drift silently. Before a Cloud release, one pass runs against a real Neon branch for what PGlite
    does not model.
 4. **The falsifier that now applies** is the spike's two-backend one: a dialect-translation layer
