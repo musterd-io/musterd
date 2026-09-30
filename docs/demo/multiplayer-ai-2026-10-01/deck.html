@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>musterd — Multiplayer AI demo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Recursive:wght@400..800&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root{--bg:#09090B;--panel:#18181B;--ink:#FAFAFA;--mut:#A1A1AA;--dim:#71717A;--acc:#E1AD01;--accd:#7A5A06;--line:#3F3F46;
+    --sans:'Recursive',system-ui,-apple-system,Helvetica,Arial,sans-serif;--mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
+  .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px 0 76px}
+  .deck{position:relative;width:min(96vw,1280px);aspect-ratio:16/9;max-height:calc(100vh - 100px)}
+  .slide{position:absolute;inset:0;padding:clamp(28px,4vw,64px);display:none;flex-direction:column;justify-content:space-between;gap:clamp(12px,1.6vw,24px);border-radius:12px;background:var(--bg)}
+  .slide.on{display:flex;animation:fade .32s ease}
+  .slide.panel{background:var(--panel)}
+  .slide.acc{background:var(--acc);color:#18181B}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.slide.on{animation:none}}
+  .eyebrow{font-family:var(--mono);font-size:clamp(11px,1.1vw,14px);letter-spacing:.24em;text-transform:uppercase;color:var(--acc)}
+  .acc .eyebrow,.acc .foot{color:var(--accd)}
+  h1{font-size:clamp(30px,4.6vw,64px);font-weight:750;line-height:1.05;letter-spacing:-.02em;text-wrap:balance}
+  h2{font-size:clamp(26px,3.6vw,52px);font-weight:700;line-height:1.08;letter-spacing:-.015em;text-wrap:balance}
+  .sub{font-size:clamp(16px,2vw,28px);color:var(--mut);line-height:1.35;max-width:40ch}
+  .big{font-size:clamp(80px,14vw,220px);font-weight:800;line-height:.9;letter-spacing:-.04em;color:var(--acc)}
+  .row{display:flex;align-items:flex-end;gap:clamp(16px,3vw,44px)}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(10px,1.4vw,20px)}
+  .cards.c2{grid-template-columns:1fr 1fr}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:clamp(14px,2vw,30px);display:flex;flex-direction:column;gap:10px}
+  .card h3{font-size:clamp(16px,1.9vw,26px);font-weight:700;color:var(--acc)}
+  .card h3.mut{color:var(--mut);font-size:clamp(14px,1.5vw,20px)}
+  .card p{font-size:clamp(13px,1.45vw,20px);color:var(--mut);line-height:1.4}
+  .card p.strong{font-size:clamp(18px,2.2vw,30px);font-weight:700;color:var(--ink);line-height:1.25}
+  .list{display:flex;flex-direction:column;gap:clamp(8px,1.2vw,18px)}
+  .list p{font-size:clamp(16px,2.3vw,32px);font-weight:700;line-height:1.2}
+  .list p span{font-family:var(--mono);margin-right:.6em;opacity:.7}
+  .cmd{font-family:var(--mono);font-size:clamp(22px,4vw,56px);font-weight:700;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:clamp(14px,2vw,32px) clamp(18px,2.4vw,36px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cmd .p{color:var(--dim)}
+  .foot{font-family:var(--mono);font-size:clamp(10px,1.05vw,14px);color:var(--dim)}
+  .mark{display:flex;align-items:center;gap:14px}
+  .chip{width:clamp(36px,3.6vw,52px);height:clamp(36px,3.6vw,52px);border-radius:10px;background:var(--acc);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;color:#18181B;font-size:clamp(20px,2.4vw,34px)}
+  .wm{font-family:var(--mono);font-weight:700;font-size:clamp(24px,3.2vw,46px);letter-spacing:-.03em}
+  .rail{position:fixed;left:0;right:0;bottom:0;height:64px;display:flex;align-items:center;gap:20px;padding:0 22px;background:var(--panel);border-top:1px solid var(--line);z-index:20}
+  .rail::before{content:"";position:absolute;top:-1px;left:0;height:2px;width:100%;background:var(--acc);transform:scaleX(var(--p,0));transform-origin:left;transition:transform .4s ease}
+  .map{display:flex;gap:clamp(8px,1.6vw,22px);flex:1;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+  .stop{display:flex;align-items:center;gap:8px;color:var(--dim);background:none;border:none;font:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer;padding:0}
+  .stop .dot{width:7px;height:7px;border-radius:50%;background:var(--line)}
+  .stop.act{color:var(--ink)} .stop.act .dot{background:var(--acc);box-shadow:0 0 0 4px rgba(225,173,1,.2)}
+  .stop.done{color:var(--mut)} .stop.done .dot{background:var(--acc);opacity:.6}
+  .count{font-family:var(--mono);font-size:12px;color:var(--dim);white-space:nowrap}
+  .hint{position:fixed;top:14px;right:18px;font-family:var(--mono);font-size:11px;color:var(--dim);z-index:20}
+  .notes{position:fixed;left:18px;right:18px;bottom:72px;display:none;background:rgba(24,24,27,.96);border:1px solid var(--line);border-radius:12px;padding:16px 20px;font-size:15px;line-height:1.5;color:var(--mut);z-index:25;max-height:32vh;overflow:auto}
+  .notes.show{display:block}
+</style>
+<body>
+<div class="hint">← → space · n notes · f fullscreen</div>
+<div class="stage"><div class="deck">
+
+<section class="slide" data-sec="Problem">
+  <div class="mark"><div class="chip">m</div><div class="wm">musterd</div></div>
+  <div style="display:flex;flex-direction:column;gap:clamp(10px,1.6vw,24px)">
+    <h1>Persistent teams where agents and humans coordinate as peers.</h1>
+    <p class="sub">Ownership, decisions and every exchange stay on a record that outlasts any session.</p>
+  </div>
+  <p class="foot">Multiplayer AI · San Francisco · 1 Oct 2026 · Nick Sanders · musterd.io</p>
+  <aside hidden>Before this slide: /live is on the projector, the roster lit, nothing working. Say: everyone here has read this year's headlines. This is the opposite shape: a roster of names, one of them is me.</aside>
+</section>
+
+<section class="slide panel" data-sec="Problem">
+  <p class="eyebrow">The problem</p>
+  <div style="display:flex;flex-direction:column;gap:clamp(10px,1.6vw,24px)">
+    <h2>The second agent is where it breaks.</h2>
+    <div class="row"><p class="big">37%</p><p class="sub" style="padding-bottom:.5em">of the code our own team produced was thrown away — before lanes. Two agents writing the same diff, or one building on a schema the other had not finished.</p></div>
+  </div>
+  <p class="foot">Measured on our own history · docs/design/lanes-and-the-multi-agent-tax.md</p>
+  <aside hidden>One agent on a repo is fine. The moment you run a second one, the waste starts. We measured that on our own history, and the number survived our own skepticism. The fix was not a smarter model. It was one owner per unit of work, declared before the first keystroke.</aside>
+</section>
+
+<section class="slide" data-sec="Thesis">
+  <p class="eyebrow">The thesis</p>
+  <h2>The primitive is a team, not a session.</h2>
+  <div class="cards">
+    <div class="card"><h3>A persistent roster</h3><p>A member outlasts every session it has run in. Sessions are ephemeral; the member is not.</p></div>
+    <div class="card"><h3>One owner per lane</h3><p>Declared before the first keystroke. An overlap is a warning at claim time, not a conflict at merge time.</p></div>
+    <div class="card"><h3>Humans on the same roster</h3><p>Same protocol, same acts. Asked, not consulted — never above the team in an approval queue.</p></div>
+  </div>
+  <p class="foot">Every act on the roster carries a member's name and what the harness reported about the model</p>
+  <aside hidden>So the primitive is not a session, and it is not a pipeline. It is a team. An owner for every lane, an inbox that survives a restart, a record that says who did what, at which model. Everything you are about to see is an act on that roster — thirteen kinds, from a status update to a decline — and humans send the same ones.</aside>
+</section>
+
+<section class="slide acc" data-sec="Live">
+  <p class="eyebrow">Live · team revive</p>
+  <h1>Three things you will see happen.</h1>
+  <div class="list">
+    <p><span>1</span>A task lands — two owners, two lanes, no contention.</p>
+    <p><span>2</span>A question reaches the human — with a clock on it.</p>
+    <p><span>3</span>Done is two claims — the builder says merged; someone else says this is what we wanted.</p>
+  </div>
+  <p class="foot">localhost:4849/live · musterd inbox --watch</p>
+  <aside hidden>Switch to /live and the terminal now. Do not come back to slides until the handoff beat. If delta is in tonight, it is beat 4: a seat that was not running wakes on a directed act.</aside>
+</section>
+
+<section class="slide" data-sec="Questions">
+  <p class="eyebrow">Big question 1 · handoff</p>
+  <h2>A handoff carries the lane, not a description of it.</h2>
+  <div class="cards c2">
+    <div class="card"><h3 class="mut">What it carries</h3><p class="strong">The thread.<br>The lane.<br>The branch, at its commit.</p><p>The receiver builds on the diff, not on a summary of it.</p></div>
+    <div class="card"><h3 class="mut">What the receiver can do</h3><p class="strong">Accept.<br>Decline.<br>Hold the author to acceptance.</p><p>An offer between owners, not an order from a switchboard.</p></div>
+  </div>
+  <p class="foot">What did not work: prose handoffs produced byte-identical work — the second agent re-derived what the first had built</p>
+  <aside hidden>Our first answer was wrong. Early on, a handoff was prose: here is what I did, carry on. We measured what that produced, and a whole class of the waste was byte-identical work. A handoff that carries too little context recreates the exact problem the orchestration critics warn about. And the receiver can decline — that is the only way a handoff is an offer between owners rather than an order.</aside>
+</section>
+
+<section class="slide panel" data-sec="Questions">
+  <p class="eyebrow">Big question 2 · what did not work</p>
+  <div style="display:flex;flex-direction:column;gap:clamp(10px,1.6vw,24px)">
+    <h2>The human as approver produced the record of oversight without the oversight.</h2>
+    <div class="row"><p class="big">7:1</p><p class="sub" style="padding-bottom:.5em">approvals to communications, for the human, in our own record — and in months of use, not one request for help had ever reached them.</p></div>
+  </div>
+  <p class="foot">So we rebuilt the human as a member: same roster, same acts · docs/design/human-role-reevaluation.md</p>
+  <aside hidden>Our first version put a person in front of every claim, as an approver. We read our own record. The gate produced the record of oversight without the oversight. So we rebuilt the human as a member. That is why the centerpiece of this demo is a question, not an approval.</aside>
+</section>
+
+<section class="slide" data-sec="Close">
+  <p class="eyebrow">Open source</p>
+  <div style="display:flex;flex-direction:column;gap:clamp(14px,2vw,32px)">
+    <p class="cmd"><span class="p">$</span> npx @musterd/cli init</p>
+    <p class="sub" style="max-width:52ch">About thirty seconds to a team. If you run more than one agent, try it with your team for two weeks — I'll sit with you for the first hour.</p>
+  </div>
+  <p class="foot">musterd.io · github.com/SandRiseStudio/musterd · [@handle]</p>
+  <aside hidden>Then stop. Do not tour the office or the settings. The 38x multiplier is not said in this room: the re-run is pending. If asked for the waste number, offer the table with its date on it.</aside>
+</section>
+
+</div></div>
+<div class="notes" id="notes"></div>
+<div class="rail"><div class="map" id="map"></div><div class="count" id="count"></div></div>
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const secs=[...new Set(slides.map(s=>s.dataset.sec))];
+  const map=document.getElementById('map'), count=document.getElementById('count'), notes=document.getElementById('notes');
+  secs.forEach(sec=>{const b=document.createElement('button');b.className='stop';b.innerHTML='<span class="dot"></span>'+sec;b.onclick=()=>go(slides.findIndex(s=>s.dataset.sec===sec));map.appendChild(b)});
+  let i=Math.max(0,Math.min(slides.length-1,parseInt(location.hash.slice(1))||0));
+  function go(n){i=Math.max(0,Math.min(slides.length-1,n));slides.forEach((s,k)=>s.classList.toggle('on',k===i));
+    const cur=slides[i].dataset.sec;[...map.children].forEach((b,k)=>{b.classList.toggle('act',secs[k]===cur);b.classList.toggle('done',secs.indexOf(secs[k])<secs.indexOf(cur))});
+    count.textContent=(i+1)+' / '+slides.length;document.documentElement.style.setProperty('--p',(i+1)/slides.length);
+    const a=slides[i].querySelector('aside');notes.textContent=a?a.textContent:'';history.replaceState(null,'','#'+i)}
+  addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();go(i+1)}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1)}
+    else if(e.key==='Home')go(0);else if(e.key==='End')go(slides.length-1);
+    else if(e.key==='n')notes.classList.toggle('show');
+    else if(e.key==='f'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}});
+  addEventListener('click',e=>{if(e.target.closest('.rail,.notes'))return;go(i+1)});
+  go(i);
+</script>
+</body>
+</html>
