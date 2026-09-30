@@ -85,7 +85,7 @@ for obstinacy.
    primer's first line); on an epistemic act that means nick's "are you sure?" is answered exactly as
    a seat's would be. This is the guidance-level form of the anonymisation result. Delivering
    `challenge` without sender identity is a protocol change and is deferred to its own ADR (below).
-   Follows-up: deferred — the first thirty-day read of the eval below (2026-09-29)
+   Follows-up: deferred — the first five-day read of the eval below (2026-10-04)
 
 4. **Measure the flip, not the agreement.** Two readouts, computed from the acts already stored, no
    new table:
@@ -122,13 +122,21 @@ concession without lowering _wrong_ concession.
   thirty-day read of the eval below, around 2026-10-29; the anonymised-delivery ADR is written then,
   with the baseline in hand to A/B against. The gate reads the line only when it sits beside the
   phrase, which is why it lives in §3 rather than here.
+- **2026-09-29 — the first read moves from thirty days to five, 2026-10-04** (nick). The note
+  above says thirty days; nick shortened it to five. ADRs 481–484 and the Eval below now key on
+  2026-10-04. The cost is the sample: 1 `challenge` act was sent in the five days before this note
+  and 17 all-time, so the read will most likely have fewer than 5 answered challenges. It can then
+  report direction only; the `challenge`-channel rates stay counts, not percentages, as ADR 294 §4
+  requires below n = 5. The phrase channel (89 concessions all-time) carries most of the early
+  signal. If the challenge channel is still below n = 5 at the read, the verdict on it is
+  "inconclusive", not "no change".
 - **2026-09-29 — increment 2: `pnpm sycophancy:readout`** (`scripts/research/sycophancy-readout.ts`,
   lane 01M3QQNA63) computes both §4 readouts, split by detection channel and with denominators. The
   wiki page carries the first read. One interpretation is fixed there and recorded here: §4's "names a
   number", taken literally, passed 5 of the 6 baseline concessions on digits like "94 ADRs". So the
   readout counts evidence-shaped numbers only: a commit sha, a `#PR`, a `file:line`. The server-side
   projection (a `musterd report` section) needs its own ADR, because it changes the `Report` schema.
-  Follows-up: lane 01M3QRD7TFZYX4HKG8QM03PV9X — deferred to the thirty-day read (2026-10-29)
+  Follows-up: lane 01M3QRD7TFZYX4HKG8QM03PV9X — deferred to the five-day read (2026-10-04)
 - **Increment 1 (this lane):** this ADR; the skill section "Answering a critique" in
   `packages/protocol/src/guidance.ts` (content version bumped, every seat's `SKILL.md` refreshes on
   the next `musterd init`/doctor pass); the wiki page with the baseline table, the queries, and the
@@ -154,7 +162,7 @@ concession without lowering _wrong_ concession.
   0 declines, 633 : 76 verdicts, and (from the wiki page) the share of concession bodies naming no
   check. Success = the unverified-concession share falls while the challenge decline rate rises off
   zero; failure = concession falls and the ledger's `challenge`-channel entries do not (the seats got
-  stubborn, not selective). Falsifier for the whole ADR: thirty days after the skill lands, answered
+  stubborn, not selective). Falsifier for the whole ADR: five days after the skill lands, answered
   challenges still concede 100% and the share of concession bodies naming a check has not moved.
 - **Experiment:** the blind second opinion is testable on the team's own reviews: for one week, half
   of nick's critiques go as `challenge` acts and half stay in the harness chat; compare how often the

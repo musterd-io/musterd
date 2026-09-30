@@ -25,7 +25,7 @@ A surface is needed that delivers the first without the second.
 
 1. **A seat sees only its own row.** The orientation block (`team_status` and the session-start
    orient read) gains one line, and only when the seat has at least 5 concessions in the window:
-   `your concessions (30d): challenge 2/3 unverified · phrase 1/14 · challenges declined 0/3`. It
+   `your concessions (5d): challenge 2/3 unverified · phrase 1/14 · challenges declined 0/3`. It
    carries counts with denominators, and nothing else: no percentage, rank, colour, or comparison to
    other seats.
 2. **No team-wide per-seat display.** `/live`, the roster and the board show no per-seat sycophancy
@@ -43,14 +43,14 @@ A surface is needed that delivers the first without the second.
 - A seat below 5 concessions sees nothing. At the current rate (6 challenge concessions all-time
   across the team) most seats will see nothing for weeks, so the phrase channel carries the early
   signal.
-- Depends on ADR 481's projection. Building waits for both that ADR and ADR 476's thirty-day read.
-  Follows-up: deferred — ADR 476's thirty-day read (2026-10-29)
+- Depends on ADR 481's projection. Building waits for both that ADR and ADR 476's five-day read.
+  Follows-up: deferred — ADR 476's five-day read (2026-10-04)
 
 ## Observability & Evaluation
 
 - **Traces:** none new. The per-seat arm label lives in seat config, and the line's rendering is
   already covered by the orient read's existing trace.
-- **Eval:** after 30 days, compare the two arms on the change in the unverified-concession share and
+- **Eval:** after 5 days, compare the two arms on the change in the unverified-concession share and
   the challenge decline rate against each seat's own baseline, and count wrong concessions from the
   ledger (`detection_channel: challenge`).
 - **Success:** the seats shown the line move towards naming checks, and wrong concessions do not
@@ -58,6 +58,6 @@ A surface is needed that delivers the first without the second.
 - **Failure:** the unverified share improves only through surface compliance, meaning a hand audit
   of 10 passing bodies finds a backticked command or file that was never actually checked. That is
   the Goodhart signal, and the line comes off.
-- **Experiment:** decision 4's random split of seats, line shown vs not, for 30 days.
-- **Falsifier:** no difference between the arms after 30 days, at n ≥ 5 concessions per seat in
+- **Experiment:** decision 4's random split of seats, line shown vs not, for 5 days.
+- **Falsifier:** no difference between the arms after 5 days, at n ≥ 5 concessions per seat in
   each arm.

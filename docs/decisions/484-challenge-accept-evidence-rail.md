@@ -35,7 +35,7 @@ it looks verified.
    `decline` had 0 of 6 answers at the 2026-09-29 baseline. A symmetric check would add friction to the behaviour the ADR
    wants more of.
 4. **Activation depends on the numbers.** The rail ships switched off and is switched on only if
-   ADR 476's thirty-day read shows the unverified share of challenge concessions has not fallen from
+   ADR 476's five-day read shows the unverified share of challenge concessions has not fallen from
    the baseline. If guidance alone moved it, the rail is not needed and this ADR is marked
    superseded by that result.
 
@@ -45,8 +45,8 @@ it looks verified.
   been told once. There is no second warning on the same thread.
 - `namesCheck` is a floor on "verified", not a judgment. A body can pass by citing a file it never
   opened. The eval samples passing bodies by hand for that reason.
-- Building waits for the thirty-day read that decides activation. Follows-up: deferred — ADR 476's
-  thirty-day read (2026-10-29)
+- Building waits for the five-day read that decides activation. Follows-up: deferred — ADR 476's
+  five-day read (2026-10-04)
 
 ## Observability & Evaluation
 
@@ -57,5 +57,5 @@ it looks verified.
 - **Goodhart check:** each month, hand-read 10 bodies that pass `namesCheck`. If more than 2 cite a
   check the thread shows was never run, the rail is teaching fake evidence and comes off.
 - **Experiment:** before and after activation, since the rail is on for everyone once activated; the monthly hand audit is the control for fake evidence.
-- **Falsifier:** 30 days after activation the unverified share has not moved, or the hand audit
+- **Falsifier:** 5 days after activation the unverified share has not moved, or the hand audit
   fails.
