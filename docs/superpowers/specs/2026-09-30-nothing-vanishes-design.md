@@ -3,7 +3,7 @@
 - Date: 2026-09-30
 - Author: dolly (lane `01M3T8MJK8H4M86DZJEBMW6KM8`), brainstormed with nick
 - Goal: `nothing-vanishes`
-- Status: proposed — ADR 487 carries the decision; this spec is the design it points at
+- Status: accepted as ADR 487 (2026-09-30)
 - Amends: [ADR 373](../../decisions/373-a-recorded-intention-names-its-lane.md) (retires repo-sourced Seeds)
 
 ## 1. The problem, in nick's words and in the record

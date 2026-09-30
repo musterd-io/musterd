@@ -227,6 +227,12 @@ reader expects their own name would hide it a second time.
 - **The three roadmap/goal disagreements are not fixed by either increment.** They are a separate,
   smaller defect in `roadmap-truth:check` — rule 3 cannot fire on an item with no `frozenBy` ADR.
   Named here so it is not mistaken for something this ADR closes.
+- **2026-09-30 — amended by [ADR 487](487-nothing-vanishes.md).** A four-slice audit found about
+  twenty plans' later increments untracked, most in specs, plans and design docs this gate does not
+  scan, or in phrasings `FORWARD_RE` misses; seed ingest last ran 2026-09-04 and this ADR's own
+  increment 3 was never laned. ADR 487 keeps `intents:check` and widens it with a structural rule
+  (every Increments/Phases row cites a lane or a disposition), retires repo-sourced Seeds and
+  `intents:ingest`, and supersedes increment 3.
 
 ## Observability & Evaluation
 

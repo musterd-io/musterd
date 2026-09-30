@@ -1,1 +1,108 @@
-# 487 — Nothing vanishes (reserved)
+# 487 — Nothing vanishes: a plan's increments are lanes under its Goal, and closing a lane asks what is left
+
+- Status: accepted
+- Date: 2026-09-30
+- Deciders: nick (directed and approved the design), dolly (lane `01M3T8MJK8H4M86DZJEBMW6KM8`)
+- Spec: `docs/superpowers/specs/2026-09-30-nothing-vanishes-design.md`
+- Amends: [ADR 373](373-a-recorded-intention-names-its-lane.md) (retires repo-sourced Seeds and
+  `intents:ingest`; widens `intents:check`)
+- Relates to: ADR 258 (goal status is derived; shipped = every lane terminal), ADR 466 (the `parked`
+  state), ADR 445/474 (traces record tool names, not to-do text)
+
+## Context
+
+A multi-increment plan is written in a spec or ADR, increment 1 gets a lane, the lane closes, and
+the later increments are dropped — neither built nor tracked. nick named it on 2026-09-21 and again on
+2026-09-30. A four-slice audit on 2026-09-30 (ADRs; specs, plans and design docs; harness
+transcripts; lanes, goals, Seeds, PRs and git) found about twenty such items, listed in the spec's
+Appendix A.
+
+Follows-up: 01M3T8MJK8H4M86DZJEBMW6KM8
+
+Two earlier fixes did not hold. ADR 373 (2026-09-03) gates forward references by phrase regex over
+three surfaces, and most plans live elsewhere or in phrasings it misses; its Seed ingest last ran
+2026-09-04. The 2026-09-21 practice of opening every increment's lane up front worked for
+`seat-continuity` but never reached guidance.
+
+## Problem
+
+1. The plan lives in a document and the board sees only the increment being built, so a Goal
+   derives `shipped` once that lane closes.
+2. Nothing fires when increment 1's lane closes; `depends_on` points only backward.
+3. Detection by phrase is lossy by construction.
+4. A Seed counts as settled once promoted, even when only increment 1 shipped.
+
+## Decision
+
+The outcome is that **nothing silently vanishes**: every declared increment, named follow-up and
+unfinished session to-do has a visible disposition — built, parked with a trigger, or dropped with
+a reason. Dropping is allowed on a seat's own authority; forgetting is not. No new terms.
+
+1. **A plan with more than one increment is a Goal; each increment or follow-up is a Lane under
+   it, opened when the plan is made.** To build: `open`, chained by `depends_on`. Deferred:
+   `parked` with `park_until`/`park_reason`. Dropped: `abandoned` with `abandon_reason`. Because
+   `parked` is non-terminal, a Goal cannot derive `shipped` while any increment is unbuilt.
+2. **`follows_up` on `lane_submit` and `lane_resolve`** — `"none"` or a list of lane ids. Optional
+   by default (absent records `none`). The close is **refused until it is answered** when a
+   leftover-work signal is present: the lane carries an unfinished to-do snapshot, or its title or
+   detail declares a part (`N of M`, `N/M`, `increment N`, `phase N`, an id like `1A`). Named lanes
+   with no goal attach to the closing lane's goal; if neither has one, the close is refused with
+   the repair. The acceptance ask shows the answer.
+3. **`abandon_reason`** (≤ 280 chars) on `lane_update`, mirroring `park_reason`; required on an
+   abandoned lane named in `follows_up`.
+4. **Session to-dos become a snapshot on the lane, never a Seed.** Each harness's `Stop` hook reads
+   the unfinished to-dos from its own transcript (Claude Code `TodoWrite` and Task tools, Codex
+   `update_plan`, Cursor `Todo`) and writes them as `unfinished_todos` on the seat's most recently
+   updated active lane, last write wins. With no lane they go to seat memory.
+5. **`intents:check` becomes structural.** It also scans `docs/superpowers/specs`,
+   `docs/superpowers/plans` and `docs/design`; in any section headed Increments or Phases, every
+   row cites a lane id, `parked <lane id>`, or `dropped — <reason>`. Existing docs start in a
+   burn-down baseline. The phrase check stays for loose sentences.
+6. **Repo-sourced Seeds retire.** `intents:ingest` is removed and the open `repo` Seeds are triaged
+   into lanes or dropped with a reason. The Seed tray is for a human's ideas and Slack.
+7. **Guidance, a stale-goal line, and a weekly sweep.** Guidance says: *more than one increment?
+   Declare a Goal and open every increment's lane now.* `team_next` shows an in-flight goal whose
+   open lanes have not changed state in 7 days. The `sweep` service reruns the audit's cheap checks
+   weekly and posts one `status_update` only when it finds something.
+8. **`FEATURE_EPOCH` 26 → 27.** All fields additive.
+
+The five lanes under goal `nothing-vanishes` carry the build; the spec's §7 maps them.
+
+## Alternatives rejected
+
+- **A new first-class plan object** holding ordered items. Cleaner on paper, but it duplicates what
+  `open`, `parked` and `abandoned` lanes already represent — two homes for one fact — and adds a term.
+- **Detect and sweep only** (ADR 373 widened). No blocking at the moment of loss, which is the one
+  place the last two fixes did not reach.
+- **A mandatory `follows_up` on every close.** Most lanes are one-shot; an answer required every time
+  becomes a rubber stamp.
+- **Session to-dos as Seeds.** Seeds are a human's ideas; to-dos churn all session and are mostly
+  sub-steps of the lane in progress.
+- **Reading to-dos from the trace.** Traces carry tool names; to-do text is content, captured only
+  under consent.
+
+## Consequences
+
+- Goal status becomes honest without changing its derivation: a plan that is fully on the board
+  cannot read `shipped` early.
+- A closer on a signalled lane pays one field. Everyone else pays nothing.
+- To-do titles reach the team's daemon, which only lane titles did before. They are the seat's own
+  notes about team work, shown to the team and the acceptor.
+- A plan that lives only in an agent's head — no to-do, no doc, no part marker — is not caught
+  structurally. The stale-goal line and the weekly sweep are its backstop.
+- ADR 373 increment 3 (code-comment scan, ADR-status flag) is superseded by this decision, not built.
+
+## Observability & Evaluation
+
+**Traces.** No new trace. The reads are the lane store (`follows_up`, `abandon_reason`,
+`unfinished_todos`, state history) and the goal derivation.
+
+**Eval.** Dataset: plans, named follow-ups and unfinished to-dos created after lane 3
+(`01M3T8MW01JB0JV0MKNB7WVWFZ`) lands. Baseline (2026-09-30): about twenty untracked items across
+ADRs, specs, plans and design docs (spec Appendix A). Falsifier: on 2026-11-01 a rerun of the
+four-slice audit finds any item in that population with no lane or disposition. The watch is
+`docs/watches/2026-09-30-nothing-vanishes.md`.
+
+**Experiment.** n/a — the close check and the docs gate are deterministic and covered by unit tests
+(each signal refuses; no signal passes; goal attach and refusal; baseline burn-down). The eval reads
+the outcome in production.
