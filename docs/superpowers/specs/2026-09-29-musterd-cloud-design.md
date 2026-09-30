@@ -192,7 +192,7 @@ server, not by keeping its own list. *(review)* The binding is a column on the t
 (`account_id`, set the first time an account signs in through an invite or a claim); export
 carries it and import restores it, so nothing about membership has to be rebuilt from the console.
 Talk-only members (§4.6) do **not** count toward ADR 461's two-human line — they hold no lane
-tools and are how an audience joins a demo; owners and members do count. *(Flagged for nick: ADR
+tools and are how an audience joins a demo; owners and members do count. *(Confirmed by nick 2026-09-29; was flagged: ADR
 461 says "human members"; this narrows it and ADR 461 gets a dated note when billing ships.)*
 
 ### 4.3 Console → team server trust ("most secure approach possible")
@@ -332,7 +332,7 @@ increment 4.
 
   Weighed against silent fail-open (today's behaviour, which turns every gate off during an
   outage without a trace) and blocking every write (strict, but an outage then stops every agent
-  on the team). *(Flagged for nick: this splits the decision he made — "fail open, visibly" — by
+  on the team). *(Confirmed by nick 2026-09-29; was flagged: this splits the decision he made — "fail open, visibly" — by
   class. It is the smallest change that keeps ADR 150 true.)*
 
 ### 4.8 Trace content capture: per-team capability, per-author consent, retention and privacy decided
@@ -544,5 +544,5 @@ exporter. Litestream is **not** needed — the file-per-team shape that wanted i
 - ADR 461's org-tier policy pack vs base Cloud: the 7–365 retention range and per-author consent
   are **base Cloud** (every hosted team gets them); the org tier adds the ability to *mandate and
   prove* them across teams. Settled when billing is designed.
-- Two decisions flagged for nick in the text, taken on review and reversible: fail-closed for
+- Two decisions taken on review, confirmed by nick 2026-09-29, still reversible: fail-closed for
   block classes (§4.7) and talk-only members not counting toward the free tier (§4.2).

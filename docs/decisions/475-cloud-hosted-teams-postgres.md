@@ -168,6 +168,10 @@ constrains the others, so they were decided together.
   atomic `jti`, hosted trace redaction and support access) are folded into decisions 5, 9 and 12
   and can close against this ADR. Two review-taken choices are flagged for nick in the spec:
   fail-closed for block classes, and talk-only members outside the free-tier count.
+- _Note, 2026-09-29 (dolly, for nick)._ nick confirmed both flagged choices: block and
+  costly-action classes fail closed on a server outage while warn and unclassified calls fail open
+  as `unenforced` (spec §4.7), and talk-only members do not count toward ADR 461's two-human line
+  (spec §4.2). The spec's flags now read as confirmed.
 
 ## Observability & Evaluation
 
