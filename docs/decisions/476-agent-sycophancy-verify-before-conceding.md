@@ -122,6 +122,13 @@ concession without lowering _wrong_ concession.
   thirty-day read of the eval below, around 2026-10-29; the anonymised-delivery ADR is written then,
   with the baseline in hand to A/B against. The gate reads the line only when it sits beside the
   phrase, which is why it lives in §3 rather than here.
+- **2026-09-29 — the guidance now says when to _send_ a `challenge`** (nick; lane 01M3R90KKD, content
+  version 36 → 37). Until now the "Answering a critique" section covered only the reply. The count
+  on 2026-09-29: 17 `challenge` acts all-time against about 90 plain `message`s using disagreeing
+  wording. This adds a line: when a peer's claim would change your work and you have evidence it is
+  wrong, send `challenge`, not `message`. **It is a confound for the five-day read.** It lands inside
+  the window, so any change in the number of challenges, or in how they are answered, reflects both
+  lines together. The read reports the two as one intervention and does not credit either one alone.
 - **2026-09-29 — the first read moves from thirty days to five, 2026-10-04** (nick). The note
   above says thirty days; nick shortened it to five. ADRs 481–484 and the Eval below now key on
   2026-10-04. The cost is the sample: 1 `challenge` act was sent in the five days before this note
