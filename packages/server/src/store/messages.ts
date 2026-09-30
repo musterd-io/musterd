@@ -8,8 +8,8 @@ import {
   type DeferUntil,
   type Envelope,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
+import type { Driver } from '../db/driver.js';
 import { undischargedSql } from './discharge.js';
 import type { MessageRow, MessageVisibility } from './rows.js';
 
@@ -19,14 +19,13 @@ import type { MessageRow, MessageVisibility } from './rows.js';
  * `insertMessage` itself, SERVER-derived by construction (there is no wire field), so a wake-born
  * session cannot masquerade as human-driven to escape the ADR 131 §4 ping-pong demotion.
  */
-function senderProvenance(db: Database, memberId: string): string | null {
-  const row = db
-    .prepare<[string], { provenance: string | null }>(
-      `SELECT provenance FROM presence
+async function senderProvenance(db: Driver, memberId: string): Promise<string | null> {
+  const row = await db.get<{ provenance: string | null }>(
+    `SELECT provenance FROM presence
         WHERE member_id = ? AND held_until IS NULL
         ORDER BY last_seen_at DESC, created_at DESC LIMIT 1`,
-    )
-    .get(memberId);
+    [memberId],
+  );
   return row?.provenance ?? null;
 }
 
@@ -41,21 +40,22 @@ function senderProvenance(db: Database, memberId: string): string | null {
  * that name events it never sent. Two sequences corrupted at once, which is the ambiguity between
  * loss and silence that ADR 331 exists to prevent.
  */
-export function localNodeForTeam(db: Database, teamId: string): { id: string } {
-  const marked = db
-    .prepare<[string], { node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?')
-    .get(teamId);
+export async function localNodeForTeam(db: Driver, teamId: string): Promise<{ id: string }> {
+  const marked = await db.get<{ node_id: string }>(
+    'SELECT node_id FROM local_node WHERE team_id = ?',
+    [teamId],
+  );
   if (marked) return { id: marked.node_id };
 
   const id = ulid();
-  db.prepare('INSERT INTO nodes (id, team_id, label, next_seq) VALUES (?, ?, ?, 1)').run(
+  await db.run('INSERT INTO nodes (id, team_id, label, next_seq) VALUES (?, ?, ?, 1)', [
     id,
     teamId,
     hostname(),
-  );
+  ]);
   // Both writes or neither: `insertMessage` already holds the transaction, so a row minted without
   // its marker cannot survive to be re-minted on the next send.
-  db.prepare('INSERT INTO local_node (team_id, node_id) VALUES (?, ?)').run(teamId, id);
+  await db.run('INSERT INTO local_node (team_id, node_id) VALUES (?, ?)', [teamId, id]);
   return { id };
 }
 
@@ -68,8 +68,8 @@ export function localNodeForTeam(db: Database, teamId: string): { id: string } {
  * between them — a replayed envelope id's UNIQUE violation is the realistic one — burns no number
  * and leaves no hole.
  */
-export function insertMessage(
-  db: Database,
+export async function insertMessage(
+  db: Driver,
   teamId: string,
   fromMemberId: string,
   toMemberId: string | null,
@@ -81,17 +81,15 @@ export function insertMessage(
    * get either from a wall clock. Production callers leave it unset.
    */
   opts: { now?: number } = {},
-): MessageRow {
-  return db.transaction((): MessageRow => {
-    const node = localNodeForTeam(db, teamId);
+): Promise<MessageRow> {
+  return db.tx(async (t) => {
+    const node = await localNodeForTeam(t, teamId);
     // Read-then-bump under SQLite's single-writer lock: `next_seq` names the next value to assign,
     // so the returned pre-increment value is this message's seq — monotone and gapless by construction.
-    const seq = db
-      .prepare<
-        [string],
-        { seq: number }
-      >('UPDATE nodes SET next_seq = next_seq + 1 WHERE id = ? RETURNING next_seq - 1 AS seq')
-      .get(node.id)!.seq;
+    const seq = (await t.get<{ seq: number }>(
+      'UPDATE nodes SET next_seq = next_seq + 1 WHERE id = ? RETURNING next_seq - 1 AS seq',
+      [node.id],
+    ))!.seq;
     const row: MessageRow = {
       id: env.id,
       team_id: teamId,
@@ -102,30 +100,43 @@ export function insertMessage(
       body: env.body,
       thread_id: env.thread ?? null,
       meta: env.meta ? JSON.stringify(env.meta) : null,
-      from_provenance: senderProvenance(db, fromMemberId),
+      from_provenance: await senderProvenance(t, fromMemberId),
       origin_node: node.id,
       origin_seq: seq,
       ts: env.ts,
       created_at: opts.now ?? Date.now(),
     };
-    db.prepare(
+    await t.run(
       `INSERT INTO messages
          (id, team_id, from_member, to_kind, to_member, act, body, thread_id, meta, from_provenance, origin_node, origin_seq, ts, created_at)
-       VALUES
-         (@id, @team_id, @from_member, @to_kind, @to_member, @act, @body, @thread_id, @meta, @from_provenance, @origin_node, @origin_seq, @ts, @created_at)`,
-    ).run(row);
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        row.id,
+        row.team_id,
+        row.from_member,
+        row.to_kind,
+        row.to_member,
+        row.act,
+        row.body,
+        row.thread_id,
+        row.meta,
+        row.from_provenance,
+        row.origin_node,
+        row.origin_seq,
+        row.ts,
+        row.created_at,
+      ],
+    );
     return row;
-  })();
+  });
 }
 
 /** The `ts` of one message by id (loop-latency lookups, ADR 082 slice 3). Null when unknown. */
-export function getMessageTs(db: Database, teamId: string, id: string): number | null {
-  const row = db
-    .prepare<
-      [string, string],
-      { ts: number }
-    >('SELECT ts FROM messages WHERE team_id = ? AND id = ?')
-    .get(teamId, id);
+export async function getMessageTs(db: Driver, teamId: string, id: string): Promise<number | null> {
+  const row = await db.get<{ ts: number }>('SELECT ts FROM messages WHERE team_id = ? AND id = ?', [
+    teamId,
+    id,
+  ]);
   return row?.ts ?? null;
 }
 
@@ -136,14 +147,10 @@ export function getMessageTs(db: Database, teamId: string, id: string): number |
  * two derivations of one truth). Daemon-wide on purpose: a health signal sampled only when
  * telemetry is on.
  */
-export function countOpenLoops(db: Database): number {
-  const row = db
-    .prepare<[], { n: number }>(
-      `SELECT COUNT(*) AS n FROM messages m
+export async function countOpenLoops(db: Driver): Promise<number> {
+  const row = await db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM messages m
         WHERE m.act IN ('request_help','handoff')
-          ${undischargedSql('m', 'm.to_member')}`,
-    )
-    .get();
+          ${undischargedSql('m', 'm.to_member')}`);
   return row?.n ?? 0;
 }
 
@@ -152,16 +159,15 @@ export function countOpenLoops(db: Database): number {
  * `open_loops` observable gauge, so a per-team/per-model coordination leaderboard can read the gauge
  * by `musterd.team`. Only teams with ≥1 open loop appear (a zero team is simply absent this cycle).
  */
-export function countOpenLoopsByTeam(db: Database): { team: string; count: number }[] {
-  return db
-    .prepare<[], { team: string; count: number }>(
-      `SELECT t.slug AS team, COUNT(*) AS count FROM messages m
+export async function countOpenLoopsByTeam(db: Driver): Promise<{ team: string; count: number }[]> {
+  return await db.all<{
+    team: string;
+    count: number;
+  }>(`SELECT t.slug AS team, COUNT(*) AS count FROM messages m
          JOIN teams t ON t.id = m.team_id
         WHERE m.act IN ('request_help','handoff')
           ${undischargedSql('m', 'm.to_member')}
-        GROUP BY t.slug`,
-    )
-    .all();
+        GROUP BY t.slug`);
 }
 
 /**
@@ -233,11 +239,11 @@ export const PINNED_DEFAULT_LIMIT = 50;
  * A member's inbox: messages in their team addressed to them or to team/broadcast,
  * excluding their own sends. unreadOnly filters by the caller-supplied cursor position (receipt order).
  */
-export function listInbox(
-  db: Database,
+export async function listInbox(
+  db: Driver,
   member: { id: string; team_id: string },
   opts: InboxOpts = {},
-): MessageRow[] {
+): Promise<MessageRow[]> {
   const params: unknown[] = [member.team_id, member.id, member.id];
   let where = `WHERE team_id = ?
        AND (to_member = ? OR to_kind IN ('team','broadcast'))
@@ -247,12 +253,10 @@ export function listInbox(
   if (opts.ids) {
     if (opts.ids.length === 0) return [];
     const holes = opts.ids.map(() => '?').join(',');
-    return db
-      .prepare<
-        unknown[],
-        MessageRow
-      >(`SELECT * FROM messages ${where} AND id IN (${holes}) ORDER BY created_at ASC, id ASC`)
-      .all(...params, ...opts.ids);
+    return await db.all<MessageRow>(
+      `SELECT * FROM messages ${where} AND id IN (${holes}) ORDER BY created_at ASC, id ASC`,
+      [...params, ...opts.ids],
+    );
   }
   if (opts.unreadOnly) {
     // Both floors apply when both are given: `cursorTs` is what the seat has already read, `since` is
@@ -281,12 +285,10 @@ export function listInbox(
   // inbox is read most-recent-first, so a bounded view must keep the recent tail, not the oldest N
   // (the `ts ASC LIMIT` bug that returned the wrong end; mirrors listTeamMessages' backfill).
   if (opts.limit) {
-    const newest = db
-      .prepare<
-        unknown[],
-        MessageRow
-      >(`SELECT * FROM (SELECT * FROM messages ${where} ORDER BY created_at DESC, id DESC LIMIT ?) ORDER BY created_at ASC, id ASC`)
-      .all(...params, opts.limit);
+    const newest = await db.all<MessageRow>(
+      `SELECT * FROM (SELECT * FROM messages ${where} ORDER BY created_at DESC, id DESC LIMIT ?) ORDER BY created_at ASC, id ASC`,
+      [...params, opts.limit],
+    );
     // MCP always sends `limit`, so the newest tail is team broadcasts and an old waiting handoff
     // never appears. The CLI banner reads with no limit and counts it. Pin action-needed unread
     // (request_help / ask / directed non-message) into the page. Directed `message` stays newest-N
@@ -334,9 +336,8 @@ export function listInbox(
     // an EXISTS would resolve to the inner alias and silently match every row against itself.
     const pinnedAny = OBLIGATION_ACTS_ANY.map(() => '?').join(',');
     const pinnedDirected = OBLIGATION_ACTS_DIRECTED.map(() => '?').join(',');
-    const pinned = db
-      .prepare<unknown[], MessageRow>(
-        `SELECT * FROM messages ${where}
+    const pinned = await db.all<MessageRow>(
+      `SELECT * FROM messages ${where}
            AND (
              act IN (${pinnedAny})
              OR (to_kind = 'member' AND act IN (${pinnedDirected}))
@@ -344,14 +345,14 @@ export function listInbox(
            ${undischargedSql('messages', '?')}
          ORDER BY created_at ASC, id ASC
          LIMIT ?`,
-      )
-      .all(
+      [
         ...params,
         ...OBLIGATION_ACTS_ANY,
         ...OBLIGATION_ACTS_DIRECTED,
         member.id,
         opts.pinnedLimit ?? PINNED_DEFAULT_LIMIT,
-      );
+      ],
+    );
     if (pinned.length === 0) return newest;
     const byId = new Map<string, MessageRow>();
     for (const row of newest) byId.set(row.id, row);
@@ -372,28 +373,22 @@ export function listInbox(
   // exactly it. That is the deliberate trade: a response slightly over budget, or a silent
   // permanent hole in someone's history.
   if (opts.headLimit) {
-    const head = db
-      .prepare<
-        unknown[],
-        MessageRow
-      >(`SELECT * FROM messages ${where} ORDER BY created_at ASC, id ASC LIMIT ?`)
-      .all(...params, opts.headLimit);
+    const head = await db.all<MessageRow>(
+      `SELECT * FROM messages ${where} ORDER BY created_at ASC, id ASC LIMIT ?`,
+      [...params, opts.headLimit],
+    );
     if (head.length < opts.headLimit) return head;
     const last = head[head.length - 1]!;
-    const tied = db
-      .prepare<
-        unknown[],
-        MessageRow
-      >(`SELECT * FROM messages ${where} AND created_at = ? AND id > ? ORDER BY id ASC`)
-      .all(...params, last.created_at, last.id);
+    const tied = await db.all<MessageRow>(
+      `SELECT * FROM messages ${where} AND created_at = ? AND id > ? ORDER BY id ASC`,
+      [...params, last.created_at, last.id],
+    );
     return tied.length > 0 ? [...head, ...tied] : head;
   }
-  return db
-    .prepare<
-      unknown[],
-      MessageRow
-    >(`SELECT * FROM messages ${where} ORDER BY created_at ASC, id ASC`)
-    .all(...params);
+  return await db.all<MessageRow>(
+    `SELECT * FROM messages ${where} ORDER BY created_at ASC, id ASC`,
+    [...params],
+  );
 }
 
 /**
@@ -403,47 +398,47 @@ export function listInbox(
  */
 /** Unread count by the caller-supplied cursor — what a bounded read needs in order to say how much
  *  it could not carry. Counting is not marshalling: this stays cheap on a deep backlog. */
-export function countUnread(
-  db: Database,
+export async function countUnread(
+  db: Driver,
   member: { id: string; team_id: string },
   cursorTs: number,
   /** The cursor row's id — same `(created_at, id)` comparison {@link listInbox} makes, so the count and the
    *  listing can never disagree about a tied row. Without it this returns 0 while one still waits. */
   cursorId?: string | null,
-): number {
+): Promise<number> {
   if (cursorId) {
-    const row = db
-      .prepare<[string, string, string, number, number, string], { n: number }>(
-        `SELECT COUNT(*) AS n FROM messages
+    const row = await db.get<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM messages
           WHERE team_id = ?
             AND (to_member = ? OR to_kind IN ('team','broadcast'))
             AND from_member != ?
             AND (created_at > ? OR (created_at = ? AND id > ?))`,
-      )
-      .get(member.team_id, member.id, member.id, cursorTs, cursorTs, cursorId);
+      [member.team_id, member.id, member.id, cursorTs, cursorTs, cursorId],
+    );
     return row?.n ?? 0;
   }
-  const row = db
-    .prepare<[string, string, string, number], { n: number }>(
-      `SELECT COUNT(*) AS n FROM messages
+  const row = await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM messages
         WHERE team_id = ?
           AND (to_member = ? OR to_kind IN ('team','broadcast'))
           AND from_member != ?
           AND created_at > ?`,
-    )
-    .get(member.team_id, member.id, member.id, cursorTs);
+    [member.team_id, member.id, member.id, cursorTs],
+  );
   return row?.n ?? 0;
 }
 
-export function countInbox(db: Database, member: { id: string; team_id: string }): number {
-  const row = db
-    .prepare<[string, string, string], { n: number }>(
-      `SELECT COUNT(*) AS n FROM messages
+export async function countInbox(
+  db: Driver,
+  member: { id: string; team_id: string },
+): Promise<number> {
+  const row = await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM messages
         WHERE team_id = ?
           AND (to_member = ? OR to_kind IN ('team','broadcast'))
           AND from_member != ?`,
-    )
-    .get(member.team_id, member.id, member.id);
+    [member.team_id, member.id, member.id],
+  );
   return row?.n ?? 0;
 }
 
@@ -774,16 +769,14 @@ export function longDeferred(
  * The label is `meta.state` (the SPEC field) or, if absent, the message body. Returns null
  * if the member has never posted a status_update with any label text.
  */
-export function latestStatusUpdate(
-  db: Database,
+export async function latestStatusUpdate(
+  db: Driver,
   memberId: string,
-): { state: string; ts: number } | null {
-  const row = db
-    .prepare<
-      [string],
-      { body: string; meta: string | null; ts: number }
-    >("SELECT body, meta, ts FROM messages WHERE from_member = ? AND act = 'status_update' ORDER BY ts DESC, id DESC LIMIT 1")
-    .get(memberId);
+): Promise<{ state: string; ts: number } | null> {
+  const row = await db.get<{ body: string; meta: string | null; ts: number }>(
+    "SELECT body, meta, ts FROM messages WHERE from_member = ? AND act = 'status_update' ORDER BY ts DESC, id DESC LIMIT 1",
+    [memberId],
+  );
   if (!row) return null;
   const metaState = row.meta
     ? (JSON.parse(row.meta) as Record<string, unknown>)['state']
@@ -864,11 +857,11 @@ function readScopeSql(scope: ReadScope): { sql: string; params: unknown[] } {
  * - **`since` (forward catch-up):** the oldest `limit` messages strictly after `since` (by ts), so a
  *   caller holding a cursor can page forward without skipping the gap. `since` is exclusive.
  */
-export function listTeamMessages(
-  db: Database,
+export async function listTeamMessages(
+  db: Driver,
   teamId: string,
   opts: TeamMessagesOpts = {},
-): MessageRow[] {
+): Promise<MessageRow[]> {
   const limit = opts.limit ?? 200;
   // A READ scope (ADR 407 grade) or a PARTY scope (what this member is in) — see the opts.
   const scoped = opts.scope
@@ -883,20 +876,16 @@ export function listTeamMessages(
   const scopeParams = scoped.params;
   if (typeof opts.since === 'number') {
     // Forward catch-up: walk forward from the cursor, oldest-first, so no message in the gap is skipped.
-    return db
-      .prepare<
-        unknown[],
-        MessageRow
-      >(`SELECT * FROM messages WHERE team_id = ? AND ts > ?${scopeSql} ORDER BY ts ASC, id ASC LIMIT ?`)
-      .all(teamId, opts.since, ...scopeParams, limit);
+    return await db.all<MessageRow>(
+      `SELECT * FROM messages WHERE team_id = ? AND ts > ?${scopeSql} ORDER BY ts ASC, id ASC LIMIT ?`,
+      [teamId, opts.since, ...scopeParams, limit],
+    );
   }
   // Initial backfill: take the newest `limit` (DESC + LIMIT), then re-sort ascending for display.
-  return db
-    .prepare<
-      unknown[],
-      MessageRow
-    >(`SELECT * FROM (SELECT * FROM messages WHERE team_id = ?${scopeSql} ORDER BY ts DESC, id DESC LIMIT ?) ORDER BY ts ASC, id ASC`)
-    .all(teamId, ...scopeParams, limit);
+  return await db.all<MessageRow>(
+    `SELECT * FROM (SELECT * FROM messages WHERE team_id = ?${scopeSql} ORDER BY ts DESC, id DESC LIMIT ?) ORDER BY ts ASC, id ASC`,
+    [teamId, ...scopeParams, limit],
+  );
 }
 
 /** Convert a stored row back to a protocol Envelope (for delivery/inbox responses). */

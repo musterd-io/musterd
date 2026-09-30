@@ -6,7 +6,7 @@ import {
   matchEnforcement,
   resolveRoute,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { getDoorbellPolicy, memberDoorbellPrefs } from './doorbell.js';
 import { listMembers } from './members.js';
 import { hasLivePresence, listLiveDrivers } from './presence.js';
@@ -36,18 +36,19 @@ import { getPolicy } from './teams.js';
  * not only ADR 149's `ask_slack_webhook` (which `getDoorbellPolicy` reads through as the team slack
  * URL). A team with no admin human seat at all is unreachable on this term regardless of surfaces.
  */
-export function adminHumanReachable(
-  db: Database,
+export async function adminHumanReachable(
+  db: Driver,
   teamId: string,
   presenceTimeoutMs: number,
-): boolean {
-  const adminHumans = listMembers(db, teamId).filter(
+): Promise<boolean> {
+  const adminHumans = (await listMembers(db, teamId)).filter(
     (m) => m.kind === 'human' && resolveCapabilities(m).is_admin,
   );
   if (adminHumans.length === 0) return false;
-  const doorbell = getDoorbellPolicy(db, teamId);
+  const doorbell = await getDoorbellPolicy(db, teamId);
   if (adminHumans.some((m) => hasOffMachineSink(doorbell, memberDoorbellPrefs(m)))) return true;
-  return adminHumans.some((m) => hasLivePresence(db, m.id, presenceTimeoutMs));
+  for (const m of adminHumans) if (await hasLivePresence(db, m.id, presenceTimeoutMs)) return true;
+  return false;
 }
 
 /** Would a blocking ring reach this human through a configured Slack or webhook URL? */
@@ -82,17 +83,18 @@ function isSelfSetAway(m: MemberRow): boolean {
  * {@link adminHumanReachable}: presence shifts only *escalation-eagerness* — which surface fires when
  * — never a hold's absolute timeout or its `held`/`stranded` terminal (the ADR 153 ceiling).
  */
-export function adminHumanPresent(
-  db: Database,
+export async function adminHumanPresent(
+  db: Driver,
   teamId: string,
   presenceTimeoutMs: number,
-): boolean {
-  const adminHumans = listMembers(db, teamId).filter(
+): Promise<boolean> {
+  const adminHumans = (await listMembers(db, teamId)).filter(
     (m) => m.kind === 'human' && resolveCapabilities(m).is_admin,
   );
   if (adminHumans.length === 0) return false;
-  const drivers = listLiveDrivers(db, teamId, presenceTimeoutMs);
-  return adminHumans.some((m) => isPresent(db, m, drivers, presenceTimeoutMs));
+  const drivers = await listLiveDrivers(db, teamId, presenceTimeoutMs);
+  for (const m of adminHumans) if (await isPresent(db, m, drivers, presenceTimeoutMs)) return true;
+  return false;
 }
 
 /**
@@ -100,22 +102,30 @@ export function adminHumanPresent(
  * doorbell (ADR 443 §4) uses it for a ring directed at one human: their own presence, not any
  * admin's, decides whether the off-machine sinks stay quiet at raise.
  */
-export function humanPresent(
-  db: Database,
+export async function humanPresent(
+  db: Driver,
   teamId: string,
   m: MemberRow,
   presenceTimeoutMs: number,
-): boolean {
-  return isPresent(db, m, listLiveDrivers(db, teamId, presenceTimeoutMs), presenceTimeoutMs);
+): Promise<boolean> {
+  return await isPresent(
+    db,
+    m,
+    await listLiveDrivers(db, teamId, presenceTimeoutMs),
+    presenceTimeoutMs,
+  );
 }
 
-function isPresent(
-  db: Database,
+async function isPresent(
+  db: Driver,
   m: MemberRow,
   drivers: Set<string>,
   presenceTimeoutMs: number,
-): boolean {
-  return !isSelfSetAway(m) && (hasLivePresence(db, m.id, presenceTimeoutMs) || drivers.has(m.name));
+): Promise<boolean> {
+  return (
+    !isSelfSetAway(m) &&
+    ((await hasLivePresence(db, m.id, presenceTimeoutMs)) || drivers.has(m.name))
+  );
 }
 
 /** The representative local-merge landing command the route-around probe matches against — the item-2
@@ -142,27 +152,33 @@ export function teammateRouteOpen(policy: EnforcementPolicy): boolean {
 }
 
 /** A live agent seat other than the raiser — the body that could land the work if the route is open. */
-export function liveTeammateExists(
-  db: Database,
+export async function liveTeammateExists(
+  db: Driver,
   teamId: string,
   raiser: string,
   presenceTimeoutMs: number,
-): boolean {
-  return listMembers(db, teamId).some(
-    (m) => m.kind === 'agent' && m.name !== raiser && hasLivePresence(db, m.id, presenceTimeoutMs),
-  );
+): Promise<boolean> {
+  for (const m of await listMembers(db, teamId)) {
+    if (
+      m.kind === 'agent' &&
+      m.name !== raiser &&
+      (await hasLivePresence(db, m.id, presenceTimeoutMs))
+    )
+      return true;
+  }
+  return false;
 }
 
 /** The full projection: human settle-term OR (live teammate AND open route-around). */
-export function unblockerReachable(
-  db: Database,
+export async function unblockerReachable(
+  db: Driver,
   teamId: string,
   raiser: string,
   presenceTimeoutMs: number,
-): boolean {
-  if (adminHumanReachable(db, teamId, presenceTimeoutMs)) return true;
+): Promise<boolean> {
+  if (await adminHumanReachable(db, teamId, presenceTimeoutMs)) return true;
   return (
-    liveTeammateExists(db, teamId, raiser, presenceTimeoutMs) &&
-    teammateRouteOpen(getPolicy(db, teamId).enforcement)
+    (await liveTeammateExists(db, teamId, raiser, presenceTimeoutMs)) &&
+    teammateRouteOpen((await getPolicy(db, teamId)).enforcement)
   );
 }

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
 import { upsertRole } from '../store/roles.js';
@@ -47,15 +48,15 @@ async function del(path: string, auth?: Auth) {
 }
 
 beforeEach(async () => {
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
   agentKey = team.json.agent_key;
   nickCred = team.json.human_credential;
   await post('/teams/dawn/members', { name: 'Ada', kind: 'agent', role: 'backend' }, nickCred);
-  const teamRow = getTeamBySlug(server.db, 'dawn')!;
-  upsertRole(server.db, teamRow.id, 'backend', {}, 'Own the rails.', null);
+  const teamRow = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+  await upsertRole(sqliteDriver(server.db), teamRow.id, 'backend', {}, 'Own the rails.', null);
 });
 
 afterEach(async () => {
@@ -67,7 +68,7 @@ async function grantFor(seat: string, lifetime = 'standing'): Promise<string> {
   return r.json.token as string;
 }
 
-describe('agent bootstrap credential lifecycle', () => {
+describe('agent bootstrap credential lifecycle', async () => {
   it('exchanges legacy plus seat proofs without creating another Presence (ADR 350)', async () => {
     const occupied = await post('/teams/dawn/claim', {
       key: agentKey,
@@ -97,7 +98,10 @@ describe('agent bootstrap credential lifecycle', () => {
         .count,
     ).toBe(before);
 
-    const audit = listAudit(server.db, getTeamBySlug(server.db, 'dawn')!.id);
+    const audit = await listAudit(
+      sqliteDriver(server.db),
+      (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id,
+    );
     expect(audit.map((row) => row.action)).toContain('bootstrap_credential.migrated');
     expect(JSON.stringify(audit)).not.toContain(agentKey);
     expect(JSON.stringify(audit)).not.toContain(occupied.json.seat_credential);
@@ -155,9 +159,12 @@ describe('agent bootstrap credential lifecycle', () => {
     });
     expect(claim.status).toBe(403);
 
-    const actions = listAudit(server.db, getTeamBySlug(server.db, 'dawn')!.id).map(
-      (entry) => entry.action,
-    );
+    const actions = (
+      await listAudit(
+        sqliteDriver(server.db),
+        (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id,
+      )
+    ).map((entry) => entry.action);
     expect(actions).toEqual(
       expect.arrayContaining([
         'bootstrap_credential.minted',
@@ -275,7 +282,7 @@ describe('agent bootstrap credential lifecycle', () => {
   });
 });
 
-describe('POST /claim — refusals', () => {
+describe('POST /claim — refusals', async () => {
   it('refuses an invalid key with 403 forbidden', async () => {
     const r = await post('/teams/dawn/claim', {
       key: 'mskey_bogus',
@@ -342,8 +349,8 @@ describe('POST /claim — refusals', () => {
 
   it('refuses a seat-scoped bootstrap credential for a different seat without a request or Presence', async () => {
     await post('/teams/dawn/members', { name: 'Lin', kind: 'agent' }, nickCred);
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const scoped = mintBootstrapCredential(server.db, {
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const scoped = await mintBootstrapCredential(sqliteDriver(server.db), {
       teamId: team.id,
       useKind: 'claim_seat',
       target: 'Ada',
@@ -361,7 +368,7 @@ describe('POST /claim — refusals', () => {
     expect(r.json.message).toMatch(/only claim.*Ada/i);
     expect(server.db.prepare('SELECT COUNT(*) AS n FROM requests').get()).toEqual({ n: 0 });
     expect(server.db.prepare('SELECT COUNT(*) AS n FROM presence').get()).toEqual({ n: 0 });
-    const refusalAudit = listAudit(server.db, team.id).find(
+    const refusalAudit = (await listAudit(sqliteDriver(server.db), team.id)).find(
       (entry) => entry.action === 'bootstrap_credential.refused',
     );
     expect(refusalAudit).toMatchObject({ target: scoped.credential.id });
@@ -377,8 +384,8 @@ describe('POST /claim — refusals', () => {
   });
 
   it('accepts a seat-scoped bootstrap credential for its target', async () => {
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const scoped = mintBootstrapCredential(server.db, {
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const scoped = await mintBootstrapCredential(sqliteDriver(server.db), {
       teamId: team.id,
       useKind: 'claim_seat',
       target: 'Ada',
@@ -403,8 +410,8 @@ describe('POST /claim — refusals', () => {
   });
 
   it('accepts a role credential only through its declared role pool and never as a seat key', async () => {
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const scoped = mintBootstrapCredential(server.db, {
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const scoped = await mintBootstrapCredential(sqliteDriver(server.db), {
       teamId: team.id,
       useKind: 'claim_role',
       target: 'backend',
@@ -431,8 +438,8 @@ describe('POST /claim — refusals', () => {
   });
 
   it('never accepts a host credential on a claim route', async () => {
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const host = mintBootstrapCredential(server.db, {
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const host = await mintBootstrapCredential(sqliteDriver(server.db), {
       teamId: team.id,
       useKind: 'host',
       target: 'mac.local',
@@ -446,8 +453,8 @@ describe('POST /claim — refusals', () => {
   });
 
   it('audits an expired credential by opaque id without creating a request or Presence', async () => {
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const scoped = mintBootstrapCredential(server.db, {
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const scoped = await mintBootstrapCredential(sqliteDriver(server.db), {
       teamId: team.id,
       useKind: 'claim_seat',
       target: 'Ada',
@@ -465,7 +472,7 @@ describe('POST /claim — refusals', () => {
     expect(claim.status).toBe(403);
     expect(server.db.prepare('SELECT COUNT(*) AS n FROM requests').get()).toEqual({ n: 0 });
     expect(server.db.prepare('SELECT COUNT(*) AS n FROM presence').get()).toEqual({ n: 0 });
-    expect(listAudit(server.db, team.id)).toContainEqual(
+    expect(await listAudit(sqliteDriver(server.db), team.id)).toContainEqual(
       expect.objectContaining({
         action: 'bootstrap_credential.expired',
         target: scoped.credential.id,
@@ -485,7 +492,7 @@ describe('POST /claim — refusals', () => {
   });
 });
 
-describe('POST /claim — occupancy', () => {
+describe('POST /claim — occupancy', async () => {
   it('mints a self-identifying credential and Presence-bound lease for agent HTTP authority', async () => {
     const grant = await grantFor('Ada');
     const claim = await post('/teams/dawn/claim', {
@@ -555,8 +562,8 @@ describe('POST /claim — occupancy', () => {
     });
     expect(old.status).toBe(401);
 
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const actions = listAudit(server.db, team.id).map((row) => row.action);
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const actions = (await listAudit(sqliteDriver(server.db), team.id)).map((row) => row.action);
     expect(actions).toContain('agent_seat_credential.rotated');
     expect(actions).toContain('agent_session_lease.revoked');
   });
@@ -601,8 +608,8 @@ describe('POST /claim — occupancy', () => {
     expect(r.json.seat.name).toBe('Ada');
     expect(r.json.presence_id).toBeTruthy();
 
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const actions = listAudit(server.db, team.id).map((a) => a.action);
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const actions = (await listAudit(sqliteDriver(server.db), team.id)).map((a) => a.action);
     expect(actions).toContain('claim.occupied');
     expect(actions).toContain('occupancy.model_attested');
     // The mirror carries the tier onto the occupancy it creates — the WS frame always did.
@@ -614,7 +621,9 @@ describe('POST /claim — occupancy', () => {
       .get(r.json.presence_id);
     expect(occupancy).toEqual({ model: 'claude-opus-4-8', model_source: 'observed' });
     // And the `claim.occupied` row itself is stamped with what the claimant attested.
-    const occupied = listAudit(server.db, team.id).find((a) => a.action === 'claim.occupied');
+    const occupied = (await listAudit(sqliteDriver(server.db), team.id)).find(
+      (a) => a.action === 'claim.occupied',
+    );
     expect(occupied).toMatchObject({
       actor_model: 'claude-opus-4-8',
       actor_model_source: 'observed',
@@ -645,8 +654,8 @@ describe('POST /claim — occupancy', () => {
     });
     expect(r.status).toBe(200);
 
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const drops = listAudit(server.db, team.id)
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const drops = (await listAudit(sqliteDriver(server.db), team.id))
       .filter((a) => a.action === 'occupancy.model_attested')
       .map((a) => JSON.parse(a.detail ?? '{}') as { old: unknown; new: unknown });
     expect(drops).toContainEqual(
@@ -664,9 +673,11 @@ describe('POST /claim — occupancy', () => {
       grant,
       surface: 'cli',
     });
-    const team = getTeamBySlug(server.db, 'dawn')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
     expect(
-      listAudit(server.db, team.id).filter((a) => a.action === 'occupancy.model_attested'),
+      (await listAudit(sqliteDriver(server.db), team.id)).filter(
+        (a) => a.action === 'occupancy.model_attested',
+      ),
     ).toHaveLength(0);
   });
 
@@ -696,7 +707,7 @@ describe('POST /claim — occupancy', () => {
   });
 });
 
-describe('POST /claim — dogfood re-seat (ADR 146)', () => {
+describe('POST /claim — dogfood re-seat (ADR 146)', async () => {
   // Occupy a seat once so its durable `bound_at` marker is stamped — the "already held it" signal
   // the re-seat policy keys on. Uses a standing grant + agent key (the normal agent occupy path).
   async function bindSeat(seat: string): Promise<void> {
@@ -727,8 +738,8 @@ describe('POST /claim — dogfood re-seat (ADR 146)', () => {
     expect(r.json.type).toBe('occupied');
     expect(r.json.seat.name).toBe('Ada');
 
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    const actions = listAudit(server.db, teamId).map((a) => a.action);
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    const actions = (await listAudit(sqliteDriver(server.db), teamId)).map((a) => a.action);
     expect(actions).toContain('claim.reseated');
   });
 
@@ -774,7 +785,7 @@ describe('POST /claim — dogfood re-seat (ADR 146)', () => {
   });
 });
 
-describe('POST /requests/{id}/decide', () => {
+describe('POST /requests/{id}/decide', async () => {
   async function openPending(): Promise<string> {
     const r = await post('/teams/dawn/claim', {
       key: agentKey,
@@ -808,10 +819,12 @@ describe('POST /requests/{id}/decide', () => {
     expect(after.json.requests.find((rq: any) => rq.id === id)?.status).toBe('approved');
 
     // ADR 127: decide + minted grant both carry authorized_by.
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    const decide = listAudit(server.db, teamId).find((a) => a.action === 'request.decide')!;
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    const decide = (await listAudit(sqliteDriver(server.db), teamId)).find(
+      (a) => a.action === 'request.decide',
+    )!;
     expect(JSON.parse(decide.detail!).authorized_by).toBe('nick');
-    const grantIssue = listAudit(server.db, teamId).find(
+    const grantIssue = (await listAudit(sqliteDriver(server.db), teamId)).find(
       (a) => a.action === 'grant.issue' && JSON.parse(a.detail!).via === 'request.decide',
     )!;
     expect(JSON.parse(grantIssue.detail!).authorized_by).toBe('nick');
@@ -845,8 +858,8 @@ describe('POST /requests/{id}/decide', () => {
       1,
     );
 
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
-    const eviction = listAudit(server.db, teamId).find(
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+    const eviction = (await listAudit(sqliteDriver(server.db), teamId)).find(
       (row) =>
         row.action === 'claim.superseded' &&
         JSON.parse(row.detail ?? '{}').via === 'request.approve',

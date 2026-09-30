@@ -5,7 +5,8 @@ import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { appendAudit } from '../store/audit.js';
 import { setCursor } from '../store/cursors.js';
@@ -65,30 +66,35 @@ async function enrollJoiner() {
 }
 
 const hubCtx = (): Ctx => ({
-  db: hub.db,
+  db: sqliteDriver(hub.db),
   hub: new Hub(),
   config: resolveConfig(),
   rosterRoots: [],
 });
-const hubTeam = () => getTeamBySlug(hub.db, 'bravo')!;
-const joinerTeam = () => getTeamBySlug(joiner.db, 'bravo')!;
+const hubTeam = async () => (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
+const joinerTeam = async () => (await getTeamBySlug(sqliteDriver(joiner.db), 'bravo'))!;
 
 /** Both directions, both folds. */
 async function roundTrip() {
-  await pushTeam(joinerCtx, joinerTeam());
-  await pullTeam(hubCtx(), hubTeam());
-  await pushTeam(hubCtx(), hubTeam());
-  await pullTeam(joinerCtx, joinerTeam());
+  await pushTeam(joinerCtx, await joinerTeam());
+  await pullTeam(hubCtx(), await hubTeam());
+  await pushTeam(hubCtx(), await hubTeam());
+  await pullTeam(joinerCtx, await joinerTeam());
 }
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'musterd-census-'));
   process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
-  hub = createServer({ db: openDb(':memory:'), port: 0 });
+  hub = createServer({ db: openTestDb(':memory:'), port: 0 });
   hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-  joiner = createServer({ db: openDb(':memory:'), port: 0 });
+  joiner = createServer({ db: openTestDb(':memory:'), port: 0 });
   joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
-  joinerCtx = { db: joiner.db, hub: new Hub(), config: resolveConfig(), rosterRoots: [] };
+  joinerCtx = {
+    db: sqliteDriver(joiner.db),
+    hub: new Hub(),
+    config: resolveConfig(),
+    rosterRoots: [],
+  };
   const onHub = await post(hubBase, '/teams', {
     slug: 'bravo',
     creator: { name: 'nick', kind: 'human' },
@@ -99,10 +105,10 @@ beforeEach(async () => {
     creator: { name: 'nick', kind: 'human' },
   });
   nickOnJoiner = onJoiner.json.human_credential;
-  const jt = joinerTeam();
-  const nick = getMemberByName(joiner.db, jt.id, 'nick')!;
-  insertMessage(
-    joiner.db,
+  const jt = await joinerTeam();
+  const nick = (await getMemberByName(sqliteDriver(joiner.db), jt.id, 'nick'))!;
+  await insertMessage(
+    sqliteDriver(joiner.db),
     jt.id,
     nick.id,
     null,
@@ -152,17 +158,23 @@ describe('residence-2 census — what crosses the wire at this build', () => {
   it('CLOSED (gap 1, ADR 367): a policy change on the hub reaches the joiner — an UNSTAMPED one still does not', async () => {
     // The gap this census named is closed: the admin route stamps, so the change replicates.
     await post(hubBase, '/teams/bravo/policy', { residency: { hourly_cap: 1 } }, nickOnHub);
-    expect(getPolicy(hub.db, hubTeam().id).residency.hourly_cap).toBe(1);
+    expect((await getPolicy(sqliteDriver(hub.db), (await hubTeam()).id)).residency.hourly_cap).toBe(
+      1,
+    );
     await roundTrip();
-    expect(getPolicy(joiner.db, joinerTeam().id).residency.hourly_cap).toBe(1);
+    expect(
+      (await getPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).residency.hourly_cap,
+    ).toBe(1);
 
     // …and the store's raw `setPolicy` still writes nothing to the wire. It is the fold's own
     // projector and the seam a future in-process caller could fall through: the stamp comes from
     // `applyPolicyChange`, never from the UPDATE. This half is why the assertion above means what
     // it says rather than "any local write happens to converge".
-    setPolicy(hub.db, hubTeam().id, { residency: { hourly_cap: 7 } });
+    await setPolicy(sqliteDriver(hub.db), (await hubTeam()).id, { residency: { hourly_cap: 7 } });
     await roundTrip();
-    expect(getPolicy(joiner.db, joinerTeam().id).residency.hourly_cap).toBe(1);
+    expect(
+      (await getPolicy(sqliteDriver(joiner.db), (await joinerTeam()).id)).residency.hourly_cap,
+    ).toBe(1);
   });
 
   it('GAP 2 CLOSED (ADR 366) — but the raw primitives still ship nothing: seat memory and the cursor cross only through the stamped writers', async () => {
@@ -171,12 +183,19 @@ describe('residence-2 census — what crosses the wire at this build', () => {
     // above. A future in-process caller that reaches for them instead of `applyMemorySave` /
     // `applyCursorAdvance` writes a note no other machine will ever see — this is the test that
     // says so. The replicating path itself is `sync/continuity.test.ts`.
-    const nickJ = getMemberByName(joiner.db, joinerTeam().id, 'nick')!;
-    saveMemory(joiner.db, nickJ.id, { headline: 'left off here', body: 'mid-flight' });
-    setCursor(joiner.db, nickJ.id, 'j-0');
+    const nickJ = (await getMemberByName(
+      sqliteDriver(joiner.db),
+      (await joinerTeam()).id,
+      'nick',
+    ))!;
+    await saveMemory(sqliteDriver(joiner.db), nickJ.id, {
+      headline: 'left off here',
+      body: 'mid-flight',
+    });
+    await setCursor(sqliteDriver(joiner.db), nickJ.id, 'j-0');
     await roundTrip();
-    const nickH = getMemberByName(hub.db, hubTeam().id, 'nick')!;
-    expect(getMemory(hub.db, nickH.id)).toBeNull();
+    const nickH = (await getMemberByName(sqliteDriver(hub.db), (await hubTeam()).id, 'nick'))!;
+    expect(await getMemory(sqliteDriver(hub.db), nickH.id)).toBeNull();
     expect(
       hub.db
         .prepare<
@@ -188,17 +207,17 @@ describe('residence-2 census — what crosses the wire at this build', () => {
   });
 
   it('GAP 3 CLOSED (ADR 371 §4): the residency.* remainder crosses as ledger rows — an audit verb OUTSIDE every replicated set still carries no stamp and never pushes', async () => {
-    const jt = joinerTeam();
+    const jt = await joinerTeam();
     // Until ADR 371 this test pinned `residency.wake_leased` as the gap. It is in the ledger set
     // now; the seam this pins is that the set is the only door — a verb no set names stays local.
-    appendAudit(joiner.db, jt.id, {
+    await appendAudit(sqliteDriver(joiner.db), jt.id, {
       actor: 'nick',
       action: 'residency.wake_leased',
       target: 'ada',
       result: 'allow',
       detail: { lease: 'L1', act: 'a1' },
     });
-    appendAudit(joiner.db, jt.id, {
+    await appendAudit(sqliteDriver(joiner.db), jt.id, {
       actor: 'nick',
       action: 'inbox.deferred',
       target: 'ada',

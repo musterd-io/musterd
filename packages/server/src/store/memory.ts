@@ -1,5 +1,5 @@
 import type { MemoryEnvelope } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { appendReplicatedEvent } from './audit.js';
 
@@ -35,11 +35,11 @@ interface MemoryRow {
  * headline by character count, body by UTF-8 byte length — and rejects an oversize/empty input with
  * the limit named. Never logs or audits the content itself (sizes only; hard rule 5).
  */
-export function saveMemory(
-  db: Database,
+export async function saveMemory(
+  db: Driver,
   memberId: string,
   input: { headline: string; body: string },
-): void {
+): Promise<void> {
   const headline = input.headline;
   if (headline.length < 1) {
     throw new MusterdError('bad_request', 'memory headline is required');
@@ -57,24 +57,23 @@ export function saveMemory(
       `memory body is ${bodyBytes} bytes; the limit is ${MEMORY_BODY_MAX_BYTES}`,
     );
   }
-  db.prepare(
+  await db.run(
     `INSERT INTO seat_memory (member_id, headline, body, saved_at)
-       VALUES (@member_id, @headline, @body, @saved_at)
+       VALUES (?, ?, ?, ?)
      ON CONFLICT(member_id) DO UPDATE SET
        headline = excluded.headline,
        body     = excluded.body,
        saved_at = excluded.saved_at`,
-  ).run({ member_id: memberId, headline, body: input.body, saved_at: Date.now() });
+    [memberId, headline, input.body, Date.now()],
+  );
 }
 
 /** The full note for a seat — the explicit body read — or null if nothing is saved. */
-export function getMemory(db: Database, memberId: string): Memory | null {
-  const row = db
-    .prepare<
-      [string],
-      MemoryRow
-    >('SELECT headline, body, saved_at FROM seat_memory WHERE member_id = ?')
-    .get(memberId);
+export async function getMemory(db: Driver, memberId: string): Promise<Memory | null> {
+  const row = await db.get<MemoryRow>(
+    'SELECT headline, body, saved_at FROM seat_memory WHERE member_id = ?',
+    [memberId],
+  );
   return row ? { headline: row.headline, body: row.body, saved_at: row.saved_at } : null;
 }
 
@@ -82,13 +81,11 @@ export function getMemory(db: Database, memberId: string): Memory | null {
  * The envelope that rides the occupied frame: headline + age + size, **never the body** (ADR 093 §3).
  * `size_bytes` is the UTF-8 byte length of the body so the agent sees the fetch cost.
  */
-export function memoryEnvelope(db: Database, memberId: string): MemoryEnvelope | null {
-  const row = db
-    .prepare<
-      [string],
-      MemoryRow
-    >('SELECT headline, body, saved_at FROM seat_memory WHERE member_id = ?')
-    .get(memberId);
+export async function memoryEnvelope(db: Driver, memberId: string): Promise<MemoryEnvelope | null> {
+  const row = await db.get<MemoryRow>(
+    'SELECT headline, body, saved_at FROM seat_memory WHERE member_id = ?',
+    [memberId],
+  );
   if (!row) return null;
   return {
     headline: row.headline,
@@ -98,8 +95,8 @@ export function memoryEnvelope(db: Database, memberId: string): MemoryEnvelope |
 }
 
 /** Clear the seat's memory. Returns true if a row existed (idempotent — false when already empty). */
-export function clearMemory(db: Database, memberId: string): boolean {
-  const info = db.prepare('DELETE FROM seat_memory WHERE member_id = ?').run(memberId);
+export async function clearMemory(db: Driver, memberId: string): Promise<boolean> {
+  const info = await db.run('DELETE FROM seat_memory WHERE member_id = ?', [memberId]);
   return info.changes > 0;
 }
 
@@ -115,23 +112,23 @@ export function clearMemory(db: Database, memberId: string): boolean {
  * never git — the ADR 058 line is unmoved), and a blob ADR 093 called history-less gains an
  * implicit history in that log, bounded by the 8 KiB cap.
  */
-export function applyMemorySave(
-  db: Database,
+export async function applyMemorySave(
+  db: Driver,
   teamId: string,
   seat: { id: string; name: string },
   input: { headline: string; body: string },
-): void {
-  db.transaction(() => {
-    saveMemory(db, seat.id, input);
-    const saved = getMemory(db, seat.id)!;
-    appendReplicatedEvent(db, teamId, {
+): Promise<void> {
+  await db.tx(async (t) => {
+    await saveMemory(t, seat.id, input);
+    const saved = (await getMemory(t, seat.id))!;
+    await appendReplicatedEvent(t, teamId, {
       actor: seat.name,
       action: 'continuity.memory_saved',
       target: seat.name,
       result: 'allow',
       detail: { headline: saved.headline, body: saved.body, saved_at: saved.saved_at },
     });
-  })();
+  });
 }
 
 /**
@@ -140,14 +137,14 @@ export function applyMemorySave(
  * `cleared_at` is what the fold compares against the local `saved_at` — same LWW rule, one clock
  * per fact, the origin's.
  */
-export function applyMemoryClear(
-  db: Database,
+export async function applyMemoryClear(
+  db: Driver,
   teamId: string,
   seat: { id: string; name: string },
-): boolean {
-  return db.transaction(() => {
-    const cleared = clearMemory(db, seat.id);
-    appendReplicatedEvent(db, teamId, {
+): Promise<boolean> {
+  return db.tx(async (t) => {
+    const cleared = await clearMemory(t, seat.id);
+    await appendReplicatedEvent(t, teamId, {
       actor: seat.name,
       action: 'continuity.memory_cleared',
       target: seat.name,
@@ -155,5 +152,5 @@ export function applyMemoryClear(
       detail: { cleared_at: Date.now(), had_memory: cleared },
     });
     return cleared;
-  })();
+  });
 }

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { upsertRole } from '../store/roles.js';
 import { getTeamBySlug } from '../store/teams.js';
@@ -33,8 +34,8 @@ async function get(path: string, headers: Record<string, string> = {}) {
 }
 const bearer = (auth: string) => ({ authorization: `Bearer ${auth}` });
 
-const auditRows = () => {
-  const team = getTeamBySlug(server.db, 'dawn')!;
+const auditRows = async () => {
+  const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
   return server.db
     .prepare<
       [string],
@@ -44,7 +45,7 @@ const auditRows = () => {
 };
 
 beforeEach(async () => {
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
@@ -58,15 +59,22 @@ beforeEach(async () => {
   );
   await post('/teams/dawn/members', { name: 'kimi', kind: 'agent' }, bearer(nickCred));
   // The role library entry (normally projected from roles/<name>.toml by reconcile).
-  const teamRow = getTeamBySlug(server.db, 'dawn')!;
-  upsertRole(server.db, teamRow.id, 'platform', {}, 'You touch infra.', 'infra toucher');
+  const teamRow = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+  await upsertRole(
+    sqliteDriver(server.db),
+    teamRow.id,
+    'platform',
+    {},
+    'You touch infra.',
+    'infra toucher',
+  );
 });
 
 afterEach(async () => {
   await server.close();
 });
 
-describe('GET /members?role= (ADR 227 close-out) — server-side filter + audit', () => {
+describe('GET /members?role= (ADR 227 close-out) — server-side filter + audit', async () => {
   it('filters members to holders of the role and returns the full role library', async () => {
     const res = await get('/teams/dawn/members?role=platform', bearer(nickCred));
     expect(res.status).toBe(200);
@@ -80,7 +88,7 @@ describe('GET /members?role= (ADR 227 close-out) — server-side filter + audit'
 
   it('writes a roster.role_query audit row for an authenticated filtered read', async () => {
     await get('/teams/dawn/members?role=platform', bearer(nickCred));
-    const rows = auditRows();
+    const rows = await auditRows();
     expect(rows).toHaveLength(1);
     expect(rows[0].actor).toBe('nick');
     expect(JSON.parse(rows[0].detail!)).toEqual({ role: 'platform', holders: ['izzo'] });
@@ -91,7 +99,7 @@ describe('GET /members?role= (ADR 227 close-out) — server-side filter + audit'
     expect(res.status).toBe(200);
     expect(res.json.members).toEqual([]);
     expect(res.json.roles.length).toBeGreaterThan(0);
-    const rows = auditRows();
+    const rows = await auditRows();
     expect(rows).toHaveLength(1);
     expect(JSON.parse(rows[0].detail!)).toEqual({ role: 'nonesuch', holders: [] });
   });
@@ -100,13 +108,13 @@ describe('GET /members?role= (ADR 227 close-out) — server-side filter + audit'
     const res = await get('/teams/dawn/members?role=platform');
     expect(res.status).toBe(200);
     expect(res.json.members.map((m: { name: string }) => m.name)).toEqual(['izzo']);
-    expect(auditRows()).toHaveLength(0);
+    expect(await auditRows()).toHaveLength(0);
   });
 
   it('no ?role= param: identical to today — no filter, no audit row', async () => {
     const res = await get('/teams/dawn/members', bearer(nickCred));
     expect(res.status).toBe(200);
     expect(res.json.members.length).toBe(3); // nick + izzo + kimi
-    expect(auditRows()).toHaveLength(0);
+    expect(await auditRows()).toHaveLength(0);
   });
 });

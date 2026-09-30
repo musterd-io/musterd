@@ -7,9 +7,9 @@ import {
   TOKEN_PREFIXES,
   type WorkingHours,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
 import type { z } from 'zod';
+import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { appendAuditRequired, appendReplicatedEvent } from './audit.js';
 import { hashToken, newSecret } from './members.js';
@@ -52,22 +52,22 @@ export type BootstrapCutoverReadiness = {
   unmet_hosts: string[];
 };
 
-export function createTeam(
-  db: Database,
+export async function createTeam(
+  db: Driver,
   input: {
     slug: string;
     display?: string | null;
     defaultLifecycle?: string;
     workingHours?: WorkingHours | null;
   },
-): TeamRow {
+): Promise<TeamRow> {
   if (!SLUG_RE.test(input.slug)) {
     throw new MusterdError(
       'bad_request',
       `invalid team slug "${input.slug}" (use [a-z0-9-], 1..32)`,
     );
   }
-  const existing = getTeamBySlug(db, input.slug);
+  const existing = await getTeamBySlug(db, input.slug);
   if (existing) {
     throw new MusterdError(
       'conflict',
@@ -90,19 +90,29 @@ export function createTeam(
     created_at: now,
     updated_at: now,
   };
-  db.prepare(
+  await db.run(
     `INSERT INTO teams (id, slug, display, default_lifecycle, archived_at, working_hours, created_at, updated_at)
-     VALUES (@id, @slug, @display, @default_lifecycle, @archived_at, @working_hours, @created_at, @updated_at)`,
-  ).run(row);
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      row.id,
+      row.slug,
+      row.display,
+      row.default_lifecycle,
+      row.archived_at,
+      row.working_hours,
+      row.created_at,
+      row.updated_at,
+    ],
+  );
   return row;
 }
 
-export function getTeamBySlug(db: Database, slug: string): TeamRow | undefined {
-  return db.prepare<[string], TeamRow>('SELECT * FROM teams WHERE slug = ?').get(slug);
+export async function getTeamBySlug(db: Driver, slug: string): Promise<TeamRow | undefined> {
+  return await db.get<TeamRow>('SELECT * FROM teams WHERE slug = ?', [slug]);
 }
 
-export function getTeamById(db: Database, id: string): TeamRow | undefined {
-  return db.prepare<[string], TeamRow>('SELECT * FROM teams WHERE id = ?').get(id);
+export async function getTeamById(db: Driver, id: string): Promise<TeamRow | undefined> {
+  return await db.get<TeamRow>('SELECT * FROM teams WHERE id = ?', [id]);
 }
 
 /**
@@ -110,13 +120,10 @@ export function getTeamById(db: Database, id: string): TeamRow | undefined {
  * excluded on the same principle as `requireTeam`: a soft-archived team drops off every surface at
  * once, and a background job acting on one would be the exception that makes that untrue.
  */
-export function listActiveTeams(db: Database): { id: string; slug: string }[] {
-  return db
-    .prepare<
-      [],
-      { id: string; slug: string }
-    >('SELECT id, slug FROM teams WHERE archived_at IS NULL')
-    .all();
+export async function listActiveTeams(db: Driver): Promise<{ id: string; slug: string }[]> {
+  return await db.all<{ id: string; slug: string }>(
+    'SELECT id, slug FROM teams WHERE archived_at IS NULL',
+  );
 }
 
 /**
@@ -124,8 +131,8 @@ export function listActiveTeams(db: Database): { id: string; slug: string }[] {
  * route (auth, roster, status, ws join, claim) resolves through this, so soft-archiving a team makes
  * it drop off every surface at once while its rows (history, audit, provenance) survive in the db.
  */
-export function requireTeam(db: Database, slug: string): TeamRow {
-  const t = getTeamBySlug(db, slug);
+export async function requireTeam(db: Driver, slug: string): Promise<TeamRow> {
+  const t = await getTeamBySlug(db, slug);
   if (!t) throw new MusterdError('not_found', `no team "${slug}"`);
   if (t.archived_at) throw new MusterdError('not_found', `team "${slug}" is archived`);
   return t;
@@ -139,13 +146,11 @@ export function requireTeam(db: Database, slug: string): TeamRow {
  * Rotate (or set) the team agent key: mint a fresh `mskey_` secret, store its hash, return the
  * plaintext **once**. Any prior key is invalidated by the overwrite.
  */
-export function rotateAgentKey(db: Database, teamId: string): AgentKeyMint {
-  const team = db
-    .prepare<
-      [string],
-      { bootstrap_cutover_at: number | null }
-    >('SELECT bootstrap_cutover_at FROM teams WHERE id = ?')
-    .get(teamId);
+export async function rotateAgentKey(db: Driver, teamId: string): Promise<AgentKeyMint> {
+  const team = await db.get<{ bootstrap_cutover_at: number | null }>(
+    'SELECT bootstrap_cutover_at FROM teams WHERE id = ?',
+    [teamId],
+  );
   if (!team) throw new MusterdError('not_found', 'Team not found');
   if (team.bootstrap_cutover_at !== null) {
     throw new MusterdError('conflict', 'legacy bootstrap authority is already cut over');
@@ -153,36 +158,36 @@ export function rotateAgentKey(db: Database, teamId: string): AgentKeyMint {
   const agentKey = newSecret(TOKEN_PREFIXES.agent_key);
   const now = Date.now();
   const keyHash = hashToken(agentKey);
-  db.transaction(() => {
-    db.prepare(
+  await db.tx(async (t) => {
+    await t.run(
       `UPDATE agent_bootstrap_credentials
        SET state = 'revoked', revoked_at = ?
        WHERE team_id = ? AND use_kind = 'legacy' AND state IN ('active', 'rotated')`,
-    ).run(now, teamId);
-    db.prepare('UPDATE teams SET agent_key_hash = ?, updated_at = ? WHERE id = ?').run(
+      [now, teamId],
+    );
+    await t.run('UPDATE teams SET agent_key_hash = ?, updated_at = ? WHERE id = ?', [
       keyHash,
       now,
       teamId,
-    );
-    db.prepare(
+    ]);
+    await t.run(
       `INSERT INTO agent_bootstrap_credentials
         (id, team_id, key_hash, use_kind, target, label, state, expires_at, created_by,
          created_at, rotated_at, revoked_at, migration_target_member_id, first_used_at)
        VALUES (?, ?, ?, 'legacy', NULL, 'team-key-compatibility', 'active', NULL, NULL,
                ?, NULL, NULL, NULL, NULL)`,
-    ).run(ulid(), teamId, keyHash, now);
-  })();
+      [ulid(), teamId, keyHash, now],
+    );
+  });
   return { agent_key: agentKey };
 }
 
 /** The team's agent-key hash, or null if none is set. */
-export function getAgentKeyHash(db: Database, teamId: string): string | null {
-  const row = db
-    .prepare<
-      [string],
-      { agent_key_hash: string | null }
-    >('SELECT agent_key_hash FROM teams WHERE id = ?')
-    .get(teamId);
+export async function getAgentKeyHash(db: Driver, teamId: string): Promise<string | null> {
+  const row = await db.get<{ agent_key_hash: string | null }>(
+    'SELECT agent_key_hash FROM teams WHERE id = ?',
+    [teamId],
+  );
   return row?.agent_key_hash ?? null;
 }
 
@@ -190,8 +195,8 @@ export function getAgentKeyHash(db: Database, teamId: string): string | null {
  * Mint a bootstrap credential constrained by a server-held purpose and target (ADR 344).
  * The caller receives the plaintext once; only its hash is retained.
  */
-export function mintBootstrapCredential(
-  db: Database,
+export async function mintBootstrapCredential(
+  db: Driver,
   input: {
     teamId: string;
     useKind: Exclude<BootstrapCredentialUse, 'legacy'>;
@@ -200,7 +205,7 @@ export function mintBootstrapCredential(
     expiresAt?: number;
     createdBy?: string;
   },
-): { credential: BootstrapCredential; agent_key: string; rotated: string[] } {
+): Promise<{ credential: BootstrapCredential; agent_key: string; rotated: string[] }> {
   const agent_key = newSecret(TOKEN_PREFIXES.agent_key);
   const now = Date.now();
   const credential: BootstrapCredential = {
@@ -219,93 +224,107 @@ export function mintBootstrapCredential(
     migration_target_member_id: null,
     first_used_at: null,
   };
-  const rotated = db.transaction(() => {
-    const predecessors = db
-      .prepare<[string, string, string], { id: string }>(
+  const rotated = await db.tx(async (t) => {
+    const predecessors = (
+      await t.all<{ id: string }>(
         `SELECT id FROM agent_bootstrap_credentials
          WHERE team_id = ? AND use_kind = ? AND target = ? AND state = 'active'`,
+        [input.teamId, input.useKind, input.target],
       )
-      .all(input.teamId, input.useKind, input.target)
-      .map((row) => row.id);
+    ).map((row) => row.id);
     // A same-scope mint is the explicit start of a staged rotation. The predecessor remains valid
     // until the admin revokes it, but inventory names the overlap rather than showing two unrelated
     // active records (ADR 344 §5–6).
-    db.prepare(
+    await t.run(
       `UPDATE agent_bootstrap_credentials
        SET state = 'rotated', rotated_at = ?
        WHERE team_id = ? AND use_kind = ? AND target = ? AND state = 'active'`,
-    ).run(now, input.teamId, input.useKind, input.target);
-    db.prepare(
+      [now, input.teamId, input.useKind, input.target],
+    );
+    await t.run(
       `INSERT INTO agent_bootstrap_credentials
         (id, team_id, key_hash, use_kind, target, label, state, expires_at, created_by, created_at, rotated_at, revoked_at)
        VALUES
-        (@id, @team_id, @key_hash, @use_kind, @target, @label, @state, @expires_at, @created_by, @created_at, @rotated_at, @revoked_at)`,
-    ).run(credential);
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        credential.id,
+        credential.team_id,
+        credential.key_hash,
+        credential.use_kind,
+        credential.target,
+        credential.label,
+        credential.state,
+        credential.expires_at,
+        credential.created_by,
+        credential.created_at,
+        credential.rotated_at,
+        credential.revoked_at,
+      ],
+    );
     return predecessors;
-  })();
+  });
   return { credential, agent_key, rotated };
 }
 
 /** Resolve an active, unexpired scoped bootstrap credential by its presented secret. */
-export function findBootstrapCredential(
-  db: Database,
+export async function findBootstrapCredential(
+  db: Driver,
   teamId: string,
   agentKey: string,
-): BootstrapCredential | null {
+): Promise<BootstrapCredential | null> {
   return (
-    db
-      .prepare<[string, string, number], BootstrapCredential>(
-        `SELECT * FROM agent_bootstrap_credentials
+    (await db.get<BootstrapCredential>(
+      `SELECT * FROM agent_bootstrap_credentials
          WHERE team_id = ? AND key_hash = ? AND state IN ('active', 'rotated')
            AND (expires_at IS NULL OR expires_at > ?)
          LIMIT 1`,
-      )
-      .get(teamId, hashToken(agentKey), Date.now()) ?? null
+      [teamId, hashToken(agentKey), Date.now()],
+    )) ?? null
   );
 }
 
 /** Resolve a credential record regardless of lifecycle state, for redacted refusal audit only. */
-export function findBootstrapCredentialRecord(
-  db: Database,
+export async function findBootstrapCredentialRecord(
+  db: Driver,
   teamId: string,
   agentKey: string,
-): BootstrapCredential | null {
+): Promise<BootstrapCredential | null> {
   return (
-    db
-      .prepare<[string, string], BootstrapCredential>(
-        `SELECT * FROM agent_bootstrap_credentials
+    (await db.get<BootstrapCredential>(
+      `SELECT * FROM agent_bootstrap_credentials
          WHERE team_id = ? AND key_hash = ?
          LIMIT 1`,
-      )
-      .get(teamId, hashToken(agentKey)) ?? null
+      [teamId, hashToken(agentKey)],
+    )) ?? null
   );
 }
 
 /** Revoke one scoped bootstrap credential. Legacy team keys remain on their compatibility path. */
-export function revokeBootstrapCredential(
-  db: Database,
+export async function revokeBootstrapCredential(
+  db: Driver,
   teamId: string,
   credentialId: string,
-): boolean {
-  const result = db
-    .prepare(
-      `UPDATE agent_bootstrap_credentials
+): Promise<boolean> {
+  const result = await db.run(
+    `UPDATE agent_bootstrap_credentials
        SET state = 'revoked', revoked_at = ?
        WHERE id = ? AND team_id = ? AND state IN ('active', 'rotated') AND use_kind <> 'legacy'`,
-    )
-    .run(Date.now(), credentialId, teamId);
+    [Date.now(), credentialId, teamId],
+  );
   return result.changes === 1;
 }
 
 /** Admin inventory source. Callers must redact key_hash before crossing a transport boundary. */
-export function listBootstrapCredentials(db: Database, teamId: string): BootstrapCredential[] {
-  return db
-    .prepare<[string], BootstrapCredential>(
-      `SELECT * FROM agent_bootstrap_credentials
+export async function listBootstrapCredentials(
+  db: Driver,
+  teamId: string,
+): Promise<BootstrapCredential[]> {
+  return await db.all<BootstrapCredential>(
+    `SELECT * FROM agent_bootstrap_credentials
        WHERE team_id = ?
        ORDER BY created_at DESC, id DESC`,
-    )
-    .all(teamId);
+    [teamId],
+  );
 }
 
 /**
@@ -313,27 +332,24 @@ export function listBootstrapCredentials(db: Database, teamId: string): Bootstra
  * by its independent `msac_`. Team and Member are derived from stored credential hashes; callers do
  * not declare either identity (ADR 350).
  */
-export function migrateLegacyBootstrapCredential(
-  db: Database,
+export async function migrateLegacyBootstrapCredential(
+  db: Driver,
   input: { legacyKey: string; seatCredential: string; now?: number },
-): BootstrapMigrationResult {
-  return db.transaction(() => {
+): Promise<BootstrapMigrationResult> {
+  return db.tx(async (t) => {
     const now = input.now ?? Date.now();
-    const legacy = db
-      .prepare<[string, number], BootstrapCredential>(
-        `SELECT * FROM agent_bootstrap_credentials
+    const legacy = await t.get<BootstrapCredential>(
+      `SELECT * FROM agent_bootstrap_credentials
          WHERE key_hash = ? AND use_kind = 'legacy' AND state = 'active'
            AND (expires_at IS NULL OR expires_at > ?)
          LIMIT 1`,
-      )
-      .get(hashToken(input.legacyKey), now);
+      [hashToken(input.legacyKey), now],
+    );
     if (!legacy) {
       throw new MusterdError('unauthorized', 'invalid or inactive legacy bootstrap credential');
     }
 
-    const team = db
-      .prepare<[string], TeamRow>('SELECT * FROM teams WHERE id = ?')
-      .get(legacy.team_id);
+    const team = await t.get<TeamRow>('SELECT * FROM teams WHERE id = ?', [legacy.team_id]);
     if (!team || team.archived_at !== null) {
       throw new MusterdError(
         'forbidden',
@@ -341,13 +357,12 @@ export function migrateLegacyBootstrapCredential(
       );
     }
 
-    const member = db
-      .prepare<[string], MemberRow>(
-        `SELECT * FROM members
+    const member = await t.get<MemberRow>(
+      `SELECT * FROM members
          WHERE credential_hash = ? AND kind = 'agent' AND observer = 0 AND left_at IS NULL
          LIMIT 1`,
-      )
-      .get(hashToken(input.seatCredential));
+      [hashToken(input.seatCredential)],
+    );
     if (!member) {
       throw new MusterdError('unauthorized', 'invalid or inactive agent seat credential');
     }
@@ -366,14 +381,13 @@ export function migrateLegacyBootstrapCredential(
       throw new MusterdError('forbidden', `seat "${member.name}" is ${accountStatus}`);
     }
 
-    const usedSuccessor = db
-      .prepare<[string, string], { id: string }>(
-        `SELECT id FROM agent_bootstrap_credentials
+    const usedSuccessor = await t.get<{ id: string }>(
+      `SELECT id FROM agent_bootstrap_credentials
          WHERE team_id = ? AND migration_target_member_id = ? AND first_used_at IS NOT NULL
          ORDER BY first_used_at DESC, id DESC
          LIMIT 1`,
-      )
-      .get(legacy.team_id, member.id);
+      [legacy.team_id, member.id],
+    );
     if (usedSuccessor) {
       throw new MusterdError(
         'conflict',
@@ -381,21 +395,21 @@ export function migrateLegacyBootstrapCredential(
       );
     }
 
-    const unused = db
-      .prepare<[string, string], { id: string }>(
-        `SELECT id FROM agent_bootstrap_credentials
+    const unused = await t.get<{ id: string }>(
+      `SELECT id FROM agent_bootstrap_credentials
          WHERE team_id = ? AND migration_target_member_id = ?
            AND state = 'active' AND first_used_at IS NULL
          ORDER BY created_at DESC, id DESC
          LIMIT 1`,
-      )
-      .get(legacy.team_id, member.id);
+      [legacy.team_id, member.id],
+    );
     if (unused) {
-      db.prepare(
+      await t.run(
         `UPDATE agent_bootstrap_credentials
          SET state = 'revoked', revoked_at = ?
          WHERE id = ? AND state = 'active' AND first_used_at IS NULL`,
-      ).run(now, unused.id);
+        [now, unused.id],
+      );
     }
 
     const agent_key = newSecret(TOKEN_PREFIXES.agent_key);
@@ -415,14 +429,30 @@ export function migrateLegacyBootstrapCredential(
       migration_target_member_id: member.id,
       first_used_at: null,
     };
-    db.prepare(
+    await t.run(
       `INSERT INTO agent_bootstrap_credentials
         (id, team_id, key_hash, use_kind, target, label, state, expires_at, created_by,
          created_at, rotated_at, revoked_at, migration_target_member_id, first_used_at)
        VALUES
-        (@id, @team_id, @key_hash, @use_kind, @target, @label, @state, @expires_at, @created_by,
-         @created_at, @rotated_at, @revoked_at, @migration_target_member_id, @first_used_at)`,
-    ).run(credential);
+        (?, ?, ?, ?, ?, ?, ?, ?, ?,
+         ?, ?, ?, ?, ?)`,
+      [
+        credential.id,
+        credential.team_id,
+        credential.key_hash,
+        credential.use_kind,
+        credential.target,
+        credential.label,
+        credential.state,
+        credential.expires_at,
+        credential.created_by,
+        credential.created_at,
+        credential.rotated_at,
+        credential.revoked_at,
+        credential.migration_target_member_id,
+        credential.first_used_at,
+      ],
+    );
 
     return {
       credential,
@@ -430,34 +460,34 @@ export function migrateLegacyBootstrapCredential(
       predecessor_credential_id: legacy.id,
       replaced_credential_id: unused?.id ?? null,
     };
-  })();
+  });
 }
 
 /** Record adoption evidence once; legacy compatibility authentication never satisfies readiness. */
-export function recordBootstrapCredentialUse(
-  db: Database,
+export async function recordBootstrapCredentialUse(
+  db: Driver,
   credentialId: string,
   now = Date.now(),
-): void {
-  db.prepare(
+): Promise<void> {
+  await db.run(
     `UPDATE agent_bootstrap_credentials
      SET first_used_at = COALESCE(first_used_at, ?)
      WHERE id = ? AND use_kind <> 'legacy'`,
-  ).run(now, credentialId);
+    [now, credentialId],
+  );
 }
 
 /** Derive legacy-key cutover readiness only from durable Team state and observed scoped use. */
-export function bootstrapCutoverReadiness(
-  db: Database,
+export async function bootstrapCutoverReadiness(
+  db: Driver,
   teamId: string,
   now = Date.now(),
-): BootstrapCutoverReadiness {
-  const team = db.prepare<[string], TeamRow>('SELECT * FROM teams WHERE id = ?').get(teamId);
+): Promise<BootstrapCutoverReadiness> {
+  const team = await db.get<TeamRow>('SELECT * FROM teams WHERE id = ?', [teamId]);
   if (!team) throw new MusterdError('not_found', 'Team not found');
 
-  const unmet_seats = db
-    .prepare<[string, number], { member_id: string; name: string }>(
-      `SELECT m.id AS member_id, m.name
+  const unmet_seats = await db.all<{ member_id: string; name: string }>(
+    `SELECT m.id AS member_id, m.name
        FROM members m
        WHERE m.team_id = ?
          AND m.kind = 'agent'
@@ -476,11 +506,11 @@ export function bootstrapCutoverReadiness(
              AND c.first_used_at IS NOT NULL
          )
        ORDER BY m.name, m.id`,
-    )
-    .all(teamId, now);
+    [teamId, now],
+  );
 
-  const unmet_hosts = db
-    .prepare<[string, number], { host: string }>(
+  const unmet_hosts = (
+    await db.all<{ host: string }>(
       `SELECT DISTINCT r.host
        FROM residency r
        JOIN members m ON m.id = r.member_id
@@ -498,9 +528,9 @@ export function bootstrapCutoverReadiness(
              AND c.first_used_at IS NOT NULL
          )
        ORDER BY r.host`,
+      [teamId, now],
     )
-    .all(teamId, now)
-    .map((row) => row.host);
+  ).map((row) => row.host);
 
   return {
     already_cut_over: team.bootstrap_cutover_at !== null,
@@ -510,29 +540,31 @@ export function bootstrapCutoverReadiness(
 }
 
 /** Transactionally disable one Team's legacy bootstrap authority after its scoped targets are ready. */
-export function cutoverLegacyBootstrap(
-  db: Database,
+export async function cutoverLegacyBootstrap(
+  db: Driver,
   input: { teamId: string; actor: string; force: boolean; now?: number },
-): BootstrapCutoverReadiness {
-  return db.transaction(() => {
+): Promise<BootstrapCutoverReadiness> {
+  return db.tx(async (t) => {
     const now = input.now ?? Date.now();
-    const readiness = bootstrapCutoverReadiness(db, input.teamId, now);
+    const readiness = await bootstrapCutoverReadiness(t, input.teamId, now);
     if (readiness.already_cut_over) return readiness;
     if (!input.force && (readiness.unmet_seats.length > 0 || readiness.unmet_hosts.length > 0)) {
       throw new MusterdError('conflict', 'legacy bootstrap cutover is not ready');
     }
 
-    db.prepare(
+    await t.run(
       `UPDATE agent_bootstrap_credentials
        SET state = 'revoked', revoked_at = ?
        WHERE team_id = ? AND use_kind = 'legacy' AND state IN ('active', 'rotated')`,
-    ).run(now, input.teamId);
-    db.prepare(
+      [now, input.teamId],
+    );
+    await t.run(
       `UPDATE teams
        SET agent_key_hash = NULL, bootstrap_cutover_at = ?, updated_at = ?
        WHERE id = ?`,
-    ).run(now, now, input.teamId);
-    appendAuditRequired(db, input.teamId, {
+      [now, now, input.teamId],
+    );
+    await appendAuditRequired(t, input.teamId, {
       actor: input.actor,
       action: 'bootstrap_credential.cutover',
       target: input.teamId,
@@ -544,7 +576,7 @@ export function cutoverLegacyBootstrap(
       },
     });
     return readiness;
-  })();
+  });
 }
 
 /**
@@ -557,18 +589,18 @@ export function cutoverLegacyBootstrap(
  * default into the row and the schema default was dead for that team from then on — see ADR 185 and
  * the #530 recalibration that had to ship a data change on top of a code change.
  */
-export function setPolicy(
-  db: Database,
+export async function setPolicy(
+  db: Driver,
   teamId: string,
   policy: z.input<typeof PolicyOverrideSchema>,
-): Policy {
+): Promise<Policy> {
   const stored = PolicyOverrideSchema.parse(policy);
-  db.prepare('UPDATE teams SET policy = ?, updated_at = ? WHERE id = ?').run(
+  await db.run('UPDATE teams SET policy = ?, updated_at = ? WHERE id = ?', [
     JSON.stringify(stored),
     Date.now(),
     teamId,
-  );
-  return getPolicy(db, teamId);
+  ]);
+  return await getPolicy(db, teamId);
 }
 
 /**
@@ -583,21 +615,21 @@ export function setPolicy(
  * Only the HUB calls this. Policy is hub-authoritative (ADR 325 residence 1): a joiner forwards to
  * the hub and learns the answer back through the fold, so no second origin ever mints the verb.
  */
-export function applyPolicyChange(
-  db: Database,
+export async function applyPolicyChange(
+  db: Driver,
   teamId: string,
   actor: string,
   policy: z.input<typeof PolicyOverrideSchema>,
   opts: { enforce?: boolean } = {},
-): { policy: Policy; stored: PolicyOverride } {
-  return db.transaction(() => {
+): Promise<{ policy: Policy; stored: PolicyOverride }> {
+  return db.tx(async (t) => {
     const stored = PolicyOverrideSchema.parse(policy);
     if (opts.enforce !== false) {
-      const refusal = policyPairRefusal(db, teamId, PolicySchema.parse(stored));
+      const refusal = await policyPairRefusal(t, teamId, PolicySchema.parse(stored));
       if (refusal) throw refusal;
     }
-    const effective = setPolicy(db, teamId, stored);
-    appendReplicatedEvent(db, teamId, {
+    const effective = await setPolicy(t, teamId, stored);
+    await appendReplicatedEvent(t, teamId, {
       actor,
       action: 'policy.change',
       target: null,
@@ -605,25 +637,24 @@ export function applyPolicyChange(
       detail: stored,
     });
     return { policy: effective, stored };
-  })();
+  });
 }
 
 /**
  * ADR 463 §4.1: one live sponsored agent enrolled in residency, if any — the fact that makes
  * `agent_connect: 'any_member'` unsafe on this team. Null when no sponsored agent is hosted.
  */
-function anyHostedSponsoredAgent(
-  db: Database,
+async function anyHostedSponsoredAgent(
+  db: Driver,
   teamId: string,
-): { agent: string; host: string } | null {
+): Promise<{ agent: string; host: string } | null> {
   return (
-    db
-      .prepare<[string], { agent: string; host: string }>(
-        `SELECT m.name AS agent, r.host AS host FROM residency r JOIN members m ON m.id = r.member_id
+    (await db.get<{ agent: string; host: string }>(
+      `SELECT m.name AS agent, r.host AS host FROM residency r JOIN members m ON m.id = r.member_id
           WHERE r.team_id = ? AND m.sponsored_by IS NOT NULL AND m.left_at IS NULL
           ORDER BY m.name LIMIT 1`,
-      )
-      .get(teamId) ?? null
+      [teamId],
+    )) ?? null
   );
 }
 
@@ -633,14 +664,18 @@ function anyHostedSponsoredAgent(
  * sponsored agent is hosted (a hosted agent runs on its sponsor's machine and must not be
  * connectable). Checked on the hub's write path; a fold or restatement never refuses.
  */
-function policyPairRefusal(db: Database, teamId: string, effective: Policy): MusterdError | null {
+async function policyPairRefusal(
+  db: Driver,
+  teamId: string,
+  effective: Policy,
+): Promise<MusterdError | null> {
   if (effective.agent_connect !== 'any_member') return null;
   if (!effective.invite_requires_expiry)
     return new MusterdError(
       'validation',
       "agent_connect 'any_member' requires invite_requires_expiry: true — set both in one write (ADR 463 §4.3)",
     );
-  const hosted = anyHostedSponsoredAgent(db, teamId);
+  const hosted = await anyHostedSponsoredAgent(db, teamId);
   if (hosted)
     return new MusterdError(
       'conflict',
@@ -661,80 +696,79 @@ function policyPairRefusal(db: Database, teamId: string, effective: Policy): Mus
  *
  * Returns whether a stamp was minted.
  */
-export function restateUnstampedPolicy(db: Database, teamId: string): boolean {
-  const stamped = db
-    .prepare<[string], { one: number }>(
-      `SELECT 1 AS one FROM audit
+export async function restateUnstampedPolicy(db: Driver, teamId: string): Promise<boolean> {
+  const stamped = await db.get<{ one: number }>(
+    `SELECT 1 AS one FROM audit
         WHERE team_id = ? AND action = 'policy.change' AND origin_seq > 0
         LIMIT 1`,
-    )
-    .get(teamId);
+    [teamId],
+  );
   if (stamped) return false;
-  const stored = getStoredPolicy(db, teamId);
+  const stored = await getStoredPolicy(db, teamId);
   if (Object.keys(stored).length === 0) return false;
   // A restatement repeats what the hub already holds — never refuse it (ADR 463 §4.3's pair rule
   // guards new choices, and a team stored before the rule existed must still converge).
-  applyPolicyChange(db, teamId, policyRestateActor(db, teamId), stored, { enforce: false });
+  await applyPolicyChange(db, teamId, await policyRestateActor(db, teamId), stored, {
+    enforce: false,
+  });
   return true;
 }
 
 /** Who set the unstamped row, else the team's oldest living member, else a hub fallback. */
-function policyRestateActor(db: Database, teamId: string): string {
-  const unstamped = db
-    .prepare<[string], { actor: string | null }>(
-      `SELECT actor FROM audit
+async function policyRestateActor(db: Driver, teamId: string): Promise<string> {
+  const unstamped = await db.get<{ actor: string | null }>(
+    `SELECT actor FROM audit
         WHERE team_id = ? AND action = 'policy.change' AND origin_seq = 0 AND actor IS NOT NULL
         ORDER BY ts DESC LIMIT 1`,
-    )
-    .get(teamId);
+    [teamId],
+  );
   if (unstamped?.actor) return unstamped.actor;
-  const oldest = db
-    .prepare<
-      [string],
-      { name: string }
-    >(`SELECT name FROM members WHERE team_id = ? AND left_at IS NULL ORDER BY created_at ASC LIMIT 1`)
-    .get(teamId);
+  const oldest = await db.get<{ name: string }>(
+    `SELECT name FROM members WHERE team_id = ? AND left_at IS NULL ORDER BY created_at ASC LIMIT 1`,
+    [teamId],
+  );
   return oldest?.name ?? 'hub';
 }
 
-function readStored(db: Database, teamId: string): unknown {
-  const row = db
-    .prepare<[string], { policy: string | null }>('SELECT policy FROM teams WHERE id = ?')
-    .get(teamId);
+async function readStored(db: Driver, teamId: string): Promise<unknown> {
+  const row = await db.get<{ policy: string | null }>('SELECT policy FROM teams WHERE id = ?', [
+    teamId,
+  ]);
   return row?.policy ? JSON.parse(row.policy) : {};
 }
 
 /** The team policy, parsed with defaults applied (an unset policy ⇒ all defaults). */
-export function getPolicy(db: Database, teamId: string): Policy {
-  return PolicySchema.parse(readStored(db, teamId));
+export async function getPolicy(db: Driver, teamId: string): Promise<Policy> {
+  return PolicySchema.parse(await readStored(db, teamId));
 }
 
 /**
  * The team policy **as stored** — sparse, only the keys somebody chose (ADR 185). The write path and
  * the explicit-vs-inherited display read this; every consumer of effective values wants `getPolicy`.
  */
-export function getStoredPolicy(db: Database, teamId: string): PolicyOverride {
-  return PolicyOverrideSchema.parse(readStored(db, teamId));
+export async function getStoredPolicy(db: Driver, teamId: string): Promise<PolicyOverride> {
+  return PolicyOverrideSchema.parse(await readStored(db, teamId));
 }
 
 /** Update a team's durable fields in place (ADR 058 reconcile upsert). Preserves id + created_at. */
-export function updateTeam(
-  db: Database,
+export async function updateTeam(
+  db: Driver,
   id: string,
   fields: {
     display: string | null;
     defaultLifecycle: string;
     workingHours?: WorkingHours | null;
   },
-): void {
-  db.prepare(
+): Promise<void> {
+  await db.run(
     'UPDATE teams SET display = ?, default_lifecycle = ?, working_hours = ?, updated_at = ? WHERE id = ?',
-  ).run(
-    fields.display,
-    fields.defaultLifecycle,
-    fields.workingHours ? JSON.stringify(fields.workingHours) : null,
-    Date.now(),
-    id,
+    [
+      fields.display,
+      fields.defaultLifecycle,
+      fields.workingHours ? JSON.stringify(fields.workingHours) : null,
+      Date.now(),
+      id,
+    ],
   );
 }
 
@@ -743,13 +777,13 @@ export function updateTeam(
  * gone — the team drops off status/rosters and refuses auth, but every row is kept. Resolves the slug
  * directly (not via requireTeam) so the error for an already-archived team names the real state.
  */
-export function archiveTeam(db: Database, slug: string): { archived_at: number } {
-  const t = getTeamBySlug(db, slug);
+export async function archiveTeam(db: Driver, slug: string): Promise<{ archived_at: number }> {
+  const t = await getTeamBySlug(db, slug);
   if (!t) throw new MusterdError('not_found', `no team "${slug}"`);
   if (t.archived_at) {
     throw new MusterdError('conflict', `team "${slug}" is already archived`);
   }
   const now = Date.now();
-  db.prepare('UPDATE teams SET archived_at = ?, updated_at = ? WHERE id = ?').run(now, now, t.id);
+  await db.run('UPDATE teams SET archived_at = ?, updated_at = ? WHERE id = ?', [now, now, t.id]);
   return { archived_at: now };
 }

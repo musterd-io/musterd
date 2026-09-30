@@ -1,7 +1,7 @@
 import { makeEnvelope } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { deferralFold } from './deferralFold.js';
 import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
@@ -22,16 +22,16 @@ import { createTeam } from './teams.js';
  * So the property is: the window is hydrated only when a deferral is actually held, and when it is
  * held the answer is identical to hydrating it every time.
  */
-function seed() {
-  const db = openDb(':memory:');
-  const team = createTeam(db, { slug: 'revive' });
-  const nick = addMember(db, team, { name: 'nick', kind: 'human' }).row;
-  const ada = addMember(db, team, { name: 'Ada', kind: 'agent' }).row;
+async function seed() {
+  const db = openTestDb(':memory:');
+  const team = await createTeam(db, { slug: 'revive' });
+  const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+  const ada = (await addMember(db, team, { name: 'Ada', kind: 'agent' })).row;
   return { db, team, nick, ada };
 }
 
 let ts = 1_000;
-function say(
+async function say(
   db: Database,
   team: TeamRow,
   from: MemberRow,
@@ -40,7 +40,7 @@ function say(
   id: string,
   meta: Record<string, unknown> | null = null,
 ) {
-  insertMessage(
+  await insertMessage(
     db,
     team.id,
     from.id,
@@ -59,7 +59,7 @@ function say(
   );
 }
 
-function countMemberLookups(db: Database, run: () => void): number {
+async function countMemberLookups(db: Database, run: () => void | Promise<void>): Promise<number> {
   let n = 0;
   const orig = db.prepare.bind(db);
   (db as unknown as { prepare: unknown }).prepare = (sql: string) => {
@@ -74,21 +74,21 @@ function countMemberLookups(db: Database, run: () => void): number {
     return stmt;
   };
   try {
-    run();
+    await run();
   } finally {
     (db as unknown as { prepare: unknown }).prepare = orig;
   }
   return n;
 }
 
-describe('deferralFold', () => {
-  it('holds nothing, and hydrates nothing, when the seat has deferred nothing', () => {
-    const { db, team, nick, ada } = seed();
-    for (let i = 0; i < 300; i++) say(db, team, nick, null, 'status_update', `c${i}`);
+describe('deferralFold', async () => {
+  it('holds nothing, and hydrates nothing, when the seat has deferred nothing', async () => {
+    const { db, team, nick, ada } = await seed();
+    for (let i = 0; i < 300; i++) await say(db, team, nick, null, 'status_update', `c${i}`);
 
     let out: ReturnType<typeof deferralFold> | undefined;
-    const lookups = countMemberLookups(db, () => {
-      out = deferralFold(db, team.slug, ada);
+    const lookups = await countMemberLookups(db, async () => {
+      out = await deferralFold(db, team.slug, ada);
     });
 
     expect(out!.held.size).toBe(0);
@@ -96,32 +96,32 @@ describe('deferralFold', () => {
     expect(lookups).toBe(0);
   });
 
-  it('folds the seat’s own wait onto the act it postpones', () => {
-    const { db, team, nick, ada } = seed();
-    say(db, team, nick, ada, 'message', 'a1');
-    say(db, team, ada, null, 'wait', 'w1', { defer_ref: 'a1', until: { lane: 'L1' } });
+  it('folds the seat’s own wait onto the act it postpones', async () => {
+    const { db, team, nick, ada } = await seed();
+    await say(db, team, nick, ada, 'message', 'a1');
+    await say(db, team, ada, null, 'wait', 'w1', { defer_ref: 'a1', until: { lane: 'L1' } });
 
-    const { held, raised } = deferralFold(db, team.slug, ada);
+    const { held, raised } = await deferralFold(db, team.slug, ada);
     expect([...held.keys()]).toEqual(['a1']);
     expect(raised.size).toBe(0);
   });
 
-  it('raises the deferral once the condition it named fires', () => {
-    const { db, team, nick, ada } = seed();
-    say(db, team, nick, ada, 'message', 'a1');
-    say(db, team, ada, null, 'wait', 'w1', { defer_ref: 'a1', until: { lane: 'L1' } });
-    say(db, team, nick, null, 'message', 'l1', { lane_state: { lane: 'L1', state: 'done' } });
+  it('raises the deferral once the condition it named fires', async () => {
+    const { db, team, nick, ada } = await seed();
+    await say(db, team, nick, ada, 'message', 'a1');
+    await say(db, team, ada, null, 'wait', 'w1', { defer_ref: 'a1', until: { lane: 'L1' } });
+    await say(db, team, nick, null, 'message', 'l1', { lane_state: { lane: 'L1', state: 'done' } });
 
-    const { held, raised } = deferralFold(db, team.slug, ada);
+    const { held, raised } = await deferralFold(db, team.slug, ada);
     expect([...held.keys()]).toEqual(['a1']);
     expect([...raised]).toEqual(['a1']);
   });
 
-  it('ignores a wait authored by someone else — only the recipient may defer', () => {
-    const { db, team, nick, ada } = seed();
-    say(db, team, nick, ada, 'message', 'a1');
-    say(db, team, nick, null, 'wait', 'w1', { defer_ref: 'a1', until: { lane: 'L1' } });
+  it('ignores a wait authored by someone else — only the recipient may defer', async () => {
+    const { db, team, nick, ada } = await seed();
+    await say(db, team, nick, ada, 'message', 'a1');
+    await say(db, team, nick, null, 'wait', 'w1', { defer_ref: 'a1', until: { lane: 'L1' } });
 
-    expect(deferralFold(db, team.slug, ada).held.size).toBe(0);
+    expect((await deferralFold(db, team.slug, ada)).held.size).toBe(0);
   });
 });

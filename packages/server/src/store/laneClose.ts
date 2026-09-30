@@ -1,5 +1,5 @@
 import { type Lane, isAwaitingAcceptance, reviewGrade } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { appendAudit, appendLaneEventRequired, peerReviewGradeOf, reviewRouting } from './audit.js';
 import { memberIsHuman, memberModelByName, workerFamily } from './review.js';
 
@@ -54,8 +54,8 @@ export interface LaneCloseVerdict {
  * Pure db writes, no envelope routing — each caller announces the close on its own surface, which is
  * also what keeps this importable from both the transport and the protocol layer without a cycle.
  */
-export function recordLaneClose(
-  db: Database,
+export async function recordLaneClose(
+  db: Driver,
   teamId: string,
   closer: Closer,
   before: Lane,
@@ -66,7 +66,7 @@ export function recordLaneClose(
    * joiner's behalf (ADR 361) — the same residence trace every other `lane.*` row carries.
    */
   node?: string,
-): LaneCloseVerdict {
+): Promise<LaneCloseVerdict> {
   // ADR 169: every terminal edge writes lane.closed, and verified-ness is DERIVED here — never
   // stored on the lane. Verified ⟺ done + the closer is a different seat than the owner at close
   // time (pinned in this row so post-close handoffs can't flip the verdict). reason distinguishes
@@ -84,7 +84,7 @@ export function recordLaneClose(
   // ADR 169/172: what the ready edge recorded — routed-or-not, and whether the lane's risk made a
   // human review REQUIRED. Read once; feeds both the reason and the missed flag.
   const routing = isAwaitingAcceptance(before.state)
-    ? reviewRouting(db, teamId, lane.id)
+    ? await reviewRouting(db, teamId, lane.id)
     : {
         routed: undefined as boolean | undefined,
         human_required: undefined as boolean | undefined,
@@ -198,7 +198,7 @@ export function recordLaneClose(
             : 'self_close';
   // The close is a lane transition, so it is the replicated, required form (lane-replication spec
   // §Hole 3): if the record cannot be written, the close does not happen.
-  appendLaneEventRequired(db, teamId, {
+  await appendLaneEventRequired(db, teamId, {
     actor: closer.name,
     action: 'lane.closed',
     target: lane.id,
@@ -246,13 +246,13 @@ export function recordLaneClose(
       ...(!verified && mergedFromPatch?.authorized_by !== undefined
         ? { authorization_claimed: mergedFromPatch.authorized_by }
         : {}),
-      worker_family: ownerAtClose ? workerFamily(db, teamId, ownerAtClose) : null,
-      ...(verified ? { reviewer_family: workerFamily(db, teamId, closer.name) } : {}),
+      worker_family: ownerAtClose ? await workerFamily(db, teamId, ownerAtClose) : null,
+      ...(verified ? { reviewer_family: await workerFamily(db, teamId, closer.name) } : {}),
       // ADR 188 two-stage: which peer review a RISKY lane actually got — the newest
       // lane.review_peer_confirmed row's grade, or 'none'. Only written on risky lanes; the human
       // half of the pair stays `human_review_missed`, derived exactly as before.
       ...(lane.risk.length > 0 && isAwaitingAcceptance(before.state)
-        ? { peer_review: peerReviewGradeOf(db, teamId, lane.id) }
+        ? { peer_review: await peerReviewGradeOf(db, teamId, lane.id) }
         : {}),
       // ADR 188: the close edge finally CHECKS what the confirm was worth, for routed and voluntary
       // confirms alike. `verified` keeps its meaning (a different seat confirmed); the grade rides
@@ -261,11 +261,11 @@ export function recordLaneClose(
       // close the grade abstains — and the abstention is COUNTED (`review_grade_unknown`, ADR 173)
       // rather than left indistinguishable from silence.
       ...(verified
-        ? (() => {
-            if (memberIsHuman(db, teamId, closer.name)) return { review_grade: 'human' };
+        ? await (async () => {
+            if (await memberIsHuman(db, teamId, closer.name)) return { review_grade: 'human' };
             const g = reviewGrade(
-              ownerAtClose ? memberModelByName(db, teamId, ownerAtClose) : null,
-              memberModelByName(db, teamId, closer.name),
+              ownerAtClose ? await memberModelByName(db, teamId, ownerAtClose) : null,
+              await memberModelByName(db, teamId, closer.name),
             );
             return g ? { review_grade: g } : { review_grade_unknown: true };
           })()
@@ -286,7 +286,7 @@ export function recordLaneClose(
   // counterpart performs the closing act.
   if (lane.branch && lane.state === 'done') {
     const m = mergedFromPatch ?? lane.merged ?? undefined;
-    appendAudit(db, teamId, {
+    await appendAudit(db, teamId, {
       actor: closer.name,
       action: 'git.pr_merged',
       target: lane.branch,

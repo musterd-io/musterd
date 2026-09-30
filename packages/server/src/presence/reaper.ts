@@ -39,7 +39,7 @@ export function startReaper(ctx: Ctx): () => void {
   // no row could have been heard. Both start at boot, because before that neither was running.
   let presenceWatchedSince = lastTickAt;
 
-  const tick = () => {
+  const tick = async () => {
     const now = Date.now();
 
     const tickGap = now - lastTickAt;
@@ -47,8 +47,8 @@ export function startReaper(ctx: Ctx): () => void {
     if (tickGap >= ctx.config.presenceTimeoutMs) presenceWatchedSince = now;
     if (tickGap >= HOST_SUSPEND_GAP_MS) {
       continuousSince = now;
-      for (const teamId of listResidencyTeamIds(ctx.db)) {
-        appendAudit(ctx.db, teamId, {
+      for (const teamId of await listResidencyTeamIds(ctx.db)) {
+        await appendAudit(ctx.db, teamId, {
           actor: null,
           action: 'residency.host_suspended',
           target: 'daemon',
@@ -61,14 +61,12 @@ export function startReaper(ctx: Ctx): () => void {
 
     // P3.2: expire claim requests past their deadline (ADR 077 spec-gap 3). Fetch pending+expired
     // rows BEFORE updating so we have from_session connIds to push refused frames.
-    const expiredRows = ctx.db
-      .prepare<
-        [number],
-        RequestRow
-      >("SELECT * FROM requests WHERE status = 'pending' AND expires_at < ?")
-      .all(now);
+    const expiredRows = await ctx.db.all<RequestRow>(
+      "SELECT * FROM requests WHERE status = 'pending' AND expires_at < ?",
+      [now],
+    );
     if (expiredRows.length > 0) {
-      expireRequests(ctx.db, now);
+      await expireRequests(ctx.db, now);
       for (const row of expiredRows) {
         ctx.hub.deliverClaimDecision(row.from_session, {
           type: 'refused',
@@ -77,7 +75,7 @@ export function startReaper(ctx: Ctx): () => void {
           claimable: [],
           hint: 'musterd claim <seat> --key <mskey_...>',
         });
-        appendAudit(ctx.db, row.team_id, {
+        await appendAudit(ctx.db, row.team_id, {
           actor: null,
           action: 'request.expired',
           target: row.target,
@@ -99,9 +97,9 @@ export function startReaper(ctx: Ctx): () => void {
     // running, so no host could have been asked. That defers (`wake_deferred`, budget-neutral by
     // construction, ADR 221's verb) — bounded by HOST-AWAKE time since the act was first leased, so
     // "retires nine hours early" cannot quietly become "never retires".
-    const expiredLeases = expireWakeLeases(ctx.db, now);
+    const expiredLeases = await expireWakeLeases(ctx.db, now);
     for (const lease of expiredLeases) {
-      const seat = getMemberById(ctx.db, lease.member_id);
+      const seat = await getMemberById(ctx.db, lease.member_id);
       const act = wakeExhaustionKey(lease.act_id, lease.lane_id);
       const detail = {
         act,
@@ -113,10 +111,10 @@ export function startReaper(ctx: Ctx): () => void {
       const unreachable = lease.created_at < continuousSince;
       // The ceiling's clock starts at the act's FIRST lease, not this one — three attempts spread
       // across three sleeps must not each restart the bound.
-      const clockFrom = firstWakeLeaseTs(ctx.db, lease.team_id, act) ?? lease.created_at;
-      const awakeMs = unreachable ? awakeMsSince(ctx.db, lease.team_id, clockFrom, now) : 0;
+      const clockFrom = (await firstWakeLeaseTs(ctx.db, lease.team_id, act)) ?? lease.created_at;
+      const awakeMs = unreachable ? await awakeMsSince(ctx.db, lease.team_id, clockFrom, now) : 0;
       if (unreachable && awakeMs < WAKE_UNREACHABLE_CEILING_MS) {
-        appendAudit(ctx.db, lease.team_id, {
+        await appendAudit(ctx.db, lease.team_id, {
           actor: null,
           action: 'residency.wake_deferred',
           target: seat?.name ?? '?',
@@ -130,8 +128,8 @@ export function startReaper(ctx: Ctx): () => void {
       // reporting — `residency.wake_cost` exists only on the report path, so that spend is
       // otherwise invisible. Stamp the fact, not a number: no cost source exists here, and
       // inventing one would be worse than recording the spend as unpriced.
-      const paidSession = leaseCapturedSession(ctx.db, lease.team_id, lease.id);
-      appendAudit(ctx.db, lease.team_id, {
+      const paidSession = await leaseCapturedSession(ctx.db, lease.team_id, lease.id);
+      await appendAudit(ctx.db, lease.team_id, {
         actor: null,
         action: 'residency.wake_failed',
         target: seat?.name ?? '?',
@@ -149,13 +147,13 @@ export function startReaper(ctx: Ctx): () => void {
 
     // ADR 443 §4: a doorbell hold lapses by its `until` with no availability POST to flush it, so
     // the tick flushes on its behalf (dolly's review, change b). A still-holding ring is skipped.
-    flushLapsedHolds(ctx, (id) => getTeamById(ctx.db, id));
-    const prunedRings = pruneRings(ctx.db, now);
+    await flushLapsedHolds(ctx, (id) => getTeamById(ctx.db, id));
+    const prunedRings = await pruneRings(ctx.db, now);
     if (prunedRings > 0) log.info({ msg: 'reap_doorbell_rings', count: prunedRings });
 
     // ADR 196: release in-flight lanes still owned by soft-removed seats (pre-fix ghosts + any
     // leave path that skipped the store composition).
-    const releasedClaims = releaseDepartedSeatClaims(ctx.db, now);
+    const releasedClaims = await releaseDepartedSeatClaims(ctx.db, now);
     if (releasedClaims.length > 0) {
       log.info({ msg: 'reap_departed_claims', count: releasedClaims.length });
     }
@@ -164,17 +162,22 @@ export function startReaper(ctx: Ctx): () => void {
     // it to the fallback role. Deliberately NOT behind `loops.sweep` — that switch arms a loop that
     // CLOSES other people's lanes, and this one only puts a name on a lane already open and visible.
     // Its own `incident.enabled` is the switch, and it defaults on because increment 1 already does.
-    for (const team of listActiveTeams(ctx.db)) {
-      for (const { lane, owner } of routeUnclaimedIncidents(ctx.db, team.id, team.slug, now)) {
+    for (const team of await listActiveTeams(ctx.db)) {
+      for (const { lane, owner } of await routeUnclaimedIncidents(
+        ctx.db,
+        team.id,
+        team.slug,
+        now,
+      )) {
         log.info({ msg: 'incident_routed', team: team.slug, lane: lane.id, owner });
         // Assigning without telling anyone would make this a board-only fact — the seat would find
         // its new lane by luck. Best-effort: the assignment is already durable, and a delivery
         // failure must not roll it back or stop the rest of the sweep.
         try {
           // listActiveTeams returns {id, slug} only; routing needs the full row.
-          const teamRow = getTeamBySlug(ctx.db, team.slug);
+          const teamRow = await getTeamBySlug(ctx.db, team.slug);
           if (teamRow) {
-            announceIncidentRouted(ctx, teamRow, lane, owner, now - lane.created_at);
+            await announceIncidentRouted(ctx, teamRow, lane, owner, now - lane.created_at);
           }
         } catch (err) {
           log.warn({ msg: 'incident_route_announce_failed', lane: lane.id, err: String(err) });
@@ -187,8 +190,8 @@ export function startReaper(ctx: Ctx): () => void {
     // below: this never closes a lane and never invents a verdict, it only moves an ask to a seat
     // that is actually there. Runs BEFORE the backstop so a lane gets a live reviewer offered
     // before it can be closed unreviewed on a team that armed the sweep.
-    for (const team of listActiveTeams(ctx.db)) {
-      for (const lane of sweepReapedAcceptances(ctx, team)) {
+    for (const team of await listActiveTeams(ctx.db)) {
+      for (const lane of await sweepReapedAcceptances(ctx, team)) {
         log.info({ msg: 'reroute_reaped_acceptance', team: team.slug, lane });
       }
     }
@@ -196,9 +199,9 @@ export function startReaper(ctx: Ctx): () => void {
     // ADR 229: the acceptance backstop. A lane past the grace in `awaiting_acceptance` has no actor
     // left to close it — the ADR 217 reasons label a close, they never cause one. Per team, and only
     // where an admin armed `loops.sweep`; every team is bit-identical to pre-229 until they do.
-    for (const team of listActiveTeams(ctx.db)) {
-      if (getPolicy(ctx.db, team.id).loops?.sweep !== true) continue;
-      const swept = sweepAbandonedAcceptance(ctx.db, team.id, team.slug, now);
+    for (const team of await listActiveTeams(ctx.db)) {
+      if ((await getPolicy(ctx.db, team.id)).loops?.sweep !== true) continue;
+      const swept = await sweepAbandonedAcceptance(ctx.db, team.id, team.slug, now);
       for (const lane of swept) {
         log.info({
           msg: 'sweep_abandoned_acceptance',
@@ -211,7 +214,7 @@ export function startReaper(ctx: Ctx): () => void {
     }
 
     // Reap idle observer seats (ADR 064) so the auto-provisioned `web-xxxx` seats don't accumulate.
-    const reapedObservers = reapStaleObservers(
+    const reapedObservers = await reapStaleObservers(
       ctx.db,
       now - ctx.config.observerTtlMs,
       now - ctx.config.presenceTimeoutMs,
@@ -221,7 +224,7 @@ export function startReaper(ctx: Ctx): () => void {
     }
 
     // ADR 196: concurrent idle-observer cap — TTL is the long-stop; the cap bounds peak churn.
-    const reapedExcess = reapExcessIdleObservers(
+    const reapedExcess = await reapExcessIdleObservers(
       ctx.db,
       ctx.config.observerIdleCap,
       now - ctx.config.presenceTimeoutMs,
@@ -234,7 +237,12 @@ export function startReaper(ctx: Ctx): () => void {
     // window in which nothing was listening for it.
     // `now` is this tick's clock, deliberately: a tick that blocks past the timeout inside its own
     // body must not judge by the time it finishes (see reapStale).
-    const removed = reapStale(ctx.db, ctx.config.presenceTimeoutMs, presenceWatchedSince, now);
+    const removed = await reapStale(
+      ctx.db,
+      ctx.config.presenceTimeoutMs,
+      presenceWatchedSince,
+      now,
+    );
     if (removed.length === 0) return;
     const seen = new Set<string>();
     for (const row of removed) {
@@ -243,8 +251,8 @@ export function startReaper(ctx: Ctx): () => void {
       // A pure grace-hold expiring is not a state change: the member already went offline when its
       // connection dropped. Only a stale *live* row (a zombie that never released) reverts to offline.
       if (row.held_until !== null) continue;
-      if (hasLivePresence(ctx.db, row.member_id, ctx.config.presenceTimeoutMs)) continue;
-      const member = getMemberById(ctx.db, row.member_id);
+      if (await hasLivePresence(ctx.db, row.member_id, ctx.config.presenceTimeoutMs)) continue;
+      const member = await getMemberById(ctx.db, row.member_id);
       if (!member) continue;
       ctx.hub.broadcastTeam(member.team_id, {
         type: 'presence',
@@ -254,7 +262,16 @@ export function startReaper(ctx: Ctx): () => void {
       log.info({ msg: 'reap_offline', member: member.name });
     }
   };
-  const handle = setInterval(tick, ctx.config.reaperIntervalMs);
+  // One tick at a time: an async tick can straddle the next interval (a slow sweep, a queue wait),
+  // and two overlapping ticks would each act on the same rows (review I2, 2026-09-30).
+  let running = false;
+  const handle = setInterval(() => {
+    if (running) return;
+    running = true;
+    void tick().finally(() => {
+      running = false;
+    });
+  }, ctx.config.reaperIntervalMs);
   handle.unref?.();
   return () => clearInterval(handle);
 }

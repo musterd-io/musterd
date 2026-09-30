@@ -315,16 +315,16 @@ export function recordPresenceChurn(event: 'attach' | 'detach', surface?: string
 
 /** Snapshot supplier for the observable gauges — injected so telemetry stays free of SQL/ctx. */
 export interface RuntimeSampler {
-  presenceBySurface: () => { surface: string; count: number }[];
-  inboxLagMs: () => number;
+  presenceBySurface: () => Promise<{ surface: string; count: number }[]>;
+  inboxLagMs: () => Promise<number>;
   /** Directed acts (request_help/handoff) not yet answered by an accept/decline (ADR 082 slice 3),
    *  **by team** (#207) — one observation per team with open loops, so the gauge is queryable per
    *  team instead of a single daemon-wide number. */
-  openLoopsByTeam: () => { team: string; count: number }[];
+  openLoopsByTeam: () => Promise<{ team: string; count: number }[]>;
   /** Live model-diversity flags on review/approval chains (ADR 101) — flagged + unverifiable — **by
    *  team** (#207). A point-in-time count of *derived* state, so a gauge (sampled each cycle), never a
    *  counter that would conflate flag scarcity with report-poll frequency. */
-  diversityFlagsByTeam: () => { team: string; count: number }[];
+  diversityFlagsByTeam: () => Promise<{ team: string; count: number }[]>;
 }
 
 /**
@@ -351,17 +351,17 @@ export function registerRuntimeGauges(sampler: RuntimeSampler): void {
       'Live model-diversity flags on review/approval chains (ADR 101): single-family (flagged) or unattested-link (unverifiable). Derived state sampled each cycle — scarcity is the guard signal',
   });
   meter.addBatchObservableCallback(
-    (obs) => {
-      for (const row of sampler.presenceBySurface()) {
+    async (obs) => {
+      for (const row of await sampler.presenceBySurface()) {
         obs.observe(active, row.count, { 'musterd.surface': row.surface });
       }
-      obs.observe(lag, sampler.inboxLagMs());
+      obs.observe(lag, await sampler.inboxLagMs());
       // One point per team (#207): a per-team leaderboard reads these gauges by `musterd.team`.
       // Teams with a zero count simply have no point this cycle — the natural gauge semantics.
-      for (const row of sampler.openLoopsByTeam()) {
+      for (const row of await sampler.openLoopsByTeam()) {
         obs.observe(openLoops, row.count, { 'musterd.team': row.team });
       }
-      for (const row of sampler.diversityFlagsByTeam()) {
+      for (const row of await sampler.diversityFlagsByTeam()) {
         obs.observe(diversityFlags, row.count, { 'musterd.team': row.team });
       }
     },

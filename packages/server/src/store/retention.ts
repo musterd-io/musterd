@@ -20,7 +20,7 @@ import {
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import type Database from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import type { AuditAction, AuditRow } from './audit.js';
 
 /**
@@ -63,10 +63,10 @@ export const AUDIT_PRUNE_MAX_BATCHES = 20;
 export const AUDIT_CAPTURED_THROUGH_KEY = 'audit_captured_through';
 
 /** The capture watermark, or null on a machine that never archived. */
-export function auditCapturedThrough(db: Database.Database): number | null {
-  const row = db
-    .prepare<[string], { value: string }>('SELECT value FROM schema_meta WHERE key = ?')
-    .get(AUDIT_CAPTURED_THROUGH_KEY);
+export async function auditCapturedThrough(db: Driver): Promise<number | null> {
+  const row = await db.get<{ value: string }>('SELECT value FROM schema_meta WHERE key = ?', [
+    AUDIT_CAPTURED_THROUGH_KEY,
+  ]);
   const n = row ? Number(row.value) : NaN;
   return Number.isFinite(n) ? n : null;
 }
@@ -126,8 +126,8 @@ function prunableSql(): string {
  * `<archiveDir>/audit-YYYY-MM.jsonl.gz` (one gzip member per batch — `gunzip` reads them all)
  * BEFORE the delete runs; a failed archive write throws and deletes nothing.
  */
-export function pruneAuditChurn(
-  db: Database.Database,
+export async function pruneAuditChurn(
+  db: Driver,
   opts: {
     now?: number;
     maxAgeMs?: number;
@@ -135,10 +135,10 @@ export function pruneAuditChurn(
     maxBatches?: number;
     archiveDir: string | null;
   },
-): AuditPruneResult {
+): Promise<AuditPruneResult> {
   const now = opts.now ?? Date.now();
   const windowCutoff = now - (opts.maxAgeMs ?? AUDIT_CHURN_MAX_AGE_MS);
-  const capturedThrough = auditCapturedThrough(db);
+  const capturedThrough = await auditCapturedThrough(db);
   const cutoff = capturedThrough === null ? windowCutoff : Math.min(windowCutoff, capturedThrough);
   const perTeam: Record<string, number> = {};
   if (opts.archiveDir === null) {
@@ -153,18 +153,18 @@ export function pruneAuditChurn(
   }
   const batch = opts.batch ?? AUDIT_PRUNE_BATCH;
   const maxBatches = opts.maxBatches ?? AUDIT_PRUNE_MAX_BATCHES;
-  const select = db.prepare<[number, number], AuditRow>(`${prunableSql()} LIMIT ?`);
-  const del = db.prepare<[string]>('DELETE FROM audit WHERE id = ?');
-  const deleteAll = db.transaction((ids: string[]) => {
-    for (const id of ids) del.run(id);
-  });
+  const SELECT = `${prunableSql()} LIMIT ?`;
+  const deleteAll = (ids: string[]) =>
+    db.tx(async (t) => {
+      for (const id of ids) await t.run('DELETE FROM audit WHERE id = ?', [id]);
+    });
   let pruned = 0;
   let archivedBytes = 0;
   for (let i = 0; i < maxBatches; i++) {
-    const rows = select.all(cutoff, batch);
+    const rows = await db.all<AuditRow>(SELECT, [cutoff, batch]);
     if (rows.length === 0) break;
     archivedBytes += archiveRows(opts.archiveDir, rows);
-    deleteAll(rows.map((r) => r.id));
+    await deleteAll(rows.map((r) => r.id));
     for (const r of rows) perTeam[r.team_id] = (perTeam[r.team_id] ?? 0) + 1;
     pruned += rows.length;
     if (rows.length < batch) break;
@@ -202,18 +202,18 @@ export const AUDIT_PRUNE_FIRST_DELAY_MS = 10 * 60 * 1000;
  * `musterd store compact` has switched the file to `auto_vacuum = INCREMENTAL` (ADR 478 §4).
  */
 export function startAuditRetention(
-  db: Database.Database,
+  db: Driver,
   opts: { archiveDir: string | null; maxAgeMs?: number },
   onPass: (r: AuditPruneResult) => void,
   onError: (err: unknown) => void,
 ): () => void {
-  const pass = () => {
+  const pass = async () => {
     try {
-      const r = pruneAuditChurn(db, {
+      const r = await pruneAuditChurn(db, {
         archiveDir: opts.archiveDir,
         ...(opts.maxAgeMs === undefined ? {} : { maxAgeMs: opts.maxAgeMs }),
       });
-      if (r.pruned > 0) db.pragma('incremental_vacuum');
+      if (r.pruned > 0 && db.dialect === 'sqlite') await db.exec('PRAGMA incremental_vacuum');
       onPass(r);
     } catch (err) {
       onError(err);
@@ -230,23 +230,25 @@ export function startAuditRetention(
 }
 
 /** The store sizes `/health` reports (ADR 478 §Observability). Absent, never zero, when unknown. */
-export function storeSizes(
-  db: Database.Database,
+export async function storeSizes(
+  db: Driver,
   dbPath: string,
   archiveDir: string | null,
-): { db_bytes?: number; sync_log_rows: number; sync_log_bytes?: number; archive_bytes?: number } {
-  const out: ReturnType<typeof storeSizes> = {
-    sync_log_rows: db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM sync_log').get()!.n,
+): Promise<{
+  db_bytes?: number;
+  sync_log_rows: number;
+  sync_log_bytes?: number;
+  archive_bytes?: number;
+}> {
+  const out: Awaited<ReturnType<typeof storeSizes>> = {
+    sync_log_rows: (await db.get<{ n: number }>('SELECT COUNT(*) AS n FROM sync_log'))!.n,
   };
   if (dbPath !== ':memory:' && existsSync(dbPath)) out.db_bytes = statSync(dbPath).size;
   try {
     // dbstat is compiled into better-sqlite3's SQLite; the sum covers the table and its indexes.
-    const r = db
-      .prepare<
-        [],
-        { b: number | null }
-      >("SELECT SUM(pgsize) AS b FROM dbstat WHERE name = 'sync_log' OR name LIKE 'idx_sync_log_%'")
-      .get();
+    const r = await db.get<{ b: number | null }>(
+      "SELECT SUM(pgsize) AS b FROM dbstat WHERE name = 'sync_log' OR name LIKE 'idx_sync_log_%'",
+    );
     if (r && r.b !== null) out.sync_log_bytes = r.b;
   } catch {
     // a build without dbstat: omit, do not guess
@@ -261,17 +263,17 @@ export function storeSizes(
 }
 
 /** How many churn rows a pass would take right now — `musterd store prune --dry-run`. */
-export function countPrunableAuditChurn(
-  db: Database.Database,
+export async function countPrunableAuditChurn(
+  db: Driver,
   opts: { now?: number; maxAgeMs?: number } = {},
-): { rows: number; cutoff: number; capturedThrough: number | null } {
+): Promise<{ rows: number; cutoff: number; capturedThrough: number | null }> {
   const now = opts.now ?? Date.now();
   const windowCutoff = now - (opts.maxAgeMs ?? AUDIT_CHURN_MAX_AGE_MS);
-  const capturedThrough = auditCapturedThrough(db);
+  const capturedThrough = await auditCapturedThrough(db);
   const cutoff = capturedThrough === null ? windowCutoff : Math.min(windowCutoff, capturedThrough);
-  const rows = db
-    .prepare<[number], { n: number }>(`SELECT COUNT(*) AS n FROM (${prunableSql()})`)
-    .get(cutoff)!.n;
+  const rows = (await db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM (${prunableSql()})`, [
+    cutoff,
+  ]))!.n;
   return { rows, cutoff, capturedThrough };
 }
 
@@ -290,20 +292,22 @@ export type CompactResult =
  * {@link COMPACT_MIN_FREE_RATIO} × the file, and it holds the write lock for the duration: an
  * operator verb, announced first, never a timer's.
  */
-export function compactStore(
-  db: Database.Database,
+export async function compactStore(
+  db: Driver,
   dbPath: string,
   opts: { freeBytes?: (dir: string) => number } = {},
-): CompactResult {
+): Promise<CompactResult> {
   if (dbPath === ':memory:' || !existsSync(dbPath)) return { ok: false, reason: 'in_memory' };
   const before = statSync(dbPath).size;
   const free = (opts.freeBytes ?? defaultFreeBytes)(dirname(dbPath));
   const need = Math.ceil(before * COMPACT_MIN_FREE_RATIO);
   if (free < need)
     return { ok: false, reason: 'insufficient_disk', need_bytes: need, free_bytes: free };
-  db.pragma('auto_vacuum = INCREMENTAL');
-  db.exec('VACUUM');
-  db.pragma('wal_checkpoint(TRUNCATE)');
+  // VACUUM / auto_vacuum / WAL are SQLite-only operations by nature.
+  if (db.dialect !== 'sqlite') return { ok: false, reason: 'in_memory' };
+  await db.exec('PRAGMA auto_vacuum = INCREMENTAL');
+  await db.exec('VACUUM');
+  await db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
   return {
     ok: true,
     before_bytes: before,

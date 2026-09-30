@@ -1,5 +1,5 @@
 import type { Quiescence } from '@musterd/protocol';
-import type { Database } from '../db/open.js';
+import type { Driver } from '../db/driver.js';
 import { auditSubjectSql } from './audit.js';
 
 /**
@@ -88,35 +88,33 @@ const SUBJECT_SQL = auditSubjectSql('a');
  * renders humans too — and the wake pool, which reads only the offline seats it was already
  * considering. Filtering belongs to whoever knows why.
  */
-export function lastActionBySubject(
-  db: Database,
+export async function lastActionBySubject(
+  db: Driver,
   teamId: string,
   opts: { now?: number; lookbackMs?: number; excludeActions?: string[] } = {},
-): Map<string, number> {
+): Promise<Map<string, number>> {
   const now = opts.now ?? Date.now();
   const lookback = opts.lookbackMs ?? QUIESCENCE_LOOKBACK_MS;
   const exclude = opts.excludeActions ?? [];
   const rows =
     exclude.length === 0
-      ? db
-          .prepare<[string, number], { actor: string; last_ts: number }>(
-            `SELECT ${SUBJECT_SQL} AS actor, MAX(a.ts) AS last_ts
+      ? await db.all<{ actor: string; last_ts: number }>(
+          `SELECT ${SUBJECT_SQL} AS actor, MAX(a.ts) AS last_ts
                FROM audit a
               WHERE a.team_id = ? AND a.ts > ? AND ${NOT_PRESENCE_SQL}
                 AND ${SUBJECT_SQL} IS NOT NULL
               GROUP BY ${SUBJECT_SQL}`,
-          )
-          .all(teamId, now - lookback)
-      : db
-          .prepare<[string, number, ...string[]], { actor: string; last_ts: number }>(
-            `SELECT ${SUBJECT_SQL} AS actor, MAX(a.ts) AS last_ts
+          [teamId, now - lookback],
+        )
+      : await db.all<{ actor: string; last_ts: number }>(
+          `SELECT ${SUBJECT_SQL} AS actor, MAX(a.ts) AS last_ts
                FROM audit a
               WHERE a.team_id = ? AND a.ts > ? AND ${NOT_PRESENCE_SQL}
                 AND ${SUBJECT_SQL} IS NOT NULL
                 AND a.action NOT IN (${exclude.map(() => '?').join(', ')})
               GROUP BY ${SUBJECT_SQL}`,
-          )
-          .all(teamId, now - lookback, ...exclude);
+          [teamId, now - lookback, ...exclude],
+        );
   return new Map(rows.map((r) => [r.actor, r.last_ts]));
 }
 
@@ -131,15 +129,14 @@ export function lastActionBySubject(
  * human at a terminal, and the cost this signal guards (dropping a seat mid-tool-call) is an agent
  * cost; humans are guarded by the operator notification that already precedes a forced bounce.
  */
-export function quietestBusyMs(
-  db: Database,
+export async function quietestBusyMs(
+  db: Driver,
   opts: { now?: number; presenceTimeoutMs: number; lookbackMs?: number },
-): number | null {
+): Promise<number | null> {
   const now = opts.now ?? Date.now();
   const lookback = opts.lookbackMs ?? QUIESCENCE_LOOKBACK_MS;
-  const row = db
-    .prepare<[number, number], { last_ts: number | null }>(
-      `SELECT MAX(a.ts) AS last_ts
+  const row = await db.get<{ last_ts: number | null }>(
+    `SELECT MAX(a.ts) AS last_ts
        FROM audit a
        JOIN members m ON m.team_id = a.team_id AND m.name = ${SUBJECT_SQL}
        WHERE a.ts > ? AND ${NOT_PRESENCE_SQL}
@@ -148,8 +145,8 @@ export function quietestBusyMs(
            SELECT 1 FROM presence p
            WHERE p.member_id = m.id AND p.held_until IS NULL AND p.last_seen_at > ?
          )`,
-    )
-    .get(now - lookback, now - opts.presenceTimeoutMs);
+    [now - lookback, now - opts.presenceTimeoutMs],
+  );
   if (!row || row.last_ts === null) return null;
   return Math.max(0, now - row.last_ts);
 }

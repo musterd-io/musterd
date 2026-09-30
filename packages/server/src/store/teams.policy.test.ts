@@ -1,11 +1,12 @@
 import { PolicyOverrideSchema, ResidencyPolicySchema, sparsifyPolicy } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { createTeam, getPolicy, getStoredPolicy, setPolicy } from './teams.js';
 
-function seed() {
-  const db = openDb(':memory:');
-  const team = createTeam(db, { slug: 'revive' });
+async function seed() {
+  const db = openTestDb(':memory:');
+  const team = await createTeam(db, { slug: 'revive' });
   return { db, team };
 }
 
@@ -17,57 +18,60 @@ function storedRaw(db: ReturnType<typeof openDb>, teamId: string): unknown {
   return row?.policy ? JSON.parse(row.policy) : null;
 }
 
-describe('setPolicy stores only what was chosen (ADR 185)', () => {
-  it('one knob written ⇒ one knob stored — the assertion whose absence let this ship', () => {
-    const { db, team } = seed();
-    setPolicy(db, team.id, { standing_reseat_known_agents: true });
+describe('setPolicy stores only what was chosen (ADR 185)', async () => {
+  it('one knob written ⇒ one knob stored — the assertion whose absence let this ship', async () => {
+    const { db, team } = await seed();
+    await setPolicy(db, team.id, { standing_reseat_known_agents: true });
     expect(storedRaw(db, team.id)).toEqual({ standing_reseat_known_agents: true });
   });
 
-  it('a nested residency knob stays sparse THROUGH the sub-object, not just at the top', () => {
-    const { db, team } = seed();
-    setPolicy(db, team.id, { residency: { cooldown_ms: 60_000 } });
+  it('a nested residency knob stays sparse THROUGH the sub-object, not just at the top', async () => {
+    const { db, team } = await seed();
+    await setPolicy(db, team.id, { residency: { cooldown_ms: 60_000 } });
     expect(storedRaw(db, team.id)).toEqual({ residency: { cooldown_ms: 60_000 } });
   });
 
-  it('the enforcement sub-object is sparse too', () => {
-    const { db, team } = seed();
-    setPolicy(db, team.id, { allow_pre_issued_grants: true });
+  it('the enforcement sub-object is sparse too', async () => {
+    const { db, team } = await seed();
+    await setPolicy(db, team.id, { allow_pre_issued_grants: true });
     expect(storedRaw(db, team.id)).not.toHaveProperty('enforcement');
   });
 
-  it('replace semantics: a later write drops keys the new doc omits', () => {
-    const { db, team } = seed();
-    setPolicy(db, team.id, { standing_reseat_known_agents: true, residency: { hourly_cap: 5 } });
-    setPolicy(db, team.id, { residency: { hourly_cap: 5 } });
+  it('replace semantics: a later write drops keys the new doc omits', async () => {
+    const { db, team } = await seed();
+    await setPolicy(db, team.id, {
+      standing_reseat_known_agents: true,
+      residency: { hourly_cap: 5 },
+    });
+    await setPolicy(db, team.id, { residency: { hourly_cap: 5 } });
     expect(storedRaw(db, team.id)).toEqual({ residency: { hourly_cap: 5 } });
   });
 
-  it('deleting the webhook key restores "unset = no outbound call ever", not a stored default', () => {
-    const { db, team } = seed();
-    setPolicy(db, team.id, { ask_slack_webhook: 'https://hooks.slack.example/x' });
-    setPolicy(db, team.id, {});
+  it('deleting the webhook key restores "unset = no outbound call ever", not a stored default', async () => {
+    const { db, team } = await seed();
+    await setPolicy(db, team.id, { ask_slack_webhook: 'https://hooks.slack.example/x' });
+    await setPolicy(db, team.id, {});
     expect(storedRaw(db, team.id)).toEqual({});
-    expect(getPolicy(db, team.id).ask_slack_webhook).toBeUndefined();
+    expect((await getPolicy(db, team.id)).ask_slack_webhook).toBeUndefined();
   });
 });
 
-describe('reads still see a fully-populated policy', () => {
-  it('getPolicy fills every default over a sparse row — consumers are untouched', () => {
-    const { db, team } = seed();
-    setPolicy(db, team.id, { residency: { cooldown_ms: 60_000 } });
-    const policy = getPolicy(db, team.id);
+describe('reads still see a fully-populated policy', async () => {
+  it('getPolicy fills every default over a sparse row — consumers are untouched', async () => {
+    const { db, team } = await seed();
+    await setPolicy(db, team.id, { residency: { cooldown_ms: 60_000 } });
+    const policy = await getPolicy(db, team.id);
     expect(policy.residency.cooldown_ms).toBe(60_000);
     expect(policy.residency.hourly_cap).toBe(ResidencyPolicySchema.parse({}).hourly_cap);
     expect(policy.allow_pre_issued_grants).toBe(false);
     expect(policy.enforcement.classes).toEqual([]);
   });
 
-  it('getStoredPolicy returns the sparse doc — {} for a team that never wrote one', () => {
-    const { db, team } = seed();
-    expect(getStoredPolicy(db, team.id)).toEqual({});
-    setPolicy(db, team.id, { residency: { lane: 'interrupt' } });
-    expect(getStoredPolicy(db, team.id)).toEqual({ residency: { lane: 'interrupt' } });
+  it('getStoredPolicy returns the sparse doc — {} for a team that never wrote one', async () => {
+    const { db, team } = await seed();
+    expect(await getStoredPolicy(db, team.id)).toEqual({});
+    await setPolicy(db, team.id, { residency: { lane: 'interrupt' } });
+    expect(await getStoredPolicy(db, team.id)).toEqual({ residency: { lane: 'interrupt' } });
   });
 
   /**
@@ -76,11 +80,11 @@ describe('reads still see a fully-populated policy', () => {
    * unrelated knob had frozen every other value in the row. Simulated here by moving a default after
    * a write, which is what a recalibration is.
    */
-  it('a schema default that moves AFTER a write reaches the team (the #530 no-op)', () => {
-    const { db, team } = seed();
-    setPolicy(db, team.id, { standing_reseat_known_agents: true });
+  it('a schema default that moves AFTER a write reaches the team (the #530 no-op)', async () => {
+    const { db, team } = await seed();
+    await setPolicy(db, team.id, { standing_reseat_known_agents: true });
 
-    const retuned = getPolicy(db, team.id);
+    const retuned = await getPolicy(db, team.id);
     expect(retuned.standing_reseat_known_agents).toBe(true);
     // Nothing about the untouched knobs is pinned in the row, so they resolve from the schema —
     // whatever it says today, and whatever it says after the next recalibration.

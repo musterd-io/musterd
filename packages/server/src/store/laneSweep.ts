@@ -1,5 +1,5 @@
 import { type Lane, isAwaitingAcceptance } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { type Closer, recordLaneClose } from './laneClose.js';
 import { listLanes, updateLane } from './lanes.js';
 
@@ -50,20 +50,20 @@ export interface SweptLane {
  * stamped lanes while inspecting them would silently corrupt that figure for every later close —
  * including the human-accepted ones this is not even about.
  */
-export function sweepAbandonedAcceptance(
-  db: Database,
+export async function sweepAbandonedAcceptance(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   now: number,
   graceMs: number = SWEEP_GRACE_MS,
-): SweptLane[] {
+): Promise<SweptLane[]> {
   const swept: SweptLane[] = [];
-  for (const before of listLanes(db, teamId, teamSlug)) {
+  for (const before of await listLanes(db, teamId, teamSlug)) {
     if (!isAwaitingAcceptance(before.state)) continue;
     const waited = now - before.updated_at;
     if (waited < graceMs) continue;
 
-    const lane: Lane | null = updateLane(
+    const lane: Lane | null = await updateLane(
       db,
       teamId,
       before.id,
@@ -77,7 +77,7 @@ export function sweepAbandonedAcceptance(
     // The merge attestation the lane already carries rides through untouched — a swept lane is
     // still a landed one, and dropping its PR/SHA would break the ADR 109 seat→PR→SHA join for
     // exactly the lanes nobody was watching.
-    recordLaneClose(db, teamId, SYSTEM_CLOSER, before, lane);
+    await recordLaneClose(db, teamId, SYSTEM_CLOSER, before, lane);
     swept.push({ id: before.id, owner_seat: before.owner_seat, waited_ms: waited });
   }
   return swept;

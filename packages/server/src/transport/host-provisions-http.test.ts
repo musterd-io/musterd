@@ -1,6 +1,7 @@
 import { GENERALIST_CAPABILITIES } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { getProvision, PROVISION_PENDING_TTL_MS } from '../store/hostProvisions.js';
 import { getMemberByName, setMemberGovernance } from '../store/members.js';
@@ -29,7 +30,8 @@ async function call(method: string, path: string, body?: unknown, bearer?: strin
   const text = await res.text();
   return { status: res.status, json: text ? (JSON.parse(text) as any) : null };
 }
-const post = (path: string, body: unknown, bearer?: string) => call('POST', path, body, bearer);
+const post = async (path: string, body: unknown, bearer?: string) =>
+  await call('POST', path, body, bearer);
 
 async function addHuman(name: string): Promise<string> {
   const r = await post('/teams/hp-t/members', { name, kind: 'human' }, nick);
@@ -54,15 +56,15 @@ async function danaWithLiveHost(): Promise<{ dana: string; hostKey: string }> {
   return { dana, hostKey: hk.json.agent_key as string };
 }
 
-function member(name: string) {
-  const team = requireTeam(server.db, 'hp-t');
-  return getMemberByName(server.db, team.id, name)!;
+async function member(name: string) {
+  const team = await requireTeam(sqliteDriver(server.db), 'hp-t');
+  return (await getMemberByName(sqliteDriver(server.db), team.id, name))!;
 }
 
-function disable(name: string) {
-  setMemberGovernance(
-    server.db,
-    member(name).id,
+async function disable(name: string) {
+  await setMemberGovernance(
+    sqliteDriver(server.db),
+    (await member(name)).id,
     'disabled',
     JSON.stringify(GENERALIST_CAPABILITIES),
   );
@@ -74,7 +76,7 @@ async function inboxOf(credential: string) {
 
 beforeEach(async () => {
   __resetOAuthBucketsForTest();
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const r = await post('/teams', { slug: 'hp-t', creator: { name: 'nick', kind: 'human' } });
@@ -161,11 +163,11 @@ describe('host provisions (ADR 463 §2)', () => {
     await post('/teams/hp-t/members/agents', { name: 'dana-scout' }, dana);
     const claim = await post('/teams/hp-t/host/provisions', { host: 'dana-mbp' }, hostKey);
     const id = claim.json.provisions[0].id as string;
-    disable('dana-scout');
+    await disable('dana-scout');
     const r = await post(`/teams/hp-t/host/provisions/${id}/report`, { state: 'ready' }, hostKey);
     expect(r.status).toBe(403);
-    const team = requireTeam(server.db, 'hp-t');
-    expect(getProvision(server.db, team.id, id)).toMatchObject({
+    const team = await requireTeam(sqliteDriver(server.db), 'hp-t');
+    expect(await getProvision(sqliteDriver(server.db), team.id, id)).toMatchObject({
       state: 'failed',
       failed_reason: 'agent_lost_standing',
     });
@@ -176,12 +178,12 @@ describe('host provisions (ADR 463 §2)', () => {
     await post('/teams/hp-t/members/agents', { name: 'dana-scout' }, dana);
     const claim = await post('/teams/hp-t/host/provisions', { host: 'dana-mbp' }, hostKey);
     const id = claim.json.provisions[0].id as string;
-    disable('dana');
+    await disable('dana');
     const r = await post(`/teams/hp-t/host/provisions/${id}/report`, { state: 'ready' }, hostKey);
     expect(r.status).toBe(403);
-    expect(server.runProvisionSweep()).toBe(1);
-    const team = requireTeam(server.db, 'hp-t');
-    expect(getProvision(server.db, team.id, id)).toMatchObject({
+    expect(await server.runProvisionSweep()).toBe(1);
+    const team = await requireTeam(sqliteDriver(server.db), 'hp-t');
+    expect(await getProvision(sqliteDriver(server.db), team.id, id)).toMatchObject({
       state: 'failed',
       failed_reason: 'sponsor_lost_standing',
     });
@@ -228,7 +230,7 @@ describe('host provisions (ADR 463 §2)', () => {
     // …and a failed provision leaves no half-hosted seat, so that link can redeem (ADR 463 §4.1).
     const residency = server.db
       .prepare('SELECT COUNT(*) AS n FROM residency WHERE member_id = ?')
-      .get(member('dana-scout').id) as { n: number };
+      .get((await member('dana-scout')).id) as { n: number };
     expect(residency.n).toBe(0);
   });
 
@@ -268,8 +270,8 @@ describe('host provisions (ADR 463 §2)', () => {
   it('a pending provision older than 15 minutes cancels and the sponsor gets a fresh connect link', async () => {
     const { dana } = await danaWithLiveHost();
     await post('/teams/hp-t/members/agents', { name: 'dana-scout' }, dana);
-    expect(server.runProvisionSweep()).toBe(0);
-    expect(server.runProvisionSweep(Date.now() + PROVISION_PENDING_TTL_MS + 1)).toBe(1);
+    expect(await server.runProvisionSweep()).toBe(0);
+    expect(await server.runProvisionSweep(Date.now() + PROVISION_PENDING_TTL_MS + 1)).toBe(1);
     const row = server.db.prepare('SELECT state FROM host_provisions').get();
     expect(row).toEqual({ state: 'cancelled' });
     const told = (await inboxOf(dana)).find((m) => m.meta?.agent_connect_fallback);

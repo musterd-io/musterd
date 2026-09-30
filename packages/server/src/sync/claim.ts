@@ -14,9 +14,9 @@ import {
   type SyncTrustRequest,
   type UpdateLane,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { z } from 'zod';
 import type { Ctx } from '../context.js';
+import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import { readNodeState } from '../node/state.js';
@@ -106,18 +106,18 @@ export class TrustRefusedError extends Error {
  * on a fresh row and nothing on an idempotent repeat. A refusal is a `seat.bound_elsewhere` deny row
  * when the speaker is not resident — the same ADR 328 §Experiment signal a bad claim leaves.
  */
-export function applyTrust(
-  db: Database,
+export async function applyTrust(
+  db: Driver,
   teamId: string,
   seat: { id: string; name: string; kind: string },
   speaker: { id: string; label: string },
   targetNodeId: string,
   now: number = Date.now(),
-): SeatNodeTrusted {
-  const result = trustNodeForSeat(db, teamId, seat, speaker.id, targetNodeId, now);
+): Promise<SeatNodeTrusted> {
+  const result = await trustNodeForSeat(db, teamId, seat, speaker.id, targetNodeId, now);
   if (result.trusted) {
     if (!result.already) {
-      appendAudit(db, teamId, {
+      await appendAudit(db, teamId, {
         actor: seat.name,
         action: 'seat.node_trusted',
         target: seat.name,
@@ -141,8 +141,8 @@ export function applyTrust(
         '(musterd node invite / join), then trust it.',
     );
   }
-  const holder = seatBinding(db, seat.id);
-  appendAudit(db, teamId, {
+  const holder = await seatBinding(db, seat.id);
+  await appendAudit(db, teamId, {
     actor: seat.name,
     action: 'seat.bound_elsewhere',
     target: seat.name,
@@ -184,17 +184,17 @@ export function applyTrust(
  * Refusals reuse `TrustRefusedError` for its nullable node — an unbound seat has no holder to name
  * — and leave the same `seat.bound_elsewhere` deny row ADR 328 §Experiment counts.
  */
-export function assertSeatAlreadyResident(
-  db: Database,
+export async function assertSeatAlreadyResident(
+  db: Driver,
   teamId: string,
   seat: { id: string; name: string },
   node: { id: string; label: string },
   act: string,
-): void {
-  const holders = seatBindings(db, seat.id);
+): Promise<void> {
+  const holders = await seatBindings(db, seat.id);
   if (holders.some((h) => h.node_id === node.id)) return;
   const holder = holders[0];
-  appendAudit(db, teamId, {
+  await appendAudit(db, teamId, {
     actor: seat.name,
     action: 'seat.bound_elsewhere',
     target: seat.name,
@@ -228,18 +228,18 @@ export function assertSeatAlreadyResident(
  * Throws `SeatBoundElsewhereError`; every other outcome is a `seat.bound` row on first bind and
  * silence after.
  */
-export function assertSeatResident(
-  db: Database,
+export async function assertSeatResident(
+  db: Driver,
   teamId: string,
   seat: { id: string; name: string },
   node: { id: string; label: string },
   now: number = Date.now(),
-): void {
-  const had = seatBinding(db, seat.id);
-  const result = bindSeatToNode(db, teamId, seat.id, node.id, now);
+): Promise<void> {
+  const had = await seatBinding(db, seat.id);
+  const result = await bindSeatToNode(db, teamId, seat.id, node.id, now);
   if (result.bound) {
     if (!had) {
-      appendAudit(db, teamId, {
+      await appendAudit(db, teamId, {
         actor: seat.name,
         action: 'seat.bound',
         target: seat.name,
@@ -249,7 +249,7 @@ export function assertSeatResident(
     }
     return;
   }
-  appendAudit(db, teamId, {
+  await appendAudit(db, teamId, {
     actor: seat.name,
     action: 'seat.bound_elsewhere',
     target: seat.name,
@@ -268,23 +268,25 @@ export class HubUnreachableError extends Error {
 }
 
 /** This daemon's own node row with its label — minted on first use, the `insertMessage` rule. */
-export function localNodeWithLabel(db: Database, teamId: string): { id: string; label: string } {
-  const { id } = localNodeForTeam(db, teamId);
-  const row = db
-    .prepare<[string], { label: string }>('SELECT label FROM nodes WHERE id = ?')
-    .get(id);
+export async function localNodeWithLabel(
+  db: Driver,
+  teamId: string,
+): Promise<{ id: string; label: string }> {
+  const { id } = await localNodeForTeam(db, teamId);
+  const row = await db.get<{ label: string }>('SELECT label FROM nodes WHERE id = ?', [id]);
   return { id, label: row?.label ?? '' };
 }
 
 /** This daemon's enrollment for the team, if it is a joiner (the push/pull rule: node.json names OUR node row). */
-export function joinerEnrollment(
-  db: Database,
+export async function joinerEnrollment(
+  db: Driver,
   teamId: string,
   teamSlug: string,
-): { hub_url: string; credential: string; node_id: string } | null {
-  const local = db
-    .prepare<[string], { node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?')
-    .get(teamId);
+): Promise<{ hub_url: string; credential: string; node_id: string } | null> {
+  const local = await db.get<{ node_id: string }>(
+    'SELECT node_id FROM local_node WHERE team_id = ?',
+    [teamId],
+  );
   const record = readNodeState().nodes[teamSlug];
   if (!local || !record || record.node_id !== local.node_id) return null;
   return record;
@@ -298,20 +300,20 @@ export function joinerEnrollment(
  * stage-one merge attestation (ADR 305). Returns the patch to write and the guard the write must
  * carry — the caller's read, so the write is a CAS. Throws `MusterdError`.
  */
-export function decideLanePatch(
-  db: Database,
+export async function decideLanePatch(
+  db: Driver,
   teamId: string,
   member: { name: string; kind: string },
   before: Lane,
   body: UpdateLane,
   presenceTimeoutMs: number,
-): { patch: UpdateLane; guard: LaneExpectation | undefined } {
+): Promise<{ patch: UpdateLane; guard: LaneExpectation | undefined }> {
   // ADR 305 amendment 2 (lane 01M2GR0434, 2026-09-14): clearing an attestation is replacing it
   // with nothing, so it is the OWNER's (or an admin's) — never a counterpart's, for the reason the
   // strip rule below exists. Decided ahead of everything else so the hub's arbitration and the
   // local path refuse identically.
   if (body.merged === null && before.merged !== null) {
-    const row = getMemberByName(db, teamId, member.name);
+    const row = await getMemberByName(db, teamId, member.name);
     const isAdmin = row !== undefined && resolveCapabilities(row).is_admin;
     if (member.name !== before.owner_seat && !isAdmin) {
       throw new MusterdError(
@@ -329,9 +331,9 @@ export function decideLanePatch(
   // lanes may share one PR: nine of ten shared SHAs on the live db (2026-09-14) were exactly that.
   if (body.merged?.sha !== undefined) {
     const owner = body.owner_seat !== undefined ? body.owner_seat : before.owner_seat;
-    const foreign = lanesAttestedBy(db, teamId, before.team, body.merged.sha, before.id).filter(
-      (l) => l.owner_seat !== owner,
-    );
+    const foreign = (
+      await lanesAttestedBy(db, teamId, before.team, body.merged.sha, before.id)
+    ).filter((l) => l.owner_seat !== owner);
     if (foreign.length > 0) {
       const l = foreign[0]!;
       throw new MusterdError(
@@ -349,7 +351,7 @@ export function decideLanePatch(
       `"${member.name}" is a service seat — ledger seats never claim or hold lanes (ADR 232)`,
     );
   if (body.owner_seat) {
-    const newOwner = getMemberByName(db, teamId, body.owner_seat);
+    const newOwner = await getMemberByName(db, teamId, body.owner_seat);
     if (newOwner?.kind === 'service')
       throw new MusterdError(
         'forbidden',
@@ -368,9 +370,9 @@ export function decideLanePatch(
     before.owner_seat !== null &&
     before.owner_seat !== member.name;
   if (takingForSelf) {
-    const incumbent = getMemberByName(db, teamId, before.owner_seat!);
+    const incumbent = await getMemberByName(db, teamId, before.owner_seat!);
     const incumbentLive =
-      incumbent !== undefined && hasLivePresence(db, incumbent.id, presenceTimeoutMs);
+      incumbent !== undefined && (await hasLivePresence(db, incumbent.id, presenceTimeoutMs));
     if (incumbentLive) {
       throw new MusterdError(
         'conflict',
@@ -459,14 +461,14 @@ export interface ArbitratedLanePatch {
  * write carries `audit.node`, and that is when `updateLane` records `lane.state_changed` so the
  * fold can apply the state. The origin still writes `lane.ready_for_review` once.
  */
-export function arbitrateLanePatch(
+export async function arbitrateLanePatch(
   ctx: Ctx,
   team: { id: string; slug: string },
   node: { id: string; label: string },
   req: SyncLanePatchRequest,
   now: number = Date.now(),
-): ArbitratedLanePatch {
-  const seat = getMemberByName(ctx.db, team.id, req.seat);
+): Promise<ArbitratedLanePatch> {
+  const seat = await getMemberByName(ctx.db, team.id, req.seat);
   if (!seat) {
     throw new ClaimRefusedError(
       `seat "${req.seat}" is not on the hub's roster yet — the roster reconciles from git; retry`,
@@ -482,8 +484,8 @@ export function arbitrateLanePatch(
     );
   }
   // Residence before anything about the lane: an unentitled node learns nothing about the board.
-  assertSeatResident(ctx.db, team.id, seat, node, now);
-  const before = getLane(ctx.db, team.id, req.lane, team.slug);
+  await assertSeatResident(ctx.db, team.id, seat, node, now);
+  const before = await getLane(ctx.db, team.id, req.lane, team.slug);
   if (!before) {
     throw new ClaimRefusedError(
       `lane "${req.lane}" is not yet replicated to the hub — its birth has not folded here; ` +
@@ -494,7 +496,7 @@ export function arbitrateLanePatch(
   }
   let decided: { patch: UpdateLane; guard: LaneExpectation | undefined };
   try {
-    decided = decideLanePatch(
+    decided = await decideLanePatch(
       ctx.db,
       team.id,
       seat,
@@ -509,9 +511,9 @@ export function arbitrateLanePatch(
     throw err;
   }
   try {
-    return ctx.db.transaction((): ArbitratedLanePatch => {
-      const lane = updateLane(
-        ctx.db,
+    return await ctx.db.tx(async (t): Promise<ArbitratedLanePatch> => {
+      const lane = (await updateLane(
+        t,
         team.id,
         req.lane,
         team.slug,
@@ -522,10 +524,10 @@ export function arbitrateLanePatch(
           actor: req.seat,
           node: node.id,
         },
-      )!;
+      ))!;
       if (LANE_TERMINAL_STATES.has(lane.state) && !LANE_TERMINAL_STATES.has(before.state)) {
-        const closed = recordLaneClose(
-          ctx.db,
+        const closed = await recordLaneClose(
+          t,
           team.id,
           seat,
           before,
@@ -536,7 +538,7 @@ export function arbitrateLanePatch(
         return { lane, closed };
       }
       return { lane };
-    })();
+    });
   } catch (err) {
     if (err instanceof LaneConflictError) {
       throw new ClaimRefusedError(
@@ -552,19 +554,21 @@ export function arbitrateLanePatch(
 }
 
 /** The claim, as the special case of `arbitrateLanePatch` it always was (ADR 355). */
-export function arbitrateClaim(
+export async function arbitrateClaim(
   ctx: Ctx,
   team: { id: string; slug: string },
   node: { id: string; label: string },
   req: SyncClaimRequest,
   now: number = Date.now(),
-): Lane {
-  return arbitrateLanePatch(
-    ctx,
-    team,
-    node,
-    { lane: req.lane, seat: req.seat, patch: { owner_seat: req.seat }, expect: req.expect },
-    now,
+): Promise<Lane> {
+  return (
+    await arbitrateLanePatch(
+      ctx,
+      team,
+      node,
+      { lane: req.lane, seat: req.seat, patch: { owner_seat: req.seat }, expect: req.expect },
+      now,
+    )
   ).lane;
 }
 

@@ -4,9 +4,9 @@ import {
   type PresenceStatus,
   type Surface,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
 import { REMOTE_PRESENCE_TTL_MS } from '../config.js';
+import type { Driver } from '../db/driver.js';
 import { appendAudit, appendReplicatedEvent } from './audit.js';
 import type { MemberRow, PresenceRow } from './rows.js';
 
@@ -66,13 +66,14 @@ export interface AttachContext {
 }
 
 /** The seat and team behind a member id — every transition names the seat, never the private id. */
-function seatOf(db: Database, memberId: string): { team_id: string; name: string } | undefined {
-  return db
-    .prepare<
-      [string],
-      { team_id: string; name: string }
-    >('SELECT team_id, name FROM members WHERE id = ?')
-    .get(memberId);
+async function seatOf(
+  db: Driver,
+  memberId: string,
+): Promise<{ team_id: string; name: string } | undefined> {
+  return await db.get<{ team_id: string; name: string }>(
+    'SELECT team_id, name FROM members WHERE id = ?',
+    [memberId],
+  );
 }
 
 type DetachReason = 'goodbye' | 'reaped' | 'displaced' | 'cleared';
@@ -82,22 +83,20 @@ type DetachReason = 'goodbye' | 'reaped' | 'displaced' | 'cleared';
  * the rows. A remote row is never the subject of a locally emitted transition: this machine did
  * not end that session and must not say it did (presence replication spec §1).
  */
-function detachLocalRows(
-  db: Database,
+async function detachLocalRows(
+  db: Driver,
   where: string,
   params: unknown[],
   reason: DetachReason,
-): void {
-  const rows = db
-    .prepare<
-      unknown[],
-      { id: string; member_id: string }
-    >(`SELECT id, member_id FROM presence WHERE node IS NULL AND ${where}`)
-    .all(...params);
+): Promise<void> {
+  const rows = await db.all<{ id: string; member_id: string }>(
+    `SELECT id, member_id FROM presence WHERE node IS NULL AND ${where}`,
+    [...params],
+  );
   for (const r of rows) {
-    const seat = seatOf(db, r.member_id);
+    const seat = await seatOf(db, r.member_id);
     if (seat) {
-      appendReplicatedEvent(db, seat.team_id, {
+      await appendReplicatedEvent(db, seat.team_id, {
         actor: seat.name,
         action: 'presence.detached',
         target: seat.name,
@@ -105,7 +104,7 @@ function detachLocalRows(
         detail: { presence: r.id, reason },
       });
     }
-    db.prepare('DELETE FROM presence WHERE id = ?').run(r.id);
+    await db.run('DELETE FROM presence WHERE id = ?', [r.id]);
   }
 }
 
@@ -118,17 +117,17 @@ function detachLocalRows(
  * the event carries what the roster shows — never `wake_lease`, which identifies rather than
  * describes and does not travel.
  */
-export function attach(
-  db: Database,
+export async function attach(
+  db: Driver,
   memberId: string,
   surface: Surface,
   connId: string | null,
   ctx: AttachContext = {},
-): PresenceRow {
-  return db.transaction(() => {
+): Promise<PresenceRow> {
+  return db.tx(async (t) => {
     const now = Date.now();
     // Back online — clear any sticky offline reason (ADR 141).
-    db.prepare('UPDATE members SET last_offline_reason = NULL WHERE id = ?').run(memberId);
+    await t.run('UPDATE members SET last_offline_reason = NULL WHERE id = ?', [memberId]);
     const row: PresenceRow = {
       id: ulid(),
       member_id: memberId,
@@ -149,13 +148,33 @@ export function attach(
       node: null,
       created_at: now,
     };
-    db.prepare(
+    await t.run(
       `INSERT INTO presence (id, member_id, surface, status, conn_id, last_seen_at, held_until, provenance, workspace, driver, model, model_source, build, epoch, guidance_epoch, wake_lease, node, created_at)
-       VALUES (@id, @member_id, @surface, @status, @conn_id, @last_seen_at, @held_until, @provenance, @workspace, @driver, @model, @model_source, @build, @epoch, @guidance_epoch, @wake_lease, @node, @created_at)`,
-    ).run(row);
-    const seat = seatOf(db, memberId);
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        row.id,
+        row.member_id,
+        row.surface,
+        row.status,
+        row.conn_id,
+        row.last_seen_at,
+        row.held_until,
+        row.provenance,
+        row.workspace,
+        row.driver,
+        row.model,
+        row.model_source,
+        row.build,
+        row.epoch,
+        row.guidance_epoch,
+        row.wake_lease,
+        row.node,
+        row.created_at,
+      ],
+    );
+    const seat = await seatOf(t, memberId);
     if (seat) {
-      appendReplicatedEvent(db, seat.team_id, {
+      await appendReplicatedEvent(t, seat.team_id, {
         actor: seat.name,
         action: 'presence.attached',
         target: seat.name,
@@ -175,7 +194,7 @@ export function attach(
       });
     }
     return row;
-  })();
+  });
 }
 
 /**
@@ -184,21 +203,24 @@ export function attach(
  * `held_until` passes. Held rows are excluded from the live/roster views below.
  * Stamps sticky `disconnected` (ADR 141); during grace `reclaimable` still projects `reconnecting`.
  */
-export function release(db: Database, presenceId: string, graceMs: number): void {
+export async function release(db: Driver, presenceId: string, graceMs: number): Promise<void> {
   const now = Date.now();
-  const member = db
-    .prepare<[string], { member_id: string }>('SELECT member_id FROM presence WHERE id = ?')
-    .get(presenceId);
-  db.prepare(
+  const member = await db.get<{ member_id: string }>(
+    'SELECT member_id FROM presence WHERE id = ?',
+    [presenceId],
+  );
+  await db.run(
     'UPDATE presence SET conn_id = NULL, last_seen_at = ?, held_until = ? WHERE id = ?',
-  ).run(now, now + graceMs, presenceId);
+    [now, now + graceMs, presenceId],
+  );
   if (member) {
     // `disconnected` means "ended without a goodbye", so it only fills an empty slot (attach
     // cleared it). A deliberate-exit stamp already placed this session (session_ended via the
     // SessionEnd hook, seat_released via unbind) must survive the socket closing moments later.
-    db.prepare(
+    await db.run(
       "UPDATE members SET last_offline_reason = 'disconnected', updated_at = ? WHERE id = ? AND last_offline_reason IS NULL",
-    ).run(now, member.member_id);
+      [now, member.member_id],
+    );
   }
 }
 
@@ -207,8 +229,8 @@ export function release(db: Database, presenceId: string, graceMs: number): void
  * single-active on a fresh hello (kind-scoped — humans fan out instead, ADR 042), and to free a
  * seat on operator reclaim/remove (any kind).
  */
-export function clearMemberPresence(db: Database, memberId: string): void {
-  detachLocalRows(db, 'member_id = ?', [memberId], 'cleared');
+export async function clearMemberPresence(db: Driver, memberId: string): Promise<void> {
+  await detachLocalRows(db, 'member_id = ?', [memberId], 'cleared');
 }
 
 /**
@@ -217,19 +239,23 @@ export function clearMemberPresence(db: Database, memberId: string): void {
  * person opened (`session`), or an older adapter that stamps nothing. Only live sockets are passed
  * in: a socketless row is an orphan every claim clears anyway.
  */
-export function heldByAttendedSession(db: Database, presenceIds: readonly string[]): boolean {
-  const stmt = db.prepare<[string], { provenance: string | null }>(
-    'SELECT provenance FROM presence WHERE id = ?',
-  );
-  return presenceIds.some((id) => {
-    const row = stmt.get(id);
-    return row !== undefined && row.provenance !== 'wake';
-  });
+export async function heldByAttendedSession(
+  db: Driver,
+  presenceIds: readonly string[],
+): Promise<boolean> {
+  for (const id of presenceIds) {
+    const row = await db.get<{ provenance: string | null }>(
+      'SELECT provenance FROM presence WHERE id = ?',
+      [id],
+    );
+    if (row !== undefined && row.provenance !== 'wake') return true;
+  }
+  return false;
 }
 
 /** Drop a single presence row by id — used to evict exactly a displaced connection (ADR 068). */
-export function clearPresenceById(db: Database, presenceId: string): void {
-  detachLocalRows(db, 'id = ?', [presenceId], 'displaced');
+export async function clearPresenceById(db: Driver, presenceId: string): Promise<void> {
+  await detachLocalRows(db, 'id = ?', [presenceId], 'displaced');
 }
 
 /**
@@ -237,8 +263,8 @@ export function clearPresenceById(db: Database, presenceId: string): void {
  * (`conn_id IS NULL`). A fresh agent hello uses this to clear crashed-session / grace-hold remnants
  * without touching a live same-workspace session it deliberately keeps (ADR 068).
  */
-export function clearOrphanPresence(db: Database, memberId: string): void {
-  detachLocalRows(db, 'member_id = ? AND conn_id IS NULL', [memberId], 'cleared');
+export async function clearOrphanPresence(db: Driver, memberId: string): Promise<void> {
+  await detachLocalRows(db, 'member_id = ? AND conn_id IS NULL', [memberId], 'cleared');
 }
 
 /**
@@ -275,17 +301,17 @@ export function clearOrphanPresence(db: Database, memberId: string): void {
  * unattested half stayed invisible for as long as it did — fixing four of five would have left a
  * ledger that is right except where it isn't, which is worse than one that is uniformly incomplete.
  */
-export function recordClaimAttestation(
-  db: Database,
+export async function recordClaimAttestation(
+  db: Driver,
   teamId: string,
   member: { id: string; name: string },
   occupancyId: string,
   model: string | null | undefined,
-): void {
+): Promise<void> {
   if (model) {
     // ADR 101: the initial attestation is the first entry in the occupancy's model history — the
     // audit log IS the switch history (old → new, source), never a table.
-    appendAudit(db, teamId, {
+    await appendAudit(db, teamId, {
       actor: member.name,
       action: 'occupancy.model_attested',
       target: member.name,
@@ -294,24 +320,22 @@ export function recordClaimAttestation(
     });
     return;
   }
-  recordUnattestedOccupancy(db, teamId, member, occupancyId, 'claim');
+  await recordUnattestedOccupancy(db, teamId, member, occupancyId, 'claim');
 }
 
-export function recordUnattestedOccupancy(
-  db: Database,
+export async function recordUnattestedOccupancy(
+  db: Driver,
   teamId: string,
   member: { id: string; name: string },
   occupancyId: string,
   source: 'claim' | 'ambient',
-): boolean {
-  const prior = db
-    .prepare<
-      [string, string],
-      { model: string | null }
-    >('SELECT model FROM presence WHERE member_id = ? AND id != ? AND model IS NOT NULL ORDER BY last_seen_at DESC LIMIT 1')
-    .get(member.id, occupancyId);
+): Promise<boolean> {
+  const prior = await db.get<{ model: string | null }>(
+    'SELECT model FROM presence WHERE member_id = ? AND id != ? AND model IS NOT NULL ORDER BY last_seen_at DESC LIMIT 1',
+    [member.id, occupancyId],
+  );
   if (!prior?.model) return false;
-  appendAudit(db, teamId, {
+  await appendAudit(db, teamId, {
     actor: member.name,
     action: 'occupancy.model_attested',
     target: member.name,
@@ -322,30 +346,32 @@ export function recordUnattestedOccupancy(
 }
 
 /** Does this member currently hold a *live* (connected, non-held) presence? Drives agent single-active. */
-export function hasActivePresence(db: Database, memberId: string): boolean {
-  const row = db
-    .prepare<
-      [string],
-      { n: number }
-    >('SELECT COUNT(*) AS n FROM presence WHERE member_id = ? AND held_until IS NULL AND conn_id IS NOT NULL')
-    .get(memberId);
+export async function hasActivePresence(db: Driver, memberId: string): Promise<boolean> {
+  const row = await db.get<{ n: number }>(
+    'SELECT COUNT(*) AS n FROM presence WHERE member_id = ? AND held_until IS NULL AND conn_id IS NOT NULL',
+    [memberId],
+  );
   return (row?.n ?? 0) > 0;
 }
 
-export function heartbeat(db: Database, presenceId: string, status?: PresenceStatus): void {
+export async function heartbeat(
+  db: Driver,
+  presenceId: string,
+  status?: PresenceStatus,
+): Promise<void> {
   if (status) {
-    db.prepare('UPDATE presence SET last_seen_at = ?, status = ? WHERE id = ?').run(
+    await db.run('UPDATE presence SET last_seen_at = ?, status = ? WHERE id = ?', [
       Date.now(),
       status,
       presenceId,
-    );
+    ]);
   } else {
-    db.prepare('UPDATE presence SET last_seen_at = ? WHERE id = ?').run(Date.now(), presenceId);
+    await db.run('UPDATE presence SET last_seen_at = ? WHERE id = ?', [Date.now(), presenceId]);
   }
 }
 
-export function detach(db: Database, presenceId: string): void {
-  detachLocalRows(db, 'id = ?', [presenceId], 'goodbye');
+export async function detach(db: Driver, presenceId: string): Promise<void> {
+  await detachLocalRows(db, 'id = ?', [presenceId], 'goodbye');
 }
 
 /**
@@ -366,27 +392,25 @@ export function detach(db: Database, presenceId: string): void {
  * Returns true when this touch flipped the member from no-live-presence to present (an offline→online
  * transition), so the caller can emit a presence event to live watchers.
  */
-export function touchAmbientPresence(
-  db: Database,
+export async function touchAmbientPresence(
+  db: Driver,
   memberId: string,
   surface: Surface,
   timeoutMs: number,
   ctx: AttachContext = {},
-): boolean {
+): Promise<boolean> {
   // A live resident session (real socket) already owns liveness — don't add a competing row.
-  if (hasActivePresence(db, memberId)) return false;
-  const wasLive = hasLivePresence(db, memberId, timeoutMs);
+  if (await hasActivePresence(db, memberId)) return false;
+  const wasLive = await hasLivePresence(db, memberId, timeoutMs);
   // SPEC.md §"Attach context": provenance is a fact known only to the attaching client, and the
   // server MUST NOT guess it. This used to default to `session`, which made an unstated provenance
   // indistinguishable from a declared one — and it landed on humans every time, since `ambientTouch`
   // reads the header for agent seats only (ADR 121). Absence is not an assertion (ADR 236).
   const provenance: Provenance | null = ctx.provenance ?? null;
-  const existing = db
-    .prepare<
-      [string],
-      { id: string }
-    >('SELECT id FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1')
-    .get(memberId);
+  const existing = await db.get<{ id: string }>(
+    'SELECT id FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1',
+    [memberId],
+  );
   if (existing) {
     // Model attestation is **sticky** across ambient touches (ADR 101): an authenticated HTTP request
     // carries no model, so `COALESCE(?, model)` preserves the value attested at claim instead of
@@ -398,48 +422,51 @@ export function touchAmbientPresence(
     // question together ("which session animates this row, and what caused it"), so a touch that
     // re-writes provenance must re-write the token in the same breath; a sticky token under a
     // fresh provenance would claim a lease the session no longer belongs to.
-    db.prepare(
+    await db.run(
       // `model_source` is COALESCEd on the SAME condition as `model` (`ctx.model ? … : null`), so the
       // pair moves or stays together. Sticky-independently would be worse than not recording it: a
       // new model under a stale tier is a stamp that lies about its own provenance.
       'UPDATE presence SET last_seen_at = ?, status = ?, surface = ?, provenance = ?, workspace = ?, driver = ?, wake_lease = ?, model = COALESCE(?, model), model_source = COALESCE(?, model_source), build = COALESCE(?, build), epoch = COALESCE(?, epoch), guidance_epoch = COALESCE(?, guidance_epoch) WHERE id = ?',
-    ).run(
-      Date.now(),
-      'online',
-      surface,
-      provenance,
-      ctx.workspace ?? null,
-      ctx.driver ?? null,
-      ctx.wake_lease ?? null,
-      ctx.model ?? null,
-      ctx.model ? (ctx.model_source ?? null) : null,
-      ctx.build ?? null,
-      ctx.epoch ?? null,
-      // ADR 417. COALESCE like its siblings, but for a different reason: `epoch` is sticky because a
-      // compiled-in constant CANNOT change mid-occupancy, while this one can and is expected to — a
-      // refresh rewrites the seat's files under a live session. So a heartbeat carrying a value moves
-      // the row forward, and one carrying none leaves the last attested value standing.
-      ctx.guidance_epoch ?? null,
-      existing.id,
+      [
+        Date.now(),
+        'online',
+        surface,
+        provenance,
+        ctx.workspace ?? null,
+        ctx.driver ?? null,
+        ctx.wake_lease ?? null,
+        ctx.model ?? null,
+        ctx.model ? (ctx.model_source ?? null) : null,
+        ctx.build ?? null,
+        ctx.epoch ?? null,
+        // ADR 417. COALESCE like its siblings, but for a different reason: `epoch` is sticky because a
+        // compiled-in constant CANNOT change mid-occupancy, while this one can and is expected to — a
+        // refresh rewrites the seat's files under a live session. So a heartbeat carrying a value moves
+        // the row forward, and one carrying none leaves the last attested value standing.
+        ctx.guidance_epoch ?? null,
+        existing.id,
+      ],
     );
   } else {
-    attach(db, memberId, surface, null, { ...ctx, provenance });
+    await attach(db, memberId, surface, null, { ...ctx, provenance });
   }
   if (!wasLive) {
-    db.prepare('UPDATE members SET last_offline_reason = NULL WHERE id = ?').run(memberId);
+    await db.run('UPDATE members SET last_offline_reason = NULL WHERE id = ?', [memberId]);
   }
   return !wasLive;
 }
 
 /** Does this member currently have any live presence (within timeout, not a release hold)? */
-export function hasLivePresence(db: Database, memberId: string, timeoutMs: number): boolean {
+export async function hasLivePresence(
+  db: Driver,
+  memberId: string,
+  timeoutMs: number,
+): Promise<boolean> {
   const [l, r] = liveCutoffs(timeoutMs);
-  const row = db
-    .prepare<
-      [string, number, number],
-      { n: number }
-    >(`SELECT COUNT(*) AS n FROM presence p LEFT JOIN nodes n ON n.id = p.node WHERE p.member_id = ? AND ${LIVE_PRESENCE_SQL}`)
-    .get(memberId, l, r);
+  const row = await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM presence p LEFT JOIN nodes n ON n.id = p.node WHERE p.member_id = ? AND ${LIVE_PRESENCE_SQL}`,
+    [memberId, l, r],
+  );
   return (row?.n ?? 0) > 0;
 }
 
@@ -450,15 +477,13 @@ export function hasLivePresence(db: Database, memberId: string, timeoutMs: numbe
  * from under a teammate. Counts members, not rows: a member fanned out over two surfaces is one
  * session. Mirrors the live filter used by the roster (fresh heartbeat, not a release hold).
  */
-export function countLivePresences(db: Database, timeoutMs: number): number {
+export async function countLivePresences(db: Driver, timeoutMs: number): Promise<number> {
   const [l, r] = liveCutoffs(timeoutMs);
   // Observer seats (ADR 063) watch without participating — never counted as live sessions.
-  const row = db
-    .prepare<
-      [number, number],
-      { n: number }
-    >(`SELECT COUNT(DISTINCT p.member_id) AS n FROM presence p JOIN members m ON m.id = p.member_id LEFT JOIN nodes n ON n.id = p.node WHERE m.observer = 0 AND ${LIVE_PRESENCE_SQL}`)
-    .get(l, r);
+  const row = await db.get<{ n: number }>(
+    `SELECT COUNT(DISTINCT p.member_id) AS n FROM presence p JOIN members m ON m.id = p.member_id LEFT JOIN nodes n ON n.id = p.node WHERE m.observer = 0 AND ${LIVE_PRESENCE_SQL}`,
+    [l, r],
+  );
   return row?.n ?? 0;
 }
 
@@ -469,63 +494,67 @@ export function countLivePresences(db: Database, timeoutMs: number): number {
  * `working`/present even without their own heartbeat, computed at read time, no synthetic presence row.
  * Same live filter as the roster (fresh heartbeat, not a release hold), scoped to the team.
  */
-export function listLiveDrivers(db: Database, teamId: string, timeoutMs: number): Set<string> {
+export async function listLiveDrivers(
+  db: Driver,
+  teamId: string,
+  timeoutMs: number,
+): Promise<Set<string>> {
   const [l, r] = liveCutoffs(timeoutMs);
-  const rows = db
-    .prepare<
-      [string, number, number],
-      { driver: string }
-    >(`SELECT DISTINCT p.driver AS driver FROM presence p JOIN members m ON m.id = p.member_id LEFT JOIN nodes n ON n.id = p.node WHERE m.team_id = ? AND p.driver IS NOT NULL AND ${LIVE_PRESENCE_SQL}`)
-    .all(teamId, l, r);
+  const rows = await db.all<{ driver: string }>(
+    `SELECT DISTINCT p.driver AS driver FROM presence p JOIN members m ON m.id = p.member_id LEFT JOIN nodes n ON n.id = p.node WHERE m.team_id = ? AND p.driver IS NOT NULL AND ${LIVE_PRESENCE_SQL}`,
+    [teamId, l, r],
+  );
   return new Set(rows.map((r) => r.driver));
 }
 
 /** Roster presence summary for a team. A member is online if any fresh presence; else offline. */
-export function listPresence(db: Database, teamId: string, timeoutMs: number): PresenceSummary[] {
+export async function listPresence(
+  db: Driver,
+  teamId: string,
+  timeoutMs: number,
+): Promise<PresenceSummary[]> {
   const [l, r] = liveCutoffs(timeoutMs);
-  const members = db
-    .prepare<
-      [string],
-      MemberRow
-    >('SELECT * FROM members WHERE team_id = ? AND left_at IS NULL AND observer = 0 ORDER BY created_at')
-    .all(teamId);
-  return members.map((member) => {
-    const presences = db
-      .prepare<
-        [string, number, number],
-        PresenceRow & { node_label: string | null }
-      >(`SELECT p.*, n.label AS node_label FROM presence p LEFT JOIN nodes n ON n.id = p.node WHERE p.member_id = ? AND ${LIVE_PRESENCE_SQL} ORDER BY p.last_seen_at DESC`)
-      .all(member.id, l, r);
-    const status: PresenceStatus =
-      presences.length === 0
-        ? 'offline'
-        : presences.some((p) => p.status === 'online')
-          ? 'online'
-          : 'away';
-    return {
-      member,
-      status,
-      presences: presences.map((p) => ({
-        surface: p.surface as Surface,
-        status: p.status,
-        last_seen_at: p.last_seen_at,
-        provenance: (p.provenance as Provenance | null) ?? null,
-        workspace: p.workspace ?? null,
-        driver: p.driver ?? null,
-        model: p.model ?? null,
-        // The tier rides only beside a model, and only when it is a tier this wire knows: a row
-        // holding a value no client of ours ever wrote is read as "unknown", not passed through.
-        model_source: p.model && isWireAttestationSource(p.model_source) ? p.model_source : null,
-        build: p.build ?? null,
-        epoch: p.epoch ?? null,
-        guidance_epoch: p.guidance_epoch ?? null,
-        wake_lease: p.wake_lease ?? null,
-        attached_at: p.created_at,
-        node: p.node ?? null,
-        node_label: p.node_label ?? null,
-      })),
-    };
-  });
+  const members = await db.all<MemberRow>(
+    'SELECT * FROM members WHERE team_id = ? AND left_at IS NULL AND observer = 0 ORDER BY created_at',
+    [teamId],
+  );
+  return Promise.all(
+    members.map(async (member) => {
+      const presences = await db.all<PresenceRow & { node_label: string | null }>(
+        `SELECT p.*, n.label AS node_label FROM presence p LEFT JOIN nodes n ON n.id = p.node WHERE p.member_id = ? AND ${LIVE_PRESENCE_SQL} ORDER BY p.last_seen_at DESC`,
+        [member.id, l, r],
+      );
+      const status: PresenceStatus =
+        presences.length === 0
+          ? 'offline'
+          : presences.some((p) => p.status === 'online')
+            ? 'online'
+            : 'away';
+      return {
+        member,
+        status,
+        presences: presences.map((p) => ({
+          surface: p.surface as Surface,
+          status: p.status,
+          last_seen_at: p.last_seen_at,
+          provenance: (p.provenance as Provenance | null) ?? null,
+          workspace: p.workspace ?? null,
+          driver: p.driver ?? null,
+          model: p.model ?? null,
+          // The tier rides only beside a model, and only when it is a tier this wire knows: a row
+          // holding a value no client of ours ever wrote is read as "unknown", not passed through.
+          model_source: p.model && isWireAttestationSource(p.model_source) ? p.model_source : null,
+          build: p.build ?? null,
+          epoch: p.epoch ?? null,
+          guidance_epoch: p.guidance_epoch ?? null,
+          wake_lease: p.wake_lease ?? null,
+          attached_at: p.created_at,
+          node: p.node ?? null,
+          node_label: p.node_label ?? null,
+        })),
+      };
+    }),
+  );
 }
 
 /**
@@ -536,13 +565,15 @@ export function listPresence(db: Database, teamId: string, timeoutMs: number): P
  * 066/105) treats it as occupied. This is the one *positive* read of held rows; every other query
  * filters them out. `now` is passed in so the caller aligns it with its other clocks.
  */
-export function listReclaimableMemberIds(db: Database, teamId: string, now: number): Set<string> {
-  const rows = db
-    .prepare<
-      [string, number],
-      { id: string }
-    >('SELECT DISTINCT p.member_id AS id FROM presence p JOIN members m ON m.id = p.member_id WHERE m.team_id = ? AND m.left_at IS NULL AND p.held_until IS NOT NULL AND p.held_until > ?')
-    .all(teamId, now);
+export async function listReclaimableMemberIds(
+  db: Driver,
+  teamId: string,
+  now: number,
+): Promise<Set<string>> {
+  const rows = await db.all<{ id: string }>(
+    'SELECT DISTINCT p.member_id AS id FROM presence p JOIN members m ON m.id = p.member_id WHERE m.team_id = ? AND m.left_at IS NULL AND p.held_until IS NOT NULL AND p.held_until > ?',
+    [teamId, now],
+  );
   return new Set(rows.map((r) => r.id));
 }
 
@@ -569,25 +600,23 @@ export function listReclaimableMemberIds(db: Database, teamId: string, now: numb
  * (2026-09-14 15:57:46Z, lane 01M2GBPX2S). No heartbeat can be heard inside a tick, so no row can
  * go quiet inside one either.
  */
-export function reapStale(
-  db: Database,
+export async function reapStale(
+  db: Driver,
   timeoutMs: number,
   watchedSince = 0,
   now = Date.now(),
-): PresenceRow[] {
+): Promise<PresenceRow[]> {
   if (now - watchedSince < timeoutMs) return [];
   const cutoff = now - timeoutMs;
-  return db.transaction(() => {
+  return db.tx(async (t) => {
     // The heartbeat cutoff is a LOCAL rule: only this machine's sockets and ambient touches animate
     // a local row, so only a local row can go quiet by it.
-    const stale = db
-      .prepare<
-        [number, number],
-        PresenceRow
-      >('SELECT * FROM presence WHERE node IS NULL AND (last_seen_at <= ? OR (held_until IS NOT NULL AND held_until <= ?))')
-      .all(cutoff, now);
-    detachLocalRows(
-      db,
+    const stale = await t.all<PresenceRow>(
+      'SELECT * FROM presence WHERE node IS NULL AND (last_seen_at <= ? OR (held_until IS NOT NULL AND held_until <= ?))',
+      [cutoff, now],
+    );
+    await detachLocalRows(
+      t,
       'last_seen_at <= ? OR (held_until IS NOT NULL AND held_until <= ?)',
       [cutoff, now],
       'reaped',
@@ -596,17 +625,18 @@ export function reapStale(
     // session and must not say it did (spec §1). The origin's own `detached`, if it ever arrives,
     // deletes nothing and advances the cursor.
     const remoteCutoff = now - REMOTE_PRESENCE_TTL_MS;
-    db.prepare(
+    await t.run(
       `DELETE FROM presence WHERE node IS NOT NULL AND id IN (
          SELECT p.id FROM presence p LEFT JOIN nodes n ON n.id = p.node
           WHERE p.node IS NOT NULL AND (n.last_seen_at IS NULL OR n.last_seen_at <= ?))`,
-    ).run(remoteCutoff);
+      [remoteCutoff],
+    );
     return stale;
-  })();
+  });
 }
 
-export function presenceById(db: Database, id: string): PresenceRow | undefined {
-  return db.prepare<[string], PresenceRow>('SELECT * FROM presence WHERE id = ?').get(id);
+export async function presenceById(db: Driver, id: string): Promise<PresenceRow | undefined> {
+  return await db.get<PresenceRow>('SELECT * FROM presence WHERE id = ?', [id]);
 }
 
 /**
@@ -615,13 +645,13 @@ export function presenceById(db: Database, id: string): PresenceRow | undefined 
  * previous value when it actually changed (the caller audits `occupancy.model_attested` with
  * old → new), undefined when the row is missing or the value is unchanged (no audit noise).
  */
-export function reattestModel(
-  db: Database,
+export async function reattestModel(
+  db: Driver,
   presenceId: string,
   model: string | null,
   modelSource?: string | null,
-): { previous: string | null } | undefined {
-  const row = presenceById(db, presenceId);
+): Promise<{ previous: string | null } | undefined> {
+  const row = await presenceById(db, presenceId);
   if (!row) return undefined;
   const next = model ?? null;
   // The tier describes the id, so it travels with it. Three cases for `modelSource`:
@@ -643,12 +673,12 @@ export function reattestModel(
   // Compare BOTH: a heal that only corrects the tier (same id, observation now backing what was a
   // declaration) is a real change and must be written, or the stamp keeps under-reporting itself.
   if ((row.model ?? null) === next && (row.model_source ?? null) === nextSource) return undefined;
-  db.prepare('UPDATE presence SET model = ?, model_source = ? WHERE id = ?').run(
+  await db.run('UPDATE presence SET model = ?, model_source = ? WHERE id = ?', [
     next,
     nextSource,
     presenceId,
-  );
-  emitReattested(db, presenceId);
+  ]);
+  await emitReattested(db, presenceId);
   return { previous: row.model ?? null };
 }
 
@@ -662,17 +692,17 @@ export function reattestModel(
  * No audit row by design (ADR 417 §Observability): a guidance epoch is occupancy state, not an
  * event. The `presence.reattested` emit is for the replication fold and live watchers, not a log.
  */
-export function reattestGuidanceEpoch(
-  db: Database,
+export async function reattestGuidanceEpoch(
+  db: Driver,
   presenceId: string,
   guidanceEpoch: number | null | undefined,
-): { previous: number | null } | undefined {
+): Promise<{ previous: number | null } | undefined> {
   if (guidanceEpoch === undefined || guidanceEpoch === null) return undefined;
-  const row = presenceById(db, presenceId);
+  const row = await presenceById(db, presenceId);
   if (!row) return undefined;
   if ((row.guidance_epoch ?? null) === guidanceEpoch) return undefined;
-  db.prepare('UPDATE presence SET guidance_epoch = ? WHERE id = ?').run(guidanceEpoch, presenceId);
-  emitReattested(db, presenceId);
+  await db.run('UPDATE presence SET guidance_epoch = ? WHERE id = ?', [guidanceEpoch, presenceId]);
+  await emitReattested(db, presenceId);
   return { previous: row.guidance_epoch ?? null };
 }
 
@@ -681,12 +711,12 @@ export function reattestGuidanceEpoch(
  * 2026-09-02). Carries the whole attestation triple so a peer's fold needs no prior state beyond
  * the row itself. Callers return early when nothing changed, so no duplicate rows.
  */
-function emitReattested(db: Database, presenceId: string): void {
-  const after = presenceById(db, presenceId);
+async function emitReattested(db: Driver, presenceId: string): Promise<void> {
+  const after = await presenceById(db, presenceId);
   if (!after || after.node !== null) return;
-  const seat = seatOf(db, after.member_id);
+  const seat = await seatOf(db, after.member_id);
   if (!seat) return;
-  appendReplicatedEvent(db, seat.team_id, {
+  await appendReplicatedEvent(db, seat.team_id, {
     actor: seat.name,
     action: 'presence.reattested',
     target: seat.name,
@@ -707,16 +737,16 @@ function emitReattested(db: Database, presenceId: string): void {
  * the previous value when it actually changed; undefined when the row is missing or unchanged
  * (no write). No audit row — `presence.surface` is the instrument (ADR 275 §4).
  */
-export function reattestSurface(
-  db: Database,
+export async function reattestSurface(
+  db: Driver,
   presenceId: string,
   surface: Surface,
-): { previous: Surface } | undefined {
-  const row = presenceById(db, presenceId);
+): Promise<{ previous: Surface } | undefined> {
+  const row = await presenceById(db, presenceId);
   if (!row) return undefined;
   if (row.surface === surface) return undefined;
-  db.prepare('UPDATE presence SET surface = ? WHERE id = ?').run(surface, presenceId);
-  emitReattested(db, presenceId);
+  await db.run('UPDATE presence SET surface = ? WHERE id = ?', [surface, presenceId]);
+  await emitReattested(db, presenceId);
   return { previous: row.surface as Surface };
 }
 
@@ -727,12 +757,12 @@ export function reattestSurface(
  * (the stateless HTTP message paths, which hold no live occupancy) it falls back to the member's
  * freshest presence that attests a model. Null when nothing attests (`unknown`).
  */
-export function currentAttestedModel(
-  db: Database,
+export async function currentAttestedModel(
+  db: Driver,
   memberId: string,
   presenceId?: string,
-): string | null {
-  return currentAttestation(db, memberId, presenceId).model;
+): Promise<string | null> {
+  return (await currentAttestation(db, memberId, presenceId)).model;
 }
 
 /**
@@ -750,34 +780,28 @@ export function currentAttestedModel(
  * 01M330CCQE). Null when no presence of this seat ever carried one. Newest presence first, so a
  * fresh wake's row wins over an older live session's.
  */
-export function currentBuild(db: Database, memberId: string): string | null {
-  const row = db
-    .prepare<
-      [string],
-      { build: string | null }
-    >('SELECT build FROM presence WHERE member_id = ? AND build IS NOT NULL ORDER BY last_seen_at DESC, id DESC LIMIT 1')
-    .get(memberId);
+export async function currentBuild(db: Driver, memberId: string): Promise<string | null> {
+  const row = await db.get<{ build: string | null }>(
+    'SELECT build FROM presence WHERE member_id = ? AND build IS NOT NULL ORDER BY last_seen_at DESC, id DESC LIMIT 1',
+    [memberId],
+  );
   return row?.build ?? null;
 }
 
-export function currentAttestation(
-  db: Database,
+export async function currentAttestation(
+  db: Driver,
   memberId: string,
   presenceId?: string,
-): { model: string | null; source: string | null } {
+): Promise<{ model: string | null; source: string | null }> {
   const row = presenceId
-    ? db
-        .prepare<
-          [string, string],
-          { model: string | null; model_source: string | null }
-        >('SELECT model, model_source FROM presence WHERE id = ? AND member_id = ?')
-        .get(presenceId, memberId)
-    : db
-        .prepare<
-          [string],
-          { model: string | null; model_source: string | null }
-        >('SELECT model, model_source FROM presence WHERE member_id = ? AND model IS NOT NULL ORDER BY last_seen_at DESC, id DESC LIMIT 1')
-        .get(memberId);
+    ? await db.get<{ model: string | null; model_source: string | null }>(
+        'SELECT model, model_source FROM presence WHERE id = ? AND member_id = ?',
+        [presenceId, memberId],
+      )
+    : await db.get<{ model: string | null; model_source: string | null }>(
+        'SELECT model, model_source FROM presence WHERE member_id = ? AND model IS NOT NULL ORDER BY last_seen_at DESC, id DESC LIMIT 1',
+        [memberId],
+      );
   const model = row?.model ?? null;
   return { model, source: model ? (row?.model_source ?? null) : null };
 }

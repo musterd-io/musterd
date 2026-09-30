@@ -8,7 +8,7 @@ import {
   serializeTeam,
   type TeamFile,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { listMembers } from '../store/members.js';
 import { roleDefaultsMap } from '../store/roles.js';
 import { parseWorkingHours, type MemberRow, type TeamRow } from '../store/rows.js';
@@ -132,12 +132,12 @@ export interface ProjectedTeam {
 }
 
 /** Project a live team into file structures (no I/O). Returns null if the team is absent. */
-export function projectTeamToFiles(db: Database, slug: string): ProjectedTeam | null {
-  const t = getTeamBySlug(db, slug);
+export async function projectTeamToFiles(db: Driver, slug: string): Promise<ProjectedTeam | null> {
+  const t = await getTeamBySlug(db, slug);
   if (!t) return null;
-  const roleDefaults = roleDefaultsMap(db, t.id);
+  const roleDefaults = await roleDefaultsMap(db, t.id);
   const unrepresentable: string[] = [];
-  const seats = listMembers(db, t.id).map((m) => {
+  const seats = (await listMembers(db, t.id)).map((m) => {
     const projected = memberRowToSeat(m, roleDefaults.get(m.role) ?? {});
     if (projected.unrepresentable) unrepresentable.push(`${m.name}: ${projected.unrepresentable}`);
     return { name: m.name, seat: projected.seat };

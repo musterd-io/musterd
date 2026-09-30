@@ -1,25 +1,20 @@
 import { makeEnvelope } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import type { Ctx } from '../context.js';
-import { openDb } from '../db/open.js';
+import type { Driver } from '../db/driver.js';
+import { withDrivers } from '../db/testing.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { addMember } from './members.js';
+import type { TeamRow } from './rows.js';
 import { ftsQuery, rebuildInsightsFts, searchInsights } from './teamMemory.js';
 import { createTeam } from './teams.js';
 
 const ID = '01M0XINSIGHTTEST00000000000A';
 
 /** Persist an insight through the real validate→persist→deliver path so triggers fire. */
-function saveInsight(
-  db: Database,
-  ctx: Ctx,
-  team: ReturnType<typeof createTeam>,
-  headline: string,
-  body: string,
-) {
-  const { row: sender } = addMember(db, team, { name: 'ghost', kind: 'agent', role: '' });
-  routeEnvelope(
+async function saveInsight(db: Driver, ctx: Ctx, team: TeamRow, headline: string, body: string) {
+  const { row: sender } = await addMember(db, team, { name: 'ghost', kind: 'agent', role: '' });
+  await routeEnvelope(
     ctx,
     team,
     sender,
@@ -35,20 +30,23 @@ function saveInsight(
   );
 }
 
-function stubCtx(db: Database): Ctx {
+function stubCtx(db: Driver): Ctx {
   return {
     db,
+    traceDb: db,
     rosterRoots: [],
     config: {} as Ctx['config'],
     hub: { deliver: () => false, broadcastFirehose: () => 0 } as unknown as Ctx['hub'],
   };
 }
 
-describe('team memory fold (ADR 327)', () => {
-  it('finds an insight saved through the real route path', () => {
-    const db = openDb(':memory:');
-    const team = createTeam(db, { slug: 'dawn' });
-    saveInsight(
+// The one module with a dialect branch above the Driver (ADR 479 Consequences: FTS5 `MATCH`
+// locally, the tsvector table in Postgres) — so this file runs on both drivers by default.
+withDrivers('team memory fold (ADR 327)', (open) => {
+  it('finds an insight saved through the real route path', async () => {
+    const db = await open();
+    const team = await createTeam(db, { slug: 'dawn' });
+    await saveInsight(
       db,
       stubCtx(db),
       team,
@@ -56,30 +54,38 @@ describe('team memory fold (ADR 327)', () => {
       'the daemon crashloops from node 20',
     );
 
-    const hits = searchInsights(db, team.id, 'crashloops');
+    const hits = await searchInsights(db, team.id, 'crashloops');
     expect(hits).toHaveLength(1);
     expect(hits[0]).toMatchObject({
       from: 'ghost',
       headline: 'service install needs node >= 22',
       tags: ['daemon'],
     });
+    await db.close();
   });
 
-  it('is team-scoped', () => {
-    const db = openDb(':memory:');
-    const dawn = createTeam(db, { slug: 'dawn' });
-    const dusk = createTeam(db, { slug: 'dusk' });
+  it('is team-scoped', async () => {
+    const db = await open();
+    const dawn = await createTeam(db, { slug: 'dawn' });
+    const dusk = await createTeam(db, { slug: 'dusk' });
     const ctx = stubCtx(db);
-    saveInsight(db, ctx, dawn, 'wake leases are host-local', 'never replicated across machines');
+    await saveInsight(
+      db,
+      ctx,
+      dawn,
+      'wake leases are host-local',
+      'never replicated across machines',
+    );
 
-    expect(searchInsights(db, dusk.id, 'replicated')).toHaveLength(0);
-    expect(searchInsights(db, dawn.id, 'replicated')).toHaveLength(1);
+    expect(await searchInsights(db, dusk.id, 'replicated')).toHaveLength(0);
+    expect(await searchInsights(db, dawn.id, 'replicated')).toHaveLength(1);
+    await db.close();
   });
 
-  it('rebuilds the fold from the log alone (the cache property)', () => {
-    const db = openDb(':memory:');
-    const team = createTeam(db, { slug: 'dawn' });
-    saveInsight(
+  it('rebuilds the fold from the log alone (the cache property)', async () => {
+    const db = await open();
+    const team = await createTeam(db, { slug: 'dawn' });
+    await saveInsight(
       db,
       stubCtx(db),
       team,
@@ -87,13 +93,16 @@ describe('team memory fold (ADR 327)', () => {
       'headless chrome processes outlive runs',
     );
 
-    db.exec('DELETE FROM insights_fts');
-    expect(searchInsights(db, team.id, 'chrome')).toHaveLength(0);
+    await db.exec('DELETE FROM insights_fts');
+    expect(await searchInsights(db, team.id, 'chrome')).toHaveLength(0);
 
-    expect(rebuildInsightsFts(db)).toBe(1);
-    expect(searchInsights(db, team.id, 'chrome')).toHaveLength(1);
+    expect(await rebuildInsightsFts(db)).toBe(1);
+    expect(await searchInsights(db, team.id, 'chrome')).toHaveLength(1);
+    await db.close();
   });
+});
 
+describe('FTS5 query text (SQLite only)', () => {
   it('sanitizes user query text into quoted FTS terms', () => {
     expect(ftsQuery('  daemon   "install" node22 ')).toBe('"daemon" """install""" "node22"');
     expect(ftsQuery('')).toBe('');

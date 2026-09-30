@@ -6,7 +6,8 @@ import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { readNodeState, saveNodeEnrollment } from '../node/state.js';
 import { addMember, mintCredential } from '../store/members.js';
@@ -51,13 +52,13 @@ async function post(base: string, path: string, body?: unknown, auth?: string) {
 }
 
 /** Send on the joiner, the way a live daemon mints its local node row and stamps an origin_seq. */
-function send(server: RunningServer, id: string, body = 'hi') {
-  const team = getTeamBySlug(server.db, 'bravo')!;
+async function send(server: RunningServer, id: string, body = 'hi') {
+  const team = (await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!;
   const member = server.db
     .prepare<[string], { id: string }>('SELECT id FROM members WHERE team_id = ? LIMIT 1')
     .get(team.id)!;
-  insertMessage(
-    server.db,
+  await insertMessage(
+    sqliteDriver(server.db),
     team.id,
     member.id,
     null,
@@ -138,25 +139,30 @@ async function captureLogs(fn: () => Promise<unknown>): Promise<Record<string, u
   return lines;
 }
 
-const joinerTeam = () => getTeamBySlug(joiner.db, 'bravo')!;
+const joinerTeam = async () => (await getTeamBySlug(sqliteDriver(joiner.db), 'bravo'))!;
 const stagedOnHub = () => hub.db.prepare('SELECT COUNT(*) AS n FROM sync_log').get();
-const cursor = () =>
+const cursor = async () =>
   joiner.db
     .prepare<
       [string],
       { last_seq: number }
     >('SELECT last_seq FROM sync_push_cursor WHERE team_id = ?')
-    .get(joinerTeam().id)?.last_seq ?? 0;
+    .get((await joinerTeam()).id)?.last_seq ?? 0;
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'musterd-push-'));
   process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
 
-  hub = createServer({ db: openDb(':memory:'), port: 0 });
+  hub = createServer({ db: openTestDb(':memory:'), port: 0 });
   hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-  joiner = createServer({ db: openDb(':memory:'), port: 0 });
+  joiner = createServer({ db: openTestDb(':memory:'), port: 0 });
   joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
-  joinerCtx = { db: joiner.db, hub: new Hub(), config: resolveConfig(), rosterRoots: [] };
+  joinerCtx = {
+    db: sqliteDriver(joiner.db),
+    hub: new Hub(),
+    config: resolveConfig(),
+    rosterRoots: [],
+  };
 
   // The same team on both daemons — roster identity replicates via git (ADR 058), so this is what
   // two machines hosting one team actually look like.
@@ -181,14 +187,14 @@ afterEach(async () => {
 
 describe('the push loop', () => {
   it("pushes this node's unpushed messages and advances the cursor", async () => {
-    send(joiner, 'm-1');
-    send(joiner, 'm-2');
+    await send(joiner, 'm-1');
+    await send(joiner, 'm-2');
     await enrollJoiner();
 
-    expect(await pushTeam(joinerCtx, joinerTeam())).toBe(2);
+    expect(await pushTeam(joinerCtx, await joinerTeam())).toBe(2);
 
     expect(stagedOnHub()).toEqual({ n: 2 });
-    expect(cursor()).toBe(2);
+    expect(await cursor()).toBe(2);
     // The wire carries the seat NAME, never `from_member`: a daemon-private id would dangle on the
     // receiver, or resolve to a DIFFERENT seat holding that id there (ADR 325).
     const staged = hub.db
@@ -199,7 +205,7 @@ describe('the push loop', () => {
   });
 
   it('advances the cursor only past an ACKED batch', async () => {
-    send(joiner, 'm-1');
+    await send(joiner, 'm-1');
     await enrollJoiner();
     // Repoint the enrollment at a port nothing is listening on: the hub is unreachable, which is
     // an ordinary Tuesday for a laptop, not a fault.
@@ -210,35 +216,35 @@ describe('the push loop', () => {
     // expected (`sync_push_failed`, retry next tick), which is the shape seeds/ingest.ts uses. A
     // pass that returned 0 here would make a permanently misconfigured hub_url indistinguishable
     // from having nothing to send.
-    await expect(pushTeam(joinerCtx, joinerTeam())).rejects.toThrow();
+    await expect(pushTeam(joinerCtx, await joinerTeam())).rejects.toThrow();
 
     // And the important half: a cursor that moved on SEND rather than on ACK would make this
     // permanent silent loss. It did not move, so the next tick resends.
-    expect(cursor()).toBe(0);
+    expect(await cursor()).toBe(0);
     expect(stagedOnHub()).toEqual({ n: 0 });
   });
 
   it('re-sends after a lost ack without duplicating on the hub', async () => {
-    send(joiner, 'm-1');
+    await send(joiner, 'm-1');
     await enrollJoiner();
-    await pushTeam(joinerCtx, joinerTeam());
+    await pushTeam(joinerCtx, await joinerTeam());
     expect(stagedOnHub()).toEqual({ n: 1 });
 
     // The ack was lost in flight: the hub holds the event, the pusher does not know it. Rewinding
     // the cursor is exactly what that looks like on the next tick.
     joiner.db.prepare('UPDATE sync_push_cursor SET last_seq = 0').run();
-    const accepted = await pushTeam(joinerCtx, joinerTeam());
+    const accepted = await pushTeam(joinerCtx, await joinerTeam());
 
     // Idempotence end to end: the hub acks without staging a second copy, and the cursor recovers.
     expect(accepted).toBe(0);
     expect(stagedOnHub()).toEqual({ n: 1 });
-    expect(cursor()).toBe(1);
+    expect(await cursor()).toBe(1);
   });
 
   it('refuses a resume point ahead of anything this node has ever minted', async () => {
-    send(joiner, 'm-1');
-    send(joiner, 'm-2');
-    send(joiner, 'm-3');
+    await send(joiner, 'm-1');
+    await send(joiner, 'm-2');
+    await send(joiner, 'm-3');
     await enrollJoiner();
 
     // A hub answering with a seq we never minted is asserting something impossible, not correcting
@@ -252,16 +258,16 @@ describe('the push loop', () => {
     });
     saveNodeEnrollment({ team: 'bravo', ...enrolled, hub_url: await stub.url });
 
-    await expect(pushTeam(joinerCtx, joinerTeam())).rejects.toThrow(/impossible|ahead/i);
+    await expect(pushTeam(joinerCtx, await joinerTeam())).rejects.toThrow(/impossible|ahead/i);
 
     // The cursor did not move, so the three messages are still queued for a hub that tells the truth.
-    expect(cursor()).toBe(0);
+    expect(await cursor()).toBe(0);
     await stub.close();
   });
 
   it('accepts a resume point at or below this node\u2019s head', async () => {
-    send(joiner, 'm-1');
-    send(joiner, 'm-2');
+    await send(joiner, 'm-1');
+    await send(joiner, 'm-2');
     await enrollJoiner();
 
     // head + 1 EXACTLY — the boundary, and the case a too-tight clamp would break: the hub holds
@@ -274,13 +280,13 @@ describe('the push loop', () => {
     });
     saveNodeEnrollment({ team: 'bravo', ...enrolled, hub_url: await stub.url });
 
-    expect(await pushTeam(joinerCtx, joinerTeam())).toBe(0);
-    expect(cursor()).toBe(2);
+    expect(await pushTeam(joinerCtx, await joinerTeam())).toBe(0);
+    expect(await cursor()).toBe(2);
     await stub.close();
   });
 
   it('reports a terminal refusal at error rather than retrying it as if offline', async () => {
-    send(joiner, 'm-1');
+    await send(joiner, 'm-1');
     await enrollJoiner();
     // A 422 is a batch the hub will never accept. The loop's every other answer is "retry next
     // tick", which here means resending a poison batch forever behind a line that reads as offline.
@@ -292,14 +298,14 @@ describe('the push loop', () => {
     const enrolled = readNodeState().nodes['bravo']!;
     saveNodeEnrollment({ team: 'bravo', ...enrolled, hub_url: await stub.url });
 
-    await expect(pushTeam(joinerCtx, joinerTeam())).rejects.toThrow(/permanently refused/i);
-    expect(cursor()).toBe(0);
+    await expect(pushTeam(joinerCtx, await joinerTeam())).rejects.toThrow(/permanently refused/i);
+    expect(await cursor()).toBe(0);
     await stub.close();
   });
 
   it('refuses a resume point just one past the boundary, not only an absurd one', async () => {
-    send(joiner, 'm-1');
-    send(joiner, 'm-2');
+    await send(joiner, 'm-1');
+    await send(joiner, 'm-2');
     await enrollJoiner();
 
     // head is 2, so head + 1 = 3 is legitimate and head + 2 = 4 is not. Tested at 4 rather than at
@@ -312,14 +318,14 @@ describe('the push loop', () => {
     });
     saveNodeEnrollment({ team: 'bravo', ...enrolled, hub_url: await stub.url });
 
-    await expect(pushTeam(joinerCtx, joinerTeam())).rejects.toThrow(/impossible|ahead/i);
-    expect(cursor()).toBe(0);
+    await expect(pushTeam(joinerCtx, await joinerTeam())).rejects.toThrow(/impossible|ahead/i);
+    expect(await cursor()).toBe(0);
     await stub.close();
   });
 
   it('distinguishes an impossible resume point from being offline', async () => {
-    send(joiner, 'm-1');
-    send(joiner, 'm-2');
+    await send(joiner, 'm-1');
+    await send(joiner, 'm-2');
     await enrollJoiner();
 
     // The refusal above is right and, until this line existed, invisible: startSyncPush catches it
@@ -333,7 +339,7 @@ describe('the push loop', () => {
     });
     saveNodeEnrollment({ team: 'bravo', ...enrolled, hub_url: await stub.url });
 
-    const lines = await captureLogs(() => pushTeam(joinerCtx, joinerTeam()));
+    const lines = await captureLogs(async () => await pushTeam(joinerCtx, await joinerTeam()));
 
     // Both numbers, because either alone leaves the reader unable to tell which side is wrong.
     expect(lines).toContainEqual(
@@ -344,12 +350,12 @@ describe('the push loop', () => {
         head: 2,
       }),
     );
-    expect(cursor()).toBe(0);
+    expect(await cursor()).toBe(0);
     await stub.close();
   });
 
   it('distinguishes a 409 with no usable resume point at all from being offline', async () => {
-    send(joiner, 'm-1');
+    await send(joiner, 'm-1');
     await enrollJoiner();
 
     // Same throw-into-the-offline-line defect on the other 409 exit. `expected_seq` is present and
@@ -362,7 +368,7 @@ describe('the push loop', () => {
     });
     saveNodeEnrollment({ team: 'bravo', ...enrolled, hub_url: await stub.url });
 
-    const lines = await captureLogs(() => pushTeam(joinerCtx, joinerTeam()));
+    const lines = await captureLogs(async () => await pushTeam(joinerCtx, await joinerTeam()));
 
     expect(lines).toContainEqual(
       expect.objectContaining({
@@ -372,17 +378,17 @@ describe('the push loop', () => {
         head: 1,
       }),
     );
-    expect(cursor()).toBe(0);
+    expect(await cursor()).toBe(0);
     await stub.close();
   });
 
   it('does nothing for a team with no enrollment', async () => {
-    send(joiner, 'm-1');
+    await send(joiner, 'm-1');
 
     // The single-machine case, which is every musterd install today: no node.json entry, so no
     // outbound call at all. Not an error — most teams are never federated.
-    expect(await pushTeam(joinerCtx, joinerTeam())).toBe(0);
-    expect(cursor()).toBe(0);
+    expect(await pushTeam(joinerCtx, await joinerTeam())).toBe(0);
+    expect(await cursor()).toBe(0);
     expect(stagedOnHub()).toEqual({ n: 0 });
   });
 
@@ -390,7 +396,7 @@ describe('the push loop', () => {
     await post(joinerBase, '/teams', { slug: 'quiet', creator: { name: 'nick', kind: 'human' } });
     // Enrolled, but with no local row — node.json is keyed by SLUG while the db keys by team_id, so
     // a renamed team, a restored database, or a hand-edited file all reach exactly this state.
-    send(joiner, 'm-1');
+    await send(joiner, 'm-1');
     await enrollJoiner();
     const enrolled = readNodeState().nodes['bravo']!;
     saveNodeEnrollment({ team: 'quiet', ...enrolled });
@@ -398,7 +404,7 @@ describe('the push loop', () => {
     // No local_node row: this daemon has stamped no origin, so it has nothing of its own to push
     // and must not mint an identity just to discover that. Reading `local_node` is what keeps that
     // true — the minting path (insertMessage's localNodeForTeam) would create a row and a marker.
-    const quiet = getTeamBySlug(joiner.db, 'quiet')!;
+    const quiet = (await getTeamBySlug(sqliteDriver(joiner.db), 'quiet'))!;
     expect(await pushTeam(joinerCtx, quiet)).toBe(0);
 
     const rows = (t: string) =>
@@ -410,11 +416,11 @@ describe('the push loop', () => {
   });
 
   it('pushes only this node’s own events, never a peer’s', async () => {
-    send(joiner, 'm-1');
+    await send(joiner, 'm-1');
     await enrollJoiner();
     // A foreign origin sitting in the local log — what 3b-ii's fold will one day put there. This
     // node may push only its own events, so the batch must not sweep it up.
-    const team = joinerTeam();
+    const team = await joinerTeam();
     joiner.db
       .prepare('INSERT INTO nodes (id, team_id, label, next_seq) VALUES (?, ?, ?, 1)')
       .run('node-peer', team.id, 'peer');
@@ -438,7 +444,12 @@ describe('the push loop', () => {
 });
 
 describe('the hub pushes to itself (3b-ii loopback)', () => {
-  const hubCtx = () => ({ db: hub.db, hub: new Hub(), config: resolveConfig(), rosterRoots: [] });
+  const hubCtx = () => ({
+    db: sqliteDriver(hub.db),
+    hub: new Hub(),
+    config: resolveConfig(),
+    rosterRoots: [],
+  });
   const hubStaged = () =>
     hub.db
       .prepare<
@@ -448,18 +459,20 @@ describe('the hub pushes to itself (3b-ii loopback)', () => {
       .all();
 
   it('stages nothing while the team has no enrolled joiner (single-machine install)', async () => {
-    send(hub, 'h-1');
-    expect(await pushTeam(hubCtx(), getTeamBySlug(hub.db, 'bravo')!)).toBe(0);
+    await send(hub, 'h-1');
+    expect(
+      await pushTeam(hubCtx(), await (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!),
+    ).toBe(0);
     expect(hubStaged()).toEqual([]);
   });
 
   it('stages its own history through ingestBatch once a joiner is enrolled, dense hub_seq', async () => {
-    send(hub, 'h-1');
-    send(hub, 'h-2');
+    await send(hub, 'h-1');
+    await send(hub, 'h-2');
     // The joiner needs its own node row before it can enroll (minted on its first logged act).
-    send(joiner, 'j-0');
+    await send(joiner, 'j-0');
     await enrollJoiner();
-    const team = getTeamBySlug(hub.db, 'bravo')!;
+    const team = (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
     expect(await pushTeam(hubCtx(), team)).toBe(2);
     const local = hub.db
       .prepare<[string], { node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?')
@@ -475,25 +488,30 @@ describe('the hub pushes to itself (3b-ii loopback)', () => {
   });
 });
 
-describe("push-level residence — every kind, not only presence (ADR 355 §5's named next increment, 2026-09-02)", () => {
-  const hubTeam = () => getTeamBySlug(hub.db, 'bravo')!;
-  const memberId = (server: RunningServer, name: string) =>
+describe("push-level residence — every kind, not only presence (ADR 355 §5's named next increment, 2026-09-02)", async () => {
+  const hubTeam = async () => (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
+  const memberId = async (server: RunningServer, name: string) =>
     server.db
       .prepare<
         [string, string],
         { id: string }
       >('SELECT id FROM members WHERE team_id = ? AND name = ?')
-      .get(getTeamBySlug(server.db, 'bravo')!.id, name)!.id;
+      .get((await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!.id, name)!.id;
 
   it('a MESSAGE from a seat bound to another node is refused whole; the cursor does not move', async () => {
-    send(joiner, 'j-0');
+    await send(joiner, 'j-0');
     await enrollJoiner();
-    const hubNode = localNodeForTeam(hub.db, hubTeam().id);
-    bindSeatToNode(hub.db, hubTeam().id, memberId(hub, 'nick'), hubNode.id);
-    const cursorBefore = cursor();
-    const lines = await captureLogs(() => pushTeam(joinerCtx, joinerTeam()));
-    await expect(pushTeam(joinerCtx, joinerTeam())).rejects.toThrow(/bound_elsewhere|403/);
-    expect(cursor()).toBe(cursorBefore);
+    const hubNode = await localNodeForTeam(sqliteDriver(hub.db), (await hubTeam()).id);
+    await bindSeatToNode(
+      sqliteDriver(hub.db),
+      (await hubTeam()).id,
+      await memberId(hub, 'nick'),
+      hubNode.id,
+    );
+    const cursorBefore = await cursor();
+    const lines = await captureLogs(async () => await pushTeam(joinerCtx, await joinerTeam()));
+    await expect(pushTeam(joinerCtx, await joinerTeam())).rejects.toThrow(/bound_elsewhere|403/);
+    expect(await cursor()).toBe(cursorBefore);
     expect(stagedOnHub()).toEqual({ n: 0 });
     expect(
       lines.some((l) => l['msg'] === 'sync_push_refused_residence' && l['seat'] === 'nick'),
@@ -501,47 +519,71 @@ describe("push-level residence — every kind, not only presence (ADR 355 §5's 
   });
 
   it('a LANE transition naming a seat bound elsewhere is refused, and the rollback binds nobody from the same batch', async () => {
-    send(joiner, 'j-0'); // nick, unbound anywhere
+    await send(joiner, 'j-0'); // nick, unbound anywhere
     await enrollJoiner();
-    const hanaOnJoiner = mintCredential(
-      joiner.db,
-      addMember(joiner.db, joinerTeam(), { name: 'hana', kind: 'human' }).row.id,
+    const hanaOnJoiner = (
+      await mintCredential(
+        sqliteDriver(joiner.db),
+        (
+          await addMember(sqliteDriver(joiner.db), await joinerTeam(), {
+            name: 'hana',
+            kind: 'human',
+          })
+        ).row.id,
+      )
     ).credential;
-    addMember(hub.db, hubTeam(), { name: 'hana', kind: 'human' });
-    const hubNode = localNodeForTeam(hub.db, hubTeam().id);
-    bindSeatToNode(hub.db, hubTeam().id, memberId(hub, 'hana'), hubNode.id);
+    await addMember(sqliteDriver(hub.db), await hubTeam(), { name: 'hana', kind: 'human' });
+    const hubNode = await localNodeForTeam(sqliteDriver(hub.db), (await hubTeam()).id);
+    await bindSeatToNode(
+      sqliteDriver(hub.db),
+      (await hubTeam()).id,
+      await memberId(hub, 'hana'),
+      hubNode.id,
+    );
     // hana opens a lane on the joiner: a lane.opened row with hana as its actor, behind nick's message.
     const opened = await post(joinerBase, '/teams/bravo/lanes', { title: 'x' }, hanaOnJoiner);
     expect(opened.status).toBe(201);
-    await expect(pushTeam(joinerCtx, joinerTeam())).rejects.toThrow(/bound_elsewhere|403/);
+    await expect(pushTeam(joinerCtx, await joinerTeam())).rejects.toThrow(/bound_elsewhere|403/);
     expect(stagedOnHub()).toEqual({ n: 0 });
     // The message before the refused lane row would have bound nick to the joiner; the batch rolled
     // back, so it did not.
-    expect(seatBinding(hub.db, memberId(hub, 'nick'))).toBeUndefined();
+    expect(await seatBinding(sqliteDriver(hub.db), await memberId(hub, 'nick'))).toBeUndefined();
   });
 
   it('a first message binds an unbound seat to the pusher, the way a first presence does', async () => {
-    send(joiner, 'j-0');
+    await send(joiner, 'j-0');
     await enrollJoiner();
-    await pushTeam(joinerCtx, joinerTeam());
+    await pushTeam(joinerCtx, await joinerTeam());
     const joinerNode = readNodeState().nodes['bravo']!.node_id;
-    expect(seatBinding(hub.db, memberId(hub, 'nick'))?.node_id).toBe(joinerNode);
+    expect((await seatBinding(sqliteDriver(hub.db), await memberId(hub, 'nick')))?.node_id).toBe(
+      joinerNode,
+    );
   });
 
   it('a service seat (ADR 232) is resident everywhere: its events are accepted from any node and bind nothing', async () => {
-    send(joiner, 'j-0');
+    await send(joiner, 'j-0');
     await enrollJoiner();
-    const svcOnJoiner = addMember(joiner.db, joinerTeam(), {
+    const svcOnJoiner = (
+      await addMember(sqliteDriver(joiner.db), await joinerTeam(), {
+        name: 'autorefresh',
+        kind: 'service',
+      })
+    ).row;
+    await addMember(sqliteDriver(hub.db), await hubTeam(), {
       name: 'autorefresh',
       kind: 'service',
-    }).row;
-    addMember(hub.db, hubTeam(), { name: 'autorefresh', kind: 'service' });
-    const hubNode = localNodeForTeam(hub.db, hubTeam().id);
+    });
+    const hubNode = await localNodeForTeam(sqliteDriver(hub.db), (await hubTeam()).id);
     // The hub's own autorefresh has spoken there first — an ordinary two-machine install.
-    bindSeatToNode(hub.db, hubTeam().id, memberId(hub, 'autorefresh'), hubNode.id);
-    insertMessage(
-      joiner.db,
-      joinerTeam().id,
+    await bindSeatToNode(
+      sqliteDriver(hub.db),
+      (await hubTeam()).id,
+      await memberId(hub, 'autorefresh'),
+      hubNode.id,
+    );
+    await insertMessage(
+      sqliteDriver(joiner.db),
+      (await joinerTeam()).id,
       svcOnJoiner.id,
       null,
       makeEnvelope({
@@ -554,43 +596,52 @@ describe("push-level residence — every kind, not only presence (ADR 355 §5's 
         ts: 1001,
       }),
     );
-    await expect(pushTeam(joinerCtx, joinerTeam())).resolves.toBe(2);
-    expect(seatBinding(hub.db, memberId(hub, 'autorefresh'))?.node_id).toBe(hubNode.id);
+    await expect(pushTeam(joinerCtx, await joinerTeam())).resolves.toBe(2);
+    expect(
+      (await seatBinding(sqliteDriver(hub.db), await memberId(hub, 'autorefresh')))?.node_id,
+    ).toBe(hubNode.id);
     expect(
       hub.db
         .prepare<
           [string],
           { n: number }
         >('SELECT COUNT(*) AS n FROM seat_nodes WHERE member_id = ?')
-        .get(memberId(hub, 'autorefresh')),
+        .get(await memberId(hub, 'autorefresh')),
     ).toEqual({ n: 1 });
   });
 });
 
-describe('a wedged push says so where the seat is (ADR 360 follow-on)', () => {
-  const hubTeam = () => getTeamBySlug(hub.db, 'bravo')!;
-  const memberId = (server: RunningServer, name: string) =>
+describe('a wedged push says so where the seat is (ADR 360 follow-on)', async () => {
+  const hubTeam = async () => (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
+  const memberId = async (server: RunningServer, name: string) =>
     server.db
       .prepare<
         [string, string],
         { id: string }
       >('SELECT id FROM members WHERE team_id = ? AND name = ?')
-      .get(getTeamBySlug(server.db, 'bravo')!.id, name)!.id;
+      .get((await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!.id, name)!.id;
   async function get(base: string, path: string, auth: string) {
     const response = await fetch(base + path, { headers: { authorization: `Bearer ${auth}` } });
     return { status: response.status, json: (await response.json()) as any };
   }
 
   it('the refusal persists on the cursor row, names the seat, the bound node and the kind, keeps its first-seen clock, and rides the roster and node list', async () => {
-    send(joiner, 'j-0');
+    await send(joiner, 'j-0');
     await enrollJoiner();
-    const hubNode = localNodeForTeam(hub.db, hubTeam().id);
-    bindSeatToNode(hub.db, hubTeam().id, memberId(hub, 'nick'), hubNode.id);
-    expect(readPushRefusal(joiner.db, joinerTeam().id)).toBeNull();
+    const hubNode = await localNodeForTeam(sqliteDriver(hub.db), (await hubTeam()).id);
+    await bindSeatToNode(
+      sqliteDriver(hub.db),
+      (await hubTeam()).id,
+      await memberId(hub, 'nick'),
+      hubNode.id,
+    );
+    expect(await readPushRefusal(sqliteDriver(joiner.db), (await joinerTeam()).id)).toBeNull();
 
-    await expect(pushTeam(joinerCtx, joinerTeam(), 1000)).rejects.toThrow(/bound_elsewhere|403/);
+    await expect(pushTeam(joinerCtx, await joinerTeam(), 1000)).rejects.toThrow(
+      /bound_elsewhere|403/,
+    );
     const joinerNode = readNodeState().nodes['bravo']!.node_id;
-    const wedge = readPushRefusal(joiner.db, joinerTeam().id);
+    const wedge = await readPushRefusal(sqliteDriver(joiner.db), (await joinerTeam()).id);
     expect(wedge).toMatchObject({
       seat: 'nick',
       bound_node_id: hubNode.id,
@@ -599,8 +650,10 @@ describe('a wedged push says so where the seat is (ADR 360 follow-on)', () => {
       since: 1000,
     });
     // A repeat refusal every tick does not restart the clock.
-    await expect(pushTeam(joinerCtx, joinerTeam(), 61_000)).rejects.toThrow(/403/);
-    expect(readPushRefusal(joiner.db, joinerTeam().id)?.since).toBe(1000);
+    await expect(pushTeam(joinerCtx, await joinerTeam(), 61_000)).rejects.toThrow(/403/);
+    expect((await readPushRefusal(sqliteDriver(joiner.db), (await joinerTeam()).id))?.since).toBe(
+      1000,
+    );
 
     // The joiner's roster — what every seat session on this machine reads — carries it.
     const roster = await get(joinerBase, '/teams/bravo/members', nickCredentialOnJoiner());
@@ -614,40 +667,47 @@ describe('a wedged push says so where the seat is (ADR 360 follow-on)', () => {
   });
 
   it('the wedge clears on the next accepted push', async () => {
-    send(joiner, 'j-0');
+    await send(joiner, 'j-0');
     await enrollJoiner();
-    const hubNode = localNodeForTeam(hub.db, hubTeam().id);
-    bindSeatToNode(hub.db, hubTeam().id, memberId(hub, 'nick'), hubNode.id);
-    await expect(pushTeam(joinerCtx, joinerTeam())).rejects.toThrow(/403/);
-    expect(readPushRefusal(joiner.db, joinerTeam().id)).not.toBeNull();
+    const hubNode = await localNodeForTeam(sqliteDriver(hub.db), (await hubTeam()).id);
+    await bindSeatToNode(
+      sqliteDriver(hub.db),
+      (await hubTeam()).id,
+      await memberId(hub, 'nick'),
+      hubNode.id,
+    );
+    await expect(pushTeam(joinerCtx, await joinerTeam())).rejects.toThrow(/403/);
+    expect(await readPushRefusal(sqliteDriver(joiner.db), (await joinerTeam()).id)).not.toBeNull();
     // The remedy: the seat moves (an admin unbind here), and the same batch goes through.
     const { unbindSeat } = await import('../store/nodes.js');
-    unbindSeat(hub.db, memberId(hub, 'nick'));
-    await expect(pushTeam(joinerCtx, joinerTeam())).resolves.toBeGreaterThan(0);
-    expect(readPushRefusal(joiner.db, joinerTeam().id)).toBeNull();
+    await unbindSeat(sqliteDriver(hub.db), await memberId(hub, 'nick'));
+    await expect(pushTeam(joinerCtx, await joinerTeam())).resolves.toBeGreaterThan(0);
+    expect(await readPushRefusal(sqliteDriver(joiner.db), (await joinerTeam()).id)).toBeNull();
     const roster = await get(joinerBase, '/teams/bravo/members', nickCredentialOnJoiner());
     expect(roster.json.sync.wedged).toBeNull();
   });
 });
 
-describe('presence replication on the push (spec 2026-09-02)', () => {
-  const hubTeam = () => getTeamBySlug(hub.db, 'bravo')!;
-  const memberId = (server: RunningServer, name: string) =>
+describe('presence replication on the push (spec 2026-09-02)', async () => {
+  const hubTeam = async () => (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
+  const memberId = async (server: RunningServer, name: string) =>
     server.db
       .prepare<
         [string, string],
         { id: string }
       >('SELECT id FROM members WHERE team_id = ? AND name = ?')
-      .get(getTeamBySlug(server.db, 'bravo')!.id, name)!.id;
+      .get((await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!.id, name)!.id;
 
   it('a presence.* row rides the push under kind presence, and the hub stamps the node as seen', async () => {
-    send(joiner, 'j-0'); // mints the joiner's node row; enrollment needs it
+    await send(joiner, 'j-0'); // mints the joiner's node row; enrollment needs it
     await enrollJoiner();
-    addMember(joiner.db, joinerTeam(), { name: 'ada', kind: 'agent' });
-    addMember(hub.db, hubTeam(), { name: 'ada', kind: 'agent' });
-    attach(joiner.db, memberId(joiner, 'ada'), 'codex', 'c1', { model: 'gpt-5' });
+    await addMember(sqliteDriver(joiner.db), await joinerTeam(), { name: 'ada', kind: 'agent' });
+    await addMember(sqliteDriver(hub.db), await hubTeam(), { name: 'ada', kind: 'agent' });
+    await attach(sqliteDriver(joiner.db), await memberId(joiner, 'ada'), 'codex', 'c1', {
+      model: 'gpt-5',
+    });
     const before = Date.now();
-    await pushTeam(joinerCtx, joinerTeam(), before);
+    await pushTeam(joinerCtx, await joinerTeam(), before);
     const staged = hub.db
       .prepare<[], { payload: string }>('SELECT payload FROM sync_log ORDER BY hub_seq')
       .all()
@@ -664,30 +724,39 @@ describe('presence replication on the push (spec 2026-09-02)', () => {
   });
 
   it('the hub binds an unbound seat to the pusher on its first attached (ADR 328 §4 at ingest)', async () => {
-    send(joiner, 'j-0');
+    await send(joiner, 'j-0');
     await enrollJoiner();
-    addMember(joiner.db, joinerTeam(), { name: 'ada', kind: 'agent' });
-    addMember(hub.db, hubTeam(), { name: 'ada', kind: 'agent' });
-    attach(joiner.db, memberId(joiner, 'ada'), 'codex', 'c1');
-    await pushTeam(joinerCtx, joinerTeam());
+    await addMember(sqliteDriver(joiner.db), await joinerTeam(), { name: 'ada', kind: 'agent' });
+    await addMember(sqliteDriver(hub.db), await hubTeam(), { name: 'ada', kind: 'agent' });
+    await attach(sqliteDriver(joiner.db), await memberId(joiner, 'ada'), 'codex', 'c1');
+    await pushTeam(joinerCtx, await joinerTeam());
     const joinerNode = readNodeState().nodes['bravo']!.node_id;
-    expect(seatBinding(hub.db, memberId(hub, 'ada'))?.node_id).toBe(joinerNode);
+    expect((await seatBinding(sqliteDriver(hub.db), await memberId(hub, 'ada')))?.node_id).toBe(
+      joinerNode,
+    );
   });
 
   it('the hub refuses a presence event for a seat bound to another node; the cursor does not move (spec §2)', async () => {
-    send(joiner, 'j-0');
+    await send(joiner, 'j-0');
     await enrollJoiner();
     // nick is bound to the hub's own node, as a local claim on the hub would leave it (#1195).
-    const hubNode = localNodeForTeam(hub.db, hubTeam().id);
-    expect(bindSeatToNode(hub.db, hubTeam().id, memberId(hub, 'nick'), hubNode.id)).toEqual({
+    const hubNode = await localNodeForTeam(sqliteDriver(hub.db), (await hubTeam()).id);
+    expect(
+      await bindSeatToNode(
+        sqliteDriver(hub.db),
+        (await hubTeam()).id,
+        await memberId(hub, 'nick'),
+        hubNode.id,
+      ),
+    ).toEqual({
       bound: true,
     });
     // The joiner attaches nick anyway and pushes.
-    attach(joiner.db, memberId(joiner, 'nick'), 'codex', 'c1');
-    const cursorBefore = cursor();
-    const lines = await captureLogs(() => pushTeam(joinerCtx, joinerTeam()));
-    await expect(pushTeam(joinerCtx, joinerTeam())).rejects.toThrow(/bound_elsewhere|403/);
-    expect(cursor()).toBe(cursorBefore);
+    await attach(sqliteDriver(joiner.db), await memberId(joiner, 'nick'), 'codex', 'c1');
+    const cursorBefore = await cursor();
+    const lines = await captureLogs(async () => await pushTeam(joinerCtx, await joinerTeam()));
+    await expect(pushTeam(joinerCtx, await joinerTeam())).rejects.toThrow(/bound_elsewhere|403/);
+    expect(await cursor()).toBe(cursorBefore);
     expect(stagedOnHub()).toEqual({ n: 0 });
     expect(
       lines.some((l) => l['msg'] === 'sync_push_refused_residence' && l['seat'] === 'nick'),

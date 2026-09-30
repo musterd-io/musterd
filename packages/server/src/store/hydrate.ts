@@ -1,5 +1,5 @@
 import type { Envelope } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { getMemberById } from './members.js';
 import { rowToEnvelope } from './messages.js';
 import type { MessageRow } from './rows.js';
@@ -23,18 +23,30 @@ import type { MessageRow } from './rows.js';
  * reason about. A missing member row yields `'?'` for a sender and `null` for a recipient, which is
  * what the per-row hydration did.
  */
-export function rowsToEnvelopes(db: Database, teamSlug: string, rows: MessageRow[]): Envelope[] {
-  const names = new Map<string, string | undefined>();
-  const nameOf = (id: string): string | undefined => {
-    if (!names.has(id)) names.set(id, getMemberById(db, id)?.name);
-    return names.get(id);
+export async function rowsToEnvelopes(
+  db: Driver,
+  teamSlug: string,
+  rows: MessageRow[],
+): Promise<Envelope[]> {
+  // Memoise the LOOKUP, not its result: the rows hydrate concurrently, so a memo filled after the
+  // first await would let every row of one sender start its own read before any of them landed.
+  const names = new Map<string, Promise<string | undefined>>();
+  const nameOf = async (id: string): Promise<string | undefined> => {
+    let p = names.get(id);
+    if (!p) {
+      p = getMemberById(db, id).then((m) => m?.name);
+      names.set(id, p);
+    }
+    return p;
   };
-  return rows.map((r) =>
-    rowToEnvelope(
-      r,
-      teamSlug,
-      nameOf(r.from_member) ?? '?',
-      r.to_member ? (nameOf(r.to_member) ?? null) : null,
+  return Promise.all(
+    rows.map(async (r) =>
+      rowToEnvelope(
+        r,
+        teamSlug,
+        (await nameOf(r.from_member)) ?? '?',
+        r.to_member ? ((await nameOf(r.to_member)) ?? null) : null,
+      ),
     ),
   );
 }

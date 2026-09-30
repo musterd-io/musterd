@@ -1,6 +1,7 @@
 import { describeFamilyPosture, makeEnvelope } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { openLane, updateLane } from './lanes.js';
 import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
@@ -18,31 +19,31 @@ import { createTeam } from './teams.js';
 
 const TIMEOUT = 60_000;
 
-function seed() {
-  const db = openDb(':memory:');
-  const team = createTeam(db, { slug: 'dawn' });
+async function seed() {
+  const db = openTestDb(':memory:');
+  const team = await createTeam(db, { slug: 'dawn' });
   return { db, team };
 }
 
-function agent(
+async function agent(
   db: ReturnType<typeof seed>['db'],
   team: ReturnType<typeof seed>['team'],
   name: string,
   model?: string,
 ): void {
-  const { row } = addMember(db, team, { kind: 'agent', name, role: '' });
-  if (model !== undefined) attach(db, row.id, 'claude-code', `conn-${name}`, { model });
+  const { row } = await addMember(db, team, { kind: 'agent', name, role: '' });
+  if (model !== undefined) await attach(db, row.id, 'claude-code', `conn-${name}`, { model });
 }
 
-describe('teamFamilyPosture (ADR 172)', () => {
-  it('monoculture: ≥2 live agents attesting, all one family — enrolled-idle seats listed as the remedy', () => {
-    const { db, team } = seed();
-    agent(db, team, 'ada', 'claude-opus-5');
-    agent(db, team, 'lin', 'claude-fable-5');
-    agent(db, team, 'kim', 'claude-opus-5');
-    agent(db, team, 'grokbot'); // enrolled, never attached — the wake pool
-    agent(db, team, 'gptbot');
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+describe('teamFamilyPosture (ADR 172)', async () => {
+  it('monoculture: ≥2 live agents attesting, all one family — enrolled-idle seats listed as the remedy', async () => {
+    const { db, team } = await seed();
+    await agent(db, team, 'ada', 'claude-opus-5');
+    await agent(db, team, 'lin', 'claude-fable-5');
+    await agent(db, team, 'kim', 'claude-opus-5');
+    await agent(db, team, 'grokbot'); // enrolled, never attached — the wake pool
+    await agent(db, team, 'gptbot');
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.state).toBe('monoculture');
     expect(p.attesting).toBe(3);
     expect(p.families).toEqual({ claude: 3 });
@@ -54,63 +55,63 @@ describe('teamFamilyPosture (ADR 172)', () => {
     expect(p.wake_pool.every((c) => c.wakeability === 'not_enrolled')).toBe(true);
   });
 
-  it('diverse: one cross-family attester flips it', () => {
-    const { db, team } = seed();
-    agent(db, team, 'ada', 'claude-opus-5');
-    agent(db, team, 'grokbot', 'grok-4.5');
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+  it('diverse: one cross-family attester flips it', async () => {
+    const { db, team } = await seed();
+    await agent(db, team, 'ada', 'claude-opus-5');
+    await agent(db, team, 'grokbot', 'grok-4.5');
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.state).toBe('diverse');
     expect(p.families).toEqual({ claude: 1, grok: 1 });
   });
 
-  it('unknown, not monoculture, with a single attester — one data point cannot tell', () => {
-    const { db, team } = seed();
-    agent(db, team, 'ada', 'claude-opus-5');
-    agent(db, team, 'grokbot');
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+  it('unknown, not monoculture, with a single attester — one data point cannot tell', async () => {
+    const { db, team } = await seed();
+    await agent(db, team, 'ada', 'claude-opus-5');
+    await agent(db, team, 'grokbot');
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.state).toBe('unknown');
     expect(p.attesting).toBe(1);
   });
 
-  it('a service seat is invisible to the posture: not unattested, never in the wake pool (ADR 232)', () => {
-    const { db, team } = seed();
-    agent(db, team, 'ada', 'claude-opus-5');
-    agent(db, team, 'lin', 'claude-fable-5');
-    const { row } = addMember(db, team, { kind: 'service', name: 'autorefresh', role: '' });
-    attach(db, row.id, 'cli', 'conn-autorefresh'); // live, attests no model — correctly
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+  it('a service seat is invisible to the posture: not unattested, never in the wake pool (ADR 232)', async () => {
+    const { db, team } = await seed();
+    await agent(db, team, 'ada', 'claude-opus-5');
+    await agent(db, team, 'lin', 'claude-fable-5');
+    const { row } = await addMember(db, team, { kind: 'service', name: 'autorefresh', role: '' });
+    await attach(db, row.id, 'cli', 'conn-autorefresh'); // live, attests no model — correctly
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.state).toBe('monoculture');
     expect(p.unattested).toBe(0); // NOT an evidence hole — services attest none, by design
     expect(p.wake_pool.map((c) => c.seat)).not.toContain('autorefresh');
   });
 
-  it('a live agent attesting nothing is unattested — present, proves nothing, not in the denominator', () => {
-    const { db, team } = seed();
-    agent(db, team, 'ada', 'claude-opus-5');
-    agent(db, team, 'lin', 'claude-fable-5');
-    const { row } = addMember(db, team, { kind: 'agent', name: 'mist', role: '' });
-    attach(db, row.id, 'claude-code', 'conn-mist'); // live, no model
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+  it('a live agent attesting nothing is unattested — present, proves nothing, not in the denominator', async () => {
+    const { db, team } = await seed();
+    await agent(db, team, 'ada', 'claude-opus-5');
+    await agent(db, team, 'lin', 'claude-fable-5');
+    const { row } = await addMember(db, team, { kind: 'agent', name: 'mist', role: '' });
+    await attach(db, row.id, 'claude-code', 'conn-mist'); // live, no model
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.state).toBe('monoculture'); // the unknown seat neither proves nor breaks it
     expect(p.attesting).toBe(2);
     expect(p.unattested).toBe(1);
   });
 
-  it('a live human never makes an all-claude agent fleet diverse — counted beside, not inside', () => {
-    const { db, team } = seed();
-    agent(db, team, 'ada', 'claude-opus-5');
-    agent(db, team, 'lin', 'claude-fable-5');
-    const { row } = addMember(db, team, { kind: 'human', name: 'nick', role: '' });
-    attach(db, row.id, 'cli', 'conn-nick');
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+  it('a live human never makes an all-claude agent fleet diverse — counted beside, not inside', async () => {
+    const { db, team } = await seed();
+    await agent(db, team, 'ada', 'claude-opus-5');
+    await agent(db, team, 'lin', 'claude-fable-5');
+    const { row } = await addMember(db, team, { kind: 'human', name: 'nick', role: '' });
+    await attach(db, row.id, 'cli', 'conn-nick');
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.state).toBe('monoculture');
     expect(p.humans_live).toBe(1);
     expect(p.wake_pool).toEqual([]); // a human is never "wakeable" here
   });
 
-  it('empty team → unknown with zeros, never a throw', () => {
-    const { db, team } = seed();
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+  it('empty team → unknown with zeros, never a throw', async () => {
+    const { db, team } = await seed();
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.state).toBe('unknown');
     expect(p.attesting).toBe(0);
     expect(p.families).toEqual({});
@@ -122,9 +123,9 @@ describe('teamFamilyPosture (ADR 172)', () => {
  * offline, so reading it alone made every idle seat's family `unknown` — which silently emptied the
  * cross-family remedy while the durable `occupancy.model_attested` record knew the answer all along.
  */
-describe('the wake pool reads the durable attestation record (ADR 187)', () => {
+describe('the wake pool reads the durable attestation record (ADR 187)', async () => {
   /** An agent that attested once and then went away — no presence row survives it. */
-  function wentOffline(
+  async function wentOffline(
     db: ReturnType<typeof seed>['db'],
     team: ReturnType<typeof seed>['team'],
     name: string,
@@ -132,7 +133,7 @@ describe('the wake pool reads the durable attestation record (ADR 187)', () => {
     at: number = Date.now(),
   ): void {
     if (!db.prepare('SELECT 1 FROM members WHERE team_id = ? AND name = ?').get(team.id, name)) {
-      addMember(db, team, { kind: 'agent', name, role: '' });
+      await addMember(db, team, { kind: 'agent', name, role: '' });
     }
     db.prepare(
       `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at)
@@ -147,27 +148,27 @@ describe('the wake pool reads the durable attestation record (ADR 187)', () => {
     );
   }
 
-  it('an idle seat carries the family it last attested, with the age of that claim', () => {
-    const { db, team } = seed();
-    agent(db, team, 'ada', 'claude-opus-5');
-    agent(db, team, 'lin', 'claude-opus-5');
+  it('an idle seat carries the family it last attested, with the age of that claim', async () => {
+    const { db, team } = await seed();
+    await agent(db, team, 'ada', 'claude-opus-5');
+    await agent(db, team, 'lin', 'claude-opus-5');
     const when = Date.now() - 86_400_000 * 21;
-    wentOffline(db, team, 'grokbot', 'grok-4.5', when);
+    await wentOffline(db, team, 'grokbot', 'grok-4.5', when);
 
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.state).toBe('monoculture'); // still — an idle seat never counts as attesting
     expect(p.wake_pool).toEqual([
       { seat: 'grokbot', family: 'grok', attested_at: when, wakeability: 'not_enrolled' },
     ]);
   });
 
-  it('newest attestation wins — a seat that switched models is not remembered as its old one', () => {
-    const { db, team } = seed();
+  it('newest attestation wins — a seat that switched models is not remembered as its old one', async () => {
+    const { db, team } = await seed();
     const old = Date.now() - 86_400_000 * 30;
-    wentOffline(db, team, 'drifter', 'grok-4.5', old);
-    wentOffline(db, team, 'drifter', 'claude-opus-5', old + 86_400_000);
+    await wentOffline(db, team, 'drifter', 'grok-4.5', old);
+    await wentOffline(db, team, 'drifter', 'claude-opus-5', old + 86_400_000);
 
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.wake_pool).toEqual([
       {
         seat: 'drifter',
@@ -185,7 +186,7 @@ describe('the wake pool reads the durable attestation record (ADR 187)', () => {
    * remedy. Marked, never filtered: the seat stays in the pool so the diversity gap is still
    * named, exactly as ADR 189 does for unenrolled seats.
    */
-  describe('quiescence marks a busy seat unspendable (ADR 219)', () => {
+  describe('quiescence marks a busy seat unspendable (ADR 219)', async () => {
     const acted = (
       db: ReturnType<typeof seed>['db'],
       team: { id: string },
@@ -199,13 +200,13 @@ describe('the wake pool reads the durable attestation record (ADR 187)', () => {
         )
         .run(`aud-${actor}-${String(at)}`, team.id, actor, at, at);
 
-    it('an enrolled seat acting seconds ago is enrolled_seat_busy, and stays in the pool', () => {
-      const { db, team } = seed();
-      agent(db, team, 'grokbot');
+    it('an enrolled seat acting seconds ago is enrolled_seat_busy, and stays in the pool', async () => {
+      const { db, team } = await seed();
+      await agent(db, team, 'grokbot');
       const row = db
         .prepare<[string], { id: string }>('SELECT id FROM members WHERE name = ?')
         .get('grokbot')!;
-      enrollResidency(db, team.id, {
+      await enrollResidency(db, team.id, {
         member_id: row.id,
         harness: 'claude-code',
         host: 'h',
@@ -213,18 +214,18 @@ describe('the wake pool reads the durable attestation record (ADR 187)', () => {
         authorized_by: null,
       });
       acted(db, team, 'grokbot', Date.now() - 5_000);
-      const p = teamFamilyPosture(db, team.id, TIMEOUT);
+      const p = await teamFamilyPosture(db, team.id, TIMEOUT);
       expect(p.wake_pool.map((c) => c.seat)).toEqual(['grokbot']); // marked, NOT filtered
       expect(p.wake_pool[0]?.wakeability).toBe('enrolled_seat_busy');
     });
 
-    it('the same seat quiet past the line is wakeable again — the mark is transient', () => {
-      const { db, team } = seed();
-      agent(db, team, 'grokbot');
+    it('the same seat quiet past the line is wakeable again — the mark is transient', async () => {
+      const { db, team } = await seed();
+      await agent(db, team, 'grokbot');
       const row = db
         .prepare<[string], { id: string }>('SELECT id FROM members WHERE name = ?')
         .get('grokbot')!;
-      enrollResidency(db, team.id, {
+      await enrollResidency(db, team.id, {
         member_id: row.id,
         harness: 'claude-code',
         host: 'h',
@@ -232,16 +233,18 @@ describe('the wake pool reads the durable attestation record (ADR 187)', () => {
         authorized_by: null,
       });
       acted(db, team, 'grokbot', Date.now() - 10 * 60_000);
-      expect(teamFamilyPosture(db, team.id, TIMEOUT).wake_pool[0]?.wakeability).toBe('wakeable');
+      expect((await teamFamilyPosture(db, team.id, TIMEOUT)).wake_pool[0]?.wakeability).toBe(
+        'wakeable',
+      );
     });
 
-    it('no audited action leaves the seat exactly as it read before the fact existed', () => {
-      const { db, team } = seed();
-      agent(db, team, 'grokbot');
+    it('no audited action leaves the seat exactly as it read before the fact existed', async () => {
+      const { db, team } = await seed();
+      await agent(db, team, 'grokbot');
       const row = db
         .prepare<[string], { id: string }>('SELECT id FROM members WHERE name = ?')
         .get('grokbot')!;
-      enrollResidency(db, team.id, {
+      await enrollResidency(db, team.id, {
         member_id: row.id,
         harness: 'claude-code',
         host: 'h',
@@ -249,23 +252,25 @@ describe('the wake pool reads the durable attestation record (ADR 187)', () => {
         authorized_by: null,
       });
       // unknown → omit the fact (ADR 169/189). Never "quiet by absence of evidence".
-      expect(teamFamilyPosture(db, team.id, TIMEOUT).wake_pool[0]?.wakeability).toBe('wakeable');
+      expect((await teamFamilyPosture(db, team.id, TIMEOUT)).wake_pool[0]?.wakeability).toBe(
+        'wakeable',
+      );
     });
 
-    it('a reachability defect outranks busy — the operator gets the actionable reason', () => {
-      const { db, team } = seed();
-      agent(db, team, 'grokbot'); // never enrolled
+    it('a reachability defect outranks busy — the operator gets the actionable reason', async () => {
+      const { db, team } = await seed();
+      await agent(db, team, 'grokbot'); // never enrolled
       acted(db, team, 'grokbot', Date.now() - 5_000);
-      expect(teamFamilyPosture(db, team.id, TIMEOUT).wake_pool[0]?.wakeability).toBe(
+      expect((await teamFamilyPosture(db, team.id, TIMEOUT)).wake_pool[0]?.wakeability).toBe(
         'not_enrolled',
       );
     });
   });
 
-  it('a seat that never attested stays unknown — the record cannot invent one', () => {
-    const { db, team } = seed();
-    agent(db, team, 'ghost'); // enrolled, never attached, never attested
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+  it('a seat that never attested stays unknown — the record cannot invent one', async () => {
+    const { db, team } = await seed();
+    await agent(db, team, 'ghost'); // enrolled, never attached, never attested
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.wake_pool).toEqual([
       { seat: 'ghost', family: 'unknown', attested_at: null, wakeability: 'not_enrolled' },
     ]);
@@ -278,46 +283,46 @@ describe('the wake pool reads the durable attestation record (ADR 187)', () => {
    * review at all (ADR 056). The durable record answers "what would waking this seat bring", never
    * "what is this seat running now".
    */
-  it('a LIVE seat is never described by its durable record — no stale cross-family claim', () => {
-    const { db, team } = seed();
-    agent(db, team, 'ada', 'claude-opus-5');
-    agent(db, team, 'lin', 'claude-opus-5');
+  it('a LIVE seat is never described by its durable record — no stale cross-family claim', async () => {
+    const { db, team } = await seed();
+    await agent(db, team, 'ada', 'claude-opus-5');
+    await agent(db, team, 'lin', 'claude-opus-5');
     // grokbot attested grok long ago, then came back on a session that attests nothing.
-    wentOffline(db, team, 'grokbot', 'grok-4.5', Date.now() - 86_400_000 * 21);
+    await wentOffline(db, team, 'grokbot', 'grok-4.5', Date.now() - 86_400_000 * 21);
     const row = db
       .prepare<[string], { id: string }>('SELECT id FROM members WHERE name = ?')
       .get('grokbot')!;
-    attach(db, row.id, 'claude-code', 'conn-grokbot'); // live, no model
+    await attach(db, row.id, 'claude-code', 'conn-grokbot'); // live, no model
 
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.unattested).toBe(1); // present, proves nothing
     expect(p.families).toEqual({ claude: 2 }); // NOT { claude: 2, grok: 1 }
     expect(p.state).toBe('monoculture'); // a stale memory must not read as diversity
     expect(p.wake_pool).toEqual([]); // and it is not idle, so it is not a remedy either
   });
 
-  it('the posture line names the cross-family remedy first, with its age', () => {
-    const { db, team } = seed();
-    agent(db, team, 'ada', 'claude-opus-5');
-    agent(db, team, 'lin', 'claude-opus-5');
-    wentOffline(db, team, 'sleepy', 'claude-opus-5', Date.now() - 3_600_000);
-    wentOffline(db, team, 'grokbot', 'grok-4.5', Date.now() - 86_400_000 * 3);
+  it('the posture line names the cross-family remedy first, with its age', async () => {
+    const { db, team } = await seed();
+    await agent(db, team, 'ada', 'claude-opus-5');
+    await agent(db, team, 'lin', 'claude-opus-5');
+    await wentOffline(db, team, 'sleepy', 'claude-opus-5', Date.now() - 3_600_000);
+    await wentOffline(db, team, 'grokbot', 'grok-4.5', Date.now() - 86_400_000 * 3);
 
-    const line = describeFamilyPosture(teamFamilyPosture(db, team.id, TIMEOUT));
+    const line = describeFamilyPosture(await teamFamilyPosture(db, team.id, TIMEOUT));
     expect(line).toContain('idle: grokbot (grok, 3d ago, not_enrolled)');
   });
 
-  it('an enrolled idle seat is marked wakeable — mark-not-filter, never filter (ADR 189)', () => {
-    const { db, team } = seed();
-    agent(db, team, 'ada', 'claude-opus-5');
-    agent(db, team, 'lin', 'claude-opus-5');
+  it('an enrolled idle seat is marked wakeable — mark-not-filter, never filter (ADR 189)', async () => {
+    const { db, team } = await seed();
+    await agent(db, team, 'ada', 'claude-opus-5');
+    await agent(db, team, 'lin', 'claude-opus-5');
     const when = Date.now() - 86_400_000 * 3;
-    wentOffline(db, team, 'grokbot', 'grok-4.5', when);
-    wentOffline(db, team, 'compo', 'composer-2', when);
+    await wentOffline(db, team, 'grokbot', 'grok-4.5', when);
+    await wentOffline(db, team, 'compo', 'composer-2', when);
     const grok = db
       .prepare<[string], { id: string }>('SELECT id FROM members WHERE name = ?')
       .get('grokbot')!;
-    enrollResidency(db, team.id, {
+    await enrollResidency(db, team.id, {
       member_id: grok.id,
       harness: 'claude-code',
       host: 'mac.lan',
@@ -325,7 +330,7 @@ describe('the wake pool reads the durable attestation record (ADR 187)', () => {
       authorized_by: 'nick',
     });
 
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.wake_pool).toEqual(
       expect.arrayContaining([
         { seat: 'grokbot', family: 'grok', attested_at: when, wakeability: 'wakeable' },
@@ -348,12 +353,12 @@ describe('pickReviewCounterpart — risky-lane human requirement (ADR 172)', () 
     // exists to demand a human's judgment must not route to it.
     const { openLane } = await import('./lanes.js');
     const { setMemberGovernance } = await import('./members.js');
-    const { db, team } = seed();
-    agent(db, team, 'ada', 'claude-opus-5'); // the worker
-    const { row: botty } = addMember(db, team, { kind: 'agent', name: 'botty', role: '' });
-    attach(db, botty.id, 'claude-code', 'conn-botty', { model: 'gpt-5.2-codex' });
-    setMemberGovernance(db, botty.id, null, JSON.stringify({ is_admin: true })); // the stale shape
-    const lane = openLane(db, team.id, 'dawn', 'ada', {
+    const { db, team } = await seed();
+    await agent(db, team, 'ada', 'claude-opus-5'); // the worker
+    const { row: botty } = await addMember(db, team, { kind: 'agent', name: 'botty', role: '' });
+    await attach(db, botty.id, 'claude-code', 'conn-botty', { model: 'gpt-5.2-codex' });
+    await setMemberGovernance(db, botty.id, null, JSON.stringify({ is_admin: true })); // the stale shape
+    const lane = await openLane(db, team.id, 'dawn', 'ada', {
       title: 'prod deploy',
       risk: ['production'],
       claim: true,
@@ -361,64 +366,69 @@ describe('pickReviewCounterpart — risky-lane human requirement (ADR 172)', () 
     const { pickReviewCounterpart, pickHumanReviewer } = await import('./review.js');
     // ADR 188: botty IS routable — as the stage-one PEER (an intended agent review). What the
     // stale admin bit must never do is satisfy the HUMAN stage: pickHumanReviewer is kind-only.
-    expect(pickReviewCounterpart(db, team.id, lane, 'ada', TIMEOUT)).toMatchObject({
+    expect(await pickReviewCounterpart(db, team.id, lane, 'ada', TIMEOUT)).toMatchObject({
       reviewer: 'botty',
       grade: 'cross_family',
     });
-    expect(pickHumanReviewer(db, team.id, 'ada', TIMEOUT)).toBeNull();
+    expect(await pickHumanReviewer(db, team.id, 'ada', TIMEOUT)).toBeNull();
   });
 });
 
-describe('pickReviewCounterpart — graded ladder (ADR 188)', () => {
-  async function pick(setup: (h: ReturnType<typeof seed>) => void, risk: string[] = []) {
+describe('pickReviewCounterpart — graded ladder (ADR 188)', async () => {
+  async function pick(
+    setup: (h: Awaited<ReturnType<typeof seed>>) => void | Promise<void>,
+    risk: string[] = [],
+  ) {
     const { openLane } = await import('./lanes.js');
     const { pickReviewCounterpart } = await import('./review.js');
-    const h = seed();
-    agent(h.db, h.team, 'worker', 'claude-opus-5');
-    setup(h);
-    const lane = openLane(h.db, h.team.id, 'dawn', 'worker', {
+    const h = await seed();
+    await agent(h.db, h.team, 'worker', 'claude-opus-5');
+    await setup(h);
+    const lane = await openLane(sqliteDriver(h.db), h.team.id, 'dawn', 'worker', {
       title: 'a change',
       risk,
       claim: true,
     });
-    return pickReviewCounterpart(h.db, h.team.id, lane, 'worker', TIMEOUT);
+    return await pickReviewCounterpart(sqliteDriver(h.db), h.team.id, lane, 'worker', TIMEOUT);
   }
 
   it('cross_model is now routable: opus-5 worker, opus-4.8 reviewer', async () => {
-    const p = await pick(({ db, team }) => agent(db, team, 'dolly', 'claude-opus-4-8'));
+    const p = await pick(async ({ db, team }) => await agent(db, team, 'dolly', 'claude-opus-4-8'));
     expect(p).toMatchObject({ reviewer: 'dolly', grade: 'cross_model' });
   });
 
   it('cross_family beats cross_model when both are live', async () => {
-    const p = await pick(({ db, team }) => {
-      agent(db, team, 'dolly', 'claude-opus-4-8');
-      agent(db, team, 'gptbot', 'gpt-5.6-sol');
+    const p = await pick(async ({ db, team }) => {
+      await agent(db, team, 'dolly', 'claude-opus-4-8');
+      await agent(db, team, 'gptbot', 'gpt-5.6-sol');
     });
     expect(p).toMatchObject({ reviewer: 'gptbot', grade: 'cross_family' });
   });
 
   it('same_model is never routed — two opus-5 seats still find no candidate', async () => {
-    expect(await pick(({ db, team }) => agent(db, team, 'twin', 'claude-opus-5'))).toBeNull();
+    expect(
+      await pick(async ({ db, team }) => await agent(db, team, 'twin', 'claude-opus-5')),
+    ).toBeNull();
   });
 
   it('an unattested live seat stays ineligible (null grade is not a grade)', async () => {
-    expect(await pick(({ db, team }) => agent(db, team, 'mist'))).toBeNull();
+    expect(await pick(async ({ db, team }) => await agent(db, team, 'mist'))).toBeNull();
   });
 
   it('a live human is never picked on a non-risky lane — the cross-family agent is (ADR 253)', async () => {
-    const p = await pick(({ db, team }) => {
-      agent(db, team, 'gptbot', 'gpt-5.6-sol');
-      const { row } = addMember(db, team, { kind: 'human', name: 'nick', role: '' });
-      attach(db, row.id, 'cli', 'conn-nick');
+    const p = await pick(async ({ db, team }) => {
+      await agent(db, team, 'gptbot', 'gpt-5.6-sol');
+      const { row } = await addMember(db, team, { kind: 'human', name: 'nick', role: '' });
+      await attach(db, row.id, 'cli', 'conn-nick');
     });
     expect(p).toMatchObject({ reviewer: 'gptbot', grade: 'cross_family' });
   });
 
   it('a live human alone is not a candidate on a non-risky lane (ADR 253)', async () => {
     expect(
-      await pick(({ db, team }) => {
-        const { row } = addMember(db, team, { kind: 'human', name: 'nick', role: '' });
-        attach(db, row.id, 'cli', 'conn-nick');
+      await pick(async ({ db, team }) => {
+        const { row } = await addMember(db, team, { kind: 'human', name: 'nick', role: '' });
+        await attach(db, row.id, 'cli', 'conn-nick');
       }),
     ).toBeNull();
   });
@@ -428,37 +438,45 @@ describe('selectReviewCounterpart — decision-time audit snapshot (ADR 303)', (
   it('records the selected grade and a bounded reason for every rejected seat', async () => {
     const { openLane } = await import('./lanes.js');
     const { selectReviewCounterpart } = await import('./review.js');
-    const { db, team } = seed();
-    agent(db, team, 'worker', 'claude-opus-5');
-    agent(db, team, 'cross-model', 'claude-opus-4-8');
-    agent(db, team, 'winner', 'gpt-5.6-sol');
-    agent(db, team, 'twin', 'claude-opus-5');
-    const { row: unknown } = addMember(db, team, { kind: 'agent', name: 'unknown', role: '' });
-    attach(db, unknown.id, 'cli', 'conn-unknown'); // live but deliberately without a model attestation
-    agent(db, team, 'busy', 'grok-4.5');
-    const { row: service } = addMember(db, team, {
+    const { db, team } = await seed();
+    await agent(db, team, 'worker', 'claude-opus-5');
+    await agent(db, team, 'cross-model', 'claude-opus-4-8');
+    await agent(db, team, 'winner', 'gpt-5.6-sol');
+    await agent(db, team, 'twin', 'claude-opus-5');
+    const { row: unknown } = await addMember(db, team, {
+      kind: 'agent',
+      name: 'unknown',
+      role: '',
+    });
+    await attach(db, unknown.id, 'cli', 'conn-unknown'); // live but deliberately without a model attestation
+    await agent(db, team, 'busy', 'grok-4.5');
+    const { row: service } = await addMember(db, team, {
       kind: 'service',
       name: 'autorefresh',
       role: '',
     });
-    attach(db, service.id, 'cli', 'conn-autorefresh', { model: 'gpt-5.6-sol' });
-    const { row: observer } = addMember(db, team, {
+    await attach(db, service.id, 'cli', 'conn-autorefresh', { model: 'gpt-5.6-sol' });
+    const { row: observer } = await addMember(db, team, {
       kind: 'human',
       name: 'watcher',
       role: '',
       observer: true,
     });
-    attach(db, observer.id, 'cli', 'conn-watcher');
-    const { row: offline } = addMember(db, team, { kind: 'agent', name: 'offline', role: '' });
+    await attach(db, observer.id, 'cli', 'conn-watcher');
+    const { row: offline } = await addMember(db, team, {
+      kind: 'agent',
+      name: 'offline',
+      role: '',
+    });
     // `offline` intentionally has no Presence.
     expect(offline.name).toBe('offline');
     db.prepare(
       `INSERT INTO audit (id, team_id, actor, action, target, result, ts, created_at)
          VALUES (?, ?, ?, 'x.did', NULL, 'allow', ?, ?)`,
     ).run('aud-busy', team.id, 'busy', Date.now() - 5_000, Date.now() - 5_000);
-    const lane = openLane(db, team.id, 'dawn', 'worker', { title: 'a change', claim: true });
+    const lane = await openLane(db, team.id, 'dawn', 'worker', { title: 'a change', claim: true });
 
-    expect(selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT)).toMatchObject({
+    expect(await selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT)).toMatchObject({
       pick: expect.objectContaining({ reviewer: 'winner', grade: 'cross_family' }),
       snapshot: {
         selected: { reviewer: 'winner', grade: 'cross_family' },
@@ -495,16 +513,20 @@ describe('selectReviewCounterpart — decision-time audit snapshot (ADR 303)', (
   it('an unattested worker routes to a live attested reviewer at the `ungraded` rung (ADR 351)', async () => {
     const { openLane } = await import('./lanes.js');
     const { selectReviewCounterpart } = await import('./review.js');
-    const { db, team } = seed();
-    const { row: worker } = addMember(db, team, { kind: 'agent', name: 'worker', role: '' });
-    attach(db, worker.id, 'cli', 'conn-worker'); // live, attests nothing (the bare-CLI-claim shape)
-    agent(db, team, 'gptbot', 'gpt-5.6-sol'); // live, attested — would be cross_family if we knew
-    agent(db, team, 'dolly', 'claude-opus-4-8'); // live, attested — could be cross_model or same
-    const { row: unknown } = addMember(db, team, { kind: 'agent', name: 'unknown', role: '' });
-    attach(db, unknown.id, 'cli', 'conn-unknown'); // a candidate that is itself unattested
+    const { db, team } = await seed();
+    const { row: worker } = await addMember(db, team, { kind: 'agent', name: 'worker', role: '' });
+    await attach(db, worker.id, 'cli', 'conn-worker'); // live, attests nothing (the bare-CLI-claim shape)
+    await agent(db, team, 'gptbot', 'gpt-5.6-sol'); // live, attested — would be cross_family if we knew
+    await agent(db, team, 'dolly', 'claude-opus-4-8'); // live, attested — could be cross_model or same
+    const { row: unknown } = await addMember(db, team, {
+      kind: 'agent',
+      name: 'unknown',
+      role: '',
+    });
+    await attach(db, unknown.id, 'cli', 'conn-unknown'); // a candidate that is itself unattested
 
-    const lane = openLane(db, team.id, 'dawn', 'worker', { title: 'a change', claim: true });
-    const selection = selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
+    const lane = await openLane(db, team.id, 'dawn', 'worker', { title: 'a change', claim: true });
+    const selection = await selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
     // Roster order among equals: gptbot was added first. No rung above `ungraded` is claimable
     // because nothing can be graded against an unknown worker — gptbot's gpt family is NOT a
     // cross_family claim here, and the pick must not say it is.
@@ -527,20 +549,24 @@ describe('selectReviewCounterpart — decision-time audit snapshot (ADR 303)', (
       ]),
     });
     // The attested snapshot names the worker's family too, so a reader need not join the close row.
-    const attested = selectReviewCounterpart(db, team.id, lane, 'gptbot', TIMEOUT);
+    const attested = await selectReviewCounterpart(db, team.id, lane, 'gptbot', TIMEOUT);
     expect(attested.snapshot.worker_family).toBe('gpt');
   });
 
   it('`ungraded` is a bottom rung, never a substitute: an attested worker still grades every candidate (ADR 351)', async () => {
     const { openLane } = await import('./lanes.js');
     const { selectReviewCounterpart } = await import('./review.js');
-    const { db, team } = seed();
-    agent(db, team, 'worker', 'claude-opus-5');
-    agent(db, team, 'twin', 'claude-opus-5'); // same_model — must stay excluded, not fall to ungraded
-    const { row: unknown } = addMember(db, team, { kind: 'agent', name: 'unknown', role: '' });
-    attach(db, unknown.id, 'cli', 'conn-unknown');
-    const lane = openLane(db, team.id, 'dawn', 'worker', { title: 'a change', claim: true });
-    const selection = selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
+    const { db, team } = await seed();
+    await agent(db, team, 'worker', 'claude-opus-5');
+    await agent(db, team, 'twin', 'claude-opus-5'); // same_model — must stay excluded, not fall to ungraded
+    const { row: unknown } = await addMember(db, team, {
+      kind: 'agent',
+      name: 'unknown',
+      role: '',
+    });
+    await attach(db, unknown.id, 'cli', 'conn-unknown');
+    const lane = await openLane(db, team.id, 'dawn', 'worker', { title: 'a change', claim: true });
+    const selection = await selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
     expect(selection.pick).toBeNull();
     expect(selection.snapshot.candidates).toEqual(
       expect.arrayContaining([
@@ -551,7 +577,7 @@ describe('selectReviewCounterpart — decision-time audit snapshot (ADR 303)', (
   });
 });
 
-describe('pickReviewCounterpart — busy is a preference (ADR 404)', () => {
+describe('pickReviewCounterpart — busy is a preference (ADR 404)', async () => {
   const acted = (
     db: ReturnType<typeof seed>['db'],
     team: { id: string },
@@ -565,23 +591,23 @@ describe('pickReviewCounterpart — busy is a preference (ADR 404)', () => {
       )
       .run(`aud-${actor}-${String(agoMs)}`, team.id, actor, Date.now() - agoMs, Date.now() - agoMs);
 
-  async function pick(setup: (h: ReturnType<typeof seed>) => void) {
+  async function pick(setup: (h: Awaited<ReturnType<typeof seed>>) => void | Promise<void>) {
     const { openLane } = await import('./lanes.js');
     const { pickReviewCounterpart } = await import('./review.js');
-    const h = seed();
-    agent(h.db, h.team, 'worker', 'claude-opus-5');
-    setup(h);
-    const lane = openLane(h.db, h.team.id, 'dawn', 'worker', {
+    const h = await seed();
+    await agent(h.db, h.team, 'worker', 'claude-opus-5');
+    await setup(h);
+    const lane = await openLane(sqliteDriver(h.db), h.team.id, 'dawn', 'worker', {
       title: 'a change',
       claim: true,
     });
-    return pickReviewCounterpart(h.db, h.team.id, lane, 'worker', TIMEOUT);
+    return await pickReviewCounterpart(sqliteDriver(h.db), h.team.id, lane, 'worker', TIMEOUT);
   }
 
   it('a live busy cross-family seat loses to a quiet cross-model seat', async () => {
-    const p = await pick(({ db, team }) => {
-      agent(db, team, 'gptbot', 'gpt-5.6-sol');
-      agent(db, team, 'dolly', 'claude-opus-4-8');
+    const p = await pick(async ({ db, team }) => {
+      await agent(db, team, 'gptbot', 'gpt-5.6-sol');
+      await agent(db, team, 'dolly', 'claude-opus-4-8');
       acted(db, team, 'gptbot', 5_000); // busy
       acted(db, team, 'dolly', 180_000); // quiet (≥ 120s)
     });
@@ -589,8 +615,8 @@ describe('pickReviewCounterpart — busy is a preference (ADR 404)', () => {
   });
 
   it('a team of only-busy live agents still asks the busy cross-family seat (ADR 404)', async () => {
-    const p = await pick(({ db, team }) => {
-      agent(db, team, 'gptbot', 'gpt-5.6-sol');
+    const p = await pick(async ({ db, team }) => {
+      await agent(db, team, 'gptbot', 'gpt-5.6-sol');
       acted(db, team, 'gptbot', 5_000);
     });
     expect(p).toMatchObject({ reviewer: 'gptbot', grade: 'cross_family' });
@@ -599,15 +625,21 @@ describe('pickReviewCounterpart — busy is a preference (ADR 404)', () => {
   it('an only-busy winner is eligible, not left marked busy', async () => {
     const { openLane } = await import('./lanes.js');
     const { selectReviewCounterpart } = await import('./review.js');
-    const h = seed();
-    agent(h.db, h.team, 'worker', 'claude-opus-5');
-    agent(h.db, h.team, 'gptbot', 'gpt-5.6-sol');
+    const h = await seed();
+    await agent(h.db, h.team, 'worker', 'claude-opus-5');
+    await agent(h.db, h.team, 'gptbot', 'gpt-5.6-sol');
     acted(h.db, h.team, 'gptbot', 5_000);
-    const lane = openLane(h.db, h.team.id, 'dawn', 'worker', {
+    const lane = await openLane(sqliteDriver(h.db), h.team.id, 'dawn', 'worker', {
       title: 'a change',
       claim: true,
     });
-    const sel = selectReviewCounterpart(h.db, h.team.id, lane, 'worker', TIMEOUT);
+    const sel = await selectReviewCounterpart(
+      sqliteDriver(h.db),
+      h.team.id,
+      lane,
+      'worker',
+      TIMEOUT,
+    );
     expect(sel.snapshot.candidates).toEqual(
       expect.arrayContaining([
         { member: 'gptbot', family: 'gpt', eligible: true, grade: 'cross_family' },
@@ -619,20 +651,20 @@ describe('pickReviewCounterpart — busy is a preference (ADR 404)', () => {
   });
 
   it('unknown (no work audit) stays eligible — occupancy attestation is not work', async () => {
-    // agent() calls attach(), which writes occupancy.model_attested as actor=name at now.
+    // await agent() calls attach(), which writes occupancy.model_attested as actor=name at now.
     // If the picker treats that as work, this is null and every ladder test above breaks.
-    const p = await pick(({ db, team }) => agent(db, team, 'gptbot', 'gpt-5.6-sol'));
+    const p = await pick(async ({ db, team }) => await agent(db, team, 'gptbot', 'gpt-5.6-sol'));
     expect(p).toMatchObject({ reviewer: 'gptbot', grade: 'cross_family' });
   });
 
   it('pickHumanReviewer still returns a live human who acted seconds ago', async () => {
     const { pickHumanReviewer } = await import('./review.js');
-    const { db, team } = seed();
-    agent(db, team, 'ada', 'claude-opus-5');
-    const { row } = addMember(db, team, { kind: 'human', name: 'nick', role: '' });
-    attach(db, row.id, 'cli', 'conn-nick');
+    const { db, team } = await seed();
+    await agent(db, team, 'ada', 'claude-opus-5');
+    const { row } = await addMember(db, team, { kind: 'human', name: 'nick', role: '' });
+    await attach(db, row.id, 'cli', 'conn-nick');
     acted(db, team, 'nick', 5_000);
-    expect(pickHumanReviewer(db, team.id, 'ada', TIMEOUT)).toMatchObject({
+    expect(await pickHumanReviewer(db, team.id, 'ada', TIMEOUT)).toMatchObject({
       reviewer: 'nick',
       grade: 'human',
     });
@@ -640,14 +672,14 @@ describe('pickReviewCounterpart — busy is a preference (ADR 404)', () => {
 });
 
 describe('pickWakeReviewer (ADR 191)', () => {
-  function wentOffline(
+  async function wentOffline(
     db: ReturnType<typeof seed>['db'],
     team: ReturnType<typeof seed>['team'],
     name: string,
     model: string,
     enrolled = true,
   ): void {
-    const { row } = addMember(db, team, { kind: 'agent', name, role: '' });
+    const { row } = await addMember(db, team, { kind: 'agent', name, role: '' });
     db.prepare(
       `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at)
        VALUES (?, ?, ?, NULL, 'occupancy.model_attested', ?, 'allow', ?, ?)`,
@@ -660,7 +692,7 @@ describe('pickWakeReviewer (ADR 191)', () => {
       Date.now() - 3_600_000,
     );
     if (enrolled) {
-      enrollResidency(db, team.id, {
+      await enrollResidency(db, team.id, {
         member_id: row.id,
         harness: 'claude-code',
         host: 'h',
@@ -672,12 +704,12 @@ describe('pickWakeReviewer (ADR 191)', () => {
 
   it('picks a wakeable cross_family idle seat over a wakeable cross_model one', async () => {
     const { pickWakeReviewer } = await import('./review.js');
-    const { db, team } = seed();
-    agent(db, team, 'worker', 'claude-opus-5');
-    wentOffline(db, team, 'dolly', 'claude-opus-4-8');
-    wentOffline(db, team, 'gptbot', 'gpt-5.6-sol');
-    const posture = teamFamilyPosture(db, team.id, TIMEOUT);
-    expect(pickWakeReviewer(db, team.id, 'worker', posture)).toMatchObject({
+    const { db, team } = await seed();
+    await agent(db, team, 'worker', 'claude-opus-5');
+    await wentOffline(db, team, 'dolly', 'claude-opus-4-8');
+    await wentOffline(db, team, 'gptbot', 'gpt-5.6-sol');
+    const posture = await teamFamilyPosture(db, team.id, TIMEOUT);
+    expect(await pickWakeReviewer(db, team.id, 'worker', posture)).toMatchObject({
       reviewer: 'gptbot',
       grade: 'cross_family',
     });
@@ -685,21 +717,21 @@ describe('pickWakeReviewer (ADR 191)', () => {
 
   it('skips not_enrolled seats even when they would restore family diversity', async () => {
     const { pickWakeReviewer } = await import('./review.js');
-    const { db, team } = seed();
-    agent(db, team, 'worker', 'claude-opus-5');
-    agent(db, team, 'twin', 'claude-opus-5'); // monoculture live
-    wentOffline(db, team, 'grokbot', 'grok-4.5', false);
-    const posture = teamFamilyPosture(db, team.id, TIMEOUT);
-    expect(pickWakeReviewer(db, team.id, 'worker', posture)).toBeNull();
+    const { db, team } = await seed();
+    await agent(db, team, 'worker', 'claude-opus-5');
+    await agent(db, team, 'twin', 'claude-opus-5'); // monoculture live
+    await wentOffline(db, team, 'grokbot', 'grok-4.5', false);
+    const posture = await teamFamilyPosture(db, team.id, TIMEOUT);
+    expect(await pickWakeReviewer(db, team.id, 'worker', posture)).toBeNull();
   });
 
   it('never routes same_model from the wake pool', async () => {
     const { pickWakeReviewer } = await import('./review.js');
-    const { db, team } = seed();
-    agent(db, team, 'worker', 'claude-opus-5');
-    wentOffline(db, team, 'twin', 'claude-opus-5');
-    const posture = teamFamilyPosture(db, team.id, TIMEOUT);
-    expect(pickWakeReviewer(db, team.id, 'worker', posture)).toBeNull();
+    const { db, team } = await seed();
+    await agent(db, team, 'worker', 'claude-opus-5');
+    await wentOffline(db, team, 'twin', 'claude-opus-5');
+    const posture = await teamFamilyPosture(db, team.id, TIMEOUT);
+    expect(await pickWakeReviewer(db, team.id, 'worker', posture)).toBeNull();
   });
 });
 
@@ -781,16 +813,19 @@ describe('tie-break among equal grades: load, then recency, then roster (lane 01
 
   async function room() {
     const { openLane } = await import('./lanes.js');
-    const { db, team } = seed();
-    const worker = addMember(db, team, { kind: 'agent', name: 'worker', role: '' }).row;
-    attach(db, worker.id, 'claude-code', 'conn-worker', { model: 'claude-opus-5' });
+    const { db, team } = await seed();
+    const worker = (await addMember(db, team, { kind: 'agent', name: 'worker', role: '' })).row;
+    await attach(db, worker.id, 'claude-code', 'conn-worker', { model: 'claude-opus-5' });
     // `first` is created before `second`, so roster order alone would always pick `first`.
-    const first = addMember(db, team, { kind: 'agent', name: 'first', role: '' }).row;
-    attach(db, first.id, 'codex', 'conn-first', { model: 'gpt-5.6-sol' });
-    const second = addMember(db, team, { kind: 'agent', name: 'second', role: '' }).row;
-    attach(db, second.id, 'codex', 'conn-second', { model: 'gpt-5.6-sol' });
-    const lane = openLane(db, team.id, 'dawn', 'worker', { title: 'judge me', claim: true });
-    const other = openLane(db, team.id, 'dawn', 'worker', { title: 'held elsewhere', claim: true });
+    const first = (await addMember(db, team, { kind: 'agent', name: 'first', role: '' })).row;
+    await attach(db, first.id, 'codex', 'conn-first', { model: 'gpt-5.6-sol' });
+    const second = (await addMember(db, team, { kind: 'agent', name: 'second', role: '' })).row;
+    await attach(db, second.id, 'codex', 'conn-second', { model: 'gpt-5.6-sol' });
+    const lane = await openLane(db, team.id, 'dawn', 'worker', { title: 'judge me', claim: true });
+    const other = await openLane(db, team.id, 'dawn', 'worker', {
+      title: 'held elsewhere',
+      claim: true,
+    });
     db.prepare(`UPDATE lanes SET state = 'awaiting_acceptance' WHERE id = ?`).run(other.id);
     return { db, team, worker, first, second, lane, other };
   }
@@ -799,7 +834,7 @@ describe('tie-break among equal grades: load, then recency, then roster (lane 01
     const { selectReviewCounterpart } = await import('./review.js');
     const { db, team, worker, first, lane, other } = await room();
     ask(db, team, worker.id, first.id, other.id, 'ask-1');
-    const sel = selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
+    const sel = await selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
     expect(sel.pick).toMatchObject({ reviewer: 'second', grade: 'cross_family' });
     expect(sel.snapshot.selected).toEqual({
       reviewer: 'second',
@@ -823,8 +858,8 @@ describe('tie-break among equal grades: load, then recency, then roster (lane 01
     db.prepare(`UPDATE lanes SET state = 'done' WHERE id = ?`).run(done.id);
     ask(db, team, worker.id, second.id, done.id, 'ask-on-done-lane');
     // `first` holds nothing at all; with `second`'s two asks discounted the pair ties on load.
-    expect(openAcceptanceLoad(db, team.id)).toEqual(new Map());
-    const sel = selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
+    expect(await openAcceptanceLoad(db, team.id)).toEqual(new Map());
+    const sel = await selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
     expect(sel.snapshot.selected?.tie_decided_by).toBe('roster');
     expect(sel.pick?.reviewer).toBe('first');
   });
@@ -834,7 +869,7 @@ describe('tie-break among equal grades: load, then recency, then roster (lane 01
     const { db, team, lane, other } = await room();
     picked(db, team, 'first', other.id, Date.now() - 1_000);
     picked(db, team, 'second', other.id, Date.now() - 3_600_000);
-    const sel = selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
+    const sel = await selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
     expect(sel.pick?.reviewer).toBe('second');
     expect(sel.snapshot.selected?.tie_decided_by).toBe('recency');
   });
@@ -842,30 +877,30 @@ describe('tie-break among equal grades: load, then recency, then roster (lane 01
   it('a full tie still falls to roster order — the last resort, and named as such', async () => {
     const { selectReviewCounterpart } = await import('./review.js');
     const { db, team, lane } = await room();
-    const sel = selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
+    const sel = await selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
     expect(sel.pick?.reviewer).toBe('first');
     expect(sel.snapshot.selected?.tie_decided_by).toBe('roster');
   });
 
   it('no equal-grade rival: decided by grade, and load never reorders across rungs', async () => {
     const { selectReviewCounterpart } = await import('./review.js');
-    // Built here rather than from room(): `second` must be cross_model from its FIRST attestation.
+    // Built here rather than from await room(): `second` must be cross_model from its FIRST attestation.
     // Re-attaching it under a second model in the same millisecond made "latest attestation" a
     // coin flip between the two rows, and the test flaked 2 in 3 runs.
     const { openLane } = await import('./lanes.js');
-    const { db, team } = seed();
-    const worker = addMember(db, team, { kind: 'agent', name: 'worker', role: '' }).row;
-    attach(db, worker.id, 'claude-code', 'conn-worker', { model: 'claude-opus-5' });
-    const first = addMember(db, team, { kind: 'agent', name: 'first', role: '' }).row;
-    attach(db, first.id, 'codex', 'conn-first', { model: 'gpt-5.6-sol' });
-    const second = addMember(db, team, { kind: 'agent', name: 'second', role: '' }).row;
-    attach(db, second.id, 'claude-code', 'conn-second', { model: 'claude-opus-4-8' });
-    const lane = openLane(db, team.id, 'dawn', 'worker', { title: 'judge me', claim: true });
-    const other = openLane(db, team.id, 'dawn', 'worker', { title: 'held', claim: true });
+    const { db, team } = await seed();
+    const worker = (await addMember(db, team, { kind: 'agent', name: 'worker', role: '' })).row;
+    await attach(db, worker.id, 'claude-code', 'conn-worker', { model: 'claude-opus-5' });
+    const first = (await addMember(db, team, { kind: 'agent', name: 'first', role: '' })).row;
+    await attach(db, first.id, 'codex', 'conn-first', { model: 'gpt-5.6-sol' });
+    const second = (await addMember(db, team, { kind: 'agent', name: 'second', role: '' })).row;
+    await attach(db, second.id, 'claude-code', 'conn-second', { model: 'claude-opus-4-8' });
+    const lane = await openLane(db, team.id, 'dawn', 'worker', { title: 'judge me', claim: true });
+    const other = await openLane(db, team.id, 'dawn', 'worker', { title: 'held', claim: true });
     db.prepare(`UPDATE lanes SET state = 'awaiting_acceptance' WHERE id = ?`).run(other.id);
     // Load `first` (cross_family) heavily. Grade must still win over the lighter cross_model seat.
     for (let i = 0; i < 5; i++) ask(db, team, worker.id, first.id, other.id, `ask-heavy-${i}`);
-    const sel = selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
+    const sel = await selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
     expect(sel.pick).toMatchObject({ reviewer: 'first', grade: 'cross_family' });
     expect(sel.snapshot.selected?.tie_decided_by).toBe('grade');
   });
@@ -873,11 +908,11 @@ describe('tie-break among equal grades: load, then recency, then roster (lane 01
   it('the wake picker breaks an equal-grade tie by load too', async () => {
     const { pickWakeReviewer } = await import('./review.js');
     const { openLane } = await import('./lanes.js');
-    const { db, team } = seed();
-    const worker = addMember(db, team, { kind: 'agent', name: 'worker', role: '' }).row;
-    attach(db, worker.id, 'claude-code', 'conn-worker', { model: 'claude-opus-5' });
-    const offline = (name: string) => {
-      const { row } = addMember(db, team, { kind: 'agent', name, role: '' });
+    const { db, team } = await seed();
+    const worker = (await addMember(db, team, { kind: 'agent', name: 'worker', role: '' })).row;
+    await attach(db, worker.id, 'claude-code', 'conn-worker', { model: 'claude-opus-5' });
+    const offline = async (name: string) => {
+      const { row } = await addMember(db, team, { kind: 'agent', name, role: '' });
       db.prepare(
         `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at)
          VALUES (?, ?, ?, NULL, 'occupancy.model_attested', ?, 'allow', ?, ?)`,
@@ -889,7 +924,7 @@ describe('tie-break among equal grades: load, then recency, then roster (lane 01
         JSON.stringify({ old: null, new: 'gpt-5.6-sol', source: 'claim' }),
         Date.now() - 3_600_000,
       );
-      enrollResidency(db, team.id, {
+      await enrollResidency(db, team.id, {
         member_id: row.id,
         harness: 'claude-code',
         host: 'h',
@@ -898,13 +933,15 @@ describe('tie-break among equal grades: load, then recency, then roster (lane 01
       });
       return row;
     };
-    const first = offline('first');
-    offline('second');
-    const held = openLane(db, team.id, 'dawn', 'worker', { title: 'held', claim: true });
+    const first = await offline('first');
+    await offline('second');
+    const held = await openLane(db, team.id, 'dawn', 'worker', { title: 'held', claim: true });
     db.prepare(`UPDATE lanes SET state = 'awaiting_acceptance' WHERE id = ?`).run(held.id);
     ask(db, team, worker.id, first.id, held.id, 'ask-wake');
-    const posture = teamFamilyPosture(db, team.id, TIMEOUT);
-    expect(pickWakeReviewer(db, team.id, 'worker', posture)).toMatchObject({ reviewer: 'second' });
+    const posture = await teamFamilyPosture(db, team.id, TIMEOUT);
+    expect(await pickWakeReviewer(db, team.id, 'worker', posture)).toMatchObject({
+      reviewer: 'second',
+    });
   });
 });
 
@@ -912,25 +949,25 @@ describe('reviewLoopBounceCount (ADR 191)', () => {
   it('counts prior ready_for_review audit rows for the lane', async () => {
     const { reviewLoopBounceCount, REVIEW_LOOP_BREAKER_N } = await import('./review.js');
     const { appendAudit } = await import('./audit.js');
-    const { db, team } = seed();
+    const { db, team } = await seed();
     expect(REVIEW_LOOP_BREAKER_N).toBe(3);
-    expect(reviewLoopBounceCount(db, team.id, 'lane-1')).toBe(0);
-    appendAudit(db, team.id, {
+    expect(await reviewLoopBounceCount(db, team.id, 'lane-1')).toBe(0);
+    await appendAudit(db, team.id, {
       actor: 'ada',
       action: 'lane.ready_for_review',
       target: 'lane-1',
       result: 'allow',
       detail: { lane: 'lane-1' },
     });
-    appendAudit(db, team.id, {
+    await appendAudit(db, team.id, {
       actor: 'ada',
       action: 'lane.ready_for_review',
       target: 'lane-1',
       result: 'allow',
       detail: { lane: 'lane-1' },
     });
-    expect(reviewLoopBounceCount(db, team.id, 'lane-1')).toBe(2);
-    expect(reviewLoopBounceCount(db, team.id, 'other')).toBe(0);
+    expect(await reviewLoopBounceCount(db, team.id, 'lane-1')).toBe(2);
+    expect(await reviewLoopBounceCount(db, team.id, 'other')).toBe(0);
   });
 });
 
@@ -955,16 +992,16 @@ describe('selectReviewCounterpart — the departing seat (lane 01M2RNBRGRWCSD89J
   it('never re-picks the seat named as departing, and files it under its own reason', async () => {
     const { openLane } = await import('./lanes.js');
     const { selectReviewCounterpart } = await import('./review.js');
-    const { db, team } = seed();
-    agent(db, team, 'worker', 'claude-opus-5');
-    agent(db, team, 'delta', 'gpt-5.6-sol');
-    agent(db, team, 'kim', 'gpt-5.6-sol');
-    const lane = openLane(db, team.id, team.slug, 'worker', { title: 'l', claim: true });
+    const { db, team } = await seed();
+    await agent(db, team, 'worker', 'claude-opus-5');
+    await agent(db, team, 'delta', 'gpt-5.6-sol');
+    await agent(db, team, 'kim', 'gpt-5.6-sol');
+    const lane = await openLane(db, team.id, team.slug, 'worker', { title: 'l', claim: true });
 
-    const open = selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
+    const open = await selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT);
     expect(['delta', 'kim']).toContain(open.pick?.reviewer);
 
-    const leaving = selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT, {
+    const leaving = await selectReviewCounterpart(db, team.id, lane, 'worker', TIMEOUT, {
       departing: 'delta',
     });
     expect(leaving.pick?.reviewer).toBe('kim');
@@ -974,17 +1011,17 @@ describe('selectReviewCounterpart — the departing seat (lane 01M2RNBRGRWCSD89J
   });
 });
 
-describe('abandonedAcceptances (lane 01M2RNBRGRWCSD89JTE1BVQ3QG)', () => {
-  function laneAwaitingAcceptanceHeldBy(holder: string) {
-    const { db, team } = seed();
-    const worker = addMember(db, team, { kind: 'agent', name: 'ada', role: '' }).row;
-    const reviewer = addMember(db, team, { kind: 'agent', name: holder, role: '' }).row;
-    const lane = openLane(db, team.id, team.slug, worker.name, {
+describe('abandonedAcceptances (lane 01M2RNBRGRWCSD89JTE1BVQ3QG)', async () => {
+  async function laneAwaitingAcceptanceHeldBy(holder: string) {
+    const { db, team } = await seed();
+    const worker = (await addMember(db, team, { kind: 'agent', name: 'ada', role: '' })).row;
+    const reviewer = (await addMember(db, team, { kind: 'agent', name: holder, role: '' })).row;
+    const lane = await openLane(db, team.id, team.slug, worker.name, {
       title: 'a lane awaiting acceptance',
       claim: true,
     });
-    updateLane(db, team.id, lane.id, team.slug, { state: 'awaiting_acceptance' });
-    insertMessage(
+    await updateLane(db, team.id, lane.id, team.slug, { state: 'awaiting_acceptance' });
+    await insertMessage(
       db,
       team.id,
       worker.id,
@@ -1003,18 +1040,18 @@ describe('abandonedAcceptances (lane 01M2RNBRGRWCSD89JTE1BVQ3QG)', () => {
     return { db, team, lane, reviewer };
   }
 
-  it('names the lane when the seat holding the ask has no live Presence', () => {
-    const { db, team, lane, reviewer } = laneAwaitingAcceptanceHeldBy('delta');
+  it('names the lane when the seat holding the ask has no live Presence', async () => {
+    const { db, team, lane, reviewer } = await laneAwaitingAcceptanceHeldBy('delta');
     // delta never attached, which is what its session having ended looks like from here.
-    expect(abandonedAcceptances(db, team.id, reviewer.name, TIMEOUT)).toEqual([
+    expect(await abandonedAcceptances(db, team.id, reviewer.name, TIMEOUT)).toEqual([
       { lane: lane.id, ask: 'ask-abandoned-1', holder: 'delta' },
     ]);
   });
 
-  it('names nothing once the ask has been answered, however long the seat has been gone', () => {
-    const { db, team, lane, reviewer } = laneAwaitingAcceptanceHeldBy('delta');
-    const verdict = addMember(db, team, { kind: 'agent', name: 'kim', role: '' }).row;
-    insertMessage(
+  it('names nothing once the ask has been answered, however long the seat has been gone', async () => {
+    const { db, team, lane, reviewer } = await laneAwaitingAcceptanceHeldBy('delta');
+    const verdict = (await addMember(db, team, { kind: 'agent', name: 'kim', role: '' })).row;
+    await insertMessage(
       db,
       team.id,
       verdict.id,
@@ -1030,21 +1067,21 @@ describe('abandonedAcceptances (lane 01M2RNBRGRWCSD89JTE1BVQ3QG)', () => {
         ts: 2_000,
       }),
     );
-    expect(abandonedAcceptances(db, team.id, reviewer.name, TIMEOUT)).toEqual([]);
+    expect(await abandonedAcceptances(db, team.id, reviewer.name, TIMEOUT)).toEqual([]);
   });
 
-  it("heldAcceptances names it regardless of liveness — the goodbye is the caller's signal", () => {
-    const { db, team, lane, reviewer } = laneAwaitingAcceptanceHeldBy('delta');
-    attach(db, reviewer.id, 'claude-code', 'conn-delta');
+  it("heldAcceptances names it regardless of liveness — the goodbye is the caller's signal", async () => {
+    const { db, team, lane, reviewer } = await laneAwaitingAcceptanceHeldBy('delta');
+    await attach(db, reviewer.id, 'claude-code', 'conn-delta');
     // Still attached, because a seat reporting its own session end has not detached yet.
-    expect(heldAcceptances(db, team.id, reviewer.name)).toEqual([
+    expect(await heldAcceptances(db, team.id, reviewer.name)).toEqual([
       { lane: lane.id, ask: 'ask-abandoned-1', holder: 'delta' },
     ]);
   });
 
-  it('names nothing while that seat is still live', () => {
-    const { db, team, reviewer } = laneAwaitingAcceptanceHeldBy('delta');
-    attach(db, reviewer.id, 'claude-code', 'conn-delta');
-    expect(abandonedAcceptances(db, team.id, reviewer.name, TIMEOUT)).toEqual([]);
+  it('names nothing while that seat is still live', async () => {
+    const { db, team, reviewer } = await laneAwaitingAcceptanceHeldBy('delta');
+    await attach(db, reviewer.id, 'claude-code', 'conn-delta');
+    expect(await abandonedAcceptances(db, team.id, reviewer.name, TIMEOUT)).toEqual([]);
   });
 });

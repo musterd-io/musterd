@@ -100,14 +100,14 @@ export function noGoalNotice(goalId: string | null): string {
  * (tier contract, reachability, ask-span telemetry) with no new act kind. Best-effort like every
  * lane delivery: a failed compose never fails the verb (the degradation path is self-close anyway).
  */
-export function deliverLaneAskAct(
+export async function deliverLaneAskAct(
   ctx: Ctx,
   team: TeamRow,
   from: MemberRow,
   to: string,
   body: string,
   meta: Record<string, unknown>,
-): boolean {
+): Promise<boolean> {
   try {
     const env = makeEnvelope({
       id: ulid(),
@@ -118,7 +118,7 @@ export function deliverLaneAskAct(
       body,
       meta,
     });
-    routeEnvelope(ctx, team, from, env, undefined, true);
+    await routeEnvelope(ctx, team, from, env, undefined, true);
     return true;
   } catch {
     /* advisory only — the lane verb already succeeded. The boolean is for the one caller that
@@ -128,7 +128,7 @@ export function deliverLaneAskAct(
   }
 }
 
-export function deliverLaneAskSuperseded(
+export async function deliverLaneAskSuperseded(
   ctx: Ctx,
   team: TeamRow,
   from: MemberRow,
@@ -136,7 +136,7 @@ export function deliverLaneAskSuperseded(
   askId: string,
   lane: Lane,
   newAcceptor: string,
-): void {
+): Promise<void> {
   try {
     const env = makeEnvelope({
       id: ulid(),
@@ -150,7 +150,7 @@ export function deliverLaneAskSuperseded(
         `the ask you held is closed and nothing is owed on it. A verdict sent on it now binds to nothing.`,
       meta: { lane_review_superseded: { lane: lane.id, ask: askId, reviewer: newAcceptor } },
     });
-    routeEnvelope(ctx, team, from, env, undefined, true);
+    await routeEnvelope(ctx, team, from, env, undefined, true);
   } catch {
     /* advisory — the re-route itself is recorded in the audit and the new ask is what binds */
   }
@@ -171,32 +171,27 @@ export type DepartureRoute = 'departed' | 'reaped';
  * If the picker finds nobody, nothing is minted and the lane keeps the ask it has — a re-route with
  * no destination would strand the acceptance worse than leaving it for `staleAcceptanceWarning`.
  */
-export function rerouteAcceptances(
+export async function rerouteAcceptances(
   ctx: Ctx,
   team: TeamRow,
   gone: MemberRow,
   held: HeldAcceptance[],
   route: DepartureRoute,
-): string[] {
+): Promise<string[]> {
   const out: string[] = [];
   for (const one of held) {
-    const lane = getLane(ctx.db, team.id, one.lane, team.slug);
+    const lane = await getLane(ctx.db, team.id, one.lane, team.slug);
     if (!lane) continue;
     const worker = lane.owner_seat ?? gone.name;
-    const pick = selectReviewCounterpart(
-      ctx.db,
-      team.id,
-      lane,
-      worker,
-      ctx.config.presenceTimeoutMs,
-      {
+    const pick = (
+      await selectReviewCounterpart(ctx.db, team.id, lane, worker, ctx.config.presenceTimeoutMs, {
         departing: gone.name,
-      },
+      })
     ).pick;
     if (!pick || pick.reviewer === gone.name) continue;
     const humanRequired = lane.risk.length > 0;
     const acceptanceTier: AskTier = 'standard';
-    appendLaneEventRequired(ctx.db, team.id, {
+    await appendLaneEventRequired(ctx.db, team.id, {
       actor: gone.name,
       action: 'lane.review_rerouted',
       target: lane.id,
@@ -217,9 +212,9 @@ export function rerouteAcceptances(
         ask_timeout_ms: askContract(acceptanceTier).timeout_ms,
       },
     });
-    deliverLaneAskSuperseded(ctx, team, gone, gone.name, one.ask, lane, pick.reviewer);
-    const priorOwners = laneOwnerHistory(ctx.db, team.id, lane.id);
-    deliverLaneAskAct(
+    await deliverLaneAskSuperseded(ctx, team, gone, gone.name, one.ask, lane, pick.reviewer);
+    const priorOwners = await laneOwnerHistory(ctx.db, team.id, lane.id);
+    await deliverLaneAskAct(
       ctx,
       team,
       gone,
@@ -247,16 +242,16 @@ export function rerouteAcceptances(
 }
 
 /** ADR 412's trigger: the seat said goodbye, so it is gone whatever its presence row still says. */
-export function rerouteDepartedAcceptances(
+export async function rerouteDepartedAcceptances(
   ctx: Ctx,
   team: TeamRow,
   departing: MemberRow,
-): string[] {
-  return rerouteAcceptances(
+): Promise<string[]> {
+  return await rerouteAcceptances(
     ctx,
     team,
     departing,
-    heldAcceptances(ctx.db, team.id, departing.name),
+    await heldAcceptances(ctx.db, team.id, departing.name),
     'departed',
   );
 }
@@ -278,24 +273,29 @@ export function rerouteDepartedAcceptances(
  * a LIVE seat, so the next tick's `abandonedAcceptances` no longer names it. A lane only comes back
  * if its new reviewer also vanishes, which is the case where trying again is the right answer.
  */
-export function sweepReapedAcceptances(ctx: Ctx, ref: TeamRef): string[] {
+export async function sweepReapedAcceptances(ctx: Ctx, ref: TeamRef): Promise<string[]> {
   // `routeEnvelope` needs the full roster row; the reaper only has id+slug, so resolve once here
   // rather than making every caller carry a row it does not have.
-  const team = getTeamBySlug(ctx.db, ref.slug);
+  const team = await getTeamBySlug(ctx.db, ref.slug);
   if (!team) return [];
   const out: string[] = [];
   const holders = new Set<string>();
-  for (const lane of listLanes(ctx.db, team.id, team.slug)) {
+  for (const lane of await listLanes(ctx.db, team.id, team.slug)) {
     if (lane.state !== 'awaiting_acceptance') continue;
-    const open = openAcceptanceAsk(ctx.db, team.id, lane.id);
+    const open = await openAcceptanceAsk(ctx.db, team.id, lane.id);
     if (open) holders.add(open.to);
   }
   for (const name of holders) {
-    const gone = getMemberByName(ctx.db, team.id, name);
+    const gone = await getMemberByName(ctx.db, team.id, name);
     if (!gone) continue;
-    const stranded = abandonedAcceptances(ctx.db, team.id, name, ctx.config.presenceTimeoutMs);
+    const stranded = await abandonedAcceptances(
+      ctx.db,
+      team.id,
+      name,
+      ctx.config.presenceTimeoutMs,
+    );
     if (stranded.length === 0) continue;
-    out.push(...rerouteAcceptances(ctx, team, gone, stranded, 'reaped'));
+    out.push(...(await rerouteAcceptances(ctx, team, gone, stranded, 'reaped')));
   }
   return out;
 }

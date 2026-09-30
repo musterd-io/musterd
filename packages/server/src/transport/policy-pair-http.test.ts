@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { __resetOAuthBucketsForTest } from './oauth.js';
 
@@ -45,7 +45,7 @@ async function hostedAgent(): Promise<string> {
 
 beforeEach(async () => {
   __resetOAuthBucketsForTest();
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const r = await post('/teams', { slug: 'pp-t', creator: { name: 'nick', kind: 'human' } });

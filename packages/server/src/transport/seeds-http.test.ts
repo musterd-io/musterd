@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listLanes } from '../store/lanes.js';
 import { createSeedFromRelay } from '../store/seeds.js';
@@ -49,7 +50,7 @@ async function request(method: string, path: string, body: unknown, auth?: Auth)
 }
 
 beforeEach(async () => {
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
 
@@ -64,17 +65,19 @@ beforeEach(async () => {
   adaAuth = await claimAgentHttp(base, 'bravo', agentKey, nickCredential, 'Ada');
   linAuth = await claimAgentHttp(base, 'bravo', agentKey, nickCredential, 'Lin');
 
-  const team = getTeamBySlug(server.db, 'bravo')!;
+  const team = (await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!;
   server.db
     .prepare("UPDATE members SET slack_user_id = 'U123' WHERE team_id = ? AND name = 'nick'")
     .run(team.id);
-  seedId = createSeedFromRelay(server.db, team.id, {
-    id: 'relay-1',
-    source: 'slack',
-    body: 'Which Surface should own this?',
-    ts: 1_785_979_000_000,
-    meta: { user: 'U123' },
-  }).id;
+  seedId = (
+    await createSeedFromRelay(sqliteDriver(server.db), team.id, {
+      id: 'relay-1',
+      source: 'slack',
+      body: 'Which Surface should own this?',
+      ts: 1_785_979_000_000,
+      meta: { user: 'U123' },
+    })
+  ).id;
 });
 
 afterEach(async () => {
@@ -201,7 +204,7 @@ describe('Seed lifecycle HTTP authorization', () => {
   });
 
   it('keeps an inert seat from reading or mutating Seeds', async () => {
-    const team = getTeamBySlug(server.db, 'bravo')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!;
     server.db
       .prepare("UPDATE members SET account_status = 'disabled' WHERE team_id = ? AND name = 'Ada'")
       .run(team.id);
@@ -259,8 +262,8 @@ describe('Seed lifecycle HTTP authorization', () => {
     expect(replay.status).toBe(200);
     expect(replay.json.seed.linked_lane_id).toBe(first.json.seed.linked_lane_id);
 
-    const team = getTeamBySlug(server.db, 'bravo')!;
-    expect(listLanes(server.db, team.id, team.slug)).toHaveLength(1);
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!;
+    expect(await listLanes(sqliteDriver(server.db), team.id, team.slug)).toHaveLength(1);
     const audit = server.db
       .prepare<
         [string],
@@ -315,8 +318,8 @@ describe('Seed lifecycle HTTP authorization', () => {
       ada,
     );
     expect(failed.status).toBe(500);
-    const team = getTeamBySlug(server.db, 'bravo')!;
-    expect(listLanes(server.db, team.id, team.slug)).toHaveLength(0);
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!;
+    expect(await listLanes(sqliteDriver(server.db), team.id, team.slug)).toHaveLength(0);
     expect(
       (await request('GET', `/teams/bravo/seeds/${seedId}`, undefined, ada)).json.seed,
     ).toMatchObject({ state: 'exploring', linked_lane_id: null });
@@ -329,7 +332,7 @@ describe('Seed lifecycle HTTP authorization', () => {
       ada,
     );
     expect(retried.status).toBe(200);
-    expect(listLanes(server.db, team.id, team.slug)).toHaveLength(1);
+    expect(await listLanes(sqliteDriver(server.db), team.id, team.slug)).toHaveLength(1);
   });
 
   it('lets the submitting Member manually promote an open Seed', async () => {

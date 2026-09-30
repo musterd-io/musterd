@@ -7,8 +7,8 @@ import {
   SeedSchema,
   type SubmitSeedBrief,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
+import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { appendReplicatedEvent } from './audit.js';
 import { openLane } from './lanes.js';
@@ -36,31 +36,27 @@ interface SeedRow {
   updated_at: number;
 }
 
-function toSeed(row: SeedRow, team: string, db: Database): Seed {
-  const thread = db
-    .prepare<
-      [string],
-      { id: string; kind: string; body: string; name: string; created_at: number }
-    >(
+async function toSeed(row: SeedRow, team: string, db: Driver): Promise<Seed> {
+  const thread = (
+    await db.all<{ id: string; kind: string; body: string; name: string; created_at: number }>(
       `SELECT e.id, e.kind, e.body, m.name, e.created_at
        FROM seed_thread_entries e JOIN members m ON m.id = e.member_id
        WHERE e.seed_id = ? ORDER BY e.created_at, e.id`,
+      [row.id],
     )
-    .all(row.id)
-    .map((entry) => ({
-      id: entry.id,
-      kind: entry.kind,
-      body: entry.body,
-      by: entry.name,
-      created_at: entry.created_at,
-    }));
-  const memberName = db
-    .prepare<[string], { name: string }>('SELECT name FROM members WHERE id = ?')
-    .get(row.submitted_by)?.name;
+  ).map((entry) => ({
+    id: entry.id,
+    kind: entry.kind,
+    body: entry.body,
+    by: entry.name,
+    created_at: entry.created_at,
+  }));
+  const memberName = (
+    await db.get<{ name: string }>('SELECT name FROM members WHERE id = ?', [row.submitted_by])
+  )?.name;
   const explorer = row.explorer_id
-    ? (db
-        .prepare<[string], { name: string }>('SELECT name FROM members WHERE id = ?')
-        .get(row.explorer_id)?.name ?? null)
+    ? ((await db.get<{ name: string }>('SELECT name FROM members WHERE id = ?', [row.explorer_id]))
+        ?.name ?? null)
     : null;
   return SeedSchema.parse({
     ...row,
@@ -79,51 +75,50 @@ function toSeed(row: SeedRow, team: string, db: Database): Seed {
   });
 }
 
-export function createSeedFromRelay(
-  db: Database,
+export async function createSeedFromRelay(
+  db: Driver,
   teamId: string,
   relay: RelaySeed,
   now = Date.now(),
-): Seed {
-  const prior = db
-    .prepare<[string, string], SeedRow>('SELECT * FROM seeds WHERE team_id = ? AND relay_id = ?')
-    .get(teamId, relay.id);
-  const team = db
-    .prepare<[string], { slug: string }>('SELECT slug FROM teams WHERE id = ?')
-    .get(teamId)!;
-  if (prior) return toSeed(prior, team.slug, db);
-  const submitter = db
-    .prepare<[string, string], { id: string }>(
-      `SELECT id FROM members
+): Promise<Seed> {
+  const prior = await db.get<SeedRow>('SELECT * FROM seeds WHERE team_id = ? AND relay_id = ?', [
+    teamId,
+    relay.id,
+  ]);
+  const team = (await db.get<{ slug: string }>('SELECT slug FROM teams WHERE id = ?', [teamId]))!;
+  if (prior) return await toSeed(prior, team.slug, db);
+  const submitter = await db.get<{ id: string }>(
+    `SELECT id FROM members
        WHERE team_id = ? AND kind = 'human' AND left_at IS NULL AND slack_user_id = ?`,
-    )
-    .get(teamId, relay.meta.user);
+    [teamId, relay.meta.user],
+  );
   if (!submitter) throw new Error('unknown_submitter');
   const id = ulid(now);
-  db.prepare(
+  await db.run(
     `INSERT INTO seeds
        (id, team_id, relay_id, source, body, captured_at, slack_user_id, submitted_by, state, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`,
-  ).run(
-    id,
-    teamId,
-    relay.id,
-    relay.source,
-    relay.body,
-    relay.ts,
-    relay.meta.user,
-    submitter.id,
-    now,
-    now,
+    [
+      id,
+      teamId,
+      relay.id,
+      relay.source,
+      relay.body,
+      relay.ts,
+      relay.meta.user,
+      submitter.id,
+      now,
+      now,
+    ],
   );
-  const row = db.prepare<[string], SeedRow>('SELECT * FROM seeds WHERE id = ?').get(id)!;
+  const row = (await db.get<SeedRow>('SELECT * FROM seeds WHERE id = ?', [id]))!;
   // ADR 399: the capture crosses to every joiner, so a seat on a second machine holds the team's
   // ideation without holding the relay's bearer token.
-  const submitterName = db
-    .prepare<[string], { name: string }>('SELECT name FROM members WHERE id = ?')
-    .get(submitter.id);
-  if (submitterName) stampSeedCapture(db, teamId, row, submitterName.name, now);
-  return toSeed(row, team.slug, db);
+  const submitterName = await db.get<{ name: string }>('SELECT name FROM members WHERE id = ?', [
+    submitter.id,
+  ]);
+  if (submitterName) await stampSeedCapture(db, teamId, row, submitterName.name, now);
+  return await toSeed(row, team.slug, db);
 }
 
 /** `relay_id` for a document-recorded intention: the source's own identifier, namespaced so it can
@@ -143,82 +138,81 @@ export function repoRelayId(ref: string): string {
  * lane?" is a query over seeds, not a new lane field. An open Seed whose ref is later disposed with
  * a lane id is linked the same way; a Seed already promoted elsewhere is left alone.
  */
-export function captureRepoSeed(
-  db: Database,
+export async function captureRepoSeed(
+  db: Driver,
   teamId: string,
   actor: MemberRow,
   input: CaptureRepoSeed,
   now = Date.now(),
-): Seed {
-  const team = db
-    .prepare<[string], { slug: string }>('SELECT slug FROM teams WHERE id = ?')
-    .get(teamId)!;
+): Promise<Seed> {
+  const team = (await db.get<{ slug: string }>('SELECT slug FROM teams WHERE id = ?', [teamId]))!;
   const relayId = repoRelayId(input.ref);
-  const tx = db.transaction((): Seed => {
-    if (input.lane_id !== undefined) {
-      const lane = db
-        .prepare<
-          [string, string],
-          { id: string }
-        >('SELECT id FROM lanes WHERE team_id = ? AND id = ?')
-        .get(teamId, input.lane_id);
-      if (!lane) throw new MusterdError('bad_request', `Lane "${input.lane_id}" not found`);
-    }
-    const prior = db
-      .prepare<[string, string], SeedRow>('SELECT * FROM seeds WHERE team_id = ? AND relay_id = ?')
-      .get(teamId, relayId);
-    if (prior) {
-      if (input.lane_id !== undefined && prior.linked_lane_id === null) {
-        db.prepare(
-          `UPDATE seeds
+  const tx = () =>
+    db.tx(async (t): Promise<Seed> => {
+      if (input.lane_id !== undefined) {
+        const lane = await t.get<{ id: string }>(
+          'SELECT id FROM lanes WHERE team_id = ? AND id = ?',
+          [teamId, input.lane_id],
+        );
+        if (!lane) throw new MusterdError('bad_request', `Lane "${input.lane_id}" not found`);
+      }
+      const prior = await t.get<SeedRow>('SELECT * FROM seeds WHERE team_id = ? AND relay_id = ?', [
+        teamId,
+        relayId,
+      ]);
+      if (prior) {
+        if (input.lane_id !== undefined && prior.linked_lane_id === null) {
+          await t.run(
+            `UPDATE seeds
            SET state = 'promoted', explorer_id = NULL, linked_lane_id = ?, promotion_kind = 'manual',
                research_skipped = 1, promoted_at = ?, updated_at = ?
            WHERE team_id = ? AND id = ?`,
-        ).run(input.lane_id, now, now, teamId, prior.id);
+            [input.lane_id, now, now, teamId, prior.id],
+          );
+        }
+        return await toSeed(
+          (await t.get<SeedRow>('SELECT * FROM seeds WHERE id = ?', [prior.id]))!,
+          team.slug,
+          t,
+        );
       }
-      return toSeed(
-        db.prepare<[string], SeedRow>('SELECT * FROM seeds WHERE id = ?').get(prior.id)!,
-        team.slug,
-        db,
-      );
-    }
-    const id = ulid(now);
-    const promoted = input.lane_id !== undefined;
-    db.prepare(
-      `INSERT INTO seeds
+      const id = ulid(now);
+      const promoted = input.lane_id !== undefined;
+      await t.run(
+        `INSERT INTO seeds
          (id, team_id, relay_id, source, body, captured_at, slack_user_id, submitted_by, state,
           linked_lane_id, promotion_kind, research_skipped, promoted_at, created_at, updated_at)
        VALUES (?, ?, ?, 'repo', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      id,
-      teamId,
-      relayId,
-      input.body,
-      input.captured_at ?? now,
-      actor.id,
-      promoted ? 'promoted' : 'open',
-      input.lane_id ?? null,
-      promoted ? 'manual' : null,
-      promoted ? 1 : null,
-      promoted ? now : null,
-      now,
-      now,
-    );
-    const row = db.prepare<[string], SeedRow>('SELECT * FROM seeds WHERE id = ?').get(id)!;
-    stampSeedCapture(db, teamId, row, actor.name, now); // ADR 399
-    return toSeed(row, team.slug, db);
-  });
+        [
+          id,
+          teamId,
+          relayId,
+          input.body,
+          input.captured_at ?? now,
+          actor.id,
+          promoted ? 'promoted' : 'open',
+          input.lane_id ?? null,
+          promoted ? 'manual' : null,
+          promoted ? 1 : null,
+          promoted ? now : null,
+          now,
+          now,
+        ],
+      );
+      const row = (await t.get<SeedRow>('SELECT * FROM seeds WHERE id = ?', [id]))!;
+      await stampSeedCapture(t, teamId, row, actor.name, now); // ADR 399
+      return await toSeed(row, team.slug, t);
+    });
   return tx();
 }
 
-export function listSeeds(db: Database, teamId: string): Seed[] {
-  const team = db
-    .prepare<[string], { slug: string }>('SELECT slug FROM teams WHERE id = ?')
-    .get(teamId)!;
-  return db
-    .prepare<[string], SeedRow>('SELECT * FROM seeds WHERE team_id = ? ORDER BY created_at, id')
-    .all(teamId)
-    .map((row) => toSeed(row, team.slug, db));
+export async function listSeeds(db: Driver, teamId: string): Promise<Seed[]> {
+  const team = (await db.get<{ slug: string }>('SELECT slug FROM teams WHERE id = ?', [teamId]))!;
+  const rows = await db.all<SeedRow>(
+    'SELECT * FROM seeds WHERE team_id = ? ORDER BY created_at, id',
+    [teamId],
+  );
+  return Promise.all(rows.map((row) => toSeed(row, team.slug, db)));
 }
 
 /**
@@ -230,36 +224,30 @@ export function listSeeds(db: Database, teamId: string): Seed[] {
  * for a repo Seed is the promise as written (the `— path:line` provenance line beneath it is
  * already carried by `ref`).
  */
-export function openSeedsForBrief(
-  db: Database,
+export async function openSeedsForBrief(
+  db: Driver,
   teamId: string,
   limit: number,
-): { seeds: NextBrief['up_next_seeds']; total: number } {
-  const total = db
-    .prepare<
-      [string],
-      { n: number }
-    >("SELECT COUNT(*) AS n FROM seeds WHERE team_id = ? AND state = 'open'")
-    .get(teamId)!.n;
-  const rows = db
-    .prepare<
-      [string, number],
-      {
-        id: string;
-        source: 'slack' | 'repo';
-        relay_id: string;
-        body: string;
-        captured_at: number;
-        name: string;
-      }
-    >(
-      `SELECT s.id, s.source, s.relay_id, s.body, s.captured_at, m.name
+): Promise<{ seeds: NextBrief['up_next_seeds']; total: number }> {
+  const total = (await db.get<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM seeds WHERE team_id = ? AND state = 'open'",
+    [teamId],
+  ))!.n;
+  const rows = await db.all<{
+    id: string;
+    source: 'slack' | 'repo';
+    relay_id: string;
+    body: string;
+    captured_at: number;
+    name: string;
+  }>(
+    `SELECT s.id, s.source, s.relay_id, s.body, s.captured_at, m.name
        FROM seeds s JOIN members m ON m.id = s.submitted_by
        WHERE s.team_id = ? AND s.state = 'open'
        ORDER BY s.captured_at, s.id
        LIMIT ?`,
-    )
-    .all(teamId, limit);
+    [teamId, limit],
+  );
   return {
     total,
     seeds: rows.map((row) => ({
@@ -287,19 +275,18 @@ function firstLine(body: string): string {
   return (first || 'Seed').slice(0, 120);
 }
 
-export function getSeed(db: Database, teamId: string, seedId: string): Seed | null {
-  const team = db
-    .prepare<[string], { slug: string }>('SELECT slug FROM teams WHERE id = ?')
-    .get(teamId);
+export async function getSeed(db: Driver, teamId: string, seedId: string): Promise<Seed | null> {
+  const team = await db.get<{ slug: string }>('SELECT slug FROM teams WHERE id = ?', [teamId]);
   if (!team) return null;
-  const row = db
-    .prepare<[string, string], SeedRow>('SELECT * FROM seeds WHERE team_id = ? AND id = ?')
-    .get(teamId, seedId);
-  return row ? toSeed(row, team.slug, db) : null;
+  const row = await db.get<SeedRow>('SELECT * FROM seeds WHERE team_id = ? AND id = ?', [
+    teamId,
+    seedId,
+  ]);
+  return row ? await toSeed(row, team.slug, db) : null;
 }
 
-function requireSeed(db: Database, teamId: string, seedId: string): Seed {
-  const seed = getSeed(db, teamId, seedId);
+async function requireSeed(db: Driver, teamId: string, seedId: string): Promise<Seed> {
+  const seed = await getSeed(db, teamId, seedId);
   if (!seed) throw new MusterdError('not_found', `Seed "${seedId}" not found`);
   return seed;
 }
@@ -316,14 +303,14 @@ function requireSeed(db: Database, teamId: string, seedId: string): Seed {
  * Hub-minted by rule: `sync/log.ts` refuses a pushed `seed` event from any node but the hub, so the
  * relay has one poller per team and a capture has one birth.
  */
-function stampSeedCapture(
-  db: Database,
+async function stampSeedCapture(
+  db: Driver,
   teamId: string,
   seed: SeedRow,
   submitterName: string,
   now: number,
-): void {
-  appendReplicatedEvent(db, teamId, {
+): Promise<void> {
+  await appendReplicatedEvent(db, teamId, {
     actor: submitterName,
     action: 'seed.captured',
     target: seed.relay_id,
@@ -361,42 +348,41 @@ export interface SeedCapture {
  * its local row. The local `seeds.id` stays daemon-private: it is minted here, and the thread
  * entries that arrive later resolve to it by `relay_id`, which is the whole reason that key exists.
  */
-export function applySeedCapture(
-  db: Database,
+export async function applySeedCapture(
+  db: Driver,
   teamId: string,
   capture: SeedCapture,
   submitterId: string,
   now: number,
-): 'applied' | 'held' {
-  const prior = db
-    .prepare<
-      [string, string],
-      { id: string }
-    >('SELECT id FROM seeds WHERE team_id = ? AND relay_id = ?')
-    .get(teamId, capture.relay_id);
+): Promise<'applied' | 'held'> {
+  const prior = await db.get<{ id: string }>(
+    'SELECT id FROM seeds WHERE team_id = ? AND relay_id = ?',
+    [teamId, capture.relay_id],
+  );
   if (prior) return 'held';
   const promoted = capture.linked_lane_id !== null;
-  db.prepare(
+  await db.run(
     `INSERT INTO seeds
        (id, team_id, relay_id, source, body, captured_at, slack_user_id, submitted_by, state,
         linked_lane_id, promotion_kind, research_skipped, promoted_at, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    ulid(now),
-    teamId,
-    capture.relay_id,
-    capture.source,
-    capture.body,
-    capture.captured_at,
-    capture.slack_user_id,
-    submitterId,
-    promoted ? 'promoted' : 'open',
-    capture.linked_lane_id,
-    capture.promotion_kind,
-    promoted ? 1 : null,
-    promoted ? now : null,
-    now,
-    now,
+    [
+      ulid(now),
+      teamId,
+      capture.relay_id,
+      capture.source,
+      capture.body,
+      capture.captured_at,
+      capture.slack_user_id,
+      submitterId,
+      promoted ? 'promoted' : 'open',
+      capture.linked_lane_id,
+      capture.promotion_kind,
+      promoted ? 1 : null,
+      promoted ? now : null,
+      now,
+      now,
+    ],
   );
   return 'applied';
 }
@@ -404,19 +390,20 @@ export function applySeedCapture(
 type ThreadKind = 'clarification' | 'answer' | 'brief' | 'conclusion';
 
 /** The fold's silent projector primitive: one thread row, no stamp (ADR 371 §1). */
-function appendThread(
-  db: Database,
+async function appendThread(
+  db: Driver,
   entryId: string,
   seedId: string,
   memberId: string,
   kind: ThreadKind,
   body: string,
   now: number,
-): void {
-  db.prepare(
+): Promise<void> {
+  await db.run(
     `INSERT INTO seed_thread_entries (id, seed_id, kind, body, member_id, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(entryId, seedId, kind, body, memberId, now);
+    [entryId, seedId, kind, body, memberId, now],
+  );
 }
 
 /**
@@ -426,18 +413,18 @@ function appendThread(
  * own id, so both machines hold the same row under the same key. The seed's lifecycle state does
  * NOT cross with it (§3): a brief replicates, the `state = 'completed'` beside it stays local.
  */
-function applyThread(
-  db: Database,
+async function applyThread(
+  db: Driver,
   teamId: string,
   seed: { id: string; relay_id: string },
   actor: MemberRow,
   kind: ThreadKind,
   body: string,
   now: number,
-): void {
+): Promise<void> {
   const entryId = ulid(now);
-  appendThread(db, entryId, seed.id, actor.id, kind, body, now);
-  appendReplicatedEvent(db, teamId, {
+  await appendThread(db, entryId, seed.id, actor.id, kind, body, now);
+  await appendReplicatedEvent(db, teamId, {
     actor: actor.name,
     action: 'record.seed_thread',
     target: seed.relay_id,
@@ -453,72 +440,80 @@ function applyThread(
   });
 }
 
-export function claimSeed(
-  db: Database,
+export async function claimSeed(
+  db: Driver,
   teamId: string,
   seedId: string,
   actor: MemberRow,
   now = Date.now(),
-): Seed {
+): Promise<Seed> {
   if (actor.kind !== 'agent')
     throw new MusterdError('forbidden', 'only an agent Member may explore a Seed');
-  const seed = requireSeed(db, teamId, seedId);
+  const seed = await requireSeed(db, teamId, seedId);
   if (seed.state !== 'open' && seed.state !== 'clarified')
     throw new MusterdError('conflict', `Seed "${seedId}" is not claimable`);
-  db.prepare(
+  // The WHERE repeats the check: two agents claiming at once both read `open`, and only one UPDATE
+  // may win (review I5, 2026-09-30).
+  const { changes } = await db.run(
     `UPDATE seeds SET state = 'exploring', explorer_id = ?, updated_at = ?
-     WHERE team_id = ? AND id = ?`,
-  ).run(actor.id, now, teamId, seedId);
-  return requireSeed(db, teamId, seedId);
+     WHERE team_id = ? AND id = ? AND state IN ('open', 'clarified')`,
+    [actor.id, now, teamId, seedId],
+  );
+  if (changes === 0) throw new MusterdError('conflict', `Seed "${seedId}" is not claimable`);
+  return await requireSeed(db, teamId, seedId);
 }
 
-export function askSeedClarification(
-  db: Database,
+export async function askSeedClarification(
+  db: Driver,
   teamId: string,
   seedId: string,
   actor: MemberRow,
   body: string,
   now = Date.now(),
-): Seed {
-  const seed = requireSeed(db, teamId, seedId);
+): Promise<Seed> {
+  const seed = await requireSeed(db, teamId, seedId);
   if (seed.state !== 'exploring' || seed.explorer !== actor.name)
     throw new MusterdError('forbidden', 'only the active explorer may ask a clarification');
-  const tx = db.transaction(() => {
-    applyThread(db, teamId, seed, actor, 'clarification', body, now);
-    db.prepare(
-      `UPDATE seeds SET state = 'needs_clarification', explorer_id = NULL, updated_at = ?
+  const tx = () =>
+    db.tx(async (t) => {
+      await applyThread(t, teamId, seed, actor, 'clarification', body, now);
+      await t.run(
+        `UPDATE seeds SET state = 'needs_clarification', explorer_id = NULL, updated_at = ?
        WHERE team_id = ? AND id = ?`,
-    ).run(now, teamId, seedId);
-  });
-  tx();
-  return requireSeed(db, teamId, seedId);
+        [now, teamId, seedId],
+      );
+    });
+  await tx();
+  return await requireSeed(db, teamId, seedId);
 }
 
-export function answerSeedClarification(
-  db: Database,
+export async function answerSeedClarification(
+  db: Driver,
   teamId: string,
   seedId: string,
   actor: MemberRow,
   body: string,
   now = Date.now(),
-): Seed {
-  const seed = requireSeed(db, teamId, seedId);
+): Promise<Seed> {
+  const seed = await requireSeed(db, teamId, seedId);
   if (seed.submitted_by !== actor.name)
     throw new MusterdError('forbidden', 'only the submitting Member may answer a clarification');
   if (seed.state !== 'needs_clarification')
     throw new MusterdError('conflict', `Seed "${seedId}" is not awaiting clarification`);
-  const tx = db.transaction(() => {
-    applyThread(db, teamId, seed, actor, 'answer', body, now);
-    db.prepare(
-      `UPDATE seeds SET state = 'clarified', updated_at = ? WHERE team_id = ? AND id = ?`,
-    ).run(now, teamId, seedId);
-  });
-  tx();
-  return requireSeed(db, teamId, seedId);
+  const tx = () =>
+    db.tx(async (t) => {
+      await applyThread(t, teamId, seed, actor, 'answer', body, now);
+      await t.run(
+        `UPDATE seeds SET state = 'clarified', updated_at = ? WHERE team_id = ? AND id = ?`,
+        [now, teamId, seedId],
+      );
+    });
+  await tx();
+  return await requireSeed(db, teamId, seedId);
 }
 
-function promote(
-  db: Database,
+async function promote(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   seed: Seed,
@@ -528,68 +523,74 @@ function promote(
   kind: 'automatic' | 'manual',
   researchSkipped: boolean,
   now: number,
-): Seed {
-  const tx = db.transaction(() => {
-    const current = requireSeed(db, teamId, seed.id);
-    if (current.state === 'promoted') return current;
-    const lane = openLane(db, teamId, teamSlug, actor.name, { title, detail }, now);
-    db.prepare(
-      `UPDATE seeds
+): Promise<Seed> {
+  const tx = () =>
+    db.tx(async (t) => {
+      const current = await requireSeed(t, teamId, seed.id);
+      if (current.state === 'promoted') return current;
+      const lane = await openLane(t, teamId, teamSlug, actor.name, { title, detail }, now);
+      await t.run(
+        `UPDATE seeds
        SET state = 'promoted', explorer_id = NULL, linked_lane_id = ?, promotion_kind = ?,
            research_skipped = ?, promoted_at = ?, updated_at = ?
        WHERE team_id = ? AND id = ?`,
-    ).run(lane.id, kind, researchSkipped ? 1 : 0, now, now, teamId, seed.id);
-    return requireSeed(db, teamId, seed.id);
-  });
+        [lane.id, kind, researchSkipped ? 1 : 0, now, now, teamId, seed.id],
+      );
+      return await requireSeed(t, teamId, seed.id);
+    });
   return tx();
 }
 
-export function submitSeedBrief(
-  db: Database,
+export async function submitSeedBrief(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   seedId: string,
   actor: MemberRow,
   input: SubmitSeedBrief,
   now = Date.now(),
-): Seed {
-  const seed = requireSeed(db, teamId, seedId);
+): Promise<Seed> {
+  const seed = await requireSeed(db, teamId, seedId);
   if (seed.state === 'promoted' && input.result === 'promote') return seed;
   if (seed.state !== 'exploring' || seed.explorer !== actor.name)
     throw new MusterdError('forbidden', 'only the active explorer may submit a final brief');
   if (input.result === 'promote') {
-    const tx = db.transaction(() => {
-      applyThread(db, teamId, seed, actor, 'brief', JSON.stringify(input.brief), now);
-      db.prepare(
-        'UPDATE seeds SET final_brief = ?, updated_at = ? WHERE team_id = ? AND id = ?',
-      ).run(JSON.stringify(input.brief), now, teamId, seedId);
-      return promote(
-        db,
-        teamId,
-        teamSlug,
-        seed,
-        actor,
-        input.brief.proposed_lane.title,
-        input.brief.proposed_lane.detail,
-        'automatic',
-        false,
-        now,
-      );
-    });
+    const tx = () =>
+      db.tx(async (t) => {
+        await applyThread(t, teamId, seed, actor, 'brief', JSON.stringify(input.brief), now);
+        await t.run(
+          'UPDATE seeds SET final_brief = ?, updated_at = ? WHERE team_id = ? AND id = ?',
+          [JSON.stringify(input.brief), now, teamId, seedId],
+        );
+        return await promote(
+          t,
+          teamId,
+          teamSlug,
+          seed,
+          actor,
+          input.brief.proposed_lane.title,
+          input.brief.proposed_lane.detail,
+          'automatic',
+          false,
+          now,
+        );
+      });
     return tx();
   }
-  const tx = db.transaction(() => {
-    applyThread(db, teamId, seed, actor, 'brief', JSON.stringify(input.brief), now);
-    applyThread(db, teamId, seed, actor, 'conclusion', input.conclusion, now);
-    db.prepare(
-      `UPDATE seeds
+  const tx = () =>
+    db.tx(async (t) => {
+      await applyThread(t, teamId, seed, actor, 'brief', JSON.stringify(input.brief), now);
+      await applyThread(t, teamId, seed, actor, 'conclusion', input.conclusion, now);
+      await t.run(
+        `UPDATE seeds
        SET state = 'completed', explorer_id = NULL, final_brief = ?, conclusion = ?,
            completed_at = ?, updated_at = ?
        WHERE team_id = ? AND id = ?`,
-    ).run(JSON.stringify(input.brief), input.conclusion, now, now, teamId, seedId);
-  });
-  tx();
-  return requireSeed(db, teamId, seedId);
+        [JSON.stringify(input.brief), input.conclusion, now, now, teamId, seedId],
+      );
+    });
+  await tx();
+  return await requireSeed(db, teamId, seedId);
 }
 
 function rawSeedTitle(body: string): string {
@@ -600,20 +601,20 @@ function rawSeedTitle(body: string): string {
   return (first || 'Seed').slice(0, 80);
 }
 
-export function promoteSeed(
-  db: Database,
+export async function promoteSeed(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   seedId: string,
   actor: MemberRow,
   input: PromoteSeed,
   now = Date.now(),
-): Seed {
-  const seed = requireSeed(db, teamId, seedId);
+): Promise<Seed> {
+  const seed = await requireSeed(db, teamId, seedId);
   if (seed.state === 'promoted') return seed;
   const title = input.title ?? seed.final_brief?.proposed_lane.title ?? rawSeedTitle(seed.body);
   const detail = input.detail ?? seed.final_brief?.proposed_lane.detail ?? seed.body;
-  return promote(
+  return await promote(
     db,
     teamId,
     teamSlug,

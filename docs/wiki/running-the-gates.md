@@ -71,3 +71,14 @@ Measured: #987 passed `pnpm format:check` locally with an edited-but-uncommitted
 **It happened again on 2026-09-01 (#1147, miley), the same way and with the page already saying so.** A new ADR 345 passed `pnpm format:check` locally while uncommitted, then failed `gates` on `watch:check` for an `often` in its own `## Decision` — a frequency claim invented rather than measured, which is exactly what the rule is for. The remedy below was already written here; it was missed by reading the first 30 lines of this page instead of the page. Cost ~7 minutes of CI plus a re-push. **A truncated read of a wiki page is not a read of it** — the section that would have saved you sorts by when it was learned, not by how likely you are to need it.
 
 **Commit first, then run `pnpm format:check`.** And when a diff gate fires on a frozen `## Decision` you cannot edit, the waiver is the honest move — `Snapshot-debt: none — <why this is not a snapshot you are asserting>` — not a hunt for a way to make the term disappear.
+
+## The store suite runs on two engines; pick one when you are iterating (2026-09-30, plan 1A; falsify: `MUSTERD_TEST_DRIVER=sqlite pnpm -C packages/server exec vitest run src/store/teamMemory.test.ts` — if a `[pglite]` block still runs, this is wrong) <!-- claim: other -->
+
+Every `withDrivers(...)` block in `packages/server` runs on SQLite **and** the PGlite test double by
+default, and CI pins `MUSTERD_TEST_DRIVER=both` (ADR 479 §3). PGlite boots once per vitest worker
+(~3–4 s), so a both-driver file costs a few seconds more than its SQLite half. While iterating:
+`MUSTERD_TEST_DRIVER=sqlite` is the fast loop; `MUSTERD_TEST_DRIVER=pglite` reproduces a
+Postgres-side failure alone. A PGlite error carries the translated statement after `in:` — read
+that line first; the fix is usually one of the eight SQLite-isms listed in `01-data-model.md`
+§Two dialects, and it goes in the SQL text or `db/dialect.ts`, never in a per-dialect branch.
+

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { isMusterdCredential } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { addMember, getMemberByName, hashToken, memberStandingRefusal } from './members.js';
 import type { MemberRow, TeamRow } from './rows.js';
@@ -37,25 +37,27 @@ export interface AgentConnectNonce {
  * is who asked for it (ADR 456 §3): it travels onto the chain as `connected_by` and bounds it.
  * Callers authorize first with {@link connectRefusal}.
  */
-export function issueAgentConnectNonce(
-  db: Database,
+export async function issueAgentConnectNonce(
+  db: Driver,
   teamId: string,
   memberId: string,
   issuedBy: string,
   now = Date.now(),
-): AgentConnectNonce {
+): Promise<AgentConnectNonce> {
   const nonce = mintConnectNonce();
   const expires_at = now + CONNECT_NONCE_TTL_MS;
-  db.transaction(() => {
-    db.prepare(
+  await db.tx(async (t) => {
+    await t.run(
       'UPDATE agent_connect_nonces SET used_at = ? WHERE member_id = ? AND used_at IS NULL',
-    ).run(now, memberId);
-    db.prepare(
+      [now, memberId],
+    );
+    await t.run(
       `INSERT INTO agent_connect_nonces
          (nonce_hash, team_id, member_id, issued_by, created_at, expires_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(hashToken(nonce), teamId, memberId, issuedBy, now, expires_at);
-  })();
+      [hashToken(nonce), teamId, memberId, issuedBy, now, expires_at],
+    );
+  });
   return { nonce, expires_at };
 }
 
@@ -116,26 +118,30 @@ export function connectRefusal(
 }
 
 /** Live (not left, not disabled/banned/archived) agents this sponsor has minted. */
-export function liveSponsoredAgents(db: Database, teamId: string, sponsorId: string): MemberRow[] {
-  return db
-    .prepare<[string, string], MemberRow>(
+export async function liveSponsoredAgents(
+  db: Driver,
+  teamId: string,
+  sponsorId: string,
+): Promise<MemberRow[]> {
+  return (
+    await db.all<MemberRow>(
       'SELECT * FROM members WHERE team_id = ? AND sponsored_by = ? AND left_at IS NULL',
+      [teamId, sponsorId],
     )
-    .all(teamId, sponsorId)
-    .filter((m) => {
-      const s = resolveAccountStatus(m);
-      return s !== 'disabled' && s !== 'banned' && s !== 'archived';
-    });
+  ).filter((m) => {
+    const s = resolveAccountStatus(m);
+    return s !== 'disabled' && s !== 'banned' && s !== 'archived';
+  });
 }
 
-export function createSponsoredAgent(
-  db: Database,
+export async function createSponsoredAgent(
+  db: Driver,
   team: TeamRow,
   sponsor: MemberRow,
   input: { name: string; role?: string | null | undefined },
   now = Date.now(),
   opts: { cap?: number } = {},
-): { member: MemberRow } & AgentConnectNonce {
+): Promise<{ member: MemberRow } & AgentConnectNonce> {
   if (sponsor.kind !== 'human' || sponsor.observer === 1)
     throw new MusterdError('forbidden', 'only a human member can create agents (ADR 449 §3)');
   // ADR 459 §1: an admin can narrow one member's minting through capabilities without touching
@@ -146,16 +152,16 @@ export function createSponsoredAgent(
       'an admin turned off agent creation for this seat (capability can_create_agents) — ask them to re-enable it',
     );
   const cap = opts.cap ?? SPONSORED_AGENT_CAP;
-  return db.transaction(() => {
+  return db.tx(async (t) => {
     // `addMember` would *revive* a tombstoned name — row, history and all. A sponsored mint must
     // never inherit someone else's past, so a removed name is refused here, not revived.
-    const existing = getMemberByName(db, team.id, input.name);
+    const existing = await getMemberByName(t, team.id, input.name);
     if (existing && existing.left_at !== null)
       throw new MusterdError(
         'conflict',
         `"${input.name}" was used by a removed member of "${team.slug}" — pick another name`,
       );
-    const live = liveSponsoredAgents(db, team.id, sponsor.id);
+    const live = await liveSponsoredAgents(t, team.id, sponsor.id);
     if (live.length >= cap)
       throw new MusterdError(
         'forbidden',
@@ -163,15 +169,15 @@ export function createSponsoredAgent(
           `remove one first: ${live.map((m) => m.name).join(', ')}`,
       );
     const expiring = sponsor.lifecycle === 'until' && sponsor.lifecycle_until !== null;
-    const { row } = addMember(db, team, {
+    const { row } = await addMember(t, team, {
       name: input.name,
       kind: 'agent',
       role: input.role ?? '',
       sponsoredBy: sponsor.id,
       ...(expiring ? { lifecycle: 'until' as const, lifecycleUntil: sponsor.lifecycle_until } : {}),
     });
-    return { member: row, ...issueAgentConnectNonce(db, team.id, row.id, sponsor.id, now) };
-  })();
+    return { member: row, ...(await issueAgentConnectNonce(t, team.id, row.id, sponsor.id, now)) };
+  });
 }
 
 /**
@@ -179,58 +185,48 @@ export function createSponsoredAgent(
  * stranger would also get null for: unknown, used, expired, wrong team, or an agent that has since
  * left or been disabled. A wrong-team attempt does not burn it.
  */
-export function redeemAgentConnectNonce(
-  db: Database,
+export async function redeemAgentConnectNonce(
+  db: Driver,
   teamId: string,
   nonce: string,
   now = Date.now(),
-): { agent: MemberRow; issuedBy: MemberRow } | null {
-  return db.transaction(() => {
-    const row = db
-      .prepare<
-        [string],
-        {
-          team_id: string;
-          member_id: string;
-          issued_by: string;
-          expires_at: number;
-          used_at: number | null;
-        }
-      >(
-        'SELECT team_id, member_id, issued_by, expires_at, used_at FROM agent_connect_nonces WHERE nonce_hash = ?',
-      )
-      .get(hashToken(nonce));
+): Promise<{ agent: MemberRow; issuedBy: MemberRow } | null> {
+  return db.tx(async (t) => {
+    const row = await t.get<{
+      team_id: string;
+      member_id: string;
+      issued_by: string;
+      expires_at: number;
+      used_at: number | null;
+    }>(
+      'SELECT team_id, member_id, issued_by, expires_at, used_at FROM agent_connect_nonces WHERE nonce_hash = ?',
+      [hashToken(nonce)],
+    );
     if (!row || row.team_id !== teamId || row.used_at !== null) return null;
-    db.prepare('UPDATE agent_connect_nonces SET used_at = ? WHERE nonce_hash = ?').run(
+    await t.run('UPDATE agent_connect_nonces SET used_at = ? WHERE nonce_hash = ?', [
       now,
       hashToken(nonce),
-    );
+    ]);
     if (row.expires_at <= now) return null;
-    const member = db
-      .prepare<
-        [string, string],
-        MemberRow
-      >("SELECT * FROM members WHERE team_id = ? AND id = ? AND left_at IS NULL AND kind = 'agent'")
-      .get(teamId, row.member_id);
+    const member = await t.get<MemberRow>(
+      "SELECT * FROM members WHERE team_id = ? AND id = ? AND left_at IS NULL AND kind = 'agent'",
+      [teamId, row.member_id],
+    );
     if (!member) return null;
     const s = resolveAccountStatus(member);
     if (s === 'disabled' || s === 'banned' || s === 'archived') return null;
     // ADR 463 §4.1: a link issued before the agent was hosted redeems nothing once it is.
     if (
-      db
-        .prepare<
-          [string, string],
-          { one: number }
-        >('SELECT 1 AS one FROM residency WHERE team_id = ? AND member_id = ?')
-        .get(teamId, member.id)
+      await t.get<{ one: number }>(
+        'SELECT 1 AS one FROM residency WHERE team_id = ? AND member_id = ?',
+        [teamId, member.id],
+      )
     )
       return null;
     // ADR 456 §3: the issuer bounds the session, so an issuer who has since lost standing redeems
     // nothing — the chain would be dead on its first use anyway.
-    const issuedBy = db
-      .prepare<[string], MemberRow>('SELECT * FROM members WHERE id = ?')
-      .get(row.issued_by);
+    const issuedBy = await t.get<MemberRow>('SELECT * FROM members WHERE id = ?', [row.issued_by]);
     if (!issuedBy || memberStandingRefusal(issuedBy, now)) return null;
     return { agent: member, issuedBy };
-  })();
+  });
 }

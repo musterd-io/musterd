@@ -1,6 +1,7 @@
 import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
 import { getTeamBySlug } from '../store/teams.js';
@@ -48,7 +49,7 @@ async function get(path: string, auth?: string | AgentHttpAuth, seat?: string) {
 }
 
 beforeEach(async () => {
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
@@ -184,8 +185,10 @@ describe('GET /inbox — deferred acts (ADR 211)', () => {
       meta: { defer_ref: ask.id, until: { lane: 'L1' } },
     });
 
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const rows = listAudit(server.db, team.id).filter((r) => r.action === 'inbox.deferred');
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const rows = (await listAudit(sqliteDriver(server.db), team.id)).filter(
+      (r) => r.action === 'inbox.deferred',
+    );
     expect(rows).toHaveLength(1);
     expect(rows[0]!.actor).toBe('Ada');
     expect(rows[0]!.target).toBe(ask.id);
@@ -209,8 +212,10 @@ describe('GET /inbox — deferred acts (ADR 211)', () => {
       meta: { ask_ref: ask.id, until: '1h' },
     });
 
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const rows = listAudit(server.db, team.id).filter((r) => r.action === 'inbox.deferred');
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const rows = (await listAudit(sqliteDriver(server.db), team.id)).filter(
+      (r) => r.action === 'inbox.deferred',
+    );
     expect(rows).toHaveLength(0);
   });
 

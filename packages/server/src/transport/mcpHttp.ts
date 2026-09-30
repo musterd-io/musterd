@@ -145,9 +145,9 @@ function requestSeat(webReq: Request): { team: string; member: string } {
   return { team, member };
 }
 
-function buildRemoteServer(ctx: Ctx, webReq: Request): McpServer {
+async function buildRemoteServer(ctx: Ctx, webReq: Request): Promise<McpServer> {
   const { team: slug, member: memberName } = requestSeat(webReq);
-  const team = requireTeam(ctx.db, slug);
+  const team = await requireTeam(ctx.db, slug);
   const server = new McpServer(
     { name: 'musterd', version: DAEMON_VERSION },
     {
@@ -191,22 +191,22 @@ function buildRemoteServer(ctx: Ctx, webReq: Request): McpServer {
       if (!parsed.success)
         return toolError('invalid input: ids (string|string[]) | limit | unread_only');
       const args = parsed.data;
-      const member = getMemberByName(ctx.db, team.id, memberName);
+      const member = await getMemberByName(ctx.db, team.id, memberName);
       if (!member) return toolError('seat is gone — sign in again');
       if (args.ids !== undefined) {
         const ids = (Array.isArray(args.ids) ? args.ids : args.ids.split(',')).filter(
           (s) => s.length > 0,
         );
-        const rows = listInbox(ctx.db, member, { ids });
+        const rows = await listInbox(ctx.db, member, { ids });
         return textResult(
           JSON.stringify({
-            messages: rowsToEnvelopes(ctx.db, slug, rows),
-            cursor: getCursor(ctx.db, member.id),
+            messages: await rowsToEnvelopes(ctx.db, slug, rows),
+            cursor: await getCursor(ctx.db, member.id),
           }),
         );
       }
-      const cursor = getCursor(ctx.db, member.id);
-      const rows = listInbox(ctx.db, member, {
+      const cursor = await getCursor(ctx.db, member.id);
+      const rows = await listInbox(ctx.db, member, {
         unreadOnly: args.unread_only ?? false,
         cursorTs: cursor.last_read_ts,
         cursorId: cursor.last_read_message_id,
@@ -214,8 +214,8 @@ function buildRemoteServer(ctx: Ctx, webReq: Request): McpServer {
       });
       return textResult(
         JSON.stringify({
-          messages: rowsToEnvelopes(ctx.db, slug, rows),
-          cursor: getCursor(ctx.db, member.id),
+          messages: await rowsToEnvelopes(ctx.db, slug, rows),
+          cursor: await getCursor(ctx.db, member.id),
         }),
       );
     },
@@ -243,14 +243,14 @@ function buildRemoteServer(ctx: Ctx, webReq: Request): McpServer {
     async (rawArgs: unknown) => {
       const parsed = TeamAgentCreateInput.safeParse(rawArgs ?? {});
       if (!parsed.success) return toolError('invalid input: name | role?');
-      const sponsor = getMemberByName(ctx.db, team.id, memberName);
+      const sponsor = await getMemberByName(ctx.db, team.id, memberName);
       if (!sponsor) return toolError('seat is gone — sign in again');
       try {
         const origin = originFrom(
           webReq.headers.get('host'),
           webReq.headers.get('x-forwarded-proto'),
         );
-        const minted = mintSponsoredAgent(ctx, team, sponsor, parsed.data, origin);
+        const minted = await mintSponsoredAgent(ctx, team, sponsor, parsed.data, origin);
         // ADR 463 §2: lead with whichever happened — the sponsor's host is standing it up, or
         // here is the link to open on the device that will run it.
         return textResult(
@@ -286,14 +286,14 @@ function buildRemoteServer(ctx: Ctx, webReq: Request): McpServer {
     async (rawArgs: unknown) => {
       const parsed = TeamAgentConnectInput.safeParse(rawArgs ?? {});
       if (!parsed.success) return toolError('invalid input: name');
-      const caller = getMemberByName(ctx.db, team.id, memberName);
+      const caller = await getMemberByName(ctx.db, team.id, memberName);
       if (!caller) return toolError('seat is gone — sign in again');
       try {
         const origin = originFrom(
           webReq.headers.get('host'),
           webReq.headers.get('x-forwarded-proto'),
         );
-        const issued = issueAgentConnect(ctx, team, caller, parsed.data.name, origin);
+        const issued = await issueAgentConnect(ctx, team, caller, parsed.data.name, origin);
         return textResult(
           `Connect link for "${issued.member}" (expires in 15 minutes, works once):\n` +
             `${issued.connect_url}`,
@@ -339,7 +339,7 @@ function buildRemoteServer(ctx: Ctx, webReq: Request): McpServer {
       } catch (err) {
         return toolError(err instanceof Error ? err.message : String(err));
       }
-      const member = getMemberByName(ctx.db, team.id, memberName);
+      const member = await getMemberByName(ctx.db, team.id, memberName);
       if (!member) return toolError('seat is gone — sign in again');
       const meta: Record<string, unknown> = { ...(args.meta ?? {}) };
       if (args.reply_to) meta['in_reply_to'] = args.reply_to;
@@ -358,7 +358,7 @@ function buildRemoteServer(ctx: Ctx, webReq: Request): McpServer {
         // The ONE validate+persist+deliver path (routeEnvelope) — a remote send is a send.
         // No sender occupancy id by design (stateless, like POST /messages): the model stamp
         // falls back to the member's newest attested presence.
-        const result = routeEnvelope(ctx, team, member, envelope);
+        const result = await routeEnvelope(ctx, team, member, envelope);
         return textResult(
           JSON.stringify({
             sent: envelope.id,
@@ -377,15 +377,15 @@ function buildRemoteServer(ctx: Ctx, webReq: Request): McpServer {
   return server;
 }
 
-function getHandler(ctx: Ctx, slug: string): McpHttpHandler {
+async function getHandler(ctx: Ctx, slug: string): Promise<McpHttpHandler> {
   let handler = handlers.get(slug);
   if (!handler) {
     // The factory runs per request with that request's seat (ADR 446 §1); sessions the SDK
     // holds are keyed by its own session ids, and this map is keyed by team — bounded by the
     // team count, never by callers. Rehearsal measures the SDK-owned session growth (inc 3).
-    handler = createMcpHandler((fctx: { requestInfo?: Request }) => {
+    handler = createMcpHandler(async (fctx: { requestInfo?: Request }) => {
       if (!fctx.requestInfo) throw new Error('remote MCP factory needs the request');
-      return buildRemoteServer(ctx, fctx.requestInfo);
+      return await buildRemoteServer(ctx, fctx.requestInfo);
     });
     handlers.set(slug, handler);
   }
@@ -499,7 +499,7 @@ export async function handleMcpRoute(
   const slug = decodeURIComponent(m[1]!);
   // Redaction lane 01M3AMYGN5: the slug is attacker-controlled path input and may itself be
   // credential-shaped — never echo it (requireTeam's `no team "X"` would write it back out).
-  const team = requireTeamRedacted(ctx.db, slug);
+  const team = await requireTeamRedacted(ctx.db, slug);
   if (!isTlsPeer(ctx, req)) {
     res.writeHead(403, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     res.end(
@@ -531,7 +531,7 @@ export async function handleMcpRoute(
   let memberName: string;
   let memberId: string;
   try {
-    const auth = authMember(
+    const auth = await authMember(
       ctx.db,
       slug,
       bearer,
@@ -562,13 +562,13 @@ export async function handleMcpRoute(
   // Ambient presence (ADR 057 §4): the tool call IS the heartbeat — stamp it, and announce the
   // flip like authTouch does. Humans stamp no model/provenance (ADR 121); the surface reads
   // `other` (no remote surface in the enum; rehearsal may name one).
-  touchSeen(ctx.db, memberId);
-  if (touchAmbientPresence(ctx.db, memberId, 'other', ctx.config.presenceTimeoutMs)) {
+  await touchSeen(ctx.db, memberId);
+  if (await touchAmbientPresence(ctx.db, memberId, 'other', ctx.config.presenceTimeoutMs)) {
     ctx.hub.broadcastTeam(team.id, { type: 'presence', member: memberName, status: 'online' });
   }
   try {
     const webReq = await toWebRequest(req, path, url, { team: slug, member: memberName });
-    const webRes = await getHandler(ctx, slug).fetch(webReq);
+    const webRes = await (await getHandler(ctx, slug)).fetch(webReq);
     await sendWebResponse(res, webRes);
   } catch (err) {
     const me = asMusterdError(err);

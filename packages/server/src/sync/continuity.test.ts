@@ -5,7 +5,8 @@ import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { getCursor } from '../store/cursors.js';
 import { getMemberByName } from '../store/members.js';
@@ -57,25 +58,25 @@ async function call(
   const text = await response.text();
   return { status: response.status, json: text ? (JSON.parse(text) as any) : null };
 }
-const post = (base: string, path: string, body?: unknown, auth?: string) =>
-  call('POST', base, path, body, auth);
+const post = async (base: string, path: string, body?: unknown, auth?: string) =>
+  await call('POST', base, path, body, auth);
 
 const hubCtx = (): Ctx => ({
-  db: hub.db,
+  db: sqliteDriver(hub.db),
   hub: new Hub(),
   config: resolveConfig(),
   rosterRoots: [],
 });
-const hubTeam = () => getTeamBySlug(hub.db, 'bravo')!;
-const joinerTeam = () => getTeamBySlug(joiner.db, 'bravo')!;
-const nickOn = (db: RunningServer['db'], team: { id: string }) =>
-  getMemberByName(db, team.id, 'nick')!;
+const hubTeam = async () => (await getTeamBySlug(sqliteDriver(hub.db), 'bravo'))!;
+const joinerTeam = async () => (await getTeamBySlug(sqliteDriver(joiner.db), 'bravo'))!;
+const nickOn = async (db: RunningServer['db'], team: { id: string }) =>
+  (await getMemberByName(sqliteDriver(db), team.id, 'nick'))!;
 
 async function roundTrip() {
-  await pushTeam(joinerCtx, joinerTeam());
-  await pullTeam(hubCtx(), hubTeam());
-  await pushTeam(hubCtx(), hubTeam());
-  await pullTeam(joinerCtx, joinerTeam());
+  await pushTeam(joinerCtx, await joinerTeam());
+  await pullTeam(hubCtx(), await hubTeam());
+  await pushTeam(hubCtx(), await hubTeam());
+  await pullTeam(joinerCtx, await joinerTeam());
 }
 
 async function enrollJoiner() {
@@ -94,12 +95,12 @@ async function enrollJoiner() {
 }
 
 /** A message on the joiner, so the cursor has somewhere to point. */
-function messageOnJoiner(id: string, ts: number) {
-  const jt = joinerTeam();
-  insertMessage(
-    joiner.db,
+async function messageOnJoiner(id: string, ts: number) {
+  const jt = await joinerTeam();
+  await insertMessage(
+    sqliteDriver(joiner.db),
     jt.id,
-    nickOn(joiner.db, jt).id,
+    (await nickOn(joiner.db, jt)).id,
     null,
     makeEnvelope({
       id,
@@ -116,11 +117,16 @@ function messageOnJoiner(id: string, ts: number) {
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'musterd-continuity-sync-'));
   process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
-  hub = createServer({ db: openDb(':memory:'), port: 0 });
+  hub = createServer({ db: openTestDb(':memory:'), port: 0 });
   hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-  joiner = createServer({ db: openDb(':memory:'), port: 0 });
+  joiner = createServer({ db: openTestDb(':memory:'), port: 0 });
   joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
-  joinerCtx = { db: joiner.db, hub: new Hub(), config: resolveConfig(), rosterRoots: [] };
+  joinerCtx = {
+    db: sqliteDriver(joiner.db),
+    hub: new Hub(),
+    config: resolveConfig(),
+    rosterRoots: [],
+  };
   nickOnHub = (
     await post(hubBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } })
   ).json.human_credential;
@@ -128,7 +134,7 @@ beforeEach(async () => {
     await post(joinerBase, '/teams', { slug: 'bravo', creator: { name: 'nick', kind: 'human' } })
   ).json.human_credential;
   // The joiner's node row is minted on its first logged act, and enrollment needs one.
-  messageOnJoiner('j-0', 1000);
+  await messageOnJoiner('j-0', 1000);
   await enrollJoiner();
 });
 
@@ -152,14 +158,16 @@ describe('seat memory replication (ADR 366)', () => {
       nickOnJoiner,
     );
     expect(saved.status).toBe(204);
-    expect(getMemory(hub.db, nickOn(hub.db, hubTeam()).id)).toBeNull();
+    expect(
+      await getMemory(sqliteDriver(hub.db), (await nickOn(hub.db, await hubTeam())).id),
+    ).toBeNull();
 
     await roundTrip();
 
     // The census's measured gap, now closed — and closed with the body, which is what continuity
     // IS. A headline-only copy would have told the second machine that a note exists and nothing
     // of what it says.
-    const onHub = getMemory(hub.db, nickOn(hub.db, hubTeam()).id);
+    const onHub = await getMemory(sqliteDriver(hub.db), (await nickOn(hub.db, await hubTeam())).id);
     expect(onHub?.headline).toBe('left off here');
     expect(onHub?.body).toBe('mid-flight: the cursor half is designed, memory half blocked');
   });
@@ -172,9 +180,14 @@ describe('seat memory replication (ADR 366)', () => {
       { headline: 'h', body: 'b' },
       nickOnJoiner,
     );
-    const origin = getMemory(joiner.db, nickOn(joiner.db, joinerTeam()).id)!;
+    const origin = (await getMemory(
+      sqliteDriver(joiner.db),
+      (await nickOn(joiner.db, await joinerTeam())).id,
+    ))!;
     await roundTrip();
-    expect(getMemory(hub.db, nickOn(hub.db, hubTeam()).id)?.saved_at).toBe(origin.saved_at);
+    expect(
+      (await getMemory(sqliteDriver(hub.db), (await nickOn(hub.db, await hubTeam())).id))?.saved_at,
+    ).toBe(origin.saved_at);
   });
 
   it('a newer save wins over an older one whichever direction it travels (LWW on the origin clock)', async () => {
@@ -191,8 +204,13 @@ describe('seat memory replication (ADR 366)', () => {
     );
     await roundTrip();
     await roundTrip(); // the hub's own row also crosses back; the joiner must not regress to it
-    expect(getMemory(hub.db, nickOn(hub.db, hubTeam()).id)?.headline).toBe('newer');
-    expect(getMemory(joiner.db, nickOn(joiner.db, joinerTeam()).id)?.headline).toBe('newer');
+    expect(
+      (await getMemory(sqliteDriver(hub.db), (await nickOn(hub.db, await hubTeam())).id))?.headline,
+    ).toBe('newer');
+    expect(
+      (await getMemory(sqliteDriver(joiner.db), (await nickOn(joiner.db, await joinerTeam())).id))
+        ?.headline,
+    ).toBe('newer');
   });
 
   it('a clear on one machine removes the note on the other — a dropped note must not walk back in', async () => {
@@ -204,7 +222,9 @@ describe('seat memory replication (ADR 366)', () => {
       nickOnJoiner,
     );
     await roundTrip();
-    expect(getMemory(hub.db, nickOn(hub.db, hubTeam()).id)).not.toBeNull();
+    expect(
+      await getMemory(sqliteDriver(hub.db), (await nickOn(hub.db, await hubTeam())).id),
+    ).not.toBeNull();
 
     const cleared = await call(
       'DELETE',
@@ -215,11 +235,17 @@ describe('seat memory replication (ADR 366)', () => {
     );
     expect(cleared.status).toBe(204);
     await roundTrip();
-    expect(getMemory(hub.db, nickOn(hub.db, hubTeam()).id)).toBeNull();
+    expect(
+      await getMemory(sqliteDriver(hub.db), (await nickOn(hub.db, await hubTeam())).id),
+    ).toBeNull();
     // And two more ticks later it has not come back from anywhere.
     await roundTrip();
-    expect(getMemory(hub.db, nickOn(hub.db, hubTeam()).id)).toBeNull();
-    expect(getMemory(joiner.db, nickOn(joiner.db, joinerTeam()).id)).toBeNull();
+    expect(
+      await getMemory(sqliteDriver(hub.db), (await nickOn(hub.db, await hubTeam())).id),
+    ).toBeNull();
+    expect(
+      await getMemory(sqliteDriver(joiner.db), (await nickOn(joiner.db, await joinerTeam())).id),
+    ).toBeNull();
   });
 
   it('a clear survives an OLDER save that arrives after it — the clear keeps its clock once the row is gone', async () => {
@@ -239,21 +265,31 @@ describe('seat memory replication (ADR 366)', () => {
     const cleared = await call('DELETE', hubBase, '/teams/bravo/memory', undefined, nickOnHub);
     expect(cleared.status).toBe(204);
     // The hub's own clear is folded from its loopback (a skip) before the joiner's save arrives.
-    await pushTeam(hubCtx(), hubTeam());
-    await pullTeam(hubCtx(), hubTeam());
-    expect(getMemory(hub.db, nickOn(hub.db, hubTeam()).id)).toBeNull();
+    await pushTeam(hubCtx(), await hubTeam());
+    await pullTeam(hubCtx(), await hubTeam());
+    expect(
+      await getMemory(sqliteDriver(hub.db), (await nickOn(hub.db, await hubTeam())).id),
+    ).toBeNull();
 
     // Now the older save crosses to the hub.
-    await pushTeam(joinerCtx, joinerTeam());
-    await pullTeam(hubCtx(), hubTeam());
-    expect(getMemory(hub.db, nickOn(hub.db, hubTeam()).id)).toBeNull();
+    await pushTeam(joinerCtx, await joinerTeam());
+    await pullTeam(hubCtx(), await hubTeam());
+    expect(
+      await getMemory(sqliteDriver(hub.db), (await nickOn(hub.db, await hubTeam())).id),
+    ).toBeNull();
 
     // And the clear reaches the joiner, where the stale note still sits, and removes it.
     await roundTrip();
-    expect(getMemory(joiner.db, nickOn(joiner.db, joinerTeam()).id)).toBeNull();
+    expect(
+      await getMemory(sqliteDriver(joiner.db), (await nickOn(joiner.db, await joinerTeam())).id),
+    ).toBeNull();
     await roundTrip();
-    expect(getMemory(hub.db, nickOn(hub.db, hubTeam()).id)).toBeNull();
-    expect(getMemory(joiner.db, nickOn(joiner.db, joinerTeam()).id)).toBeNull();
+    expect(
+      await getMemory(sqliteDriver(hub.db), (await nickOn(hub.db, await hubTeam())).id),
+    ).toBeNull();
+    expect(
+      await getMemory(sqliteDriver(joiner.db), (await nickOn(joiner.db, await joinerTeam())).id),
+    ).toBeNull();
   });
 
   it('a save made AFTER a clear survives the clear arriving late', async () => {
@@ -271,8 +307,13 @@ describe('seat memory replication (ADR 366)', () => {
     );
     await roundTrip();
     await roundTrip();
-    expect(getMemory(hub.db, nickOn(hub.db, hubTeam()).id)?.headline).toBe('fresh');
-    expect(getMemory(joiner.db, nickOn(joiner.db, joinerTeam()).id)?.headline).toBe('fresh');
+    expect(
+      (await getMemory(sqliteDriver(hub.db), (await nickOn(hub.db, await hubTeam())).id))?.headline,
+    ).toBe('fresh');
+    expect(
+      (await getMemory(sqliteDriver(joiner.db), (await nickOn(joiner.db, await joinerTeam())).id))
+        ?.headline,
+    ).toBe('fresh');
   });
 
   it('the stamped row is an audit row that CARRIES the body — ADR 093 hard rule 5, overturned on purpose', async () => {
@@ -302,10 +343,13 @@ describe('seat memory replication (ADR 366)', () => {
 
 describe('inbox cursor replication (ADR 366)', () => {
   it('a cursor advanced on the joiner is at the same MESSAGE on the hub — resolved locally, not by timestamp', async () => {
-    messageOnJoiner('j-1', 2000);
-    messageOnJoiner('j-2', 3000);
+    await messageOnJoiner('j-1', 2000);
+    await messageOnJoiner('j-2', 3000);
     await roundTrip(); // the messages must be on the hub before the cursor can point at them
-    const before = getCursor(hub.db, nickOn(hub.db, hubTeam()).id);
+    const before = await getCursor(
+      sqliteDriver(hub.db),
+      (await nickOn(hub.db, await hubTeam())).id,
+    );
     expect(before.last_read_message_id).toBeNull();
 
     const advanced = await post(
@@ -317,7 +361,7 @@ describe('inbox cursor replication (ADR 366)', () => {
     expect(advanced.status).toBe(200);
     await roundTrip();
 
-    const onHub = getCursor(hub.db, nickOn(hub.db, hubTeam()).id);
+    const onHub = await getCursor(sqliteDriver(hub.db), (await nickOn(hub.db, await hubTeam())).id);
     expect(onHub.last_read_message_id).toBe('j-1');
     // THE point of the design: `last_read_ts` is the HUB's own created_at for j-1 — its receipt
     // clock — not the joiner's. The two daemons folded j-1 at different instants, so the raw
@@ -326,7 +370,10 @@ describe('inbox cursor replication (ADR 366)', () => {
       .prepare<[string], { created_at: number }>('SELECT created_at FROM messages WHERE id = ?')
       .get('j-1')!;
     expect(onHub.last_read_ts).toBe(hubRow.created_at);
-    const joinerCursor = getCursor(joiner.db, nickOn(joiner.db, joinerTeam()).id);
+    const joinerCursor = await getCursor(
+      sqliteDriver(joiner.db),
+      (await nickOn(joiner.db, await joinerTeam())).id,
+    );
     expect(joinerCursor.last_read_message_id).toBe('j-1');
     // The event never carried a timestamp at all.
     const evt = hub.db
@@ -339,8 +386,8 @@ describe('inbox cursor replication (ADR 366)', () => {
   });
 
   it('the cursor only moves FORWARD in the receiver’s order — an older position arriving late is a no-op', async () => {
-    messageOnJoiner('j-1', 2000);
-    messageOnJoiner('j-2', 3000);
+    await messageOnJoiner('j-1', 2000);
+    await messageOnJoiner('j-2', 3000);
     await roundTrip();
     // Hub reads further than the joiner will.
     await post(hubBase, '/teams/bravo/inbox/cursor', { last_read_message_id: 'j-2' }, nickOnHub);
@@ -352,17 +399,21 @@ describe('inbox cursor replication (ADR 366)', () => {
     );
     await roundTrip();
     await roundTrip();
-    expect(getCursor(hub.db, nickOn(hub.db, hubTeam()).id).last_read_message_id).toBe('j-2');
+    expect(
+      (await getCursor(sqliteDriver(hub.db), (await nickOn(hub.db, await hubTeam())).id))
+        .last_read_message_id,
+    ).toBe('j-2');
     // And the joiner catches UP to j-2 rather than the hub falling back to j-1.
-    expect(getCursor(joiner.db, nickOn(joiner.db, joinerTeam()).id).last_read_message_id).toBe(
-      'j-2',
-    );
+    expect(
+      (await getCursor(sqliteDriver(joiner.db), (await nickOn(joiner.db, await joinerTeam())).id))
+        .last_read_message_id,
+    ).toBe('j-2');
   });
 
   it('a cursor naming a message not folded here yet STOPS the fold (cursor_unborn) instead of skipping', async () => {
     // The block-don't-skip discipline every kind shares. A cursor pointed at a place this daemon
     // cannot resolve is not a fact to apply half of; the next tick has the message.
-    const result = foldBatch(hub.db, hubTeam().id, [
+    const result = await foldBatch(sqliteDriver(hub.db), (await hubTeam()).id, [
       {
         kind: 'continuity',
         team: 'bravo',
@@ -395,7 +446,7 @@ describe('inbox cursor replication (ADR 366)', () => {
   });
 
   it('a continuity verb this build cannot project STOPS the fold rather than storing it', async () => {
-    const result = foldBatch(joiner.db, joinerTeam().id, [
+    const result = await foldBatch(sqliteDriver(joiner.db), (await joinerTeam()).id, [
       {
         kind: 'continuity',
         team: 'bravo',
@@ -481,6 +532,8 @@ describe('continuity is a SEAT fact — residence applies (unlike policy)', () =
     expect(res.status).toBe(403);
     expect(res.json.error.code).toBe('bound_elsewhere');
     expect(res.json.kind).toBe('continuity');
-    expect(getMemory(hub.db, nickOn(hub.db, hubTeam()).id)?.headline).toBe('mine');
+    expect(
+      (await getMemory(sqliteDriver(hub.db), (await nickOn(hub.db, await hubTeam())).id))?.headline,
+    ).toBe('mine');
   });
 });

@@ -1,7 +1,8 @@
 import { makeEnvelope } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { runMigrations } from '../db/migrations.js';
-import { openDb, type Database } from '../db/open.js';
+import { type Database } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { createTeam } from '../store/teams.js';
@@ -25,11 +26,11 @@ function snapshot(db: Database) {
   };
 }
 
-function seed() {
-  const db = openDb(':memory:');
-  const team = createTeam(db, { slug: 'revive' });
-  const ada = addMember(db, team, { name: 'ada', kind: 'agent' }).row;
-  insertMessage(
+async function seed() {
+  const db = openTestDb(':memory:');
+  const team = await createTeam(db, { slug: 'revive' });
+  const ada = (await addMember(db, team, { name: 'ada', kind: 'agent' })).row;
+  await insertMessage(
     db,
     team.id,
     ada.id,
@@ -47,19 +48,19 @@ function seed() {
   return { db, team };
 }
 
-describe('sync containment', () => {
-  it('has the three staging tables, and they start empty', () => {
-    const { db } = seed();
+describe('sync containment', async () => {
+  it('has the three staging tables, and they start empty', async () => {
+    const { db } = await seed();
 
     for (const table of ['sync_log', 'sync_meta', 'sync_push_cursor']) {
       expect(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()).toEqual({ n: 0 });
     }
 
-    db.close();
+    await db.close();
   });
 
-  it('leaves the message log and every next_seq untouched when v50 replays', () => {
-    const { db } = seed();
+  it('leaves the message log and every next_seq untouched when v50 replays', async () => {
+    const { db } = await seed();
     const before = snapshot(db);
     // One message, one local node that has handed out exactly one seq.
     expect(before.messages).toEqual({ n: 1 });
@@ -73,11 +74,11 @@ describe('sync containment', () => {
     expect(snapshot(db)).toEqual(before);
     // …and the replay did not drop what was already staged-adjacent: the tables survive it.
     expect(db.prepare('SELECT COUNT(*) AS n FROM sync_log').get()).toEqual({ n: 0 });
-    db.close();
+    await db.close();
   });
 
-  it('v54 holds (origin_node, origin_seq) unique in messages and adds the pull cursor', () => {
-    const { db, team } = seed();
+  it('v54 holds (origin_node, origin_seq) unique in messages and adds the pull cursor', async () => {
+    const { db, team } = await seed();
     const row = db
       .prepare<
         [string],
@@ -105,11 +106,11 @@ describe('sync containment', () => {
         )
         .get(),
     ).toBeDefined();
-    db.close();
+    await db.close();
   });
 
-  it('stages two rows in one team that the fold cannot both write', () => {
-    const { db, team } = seed();
+  it('stages two rows in one team that the fold cannot both write', async () => {
+    const { db, team } = await seed();
     for (const id of ['node-a', 'node-b']) {
       db.prepare('INSERT INTO nodes (id, team_id, label, next_seq) VALUES (?, ?, ?, 1)').run(
         id,
@@ -147,11 +148,11 @@ describe('sync containment', () => {
 
     fold('node-a');
     expect(() => fold('node-b')).toThrow(/UNIQUE|PRIMARY KEY|constraint/i);
-    db.close();
+    await db.close();
   });
 
-  it('keeps the staging tables free of any counter tied to nodes.next_seq', () => {
-    const { db } = seed();
+  it('keeps the staging tables free of any counter tied to nodes.next_seq', async () => {
+    const { db } = await seed();
 
     // `hub_seq` is the hub's own canonical order over staged rows; `last_seq` is this machine's
     // memory of how far it has pushed. Neither is an origin's next-seq allocator, and no column
@@ -166,6 +167,6 @@ describe('sync containment', () => {
       expect(columns).not.toContain('next_seq');
     }
 
-    db.close();
+    await db.close();
   });
 });

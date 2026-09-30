@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { addMember } from './members.js';
 import {
   enrollResidency,
@@ -50,12 +51,13 @@ function wakeRow(
 }
 const NOW = 1_800_000_000_000;
 
-function seed() {
-  const db = openDb(':memory:');
-  const team = createTeam(db, { slug: 'dawn' });
-  const agent = (name: string) => addMember(db, team, { kind: 'agent', name, role: '' }).row;
-  const enrol = (memberId: string, host = 'mac.lan') =>
-    enrollResidency(db, team.id, {
+async function seed() {
+  const db = openTestDb(':memory:');
+  const team = await createTeam(db, { slug: 'dawn' });
+  const agent = async (name: string) =>
+    (await addMember(db, team, { kind: 'agent', name, role: '' })).row;
+  const enrol = async (memberId: string, host = 'mac.lan') =>
+    await enrollResidency(db, team.id, {
       member_id: memberId,
       harness: 'codex',
       host,
@@ -65,14 +67,14 @@ function seed() {
   return { db, team, agent, enrol };
 }
 
-describe('recordHostSeen / listHostSeen — the poll IS the heartbeat', () => {
-  it('records the newest sighting per (team, host) and reads it back', () => {
-    const { db, team } = seed();
-    expect(listHostSeen(db, team.id).size).toBe(0);
-    recordHostSeen(db, team.id, 'mac.lan', NOW - 5_000);
-    recordHostSeen(db, team.id, 'mac.lan', NOW);
-    recordHostSeen(db, team.id, 'fly-1', NOW - 90_000);
-    expect(listHostSeen(db, team.id)).toEqual(
+describe('recordHostSeen / listHostSeen — the poll IS the heartbeat', async () => {
+  it('records the newest sighting per (team, host) and reads it back', async () => {
+    const { db, team } = await seed();
+    expect((await listHostSeen(db, team.id)).size).toBe(0);
+    await recordHostSeen(db, team.id, 'mac.lan', NOW - 5_000);
+    await recordHostSeen(db, team.id, 'mac.lan', NOW);
+    await recordHostSeen(db, team.id, 'fly-1', NOW - 90_000);
+    expect(await listHostSeen(db, team.id)).toEqual(
       new Map([
         ['mac.lan', NOW],
         ['fly-1', NOW - 90_000],
@@ -80,48 +82,50 @@ describe('recordHostSeen / listHostSeen — the poll IS the heartbeat', () => {
     );
   });
 
-  it('never moves a sighting backwards — a late-arriving old poll must not make a host look stale', () => {
-    const { db, team } = seed();
-    recordHostSeen(db, team.id, 'mac.lan', NOW);
-    recordHostSeen(db, team.id, 'mac.lan', NOW - 30_000);
-    expect(listHostSeen(db, team.id).get('mac.lan')).toBe(NOW);
+  it('never moves a sighting backwards — a late-arriving old poll must not make a host look stale', async () => {
+    const { db, team } = await seed();
+    await recordHostSeen(db, team.id, 'mac.lan', NOW);
+    await recordHostSeen(db, team.id, 'mac.lan', NOW - 30_000);
+    expect((await listHostSeen(db, team.id)).get('mac.lan')).toBe(NOW);
   });
 });
 
-describe('seatWakeabilityFacts — the facts wakeabilityFromFacts was always waiting for', () => {
-  it('an enrolled seat whose host polled inside HOST_STALE_MS is host_reachable', () => {
-    const { db, team, agent, enrol } = seed();
-    const bot = agent('gptbot');
-    enrol(bot.id);
-    recordHostSeen(db, team.id, 'mac.lan', NOW - HOST_STALE_MS + 1);
-    const facts = seatWakeabilityFacts(db, team.id, NOW).get(bot.id);
+describe('seatWakeabilityFacts — the facts wakeabilityFromFacts was always waiting for', async () => {
+  it('an enrolled seat whose host polled inside HOST_STALE_MS is host_reachable', async () => {
+    const { db, team, agent, enrol } = await seed();
+    const bot = await agent('gptbot');
+    await enrol(bot.id);
+    await recordHostSeen(db, team.id, 'mac.lan', NOW - HOST_STALE_MS + 1);
+    const facts = (await seatWakeabilityFacts(db, team.id, NOW)).get(bot.id);
     expect(facts).toMatchObject({ enrolled: true, host_reachable: true, workspace_readable: true });
   });
 
-  it('an enrolled seat whose host has not polled for HOST_STALE_MS is NOT host_reachable', () => {
-    const { db, team, agent, enrol } = seed();
-    const bot = agent('gptbot');
-    enrol(bot.id);
-    recordHostSeen(db, team.id, 'mac.lan', NOW - HOST_STALE_MS);
-    expect(seatWakeabilityFacts(db, team.id, NOW).get(bot.id)?.host_reachable).toBe(false);
+  it('an enrolled seat whose host has not polled for HOST_STALE_MS is NOT host_reachable', async () => {
+    const { db, team, agent, enrol } = await seed();
+    const bot = await agent('gptbot');
+    await enrol(bot.id);
+    await recordHostSeen(db, team.id, 'mac.lan', NOW - HOST_STALE_MS);
+    expect((await seatWakeabilityFacts(db, team.id, NOW)).get(bot.id)?.host_reachable).toBe(false);
   });
 
-  it('an enrolled seat whose host has NEVER polled is UNKNOWN, not stale — absence is not an assertion (ADR 236)', () => {
+  it('an enrolled seat whose host has NEVER polled is UNKNOWN, not stale — absence is not an assertion (ADR 236)', async () => {
     // A fresh install, an older host build, or a registry entry nobody has polled for yet must
     // read exactly as they did before host_liveness existed. Only an observed silence — a host that
     // polled and then stopped — is stale. The first mutation of this rule ("never seen ⇒ stale")
     // turned five existing wake-pool tests red, which is the right thing for them to have done.
-    const { db, team, agent, enrol } = seed();
-    const bot = agent('gptbot');
-    enrol(bot.id);
-    expect(seatWakeabilityFacts(db, team.id, NOW).get(bot.id)?.host_reachable).toBeUndefined();
+    const { db, team, agent, enrol } = await seed();
+    const bot = await agent('gptbot');
+    await enrol(bot.id);
+    expect(
+      (await seatWakeabilityFacts(db, team.id, NOW)).get(bot.id)?.host_reachable,
+    ).toBeUndefined();
   });
 
-  it('the last wake report saying enrolled_dead_workspace makes the seat not workspace_readable — until a later woke', () => {
-    const { db, team, agent, enrol } = seed();
-    const bot = agent('gptbot');
-    enrol(bot.id);
-    recordHostSeen(db, team.id, 'mac.lan', NOW);
+  it('the last wake report saying enrolled_dead_workspace makes the seat not workspace_readable — until a later woke', async () => {
+    const { db, team, agent, enrol } = await seed();
+    const bot = await agent('gptbot');
+    await enrol(bot.id);
+    await recordHostSeen(db, team.id, 'mac.lan', NOW);
     wakeRow(
       db,
       team.id,
@@ -130,16 +134,20 @@ describe('seatWakeabilityFacts — the facts wakeabilityFromFacts was always wai
       { lease_id: 'L1', wakeability: 'enrolled_dead_workspace', reason: 'workspace gone' },
       NOW - 60_000,
     );
-    expect(seatWakeabilityFacts(db, team.id, NOW).get(bot.id)?.workspace_readable).toBe(false);
+    expect((await seatWakeabilityFacts(db, team.id, NOW)).get(bot.id)?.workspace_readable).toBe(
+      false,
+    );
     wakeRow(db, team.id, 'residency.woke', 'gptbot', { lease_id: 'L2' }, NOW - 30_000);
-    expect(seatWakeabilityFacts(db, team.id, NOW).get(bot.id)?.workspace_readable).toBe(true);
+    expect((await seatWakeabilityFacts(db, team.id, NOW)).get(bot.id)?.workspace_readable).toBe(
+      true,
+    );
   });
 
-  it('a wake_failed for any OTHER reason leaves workspace_readable true — only the still-true set sticks', () => {
-    const { db, team, agent, enrol } = seed();
-    const bot = agent('gptbot');
-    enrol(bot.id);
-    recordHostSeen(db, team.id, 'mac.lan', NOW);
+  it('a wake_failed for any OTHER reason leaves workspace_readable true — only the still-true set sticks', async () => {
+    const { db, team, agent, enrol } = await seed();
+    const bot = await agent('gptbot');
+    await enrol(bot.id);
+    await recordHostSeen(db, team.id, 'mac.lan', NOW);
     wakeRow(
       db,
       team.id,
@@ -148,48 +156,50 @@ describe('seatWakeabilityFacts — the facts wakeabilityFromFacts was always wai
       { lease_id: 'L1', wakeability: 'wakeable', reason: 'watchdog timeout' },
       NOW - 60_000,
     );
-    expect(seatWakeabilityFacts(db, team.id, NOW).get(bot.id)?.workspace_readable).toBe(true);
+    expect((await seatWakeabilityFacts(db, team.id, NOW)).get(bot.id)?.workspace_readable).toBe(
+      true,
+    );
   });
 
-  it('an unenrolled seat has no entry', () => {
-    const { db, team, agent } = seed();
-    const bot = agent('ghost');
-    expect(seatWakeabilityFacts(db, team.id, NOW).has(bot.id)).toBe(false);
+  it('an unenrolled seat has no entry', async () => {
+    const { db, team, agent } = await seed();
+    const bot = await agent('ghost');
+    expect((await seatWakeabilityFacts(db, team.id, NOW)).has(bot.id)).toBe(false);
   });
 });
 
-describe('teamFamilyPosture — the ADR 191 wake pool now sees host and workspace', () => {
-  it('an enrolled idle seat on a stale host is enrolled_host_stale, not wakeable', () => {
-    const { db, team, agent, enrol } = seed();
-    const bot = agent('gptbot');
-    enrol(bot.id);
-    recordHostSeen(db, team.id, 'mac.lan', Date.now() - HOST_STALE_MS - 1);
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+describe('teamFamilyPosture — the ADR 191 wake pool now sees host and workspace', async () => {
+  it('an enrolled idle seat on a stale host is enrolled_host_stale, not wakeable', async () => {
+    const { db, team, agent, enrol } = await seed();
+    const bot = await agent('gptbot');
+    await enrol(bot.id);
+    await recordHostSeen(db, team.id, 'mac.lan', Date.now() - HOST_STALE_MS - 1);
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.wake_pool.find((c) => c.seat === 'gptbot')?.wakeability).toBe('enrolled_host_stale');
   });
 
-  it('an enrolled idle seat on a host this daemon has never heard from is still wakeable — unknown never demotes', () => {
-    const { db, team, agent, enrol } = seed();
-    const bot = agent('gptbot');
-    enrol(bot.id);
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+  it('an enrolled idle seat on a host this daemon has never heard from is still wakeable — unknown never demotes', async () => {
+    const { db, team, agent, enrol } = await seed();
+    const bot = await agent('gptbot');
+    await enrol(bot.id);
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.wake_pool.find((c) => c.seat === 'gptbot')?.wakeability).toBe('wakeable');
   });
 
-  it('an enrolled idle seat on a live host with a readable workspace is wakeable', () => {
-    const { db, team, agent, enrol } = seed();
-    const bot = agent('gptbot');
-    enrol(bot.id);
-    recordHostSeen(db, team.id, 'mac.lan', Date.now());
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+  it('an enrolled idle seat on a live host with a readable workspace is wakeable', async () => {
+    const { db, team, agent, enrol } = await seed();
+    const bot = await agent('gptbot');
+    await enrol(bot.id);
+    await recordHostSeen(db, team.id, 'mac.lan', Date.now());
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.wake_pool.find((c) => c.seat === 'gptbot')?.wakeability).toBe('wakeable');
   });
 
-  it('a dead workspace outranks a live host — the ADR 189 ladder order', () => {
-    const { db, team, agent, enrol } = seed();
-    const bot = agent('gptbot');
-    enrol(bot.id);
-    recordHostSeen(db, team.id, 'mac.lan', Date.now());
+  it('a dead workspace outranks a live host — the ADR 189 ladder order', async () => {
+    const { db, team, agent, enrol } = await seed();
+    const bot = await agent('gptbot');
+    await enrol(bot.id);
+    await recordHostSeen(db, team.id, 'mac.lan', Date.now());
     wakeRow(
       db,
       team.id,
@@ -198,57 +208,57 @@ describe('teamFamilyPosture — the ADR 191 wake pool now sees host and workspac
       { lease_id: 'L1', wakeability: 'enrolled_dead_workspace', reason: 'workspace gone' },
       Date.now() - 1_000,
     );
-    const p = teamFamilyPosture(db, team.id, TIMEOUT);
+    const p = await teamFamilyPosture(db, team.id, TIMEOUT);
     expect(p.wake_pool.find((c) => c.seat === 'gptbot')?.wakeability).toBe(
       'enrolled_dead_workspace',
     );
   });
 });
 
-describe('seatWakeabilityFacts — the resumable badge is withdrawn by a fresh wake (ADR 424)', () => {
+describe('seatWakeabilityFacts — the resumable badge is withdrawn by a fresh wake (ADR 424)', async () => {
   const CAPTURE = NOW - 3_600_000;
 
-  it('a capture with no wake since keeps its attestation time', () => {
-    const { db, team, agent, enrol } = seed();
-    const bot = agent('gptbot');
-    enrol(bot.id);
-    recordSessionAttestation(db, team.id, bot.id, 'claude-code', CAPTURE);
-    expect(seatWakeabilityFacts(db, team.id, NOW).get(bot.id)?.resumable_at).toBe(CAPTURE);
+  it('a capture with no wake since keeps its attestation time', async () => {
+    const { db, team, agent, enrol } = await seed();
+    const bot = await agent('gptbot');
+    await enrol(bot.id);
+    await recordSessionAttestation(db, team.id, bot.id, 'claude-code', CAPTURE);
+    expect((await seatWakeabilityFacts(db, team.id, NOW)).get(bot.id)?.resumable_at).toBe(CAPTURE);
   });
 
-  it('a fresh wake AFTER the capture withdraws it — the roster stops promising a resume the ladder refused', () => {
-    const { db, team, agent, enrol } = seed();
-    const bot = agent('gptbot');
-    enrol(bot.id);
-    recordSessionAttestation(db, team.id, bot.id, 'claude-code', CAPTURE);
+  it('a fresh wake AFTER the capture withdraws it — the roster stops promising a resume the ladder refused', async () => {
+    const { db, team, agent, enrol } = await seed();
+    const bot = await agent('gptbot');
+    await enrol(bot.id);
+    await recordSessionAttestation(db, team.id, bot.id, 'claude-code', CAPTURE);
     wakeRow(db, team.id, 'residency.woke', 'gptbot', { session: 'fresh' }, CAPTURE + 60_000);
-    expect(seatWakeabilityFacts(db, team.id, NOW).get(bot.id)?.resumable_at).toBeNull();
+    expect((await seatWakeabilityFacts(db, team.id, NOW)).get(bot.id)?.resumable_at).toBeNull();
   });
 
-  it('a resumed wake after the capture leaves it standing', () => {
-    const { db, team, agent, enrol } = seed();
-    const bot = agent('gptbot');
-    enrol(bot.id);
-    recordSessionAttestation(db, team.id, bot.id, 'claude-code', CAPTURE);
+  it('a resumed wake after the capture leaves it standing', async () => {
+    const { db, team, agent, enrol } = await seed();
+    const bot = await agent('gptbot');
+    await enrol(bot.id);
+    await recordSessionAttestation(db, team.id, bot.id, 'claude-code', CAPTURE);
     wakeRow(db, team.id, 'residency.woke', 'gptbot', { session: 'resumed' }, CAPTURE + 60_000);
-    expect(seatWakeabilityFacts(db, team.id, NOW).get(bot.id)?.resumable_at).toBe(CAPTURE);
+    expect((await seatWakeabilityFacts(db, team.id, NOW)).get(bot.id)?.resumable_at).toBe(CAPTURE);
   });
 
-  it('a fresh wake BEFORE the capture is not evidence against it — a new capture re-arms the badge', () => {
-    const { db, team, agent, enrol } = seed();
-    const bot = agent('gptbot');
-    enrol(bot.id);
+  it('a fresh wake BEFORE the capture is not evidence against it — a new capture re-arms the badge', async () => {
+    const { db, team, agent, enrol } = await seed();
+    const bot = await agent('gptbot');
+    await enrol(bot.id);
     wakeRow(db, team.id, 'residency.woke', 'gptbot', { session: 'fresh' }, CAPTURE - 60_000);
-    recordSessionAttestation(db, team.id, bot.id, 'claude-code', CAPTURE);
-    expect(seatWakeabilityFacts(db, team.id, NOW).get(bot.id)?.resumable_at).toBe(CAPTURE);
+    await recordSessionAttestation(db, team.id, bot.id, 'claude-code', CAPTURE);
+    expect((await seatWakeabilityFacts(db, team.id, NOW)).get(bot.id)?.resumable_at).toBe(CAPTURE);
   });
 
-  it('a woke row without a session axis is not evidence of anything (ADR 236)', () => {
-    const { db, team, agent, enrol } = seed();
-    const bot = agent('gptbot');
-    enrol(bot.id);
-    recordSessionAttestation(db, team.id, bot.id, 'claude-code', CAPTURE);
+  it('a woke row without a session axis is not evidence of anything (ADR 236)', async () => {
+    const { db, team, agent, enrol } = await seed();
+    const bot = await agent('gptbot');
+    await enrol(bot.id);
+    await recordSessionAttestation(db, team.id, bot.id, 'claude-code', CAPTURE);
     wakeRow(db, team.id, 'residency.woke', 'gptbot', { act: 'a1' }, CAPTURE + 60_000);
-    expect(seatWakeabilityFacts(db, team.id, NOW).get(bot.id)?.resumable_at).toBe(CAPTURE);
+    expect((await seatWakeabilityFacts(db, team.id, NOW)).get(bot.id)?.resumable_at).toBe(CAPTURE);
   });
 });

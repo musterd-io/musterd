@@ -5,8 +5,8 @@ import {
   type IncidentPolicy,
   type Lane,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { monotonicFactory as monotonicUlid } from 'ulid';
+import type { Driver } from '../db/driver.js';
 import { appendAudit, appendReplicatedEvent } from './audit.js';
 import { getLane, listLanes, openLane, updateLane } from './lanes.js';
 import { getMemberByRole } from './members.js';
@@ -42,8 +42,8 @@ export type IncidentOutcome =
   | { kind: 'appended'; lane: Lane }; // matched an already-open incident
 
 /** The team's incident knobs, defaults applied on read (never on write — ADR 185). */
-export function incidentPolicy(db: Database, teamId: string): IncidentPolicy {
-  return getPolicy(db, teamId).incident;
+export async function incidentPolicy(db: Driver, teamId: string): Promise<IncidentPolicy> {
+  return (await getPolicy(db, teamId)).incident;
 }
 
 /** One pool row as the wire carries it (ADR 371 §2) — the hub's row, verbatim. */
@@ -64,8 +64,8 @@ interface ReportRow {
  * one is refused at ingest (`sync/log.ts`). `actor` is the reporter: the fold keys the mirror on
  * the seat NAME and resolves nothing, and ingest binds nothing on the hub's own loopback.
  */
-function stampReport(db: Database, teamId: string, row: ReportRow): void {
-  appendReplicatedEvent(db, teamId, {
+async function stampReport(db: Driver, teamId: string, row: ReportRow): Promise<void> {
+  await appendReplicatedEvent(db, teamId, {
     actor: row.seat,
     action: 'record.incident_report',
     target: row.lane_id ?? row.gate,
@@ -96,30 +96,34 @@ function detailLine(
 }
 
 /** Open (non-terminal) incident lanes for a team, oldest first. */
-export function openIncidents(db: Database, teamId: string, teamSlug: string): Lane[] {
-  return listLanes(db, teamId, teamSlug)
+export async function openIncidents(db: Driver, teamId: string, teamSlug: string): Promise<Lane[]> {
+  return (await listLanes(db, teamId, teamSlug))
     .filter((l) => l.kind === 'incident' && !LANE_TERMINAL_STATES.has(l.state))
     .sort((a, b) => a.created_at - b.created_at);
 }
 
-function findOpenIncident(
-  db: Database,
+async function findOpenIncident(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   gate: string,
-): Lane | null {
+): Promise<Lane | null> {
   const title = incidentTitle(gate);
-  return openIncidents(db, teamId, teamSlug).find((l) => l.title === title) ?? null;
+  return (await openIncidents(db, teamId, teamSlug)).find((l) => l.title === title) ?? null;
 }
 
 /** Distinct seats that reported into an incident lane (for resolve fan-out and the route hook). */
-export function incidentReporters(db: Database, teamId: string, laneId: string): string[] {
-  return db
-    .prepare<[string, string], { seat: string }>(
+export async function incidentReporters(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+): Promise<string[]> {
+  return (
+    await db.all<{ seat: string }>(
       'SELECT DISTINCT seat FROM incident_reports WHERE team_id = ? AND lane_id = ?',
+      [teamId, laneId],
     )
-    .all(teamId, laneId)
-    .map((r) => r.seat);
+  ).map((r) => r.seat);
 }
 
 /** One incident handed to an owner because its claim window closed with nobody on it. */
@@ -129,13 +133,15 @@ export interface RoutedIncident {
 }
 
 /** Has this lane already been recorded as unroutable? (One row per lane, not one per tick.) */
-function alreadyReportedUnfilled(db: Database, teamId: string, laneId: string): boolean {
-  const row = db
-    .prepare<
-      [string, string],
-      { n: number }
-    >("SELECT COUNT(*) n FROM audit WHERE team_id = ? AND action = 'incident.route_unfilled' AND target = ?")
-    .get(teamId, laneId);
+async function alreadyReportedUnfilled(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+): Promise<boolean> {
+  const row = await db.get<{ n: number }>(
+    "SELECT COUNT(*) n FROM audit WHERE team_id = ? AND action = 'incident.route_unfilled' AND target = ?",
+    [teamId, laneId],
+  );
   return (row?.n ?? 0) > 0;
 }
 
@@ -157,24 +163,24 @@ function alreadyReportedUnfilled(db: Database, teamId: string, laneId: string): 
  * Idempotent by construction: assignment moves the lane off `owner_seat IS NULL`, so a second pass
  * finds nothing. Nothing here wakes anyone — the wake edge is separate and opt-in.
  */
-export function routeUnclaimedIncidents(
-  db: Database,
+export async function routeUnclaimedIncidents(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   now: number = Date.now(),
-): RoutedIncident[] {
-  const policy = incidentPolicy(db, teamId);
+): Promise<RoutedIncident[]> {
+  const policy = await incidentPolicy(db, teamId);
   if (!policy.enabled) return [];
 
   const routed: RoutedIncident[] = [];
-  for (const lane of openIncidents(db, teamId, teamSlug)) {
+  for (const lane of await openIncidents(db, teamId, teamSlug)) {
     if (lane.owner_seat) continue; // someone claimed it — context beat role, which is the design
     if (now - lane.created_at < policy.claim_window_ms) continue;
 
-    const owner = getMemberByRole(db, teamId, policy.fallback_role);
+    const owner = await getMemberByRole(db, teamId, policy.fallback_role);
     if (!owner) {
-      if (!alreadyReportedUnfilled(db, teamId, lane.id)) {
-        appendAudit(db, teamId, {
+      if (!(await alreadyReportedUnfilled(db, teamId, lane.id))) {
+        await appendAudit(db, teamId, {
           actor: null,
           action: 'incident.route_unfilled',
           target: lane.id,
@@ -185,7 +191,7 @@ export function routeUnclaimedIncidents(
       continue;
     }
 
-    const assigned = updateLane(
+    const assigned = await updateLane(
       db,
       teamId,
       lane.id,
@@ -196,7 +202,7 @@ export function routeUnclaimedIncidents(
       { actor: null },
     );
     if (!assigned) continue;
-    appendAudit(db, teamId, {
+    await appendAudit(db, teamId, {
       actor: null,
       action: 'incident.routed',
       target: lane.id,
@@ -214,40 +220,41 @@ export function routeUnclaimedIncidents(
  * `lane_id IS NULL` are the pre-threshold pool; a terminal incident never absorbs new reports —
  * its rows keep their lane_id, so the pool restarts empty after a resolve.
  */
-export function recordBlockedReport(
-  db: Database,
+export async function recordBlockedReport(
+  db: Driver,
   teamId: string,
   teamSlug: string,
   seat: string,
   report: BlockedBy,
   messageId: string,
   now: number = Date.now(),
-): IncidentOutcome {
-  const policy = incidentPolicy(db, teamId);
+): Promise<IncidentOutcome> {
+  const policy = await incidentPolicy(db, teamId);
   // The opt-out is a FULL one: no row is written either. A team that turned this off should not be
   // accumulating a pool that springs into an incident the moment someone turns it back on.
   if (!policy.enabled) return { kind: 'disabled' };
-  const open = findOpenIncident(db, teamId, teamSlug, report.gate);
+  const open = await findOpenIncident(db, teamId, teamSlug, report.gate);
   // Every pool row is stamped `record.incident_report` as it is written (ADR 371 §2): the pool is
   // the hub's, and the row replicates back to every joiner as a read-only mirror so
   // `incidentReporters` answers there. The `lane_id` stamp at open is the same verb again.
-  const insert = (laneId: string | null) => {
+  const insert = async (laneId: string | null) => {
     const id = mintReportId();
-    db.prepare(
+    await db.run(
       `INSERT INTO incident_reports (id, team_id, gate, seat, sig, ref, message_id, lane_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      id,
-      teamId,
-      report.gate,
-      seat,
-      report.sig ?? null,
-      report.ref ?? null,
-      messageId,
-      laneId,
-      now,
+      [
+        id,
+        teamId,
+        report.gate,
+        seat,
+        report.sig ?? null,
+        report.ref ?? null,
+        messageId,
+        laneId,
+        now,
+      ],
     );
-    stampReport(db, teamId, {
+    await stampReport(db, teamId, {
       id,
       seat,
       gate: report.gate,
@@ -260,8 +267,8 @@ export function recordBlockedReport(
   };
 
   if (open) {
-    insert(open.id);
-    const appended = updateLane(
+    await insert(open.id);
+    const appended = await updateLane(
       db,
       teamId,
       open.id,
@@ -271,7 +278,7 @@ export function recordBlockedReport(
       undefined,
       { actor: seat },
     );
-    appendAudit(db, teamId, {
+    await appendAudit(db, teamId, {
       actor: seat,
       action: 'incident.report_appended',
       target: open.id,
@@ -281,31 +288,27 @@ export function recordBlockedReport(
     return { kind: 'appended', lane: appended ?? open };
   }
 
-  insert(null);
-  const pool = db
-    .prepare<[string, string], { seat: string }>(
+  await insert(null);
+  const pool = (
+    await db.all<{ seat: string }>(
       'SELECT DISTINCT seat FROM incident_reports WHERE team_id = ? AND gate = ? AND lane_id IS NULL',
+      [teamId, report.gate],
     )
-    .all(teamId, report.gate)
-    .map((r) => r.seat);
+  ).map((r) => r.seat);
   if (pool.length < policy.cluster_threshold) return { kind: 'recorded' };
 
-  const rows = db
-    .prepare<
-      [string, string],
-      {
-        id: string;
-        seat: string;
-        sig: string | null;
-        ref: string | null;
-        message_id: string | null;
-        created_at: number;
-      }
-    >(
-      'SELECT id, seat, sig, ref, message_id, created_at FROM incident_reports WHERE team_id = ? AND gate = ? AND lane_id IS NULL ORDER BY id',
-    )
-    .all(teamId, report.gate);
-  const lane = openLane(
+  const rows = await db.all<{
+    id: string;
+    seat: string;
+    sig: string | null;
+    ref: string | null;
+    message_id: string | null;
+    created_at: number;
+  }>(
+    'SELECT id, seat, sig, ref, message_id, created_at FROM incident_reports WHERE team_id = ? AND gate = ? AND lane_id IS NULL ORDER BY id',
+    [teamId, report.gate],
+  );
+  const lane = await openLane(
     db,
     teamId,
     teamSlug,
@@ -318,16 +321,18 @@ export function recordBlockedReport(
     },
     now,
   );
-  db.prepare(
+  await db.run(
     'UPDATE incident_reports SET lane_id = ? WHERE team_id = ? AND gate = ? AND lane_id IS NULL',
-  ).run(lane.id, teamId, report.gate);
-  for (const r of rows) stampReport(db, teamId, { ...r, gate: report.gate, lane_id: lane.id });
-  appendAudit(db, teamId, {
+    [lane.id, teamId, report.gate],
+  );
+  for (const r of rows)
+    await stampReport(db, teamId, { ...r, gate: report.gate, lane_id: lane.id });
+  await appendAudit(db, teamId, {
     actor: seat,
     action: 'incident.opened',
     target: lane.id,
     result: 'allow',
     detail: { gate: report.gate, reporters: pool.length },
   });
-  return { kind: 'opened', lane: getLane(db, teamId, lane.id, teamSlug) ?? lane };
+  return { kind: 'opened', lane: (await getLane(db, teamId, lane.id, teamSlug)) ?? lane };
 }

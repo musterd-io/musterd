@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { AUDIT_SUBJECT, appendAudit, appendAuditRequired, appendReplicatedEvent } from './audit.js';
 import type { AuditAction } from './audit.js';
 import { addMember } from './members.js';
@@ -18,9 +18,9 @@ import { createTeam } from './teams.js';
  * reported on it.
  */
 
-const team = () => {
-  const db = openDb(':memory:');
-  const row = createTeam(db, { slug: 'revive' });
+const team = async () => {
+  const db = openTestDb(':memory:');
+  const row = await createTeam(db, { slug: 'revive' });
   return { db, team: row, teamId: row.id };
 };
 
@@ -78,47 +78,47 @@ describe('AUDIT_SUBJECT (the declared map)', () => {
   });
 });
 
-describe('appendAudit refuses an undeclared action (ADR 410 decision 2)', () => {
+describe('appendAudit refuses an undeclared action (ADR 410 decision 2)', async () => {
   const undeclared = 'totally.invented' as AuditAction;
   const entry = { actor: 'ada', action: undeclared, target: null, result: 'allow' } as const;
 
-  it('throws from the plain append — the load-bearing half, or the map rots', () => {
-    const { db, teamId } = team();
-    expect(() => appendAudit(db, teamId, entry)).toThrow(/AUDIT_SUBJECT/);
+  it('throws from the plain append — the load-bearing half, or the map rots', async () => {
+    const { db, teamId } = await team();
+    await expect(appendAudit(db, teamId, entry)).rejects.toThrow(/AUDIT_SUBJECT/);
   });
 
-  it('throws from the two sibling writers too — all three insert the same columns', () => {
-    const { db, teamId } = team();
-    expect(() => appendAuditRequired(db, teamId, entry)).toThrow(/AUDIT_SUBJECT/);
-    expect(() => appendReplicatedEvent(db, teamId, entry)).toThrow(/AUDIT_SUBJECT/);
+  it('throws from the two sibling writers too — all three insert the same columns', async () => {
+    const { db, teamId } = await team();
+    await expect(appendAuditRequired(db, teamId, entry)).rejects.toThrow(/AUDIT_SUBJECT/);
+    await expect(appendReplicatedEvent(db, teamId, entry)).rejects.toThrow(/AUDIT_SUBJECT/);
   });
 
-  it('still swallows a STORAGE failure — the refusal is about the map, not the row', () => {
-    const { db, teamId } = team();
+  it('still swallows a STORAGE failure — the refusal is about the map, not the row', async () => {
+    const { db, teamId } = await team();
     db.prepare('DROP TABLE audit').run();
-    expect(() =>
+    await expect(
       appendAudit(db, teamId, {
         actor: 'ada',
         action: 'inbox.rendered',
         target: 'ada',
         result: 'allow',
       }),
-    ).not.toThrow();
+    ).resolves.not.toBeNull();
   });
 });
 
-describe('the three generic readers consult the map (ADR 410 decision 3)', () => {
+describe('the three generic readers consult the map (ADR 410 decision 3)', async () => {
   const NOW = 10_000_000;
 
   /** A team with two live agent seats and one `interrupt.raised` row: sender ada, recipient lin. */
-  const withRaise = () => {
-    const { db, team: row, teamId } = team();
-    const ada = addMember(db, row, { name: 'ada', kind: 'agent' }).row;
-    const lin = addMember(db, row, { name: 'lin', kind: 'agent' }).row;
-    attach(db, ada.id, 'claude-code', 'c1');
-    attach(db, lin.id, 'claude-code', 'c2');
+  const withRaise = async () => {
+    const { db, team: row, teamId } = await team();
+    const ada = (await addMember(db, row, { name: 'ada', kind: 'agent' })).row;
+    const lin = (await addMember(db, row, { name: 'lin', kind: 'agent' })).row;
+    await attach(db, ada.id, 'claude-code', 'c1');
+    await attach(db, lin.id, 'claude-code', 'c2');
     // Written when LIN's probe fired; `actor` is the seat that sent the act, possibly weeks ago.
-    appendAudit(db, teamId, {
+    await appendAudit(db, teamId, {
       actor: 'ada',
       action: 'interrupt.raised',
       target: 'lin',
@@ -127,71 +127,73 @@ describe('the three generic readers consult the map (ADR 410 decision 3)', () =>
     return { db, teamId, ada, lin };
   };
 
-  it('credits the probing recipient, not the sender — the live defect, closed', () => {
-    const { db, teamId } = withRaise();
-    const seen = lastActionBySubject(db, teamId, { now: NOW });
+  it('credits the probing recipient, not the sender — the live defect, closed', async () => {
+    const { db, teamId } = await withRaise();
+    const seen = await lastActionBySubject(db, teamId, { now: NOW });
     expect(seen.has('lin')).toBe(true);
     expect(seen.has('ada')).toBe(false);
   });
 
-  it('drops a machine-written row entirely — nobody is credited for a wake', () => {
-    const { db, team: row, teamId } = team();
-    addMember(db, row, { name: 'ada', kind: 'agent' });
-    appendAudit(db, teamId, {
+  it('drops a machine-written row entirely — nobody is credited for a wake', async () => {
+    const { db, team: row, teamId } = await team();
+    await addMember(db, row, { name: 'ada', kind: 'agent' });
+    await appendAudit(db, teamId, {
       actor: null,
       action: 'residency.woke',
       target: 'ada',
       result: 'allow',
     });
-    expect(lastActionBySubject(db, teamId, { now: NOW }).has('ada')).toBe(false);
+    expect((await lastActionBySubject(db, teamId, { now: NOW })).has('ada')).toBe(false);
   });
 
-  it('still credits the actor on a convention-3 row — the counterparty is not the worker', () => {
-    const { db, team: row, teamId } = team();
-    addMember(db, row, { name: 'ada', kind: 'agent' });
-    addMember(db, row, { name: 'lin', kind: 'agent' });
-    appendAudit(db, teamId, {
+  it('still credits the actor on a convention-3 row — the counterparty is not the worker', async () => {
+    const { db, team: row, teamId } = await team();
+    await addMember(db, row, { name: 'ada', kind: 'agent' });
+    await addMember(db, row, { name: 'lin', kind: 'agent' });
+    await appendAudit(db, teamId, {
       actor: 'ada',
       action: 'send.denied',
       target: 'lin',
       result: 'deny',
     });
-    const seen = lastActionBySubject(db, teamId, { now: NOW });
+    const seen = await lastActionBySubject(db, teamId, { now: NOW });
     expect(seen.has('ada')).toBe(true);
     expect(seen.has('lin')).toBe(false);
   });
 
-  it("quietestBusyMs joins members on the subject, so /health's bounce reads the recipient", () => {
-    const { db } = withRaise();
+  it("quietestBusyMs joins members on the subject, so /health's bounce reads the recipient", async () => {
+    const { db } = await withRaise();
     // Sender-keyed, this row would have said "someone acted just now" about ada. It still says
     // somebody is busy — but the seat it means is lin, and a lin-less team is silent.
-    expect(quietestBusyMs(db, { presenceTimeoutMs: 60_000 })).not.toBeNull();
-    const { db: db2, team: row2, teamId: t2 } = team();
-    const solo = addMember(db2, row2, { name: 'ada', kind: 'agent' }).row;
-    attach(db2, solo.id, 'claude-code', 'c1');
-    appendAudit(db2, t2, {
+    expect(await quietestBusyMs(db, { presenceTimeoutMs: 60_000 })).not.toBeNull();
+    const { db: db2, team: row2, teamId: t2 } = await team();
+    const solo = (await addMember(db2, row2, { name: 'ada', kind: 'agent' })).row;
+    await attach(db2, solo.id, 'claude-code', 'c1');
+    await appendAudit(db2, t2, {
       actor: 'ada',
       action: 'interrupt.raised',
       target: 'gone',
       result: 'allow',
     });
-    expect(quietestBusyMs(db2, { presenceTimeoutMs: 60_000 })).toBeNull();
+    expect(await quietestBusyMs(db2, { presenceTimeoutMs: 60_000 })).toBeNull();
   });
 
-  it('leaves the excludeActions list doing its own job — a different axis', () => {
+  it('leaves the excludeActions list doing its own job — a different axis', async () => {
     // The map says WHICH COLUMN; the list says WHICH ACTIONS ARE WORK. A claim is convention 1 and
     // still excluded from review selection, because establishing authority is not being busy.
-    const { db, team: row, teamId } = team();
-    addMember(db, row, { name: 'ada', kind: 'agent' });
-    appendAudit(db, teamId, {
+    const { db, team: row, teamId } = await team();
+    await addMember(db, row, { name: 'ada', kind: 'agent' });
+    await appendAudit(db, teamId, {
       actor: 'ada',
       action: 'claim.occupied',
       target: 'ada',
       result: 'allow',
     });
-    expect(lastActionBySubject(db, teamId, { now: NOW }).has('ada')).toBe(true);
+    expect((await lastActionBySubject(db, teamId, { now: NOW })).has('ada')).toBe(true);
     expect(
-      lastActionBySubject(db, teamId, { now: NOW, excludeActions: ['claim.occupied'] }).has('ada'),
+      (await lastActionBySubject(db, teamId, { now: NOW, excludeActions: ['claim.occupied'] })).has(
+        'ada',
+      ),
     ).toBe(false);
   });
 });

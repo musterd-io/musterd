@@ -1,6 +1,6 @@
 import { makeEnvelope } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
 import { authenticateNode, bindNode, listNodes, revokeNode, rotateNode } from './nodes.js';
@@ -14,67 +14,67 @@ import { createTeam } from './teams.js';
  * the log, or revoking a credential becomes retro-repudiating what was said under it.
  */
 
-function seed() {
-  const db = openDb(':memory:');
-  const team = createTeam(db, { slug: 'revive' });
-  const ada = addMember(db, team, { name: 'ada', kind: 'agent' }).row;
+async function seed() {
+  const db = openTestDb(':memory:');
+  const team = await createTeam(db, { slug: 'revive' });
+  const ada = (await addMember(db, team, { name: 'ada', kind: 'agent' })).row;
   return { db, team, ada };
 }
 
-describe('node lifecycle (ADR 328 §5)', () => {
-  it('rotation keeps the node id, so origin stamps survive it', () => {
-    const { db, team } = seed();
-    bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_aaa', 'nick');
+describe('node lifecycle (ADR 328 §5)', async () => {
+  it('rotation keeps the node id, so origin stamps survive it', async () => {
+    const { db, team } = await seed();
+    await bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_aaa', 'nick');
 
-    const rotated = rotateNode(db, team.id, 'node-remote');
+    const rotated = await rotateNode(db, team.id, 'node-remote');
     expect(rotated).not.toBeNull();
     expect(rotated!.credential).toMatch(/^msnode_/);
     expect(rotated!.credential).not.toBe('msnode_aaa');
 
     // The old credential is dead, the new one works, and the identity is untouched — which is the
     // entire reason ADR 328 §5 made the id a ULID on the row rather than deriving it from the key.
-    expect(authenticateNode(db, team.id, 'msnode_aaa')).toBeNull();
-    expect(authenticateNode(db, team.id, rotated!.credential)?.id).toBe('node-remote');
-    db.close();
+    expect(await authenticateNode(db, team.id, 'msnode_aaa')).toBeNull();
+    expect((await authenticateNode(db, team.id, rotated!.credential))?.id).toBe('node-remote');
+    await db.close();
   });
 
-  it('refuses to rotate a revoked node — re-arming a retired credential is an enrollment', () => {
-    const { db, team } = seed();
-    bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_aaa', 'nick');
-    revokeNode(db, team.id, 'node-remote');
+  it('refuses to rotate a revoked node — re-arming a retired credential is an enrollment', async () => {
+    const { db, team } = await seed();
+    await bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_aaa', 'nick');
+    await revokeNode(db, team.id, 'node-remote');
 
-    expect(rotateNode(db, team.id, 'node-remote')).toBeNull();
-    db.close();
+    expect(await rotateNode(db, team.id, 'node-remote')).toBeNull();
+    await db.close();
   });
 
-  it("refuses to rotate another team's node", () => {
-    const db = openDb(':memory:');
-    const one = createTeam(db, { slug: 'one' });
-    const two = createTeam(db, { slug: 'two' });
-    bindNode(db, one.id, 'node-a', 'laptop', 'msnode_aaa', 'nick');
+  it("refuses to rotate another team's node", async () => {
+    const db = openTestDb(':memory:');
+    const one = await createTeam(db, { slug: 'one' });
+    const two = await createTeam(db, { slug: 'two' });
+    await bindNode(db, one.id, 'node-a', 'laptop', 'msnode_aaa', 'nick');
 
-    expect(rotateNode(db, two.id, 'node-a')).toBeNull();
-    expect(authenticateNode(db, one.id, 'msnode_aaa')?.id).toBe('node-a');
-    db.close();
+    expect(await rotateNode(db, two.id, 'node-a')).toBeNull();
+    expect((await authenticateNode(db, one.id, 'msnode_aaa'))?.id).toBe('node-a');
+    await db.close();
   });
 
-  it('a revoked node authenticates nowhere, and revoking twice does not lie about it', () => {
-    const { db, team } = seed();
-    bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_aaa', 'nick');
+  it('a revoked node authenticates nowhere, and revoking twice does not lie about it', async () => {
+    const { db, team } = await seed();
+    await bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_aaa', 'nick');
 
-    expect(revokeNode(db, team.id, 'node-remote')).toBe(true);
-    expect(authenticateNode(db, team.id, 'msnode_aaa')).toBeNull();
+    expect(await revokeNode(db, team.id, 'node-remote')).toBe(true);
+    expect(await authenticateNode(db, team.id, 'msnode_aaa')).toBeNull();
     // Idempotent, but honest: the second call did not revoke anything, and says so.
-    expect(revokeNode(db, team.id, 'node-remote')).toBe(false);
-    expect(revokeNode(db, team.id, 'no-such-node')).toBe(false);
-    db.close();
+    expect(await revokeNode(db, team.id, 'node-remote')).toBe(false);
+    expect(await revokeNode(db, team.id, 'no-such-node')).toBe(false);
+    await db.close();
   });
 
-  it('revocation keeps the history that node attested', () => {
-    const { db, team, ada } = seed();
-    bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_aaa', 'nick');
+  it('revocation keeps the history that node attested', async () => {
+    const { db, team, ada } = await seed();
+    await bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_aaa', 'nick');
     // A message stamped to that origin — the shape a synced event will have in 3b.
-    insertMessage(
+    await insertMessage(
       db,
       team.id,
       ada.id,
@@ -92,7 +92,7 @@ describe('node lifecycle (ADR 328 §5)', () => {
     );
     db.prepare("UPDATE messages SET origin_node = 'node-remote' WHERE id = 'm-1'").run();
 
-    revokeNode(db, team.id, 'node-remote');
+    await revokeNode(db, team.id, 'node-remote');
 
     // The log is append-only and those events are attested history: revoking a credential is not
     // retro-repudiating what was said under it (ADR 328 §5).
@@ -103,27 +103,27 @@ describe('node lifecycle (ADR 328 §5)', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM nodes WHERE id = ?').get('node-remote')).toEqual({
       n: 1,
     });
-    db.close();
+    await db.close();
   });
 
-  it('authenticates only a bound, unrevoked credential of the right team', () => {
-    const db = openDb(':memory:');
-    const one = createTeam(db, { slug: 'one' });
-    const two = createTeam(db, { slug: 'two' });
-    bindNode(db, one.id, 'node-a', 'laptop', 'msnode_aaa', 'nick');
+  it('authenticates only a bound, unrevoked credential of the right team', async () => {
+    const db = openTestDb(':memory:');
+    const one = await createTeam(db, { slug: 'one' });
+    const two = await createTeam(db, { slug: 'two' });
+    await bindNode(db, one.id, 'node-a', 'laptop', 'msnode_aaa', 'nick');
 
-    expect(authenticateNode(db, one.id, 'msnode_aaa')?.label).toBe('laptop');
+    expect((await authenticateNode(db, one.id, 'msnode_aaa'))?.label).toBe('laptop');
     // A node speaks only for the team it was admitted to — ADR 325's one team, one authority.
-    expect(authenticateNode(db, two.id, 'msnode_aaa')).toBeNull();
-    expect(authenticateNode(db, one.id, 'msnode_wrong')).toBeNull();
-    expect(authenticateNode(db, one.id, '')).toBeNull();
-    db.close();
+    expect(await authenticateNode(db, two.id, 'msnode_aaa')).toBeNull();
+    expect(await authenticateNode(db, one.id, 'msnode_wrong')).toBeNull();
+    expect(await authenticateNode(db, one.id, '')).toBeNull();
+    await db.close();
   });
 
-  it('never returns a credential or a hash in a listing', () => {
-    const { db, team, ada } = seed();
+  it('never returns a credential or a hash in a listing', async () => {
+    const { db, team, ada } = await seed();
     // The daemon's own row is unenrolled; the remote one is bound.
-    insertMessage(
+    await insertMessage(
       db,
       team.id,
       ada.id,
@@ -139,9 +139,9 @@ describe('node lifecycle (ADR 328 §5)', () => {
         meta: null,
       }),
     );
-    bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_secret-value', 'nick');
+    await bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_secret-value', 'nick');
 
-    const listed = listNodes(db, team.id);
+    const listed = await listNodes(db, team.id);
     expect(listed).toHaveLength(2);
     expect(JSON.stringify(listed)).not.toContain('msnode_secret-value');
     expect(JSON.stringify(listed)).not.toContain('credential_hash');
@@ -155,6 +155,6 @@ describe('node lifecycle (ADR 328 §5)', () => {
     const local = listed.find((n) => n.id !== 'node-remote')!;
     expect(local.credential_prefix).toBeNull();
     expect(local.enrolled_at).toBeNull();
-    db.close();
+    await db.close();
   });
 });

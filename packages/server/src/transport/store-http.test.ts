@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { appendAudit } from '../store/audit.js';
 import { createTeam } from '../store/teams.js';
@@ -13,9 +13,9 @@ describe('POST /store/prune and /store/compact', () => {
   let base: string;
 
   beforeEach(async () => {
-    const db = openDb(':memory:');
-    const team = createTeam(db, { slug: 'revive' });
-    appendAudit(db, team.id, {
+    const db = openTestDb(':memory:');
+    const team = await createTeam(db, { slug: 'revive' });
+    await appendAudit(db, team.id, {
       actor: 'dolly',
       action: 'presence.attached',
       target: 'dolly',

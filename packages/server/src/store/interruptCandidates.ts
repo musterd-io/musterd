@@ -1,5 +1,5 @@
 import { isAwaitingAcceptance } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { listRenderedActs } from './audit.js';
 import type { MessageRow } from './rows.js';
 
@@ -36,15 +36,14 @@ import type { MessageRow } from './rows.js';
  * Keep this in step with `pendingInterrupts`. A new shape admitted there and forgotten here would
  * narrow the fold's input below what it reads, and the answer would silently change.
  */
-export function listInterruptCandidates(
-  db: Database,
+export async function listInterruptCandidates(
+  db: Driver,
   member: { id: string; team_id: string; name: string },
   /** `cursorTs` is the cursor row's `created_at` (see `cursors.ts`) — the window is in receipt order. */
   opts: { cursorTs?: number } = {},
-): MessageRow[] {
-  const windowRows = db
-    .prepare<unknown[], MessageRow>(
-      `SELECT * FROM messages
+): Promise<MessageRow[]> {
+  const windowRows = await db.all<MessageRow>(
+    `SELECT * FROM messages
         WHERE team_id = ?
           AND (to_member = ? OR to_kind IN ('team','broadcast'))
           AND from_member != ?
@@ -65,14 +64,18 @@ export function listInterruptCandidates(
             )
           )
         ORDER BY created_at ASC, id ASC`,
-    )
-    .all(member.team_id, member.id, member.id, opts.cursorTs ?? 0);
+    [member.team_id, member.id, member.id, opts.cursorTs ?? 0],
+  );
 
   // Doorbell contract clause 7 (docs/design/daemon-doorbell-contract.md): six clauses governed
   // DELIVERY and none governed DISCHARGE, and the fold is pure over what it is handed — so the
   // shapes that discharge an act from outside the seat's window are this function's to fetch or
   // to drop. Three live falsifiers on c8e89dd8, 2026-09-14, one per shape below.
-  const rows = dischargeOutsideTheWindow(db, member, buriedTurns(db, member, windowRows, opts));
+  const rows = await dischargeOutsideTheWindow(
+    db,
+    member,
+    await buriedTurns(db, member, windowRows, opts),
+  );
 
   // Own suppress acts never survive the filters above: `from_member != me` drops them, and an
   // accept/decline is a DM to the asker so `to_member = me` would not have kept it either.
@@ -81,16 +84,15 @@ export function listInterruptCandidates(
   // the huddle "mine" fetch below — the fold needs the author's own rows, which the inbox omits.
   // Any own act carrying `in_reply_to` rides along too: a steer has no accept/decline, so the
   // addressee's reply — whatever act it rides on — is what discharges it (clause 7(iv)).
-  const mineSuppress = db
-    .prepare<unknown[], MessageRow>(
-      `SELECT * FROM messages
+  const mineSuppress = await db.all<MessageRow>(
+    `SELECT * FROM messages
         WHERE team_id = ?
           AND from_member = ?
           AND created_at > ?
           AND (act IN ('resolve','accept','decline')
                OR in_reply_to IS NOT NULL)`,
-    )
-    .all(member.team_id, member.id, opts.cursorTs ?? 0);
+    [member.team_id, member.id, opts.cursorTs ?? 0],
+  );
 
   // ADR 434 shape 4: my own turns in the threads of the steers this window carries. A steer inside
   // a thread is answered by my next turn in that thread, `in_reply_to` or not — and my own acts
@@ -102,13 +104,12 @@ export function listInterruptCandidates(
   const mineOnSteerThreads =
     steerThreads.length === 0
       ? []
-      : db
-          .prepare<unknown[], MessageRow>(
-            `SELECT * FROM messages
+      : await db.all<MessageRow>(
+          `SELECT * FROM messages
               WHERE team_id = ? AND from_member = ?
                 AND thread_id IN (${steerThreads.map(() => '?').join(',')})`,
-          )
-          .all(member.team_id, member.id, ...steerThreads);
+          [member.team_id, member.id, ...steerThreads],
+        );
   for (const r of mineOnSteerThreads) mineSuppress.push(r);
 
   // ADR 378 — the context a huddle turn cannot carry. A turn is an ordinary `message` in a thread:
@@ -127,12 +128,11 @@ export function listInterruptCandidates(
     );
   }
   const marks = threads.map(() => '?').join(',');
-  const roots = db
-    .prepare<unknown[], MessageRow>(
-      `SELECT * FROM messages
+  const roots = await db.all<MessageRow>(
+    `SELECT * FROM messages
         WHERE team_id = ? AND id IN (${marks}) AND json_extract(meta, '$.huddle') IS NOT NULL`,
-    )
-    .all(member.team_id, ...threads);
+    [member.team_id, ...threads],
+  );
   if (roots.length === 0) {
     if (mineSuppress.length === 0) return rows;
     const byId = new Map<string, MessageRow>();
@@ -142,12 +142,11 @@ export function listInterruptCandidates(
     );
   }
   const rootMarks = roots.map(() => '?').join(',');
-  const mine = db
-    .prepare<unknown[], MessageRow>(
-      `SELECT * FROM messages
+  const mine = await db.all<MessageRow>(
+    `SELECT * FROM messages
         WHERE team_id = ? AND thread_id IN (${rootMarks}) AND from_member = ?`,
-    )
-    .all(member.team_id, ...roots.map((r) => r.id), member.id);
+    [member.team_id, ...roots.map((r) => r.id), member.id],
+  );
 
   const byId = new Map<string, MessageRow>();
   for (const r of [...mineSuppress, ...roots, ...mine, ...rows]) byId.set(r.id, r);
@@ -171,12 +170,12 @@ export function listInterruptCandidates(
  * second test on this). Keyed on root ids already in hand, skipped when there are none — a window
  * with no freshly landed root costs nothing extra.
  */
-function buriedTurns(
-  db: Database,
+async function buriedTurns(
+  db: Driver,
   member: { id: string; team_id: string },
   windowRows: MessageRow[],
   opts: { cursorTs?: number },
-): MessageRow[] {
+): Promise<MessageRow[]> {
   const cursorTs = opts.cursorTs ?? 0;
   if (cursorTs === 0) return windowRows;
   const lateRoots = windowRows.filter((r) => {
@@ -189,15 +188,14 @@ function buriedTurns(
   });
   if (lateRoots.length === 0) return windowRows;
   const marks = lateRoots.map(() => '?').join(',');
-  const buried = db
-    .prepare<unknown[], MessageRow>(
-      `SELECT * FROM messages
+  const buried = await db.all<MessageRow>(
+    `SELECT * FROM messages
         WHERE team_id = ?
           AND thread_id IN (${marks})
           AND from_member != ?
           AND created_at <= ?`,
-    )
-    .all(member.team_id, ...lateRoots.map((r) => r.id), member.id, cursorTs);
+    [member.team_id, ...lateRoots.map((r) => r.id), member.id, cursorTs],
+  );
   if (buried.length === 0) return windowRows;
   const byId = new Map<string, MessageRow>();
   for (const r of [...buried, ...windowRows]) byId.set(r.id, r);
@@ -224,11 +222,11 @@ function buriedTurns(
  * Every query here is keyed on ids already in hand and skipped when there are none, so the common
  * case — a window with no obligation, no eligible set and no steer — costs nothing extra.
  */
-function dischargeOutsideTheWindow(
-  db: Database,
+async function dischargeOutsideTheWindow(
+  db: Driver,
   member: { id: string; team_id: string; name: string },
   rows: MessageRow[],
-): MessageRow[] {
+): Promise<MessageRow[]> {
   const metaOf = (r: MessageRow): Record<string, unknown> => {
     if (!r.meta) return {};
     try {
@@ -249,12 +247,12 @@ function dischargeOutsideTheWindow(
   if (laneOf.size > 0) {
     const laneIds = [...new Set(laneOf.values())];
     const states = new Map(
-      db
-        .prepare<unknown[], { id: string; state: string }>(
+      (
+        await db.all<{ id: string; state: string }>(
           `SELECT id, state FROM lanes WHERE team_id = ? AND id IN (${laneIds.map(() => '?').join(',')})`,
+          [member.team_id, ...laneIds],
         )
-        .all(member.team_id, ...laneIds)
-        .map((l) => [l.id, l.state]),
+      ).map((l) => [l.id, l.state]),
     );
     out = out.filter((r) => {
       const lane = laneOf.get(r.id);
@@ -271,19 +269,18 @@ function dischargeOutsideTheWindow(
   const answers =
     shared.length === 0
       ? []
-      : db
-          .prepare<unknown[], MessageRow>(
-            `SELECT * FROM messages
+      : await db.all<MessageRow>(
+          `SELECT * FROM messages
               WHERE team_id = ?
                 AND act IN ('accept','decline')
                 AND in_reply_to IN (${shared.map(() => '?').join(',')})`,
-          )
-          .all(member.team_id, ...shared);
+          [member.team_id, ...shared],
+        );
 
   // (iv) steers and urgent acts this seat was already shown.
   const shown = out.filter((r) => r.act === 'steer' || metaOf(r)['urgent'] === true);
   if (shown.length > 0) {
-    const rendered = listRenderedActs(
+    const rendered = await listRenderedActs(
       db,
       member.team_id,
       member.name,

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { SPONSORED_AGENT_CAP, redeemAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { requireTeam } from '../store/teams.js';
@@ -42,7 +43,7 @@ beforeEach(async () => {
   // The mint bucket is per-IP and module-level: every test server here shares loopback, so a
   // previous test's mints would spend this test's budget without the reset (ADR 459 §2).
   __resetOAuthBucketsForTest();
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const r = await post('/teams', { slug: 'sponsor-t', creator: { name: 'nick', kind: 'human' } });
@@ -69,8 +70,10 @@ describe('POST /teams/:slug/members/agents', () => {
     expect(JSON.stringify(r.json)).not.toMatch(/ms(cr|ac|at|kd)_/);
 
     const nonce = nonceOf(r.json.connect_url);
-    const team = requireTeam(server.db, 'sponsor-t');
-    expect(redeemAgentConnectNonce(server.db, team.id, nonce)?.agent.name).toBe('dana-scout');
+    const team = await requireTeam(sqliteDriver(server.db), 'sponsor-t');
+    expect(
+      (await redeemAgentConnectNonce(sqliteDriver(server.db), team.id, nonce))?.agent.name,
+    ).toBe('dana-scout');
   });
 
   it('writes the audit row naming sponsor and agent', async () => {
@@ -147,10 +150,12 @@ describe('POST /teams/:slug/members/agents/:name/connect', () => {
     const oldNonce = nonceOf(made.json.connect_url);
     const r = await post('/teams/sponsor-t/members/agents/dana-scout/connect', {}, dana);
     expect(r.status).toBe(200);
-    const team = requireTeam(server.db, 'sponsor-t');
-    expect(redeemAgentConnectNonce(server.db, team.id, oldNonce)).toBeNull();
+    const team = await requireTeam(sqliteDriver(server.db), 'sponsor-t');
+    expect(await redeemAgentConnectNonce(sqliteDriver(server.db), team.id, oldNonce)).toBeNull();
     const newNonce = nonceOf(r.json.connect_url);
-    expect(redeemAgentConnectNonce(server.db, team.id, newNonce)?.agent.name).toBe('dana-scout');
+    expect(
+      (await redeemAgentConnectNonce(sqliteDriver(server.db), team.id, newNonce))?.agent.name,
+    ).toBe('dana-scout');
   });
 
   it("under the default 'sponsor' policy another member cannot mint a link to dana's agent (ADR 456 §2)", async () => {

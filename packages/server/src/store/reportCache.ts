@@ -12,7 +12,8 @@
 //    derives inline and uncached — exactly the pre-fix behavior, which its tests assert on.
 import { Worker } from 'node:worker_threads';
 import type { Report } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
+import type { SqliteDriver } from '../db/sqliteDriver.js';
 import { deriveReport } from './insights.js';
 import type { ReportJob, ReportReply } from './reportWorker.js';
 
@@ -56,7 +57,7 @@ export function createReportCache(
   }
 
   return {
-    get(teamId: string, teamSlug: string): Promise<Report> {
+    async get(teamId: string, teamSlug: string): Promise<Report> {
       let entry = entries.get(teamId);
       if (!entry) {
         entry = { at: 0 };
@@ -128,15 +129,20 @@ export interface ReportService {
   close(): Promise<void>;
 }
 
-export function createReportService(db: Database, presenceTimeoutMs: number): ReportService {
-  if (db.memory) {
+export function createReportService(db: Driver, presenceTimeoutMs: number): ReportService {
+  // The worker opens the store by path, so only a file-backed SQLite store gets one; an in-memory
+  // store (and any other dialect) derives inline.
+  const file =
+    db.dialect === 'sqlite' && !(db as SqliteDriver).raw.memory
+      ? (db as SqliteDriver).raw.name
+      : null;
+  if (file === null) {
     return {
-      get: (teamId, teamSlug) =>
-        Promise.resolve(deriveReport(db, teamId, teamSlug, Date.now(), presenceTimeoutMs)),
+      get: (teamId, teamSlug) => deriveReport(db, teamId, teamSlug, Date.now(), presenceTimeoutMs),
       close: () => Promise.resolve(),
     };
   }
-  const worker = new ReportWorker(db.name);
+  const worker = new ReportWorker(file);
   const cache = createReportCache((teamId, teamSlug, now) =>
     worker.derive({ teamId, teamSlug, now, presenceTimeoutMs }),
   );
@@ -144,9 +150,9 @@ export function createReportService(db: Database, presenceTimeoutMs: number): Re
 }
 
 // One service per store, created on first use, so callers that build a `Ctx` by hand need no wiring.
-const services = new WeakMap<Database, ReportService>();
+const services = new WeakMap<Driver, ReportService>();
 
-export function reportServiceFor(db: Database, presenceTimeoutMs: number): ReportService {
+export function reportServiceFor(db: Driver, presenceTimeoutMs: number): ReportService {
   let s = services.get(db);
   if (!s) {
     s = createReportService(db, presenceTimeoutMs);
@@ -155,7 +161,7 @@ export function reportServiceFor(db: Database, presenceTimeoutMs: number): Repor
   return s;
 }
 
-export async function closeReportService(db: Database): Promise<void> {
+export async function closeReportService(db: Driver): Promise<void> {
   const s = services.get(db);
   services.delete(db);
   if (s) await s.close();

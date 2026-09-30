@@ -1,6 +1,6 @@
-import type { Database } from 'better-sqlite3';
 import { addMember } from '../store/members.js';
 import { createTeam } from '../store/teams.js';
+import type { Driver } from './driver.js';
 
 export interface SeededDawn {
   teamId: string;
@@ -10,21 +10,21 @@ export interface SeededDawn {
 }
 
 /** Insert the canonical `dawn` fixture (01-data-model.md). Used by integration + scenario tests. */
-export function seedDawn(db: Database): SeededDawn {
-  const team = createTeam(db, { slug: 'dawn' });
-  const nick = addMember(db, team, {
+export async function seedDawn(db: Driver): Promise<SeededDawn> {
+  const team = await createTeam(db, { slug: 'dawn' });
+  const nick = await addMember(db, team, {
     name: 'nick',
     kind: 'human',
     role: 'lead',
     lifecycle: 'forever',
   });
-  const ada = addMember(db, team, {
+  const ada = await addMember(db, team, {
     name: 'Ada',
     kind: 'agent',
     role: 'backend',
     lifecycle: 'session',
   });
-  const lin = addMember(db, team, {
+  const lin = await addMember(db, team, {
     name: 'Lin',
     kind: 'agent',
     role: 'frontend',

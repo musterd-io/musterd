@@ -1,6 +1,7 @@
 import { GENERALIST_CAPABILITIES } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { getMemberByName, setMemberGovernance } from '../store/members.js';
 import { requireTeam } from '../store/teams.js';
@@ -33,11 +34,15 @@ async function addHuman(name: string): Promise<string> {
 }
 
 /** Governance is reconcile-written (seat files), never an HTTP route — tests set it on the store. */
-function govern(name: string, status: string | null, caps: Record<string, unknown> = {}): void {
-  const team = requireTeam(server.db, 'auth-t');
-  const m = getMemberByName(server.db, team.id, name)!;
-  setMemberGovernance(
-    server.db,
+async function govern(
+  name: string,
+  status: string | null,
+  caps: Record<string, unknown> = {},
+): void {
+  const team = await requireTeam(sqliteDriver(server.db), 'auth-t');
+  const m = (await getMemberByName(sqliteDriver(server.db), team.id, name))!;
+  await setMemberGovernance(
+    sqliteDriver(server.db),
     m.id,
     status,
     JSON.stringify({ ...GENERALIST_CAPABILITIES, ...caps }),
@@ -54,7 +59,7 @@ function auditRows(action: string): { actor: string | null; target: string; deta
 
 beforeEach(async () => {
   __resetOAuthBucketsForTest();
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const r = await post('/teams', { slug: 'auth-t', creator: { name: 'nick', kind: 'human' } });
@@ -133,7 +138,7 @@ describe('sponsor-scoped authority (ADR 463 §1)', () => {
   it('a sponsor with can_create_agents withdrawn is refused', async () => {
     const dana = await addHuman('dana');
     await post('/teams/auth-t/members/agents', { name: 'dana-scout' }, dana);
-    govern('dana', null, { can_create_agents: false });
+    await govern('dana', null, { can_create_agents: false });
     const r = await post(
       '/teams/auth-t/agent-bootstrap-credentials',
       { use: 'claim_seat', target: 'dana-scout' },
@@ -206,7 +211,7 @@ describe('sponsor-scoped authority (ADR 463 §1)', () => {
   it('a disabled agent of the sponsor’s is not mintable', async () => {
     const dana = await addHuman('dana');
     await post('/teams/auth-t/members/agents', { name: 'dana-scout' }, dana);
-    govern('dana-scout', 'disabled');
+    await govern('dana-scout', 'disabled');
     const r = await post(
       '/teams/auth-t/agent-bootstrap-credentials',
       { use: 'claim_seat', target: 'dana-scout' },

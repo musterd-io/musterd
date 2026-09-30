@@ -457,7 +457,7 @@ export function createCimdResolver(
   };
 }
 
-const productionResolver = createCimdResolver({
+const productionResolver = await createCimdResolver({
   lookup: lookupPublicAddresses,
   request: requestPinnedDocument,
   now: Date.now,

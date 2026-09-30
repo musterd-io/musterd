@@ -7,7 +7,7 @@ import {
   type DeliveryRecipient,
   type LaneState,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { getCursor } from './cursors.js';
 import { repliedByRecipientWhere, undischargedSql } from './discharge.js';
 import type { MessageRow } from './rows.js';
@@ -29,12 +29,12 @@ interface RecipientRow {
 /** Whom a persisted act addresses. For team/broadcast this is the *current* non-observer roster
  * minus the sender — membership that changed since the send is approximated by the roster of now
  * (the log stores no fan-out list; ADR 090 accepts and labels this). */
-function recipientsOf(db: Database, msg: MessageRow): RecipientRow[] {
+async function recipientsOf(db: Driver, msg: MessageRow): Promise<RecipientRow[]> {
   if (msg.to_kind === 'member') {
     if (!msg.to_member) return [];
-    const row = db
-      .prepare<[string], RecipientRow>('SELECT id, name FROM members WHERE id = ?')
-      .get(msg.to_member);
+    const row = await db.get<RecipientRow>('SELECT id, name FROM members WHERE id = ?', [
+      msg.to_member,
+    ]);
     return row ? [row] : [];
   }
   // ADR 254: an eligible set narrows OBLIGATION, not visibility. The act is team-addressed and every
@@ -47,20 +47,20 @@ function recipientsOf(db: Database, msg: MessageRow): RecipientRow[] {
   // reproduce where the log actually knows better.
   const eligible = eligibleOf(metaOf(msg));
   if (eligible) {
-    const stmt = db.prepare<[string, string], RecipientRow>(
-      'SELECT id, name FROM members WHERE team_id = ? AND name = ?',
-    );
-    return eligible.flatMap((name) => {
-      const row = stmt.get(msg.team_id, name);
-      return row ? [row] : [];
-    });
+    const out: RecipientRow[] = [];
+    for (const name of eligible) {
+      const row = await db.get<RecipientRow>(
+        'SELECT id, name FROM members WHERE team_id = ? AND name = ?',
+        [msg.team_id, name],
+      );
+      if (row) out.push(row);
+    }
+    return out;
   }
-  return db
-    .prepare<
-      [string, string],
-      RecipientRow
-    >('SELECT id, name FROM members WHERE team_id = ? AND left_at IS NULL AND observer = 0 AND id != ?')
-    .all(msg.team_id, msg.from_member);
+  return await db.all<RecipientRow>(
+    'SELECT id, name FROM members WHERE team_id = ? AND left_at IS NULL AND observer = 0 AND id != ?',
+    [msg.team_id, msg.from_member],
+  );
 }
 
 /** An act's decoded `meta`, or null when absent/corrupt. */
@@ -78,17 +78,15 @@ function isUrgent(msg: MessageRow): boolean {
 }
 
 /** The resolve that closed this act's thread (thread_key = thread_id ?? id), if any. */
-function threadResolve(
-  db: Database,
+async function threadResolve(
+  db: Driver,
   msg: MessageRow,
-): { act: string; id: string; ts: number } | null {
+): Promise<{ act: string; id: string; ts: number } | null> {
   const threadKey = msg.thread_id ?? msg.id;
-  const row = db
-    .prepare<
-      [string, string],
-      { id: string; ts: number }
-    >(`SELECT id, ts FROM messages WHERE team_id = ? AND act = 'resolve' AND thread_id = ? ORDER BY ts ASC LIMIT 1`)
-    .get(msg.team_id, threadKey);
+  const row = await db.get<{ id: string; ts: number }>(
+    `SELECT id, ts FROM messages WHERE team_id = ? AND act = 'resolve' AND thread_id = ? ORDER BY ts ASC LIMIT 1`,
+    [msg.team_id, threadKey],
+  );
   return row ? { act: 'resolve', id: row.id, ts: row.ts } : null;
 }
 
@@ -104,15 +102,17 @@ function threadResolve(
  * Applied ONLY when the act carries an eligible set. A plain team act keeps per-recipient answering,
  * because there "someone replied" genuinely does not mean everyone else is off the hook.
  */
-function anyAnswer(db: Database, msg: MessageRow): { act: string; id: string; ts: number } | null {
-  const row = db
-    .prepare<[string, string], { act: string; id: string; ts: number }>(
-      `SELECT act, id, ts FROM messages
+async function anyAnswer(
+  db: Driver,
+  msg: MessageRow,
+): Promise<{ act: string; id: string; ts: number } | null> {
+  const row = await db.get<{ act: string; id: string; ts: number }>(
+    `SELECT act, id, ts FROM messages
         WHERE team_id = ? AND act IN ('accept','decline')
           AND in_reply_to = ?
         ORDER BY ts ASC LIMIT 1`,
-    )
-    .get(msg.team_id, msg.id);
+    [msg.team_id, msg.id],
+  );
   return row ?? null;
 }
 
@@ -123,19 +123,18 @@ function anyAnswer(db: Database, msg: MessageRow): { act: string; id: string; ts
  * gptbot's "standing down" `message` (in_reply_to set, 13:19 and 13:43 on 2026-09-21) left the
  * ledger's `answered` null and the batched lane leased the act three times.
  */
-function answerBy(
-  db: Database,
+async function answerBy(
+  db: Driver,
   msg: MessageRow,
   recipientId: string,
-): { act: string; id: string; ts: number } | null {
-  const row = db
-    .prepare<[string, string], { act: string; id: string; ts: number }>(
-      `SELECT dy.act, dy.id, dy.ts FROM messages dy
+): Promise<{ act: string; id: string; ts: number } | null> {
+  const row = await db.get<{ act: string; id: string; ts: number }>(
+    `SELECT dy.act, dy.id, dy.ts FROM messages dy
          JOIN messages m ON m.id = ?
         WHERE ${repliedByRecipientWhere('m', '?')}
         ORDER BY dy.created_at ASC, dy.id ASC LIMIT 1`,
-    )
-    .get(msg.id, recipientId);
+    [msg.id, recipientId],
+  );
   return row ?? null;
 }
 
@@ -164,13 +163,13 @@ function answerBy(
  * uses the same out-of-play test. A second copy in `orientation.ts` is how the `why` kept serving
  * discharged work after this clause landed for wakes (#745).
  */
-export function handoffNamedLaneOutOfPlay(
-  db: Database,
+export async function handoffNamedLaneOutOfPlay(
+  db: Driver,
   teamId: string,
   meta: string | null,
   body?: string | null,
-): boolean {
-  const lane = namedHandoffLane(db, teamId, meta);
+): Promise<boolean> {
+  const lane = await namedHandoffLane(db, teamId, meta);
   if (lane) return laneOutOfPlay(lane.state);
   // No structured lane. ADR 231 (#662) made every handoff carry one, but the 24 that predate it
   // never will, and a bare handoff is always "in play" — so the newest one wins the `why` slot
@@ -181,7 +180,7 @@ export function handoffNamedLaneOutOfPlay(
   // A lane id in prose is not prose: it resolves to a lane row or it does not. What keeps this on
   // the right side of "only a recorded fact earns a label" is that nothing here reads MEANING —
   // an identifier is matched, and an ambiguous or unresolvable one abstains.
-  return bodyNamedLanesAllOutOfPlay(db, teamId, body);
+  return await bodyNamedLanesAllOutOfPlay(db, teamId, body);
 }
 
 function laneOutOfPlay(state: string): boolean {
@@ -205,8 +204,12 @@ const LANE_ID_IN_PROSE = /\b01[0-9A-HJKMNP-TV-Z]{8,24}\b/g;
  * fired is expensive while a handoff that stops asking is work dropped on the floor — only one of
  * those is recoverable. So any still-live mention keeps the whole handoff showing.
  */
-function bodyNamedLanesAllOutOfPlay(db: Database, teamId: string, body?: string | null): boolean {
-  const states = bodyNamedLaneStates(db, teamId, body);
+async function bodyNamedLanesAllOutOfPlay(
+  db: Driver,
+  teamId: string,
+  body?: string | null,
+): Promise<boolean> {
+  const states = await bodyNamedLaneStates(db, teamId, body);
   return states.length > 0 && states.every(laneOutOfPlay);
 }
 
@@ -214,18 +217,20 @@ function bodyNamedLanesAllOutOfPlay(db: Database, teamId: string, body?: string 
  * The states of every lane this body names and resolves to exactly one row. An ambiguous prefix
  * picked out no single lane, so it is not evidence about any of them and is dropped.
  */
-function bodyNamedLaneStates(db: Database, teamId: string, body?: string | null): string[] {
+async function bodyNamedLaneStates(
+  db: Driver,
+  teamId: string,
+  body?: string | null,
+): Promise<string[]> {
   if (!body) return [];
   const prefixes = [...new Set(body.match(LANE_ID_IN_PROSE) ?? [])];
   const states: string[] = [];
   for (const prefix of prefixes) {
     // LIMIT 2 is enough to tell "exactly one" from "more than one" without scanning the rest.
-    const matches = db
-      .prepare<
-        [string, string],
-        { state: string }
-      >("SELECT state FROM lanes WHERE team_id = ? AND id LIKE ? || '%' LIMIT 2")
-      .all(teamId, prefix);
+    const matches = await db.all<{ state: string }>(
+      "SELECT state FROM lanes WHERE team_id = ? AND id LIKE ? || '%' LIMIT 2",
+      [teamId, prefix],
+    );
     if (matches.length !== 1) continue;
     states.push(matches[0]!.state);
   }
@@ -239,21 +244,21 @@ function bodyNamedLaneStates(db: Database, teamId: string, body?: string | null)
  * this to decide whether they hold a checkable claim or only an uncheckable one; what they do about
  * it is theirs (the orientation `why` bounds it by age — ADR 264 — while wake candidacy does not).
  */
-export function handoffNamesNoLane(
-  db: Database,
+export async function handoffNamesNoLane(
+  db: Driver,
   teamId: string,
   meta: string | null,
   body?: string | null,
-): boolean {
-  if (namedHandoffLane(db, teamId, meta)) return false;
-  return bodyNamedLaneStates(db, teamId, body).length === 0;
+): Promise<boolean> {
+  if (await namedHandoffLane(db, teamId, meta)) return false;
+  return (await bodyNamedLaneStates(db, teamId, body)).length === 0;
 }
 
-function namedHandoffLane(
-  db: Database,
+async function namedHandoffLane(
+  db: Driver,
   teamId: string,
   meta: string | null,
-): { id: string; state: string; updated_at: number } | null {
+): Promise<{ id: string; state: string; updated_at: number } | null> {
   if (!meta) return null;
   let laneId: unknown;
   try {
@@ -263,21 +268,19 @@ function namedHandoffLane(
     return null; // unparseable meta is not evidence of discharge
   }
   if (typeof laneId !== 'string' || laneId === '') return null;
-  const lane = db
-    .prepare<
-      [string, string],
-      { id: string; state: string; updated_at: number }
-    >('SELECT id, state, updated_at FROM lanes WHERE team_id = ? AND id = ?')
-    .get(teamId, laneId);
+  const lane = await db.get<{ id: string; state: string; updated_at: number }>(
+    'SELECT id, state, updated_at FROM lanes WHERE team_id = ? AND id = ?',
+    [teamId, laneId],
+  );
   return lane ?? null;
 }
 
-function laneHandoffDischarged(
-  db: Database,
+async function laneHandoffDischarged(
+  db: Driver,
   msg: MessageRow,
-): { act: string; id: string; ts: number } | null {
+): Promise<{ act: string; id: string; ts: number } | null> {
   if (msg.act !== 'handoff') return null;
-  const lane = namedHandoffLane(db, msg.team_id, msg.meta);
+  const lane = await namedHandoffLane(db, msg.team_id, msg.meta);
   if (!lane) return null;
   if (!isAwaitingAcceptance(lane.state) && !LANE_TERMINAL_STATES.has(lane.state as LaneState)) {
     return null;
@@ -293,23 +296,30 @@ function laneHandoffDischarged(
  * (ADR 131 O&E: "woken acts that reach `answered` in the ADR 090 ledger"), so the report reads
  * the LIVE ledger state rather than the host's report-time snapshot.
  */
-export function actAnswered(
-  db: Database,
+export async function actAnswered(
+  db: Driver,
   msg: MessageRow,
   recipientId: string,
-): { act: string; id: string; ts: number } | null {
-  return answerBy(db, msg, recipientId) ?? threadResolve(db, msg) ?? laneHandoffDischarged(db, msg);
+): Promise<{ act: string; id: string; ts: number } | null> {
+  return (
+    (await answerBy(db, msg, recipientId)) ??
+    (await threadResolve(db, msg)) ??
+    (await laneHandoffDischarged(db, msg))
+  );
 }
 
 /** ADR 088 interrupt raises recorded for this (act, recipient) — the attempt history. */
-function interruptRaises(db: Database, msg: MessageRow, recipientName: string): number {
-  const row = db
-    .prepare<[string, string, string], { n: number }>(
-      `SELECT COUNT(*) AS n FROM audit
+async function interruptRaises(
+  db: Driver,
+  msg: MessageRow,
+  recipientName: string,
+): Promise<number> {
+  const row = await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM audit
         WHERE team_id = ? AND action = 'interrupt.raised' AND target = ?
           AND json_extract(detail, '$.act') = ?`,
-    )
-    .get(msg.team_id, recipientName, msg.id);
+    [msg.team_id, recipientName, msg.id],
+  );
   return row?.n ?? 0;
 }
 
@@ -318,30 +328,34 @@ function interruptRaises(db: Database, msg: MessageRow, recipientName: string): 
  *  projects it. The nudge row carries no recipient of its own (only the sender is authenticated),
  *  but a `nudge_ref` resolves through the act, whose recipient is fixed — so the count is per-act,
  *  landing on its one directed recipient. `verbatim` counts the fingerprint-matched subset. */
-function ccdNudges(db: Database, msg: MessageRow): { total: number; verbatim: number } {
-  const row = db
-    .prepare<[string, string], { total: number; verbatim: number }>(
-      `SELECT COUNT(*) AS total,
-              COALESCE(SUM(json_extract(detail, '$.verbatim') = 1), 0) AS verbatim
+async function ccdNudges(
+  db: Driver,
+  msg: MessageRow,
+): Promise<{ total: number; verbatim: number }> {
+  const row = await db.get<{ total: number; verbatim: number }>(
+    `SELECT COUNT(*) AS total,
+              COALESCE(SUM(CASE WHEN json_extract(detail, '$.verbatim') = 1 THEN 1 ELSE 0 END), 0) AS verbatim
          FROM audit
         WHERE team_id = ? AND action = 'actor.session_message'
           AND json_extract(detail, '$.nudge_ref') = ?`,
-    )
-    .get(msg.team_id, msg.id);
+    [msg.team_id, msg.id],
+  );
   return { total: row?.total ?? 0, verbatim: row?.verbatim ?? 0 };
 }
 
-function recipientLedger(
-  db: Database,
+async function recipientLedger(
+  db: Driver,
   msg: MessageRow,
   recipient: RecipientRow,
   resolve: { act: string; id: string; ts: number } | null,
-): DeliveryRecipient {
+): Promise<DeliveryRecipient> {
   // ADR 254: on an eligible-set act the FIRST answer from anyone discharges it for every named seat
   // (`anyAnswer`); everywhere else the per-recipient clause stands unchanged.
-  const ownAnswer = eligibleOf(metaOf(msg)) ? anyAnswer(db, msg) : answerBy(db, msg, recipient.id);
-  const answered = ownAnswer ?? resolve ?? laneHandoffDischarged(db, msg);
-  const cursor = getCursor(db, recipient.id);
+  const ownAnswer = eligibleOf(metaOf(msg))
+    ? await anyAnswer(db, msg)
+    : await answerBy(db, msg, recipient.id);
+  const answered = ownAnswer ?? resolve ?? (await laneHandoffDischarged(db, msg));
+  const cursor = await getCursor(db, recipient.id);
   // The cursor is a `(created_at, id)` point, not a ts (ADR 290, amended 2026-08-20; re-keyed from
   // `ts` to receipt by the ts-cursor fix, see `cursors.ts`). Comparing on ts alone called an act
   // tied with the cursor row SEEN although the reader was never handed it — while `listInbox`
@@ -352,24 +366,24 @@ function recipientLedger(
     (cursor.last_read_ts === msg.created_at &&
       cursor.last_read_message_id !== null &&
       cursor.last_read_message_id >= msg.id);
-  const nudges = ccdNudges(db, msg);
+  const nudges = await ccdNudges(db, msg);
   return {
     seat: recipient.name,
     seat_id: normalizeSeatName(recipient.name),
     state: answered ? 'answered' : seen ? 'seen' : 'logged',
     seen_by: seen ? cursor.updated_at : null,
     answered,
-    interrupt_raises: interruptRaises(db, msg, recipient.name),
+    interrupt_raises: await interruptRaises(db, msg, recipient.name),
     ccd_nudges: nudges.total,
     ccd_nudges_verbatim: nudges.verbatim,
   };
 }
 
-function actDeliveryOf(db: Database, msg: MessageRow, now: number): ActDelivery {
-  const resolve = threadResolve(db, msg);
-  const from = db
-    .prepare<[string], { name: string }>('SELECT name FROM members WHERE id = ?')
-    .get(msg.from_member);
+async function actDeliveryOf(db: Driver, msg: MessageRow, now: number): Promise<ActDelivery> {
+  const resolve = await threadResolve(db, msg);
+  const from = await db.get<{ name: string }>('SELECT name FROM members WHERE id = ?', [
+    msg.from_member,
+  ]);
   return {
     id: msg.id,
     act: msg.act,
@@ -379,7 +393,9 @@ function actDeliveryOf(db: Database, msg: MessageRow, now: number): ActDelivery 
     ts: msg.ts,
     age_ms: Math.max(0, now - msg.ts),
     urgent: isUrgent(msg),
-    recipients: recipientsOf(db, msg).map((r) => recipientLedger(db, msg, r, resolve)),
+    recipients: await Promise.all(
+      (await recipientsOf(db, msg)).map((r) => recipientLedger(db, msg, r, resolve)),
+    ),
   };
 }
 
@@ -392,36 +408,36 @@ function actDeliveryOf(db: Database, msg: MessageRow, now: number): ActDelivery 
  * (request_help/handoff — their `to_member` is NULL, so a `to_member = me` filter alone silently
  * skips them; bugbot on #114). Never my own sends.
  */
-export function crossedBySeen(
-  db: Database,
+export async function crossedBySeen(
+  db: Driver,
   teamId: string,
   memberId: string,
   fromTs: number,
   toTs: number,
-): { act: string; urgent: boolean; ts: number }[] {
-  const rows = db
-    .prepare<[string, number, number, string, string], MessageRow>(
-      `SELECT * FROM messages
+): Promise<{ act: string; urgent: boolean; ts: number }[]> {
+  const rows = await db.all<MessageRow>(
+    `SELECT * FROM messages
         WHERE team_id = ? AND created_at > ? AND created_at <= ?
           AND (to_member = ?
                OR (to_kind IN ('team','broadcast') AND act IN ('request_help','handoff')))
           AND from_member != ?`,
-    )
-    .all(teamId, fromTs, toTs, memberId, memberId);
+    [teamId, fromTs, toTs, memberId, memberId],
+  );
   return rows.map((m) => ({ act: m.act, urgent: isUrgent(m), ts: m.ts }));
 }
 
 /** The per-act ledger: one act's journey across every recipient. Null for an unknown id. */
-export function actDelivery(
-  db: Database,
+export async function actDelivery(
+  db: Driver,
   teamId: string,
   messageId: string,
   now: number = Date.now(),
-): ActDelivery | null {
-  const msg = db
-    .prepare<[string, string], MessageRow>('SELECT * FROM messages WHERE team_id = ? AND id = ?')
-    .get(teamId, messageId);
-  return msg ? actDeliveryOf(db, msg, now) : null;
+): Promise<ActDelivery | null> {
+  const msg = await db.get<MessageRow>('SELECT * FROM messages WHERE team_id = ? AND id = ?', [
+    teamId,
+    messageId,
+  ]);
+  return msg ? await actDeliveryOf(db, msg, now) : null;
 }
 
 /**
@@ -430,21 +446,20 @@ export function actDelivery(
  * its thread. This is the `open_loops` gauge made answerable (which act, whose inbox, seen or
  * ignored), and the two derivations must reconcile (the ADR's no-drift guard). Oldest first.
  */
-export function openDirectedLedger(
-  db: Database,
+export async function openDirectedLedger(
+  db: Driver,
   teamId: string,
   now: number = Date.now(),
-): ActDelivery[] {
-  const rows = db
-    .prepare<[string], MessageRow>(
-      `SELECT m.* FROM messages m
+): Promise<ActDelivery[]> {
+  const rows = await db.all<MessageRow>(
+    `SELECT m.* FROM messages m
         WHERE m.team_id = ?
           AND (m.act IN ('request_help','handoff')
                OR (m.to_kind = 'member' AND json_extract(m.meta, '$.urgent') = 1))
           AND m.act NOT IN ('accept','decline','resolve')
           ${undischargedSql('m', 'm.to_member')}
         ORDER BY m.ts ASC`,
-    )
-    .all(teamId);
-  return rows.map((m) => actDeliveryOf(db, m, now));
+    [teamId],
+  );
+  return Promise.all(rows.map((m) => actDeliveryOf(db, m, now)));
 }

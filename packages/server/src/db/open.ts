@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
 import { runMigrations } from './migrations.js';
+import { sqliteDriver, type SqliteDriver } from './sqliteDriver.js';
 
 export type { Database } from 'better-sqlite3';
 
@@ -28,4 +29,9 @@ export function openDb(path: string): Database.Database {
     }
   }
   return db;
+}
+
+/** The coordination store behind the async Driver (ADR 479): `openDb` + the SQLite driver. */
+export function openDriver(path: string): SqliteDriver {
+  return sqliteDriver(openDb(path));
 }

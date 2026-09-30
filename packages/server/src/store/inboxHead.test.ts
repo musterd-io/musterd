@@ -1,9 +1,12 @@
 import { makeEnvelope } from '@musterd/protocol';
-import { describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { Driver } from '../db/driver.js';
+import { withDrivers } from '../db/testing.js';
 import { addMember } from './members.js';
 import { insertMessage, listInbox } from './messages.js';
 import { createTeam } from './teams.js';
+
+let openStore: () => Promise<Driver>;
 
 /**
  * `/inbox` accepts `?limit=` but has no DEFAULT, so a seat returning after time away reads its whole
@@ -24,13 +27,13 @@ import { createTeam } from './teams.js';
  * it: they answer opposite questions, and collapsing them would leave the dangerous one as the
  * default spelling.
  */
-function seed() {
-  const db = openDb(':memory:');
-  const team = createTeam(db, { slug: 'revive' });
-  const nick = addMember(db, team, { name: 'nick', kind: 'human' }).row;
-  const ada = addMember(db, team, { name: 'Ada', kind: 'agent' }).row;
+async function seed() {
+  const db = await openStore();
+  const team = await createTeam(db, { slug: 'revive' });
+  const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+  const ada = (await addMember(db, team, { name: 'Ada', kind: 'agent' })).row;
   for (let i = 0; i < 50; i++) {
-    insertMessage(
+    await insertMessage(
       db,
       team.id,
       nick.id,
@@ -53,164 +56,175 @@ function seed() {
   return { db, team, ada };
 }
 
-describe('listInbox headLimit — a bounded read that cannot skip a message', () => {
-  it('takes the OLDEST n, so the response is a prefix of the unbounded read', () => {
-    const { db, ada } = seed();
-    const all = listInbox(db, ada, { unreadOnly: true, cursorTs: 0 }).map((r) => r.id);
-    const head = listInbox(db, ada, { unreadOnly: true, cursorTs: 0, headLimit: 10 }).map(
-      (r) => r.id,
-    );
-    expect(head).toEqual(all.slice(0, 10));
-    expect(head[0]).toBe('m00');
+withDrivers('inboxHead', (o) => {
+  // Set per test, not at collection: describe.each collects every driver before any test runs.
+  beforeEach(() => {
+    openStore = o;
   });
 
-  it('lets a reader catch up over several reads without a gap', () => {
-    const { db, ada } = seed();
-    const seen: string[] = [];
-    let cursorTs = 0;
-    for (let round = 0; round < 5; round++) {
-      const rows = listInbox(db, ada, { unreadOnly: true, cursorTs, headLimit: 10 });
-      seen.push(...rows.map((r) => r.id));
-      // What a client may safely do after a truncated read: advance to the last row it actually saw.
-      cursorTs = rows[rows.length - 1]!.created_at;
-    }
-    const all = listInbox(db, ada, { unreadOnly: true, cursorTs: 0 }).map((r) => r.id);
-    expect(seen).toEqual(all);
-  });
-
-  it('pages an unread read forward from `since`, so a caller can walk a backlog', () => {
-    const { db, ada } = seed();
-    const first = listInbox(db, ada, { unreadOnly: true, cursorTs: 0, headLimit: 10 });
-    const next = listInbox(db, ada, {
-      unreadOnly: true,
-      cursorTs: 0,
-      since: first[first.length - 1]!.created_at,
-      headLimit: 10,
+  describe('listInbox headLimit — a bounded read that cannot skip a message', async () => {
+    it('takes the OLDEST n, so the response is a prefix of the unbounded read', async () => {
+      const { db, ada } = await seed();
+      const all = (await listInbox(db, ada, { unreadOnly: true, cursorTs: 0 })).map((r) => r.id);
+      const head = (await listInbox(db, ada, { unreadOnly: true, cursorTs: 0, headLimit: 10 })).map(
+        (r) => r.id,
+      );
+      expect(head).toEqual(all.slice(0, 10));
+      expect(head[0]).toBe('m00');
     });
-    // Without `since` being honoured alongside `unreadOnly`, this would hand back m00-m09 again and
-    // a paging caller would loop forever on the first page.
-    expect(next.map((r) => r.id)).toEqual([
-      'm10',
-      'm11',
-      'm12',
-      'm13',
-      'm14',
-      'm15',
-      'm16',
-      'm17',
-      'm18',
-      'm19',
-    ]);
+
+    it('lets a reader catch up over several reads without a gap', async () => {
+      const { db, ada } = await seed();
+      const seen: string[] = [];
+      let cursorTs = 0;
+      for (let round = 0; round < 5; round++) {
+        const rows = await listInbox(db, ada, { unreadOnly: true, cursorTs, headLimit: 10 });
+        seen.push(...rows.map((r) => r.id));
+        // What a client may safely do after a truncated read: advance to the last row it actually saw.
+        cursorTs = rows[rows.length - 1]!.created_at;
+      }
+      const all = (await listInbox(db, ada, { unreadOnly: true, cursorTs: 0 })).map((r) => r.id);
+      expect(seen).toEqual(all);
+    });
+
+    it('pages an unread read forward from `since`, so a caller can walk a backlog', async () => {
+      const { db, ada } = await seed();
+      const first = await listInbox(db, ada, { unreadOnly: true, cursorTs: 0, headLimit: 10 });
+      const next = await listInbox(db, ada, {
+        unreadOnly: true,
+        cursorTs: 0,
+        since: first[first.length - 1]!.created_at,
+        headLimit: 10,
+      });
+      // Without `since` being honoured alongside `unreadOnly`, this would hand back m00-m09 again and
+      // a paging caller would loop forever on the first page.
+      expect(next.map((r) => r.id)).toEqual([
+        'm10',
+        'm11',
+        'm12',
+        'm13',
+        'm14',
+        'm15',
+        'm16',
+        'm17',
+        'm18',
+        'm19',
+      ]);
+    });
+
+    it('never pages behind the read cursor — the later of the two floors wins', async () => {
+      const { db, ada } = await seed();
+      const all = await listInbox(db, ada, { unreadOnly: true, cursorTs: 0 });
+      const cursorTs = all[19]!.created_at; // the seat has read through m19
+      const rows = await listInbox(db, ada, { unreadOnly: true, cursorTs, since: 0, headLimit: 5 });
+      expect(rows.map((r) => r.id)).toEqual(['m20', 'm21', 'm22', 'm23', 'm24']);
+    });
+
+    it('leaves `limit` alone — it still takes the newest tail, which is what it is for', async () => {
+      const { db, ada } = await seed();
+      const tail = (await listInbox(db, ada, { unreadOnly: true, cursorTs: 0, limit: 10 })).map(
+        (r) => r.id,
+      );
+      expect(tail[tail.length - 1]).toBe('m49');
+      expect(tail[0]).toBe('m40');
+    });
   });
 
-  it('never pages behind the read cursor — the later of the two floors wins', () => {
-    const { db, ada } = seed();
-    const all = listInbox(db, ada, { unreadOnly: true, cursorTs: 0 });
-    const cursorTs = all[19]!.created_at; // the seat has read through m19
-    const rows = listInbox(db, ada, { unreadOnly: true, cursorTs, since: 0, headLimit: 5 });
-    expect(rows.map((r) => r.id)).toEqual(['m20', 'm21', 'm22', 'm23', 'm24']);
-  });
-
-  it('leaves `limit` alone — it still takes the newest tail, which is what it is for', () => {
-    const { db, ada } = seed();
-    const tail = listInbox(db, ada, { unreadOnly: true, cursorTs: 0, limit: 10 }).map((r) => r.id);
-    expect(tail[tail.length - 1]).toBe('m49');
-    expect(tail[0]).toBe('m40');
-  });
-});
-
-/**
- * `?limit=` is the newest tail. That is right for team chatter and wrong for a waiting handoff:
- * MCP always sends `limit` (default 50), so an old directed act sits behind the newest broadcasts
- * and `team_inbox_check` reports nothing waiting while the CLI banner, which reads with no limit,
- * counts it. Pin action-needed unread into the limited page. Directed `message` stays newest-N so
- * a mailbox of DMs does not explode the bound.
- */
-describe('listInbox limit — pin action-needed unread into the newest tail', () => {
-  it('keeps an old unread handoff on a page of newer team broadcasts', () => {
-    const db = openDb(':memory:');
-    const team = createTeam(db, { slug: 'revive' });
-    const nick = addMember(db, team, { name: 'nick', kind: 'human' }).row;
-    const ada = addMember(db, team, { name: 'Ada', kind: 'agent' }).row;
-    insertMessage(
-      db,
-      team.id,
-      nick.id,
-      ada.id,
-      makeEnvelope({
-        id: 'handoff-old',
-        team: team.slug,
-        from: 'nick',
-        to: { kind: 'member', name: 'Ada' },
-        act: 'handoff',
-        body: 'take this',
-        thread: null,
-        meta: null,
-        ts: 1,
-      }),
-      { now: 1 },
-    );
-    for (let i = 0; i < 100; i++) {
-      insertMessage(
+  /**
+   * `?limit=` is the newest tail. That is right for team chatter and wrong for a waiting handoff:
+   * MCP always sends `limit` (default 50), so an old directed act sits behind the newest broadcasts
+   * and `team_inbox_check` reports nothing waiting while the CLI banner, which reads with no limit,
+   * counts it. Pin action-needed unread into the limited page. Directed `message` stays newest-N so
+   * a mailbox of DMs does not explode the bound.
+   */
+  describe('listInbox limit — pin action-needed unread into the newest tail', async () => {
+    it('keeps an old unread handoff on a page of newer team broadcasts', async () => {
+      const db = await openStore();
+      const team = await createTeam(db, { slug: 'revive' });
+      const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+      const ada = (await addMember(db, team, { name: 'Ada', kind: 'agent' })).row;
+      await insertMessage(
         db,
         team.id,
         nick.id,
-        null,
+        ada.id,
         makeEnvelope({
-          id: `t${String(i).padStart(3, '0')}`,
+          id: 'handoff-old',
           team: team.slug,
           from: 'nick',
-          to: { kind: 'team' },
-          act: 'message',
-          body: 'noise',
+          to: { kind: 'member', name: 'Ada' },
+          act: 'handoff',
+          body: 'take this',
           thread: null,
           meta: null,
-          ts: 1_000 + i,
+          ts: 1,
         }),
-        { now: 1_000 + i },
+        { now: 1 },
       );
-    }
-    const page = listInbox(db, ada, { unreadOnly: true, cursorTs: 0, limit: 50 });
-    const ids = page.map((r) => r.id);
-    expect(ids).toContain('handoff-old');
-    expect(ids).toContain('t099');
-    expect(ids).not.toContain('t000');
-  });
-});
-
-/**
- * Reading specific acts back by id (lane 01M2JZYTAH).
- *
- * `team_inbox_check` now clips a long body so one act cannot spend a whole reply's budget, and a
- * clip is only honest if the rest is reachable. Nothing on this surface could fetch a message by
- * id before: `/inbox` took unread_only, limit and since, and none of them names a row. So a seat
- * handed "[+3.4k chars clipped]" had no call to make.
- *
- * The retrieval read is deliberately NOT a cursor read: it names rows the caller has already been
- * shown, so it ignores the cursor entirely and moves nothing.
- */
-describe('listInbox ids — read named acts back, without touching the cursor', () => {
-  it('returns exactly the named rows, in receipt order', () => {
-    const { db, ada } = seed();
-    const rows = listInbox(db, ada, { ids: ['m40', 'm02', 'm17'] });
-    expect(rows.map((r) => r.id)).toEqual(['m02', 'm17', 'm40']);
-  });
-
-  it('ignores the read cursor — an act already read is still retrievable', () => {
-    const { db, ada } = seed();
-    // Cursor past everything: unreadOnly would return nothing at all.
-    expect(listInbox(db, ada, { unreadOnly: true, cursorTs: 9_999 })).toHaveLength(0);
-    expect(listInbox(db, ada, { ids: ['m10'], unreadOnly: true, cursorTs: 9_999 })).toHaveLength(1);
+      for (let i = 0; i < 100; i++) {
+        await insertMessage(
+          db,
+          team.id,
+          nick.id,
+          null,
+          makeEnvelope({
+            id: `t${String(i).padStart(3, '0')}`,
+            team: team.slug,
+            from: 'nick',
+            to: { kind: 'team' },
+            act: 'message',
+            body: 'noise',
+            thread: null,
+            meta: null,
+            ts: 1_000 + i,
+          }),
+          { now: 1_000 + i },
+        );
+      }
+      const page = await listInbox(db, ada, { unreadOnly: true, cursorTs: 0, limit: 50 });
+      const ids = page.map((r) => r.id);
+      expect(ids).toContain('handoff-old');
+      expect(ids).toContain('t099');
+      expect(ids).not.toContain('t000');
+    });
   });
 
-  it('silently omits an id in another team or not addressed to this member', () => {
-    const { db, ada } = seed();
-    const rows = listInbox(db, ada, { ids: ['m01', 'no-such-id'] });
-    expect(rows.map((r) => r.id)).toEqual(['m01']);
-  });
+  /**
+   * Reading specific acts back by id (lane 01M2JZYTAH).
+   *
+   * `team_inbox_check` now clips a long body so one act cannot spend a whole reply's budget, and a
+   * clip is only honest if the rest is reachable. Nothing on this surface could fetch a message by
+   * id before: `/inbox` took unread_only, limit and since, and none of them names a row. So a seat
+   * handed "[+3.4k chars clipped]" had no call to make.
+   *
+   * The retrieval read is deliberately NOT a cursor read: it names rows the caller has already been
+   * shown, so it ignores the cursor entirely and moves nothing.
+   */
+  describe('listInbox ids — read named acts back, without touching the cursor', async () => {
+    it('returns exactly the named rows, in receipt order', async () => {
+      const { db, ada } = await seed();
+      const rows = await listInbox(db, ada, { ids: ['m40', 'm02', 'm17'] });
+      expect(rows.map((r) => r.id)).toEqual(['m02', 'm17', 'm40']);
+    });
 
-  it('returns nothing for an empty id list rather than the whole inbox', () => {
-    const { db, ada } = seed();
-    expect(listInbox(db, ada, { ids: [] })).toEqual([]);
+    it('ignores the read cursor — an act already read is still retrievable', async () => {
+      const { db, ada } = await seed();
+      // Cursor past everything: unreadOnly would return nothing at all.
+      expect(await listInbox(db, ada, { unreadOnly: true, cursorTs: 9_999 })).toHaveLength(0);
+      expect(
+        await listInbox(db, ada, { ids: ['m10'], unreadOnly: true, cursorTs: 9_999 }),
+      ).toHaveLength(1);
+    });
+
+    it('silently omits an id in another team or not addressed to this member', async () => {
+      const { db, ada } = await seed();
+      const rows = await listInbox(db, ada, { ids: ['m01', 'no-such-id'] });
+      expect(rows.map((r) => r.id)).toEqual(['m01']);
+    });
+
+    it('returns nothing for an empty id list rather than the whole inbox', async () => {
+      const { db, ada } = await seed();
+      expect(await listInbox(db, ada, { ids: [] })).toEqual([]);
+    });
   });
 });

@@ -1,6 +1,7 @@
 import { PROTOCOL_VERSION } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { getTeamBySlug } from '../store/teams.js';
 
@@ -73,11 +74,11 @@ function ev(node: string, seq: number, id = `${node}-${seq}`) {
   };
 }
 
-const push = (events: unknown[], auth?: Auth) =>
-  request('POST', '/teams/bravo/sync/push', { events }, auth);
+const push = async (events: unknown[], auth?: Auth) =>
+  await request('POST', '/teams/bravo/sync/push', { events }, auth);
 
 beforeEach(async () => {
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
 
@@ -181,7 +182,7 @@ describe('POST /teams/:slug/sync/push (ADR 325/328)', () => {
 
     // The containment property, at the boundary a real pusher crosses: 3b-i stages, it never folds.
     expect(server.db.prepare('SELECT COUNT(*) AS n FROM messages').get()).toEqual({ n: 0 });
-    const team = getTeamBySlug(server.db, 'bravo')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'bravo'))!;
     const seqs = server.db
       .prepare<[string], { next_seq: number }>('SELECT next_seq FROM nodes WHERE team_id = ?')
       .all(team.id);

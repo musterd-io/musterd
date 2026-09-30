@@ -5,8 +5,8 @@ import {
   OAUTH_REFRESH_TTL_S,
   TOKEN_PREFIXES,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
+import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { hashToken, memberStandingRefusal, newSecret } from './members.js';
 import type { MemberRow } from './rows.js';
@@ -61,22 +61,21 @@ function newClientId(): string {
 }
 
 /** Ensure a Team owns this exact public client ID without persisting CIMD metadata. */
-function ensureClientBinding(
-  db: Database,
+async function ensureClientBinding(
+  db: Driver,
   teamId: string,
   clientId: string,
   source: OAuthClientSource,
-): void {
-  db.prepare(
+): Promise<void> {
+  await db.run(
     `INSERT INTO oauth_client_bindings (team_id, client_id, source)
      VALUES (?, ?, ?) ON CONFLICT(team_id, client_id) DO NOTHING`,
-  ).run(teamId, clientId, source);
-  const binding = db
-    .prepare<
-      [string, string],
-      { source: OAuthClientSource }
-    >('SELECT source FROM oauth_client_bindings WHERE team_id = ? AND client_id = ?')
-    .get(teamId, clientId);
+    [teamId, clientId, source],
+  );
+  const binding = await db.get<{ source: OAuthClientSource }>(
+    'SELECT source FROM oauth_client_bindings WHERE team_id = ? AND client_id = ?',
+    [teamId, clientId],
+  );
   if (binding?.source !== source)
     throw new MusterdError('conflict', 'OAuth client binding source mismatch');
 }
@@ -86,30 +85,32 @@ function ensureClientBinding(
  * are public, and a confidential secret needs a typed prefix the ADR does not define yet
  * (increment 3). Redirect URIs are validated by the route, not here; they store as JSON.
  */
-export function registerClient(
-  db: Database,
+export async function registerClient(
+  db: Driver,
   input: { teamId: string; clientName: string; redirectUris: string[] },
   now = Date.now(),
-): { client_id: string } {
+): Promise<{ client_id: string }> {
   const client_id = newClientId();
-  const insert = db.prepare(
-    `INSERT INTO oauth_clients (client_id, team_id, client_name, redirect_uris, auth_method, created_at)
-     VALUES (?, ?, ?, ?, 'none', ?)`,
-  );
-  db.transaction(() => {
-    insert.run(client_id, input.teamId, input.clientName, JSON.stringify(input.redirectUris), now);
-    ensureClientBinding(db, input.teamId, client_id, 'dcr');
-  })();
+  await db.tx(async (t) => {
+    await t.run(
+      `INSERT INTO oauth_clients (client_id, team_id, client_name, redirect_uris, auth_method, created_at)
+       VALUES (?, ?, ?, ?, 'none', ?)`,
+      [client_id, input.teamId, input.clientName, JSON.stringify(input.redirectUris), now],
+    );
+    await ensureClientBinding(t, input.teamId, client_id, 'dcr');
+  });
   return { client_id };
 }
 
-export function getClient(db: Database, teamId: string, clientId: string): OAuthClientRow {
-  const row = db
-    .prepare<
-      [string, string],
-      OAuthClientRow
-    >('SELECT * FROM oauth_clients WHERE team_id = ? AND client_id = ?')
-    .get(teamId, clientId);
+export async function getClient(
+  db: Driver,
+  teamId: string,
+  clientId: string,
+): Promise<OAuthClientRow> {
+  const row = await db.get<OAuthClientRow>(
+    'SELECT * FROM oauth_clients WHERE team_id = ? AND client_id = ?',
+    [teamId, clientId],
+  );
   if (!row) throw new MusterdError('not_found', `unknown OAuth client for this team`);
   return row;
 }
@@ -119,8 +120,8 @@ export function getClient(db: Database, teamId: string, clientId: string): OAuth
  * `client_id + redirect_uri + code_challenge + team + member`. The plaintext crosses exactly
  * one 302 `Location` (the flow both apps require) and is never stored.
  */
-export function issueCode(
-  db: Database,
+export async function issueCode(
+  db: Driver,
   input: {
     teamId: string;
     memberId: string;
@@ -133,17 +134,15 @@ export function issueCode(
     connectedBy?: string | null;
   },
   now = Date.now(),
-): OAuthCodeMint {
+): Promise<OAuthCodeMint> {
   const code = randomBytes(32).toString('base64url');
   const expires_at = now + OAUTH_CODE_TTL_S * 1000;
-  const insert = db.prepare(
-    `INSERT INTO oauth_codes
+  const INSERT_CODE = `INSERT INTO oauth_codes
        (code_hash, team_id, member_id, client_id, redirect_uri, code_challenge, scope, created_at, expires_at, connected_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  db.transaction(() => {
-    ensureClientBinding(db, input.teamId, input.clientId, input.clientSource ?? 'dcr');
-    insert.run(
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  await db.tx(async (t) => {
+    await ensureClientBinding(t, input.teamId, input.clientId, input.clientSource ?? 'dcr');
+    await t.run(INSERT_CODE, [
       hashToken(code),
       input.teamId,
       input.memberId,
@@ -154,8 +153,8 @@ export function issueCode(
       now,
       expires_at,
       input.connectedBy ?? null,
-    );
-  })();
+    ]);
+  });
   return { code, expires_at };
 }
 
@@ -163,28 +162,23 @@ export function issueCode(
  * Redeem a code for its seat (transactional check-and-burn: verify PKCE `S256`, redirect exact
  * match, TTL, single-use — then burn). Any failure throws; a replay of a burned code throws.
  */
-export function redeemCode(
-  db: Database,
+export async function redeemCode(
+  db: Driver,
   input: { teamId: string; clientId: string; code: string; redirectUri: string; verifier: string },
   now = Date.now(),
-): { memberId: string; scope: string | null; connectedBy: string | null } {
-  return db.transaction(() => {
-    const row = db
-      .prepare<
-        [string],
-        {
-          team_id: string;
-          member_id: string;
-          connected_by: string | null;
-          client_id: string;
-          redirect_uri: string;
-          code_challenge: string;
-          scope: string | null;
-          expires_at: number;
-          used_at: number | null;
-        }
-      >('SELECT * FROM oauth_codes WHERE code_hash = ?')
-      .get(hashToken(input.code));
+): Promise<{ memberId: string; scope: string | null; connectedBy: string | null }> {
+  return db.tx(async (t) => {
+    const row = await t.get<{
+      team_id: string;
+      member_id: string;
+      connected_by: string | null;
+      client_id: string;
+      redirect_uri: string;
+      code_challenge: string;
+      scope: string | null;
+      expires_at: number;
+      used_at: number | null;
+    }>('SELECT * FROM oauth_codes WHERE code_hash = ?', [hashToken(input.code)]);
     if (!row || row.team_id !== input.teamId || row.client_id !== input.clientId)
       throw new MusterdError('unauthorized', 'invalid authorization code');
     if (row.used_at !== null) throw new MusterdError('unauthorized', 'authorization code replayed');
@@ -193,12 +187,12 @@ export function redeemCode(
       throw new MusterdError('unauthorized', 'redirect_uri mismatch');
     if (!safeEqual(pkceChallenge(input.verifier), row.code_challenge))
       throw new MusterdError('unauthorized', 'PKCE verification failed');
-    db.prepare('UPDATE oauth_codes SET used_at = ? WHERE code_hash = ?').run(
+    await t.run('UPDATE oauth_codes SET used_at = ? WHERE code_hash = ?', [
       now,
       hashToken(input.code),
-    );
+    ]);
     return { memberId: row.member_id, scope: row.scope, connectedBy: row.connected_by };
-  })();
+  });
 }
 
 /**
@@ -206,13 +200,11 @@ export function redeemCode(
  * (ADR 449 §1, landed by ADR 452 §4): `min(kind TTL, lifecycle_until)`. `authMember` still enforces
  * expiry at use; the cap keeps what a client is told about its lifetime true.
  */
-function memberEnd(db: Database, memberId: string): number | null {
-  const row = db
-    .prepare<
-      [string],
-      { lifecycle: string | null; lifecycle_until: number | null }
-    >('SELECT lifecycle, lifecycle_until FROM members WHERE id = ?')
-    .get(memberId);
+async function memberEnd(db: Driver, memberId: string): Promise<number | null> {
+  const row = await db.get<{ lifecycle: string | null; lifecycle_until: number | null }>(
+    'SELECT lifecycle, lifecycle_until FROM members WHERE id = ?',
+    [memberId],
+  );
   return row?.lifecycle === 'until' && row.lifecycle_until !== null ? row.lifecycle_until : null;
 }
 
@@ -227,8 +219,8 @@ function cappedExpiries(
 }
 
 /** Mint a fresh access + refresh pair on one chain — the chain id is what reuse revokes. */
-export function mintTokenPair(
-  db: Database,
+export async function mintTokenPair(
+  db: Driver,
   input: {
     teamId: string;
     memberId: string;
@@ -238,18 +230,16 @@ export function mintTokenPair(
     connectedBy?: string | null;
   },
   now = Date.now(),
-): OAuthTokenPair {
+): Promise<OAuthTokenPair> {
   const access_token = newSecret(TOKEN_PREFIXES.oauth_access);
   const refresh_token = newSecret(TOKEN_PREFIXES.oauth_refresh);
   const chain_id = ulid();
-  const exp = cappedExpiries(memberEnd(db, input.memberId), now);
-  const ins = db.prepare(
-    `INSERT INTO oauth_tokens
+  const exp = cappedExpiries(await memberEnd(db, input.memberId), now);
+  const INS = `INSERT INTO oauth_tokens
        (token_hash, kind, team_id, member_id, client_id, chain_id, scope, created_at, expires_at, connected_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  const tx = db.transaction(() => {
-    ins.run(
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  await db.tx(async (t) => {
+    await t.run(INS, [
       hashToken(access_token),
       'access',
       input.teamId,
@@ -260,8 +250,8 @@ export function mintTokenPair(
       now,
       exp.access,
       input.connectedBy ?? null,
-    );
-    ins.run(
+    ]);
+    await t.run(INS, [
       hashToken(refresh_token),
       'refresh',
       input.teamId,
@@ -272,9 +262,8 @@ export function mintTokenPair(
       now,
       exp.refresh,
       input.connectedBy ?? null,
-    );
+    ]);
   });
-  tx();
   return { access_token, refresh_token, expires_in: exp.expires_in };
 }
 
@@ -286,32 +275,29 @@ export function mintTokenPair(
  * Reuse of a burned refresh is the stolen-token signal: revoke the WHOLE chain and throw — the
  * legitimate holder's next use fails closed too, which is the point (both sides re-authenticate).
  */
-export function rotateRefresh(
-  db: Database,
+export async function rotateRefresh(
+  db: Driver,
   input: { teamId: string; clientId: string; refreshToken: string },
   now = Date.now(),
-): OAuthTokenPair {
+): Promise<OAuthTokenPair> {
   // NOTE: the reuse branch writes (chain revocation) and then must THROW — a throw inside the
   // transaction would roll the revocation back, so the tx returns a verdict and the throw happens
   // outside it. Failure paths before any write throw inside freely.
-  const outcome = db.transaction(
-    (): { pair: OAuthTokenPair } | { reused: true } | { ended: MusterdError } => {
-      const row = db
-        .prepare<
-          [string],
-          {
-            team_id: string;
-            member_id: string;
-            client_id: string;
-            chain_id: string;
-            scope: string | null;
-            expires_at: number;
-            replaced_at: number | null;
-            revoked_at: number | null;
-            connected_by: string | null;
-          }
-        >("SELECT * FROM oauth_tokens WHERE token_hash = ? AND kind = 'refresh'")
-        .get(hashToken(input.refreshToken));
+  const outcome = await db.tx(
+    async (t): Promise<{ pair: OAuthTokenPair } | { reused: true } | { ended: MusterdError }> => {
+      const row = await t.get<{
+        team_id: string;
+        member_id: string;
+        client_id: string;
+        chain_id: string;
+        scope: string | null;
+        expires_at: number;
+        replaced_at: number | null;
+        revoked_at: number | null;
+        connected_by: string | null;
+      }>("SELECT * FROM oauth_tokens WHERE token_hash = ? AND kind = 'refresh'", [
+        hashToken(input.refreshToken),
+      ]);
       if (!row || row.team_id !== input.teamId || row.client_id !== input.clientId)
         throw new MusterdError('unauthorized', 'invalid refresh token');
       if (row.revoked_at !== null)
@@ -322,43 +308,41 @@ export function rotateRefresh(
         // Burned refresh presented again: stolen-refresh detection — revoke the chain. This write
         // COMMITS (the verdict is thrown outside the tx); the legitimate holder fails closed too,
         // which is the point — both sides re-authenticate.
-        db.prepare(
+        await t.run(
           'UPDATE oauth_tokens SET revoked_at = ? WHERE chain_id = ? AND revoked_at IS NULL',
-        ).run(now, row.chain_id);
+          [now, row.chain_id],
+        );
         return { reused: true };
       }
       // ADR 452 §4: a member who left, was disabled, or expired gets no fresh pair — and the whole
       // chain dies with the refusal (committed: the verdict is thrown outside the tx), so a later
       // re-enable does not quietly revive a chain nobody re-authorized.
-      const owner = db
-        .prepare<[string], MemberRow>('SELECT * FROM members WHERE id = ?')
-        .get(row.member_id);
+      const owner = await t.get<MemberRow>('SELECT * FROM members WHERE id = ?', [row.member_id]);
       // ADR 456 §3: so does one whose connector (the member who connected this device) lost theirs.
       const ended = owner
-        ? (memberStandingRefusal(owner, now) ?? connectorRefusal(db, row.connected_by, now))
+        ? (memberStandingRefusal(owner, now) ?? (await connectorRefusal(t, row.connected_by, now)))
         : new MusterdError('unauthorized', 'seat is gone');
       if (ended) {
-        db.prepare(
+        await t.run(
           'UPDATE oauth_tokens SET revoked_at = ? WHERE chain_id = ? AND revoked_at IS NULL',
-        ).run(now, row.chain_id);
+          [now, row.chain_id],
+        );
         return { ended };
       }
-      db.prepare('UPDATE oauth_tokens SET replaced_at = ? WHERE token_hash = ?').run(
+      await t.run('UPDATE oauth_tokens SET replaced_at = ? WHERE token_hash = ?', [
         now,
         hashToken(input.refreshToken),
-      );
+      ]);
       const access_token = newSecret(TOKEN_PREFIXES.oauth_access);
       const refresh_token = newSecret(TOKEN_PREFIXES.oauth_refresh);
       // Sliding cap: the new refresh never outlives the burned one's expiry (first-login + 30d),
       // nor the member's own end (ADR 449 §1).
-      const exp = cappedExpiries(memberEnd(db, row.member_id), now, row.expires_at);
+      const exp = cappedExpiries(await memberEnd(t, row.member_id), now, row.expires_at);
       const refreshExpires = exp.refresh;
-      const ins = db.prepare(
-        `INSERT INTO oauth_tokens
+      const INS = `INSERT INTO oauth_tokens
          (token_hash, kind, team_id, member_id, client_id, chain_id, scope, created_at, expires_at, connected_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      );
-      ins.run(
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+      await t.run(INS, [
         hashToken(access_token),
         'access',
         row.team_id,
@@ -369,8 +353,8 @@ export function rotateRefresh(
         now,
         exp.access,
         row.connected_by,
-      );
-      ins.run(
+      ]);
+      await t.run(INS, [
         hashToken(refresh_token),
         'refresh',
         row.team_id,
@@ -381,10 +365,10 @@ export function rotateRefresh(
         now,
         refreshExpires,
         row.connected_by,
-      );
+      ]);
       return { pair: { access_token, refresh_token, expires_in: exp.expires_in } };
     },
-  )();
+  );
   if ('ended' in outcome) throw outcome.ended;
   if ('reused' in outcome)
     throw new MusterdError(
@@ -399,63 +383,62 @@ export function rotateRefresh(
  * kind of token, or null when the token names nothing. Audit-only — authorization never consults
  * it, so an unknown token stays an unknown token everywhere else.
  */
-export function chainMember(
-  db: Database,
+export async function chainMember(
+  db: Driver,
   teamId: string,
   clientId: string | null,
   token: string,
-): string | null {
-  const row = db
-    .prepare<
-      [string],
-      { team_id: string; client_id: string; member_id: string }
-    >('SELECT team_id, client_id, member_id FROM oauth_tokens WHERE token_hash = ?')
-    .get(hashToken(token));
+): Promise<string | null> {
+  const row = await db.get<{ team_id: string; client_id: string; member_id: string }>(
+    'SELECT team_id, client_id, member_id FROM oauth_tokens WHERE token_hash = ?',
+    [hashToken(token)],
+  );
   if (!row || row.team_id !== teamId) return null;
   if (clientId !== null && row.client_id !== clientId) return null;
   return (
-    db
-      .prepare<[string], { name: string }>('SELECT name FROM members WHERE id = ?')
-      .get(row.member_id)?.name ?? null
+    (await db.get<{ name: string }>('SELECT name FROM members WHERE id = ?', [row.member_id]))
+      ?.name ?? null
   );
 }
 
-/** RFC 7009 revocation — either kind; a refresh revocation also burns its live access sibling. */ export function revokeToken(
-  db: Database,
+/** RFC 7009 revocation — either kind; a refresh revocation also burns its live access sibling. */ export async function revokeToken(
+  db: Driver,
   teamId: string,
   token: string,
   now = Date.now(),
-): boolean {
-  const row = db
-    .prepare<
-      [string],
-      { team_id: string; kind: string; chain_id: string; revoked_at: number | null }
-    >('SELECT team_id, kind, chain_id, revoked_at FROM oauth_tokens WHERE token_hash = ?')
-    .get(hashToken(token));
+): Promise<boolean> {
+  const row = await db.get<{
+    team_id: string;
+    kind: string;
+    chain_id: string;
+    revoked_at: number | null;
+  }>('SELECT team_id, kind, chain_id, revoked_at FROM oauth_tokens WHERE token_hash = ?', [
+    hashToken(token),
+  ]);
   if (!row || row.team_id !== teamId || row.revoked_at !== null) return false;
-  db.prepare('UPDATE oauth_tokens SET revoked_at = ? WHERE token_hash = ?').run(
+  await db.run('UPDATE oauth_tokens SET revoked_at = ? WHERE token_hash = ?', [
     now,
     hashToken(token),
-  );
+  ]);
   if (row.kind === 'refresh')
-    db.prepare(
+    await db.run(
       "UPDATE oauth_tokens SET revoked_at = ? WHERE chain_id = ? AND kind = 'access' AND revoked_at IS NULL",
-    ).run(now, row.chain_id);
+      [now, row.chain_id],
+    );
   return true;
 }
 
 /** Admin revoke-all per seat — rides the credential-rotate path (ADR 446 §3). */
-export function revokeAllForMember(
-  db: Database,
+export async function revokeAllForMember(
+  db: Driver,
   teamId: string,
   memberId: string,
   now = Date.now(),
-): number {
-  const res = db
-    .prepare<
-      [number, string, string]
-    >('UPDATE oauth_tokens SET revoked_at = ? WHERE team_id = ? AND member_id = ? AND revoked_at IS NULL')
-    .run(now, teamId, memberId);
+): Promise<number> {
+  const res = await db.run(
+    'UPDATE oauth_tokens SET revoked_at = ? WHERE team_id = ? AND member_id = ? AND revoked_at IS NULL',
+    [now, teamId, memberId],
+  );
   return Number(res.changes);
 }
 
@@ -465,17 +448,16 @@ export function revokeAllForMember(
  * whole of a supersede — chains AND codes — because a 90s code from an earlier connect would pass
  * every other check (the agent is live) and mint a second chain. Returns how many it burned.
  */
-export function burnUnexchangedCodes(
-  db: Database,
+export async function burnUnexchangedCodes(
+  db: Driver,
   teamId: string,
   memberId: string,
   now = Date.now(),
-): number {
-  const res = db
-    .prepare<
-      [number, string, string]
-    >('UPDATE oauth_codes SET used_at = ? WHERE team_id = ? AND member_id = ? AND used_at IS NULL')
-    .run(now, teamId, memberId);
+): Promise<number> {
+  const res = await db.run(
+    'UPDATE oauth_codes SET used_at = ? WHERE team_id = ? AND member_id = ? AND used_at IS NULL',
+    [now, teamId, memberId],
+  );
   return Number(res.changes);
 }
 
@@ -484,15 +466,13 @@ export function burnUnexchangedCodes(
  * left, been disabled/banned/archived, or expired — or null (including a chain with no connector,
  * i.e. a human who signed their own seat in).
  */
-export function connectorRefusal(
-  db: Database,
+export async function connectorRefusal(
+  db: Driver,
   connectedBy: string | null,
   now = Date.now(),
-): MusterdError | null {
+): Promise<MusterdError | null> {
   if (connectedBy === null) return null;
-  const connector = db
-    .prepare<[string], MemberRow>('SELECT * FROM members WHERE id = ?')
-    .get(connectedBy);
+  const connector = await db.get<MemberRow>('SELECT * FROM members WHERE id = ?', [connectedBy]);
   if (connector && !memberStandingRefusal(connector, now)) return null;
   return new MusterdError(
     'unauthorized',
@@ -507,36 +487,30 @@ export function connectorRefusal(
  * is a human, or (ADR 452 §3) an agent whose chain came from a redeemed connect nonce — the only
  * way an agent-bound code is ever issued — and then (ADR 456 §3) only while its connector stands.
  */
-export function verifyAccess(
-  db: Database,
+export async function verifyAccess(
+  db: Driver,
   teamId: string,
   accessToken: string,
   now = Date.now(),
-): MemberRow {
-  const row = db
-    .prepare<
-      [string],
-      {
-        member_id: string;
-        team_id: string;
-        expires_at: number;
-        revoked_at: number | null;
-        connected_by: string | null;
-      }
-    >(
-      "SELECT member_id, team_id, expires_at, revoked_at, connected_by FROM oauth_tokens WHERE token_hash = ? AND kind = 'access'",
-    )
-    .get(hashToken(accessToken));
+): Promise<MemberRow> {
+  const row = await db.get<{
+    member_id: string;
+    team_id: string;
+    expires_at: number;
+    revoked_at: number | null;
+    connected_by: string | null;
+  }>(
+    "SELECT member_id, team_id, expires_at, revoked_at, connected_by FROM oauth_tokens WHERE token_hash = ? AND kind = 'access'",
+    [hashToken(accessToken)],
+  );
   if (!row || row.team_id !== teamId || row.revoked_at !== null || row.expires_at <= now)
     throw new MusterdError('unauthorized', `invalid access token for this team`);
-  const member = db
-    .prepare<
-      [string, string],
-      MemberRow
-    >("SELECT * FROM members WHERE team_id = ? AND id = ? AND left_at IS NULL AND kind IN ('human', 'agent')")
-    .get(teamId, row.member_id);
+  const member = await db.get<MemberRow>(
+    "SELECT * FROM members WHERE team_id = ? AND id = ? AND left_at IS NULL AND kind IN ('human', 'agent')",
+    [teamId, row.member_id],
+  );
   if (!member) throw new MusterdError('unauthorized', 'access token names a seat that is gone');
-  const connector = connectorRefusal(db, row.connected_by, now);
+  const connector = await connectorRefusal(db, row.connected_by, now);
   if (connector) throw connector;
   return member;
 }

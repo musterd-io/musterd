@@ -6,6 +6,7 @@ import {
   SyncWedgeSchema,
 } from '@musterd/protocol';
 import type { Ctx } from '../context.js';
+import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
 import { readNodeState } from '../node/state.js';
 import { REPLICATED_LEDGER_VERBS, type AuditRow } from '../store/audit.js';
@@ -37,11 +38,13 @@ export const SYNC_PUSH_INTERVAL_MS = 60_000;
 const PUSH_TIMEOUT_MS = 10_000;
 
 /** This daemon's `nodes` row for the team, or null when it has never logged an act here. */
-function localNodeId(ctx: Ctx, teamId: string): string | null {
+async function localNodeId(ctx: Ctx, teamId: string): Promise<string | null> {
   return (
-    ctx.db
-      .prepare<[string], { node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?')
-      .get(teamId)?.node_id ?? null
+    (
+      await ctx.db.get<{ node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?', [
+        teamId,
+      ])
+    )?.node_id ?? null
   );
 }
 
@@ -57,39 +60,42 @@ function localNodeId(ctx: Ctx, teamId: string): string | null {
  * trips the check below and wedges the loop this guard exists to protect. The allocator is the only
  * reading that stays true as kinds are added (dolly, 2026-08-28, #1102 note 3).
  */
-function localHead(ctx: Ctx, teamId: string, nodeId: string): number {
-  const row = ctx.db
-    .prepare<
-      [string, string],
-      { next_seq: number }
-    >('SELECT next_seq FROM nodes WHERE team_id = ? AND id = ?')
-    .get(teamId, nodeId);
+async function localHead(ctx: Ctx, teamId: string, nodeId: string): Promise<number> {
+  const row = await ctx.db.get<{ next_seq: number }>(
+    'SELECT next_seq FROM nodes WHERE team_id = ? AND id = ?',
+    [teamId, nodeId],
+  );
   // `next_seq` names the NEXT value to assign, so the head is one below it; 1 means nothing minted.
   return row ? row.next_seq - 1 : 0;
 }
 
-function readCursor(ctx: Ctx, teamId: string, nodeId: string): number {
+async function readCursor(ctx: Ctx, teamId: string, nodeId: string): Promise<number> {
   return (
-    ctx.db
-      .prepare<
-        [string, string],
-        { last_seq: number }
-      >('SELECT last_seq FROM sync_push_cursor WHERE team_id = ? AND node_id = ?')
-      .get(teamId, nodeId)?.last_seq ?? 0
+    (
+      await ctx.db.get<{ last_seq: number }>(
+        'SELECT last_seq FROM sync_push_cursor WHERE team_id = ? AND node_id = ?',
+        [teamId, nodeId],
+      )
+    )?.last_seq ?? 0
   );
 }
 
-function advanceCursor(ctx: Ctx, teamId: string, nodeId: string, seq: number, now: number): void {
+async function advanceCursor(
+  ctx: Ctx,
+  teamId: string,
+  nodeId: string,
+  seq: number,
+  now: number,
+): Promise<void> {
   // An accepted batch clears any wedge: the hub took what it had refused.
-  ctx.db
-    .prepare(
-      `INSERT INTO sync_push_cursor (team_id, node_id, last_seq, updated_at, refused_json)
+  await ctx.db.run(
+    `INSERT INTO sync_push_cursor (team_id, node_id, last_seq, updated_at, refused_json)
        VALUES (?, ?, ?, ?, NULL)
        ON CONFLICT(team_id, node_id) DO UPDATE SET last_seq = excluded.last_seq,
                                                   updated_at = excluded.updated_at,
                                                   refused_json = NULL`,
-    )
-    .run(teamId, nodeId, seq, now);
+    [teamId, nodeId, seq, now],
+  );
 }
 
 /**
@@ -97,34 +103,32 @@ function advanceCursor(ctx: Ctx, teamId: string, nodeId: string, seq: number, no
  * who can clear it reads it from the roster and the inbox, not from this daemon's log. `since` is
  * the FIRST refusal for this seat — a repeat every tick does not restart the clock.
  */
-export function recordPushRefusal(
+export async function recordPushRefusal(
   ctx: Ctx,
   teamId: string,
   nodeId: string,
   refusal: Omit<SyncWedge, 'since' | 'node_id'>,
   now: number,
-): void {
-  const prior = readPushRefusal(ctx.db, teamId);
+): Promise<void> {
+  const prior = await readPushRefusal(ctx.db, teamId);
   const since = prior && prior.seat === refusal.seat ? prior.since : now;
   const wedge: SyncWedge = { ...refusal, node_id: nodeId, since };
-  ctx.db
-    .prepare(
-      `INSERT INTO sync_push_cursor (team_id, node_id, last_seq, updated_at, refused_json)
+  await ctx.db.run(
+    `INSERT INTO sync_push_cursor (team_id, node_id, last_seq, updated_at, refused_json)
        VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(team_id, node_id) DO UPDATE SET refused_json = excluded.refused_json`,
-    )
-    .run(teamId, nodeId, readCursor(ctx, teamId, nodeId), now, JSON.stringify(wedge));
+    [teamId, nodeId, await readCursor(ctx, teamId, nodeId), now, JSON.stringify(wedge)],
+  );
 }
 
 /** This daemon's standing wedge for the team, or null — read by the roster and `node list`. */
-export function readPushRefusal(db: Ctx['db'], teamId: string): SyncWedge | null {
-  const row = db
-    .prepare<[string], { refused_json: string | null }>(
-      `SELECT c.refused_json FROM sync_push_cursor c
-         JOIN local_node l ON l.team_id = c.team_id AND l.node_id = c.node_id
-        WHERE c.team_id = ?`,
-    )
-    .get(teamId);
+export async function readPushRefusal(db: Driver, teamId: string): Promise<SyncWedge | null> {
+  const row = await db.get<{ refused_json: string | null }>(
+    `SELECT c.refused_json FROM sync_push_cursor c
+       JOIN local_node l ON l.team_id = c.team_id AND l.node_id = c.node_id
+      WHERE c.team_id = ?`,
+    [teamId],
+  );
   if (!row?.refused_json) return null;
   const parsed = SyncWedgeSchema.safeParse(JSON.parse(row.refused_json));
   return parsed.success ? parsed.data : null;
@@ -152,12 +156,14 @@ type Pending =
  * sort on `origin_seq` and the sequence the hub sees is dense. Bounded after the merge, not per
  * table — bounding each side first could ship seq 501 of one kind ahead of seq 3 of the other.
  */
-function unpushed(ctx: Ctx, teamId: string, nodeId: string, after: number): Pending[] {
-  const messages: Pending[] = ctx.db
-    .prepare<
-      [string, string, number, number],
-      MessageRow & { from_name: string; to_name: string | null }
-    >(
+async function unpushed(
+  ctx: Ctx,
+  teamId: string,
+  nodeId: string,
+  after: number,
+): Promise<Pending[]> {
+  const messages: Pending[] = (
+    await ctx.db.all<MessageRow & { from_name: string; to_name: string | null }>(
       `SELECT m.*, f.name AS from_name, t.name AS to_name
          FROM messages m
          JOIN members f ON f.id = m.from_member
@@ -165,18 +171,18 @@ function unpushed(ctx: Ctx, teamId: string, nodeId: string, after: number): Pend
         WHERE m.team_id = ? AND m.origin_node = ? AND m.origin_seq > ?
         ORDER BY m.origin_seq
         LIMIT ?`,
+      [teamId, nodeId, after, SYNC_PUSH_MAX_BATCH],
     )
-    .all(teamId, nodeId, after, SYNC_PUSH_MAX_BATCH)
-    .map((r) => ({ kind: 'message', seq: r.origin_seq, row: r, from: r.from_name, to: r.to_name }));
-  const lanes: Pending[] = ctx.db
-    .prepare<[string, string, number, number], AuditRow>(
+  ).map((r) => ({ kind: 'message', seq: r.origin_seq, row: r, from: r.from_name, to: r.to_name }));
+  const lanes: Pending[] = (
+    await ctx.db.all<AuditRow>(
       `SELECT * FROM audit
         WHERE team_id = ? AND origin_node = ? AND origin_seq > ?
         ORDER BY origin_seq
         LIMIT ?`,
+      [teamId, nodeId, after, SYNC_PUSH_MAX_BATCH],
     )
-    .all(teamId, nodeId, after, SYNC_PUSH_MAX_BATCH)
-    .map((r) => ({ kind: 'lane', seq: r.origin_seq, row: r }));
+  ).map((r) => ({ kind: 'lane', seq: r.origin_seq, row: r }));
   return [...messages, ...lanes].sort((a, b) => a.seq - b.seq).slice(0, SYNC_PUSH_MAX_BATCH);
 }
 
@@ -242,7 +248,7 @@ export async function pushTeam(
   team: { id: string; slug: string },
   now: number = Date.now(),
 ): Promise<number> {
-  const nodeId = localNodeId(ctx, team.id);
+  const nodeId = await localNodeId(ctx, team.id);
   // An enrollment is THIS daemon's only if it names this daemon's node row: node.json is keyed by
   // team slug, and a record minted for another node (two daemons sharing one state file, as the
   // through-DB tests do) must not make a hub believe it is a joiner.
@@ -254,7 +260,7 @@ export async function pushTeam(
   // is missing every event it minted itself — stage in-process through the same ingestBatch the
   // route calls (spec 2026-09-01 §Finding 1). Neither: a single-machine install, which is every
   // musterd install today. Not an error.
-  const loopback = !enrollment && hasEnrolledJoiners(ctx.db, team.id, nodeId ?? '');
+  const loopback = !enrollment && (await hasEnrolledJoiners(ctx.db, team.id, nodeId ?? ''));
   if (!enrollment && !loopback) return 0;
 
   // ADR 398: a hub whose stored policy was never stamped (pre-kind history, or silent
@@ -263,30 +269,30 @@ export async function pushTeam(
   // but has never minted a local node (policy written via silent `setPolicy`) gets one here —
   // applyPolicyChange is what mints it. Must not mint a node on a single-machine install just
   // to discover there is nothing to push; loopback already proved joiners exist.
-  if (loopback) restateUnstampedPolicy(ctx.db, team.id);
+  if (loopback) await restateUnstampedPolicy(ctx.db, team.id);
 
   // No local row means this daemon has stamped no origin for the team, so it has nothing of its
   // own to push. Re-read: restatement above may have just minted the hub's node.
-  const originId = localNodeId(ctx, team.id);
+  const originId = await localNodeId(ctx, team.id);
   if (!originId) return 0;
 
-  const cursor = readCursor(ctx, team.id, originId);
-  const pending = unpushed(ctx, team.id, originId, cursor);
+  const cursor = await readCursor(ctx, team.id, originId);
+  const pending = await unpushed(ctx, team.id, originId, cursor);
   if (pending.length === 0) return 0;
 
   const events: SyncEvent[] = pending.map((p) => toSyncEvent(p, team.slug));
 
   if (loopback) {
     try {
-      const result = ingestBatch(ctx.db, team.id, originId, events, now);
-      advanceCursor(ctx, team.id, originId, pending[pending.length - 1]!.row.origin_seq, now);
+      const result = await ingestBatch(ctx.db, team.id, originId, events, now);
+      await advanceCursor(ctx, team.id, originId, pending[pending.length - 1]!.row.origin_seq, now);
       return result.accepted;
     } catch (err) {
       // A gap here means the push cursor and sync_log disagree about this node — the cursor was
       // lost or rolled back. Believe the log (it is the authority on what it holds), bounded by
       // this node's own head exactly as the HTTP path bounds a hub's resume point.
       if (err instanceof SyncGapError) {
-        const head = localHead(ctx, team.id, originId);
+        const head = await localHead(ctx, team.id, originId);
         if (err.expectedSeq > head + 1) {
           log.error({
             msg: 'sync_loopback_impossible_resume',
@@ -298,7 +304,7 @@ export async function pushTeam(
           });
           throw err;
         }
-        advanceCursor(ctx, team.id, originId, err.expectedSeq - 1, now);
+        await advanceCursor(ctx, team.id, originId, err.expectedSeq - 1, now);
         log.warn({ msg: 'sync_loopback_gap', team: team.slug, resume_at: err.expectedSeq });
         return 0;
       }
@@ -330,7 +336,7 @@ export async function pushTeam(
     // here, reported by nobody (dolly, 2026-08-28, #1102 required B).
     const body = (await res.json().catch(() => null)) as { expected_seq?: unknown } | null;
     const expected = body?.expected_seq;
-    const head = localHead(ctx, team.id, originId);
+    const head = await localHead(ctx, team.id, originId);
     if (typeof expected === 'number' && Number.isInteger(expected) && expected >= 1) {
       if (expected > head + 1) {
         // Decision 7 (ADR 335 §7): every refusal must be distinguishable from being offline.
@@ -351,7 +357,7 @@ export async function pushTeam(
             'impossible, so refusing rather than skipping events',
         );
       }
-      advanceCursor(ctx, team.id, originId, expected - 1, now);
+      await advanceCursor(ctx, team.id, originId, expected - 1, now);
       log.warn({ msg: 'sync_push_gap', team: team.slug, resume_at: expected });
       return 0;
     }
@@ -383,7 +389,7 @@ export async function pushTeam(
     } | null;
     if (typeof body?.seat === 'string' && typeof body?.node_id === 'string') {
       const kind = body.kind === 'lane' || body.kind === 'message' ? body.kind : 'presence';
-      recordPushRefusal(
+      await recordPushRefusal(
         ctx,
         team.id,
         originId,
@@ -430,7 +436,7 @@ export async function pushTeam(
   const ack = SyncPushResponseSchema.parse(await res.json());
   // Only now, and only as far as the batch we actually sent. `accepted` counts what was NEW to the
   // hub — a replay acks 0 — so the cursor follows the batch, not the count.
-  advanceCursor(ctx, team.id, originId, pending[pending.length - 1]!.row.origin_seq, now);
+  await advanceCursor(ctx, team.id, originId, pending[pending.length - 1]!.row.origin_seq, now);
   return ack.accepted;
 }
 
@@ -441,7 +447,7 @@ export function startSyncPush(ctx: Ctx): () => void {
     if (running) return; // a slow hub must not stack passes
     running = true;
     try {
-      for (const team of listActiveTeams(ctx.db)) {
+      for (const team of await listActiveTeams(ctx.db)) {
         try {
           const pushed = await pushTeam(ctx, team);
           if (pushed > 0) log.info({ msg: 'sync_pushed', team: team.slug, pushed });

@@ -1,7 +1,8 @@
 import { PROTOCOL_VERSION, type WSServerFrame } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import {
   AGENT_SESSION_LEASE_RENEW_AHEAD_MS,
@@ -111,7 +112,7 @@ function ageLease(msLeft: number) {
 }
 
 beforeEach(async () => {
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
@@ -185,7 +186,7 @@ describe('agent session lease renewal over the live WS (ADR 347)', () => {
     const memberId = server.db
       .prepare<[string], { id: string }>('SELECT id FROM members WHERE name = ?')
       .get('Ada')!.id;
-    expect(revokeMemberSessionLeases(server.db, memberId)).toHaveLength(1);
+    expect(await revokeMemberSessionLeases(sqliteDriver(server.db), memberId)).toHaveLength(1);
     ws.send({ type: 'heartbeat', status: 'online' });
     await new Promise((r) => setTimeout(r, 200));
     expect(ws.frames.filter((f) => f.type === 'lease')).toHaveLength(0);

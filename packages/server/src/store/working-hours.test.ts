@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { Driver } from '../db/driver.js';
+import { withDrivers } from '../db/testing.js';
 import { addMember, getMemberByName } from './members.js';
 import { getTeamBySlug, createTeam } from './teams.js';
+
+let openStore: () => Promise<Driver>;
 
 const hours = {
   timezone: 'America/Los_Angeles',
@@ -10,29 +13,38 @@ const hours = {
   end: '15:00',
 };
 
-describe('working-hours persistence', () => {
-  it('stores optional Team and Member schedules as JSON', () => {
-    const db = openDb(':memory:');
-    const team = createTeam(db, { slug: 'revive', workingHours: hours });
-    addMember(db, team, {
-      name: 'miley',
-      kind: 'agent',
-      workingHours: hours,
-    });
-
-    expect(getTeamBySlug(db, 'revive')?.working_hours).toBe(JSON.stringify(hours));
-    expect(getMemberByName(db, team.id, 'miley')?.working_hours).toBe(JSON.stringify(hours));
-    db.close();
+withDrivers('working-hours', (o) => {
+  // Set per test, not at collection: describe.each collects every driver before any test runs.
+  beforeEach(() => {
+    openStore = o;
   });
 
-  it('keeps a missing Member schedule nullable for inheritance', () => {
-    const db = openDb(':memory:');
-    const team = createTeam(db, { slug: 'revive', workingHours: hours });
-    const member = addMember(db, team, { name: 'miley', kind: 'agent' });
+  describe('working-hours persistence', async () => {
+    it('stores optional Team and Member schedules as JSON', async () => {
+      const db = await openStore();
+      const team = await createTeam(db, { slug: 'revive', workingHours: hours });
+      await addMember(db, team, {
+        name: 'miley',
+        kind: 'agent',
+        workingHours: hours,
+      });
 
-    expect(getMemberByName(db, team.id, 'miley')?.working_hours).toBeNull();
-    expect(getTeamBySlug(db, 'revive')?.working_hours).toBe(JSON.stringify(hours));
-    expect(member.row.working_hours).toBeNull();
-    db.close();
+      expect((await getTeamBySlug(db, 'revive'))?.working_hours).toBe(JSON.stringify(hours));
+      expect((await getMemberByName(db, team.id, 'miley'))?.working_hours).toBe(
+        JSON.stringify(hours),
+      );
+      await db.close();
+    });
+
+    it('keeps a missing Member schedule nullable for inheritance', async () => {
+      const db = await openStore();
+      const team = await createTeam(db, { slug: 'revive', workingHours: hours });
+      const member = await addMember(db, team, { name: 'miley', kind: 'agent' });
+
+      expect((await getMemberByName(db, team.id, 'miley'))?.working_hours).toBeNull();
+      expect((await getTeamBySlug(db, 'revive'))?.working_hours).toBe(JSON.stringify(hours));
+      expect(member.row.working_hours).toBeNull();
+      await db.close();
+    });
   });
 });

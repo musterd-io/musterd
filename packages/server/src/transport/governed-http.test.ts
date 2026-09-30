@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { openLane } from '../store/lanes.js';
 import { getMemberByName } from '../store/members.js';
@@ -29,7 +30,7 @@ async function request(
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
 
 beforeEach(async () => {
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const created = await request('POST', '/teams', {
@@ -44,10 +45,10 @@ beforeEach(async () => {
     bearer(nickCredential),
   );
 
-  const team = getTeamBySlug(server.db, 'governed')!;
-  const ada = getMemberByName(server.db, team.id, 'ada')!;
-  bindNode(server.db, team.id, 'node-a', 'laptop', 'msnode_node-a', 'nick', 10);
-  bindSeatToNode(server.db, team.id, ada.id, 'node-a', 11);
+  const team = (await getTeamBySlug(sqliteDriver(server.db), 'governed'))!;
+  const ada = (await getMemberByName(sqliteDriver(server.db), team.id, 'ada'))!;
+  await bindNode(sqliteDriver(server.db), team.id, 'node-a', 'laptop', 'msnode_node-a', 'nick', 10);
+  await bindSeatToNode(sqliteDriver(server.db), team.id, ada.id, 'node-a', 11);
 });
 
 afterEach(async () => {
@@ -65,9 +66,9 @@ describe('governed authorization HTTP routes (ADR 411)', () => {
       (await request('POST', '/teams/governed/governed/policy', policy, bearer(nickCredential)))
         .status,
     ).toBe(200);
-    const team = getTeamBySlug(server.db, 'governed')!;
-    const lane = openLane(
-      server.db,
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'governed'))!;
+    const lane = await openLane(
+      sqliteDriver(server.db),
       team.id,
       team.slug,
       'ada',
@@ -88,8 +89,8 @@ describe('governed authorization HTTP routes (ADR 411)', () => {
     expect(issued.status).toBe(201);
     expect(issued.json.token).toMatch(/^msla_/);
 
-    const ada = getMemberByName(server.db, team.id, 'ada')!;
-    const presence = attach(server.db, ada.id, 'claude-code', 'conn-1');
+    const ada = (await getMemberByName(sqliteDriver(server.db), team.id, 'ada'))!;
+    const presence = await attach(sqliteDriver(server.db), ada.id, 'claude-code', 'conn-1');
     const consumed = await request(
       'POST',
       '/teams/governed/governed/launches/consume',
@@ -148,9 +149,14 @@ describe('governed authorization HTTP routes (ADR 411)', () => {
       },
       bearer(nickCredential),
     );
-    const team = getTeamBySlug(server.db, 'governed')!;
-    const ada = getMemberByName(server.db, team.id, 'ada')!;
-    const presence = attach(server.db, ada.id, 'claude-code', 'conn-orientation');
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'governed'))!;
+    const ada = (await getMemberByName(sqliteDriver(server.db), team.id, 'ada'))!;
+    const presence = await attach(
+      sqliteDriver(server.db),
+      ada.id,
+      'claude-code',
+      'conn-orientation',
+    );
     const consumed = await request(
       'POST',
       '/teams/governed/governed/launches/consume',
@@ -197,9 +203,9 @@ describe('governed authorization HTTP routes (ADR 411)', () => {
       },
       bearer(nickCredential),
     );
-    const team = getTeamBySlug(server.db, 'governed')!;
-    const ada = getMemberByName(server.db, team.id, 'ada')!;
-    const presence = attach(server.db, ada.id, 'claude-code', 'conn-1');
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'governed'))!;
+    const ada = (await getMemberByName(sqliteDriver(server.db), team.id, 'ada'))!;
+    const presence = await attach(sqliteDriver(server.db), ada.id, 'claude-code', 'conn-1');
     await request(
       'POST',
       '/teams/governed/governed/launches/consume',

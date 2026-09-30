@@ -1,5 +1,5 @@
 import type { Envelope } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 import { rowsToEnvelopes } from './hydrate.js';
 import { type Deferral, deferrals, listTeamMessages, raisedDeferrals } from './messages.js';
 import type { MemberRow } from './rows.js';
@@ -29,14 +29,14 @@ export const DEFERRAL_SCAN_LIMIT = 2000;
  * inbox read folds a second answer off exactly that subset (which asks it has already replied to, by
  * `meta.in_reply_to`). One narrow hydration, two folds; the caller never has to reach for the window.
  */
-export function deferralFold(
-  db: Database,
+export async function deferralFold(
+  db: Driver,
   teamSlug: string,
   member: MemberRow,
   limit: number = DEFERRAL_SCAN_LIMIT,
-): { held: Map<string, Deferral>; raised: Set<string>; own: Envelope[] } {
-  const window = listTeamMessages(db, member.team_id, { forMemberId: member.id, limit });
-  const own = rowsToEnvelopes(
+): Promise<{ held: Map<string, Deferral>; raised: Set<string>; own: Envelope[] }> {
+  const window = await listTeamMessages(db, member.team_id, { forMemberId: member.id, limit });
+  const own = await rowsToEnvelopes(
     db,
     teamSlug,
     window.filter((r) => r.from_member === member.id),
@@ -45,7 +45,7 @@ export function deferralFold(
   if (held.size === 0) return { held, raised: new Set<string>(), own };
   return {
     held,
-    raised: raisedDeferrals(rowsToEnvelopes(db, teamSlug, window), member.name),
+    raised: raisedDeferrals(await rowsToEnvelopes(db, teamSlug, window), member.name),
     own,
   };
 }

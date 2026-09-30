@@ -14,8 +14,8 @@ import {
   hueConflict,
   nearestClearHue,
 } from '@musterd/protocol/hue';
-import type { Database } from 'better-sqlite3';
 import { ulid } from 'ulid';
+import type { Driver } from '../db/driver.js';
 import { MusterdError, SessionLeaseRefused } from '../errors.js';
 import { releaseInFlightClaimsForSeat } from './lanes.js';
 import { verifyAccess } from './oauth.js';
@@ -29,8 +29,8 @@ export function hashToken(token: string): string {
 }
 
 /** Bump a member's `updated_at` to now — used as an observer's last-seen for the idle TTL (ADR 064). */
-export function touchSeen(db: Database, memberId: string): void {
-  db.prepare('UPDATE members SET updated_at = ? WHERE id = ?').run(Date.now(), memberId);
+export async function touchSeen(db: Driver, memberId: string): Promise<void> {
+  await db.run('UPDATE members SET updated_at = ? WHERE id = ?', [Date.now(), memberId]);
 }
 
 /**
@@ -39,26 +39,24 @@ export function touchSeen(db: Database, memberId: string): void {
  * still referenced by a message (no `to_member` cascade) — left for manual cleanup rather than an FK
  * failure. Presence + cursor rows cascade. Returns the reaped members for logging.
  */
-export function reapStaleObservers(
-  db: Database,
+export async function reapStaleObservers(
+  db: Driver,
   idleCutoffTs: number,
   liveCutoffTs: number,
-): { id: string; name: string; team_id: string }[] {
-  const stale = db
-    .prepare<[number, number], { id: string; name: string; team_id: string }>(
-      `SELECT id, name, team_id FROM members
+): Promise<{ id: string; name: string; team_id: string }[]> {
+  const stale = await db.all<{ id: string; name: string; team_id: string }>(
+    `SELECT id, name, team_id FROM members
        WHERE observer = 1
          AND updated_at < ?
          AND id NOT IN (SELECT member_id FROM presence WHERE held_until IS NULL AND last_seen_at > ?)
          AND id NOT IN (SELECT from_member FROM messages)
          AND id NOT IN (SELECT to_member FROM messages WHERE to_member IS NOT NULL)`,
-    )
-    .all(idleCutoffTs, liveCutoffTs);
+    [idleCutoffTs, liveCutoffTs],
+  );
   if (stale.length > 0) {
-    const del = db.prepare('DELETE FROM members WHERE id = ?');
-    db.transaction(() => {
-      for (const m of stale) del.run(m.id);
-    })();
+    await db.tx(async (t) => {
+      for (const m of stale) await t.run('DELETE FROM members WHERE id = ?', [m.id]);
+    });
   }
   return stale;
 }
@@ -69,23 +67,22 @@ export function reapStaleObservers(
  * and hard-delete the rest. Same message-FK skip as {@link reapStaleObservers}. Live-connected
  * seats are never capped out. Returns the reaped members for logging.
  */
-export function reapExcessIdleObservers(
-  db: Database,
+export async function reapExcessIdleObservers(
+  db: Driver,
   maxIdlePerTeam: number,
   liveCutoffTs: number,
-): { id: string; name: string; team_id: string }[] {
+): Promise<{ id: string; name: string; team_id: string }[]> {
   if (maxIdlePerTeam < 1) return [];
-  const idle = db
-    .prepare<[number], { id: string; name: string; team_id: string; updated_at: number }>(
-      `SELECT id, name, team_id, updated_at FROM members
+  const idle = await db.all<{ id: string; name: string; team_id: string; updated_at: number }>(
+    `SELECT id, name, team_id, updated_at FROM members
        WHERE observer = 1
          AND left_at IS NULL
          AND id NOT IN (SELECT member_id FROM presence WHERE held_until IS NULL AND last_seen_at > ?)
          AND id NOT IN (SELECT from_member FROM messages)
          AND id NOT IN (SELECT to_member FROM messages WHERE to_member IS NOT NULL)
        ORDER BY team_id, updated_at DESC`,
-    )
-    .all(liveCutoffTs);
+    [liveCutoffTs],
+  );
   const excess: { id: string; name: string; team_id: string }[] = [];
   let currentTeam = '';
   let kept = 0;
@@ -101,10 +98,9 @@ export function reapExcessIdleObservers(
     excess.push({ id: row.id, name: row.name, team_id: row.team_id });
   }
   if (excess.length > 0) {
-    const del = db.prepare('DELETE FROM members WHERE id = ?');
-    db.transaction(() => {
-      for (const m of excess) del.run(m.id);
-    })();
+    await db.tx(async (t) => {
+      for (const m of excess) await t.run('DELETE FROM members WHERE id = ?', [m.id]);
+    });
   }
   return excess;
 }
@@ -124,34 +120,38 @@ function newToken(): string {
 }
 
 /** Set (or clear) a member's credential hash (ADR 076, P3.1). */
-export function setCredentialHash(db: Database, memberId: string, hash: string | null): void {
-  db.prepare('UPDATE members SET credential_hash = ?, updated_at = ? WHERE id = ?').run(
+export async function setCredentialHash(
+  db: Driver,
+  memberId: string,
+  hash: string | null,
+): Promise<void> {
+  await db.run('UPDATE members SET credential_hash = ?, updated_at = ? WHERE id = ?', [
     hash,
     Date.now(),
     memberId,
-  );
+  ]);
 }
 
 /** Mint a fresh `mscr_` human credential for a member: store its hash, return the plaintext **once**. */
-export function mintCredential(db: Database, memberId: string): CredentialMint {
+export async function mintCredential(db: Driver, memberId: string): Promise<CredentialMint> {
   const credential = newSecret(TOKEN_PREFIXES.credential);
-  setCredentialHash(db, memberId, hashToken(credential));
+  await setCredentialHash(db, memberId, hashToken(credential));
   return { credential };
 }
 
 /** Mint a fresh self-identifying credential for an agent Member (ADR 337). */
-export function mintAgentSeatCredential(
-  db: Database,
+export async function mintAgentSeatCredential(
+  db: Driver,
   memberId: string,
-): { seat_credential: string } {
-  const member = getMemberById(db, memberId);
+): Promise<{ seat_credential: string }> {
+  const member = await getMemberById(db, memberId);
   if (!member || member.kind !== 'agent' || member.observer === 1)
     throw new MusterdError(
       'bad_request',
       'agent-seat credentials may only be minted for agent seats',
     );
   const seat_credential = newSecret(TOKEN_PREFIXES.agent_seat);
-  setCredentialHash(db, memberId, hashToken(seat_credential));
+  await setCredentialHash(db, memberId, hashToken(seat_credential));
   return { seat_credential };
 }
 
@@ -187,18 +187,18 @@ export interface AddMemberInput {
 }
 
 /** Add a member to a team and mint its one-time token. Returns the row plus the plaintext token. */
-export function addMember(
-  db: Database,
+export async function addMember(
+  db: Driver,
   team: TeamRow,
   input: AddMemberInput,
-): { row: MemberRow; token: string; hue_shared_with?: string } {
+): Promise<{ row: MemberRow; token: string; hue_shared_with?: string }> {
   if (!input.name || /\s/.test(input.name)) {
     throw new MusterdError(
       'bad_request',
       'member name is required and must not contain whitespace',
     );
   }
-  const existing = getMemberByName(db, team.id, input.name);
+  const existing = await getMemberByName(db, team.id, input.name);
   if (existing && existing.left_at === null) {
     throw new MusterdError('conflict', `member "${input.name}" already exists in "${team.slug}"`);
   }
@@ -206,7 +206,7 @@ export function addMember(
   if (lifecycle === 'until' && !input.lifecycleUntil) {
     throw new MusterdError('bad_request', 'lifecycle "until" requires a timestamp');
   }
-  const { hue, sharedWith } = resolveHue(
+  const { hue, sharedWith } = await resolveHue(
     db,
     team.id,
     input.name,
@@ -220,7 +220,7 @@ export function addMember(
   // name can't be reused" trap (ADR 065). Re-adding a removed name is a revive, not a new row: reuse
   // the seat's id (keeps message history continuous) and re-mint the token (ADR 058 `reviveMember`).
   if (existing) {
-    const token = reviveMember(db, existing.id, {
+    const token = await reviveMember(db, existing.id, {
       kind: input.kind,
       role: input.role ?? '',
       lifecycle,
@@ -229,7 +229,7 @@ export function addMember(
       slackUserId: input.slackUserId ?? null,
       hue,
     });
-    const row = getMemberById(db, existing.id)!;
+    const row = (await getMemberById(db, existing.id))!;
     return { row, token };
   }
   const token = newToken();
@@ -268,12 +268,34 @@ export function addMember(
     created_at: now,
     updated_at: now,
   };
-  db.prepare(
+  await db.run(
     `INSERT INTO members
        (id, team_id, name, kind, role, lifecycle, lifecycle_until, availability, working_hours, slack_user_id, hue, sponsored_by, token_hash, observer, observer_scope, account_status, capabilities, left_at, created_at, updated_at)
      VALUES
-       (@id, @team_id, @name, @kind, @role, @lifecycle, @lifecycle_until, @availability, @working_hours, @slack_user_id, @hue, @sponsored_by, @token_hash, @observer, @observer_scope, @account_status, @capabilities, @left_at, @created_at, @updated_at)`,
-  ).run(row);
+       (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      row.id,
+      row.team_id,
+      row.name,
+      row.kind,
+      row.role,
+      row.lifecycle,
+      row.lifecycle_until,
+      row.availability,
+      row.working_hours,
+      row.slack_user_id,
+      row.hue,
+      row.sponsored_by,
+      row.token_hash,
+      row.observer,
+      row.observer_scope,
+      row.account_status,
+      row.capabilities,
+      row.left_at,
+      row.created_at,
+      row.updated_at,
+    ],
+  );
   return { row, token, ...(sharedWith !== null ? { hue_shared_with: sharedWith } : {}) };
 }
 
@@ -281,12 +303,13 @@ export function addMember(
  *  A departed seat's hue is not held against anyone; neither is an observer's (ADR 409): a
  *  watcher is a session, hidden from the roster, and must not fill the uniqueness floor
  *  `team add` has to walk. `except` leaves the member being recoloured out of its own way. */
-export function takenHues(db: Database, teamId: string, except?: string): number[] {
-  return db
-    .prepare<[string], { id: string; hue: number | null }>(
+export async function takenHues(db: Driver, teamId: string, except?: string): Promise<number[]> {
+  return (
+    await db.all<{ id: string; hue: number | null }>(
       'SELECT id, hue FROM members WHERE team_id = ? AND left_at IS NULL AND observer = 0 AND hue IS NOT NULL',
+      [teamId],
     )
-    .all(teamId)
+  )
     .filter((r) => r.id !== except)
     .map((r) => r.hue!);
 }
@@ -301,15 +324,15 @@ export function takenHues(db: Database, teamId: string, except?: string): number
  *   - `undefined` — nobody said: keep what the seat already had (a revive), else assign the nearest
  *     clear hue to the name's default. Only a DB-only caller says nothing; reconcile always says.
  */
-function resolveHue(
-  db: Database,
+async function resolveHue(
+  db: Driver,
   teamId: string,
   name: string,
   asked: number | null | undefined,
   had: number | null,
   except?: string,
   declared = false,
-): { hue: number | null; sharedWith: string | null } {
+): Promise<{ hue: number | null; sharedWith: string | null }> {
   if (asked === null) return { hue: null, sharedWith: null };
   if (asked !== undefined) {
     if (!Number.isInteger(asked) || asked < 0 || asked > 359)
@@ -317,33 +340,31 @@ function resolveHue(
     return {
       hue: asked,
       sharedWith: declared
-        ? hueSharedWith(db, teamId, asked, except)
-        : assertHueClear(db, teamId, asked, except),
+        ? await hueSharedWith(db, teamId, asked, except)
+        : await assertHueClear(db, teamId, asked, except),
     };
   }
   if (had !== null) return { hue: had, sharedWith: null };
   // The name comes from the caller, never from a row lookup: a NEW member has no row yet, and the
   // first cut looked one up by id and seeded every fresh seat from `defaultHue('')` — one colour for
   // everyone, walked apart by `assignHue` so nobody noticed until gptbot read it (#1258 acceptance).
-  const hue = assignHue(defaultHue(name), takenHues(db, teamId, except));
-  return { hue, sharedWith: hueSharedWith(db, teamId, hue, except) };
+  const hue = assignHue(defaultHue(name), await takenHues(db, teamId, except));
+  return { hue, sharedWith: await hueSharedWith(db, teamId, hue, except) };
 }
 
 /** The live roster member whose hue sits within `HUE_MIN_SEPARATION` of `hue`, or null. */
-export function hueSharedWith(
-  db: Database,
+export async function hueSharedWith(
+  db: Driver,
   teamId: string,
   hue: number,
   except?: string,
-): string | null {
-  const near = hueConflict(hue, takenHues(db, teamId, except));
+): Promise<string | null> {
+  const near = hueConflict(hue, await takenHues(db, teamId, except));
   if (near === null) return null;
-  const who = db
-    .prepare<
-      [string, number],
-      { name: string }
-    >('SELECT name FROM members WHERE team_id = ? AND left_at IS NULL AND observer = 0 AND hue = ?')
-    .get(teamId, near);
+  const who = await db.get<{ name: string }>(
+    'SELECT name FROM members WHERE team_id = ? AND left_at IS NULL AND observer = 0 AND hue = ?',
+    [teamId, near],
+  );
   return who?.name ?? '?';
 }
 
@@ -354,18 +375,18 @@ export function hueSharedWith(
  * the hue is kept and the neighbour's name is returned, so the caller can say "colour shared with"
  * out loud exactly as Decision 4's walk does. Returns null when the hue is clear.
  */
-export function assertHueClear(
-  db: Database,
+export async function assertHueClear(
+  db: Driver,
   teamId: string,
   hue: number,
   except?: string,
-): string | null {
+): Promise<string | null> {
   if (!Number.isInteger(hue) || hue < 0 || hue > 359)
     throw new MusterdError('bad_request', `hue must be an integer 0–359, got ${hue}`);
-  const taken = takenHues(db, teamId, except);
+  const taken = await takenHues(db, teamId, except);
   const near = hueConflict(hue, taken);
   if (near === null) return null;
-  const who = hueSharedWith(db, teamId, hue, except);
+  const who = await hueSharedWith(db, teamId, hue, except);
   const alternative = nearestClearHue(hue, taken);
   if (alternative === null) return who;
   throw new MusterdError(
@@ -375,20 +396,29 @@ export function assertHueClear(
 }
 
 /** Set a live member's hue in place (the DB-only `team hue` path; ADR 374). */
-export function setMemberHue(db: Database, member: MemberRow, hue: number): string | null {
-  const sharedWith = assertHueClear(db, member.team_id, hue, member.id);
-  db.prepare('UPDATE members SET hue = ?, updated_at = ? WHERE id = ?').run(
+export async function setMemberHue(
+  db: Driver,
+  member: MemberRow,
+  hue: number,
+): Promise<string | null> {
+  const sharedWith = await assertHueClear(db, member.team_id, hue, member.id);
+  await db.run('UPDATE members SET hue = ?, updated_at = ? WHERE id = ?', [
     hue,
     Date.now(),
     member.id,
-  );
+  ]);
   return sharedWith;
 }
 
-export function getMemberByName(db: Database, teamId: string, name: string): MemberRow | undefined {
-  return db
-    .prepare<[string, string], MemberRow>('SELECT * FROM members WHERE team_id = ? AND name = ?')
-    .get(teamId, name);
+export async function getMemberByName(
+  db: Driver,
+  teamId: string,
+  name: string,
+): Promise<MemberRow | undefined> {
+  return await db.get<MemberRow>('SELECT * FROM members WHERE team_id = ? AND name = ?', [
+    teamId,
+    name,
+  ]);
 }
 
 /**
@@ -406,26 +436,28 @@ export function getMemberByName(db: Database, teamId: string, name: string): Mem
  * Departed seats are skipped: assigning an incident to someone who left is a lane that will never
  * move, and it looks owned on the board while nobody is on it.
  */
-export function getMemberByRole(db: Database, teamId: string, role: string): MemberRow | undefined {
-  return db
-    .prepare<[string], MemberRow>(
+export async function getMemberByRole(
+  db: Driver,
+  teamId: string,
+  role: string,
+): Promise<MemberRow | undefined> {
+  return (
+    await db.all<MemberRow>(
       'SELECT * FROM members WHERE team_id = ? AND left_at IS NULL ORDER BY created_at, id',
+      [teamId],
     )
-    .all(teamId)
-    .find((row) => parseRoles(row).includes(role));
+  ).find((row) => parseRoles(row).includes(role));
 }
 
-export function getMemberById(db: Database, id: string): MemberRow | undefined {
-  return db.prepare<[string], MemberRow>('SELECT * FROM members WHERE id = ?').get(id);
+export async function getMemberById(db: Driver, id: string): Promise<MemberRow | undefined> {
+  return await db.get<MemberRow>('SELECT * FROM members WHERE id = ?', [id]);
 }
 
-export function listMembers(db: Database, teamId: string): MemberRow[] {
-  return db
-    .prepare<
-      [string],
-      MemberRow
-    >('SELECT * FROM members WHERE team_id = ? AND left_at IS NULL ORDER BY created_at')
-    .all(teamId);
+export async function listMembers(db: Driver, teamId: string): Promise<MemberRow[]> {
+  return await db.all<MemberRow>(
+    'SELECT * FROM members WHERE team_id = ? AND left_at IS NULL ORDER BY created_at',
+    [teamId],
+  );
 }
 
 /**
@@ -444,8 +476,8 @@ export function listMembers(db: Database, teamId: string): MemberRow[] {
  *    credential is the authority; if `actingSeat` is supplied it must match.
  *  - anything else → `unauthorized` (the `mskd_` path is gone, ADR 069 decision 2).
  */
-export function authMember(
-  db: Database,
+export async function authMember(
+  db: Driver,
   teamSlug: string,
   token: string,
   actingSeat?: string,
@@ -460,8 +492,8 @@ export function authMember(
      */
     leaseless?: boolean;
   } = {},
-): { team: TeamRow; member: MemberRow } {
-  const team = requireTeam(db, teamSlug);
+): Promise<{ team: TeamRow; member: MemberRow }> {
+  const team = await requireTeam(db, teamSlug);
   let member: MemberRow;
 
   if (token.startsWith(TOKEN_PREFIXES.agent_key)) {
@@ -470,22 +502,29 @@ export function authMember(
       'the team agent key is bootstrap-only — claim an agent seat and present its seat credential',
     );
   } else if (token.startsWith(TOKEN_PREFIXES.agent_seat)) {
-    member = authByAgentSeatCredential(db, team, token, actingSeat, sessionLease, opts.leaseless);
+    member = await authByAgentSeatCredential(
+      db,
+      team,
+      token,
+      actingSeat,
+      sessionLease,
+      opts.leaseless,
+    );
   } else if (token.startsWith(TOKEN_PREFIXES.credential)) {
-    member = authByCredential(db, team, token, actingSeat);
+    member = await authByCredential(db, team, token, actingSeat);
   } else if (token.startsWith(TOKEN_PREFIXES.oauth_access)) {
     // ADR 446: a phone's `msat_` bearer authenticates exactly like an `mscr_` — self-identifying
     // (acting-seat must match-or-absent, checked in authByCredential's sibling below via the
     // shared tail) — with NO session lease: there is no Presence to bind one to. Presence for
     // the roster derives from authenticated activity (ambient, ADR 057), stamped by the caller.
-    member = verifyAccess(db, team.id, token);
+    member = await verifyAccess(db, team.id, token);
     if (actingSeat && actingSeat !== member.name)
       throw new MusterdError(
         'forbidden',
         `access token identifies "${member.name}", not "${actingSeat}"`,
       );
   } else if (token.startsWith(TOKEN_PREFIXES.seat)) {
-    member = authByServiceToken(db, team, token, actingSeat);
+    member = await authByServiceToken(db, team, token, actingSeat);
   } else {
     // v0.3 hard cutover (ADR 069 decision 2): the v0.2 per-seat token (`mskd_`) auth path is removed
     // for peer seats — the only credentials are the team agent key (`mskey_`), a human credential
@@ -523,20 +562,18 @@ export function memberStandingRefusal(member: MemberRow, now = Date.now()): Must
 }
 
 /** Agent HTTP proof is self-identifying and inseparable from its current Presence lease (ADR 337). */
-function authByAgentSeatCredential(
-  db: Database,
+async function authByAgentSeatCredential(
+  db: Driver,
   team: TeamRow,
   credential: string,
   actingSeat: string | undefined,
   sessionLease: string | undefined,
   leaseless = false,
-): MemberRow {
-  const member = db
-    .prepare<
-      [string, string],
-      MemberRow
-    >("SELECT * FROM members WHERE team_id = ? AND credential_hash = ? AND left_at IS NULL AND kind = 'agent'")
-    .get(team.id, hashToken(credential));
+): Promise<MemberRow> {
+  const member = await db.get<MemberRow>(
+    "SELECT * FROM members WHERE team_id = ? AND credential_hash = ? AND left_at IS NULL AND kind = 'agent'",
+    [team.id, hashToken(credential)],
+  );
   if (!member)
     throw new MusterdError('unauthorized', `invalid agent-seat credential for team "${team.slug}"`);
   if (actingSeat && actingSeat !== member.name)
@@ -551,7 +588,9 @@ function authByAgentSeatCredential(
   // needs to say which seat went deaf, and only this function ever knew.
   if (!sessionLease?.startsWith(TOKEN_PREFIXES.session_lease))
     throw new SessionLeaseRefused(member.name, 'missing');
-  if (!hasValidSessionLease(db, { teamId: team.id, memberId: member.id, token: sessionLease }))
+  if (
+    !(await hasValidSessionLease(db, { teamId: team.id, memberId: member.id, token: sessionLease }))
+  )
     throw new SessionLeaseRefused(member.name, 'dead');
   return member;
 }
@@ -619,18 +658,16 @@ export function agentKeySeatKindRefusal(
  * `bound_at` (declared → held), which is what lets ambient presence (ADR 057) derive freshness from
  * its authenticated actions.
  */
-function authByServiceToken(
-  db: Database,
+async function authByServiceToken(
+  db: Driver,
   team: TeamRow,
   token: string,
   actingSeat: string | undefined,
-): MemberRow {
-  const member = db
-    .prepare<
-      [string, string],
-      MemberRow
-    >("SELECT * FROM members WHERE team_id = ? AND token_hash = ? AND left_at IS NULL AND kind = 'service'")
-    .get(team.id, hashToken(token));
+): Promise<MemberRow> {
+  const member = await db.get<MemberRow>(
+    "SELECT * FROM members WHERE team_id = ? AND token_hash = ? AND left_at IS NULL AND kind = 'service'",
+    [team.id, hashToken(token)],
+  );
   if (!member)
     throw new MusterdError('unauthorized', `invalid service token for team "${team.slug}"`);
   if (actingSeat && actingSeat !== member.name)
@@ -638,23 +675,21 @@ function authByServiceToken(
       'forbidden',
       `service token identifies "${member.name}", not "${actingSeat}"`,
     );
-  markBound(db, member.id);
+  await markBound(db, member.id);
   return member;
 }
 
 /** Human-credential (`mscr_`) auth: self-identifying; the credential is the authority for its seat. */
-function authByCredential(
-  db: Database,
+async function authByCredential(
+  db: Driver,
   team: TeamRow,
   credential: string,
   actingSeat: string | undefined,
-): MemberRow {
-  const member = db
-    .prepare<
-      [string, string],
-      MemberRow
-    >("SELECT * FROM members WHERE team_id = ? AND credential_hash = ? AND left_at IS NULL AND kind = 'human'")
-    .get(team.id, hashToken(credential));
+): Promise<MemberRow> {
+  const member = await db.get<MemberRow>(
+    "SELECT * FROM members WHERE team_id = ? AND credential_hash = ? AND left_at IS NULL AND kind = 'human'",
+    [team.id, hashToken(credential)],
+  );
   if (!member)
     throw new MusterdError('unauthorized', `invalid human credential for team "${team.slug}"`);
   if (actingSeat && actingSeat !== member.name)
@@ -676,8 +711,8 @@ export function isHeld(member: MemberRow): boolean {
  * behaviour (any member may operate) so enforcement never breaks an un-migrated team — and self-activates
  * the instant a seat declares admin (creator default, or a seat-file `[capabilities] is_admin = true`).
  */
-export function teamHasAdmin(db: Database, teamId: string): boolean {
-  return listMembers(db, teamId).some((m) => resolveCapabilities(m).is_admin);
+export async function teamHasAdmin(db: Driver, teamId: string): Promise<boolean> {
+  return (await listMembers(db, teamId)).some((m) => resolveCapabilities(m).is_admin);
 }
 
 export interface MemberIdentityFields {
@@ -696,19 +731,24 @@ export interface MemberIdentityFields {
  * `token_hash`, and `bound_at` — the daemon-private anchors that must survive a reconcile so the
  * message log and any live token stay valid.
  */
-export function updateMemberIdentity(db: Database, id: string, f: MemberIdentityFields): void {
-  db.prepare(
+export async function updateMemberIdentity(
+  db: Driver,
+  id: string,
+  f: MemberIdentityFields,
+): Promise<void> {
+  await db.run(
     'UPDATE members SET kind = ?, role = ?, lifecycle = ?, lifecycle_until = ?, working_hours = ?, slack_user_id = ?, hue = ?, updated_at = ? WHERE id = ?',
-  ).run(
-    f.kind,
-    f.role,
-    f.lifecycle,
-    f.lifecycleUntil,
-    f.workingHours ? JSON.stringify(f.workingHours) : null,
-    f.slackUserId ?? null,
-    f.hue ?? null,
-    Date.now(),
-    id,
+    [
+      f.kind,
+      f.role,
+      f.lifecycle,
+      f.lifecycleUntil,
+      f.workingHours ? JSON.stringify(f.workingHours) : null,
+      f.slackUserId ?? null,
+      f.hue ?? null,
+      Date.now(),
+      id,
+    ],
   );
 }
 
@@ -717,31 +757,36 @@ export function updateMemberIdentity(db: Database, id: string, f: MemberIdentity
  * log stays continuous, but **re-mints the token** (deletion was a revocation) and clears `bound_at`
  * back to *declared*. Returns the fresh plaintext token.
  */
-export function reviveMember(db: Database, id: string, f: MemberIdentityFields): string {
+export async function reviveMember(
+  db: Driver,
+  id: string,
+  f: MemberIdentityFields,
+): Promise<string> {
   const token = newToken();
-  db.prepare(
+  await db.run(
     `UPDATE members
        SET kind = ?, role = ?, lifecycle = ?, lifecycle_until = ?,
            working_hours = ?, slack_user_id = ?, hue = ?, token_hash = ?, bound_at = NULL, left_at = NULL, updated_at = ?
      WHERE id = ?`,
-  ).run(
-    f.kind,
-    f.role,
-    f.lifecycle,
-    f.lifecycleUntil,
-    f.workingHours ? JSON.stringify(f.workingHours) : null,
-    f.slackUserId ?? null,
-    f.hue ?? null,
-    hashToken(token),
-    Date.now(),
-    id,
+    [
+      f.kind,
+      f.role,
+      f.lifecycle,
+      f.lifecycleUntil,
+      f.workingHours ? JSON.stringify(f.workingHours) : null,
+      f.slackUserId ?? null,
+      f.hue ?? null,
+      hashToken(token),
+      Date.now(),
+      id,
+    ],
   );
   return token;
 }
 
 /** Force a held seat back to *declared* without deleting it (operator reclaim / unbind, ADR 058). */
-export function clearBound(db: Database, id: string): void {
-  db.prepare('UPDATE members SET bound_at = NULL, updated_at = ? WHERE id = ?').run(Date.now(), id);
+export async function clearBound(db: Driver, id: string): Promise<void> {
+  await db.run('UPDATE members SET bound_at = NULL, updated_at = ? WHERE id = ?', [Date.now(), id]);
 }
 
 /**
@@ -750,11 +795,11 @@ export function clearBound(db: Database, id: string): void {
  * token touch did this; post-cutover (ADR 069) the claim OCCUPY is the first-occupancy signal, so it
  * calls this — keeping the durable "held" marker and the ADR 070 active derivation intact.
  */
-export function markBound(db: Database, id: string): void {
-  db.prepare('UPDATE members SET bound_at = ? WHERE id = ? AND bound_at IS NULL').run(
+export async function markBound(db: Driver, id: string): Promise<void> {
+  await db.run('UPDATE members SET bound_at = ? WHERE id = ? AND bound_at IS NULL', [
     Date.now(),
     id,
-  );
+  ]);
 }
 
 /**
@@ -764,24 +809,26 @@ export function markBound(db: Database, id: string): void {
  * generalist/derived, the backward-compatible state). `accountStatus` is the admin override only
  * (disabled/banned/archived) or NULL; `capabilities` is the resolved effective JSON.
  */
-export function setMemberGovernance(
-  db: Database,
+export async function setMemberGovernance(
+  db: Driver,
   id: string,
   accountStatus: string | null,
   capabilities: string,
   roles?: string[],
-): void {
+): Promise<void> {
   // `roles` (ADR 227) rides the governance write because reconcile is its single writer, like
   // capabilities; callers that don't project roles (admin routes, tests) leave the column untouched.
   if (roles === undefined) {
-    db.prepare(
+    await db.run(
       'UPDATE members SET account_status = ?, capabilities = ?, updated_at = ? WHERE id = ?',
-    ).run(accountStatus, capabilities, Date.now(), id);
+      [accountStatus, capabilities, Date.now(), id],
+    );
     return;
   }
-  db.prepare(
+  await db.run(
     'UPDATE members SET account_status = ?, capabilities = ?, roles = ?, updated_at = ? WHERE id = ?',
-  ).run(accountStatus, capabilities, JSON.stringify(roles), Date.now(), id);
+    [accountStatus, capabilities, JSON.stringify(roles), Date.now(), id],
+  );
 }
 
 /**
@@ -791,30 +838,28 @@ export function setMemberGovernance(
  * (the caller audits each, naming the root). Expiry needs no cascade: sponsored members carry
  * their own `lifecycle_until`.
  */
-export function cascadeSponsoredRevocation(
-  db: Database,
+export async function cascadeSponsoredRevocation(
+  db: Driver,
   teamId: string,
   rootMemberId: string,
-): MemberRow[] {
+): Promise<MemberRow[]> {
   const affected: MemberRow[] = [];
   const queue = [rootMemberId];
   const seen = new Set<string>(queue);
   while (queue.length > 0) {
     const sponsor = queue.shift()!;
-    const children = db
-      .prepare<
-        [string, string],
-        MemberRow
-      >('SELECT * FROM members WHERE team_id = ? AND sponsored_by = ? AND left_at IS NULL')
-      .all(teamId, sponsor);
+    const children = await db.all<MemberRow>(
+      'SELECT * FROM members WHERE team_id = ? AND sponsored_by = ? AND left_at IS NULL',
+      [teamId, sponsor],
+    );
     for (const child of children) {
       if (seen.has(child.id)) continue;
       seen.add(child.id);
       queue.push(child.id);
-      db.prepare("UPDATE members SET account_status = 'disabled', updated_at = ? WHERE id = ?").run(
+      await db.run("UPDATE members SET account_status = 'disabled', updated_at = ? WHERE id = ?", [
         Date.now(),
         child.id,
-      );
+      ]);
       affected.push(child);
     }
   }
@@ -826,13 +871,13 @@ export function cascadeSponsoredRevocation(
  * declared-but-unheld seat (e.g. one projected from a `git pull`) is claimed: it hands the claimer a
  * fresh token and leaves `bound_at` null until they authenticate. Returns the new plaintext token.
  */
-export function rotateToken(db: Database, id: string): string {
+export async function rotateToken(db: Driver, id: string): Promise<string> {
   const token = newToken();
-  db.prepare('UPDATE members SET token_hash = ?, updated_at = ? WHERE id = ?').run(
+  await db.run('UPDATE members SET token_hash = ?, updated_at = ? WHERE id = ?', [
     hashToken(token),
     Date.now(),
     id,
-  );
+  ]);
   return token;
 }
 
@@ -841,28 +886,29 @@ export function rotateToken(db: Database, id: string): string {
  * existing `members.availability` TEXT column — JSON-encoded, no migration. Passing `null` returns
  * the member to the implicit-`available` default. Never inferred: only the member's own act sets it.
  */
-export function setAvailability(
-  db: Database,
+export async function setAvailability(
+  db: Driver,
   memberId: string,
   availability: Availability | null,
-): void {
-  db.prepare('UPDATE members SET availability = ?, updated_at = ? WHERE id = ?').run(
+): Promise<void> {
+  await db.run('UPDATE members SET availability = ?, updated_at = ? WHERE id = ?', [
     availability ? JSON.stringify(availability) : null,
     Date.now(),
     memberId,
-  );
+  ]);
 }
 
-export function leaveMember(db: Database, memberId: string): void {
-  const member = getMemberById(db, memberId);
+export async function leaveMember(db: Driver, memberId: string): Promise<void> {
+  const member = await getMemberById(db, memberId);
   const now = Date.now();
-  db.prepare(
+  await db.run(
     "UPDATE members SET left_at = ?, last_offline_reason = 'left_team', updated_at = ? WHERE id = ?",
-  ).run(now, now, memberId);
+    [now, now, memberId],
+  );
   // ADR 196: soft-remove must free in-flight WIP — otherwise the board asserts ownership for a
   // name every roster filter already drops. awaiting_acceptance keeps the owner (verified-ness).
   if (member && member.left_at === null) {
-    releaseInFlightClaimsForSeat(db, member.team_id, member.name, now);
+    await releaseInFlightClaimsForSeat(db, member.team_id, member.name, now);
   }
 }
 
@@ -881,23 +927,23 @@ export interface SweptMember {
  * for the name-refusal rules), never releases claims (use `leaveMember` for a real departure).
  * Returns the swept rows; the caller audits them.
  */
-export function sweepExpiredMembers(db: Database, now = Date.now()): SweptMember[] {
-  const rows = db
-    .prepare<
-      [number],
-      { team_id: string; id: string; name: string; lifecycle_until: number | null }
-    >(
-      `SELECT team_id, id, name, lifecycle_until FROM members
+export async function sweepExpiredMembers(db: Driver, now = Date.now()): Promise<SweptMember[]> {
+  const rows = await db.all<{
+    team_id: string;
+    id: string;
+    name: string;
+    lifecycle_until: number | null;
+  }>(
+    `SELECT team_id, id, name, lifecycle_until FROM members
         WHERE lifecycle = 'until' AND lifecycle_until IS NOT NULL
           AND lifecycle_until <= ? AND left_at IS NULL`,
-    )
-    .all(now);
+    [now],
+  );
   if (rows.length === 0) return [];
-  const mark = db.prepare('UPDATE members SET left_at = ?, updated_at = ? WHERE id = ?');
-  const tx = db.transaction(() => {
-    for (const r of rows) mark.run(now, now, r.id);
+  await db.tx(async (t) => {
+    for (const r of rows)
+      await t.run('UPDATE members SET left_at = ?, updated_at = ? WHERE id = ?', [now, now, r.id]);
   });
-  tx();
   return rows;
 }
 
@@ -911,13 +957,13 @@ export const EXPIRED_SWEEP_FIRST_DELAY_MS = 60 * 1000;
  * hygiene, never load-bearing. Returns the stop function `close()` calls.
  */
 export function startExpiredMemberSweep(
-  db: Database,
+  db: Driver,
   onPass: (swept: SweptMember[]) => void,
   onError: (err: unknown) => void,
 ): () => void {
-  const pass = () => {
+  const pass = async () => {
     try {
-      onPass(sweepExpiredMembers(db));
+      onPass(await sweepExpiredMembers(db));
     } catch (err) {
       onError(err);
     }
@@ -933,17 +979,19 @@ export function startExpiredMemberSweep(
 }
 
 /** Sticky offline reason for an intentional seat release (unbind) — ADR 141, presence-honesty §2.3. */
-export function markSeatReleased(db: Database, memberId: string): void {
-  db.prepare(
+export async function markSeatReleased(db: Driver, memberId: string): Promise<void> {
+  await db.run(
     "UPDATE members SET last_offline_reason = 'seat_released', updated_at = ? WHERE id = ?",
-  ).run(Date.now(), memberId);
+    [Date.now(), memberId],
+  );
 }
 
 /** Sticky offline reason for a clean session exit (graceful release) — presence-honesty §2.3. */
-export function markSessionEnded(db: Database, memberId: string): void {
-  db.prepare(
+export async function markSessionEnded(db: Driver, memberId: string): Promise<void> {
+  await db.run(
     "UPDATE members SET last_offline_reason = 'session_ended', updated_at = ? WHERE id = ?",
-  ).run(Date.now(), memberId);
+    [Date.now(), memberId],
+  );
 }
 
 export { newToken };

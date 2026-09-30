@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { getTeamBySlug, setPolicy } from '../store/teams.js';
 import { countTraceEvents, listSessionTrace } from '../store/trace.js';
@@ -40,7 +41,7 @@ const ev = (over: Record<string, unknown> = {}) => ({
 });
 
 beforeEach(async () => {
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
@@ -58,9 +59,9 @@ afterEach(async () => {
   await server.close();
 });
 
-const teamId = () => getTeamBySlug(server.db, 'dawn')!.id;
+const teamId = async () => (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
 
-describe('POST /teams/:slug/trace/events', () => {
+describe('POST /teams/:slug/trace/events', async () => {
   it('stores structural rows in trace.db under the authenticated seat, with a lease', async () => {
     const r = await post(
       '/teams/dawn/trace/events',
@@ -73,7 +74,11 @@ describe('POST /teams/:slug/trace/events', () => {
     );
     expect(r.status).toBe(202);
     expect(r.json).toEqual({ accepted: 2, content: 'off' });
-    const rows = listSessionTrace(server.traceDb, teamId(), 'abcdef012345');
+    const rows = await listSessionTrace(
+      sqliteDriver(server.traceDb),
+      await teamId(),
+      'abcdef012345',
+    );
     expect(rows.map((x) => [x.seq, x.kind, x.seat])).toEqual([
       [0, 'PostToolUse', 'Ada'],
       [1, 'PreToolUse', 'Ada'],
@@ -95,7 +100,7 @@ describe('POST /teams/:slug/trace/events', () => {
       { authorization: `Bearer ${auth.key}`, 'x-musterd-seat': 'Ada' },
     );
     expect(r.status).toBe(202);
-    expect(countTraceEvents(server.traceDb, teamId(), 'Ada')).toEqual([
+    expect(await countTraceEvents(sqliteDriver(server.traceDb), await teamId(), 'Ada')).toEqual([
       { kind: 'SessionStart', count: 1 },
     ]);
   });
@@ -108,7 +113,9 @@ describe('POST /teams/:slug/trace/events', () => {
       headers,
     );
     expect(ok.status).toBe(202);
-    const row = listSessionTrace(server.traceDb, teamId(), 'abcdef012345')[0]!;
+    const row = (
+      await listSessionTrace(sqliteDriver(server.traceDb), await teamId(), 'abcdef012345')
+    )[0]!;
     expect(row.content).toBeNull();
     expect(JSON.stringify(row)).not.toContain('binding.json');
 
@@ -118,11 +125,13 @@ describe('POST /teams/:slug/trace/events', () => {
       headers,
     );
     expect(bad.status).toBe(400);
-    expect(listSessionTrace(server.traceDb, teamId(), 'ffffffff0000')).toHaveLength(0);
+    expect(
+      await listSessionTrace(sqliteDriver(server.traceDb), await teamId(), 'ffffffff0000'),
+    ).toHaveLength(0);
     expect((await post('/teams/dawn/trace/events', { events: [] }, headers)).status).toBe(400);
   });
 
-  describe('the content part (increment 1b)', () => {
+  describe('the content part (increment 1b)', async () => {
     const headers = () => ({ authorization: `Bearer ${auth.key}`, 'x-musterd-seat': 'Ada' });
     const content = (over: Record<string, unknown> = {}) => ({
       tool_input: '{"command":"cat .musterd/binding.json"}',
@@ -139,13 +148,15 @@ describe('POST /teams/:slug/trace/events', () => {
         headers(),
       );
       expect(r.json).toEqual({ accepted: 1, content: 'off' });
-      const row = listSessionTrace(server.traceDb, teamId(), 'abcdef012345')[0]!;
+      const row = (
+        await listSessionTrace(sqliteDriver(server.traceDb), await teamId(), 'abcdef012345')
+      )[0]!;
       expect(row.content).toBeNull();
       expect(row.redactions).toBeNull();
     });
 
     it('is stored under trace.content=on, re-scrubbed on the way in, with the counts on the row', async () => {
-      setPolicy(server.db, teamId(), { trace: { content: 'on' } });
+      await setPolicy(sqliteDriver(server.db), await teamId(), { trace: { content: 'on' } });
       const leaked = 'mskey_Zq7xK2mNvB9pLw4R';
       const r = await post(
         '/teams/dawn/trace/events',
@@ -165,7 +176,11 @@ describe('POST /teams/:slug/trace/events', () => {
         headers(),
       );
       expect(r.json).toEqual({ accepted: 2, content: 'on' });
-      const [withContent, structural] = listSessionTrace(server.traceDb, teamId(), 'abcdef012345');
+      const [withContent, structural] = await listSessionTrace(
+        sqliteDriver(server.traceDb),
+        await teamId(),
+        'abcdef012345',
+      );
       expect(JSON.parse(withContent!.content!)).toEqual({
         tool_input: '{"command":"cat .musterd/binding.json"}',
         tool_response: '{"stdout":"<redacted:agent_key>"}',
@@ -177,14 +192,16 @@ describe('POST /teams/:slug/trace/events', () => {
     });
 
     it('refuses a content part over the bound as a 400 — no partial write', async () => {
-      setPolicy(server.db, teamId(), { trace: { content: 'on' } });
+      await setPolicy(sqliteDriver(server.db), await teamId(), { trace: { content: 'on' } });
       const r = await post(
         '/teams/dawn/trace/events',
         { events: [ev({ content: content({ tool_response: 'x'.repeat(262_145) }) })] },
         headers(),
       );
       expect(r.status).toBe(400);
-      expect(listSessionTrace(server.traceDb, teamId(), 'abcdef012345')).toHaveLength(0);
+      expect(
+        await listSessionTrace(sqliteDriver(server.traceDb), await teamId(), 'abcdef012345'),
+      ).toHaveLength(0);
     });
   });
 
@@ -198,7 +215,10 @@ describe('POST /teams/:slug/trace/events', () => {
       { authorization: `Bearer ${auth.key}`, 'x-musterd-seat': 'Ada' },
     );
     expect(r2.status).toBe(202);
-    expect(listSessionTrace(server.traceDb, teamId(), 'abcdef012345')[0]!.seat).toBe('Ada');
+    expect(
+      (await listSessionTrace(sqliteDriver(server.traceDb), await teamId(), 'abcdef012345'))[0]!
+        .seat,
+    ).toBe('Ada');
   });
 
   it('/health reports the trace ladder beside the coordination schema', async () => {
@@ -233,7 +253,7 @@ describe('POST /teams/:slug/trace/events', () => {
         [string],
         { actor: string; target: string; detail: string }
       >("SELECT actor, target, detail FROM audit WHERE team_id = ? AND action = 'trace.downgraded'")
-      .all(teamId());
+      .all(await teamId());
     expect(rows).toHaveLength(1);
     expect(rows[0]!.actor).toBe('Ada');
     expect(JSON.parse(rows[0]!.detail)).toEqual({
@@ -244,7 +264,7 @@ describe('POST /teams/:slug/trace/events', () => {
   });
 });
 
-describe('GET /teams/:slug/trace/sessions/:digest (increment 2)', () => {
+describe('GET /teams/:slug/trace/sessions/:digest (increment 2)', async () => {
   // Unlike the ingest POST (leaseless by design — hooks), the read is an ordinary authenticated
   // read: an agent seat presents its live session lease like everywhere else.
   const headers = () => ({
@@ -260,7 +280,7 @@ describe('GET /teams/:slug/trace/sessions/:digest (increment 2)', () => {
   }
 
   beforeEach(async () => {
-    setPolicy(server.db, teamId(), { trace: { content: 'on' } });
+    await setPolicy(sqliteDriver(server.db), await teamId(), { trace: { content: 'on' } });
     await post(
       '/teams/dawn/trace/events',
       {
@@ -327,7 +347,7 @@ describe('GET /teams/:slug/trace/sessions/:digest (increment 2)', () => {
   });
 });
 
-describe('GET /report/trace (ADR 445 increment 4) — ADR 128 scoping', () => {
+describe('GET /report/trace (ADR 445 increment 4) — ADR 128 scoping', async () => {
   async function get(path: string, headers: Record<string, string>) {
     const res = await fetch(base + path, { headers });
     return { status: res.status, json: (await res.json()) as any };
@@ -389,7 +409,7 @@ describe('GET /report/trace (ADR 445 increment 4) — ADR 128 scoping', () => {
   });
 });
 
-describe('GET /trace/seats/:name (ADR 445 increment 4b) — the /live timeline read', () => {
+describe('GET /trace/seats/:name (ADR 445 increment 4b) — the /live timeline read', async () => {
   async function get(path: string, headers: Record<string, string>) {
     const res = await fetch(base + path, { headers });
     return { status: res.status, json: (await res.json()) as any };

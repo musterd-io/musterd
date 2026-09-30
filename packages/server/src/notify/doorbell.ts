@@ -65,14 +65,14 @@ interface DispatchOptions {
   askBody: string;
 }
 
-function dispatch(
+async function dispatch(
   ctx: Ctx,
   team: TeamRow,
   member: MemberRow,
   ring: Ring,
   policy: DoorbellPolicy,
   opts: DispatchOptions,
-): void {
+): Promise<void> {
   const prefs = memberDoorbellPrefs(member);
   for (const sink of ring.sinks) {
     if (!OFF_MACHINE_SINKS.has(sink) || opts.quietOffMachine) continue;
@@ -83,8 +83,11 @@ function dispatch(
       sink === 'slack'
         ? postSlackWebhook(url, formatDoorbellSlackText(ring.record, opts.askBody))
         : postDoorbellWebhook(url, ring.record);
-    void attempt.then(({ ok, status }) => {
-      appendAudit(ctx.db, team.id, {
+    // Settles after whatever transaction the ring was raised in has committed: the audit goes
+    // through the connection, never a tx handle that is dead by then (review I1, 2026-09-30).
+    const db = ctx.db.connection();
+    void attempt.then(async ({ ok, status }) => {
+      await appendAudit(db, team.id, {
         actor: ring.record.from,
         action: 'doorbell.surfaced',
         target: member.name,
@@ -96,21 +99,23 @@ function dispatch(
   // The host raises the banner; until it reports, the ring waits for it. With no host label there
   // is no machine to raise it on, and nothing is left to do.
   const waitsForHost = ring.sinks.includes('os') && ring.host !== null;
-  setRingState(ctx.db, ring.id, waitsForHost ? 'queued' : 'done');
+  await setRingState(ctx.db, ring.id, waitsForHost ? 'queued' : 'done');
 }
 
 /** Ring every human this act rings (ADR 443 §2). Never throws into the send path. */
-export function ringDoorbell(ctx: Ctx, team: TeamRow, env: Envelope): void {
+export async function ringDoorbell(ctx: Ctx, team: TeamRow, env: Envelope): Promise<void> {
   try {
-    ring(ctx, team, env);
+    await ring(ctx, team, env);
   } catch (err) {
     log.warn({ msg: 'doorbell_ring_failed', team: team.slug, act: env.id, err: String(err) });
   }
 }
 
-function ring(ctx: Ctx, team: TeamRow, env: Envelope): void {
+async function ring(ctx: Ctx, team: TeamRow, env: Envelope): Promise<void> {
   if (!actMayRing(env.act)) return;
-  const members = listMembers(ctx.db, team.id).filter((m) => m.kind === 'human' && !m.observer);
+  const members = (await listMembers(ctx.db, team.id)).filter(
+    (m) => m.kind === 'human' && !m.observer,
+  );
   const humans = new Set(members.map((m) => m.name));
   const admins = new Set(members.filter((m) => resolveCapabilities(m).is_admin).map((m) => m.name));
   const to = env.to.kind === 'member' ? env.to.name : null;
@@ -131,7 +136,7 @@ function ring(ctx: Ctx, team: TeamRow, env: Envelope): void {
     ...(env.act === 'ask' && tier ? { deadline_ms: now + askContract(tier).timeout_ms } : {}),
     answer_path: `/live?act=${encodeURIComponent(env.id)}`,
   };
-  const policy = getDoorbellPolicy(ctx.db, team.id);
+  const policy = await getDoorbellPolicy(ctx.db, team.id);
   // ADR 155 Increment 2: an in-thread ask is the agent's re-notify, and always rings loud.
   const isRenotify = env.act === 'ask' && typeof env.thread === 'string' && env.thread.length > 0;
   // Rung as the admin group (team-addressed, or an ask to an agent): the ADR 155 rule as it was —
@@ -139,7 +144,7 @@ function ring(ctx: Ctx, team: TeamRow, env: Envelope): void {
   const directedToHuman = to !== null && humans.has(to);
   const timeout = ctx.config.presenceTimeoutMs;
   const groupPresent =
-    !isRenotify && !directedToHuman && adminHumanPresent(ctx.db, team.id, timeout);
+    !isRenotify && !directedToHuman && (await adminHumanPresent(ctx.db, team.id, timeout));
   const posted = new Set<string>();
 
   for (const name of targets) {
@@ -148,7 +153,7 @@ function ring(ctx: Ctx, team: TeamRow, env: Envelope): void {
     const prefs = memberDoorbellPrefs(member);
     const sinks = resolveRoute(policy, prefs, tier);
     const held = holdsRing(memberAvailability(member), tier, now);
-    const stored = insertRing(ctx.db, {
+    const stored = await insertRing(ctx.db, {
       team_id: team.id,
       member_id: member.id,
       act_id: env.id,
@@ -161,8 +166,8 @@ function ring(ctx: Ctx, team: TeamRow, env: Envelope): void {
     if (held) continue;
     const quietOffMachine =
       !isRenotify &&
-      (directedToHuman ? humanPresent(ctx.db, team.id, member, timeout) : groupPresent);
-    dispatch(ctx, team, member, stored, policy, {
+      (directedToHuman ? await humanPresent(ctx.db, team.id, member, timeout) : groupPresent);
+    await dispatch(ctx, team, member, stored, policy, {
       quietOffMachine,
       posted,
       askBody: env.act === 'ask' ? env.body : '',
@@ -176,23 +181,23 @@ function ring(ctx: Ctx, team: TeamRow, env: Envelope): void {
  * accept/decline replying to it, or a resolve of its thread) is dropped, not rung. Presence quiet
  * does not apply: a flush is not a raise, and the human asked to be held, not silenced.
  */
-export function flushHeldRings(ctx: Ctx, team: TeamRow, member: MemberRow): void {
+export async function flushHeldRings(ctx: Ctx, team: TeamRow, member: MemberRow): Promise<void> {
   try {
     const now = Date.now();
-    const held = listHeldRings(ctx.db, member.id);
+    const held = await listHeldRings(ctx.db, member.id);
     if (held.length === 0) return;
-    const policy = getDoorbellPolicy(ctx.db, team.id);
+    const policy = await getDoorbellPolicy(ctx.db, team.id);
     const posted = new Set<string>();
     for (const ring of held) {
       if (holdsRing(memberAvailability(member), ring.record.tier, now)) continue;
-      if (actAnsweredOrResolved(ctx.db, team.id, ring.act_id)) {
-        setRingState(ctx.db, ring.id, 'done');
+      if (await actAnsweredOrResolved(ctx.db, team.id, ring.act_id)) {
+        await setRingState(ctx.db, ring.id, 'done');
         continue;
       }
-      dispatch(ctx, team, member, ring, policy, {
+      await dispatch(ctx, team, member, ring, policy, {
         quietOffMachine: false,
         posted,
-        askBody: ring.record.act === 'ask' ? askBodyOf(ctx, team, ring.act_id) : '',
+        askBody: ring.record.act === 'ask' ? await askBodyOf(ctx, team, ring.act_id) : '',
       });
     }
   } catch (err) {
@@ -209,25 +214,27 @@ export function flushHeldRings(ctx: Ctx, team: TeamRow, member: MemberRow): void
  * The sweep's half (dolly's change b): flush every member whose hold may have lapsed. A member who
  * has left, or a team that is archived, has nobody left to ring — those rings are closed, not rung.
  */
-export function flushLapsedHolds(ctx: Ctx, teamsById: (id: string) => TeamRow | undefined): void {
-  for (const { member_id, team_id } of listMembersWithHeldRings(ctx.db)) {
-    const member = getMemberById(ctx.db, member_id);
-    const team = teamsById(team_id);
+export async function flushLapsedHolds(
+  ctx: Ctx,
+  teamsById: (id: string) => TeamRow | null | undefined | Promise<TeamRow | null | undefined>,
+): Promise<void> {
+  for (const { member_id, team_id } of await listMembersWithHeldRings(ctx.db)) {
+    const member = await getMemberById(ctx.db, member_id);
+    const team = await teamsById(team_id);
     if (member && team && member.left_at === null && team.archived_at === null) {
-      flushHeldRings(ctx, team, member);
+      await flushHeldRings(ctx, team, member);
     } else {
-      for (const ring of listHeldRings(ctx.db, member_id)) setRingState(ctx.db, ring.id, 'done');
+      for (const ring of await listHeldRings(ctx.db, member_id))
+        await setRingState(ctx.db, ring.id, 'done');
     }
   }
 }
 
 /** Read an ask's body at dispatch for the `slack` sink — it is never stored with the ring. */
-function askBodyOf(ctx: Ctx, team: TeamRow, actId: string): string {
-  const row = ctx.db
-    .prepare<
-      [string, string],
-      { body: string }
-    >('SELECT body FROM messages WHERE team_id = ? AND id = ?')
-    .get(team.id, actId);
+async function askBodyOf(ctx: Ctx, team: TeamRow, actId: string): Promise<string> {
+  const row = await ctx.db.get<{ body: string }>(
+    'SELECT body FROM messages WHERE team_id = ? AND id = ?',
+    [team.id, actId],
+  );
   return row?.body ?? '';
 }

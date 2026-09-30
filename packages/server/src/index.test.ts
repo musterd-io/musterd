@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { openDb } from './db/open.js';
+import { openDriver } from './db/open.js';
+import { openTestDb } from './db/testing.js';
 import { createServer } from './index.js';
 
 /**
@@ -8,12 +9,12 @@ import { createServer } from './index.js';
  * from `config.dbPath`, the path the daemon INTENDED to open, while `opts.db` bypasses that path
  * entirely. So a daemon running wholly in memory named the operator's real database.
  *
- * In production the two agree — `openDb(path)` opens exactly `path` — which is what kept this
+ * In production the two agree — `openTestDb(path)` opens exactly `path` — which is what kept this
  * invisible: the value was accidentally right, derived from the intention rather than the fact.
  */
 describe('the daemon reports the database it actually opened', () => {
   it('names the injected handle, not the config default it never opened', async () => {
-    const server = createServer({ db: openDb(':memory:'), port: 0 });
+    const server = createServer({ db: openTestDb(':memory:'), port: 0 });
     const { port } = await server.listen();
     try {
       expect(server.dbPath).toBe(':memory:');
@@ -47,7 +48,7 @@ describe('the request log never carries a token from the path', () => {
     vi.spyOn(process.stdout, 'write').mockImplementation(capture);
     vi.spyOn(process.stderr, 'write').mockImplementation(capture);
 
-    const server = createServer({ db: openDb(':memory:'), port: 0 });
+    const server = createServer({ db: openTestDb(':memory:'), port: 0 });
     const { port } = await server.listen();
     const secret = 'mscr_' + 'f'.repeat(40);
     const bodies: string[] = [];
@@ -65,5 +66,20 @@ describe('the request log never carries a token from the path', () => {
     expect(requestLines.join('')).toContain('/mcp/[redacted]');
     expect(lines.join('')).not.toContain(secret);
     expect(bodies.join('')).not.toContain(secret);
+  });
+});
+
+describe('createServer takes a Driver or a raw handle (plan 1A task 4)', () => {
+  it('exposes ctx.db as a Driver either way and serves /health', async () => {
+    for (const db of [openTestDb(':memory:'), openDriver(':memory:')]) {
+      const server = createServer({ db, port: 0 });
+      const { port } = await server.listen();
+      try {
+        const res = await fetch(`http://127.0.0.1:${port}/health`);
+        expect(res.status).toBe(200);
+      } finally {
+        await server.close();
+      }
+    }
   });
 });

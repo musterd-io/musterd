@@ -74,8 +74,12 @@ export async function serveCommand(parsed: Parsed): Promise<number> {
   // SIGHUP reloads the durable roster (ADR 058): re-resolve roots + reconcile, so a team exported
   // after the daemon started is picked up without a restart.
   process.on('SIGHUP', () => {
-    server.reload();
-    process.stdout.write(theme.meta('reloaded roster roots (SIGHUP)') + '\n');
+    server
+      .reload()
+      .then(() => process.stdout.write(theme.meta('reloaded roster roots (SIGHUP)') + '\n'))
+      .catch((err: unknown) =>
+        process.stderr.write(theme.meta(`roster reload failed (SIGHUP): ${String(err)}`) + '\n'),
+      );
   });
   await new Promise<void>((resolveP) => {
     // SIGINT (ctrl-c) and SIGTERM both shut down gracefully. SIGTERM matters for the LaunchAgent:

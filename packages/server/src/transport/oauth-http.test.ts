@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { OAUTH_RATE_LIMITS } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
 import { __setInviteKeyForTest } from '../store/invites.js';
@@ -77,13 +78,13 @@ function safeJson(text: string): any {
   }
 }
 
-const audits = (action: string) => {
-  const team = getTeamBySlug(server.db, 'dawn')!;
-  return listAudit(server.db, team.id).filter((r) => r.action === action);
+const audits = async (action: string) => {
+  const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+  return (await listAudit(sqliteDriver(server.db), team.id)).filter((r) => r.action === action);
 };
 
 async function registerClient(redirectUris: string[] = [REDIRECT], name = 'Claude') {
-  return postJson('/oauth/dawn/register', {
+  return await postJson('/oauth/dawn/register', {
     redirect_uris: redirectUris,
     client_name: name,
   });
@@ -148,7 +149,7 @@ beforeEach(async () => {
   __setCimdResolverForTest();
   resetMcpHandlersForTest();
   __setInviteKeyForTest(randomBytes(32));
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const team = await postJson('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
@@ -251,7 +252,7 @@ describe('Client ID Metadata Documents (ADR 470)', () => {
     expect(authz.status, authz.text).toBe(302);
     expect(new URL(authz.headers.get('location')!).searchParams.get('state')).toBe('state');
     expect(calls).toBe(2);
-    const codeAudit = audits('oauth.code_issued').at(-1)!;
+    const codeAudit = (await audits('oauth.code_issued')).at(-1)!;
     expect(codeAudit.target).toBeNull();
     expect(JSON.stringify(codeAudit.detail)).not.toContain(clientId);
   });
@@ -263,7 +264,7 @@ describe('Client ID Metadata Documents (ADR 470)', () => {
       return metadata(id);
     });
     const registered = await registerClient();
-    const teamId = getTeamBySlug(server.db, 'dawn')!.id;
+    const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
     const dcrBinding = server.db
       .prepare(
         'SELECT team_id, client_id, source FROM oauth_client_bindings WHERE team_id = ? AND client_id = ?',
@@ -454,7 +455,10 @@ describe('Client ID Metadata Documents (ADR 470)', () => {
     expect(secondToken.status).toBe(200);
     expect(calls).toBe(callsAfterAuthorization);
 
-    const teamIds = [getTeamBySlug(server.db, 'dawn')!.id, getTeamBySlug(server.db, 'dusk')!.id];
+    const teamIds = [
+      (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id,
+      (await getTeamBySlug(sqliteDriver(server.db), 'dusk'))!.id,
+    ];
     const bindings = server.db
       .prepare(
         'SELECT team_id, client_id, source FROM oauth_client_bindings WHERE client_id = ? ORDER BY team_id',
@@ -529,7 +533,7 @@ describe('client registration (ADR 446 §3/§5)', () => {
     expect(res.json.client_id).toMatch(/^cid_/);
     expect(res.json.client_secret).toBeUndefined();
     expect(res.json.token_endpoint_auth_method).toBe('none');
-    const rows = audits('oauth.client_registered');
+    const rows = await audits('oauth.client_registered');
     expect(rows).toHaveLength(1);
     expect(JSON.stringify(rows[0])).not.toMatch(/mscr_|msat_|msrt_/);
   });
@@ -642,7 +646,7 @@ describe('authorization + token (ADR 446 §3/§5)', () => {
       credential: 'mscr_wrong',
     });
     expect(res.status).toBe(401);
-    expect(audits('oauth.code_issued')).toHaveLength(0);
+    expect(await audits('oauth.code_issued')).toHaveLength(0);
   });
 
   it('code → pair → bearer works; replay fails closed with invalid_grant', async () => {
@@ -677,7 +681,7 @@ describe('authorization + token (ADR 446 §3/§5)', () => {
     expect(pair.access_token).toMatch(/^msat_/);
     expect(pair.refresh_token).toMatch(/^msrt_/);
     expect(pair.token_type).toBe('Bearer');
-    expect(audits('oauth.token_issued')).toHaveLength(1);
+    expect(await audits('oauth.token_issued')).toHaveLength(1);
 
     // The spent code, presented again, is refused — single-use is transactional.
     const replay = await postForm('/oauth/dawn/token', tokenBody);
@@ -694,7 +698,7 @@ describe('authorization + token (ADR 446 §3/§5)', () => {
     });
     expect(rot.status).toBe(200);
     expect(rot.json.access_token).not.toBe(pair.access_token);
-    expect(audits('oauth.token_rotated')).toHaveLength(1);
+    expect(await audits('oauth.token_rotated')).toHaveLength(1);
 
     const reuse = await postForm('/oauth/dawn/token', {
       grant_type: 'refresh_token',
@@ -703,7 +707,7 @@ describe('authorization + token (ADR 446 §3/§5)', () => {
     });
     expect(reuse.status).toBe(400);
     expect(reuse.json.error).toBe('invalid_grant');
-    const theft = audits('oauth.token_reused_revoked');
+    const theft = await audits('oauth.token_reused_revoked');
     expect(theft).toHaveLength(1);
     expect(theft[0]?.actor).toBe('nick');
     expect(theft[0]?.result).toBe('deny');
@@ -728,7 +732,7 @@ describe('authorization + token (ADR 446 §3/§5)', () => {
     });
     // A revoked bearer cannot even open the exchange.
     expect(inbox.status).toBe(401);
-    expect(audits('oauth.revoked')).toHaveLength(1);
+    expect(await audits('oauth.revoked')).toHaveLength(1);
 
     const unknown = await postForm('/oauth/dawn/revoke', { token: 'msat_nothing' });
     expect(unknown.status).toBe(200);
@@ -766,8 +770,10 @@ describe('transport posture (ADR 446 §1/§5)', () => {
 
   it('no secret ever reaches the audit detail — codes, tokens, credentials', async () => {
     await signInPair(nickCred);
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const rows = listAudit(server.db, team.id).filter((r) => r.action.startsWith('oauth.'));
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const rows = (await listAudit(sqliteDriver(server.db), team.id)).filter((r) =>
+      r.action.startsWith('oauth.'),
+    );
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
       expect(JSON.stringify(row)).not.toMatch(/mscr_|msat_|msrt_|code=[A-Za-z0-9_-]{10}/);
@@ -856,7 +862,7 @@ describe('decline fixes (re-review)', () => {
   });
 
   it('with trustProxy, buckets key off CF-Connecting-IP — XFF is untrusted', async () => {
-    const proxyServer = createServer({ db: openDb(':memory:'), port: 0, trustProxy: true });
+    const proxyServer = createServer({ db: openTestDb(':memory:'), port: 0, trustProxy: true });
     const { port } = await proxyServer.listen();
     const proxyBase = `http://127.0.0.1:${port}`;
     try {
@@ -990,11 +996,11 @@ describe('/mcp/:team — the Done line (ADR 446 §7)', () => {
       capabilities: {},
       clientInfo: { name: 'phone', version: '0' },
     });
-    const dawn = getTeamBySlug(server.db, 'dawn')!;
+    const dawn = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
     const nick = server.db
       .prepare("SELECT id FROM members WHERE team_id = ? AND name = 'nick'")
       .get(dawn.id) as { id: string };
-    recordHostSeen(server.db, dawn.id, 'nick-mbp', Date.now(), nick.id);
+    await recordHostSeen(sqliteDriver(server.db), dawn.id, 'nick-mbp', Date.now(), nick.id);
     const made = await mcpCall(
       pair.access_token,
       'tools/call',
@@ -1028,12 +1034,12 @@ describe('/mcp/:team — the Done line (ADR 446 §7)', () => {
     const row = server.db
       .prepare("SELECT kind, sponsored_by FROM members WHERE name = 'nick-scout'")
       .get() as { kind: string; sponsored_by: string };
-    const dawn = getTeamBySlug(server.db, 'dawn')!;
+    const dawn = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
     const nick = server.db
       .prepare("SELECT id FROM members WHERE team_id = ? AND name = 'nick'")
       .get(dawn.id) as { id: string };
     expect(row).toEqual({ kind: 'agent', sponsored_by: nick.id });
-    expect(audits('member.sponsored_agent_created')).toHaveLength(1);
+    expect(await audits('member.sponsored_agent_created')).toHaveLength(1);
 
     // Lane 01M3FBK3S6: the team is told, in the sponsor's voice, and the creator's reply says so.
     expect(text).toContain('The team has been told');
@@ -1110,7 +1116,7 @@ describe('/mcp/:team — the Done line (ADR 446 §7)', () => {
   });
 });
 
-describe('invite prover at authorize (ADR 450)', () => {
+describe('invite prover at authorize (ADR 450)', async () => {
   const admin = () => ({ authorization: `Bearer ${nickCred}` });
 
   async function mint(body: Record<string, unknown> = {}) {
@@ -1136,7 +1142,7 @@ describe('invite prover at authorize (ADR 450)', () => {
 
   async function tokenFor(authz: Awaited<ReturnType<typeof postForm>>, client_id: string) {
     const code = new URL(authz.headers.get('location')!).searchParams.get('code')!;
-    return postForm('/oauth/dawn/token', {
+    return await postForm('/oauth/dawn/token', {
       grant_type: 'authorization_code',
       code,
       redirect_uri: REDIRECT,
@@ -1164,7 +1170,7 @@ describe('invite prover at authorize (ADR 450)', () => {
     const secretTail = m.link_secret.split('.')[1]!;
     expect(list.text).not.toContain(secretTail);
     expect(list.text).not.toContain(m.room_code.slice(4));
-    expect(JSON.stringify(audits('invite.minted'))).not.toContain(secretTail);
+    expect(JSON.stringify(await audits('invite.minted'))).not.toContain(secretTail);
 
     const del = await fetch(base + `/teams/dawn/invites/${m.invite.id}`, {
       method: 'DELETE',
@@ -1172,7 +1178,7 @@ describe('invite prover at authorize (ADR 450)', () => {
     });
     expect(del.status).toBe(200);
     expect((await get('/teams/dawn/invites', admin())).json.invites[0].state).toBe('revoked');
-    expect(audits('invite.revoked')).toHaveLength(1);
+    expect(await audits('invite.revoked')).toHaveLength(1);
   });
 
   it('a stranger with the room code becomes a NEW human member and reaches MCP; the link value works too', async () => {
@@ -1187,7 +1193,7 @@ describe('invite prover at authorize (ADR 450)', () => {
     });
     expect(inbox.error).toBeUndefined();
 
-    const team = getTeamBySlug(server.db, 'dawn')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
     const ada = server.db
       .prepare(
         'SELECT kind, lifecycle, lifecycle_until, sponsored_by, left_at FROM members WHERE team_id = ? AND name = ?',
@@ -1201,7 +1207,7 @@ describe('invite prover at authorize (ADR 450)', () => {
     });
     expect(ada.lifecycle_until).toBeGreaterThan(Date.now());
 
-    const admitted = audits('member.invite_admitted');
+    const admitted = await audits('member.invite_admitted');
     expect(admitted).toHaveLength(1);
     expect(admitted[0]).toMatchObject({ actor: 'ada', target: m.invite.id });
     expect(JSON.stringify(admitted[0])).not.toContain(m.room_code.slice(4));
@@ -1232,13 +1238,13 @@ describe('invite prover at authorize (ADR 450)', () => {
     );
     expect(inv).toMatchObject({ state: 'burned', failures: 2, uses: 0 });
     // eve never got a row.
-    const team = getTeamBySlug(server.db, 'dawn')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
     expect(
       server.db
         .prepare('SELECT id FROM members WHERE team_id = ? AND name = ?')
         .get(team.id, 'eve'),
     ).toBeUndefined();
-    const refused = audits('member.invite_refused');
+    const refused = await audits('member.invite_refused');
     expect(refused.length).toBeGreaterThanOrEqual(3);
     expect(JSON.stringify(refused)).not.toContain('ZZZZ');
   });
@@ -1255,8 +1261,8 @@ describe('invite prover at authorize (ADR 450)', () => {
   it('a taken name and a tombstoned name are refused with conflict and cost the invite nothing', async () => {
     const m = await mint();
     // nick is live; make a tombstone by adding + removing 'gone'.
-    const team = getTeamBySlug(server.db, 'dawn')!;
-    const gone = addMember(server.db, team, { name: 'gone', kind: 'human' });
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+    const gone = await addMember(sqliteDriver(server.db), team, { name: 'gone', kind: 'human' });
     server.db.prepare('UPDATE members SET left_at = ? WHERE id = ?').run(Date.now(), gone.row.id);
     for (const name of ['nick', 'gone']) {
       const r = await authorizeInvite(m.room_code, name);
@@ -1279,7 +1285,7 @@ describe('invite prover at authorize (ADR 450)', () => {
     expect(authz.status).toBe(302);
     const tok = await tokenFor(authz, client_id);
     expect(tok.status).toBe(200);
-    const team = getTeamBySlug(server.db, 'dawn')!;
+    const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
     server.db
       .prepare('UPDATE members SET lifecycle_until = ? WHERE team_id = ? AND name = ?')
       .run(Date.now() - 1, team.id, 'brief');
@@ -1351,7 +1357,7 @@ describe('agent seats over OAuth via the sponsor nonce (ADR 452)', () => {
   }
 
   async function exchange(code: string, client_id: string) {
-    return postForm('/oauth/dawn/token', {
+    return await postForm('/oauth/dawn/token', {
       grant_type: 'authorization_code',
       code,
       redirect_uri: REDIRECT,
@@ -1384,10 +1390,10 @@ describe('agent seats over OAuth via the sponsor nonce (ADR 452)', () => {
       2,
     );
     expect(JSON.stringify(send.json.result)).toContain('sent');
-    const row = audits('member.agent_connected')[0]!;
+    const row = (await audits('member.agent_connected'))[0]!;
     expect(row.actor).toBe('nick');
     expect(row.target).toBe('nick-scout');
-    expect(JSON.stringify(audits('member.agent_connected'))).not.toContain(
+    expect(JSON.stringify(await audits('member.agent_connected'))).not.toContain(
       new URL(link).hash.slice(3),
     );
   });
@@ -1409,7 +1415,7 @@ describe('agent seats over OAuth via the sponsor nonce (ADR 452)', () => {
     const again = await authorizeAgent(link);
     expect(again.authz.status).toBe(401);
     expect(again.authz.text).toContain("that connect link isn't valid");
-    expect(audits('member.agent_connect_refused')).toHaveLength(1);
+    expect(await audits('member.agent_connect_refused')).toHaveLength(1);
     const junk = await authorizeAgent('Z'.repeat(43));
     expect(junk.authz.text).toBe(again.authz.text);
   });
@@ -1421,7 +1427,7 @@ describe('agent seats over OAuth via the sponsor nonce (ADR 452)', () => {
     const stale = await mcpCall(first.pair.access_token, 'tools/list', {}, 3);
     expect(stale.status).toBe(401);
     expect(
-      audits('oauth.revoked').some((r) => JSON.stringify(r.detail).includes('superseded')),
+      (await audits('oauth.revoked')).some((r) => JSON.stringify(r.detail).includes('superseded')),
     ).toBe(true);
   });
 
@@ -1477,7 +1483,7 @@ describe('agent seats over OAuth via the sponsor nonce (ADR 452)', () => {
       const res = await authorizeAgent(pasted);
       expect(res.authz.status).toBe(400);
     }
-    expect(audits('member.agent_connect_refused')).toHaveLength(0);
+    expect(await audits('member.agent_connect_refused')).toHaveLength(0);
     // Refused before redemption: the real link still works.
     expect((await authorizeAgent(link)).authz.status).toBe(302);
   });
@@ -1485,7 +1491,7 @@ describe('agent seats over OAuth via the sponsor nonce (ADR 452)', () => {
   it('a credential pasted into the agent field is refused at the schema — never an auth attempt', async () => {
     const res = await authorizeAgent(nickCred + 'x'.repeat(20));
     expect(res.authz.status).toBe(400);
-    expect(audits('member.agent_connect_refused')).toHaveLength(0);
+    expect(await audits('member.agent_connect_refused')).toHaveLength(0);
   });
 
   // ── ADR 456: team agents — who may connect, and the connector bounds the session ──
@@ -1552,7 +1558,7 @@ describe('agent seats over OAuth via the sponsor nonce (ADR 452)', () => {
       expect(notes[0]!.body).toMatch(/connected nick-scout/);
     }
     expect(directedTo('eve')).toHaveLength(0);
-    const connected = audits('member.agent_connected').map((r) => r.actor);
+    const connected = (await audits('member.agent_connected')).map((r) => r.actor);
     expect(connected.sort()).toEqual(['dana', 'eve']);
   });
 
@@ -1602,8 +1608,8 @@ describe('agent seats over OAuth via the sponsor nonce (ADR 452)', () => {
       capabilities: {},
       clientInfo: { name: 'phone', version: '0' },
     });
-    const call = () =>
-      mcpCall(
+    const call = async () =>
+      await mcpCall(
         pair.access_token,
         'tools/call',
         { name: 'team_agent_connect', arguments: { name: 'nick-scout' } },

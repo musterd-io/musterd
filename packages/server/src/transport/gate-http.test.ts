@@ -1,6 +1,7 @@
 import { makeEnvelope } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { sqliteDriver } from '../db/sqliteDriver.js';
+import { openTestDb } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
 import { openLane } from '../store/lanes.js';
@@ -44,9 +45,9 @@ async function get(path: string, headers: Record<string, string> = {}) {
 }
 const bearer = (auth: string) => ({ authorization: `Bearer ${auth}` });
 
-const audits = (action: string) => {
-  const team = getTeamBySlug(server.db, 'dawn')!;
-  return listAudit(server.db, team.id).filter((r) => r.action === action);
+const audits = async (action: string) => {
+  const team = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+  return (await listAudit(sqliteDriver(server.db), team.id)).filter((r) => r.action === action);
 };
 
 const CLASSES = [
@@ -56,7 +57,7 @@ const CLASSES = [
 ];
 
 beforeEach(async () => {
-  server = createServer({ db: openDb(':memory:'), port: 0 });
+  server = createServer({ db: openTestDb(':memory:'), port: 0 });
   const { port } = await server.listen();
   base = `http://127.0.0.1:${port}`;
   const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
@@ -110,7 +111,7 @@ describe('POST /gate (ADR 150) — adjudicate + shapes-only audit', () => {
     expect(r.status).toBe(200);
     expect(r.json.decision).toBe('allow');
     expect(r.json.outcome).toBe('warned');
-    const rows = audits('lane.gate');
+    const rows = await audits('lane.gate');
     expect(rows).toHaveLength(1);
     expect(rows[0]!.result).toBe('allow');
   });
@@ -129,7 +130,7 @@ describe('POST /gate (ADR 150) — adjudicate + shapes-only audit', () => {
       seatHeaders('Ada'),
     );
     expect(r.json.outcome).toBe('warned');
-    expect(audits('action.gate')).toHaveLength(1);
+    expect(await audits('action.gate')).toHaveLength(1);
   });
 
   it('the audit row is SHAPES ONLY — carries class + fingerprint, never the raw target text', async () => {
@@ -145,7 +146,7 @@ describe('POST /gate (ADR 150) — adjudicate + shapes-only audit', () => {
       },
       seatHeaders('Ada'),
     );
-    const row = audits('action.gate').at(-1)!;
+    const row = (await audits('action.gate')).at(-1)!;
     const detail = JSON.parse(row.detail!);
     expect(detail.class).toBe('force-push');
     expect(detail.fingerprint).toBe('ghi789');
@@ -164,10 +165,10 @@ describe('POST /gate (ADR 150) — adjudicate + shapes-only audit', () => {
   });
 });
 
-describe('Gate A — lane-ownership (ADR 150)', () => {
-  const team = () => getTeamBySlug(server.db, 'dawn')!;
-  const gateA = (posture: 'warn' | 'block', target: string, seat = 'Ada') =>
-    post(
+describe('Gate A — lane-ownership (ADR 150)', async () => {
+  const team = async () => (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!;
+  const gateA = async (posture: 'warn' | 'block', target: string, seat = 'Ada') =>
+    await post(
       '/teams/dawn/gate',
       {
         kind: 'contended-surface',
@@ -181,7 +182,7 @@ describe('Gate A — lane-ownership (ADR 150)', () => {
     );
 
   it('owns a claimed lane covering the path → allow, quietly (no nag), under block', async () => {
-    openLane(server.db, team().id, 'dawn', 'Ada', {
+    await openLane(sqliteDriver(server.db), (await team()).id, 'dawn', 'Ada', {
       title: 'tariff work',
       scope: ['src/**'],
       claim: true,
@@ -198,13 +199,13 @@ describe('Gate A — lane-ownership (ADR 150)', () => {
     expect(r.json.outcome).toBe('denied');
     expect(r.json.reason).toContain('claim one');
     // The deny is recorded as a lane.gate row with result: deny.
-    const row = audits('lane.gate').at(-1)!;
+    const row = (await audits('lane.gate')).at(-1)!;
     expect(row.result).toBe('deny');
   });
 
   it('ANOTHER seat owns the covering lane, block → DENY naming that owner', async () => {
     await post('/teams/dawn/members', { name: 'Bo', kind: 'agent' }, bearer(nickCred));
-    openLane(server.db, team().id, 'dawn', 'Bo', {
+    await openLane(sqliteDriver(server.db), (await team()).id, 'dawn', 'Bo', {
       title: 'bo tariff',
       scope: ['src/tariff.ts'],
       claim: true,
@@ -221,7 +222,7 @@ describe('Gate A — lane-ownership (ADR 150)', () => {
   });
 
   it('owns the lane, warn → quiet allow (ownership means no advisory either)', async () => {
-    openLane(server.db, team().id, 'dawn', 'Ada', {
+    await openLane(sqliteDriver(server.db), (await team()).id, 'dawn', 'Ada', {
       title: 'ada tariff',
       scope: ['src/tariff.ts'],
       claim: true,
@@ -231,7 +232,7 @@ describe('Gate A — lane-ownership (ADR 150)', () => {
   });
 
   it('a resolved (done) lane does not count as ownership — only contending lanes cover', async () => {
-    const lane = openLane(server.db, team().id, 'dawn', 'Ada', {
+    const lane = await openLane(sqliteDriver(server.db), (await team()).id, 'dawn', 'Ada', {
       title: 'old tariff',
       scope: ['src/**'],
       claim: true,
@@ -242,10 +243,10 @@ describe('Gate A — lane-ownership (ADR 150)', () => {
   });
 });
 
-describe('Gate B — policy-classed action→ask (ADR 150) — deny IS emit', () => {
+describe('Gate B — policy-classed action→ask (ADR 150) — deny IS emit', async () => {
   // `force-push` is the block-posture costly-action class in CLASSES.
-  const forcePush = (target = 'git push --force origin feat/x') =>
-    post(
+  const forcePush = async (target = 'git push --force origin feat/x') =>
+    await post(
       '/teams/dawn/gate',
       {
         kind: 'costly-action',
@@ -274,16 +275,19 @@ describe('Gate B — policy-classed action→ask (ADR 150) — deny IS emit', ()
       act,
       meta: { in_reply_to: askId },
     });
-    return post('/teams/dawn/messages', { envelope: env }, headers);
+    return await post('/teams/dawn/messages', { envelope: env }, headers);
   };
 
-  const askMessages = () =>
+  const askMessages = async () =>
     server.db
       .prepare(
         `SELECT id, meta FROM messages WHERE team_id = ? AND act = 'ask'
            AND json_extract(meta, '$.gate.fingerprint') = 'fp-force'`,
       )
-      .all(getTeamBySlug(server.db, 'dawn')!.id) as { id: string; meta: string }[];
+      .all((await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id) as {
+      id: string;
+      meta: string;
+    }[];
 
   it('first block attempt → DENY + emits ONE species:approve/tier:blocking ask carrying meta.gate', async () => {
     const r = await forcePush();
@@ -292,16 +296,16 @@ describe('Gate B — policy-classed action→ask (ADR 150) — deny IS emit', ()
     expect(r.json.reason).toContain('human approval');
     expect(r.json.ask_ref).toBeTruthy();
 
-    const asks = askMessages();
+    const asks = await askMessages();
     expect(asks).toHaveLength(1);
     const meta = JSON.parse(asks[0]!.meta);
     expect(meta.species).toBe('approve');
     expect(meta.tier).toBe('blocking');
     expect(meta.gate).toMatchObject({ class: 'force-push', fingerprint: 'fp-force' });
     // The ask raised its ADR 147 lifecycle row.
-    expect(audits('ask.raised')).toHaveLength(1);
+    expect(await audits('ask.raised')).toHaveLength(1);
     // The gate decision recorded a denied_ask_raised action.gate row.
-    expect(audits('action.gate').at(-1)!.result).toBe('deny');
+    expect((await audits('action.gate')).at(-1)!.result).toBe('deny');
   });
 
   it('the deny repair string carries the ADR 147 hold contract + names the route-around (finding 006 item 1)', async () => {
@@ -320,9 +324,13 @@ describe('Gate B — policy-classed action→ask (ADR 150) — deny IS emit', ()
     // Make the room provably empty: drop the loud reach (nick, the admin human, has no live presence
     // in this fixture) and clear any ambient presence the setup's authed requests created. Ada is the
     // raiser, so no teammate term either — the FB3 shape.
-    setPolicy(server.db, getTeamBySlug(server.db, 'dawn')!.id, {
-      enforcement: { classes: CLASSES as never },
-    });
+    await setPolicy(
+      sqliteDriver(server.db),
+      (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id,
+      {
+        enforcement: { classes: CLASSES as never },
+      },
+    );
     server.db.prepare('DELETE FROM presence').run();
     agentAuthorities.Ada = await claimAgentHttp(
       base,
@@ -360,7 +368,7 @@ describe('Gate B — policy-classed action→ask (ADR 150) — deny IS emit', ()
     expect(r.json.decision).toBe('deny');
     expect(r.json.outcome).toBe('denied_awaiting');
     expect(r.json.ask_ref).toBe(first.json.ask_ref);
-    expect(askMessages()).toHaveLength(1); // still ONE ask
+    expect(await askMessages()).toHaveLength(1); // still ONE ask
   });
 
   it('re-attempt after a HUMAN accept → ALLOW (released), standing per-fingerprint', async () => {
@@ -380,7 +388,7 @@ describe('Gate B — policy-classed action→ask (ADR 150) — deny IS emit', ()
     expect(r.json.decision).toBe('deny');
     expect(r.json.outcome).toBe('denied_declined');
     expect(r.json.reason).toContain('declined by nick');
-    expect(askMessages()).toHaveLength(1); // no second ask on decline
+    expect(await askMessages()).toHaveLength(1); // no second ask on decline
   });
 
   it('an AGENT accept does NOT release the gate — only a human accept counts', async () => {
@@ -395,14 +403,14 @@ describe('Gate B — policy-classed action→ask (ADR 150) — deny IS emit', ()
 
   it('the ask body carries the target (delivery carries bodies) while the audit row stays shapes-only', async () => {
     await forcePush('git push --force origin secret-branch');
-    const meta = askMessages();
+    const meta = await askMessages();
     // body is delivery, not audit: the ask names the exact action for the human.
     const askRow = server.db.prepare(`SELECT body FROM messages WHERE id = ?`).get(meta[0]!.id) as {
       body: string;
     };
     expect(askRow.body).toContain('secret-branch');
     // but the action.gate audit row never carries the command text.
-    expect(JSON.stringify(audits('action.gate'))).not.toContain('secret-branch');
+    expect(JSON.stringify(await audits('action.gate'))).not.toContain('secret-branch');
   });
 });
 
@@ -426,7 +434,7 @@ describe('POST /actor — actor attestation (ADR 163)', () => {
       seatHeaders('Ada'),
     );
     expect(res.status).toBe(202);
-    const rows = audits('actor.subagent_write');
+    const rows = await audits('actor.subagent_write');
     expect(rows).toHaveLength(1);
     expect(rows[0]!.actor).toBe('Ada');
     expect(rows[0]!.result).toBe('allow'); // an observer never denies
@@ -446,7 +454,7 @@ describe('POST /actor — actor attestation (ADR 163)', () => {
       seatHeaders('Ada'),
     );
     expect(res.status).toBe(202);
-    const rows = audits('actor.subagent_spawn');
+    const rows = await audits('actor.subagent_spawn');
     expect(rows).toHaveLength(1);
     const detail = JSON.parse(rows[0]!.detail!) as Record<string, unknown>;
     expect(detail).toMatchObject({ tool: 'Agent', spawn_type: 'Explore', spawn_model: 'haiku' });
@@ -459,7 +467,7 @@ describe('POST /actor — actor attestation (ADR 163)', () => {
       { kind: 'subagent-write', tool: 'Bash', actorId: 'ag1', target: command },
       seatHeaders('Ada'),
     );
-    const row = audits('actor.subagent_write').at(-1)!;
+    const row = (await audits('actor.subagent_write')).at(-1)!;
     const detail = JSON.parse(row.detail!) as Record<string, unknown>;
     expect(detail['target']).toBeUndefined();
     expect(detail['command_fingerprint']).toMatch(/^[0-9a-f]{16}$/);
@@ -479,7 +487,7 @@ describe('POST /actor — actor attestation (ADR 163)', () => {
       seatHeaders('Ada'),
     );
     expect(res.status).toBe(202);
-    const rows = audits('actor.session_message');
+    const rows = await audits('actor.session_message');
     expect(rows).toHaveLength(1);
     expect(rows[0]!.actor).toBe('Ada');
     expect(rows[0]!.result).toBe('allow'); // an observer never denies
@@ -499,12 +507,12 @@ describe('POST /actor — actor attestation (ADR 163)', () => {
       seatHeaders('Ada'),
     );
     expect(res.status).toBe(202);
-    const row = audits('actor.session_message').at(-1)!;
+    const row = (await audits('actor.session_message')).at(-1)!;
     expect(JSON.parse(row.detail!)).toEqual({ tool: 'mcp__ccd_session_mgmt__send_message' });
   });
 
   it('a raw body sneaking into bodyFingerprint bounces on shape — 16 chars exactly, no row', async () => {
-    const before = audits('actor.session_message').length;
+    const before = (await audits('actor.session_message')).length;
     const res = await post(
       '/teams/dawn/actor',
       {
@@ -515,18 +523,18 @@ describe('POST /actor — actor attestation (ADR 163)', () => {
       seatHeaders('Ada'),
     );
     expect(res.status).toBe(400);
-    expect(audits('actor.session_message')).toHaveLength(before);
+    expect(await audits('actor.session_message')).toHaveLength(before);
   });
 
   it('a malformed body is a 400, not a 500 — and writes no row', async () => {
-    const before = audits('actor.subagent_write').length;
+    const before = (await audits('actor.subagent_write')).length;
     const res = await post(
       '/teams/dawn/actor',
       { kind: 'nonsense', tool: 'Write' },
       seatHeaders('Ada'),
     );
     expect(res.status).toBe(400);
-    expect(audits('actor.subagent_write')).toHaveLength(before);
+    expect(await audits('actor.subagent_write')).toHaveLength(before);
   });
 });
 
@@ -543,7 +551,7 @@ describe('session-denied attestation (ADR 442)', () => {
       seatHeaders('Ada'),
     );
     expect(res.status).toBe(202);
-    const rows = audits('gate.session_denied');
+    const rows = await audits('gate.session_denied');
     expect(rows).toHaveLength(1);
     expect(rows[0]!.actor).toBe('Ada');
     expect(rows[0]!.result).toBe('deny');
@@ -557,7 +565,7 @@ describe('session-denied attestation (ADR 442)', () => {
       { kind: 'session-denied', tool: 'mcp__ccd_session_mgmt__send_message' },
       seatHeaders('Ada'),
     );
-    const row = audits('gate.session_denied').at(-1)!;
+    const row = (await audits('gate.session_denied')).at(-1)!;
     expect(JSON.parse(row.detail!)).toEqual({ tool: 'mcp__ccd_session_mgmt__send_message' });
   });
 
@@ -581,7 +589,7 @@ describe('session-denied attestation (ADR 442)', () => {
       },
       seatHeaders('Ada'),
     );
-    const detail = JSON.parse(audits('actor.session_message').at(-1)!.detail!);
+    const detail = JSON.parse((await audits('actor.session_message')).at(-1)!.detail!);
     expect(detail['nudge']).toBeUndefined();
     expect(detail['verbatim']).toBeUndefined();
   });

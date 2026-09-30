@@ -5,6 +5,7 @@
 // on request. The report is a pure read (verified read-only against a live copy), so nothing here writes.
 import { parentPort, workerData } from 'node:worker_threads';
 import Database from 'better-sqlite3';
+import { sqliteDriver } from '../db/sqliteDriver.js';
 import { deriveReport } from './insights.js';
 
 export interface ReportJob {
@@ -20,13 +21,14 @@ export type ReportReply =
   | { id: number; ok: false; error: string };
 
 const { dbPath } = workerData as { dbPath: string };
-const db = new Database(dbPath, { readonly: true, fileMustExist: true });
-db.pragma('busy_timeout = 5000');
+const raw = new Database(dbPath, { readonly: true, fileMustExist: true });
+raw.pragma('busy_timeout = 5000');
+const db = sqliteDriver(raw);
 
-parentPort!.on('message', (job: ReportJob) => {
+parentPort!.on('message', async (job: ReportJob) => {
   let reply: ReportReply;
   try {
-    const report = deriveReport(db, job.teamId, job.teamSlug, job.now, job.presenceTimeoutMs);
+    const report = await deriveReport(db, job.teamId, job.teamSlug, job.now, job.presenceTimeoutMs);
     reply = { id: job.id, ok: true, report };
   } catch (err) {
     reply = { id: job.id, ok: false, error: err instanceof Error ? err.message : String(err) };

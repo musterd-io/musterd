@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3';
+import type { Driver } from '../db/driver.js';
 
 /**
  * Gate B (ADR 150 — structural inducement) ask-lifecycle reads. The `costly-action` gate's "deny **is**
@@ -16,20 +16,19 @@ import type { Database } from 'better-sqlite3';
  * the message row (where `meta.gate` is persisted) so one query feeds both. Best-effort: a read error
  * degrades to "none raised" (at worst one extra ask), never a gate on the decision.
  */
-export function findGateAsk(
-  db: Database,
+export async function findGateAsk(
+  db: Driver,
   teamId: string,
   fingerprint: string,
-): { id: string; ts: number } | null {
+): Promise<{ id: string; ts: number } | null> {
   try {
-    const row = db
-      .prepare<[string, string], { id: string; ts: number }>(
-        `SELECT id, ts FROM messages
+    const row = await db.get<{ id: string; ts: number }>(
+      `SELECT id, ts FROM messages
           WHERE team_id = ? AND act = 'ask'
             AND json_extract(meta, '$.gate.fingerprint') = ?
           ORDER BY ts DESC LIMIT 1`,
-      )
-      .get(teamId, fingerprint);
+      [teamId, fingerprint],
+    );
     return row ?? null;
   } catch {
     return null;
@@ -42,22 +41,21 @@ export function findGateAsk(
  * "only an *admin's* accept counts" (gated on `multi-human-admin`) but requires a human accept — an
  * agent's accept never releases a gate. Best-effort like `findGateAsk`.
  */
-export function gateAskHumanAnswer(
-  db: Database,
+export async function gateAskHumanAnswer(
+  db: Driver,
   teamId: string,
   askId: string,
-): { act: 'accept' | 'decline'; by: string; ts: number } | null {
+): Promise<{ act: 'accept' | 'decline'; by: string; ts: number } | null> {
   try {
-    const row = db
-      .prepare<[string, string], { act: string; by: string; ts: number }>(
-        `SELECT m.act AS act, mem.name AS by, m.ts AS ts
+    const row = await db.get<{ act: string; by: string; ts: number }>(
+      `SELECT m.act AS act, mem.name AS by, m.ts AS ts
            FROM messages m JOIN members mem ON mem.id = m.from_member
           WHERE m.team_id = ? AND m.act IN ('accept', 'decline')
             AND mem.kind = 'human'
             AND m.in_reply_to = ?
           ORDER BY m.ts ASC LIMIT 1`,
-      )
-      .get(teamId, askId);
+      [teamId, askId],
+    );
     if (!row) return null;
     return { act: row.act as 'accept' | 'decline', by: row.by, ts: row.ts };
   } catch {

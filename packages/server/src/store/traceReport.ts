@@ -7,8 +7,8 @@ import {
   type TraceLaneCostRowSchema,
   type TraceReport,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import type { z } from 'zod';
+import type { Driver } from '../db/driver.js';
 import { CALL_ROW, POST_TOOL_USE_ONCE } from './traceCoverage.js';
 
 /**
@@ -33,25 +33,27 @@ function num(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
 }
 
-export function deriveTraceReport(
-  db: Database,
-  traceDb: Database,
+export async function deriveTraceReport(
+  db: Driver,
+  traceDb: Driver,
   teamId: string,
   seats: readonly string[],
   opts: { days: number; now?: number },
-): TraceReport {
+): Promise<TraceReport> {
   const now = opts.now ?? Date.now();
   const since = now - opts.days * 24 * 60 * 60 * 1000;
   const inSeats = seats.length > 0 ? `AND seat IN (${seats.map(() => '?').join(',')})` : 'AND 0';
   const seatArgs = [...seats];
 
   // ── coverage: R1 PostToolUse ÷ R2 usage.tool_uses, per harness ──
-  const sessions = traceDb
-    .prepare<
-      [string, number, ...string[]],
-      { harness: string; session_digest: string; has_r2: number; post: number; post_main: number }
-    >(
-      `SELECT harness, session_digest,
+  const sessions = await traceDb.all<{
+    harness: string;
+    session_digest: string;
+    has_r2: number;
+    post: number;
+    post_main: number;
+  }>(
+    `SELECT harness, session_digest,
               -- An R2 session is one whose transcript rail can COUNT calls. A rail that posted
               -- tokens and no tool_uses (codex@1) is no denominator: with it, codex read 1.47 on
               -- the dogfood box, 11 of 11 sessions "with R2" over 1,289 calls (lane 01M3NMDWA9).
@@ -63,15 +65,14 @@ export function deriveTraceReport(
          FROM trace_events
         WHERE team_id = ? AND ts >= ? ${inSeats}
         GROUP BY harness, session_digest`,
-    )
-    .all(teamId, since, ...seatArgs);
-  const usage = traceDb
-    .prepare<[string, number, ...string[]], UsageRow>(
-      `SELECT seat, harness, session_digest, ts, detail FROM trace_events
+    [teamId, since, ...seatArgs],
+  );
+  const usage = await traceDb.all<UsageRow>(
+    `SELECT seat, harness, session_digest, ts, detail FROM trace_events
         WHERE team_id = ? AND ts >= ? AND kind = 'usage' ${inSeats}
         ORDER BY ts`,
-    )
-    .all(teamId, since, ...seatArgs);
+    [teamId, since, ...seatArgs],
+  );
 
   const cov = new Map<string, z.infer<typeof TraceCoverageRowSchema>>();
   for (const s of sessions) {
@@ -116,11 +117,14 @@ export function deriveTraceReport(
   }
 
   // ── tool mix ──
-  const tools = traceDb
-    .prepare<
-      [string, number, ...string[]],
-      { harness: string; tool: string; calls: number; errors: number; avg: number | null }
-    >(
+  const tools = (
+    await traceDb.all<{
+      harness: string;
+      tool: string;
+      calls: number;
+      errors: number;
+      avg: number | null;
+    }>(
       `SELECT harness, tool_name AS tool, COUNT(*) AS calls,
               SUM(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS errors,
               AVG(duration_ms) AS avg
@@ -130,15 +134,15 @@ export function deriveTraceReport(
         GROUP BY harness, tool_name
         ORDER BY calls DESC, tool, harness
         LIMIT ${TRACE_TOOL_MIX_TOP}`,
+      [teamId, since, ...seatArgs],
     )
-    .all(teamId, since, ...seatArgs)
-    .map((t) => ({
-      harness: t.harness,
-      tool: t.tool,
-      calls: t.calls,
-      errors: t.errors,
-      avg_duration_ms: t.avg === null ? null : Math.round(t.avg),
-    }));
+  ).map((t) => ({
+    harness: t.harness,
+    tool: t.tool,
+    calls: t.calls,
+    errors: t.errors,
+    avg_duration_ms: t.avg === null ? null : Math.round(t.avg),
+  }));
 
   // ── cost per lane: each usage row → the seat's most recently claimed lane open at its ts ──
   // A lane's window is claim → MERGE, the same window ADR 462's archaeology uses. The lane row has
@@ -147,33 +151,29 @@ export function deriveTraceReport(
   // took, and charged the seat's NEXT work to it (ryder, 2026-09-28). The submit only bounds a lane
   // that is still submitted or closed: a rejected lane is back in work, and its old submit is not
   // the end of anything.
-  const lanes = db
-    .prepare<
-      [string],
-      {
-        id: string;
-        title: string;
-        state: string;
-        owner_seat: string;
-        goal_id: string | null;
-        claimed_at: number;
-        resolved_at: number | null;
-      }
-    >(
-      `SELECT id, title, state, owner_seat, goal_id, claimed_at, resolved_at FROM lanes
+  const lanes = await db.all<{
+    id: string;
+    title: string;
+    state: string;
+    owner_seat: string;
+    goal_id: string | null;
+    claimed_at: number;
+    resolved_at: number | null;
+  }>(
+    `SELECT id, title, state, owner_seat, goal_id, claimed_at, resolved_at FROM lanes
         WHERE team_id = ? AND owner_seat IS NOT NULL AND claimed_at IS NOT NULL
         ORDER BY claimed_at DESC`,
-    )
-    .all(teamId);
+    [teamId],
+  );
   const submittedAt = new Map(
-    db
-      .prepare<[string], { target: string; ts: number }>(
+    (
+      await db.all<{ target: string; ts: number }>(
         `SELECT target, MAX(ts) AS ts FROM audit
           WHERE team_id = ? AND action = 'lane.ready_for_review'
           GROUP BY target`,
+        [teamId],
       )
-      .all(teamId)
-      .map((r) => [r.target, r.ts]),
+    ).map((r) => [r.target, r.ts]),
   );
   const windowEnd = (l: (typeof lanes)[number]): number | null => {
     const submitted = submittedAt.get(l.id);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { recordLaneClose } from './laneClose.js';
 import { openLane, updateLane } from './lanes.js';
 import { addMember } from './members.js';
@@ -15,11 +16,11 @@ import { createTeam } from './teams.js';
  * `recordLaneClose`) would let any seat mint its own acceptance, which is the failure ADR 192
  * exists to prevent. But it must not VANISH either, and that is what these pin.
  */
-function seed() {
-  const db = openDb(':memory:');
-  const team = createTeam(db, { slug: 'revive' });
-  addMember(db, team, { name: 'nick', kind: 'human' });
-  addMember(db, team, { name: 'izzo', kind: 'agent' });
+async function seed() {
+  const db = openTestDb(':memory:');
+  const team = await createTeam(db, { slug: 'revive' });
+  await addMember(db, team, { name: 'nick', kind: 'human' });
+  await addMember(db, team, { name: 'izzo', kind: 'agent' });
   return { db, team };
 }
 
@@ -33,29 +34,33 @@ function auditRows(db: ReturnType<typeof openDb>, action: string, target: string
 }
 
 /** A lane owned by izzo, parked in review, closed `done` by izzo relaying nick's verdict. */
-function relayedClose(db: ReturnType<typeof openDb>, teamId: string, opts: { branch?: string }) {
-  const lane = openLane(db, teamId, 'revive', 'izzo', {
+async function relayedClose(
+  db: ReturnType<typeof openDb>,
+  teamId: string,
+  opts: { branch?: string },
+) {
+  const lane = await openLane(db, teamId, 'revive', 'izzo', {
     title: 'harness residency increment 6',
     claim: true,
     ...(opts.branch ? { branch: opts.branch } : {}),
   });
-  updateLane(db, teamId, lane.id, 'revive', { state: 'awaiting_acceptance' });
+  await updateLane(db, teamId, lane.id, 'revive', { state: 'awaiting_acceptance' });
   const before = { ...lane, state: 'awaiting_acceptance' as const };
   const done = { ...before, state: 'done' as const };
-  recordLaneClose(db, teamId, { name: 'izzo', kind: 'agent' }, before, done, {
+  await recordLaneClose(db, teamId, { name: 'izzo', kind: 'agent' }, before, done, {
     authorized_by: 'nick',
   });
   return lane;
 }
 
-describe('a relayed human authorization is recorded, never promoted (ADR 192 / 202)', () => {
+describe('a relayed human authorization is recorded, never promoted (ADR 192 / 202)', async () => {
   // THE defect. A branchless lane takes the `git.pr_merged` early-out, so before the fix the only
   // place `authorized_by` landed was the lane row — and the ledger, which is the artifact ADR 109
   // and ADR 127 exist to make joinable, held no trace of the claimed authorizer at all. The name of
   // the human who actually gave the verdict was accepted by the API and silently dropped.
-  it('records the claimed authorizer on a branchless lane, where there is no git row to carry it', () => {
-    const { db, team } = seed();
-    const lane = relayedClose(db, team.id, {});
+  it('records the claimed authorizer on a branchless lane, where there is no git row to carry it', async () => {
+    const { db, team } = await seed();
+    const lane = await relayedClose(db, team.id, {});
 
     const [close] = auditRows(db, 'lane.closed', lane.id);
     expect(close?.detail['authorization_claimed']).toBe('nick');
@@ -67,9 +72,9 @@ describe('a relayed human authorization is recorded, never promoted (ADR 192 / 2
   // awaiting_acceptance), so ADR 217's wait verdict owns the label — `review_timeout` here, the
   // abstaining form, because nothing recorded a promised window. The claimed authorizer rides
   // beside that verdict; it never replaces it.
-  it('does not promote the relay to verified, and leaves the wait verdict owning the reason', () => {
-    const { db, team } = seed();
-    const lane = relayedClose(db, team.id, {});
+  it('does not promote the relay to verified, and leaves the wait verdict owning the reason', async () => {
+    const { db, team } = await seed();
+    const lane = await relayedClose(db, team.id, {});
 
     const [close] = auditRows(db, 'lane.closed', lane.id);
     expect(close?.detail['verified']).toBe(false);
@@ -82,12 +87,12 @@ describe('a relayed human authorization is recorded, never promoted (ADR 192 / 2
 
   // A self-close claiming nobody must stay exactly as it was — the field is absent, not null or
   // empty. ADR 173: an absent key and a present-but-empty one are different facts.
-  it('writes no authorization key when the close claimed no authorizer', () => {
-    const { db, team } = seed();
-    const lane = openLane(db, team.id, 'revive', 'izzo', { title: 'plain', claim: true });
-    updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
+  it('writes no authorization key when the close claimed no authorizer', async () => {
+    const { db, team } = await seed();
+    const lane = await openLane(db, team.id, 'revive', 'izzo', { title: 'plain', claim: true });
+    await updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
     const before = { ...lane, state: 'awaiting_acceptance' as const };
-    recordLaneClose(
+    await recordLaneClose(
       db,
       team.id,
       { name: 'izzo', kind: 'agent' },
@@ -102,12 +107,12 @@ describe('a relayed human authorization is recorded, never promoted (ADR 192 / 2
 
   // A counterpart close needs no relay: the closer IS the authority, and asserting a second,
   // client-attested one alongside `verified: true` would muddy which fact carried the confirmation.
-  it('writes no authorization key when a counterpart genuinely confirmed', () => {
-    const { db, team } = seed();
-    const lane = openLane(db, team.id, 'revive', 'izzo', { title: 'confirmed', claim: true });
-    updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
+  it('writes no authorization key when a counterpart genuinely confirmed', async () => {
+    const { db, team } = await seed();
+    const lane = await openLane(db, team.id, 'revive', 'izzo', { title: 'confirmed', claim: true });
+    await updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
     const before = { ...lane, state: 'awaiting_acceptance' as const };
-    recordLaneClose(
+    await recordLaneClose(
       db,
       team.id,
       { name: 'nick', kind: 'human' },
@@ -123,9 +128,9 @@ describe('a relayed human authorization is recorded, never promoted (ADR 192 / 2
 
   // The branch-carrying path already carried the name into `git.pr_merged` (ADR 109). That join is
   // load-bearing and must survive the new key rather than move.
-  it('keeps the ADR 109 git join intact on a branch-carrying lane', () => {
-    const { db, team } = seed();
-    const lane = relayedClose(db, team.id, { branch: 'izzo/residency-inc6' });
+  it('keeps the ADR 109 git join intact on a branch-carrying lane', async () => {
+    const { db, team } = await seed();
+    const lane = await relayedClose(db, team.id, { branch: 'izzo/residency-inc6' });
 
     const [git] = auditRows(db, 'git.pr_merged', 'izzo/residency-inc6');
     expect(git?.detail['authorized_by']).toBe('nick');
@@ -143,14 +148,14 @@ describe('a relayed human authorization is recorded, never promoted (ADR 192 / 2
  * conflation ADR 283 exists to end, and a direct contradiction of what `lane_submit` had said one
  * call earlier. These pin the return against the row so the two can never disagree.
  */
-describe('recordLaneClose hands back the verdict it recorded', () => {
+describe('recordLaneClose hands back the verdict it recorded', async () => {
   /** izzo's own lane, parked in review with `acceptance_exempt` on the ready row, self-closed. */
-  function exemptClose(db: ReturnType<typeof openDb>, teamId: string) {
-    const lane = openLane(db, teamId, 'revive', 'izzo', {
+  async function exemptClose(db: ReturnType<typeof openDb>, teamId: string) {
+    const lane = await openLane(db, teamId, 'revive', 'izzo', {
       title: 'a low-stakes lane',
       claim: true,
     });
-    updateLane(db, teamId, lane.id, 'revive', { state: 'awaiting_acceptance' });
+    await updateLane(db, teamId, lane.id, 'revive', { state: 'awaiting_acceptance' });
     // The ready row is what the reason is keyed on — never `lane.stakes`, which stays editable.
     db.prepare(
       `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at)
@@ -167,13 +172,13 @@ describe('recordLaneClose hands back the verdict it recorded', () => {
     const done = { ...before, state: 'done' as const };
     return {
       lane,
-      verdict: recordLaneClose(db, teamId, { name: 'izzo', kind: 'agent' }, before, done),
+      verdict: await recordLaneClose(db, teamId, { name: 'izzo', kind: 'agent' }, before, done),
     };
   }
 
-  it('returns acceptance_exempt for a by-design self-close, matching the row it wrote', () => {
-    const { db, team } = seed();
-    const { lane, verdict } = exemptClose(db, team.id);
+  it('returns acceptance_exempt for a by-design self-close, matching the row it wrote', async () => {
+    const { db, team } = await seed();
+    const { lane, verdict } = await exemptClose(db, team.id);
 
     expect(verdict).toEqual({ verified: false, reason: 'acceptance_exempt' });
     // The returned verdict and the ledger row are the same derivation, not two.
@@ -182,14 +187,14 @@ describe('recordLaneClose hands back the verdict it recorded', () => {
     expect(close?.detail['verified']).toBe(verdict.verified);
   });
 
-  it('returns counterpart_confirm when another seat closed it', () => {
-    const { db, team } = seed();
-    addMember(db, team, { name: 'ryder', kind: 'agent' });
-    const lane = openLane(db, team.id, 'revive', 'izzo', { title: 'a lane', claim: true });
-    updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
+  it('returns counterpart_confirm when another seat closed it', async () => {
+    const { db, team } = await seed();
+    await addMember(db, team, { name: 'ryder', kind: 'agent' });
+    const lane = await openLane(db, team.id, 'revive', 'izzo', { title: 'a lane', claim: true });
+    await updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
     const before = { ...lane, state: 'awaiting_acceptance' as const };
 
-    const verdict = recordLaneClose(db, team.id, { name: 'ryder', kind: 'agent' }, before, {
+    const verdict = await recordLaneClose(db, team.id, { name: 'ryder', kind: 'agent' }, before, {
       ...before,
       state: 'done' as const,
     });

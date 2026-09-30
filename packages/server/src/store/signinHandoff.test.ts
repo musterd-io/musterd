@@ -6,7 +6,7 @@ import { HANDOFF_TTL_MS, redeemHandoff, stageHandoff, __resetHandoffs } from './
  * use* — the property that lets the CLI put it in a URL at all. No DB: the relay is deliberately
  * memory-only (a handoff older than a minute is void, so nothing about it should survive a restart).
  */
-describe('sign-in handoff relay (ADR 170)', () => {
+describe('sign-in handoff relay (ADR 170)', async () => {
   beforeEach(() => {
     __resetHandoffs();
     vi.useRealTimers();
@@ -23,10 +23,10 @@ describe('sign-in handoff relay (ADR 170)', () => {
     expect(redeemHandoff('revive', nonce)).toBeNull();
   });
 
-  it('expires — a link left in history overnight is inert', () => {
+  it('expires — a link left in history overnight is inert', async () => {
     vi.useFakeTimers();
     const { nonce } = stageHandoff({ team: 'revive', member: 'nick', credential: 'mscr_x' });
-    vi.advanceTimersByTime(HANDOFF_TTL_MS + 1);
+    await vi.advanceTimersByTimeAsync(HANDOFF_TTL_MS + 1);
     expect(redeemHandoff('revive', nonce)).toBeNull();
   });
 
@@ -57,10 +57,10 @@ describe('sign-in handoff relay (ADR 170)', () => {
     expect(staged.expires_in_ms).toBe(HANDOFF_TTL_MS);
   });
 
-  it('sweeps expired entries on write — a stale relay never accumulates', () => {
+  it('sweeps expired entries on write — a stale relay never accumulates', async () => {
     vi.useFakeTimers();
     const first = stageHandoff({ team: 'revive', member: 'nick', credential: 'mscr_x' });
-    vi.advanceTimersByTime(HANDOFF_TTL_MS + 1);
+    await vi.advanceTimersByTimeAsync(HANDOFF_TTL_MS + 1);
     stageHandoff({ team: 'revive', member: 'nick', credential: 'mscr_x' });
     // The expired one is gone from the map, not merely unreadable.
     expect(redeemHandoff('revive', first.nonce)).toBeNull();

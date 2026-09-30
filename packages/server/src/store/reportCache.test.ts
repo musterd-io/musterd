@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Report } from '@musterd/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openDb } from '../db/open.js';
+import { openTestDb } from '../db/testing.js';
 import { deriveReport } from './insights.js';
 import { createReportCache, createReportService } from './reportCache.js';
 import { createTeam } from './teams.js';
@@ -79,9 +79,11 @@ describe('report cache policy', () => {
 
   it('a failed derivation is not cached — the next reader retries', async () => {
     let calls = 0;
-    const cache = createReportCache(() => {
+    const cache = createReportCache(async () => {
       calls++;
-      return calls === 1 ? Promise.reject(new Error('boom')) : Promise.resolve(fake(calls));
+      return calls === 1
+        ? await Promise.reject(new Error('boom'))
+        : await Promise.resolve(fake(calls));
     });
     await expect(cache.get('team', 'revive')).rejects.toThrow('boom');
     expect((await cache.get('team', 'revive')).team).toBe('t2');
@@ -104,8 +106,8 @@ describe('report service', () => {
   });
 
   it('an in-memory store derives inline, uncached (the pre-worker behavior)', async () => {
-    const db = openDb(':memory:');
-    const team = createTeam(db, { slug: 'revive' });
+    const db = openTestDb(':memory:');
+    const team = await createTeam(db, { slug: 'revive' });
     const svc = createReportService(db, 120_000);
     const report = await svc.get(team.id, team.slug);
     expect(report.team).toBe('revive');
@@ -119,20 +121,20 @@ describe('report service', () => {
     'a file-backed store derives in the worker, matching the inline report',
     async () => {
       dir = mkdtempSync(join(tmpdir(), 'musterd-report-'));
-      const db = openDb(join(dir, 'musterd.db'));
-      const team = createTeam(db, { slug: 'revive' });
+      const db = openTestDb(join(dir, 'musterd.db'));
+      const team = await createTeam(db, { slug: 'revive' });
       const mod = (await import(
         new URL('../../dist/store/reportCache.js', import.meta.url).href
       )) as typeof import('./reportCache.js');
       const svc = mod.createReportService(db, 120_000);
       const report = await svc.get(team.id, team.slug);
-      const inline = deriveReport(db, team.id, team.slug, report.generated_ts, 120_000);
+      const inline = await deriveReport(db, team.id, team.slug, report.generated_ts, 120_000);
       // family_posture stamps its own wall clock; everything else is a function of `now`.
       const strip = (r: Report) => ({ ...r, family_posture: undefined });
       expect(strip(report)).toEqual(strip(inline));
       expect(report.family_posture?.state).toBe(inline.family_posture?.state);
       await svc.close();
-      db.close();
+      await db.close();
     },
   );
 });

@@ -9,8 +9,8 @@ import {
   type TraceContent,
   type TraceEvent,
 } from '@musterd/protocol';
-import type { Database } from 'better-sqlite3';
 import { monotonicFactory } from 'ulid';
+import type { Driver } from '../db/driver.js';
 import {
   CONTENT_CAPTURED_THROUGH_KEY,
   SYNC_TRACE_ID_KEY,
@@ -53,38 +53,35 @@ export function scrubStoredContent(content: TraceContent): {
  * per tool call. The whole batch is one transaction, so two hooks racing on the same session cannot
  * interleave their sequences.
  */
-export function ingestTraceEvents(
-  traceDb: Database,
+export async function ingestTraceEvents(
+  traceDb: Driver,
   teamId: string,
   seat: string,
   events: readonly TraceEvent[],
   opts: { writeContent?: boolean } = {},
-): { accepted: number; content: number; normalized: number } {
-  const nextSeq = traceDb.prepare<[string, string], { next: number }>(
-    'SELECT COALESCE(MAX(seq), -1) + 1 AS next FROM trace_events WHERE team_id = ? AND session_digest = ?',
-  );
-  const insert = traceDb.prepare(`
+): Promise<{ accepted: number; content: number; normalized: number }> {
+  const NEXT_SEQ =
+    'SELECT COALESCE(MAX(seq), -1) + 1 AS next FROM trace_events WHERE team_id = ? AND session_digest = ?';
+  const INSERT = `
     INSERT INTO trace_events (
       id, team_id, seat, session_digest, seq, ts, received_at, harness, kind,
       tool_name, tool_use_id, agent_id, parent_agent_id, duration_ms, outcome, detail,
       content, redactions, truncated
-    ) VALUES (
-      @id, @team_id, @seat, @session_digest, @seq, @ts, @received_at, @harness, @kind,
-      @tool_name, @tool_use_id, @agent_id, @parent_agent_id, @duration_ms, @outcome, @detail,
-      @content, @redactions, @truncated
-    )
-  `);
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
   const now = Date.now();
-  const run = traceDb.transaction((batch: readonly TraceEvent[]) => {
+  return traceDb.tx(async (t) => {
     // One MAX per distinct session in the batch, then count up locally — a batch is normally one
     // session, and a per-row MAX would re-scan the index for every event.
     const cursors = new Map<string, number>();
     let accepted = 0;
     let withContent = 0;
     let normalized = 0;
-    for (const e of batch) {
+    for (const e of events) {
       let seq = cursors.get(e.session_digest);
-      if (seq === undefined) seq = nextSeq.get(teamId, e.session_digest)!.next;
+      if (seq === undefined) {
+        seq = (await t.get<{ next: number }>(NEXT_SEQ, [teamId, e.session_digest]))!.next;
+      }
       cursors.set(e.session_digest, seq + 1);
       const stored = opts.writeContent && e.content ? scrubStoredContent(e.content) : undefined;
       if (stored) withContent++;
@@ -94,32 +91,31 @@ export function ingestTraceEvents(
       const tool = structuralToolName(e.harness, e.tool_name);
       const det = normalizeTraceDetail(e.kind, e.detail);
       normalized += (tool.normalized ? 1 : 0) + det.normalized;
-      insert.run({
-        id: ulid(),
-        team_id: teamId,
+      await t.run(INSERT, [
+        ulid(),
+        teamId,
         seat,
-        session_digest: e.session_digest,
+        e.session_digest,
         seq,
-        ts: e.ts,
-        received_at: now,
-        harness: e.harness,
-        kind: e.kind,
-        tool_name: tool.name,
-        tool_use_id: e.tool_use_id ?? null,
-        agent_id: e.agent_id ?? null,
-        parent_agent_id: e.parent_agent_id ?? null,
-        duration_ms: e.duration_ms ?? null,
-        outcome: e.outcome ?? null,
-        detail: det.detail === null ? null : JSON.stringify(det.detail),
-        content: stored?.json ?? null,
-        redactions: stored?.redactions ?? null,
-        truncated: stored?.truncated ? 1 : 0,
-      });
+        e.ts,
+        now,
+        e.harness,
+        e.kind,
+        tool.name,
+        e.tool_use_id ?? null,
+        e.agent_id ?? null,
+        e.parent_agent_id ?? null,
+        e.duration_ms ?? null,
+        e.outcome ?? null,
+        det.detail === null ? null : JSON.stringify(det.detail),
+        stored?.json ?? null,
+        stored?.redactions ?? null,
+        stored?.truncated ? 1 : 0,
+      ]);
       accepted++;
     }
     return { accepted, content: withContent, normalized };
   });
-  return run(events);
 }
 
 export interface TraceEventRow {
@@ -151,17 +147,15 @@ export interface TraceEventRow {
 }
 
 /** One session's events in sequence order — the read the coverage eval and `trace show` (inc 2) use. */
-export function listSessionTrace(
-  traceDb: Database,
+export async function listSessionTrace(
+  traceDb: Driver,
   teamId: string,
   sessionDigest: string,
-): TraceEventRow[] {
-  return traceDb
-    .prepare<
-      [string, string],
-      TraceEventRow
-    >('SELECT * FROM trace_events WHERE team_id = ? AND session_digest = ? ORDER BY seq')
-    .all(teamId, sessionDigest);
+): Promise<TraceEventRow[]> {
+  return await traceDb.all<TraceEventRow>(
+    'SELECT * FROM trace_events WHERE team_id = ? AND session_digest = ? ORDER BY seq',
+    [teamId, sessionDigest],
+  );
 }
 
 /** ADR 445 §3's content window and the function's fallback. The DAEMON passes
@@ -176,10 +170,10 @@ export const TRACE_PRUNE_BATCH = 2_000;
 export const TRACE_PRUNE_MAX_BATCHES = 25;
 
 /** The capture watermark `corpus:snapshot` stamped, or null on a machine that never archived. */
-export function contentCapturedThrough(traceDb: Database): number | null {
-  const row = traceDb
-    .prepare<[string], { value: string }>('SELECT value FROM schema_meta WHERE key = ?')
-    .get(CONTENT_CAPTURED_THROUGH_KEY);
+export async function contentCapturedThrough(traceDb: Driver): Promise<number | null> {
+  const row = await traceDb.get<{ value: string }>('SELECT value FROM schema_meta WHERE key = ?', [
+    CONTENT_CAPTURED_THROUGH_KEY,
+  ]);
   const n = row ? Number(row.value) : NaN;
   return Number.isFinite(n) ? n : null;
 }
@@ -198,27 +192,27 @@ export function contentCapturedThrough(traceDb: Database): number | null {
  * Batched: each batch is its own short transaction, and a tick stops after
  * {@link TRACE_PRUNE_MAX_BATCHES}; the rest waits for the next tick.
  */
-export function pruneTraceContent(
-  traceDb: Database,
+export async function pruneTraceContent(
+  traceDb: Driver,
   now: number = Date.now(),
   opts: { maxAgeMs?: number; batch?: number; maxBatches?: number } = {},
-): { pruned: number; cutoff: number; capturedThrough: number | null } {
+): Promise<{ pruned: number; cutoff: number; capturedThrough: number | null }> {
   const windowCutoff = now - (opts.maxAgeMs ?? TRACE_CONTENT_MAX_AGE_MS);
-  const capturedThrough = contentCapturedThrough(traceDb);
+  const capturedThrough = await contentCapturedThrough(traceDb);
   const cutoff = capturedThrough === null ? windowCutoff : Math.min(windowCutoff, capturedThrough);
   const batch = opts.batch ?? TRACE_PRUNE_BATCH;
   const maxBatches = opts.maxBatches ?? TRACE_PRUNE_MAX_BATCHES;
-  const prune = traceDb.prepare<[number, number, number]>(`
+  const PRUNE = `
     UPDATE trace_events SET content = NULL, content_pruned_at = ?
      WHERE rowid IN (
        SELECT rowid FROM trace_events
         WHERE content IS NOT NULL AND received_at < ?
         ORDER BY received_at LIMIT ?
      )
-  `);
+  `;
   let pruned = 0;
   for (let i = 0; i < maxBatches; i++) {
-    const { changes } = prune.run(now, cutoff, batch);
+    const { changes } = await traceDb.run(PRUNE, [now, cutoff, batch]);
     pruned += changes;
     if (changes < batch) break;
   }
@@ -235,15 +229,15 @@ export const TRACE_PRUNE_FIRST_DELAY_MS = 60 * 1000;
  * delay a bound, never take the daemon down. Returns the stop function `close()` calls.
  */
 export function startTraceContentPrune(
-  traceDb: Database,
-  onPass: (r: ReturnType<typeof pruneTraceContent>) => void,
+  traceDb: Driver,
+  onPass: (r: Awaited<ReturnType<typeof pruneTraceContent>>) => void,
   onError: (err: unknown) => void,
   opts: { maxAgeMs?: number } = {},
 ): () => void {
-  const pass = () => {
+  const pass = async () => {
     try {
       onPass(
-        pruneTraceContent(
+        await pruneTraceContent(
           traceDb,
           Date.now(),
           opts.maxAgeMs === undefined ? {} : { maxAgeMs: opts.maxAgeMs },
@@ -253,9 +247,10 @@ export function startTraceContentPrune(
       onError(err);
     }
   };
-  const first = setTimeout(pass, TRACE_PRUNE_FIRST_DELAY_MS);
+  const tick = () => void pass();
+  const first = setTimeout(tick, TRACE_PRUNE_FIRST_DELAY_MS);
   first.unref?.();
-  const every = setInterval(pass, TRACE_PRUNE_INTERVAL_MS);
+  const every = setInterval(tick, TRACE_PRUNE_INTERVAL_MS);
   every.unref?.();
   return () => {
     clearTimeout(first);
@@ -268,73 +263,66 @@ export function startTraceContentPrune(
  * timeline's read (ADR 445 increment 4b). The content column is not selected, so nothing this
  * returns can carry it. Ordered by `ts` then `seq` so the two rails interleave in time.
  */
-export function listSeatTrace(
-  traceDb: Database,
+export async function listSeatTrace(
+  traceDb: Driver,
   teamId: string,
   seat: string,
   limit: number,
-): Omit<TraceEventRow, 'content' | 'redactions'>[] {
-  return traceDb
-    .prepare<[string, string, number], Omit<TraceEventRow, 'content' | 'redactions'>>(
-      `SELECT id, team_id, seat, session_digest, seq, ts, received_at, harness, kind, tool_name,
+): Promise<Omit<TraceEventRow, 'content' | 'redactions'>[]> {
+  return await traceDb.all<Omit<TraceEventRow, 'content' | 'redactions'>>(
+    `SELECT id, team_id, seat, session_digest, seq, ts, received_at, harness, kind, tool_name,
               tool_use_id, agent_id, parent_agent_id, duration_ms, outcome, detail, truncated,
               content_pruned_at, origin_node
          FROM trace_events
         WHERE team_id = ? AND seat = ?
         ORDER BY ts DESC, seq DESC
         LIMIT ?`,
-    )
-    .all(teamId, seat, limit);
+    [teamId, seat, limit],
+  );
 }
 
 /** Per-kind counts for a team (optionally one seat) — the `musterd.trace.ingest` cross-check. */
-export function countTraceEvents(
-  traceDb: Database,
+export async function countTraceEvents(
+  traceDb: Driver,
   teamId: string,
   seat?: string,
-): { kind: string; count: number }[] {
+): Promise<{ kind: string; count: number }[]> {
   return seat === undefined
-    ? traceDb
-        .prepare<
-          [string],
-          { kind: string; count: number }
-        >('SELECT kind, COUNT(*) AS count FROM trace_events WHERE team_id = ? GROUP BY kind ORDER BY kind')
-        .all(teamId)
-    : traceDb
-        .prepare<
-          [string, string],
-          { kind: string; count: number }
-        >('SELECT kind, COUNT(*) AS count FROM trace_events WHERE team_id = ? AND seat = ? GROUP BY kind ORDER BY kind')
-        .all(teamId, seat);
+    ? await traceDb.all<{ kind: string; count: number }>(
+        'SELECT kind, COUNT(*) AS count FROM trace_events WHERE team_id = ? GROUP BY kind ORDER BY kind',
+        [teamId],
+      )
+    : await traceDb.all<{ kind: string; count: number }>(
+        'SELECT kind, COUNT(*) AS count FROM trace_events WHERE team_id = ? AND seat = ? GROUP BY kind ORDER BY kind',
+        [teamId, seat],
+      );
 }
 
 // ── replication (ADR 453) ───────────────────────────────────────────────────────────────────────
 
-function readMeta(traceDb: Database, key: string): string | null {
+async function readMeta(traceDb: Driver, key: string): Promise<string | null> {
   return (
-    traceDb
-      .prepare<[string], { value: string }>('SELECT value FROM schema_meta WHERE key = ?')
-      .get(key)?.value ?? null
+    (await traceDb.get<{ value: string }>('SELECT value FROM schema_meta WHERE key = ?', [key]))
+      ?.value ?? null
   );
 }
 
-function writeMeta(traceDb: Database, key: string, value: string): void {
-  traceDb
-    .prepare(
-      'INSERT INTO schema_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-    )
-    .run(key, value);
+async function writeMeta(traceDb: Driver, key: string, value: string): Promise<void> {
+  await traceDb.run(
+    'INSERT INTO schema_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    [key, value],
+  );
 }
 
 /**
  * The per-machine id-digest key (ADR 453 §2), minted on first use into this file's `schema_meta`.
  * Random, never sent, never logged; the same id digests the same way here for the file's life.
  */
-export function syncTraceIdKey(traceDb: Database): Buffer {
-  const held = readMeta(traceDb, SYNC_TRACE_ID_KEY);
+export async function syncTraceIdKey(traceDb: Driver): Promise<Buffer> {
+  const held = await readMeta(traceDb, SYNC_TRACE_ID_KEY);
   if (held) return Buffer.from(held, 'hex');
   const key = randomBytes(32);
-  writeMeta(traceDb, SYNC_TRACE_ID_KEY, key.toString('hex'));
+  await writeMeta(traceDb, SYNC_TRACE_ID_KEY, key.toString('hex'));
   return key;
 }
 
@@ -345,13 +333,17 @@ export function digestTraceId(key: Buffer, id: string | null): string | null {
 }
 
 /** The pusher's cursor for a team: the highest `rowid` the hub has acked (0 = nothing yet). */
-export function readSyncTraceCursor(traceDb: Database, teamId: string): number {
-  const v = Number(readMeta(traceDb, syncTraceCursorKey(teamId)) ?? '0');
+export async function readSyncTraceCursor(traceDb: Driver, teamId: string): Promise<number> {
+  const v = Number((await readMeta(traceDb, syncTraceCursorKey(teamId))) ?? '0');
   return Number.isSafeInteger(v) && v >= 0 ? v : 0;
 }
 
-export function advanceSyncTraceCursor(traceDb: Database, teamId: string, rowid: number): void {
-  writeMeta(traceDb, syncTraceCursorKey(teamId), String(rowid));
+export async function advanceSyncTraceCursor(
+  traceDb: Driver,
+  teamId: string,
+  rowid: number,
+): Promise<void> {
+  await writeMeta(traceDb, syncTraceCursorKey(teamId), String(rowid));
 }
 
 /**
@@ -362,42 +354,38 @@ export function advanceSyncTraceCursor(traceDb: Database, teamId: string, rowid:
  * `trace_events` (the content prune is an UPDATE), so it only grows. Rows with an `origin_node`
  * are never offered — they are a joiner's, held here on a hub, and the hub forwards nothing.
  */
-export function unpushedTraceRows(
-  traceDb: Database,
+export async function unpushedTraceRows(
+  traceDb: Driver,
   teamId: string,
   after: number,
   limit: number,
-): { rows: SyncTraceRow[]; last: number; normalized: number } {
-  const key = syncTraceIdKey(traceDb);
-  const raw = traceDb
-    .prepare<
-      [string, number, number],
-      {
-        rowid: number;
-        id: string;
-        seat: string;
-        session_digest: string;
-        seq: number;
-        ts: number;
-        received_at: number;
-        harness: string;
-        kind: SyncTraceRow['kind'];
-        tool_name: string | null;
-        tool_use_id: string | null;
-        agent_id: string | null;
-        parent_agent_id: string | null;
-        duration_ms: number | null;
-        outcome: SyncTraceRow['outcome'];
-        detail: string | null;
-      }
-    >(
-      `SELECT rowid, id, seat, session_digest, seq, ts, received_at, harness, kind, tool_name,
+): Promise<{ rows: SyncTraceRow[]; last: number; normalized: number }> {
+  const key = await syncTraceIdKey(traceDb);
+  const raw = await traceDb.all<{
+    rowid: number;
+    id: string;
+    seat: string;
+    session_digest: string;
+    seq: number;
+    ts: number;
+    received_at: number;
+    harness: string;
+    kind: SyncTraceRow['kind'];
+    tool_name: string | null;
+    tool_use_id: string | null;
+    agent_id: string | null;
+    parent_agent_id: string | null;
+    duration_ms: number | null;
+    outcome: SyncTraceRow['outcome'];
+    detail: string | null;
+  }>(
+    `SELECT rowid, id, seat, session_digest, seq, ts, received_at, harness, kind, tool_name,
               tool_use_id, agent_id, parent_agent_id, duration_ms, outcome, detail
          FROM trace_events
         WHERE team_id = ? AND rowid > ? AND origin_node IS NULL
         ORDER BY rowid LIMIT ?`,
-    )
-    .all(teamId, after, limit);
+    [teamId, after, limit],
+  );
   let normalized = 0;
   const rows: SyncTraceRow[] = raw.map((r) => {
     const tool = structuralToolName(r.harness, r.tool_name);
@@ -438,55 +426,48 @@ export function unpushedTraceRows(
  * collision cannot hide inside the re-push count. The residence check is the ROUTE's (it needs the
  * coordination store); rows arrive here already admitted.
  */
-export function ingestSyncedTraceRows(
-  traceDb: Database,
+export async function ingestSyncedTraceRows(
+  traceDb: Driver,
   teamId: string,
   originNode: string,
   rows: readonly SyncTraceRow[],
-): { accepted: number; ignored: number; collided: number } {
-  const insert = traceDb.prepare(`
+): Promise<{ accepted: number; ignored: number; collided: number }> {
+  const INSERT = `
     INSERT OR IGNORE INTO trace_events (
       id, team_id, seat, session_digest, seq, ts, received_at, harness, kind,
       tool_name, tool_use_id, agent_id, parent_agent_id, duration_ms, outcome, detail,
       content, redactions, truncated, origin_node
-    ) VALUES (
-      @id, @team_id, @seat, @session_digest, @seq, @ts, @received_at, @harness, @kind,
-      @tool_name, @tool_use_id, @agent_id, @parent_agent_id, @duration_ms, @outcome, @detail,
-      NULL, NULL, 0, @origin_node
-    )
-  `);
-  const held = traceDb.prepare<[string], { one: number }>(
-    'SELECT 1 AS one FROM trace_events WHERE id = ?',
-  );
-  const run = traceDb.transaction((batch: readonly SyncTraceRow[]) => {
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?)
+  `;
+  const HELD = 'SELECT 1 AS one FROM trace_events WHERE id = ?';
+  return traceDb.tx(async (t) => {
     let accepted = 0;
     let ignored = 0;
     let collided = 0;
-    for (const r of batch) {
-      const { changes } = insert.run({
-        id: r.id,
-        team_id: teamId,
-        seat: r.seat,
-        session_digest: r.session_digest,
-        seq: r.seq,
-        ts: r.ts,
-        received_at: r.received_at,
-        harness: r.harness,
-        kind: r.kind,
-        tool_name: r.tool_name,
-        tool_use_id: r.tool_use_id,
-        agent_id: r.agent_id,
-        parent_agent_id: r.parent_agent_id,
-        duration_ms: r.duration_ms,
-        outcome: r.outcome,
-        detail: r.detail === null ? null : JSON.stringify(r.detail),
-        origin_node: originNode,
-      });
+    for (const r of rows) {
+      const { changes } = await t.run(INSERT, [
+        r.id,
+        teamId,
+        r.seat,
+        r.session_digest,
+        r.seq,
+        r.ts,
+        r.received_at,
+        r.harness,
+        r.kind,
+        r.tool_name,
+        r.tool_use_id,
+        r.agent_id,
+        r.parent_agent_id,
+        r.duration_ms,
+        r.outcome,
+        r.detail === null ? null : JSON.stringify(r.detail),
+        originNode,
+      ]);
       if (changes > 0) accepted++;
-      else if (held.get(r.id)) ignored++;
+      else if (await t.get<{ one: number }>(HELD, [r.id])) ignored++;
       else collided++;
     }
     return { accepted, ignored, collided };
   });
-  return run(rows);
 }
