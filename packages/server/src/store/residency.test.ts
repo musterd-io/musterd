@@ -11,6 +11,7 @@ import { attach } from './presence.js';
 import {
   WAKE_DEFER_ACTUATOR_RESTART,
   WAKE_DEFER_SNOOZE_MS,
+  WAKE_DEFER_SNOOZE_CAP_MS,
   WAKE_LEASE_TTL_MS,
   WAKE_POLICY_DEFAULTS,
   WORK_ORDER_CONTINUATION_SUCCESS_CAP,
@@ -1078,6 +1079,102 @@ describe('session capture (ADR 131 inc 4): attestation + the wake_deferred snooz
     expect(orders[0]!.act_id).toBe('u1');
   });
 
+  describe('ADR 485: a repeated local-session deferral backs off', () => {
+    /** A streak of `n` same-reason deferrals, the newest `ageMs` ago, each one base snooze apart. */
+    function streak(
+      db: Database,
+      team: TeamRow,
+      seat: string,
+      n: number,
+      ageMs: number,
+      reason: string,
+    ) {
+      const newest = Date.now() - ageMs;
+      for (let i = n - 1; i >= 0; i--) {
+        appendAudit(db, team.id, {
+          actor: null,
+          action: 'residency.wake_deferred',
+          target: seat,
+          result: 'allow',
+          detail: { act: 'u1', lease_id: `x${i}`, reason },
+        });
+        db.prepare(
+          'UPDATE audit SET ts = ? WHERE rowid = (SELECT rowid FROM audit ORDER BY rowid DESC LIMIT 1)',
+        ).run(newest - i * WAKE_DEFER_SNOOZE_MS);
+      }
+    }
+    function due(reason: string, n: number, ageMs: number) {
+      const { db, team, nick, ada } = seed();
+      enroll(db, team, ada);
+      msg(db, team, nick, ada, 'message', 'u1', 1_000, {
+        meta: { urgent: true, urgent_reason: 'wake me' },
+      });
+      streak(db, team, ada.name, n, ageMs, reason);
+      return claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS).length;
+    }
+
+    it('the window doubles per repeat: a 3rd attended-session-open deferral snoozes 20 min', () => {
+      // One deferral: the base 5 min, unchanged (ADR 444's guard is not weakened).
+      expect(due('attended-session-open', 1, WAKE_DEFER_SNOOZE_MS + 1_000)).toBe(1);
+      // Three in a row: 5 → 10 → 20 min, so 6 min after the third is still snoozed …
+      expect(due('attended-session-open', 3, 6 * 60_000)).toBe(0);
+      // … and 21 min after it is not.
+      expect(due('attended-session-open', 3, 21 * 60_000)).toBe(1);
+    });
+
+    it('the window is capped: a 20-deferral streak snoozes WAKE_DEFER_SNOOZE_CAP_MS, not longer', () => {
+      expect(due('local-session-live', 20, WAKE_DEFER_SNOOZE_CAP_MS - 60_000)).toBe(0);
+      expect(due('local-session-live', 20, WAKE_DEFER_SNOOZE_CAP_MS + 60_000)).toBe(1);
+    });
+
+    it('only local-session reasons back off: host_unreachable keeps the flat base snooze', () => {
+      expect(due('host_unreachable', 10, WAKE_DEFER_SNOOZE_MS + 1_000)).toBe(1);
+    });
+
+    it('a change of reason restarts the streak at the base window', () => {
+      const { db, team, nick, ada } = seed();
+      enroll(db, team, ada);
+      msg(db, team, nick, ada, 'message', 'u1', 1_000, {
+        meta: { urgent: true, urgent_reason: 'wake me' },
+      });
+      streak(db, team, ada.name, 5, 30 * 60_000, 'local-session-live');
+      streak(db, team, ada.name, 1, WAKE_DEFER_SNOOZE_MS + 1_000, 'attended-session-open');
+      expect(claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toHaveLength(1);
+    });
+
+    it('a wake between deferrals ends the streak', () => {
+      const { db, team, nick, ada } = seed();
+      enroll(db, team, ada);
+      msg(db, team, nick, ada, 'message', 'u1', 1_000, {
+        meta: { urgent: true, urgent_reason: 'wake me' },
+      });
+      streak(db, team, ada.name, 5, 40 * 60_000, 'attended-session-open');
+      appendAudit(db, team.id, {
+        actor: null,
+        action: 'residency.woke',
+        target: ada.name,
+        result: 'allow',
+        detail: { act: 'u0', lease_id: 'w' },
+      });
+      db.prepare(
+        'UPDATE audit SET ts = ? WHERE rowid = (SELECT rowid FROM audit ORDER BY rowid DESC LIMIT 1)',
+      ).run(Date.now() - 20 * 60_000);
+      streak(db, team, ada.name, 1, WAKE_DEFER_SNOOZE_MS + 1_000, 'attended-session-open');
+      expect(claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toHaveLength(1);
+    });
+
+    it('a long quiet gap ends the streak: yesterday’s deferrals do not stretch today’s snooze', () => {
+      const { db, team, nick, ada } = seed();
+      enroll(db, team, ada);
+      msg(db, team, nick, ada, 'message', 'u1', 1_000, {
+        meta: { urgent: true, urgent_reason: 'wake me' },
+      });
+      streak(db, team, ada.name, 8, 24 * 3_600_000, 'attended-session-open');
+      streak(db, team, ada.name, 1, WAKE_DEFER_SNOOZE_MS + 1_000, 'attended-session-open');
+      expect(claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toHaveLength(1);
+    });
+  });
+
   it('an actuator_restart handback does NOT snooze: the next poll re-derives the lease (lane 01M3QRYZM2)', () => {
     const { db, team, nick, ada } = seed();
     enroll(db, team, ada);
@@ -1104,7 +1201,8 @@ describe('session capture (ADR 131 inc 4): attestation + the wake_deferred snooz
     });
     // A long working session deferred the wake many times over (all past the snooze window now) —
     // more rows than the attempt cap and the hourly cap combined.
-    const old = Date.now() - WAKE_DEFER_SNOOZE_MS - 60_000;
+    // ADR 485: a streak this long is snoozed to the cap, so backdate past the CAP, not the base.
+    const old = Date.now() - WAKE_DEFER_SNOOZE_CAP_MS - 60_000;
     for (let i = 0; i < WAKE_ATTEMPT_CAP + WAKE_HOURLY_CAP + 1; i++) {
       deferredRow(db, team, ada.name, old - i * 1_000);
     }

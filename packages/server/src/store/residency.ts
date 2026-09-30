@@ -64,6 +64,20 @@ export const WAKE_POLICY_DEFAULTS: ResidencyPolicy = ResidencyPolicySchema.parse
  *  every poll tick. Deferrals consume NO attempt/cooldown/hourly budget (they are neither
  *  `residency.woke` nor `residency.wake_failed`), so the act stays fully due afterwards. */
 export const WAKE_DEFER_SNOOZE_MS = 5 * 60_000;
+/** ADR 485: the ceiling on a backed-off local-session snooze. A deferral for a session open in the
+ *  seat's workspace doubles the window per unchanged repeat (5 → 10 → 20 → 40 → 60 min), because a
+ *  flat 5 min re-derived the same lease 142× in 12 h for one idle session (2026-09-29). One hour
+ *  bounds how long an act can wait after that session finally closes. */
+export const WAKE_DEFER_SNOOZE_CAP_MS = 60 * 60_000;
+/** ADR 485: the deferral reasons that say "a human's session is open here". Only these back off —
+ *  `host_unreachable` (ADR 236) and cannot-actuate (ADR 221) need the fast retry a just-woken host
+ *  deserves, so they keep the flat base window. */
+const LOCAL_SESSION_DEFER_REASONS: readonly string[] = [
+  'local-session-live',
+  'attended-session-open',
+];
+/** How many recent deferrals the streak read looks at — enough for the window to reach the cap. */
+const DEFER_STREAK_SCAN = 16;
 /** Lane 01M3QRYZM2: the deferral an actuator sends for an order it was stopped before starting
  *  (`launchctl kickstart -k` mid-poll). It says nothing about the seat — a fresh actuator is up
  *  within seconds — so it is the one deferral reason that does NOT snooze lease derivation. */
@@ -714,19 +728,45 @@ function wakesSince(db: Database, teamId: string, seatName: string, sinceTs: num
   return row?.n ?? 0;
 }
 
-/** Was this seat's last wake deferred for a live local session within the snooze window? Derived
+/** When does this seat's deferral snooze lift? `null` when there is no deferral to honour. Derived
  *  from `residency.wake_deferred` audit rows (increment 4's guard) — deliberately NOT part of
- *  `wakesSince`/`attemptsForAct`: a deferral burns no rate or attempt budget, it only snoozes. */
-function deferredSince(db: Database, teamId: string, seatName: string, sinceTs: number): boolean {
-  const row = db
-    .prepare<[string, string, number, string], { one: number }>(
-      `SELECT 1 AS one FROM audit
+ *  `wakesSince`/`attemptsForAct`: a deferral burns no rate or attempt budget, it only snoozes.
+ *
+ *  ADR 485: a local-session deferral backs off. The streak is the run of newest deferrals with the
+ *  same local-session reason, broken by a different reason, by a woke/failed wake after it, or by a
+ *  gap longer than the cap plus the base (the session closed and a later one opened). The window is
+ *  base × 2^(streak − 1), capped. Every other reason keeps the flat base window. */
+function deferralSnoozeUntil(db: Database, teamId: string, seatName: string): number | null {
+  const rows = db
+    .prepare<[string, string, string, number], { ts: number; reason: string }>(
+      `SELECT ts, COALESCE(json_extract(detail, '$.reason'), '') AS reason FROM audit
         WHERE team_id = ? AND action = 'residency.wake_deferred'
-          AND target = ? AND ts > ? ${MINTED_HERE}
-          AND COALESCE(json_extract(detail, '$.reason'), '') <> ? LIMIT 1`,
+          AND target = ? ${MINTED_HERE}
+          AND COALESCE(json_extract(detail, '$.reason'), '') <> ?
+        ORDER BY ts DESC LIMIT ?`,
     )
-    .get(teamId, seatName, sinceTs, WAKE_DEFER_ACTUATOR_RESTART);
-  return row != null;
+    .all(teamId, seatName, WAKE_DEFER_ACTUATOR_RESTART, DEFER_STREAK_SCAN);
+  const newest = rows[0];
+  if (!newest) return null;
+  if (!LOCAL_SESSION_DEFER_REASONS.includes(newest.reason)) return newest.ts + WAKE_DEFER_SNOOZE_MS;
+  const lastWake =
+    db
+      .prepare<[string, string], { ts: number | null }>(
+        `SELECT MAX(ts) AS ts FROM audit
+          WHERE team_id = ? AND action IN ('residency.woke','residency.wake_failed')
+            AND target = ? ${MINTED_HERE}`,
+      )
+      .get(teamId, seatName)?.ts ?? 0;
+  let streak = 1;
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i]!;
+    if (row.reason !== newest.reason) break;
+    if (row.ts < lastWake) break;
+    if (rows[i - 1]!.ts - row.ts > WAKE_DEFER_SNOOZE_CAP_MS + WAKE_DEFER_SNOOZE_MS) break;
+    streak++;
+  }
+  const window = Math.min(WAKE_DEFER_SNOOZE_MS * 2 ** (streak - 1), WAKE_DEFER_SNOOZE_CAP_MS);
+  return newest.ts + window;
 }
 
 /** Actuation attempts recorded for one act (woke + failed) — drives the per-act attempt cap. */
@@ -1509,7 +1549,9 @@ export function claimWakeLeases(
       if (liveLease(db, member.id, now)) continue;
       // Local-session guard snooze (increment 4): the host reported a live local session in this
       // seat's workspace — don't re-derive a lease every tick while someone is plainly working there.
-      if (deferredSince(db, teamId, member.name, now - WAKE_DEFER_SNOOZE_MS)) continue;
+      // ADR 485: a repeated local-session deferral backs off instead of re-deriving every 5 min.
+      const snoozeUntil = deferralSnoozeUntil(db, teamId, member.name);
+      if (snoozeUntil !== null && now < snoozeUntil) continue;
       const policy = effectiveWakePolicy(seatWakeDefaults(teamPolicy, member), enrollment.policy);
       // ADR 463 §2: a freshly provisioned seat's first wake — once, ahead of everything else, and
       // outside the rate gates (it is the seat's first wake, so they cannot have been spent).
