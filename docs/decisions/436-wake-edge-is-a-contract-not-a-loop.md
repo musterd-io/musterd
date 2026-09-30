@@ -119,6 +119,16 @@ fix five contract holes.
   434 §2 holds and nothing re-leases beyond it. Pinned as a test (`residency.test.ts`, the arm-E
   shape: not re-leased, still an open loop for the sender).
 
+- **2026-09-30 — the rail exists, and the trigger date is set** (lane `01M330A14T`, Decision 4).
+  Clause 1 reached the daemon on 2026-09-21 at 21:04 (#1650, `cd818f7b`), so Decision 5 reads on
+  **2026-10-21**. `pnpm wake:rail` renders the per-harness table from the ledger and prints the
+  trigger as one line. The first snapshot, with the definitions it had to get right, is in the wiki
+  (`resume-bound-is-below-one-wake-life.md`, "The wake contract rail, first snapshot"). Read
+  early, the pricing clause already fires: Codex 0/8, OpenCode 0/7, Grok 0/2 settled wakes priced.
+  The floor clause holds; Grok is about 2× on n = 2. Two definitions the Decision text leaves open
+  are settled in the script, not here. The floor is the reply wake's whole-life prompt tokens,
+  normalised per harness, with board work orders excluded. "Before first act" starts at the lease.
+
 ## Observability & Evaluation
 
 - **Traces:** per wake, the existing `residency.woke` / `residency.wake_cost` / `session_captured`

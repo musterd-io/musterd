@@ -202,3 +202,27 @@ Fix landed 2026-09-24 by [#1687](https://github.com/SandRiseStudio/musterd/pull/
 Corrected 2026-09-24 (lane 01M3309Y1V, ADR 436 clause 3): "Grok wakes post no capture at all" held only until 2026-09-21 21:03. Every grokbot wake since then posts a `session_captured` row, and every one says `"harness":"claude-code"` (`sqlite3 ~/.musterd/musterd.db "select detail from audit where action='residency.session_captured' and target in ('grokbot','ghost')"`). There were two causes. The hook path's `pushAttestation` never passed a harness, so it defaulted to `claude-code` even when the local slot said `grok`. And the slot itself was inferred from the hook payload's shape, which is Claude's on a woken OpenCode child. The host now stamps `MUSTERD_WAKE_HARNESS` at spawn beside the lease, the capture prefers it, and the push sends the capture's own harness. Falsify the fix with a `session_captured` row for a Grok or OpenCode wake, on a host newer than this change, that still says `claude-code`.
 
 **Not run: cursor-agent** (2026-09-21; falsify: a `cursor` file under `packages/cli/src/host/backends/`). There is no wake backend for it (`packages/cli/src/host/backends/` has claude-code, codex, grok, opencode, native), so the "regardless of harness" claim excludes it until one exists, and wanderer — the one seat on Cursor — cannot be wake-measured. The native ADR 251 backend (nativeprobe) was not exercised either. <!-- claim: other -->
+
+## The wake contract rail, first snapshot: the pricing clause of ADR 436's trigger already holds on three harnesses of four (2026-09-30, lane 01M330A14T; falsify: `pnpm wake:rail` on 2026-10-21 showing Codex, OpenCode and Grok each with at least one priced settled wake) <!-- claim: other -->
+
+`pnpm wake:rail [--since YYYY-MM-DD] [--wakes] [--json]` is ADR 436 Decision 4: one row per harness, derived read-only from the wake ledger (`residency.woke` / `wake_leased` / `wake_cost` / `context_read` / `session_captured`), the seat's acts, and trace.db. It defaults to wakes since clause 1 reached the daemon (2026-09-21 21:04, #1650), which is the window the trigger reads. Source and definitions: `scripts/research/wake-contract-rail.ts`.
+
+| harness | wakes | priced | floor (median prompt tokens) | musterd reads before first act | tool calls before first act | first act in thread | no act |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| claude-code | 9 | 8/9 | 814k (n=3) | 1 (n=7) | 4 (n=3) | 5/7 | 2 |
+| codex | 8 | 0/8 (`harness_prints_no_price`) | 629k (n=8) | 1 (n=3) | 7 (n=1) | 3/3 | 5 |
+| opencode | 7 | 0/7 (`harness_price_unverified`) | 359k (n=7) | 1 (n=7) | 6 (n=3) | 5/7 | 0 |
+| grok | 2 | 0/2 (`harness_price_unverified`) | 1,663k (n=2) | 0 (n=1) | — | 1/1 | 1 |
+| claude-code, board work orders | 18 | 15/15 | 1,043k (n=5) | 1 (n=14) | 11 (n=4) | 1/5 | 4 |
+
+**Read now, the trigger fires on pricing and holds on the floor.** Codex, OpenCode and Grok have priced none of their settled wakes: Codex prints no price, and OpenCode and Grok print usage that musterd has not verified a price for. Unless a price reader lands for each before **2026-10-21**, Decision 5 requires a new ADR. On the floor, no harness is above 3× Claude Code. Grok is highest at about 2×, but on n = 2 against a Claude Code base of n = 3, so it is a reading, not a verdict.
+
+**What the rail had to get right, each found on live rows.**
+- **Board work orders are shown apart.** All 18 are Claude Code coding sessions. Mixed in with reply wakes, they put Claude Code's floor at 928k, and the ratio would then have compared a coding session with a one-line reply.
+- **The wake starts at its lease, not its `woke` row.** The host writes `woke` after verifying occupancy, and by then the seat has often read its packet. ghost's 2026-09-29 read is stamped 16:43:08, and its `woke` row 16:43:09.
+- **Prompt tokens are normalised per harness.** Claude Code and OpenCode report the cached prefix beside input. Codex and Grok report it inside input. Claude Code posts a price but no usage, so its tokens come from its transcript `usage` rows, pinned to the session whose capture names the lease.
+- **Cross-checks.** The rail reads grokbot's #1650 falsifier wake as exactly 443,286 tokens, the figure recorded by hand above. It shows ghost's 14:44 out-of-thread reply as the arm-E shape.
+- **Tool calls are thin.** The trace tap reaches most seats only from 2026-09-28, so most rows before that have no count.
+
+**Revisit 2026-10-21**: run `pnpm wake:rail`, record the snapshot here, and write the ADR 436 Decision 5 follow-up if either clause fires.
+Follows-up: 01M3TB1GPMMH2VKFJ2V97CSP9P
