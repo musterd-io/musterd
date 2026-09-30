@@ -42,7 +42,12 @@ export const TRACE_COVERAGE_FIRST_DELAY_MS = 2 * 60 * 1000;
  * ids, lane 01M3N8GF8D). A row with no `tool_use_id` (older taps, harnesses that send none) is its
  * own call, so the count never drops below what such rows would have read before.
  */
-const MAIN_POST = `kind IN ('PostToolUse', 'PostToolUseFailure') AND agent_id IS NULL`;
+// Grok's R1 row per call is its PreToolUse probe (ADR 445, 2026-09-28: the probe has no matcher,
+// so it records every call; the gate posts only its HookOutcome). Grok's PostToolUse is never
+// tapped, so without this every Grok session read R1 = 0 (lane 01M3R8G033).
+export const CALL_ROW = `(kind IN ('PostToolUse', 'PostToolUseFailure')
+                   OR (harness = 'grok' AND kind = 'PreToolUse'))`;
+const MAIN_POST = `${CALL_ROW} AND agent_id IS NULL`;
 const PRIMARY_SPELLING = `COALESCE(json_extract(detail, '$.hook_event'), '')
                           NOT IN ('afterShellExecution', 'afterMCPExecution')`;
 export const POST_TOOL_USE_ONCE = `

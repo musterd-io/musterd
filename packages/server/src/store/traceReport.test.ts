@@ -124,6 +124,30 @@ describe('deriveTraceReport (ADR 445 increment 4)', () => {
   // Counting it as an R2 session put its hook calls over an empty denominator — codex read 1.47
   // on the dogfood box (1,890 / 1,289) with 11 of 11 sessions "with R2". A transcript rail that
   // cannot count calls is no denominator: the session is R1-only for the ratio.
+  it('coverage: a Grok session counts its PreToolUse rows as R1 — the probe is its one row per call', () => {
+    const { db, traceDb, team } = fixture();
+    const g = (over: Partial<TraceEvent>) =>
+      ev({ harness: 'grok', session_digest: 'gggggggggggg', ...over });
+    ingestTraceEvents(traceDb, team.id, 'ryder', [
+      g({ kind: 'PreToolUse', tool_name: 'read_file', tool_use_id: 'c1' }),
+      g({ kind: 'PreToolUse', tool_name: 'run_terminal_command', tool_use_id: 'c2' }),
+      g({ kind: 'PreToolUse', tool_name: 'run_terminal_command', tool_use_id: 'c3' }),
+      g({ kind: 'usage', detail: { parser: 'grok@1', tool_uses: 3 } }),
+      // a claude-code PreToolUse (the gate's observed event there) is NOT a call row
+      ev({ kind: 'PreToolUse', tool_name: 'Bash', session_digest: 'hhhhhhhhhhhh' }),
+    ]);
+    const r = deriveTraceReport(db, traceDb, team.id, ['ryder'], { days: 7, now: NOW });
+    const grok = r.coverage.find((c) => c.harness === 'grok')!;
+    expect(grok).toMatchObject({
+      sessions: 1,
+      sessions_with_r2: 1,
+      post_tool_use_r2: 3,
+      r2_tool_uses: 3,
+    });
+    expect(grok.coverage).toBe(1);
+    expect(r.coverage.find((c) => c.harness === 'claude-code')?.post_tool_use).toBe(0);
+  });
+
   it('coverage: a session whose usage rows carry no tool_uses is not an R2 session', () => {
     const { db, traceDb, team } = fixture();
     ingestTraceEvents(traceDb, team.id, 'ryder', [
