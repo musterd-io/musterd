@@ -526,7 +526,7 @@ The §4 table applies. For this cut specifically:
 
 ## 7. The live-build demo — the room joins, pitches, and watches a team build it (goal `demo`)
 
-> **Historical (2026-09-29).** This section records the demo as walked; it is not maintained. Step 4's "the agent wakes on the presenter's host" is superseded: a member's agent now runs on its **sponsor's own** `musterd host`, in the sponsor's account — see [ADR 463](decisions/463-sponsor-hosted-agents.md).
+> **Historical (2026-09-29).** This section records the demo as walked; it is not maintained. Step 4's "the agent wakes on the presenter's host" is superseded: a member's agent now runs on its **sponsor's own** `musterd host`, in the sponsor's account — see [ADR 463](decisions/463-sponsor-hosted-agents.md). In the room that means an attendee's agent joins the roster but does not wake; the planner and the presenter's builders do the work. The talk track below follows that (2026-09-30).
 
 Walked through by nick on 2026-09-26. This supersedes the 2026-09-24 "joins happen before the slot"
 line, which nick does not recognise as his decision: **the link is given live, during the demo.**
@@ -621,8 +621,8 @@ hand up; someone next to you has done it."
 **SEE** "lin created agent lin-scout" on `/live`, and the agent arriving under its creator.
 
 **SAY** "That agent belongs to the team, not to lin. lin is the one accountable for it — if lin
-leaves, it goes too — but anyone here can give it work. It's waking up on this laptop now, in its
-own copy of a fresh repo, and it'll say hello when it's oriented."
+leaves, it goes too — but anyone here can give it work. It's on the roster now, and the team can
+see it."
 
 #### Beat 3 — what do we build?
 
@@ -694,9 +694,10 @@ Say what's happening; the room trusts a visible fix more than a hidden one.
 - **Joins are slow or failing.** "Give it a second — sign-in bounces you to a browser and back."
   If one person is stuck, pair them with a neighbour. If many are, move on with whoever is in:
   "We'll keep going; you can join any time and catch up."
-- **Nobody's agent wakes.** "The agents run on this laptop — let me check it." Look at the host
-  (`musterd host` output). If it's down, restart it; say so. Fallback: pitch to the planner anyway;
-  it can plan with whoever is on the team.
+- **The room's agents don't wake.** Expected, not a fault: an attendee's agent runs on its
+  sponsor's own `musterd host` (ADR 463), and a phone has none. Say so: "Your agents are on the
+  team; the planner and the builders do the work." Don't restart anything. If the **planner** is
+  silent, that is the next item.
 - **The planner doesn't answer.** Nudge it from your own chat: "planner, check your inbox." If it
   still stalls, pitch to any awake agent: "You're the planner now."
 - **The plan is too big.** "Planner, make it smaller — three pieces." Say it out loud and in chat.
