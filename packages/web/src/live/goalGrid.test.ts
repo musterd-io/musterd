@@ -110,7 +110,7 @@ describe('buildGoalGrid — zones', () => {
     expect(card.counts.total).toBe(20);
   });
 
-  it('marks the most recently resolved done lane latest (✨)', () => {
+  it('marks the most recently resolved done lane latest (ringed)', () => {
     const lanes = [
       lane({ id: 'old', goal_id: 'g1', state: 'done', resolved_at: 100 }),
       lane({ id: 'new', goal_id: 'g1', state: 'done', resolved_at: 900 }),

@@ -20,26 +20,6 @@
   position: relative;
   overflow: hidden;
 }
-.gg-stage::before {
-  content: '✦';
-  position: absolute;
-  top: 10px;
-  right: 18px;
-  color: #e6c78a;
-  font-size: 12px;
-  animation: gg-twinkle 3.2s ease-in-out infinite;
-}
-@keyframes gg-twinkle {
-  0%,
-  100% {
-    opacity: 0.25;
-    transform: scale(0.9);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.15) rotate(20deg);
-  }
-}
 
 .gg-hdr {
   display: flex;
@@ -351,22 +331,12 @@
 }
 
 .gg-landed {
+  /* The most recently landed lane: a still ring around its dot, not a sparkle emoji (designer
+   * skill tells 3 and 5). */
   position: absolute;
-  top: -10px;
-  left: -3px;
-  font-size: 11px;
-  animation: gg-sparkle 2.6s ease-in-out infinite;
-}
-@keyframes gg-sparkle {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: scale(1);
-  }
-  45% {
-    opacity: 1;
-    transform: scale(1.3) rotate(12deg);
-  }
+  inset: -4px;
+  border: 1.5px solid var(--gg-ink-accent);
+  border-radius: 50%;
 }
 
 /* ADR 295: the daemon's per-goal flow — how the goal is MOVING, between the runway (its shape) and
@@ -534,15 +504,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gg-stage::before,
   .gg-pulse__dot,
   .gg-runway__track::after,
   .gg-dot--review,
   .gg-dot--blocked,
   .gg-rider,
-  .gg-landed {
-    animation: none;
-  }
   .gg-card,
   .gg-peek,
   .gg-slip {
