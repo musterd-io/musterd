@@ -71,6 +71,19 @@ The phrase list is a proxy and under-counts (a concession can be worded any way)
 
 Any published cut over these must carry its denominator and detection channel ([ADR 294](../decisions/294-false-claims-ledger.md) §4) — a per-seat "sycophancy score" quoted bare is the leaderboard that ADR was designed against.
 
+## The channel experiment (2026-10-01 → 2026-10-08)
+
+ADR 476 §Observability asks whether a critique sent as a `challenge` act gets a reply that names its check more often than the same critique typed into the harness chat. For eight days, nick's critiques of a seat's work go into one arm or the other, **by calendar day, not by choice** (choosing per critique would let the hard ones drift into one arm):
+
+- **Even day (Oct 2, 4, 6, 8): `challenge` arm.** Send it from nick's own seat, not through a seat's session: `cd ~/musterd/revive/agents/nick && musterd send --act challenge --to <seat> '<critique>'`.
+- **Odd day (Oct 1, 3, 5, 7): chat arm.** Type it into the seat's Claude Code or Codex session as usual, and start the message with `crit:`, which is how the scorer finds it.
+
+Only critiques count: a claim of the seat's you doubt, or work you think is wrong. Questions and instructions don't count. A critique sent in the wrong arm for its day is reported as off-protocol and left out.
+
+`pnpm critique:experiment --since 2026-10-01 --until 2026-10-09 [--json]` scores both arms with the readout's `namesCheck` rule. In the challenge arm it scores the addressee's first reply to the act; in the chat arm, the last assistant text of the turn the `crit:` prompt opened. An unanswered critique is counted as unanswered, not unverified. Source: `scripts/research/critique-channel-experiment.ts`.
+
+**Result: pending — read on 2026-10-09 (lane 01M3QTEJ3W).** Fewer than 5 answered critiques in either arm is inconclusive, not a null. The challenge arm also feeds the five-day eval's `challenge` channel (from 2026-10-02), so that eval has to count these as experiment traffic, not organic challenges.
+
 ## What the literature says (read 2026-09-29)
 
 - **Flip rates are large.** Across 16 models and seven pressure types, 40–75% of initially correct answers flip under at least one form of social pressure; a bare "are you sure?" flips about 46% ([SYCON Bench](https://www.emergentmind.com/topics/sycon-bench); [multi-turn sycophancy](https://aclanthology.org/2025.findings-emnlp.121.pdf)).
