@@ -79,7 +79,7 @@
   border: 1px solid var(--mustard-100);
   /* The ground the still sits on and the player paints over. Without it, the moment between
      construction and first frame is the page's background showing through a bordered box. */
-  background: radial-gradient(90% 90% at 30% 20%, var(--zinc-800) 0%, var(--zinc-950) 100%);
+  background: var(--zinc-900);
 }
 
 /* The SDK builds its iframe into this node and sizes it from the node's own box, so the mount has

@@ -125,7 +125,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.6rem;
-  background: radial-gradient(90% 90% at 30% 20%, var(--zinc-800) 0%, var(--zinc-950) 100%);
+  background: var(--zinc-900);
 }
 
 .watch-player__play {

@@ -224,6 +224,23 @@
   outline-offset: 2px;
 }
 
+/* The clock is the same defect class as the round buttons below: a flex item with the default
+   shrink, so at 390px the row squeezed it to 49px against ~75px of content and it wrapped into a
+   circle that clipped the time (captured 2026-09-29, lane 01M3R7FJ9). It keeps its size; on a
+   phone the row tightens its gaps instead so everything still fits in 390px. */
+.lc__topbar .lc-clock {
+  flex: none;
+}
+@media (max-width: 440px) {
+  .lc__topbar {
+    gap: var(--lc-3);
+    padding-inline: var(--lc-5);
+  }
+  .lc__topbar .lc-clock__zone {
+    display: none;
+  }
+}
+
 /* Topbar round buttons — the sound toggle and the office panel controls (collapse / companion)
    share one chrome; the sound icon's speaker body is the lone filled path.
 
