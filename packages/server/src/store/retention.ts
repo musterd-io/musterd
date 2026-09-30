@@ -90,13 +90,14 @@ const churnList = () => [...AUDIT_CHURN_ACTIONS].map((a) => `'${a}'`).join(', ')
 const latestList = () => [...LATEST_PER_SEAT].map((a) => `'${a}'`).join(', ');
 
 /** The prunable set: churn, older than `?` (the cutoff), minus the rows kept whatever their age. */
-function prunableSql(): string {
+export function prunableSql(): string {
   return `
     SELECT a.* FROM audit a
      WHERE a.action IN (${churnList()})
        AND a.ts < ?
        AND NOT (a.origin_seq > 0 AND a.origin_seq =
-                (SELECT MAX(b.origin_seq) FROM audit b WHERE b.origin_node = a.origin_node))
+                (SELECT MAX(b.origin_seq) FROM audit b
+                  WHERE b.origin_node = a.origin_node AND b.origin_seq > 0))
        AND NOT (a.action IN (${latestList()}) AND a.id =
                 (SELECT c.id FROM audit c
                   WHERE c.team_id = a.team_id AND c.action = a.action AND c.target IS a.target

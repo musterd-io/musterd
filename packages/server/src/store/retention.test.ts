@@ -14,6 +14,7 @@ import {
   compactStore,
   countPrunableAuditChurn,
   pruneAuditChurn,
+  prunableSql,
   storeSizes,
 } from './retention.js';
 import { createTeam } from './teams.js';
@@ -174,6 +175,21 @@ describe('pruneAuditChurn (ADR 478)', () => {
 });
 
 describe('countPrunableAuditChurn', () => {
+  it('reads the per-node high-water mark through idx_audit_origin, never a table scan', () => {
+    // Incident 2026-09-29: the subquery lacked `origin_seq > 0`, so the partial index could not
+    // serve it and every candidate row rescanned the whole audit table -- the daemon's one thread
+    // sat in that query for 20+ minutes on a 330k-row store. The plan is the regression guard.
+    const { db } = seeded();
+    const plan = db
+      .prepare(`EXPLAIN QUERY PLAN SELECT COUNT(*) FROM (${prunableSql()})`)
+      .all(NOW)
+      .map((r) => String((r as { detail: string }).detail));
+    const highWater = plan.find((d) => d.includes('idx_audit_origin'));
+    expect(highWater, plan.join('\n')).toBeDefined();
+    // Only the outer `audit a` walks the table; `SCAN (subquery-N)` is COUNT's wrapper, not audit.
+    expect(plan.filter((d) => /^SCAN [a-z]/.test(d))).toEqual(['SCAN a']);
+  });
+
   it('counts exactly what a pass would take, and takes nothing', () => {
     const { db, put } = seeded();
     put('presence.attached', 40, 'dolly');
