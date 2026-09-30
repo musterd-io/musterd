@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 37;
+export const GUIDANCE_CONTENT_VERSION = 38;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -204,12 +204,14 @@ export function renderSkillBody(opts: { team: string }): string {
     '   --pr <n> --sha <sha>` is the same path in one step — that is the routine close after a merge.',
     '   A bare `done`/`resolve` with no attestation records an **unconfirmed** self-close instead.',
     '2. Acceptor: accept (→ done) or reject (→ active with a concrete note). Not style nits.',
-    '3. Then **follow the submit response** — it names the contract (ADR 235). Acceptor asked and a',
-    '   backstop armed: you are done — do **not** self-close on silence (as of 2026-08 acceptors had',
-    '   come back 20 of 20 times, and the daemon sweeps unanswered lanes itself; if you ever see that',
-    '   stop being true, say so rather than resuming self-closing). Only when nobody was asked —',
-    '   no eligible acceptor, or acceptance-exempt (ADR 234) — is `lane_resolve` / `musterd lane',
-    '   resolve` yourself sanctioned (recorded **unconfirmed**, never a wedge).',
+    '3. Then **follow the submit response** — it names the contract (ADR 235), one of three:',
+    '   - acceptor asked, backstop **armed**: you are done — do **not** self-close on silence',
+    '     (as of 2026-08 acceptors had come back 20 of 20 times, and the daemon sweeps unanswered',
+    '     lanes itself; if you ever see that stop being true, say so rather than resuming',
+    '     self-closing);',
+    '   - acceptor asked, **no** backstop: wait ≤5m, then self-close on silence;',
+    '   - **nobody** asked — no eligible acceptor, or acceptance-exempt (ADR 234): self-close now.',
+    '   A self-close is `lane_resolve` / `musterd lane resolve`, recorded **unconfirmed**, never a wedge.',
     '',
     '## Answering a critique — verify, then concede or hold (ADR 476)',
     '',

@@ -193,6 +193,14 @@ branches disagree about who was picked, never about whether the team armed a swe
 > from elsewhere keep teaching the old thing until someone reads the source. The falsifier for
 > "corrected everywhere" is a grep of the rendered artifacts, not of the code the ADR shipped.
 
+_Note, 2026-09-30 (dolly, lane 01M3SF2356)._ **The guidance taught two of this ADR's three rows.**
+The skill's lane-close step (guidance v15) and AGENTS.md step 6 said self-close was sanctioned
+"only when nobody was asked". That dropped the middle row of the table above: acceptor asked, **no**
+backstop, wait ≤5m, then self-close. The submit hint in `lanes.ts` always gave that row correctly,
+so a seat on an unarmed team read the hint and the guidance as contradicting each other (dolly hit
+it on lane 01M3R8N33X). Guidance v38 and AGENTS.md now state all three rows. The Decision is
+unchanged; only its teaching was incomplete.
+
 ## Observability & Evaluation
 
 **Traces.** No new audit rows, and deliberately none: the decision changes advice, and advice is not
