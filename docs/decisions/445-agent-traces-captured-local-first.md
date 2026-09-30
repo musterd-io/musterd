@@ -672,6 +672,18 @@ ADR 184's publication gate; a spans backend.
   from the host (`tailGrokSession`). It uses the hook's `tailTranscript`, so the digest, cursor and
   lock are shared, and a SessionEnd that did fire cannot double-post. Falsifier: a steered grokbot
   wake on a build carrying this whose `report trace` grok row is null, or outside 0.9–1.1.
+- **2026-09-30 — the Grok falsifier read: passes** (izzo, read from nick's seat, because a
+  seat's own `report trace` shows only that seat's rows). The first grokbot wake after the daemon
+  moved onto `e005dee9` (restart 21:35:15, wake settled 21:36:58) reads **6 / 6** in its own
+  window. `musterd report trace --days 1` reads grok **100% (18 / 18)**. The new tail path fired:
+  all three of the session's `usage` rows have `received_at` 21:36:58. That includes the rows for
+  the 09-28 and 09-29 16:37 wakes, which the old build never posted, so the backlog came in from
+  the settled wake's tail, not from a SessionEnd. The default 7-day row reads **46% (18 / 39)**,
+  and that is not a tap gap. Grok resumes one session across wakes, so its only digest,
+  `664ddb76…`, reaches back to the 09-28 wake. That wake made 21 calls before the Grok tap was
+  installed, so R2 counts them and R1 cannot. The row returns to ≈ 1.0 once 09-28 leaves the
+  window (2026-10-05). Falsifier for this read: a Grok wake after 2026-09-30 whose own window
+  reads outside 0.9–1.1.
 - Cost: one hook round-trip per tool call already exists (ADR 150); R1 adds a payload to it and a
   batched POST, so the per-call overhead is what the gate costs now. R2 is a file tail.
 
