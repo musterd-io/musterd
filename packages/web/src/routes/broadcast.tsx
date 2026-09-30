@@ -71,12 +71,14 @@ function captureFpsFromUrl(): number {
 }
 
 /**
- * `&sprites=1` — rasterize the static furniture once per state and blit it, instead of redrawing
- * the whole room every frame (spec 2026-09-17). OFF unless asked: the default flips only once the
- * pixel gate is byte-equal and one box measures ≤ 25 ms/draw with it on.
+ * The sprite cache — rasterize the static furniture once per state and blit it, instead of redrawing
+ * the whole room every frame (spec 2026-09-17). ON for the stream (ADR 488): the spec's flip bar was
+ * byte-equal pixels and ≤ 25 ms/draw, and nick accepted the measured residue instead (~0.16% of a
+ * day frame beyond rounding, one pen cup at Δ91) for a real 15 fps. `&sprites=0` is the escape
+ * hatch and the A/B arm. `/live` never reads this: viewers keep the direct render.
  */
 export function spritesFromUrl(search: string): boolean {
-  return new URLSearchParams(search).get('sprites') === '1';
+  return new URLSearchParams(search).get('sprites') !== '0';
 }
 
 /**

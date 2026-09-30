@@ -166,7 +166,7 @@ export function OfficeScene({
   /** Encode fps when broadcasting — office coalesces draws to this rate. From `?fps=` on `/broadcast`. */
   captureFps?: number;
   /** Cache the static furniture as sprites instead of redrawing the room every frame (spec
-   * 2026-09-17). From `&sprites=1` on `/broadcast`; dark everywhere else until the gate flips it. */
+   * 2026-09-17). On for `/broadcast` (ADR 488, `&sprites=0` opts out); `/live` never passes it. */
   sprites?: boolean;
   /** Handed the scene handle once it mounts (and `null` on teardown) — the broadcast route publishes it
    * as `window.__office` so a capturer can probe the scene. */
