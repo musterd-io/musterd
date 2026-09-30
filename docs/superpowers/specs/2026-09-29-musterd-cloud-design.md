@@ -546,3 +546,112 @@ exporter. Litestream is **not** needed — the file-per-team shape that wanted i
   prove* them across teams. Settled when billing is designed.
 - Two decisions taken on review, confirmed by nick 2026-09-29, still reversible: fail-closed for
   block classes (§4.7) and talk-only members not counting toward the free tier (§4.2).
+
+## 12. Increment 1B — real Postgres behind the Driver (design, 2026-09-30)
+
+_Agreed in conversation on 2026-09-30 (fifty, nick), after increment 1A landed the async `Driver`
+([ADR 479](../../decisions/479-two-store-backends.md), PR #1871). 1B is the Postgres half of that
+decision; cloud mode itself (§5: loopback audit, test issuer, 503 wiring) is 1C, deploy and the load
+test are 1D._
+
+### 12.1 Tenant context reaches RLS through the driver, and the default is empty
+
+Every Postgres statement runs inside a transaction that carries `SET LOCAL app.team_id = <team>`;
+the row-level policy on every team-owned table is `team_id = current_setting('app.team_id', true)`.
+Three shapes were weighed:
+
+- **Driver-scoped (chosen).** `Driver` gains `forTeam(teamId): Driver` and `asOperator(): Driver`.
+  A team-scoped handle stamps the tenant on every transaction it opens (a bare `get/all/run` outside
+  a `tx` becomes `BEGIN; SET LOCAL; <stmt>; COMMIT` on one pooled client; `tx` sets it once for the
+  body; nested = SAVEPOINT). `SET LOCAL` dies with the transaction, so a returned pooled connection
+  carries nothing to the next request — the failure §8.2 tests for cannot happen by construction.
+  The seam is the one place that already knows the team: the auth helpers (`authTouch`,
+  `authClaimedAgent`, `authAgentKeyOnly`, the WS claim) hand the rest of the request
+  `ctx.db.forTeam(team.id)`. Store code is untouched. On SQLite both methods return the handle itself.
+- Request-scoped transaction (one `tx` per HTTP/WS request): holds a connection and locks for the
+  whole request; a wake poll or a webhook would pin a client; on SQLite the 1A queue would serialise
+  every request. Rejected.
+- No RLS on the app path (`WHERE team_id` only): one missed predicate is a breach; §8.2 says the app
+  role runs with RLS on. Rejected.
+
+Two hardenings make the chosen shape the secure one:
+
+1. **Fail closed.** The connection-level handle has no tenant. With no setting,
+   `current_setting('app.team_id', true)` is NULL and the policy matches no row, so a code path that
+   reaches Postgres without `forTeam` reads and writes nothing — loudly, in its own tests — rather
+   than everything. Genuinely cross-team work (the presence reaper, retention, the census, `/health`,
+   team creation, the sync loops) takes `asOperator()`, a handle on the `musterd_operator` role
+   (`BYPASSRLS`). `asOperator(` is therefore the greppable audit list of every cross-tenant read.
+2. **The app role owns nothing.** The server connects as `musterd_app`: DML only, no `BYPASSRLS`,
+   not the table owner, and every team-owned table carries `FORCE ROW LEVEL SECURITY` regardless.
+   Migrations run as `musterd_owner` in a separate step (§6). An injection-shaped bug in the app
+   cannot cross a tenant.
+
+Cost: a bare statement outside a `tx` is three round-trips instead of one — ~1 ms inside the
+datacenter, noise beside the internet hop §3.1 already accepts; the hot paths (gate, inbox, wake
+poll) already batch inside one `tx`. The laptop pays nothing.
+
+### 12.2 Schema: a frozen Postgres baseline, then one portable ladder
+
+Today `db/pgSchema.ts` derives Postgres DDL from the current SQLite schema on every run — right for
+a test double, wrong for a production schema (no history, so nothing to migrate forward). Decision:
+
+- `db/pg/0080-baseline.sql` snapshots the translated DDL once, hand-checked, with the roles
+  (`musterd_owner`, `musterd_app`, `musterd_operator`), `ENABLE` + `FORCE ROW LEVEL SECURITY` and the
+  `tenant` policy on every team-owned table. Team-owned tables that carry no `team_id` today
+  (`presence`, `wake_leases`, `seat_memory`, …) get either a policy through their owning join or a
+  `team_id` column in the same baseline; the plan lists each. A short **allowlist of global tables**
+  (`schema_meta`, `nodes`, `local_node`, the sync cursors, …) is declared in code.
+- From v81 on there is **one** `Migration` shape, `up: (db: Driver) => Promise<void>` in SQL both
+  engines accept, with an explicit `{ sqlite?, postgres? }` branch only when unavoidable. SQLite
+  keeps its history 1–80; Postgres starts at the baseline. `runMigrations` becomes async and shared;
+  `pgSchema.ts` is deleted and PGlite loads the real ladder.
+- A translation-aware diff (the same rules that produced the baseline) asserts SQLite@80 and the
+  Postgres baseline agree on tables, columns, indexes and constraints, so the two schemas cannot
+  drift silently; a fixture v81 applies on both.
+- §6's guard lands here: on either engine, boot refuses when `schema_meta.schema_version` is newer
+  than the ladder the binary carries, with a stable sentence ("schema newer than this build").
+
+Weighed and rejected: two independent ladders (every change written twice, the diff test the only
+tie); generating Postgres from SQLite forever (no expand/contract, no guard, SQLite's 80 rebuilds
+become Postgres's history by accident).
+
+### 12.3 Tests
+
+- **Tenancy leak (§8.2), on PGlite, in CI.** (i) Inventory: every table in `pg_tables` is either in
+  the global allowlist or has a tenant policy with RLS enabled and forced — a table in neither fails,
+  so a new table cannot ship unclassified. (ii) Cross-tenant through the app's own paths: seed teams A
+  and B via the store; as `musterd_app` scoped to A, every team-owned table's store reads return only
+  A's rows and writes naming B's ids change 0 rows, B intact. (iii) Alternating tenants on reused
+  connections: a pool of size 1, A/B/A/B across 200 statements and transactions including a body that
+  throws mid-way. (iv) Fail-closed: the bare handle reads 0 rows and writes 0 rows on every team-owned
+  table; `asOperator()` sees both teams.
+- **Ladder:** both ladders load from empty; the baseline diff; the v81 fixture; the guard on both
+  engines.
+- **The 94 store test files 1A left on the SQLite hybrid handle** move to `withDrivers`, their raw
+  `prepare`/`pragma` reads replaced by driver calls, in clusters with the suite green after each.
+  End state: `MUSTERD_TEST_DRIVER=both` covers every store test and the hybrid `openTestDb` is gone.
+- **Real Postgres, by hand, before a Cloud release** (ADR 479 decision 3): `scripts/cloud/neon-pass.mjs`
+  reads `DATABASE_URL` from `~/.musterd/cloud/neon.env` (chmod 600, outside the repo; nick creates the
+  Neon project with `neonctl` and writes the URL there — it never appears in a transcript), runs the
+  ladder as owner, then the tenancy test and the store suite through the `pg` driver, and writes a
+  dated `docs/perf/neon-pass.md`. Not CI.
+
+### 12.4 Errors and dependencies
+
+An unreachable database or an exhausted pool (after a bounded wait) surfaces as
+`DriverError('unavailable')` with the stable sentence "database unreachable", for 1C's 503 to match. A
+failed `SET LOCAL` fails its transaction; it is never retried on another client. Postgres errors carry
+the translated statement, as PGlite's already do.
+
+New runtime dependency: `pg` (+ `@types/pg` dev), with its own ADR (hard rule 6) weighing `postgres`
+(porsager: nicer API, its own protocol quirks behind poolers) and `@neondatabase/serverless`
+(HTTP/WebSocket, ties the app to one vendor). Neon's pooled endpoint speaks plain Postgres, so `pg`
+keeps the app vendor-neutral.
+
+### 12.5 Done when
+
+The store suite and the tenancy leak test are green on both drivers in CI with no SQLite-only test
+file left; the §6 guard refuses a future schema on both engines; the Neon pass has one dated result
+page; `pgSchema.ts` and the hybrid test handle are deleted.
+
