@@ -149,11 +149,12 @@ export async function attach(
       created_at: now,
     };
     await t.run(
-      `INSERT INTO presence (id, member_id, surface, status, conn_id, last_seen_at, held_until, provenance, workspace, driver, model, model_source, build, epoch, guidance_epoch, wake_lease, node, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      // team_id (v81) comes off the member row in the same statement: the seam's RLS admits the
+      // row only when it matches the transaction's tenant, and a stray member id inserts nothing.
+      `INSERT INTO presence (id, member_id, team_id, surface, status, conn_id, last_seen_at, held_until, provenance, workspace, driver, model, model_source, build, epoch, guidance_epoch, wake_lease, node, created_at)
+       SELECT ?, id, team_id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM members WHERE id = ?`,
       [
         row.id,
-        row.member_id,
         row.surface,
         row.status,
         row.conn_id,
@@ -170,6 +171,7 @@ export async function attach(
         row.wake_lease,
         row.node,
         row.created_at,
+        row.member_id,
       ],
     );
     const seat = await seatOf(t, memberId);

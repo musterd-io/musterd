@@ -17,7 +17,7 @@ import {
   statfsSync,
   statSync,
 } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import type { Driver } from '../db/driver.js';
@@ -73,7 +73,9 @@ export async function auditCapturedThrough(db: Driver): Promise<number | null> {
 
 /** `~/.musterd/archive` beside the store; null for an in-memory store (nothing to archive to). */
 export function defaultArchiveDir(dbPath: string): string | null {
-  return dbPath === ':memory:' ? null : join(dirname(dbPath), 'archive');
+  // Only a file-backed store has a directory to archive beside: `:memory:` and a Postgres store
+  // (`postgres`, index.ts) are not paths.
+  return isAbsolute(dbPath) ? join(dirname(dbPath), 'archive') : null;
 }
 
 export interface AuditPruneResult {
@@ -245,11 +247,15 @@ export async function storeSizes(
   };
   if (dbPath !== ':memory:' && existsSync(dbPath)) out.db_bytes = statSync(dbPath).size;
   try {
-    // dbstat is compiled into better-sqlite3's SQLite; the sum covers the table and its indexes.
-    const r = await db.get<{ b: number | null }>(
-      "SELECT SUM(pgsize) AS b FROM dbstat WHERE name = 'sync_log' OR name LIKE 'idx_sync_log_%'",
-    );
-    if (r && r.b !== null) out.sync_log_bytes = r.b;
+    // The table plus its indexes: dbstat is compiled into better-sqlite3's SQLite; Postgres has
+    // pg_total_relation_size. Engine introspection, not store SQL — the one dialect branch here.
+    const r =
+      db.dialect === 'postgres'
+        ? await db.get<{ b: number | null }>("SELECT pg_total_relation_size('sync_log') AS b")
+        : await db.get<{ b: number | null }>(
+            "SELECT SUM(pgsize) AS b FROM dbstat WHERE name = 'sync_log' OR name LIKE 'idx_sync_log_%'",
+          );
+    if (r && r.b !== null) out.sync_log_bytes = Number(r.b);
   } catch {
     // a build without dbstat: omit, do not guess
   }

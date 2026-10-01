@@ -204,8 +204,8 @@ export async function pruneTraceContent(
   const maxBatches = opts.maxBatches ?? TRACE_PRUNE_MAX_BATCHES;
   const PRUNE = `
     UPDATE trace_events SET content = NULL, content_pruned_at = ?
-     WHERE rowid IN (
-       SELECT rowid FROM trace_events
+     WHERE id IN (
+       SELECT id FROM trace_events
         WHERE content IS NOT NULL AND received_at < ?
         ORDER BY received_at LIMIT ?
      )
@@ -332,7 +332,7 @@ export function digestTraceId(key: Buffer, id: string | null): string | null {
   return createHmac('sha256', key).update(id).digest('hex').slice(0, TRACE_ID_DIGEST_LEN);
 }
 
-/** The pusher's cursor for a team: the highest `rowid` the hub has acked (0 = nothing yet). */
+/** The pusher's cursor for a team: the highest `row_seq` the hub has acked (0 = nothing yet). */
 export async function readSyncTraceCursor(traceDb: Driver, teamId: string): Promise<number> {
   const v = Number((await readMeta(traceDb, syncTraceCursorKey(teamId))) ?? '0');
   return Number.isSafeInteger(v) && v >= 0 ? v : 0;
@@ -347,11 +347,12 @@ export async function advanceSyncTraceCursor(
 }
 
 /**
- * The next batch of THIS daemon's own rows after the cursor, in `rowid` order, already shaped for
+ * The next batch of THIS daemon's own rows after the cursor, in `row_seq` order, already shaped for
  * the wire (ADR 453 §2, rule 2): structural columns SELECTed by name (content is never read), the
  * tool name normalized to the harness namespace, the detail normalized per kind, and the three
- * opaque ids digested under the machine key. `rowid` is sound as a cursor: nothing deletes from
- * `trace_events` (the content prune is an UPDATE), so it only grows. Rows with an `origin_node`
+ * opaque ids digested under the machine key. `row_seq` (trace v4: SQLite's rowid mirrored into a
+ * column, an identity on Postgres) is sound as a cursor: nothing deletes from `trace_events` (the
+ * content prune is an UPDATE), so it only grows. Rows with an `origin_node`
  * are never offered — they are a joiner's, held here on a hub, and the hub forwards nothing.
  */
 export async function unpushedTraceRows(
@@ -362,7 +363,7 @@ export async function unpushedTraceRows(
 ): Promise<{ rows: SyncTraceRow[]; last: number; normalized: number }> {
   const key = await syncTraceIdKey(traceDb);
   const raw = await traceDb.all<{
-    rowid: number;
+    row_seq: number;
     id: string;
     seat: string;
     session_digest: string;
@@ -379,11 +380,11 @@ export async function unpushedTraceRows(
     outcome: SyncTraceRow['outcome'];
     detail: string | null;
   }>(
-    `SELECT rowid, id, seat, session_digest, seq, ts, received_at, harness, kind, tool_name,
+    `SELECT row_seq, id, seat, session_digest, seq, ts, received_at, harness, kind, tool_name,
               tool_use_id, agent_id, parent_agent_id, duration_ms, outcome, detail
          FROM trace_events
-        WHERE team_id = ? AND rowid > ? AND origin_node IS NULL
-        ORDER BY rowid LIMIT ?`,
+        WHERE team_id = ? AND row_seq > ? AND origin_node IS NULL
+        ORDER BY row_seq LIMIT ?`,
     [teamId, after, limit],
   );
   let normalized = 0;
@@ -415,7 +416,7 @@ export async function unpushedTraceRows(
       detail: det.detail,
     };
   });
-  return { rows, last: raw.length > 0 ? raw[raw.length - 1]!.rowid : after, normalized };
+  return { rows, last: raw.length > 0 ? raw[raw.length - 1]!.row_seq : after, normalized };
 }
 
 /**

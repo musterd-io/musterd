@@ -13,7 +13,7 @@ import {
 import { ulid } from 'ulid';
 import { z } from 'zod';
 import { isLocalPeer } from '../config.js';
-import type { Ctx } from '../context.js';
+import { teamCtx, type Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { asMusterdError, MusterdError } from '../errors.js';
 import { routeEnvelope } from '../protocol/route.js';
@@ -503,6 +503,8 @@ export async function handleOAuthRoutes(
   const slug = decodeURIComponent(m[1]!);
   const rest = m[2] ?? '';
   const team = await requireTeamRedacted(ctx.db, slug);
+  // Spec §12.1: from here the request is this team's (the caller handed us the operator ctx).
+  ctx = teamCtx(ctx, team.id);
 
   const parseOrOAuth = <S extends z.ZodTypeAny>(schema: S, raw: unknown): z.infer<S> => {
     const parsed = schema.safeParse(raw);

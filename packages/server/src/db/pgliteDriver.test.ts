@@ -1,11 +1,13 @@
 import { afterAll, describe, expect, it } from 'vitest';
+import { migratePostgres } from './pg/migrate.js';
 import { pgliteDriver } from './pgliteDriver.js';
-import { loadPgSchema } from './pgSchema.js';
 import { openTestDriver, testDriverKinds, withDrivers } from './testing.js';
 
 describe('pgliteDriver', () => {
-  const dp = pgliteDriver();
-  afterAll(async () => (await dp).close());
+  const root = pgliteDriver();
+  // Ad-hoc tables: the owner path (no role, no RLS) — what a migration or a DDL fixture runs as.
+  const dp = root.then((d) => d.asOwner());
+  afterAll(async () => (await root).close());
 
   it('translates ? placeholders and reports changes', async () => {
     const d = await dp;
@@ -67,16 +69,48 @@ describe('pgliteDriver', () => {
   });
 });
 
-describe('pgSchema', () => {
-  it('the whole current ladder loads on PGlite (spike Q1, kept green)', async () => {
+describe('tenancy stamping (spec §12.1)', () => {
+  it('scoped handles are memoised per team (a WeakMap keyed on the Driver hits every request)', async () => {
     const d = await pgliteDriver();
-    await loadPgSchema(d);
-    const tables = await d.all<{ table_name: string }>(
-      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY 1",
+    expect(d.forTeam('A')).toBe(d.forTeam('A'));
+    expect(d.forTeam('A')).not.toBe(d.forTeam('B'));
+    expect(d.asOperator()).toBe(d.asOperator());
+    await d.close();
+  });
+
+  it('fail-closed: the bare handle reads nothing, forTeam reads its team, asOperator reads both', async () => {
+    const d = await pgliteDriver();
+    await migratePostgres(d.asOwner());
+    const op = d.asOperator();
+    await op.run(
+      "INSERT INTO teams (id, slug, display, created_at, updated_at) VALUES ('A','a','A',1,1)",
     );
-    expect(tables.map((t) => t.table_name)).toEqual(
-      expect.arrayContaining(['teams', 'members', 'messages', 'audit', 'lanes', 'insights_fts']),
+    await op.run(
+      "INSERT INTO teams (id, slug, display, created_at, updated_at) VALUES ('B','b','B',1,1)",
     );
+    expect((await d.all('SELECT id FROM teams')).length).toBe(0);
+    expect(
+      (await d.forTeam('A').all<{ id: string }>('SELECT id FROM teams')).map((r) => r.id),
+    ).toEqual(['A']);
+    expect((await op.all('SELECT id FROM teams')).length).toBe(2);
+    expect(
+      (await d.forTeam('A').run("UPDATE teams SET display = 'x' WHERE id = 'B'")).changes,
+    ).toBe(0);
+    // The stamp is per transaction: a tx body sees its team and nothing else, and the scope
+    // cannot be changed from inside it.
+    await d.forTeam('B').tx(async (t) => {
+      expect((await t.all<{ id: string }>('SELECT id FROM teams')).map((r) => r.id)).toEqual(['B']);
+      expect(() => t.forTeam('A')).toThrow(/scope is fixed/);
+      expect(() => t.asOperator()).toThrow(/scope is fixed/);
+    });
+    // A team handle cannot write another team's row into existence (WITH CHECK).
+    await expect(
+      d
+        .forTeam('A')
+        .run(
+          "INSERT INTO teams (id, slug, display, created_at, updated_at) VALUES ('C','c','C',1,1)",
+        ),
+    ).rejects.toThrow(/row-level security/);
     await d.close();
   });
 });

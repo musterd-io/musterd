@@ -1,8 +1,15 @@
 import { isWireAttestationSource } from '@musterd/protocol';
-import { ulid } from 'ulid';
+import { monotonicFactory } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
 import { localNodeForTeam } from './messages.js';
+
+/**
+ * Audit ids are MONOTONIC ULIDs: several rows appended in one millisecond still sort in arrival
+ * order by `id`, so "the row just written" is `ORDER BY id DESC LIMIT 1` on both engines — the
+ * SQLite `rowid` that used to carry that role has no Postgres counterpart (1B).
+ */
+const ulid = monotonicFactory();
 
 /**
  * The v0.3 governance audit log (ADR 071, P2 of ADR 069). Append-only: every governed decision writes one

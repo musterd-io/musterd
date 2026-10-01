@@ -2,8 +2,10 @@ import { chmodSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
 import type { Driver } from './driver.js';
+import { sqliteLadder } from './ladder.js';
 import { type Migration, runMigrations, schemaVersionOf } from './migrations.js';
 import { sqliteDriver, type SqliteDriver } from './sqliteDriver.js';
+import { TRACE_LADDER } from './traceLadder.js';
 
 /**
  * The trace store (ADR 445 §3): a **separate database file**, `trace.db` beside `musterd.db`, with
@@ -17,7 +19,7 @@ import { sqliteDriver, type SqliteDriver } from './sqliteDriver.js';
  * The ladder is checked by `pnpm migrations:check` alongside the main one (both files are parsed);
  * the version lives in this file's own `schema_meta`, never `musterd.db`'s.
  */
-export const TRACE_MIGRATIONS: Migration[] = [
+const TRACE_LEGACY: Migration[] = [
   {
     version: 1,
     up: (db) => {
@@ -85,6 +87,9 @@ export const TRACE_MIGRATIONS: Migration[] = [
     },
   },
 ];
+
+/** v1–v3 frozen; from trace v4 the portable TRACE_LADDER (traceLadder.ts) is appended (spec §12.2). */
+export const TRACE_MIGRATIONS: Migration[] = [...TRACE_LEGACY, ...sqliteLadder(TRACE_LADDER)];
 
 /**
  * ADR 453 §2: the joiner's per-machine key for digesting opaque harness ids on their way to the hub.

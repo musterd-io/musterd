@@ -118,7 +118,7 @@ import {
 import { ulid } from 'ulid';
 import { z } from 'zod';
 import { checkUpgrade, isLocalPeer, readLocalIdentity, resolveRosterRoots } from '../config.js';
-import type { Ctx } from '../context.js';
+import { operatorCtx, teamCtx, type Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { schemaVersionOf } from '../db/migrations.js';
 import { traceDbBytes, traceSchemaVersion } from '../db/traceDb.js';
@@ -1807,10 +1807,15 @@ async function summarize(
 
 /** Dispatch an HTTP request. Returns true if it handled the request (always, except non-matching upgrade). */
 export async function handleHttp(
-  ctx: Ctx,
+  rootCtx: Ctx,
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
+  // Spec §12.1 — the tenant seam. Everything above the `/teams/:slug` prefix is about the daemon or
+  // about every team (/health, team creation, the store verbs, discovery, slug → team resolution) and
+  // runs as the operator; everything under the prefix runs team-scoped (below). On SQLite both are
+  // the same handle.
+  const ctx = operatorCtx(rootCtx);
   try {
     // Apply the same Host/Origin boundary to HTTP that protects WebSocket upgrades. In particular,
     // bearer-free local identity requests must not be callable by a hostile browser origin on loopback.
@@ -2119,6 +2124,14 @@ export async function handleHttp(
     if (teamMatch) {
       const slug = decodeURIComponent(teamMatch[1]!);
       const rest = teamMatch[2] ?? '';
+      // The seam (spec §12.1): the slug resolves as the operator — the one cross-tenant read a request
+      // makes — and from here every route runs as the app role inside this team's rows. The `auth*`
+      // helpers below re-resolve the team through the scoped handle, which sees exactly that team.
+      // An unknown slug is NOT refused here: each route owns its refusal shape (some deliberately
+      // answer 409, never 404, so a caller cannot probe which teams exist), so it runs on the
+      // unscoped handle — fail-closed on Postgres, the same handle on SQLite — and refuses itself.
+      const known = await getTeamBySlug(operatorCtx(rootCtx).db, slug);
+      const ctx = known ? teamCtx(rootCtx, known.id) : rootCtx;
 
       if (method === 'GET' && rest === '') {
         const team = await requireTeam(ctx.db, slug);
@@ -6992,27 +7005,28 @@ export async function handleHttp(
             eligibleOf(m.meta as Record<string, unknown> | null)?.includes(member.name),
           )
           .map((m) => m.id);
-        // The group key is `ref`, never `id`: both `messages` and `members` have an `id`, so grouping
-        // on that alias is ambiguous and SQLite rejects the statement outright. `by` is a bare column
-        // beside a single MIN(), which SQLite defines as taking its value from the row that supplied
-        // the minimum — so the seat named is the one whose answer landed FIRST. Ties on `ts` resolve
-        // arbitrarily, exactly as `anyAnswer` in store/delivery.ts already does; matching the ledger
-        // matters more here than a stricter rule, since a trace that disagreed with the ledger about
-        // who answered would be worse than one that is merely arbitrary in a tie.
-        const discharged =
-          owed.length === 0
-            ? []
-            : (
-                await ctx.db.all<{ ref: string; by: string }>(
-                  `SELECT m.in_reply_to AS ref, mem.name AS by, MIN(m.ts) AS first_ts
-                     FROM messages m JOIN members mem ON mem.id = m.from_member
-                    WHERE m.team_id = ?
-                      AND m.act IN ('accept','decline')
-                      AND m.in_reply_to IN (${owed.map(() => '?').join(',')})
-                    GROUP BY ref`,
-                  [team.id, ...owed],
-                )
-              ).map((r) => ({ id: r.ref, by: r.by, reason: 'answered' as const }));
+        // The seat named is the one whose answer landed FIRST: candidates come back in (ts, id)
+        // order and the first per `ref` wins. Ties on `ts` break on the ULID, deterministically —
+        // stricter than `anyAnswer` in store/delivery.ts (arbitrary), and the same first row on both
+        // engines; SQLite's bare-column-beside-MIN() shortcut this used to lean on has no Postgres
+        // meaning (1B).
+        const discharged: { id: string; by: string; reason: 'answered' }[] = [];
+        if (owed.length > 0) {
+          const seen = new Set<string>();
+          for (const r of await ctx.db.all<{ ref: string; by: string }>(
+            `SELECT m.in_reply_to AS ref, mem.name AS by
+               FROM messages m JOIN members mem ON mem.id = m.from_member
+              WHERE m.team_id = ?
+                AND m.act IN ('accept','decline')
+                AND m.in_reply_to IN (${owed.map(() => '?').join(',')})
+              ORDER BY m.ts, m.id`,
+            [team.id, ...owed],
+          )) {
+            if (seen.has(r.ref)) continue;
+            seen.add(r.ref);
+            discharged.push({ id: r.ref, by: r.by, reason: 'answered' });
+          }
+        }
 
         // Doorbell contract clause 7, shapes (ii) and (iv), on the OTHER surface. #1383 taught the
         // interrupt line to drop these in `listInterruptCandidates`; the human-facing count is

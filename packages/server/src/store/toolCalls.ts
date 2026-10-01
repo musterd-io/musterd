@@ -40,10 +40,10 @@ export async function recordToolCalls(
        (team_id, seat, role, tool, outcome, bucket_start, calls, total_duration_ms, max_duration_ms)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (team_id, seat, tool, outcome, bucket_start) DO UPDATE SET
-       calls = calls + excluded.calls,
-       total_duration_ms = total_duration_ms + excluded.total_duration_ms,
-       max_duration_ms = MAX(max_duration_ms, excluded.max_duration_ms),
-       role = COALESCE(excluded.role, role)`;
+       calls = tool_call_stats.calls + excluded.calls,
+       total_duration_ms = tool_call_stats.total_duration_ms + excluded.total_duration_ms,
+       max_duration_ms = MAX(tool_call_stats.max_duration_ms, excluded.max_duration_ms),
+       role = COALESCE(excluded.role, tool_call_stats.role)`;
   await db.tx(async (t) => {
     for (const e of events) {
       await t.run(UPSERT, [
@@ -138,8 +138,9 @@ export async function deriveToolCallMetrics(
   const since = now - WINDOW_MS;
   const rows = await db.all<StatRow>(
     `SELECT seat, role, tool, outcome,
-              SUM(calls) AS calls,
-              SUM(total_duration_ms) AS total_duration_ms,
+              -- CAST: SUM over 64-bit columns is numeric (a string) on Postgres.
+              CAST(SUM(calls) AS INTEGER) AS calls,
+              CAST(SUM(total_duration_ms) AS INTEGER) AS total_duration_ms,
               MAX(max_duration_ms) AS max_duration_ms
          FROM tool_call_stats
         WHERE team_id = ? AND bucket_start > ?

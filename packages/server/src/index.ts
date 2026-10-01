@@ -8,7 +8,7 @@ import {
   resolveConfig,
   resolveRosterRoots,
 } from './config.js';
-import type { Ctx } from './context.js';
+import { operatorCtx, type Ctx } from './context.js';
 import type { Driver } from './db/driver.js';
 import { schemaVersionOf } from './db/migrations.js';
 import { openDriver } from './db/open.js';
@@ -69,9 +69,18 @@ export interface RunningServer {
   /** Re-resolve roster roots + reconcile + re-point the watcher (ADR 058). Wired to SIGHUP by the bin. */
   reload: () => Promise<void>;
   close: () => Promise<void>;
+  /** The raw better-sqlite3 handle, for SQLite-backed tests only; throws when the store is Postgres. */
   db: Database;
-  /** The trace store (ADR 445 §3) — exposed so tests can read what a hook posted. */
+  /** The trace store (ADR 445 §3) — exposed so tests can read what a hook posted. Same caveat. */
   traceDb: Database;
+  /**
+   * The store as the OPERATOR sees it (spec §12.1): every team's rows, on either engine. For tests
+   * that read back what a request wrote, and for tooling; the daemon's own code never takes this
+   * door — its loops receive the same handle through `operatorCtx`.
+   */
+  readonly store: Driver;
+  /** The trace store, operator-scoped. */
+  readonly traceStore: Driver;
   /** One provision sweep pass now (ADR 463 §2) — the 60 s loop's body, for tests. */
   runProvisionSweep: (now?: number) => Promise<number>;
   /** The bound port, available after listen() resolves. */
@@ -90,6 +99,12 @@ function isDriver(x: Database | Driver): x is Driver {
 /** The better-sqlite3 connection under a Driver, or null when the store is another dialect. */
 const sqliteHandle = (d: Driver): Database | null =>
   d.dialect === 'sqlite' ? (d as SqliteDriver).raw : null;
+const rawHandle = (d: Driver, what: string): Database => {
+  const h = sqliteHandle(d);
+  if (!h)
+    throw new Error(`RunningServer.${what} is the SQLite handle; this server's store is Postgres`);
+  return h;
+};
 
 export function createServer(opts: ServerOptions = {}): RunningServer {
   const config = resolveConfig(opts);
@@ -112,7 +127,9 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   // client can confirm which database this daemon serves, and which guardian turns into the
   // `wrong_db` alert. In production the two always agreed (`openDb(p)` opens exactly `p`), so the
   // value was accidentally right rather than derived from anything checked.
-  config.dbPath = sqliteHandle(db)?.name || config.dbPath;
+  // A Postgres store has no file: name it so, rather than the SQLite path config resolved and the
+  // daemon never opened (the /health `db` field, the archive dir, the size probes all key on it).
+  config.dbPath = sqliteHandle(db)?.name ?? (db.dialect === 'sqlite' ? config.dbPath : 'postgres');
   // The trace store (ADR 445 §3): its own file, its own ladder, opened beside — never inside — the
   // coordination store. An injected `db` with no injected `traceDb` gets an in-memory trace store,
   // so a test that hands us `:memory:` never leaves a `trace.db` on disk.
@@ -121,7 +138,8 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       ? opts.traceDb
       : sqliteDriver(opts.traceDb)
     : openTraceDriver(opts.db ? ':memory:' : config.traceDbPath);
-  config.traceDbPath = sqliteHandle(traceDb)?.name || config.traceDbPath;
+  config.traceDbPath =
+    sqliteHandle(traceDb)?.name ?? (traceDb.dialect === 'sqlite' ? config.traceDbPath : 'postgres');
   const hub = new Hub();
   // Durable roster roots (ADR 058): explicit list (tests) or the rosterHome registry + env override.
   // An explicit list is fixed (hermetic tests); otherwise `reload()` re-resolves from the registry so
@@ -134,6 +152,12 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     config,
     rosterRoots: opts.rosterRoots ?? resolveRosterRoots(),
   };
+  // Spec §12.1: the transports scope `ctx` per request/connection; everything the daemon does on its
+  // own behalf — the loops, telemetry, reconcile, the sweeps — is about every team and runs as the
+  // operator. On SQLite these are the same handles.
+  const opCtx = operatorCtx(ctx);
+  const opDb = opCtx.db;
+  const opTraceDb = opCtx.traceDb;
 
   const handler = async (
     req: import('node:http').IncomingMessage,
@@ -194,7 +218,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     if (ctx.rosterRoots.length > 0) {
       stopWatcher = startRosterWatcher(ctx.rosterRoots, RECONCILE_DEBOUNCE_MS, async () => {
         // A seat file that just appeared (a git pull, `musterd agent`) is a Member arriving — say so.
-        void (await reconcileAll(db, ctx.rosterRoots)
+        void (await reconcileAll(opDb, ctx.rosterRoots)
           .then((r) => broadcastReconciled(ctx, r))
           .catch((err) => log.warn({ msg: 'reconcile_watch_failed', err: String(err) })));
       });
@@ -204,9 +228,15 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   return {
     // The raw handles, for the CLI's server-side tests (they open the store themselves and read it
     // back through `server.db.prepare`); the daemon's own code never takes this door.
-    db: sqliteHandle(db)!,
-    traceDb: sqliteHandle(traceDb)!,
-    runProvisionSweep: (now?: number) => sweepProvisionsPass(ctx, now),
+    get db() {
+      return rawHandle(db, 'db');
+    },
+    get traceDb() {
+      return rawHandle(traceDb, 'traceDb');
+    },
+    store: opDb,
+    traceStore: opTraceDb,
+    runProvisionSweep: (now?: number) => sweepProvisionsPass(opCtx, now),
     get port() {
       return boundPort;
     },
@@ -222,16 +252,16 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       stopTelemetry = await startTelemetry();
       if (telemetryEnabled()) {
         registerRuntimeGauges({
-          presenceBySurface: () => activePresenceBySurface(db, config.presenceTimeoutMs),
-          inboxLagMs: () => slowestInboxLagMs(db),
-          openLoopsByTeam: async () => await countOpenLoopsByTeam(db),
-          diversityFlagsByTeam: async () => await countDiversityFlagsByTeam(db),
+          presenceBySurface: () => activePresenceBySurface(opDb, config.presenceTimeoutMs),
+          inboxLagMs: () => slowestInboxLagMs(opDb),
+          openLoopsByTeam: async () => await countOpenLoopsByTeam(opDb),
+          diversityFlagsByTeam: async () => await countDiversityFlagsByTeam(opDb),
         });
       }
       // Boot floor (ADR 058): project the durable files into the db before serving, so the roster the
       // first request sees matches git. Idempotent — safe to re-run; the watcher takes over at runtime.
       if (ctx.rosterRoots.length > 0) {
-        const summary = await reconcileAll(db, ctx.rosterRoots);
+        const summary = await reconcileAll(opDb, ctx.rosterRoots);
         log.info({ msg: 'reconcile_boot', teams: summary.length, roots: ctx.rosterRoots.length });
       }
       return await new Promise((resolve, reject) => {
@@ -239,17 +269,17 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         http.listen(config.port, config.host, async () => {
           const addr = http.address();
           boundPort = typeof addr === 'object' && addr ? addr.port : config.port;
-          stopReaper = startReaper(ctx);
-          stopSeeds = startSeedsIngest(ctx);
-          stopSync = startSyncPush(ctx);
-          stopPull = startSyncPull(ctx);
+          stopReaper = startReaper(opCtx);
+          stopSeeds = startSeedsIngest(opCtx);
+          stopSync = startSyncPush(opCtx);
+          stopPull = startSyncPull(opCtx);
           // ADR 453 §4: its own loop, so a stalled /sync/trace never delays /sync/push.
-          stopTracePush = startTracePush(ctx);
-          stopFootprint = startFootprintSampler(ctx);
+          stopTracePush = startTracePush(opCtx);
+          stopFootprint = startFootprintSampler(opCtx);
           // ADR 445 increment 3a: content past its window is nulled, structural rows stay; the
           // window is config (ADR 478 §3: 7 days locally).
           stopTracePrune = startTraceContentPrune(
-            traceDb,
+            opTraceDb,
             (r) => {
               if (r.pruned > 0)
                 log.info({
@@ -265,7 +295,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
           // ADR 478 §1/§5: churn-class audit rows past their window are archived, then pruned, daily;
           // an in-memory store has no archive dir and is skipped. One `store.pruned` row per team.
           stopAuditRetention = startAuditRetention(
-            db,
+            opDb,
             {
               archiveDir: defaultArchiveDir(config.dbPath),
               maxAgeMs: config.auditChurnRetentionMs,
@@ -279,7 +309,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
                 cutoff: r.cutoff,
               });
               for (const [teamId, rows] of Object.entries(r.perTeam)) {
-                await appendAudit(db, teamId, {
+                await appendAudit(opDb, teamId, {
                   actor: null,
                   action: 'store.pruned',
                   target: null,
@@ -297,11 +327,11 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
           );
           // ADR 445 §Observability: a quiet session below 0.98 tool coverage is audited, once.
           stopTraceCoverage = startTraceCoverageSweep(
-            db,
-            traceDb,
+            opDb,
+            opTraceDb,
             async (sessions) => {
               for (const s of sessions) {
-                await appendAudit(db, s.team_id, {
+                await appendAudit(opDb, s.team_id, {
                   actor: null,
                   action: 'trace.coverage_low',
                   target: s.seat,
@@ -321,10 +351,10 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
           // ADR 459 §4: expired members read as departed on the roster. Hygiene only — auth
           // already refused them — so one audited row per swept member, and a failing pass logs on.
           stopExpiredSweep = await startExpiredMemberSweep(
-            db,
+            opDb,
             async (swept) => {
               for (const m of swept) {
-                await appendAudit(db, m.team_id, {
+                await appendAudit(opDb, m.team_id, {
                   actor: null,
                   action: 'member.expired_swept',
                   target: m.name,
@@ -332,14 +362,14 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
                   detail: { lifecycle_until: m.lifecycle_until },
                 });
                 // ADR 463 §4.4: expiry takes the enrollment and anything the member sponsored.
-                await revokeExpiredMember(db, m.team_id, m);
+                await revokeExpiredMember(opDb, m.team_id, m);
               }
               if (swept.length > 0) log.info({ msg: 'expired_members_swept', count: swept.length });
             },
             (err) => log.warn({ msg: 'expired_sweep_failed', err: String(err) }),
           );
           // ADR 463 §2: a provision that can no longer finish hands the sponsor a connect link.
-          stopProvisionSweep = await startProvisionSweep(ctx, (err) =>
+          stopProvisionSweep = await startProvisionSweep(opCtx, (err) =>
             log.warn({ msg: 'provision_sweep_failed', err: String(err) }),
           );
           await startWatching();
@@ -350,7 +380,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
             scheme: config.scheme,
             trustProxy: config.trustProxy,
             db: config.dbPath,
-            schema: await schemaVersionOf(db),
+            schema: await schemaVersionOf(opDb),
           });
           resolve({ port: boundPort, host: config.host });
         });
@@ -361,7 +391,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       // re-reconcile and re-point the watcher. Explicit (test) roots are fixed and not re-resolved.
       // Wired to SIGHUP by the daemon bin — the lib never grabs process signals (tests would clash).
       if (!rootsExplicit) ctx.rosterRoots = resolveRosterRoots();
-      const summary = await reconcileAll(db, ctx.rosterRoots);
+      const summary = await reconcileAll(opDb, ctx.rosterRoots);
       await broadcastReconciled(ctx, summary);
       await startWatching();
       log.info({ msg: 'reconcile_reload', teams: summary.length, roots: ctx.rosterRoots.length });

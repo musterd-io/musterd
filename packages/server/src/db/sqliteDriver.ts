@@ -104,7 +104,7 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
   const make = (life: { dead: boolean } | null): SqliteDriver => {
     const stmt = <R>(sql: string, run: () => R): Promise<R> =>
       life ? inTx(life, sql, run) : onQueue(sql, run);
-    return {
+    const handle: SqliteDriver = {
       dialect: 'sqlite',
       raw,
       onStatement(listener: (sql: string) => void) {
@@ -113,6 +113,13 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
       },
       connection() {
         return outer;
+      },
+      // One team per file: the tenant seam is the handle itself (spec §12.1).
+      forTeam() {
+        return handle;
+      },
+      asOperator() {
+        return handle;
       },
       async get<R>(sql: string, params: Params = []) {
         return stmt(sql, () => prep(sql).get(...(params as unknown[])) as R | undefined);
@@ -185,6 +192,7 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
         raw.close();
       },
     };
+    return handle;
   };
   const outer = make(null);
   return outer;

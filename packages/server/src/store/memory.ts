@@ -58,13 +58,13 @@ export async function saveMemory(
     );
   }
   await db.run(
-    `INSERT INTO seat_memory (member_id, headline, body, saved_at)
-       VALUES (?, ?, ?, ?)
+    `INSERT INTO seat_memory (member_id, team_id, headline, body, saved_at)
+       SELECT id, team_id, ?, ?, ? FROM members WHERE id = ?
      ON CONFLICT(member_id) DO UPDATE SET
        headline = excluded.headline,
        body     = excluded.body,
        saved_at = excluded.saved_at`,
-    [memberId, headline, input.body, Date.now()],
+    [headline, input.body, Date.now(), memberId],
   );
 }
 

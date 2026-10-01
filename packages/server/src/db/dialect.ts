@@ -128,7 +128,14 @@ function translate(sql: string): string {
       .replace(/\bINSERT\s+OR\s+IGNORE\s+INTO\b/gi, 'INSERT OR IGNORE INTO')
       .replace(/\bLIKE\b/g, 'ILIKE')
       // SQLite's instr has a Postgres name of its own.
-      .replace(/\binstr\(/g, 'strpos('),
+      .replace(/\binstr\(/g, 'strpos(')
+      // SQLite INTEGER is 64-bit; Postgres INTEGER is 32 and an epoch-millis cast overflows it. The
+      // DDL rule (INTEGER → BIGINT) applied to expressions — found by residency.test on PGlite (1B).
+      .replace(/\bAS\s+INTEGER\b/gi, 'AS BIGINT')
+      // SQLite's null-safe `x IS ?` / `x IS NOT ?` against a bound value is Postgres's
+      // `IS [NOT] DISTINCT FROM` (Postgres allows IS only before NULL/TRUE/FALSE) — GET /messages.
+      .replace(/\bIS\s+NOT\s+\?/g, 'IS DISTINCT FROM ?')
+      .replace(/\bIS\s+\?/g, 'IS NOT DISTINCT FROM ?'),
   );
   out = scalarMaxMin(out);
 

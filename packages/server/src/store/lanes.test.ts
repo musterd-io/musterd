@@ -1,7 +1,8 @@
 import { ACCEPTANCE_STALE_MS, makeEnvelope, type Lane } from '@musterd/protocol';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { Driver } from '../db/driver.js';
 import { openDb } from '../db/open.js';
-import { openTestDb } from '../db/testing.js';
+import { withDrivers } from '../db/testing.js';
 import { appendAudit } from './audit.js';
 import {
   boardWarnings,
@@ -24,1258 +25,1316 @@ import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
 import { createTeam } from './teams.js';
 
-async function seed() {
-  const db = openTestDb(':memory:');
-  const team = await createTeam(db, { slug: 'bravo' });
-  return { db, team };
-}
+let openStore: () => Promise<Driver>;
 
-/**
- * Transfer a lane the way the PATCH handler does: the store move plus the `lane.claimed` audit row
- * that marks it a handoff rather than a self-claim. The audit row is the only record of WHO handed
- * WHAT to WHOM, so a derivation that reads it must be tested against the real pair, not the move
- * alone.
- */
-async function recordHandoff(
-  db: ReturnType<typeof openDb>,
-  teamId: string,
-  teamSlug: string,
-  laneId: string,
-  from: string,
-  to: string,
-): void {
-  await updateLane(db, teamId, laneId, teamSlug, { owner_seat: to });
-  await appendAudit(db, teamId, {
-    actor: from,
-    action: 'lane.claimed',
-    target: laneId,
-    result: 'allow',
-    detail: { lane: laneId, owner: to, previous_owner: from, kind: 'handoff' },
-  });
-}
-
-describe('globsOverlap (cheap prefix intersection, ADR 083)', () => {
-  it('overlaps on shared path prefixes, either direction', () => {
-    expect(globsOverlap('packages/server/src/store/**', 'packages/server/**')).toBe(true);
-    expect(globsOverlap('packages/server/**', 'packages/server/src/store/migrations.ts')).toBe(
-      true,
-    );
-    expect(globsOverlap('a/b/c', 'a/b/c')).toBe(true);
-  });
-  it('does not overlap disjoint paths', () => {
-    expect(globsOverlap('packages/server/**', 'packages/cli/**')).toBe(false);
-    expect(globsOverlap('packages/serverless/**', 'packages/server/**')).toBe(false); // no partial-segment match
-  });
-});
-
-/**
- * ADR 240. A lane's title is what the board renders, what a handoff announces, and what a seat
- * reads when deciding whether a lane is theirs — and it was the one field with no escape hatch.
- * Live instance 2026-08-05: lane 01KZ9HR001 was opened with a title built on a misreading, and the
- * only available correction was a note at the top of the detail saying the title is wrong.
- */
-describe('a lane title is correctable (ADR 240)', async () => {
-  it('patches the title, and leaves it alone when the patch omits one', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'wrong from the start' });
-
-    const retitled = await updateLane(db, team.id, lane.id, 'bravo', {
-      title: 'what it actually is',
-    });
-    expect(retitled?.title).toBe('what it actually is');
-
-    // An unrelated patch must not disturb it — the field is opt-in, like `detail` and `project`.
-    const later = await updateLane(db, team.id, lane.id, 'bravo', { state: 'active' });
-    expect(later?.title).toBe('what it actually is');
-    expect((await getLane(db, team.id, lane.id, 'bravo'))?.title).toBe('what it actually is');
-  });
-});
-
-describe('lane lifecycle + the two checks (spec §8 acceptance scenarios)', async () => {
-  it('scenario 1 — the dependency-revert: unmet_dependency warns while the dep is active', async () => {
-    const { db, team } = await seed();
-    const june = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'P3.1 schema',
-      project: 'musterd',
-      scope: ['packages/server/src/store/**'],
-      claim: true,
-    });
-    await updateLane(db, team.id, june.id, 'bravo', { state: 'active' });
-    const cleo = await openLane(db, team.id, 'bravo', 'Cleo', {
-      title: 'P3.2 handshake',
-      project: 'musterd',
-      depends_on: [june.id],
-      claim: true,
-    });
-    const warnings = await laneWarnings(db, team.id, 'bravo', cleo);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]!.kind).toBe('unmet_dependency');
-    expect(warnings[0]!.with).toBe(june.id);
-    expect(warnings[0]!.owner).toBe('June');
-    expect(warnings[0]!.detail).toContain('still active');
-
-    // ADR 169: ready_for_review does NOT clear it — a dependent building on unreviewed work is
-    // exactly when the warning earns its keep (advisory, so keeping it wedges nothing).
-    await updateLane(db, team.id, june.id, 'bravo', { state: 'ready_for_review' });
-    const still = await laneWarnings(db, team.id, 'bravo', cleo);
-    expect(still).toHaveLength(1);
-    expect(still[0]!.detail).toContain('still awaiting_acceptance');
-
-    // The dep resolving clears the warning (dedup-until-cleared is a diff over this).
-    await updateLane(db, team.id, june.id, 'bravo', { state: 'done' });
-    expect(await laneWarnings(db, team.id, 'bravo', cleo)).toHaveLength(0);
+withDrivers('lanes', (o) => {
+  // Set per test, not at collection: describe.each collects every driver before any test runs.
+  beforeEach(() => {
+    openStore = o;
   });
 
-  it('ADR 192: awaiting_acceptance persists the stage-one attestation and stays unresolved', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'riley', {
-      title: 'two-stage',
-      project: 'musterd',
-      branch: 'riley/two-stage',
-      claim: true,
-    });
-    const ready = (await updateLane(db, team.id, lane.id, 'bravo', {
-      state: 'ready_for_review', // legacy spelling coerces on write
-      merged: { pr: 7, sha: 'deadbeef', authorized_by: 'nick' },
-    }))!;
-    expect(ready.state).toBe('awaiting_acceptance');
-    expect(ready.merged).toEqual({ pr: 7, sha: 'deadbeef', authorized_by: 'nick' });
-    expect(ready.resolved_at).toBeNull();
-    // The attestation survives an unrelated later patch (rebuild-from-existing carry).
-    const noted = (await updateLane(db, team.id, lane.id, 'bravo', { detail: 'note' }))!;
-    expect(noted.merged).toEqual({ pr: 7, sha: 'deadbeef', authorized_by: 'nick' });
-  });
+  async function seed() {
+    const db = await openStore();
+    const team = await createTeam(db, { slug: 'bravo' });
+    return { db, team };
+  }
 
-  it('scenario 2 — the redone lane: handoff carries the branch', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'riley', {
-      title: 'BindingSchema',
-      project: 'musterd',
-      branch: 'agent/riley',
-      claim: true,
+  /**
+   * Transfer a lane the way the PATCH handler does: the store move plus the `lane.claimed` audit row
+   * that marks it a handoff rather than a self-claim. The audit row is the only record of WHO handed
+   * WHAT to WHOM, so a derivation that reads it must be tested against the real pair, not the move
+   * alone.
+   */
+  async function recordHandoff(
+    db: ReturnType<typeof openDb>,
+    teamId: string,
+    teamSlug: string,
+    laneId: string,
+    from: string,
+    to: string,
+  ): void {
+    await updateLane(db, teamId, laneId, teamSlug, { owner_seat: to });
+    await appendAudit(db, teamId, {
+      actor: from,
+      action: 'lane.claimed',
+      target: laneId,
+      result: 'allow',
+      detail: { lane: laneId, owner: to, previous_owner: from, kind: 'handoff' },
     });
-    const handed = (await updateLane(db, team.id, lane.id, 'bravo', {
-      owner_seat: 'June',
-      branch: 'agent/riley',
-    }))!;
-    expect(handed.owner_seat).toBe('June');
-    expect(handed.branch).toBe('agent/riley');
-    // The board shows the lane with its branch — June builds on it instead of re-deriving.
-    const board = await listLanes(db, team.id, 'bravo', { owner: 'June' });
-    expect(board[0]!.branch).toBe('agent/riley');
-  });
+  }
 
-  it('board states filter — a seat with history sees only the live lanes (lane 01M2R988GK)', async () => {
-    const { db, team } = await seed();
-    const live = await openLane(db, team.id, 'bravo', 'June', { title: 'live', claim: true });
-    await updateLane(db, team.id, live.id, 'bravo', { state: 'active' });
-    const old = await openLane(db, team.id, 'bravo', 'June', { title: 'old', claim: true });
-    await updateLane(db, team.id, old.id, 'bravo', { state: 'done' });
-    // Owner alone returns both — the overflow this filter fixes.
-    expect(await listLanes(db, team.id, 'bravo', { owner: 'June' })).toHaveLength(2);
-    const filtered = await listLanes(db, team.id, 'bravo', {
-      owner: 'June',
-      states: ['claimed', 'active', 'blocked', 'awaiting_acceptance', 'ready_for_review'],
+  describe('globsOverlap (cheap prefix intersection, ADR 083)', () => {
+    it('overlaps on shared path prefixes, either direction', () => {
+      expect(globsOverlap('packages/server/src/store/**', 'packages/server/**')).toBe(true);
+      expect(globsOverlap('packages/server/**', 'packages/server/src/store/migrations.ts')).toBe(
+        true,
+      );
+      expect(globsOverlap('a/b/c', 'a/b/c')).toBe(true);
     });
-    expect(filtered.map((l) => l.id)).toEqual([live.id]);
-  });
-
-  it('scenario 3 — the clean independent lane stays silent', async () => {
-    const { db, team } = await seed();
-    await openLane(db, team.id, 'bravo', 'June', {
-      title: 'store work',
-      project: 'musterd',
-      scope: ['packages/server/src/store/**'],
-      claim: true,
+    it('does not overlap disjoint paths', () => {
+      expect(globsOverlap('packages/server/**', 'packages/cli/**')).toBe(false);
+      expect(globsOverlap('packages/serverless/**', 'packages/server/**')).toBe(false); // no partial-segment match
     });
-    const jasmine = await openLane(db, team.id, 'bravo', 'Jasmine', {
-      title: 'governance',
-      project: 'musterd',
-      scope: ['packages/protocol/src/capabilities.ts'],
-      claim: true,
-    });
-    expect(await laneWarnings(db, team.id, 'bravo', jasmine)).toHaveLength(0);
-  });
-
-  it('scenario 3b — surface overlap warns, once per pair on the board', async () => {
-    const { db, team } = await seed();
-    const a = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'schema',
-      project: 'musterd',
-      scope: ['packages/server/src/store/**'],
-      claim: true,
-    });
-    const b = await openLane(db, team.id, 'bravo', 'Cleo', {
-      title: 'also schema',
-      project: 'musterd',
-      scope: ['packages/server/**'],
-      claim: true,
-    });
-    const w = await laneWarnings(db, team.id, 'bravo', b);
-    expect(
-      w.some((x) => x.kind === 'surface_overlap' && x.with === a.id && x.owner === 'June'),
-    ).toBe(true);
-    // Board dedups the symmetric pair to one warning.
-    const lanes = await listLanes(db, team.id, 'bravo');
-    const board = await boardWarnings(db, team.id, 'bravo', lanes);
-    expect(board.filter((x) => x.kind === 'surface_overlap')).toHaveLength(1);
-  });
-
-  it('scenario 4 — cross-project non-collision', async () => {
-    const { db, team } = await seed();
-    await openLane(db, team.id, 'bravo', 'June', {
-      title: 'members',
-      project: 'musterd',
-      scope: ['store/members.ts'],
-      claim: true,
-    });
-    const cleo = await openLane(db, team.id, 'bravo', 'Cleo', {
-      title: 'members elsewhere',
-      project: 'izzocam',
-      scope: ['store/members.ts'],
-      claim: true,
-    });
-    expect(await laneWarnings(db, team.id, 'bravo', cleo)).toHaveLength(0);
   });
 
   /**
-   * The mixed-era case that project *derivation* creates: before it existed every lane was
-   * `'default'`, so a scoped lane and a legacy one must not go mutually blind — an unscoped lane
-   * means "I didn't say", and a warning system should fail toward the false positive.
+   * ADR 240. A lane's title is what the board renders, what a handoff announces, and what a seat
+   * reads when deciding whether a lane is theirs — and it was the one field with no escape hatch.
+   * Live instance 2026-08-05: lane 01KZ9HR001 was opened with a title built on a misreading, and the
+   * only available correction was a note at the top of the detail saying the title is wrong.
    */
-  it("scenario 4b — an unscoped 'default' lane still contends with every project", async () => {
-    const { db, team } = await seed();
-    const legacy = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'members (opened before derivation)',
-      scope: ['store/members.ts'],
-      claim: true,
-    });
-    expect(legacy.project).toBe('default');
-    const scoped = await openLane(db, team.id, 'bravo', 'Cleo', {
-      title: 'members',
-      project: 'musterd',
-      scope: ['store/members.ts'],
-      claim: true,
-    });
-    // Both directions — the wildcard is symmetric.
-    expect(await laneWarnings(db, team.id, 'bravo', scoped)).toHaveLength(1);
-    expect(await laneWarnings(db, team.id, 'bravo', legacy)).toHaveLength(1);
+  describe('a lane title is correctable (ADR 240)', async () => {
+    it('patches the title, and leaves it alone when the patch omits one', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'wrong from the start' });
 
-    // …and the escape hatch closes it: re-project the legacy lane and they stop contending.
-    const moved = (await updateLane(db, team.id, legacy.id, 'bravo', { project: 'izzocam' }))!;
-    expect(moved.project).toBe('izzocam');
-    expect(await laneWarnings(db, team.id, 'bravo', scoped)).toHaveLength(0);
-  });
+      const retitled = await updateLane(db, team.id, lane.id, 'bravo', {
+        title: 'what it actually is',
+      });
+      expect(retitled?.title).toBe('what it actually is');
 
-  it('scenario 5 — non-git: manual resolve closes the loop as a state transition', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'work', claim: true });
-    const done = (await updateLane(db, team.id, lane.id, 'bravo', { state: 'done' }))!;
-    expect(done.state).toBe('done');
-    expect(done.resolved_at).not.toBeNull();
-    // done lanes stop contending: no overlap warnings from/against them.
-    expect(await laneWarnings(db, team.id, 'bravo', done)).toHaveLength(0);
-  });
-
-  it('claiming an open lane implies claimed + stamps claimed_at', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'pool item' });
-    expect(lane.state).toBe('open');
-    expect(lane.owner_seat).toBeNull();
-    const claimed = (await updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'Cleo' }))!;
-    expect(claimed.state).toBe('claimed');
-    expect(claimed.owner_seat).toBe('Cleo');
-    expect(claimed.claimed_at).not.toBeNull();
-  });
-});
-
-describe('the release invariant — open ⟺ unowned', async () => {
-  it('moving an owned lane back to open clears the owner and the claim stamp', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'parked work',
-      claim: true,
-    });
-    expect(lane.owner_seat).toBe('June');
-    expect(lane.claimed_at).not.toBeNull();
-    const released = (await updateLane(db, team.id, lane.id, 'bravo', { state: 'open' }))!;
-    expect(released.state).toBe('open');
-    // The whole point: the board must not name a holder for work nobody is doing.
-    expect(released.owner_seat).toBeNull();
-    expect(released.claimed_at).toBeNull();
-  });
-
-  it('a released lane is claimable by a different seat, stamping a fresh tenure', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'parked work',
-      claim: true,
-    });
-    const releasedAt = (await updateLane(db, team.id, lane.id, 'bravo', { state: 'open' }, 1_000))!;
-    expect(releasedAt.owner_seat).toBeNull();
-    const reclaimed = (await updateLane(
-      db,
-      team.id,
-      lane.id,
-      'bravo',
-      { owner_seat: 'Cleo' },
-      5_000,
-    ))!;
-    expect(reclaimed.state).toBe('claimed');
-    expect(reclaimed.owner_seat).toBe('Cleo');
-    // Not June's original stamp inherited: claimed_at describes the CURRENT tenure.
-    expect(reclaimed.claimed_at).toBe(5_000);
-  });
-
-  // The direct owner -> owner move never passes through the release that clears the stamp, so the
-  // new holder used to inherit the old one's claimed_at. That is what let a takeover read as a first
-  // claim on 2026-08-01: the response said "claimed_at 22:00" and the taker read it as their own.
-  it("a DIRECT owner-to-owner move stamps a fresh tenure, never the previous holder's", async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(
-      db,
-      team.id,
-      'bravo',
-      'June',
-      { title: 'work', claim: true },
-      1_000,
-    );
-    expect(lane.claimed_at).toBe(1_000);
-    const handed = (await updateLane(
-      db,
-      team.id,
-      lane.id,
-      'bravo',
-      { owner_seat: 'Cleo' },
-      9_000,
-    ))!;
-    expect(handed.owner_seat).toBe('Cleo');
-    expect(handed.claimed_at).toBe(9_000); // Cleo's tenure, not June's 1_000
-  });
-
-  it('re-patching the SAME owner keeps the original stamp (no tenure restart on an unrelated edit)', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(
-      db,
-      team.id,
-      'bravo',
-      'June',
-      { title: 'work', claim: true },
-      1_000,
-    );
-    const same = (await updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'June' }, 9_000))!;
-    expect(same.claimed_at).toBe(1_000);
-  });
-
-  it('an owner named on the same patch as state:open still releases — state wins', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'parked', claim: true });
-    const out = (await updateLane(db, team.id, lane.id, 'bravo', {
-      state: 'open',
-      owner_seat: 'Cleo',
-    }))!;
-    expect(out.state).toBe('open');
-    expect(out.owner_seat).toBeNull(); // the incoherent tuple is unrepresentable
-  });
-
-  it('a terminal close keeps its owner — release is only the open edge', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'shipped', claim: true });
-    const done = (await updateLane(db, team.id, lane.id, 'bravo', { state: 'done' }))!;
-    expect(done.owner_seat).toBe('June'); // ADR 169 derives verified-ness from the owner at close
-    expect(done.claimed_at).not.toBeNull();
-  });
-});
-
-describe('goal_id join (ADR 084)', async () => {
-  it('round-trips goal_id through open + update, and lanesForGoal filters by it', async () => {
-    const { db, team } = await seed();
-    const a = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'spine migration',
-      goal_id: 'orientation-spine',
-      claim: true,
-    });
-    expect(a.goal_id).toBe('orientation-spine');
-    // A lane opened without a goal is ungrouped; update can link it later.
-    const b = await openLane(db, team.id, 'bravo', 'Cleo', { title: 'unlinked', claim: true });
-    expect(b.goal_id).toBeNull();
-    const linked = (await updateLane(db, team.id, b.id, 'bravo', {
-      goal_id: 'orientation-spine',
-    }))!;
-    expect(linked.goal_id).toBe('orientation-spine');
-    // update can clear it back to null.
-    const cleared = (await updateLane(db, team.id, b.id, 'bravo', { goal_id: null }))!;
-    expect(cleared.goal_id).toBeNull();
-
-    const forGoal = await lanesForGoal(db, team.id, 'bravo', 'orientation-spine');
-    expect(forGoal.map((l) => l.id)).toEqual([a.id]);
-  });
-});
-
-describe('deriveGoalStatus (the pinned rule, ADR 048 as amended by 084)', () => {
-  const lane = (state: string): Lane =>
-    ({ state, id: state, title: '', goal_id: 'g' }) as unknown as Lane;
-
-  it('planned when the Goal has no lanes', () => {
-    expect(deriveGoalStatus([])).toBe('planned');
-  });
-  it('in-flight when any lane is live', () => {
-    expect(deriveGoalStatus([lane('done'), lane('active')])).toBe('in-flight');
-    expect(deriveGoalStatus([lane('open')])).toBe('in-flight');
-    expect(deriveGoalStatus([lane('blocked')])).toBe('in-flight');
-    // ADR 169: awaiting review is live — a goal is not shipped until its closes land.
-    expect(deriveGoalStatus([lane('done'), lane('awaiting_acceptance')])).toBe('in-flight');
-  });
-  it('shipped only when all lanes are terminal AND at least one is done', () => {
-    expect(deriveGoalStatus([lane('done')])).toBe('shipped');
-    expect(deriveGoalStatus([lane('done'), lane('abandoned')])).toBe('shipped');
-  });
-  it('not shipped when every lane is abandoned (no done)', () => {
-    expect(deriveGoalStatus([lane('abandoned'), lane('abandoned')])).toBe('in-flight');
-  });
-  it('flap-tolerant: a new open lane returns a shipped Goal to in-flight', () => {
-    const shipped = [lane('done'), lane('done')];
-    expect(deriveGoalStatus(shipped)).toBe('shipped');
-    expect(deriveGoalStatus([...shipped, lane('open')])).toBe('in-flight');
-  });
-});
-
-describe('departed-seat claim release (ADR 196)', async () => {
-  it('releaseInFlightClaimsForSeat opens claimed/active/blocked but keeps awaiting_acceptance', async () => {
-    const { db, team } = await seed();
-    const claimed = await openLane(db, team.id, 'bravo', 'June', { title: 'wip', claim: true });
-    const active = await openLane(db, team.id, 'bravo', 'June', { title: 'building', claim: true });
-    await updateLane(db, team.id, active.id, 'bravo', { state: 'active' });
-    const awaiting = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'shipped',
-      claim: true,
-    });
-    await updateLane(db, team.id, awaiting.id, 'bravo', { state: 'awaiting_acceptance' });
-
-    const released = await releaseInFlightClaimsForSeat(db, team.id, 'June');
-    expect(released.map((r) => r.id).sort()).toEqual([active.id, claimed.id].sort());
-    expect(await getLane(db, team.id, claimed.id, 'bravo')).toMatchObject({
-      state: 'open',
-      owner_seat: null,
-    });
-    expect((await getLane(db, team.id, active.id, 'bravo'))?.owner_seat).toBeNull();
-    expect(await getLane(db, team.id, awaiting.id, 'bravo')).toMatchObject({
-      state: 'awaiting_acceptance',
-      owner_seat: 'June',
+      // An unrelated patch must not disturb it — the field is opt-in, like `detail` and `project`.
+      const later = await updateLane(db, team.id, lane.id, 'bravo', { state: 'active' });
+      expect(later?.title).toBe('what it actually is');
+      expect((await getLane(db, team.id, lane.id, 'bravo'))?.title).toBe('what it actually is');
     });
   });
 
-  it('releaseDepartedSeatClaims sweeps lanes still owned by soft-removed seats', async () => {
-    const { db, team } = await seed();
-    const june = await addMember(db, team, { name: 'June', kind: 'agent' });
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'ghost wip', claim: true });
-    // Bypass leaveMember's composition — the historical ghost ADR 196's reaper sweep clears.
-    db.prepare('UPDATE members SET left_at = ? WHERE id = ?').run(Date.now(), june.row.id);
-
-    const swept = await releaseDepartedSeatClaims(db);
-    expect(swept).toEqual([
-      { team_id: team.id, seat: 'June', lane: lane.id, state_before: 'claimed' },
-    ]);
-    expect(await getLane(db, team.id, lane.id, 'bravo')).toMatchObject({
-      state: 'open',
-      owner_seat: null,
-    });
-  });
-
-  // Lane-replication slice (spec 2026-09-01-lane-replication-design.md §Finding 3, hole 1): these
-  // two paths were the only places a lane changed hands with no record of who or why. Increment 1
-  // made every transition leave a `lane.*` audit row precisely so a replicating daemon can fold
-  // history back out — a release that leaves no trace cannot replicate under any design, and a
-  // peer would keep showing a holder this machine already released.
-  const releasedRows = (db: ReturnType<typeof openDb>, laneId: string) =>
-    db
-      .prepare<[string], { actor: string | null; detail: string }>(
-        "SELECT actor, detail FROM audit WHERE action = 'lane.released' AND target = ?",
-      )
-      .all(laneId)
-      .map((r) => ({ actor: r.actor, detail: JSON.parse(r.detail) as Record<string, unknown> }));
-
-  it('releaseInFlightClaimsForSeat leaves a lane.released row per lane, naming the departed holder', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'wip', claim: true });
-
-    await releaseInFlightClaimsForSeat(db, team.id, 'June');
-
-    expect(releasedRows(db, lane.id)).toEqual([
-      {
-        actor: 'musterd',
-        detail: {
-          lane: lane.id,
-          released_by: 'musterd',
-          owner_before: 'June',
-          reason: 'seat_left',
-        },
-      },
-    ]);
-  });
-
-  it('releaseDepartedSeatClaims leaves a lane.released row per swept lane', async () => {
-    const { db, team } = await seed();
-    const june = await addMember(db, team, { name: 'June', kind: 'agent' });
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'ghost wip', claim: true });
-    db.prepare('UPDATE members SET left_at = ? WHERE id = ?').run(Date.now(), june.row.id);
-
-    await releaseDepartedSeatClaims(db);
-
-    expect(releasedRows(db, lane.id)).toEqual([
-      {
-        actor: 'musterd',
-        detail: {
-          lane: lane.id,
-          released_by: 'musterd',
-          owner_before: 'June',
-          reason: 'seat_departed_sweep',
-        },
-      },
-    ]);
-  });
-});
-
-// Lane-replication slice (spec §Finding 3, hole 2): `lane.updated` recorded field NAMES only, so
-// history could prove a lane's scope changed and never say to what. A folding peer needs values.
-describe('laneFieldDiff — the values behind a lane.updated row', async () => {
-  it('reports from/to per changed audited field, arrays by value, and nothing for unchanged ones', async () => {
-    const { db, team } = await seed();
-    const before = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'old',
-      scope: ['a/**'],
-      claim: true,
-    });
-    const after = (await updateLane(db, team.id, before.id, 'bravo', {
-      title: 'new',
-      scope: ['a/**', 'b/**'],
-      state: 'active', // state is not an audited field — it has its own verb
-    }))!;
-
-    expect(laneFieldDiff(before, after)).toEqual({
-      title: { from: 'old', to: 'new' },
-      scope: { from: ['a/**'], to: ['a/**', 'b/**'] },
-    });
-  });
-});
-
-// Lane-replication slice (spec §Hole 3): a lane.* row IS the transition, so the store writes it
-// inside the same transaction as the lane row, with the required append. If the record cannot be
-// written, the transition does not happen.
-describe('lane.* rows are written by the store, inside the write', async () => {
-  const rows = (db: ReturnType<typeof openDb>, laneId: string) =>
-    db
-      .prepare<[string], { actor: string | null; action: string; detail: string }>(
-        'SELECT actor, action, detail FROM audit WHERE target = ? ORDER BY rowid',
-      )
-      .all(laneId)
-      .map((r) => ({ actor: r.actor, action: r.action, detail: JSON.parse(r.detail) }));
-
-  // Finding 4: the log had no first event. `lane.opened` carries the whole declaration so a peer
-  // folding the log knows what a lane IS, not only what happened to it.
-  it('openLane writes lane.opened carrying the full declaration, before any claim row', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(
-      db,
-      team.id,
-      'bravo',
-      'June',
-      {
-        title: 'declared',
+  describe('lane lifecycle + the two checks (spec §8 acceptance scenarios)', async () => {
+    it('scenario 1 — the dependency-revert: unmet_dependency warns while the dep is active', async () => {
+      const { db, team } = await seed();
+      const june = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'P3.1 schema',
         project: 'musterd',
-        detail: 'why',
-        scope: ['packages/server/**'],
-        depends_on: ['01DEP'],
-        branch: 'june/x',
-        goal_id: 'launch',
-        risk: ['schema'],
-        stakes: 'high',
+        scope: ['packages/server/src/store/**'],
         claim: true,
-      },
-      7,
-    );
-    expect(rows(db, lane.id).map((r) => r.action)).toEqual(['lane.opened', 'lane.claimed']);
-    expect(rows(db, lane.id)[0]).toEqual({
-      actor: 'June',
-      action: 'lane.opened',
-      detail: {
-        lane: lane.id,
-        title: 'declared',
+      });
+      await updateLane(db, team.id, june.id, 'bravo', { state: 'active' });
+      const cleo = await openLane(db, team.id, 'bravo', 'Cleo', {
+        title: 'P3.2 handshake',
         project: 'musterd',
-        detail: 'why',
-        kind: null,
-        role: null,
+        depends_on: [june.id],
+        claim: true,
+      });
+      const warnings = await laneWarnings(db, team.id, 'bravo', cleo);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]!.kind).toBe('unmet_dependency');
+      expect(warnings[0]!.with).toBe(june.id);
+      expect(warnings[0]!.owner).toBe('June');
+      expect(warnings[0]!.detail).toContain('still active');
+
+      // ADR 169: ready_for_review does NOT clear it — a dependent building on unreviewed work is
+      // exactly when the warning earns its keep (advisory, so keeping it wedges nothing).
+      await updateLane(db, team.id, june.id, 'bravo', { state: 'ready_for_review' });
+      const still = await laneWarnings(db, team.id, 'bravo', cleo);
+      expect(still).toHaveLength(1);
+      expect(still[0]!.detail).toContain('still awaiting_acceptance');
+
+      // The dep resolving clears the warning (dedup-until-cleared is a diff over this).
+      await updateLane(db, team.id, june.id, 'bravo', { state: 'done' });
+      expect(await laneWarnings(db, team.id, 'bravo', cleo)).toHaveLength(0);
+    });
+
+    it('ADR 192: awaiting_acceptance persists the stage-one attestation and stays unresolved', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'riley', {
+        title: 'two-stage',
+        project: 'musterd',
+        branch: 'riley/two-stage',
+        claim: true,
+      });
+      const ready = (await updateLane(db, team.id, lane.id, 'bravo', {
+        state: 'ready_for_review', // legacy spelling coerces on write
+        merged: { pr: 7, sha: 'deadbeef', authorized_by: 'nick' },
+      }))!;
+      expect(ready.state).toBe('awaiting_acceptance');
+      expect(ready.merged).toEqual({ pr: 7, sha: 'deadbeef', authorized_by: 'nick' });
+      expect(ready.resolved_at).toBeNull();
+      // The attestation survives an unrelated later patch (rebuild-from-existing carry).
+      const noted = (await updateLane(db, team.id, lane.id, 'bravo', { detail: 'note' }))!;
+      expect(noted.merged).toEqual({ pr: 7, sha: 'deadbeef', authorized_by: 'nick' });
+    });
+
+    it('scenario 2 — the redone lane: handoff carries the branch', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'riley', {
+        title: 'BindingSchema',
+        project: 'musterd',
+        branch: 'agent/riley',
+        claim: true,
+      });
+      const handed = (await updateLane(db, team.id, lane.id, 'bravo', {
+        owner_seat: 'June',
+        branch: 'agent/riley',
+      }))!;
+      expect(handed.owner_seat).toBe('June');
+      expect(handed.branch).toBe('agent/riley');
+      // The board shows the lane with its branch — June builds on it instead of re-deriving.
+      const board = await listLanes(db, team.id, 'bravo', { owner: 'June' });
+      expect(board[0]!.branch).toBe('agent/riley');
+    });
+
+    it('board states filter — a seat with history sees only the live lanes (lane 01M2R988GK)', async () => {
+      const { db, team } = await seed();
+      const live = await openLane(db, team.id, 'bravo', 'June', { title: 'live', claim: true });
+      await updateLane(db, team.id, live.id, 'bravo', { state: 'active' });
+      const old = await openLane(db, team.id, 'bravo', 'June', { title: 'old', claim: true });
+      await updateLane(db, team.id, old.id, 'bravo', { state: 'done' });
+      // Owner alone returns both — the overflow this filter fixes.
+      expect(await listLanes(db, team.id, 'bravo', { owner: 'June' })).toHaveLength(2);
+      const filtered = await listLanes(db, team.id, 'bravo', {
+        owner: 'June',
+        states: ['claimed', 'active', 'blocked', 'awaiting_acceptance', 'ready_for_review'],
+      });
+      expect(filtered.map((l) => l.id)).toEqual([live.id]);
+    });
+
+    it('scenario 3 — the clean independent lane stays silent', async () => {
+      const { db, team } = await seed();
+      await openLane(db, team.id, 'bravo', 'June', {
+        title: 'store work',
+        project: 'musterd',
+        scope: ['packages/server/src/store/**'],
+        claim: true,
+      });
+      const jasmine = await openLane(db, team.id, 'bravo', 'Jasmine', {
+        title: 'governance',
+        project: 'musterd',
+        scope: ['packages/protocol/src/capabilities.ts'],
+        claim: true,
+      });
+      expect(await laneWarnings(db, team.id, 'bravo', jasmine)).toHaveLength(0);
+    });
+
+    it('scenario 3b — surface overlap warns, once per pair on the board', async () => {
+      const { db, team } = await seed();
+      const a = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'schema',
+        project: 'musterd',
+        scope: ['packages/server/src/store/**'],
+        claim: true,
+      });
+      const b = await openLane(db, team.id, 'bravo', 'Cleo', {
+        title: 'also schema',
+        project: 'musterd',
         scope: ['packages/server/**'],
-        depends_on: ['01DEP'],
-        branch: 'june/x',
-        goal_id: 'launch',
-        risk: ['schema'],
-        stakes: 'high',
-        stakes_provenance: 'declared',
-        created_by: 'June',
-        created_at: 7,
-      },
+        claim: true,
+      });
+      const w = await laneWarnings(db, team.id, 'bravo', b);
+      expect(
+        w.some((x) => x.kind === 'surface_overlap' && x.with === a.id && x.owner === 'June'),
+      ).toBe(true);
+      // Board dedups the symmetric pair to one warning.
+      const lanes = await listLanes(db, team.id, 'bravo');
+      const board = await boardWarnings(db, team.id, 'bravo', lanes);
+      expect(board.filter((x) => x.kind === 'surface_overlap')).toHaveLength(1);
+    });
+
+    it('scenario 4 — cross-project non-collision', async () => {
+      const { db, team } = await seed();
+      await openLane(db, team.id, 'bravo', 'June', {
+        title: 'members',
+        project: 'musterd',
+        scope: ['store/members.ts'],
+        claim: true,
+      });
+      const cleo = await openLane(db, team.id, 'bravo', 'Cleo', {
+        title: 'members elsewhere',
+        project: 'izzocam',
+        scope: ['store/members.ts'],
+        claim: true,
+      });
+      expect(await laneWarnings(db, team.id, 'bravo', cleo)).toHaveLength(0);
+    });
+
+    /**
+     * The mixed-era case that project *derivation* creates: before it existed every lane was
+     * `'default'`, so a scoped lane and a legacy one must not go mutually blind — an unscoped lane
+     * means "I didn't say", and a warning system should fail toward the false positive.
+     */
+    it("scenario 4b — an unscoped 'default' lane still contends with every project", async () => {
+      const { db, team } = await seed();
+      const legacy = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'members (opened before derivation)',
+        scope: ['store/members.ts'],
+        claim: true,
+      });
+      expect(legacy.project).toBe('default');
+      const scoped = await openLane(db, team.id, 'bravo', 'Cleo', {
+        title: 'members',
+        project: 'musterd',
+        scope: ['store/members.ts'],
+        claim: true,
+      });
+      // Both directions — the wildcard is symmetric.
+      expect(await laneWarnings(db, team.id, 'bravo', scoped)).toHaveLength(1);
+      expect(await laneWarnings(db, team.id, 'bravo', legacy)).toHaveLength(1);
+
+      // …and the escape hatch closes it: re-project the legacy lane and they stop contending.
+      const moved = (await updateLane(db, team.id, legacy.id, 'bravo', { project: 'izzocam' }))!;
+      expect(moved.project).toBe('izzocam');
+      expect(await laneWarnings(db, team.id, 'bravo', scoped)).toHaveLength(0);
+    });
+
+    it('scenario 5 — non-git: manual resolve closes the loop as a state transition', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'work', claim: true });
+      const done = (await updateLane(db, team.id, lane.id, 'bravo', { state: 'done' }))!;
+      expect(done.state).toBe('done');
+      expect(done.resolved_at).not.toBeNull();
+      // done lanes stop contending: no overlap warnings from/against them.
+      expect(await laneWarnings(db, team.id, 'bravo', done)).toHaveLength(0);
+    });
+
+    it('claiming an open lane implies claimed + stamps claimed_at', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'pool item' });
+      expect(lane.state).toBe('open');
+      expect(lane.owner_seat).toBeNull();
+      const claimed = (await updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'Cleo' }))!;
+      expect(claimed.state).toBe('claimed');
+      expect(claimed.owner_seat).toBe('Cleo');
+      expect(claimed.claimed_at).not.toBeNull();
     });
   });
 
-  it('an unclaimed open still writes lane.opened, and nothing else', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'unowned' }, 7);
-    expect(rows(db, lane.id).map((r) => r.action)).toEqual(['lane.opened']);
-  });
-
-  it('openLane with claim writes lane.claimed at_open', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(
-      db,
-      team.id,
-      'bravo',
-      'June',
-      { title: 'born owned', claim: true },
-      1,
-    );
-    expect(rows(db, lane.id).slice(1)).toEqual([
-      {
-        actor: 'June',
-        action: 'lane.claimed',
-        detail: {
-          lane: lane.id,
-          owner: 'June',
-          previous_owner: null,
-          kind: 'claim',
-          at_open: true,
-        },
-      },
-    ]);
-  });
-
-  it('updateLane writes claimed / updated / state_changed / released for their edges', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 't' });
-    const audit = { actor: 'June' };
-
-    await updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'June' }, 2, undefined, audit);
-    await updateLane(db, team.id, lane.id, 'bravo', { branch: 'b' }, 3, undefined, audit);
-    await updateLane(db, team.id, lane.id, 'bravo', { state: 'active' }, 4, undefined, audit);
-    await updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'Cleo' }, 5, undefined, audit);
-    await updateLane(db, team.id, lane.id, 'bravo', { state: 'open' }, 6, undefined, {
-      actor: 'Cleo',
+  describe('the release invariant — open ⟺ unowned', async () => {
+    it('moving an owned lane back to open clears the owner and the claim stamp', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'parked work',
+        claim: true,
+      });
+      expect(lane.owner_seat).toBe('June');
+      expect(lane.claimed_at).not.toBeNull();
+      const released = (await updateLane(db, team.id, lane.id, 'bravo', { state: 'open' }))!;
+      expect(released.state).toBe('open');
+      // The whole point: the board must not name a holder for work nobody is doing.
+      expect(released.owner_seat).toBeNull();
+      expect(released.claimed_at).toBeNull();
     });
 
-    expect(rows(db, lane.id)[0].action).toBe('lane.opened');
-    expect(rows(db, lane.id).slice(1)).toEqual([
-      {
+    it('a released lane is claimable by a different seat, stamping a fresh tenure', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'parked work',
+        claim: true,
+      });
+      const releasedAt = (await updateLane(
+        db,
+        team.id,
+        lane.id,
+        'bravo',
+        { state: 'open' },
+        1_000,
+      ))!;
+      expect(releasedAt.owner_seat).toBeNull();
+      const reclaimed = (await updateLane(
+        db,
+        team.id,
+        lane.id,
+        'bravo',
+        { owner_seat: 'Cleo' },
+        5_000,
+      ))!;
+      expect(reclaimed.state).toBe('claimed');
+      expect(reclaimed.owner_seat).toBe('Cleo');
+      // Not June's original stamp inherited: claimed_at describes the CURRENT tenure.
+      expect(reclaimed.claimed_at).toBe(5_000);
+    });
+
+    // The direct owner -> owner move never passes through the release that clears the stamp, so the
+    // new holder used to inherit the old one's claimed_at. That is what let a takeover read as a first
+    // claim on 2026-08-01: the response said "claimed_at 22:00" and the taker read it as their own.
+    it("a DIRECT owner-to-owner move stamps a fresh tenure, never the previous holder's", async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(
+        db,
+        team.id,
+        'bravo',
+        'June',
+        { title: 'work', claim: true },
+        1_000,
+      );
+      expect(lane.claimed_at).toBe(1_000);
+      const handed = (await updateLane(
+        db,
+        team.id,
+        lane.id,
+        'bravo',
+        { owner_seat: 'Cleo' },
+        9_000,
+      ))!;
+      expect(handed.owner_seat).toBe('Cleo');
+      expect(handed.claimed_at).toBe(9_000); // Cleo's tenure, not June's 1_000
+    });
+
+    it('re-patching the SAME owner keeps the original stamp (no tenure restart on an unrelated edit)', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(
+        db,
+        team.id,
+        'bravo',
+        'June',
+        { title: 'work', claim: true },
+        1_000,
+      );
+      const same = (await updateLane(
+        db,
+        team.id,
+        lane.id,
+        'bravo',
+        { owner_seat: 'June' },
+        9_000,
+      ))!;
+      expect(same.claimed_at).toBe(1_000);
+    });
+
+    it('an owner named on the same patch as state:open still releases — state wins', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'parked', claim: true });
+      const out = (await updateLane(db, team.id, lane.id, 'bravo', {
+        state: 'open',
+        owner_seat: 'Cleo',
+      }))!;
+      expect(out.state).toBe('open');
+      expect(out.owner_seat).toBeNull(); // the incoherent tuple is unrepresentable
+    });
+
+    it('a terminal close keeps its owner — release is only the open edge', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'shipped', claim: true });
+      const done = (await updateLane(db, team.id, lane.id, 'bravo', { state: 'done' }))!;
+      expect(done.owner_seat).toBe('June'); // ADR 169 derives verified-ness from the owner at close
+      expect(done.claimed_at).not.toBeNull();
+    });
+  });
+
+  describe('goal_id join (ADR 084)', async () => {
+    it('round-trips goal_id through open + update, and lanesForGoal filters by it', async () => {
+      const { db, team } = await seed();
+      const a = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'spine migration',
+        goal_id: 'orientation-spine',
+        claim: true,
+      });
+      expect(a.goal_id).toBe('orientation-spine');
+      // A lane opened without a goal is ungrouped; update can link it later.
+      const b = await openLane(db, team.id, 'bravo', 'Cleo', { title: 'unlinked', claim: true });
+      expect(b.goal_id).toBeNull();
+      const linked = (await updateLane(db, team.id, b.id, 'bravo', {
+        goal_id: 'orientation-spine',
+      }))!;
+      expect(linked.goal_id).toBe('orientation-spine');
+      // update can clear it back to null.
+      const cleared = (await updateLane(db, team.id, b.id, 'bravo', { goal_id: null }))!;
+      expect(cleared.goal_id).toBeNull();
+
+      const forGoal = await lanesForGoal(db, team.id, 'bravo', 'orientation-spine');
+      expect(forGoal.map((l) => l.id)).toEqual([a.id]);
+    });
+  });
+
+  describe('deriveGoalStatus (the pinned rule, ADR 048 as amended by 084)', () => {
+    const lane = (state: string): Lane =>
+      ({ state, id: state, title: '', goal_id: 'g' }) as unknown as Lane;
+
+    it('planned when the Goal has no lanes', () => {
+      expect(deriveGoalStatus([])).toBe('planned');
+    });
+    it('in-flight when any lane is live', () => {
+      expect(deriveGoalStatus([lane('done'), lane('active')])).toBe('in-flight');
+      expect(deriveGoalStatus([lane('open')])).toBe('in-flight');
+      expect(deriveGoalStatus([lane('blocked')])).toBe('in-flight');
+      // ADR 169: awaiting review is live — a goal is not shipped until its closes land.
+      expect(deriveGoalStatus([lane('done'), lane('awaiting_acceptance')])).toBe('in-flight');
+    });
+    it('shipped only when all lanes are terminal AND at least one is done', () => {
+      expect(deriveGoalStatus([lane('done')])).toBe('shipped');
+      expect(deriveGoalStatus([lane('done'), lane('abandoned')])).toBe('shipped');
+    });
+    it('not shipped when every lane is abandoned (no done)', () => {
+      expect(deriveGoalStatus([lane('abandoned'), lane('abandoned')])).toBe('in-flight');
+    });
+    it('flap-tolerant: a new open lane returns a shipped Goal to in-flight', () => {
+      const shipped = [lane('done'), lane('done')];
+      expect(deriveGoalStatus(shipped)).toBe('shipped');
+      expect(deriveGoalStatus([...shipped, lane('open')])).toBe('in-flight');
+    });
+  });
+
+  describe('departed-seat claim release (ADR 196)', async () => {
+    it('releaseInFlightClaimsForSeat opens claimed/active/blocked but keeps awaiting_acceptance', async () => {
+      const { db, team } = await seed();
+      const claimed = await openLane(db, team.id, 'bravo', 'June', { title: 'wip', claim: true });
+      const active = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'building',
+        claim: true,
+      });
+      await updateLane(db, team.id, active.id, 'bravo', { state: 'active' });
+      const awaiting = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'shipped',
+        claim: true,
+      });
+      await updateLane(db, team.id, awaiting.id, 'bravo', { state: 'awaiting_acceptance' });
+
+      const released = await releaseInFlightClaimsForSeat(db, team.id, 'June');
+      expect(released.map((r) => r.id).sort()).toEqual([active.id, claimed.id].sort());
+      expect(await getLane(db, team.id, claimed.id, 'bravo')).toMatchObject({
+        state: 'open',
+        owner_seat: null,
+      });
+      expect((await getLane(db, team.id, active.id, 'bravo'))?.owner_seat).toBeNull();
+      expect(await getLane(db, team.id, awaiting.id, 'bravo')).toMatchObject({
+        state: 'awaiting_acceptance',
+        owner_seat: 'June',
+      });
+    });
+
+    it('releaseDepartedSeatClaims sweeps lanes still owned by soft-removed seats', async () => {
+      const { db, team } = await seed();
+      const june = await addMember(db, team, { name: 'June', kind: 'agent' });
+      const lane = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'ghost wip',
+        claim: true,
+      });
+      // Bypass leaveMember's composition — the historical ghost ADR 196's reaper sweep clears.
+      await db.run('UPDATE members SET left_at = ? WHERE id = ?', [Date.now(), june.row.id]);
+
+      const swept = await releaseDepartedSeatClaims(db);
+      expect(swept).toEqual([
+        { team_id: team.id, seat: 'June', lane: lane.id, state_before: 'claimed' },
+      ]);
+      expect(await getLane(db, team.id, lane.id, 'bravo')).toMatchObject({
+        state: 'open',
+        owner_seat: null,
+      });
+    });
+
+    // Lane-replication slice (spec 2026-09-01-lane-replication-design.md §Finding 3, hole 1): these
+    // two paths were the only places a lane changed hands with no record of who or why. Increment 1
+    // made every transition leave a `lane.*` audit row precisely so a replicating daemon can fold
+    // history back out — a release that leaves no trace cannot replicate under any design, and a
+    // peer would keep showing a holder this machine already released.
+    const releasedRows = async (db: ReturnType<typeof openDb>, laneId: string) =>
+      (
+        await db.all(
+          "SELECT actor, detail FROM audit WHERE action = 'lane.released' AND target = ?",
+          [laneId],
+        )
+      ).map((r) => ({ actor: r.actor, detail: JSON.parse(r.detail) as Record<string, unknown> }));
+
+    it('releaseInFlightClaimsForSeat leaves a lane.released row per lane, naming the departed holder', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'wip', claim: true });
+
+      await releaseInFlightClaimsForSeat(db, team.id, 'June');
+
+      expect(await releasedRows(db, lane.id)).toEqual([
+        {
+          actor: 'musterd',
+          detail: {
+            lane: lane.id,
+            released_by: 'musterd',
+            owner_before: 'June',
+            reason: 'seat_left',
+          },
+        },
+      ]);
+    });
+
+    it('releaseDepartedSeatClaims leaves a lane.released row per swept lane', async () => {
+      const { db, team } = await seed();
+      const june = await addMember(db, team, { name: 'June', kind: 'agent' });
+      const lane = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'ghost wip',
+        claim: true,
+      });
+      await db.run('UPDATE members SET left_at = ? WHERE id = ?', [Date.now(), june.row.id]);
+
+      await releaseDepartedSeatClaims(db);
+
+      expect(await releasedRows(db, lane.id)).toEqual([
+        {
+          actor: 'musterd',
+          detail: {
+            lane: lane.id,
+            released_by: 'musterd',
+            owner_before: 'June',
+            reason: 'seat_departed_sweep',
+          },
+        },
+      ]);
+    });
+  });
+
+  // Lane-replication slice (spec §Finding 3, hole 2): `lane.updated` recorded field NAMES only, so
+  // history could prove a lane's scope changed and never say to what. A folding peer needs values.
+  describe('laneFieldDiff — the values behind a lane.updated row', async () => {
+    it('reports from/to per changed audited field, arrays by value, and nothing for unchanged ones', async () => {
+      const { db, team } = await seed();
+      const before = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'old',
+        scope: ['a/**'],
+        claim: true,
+      });
+      const after = (await updateLane(db, team.id, before.id, 'bravo', {
+        title: 'new',
+        scope: ['a/**', 'b/**'],
+        state: 'active', // state is not an audited field — it has its own verb
+      }))!;
+
+      expect(laneFieldDiff(before, after)).toEqual({
+        title: { from: 'old', to: 'new' },
+        scope: { from: ['a/**'], to: ['a/**', 'b/**'] },
+      });
+    });
+  });
+
+  // Lane-replication slice (spec §Hole 3): a lane.* row IS the transition, so the store writes it
+  // inside the same transaction as the lane row, with the required append. If the record cannot be
+  // written, the transition does not happen.
+  describe('lane.* rows are written by the store, inside the write', async () => {
+    const rows = async (db: ReturnType<typeof openDb>, laneId: string) =>
+      (
+        await db.all('SELECT actor, action, detail FROM audit WHERE target = ? ORDER BY id', [
+          laneId,
+        ])
+      ).map((r) => ({ actor: r.actor, action: r.action, detail: JSON.parse(r.detail) }));
+
+    // Finding 4: the log had no first event. `lane.opened` carries the whole declaration so a peer
+    // folding the log knows what a lane IS, not only what happened to it.
+    it('openLane writes lane.opened carrying the full declaration, before any claim row', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(
+        db,
+        team.id,
+        'bravo',
+        'June',
+        {
+          title: 'declared',
+          project: 'musterd',
+          detail: 'why',
+          scope: ['packages/server/**'],
+          depends_on: ['01DEP'],
+          branch: 'june/x',
+          goal_id: 'launch',
+          risk: ['schema'],
+          stakes: 'high',
+          claim: true,
+        },
+        7,
+      );
+      expect((await rows(db, lane.id)).map((r) => r.action)).toEqual([
+        'lane.opened',
+        'lane.claimed',
+      ]);
+      expect((await rows(db, lane.id))[0]).toEqual({
         actor: 'June',
-        action: 'lane.claimed',
-        detail: { lane: lane.id, owner: 'June', previous_owner: null, kind: 'claim' },
-      },
-      {
-        actor: 'June',
-        action: 'lane.updated',
-        detail: { lane: lane.id, fields: ['branch'], changes: { branch: { from: null, to: 'b' } } },
-      },
-      {
-        actor: 'June',
-        action: 'lane.state_changed',
-        detail: { lane: lane.id, from: 'claimed', to: 'active' },
-      },
-      {
-        actor: 'June',
-        action: 'lane.claimed',
+        action: 'lane.opened',
         detail: {
           lane: lane.id,
-          owner: 'Cleo',
-          previous_owner: 'June',
-          kind: 'handoff',
-          takeover_of_offline_owner: true,
+          title: 'declared',
+          project: 'musterd',
+          detail: 'why',
+          kind: null,
+          role: null,
+          scope: ['packages/server/**'],
+          depends_on: ['01DEP'],
+          branch: 'june/x',
+          goal_id: 'launch',
+          risk: ['schema'],
+          stakes: 'high',
+          stakes_provenance: 'declared',
+          created_by: 'June',
+          created_at: 7,
         },
-      },
-      {
+      });
+    });
+
+    it('an unclaimed open still writes lane.opened, and nothing else', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'unowned' }, 7);
+      expect((await rows(db, lane.id)).map((r) => r.action)).toEqual(['lane.opened']);
+    });
+
+    it('openLane with claim writes lane.claimed at_open', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(
+        db,
+        team.id,
+        'bravo',
+        'June',
+        { title: 'born owned', claim: true },
+        1,
+      );
+      expect((await rows(db, lane.id)).slice(1)).toEqual([
+        {
+          actor: 'June',
+          action: 'lane.claimed',
+          detail: {
+            lane: lane.id,
+            owner: 'June',
+            previous_owner: null,
+            kind: 'claim',
+            at_open: true,
+          },
+        },
+      ]);
+    });
+
+    it('updateLane writes claimed / updated / state_changed / released for their edges', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 't' });
+      const audit = { actor: 'June' };
+
+      await updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'June' }, 2, undefined, audit);
+      await updateLane(db, team.id, lane.id, 'bravo', { branch: 'b' }, 3, undefined, audit);
+      await updateLane(db, team.id, lane.id, 'bravo', { state: 'active' }, 4, undefined, audit);
+      await updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'Cleo' }, 5, undefined, audit);
+      await updateLane(db, team.id, lane.id, 'bravo', { state: 'open' }, 6, undefined, {
         actor: 'Cleo',
-        action: 'lane.released',
-        detail: { lane: lane.id, released_by: 'Cleo', owner_before: 'Cleo' },
-      },
-    ]);
-  });
+      });
 
-  it('a local submit does not write lane.state_changed; a hub-arbitrated one does, so a joiner can fold it', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 't', claim: true });
-    await updateLane(
-      db,
-      team.id,
-      lane.id,
-      'bravo',
-      { state: 'awaiting_acceptance' },
-      2,
-      undefined,
-      {
-        actor: 'June',
-      },
-    );
-    expect(rows(db, lane.id).filter((r) => r.action === 'lane.state_changed')).toEqual([]);
+      expect((await rows(db, lane.id))[0].action).toBe('lane.opened');
+      expect((await rows(db, lane.id)).slice(1)).toEqual([
+        {
+          actor: 'June',
+          action: 'lane.claimed',
+          detail: { lane: lane.id, owner: 'June', previous_owner: null, kind: 'claim' },
+        },
+        {
+          actor: 'June',
+          action: 'lane.updated',
+          detail: {
+            lane: lane.id,
+            fields: ['branch'],
+            changes: { branch: { from: null, to: 'b' } },
+          },
+        },
+        {
+          actor: 'June',
+          action: 'lane.state_changed',
+          detail: { lane: lane.id, from: 'claimed', to: 'active' },
+        },
+        {
+          actor: 'June',
+          action: 'lane.claimed',
+          detail: {
+            lane: lane.id,
+            owner: 'Cleo',
+            previous_owner: 'June',
+            kind: 'handoff',
+            takeover_of_offline_owner: true,
+          },
+        },
+        {
+          actor: 'Cleo',
+          action: 'lane.released',
+          detail: { lane: lane.id, released_by: 'Cleo', owner_before: 'Cleo' },
+        },
+      ]);
+    });
 
-    const other = await openLane(db, team.id, 'bravo', 'June', { title: 'u', claim: true });
-    await updateLane(
-      db,
-      team.id,
-      other.id,
-      'bravo',
-      { state: 'awaiting_acceptance' },
-      3,
-      undefined,
-      {
-        actor: 'June',
-        node: 'joiner-node',
-      },
-    );
-    expect(rows(db, other.id).filter((r) => r.action === 'lane.state_changed')).toEqual([
-      {
-        actor: 'June',
-        action: 'lane.state_changed',
-        detail: {
-          lane: other.id,
-          from: 'claimed',
-          to: 'awaiting_acceptance',
+    it('a local submit does not write lane.state_changed; a hub-arbitrated one does, so a joiner can fold it', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 't', claim: true });
+      await updateLane(
+        db,
+        team.id,
+        lane.id,
+        'bravo',
+        { state: 'awaiting_acceptance' },
+        2,
+        undefined,
+        {
+          actor: 'June',
+        },
+      );
+      expect((await rows(db, lane.id)).filter((r) => r.action === 'lane.state_changed')).toEqual(
+        [],
+      );
+
+      const other = await openLane(db, team.id, 'bravo', 'June', { title: 'u', claim: true });
+      await updateLane(
+        db,
+        team.id,
+        other.id,
+        'bravo',
+        { state: 'awaiting_acceptance' },
+        3,
+        undefined,
+        {
+          actor: 'June',
           node: 'joiner-node',
         },
-      },
-    ]);
-  });
-
-  it('a transition whose record cannot be written does not happen', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 't', branch: 'before' });
-    await db.exec('DROP TABLE audit');
-
-    await expect(
-      updateLane(db, team.id, lane.id, 'bravo', { branch: 'after' }, 2, undefined, {
-        actor: 'June',
-      }),
-    ).rejects.toThrow();
-    expect((await getLane(db, team.id, lane.id, 'bravo'))?.branch).toBe('before');
-  });
-
-  it('updateLane without an audit option writes nothing (callers that own their own verb)', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 't' });
-    await updateLane(db, team.id, lane.id, 'bravo', { state: 'active' });
-    // The birth is the store's own row and is always there; the patch added nothing after it.
-    expect(rows(db, lane.id).map((r) => r.action)).toEqual(['lane.opened']);
-  });
-});
-
-describe('deriveHandoffLane (ADR 231) — a handoff act names the lane it hands off', async () => {
-  it('attaches when the sender holds exactly one live lane', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'the one live lane',
-      project: 'musterd',
-      branch: 'june/the-work',
-      claim: true,
+      );
+      expect((await rows(db, other.id)).filter((r) => r.action === 'lane.state_changed')).toEqual([
+        {
+          actor: 'June',
+          action: 'lane.state_changed',
+          detail: {
+            lane: other.id,
+            from: 'claimed',
+            to: 'awaiting_acceptance',
+            node: 'joiner-node',
+          },
+        },
+      ]);
     });
-    const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June');
-    expect(derived.kind).toBe('attach');
-    if (derived.kind !== 'attach') throw new Error('unreachable');
-    expect(derived.lane.id).toBe(lane.id);
-    expect(derived.lane.branch).toBe('june/the-work');
-  });
 
-  it('abstains as ambiguous when the sender holds two or more — never guesses', async () => {
-    const { db, team } = await seed();
-    await openLane(db, team.id, 'bravo', 'June', {
-      title: 'first',
-      project: 'musterd',
-      claim: true,
-    });
-    await openLane(db, team.id, 'bravo', 'June', {
-      title: 'second',
-      project: 'musterd',
-      claim: true,
-    });
-    const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June');
-    expect(derived.kind).toBe('ambiguous');
-    if (derived.kind !== 'ambiguous') throw new Error('unreachable');
-    expect(derived.candidates).toHaveLength(2);
-  });
-
-  it('says none when the sender holds no live lane — the legal lane-less handoff', async () => {
-    const { db, team } = await seed();
-    expect((await deriveHandoffLane(db, team.id, 'bravo', 'June')).kind).toBe('none');
-  });
-
-  it('ignores terminal lanes — a done lane is not what you are handing off', async () => {
-    const { db, team } = await seed();
-    const done = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'shipped',
-      project: 'musterd',
-      claim: true,
-    });
-    await updateLane(db, team.id, done.id, 'bravo', { state: 'done' });
-    const live = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'still going',
-      project: 'musterd',
-      claim: true,
-    });
-    const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June');
-    expect(derived.kind).toBe('attach');
-    if (derived.kind !== 'attach') throw new Error('unreachable');
-    expect(derived.lane.id).toBe(live.id);
-  });
-
-  /*
-   * Lane 01M2KTBDNP, observed on izzo 2026-09-15. I sent a handoff routing a newly opened lane and
-   * the ack came back naming a DIFFERENT one — a lane whose PR had merged minutes earlier and which
-   * was sitting in `awaiting_acceptance`. The candidate filter drops only LANE_TERMINAL_STATES, and
-   * acceptance is not terminal, so a lane whose work has LANDED stayed a handoff candidate.
-   *
-   * There is nothing to hand off in such a lane: the branch is merged, its remote is deleted, and
-   * the only act left is somebody else's accept. Worse, it does not merely annotate the ack — the
-   * route rewrites the envelope's meta with it, so the delivered act permanently carries a pointer
-   * to finished work, and ADR 243's orientation `why` reads exactly that field to tell the recipient
-   * WHICH work this is.
-   *
-   * And it was confident rather than ambiguous: with one such lane held and nothing else, it took
-   * the `length === 1` attach path, so the deliberate "warn and attach nothing" branch never ran.
-   */
-  it('ignores a lane awaiting acceptance — the work landed, there is nothing left to hand over', async () => {
-    const { db, team } = await seed();
-    const submitted = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'merged, waiting on a verdict',
-      project: 'musterd',
-      branch: 'june/landed',
-      claim: true,
-    });
-    await updateLane(db, team.id, submitted.id, 'bravo', { state: 'awaiting_acceptance' });
-    // The only lane held is the submitted one: the answer must be `none`, not a confident attach.
-    expect((await deriveHandoffLane(db, team.id, 'bravo', 'June')).kind).toBe('none');
-
-    const live = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'still going',
-      project: 'musterd',
-      claim: true,
-    });
-    const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June');
-    expect(derived.kind).toBe('attach');
-    if (derived.kind !== 'attach') throw new Error('unreachable');
-    expect(derived.lane.id).toBe(live.id);
-  });
-
-  it('ignores the legacy spelling of that stage too — `ready_for_review` is the same lane', async () => {
-    // ADR 192 kept `ready_for_review` on the wire for fleet skew, and lanes.wire.ts says to read the
-    // stage through `isAwaitingAcceptance` rather than comparing against either name. A fix that
-    // matched only the canonical spelling would leave a skewed daemon's lanes still derivable.
-    const { db, team } = await seed();
-    const submitted = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'merged under the old name',
-      project: 'musterd',
-      claim: true,
-    });
-    await updateLane(db, team.id, submitted.id, 'bravo', { state: 'ready_for_review' });
-    expect((await deriveHandoffLane(db, team.id, 'bravo', 'June')).kind).toBe('none');
-  });
-
-  it('ignores an awaiting-acceptance lane on the recipient branch as well — same rule, both paths', async () => {
-    // The handed-to-recipient branch runs FIRST and carries its own copy of the filter, so a lane
-    // handed over and then submitted would otherwise still be derived by the earlier path and never
-    // reach the held-lane rule below it.
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', {
-      title: 'handed over, then submitted',
-      project: 'musterd',
-      claim: true,
-    });
-    await recordHandoff(db, team.id, 'bravo', lane.id, 'June', 'Cleo');
-    await updateLane(db, team.id, lane.id, 'bravo', { state: 'awaiting_acceptance' });
-    expect((await deriveHandoffLane(db, team.id, 'bravo', 'June', 'Cleo')).kind).toBe('none');
-  });
-
-  it('ignores lanes owned by someone else — you cannot hand off what you do not hold', async () => {
-    const { db, team } = await seed();
-    await openLane(db, team.id, 'bravo', 'Cleo', {
-      title: 'cleo owns it',
-      project: 'musterd',
-      claim: true,
-    });
-    expect((await deriveHandoffLane(db, team.id, 'bravo', 'June')).kind).toBe('none');
-  });
-
-  // ADR 243. The candidate set was "lanes the sender still HOLDS", but `lane_handoff` transfers
-  // ownership BEFORE the explanatory act is sent — so the intended lane is never a candidate, and a
-  // sender who holds exactly one OTHER lane lands in the confident single-candidate branch.
-  describe('a lane just handed to this recipient outranks a lane the sender still holds', async () => {
-    /** The live 2026-08-05 shape: hand one lane away, keep another, then explain the handoff. */
-    async function handedAndHeld() {
+    it('a transition whose record cannot be written does not happen', async () => {
       const { db, team } = await seed();
-      const handed = await openLane(db, team.id, 'bravo', 'June', {
-        title: 'the lane actually handed over',
-        project: 'musterd',
-        branch: 'june/handed',
-        claim: true,
-      });
-      await recordHandoff(db, team.id, 'bravo', handed.id, 'June', 'Cleo');
-      const kept = await openLane(db, team.id, 'bravo', 'June', {
-        title: 'my unrelated lane in acceptance',
-        project: 'musterd',
-        claim: true,
-      });
-      return { db, team, handed, kept };
-    }
-
-    it('attaches the handed lane, not the held one', async () => {
-      const { db, team, handed } = await handedAndHeld();
-      const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June', 'Cleo');
-      expect(derived.kind).toBe('attach');
-      if (derived.kind !== 'attach') throw new Error('unreachable');
-      expect(derived.lane.id).toBe(handed.id);
-      expect(derived.lane.branch).toBe('june/handed');
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 't', branch: 'before' });
+      // Hide the table rather than drop it: the PGlite double is one pooled instance per worker.
+      await db.exec('ALTER TABLE audit RENAME TO audit_gone');
+      try {
+        await expect(
+          updateLane(db, team.id, lane.id, 'bravo', { branch: 'after' }, 2, undefined, {
+            actor: 'June',
+          }),
+        ).rejects.toThrow();
+        expect((await getLane(db, team.id, lane.id, 'bravo'))?.branch).toBe('before');
+      } finally {
+        await db.exec('ALTER TABLE audit_gone RENAME TO audit');
+      }
     });
 
-    it('falls back to the held lane when nothing was handed to THIS recipient', async () => {
-      const { db, team, kept } = await handedAndHeld();
-      const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June', 'Dara');
+    it('updateLane without an audit option writes nothing (callers that own their own verb)', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 't' });
+      await updateLane(db, team.id, lane.id, 'bravo', { state: 'active' });
+      // The birth is the store's own row and is always there; the patch added nothing after it.
+      expect((await rows(db, lane.id)).map((r) => r.action)).toEqual(['lane.opened']);
+    });
+  });
+
+  describe('deriveHandoffLane (ADR 231) — a handoff act names the lane it hands off', async () => {
+    it('attaches when the sender holds exactly one live lane', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'the one live lane',
+        project: 'musterd',
+        branch: 'june/the-work',
+        claim: true,
+      });
+      const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June');
       expect(derived.kind).toBe('attach');
       if (derived.kind !== 'attach') throw new Error('unreachable');
-      expect(derived.lane.id).toBe(kept.id);
+      expect(derived.lane.id).toBe(lane.id);
+      expect(derived.lane.branch).toBe('june/the-work');
     });
 
-    it('is ambiguous when several lanes went to the same recipient — one referent or none', async () => {
-      const { db, team } = await handedAndHeld();
-      const second = await openLane(db, team.id, 'bravo', 'June', {
-        title: 'a second lane handed to Cleo',
+    it('abstains as ambiguous when the sender holds two or more — never guesses', async () => {
+      const { db, team } = await seed();
+      await openLane(db, team.id, 'bravo', 'June', {
+        title: 'first',
         project: 'musterd',
         claim: true,
       });
-      await recordHandoff(db, team.id, 'bravo', second.id, 'June', 'Cleo');
-      const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June', 'Cleo');
+      await openLane(db, team.id, 'bravo', 'June', {
+        title: 'second',
+        project: 'musterd',
+        claim: true,
+      });
+      const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June');
       expect(derived.kind).toBe('ambiguous');
       if (derived.kind !== 'ambiguous') throw new Error('unreachable');
       expect(derived.candidates).toHaveLength(2);
     });
 
-    it('ignores a handed lane the recipient no longer owns — the fact expired, not aged out', async () => {
-      const { db, team, handed, kept } = await handedAndHeld();
-      await updateLane(db, team.id, handed.id, 'bravo', { owner_seat: 'Dara' });
-      const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June', 'Cleo');
-      expect(derived.kind).toBe('attach');
-      if (derived.kind !== 'attach') throw new Error('unreachable');
-      expect(derived.lane.id).toBe(kept.id);
-    });
-
-    it('ignores a handed lane that has since gone terminal', async () => {
-      const { db, team, handed, kept } = await handedAndHeld();
-      await updateLane(db, team.id, handed.id, 'bravo', { state: 'done' });
-      const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June', 'Cleo');
-      expect(derived.kind).toBe('attach');
-      if (derived.kind !== 'attach') throw new Error('unreachable');
-      expect(derived.lane.id).toBe(kept.id);
-    });
-
-    it('ignores a lane the RECIPIENT claimed for themselves — a claim is not a handoff', async () => {
+    it('says none when the sender holds no live lane — the legal lane-less handoff', async () => {
       const { db, team } = await seed();
-      const claimed = await openLane(db, team.id, 'bravo', 'June', {
-        title: 'Cleo took this one herself',
+      expect((await deriveHandoffLane(db, team.id, 'bravo', 'June')).kind).toBe('none');
+    });
+
+    it('ignores terminal lanes — a done lane is not what you are handing off', async () => {
+      const { db, team } = await seed();
+      const done = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'shipped',
         project: 'musterd',
         claim: true,
       });
-      await updateLane(db, team.id, claimed.id, 'bravo', { owner_seat: 'Cleo' });
-      await appendAudit(db, team.id, {
-        actor: 'Cleo',
-        action: 'lane.claimed',
-        target: claimed.id,
-        result: 'allow',
-        detail: { lane: claimed.id, owner: 'Cleo', previous_owner: 'June', kind: 'claim' },
+      await updateLane(db, team.id, done.id, 'bravo', { state: 'done' });
+      const live = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'still going',
+        project: 'musterd',
+        claim: true,
       });
+      const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June');
+      expect(derived.kind).toBe('attach');
+      if (derived.kind !== 'attach') throw new Error('unreachable');
+      expect(derived.lane.id).toBe(live.id);
+    });
+
+    /*
+     * Lane 01M2KTBDNP, observed on izzo 2026-09-15. I sent a handoff routing a newly opened lane and
+     * the ack came back naming a DIFFERENT one — a lane whose PR had merged minutes earlier and which
+     * was sitting in `awaiting_acceptance`. The candidate filter drops only LANE_TERMINAL_STATES, and
+     * acceptance is not terminal, so a lane whose work has LANDED stayed a handoff candidate.
+     *
+     * There is nothing to hand off in such a lane: the branch is merged, its remote is deleted, and
+     * the only act left is somebody else's accept. Worse, it does not merely annotate the ack — the
+     * route rewrites the envelope's meta with it, so the delivered act permanently carries a pointer
+     * to finished work, and ADR 243's orientation `why` reads exactly that field to tell the recipient
+     * WHICH work this is.
+     *
+     * And it was confident rather than ambiguous: with one such lane held and nothing else, it took
+     * the `length === 1` attach path, so the deliberate "warn and attach nothing" branch never ran.
+     */
+    it('ignores a lane awaiting acceptance — the work landed, there is nothing left to hand over', async () => {
+      const { db, team } = await seed();
+      const submitted = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'merged, waiting on a verdict',
+        project: 'musterd',
+        branch: 'june/landed',
+        claim: true,
+      });
+      await updateLane(db, team.id, submitted.id, 'bravo', { state: 'awaiting_acceptance' });
+      // The only lane held is the submitted one: the answer must be `none`, not a confident attach.
+      expect((await deriveHandoffLane(db, team.id, 'bravo', 'June')).kind).toBe('none');
+
+      const live = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'still going',
+        project: 'musterd',
+        claim: true,
+      });
+      const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June');
+      expect(derived.kind).toBe('attach');
+      if (derived.kind !== 'attach') throw new Error('unreachable');
+      expect(derived.lane.id).toBe(live.id);
+    });
+
+    it('ignores the legacy spelling of that stage too — `ready_for_review` is the same lane', async () => {
+      // ADR 192 kept `ready_for_review` on the wire for fleet skew, and lanes.wire.ts says to read the
+      // stage through `isAwaitingAcceptance` rather than comparing against either name. A fix that
+      // matched only the canonical spelling would leave a skewed daemon's lanes still derivable.
+      const { db, team } = await seed();
+      const submitted = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'merged under the old name',
+        project: 'musterd',
+        claim: true,
+      });
+      await updateLane(db, team.id, submitted.id, 'bravo', { state: 'ready_for_review' });
+      expect((await deriveHandoffLane(db, team.id, 'bravo', 'June')).kind).toBe('none');
+    });
+
+    it('ignores an awaiting-acceptance lane on the recipient branch as well — same rule, both paths', async () => {
+      // The handed-to-recipient branch runs FIRST and carries its own copy of the filter, so a lane
+      // handed over and then submitted would otherwise still be derived by the earlier path and never
+      // reach the held-lane rule below it.
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', {
+        title: 'handed over, then submitted',
+        project: 'musterd',
+        claim: true,
+      });
+      await recordHandoff(db, team.id, 'bravo', lane.id, 'June', 'Cleo');
+      await updateLane(db, team.id, lane.id, 'bravo', { state: 'awaiting_acceptance' });
       expect((await deriveHandoffLane(db, team.id, 'bravo', 'June', 'Cleo')).kind).toBe('none');
     });
-  });
-});
 
-describe('no_goal warning (goals-front-door design)', async () => {
-  async function seedWithNick() {
-    const { db, team } = await seed();
-    const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
-    return { db, team, nick };
-  }
-  let gts = 0;
-  async function declareGoal(
-    db: ReturnType<typeof seed>['db'],
-    teamId: string,
-    fromId: string,
-    goal: { id: string; title: string; wave?: number | 'later' },
-  ) {
-    const ts = ++gts;
-    await insertMessage(
-      db,
-      teamId,
-      fromId,
-      null,
-      makeEnvelope({
-        id: `ng${ts}-${goal.id}`,
-        team: 'bravo',
-        from: 'nick',
-        to: { kind: 'team' },
-        act: 'message',
-        body: `[goal] ${goal.title}`,
-        meta: { goal },
-        ts,
-      }),
-    );
-  }
-
-  it('a contending goal-less lane warns when an unshipped goal exists', async () => {
-    const { db, team, nick } = await seedWithNick();
-    await declareGoal(db, team.id, nick.id, { id: 'g1', title: 'Native harness' });
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'work', claim: true });
-    const w = await laneWarnings(db, team.id, 'bravo', lane);
-    expect(w.some((x) => x.kind === 'no_goal' && x.owner === null && x.with === 'g1')).toBe(true);
-  });
-
-  it('never warns: no goals declared / attached lane / backlog lane', async () => {
-    const { db, team, nick } = await seedWithNick();
-    const bare = await openLane(db, team.id, 'bravo', 'June', { title: 'a', claim: true });
-    expect((await laneWarnings(db, team.id, 'bravo', bare)).some((x) => x.kind === 'no_goal')).toBe(
-      false,
-    );
-    await declareGoal(db, team.id, nick.id, { id: 'g1', title: 'G' });
-    const linked = await openLane(db, team.id, 'bravo', 'Cleo', {
-      title: 'b',
-      goal_id: 'g1',
-      claim: true,
-    });
-    expect(
-      (await laneWarnings(db, team.id, 'bravo', linked)).some((x) => x.kind === 'no_goal'),
-    ).toBe(false);
-    // backlog (open, unclaimed) lane does not flag on the board:
-    const idle = await openLane(db, team.id, 'bravo', 'Cleo', { title: 'c' });
-    expect((await laneWarnings(db, team.id, 'bravo', idle)).some((x) => x.kind === 'no_goal')).toBe(
-      false,
-    );
-  });
-
-  it('never warns when the only goals are shipped', async () => {
-    const { db, team, nick } = await seedWithNick();
-    await declareGoal(db, team.id, nick.id, { id: 'g1', title: 'G' });
-    const shipping = await openLane(db, team.id, 'bravo', 'Cleo', {
-      title: 'ship it',
-      goal_id: 'g1',
-      claim: true,
-    });
-    await updateLane(db, team.id, shipping.id, 'bravo', { state: 'done' });
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'work', claim: true });
-    expect((await laneWarnings(db, team.id, 'bravo', lane)).some((x) => x.kind === 'no_goal')).toBe(
-      false,
-    );
-  });
-
-  it('board projection carries it once per lane', async () => {
-    const { db, team, nick } = await seedWithNick();
-    await declareGoal(db, team.id, nick.id, { id: 'g1', title: 'G' });
-    await openLane(db, team.id, 'bravo', 'June', { title: 'w', claim: true });
-    const lanes = await listLanes(db, team.id, 'bravo');
-    expect(
-      (await boardWarnings(db, team.id, 'bravo', lanes)).filter((w) => w.kind === 'no_goal'),
-    ).toHaveLength(1);
-  });
-});
-
-describe('stale_acceptance warning (value-layer design)', async () => {
-  function insertAuditAt(
-    db: ReturnType<typeof seed>['db'],
-    teamId: string,
-    target: string,
-    ts: number,
-  ) {
-    db.prepare(
-      `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      `sa${ts}-${target}`,
-      teamId,
-      ts,
-      'June',
-      'lane.ready_for_review',
-      target,
-      'allow',
-      null,
-      ts,
-    );
-  }
-  async function awaitingLane(db: ReturnType<typeof seed>['db'], teamId: string) {
-    const lane = await openLane(db, teamId, 'bravo', 'June', { title: 'w', claim: true });
-    return await updateLane(db, teamId, lane.id, 'bravo', { state: 'awaiting_acceptance' });
-  }
-
-  it('warns once a lane has waited past the threshold — advisory, owner null', async () => {
-    const { db, team } = await seed();
-    const now = Date.now();
-    const lane = await awaitingLane(db, team.id);
-    insertAuditAt(db, team.id, lane.id, now - ACCEPTANCE_STALE_MS - 60_000);
-    const w = await staleAcceptanceWarning(db, team.id, lane, now);
-    expect(w).toMatchObject({ kind: 'stale_acceptance', subject: lane.id, owner: null });
-    expect(w!.detail).toMatch(/waiting 12h/);
-  });
-
-  it('stays silent under the threshold', async () => {
-    const { db, team } = await seed();
-    const now = Date.now();
-    const lane = await awaitingLane(db, team.id);
-    insertAuditAt(db, team.id, lane.id, now - 60_000);
-    expect(await staleAcceptanceWarning(db, team.id, lane, now)).toBeNull();
-  });
-
-  it('never warns for a non-waiting state, even past threshold', async () => {
-    const { db, team } = await seed();
-    const now = Date.now();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'w', claim: true });
-    insertAuditAt(db, team.id, lane.id, now - ACCEPTANCE_STALE_MS - 60_000);
-    expect(await staleAcceptanceWarning(db, team.id, lane, now)).toBeNull();
-  });
-
-  it('falls back to updated_at with no audit row, and clock skew never emits', async () => {
-    const { db, team } = await seed();
-    const lane = await awaitingLane(db, team.id); // updated_at ≈ now, no audit row
-    expect(await staleAcceptanceWarning(db, team.id, lane, Date.now())).toBeNull();
-    // updated_at in the future (skew): waited < 0 — never emits.
-    expect(await staleAcceptanceWarning(db, team.id, lane, lane.updated_at - 60_000)).toBeNull();
-  });
-
-  it('rides laneWarnings so the board projection carries it', async () => {
-    const { db, team } = await seed();
-    const now = Date.now();
-    const lane = await awaitingLane(db, team.id);
-    insertAuditAt(db, team.id, lane.id, now - ACCEPTANCE_STALE_MS - 60_000);
-    const w = await laneWarnings(db, team.id, 'bravo', lane, undefined, now);
-    expect(w.some((x) => x.kind === 'stale_acceptance')).toBe(true);
-  });
-});
-
-describe('lane kind (incident convergence inc 1)', async () => {
-  it('kind persists through open and reads back; default is null; updateLane leaves it alone', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'miley', {
-      title: 'incident: ci:gates/A11y contrast',
-      kind: 'incident',
-      stakes: 'high',
-    });
-    expect(lane.kind).toBe('incident');
-    expect((await getLane(db, team.id, lane.id, 'bravo'))?.kind).toBe('incident');
-    const plain = await openLane(db, team.id, 'bravo', 'miley', { title: 'ordinary' });
-    expect(plain.kind).toBeNull();
-    // kind is immutable: a routine patch must not touch it
-    const patched = await updateLane(db, team.id, lane.id, 'bravo', { detail: 'more' });
-    expect(patched?.kind).toBe('incident');
-  });
-});
-
-/**
- * ADR 325 prereqs. The claim edge was a read-then-write with no guard on the write: the DB would
- * happily overwrite an ownership that changed between the caller's read and its UPDATE, leaving
- * correctness to the accident that nothing awaits between the two. The guard makes the write
- * itself refuse a stale expectation — the shape every hub-authoritative CAS needs.
- */
-describe('guarded lane updates (ADR 325 prereq: the write carries the claim guard)', async () => {
-  it('refuses when ownership moved since the expectation was formed, and changes nothing', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'contended' });
-    // A reads the lane open+unowned, then B claims it before A's write lands.
-    await updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'B' });
-
-    await expect(
-      updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'A' }, Date.now(), {
-        owner_seat: null,
-        state: 'open',
-      }),
-    ).rejects.toThrow(LaneConflictError);
-    // The loser's write must not have landed in any column.
-    const after = await getLane(db, team.id, lane.id, 'bravo');
-    expect(after?.owner_seat).toBe('B');
-    expect(after?.state).toBe('claimed');
-  });
-
-  it('goes through when the expectation still holds', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'uncontended' });
-    const claimed = await updateLane(
-      db,
-      team.id,
-      lane.id,
-      'bravo',
-      { owner_seat: 'A' },
-      Date.now(),
-      {
-        owner_seat: null,
-        state: 'open',
-      },
-    );
-    expect(claimed?.owner_seat).toBe('A');
-    expect(claimed?.state).toBe('claimed');
-  });
-
-  it('carries what it actually found, so the caller can say who holds the lane', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'contended' });
-    await updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'B' });
-    try {
-      await updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'A' }, Date.now(), {
-        owner_seat: null,
+    it('ignores lanes owned by someone else — you cannot hand off what you do not hold', async () => {
+      const { db, team } = await seed();
+      await openLane(db, team.id, 'bravo', 'Cleo', {
+        title: 'cleo owns it',
+        project: 'musterd',
+        claim: true,
       });
-      expect.unreachable('expected a LaneConflictError');
-    } catch (err) {
-      if (!(err instanceof LaneConflictError)) throw err;
-      expect(err.actual.owner_seat).toBe('B');
+      expect((await deriveHandoffLane(db, team.id, 'bravo', 'June')).kind).toBe('none');
+    });
+
+    // ADR 243. The candidate set was "lanes the sender still HOLDS", but `lane_handoff` transfers
+    // ownership BEFORE the explanatory act is sent — so the intended lane is never a candidate, and a
+    // sender who holds exactly one OTHER lane lands in the confident single-candidate branch.
+    describe('a lane just handed to this recipient outranks a lane the sender still holds', async () => {
+      /** The live 2026-08-05 shape: hand one lane away, keep another, then explain the handoff. */
+      async function handedAndHeld() {
+        const { db, team } = await seed();
+        const handed = await openLane(db, team.id, 'bravo', 'June', {
+          title: 'the lane actually handed over',
+          project: 'musterd',
+          branch: 'june/handed',
+          claim: true,
+        });
+        await recordHandoff(db, team.id, 'bravo', handed.id, 'June', 'Cleo');
+        const kept = await openLane(db, team.id, 'bravo', 'June', {
+          title: 'my unrelated lane in acceptance',
+          project: 'musterd',
+          claim: true,
+        });
+        return { db, team, handed, kept };
+      }
+
+      it('attaches the handed lane, not the held one', async () => {
+        const { db, team, handed } = await handedAndHeld();
+        const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June', 'Cleo');
+        expect(derived.kind).toBe('attach');
+        if (derived.kind !== 'attach') throw new Error('unreachable');
+        expect(derived.lane.id).toBe(handed.id);
+        expect(derived.lane.branch).toBe('june/handed');
+      });
+
+      it('falls back to the held lane when nothing was handed to THIS recipient', async () => {
+        const { db, team, kept } = await handedAndHeld();
+        const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June', 'Dara');
+        expect(derived.kind).toBe('attach');
+        if (derived.kind !== 'attach') throw new Error('unreachable');
+        expect(derived.lane.id).toBe(kept.id);
+      });
+
+      it('is ambiguous when several lanes went to the same recipient — one referent or none', async () => {
+        const { db, team } = await handedAndHeld();
+        const second = await openLane(db, team.id, 'bravo', 'June', {
+          title: 'a second lane handed to Cleo',
+          project: 'musterd',
+          claim: true,
+        });
+        await recordHandoff(db, team.id, 'bravo', second.id, 'June', 'Cleo');
+        const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June', 'Cleo');
+        expect(derived.kind).toBe('ambiguous');
+        if (derived.kind !== 'ambiguous') throw new Error('unreachable');
+        expect(derived.candidates).toHaveLength(2);
+      });
+
+      it('ignores a handed lane the recipient no longer owns — the fact expired, not aged out', async () => {
+        const { db, team, handed, kept } = await handedAndHeld();
+        await updateLane(db, team.id, handed.id, 'bravo', { owner_seat: 'Dara' });
+        const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June', 'Cleo');
+        expect(derived.kind).toBe('attach');
+        if (derived.kind !== 'attach') throw new Error('unreachable');
+        expect(derived.lane.id).toBe(kept.id);
+      });
+
+      it('ignores a handed lane that has since gone terminal', async () => {
+        const { db, team, handed, kept } = await handedAndHeld();
+        await updateLane(db, team.id, handed.id, 'bravo', { state: 'done' });
+        const derived = await deriveHandoffLane(db, team.id, 'bravo', 'June', 'Cleo');
+        expect(derived.kind).toBe('attach');
+        if (derived.kind !== 'attach') throw new Error('unreachable');
+        expect(derived.lane.id).toBe(kept.id);
+      });
+
+      it('ignores a lane the RECIPIENT claimed for themselves — a claim is not a handoff', async () => {
+        const { db, team } = await seed();
+        const claimed = await openLane(db, team.id, 'bravo', 'June', {
+          title: 'Cleo took this one herself',
+          project: 'musterd',
+          claim: true,
+        });
+        await updateLane(db, team.id, claimed.id, 'bravo', { owner_seat: 'Cleo' });
+        await appendAudit(db, team.id, {
+          actor: 'Cleo',
+          action: 'lane.claimed',
+          target: claimed.id,
+          result: 'allow',
+          detail: { lane: claimed.id, owner: 'Cleo', previous_owner: 'June', kind: 'claim' },
+        });
+        expect((await deriveHandoffLane(db, team.id, 'bravo', 'June', 'Cleo')).kind).toBe('none');
+      });
+    });
+  });
+
+  describe('no_goal warning (goals-front-door design)', async () => {
+    async function seedWithNick() {
+      const { db, team } = await seed();
+      const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+      return { db, team, nick };
     }
+    let gts = 0;
+    async function declareGoal(
+      db: ReturnType<typeof seed>['db'],
+      teamId: string,
+      fromId: string,
+      goal: { id: string; title: string; wave?: number | 'later' },
+    ) {
+      const ts = ++gts;
+      await insertMessage(
+        db,
+        teamId,
+        fromId,
+        null,
+        makeEnvelope({
+          id: `ng${ts}-${goal.id}`,
+          team: 'bravo',
+          from: 'nick',
+          to: { kind: 'team' },
+          act: 'message',
+          body: `[goal] ${goal.title}`,
+          meta: { goal },
+          ts,
+        }),
+      );
+    }
+
+    it('a contending goal-less lane warns when an unshipped goal exists', async () => {
+      const { db, team, nick } = await seedWithNick();
+      await declareGoal(db, team.id, nick.id, { id: 'g1', title: 'Native harness' });
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'work', claim: true });
+      const w = await laneWarnings(db, team.id, 'bravo', lane);
+      expect(w.some((x) => x.kind === 'no_goal' && x.owner === null && x.with === 'g1')).toBe(true);
+    });
+
+    it('never warns: no goals declared / attached lane / backlog lane', async () => {
+      const { db, team, nick } = await seedWithNick();
+      const bare = await openLane(db, team.id, 'bravo', 'June', { title: 'a', claim: true });
+      expect(
+        (await laneWarnings(db, team.id, 'bravo', bare)).some((x) => x.kind === 'no_goal'),
+      ).toBe(false);
+      await declareGoal(db, team.id, nick.id, { id: 'g1', title: 'G' });
+      const linked = await openLane(db, team.id, 'bravo', 'Cleo', {
+        title: 'b',
+        goal_id: 'g1',
+        claim: true,
+      });
+      expect(
+        (await laneWarnings(db, team.id, 'bravo', linked)).some((x) => x.kind === 'no_goal'),
+      ).toBe(false);
+      // backlog (open, unclaimed) lane does not flag on the board:
+      const idle = await openLane(db, team.id, 'bravo', 'Cleo', { title: 'c' });
+      expect(
+        (await laneWarnings(db, team.id, 'bravo', idle)).some((x) => x.kind === 'no_goal'),
+      ).toBe(false);
+    });
+
+    it('never warns when the only goals are shipped', async () => {
+      const { db, team, nick } = await seedWithNick();
+      await declareGoal(db, team.id, nick.id, { id: 'g1', title: 'G' });
+      const shipping = await openLane(db, team.id, 'bravo', 'Cleo', {
+        title: 'ship it',
+        goal_id: 'g1',
+        claim: true,
+      });
+      await updateLane(db, team.id, shipping.id, 'bravo', { state: 'done' });
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'work', claim: true });
+      expect(
+        (await laneWarnings(db, team.id, 'bravo', lane)).some((x) => x.kind === 'no_goal'),
+      ).toBe(false);
+    });
+
+    it('board projection carries it once per lane', async () => {
+      const { db, team, nick } = await seedWithNick();
+      await declareGoal(db, team.id, nick.id, { id: 'g1', title: 'G' });
+      await openLane(db, team.id, 'bravo', 'June', { title: 'w', claim: true });
+      const lanes = await listLanes(db, team.id, 'bravo');
+      expect(
+        (await boardWarnings(db, team.id, 'bravo', lanes)).filter((w) => w.kind === 'no_goal'),
+      ).toHaveLength(1);
+    });
   });
-});
 
-/**
- * ADR 325 prereq: the UPDATE assigns only the columns the patch actually changes. A full-row
- * overwrite makes every patch a blind LWW of every field — two writers patching unrelated fields
- * clobber each other the moment writes can interleave. `UPDATE OF <col>` triggers fire exactly
- * when a column appears in the SET list, so they observe the contract directly.
- */
-describe('per-field lane updates (ADR 325 prereq: untouched columns stay out of the SET list)', async () => {
-  function titleWriteCount(db: ReturnType<typeof openDb>): number {
-    const row = db.prepare<[], { n: number }>('SELECT COUNT(*) n FROM title_writes').get();
-    return row?.n ?? 0;
-  }
+  describe('stale_acceptance warning (value-layer design)', async () => {
+    async function insertAuditAt(
+      db: ReturnType<typeof seed>['db'],
+      teamId: string,
+      target: string,
+      ts: number,
+    ) {
+      await db.run(
+        `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          `sa${ts}-${target}`,
+          teamId,
+          ts,
+          'June',
+          'lane.ready_for_review',
+          target,
+          'allow',
+          null,
+          ts,
+        ],
+      );
+    }
+    async function awaitingLane(db: ReturnType<typeof seed>['db'], teamId: string) {
+      const lane = await openLane(db, teamId, 'bravo', 'June', { title: 'w', claim: true });
+      return await updateLane(db, teamId, lane.id, 'bravo', { state: 'awaiting_acceptance' });
+    }
 
-  it('a branch-only patch never assigns the title column', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'as opened' });
-    await db.exec(`
-      CREATE TEMP TABLE title_writes (at INTEGER);
-      CREATE TEMP TRIGGER observe_title_writes AFTER UPDATE OF title ON lanes
-        BEGIN INSERT INTO title_writes VALUES (1); END;
-    `);
+    it('warns once a lane has waited past the threshold — advisory, owner null', async () => {
+      const { db, team } = await seed();
+      const now = Date.now();
+      const lane = await awaitingLane(db, team.id);
+      await insertAuditAt(db, team.id, lane.id, now - ACCEPTANCE_STALE_MS - 60_000);
+      const w = await staleAcceptanceWarning(db, team.id, lane, now);
+      expect(w).toMatchObject({ kind: 'stale_acceptance', subject: lane.id, owner: null });
+      expect(w!.detail).toMatch(/waiting 12h/);
+    });
 
-    const patched = await updateLane(db, team.id, lane.id, 'bravo', { branch: 'june/branch-only' });
-    expect(patched?.branch).toBe('june/branch-only');
-    expect(titleWriteCount(db)).toBe(0);
+    it('stays silent under the threshold', async () => {
+      const { db, team } = await seed();
+      const now = Date.now();
+      const lane = await awaitingLane(db, team.id);
+      await insertAuditAt(db, team.id, lane.id, now - 60_000);
+      expect(await staleAcceptanceWarning(db, team.id, lane, now)).toBeNull();
+    });
 
-    // The complement: a patch that does change the title assigns it.
-    await updateLane(db, team.id, lane.id, 'bravo', { title: 'renamed' });
-    expect(titleWriteCount(db)).toBe(1);
+    it('never warns for a non-waiting state, even past threshold', async () => {
+      const { db, team } = await seed();
+      const now = Date.now();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'w', claim: true });
+      await insertAuditAt(db, team.id, lane.id, now - ACCEPTANCE_STALE_MS - 60_000);
+      expect(await staleAcceptanceWarning(db, team.id, lane, now)).toBeNull();
+    });
+
+    it('falls back to updated_at with no audit row, and clock skew never emits', async () => {
+      const { db, team } = await seed();
+      const lane = await awaitingLane(db, team.id); // updated_at ≈ now, no audit row
+      expect(await staleAcceptanceWarning(db, team.id, lane, Date.now())).toBeNull();
+      // updated_at in the future (skew): waited < 0 — never emits.
+      expect(await staleAcceptanceWarning(db, team.id, lane, lane.updated_at - 60_000)).toBeNull();
+    });
+
+    it('rides laneWarnings so the board projection carries it', async () => {
+      const { db, team } = await seed();
+      const now = Date.now();
+      const lane = await awaitingLane(db, team.id);
+      await insertAuditAt(db, team.id, lane.id, now - ACCEPTANCE_STALE_MS - 60_000);
+      const w = await laneWarnings(db, team.id, 'bravo', lane, undefined, now);
+      expect(w.some((x) => x.kind === 'stale_acceptance')).toBe(true);
+    });
   });
 
-  it('a no-op patch still stamps updated_at and nothing else', async () => {
-    const { db, team } = await seed();
-    const lane = await openLane(
-      db,
-      team.id,
-      'bravo',
-      'June',
-      { title: 'as opened' },
-      Date.now() - 1000,
-    );
-    await db.exec(`
-      CREATE TEMP TABLE title_writes (at INTEGER);
-      CREATE TEMP TRIGGER observe_title_writes AFTER UPDATE OF title ON lanes
-        BEGIN INSERT INTO title_writes VALUES (1); END;
-    `);
-    const before = (await getLane(db, team.id, lane.id, 'bravo'))!;
-    const patched = await updateLane(db, team.id, lane.id, 'bravo', {});
-    expect(titleWriteCount(db)).toBe(0);
-    expect(patched?.updated_at).toBeGreaterThan(before.updated_at);
+  describe('lane kind (incident convergence inc 1)', async () => {
+    it('kind persists through open and reads back; default is null; updateLane leaves it alone', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'miley', {
+        title: 'incident: ci:gates/A11y contrast',
+        kind: 'incident',
+        stakes: 'high',
+      });
+      expect(lane.kind).toBe('incident');
+      expect((await getLane(db, team.id, lane.id, 'bravo'))?.kind).toBe('incident');
+      const plain = await openLane(db, team.id, 'bravo', 'miley', { title: 'ordinary' });
+      expect(plain.kind).toBeNull();
+      // kind is immutable: a routine patch must not touch it
+      const patched = await updateLane(db, team.id, lane.id, 'bravo', { detail: 'more' });
+      expect(patched?.kind).toBe('incident');
+    });
+  });
+
+  /**
+   * ADR 325 prereqs. The claim edge was a read-then-write with no guard on the write: the DB would
+   * happily overwrite an ownership that changed between the caller's read and its UPDATE, leaving
+   * correctness to the accident that nothing awaits between the two. The guard makes the write
+   * itself refuse a stale expectation — the shape every hub-authoritative CAS needs.
+   */
+  describe('guarded lane updates (ADR 325 prereq: the write carries the claim guard)', async () => {
+    it('refuses when ownership moved since the expectation was formed, and changes nothing', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'contended' });
+      // A reads the lane open+unowned, then B claims it before A's write lands.
+      await updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'B' });
+
+      await expect(
+        updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'A' }, Date.now(), {
+          owner_seat: null,
+          state: 'open',
+        }),
+      ).rejects.toThrow(LaneConflictError);
+      // The loser's write must not have landed in any column.
+      const after = await getLane(db, team.id, lane.id, 'bravo');
+      expect(after?.owner_seat).toBe('B');
+      expect(after?.state).toBe('claimed');
+    });
+
+    it('goes through when the expectation still holds', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'uncontended' });
+      const claimed = await updateLane(
+        db,
+        team.id,
+        lane.id,
+        'bravo',
+        { owner_seat: 'A' },
+        Date.now(),
+        {
+          owner_seat: null,
+          state: 'open',
+        },
+      );
+      expect(claimed?.owner_seat).toBe('A');
+      expect(claimed?.state).toBe('claimed');
+    });
+
+    it('carries what it actually found, so the caller can say who holds the lane', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'contended' });
+      await updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'B' });
+      try {
+        await updateLane(db, team.id, lane.id, 'bravo', { owner_seat: 'A' }, Date.now(), {
+          owner_seat: null,
+        });
+        expect.unreachable('expected a LaneConflictError');
+      } catch (err) {
+        if (!(err instanceof LaneConflictError)) throw err;
+        expect(err.actual.owner_seat).toBe('B');
+      }
+    });
+  });
+
+  /**
+   * ADR 325 prereq: the UPDATE assigns only the columns the patch actually changes. A full-row
+   * overwrite makes every patch a blind LWW of every field — two writers patching unrelated fields
+   * clobber each other the moment writes can interleave. `UPDATE OF <col>` triggers fire exactly
+   * when a column appears in the SET list, so they observe the contract directly.
+   */
+  describe('per-field lane updates (ADR 325 prereq: untouched columns stay out of the SET list)', async () => {
+    async function titleWriteCount(db: Driver): Promise<number> {
+      const row = await db.get<{ n: number }>('SELECT COUNT(*) AS n FROM title_writes');
+      return row?.n ?? 0;
+    }
+
+    /** An `UPDATE OF title` trigger, in each engine's spelling; re-creatable on the pooled double. */
+    async function observeTitleWrites(db: Driver): Promise<void> {
+      if (db.dialect === 'sqlite') {
+        await db.exec(`
+          CREATE TEMP TABLE title_writes (at INTEGER);
+          CREATE TEMP TRIGGER observe_title_writes AFTER UPDATE OF title ON lanes
+            BEGIN INSERT INTO title_writes VALUES (1); END;`);
+        return;
+      }
+      await db.exec(`
+        DROP TRIGGER IF EXISTS observe_title_writes ON lanes;
+        DROP TABLE IF EXISTS title_writes;
+        CREATE TABLE title_writes (at BIGINT);
+        CREATE OR REPLACE FUNCTION observe_title_writes_fn() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN INSERT INTO title_writes VALUES (1); RETURN NEW; END $$;
+        CREATE TRIGGER observe_title_writes AFTER UPDATE OF title ON lanes
+          FOR EACH ROW EXECUTE FUNCTION observe_title_writes_fn();`);
+    }
+
+    it('a branch-only patch never assigns the title column', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(db, team.id, 'bravo', 'June', { title: 'as opened' });
+      await observeTitleWrites(db);
+
+      const patched = await updateLane(db, team.id, lane.id, 'bravo', {
+        branch: 'june/branch-only',
+      });
+      expect(patched?.branch).toBe('june/branch-only');
+      expect(await titleWriteCount(db)).toBe(0);
+
+      // The complement: a patch that does change the title assigns it.
+      await updateLane(db, team.id, lane.id, 'bravo', { title: 'renamed' });
+      expect(await titleWriteCount(db)).toBe(1);
+    });
+
+    it('a no-op patch still stamps updated_at and nothing else', async () => {
+      const { db, team } = await seed();
+      const lane = await openLane(
+        db,
+        team.id,
+        'bravo',
+        'June',
+        { title: 'as opened' },
+        Date.now() - 1000,
+      );
+      await observeTitleWrites(db);
+      const before = (await getLane(db, team.id, lane.id, 'bravo'))!;
+      const patched = await updateLane(db, team.id, lane.id, 'bravo', {});
+      expect(await titleWriteCount(db)).toBe(0);
+      expect(patched?.updated_at).toBeGreaterThan(before.updated_at);
+    });
   });
 });

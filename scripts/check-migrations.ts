@@ -45,6 +45,9 @@ const repoRoot = join(here, '..');
 const MIGRATION_FILES = [
   join(repoRoot, 'packages', 'server', 'src', 'db', 'migrations.ts'),
   join(repoRoot, 'packages', 'server', 'src', 'db', 'traceDb.ts'),
+  // From v81 both engines share one ladder (cloud design §12.2); its versions continue the main one.
+  join(repoRoot, 'packages', 'server', 'src', 'db', 'ladder.ts'),
+  join(repoRoot, 'packages', 'server', 'src', 'db', 'traceLadder.ts'),
 ];
 
 export interface ParsedMigration {

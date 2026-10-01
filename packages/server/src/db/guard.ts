@@ -1,0 +1,15 @@
+/**
+ * Spec §6: a build never serves a database migrated by a NEWER build. Under expand/contract the
+ * old binary keeps running against the expanded schema (additive; fine) — but a database whose
+ * `schema_version` is past what this build's ladder knows was contracted or reshaped by something
+ * newer, and serving it would mean writing rows this build cannot reason about. Both engines
+ * (`runMigrations`, `migratePostgres`) refuse with the same stable sentence.
+ */
+export const SCHEMA_NEWER_SENTENCE = 'schema newer than this build';
+
+export function assertSchemaNotNewer(have: number, max: number): void {
+  if (have > max)
+    throw new Error(
+      `${SCHEMA_NEWER_SENTENCE}: database is at schema ${have}, this build knows ${max}`,
+    );
+}

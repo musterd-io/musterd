@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import { workspaceSrcAliases } from '../../tests/setup/workspace-src-aliases.ts';
-import { TEST_TIMEOUT_MS } from '../../vitest.shared.ts';
+import { MAX_WORKERS, TEST_TIMEOUT_MS } from '../../vitest.shared.ts';
 
 export default defineConfig({
   // Workspace imports resolve to src, never to gitignored dist/ (mirrors the root config; a
@@ -12,6 +12,9 @@ export default defineConfig({
     // Inherited from nothing: a package-local run reads only THIS file, so the root's tuned
     // ceiling never reached `pnpm -r test`. See vitest.shared.ts for the measurement.
     testTimeout: TEST_TIMEOUT_MS,
+    // A beforeEach that opens the PGlite double pays the worker's first migration; same ceiling.
+    hookTimeout: TEST_TIMEOUT_MS,
+    maxWorkers: MAX_WORKERS,
     pool: 'forks',
     env: { MUSTERD_SILENT: '1' },
   },
