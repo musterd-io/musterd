@@ -325,7 +325,7 @@ Delivery is **envelope-on-occupy / body-on-demand**: the `occupied` frame carrie
 
 ### `team_wake_context` (ADR 209)
 
-`team_wake_context({act_id? , lane_id?})` accepts exactly one directed Act or owned Lane target after the Member occupies. It returns a structured, server-derived packet with only canonical IDs, metadata, intended delivery, and named follow-up reads. It never automatically loads an Act, thread, memory, or artifact body; the Member chooses the named explicit read instead.
+`team_wake_context({act_id? , lane_id?})` accepts exactly one Act delivered to the Member — directed at it, or naming it in an eligible set (ADR 254), as a huddle open does — or one owned Lane target, after the Member occupies. It returns a structured, server-derived packet with only canonical IDs, metadata, intended delivery, and named follow-up reads. It never automatically loads an Act, thread, memory, or artifact body; the Member chooses the named explicit read instead.
 
 ## Results & empty states — the audited standard (ADR 144 inc 3)
 

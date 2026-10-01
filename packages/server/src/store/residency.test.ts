@@ -176,6 +176,35 @@ withDrivers('residency', (o, kind) => {
       await expect(buildWakeContext(db, team, bob, { act_id: 'm1' })).rejects.toThrow(/forbidden/i);
     });
 
+    /**
+     * A huddle open naming 2–4 seats is team-addressed with an eligible set (ADR 254), and that set is
+     * exactly what convenes them (ADR 386) — so the wake lease points every named seat at an act the
+     * recipient-only rule refused. Rehearsal 2026-10-01 (huddle 01M3W9RMA5): all three named seats
+     * woke to "forbidden wake context target", and two replied outside the room.
+     */
+    it('serves an eligible-set act to every seat it names, and still refuses an unnamed reader', async () => {
+      const { db, team, nick, ada, bob } = await seed();
+      const carol = (await addMember(db, team, { name: 'carol', kind: 'agent' })).row;
+      await msg(db, team, nick, null, 'message', 'hud1', 1_000, {
+        meta: { eligible: ['Ada', 'bob'] },
+      });
+      await msg(db, team, nick, null, 'message', 'all1', 1_001);
+
+      expect(await buildWakeContext(db, team, ada, { act_id: 'hud1' })).toMatchObject({
+        wake: { act_id: 'hud1' },
+      });
+      expect(await buildWakeContext(db, team, bob, { act_id: 'hud1' })).toMatchObject({
+        wake: { act_id: 'hud1' },
+      });
+      await expect(buildWakeContext(db, team, carol, { act_id: 'hud1' })).rejects.toThrow(
+        /forbidden/i,
+      );
+      // A plain @team act names nobody: the packet carries the whole thread, so it stays refused.
+      await expect(buildWakeContext(db, team, ada, { act_id: 'all1' })).rejects.toThrow(
+        /forbidden/i,
+      );
+    });
+
     it('v2: carries the waking thread, the open ledger and the memory body; fetch names only what did not fit (ADR 430)', async () => {
       const { db, team, nick, ada } = await seed();
       await saveMemory(db, ada.id, { headline: 'h', body: 'carrying lane X' });

@@ -15,6 +15,7 @@ import type {
 } from '@musterd/protocol';
 import {
   WAKE_CONTEXT_BUDGET,
+  eligibleOf,
   isAwaitingAcceptance,
   LANE_TERMINAL_STATES,
   ResidencyPolicyOverrideSchema,
@@ -234,6 +235,20 @@ export function effectiveWakePolicy(
 }
 
 /**
+ * Who may read an act's wake packet: its directed recipient, or a seat its eligible set names
+ * (ADR 254). A huddle open naming 2–4 seats is team-addressed, and its eligible set is exactly what
+ * convenes them (ADR 386) — refusing it woke every named seat to a pointer it could not read
+ * (rehearsal 2026-10-01, huddle 01M3W9RMA5). A plain `@team` act stays refused: the packet carries
+ * the whole thread, and a reader nobody named has no standing in it.
+ */
+function mayReadWakeAct(row: MessageRow, recipient: MemberRow): boolean {
+  if (row.to_kind === 'member') return row.to_member === recipient.id;
+  if (row.to_kind !== 'team') return false;
+  const named = eligibleOf(JSON.parse(row.meta ?? '{}') as Record<string, unknown>);
+  return named !== null && named.includes(recipient.name);
+}
+
+/**
  * Derive the bounded orientation packet for one recipient (ADR 209; v2 per ADR 430). It reads
  * canonical rows only and stores nothing. Bodies cross this seam *attributed and budgeted* — the
  * waking thread's recent acts, the recipient's own memory — under `context`; the audit that records
@@ -250,7 +265,7 @@ export async function buildWakeContext(
       team.id,
       request.act_id,
     ]);
-    if (!row || row.to_kind !== 'member' || row.to_member !== recipient.id)
+    if (!row || !mayReadWakeAct(row, recipient))
       throw new MusterdError('forbidden', 'forbidden wake context target');
     const threadId = row.thread_id ?? row.id;
     const meta = JSON.parse(row.meta ?? '{}') as {
