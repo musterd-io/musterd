@@ -1,5 +1,5 @@
 import { rankSeats } from '../fuzzy.js';
-import { chooseHarness } from '../labels.js';
+import { chooseHarness, LAUNCHABLE_HARNESSES } from '../labels.js';
 import type { Live } from '../live.js';
 import { lastUsedAt, type LauncherFile, type Seat, type TeamEntry } from '../store.js';
 
@@ -25,7 +25,22 @@ export type Row =
       count: number;
       remote: string | null;
       star: boolean;
-    };
+    }
+  | { kind: 'team-only'; team: string; project: string; member: string }
+  | { kind: 'new-seat'; team: string; project: string }
+  | { kind: 'hint'; text: string };
+
+/** Setting up a seat from the picker (ADR 491 Decision 10). */
+export interface CreateDraft {
+  team: string;
+  project: string;
+  member: string;
+  /** Typing a name (`+ new seat`) vs. confirming a harness. */
+  naming: boolean;
+  /** Index into LAUNCHABLE_HARNESSES. */
+  harness: number;
+  error: string | null;
+}
 
 /** What `readline`'s keypress event carries. */
 export interface Key {
@@ -52,6 +67,9 @@ export interface PickerState {
   harness: Record<string, string>;
   confirm: { seat: Seat; mode: 'fresh' | 'resume' } | null;
   help: boolean;
+  /** Each team's agent members from its roster, for "on the team · not here". */
+  agents: Record<string, string[]>;
+  create: CreateDraft | null;
   now: number;
 }
 
@@ -63,12 +81,14 @@ export type PickerEvent =
       live: Record<string, Live>;
       status: 'ok' | 'offline';
       unknown?: string[];
+      agents?: Record<string, string[]>;
       now: number;
     };
 
 export type PickerOutcome =
   | { kind: 'launch'; seat: Seat; mode: 'fresh' | 'resume'; harness: string | null; force: boolean }
-  | { kind: 'quit'; code: number };
+  | { kind: 'quit'; code: number }
+  | { kind: 'create'; team: string; project: string; member: string; harnesses: string[] };
 
 type Step = { state: PickerState; outcome: PickerOutcome | null };
 
@@ -89,6 +109,8 @@ export function initialState(file: LauncherFile, query: string, now: number): Pi
     harness: {},
     confirm: null,
     help: false,
+    agents: {},
+    create: null,
     now,
   };
 }
@@ -154,13 +176,32 @@ export function rows(s: PickerState): Row[] {
     case 'members': {
       const { team, project } = s.level;
       const here = s.seats.filter((x) => x.team === team && x.project === project).sort(byMember);
-      return [{ kind: 'heading', label: 'on this machine' }, ...here.map((x) => seatRow(x, false))];
+      const mine = here.some((x) => x.kind === 'human' && x.problem === null);
+      const teamOnly = (s.agents[team] ?? []).filter(
+        (name) => !here.some((x) => x.member === name),
+      );
+      const out: Row[] = [
+        { kind: 'heading', label: 'on this machine' },
+        ...here.map((x) => seatRow(x, false)),
+      ];
+      // A seat is set up acting as you, from your own Workspace here (ADR 491 §4.7).
+      if (!mine)
+        return [
+          ...out,
+          { kind: 'hint', text: 'set up your own seat here first: musterd human <you>' },
+        ];
+      return [
+        ...out,
+        { kind: 'heading', label: 'on the team · not here' },
+        ...teamOnly.map((member): Row => ({ kind: 'team-only', team, project, member })),
+        { kind: 'new-seat', team, project },
+      ];
     }
   }
 }
 
 export function selectable(row: Row): boolean {
-  return row.kind !== 'heading' && !(row.kind === 'team' && !row.here);
+  return row.kind !== 'heading' && row.kind !== 'hint' && !(row.kind === 'team' && !row.here);
 }
 
 export function selectableRows(s: PickerState): Row[] {
@@ -176,7 +217,11 @@ const identity = (row: Row | undefined): string =>
         ? `t:${row.team}`
         : row.kind === 'project'
           ? `p:${row.team}/${row.project}`
-          : '';
+          : row.kind === 'team-only'
+            ? `o:${row.member}`
+            : row.kind === 'new-seat'
+              ? 'new'
+              : '';
 
 function clamp(s: PickerState, cursor: number): PickerState {
   const n = selectableRows(s).length;
@@ -197,6 +242,20 @@ function pop(s: PickerState): PickerState {
 
 function activate(s: PickerState, mode: 'fresh' | 'resume'): Step {
   const row = selectableRows(s)[s.cursor];
+  if (mode === 'fresh' && row?.kind === 'team-only') {
+    const draft = { team: row.team, project: row.project, member: row.member };
+    return {
+      state: { ...s, create: { ...draft, naming: false, harness: 0, error: null } },
+      outcome: null,
+    };
+  }
+  if (mode === 'fresh' && row?.kind === 'new-seat') {
+    const draft = { team: row.team, project: row.project, member: '' };
+    return {
+      state: { ...s, create: { ...draft, naming: true, harness: 0, error: null } },
+      outcome: null,
+    };
+  }
   if (row?.kind === 'seat') {
     if (s.live[row.seat.address])
       return { state: { ...s, confirm: { seat: row.seat, mode } }, outcome: null };
@@ -243,6 +302,7 @@ function cycleHarness(s: PickerState): PickerState {
 function onKey(s: PickerState, key: Key): Step {
   const none = (state: PickerState): Step => ({ state, outcome: null });
   if (key.ctrl && key.name === 'c') return { state: s, outcome: { kind: 'quit', code: 130 } };
+  if (s.create) return onCreateKey(s, s.create, key);
   if (s.confirm) {
     if (key.name === 'y' || key.sequence === 'Y') {
       const { seat, mode } = s.confirm;
@@ -310,8 +370,55 @@ export function reduce(s: PickerState, e: PickerEvent): Step {
   }
   if (e.type === 'live')
     return {
-      state: { ...s, live: e.live, liveStatus: e.status, unknownLive: e.unknown ?? [], now: e.now },
+      state: {
+        ...s,
+        live: e.live,
+        liveStatus: e.status,
+        unknownLive: e.unknown ?? [],
+        agents: e.agents ?? s.agents,
+        now: e.now,
+      },
       outcome: null,
     };
   return onKey(s, e.key);
+}
+
+const NAME = /^[a-z][a-z0-9-]{0,31}$/;
+
+/** Keys while a set-up draft is open: name it (for `+ new seat`), pick a harness, confirm, or cancel. */
+function onCreateKey(s: PickerState, d: CreateDraft, key: Key): Step {
+  const set = (create: CreateDraft | null): Step => ({ state: { ...s, create }, outcome: null });
+  if (key.name === 'escape') return set(null);
+  if (d.naming) {
+    if (key.name === 'return') {
+      if (!NAME.test(d.member))
+        return set({
+          ...d,
+          error: 'a seat name is lowercase letters, digits and dashes, starting with a letter',
+        });
+      if (s.seats.some((x) => x.team === d.team && x.member === d.member))
+        return set({ ...d, error: `${d.member} already has a Workspace here` });
+      return set({ ...d, naming: false, error: null });
+    }
+    if (key.name === 'backspace') return set({ ...d, member: d.member.slice(0, -1), error: null });
+    const ch = key.sequence;
+    if (ch && ch.length === 1 && ch >= ' ' && !key.ctrl && !key.meta)
+      return set({ ...d, member: d.member + ch.toLowerCase(), error: null });
+    return set(d);
+  }
+  if (key.name === 'tab')
+    return set({ ...d, harness: (d.harness + 1) % LAUNCHABLE_HARNESSES.length });
+  if (key.name === 'return') {
+    return {
+      state: { ...s, create: null },
+      outcome: {
+        kind: 'create',
+        team: d.team,
+        project: d.project,
+        member: d.member,
+        harnesses: [LAUNCHABLE_HARNESSES[d.harness]!],
+      },
+    };
+  }
+  return set(d);
 }

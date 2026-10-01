@@ -1,5 +1,6 @@
 import { theme } from '../../render/theme.js';
 import { padEndVisible, visibleLen } from '../../render/ui.js';
+import { harnessLabel, LAUNCHABLE_HARNESSES } from '../labels.js';
 import { ago, describeLive, describeLiveLong, seatLine } from '../rows.js';
 import { lastUsedAt } from '../store.js';
 import { rows, selectable, shownHarness, type PickerState, type Row } from './state.js';
@@ -70,6 +71,15 @@ function body(s: PickerState, cols: number): { line: string; selected: boolean }
     switch (row.kind) {
       case 'heading':
         return { line: `  ${theme.meta(row.label)}`, selected };
+      case 'hint':
+        return { line: `  ${theme.meta(row.text)}`, selected };
+      case 'team-only':
+        return {
+          line: `${marker}${padEndVisible(row.member, nameWidth)}${theme.meta('⏎ set up here')}`,
+          selected,
+        };
+      case 'new-seat':
+        return { line: `${marker}${theme.accent('+ new seat')}`, selected };
       case 'team':
         return {
           line: `${marker}${padEndVisible(row.team, 9)}${row.here ? `${theme.ok('●')} here  ${row.count} seats` : theme.meta('○ no Workspace here')}${row.star ? '  ★' : ''}`,
@@ -124,6 +134,18 @@ function window(items: { line: string; selected: boolean }[], room: number): str
 }
 
 function footer(s: PickerState, cols: number): string[] {
+  if (s.create) {
+    const d = s.create;
+    if (d.naming) {
+      const prompt = `  new seat in ${d.team}/${d.project} › ${d.member}▏   ⏎ next · esc cancel`;
+      return d.error ? [prompt, `  ${theme.warn(d.error)}`] : [prompt];
+    }
+    // Wrapped like the live-seat question: its keys must stay visible at any width.
+    return wrap(
+      `set up ${d.member} here → ~/musterd/${d.team}/${d.project}/${d.member} · ${harnessLabel(LAUNCHABLE_HARNESSES[d.harness]!)} (⇥ to change) · ⏎ set up and launch · esc cancel`,
+      cols - 2,
+    ).map((l) => `  ${l}`);
+  }
   if (s.confirm) {
     const live = s.live[s.confirm.seat.address];
     const where = live ? describeLiveLong(live, s.now) : 'elsewhere';

@@ -149,4 +149,41 @@ describe('renderPicker (spec §3.1, no color, 80 columns)', () => {
     const s = initialState(EMPTY_LAUNCHER_FILE, '', NOW);
     expect(renderPicker(s, { cols: 80, rows: 24 })).toContain('  finding seats…');
   });
+
+  it('the set-up prompt names the path and the harness', () => {
+    let s = initialState(
+      {
+        ...FILE,
+        snapshot: {
+          taken_at: NOW,
+          seats: [...SEATS, seat('nick', { kind: 'human' })],
+          teams: [{ team: 'revive', here: true }],
+        },
+      },
+      '',
+      NOW,
+    );
+    s = reduce(s, {
+      type: 'live',
+      live: {},
+      status: 'ok',
+      now: NOW,
+      agents: { revive: ['slate'] },
+    }).state;
+    s = {
+      ...s,
+      level: { kind: 'members', team: 'revive', project: 'agents' },
+      create: {
+        team: 'revive',
+        project: 'agents',
+        member: 'slate',
+        naming: false,
+        harness: 2,
+        error: null,
+      },
+    };
+    expect(renderPicker(s, { cols: 120, rows: 24 }).at(-1)).toBe(
+      '  set up slate here → ~/musterd/revive/agents/slate · codex (⇥ to change) · ⏎ set up and launch · esc cancel',
+    );
+  });
 });

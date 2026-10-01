@@ -36,6 +36,27 @@ export async function openPicker(
     },
   );
   if (outcome.kind === 'quit') return outcome.code;
+  if (outcome.kind === 'create') {
+    process.stderr.write(`setting up ${outcome.member} in ${outcome.team}/${outcome.project}…\n`);
+    const [{ createSeat }, { buildCatalog }, { loadConfig }, os] = await Promise.all([
+      import('./create.js'),
+      import('./catalog.js'),
+      import('../config.js'),
+      import('node:os'),
+    ]);
+    const home = opts.home ?? os.homedir();
+    const seats = buildCatalog({ home, config: loadConfig() }).seats;
+    const seat = await createSeat({
+      team: outcome.team,
+      project: outcome.project,
+      member: outcome.member,
+      harnesses: outcome.harnesses,
+      seats,
+      home,
+    });
+    const { launchSeat } = await import('./byName.js');
+    return launchSeat(seat, { mode: 'fresh', harness: outcome.harnesses[0] ?? null, force: true });
+  }
   const { launchSeat } = await import('./byName.js');
   const d = opts.defaults;
   return launchSeat(outcome.seat, {
@@ -77,19 +98,28 @@ async function refresh(
     } catch {
       // the snapshot is a cache
     }
-    const { fetchRosters, liveFor, rosterKey } = await import('./live.js');
+    const { fetchRosters, liveFor, rosterKey, teamAgents } = await import('./live.js');
     const rosters = await fetchRosters(catalog.seats);
     const live: Record<string, Live> = {};
+    const agents: Record<string, string[]> = {};
     let answered = catalog.seats.length === 0;
     const unknown: string[] = [];
     for (const seat of catalog.seats) {
       const members = rosters.get(rosterKey(seat)) ?? null;
       if (members) answered = true;
       else unknown.push(seat.address);
+      if (members && !agents[seat.team]) agents[seat.team] = teamAgents(members);
       const l = liveFor(seat, members);
       if (l) live[seat.address] = l;
     }
-    dispatch({ type: 'live', live, status: answered ? 'ok' : 'offline', unknown, now: Date.now() });
+    dispatch({
+      type: 'live',
+      live,
+      status: answered ? 'ok' : 'offline',
+      unknown,
+      agents,
+      now: Date.now(),
+    });
   } catch {
     dispatch({ type: 'live', live: {}, status: 'offline', now: Date.now() });
   }
