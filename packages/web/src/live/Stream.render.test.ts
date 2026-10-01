@@ -84,3 +84,40 @@ describe('the stream row names an eligible set instead of calling it a team act'
     expect(html).not.toContain('lc-to--eligible');
   });
 });
+
+describe('a huddle reads as one card in the stream, at its latest turn', () => {
+  const HUDDLE = { topic: { kind: 'goal', id: 'demo' }, room: 'https://b.example/h', anchor: 'docs/x.md' };
+  const t0 = Date.UTC(2026, 9, 1, 18, 0, 0);
+  const timeline = [
+    env({ id: '01ROOT', from: 'nick', act: 'message', body: 'Which Replay lane?', ts: t0, meta: { huddle: HUDDLE } }),
+    env({ id: '01PLAIN', from: 'ryder', act: 'status_update', body: 'shipping the picker', ts: t0 + 30_000 }),
+    env({ id: '01T1', from: 'sloane', act: 'message', body: 'Lane 2, scrubber.', ts: t0 + 84_000, thread: '01ROOT' }),
+    env({ id: '01LATE', from: 'dolly', act: 'status_update', body: 'unrelated', ts: t0 + 90_000 }),
+    env({ id: '01T2', from: 'ryder', act: 'message', body: 'Lane 1, the engine.', ts: t0 + 150_000, thread: '01ROOT' }),
+  ];
+  const html = renderToStaticMarkup(
+    createElement(Stream, { envelopes: timeline, roster, liveIds: new Set<string>() }),
+  );
+
+  it('draws one card, after the last unrelated row that came before its latest turn', () => {
+    expect(html.match(/class="lc-hcard[ "]/g)).toHaveLength(1);
+    expect(html.indexOf('lc-hcard')).toBeGreaterThan(html.indexOf('unrelated'));
+  });
+
+  it('folds the root and its turns out of the plain rows', () => {
+    expect(html).not.toContain('id="lc-msg-01ROOT" class="lc-row');
+    expect(html).not.toContain('id="lc-msg-01T1" class="lc-row');
+    expect(html).toContain('shipping the picker');
+  });
+
+  it('gives every turn time-to-turn and a reveal target', () => {
+    expect(html).toContain('id="lc-msg-01T1"');
+    expect(html).toContain('+1.4m');
+    expect(html).toContain('+2.5m');
+    expect(html).toContain('Lane 1, the engine.');
+  });
+
+  it('counts the turns in its header', () => {
+    expect(html).toContain('2 turns');
+  });
+});

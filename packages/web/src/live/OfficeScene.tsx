@@ -342,7 +342,12 @@ export function OfficeScene({
         {!collapsed && (
           <div className="lc-office__asks">
             {topSlot}
-            <HuddleRail envelopes={envelopes} roster={roster} roomLink={!broadcast} />
+            <HuddleRail
+              envelopes={envelopes}
+              roster={roster}
+              roomLink={!broadcast}
+              {...(broadcast || !onActClick ? {} : { onShow: onActClick })}
+            />
           </div>
         )}
         {/* The product's mark on the room itself — for every frame that leaves this app (a clip, a

@@ -22,6 +22,7 @@ export function HuddleRail({
   roster,
   now: nowProp,
   roomLink = true,
+  onShow,
 }: {
   envelopes: Envelope[];
   roster: MemberSummary[];
@@ -29,6 +30,9 @@ export function HuddleRail({
   now?: number;
   /** `/live` links out to the whiteboard room; a stream drops the link nobody can click. */
   roomLink?: boolean;
+  /** Open the log on this huddle's card — /live's bubble click-through (opens the drawer, then
+   *  reveals). Absent → no "in the log" link, which is how a stream (no log) renders. */
+  onShow?: (id: string) => void;
 }) {
   const [ticked, setTicked] = useState(() => Date.now());
   const now = nowProp ?? ticked;
@@ -53,7 +57,7 @@ export function HuddleRail({
   return (
     <section className="lc-huddles" aria-label="huddles">
       {open.map((h) => (
-        <Huddle key={h.id} h={h} idx={idx} now={now} roomLink={roomLink} />
+        <Huddle key={h.id} h={h} idx={idx} now={now} roomLink={roomLink} onShow={onShow} />
       ))}
     </section>
   );
@@ -64,11 +68,13 @@ function Huddle({
   idx,
   now,
   roomLink,
+  onShow,
 }: {
   h: HuddleView;
   idx: Map<string, MemberSummary>;
   now: number;
   roomLink: boolean;
+  onShow: ((id: string) => void) | undefined;
 }) {
   const budget = huddleBudget(h, now);
   // Named at the root and still silent — an invitation outstanding, which is a different fact from
@@ -84,6 +90,13 @@ function Huddle({
         <span className="lc-huddle__topic">{h.topic}</span>
         <span className="lc-huddle__line">{h.body}</span>
         <span className="lc-huddle__count">{turnCount(budget)}</span>
+        {/* The whole room, in order, is one card in the log (huddle replay increment 1) — this
+            opens the log on it, the same click-through an office bubble takes. */}
+        {onShow && (
+          <button type="button" className="lc-huddle__room" onClick={() => onShow(h.id)}>
+            in the log
+          </button>
+        )}
         {roomLink && h.room && (
           <a className="lc-huddle__room" href={h.room} target="_blank" rel="noreferrer">
             room

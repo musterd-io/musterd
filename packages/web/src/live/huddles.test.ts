@@ -2,7 +2,14 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PROTOCOL_VERSION, deriveHuddles, type Envelope } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { gatheredFrom, gatheredSeats, huddleBudget, openHuddles } from './huddles';
+import {
+  gatheredFrom,
+  gatheredSeats,
+  huddleBudget,
+  openHuddles,
+  sinceOpen,
+  streamPlacement,
+} from './huddles';
 
 const src = (rel: string): string =>
   readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
@@ -173,4 +180,60 @@ describe('the office floor reads the gathering', () => {
     const index = src('./office-scene/index.ts');
     expect(index).toMatch(/assignSeats\(\s*next\.nodes,/);
   });
+});
+
+describe('streamPlacement — where the Stream draws a huddle as one card', () => {
+  const timeline = [
+    root('01r', 1000),
+    env('01a', 'status_update', { ts: 1500, from: 'ryder' }),
+    env('01t1', 'message', { ts: 2000, from: 'miley', thread: '01r' }),
+    env('01b', 'message', { ts: 2500, from: 'ghost' }),
+    env('01t2', 'steer', { ts: 3000, from: 'ada', thread: '01r' }),
+    env('01c', 'message', { ts: 3500, from: 'lazara' }),
+  ];
+
+  it('anchors the card at its latest row, not where it opened', () => {
+    const { cardAt } = streamPlacement(timeline);
+    expect([...cardAt.keys()]).toEqual(['01t2']);
+    expect(cardAt.get('01t2')!.id).toBe('01r');
+  });
+
+  it('folds the root and every thread row into the card, and nothing else', () => {
+    const { folded } = streamPlacement(timeline);
+    expect([...folded].sort()).toEqual(['01r', '01t1', '01t2']);
+  });
+
+  it('follows the live edge: a new turn moves the anchor to it', () => {
+    const next = [...timeline, env('01t3', 'message', { ts: 4000, from: 'ghost', thread: '01r' })];
+    expect([...streamPlacement(next).cardAt.keys()]).toEqual(['01t3']);
+  });
+
+  it('stays where it closed: the resolve is the last row the card claims', () => {
+    const closed = [
+      ...timeline,
+      env('01x', 'resolve', { ts: 4000, from: 'ada', thread: '01r' }),
+      env('01d', 'message', { ts: 5000, from: 'ryder' }),
+    ];
+    const { cardAt, folded } = streamPlacement(closed);
+    expect([...cardAt.keys()]).toEqual(['01x']);
+    expect(folded.has('01x')).toBe(true);
+    expect(folded.has('01d')).toBe(false);
+  });
+
+  it('leaves an ordinary thread alone: only huddle roots group', () => {
+    const plain = [
+      env('01p', 'request_help', { ts: 1000 }),
+      env('01q', 'accept', { ts: 2000, thread: '01p' }),
+    ];
+    const { cardAt, folded } = streamPlacement(plain);
+    expect(cardAt.size).toBe(0);
+    expect(folded.size).toBe(0);
+  });
+});
+
+describe('sinceOpen — time-to-turn in the close-note format', () => {
+  it('reads seconds under a minute', () => expect(sinceOpen(45_000)).toBe('+45s'));
+  it('reads tenths of a minute under an hour', () => expect(sinceOpen(84_000)).toBe('+1.4m'));
+  it('reads hours past the hour', () => expect(sinceOpen(65 * 60_000)).toBe('+1h05m'));
+  it('never goes negative on a skewed clock', () => expect(sinceOpen(-3000)).toBe('+0s'));
 });

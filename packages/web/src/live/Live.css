@@ -931,6 +931,22 @@
   white-space: nowrap;
 }
 
+/* The row's two ways out — the room on the whiteboard, and its card in the stream. One look for both:
+   a link-weight word, never a button chip competing with the topic. */
+.lc-huddle__room {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: var(--lc-accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--lc-accent) 55%, transparent);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 /* Where the output lands (ADR 378) — the quietest thing on the row and the first to give up width,
    because a huddle's anchor matters most when you are about to close it. */
 .lc-huddle__anchor {
@@ -4004,6 +4020,113 @@
 }
 .lc-thread__spine--success {
   background: color-mix(in srgb, var(--lc-success) 65%, transparent);
+}
+
+/* A huddle as one card in the stream (huddle replay increment 1). The room the office draws at its
+   meeting table, gathered into one place: a mustard spine runs down its turns the way a thread's
+   spine runs down a reply, so it reads as one conversation among the team's other traffic. Rows,
+   not boxes inside a box — the card is the only container. */
+.lc-hcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lc-2);
+  padding: var(--lc-4) var(--lc-5);
+  border-radius: var(--lc-r-md);
+  border: 1px solid color-mix(in srgb, var(--lc-accent) 32%, var(--lc-border));
+  background: color-mix(in srgb, var(--lc-accent) 5%, transparent);
+}
+.lc-hcard.is-closed {
+  border-color: var(--lc-border);
+  background: transparent;
+}
+.lc-hcard__head {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-4);
+  flex-wrap: wrap;
+}
+.lc-badge--huddle {
+  color: var(--lc-accent-ink);
+  border-color: color-mix(in srgb, var(--lc-accent) 44%, transparent);
+  background: color-mix(in srgb, var(--lc-accent) 15%, transparent);
+}
+.lc-hcard__topic {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--lc-text);
+}
+.lc-hcard__count,
+.lc-hcard__state {
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  color: var(--lc-faint);
+  white-space: nowrap;
+}
+.lc-hcard__state {
+  margin-left: auto;
+}
+.lc-hcard.is-spent .lc-hcard__count {
+  color: var(--lc-warn-ink);
+  font-weight: 600;
+}
+.lc-hcard__turns {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--lc-5);
+  border-left: 2px solid color-mix(in srgb, var(--lc-accent) 65%, transparent);
+  /* One grid for every turn (each line is a subgrid row), so who / +Δ / what-they-said line up down
+     the whole room instead of each line sizing its own columns. */
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  row-gap: var(--lc-2);
+}
+.lc-hcard.is-closed .lc-hcard__turns {
+  border-left-color: var(--lc-border-2);
+}
+/* One line per act: who, how long after the open, then what they said, wrapping under itself. Names
+   sit on the FIRST line of a long turn, not in the middle of it. */
+.lc-hcard__line {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  column-gap: var(--lc-3);
+  padding: 2px var(--lc-2);
+  border-radius: var(--lc-r-sm);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.lc-hcard__turns > .lc-hcard__line {
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+.lc-hcard__line .lc-badge {
+  margin-right: var(--lc-2);
+  vertical-align: 1px;
+}
+.lc-hcard__who {
+  min-height: 20px;
+}
+.lc-hcard__since {
+  line-height: 20px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  color: var(--lc-accent-ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.lc-hcard__body {
+  color: var(--lc-dim);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lc-hcard__line.is-steer .lc-hcard__body {
+  color: var(--lc-faint);
+}
+.lc-hcard__foot {
+  font-size: 12px;
+  color: var(--lc-faint);
+  padding-left: var(--lc-2);
 }
 
 /* now marker */

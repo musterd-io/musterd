@@ -78,3 +78,43 @@ export function huddleBudget(view: HuddleView, now: number): HuddleBudgetView {
 export function gatheredFrom(envelopes: Envelope[]): Set<string> {
   return gatheredSeats(deriveHuddles(envelopes, ''));
 }
+
+/**
+ * Where the Stream draws each huddle as ONE card (huddle replay increment 1, nick 2026-10-01).
+ *
+ * A huddle's turns land between everyone else's traffic, so read row by row the room is scattered
+ * across the panel. The Stream instead folds the root and every row on its thread into a single
+ * card, and puts that card where the huddle's LATEST row sits: each new turn moves it to the live
+ * edge, and a resolve pins it where the room closed. Only the Stream reads this — the office floor
+ * keeps drawing every act as its own bubble, huddle or not.
+ *
+ * - `cardAt` — the id of the row a card replaces → that huddle's view.
+ * - `folded` — every row id a card owns, its anchor included; the Stream skips them as plain rows.
+ */
+export function streamPlacement(envelopes: Envelope[]): {
+  cardAt: Map<string, HuddleView>;
+  folded: Set<string>;
+} {
+  const views = deriveHuddles(envelopes, '');
+  const byRoot = new Map(views.map((v) => [v.id, v]));
+  const last = new Map<string, string>();
+  const folded = new Set<string>();
+  for (const e of envelopes) {
+    const rootId = byRoot.has(e.id) ? e.id : e.thread && byRoot.has(e.thread) ? e.thread : null;
+    if (!rootId) continue;
+    folded.add(e.id);
+    last.set(rootId, e.id); // the timeline is oldest-first, so the final write is the latest row
+  }
+  const cardAt = new Map<string, HuddleView>();
+  for (const [rootId, anchor] of last) cardAt.set(anchor, byRoot.get(rootId)!);
+  return { cardAt, folded };
+}
+
+/** Time from the open to a turn, in the close-note format (`miley +1.4m`): s, tenths of a minute, h+mm. */
+export function sinceOpen(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `+${s}s`;
+  if (s < 3600) return `+${(s / 60).toFixed(1).replace(/\.0$/, '')}m`;
+  const m = Math.floor(s / 60);
+  return `+${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`;
+}
