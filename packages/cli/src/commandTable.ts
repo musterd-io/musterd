@@ -47,6 +47,7 @@ export const COMMANDS: Readonly<Record<string, () => Promise<CommandFn>>> = {
   reset: async () => (await import('./commands/reset.js')).resetCommand,
   residency: async () => (await import('./commands/residency.js')).residencyCommand,
   role: async () => (await import('./commands/role.js')).roleCommand,
+  seats: async () => (await import('./commands/seats.js')).seatsCommand,
   seed: async () => (await import('./commands/seed.js')).seedCommand,
   send: async () => (await import('./commands/send.js')).sendCommand,
   serve: async () => (await import('./commands/serve.js')).serveCommand,

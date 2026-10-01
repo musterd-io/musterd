@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { FEATURE_EPOCH } from '@musterd/protocol';
-import { grokCandidates } from '../../grokBin.js';
+import { grokCandidates, resolveGrokBin } from '../../grokBin.js';
 import { isDeclined } from '../declined.js';
 import {
   registeredFromEnv,
@@ -532,6 +532,11 @@ export const grokAdapter: HarnessAdapter = {
   id: 'grok',
   surface: GROK_SURFACE,
   adapterVersion: 1,
+  interactive: {
+    resolveBin: () => resolveGrokBin(),
+    fresh: () => [],
+    resume: (id) => (id ? ['--resume', id] : ['--continue']),
+  },
 
   async availability(ctx) {
     const home = ctx.env['HOME'] ?? homedir();

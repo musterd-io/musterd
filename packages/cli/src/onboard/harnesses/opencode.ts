@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { resolveOpencodeBin } from '../../opencodeBin.js';
 import {
   registeredFromEnv,
   type Harness,
@@ -300,6 +301,11 @@ export const opencodeAdapter: HarnessAdapter = {
   id: 'opencode',
   surface: OPENCODE_SURFACE,
   adapterVersion: 1,
+  interactive: {
+    resolveBin: () => resolveOpencodeBin(),
+    fresh: () => [],
+    resume: (id) => (id ? ['--session', id] : ['--continue']),
+  },
 
   async availability(ctx) {
     const home = ctx.env['HOME'] ?? homedir();

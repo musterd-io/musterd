@@ -62,6 +62,20 @@ export interface HarnessAvailability {
   detail?: string;
 }
 
+/**
+ * How a person starts this harness in a terminal, in a Workspace (ADR 491 Decision 5). Each adapter
+ * declares its own, so the launcher holds no per-harness switch and a new harness joins by
+ * declaring one.
+ */
+export interface InteractiveLaunch {
+  /** A runnable binary: PATH first, then known install locations; null when absent. */
+  resolveBin(): Promise<string | null>;
+  /** argv for a fresh session. */
+  fresh(): string[];
+  /** argv to resume: the recorded session id when there is one, else the harness's continue-latest form. */
+  resume(sessionId: string | undefined): string[];
+}
+
 /** The pluggable fragment adapter. */
 export interface HarnessAdapter {
   id: HarnessId;
@@ -69,6 +83,8 @@ export interface HarnessAdapter {
   surface: Surface;
   /** Bumped when the adapter's fragment representation changes shape — recorded in the ledger. */
   adapterVersion: number;
+  /** The terminal launch entry (ADR 491); null for a harness with none (the native `musterd host`). */
+  interactive: InteractiveLaunch | null;
   availability(ctx: HarnessContext): Promise<HarnessAvailability>;
   target(ctx: HarnessContext): Promise<HarnessTarget>;
   desiredFragments(ctx: HarnessContext, target: HarnessTarget): Promise<FragmentIntent[]>;
