@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { cpus, homedir, loadavg, platform as osPlatform } from 'node:os';
@@ -37,6 +38,7 @@ import {
 } from '../service/autorefresh.js';
 import { guardianStatusLine, guardianTick } from '../service/guardian.js';
 import { clearHandover, readHandover, writeHandover } from '../service/handover.js';
+import { describeHold, readHold, resolveHoldUntil } from '../service/hold.js';
 import {
   installWakeHost,
   restartWakeHost,
@@ -1116,6 +1118,9 @@ export async function serviceCommand(
      *  can never clobber the broken-`main` attempted-tip marker (or be clobbered by it). */
     outageState?: { read: () => string | null; write: (s: string) => void };
     blockedState?: { read: () => string | null; write: (s: string) => void };
+    /** Lane 01M3TE3VN1: the demo-hold stamp (`service hold --auto`), injected so tests never read
+     *  the real one. Holds the expiry as epoch ms; empty means no hold. */
+    holdState?: { read: () => string | null; write: (s: string) => void };
     /** Sleep between post-bounce `/health` polls (injected so tests never actually wait). */
     sleep?: (ms: number) => Promise<void>;
     /** ADR 224 log trim (injected so the tick's tests never touch the real ~/.musterd logs). */
@@ -1216,6 +1221,7 @@ export async function serviceCommand(
       const autoState = deps.autoState ?? fileAutoState();
       const outageState = deps.outageState ?? fileOutageState();
       const blockedState = deps.blockedState ?? fileBlockedState();
+      const holdState = deps.holdState ?? fileHoldState();
       // Unattended output: stamp it and record what the operator was actually shown. `refresh.log`
       // is read after the fact, by a human asking "why did my machine just do that?" — and it
       // answered neither half. Every line looked alike whether it was emitted 2 minutes or 2 days
@@ -1252,10 +1258,18 @@ export async function serviceCommand(
         fail,
         deps.touch,
         deps.refreshSharedHooks,
+        holdState,
       );
     }
     const arCtx = deps.autoRefreshCtx ?? resolveAutoRefreshCtx(ctx.run, parsed);
-    return autoRefreshServiceCommand(sub, arCtx, parsed, ok, fail);
+    return autoRefreshServiceCommand(
+      sub,
+      arCtx,
+      parsed,
+      ok,
+      fail,
+      deps.holdState ?? fileHoldState(),
+    );
   }
 
   // `--guardian` targets the on-call probe (2026-08-13 guardian spec): `guardian-tick` runs one
@@ -1375,6 +1389,15 @@ export async function serviceCommand(
     }
     case 'refresh': {
       const pin = typeof parsed.flags['pin'] === 'string' ? parsed.flags['pin'] : undefined;
+      // A manual refresh outranks a demo hold (§8: refresh, THEN hold) — but say so, in case the
+      // operator forgot the slot is frozen.
+      const hold = readHold((deps.holdState ?? fileHoldState()).read(), Date.now());
+      if (hold.state === 'held')
+        process.stdout.write(
+          theme.warn(
+            `! the auto-refresher is held ${describeHold(hold.until, Date.now())} — refreshing anyway`,
+          ) + '\n',
+        );
       return refreshDaemon(ctx, health, force, ok, fail, deps.sleep, undefined, undefined, pin);
     }
     case 'status':
@@ -1926,6 +1949,32 @@ function fileOutageState(): { read: () => string | null; write: (s: string) => v
 /** File-backed blocked-cause marker for the {@link blockedFailureNotice} ladder — its own file beside
  *  the attempted-tip stamp and the outage marker, so three lifecycles (a tip already tried, a dead
  *  daemon, a refresh stuck on one cause) can never overwrite each other. */
+/** Lane 01M3TE3VN1: the demo-hold stamp beside the refresher's other markers. */
+function holdPath(): string {
+  return join(dirname(configPath()), 'autorefresh', 'hold-until');
+}
+
+function fileHoldState(): { read: () => string | null; write: (s: string) => void } {
+  const p = holdPath();
+  return {
+    read: () => {
+      try {
+        return readFileSync(p, 'utf8').trim() || null;
+      } catch {
+        return null;
+      }
+    },
+    write: (v: string) => {
+      if (v === '') {
+        rmSync(p, { force: true });
+        return;
+      }
+      mkdirSync(dirname(p), { recursive: true });
+      writeFileSync(p, v, 'utf8');
+    },
+  };
+}
+
 function fileBlockedState(): { read: () => string | null; write: (s: string) => void } {
   const p = join(dirname(configPath()), 'autorefresh', '.blocked');
   return {
@@ -2082,6 +2131,10 @@ async function autoRefreshTick(
   fail: (step: string, r: RunResult) => never,
   touch: (ok: (s: string) => void) => Promise<void> = touchServicePresence,
   refreshSharedHooks: (dir: string) => string[] = (d) => installCodexHooks(d),
+  holdState: { read: () => string | null; write: (s: string) => void } = {
+    read: () => null,
+    write: () => {},
+  },
 ): Promise<number> {
   const dir = daemonCheckout(ctx) ?? ctx.workingDir;
   let health0: DaemonHealth;
@@ -2116,6 +2169,21 @@ async function autoRefreshTick(
     if (blockedState.read()) blockedState.write(blockedFailureNotice('', null, Date.now()).state);
     ok(`daemon up to date with origin/main (${health0.build.slice(0, 7)})`);
     return 0;
+  }
+  // The demo hold (lane 01M3TE3VN1): an operator froze bounces for a slot. Checked once we know the
+  // daemon is behind — so the log says what the hold is costing — and before any sync or build. An
+  // expired stamp clears itself here: a forgotten hold must never pin the daemon past its time.
+  const hold = readHold(holdState.read(), Date.now());
+  if (hold.state === 'held') {
+    ok(
+      `held ${describeHold(hold.until, Date.now())} — not bouncing (${behind} commit${behind === 1 ? '' : 's'} behind). ` +
+        `\`musterd service hold --auto --release\` ends it early.`,
+    );
+    return 0;
+  }
+  if (hold.state === 'expired') {
+    holdState.write('');
+    ok('hold expired — refreshing as normal');
   }
   // Debounce: don't re-attempt a tip we already tried that didn't stick (a failed build) — UNLESS
   // the checkout's node_modules is out of sync with its lockfile. That state means the failed
@@ -2652,6 +2720,7 @@ async function autoRefreshServiceCommand(
   parsed: Parsed,
   ok: (s: string) => void,
   fail: (step: string, r: RunResult) => never,
+  holdState: { read: () => string | null; write: (s: string) => void },
 ): Promise<number> {
   const meta = (s: string) => process.stdout.write(theme.meta(s) + '\n');
   const mode = ctx.refreshArgs[ctx.refreshArgs.indexOf('--mode') + 1] ?? DEFAULT_AUTOREFRESH_MODE;
@@ -2699,6 +2768,32 @@ async function autoRefreshServiceCommand(
       ok('restarted the daemon auto-refresher (a tick runs now)');
       return 0;
     }
+    case 'hold': {
+      // Lane 01M3TE3VN1: freeze bounces for a demo or pitch; the tick clears an expired hold itself.
+      if (parsed.flags['release'] === true) {
+        const had = readHold(holdState.read(), Date.now()).state === 'held';
+        holdState.write('');
+        ok(had ? 'released the hold — the next tick refreshes as normal' : 'no hold was set');
+        return 0;
+      }
+      const untilFlag = flagStr(parsed.flags, 'until');
+      const forFlag = flagStr(parsed.flags, 'for');
+      let until: number;
+      try {
+        until = resolveHoldUntil({
+          ...(untilFlag !== undefined ? { until: untilFlag } : {}),
+          ...(forFlag !== undefined ? { for: forFlag } : {}),
+          now: new Date(),
+        });
+      } catch (err) {
+        throw new CliError((err as Error).message, 2);
+      }
+      holdState.write(String(until));
+      ok(`holding daemon refreshes ${describeHold(until, Date.now())}`);
+      meta('  the guardian still restarts a daemon that is down; `service refresh` still works');
+      meta('  end it early: musterd service hold --auto --release');
+      return 0;
+    }
     case 'status': {
       const st = statusAutoRefresh(ctx);
       // `intervalAgentLabel`, not the raw launchd `state`: this agent is a periodic one-shot, so its
@@ -2712,6 +2807,8 @@ async function autoRefreshServiceCommand(
       const autoDead = agentFailureNote(st, agentProgramExists(ctx.plistPath));
       if (autoDead) process.stdout.write(`  ${theme.err('✗')} ${autoDead}\n`);
       meta(`  runs:  musterd service refresh --auto --mode ${mode} every ${ctx.intervalSeconds}s`);
+      const hold = readHold(holdState.read(), Date.now());
+      if (hold.state === 'held') meta(`  hold: ${describeHold(hold.until, Date.now())}`);
       meta(`  logs:  ${ctx.logPath}`);
       return 0;
     }
