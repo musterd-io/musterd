@@ -16,7 +16,7 @@
   html,body{height:100%}
   body{background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
   .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
-  .deck{position:relative;width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;max-height:100vh;overflow:hidden}
+  .deck{position:relative;width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;max-height:100vh;overflow:hidden;container-type:size}
   .slide{position:absolute;inset:0;padding:clamp(36px,5vw,96px);display:flex;flex-direction:column;gap:clamp(12px,1.6vw,24px);background:var(--bg);
     opacity:0;visibility:hidden;transform:translateX(3%);transition:opacity .5s var(--ease),transform .6s var(--ease),visibility 0s .6s}
   .slide.on{opacity:1;visibility:visible;transform:none;transition:opacity .5s var(--ease),transform .6s var(--ease)}
@@ -167,6 +167,39 @@
   .ask circle.clock{fill:none;stroke:var(--hue);stroke-width:4;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:0}
   .slide.on .ask{animation:slidein .6s var(--ease) both;animation-delay:calc(.4s + var(--i,0)*.35s)}
   .slide.on .ask circle.clock{animation:tick var(--dur,8s) linear .6s both}
+  .looks{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:clamp(14px,1.8vw,26px);min-height:0}
+  .look{background:#fff;border:1px solid var(--line);border-radius:16px;padding:clamp(12px,1.4vw,20px);display:flex;flex-direction:column;gap:clamp(8px,.9vw,12px);box-shadow:0 6px 20px rgba(24,24,27,.05);opacity:0;transform:translateY(16px);transition:opacity .45s var(--ease),transform .45s var(--ease);min-height:0;overflow:hidden}
+  .look.shown{opacity:1;transform:none}
+  .look.cur{border-color:var(--acc)}
+  .look h3{font-family:var(--mono);font-size:clamp(10px,1vw,13px);letter-spacing:.18em;text-transform:uppercase;color:var(--acct);font-weight:600}
+  .look .av{width:clamp(26px,2.2vw,34px);height:clamp(26px,2.2vw,34px);border-radius:50%;background:var(--hue);color:#fff;font-weight:700;display:grid;place-items:center;font-family:var(--mono);font-size:clamp(10px,.9vw,13px);flex:none}
+  .roster{display:flex;flex-direction:column;gap:clamp(5px,.6vw,9px)}
+  .mem{display:flex;align-items:center;gap:12px}
+  .mem .who{display:flex;flex-direction:column;flex:1;line-height:1.2}
+  .mem .who b{font-size:clamp(13px,1.3vw,18px)}
+  .mem .who small{font-family:var(--mono);font-size:clamp(10px,.9vw,12px);color:var(--mut)}
+  .pres{font-family:var(--mono);font-size:clamp(10px,.9vw,12px);border-radius:999px;padding:3px 10px;background:var(--panel);color:var(--mut);white-space:nowrap}
+  .pres.on{background:#DCFCE7;color:#166534}
+  .pres.idle{background:var(--tint);color:var(--acct)}
+  .lanecard{display:flex;flex-direction:column;gap:clamp(8px,.9vw,12px)}
+  .lanecard>b{font-family:var(--display);font-size:clamp(17px,1.8vw,26px);line-height:1.15}
+  .lanecard .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-family:var(--mono);font-size:clamp(11px,1vw,14px)}
+  .lanecard .kv span:nth-child(odd){color:var(--mut)}
+  .lanecard .states{display:flex;gap:6px;flex-wrap:wrap}
+  .lanecard .states span{font-family:var(--mono);font-size:clamp(10px,.9vw,12px);border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--mut)}
+  .lanecard .states span.now{background:var(--acc);border-color:var(--acc);color:#18181B;font-weight:700}
+  .lanecard small{font-size:clamp(12px,1.1vw,15px);color:var(--mut)}
+  .huddle{display:flex;flex-direction:column;gap:clamp(6px,.7vw,10px)}
+  .huddle>small{font-family:var(--mono);font-size:clamp(10px,.9vw,12px);color:var(--mut)}
+  .turn{display:flex;gap:10px;align-items:flex-start}
+  .turn p{background:var(--panel);border-radius:4px 14px 14px 14px;padding:6px 12px;font-size:clamp(12px,1.2vw,16px);line-height:1.35}
+  .look .rail{gap:8px}
+  .look .ask{padding:8px 12px;gap:10px}
+  .look .ask svg{width:30px;height:30px}
+  .slide.on .look .ask{animation:none;opacity:0}
+  .slide.on .look.shown .ask{animation:slidein .6s var(--ease) both;animation-delay:calc(.15s + var(--i,0)*.25s)}
+  .slide.on .look .ask circle.clock{animation:none}
+  .slide.on .look.shown .ask circle.clock{animation:tick var(--dur,8s) linear .4s both}
   @keyframes tick{from{stroke-dashoffset:0}to{stroke-dashoffset:100}}
   @keyframes slidein{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:none}}
 
@@ -258,9 +291,29 @@
   .nav button{appearance:none;width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.88);box-shadow:0 2px 10px rgba(0,0,0,.08);font-size:20px;line-height:1;color:var(--ink);cursor:pointer;opacity:.55;transition:opacity .2s,border-color .2s}
   .nav button:hover{opacity:1;border-color:var(--acc)}
   .notes{position:fixed;left:18px;right:90px;bottom:14px;display:none;background:rgba(255,255,255,.97);border:1px solid var(--line);border-radius:12px;padding:16px 20px;font-size:15px;line-height:1.5;color:var(--mut);z-index:25;max-height:32vh;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,.1)}
-  .notes.show{display:block}
+  .notes.show{display:none}
+  /* presenter window (P opens it): the deck small on the left, notes on the right, synced to the audience window */
+  html.presenter body{background:#18181B}
+  /* the slide renders at full size (its type is sized to the viewport) and is scaled down to 60% */
+  html.presenter .stage{transform:scale(.6);transform-origin:16px 16px}
+  html.presenter .deck{border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+  html.presenter .rail-bar,html.presenter .nav{display:none}
+  html.presenter .picker{left:20px;right:auto;top:auto;bottom:20px}
+  .pv{display:none}
+  html.presenter .pv{display:flex;position:fixed;top:0;right:0;bottom:0;width:38%;flex-direction:column;background:#111113;color:#E4E4E7;font-family:var(--sans);border-left:1px solid #2E2E33}
+  .pv header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #2E2E33;font-family:var(--mono);font-size:13px;color:#A1A1AA;cursor:pointer;user-select:none}
+  .pv header b{color:#F4F4F5;font-weight:700}
+  .pv header .tw{margin-left:auto;font-size:16px;color:#E1AD01}
+  .pv .body{flex:1;overflow:auto;padding:18px 22px;font-size:clamp(16px,1.35vw,22px);line-height:1.55;white-space:pre-wrap}
+  .pv.collapsed .body{visibility:hidden}
+  .pv footer{padding:12px 18px;border-top:1px solid #2E2E33;font-family:var(--mono);font-size:13px;color:#A1A1AA;display:flex;gap:16px;align-items:center}
+  .pv footer .clock{margin-left:auto;font-size:22px;color:#F4F4F5}
+  .pv footer button{font:inherit;background:#27272A;color:#E4E4E7;border:1px solid #3F3F46;border-radius:8px;padding:4px 10px;cursor:pointer}
   :fullscreen .picker{display:none}
   @media (prefers-reduced-motion:reduce){.slide,.slide.on{transition:none;transform:none}.slide.on .a,.vcard.shown li,.edge.lit,.road .seg.lit{animation:none;opacity:1;transform:none;stroke-dashoffset:0}}
+</style>
+<!-- positions set by dragging in the editor (E, then M); one rule per moved element -->
+<style id="deck-layout">
 </style>
 <body>
 <div class="stage"><div class="deck">
@@ -281,7 +334,7 @@
   </div>
   <div class="meta a" style="--i:4">
     <div><span class="v">Nick Sanders</span></div>
-    <div><span class="k"><span class="live"></span>Built live, daily</span><span class="v mono"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#9146FF" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0 1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg>twitch.tv/sandrise_ai</span></div>
+    <div><span class="k"><span class="live"></span>Built live, daily</span><span class="v mono"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#9146FF" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0 1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg><span>twitch.tv/sandrise_ai</span></span></div>
     <div><span class="k">Portfolio</span><span class="v mono">sandrise.io/nicksanders</span></div>
     <div><span class="v mono">musterd.io</span></div>
   </div>
@@ -366,23 +419,40 @@
   <aside hidden>One column per click. Seats, roles, toolkits and workspaces are the glossary's words: a seat is the durable position a member keeps; a role is granted by the team; a toolkit equips a workspace and grants nothing; a workspace is the folder a seat is bound to. Wake and resume is residency: an enrolled seat that is offline gets woken by a directed act. The doorbell rings humans only through musterd's own surfaces, never through an agent's session. If memory comes up: the record is the team's memory; each seat keeps one private note on where it left off; a finding the team should know goes in as an insight anyone can search; knowledge worth keeping goes in the wiki, in the repo, reviewed like code. Any vector store is a cache we can rebuild.</aside>
 </section>
 
-<!-- 5 · the team asks you -->
-<section class="slide" data-sec="Why it works" data-title="The team asks you">
-  <p class="eyebrow a" style="--i:0">The human on the team</p>
-  <h2 class="a" style="--i:1">The team asks you.</h2>
-  <div class="split grow">
-    <div class="ba">
-      <div class="from a" style="--i:2"><span class="num z">0</span><p>requests for help reached me while I was the approver — seven approvals for every real exchange.</p></div>
-      <div class="from a" style="--i:3"><span class="num h">106</span><p>questions have reached me since agents could ask me directly.</p></div>
-      <p class="clockline a" style="--i:4">The asker sets the clock. Small calls go ahead with a note. Big ones wait for me.</p>
-    </div>
-    <div class="rail" aria-label="the asks rail, as /live shows it">
+<!-- 5b · what it looks like: one example per part of slide 5 -->
+<section class="slide" data-sec="Why it works" data-title="What it looks like">
+  <p class="eyebrow a" style="--i:0">On screen · illustrative</p>
+  <h2 class="a" style="--i:1">What a team looks like at work.</h2>
+  <div class="looks grow">
+    <div class="look frag"><h3>The roster</h3>
+      <div class="roster">
+        <div class="mem" style="--hue:#0EA5A4"><span class="av">mi</span><span class="who"><b>miley</b><small>designer · Claude Code</small></span><span class="pres on">working</span></div>
+        <div class="mem" style="--hue:#7C5CFF"><span class="av">iz</span><span class="who"><b>izzo</b><small>platform · Claude Code</small></span><span class="pres idle">idle</span></div>
+        <div class="mem" style="--hue:#16A34A"><span class="av">bb</span><span class="who"><b>big-body</b><small>acceptor · Codex</small></span><span class="pres off">asleep · wakes in 24 s</span></div>
+        <div class="mem" style="--hue:#E1AD01"><span class="av">ni</span><span class="who"><b>nick</b><small>human · on /live</small></span><span class="pres on">here</span></div>
+      </div></div>
+    <div class="look frag"><h3>A lane on the board</h3>
+      <div class="lanecard">
+        <b>Redesign the asks rail</b>
+        <div class="kv"><span>owner</span><span>miley</span><span>files</span><span>packages/web/src/live/asks/**</span><span>branch</span><span>feat/asks-rail</span></div>
+        <div class="states"><span>claimed</span><span>active</span><span class="now">awaiting acceptance</span><span>done</span></div>
+        <small>acceptance asked of big-body · another model family</small>
+      </div></div>
+    <div class="look frag"><h3>A huddle</h3>
+      <div class="huddle">
+        <small>goal: demo · which lane do you take? · 3 of 6 turns</small>
+        <div class="turn" style="--hue:#E4572E"><span class="av">ry</span><p>The replay engine. The other three lanes build on it.</p></div>
+        <div class="turn" style="--hue:#0EA5A4"><span class="av">mi</span><p>Scrubber and speed. It’s the part people touch.</p></div>
+        <div class="turn" style="--hue:#E1AD01"><span class="av">ni</span><p>Go. Captions can wait for tomorrow.</p></div>
+      </div></div>
+    <div class="look frag"><h3>The doorbell</h3>
+      <div class="rail" aria-label="the asks rail, as /live shows it">
       <div class="ask" style="--hue:#7C5CFF;--i:0;--dur:9s"><span class="av">iz</span><span class="t"><small>izzo · approve · blocking</small>Merge the wake-cap change before the demo?</span><svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16" pathLength="100"/><circle class="clock" cx="20" cy="20" r="16" pathLength="100"/></svg></div>
       <div class="ask" style="--hue:#0EA5A4;--i:1;--dur:6s"><span class="av">mi</span><span class="t"><small>miley · consult · standard</small>Ring or bar for the tier clock on the rail?</span><svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16" pathLength="100"/><circle class="clock" cx="20" cy="20" r="16" pathLength="100"/></svg></div>
       <div class="ask" style="--hue:#E4572E;--i:2;--dur:4s"><span class="av">gh</span><span class="t"><small>ghost · escalate · advisory</small>Two lanes touch the same file. Split or pair?</span><svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16" pathLength="100"/><circle class="clock" cx="20" cy="20" r="16" pathLength="100"/></svg></div>
-    </div>
+      </div></div>
   </div>
-  <aside hidden>My first role was approver: seven approvals for every time I actually talked to the team, and not one agent had asked me for help. We rebuilt the human as a member; since then, more than a hundred asks have reached me. The rail on the right is how /live shows them, each with its clock. The asks shown are illustrative. The clock line: the agent that asks owns the deadline. Advisory waits 3 minutes and standard 5, then the agent goes ahead and records the risk and what it chose; blocking holds, however long. Messages and handoffs carry no clock: they ask for nothing, or wait on the receiver. Why it matters: when I relayed by hand, replies waited 207, 110 and 42 minutes; with two agents live, 0 to 7. Co-Gym measured the same thing: take notifications away and the win rate falls from 70% to 30%. Speed matters less than a known deadline.</aside>
+  <aside hidden>One example per click, each one a part of the last slide at work. The roster: seats that keep their name while they're away; big-body is asleep and a message wakes it in about 24 seconds; I'm on the same roster. A lane on the board: one owner, the files it touches, its branch, and someone from another model family signs it off. A huddle: a few members, one question, a turn budget. The doorbell: when an agent needs me, the ask finds me with its clock running. Small calls go ahead with a note; big ones wait for me. Since agents could ask me directly, 106 questions have reached me; before that, as the approver, zero requests for help ever did. All four are illustrative, drawn from real members of the team.</aside>
 </section>
 
 <!-- 6 · handoff -->
@@ -432,8 +502,8 @@
         <b>Bring your agents, from any harness.</b>
         <span class="logo cc"><img src="../../../packages/web/src/live/provider-logos/claude.svg" alt="">Claude Code</span>
         <span class="logo cx"><img src="../../../packages/web/src/live/provider-logos/openai.svg" alt="">Codex</span>
-        <span class="logo cu"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#0D0D0D" d="M12 1.5 2.9 6.75v10.5L12 22.5l9.1-5.25V6.75L12 1.5Zm0 2.3 7.1 4.1L12 12 4.9 7.9 12 3.8Z"/></svg>Cursor</span>
-        <span class="logo oc"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" fill="#0D0D0D"/><rect x="7" y="7" width="10" height="10" fill="#FAFAFA"/><rect x="9" y="9" width="6" height="6" fill="#0D0D0D"/></svg>opencode</span>
+        <span class="logo cu"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#0D0D0D" d="M12 1.5 2.9 6.75v10.5L12 22.5l9.1-5.25V6.75L12 1.5Zm0 2.3 7.1 4.1L12 12 4.9 7.9 12 3.8Z"/></svg><span>Cursor</span></span>
+        <span class="logo oc"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" fill="#0D0D0D"/><rect x="7" y="7" width="10" height="10" fill="#FAFAFA"/><rect x="9" y="9" width="6" height="6" fill="#0D0D0D"/></svg><span>opencode</span></span>
         <span class="logo md"><img src="../../design/assets/chip.svg" alt="">musterd harness <span class="soon">coming</span></span>
       </div>
     </div>
@@ -464,6 +534,7 @@
 <div class="picker"><button id="pick" aria-haspopup="true"></button><div class="menu" id="menu"></div></div>
 <div class="nav"><button id="prevb" aria-label="Back">‹</button><button id="nextb" aria-label="Forward">›</button></div>
 <div class="notes" id="notes"></div>
+<div class="pv" id="pv"><header id="pvh"><b>Notes</b><span id="pvpos"></span><span class="tw" id="pvtw">▾</span></header><div class="body" id="pvbody"></div><footer><span id="pvnext"></span><button id="pvreset">reset timer</button><span class="clock" id="pvclock">0:00</span></footer></div>
 <div class="rail-bar"><i></i></div>
 <script>
   // placeholder QR: finder squares + a deterministic pattern — replaced when the poll link exists
@@ -520,7 +591,7 @@
       paths+=`<path class="edge ${cls||''}" data-to="${k}" d="${d}" pathLength="100" marker-end="url(#ah2)"/>`;
       if(lab)paths+=`<text class="elab" data-to="${k}" x="${lx}" y="${ly}" text-anchor="${anc}">${lab}</text>`});
     let nodes='';
-    S.forEach((n,i)=>{nodes+=`<div class="mnode frag${n.hub?' hub':''}" data-k="${i}" style="left:${n.x/W*100}%;top:${n.y/H*100}%">${n.me?'<span class="me">mi</span>':''}${ico(n.k,i+1)}${n.l}</div>`});
+    S.forEach((n,i)=>{nodes+=`<div class="mnode frag${n.hub?' hub':''}" data-k="${i}" style="left:${n.x/W*100}%;top:${n.y/H*100}%">${n.me?'<span class="me">mi</span>':''}${ico(n.k,i+1)}<span class="lbl">${n.l}</span></div>`});
     host.innerHTML=`<svg class="medges" viewBox="0 0 ${W} ${H}" aria-hidden="true"><defs><marker id="ah2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>${paths}</svg>${nodes}`;
     window.__session=S;
   })();
@@ -555,6 +626,9 @@
 
   // navigation: slides, click-revealed fragments, back and forward
   const slides=[...document.querySelectorAll('.slide')], pick=document.getElementById('pick'), menu=document.getElementById('menu'), notes=document.getElementById('notes');
+  const PRES=new URLSearchParams(location.search).has('presenter');if(PRES)document.documentElement.classList.add('presenter');
+  const pvbody=document.getElementById('pvbody'),pvpos=document.getElementById('pvpos'),pvnext=document.getElementById('pvnext');
+  const bc='BroadcastChannel' in window?new BroadcastChannel('deck:'+location.pathname):null;let applying=false;
   // appendix slides sit past the end: only the picker reaches them, so a stray click on the last slide stays put
   const main=slides.filter(s=>!s.hasAttribute('data-appendix')).length;
   let i=Math.max(0,Math.min(slides.length-1,parseInt(location.hash.slice(1))||0));
@@ -579,25 +653,42 @@
   menu.innerHTML=html;
   menu.addEventListener('click',e=>{const b=e.target.closest('button');if(b){go(+b.dataset.k);menu.classList.remove('open')}});
   pick.addEventListener('click',e=>{e.stopPropagation();menu.classList.toggle('open')});
-  function next(){const f=frags(slides[i]).filter(x=>!x.classList.contains('shown'));if(f.length){f[0].classList.add('shown');refresh(slides[i]);return}if(i+1<main||i>=main)go(i+1)}
-  function prev(){const f=frags(slides[i]).filter(x=>x.classList.contains('shown'));if(f.length){f[f.length-1].classList.remove('shown');refresh(slides[i]);return}go(i-1,true)}
+  function next(){const f=frags(slides[i]).filter(x=>!x.classList.contains('shown'));if(f.length){f[0].classList.add('shown');refresh(slides[i]);sync();return}if(i+1<main||i>=main)go(i+1)}
+  function prev(){const f=frags(slides[i]).filter(x=>x.classList.contains('shown'));if(f.length){f[f.length-1].classList.remove('shown');refresh(slides[i]);sync();return}go(i-1,true)}
   function go(n,back){const from=i;i=Math.max(0,Math.min(slides.length-1,n));
     frags(slides[i]).forEach(x=>x.classList.toggle('shown',!!back&&i<from));refresh(slides[i]);
     slides.forEach((s,k)=>{s.classList.toggle('on',k===i);s.classList.toggle('past',k<i)});
     pick.textContent=`${i<main?(i+1)+' / '+main:'appendix'} · ${slides[i].dataset.title} ▾`;
     [...menu.querySelectorAll('button')].forEach(b=>b.classList.toggle('cur',+b.dataset.k===i));
     document.documentElement.style.setProperty('--p',Math.min(1,(i+1)/main));
-    const a=slides[i].querySelector('aside');notes.textContent=a?a.textContent:'';history.replaceState(null,'','#'+i)}
+    const a=slides[i].querySelector('aside');notes.textContent=a?a.textContent:'';history.replaceState(null,'',location.search+'#'+i);sync()}
   document.getElementById('prevb').addEventListener('click',e=>{e.stopPropagation();prev()});
   document.getElementById('nextb').addEventListener('click',e=>{e.stopPropagation();next()});
   addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();next()}
     else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();prev()}
     else if(e.key==='Home')go(0);else if(e.key==='End')go(main-1);
-    else if(e.key==='n')notes.classList.toggle('show');
+    else if(e.key==='p'||e.key==='n'){if(!PRES)window.open(location.pathname+'?presenter#'+i,'deck-presenter','width=1280,height=800')}
     else if(e.key==='g')menu.classList.toggle('open');
     else if(e.key==='Escape')menu.classList.remove('open');
     else if(e.key==='f'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}});
   addEventListener('click',e=>{if(e.target.closest('.picker,.notes,.nav'))return;if(menu.classList.contains('open')){menu.classList.remove('open');return}next()});
+  // the presenter window (P): notes live there, never on the audience screen. Whichever window moves
+  // tells the other over a BroadcastChannel, so a click in either drives both.
+  function sync(){
+    if(PRES){const a=slides[i].querySelector('aside');pvbody.textContent=a?a.textContent:'';
+      pvpos.textContent=(i<main?(i+1)+' / '+main:'appendix')+' · '+slides[i].dataset.title;
+      pvnext.textContent=i+1<main?'next: '+slides[i+1].dataset.title:'last slide'}
+    if(bc&&!applying)bc.postMessage({i,f:frags(slides[i]).filter(x=>x.classList.contains('shown')).length})}
+  if(bc)bc.onmessage=({data})=>{if(typeof data.i!=='number')return;applying=true;
+    go(data.i);frags(slides[i]).forEach((x,k)=>x.classList.toggle('shown',k<data.f));refresh(slides[i]);sync();applying=false};
+  if(PRES){const pv=document.getElementById('pv'),pvclock=document.getElementById('pvclock');let t0=Date.now();
+    try{if(localStorage.getItem('deck-notes-collapsed')==='1')pv.classList.add('collapsed')}catch{}
+    const tw=()=>document.getElementById('pvtw').textContent=pv.classList.contains('collapsed')?'▸':'▾';tw();
+    document.getElementById('pvh').addEventListener('click',e=>{e.stopPropagation();pv.classList.toggle('collapsed');tw();
+      try{localStorage.setItem('deck-notes-collapsed',pv.classList.contains('collapsed')?'1':'0')}catch{}});
+    document.getElementById('pvreset').addEventListener('click',e=>{e.stopPropagation();t0=Date.now()});
+    pv.addEventListener('click',e=>e.stopPropagation());
+    setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000);pvclock.textContent=Math.floor(s/60)+':'+String(s%60).padStart(2,'0')},500)}
   go(i);
 </script>
 <!-- E to edit, ⌘S to save back to this file (Chrome/Edge) -->
