@@ -808,9 +808,9 @@ stopwatch until a live read replaces it. Measured 2026-09-30, spoken words only:
 | 3:30 done is two claims | demo | 45 s | 86 | ~34 s |
 | 4:15 a seat that is not running *(optional)* | demo | 45 s | 69 | ~28 s |
 | 5:00 handoff | big questions | 60 s | 141 | ~56 s |
-| 6:00 what did not work | big questions | 40 s | 91 | ~36 s |
+| 6:00 what did not work | big questions | 40 s | 97 | ~39 s |
 | 6:40 the ask | close | 20 s | 37 | ~15 s |
-| **total** | | **420 s** | **877** (808 without `delta`) | **~351 s** (~323 s) |
+| **total** | | **420 s** | **883** (814 without `delta`) | **~353 s** (~326 s) |
 
 The ~70 s of slack is for the two live actions (the ask landing and being answered; the
 acceptance routing) and, if it is in, the ~24 s `delta` wake. **Stopwatch rule:** at 4:15 without
@@ -919,8 +919,8 @@ order from a switchboard."
 
 **SAY** "The other thing that did not work was the human's first role: a person in front of every
 claim, as an approver. We read our own record. The human appeared as an approver seven times for
-every time they communicated, and in months of use not one request for help had ever reached them.
-The gate produced the record of oversight without the oversight. So we rebuilt the human as a
+every time they communicated, and in months of use not one request for help had ever reached them
+— since the rebuild, a hundred-plus have. The gate produced the record of oversight without the oversight. So we rebuilt the human as a
 member — same roster, same acts. That is why the centerpiece of this demo is a question, not an
 approval."
 
