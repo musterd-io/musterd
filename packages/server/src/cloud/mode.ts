@@ -53,7 +53,8 @@ function urlOf(env: Env, name: string): URL {
   }
 }
 
-function postgresUrl(env: Env, name: string): string {
+/** A required `postgres://` URL from `env`; refusals name `name`, never the value. */
+export function postgresUrl(env: Env, name: string): string {
   const u = urlOf(env, name);
   if (u.protocol !== 'postgres:' && u.protocol !== 'postgresql:')
     throw new Error(`${name} must be a postgres:// URL`);

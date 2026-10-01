@@ -173,6 +173,13 @@ export async function pgliteDriver(opts: { dataDir?: string } = {}): Promise<Pgl
               rolledBack = true;
               return { rows: [], rowCount: null };
             }
+            // node-postgres sends a query with no values over the SIMPLE protocol, where several
+            // statements are one query (the baseline DDL relies on it); PGlite's `query` is always
+            // extended, so mirror the wire: no values → `exec`, and the last statement's result.
+            if (!values || values.length === 0) {
+              const last = (await t.exec(text)).at(-1);
+              return { rows: last?.rows ?? [], rowCount: last?.affectedRows ?? null };
+            }
             const r = await t.query(text, values);
             return { rows: r.rows, rowCount: r.affectedRows ?? r.rows.length };
           },

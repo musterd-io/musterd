@@ -2,7 +2,10 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { openTestDriver, testCloudPools } from '../db/testing.js';
+import { SCHEMA_NEWER_SENTENCE, SCHEMA_OLDER_SENTENCE } from '../db/guard.js';
+import { LADDER } from '../db/ladder.js';
+import { openTestDriver, testCloudPools, type TestStore } from '../db/testing.js';
+import { TRACE_LADDER } from '../db/traceLadder.js';
 import { createServer } from '../index.js';
 import { createTeam } from '../store/teams.js';
 
@@ -50,4 +53,54 @@ describe('cloud mode — store selection (1C task 2)', () => {
       await s.close();
     }
   });
+});
+
+describe('cloud mode — boot refuses a schema it does not match (1C task 3, spec §6)', () => {
+  afterEach(() => vi.unstubAllEnvs());
+  const MAX: Record<TestStore, number> = {
+    main: LADDER.at(-1)!.version,
+    trace: TRACE_LADDER.at(-1)!.version,
+  };
+
+  /** Boot a cloud server with `store`'s schema_version set to `at`, restoring it afterwards. */
+  async function bootAt(store: TestStore, at: number): Promise<unknown> {
+    stubCloudEnv();
+    const d = await openTestDriver('pglite', { store });
+    await openTestDriver('pglite', { store: store === 'main' ? 'trace' : 'main' });
+    const set = (v: number) =>
+      d.run("UPDATE schema_meta SET value = ? WHERE key = 'schema_version'", [String(v)]);
+    await set(at);
+    const s = createServer({
+      cloudPools: (await testCloudPools()).factories,
+      rosterRoots: [],
+      port: 0,
+    });
+    try {
+      await s.listen();
+      return 'served';
+    } catch (e) {
+      return (e as Error).message;
+    } finally {
+      await s.close();
+      await set(MAX[store]);
+    }
+  }
+
+  it("serves when both stores are at this build's version", async () => {
+    expect(await bootAt('main', MAX.main)).toBe('served');
+  });
+
+  it.each<TestStore>(['main', 'trace'])(
+    'refuses a %s schema NEWER than this build',
+    async (store) => {
+      expect(await bootAt(store, MAX[store] + 1)).toMatch(SCHEMA_NEWER_SENTENCE);
+    },
+  );
+
+  it.each<TestStore>(['main', 'trace'])(
+    'refuses a %s schema OLDER than this build — migration is a separate step',
+    async (store) => {
+      expect(await bootAt(store, MAX[store] - 1)).toMatch(SCHEMA_OLDER_SENTENCE);
+    },
+  );
 });

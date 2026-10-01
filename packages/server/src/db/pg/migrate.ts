@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import type { Driver } from '../driver.js';
-import { assertSchemaNotNewer } from '../guard.js';
+import { assertSchemaNotNewer, assertSchemaNotOlder } from '../guard.js';
 import { LADDER, type PortableMigration } from '../ladder.js';
 import { TRACE_LADDER } from '../traceLadder.js';
 import { GLOBAL_TABLES, tenantPolicySql } from './tenancy.js';
@@ -68,11 +68,25 @@ export async function migrateTracePostgres(owner: Driver): Promise<number> {
   return migrateStore(owner, TRACE);
 }
 
+const maxVersion = (spec: StoreSpec): number =>
+  spec.ladder.length ? spec.ladder[spec.ladder.length - 1]!.version : spec.baselineVersion;
+
+/**
+ * Cloud boot (spec §6): the database must be at exactly this build's version — newer means a later
+ * build migrated (and may have contracted) it; older means the migrate step did not run. Either way
+ * the server refuses to start, with the stable sentence. Read-only; any scoped handle that can see
+ * `schema_meta` (a global table) will do — the server passes its operator handle.
+ */
+export async function assertSchemaCurrent(d: Driver, store: 'main' | 'trace'): Promise<void> {
+  const spec = store === 'main' ? MAIN : TRACE;
+  const have = await schemaVersion(d);
+  assertSchemaNotNewer(have, maxVersion(spec));
+  assertSchemaNotOlder(have, maxVersion(spec));
+}
+
 async function migrateStore(owner: Driver, spec: StoreSpec): Promise<number> {
   let have = await schemaVersion(owner);
-  const max = spec.ladder.length
-    ? spec.ladder[spec.ladder.length - 1]!.version
-    : spec.baselineVersion;
+  const max = maxVersion(spec);
   assertSchemaNotNewer(have, max);
   if (have === 0) {
     await owner.exec(readFileSync(spec.baseline, 'utf8'));

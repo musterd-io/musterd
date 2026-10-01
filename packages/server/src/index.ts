@@ -12,6 +12,7 @@ import { operatorCtx, type Ctx } from './context.js';
 import type { Driver } from './db/driver.js';
 import { schemaVersionOf } from './db/migrations.js';
 import { openDriver } from './db/open.js';
+import { assertSchemaCurrent } from './db/pg/migrate.js';
 import { pgDriver, type PoolFactory } from './db/pgDriver.js';
 import { sqliteDriver, type SqliteDriver } from './db/sqliteDriver.js';
 import { openTraceDriver } from './db/traceDb.js';
@@ -268,6 +269,12 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       return config.scheme;
     },
     async listen() {
+      // Cloud (spec §6): migrations are a separate step; a server whose database is not at exactly
+      // its own schema version refuses to start, before it binds or starts a loop.
+      if (config.cloud && opDb.dialect === 'postgres') {
+        await assertSchemaCurrent(opDb, 'main');
+        await assertSchemaCurrent(opTraceDb, 'trace');
+      }
       // Start telemetry before binding so the first envelope is already instrumented. No-op + instant
       // when no OTLP endpoint is configured (off by default — observability.md §4 / ADR 015).
       stopTelemetry = await startTelemetry();
