@@ -15,7 +15,9 @@ import { ulid } from 'ulid';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import type { Ctx } from '../context.js';
+import type { Driver } from '../db/driver.js';
 import { openDb } from '../db/open.js';
+import type { SqliteDriver } from '../db/sqliteDriver.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { flushLapsedHolds } from '../notify/doorbell.js';
@@ -221,10 +223,13 @@ withDrivers('integration', (_o, kind) => {
     ws: WebSocket;
     frames: WSServerFrame[] = [];
     private waiters: { type: string; resolve: (f: WSServerFrame) => void }[] = [];
+    /** When each frame arrived — timing is asserted between frames, never against the wall clock. */
+    private arrived = new Map<WSServerFrame, number>();
     constructor() {
       this.ws = new WebSocket(wsUrl);
       this.ws.on('message', (d) => {
         const f = JSON.parse(d.toString()) as WSServerFrame;
+        this.arrived.set(f, performance.now());
         this.frames.push(f);
         this.waiters = this.waiters.filter((w) => {
           if (w.type === f.type) {
@@ -237,6 +242,10 @@ withDrivers('integration', (_o, kind) => {
     }
     open() {
       return new Promise<void>((r) => this.ws.on('open', () => r()));
+    }
+    /** performance.now() when `f` arrived on this socket. */
+    receivedAt(f: WSServerFrame): number {
+      return this.arrived.get(f)!;
     }
     send(frame: unknown) {
       this.ws.send(JSON.stringify(frame));
@@ -3067,13 +3076,20 @@ withDrivers('integration', (_o, kind) => {
     describe('durability-gated same-workspace eviction (ADR 092)', () => {
       // A short grace so the reap fires within a test's patience; the outer beforeEach already stood up a
       // default-grace server, so close it and stand up a short-grace one for these cases.
-      beforeEach(async () => {
+      const GRACE_MS = 120;
+      // Receipt times carry a little jitter (two sockets, one event loop); never a whole grace.
+      const RECEIPT_SLACK_MS = 30;
+      /** Stand the server up again with `grace` (and optionally a wrapped driver). */
+      async function restart(grace: number, db?: Driver): Promise<void> {
         await server.close();
-        process.env['MUSTERD_SUPERSEDE_GRACE_MS'] = '120';
-        server = createServer({ db: await openTestDriver(kind), port: 0 });
+        process.env['MUSTERD_SUPERSEDE_GRACE_MS'] = String(grace);
+        server = createServer({ db: db ?? (await openTestDriver(kind)), port: 0 });
         const { port } = await server.listen();
         base = `http://127.0.0.1:${port}`;
         wsUrl = `ws://127.0.0.1:${port}/ws`;
+      }
+      beforeEach(async () => {
+        await restart(GRACE_MS);
       });
       afterEach(() => {
         delete process.env['MUSTERD_SUPERSEDE_GRACE_MS'];
@@ -3155,7 +3171,7 @@ withDrivers('integration', (_o, kind) => {
         await occupyAda(successor, team.json.agent_key, grant, 'repo@main');
 
         // The orphan is reaped after the grace, and told same_workspace so its adapter exits.
-        const superseded = await orphan.waitFor('error', 1000);
+        const superseded = await orphan.waitFor('error');
         expect((superseded as any).code).toBe('superseded');
         expect((superseded as any).same_workspace).toBe(true);
 
@@ -3172,6 +3188,12 @@ withDrivers('integration', (_o, kind) => {
       });
 
       it('a transient same-workspace probe that disconnects within the grace does NOT reap the incumbent', async () => {
+        // "Within the grace" has to hold on a loaded machine: the probe's close must reach the
+        // server before the timer fires, and at 120 ms a starved test process could not promise
+        // that (seen at load 23, PGlite, 2026-10-01) — so this case runs a grace a disconnect
+        // comfortably beats, and watches past it. Production's grace is 10 s.
+        const PROBE_GRACE_MS = 1_500;
+        await restart(PROBE_GRACE_MS);
         const team = await post('/teams', {
           slug: 'dawn',
           creator: { name: 'nick', kind: 'human' },
@@ -3193,9 +3215,94 @@ withDrivers('integration', (_o, kind) => {
         probe.close(); // disconnects immediately, before the grace elapses — as a health check does
 
         // The live session is never superseded: the successor is gone before the reap fires (ADR 068 held).
-        await expect(live.waitFor('error', 400)).rejects.toThrow(/timeout/);
+        await expect(live.waitFor('error', PROBE_GRACE_MS + 500)).rejects.toThrow(/timeout/);
 
         live.close();
+      });
+
+      /**
+       * The driver with reads matching `re` slowed by `delay.ms` (0 = off) — every handle derived
+       * from it too, so the server's team-scoped and operator views are all slowed alike. Stands in
+       * for a slow database (Postgres under load) without depending on the machine being slow.
+       */
+      function slowReads(d: Driver, re: RegExp, delay: { ms: number }): Driver {
+        const slow = async () => {
+          if (delay.ms > 0) await new Promise((r) => setTimeout(r, delay.ms));
+        };
+        const wrap = (h: Driver): Driver => ({
+          ...(h.dialect === 'sqlite' ? { raw: (h as SqliteDriver).raw } : {}),
+          dialect: h.dialect,
+          get: async (sql, params) => {
+            if (re.test(sql)) await slow();
+            return h.get(sql, params);
+          },
+          all: async (sql, params) => {
+            if (re.test(sql)) await slow();
+            return h.all(sql, params);
+          },
+          run: (sql, params) => h.run(sql, params),
+          exec: (sql) => h.exec(sql),
+          tx: (fn) => h.tx((t) => fn(wrap(t))),
+          connection: () => wrap(h.connection()),
+          forTeam: (team) => wrap(h.forTeam(team)),
+          asOperator: () => wrap(h.asOperator()),
+          close: () => h.close(),
+        });
+        return wrap(d);
+      }
+
+      it('the grace of an approved pending claim runs from `occupied`, even when its frame is slow to build', async () => {
+        // ADR 092: the successor proves durable by staying attached for the grace AFTER it is told
+        // it is occupied. The approve path built that frame (role charter + seat memory reads) AFTER
+        // arming the reap, so a slow database spent the grace before `occupied` was even sent.
+        const delay = { ms: 0 };
+        await restart(
+          GRACE_MS,
+          slowReads(await openTestDriver(kind), /FROM (roles|seat_memory)\b/, delay),
+        );
+        const team = await post('/teams', {
+          slug: 'dawn',
+          creator: { name: 'nick', kind: 'human' },
+        });
+        await post(
+          '/teams/dawn/members',
+          { name: 'Ada', kind: 'agent' },
+          team.json.human_credential,
+        );
+        const grant = await standingGrant(team.json.human_credential, 'Ada');
+        const incumbent = new TestWs();
+        await incumbent.open();
+        await occupyAda(incumbent, team.json.agent_key, grant, 'repo@main');
+        const challenger = new TestWs();
+        await challenger.open();
+        challenger.send({
+          type: 'claim',
+          v: PROTOCOL_VERSION,
+          team: 'dawn',
+          key: team.json.agent_key,
+          target: { seat: 'Ada' },
+          surface: 'claude-code',
+          workspace: 'repo@main',
+        });
+        const pending = await challenger.waitFor('pending');
+
+        delay.ms = 2 * GRACE_MS; // each of the frame's two reads alone outlasts the grace
+        const decided = await post(
+          `/teams/dawn/requests/${pending.request_id}/decide`,
+          { decision: 'approve', lifetime: 'standing' },
+          team.json.human_credential,
+        );
+        expect(decided.status).toBe(200);
+        const occupied = await challenger.waitFor('occupied');
+        const superseded = await incumbent.waitFor('error');
+        delay.ms = 0;
+        expect(superseded).toMatchObject({ code: 'superseded', same_workspace: true });
+        expect(
+          incumbent.receivedAt(superseded) - challenger.receivedAt(occupied),
+        ).toBeGreaterThanOrEqual(GRACE_MS - RECEIPT_SLACK_MS);
+
+        incumbent.close();
+        challenger.close();
       });
 
       it('an approved same-workspace pending claim reaps only after the grace', async () => {
@@ -3233,16 +3340,15 @@ withDrivers('integration', (_o, kind) => {
           team.json.human_credential,
         );
         expect(decided.status).toBe(200);
-        expect((await challenger.waitFor('occupied')).type).toBe('occupied');
-        // The "not yet" half races the 120 ms grace timer, exactly as in the reconnect case below:
-        // under CI load the PGlite double let the grace elapse before the wait began (main,
-        // 2026-10-01, run 36820631249), so it is asserted on SQLite only.
-        if (kind === 'sqlite')
-          await expect(incumbent.waitFor('error', 50)).rejects.toThrow(/timeout/);
-        expect(await incumbent.waitFor('error', 1000)).toMatchObject({
-          code: 'superseded',
-          same_workspace: true,
-        });
+        const occupied = await challenger.waitFor('occupied');
+        const superseded = await incumbent.waitFor('error');
+        expect(superseded).toMatchObject({ code: 'superseded', same_workspace: true });
+        // "Not yet" is a claim about the gap BETWEEN the two frames, so it is measured there — on
+        // both drivers. (A wall-clock wait that starts after the test sees `occupied` raced the
+        // grace on the PGlite double under CI load: main, 2026-10-01, run 36820631249.)
+        expect(
+          incumbent.receivedAt(superseded) - challenger.receivedAt(occupied),
+        ).toBeGreaterThanOrEqual(GRACE_MS - RECEIPT_SLACK_MS);
 
         incumbent.close();
         challenger.close();

@@ -2769,7 +2769,17 @@ export async function handleHttp(
 
           // (The request was settled above, before the mint.)
 
-          // Flip the waiting WS: find the pending connection and call _claimApproved.
+          // Read everything the `occupied` frame carries BEFORE the flip. The flip arms the ADR 092
+          // grace-gated reap of a same-workspace predecessor, and that grace runs from `occupied` —
+          // the successor proves durable by staying attached after it is told it holds the seat.
+          // Awaiting these reads after the flip let a slow database spend the grace before the
+          // frame was even sent, evicting the incumbent ahead of its successor's `occupied`.
+          const charter = (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined;
+          const memory = await memoryEnvelope(ctx.db, targetMember.id);
+
+          // Flip the waiting WS: find the pending connection and call _claimApproved. Its synchronous
+          // part (authenticate + hub swap) runs here, so the client's first frame after `occupied`
+          // is accepted; the reap timer it arms starts after an audit write, i.e. after the send below.
           if (pendingConn?._claimApproved) {
             void Promise.resolve(
               pendingConn._claimApproved(presence.id, sameWorkspacePredecessors),
@@ -2785,9 +2795,9 @@ export async function handleHttp(
             presence_id: presence.id,
             server_time: Date.now(),
             ...(resumeToken ? { grant: resumeToken } : {}),
-            charter: (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined,
+            charter,
             ...agentAuthority,
-            memory: await memoryEnvelope(ctx.db, targetMember.id),
+            memory,
           });
 
           // Broadcast presence online for non-observers.
