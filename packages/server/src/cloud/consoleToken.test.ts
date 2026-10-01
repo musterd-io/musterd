@@ -1,7 +1,13 @@
 import { createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { withDrivers } from '../db/testing.js';
-import { ConsoleTokenError, JwksCache, redeemJti, verifyConsoleToken } from './consoleToken.js';
+import {
+  ConsoleTokenError,
+  JTI_RETENTION_S,
+  JwksCache,
+  redeemJti,
+  verifyConsoleToken,
+} from './consoleToken.js';
 import { testIssuer, type TestIssuer } from './testIssuer.js';
 
 const AUD = 'https://cloud.test';
@@ -114,14 +120,52 @@ describe('verifyConsoleToken (1C task 5, spec §4.3)', () => {
 });
 
 withDrivers('redeemJti — single use is enforced in the database (spec §4.3)', (open) => {
-  it('the first redemption wins; the second is a replay; expired rows are pruned', async () => {
+  it('the first redemption wins; the second is a replay', async () => {
     const db = await open();
     const exp = Math.floor(Date.now() / 1000) + 60;
     await redeemJti(db, 'jti-1', exp);
     expect(await refusal(redeemJti(db, 'jti-1', exp))).toBe('replayed');
-    await redeemJti(db, 'jti-old', Math.floor(Date.now() / 1000) - 120);
-    await redeemJti(db, 'jti-2', exp);
+  });
+
+  it('a redemption prunes rows an hour past their exp, and keeps every younger one', async () => {
+    const db = await open();
+    const nowS = Math.floor(Date.now() / 1000);
+    await db.run('INSERT INTO console_token_jti (jti, exp) VALUES (?, ?), (?, ?)', [
+      'ancient',
+      nowS - JTI_RETENTION_S - 1,
+      'recent',
+      nowS - 120,
+    ]);
+    await redeemJti(db, 'fresh', nowS + 60);
     const rows = await db.all<{ jti: string }>('SELECT jti FROM console_token_jti ORDER BY jti');
-    expect(rows.map((r) => r.jti)).toEqual(['jti-1', 'jti-2']);
+    expect(rows.map((r) => r.jti)).toEqual(['fresh', 'recent']);
   });
 });
+
+/**
+ * Review I1: verification happens when the request ARRIVES, redemption after its body is read — a
+ * slow body (Node's request timeout is minutes) reaches redemption long after `exp`. Redemption
+ * must refuse an expired token itself, and the prune that keeps the table small must never remove
+ * a row while its token could still be presented anywhere.
+ */
+withDrivers(
+  'redeemJti — expiry is enforced at redemption, not only at verification (review I1)',
+  (open) => {
+    const E = Math.floor(Date.now() / 1000) + 60;
+
+    it('a token presented past exp + skew is refused as expired, even if never redeemed', async () => {
+      const db = await open();
+      expect(await refusal(redeemJti(db, 'late', E, (E + 6) * 1000))).toBe('expired');
+    });
+
+    it('once T is redeemed, a prune by a later redemption cannot open T to a second use', async () => {
+      const db = await open();
+      await redeemJti(db, 'T', E, (E - 10) * 1000);
+      // Another console call, just past T's exp + skew: under the old margin this pruned T's row.
+      await redeemJti(db, 'later', E + 100, (E + 6) * 1000);
+      expect(await refusal(redeemJti(db, 'T', E, (E + 6) * 1000))).not.toBe('accepted');
+      const rows = await db.all<{ jti: string }>('SELECT jti FROM console_token_jti ORDER BY jti');
+      expect(rows.map((r) => r.jti)).toEqual(['T', 'later']);
+    });
+  },
+);

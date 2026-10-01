@@ -140,7 +140,7 @@ adds `team_id` to the four tables that were owned only through `members` / `seed
 `NOT NULL` on Postgres; the store writes it on every insert (member-keyed tables take it off the
 `members` row in the same `INSERT … SELECT`). v84 (cloud increment 1C) adds `console_token_jti (jti TEXT PRIMARY
 KEY, exp BIGINT NOT NULL)`, portable SQL: a console token's id, redeemed once across every Cloud
-server (cloud design §4.3) — a duplicate insert is a replay; expired rows are pruned on redemption.
+server (cloud design §4.3) — a duplicate insert is a replay; redemption refuses an expired token itself, and prunes rows only an hour past their `exp` so a prune can never reopen one.
 
 **Tenancy (cloud design §12.1).** On Postgres every team-owned table carries `team_id` (`teams`:
 its `id`) and one derived row-level-security policy, `tenant`, on

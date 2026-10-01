@@ -180,11 +180,17 @@ export async function verifyConsoleToken(
   return { sub: c.sub, aud: opts.audience, jti: c.jti, exp: c.exp };
 }
 
+/** Rows stay this long past their token's `exp` — far beyond any clock skew between servers. */
+export const JTI_RETENTION_S = 3_600;
+
 /**
  * Single use, enforced where every server sees it (§4.3): one insert into `console_token_jti`. A
- * duplicate key is a replay, whichever server saw the token first. Rows outlive their token by
- * nothing — expired ones are pruned here, on the way in (console tokens are rare: admin calls).
- * `db` is the operator handle; the table is global (no tenant owns a console token).
+ * duplicate key is a replay, whichever server saw the token first. Expiry is checked HERE too, not
+ * only in {@link verifyConsoleToken}: verification runs when a request arrives, redemption after its
+ * body is read, and a slow body can reach this line long after `exp` (review I1). Rows are pruned on
+ * the way in (console tokens are rare: admin calls), but only an hour past their token's `exp` —
+ * a row must outlive every moment its token could still be presented on any server, or the prune
+ * itself would reopen the token. `db` is the operator handle; the table is global.
  */
 export async function redeemJti(
   db: Driver,
@@ -193,7 +199,8 @@ export async function redeemJti(
   nowMs = Date.now(),
 ): Promise<void> {
   const nowS = Math.floor(nowMs / 1000);
-  await db.run('DELETE FROM console_token_jti WHERE exp < ?', [nowS - SKEW_S]);
+  if (expS < nowS - SKEW_S) throw refuse('expired', 'past its exp at redemption');
+  await db.run('DELETE FROM console_token_jti WHERE exp < ?', [nowS - JTI_RETENTION_S]);
   const r = await db.run(
     'INSERT INTO console_token_jti (jti, exp) VALUES (?, ?) ON CONFLICT (jti) DO NOTHING',
     [jti, expS],
