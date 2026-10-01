@@ -21,6 +21,7 @@ import { pollHostOnce } from '../../packages/cli/src/host/loop.js';
 import { provisionOnce } from '../../packages/cli/src/host/provisioner.js';
 import { loadHostRegistry } from '../../packages/cli/src/host/registry.js';
 import type { Harness } from '../../packages/cli/src/onboard/harness.js';
+import { provisionSeat } from '../../packages/cli/src/onboard/provisionSeat.js';
 import { provisionWorkspace } from '../../packages/cli/src/onboard/workspace.js';
 
 /**
@@ -124,12 +125,10 @@ describe('Scenario E — a sponsor’s host runs the agent they created', () => 
     expect(made.json.host).toBe('dana-mbp');
 
     // 4. The host's provisioner: real git workspace, real provisionSeat (credential, grant, binding),
-    // real enrollment. Only the harness's own MCP registration is faked.
-    const harness = {
-      id: 'claude-code',
-      label: 'Claude Code',
-      configure: vi.fn(async () => ({ target: 'fake', activation: '' })),
-    } as unknown as Harness;
+    // real enrollment. Only the harness wiring is faked: the reconcile engine (ADR 491) would write
+    // this machine's real harness config.
+    const harness = { id: 'claude-code', label: 'Claude Code' } as unknown as Harness;
+    const reconcile = vi.fn(async () => ({ ok: true, results: [] }));
     const log: string[] = [];
     const danaHttp = new HttpClient({ server: base, key: dana });
     const tick = await provisionOnce({
@@ -145,6 +144,8 @@ describe('Scenario E — a sponsor’s host runs the agent they created', () => 
       log: (l) => log.push(l),
       // the real one, with the layout's `~` pointed at a tmp home
       provisionWorkspace: (name, opts) => provisionWorkspace(name, { ...opts, home }),
+      provisionSeat: (input) =>
+        provisionSeat({ ...input, wiring: { ...input.wiring, reconcile: reconcile as never } }),
     });
     expect(tick).toEqual({ claimed: 1, ready: 1, failed: 0 });
 
@@ -157,7 +158,8 @@ describe('Scenario E — a sponsor’s host runs the agent they created', () => 
       host_key: hostKey,
     });
     expect(binding.grant).toBeTruthy();
-    expect(harness.configure).toHaveBeenCalledTimes(1);
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(reconcile.mock.calls[0]![1]).toEqual(['claude-code']);
     const provisions = await api(
       'GET',
       `/teams/${TEAM}/host/provisions?host=dana-mbp`,
