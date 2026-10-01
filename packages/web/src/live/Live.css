@@ -1578,7 +1578,13 @@
 .lc-gl-label:not(.is-expanded):not(.is-broadcast) > .lc-gl-label__plate > .lc-gl-label__rule {
   display: none;
 }
+/* The name at the model's 11px (nick, 2026-10-01). #1796 raised the model to 11px so a room could
+   read it, and left the name on the plate's 8px `--lc-type-name` — the second line outranked the
+   identity. Same size now, and the name still leads: 700 weight in full ink against the model's 600 at
+   78%. The width this costs is handled where collisions are, in plateLayout.ts, which lays plates
+   out from their MEASURED boxes. */
 .lc-gl-label__who {
+  font-size: 11px;
   font-weight: 700;
   color: var(--lc-paper-ink);
 }
