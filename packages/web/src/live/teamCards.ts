@@ -89,7 +89,9 @@ export function teamCards(
     else owned.set(l.owner_seat, [l]);
   }
   for (const list of owned.values()) list.sort((a, b) => recency(b) - recency(a));
-  const goalTitle = new Map(goals.map((g) => [g.id, g.title] as const));
+  // The goal's NAME: titles read "Name — what it promises", and the card names which goal a lane
+  // serves, it does not retell it (slop tell 8 — under every member on that goal, it was 3 lines).
+  const goalTitle = new Map(goals.map((g) => [g.id, g.title.split(' — ')[0]!.trim()] as const));
 
   const present = roster.filter((m) => m.presence !== 'offline');
   const cards = present.map((m): TeamCard => {

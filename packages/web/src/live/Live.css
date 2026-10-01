@@ -3220,21 +3220,27 @@
 .lc-team__cards {
   list-style: none;
   margin: 0;
-  padding: var(--lc-4) var(--lc-5) var(--lc-5);
+  padding: 0 var(--lc-5) var(--lc-5);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--lc-4);
 }
+/* Rows, not cards (slop tell 4, 2026-10-01): a stack of rounded boxes each with a coloured left
+   stripe was the most templated thing on the page. A hairline between rows carries the separation;
+   the member's hue lives in the avatar, which already says who. Linking (ADR 464) lights the row's
+   ground and rings the avatar in that hue instead of boxing the row. */
 .lc-team-card {
-  border-radius: var(--lc-r-md);
-  border: 1px solid var(--lc-border);
-  border-left: 4px solid var(--member);
-  background: var(--lc-surface);
-  transition: box-shadow var(--lc-dur-1) var(--lc-ease-out);
+  border-bottom: 1px solid var(--lc-border);
+  transition: background-color var(--lc-dur-1) var(--lc-ease-out);
+}
+.lc-team-card:last-child {
+  border-bottom: none;
 }
 .lc-team-card.is-linked {
-  box-shadow: 0 0 0 2px var(--member);
+  background: var(--lc-surface);
+}
+.lc-team-card.is-linked .lc-team-card__avatar {
+  box-shadow: 0 0 0 2px var(--lc-ground-2), 0 0 0 4px var(--member);
 }
 .lc-team-card__hit {
   all: unset;

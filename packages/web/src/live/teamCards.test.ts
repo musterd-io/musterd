@@ -95,6 +95,15 @@ describe('teamCards', () => {
     expect(cards[0]).toMatchObject({ goal: 'Launch', since: 5 });
   });
 
+  it('names the goal by its NAME, not its whole story (slop tell 8)', () => {
+    // Goal titles on a real team read "Name — what it promises"; the card repeated the whole
+    // sentence under every member on that goal (three lines each on /live, 2026-10-01).
+    const { cards } = teamCards([m('a')], board(lane('a', { goal_id: 'demo' })), [
+      { id: 'demo', title: 'Demo — an audience joins a live musterd team from their phones' },
+    ]);
+    expect(cards[0]?.goal).toBe('Demo');
+  });
+
   it('with no board yet, still renders every present member (Review Focus 5)', () => {
     const { cards } = teamCards(
       [m('a', { state: 'reading the spec', posture: 'active' })],
