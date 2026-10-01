@@ -131,7 +131,8 @@ export function repoRelayId(ref: string): string {
  * ADR 373 increment 2: capture a document-recorded intention as a Seed — the same shape the relay
  * ingest produces, with the repo path + anchor where the Slack record id would be. Idempotent on
  * that key: a second capture returns the row the first one made, body untouched (the source is
- * immutable, ADR 291), so `pnpm intents:ingest` can run on every merge.
+ * immutable, ADR 291), so a batch capture can be re-run safely. (Its bulk caller, `intents:ingest`,
+ * was retired by ADR 487 on 2026-09-30.)
  *
  * `lane_id` is a `Follows-up: <lane-id>` already written: the Seed is born (or moves to) `promoted`
  * with `linked_lane_id` set — the seed → lane edge ADR 248 built — so "which document asked for this

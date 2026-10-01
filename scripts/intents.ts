@@ -9,7 +9,8 @@
  * auto-provision".
  *
  * This module is the pure half: what counts as a forward reference, what counts as disposing of
- * one, and the baseline of references that predate the gate. `check-intents.ts` is the gate.
+ * one, and the baseline of references that predate the gate — plus ADR 487's structural rule for
+ * Increments/Phases sections, below. `check-intents.ts` is the gate.
  *
  * **The list is a floor, not an inventory.** `FORWARD_RE` is hand-kept and will go stale exactly as
  * the wiki's `DEFECT_RE` did — measured 2026-08-24, the entire "reaches nobody" family passed that
@@ -293,60 +294,149 @@ export function failures(
   });
 }
 
-/**
- * ADR 373 increment 2 — which forward references become Seeds, and under what key.
- *
- * A document-recorded intention is a Seed whose source is a repo path + anchor instead of a Slack
- * capture. The anchor is {@link baselineKey}'s text head, so the Seed's identity survives ordinary
- * editing above the line exactly as the baseline does, and a re-run of `pnpm intents:ingest`
- * captures nothing twice (the daemon is idempotent on `ref`).
- *
- *   - undisposed (baselined or not)  → an OPEN Seed: captured, never started — the tray shows it
- *   - `deferred — <trigger> (date)`  → an OPEN Seed: still an intention, with its reopen trigger
- *   - `<lane-id>`                    → a Seed born PROMOTED with `linked_lane_id`: the provenance edge
- *   - `none — <why> (date)`          → nothing: the author said no work is owed
- *   - malformed                      → nothing: the gate fails it; fix the line, not the tray
- *   - noise ({@link FALSE_POSITIVE_BASELINE}) → nothing: it promises nothing
- *
- * Capture, never interpret: the body is the line as written plus where it was written.
+/*
+ * ADR 487 — the structural rule. A plan's increments are lanes under its Goal, so a doc that lists
+ * them must say where each one went. In any section whose heading names Increments or Phases, every
+ * table row and every top-level list item cites one of: a lane id, `parked <lane id>`, or
+ * `dropped — <reason>`. This checks the table rather than the prose, so phrasing no longer matters —
+ * the phrase list above stays only as a cheap net for loose sentences (ADR 487 Decision 5).
  */
-export interface IngestCandidate {
-  ref: string;
-  body: string;
-  lane_id?: string;
-  kind: 'undisposed' | 'deferred' | 'lane';
+
+/**
+ * A heading that names the plural: `## Increments`, `### 7. Increments (each a lane)`, `## The
+ * five phases`. Plural only — a heading that IS one phase (`## Phase 2 — build`) is that phase's
+ * own body, not a list of them. H1 is the document's title, never a section.
+ */
+export const INCREMENTS_HEADING_RE =
+  /^(?<hashes>#{2,6})\s+(?<title>.*\b(?:increments|phases)\b.*)$/i;
+
+/**
+ * A lane id as a doc cites it: the full 26-char ULID, or the 10-char prefix the board and the
+ * specs abbreviate it to (`01M3TAKF3Y`). Lane ids are minted now-ish, so they start with `0`.
+ * `parked <lane id>` is a lane id with a word in front, so this one shape covers both.
+ */
+const CITED_LANE_RE = /\b0[0-9A-HJKMNP-TV-Z]{9}(?:[0-9A-HJKMNP-TV-Z]{16})?\b/;
+/** `dropped — <reason>`: any dash, then a reason a reader can act on (at least one letter). */
+const DROPPED_RE = /\bdropped\s*[—–-]+\s*[^\s|]*\p{L}/iu;
+
+export function citesDisposition(text: string): boolean {
+  return CITED_LANE_RE.test(text) || DROPPED_RE.test(text);
 }
 
-/** A URL-safe anchor from the baseline key's text head: same stability, readable in a Seed tray. */
-export function anchorOf(textHead: string): string {
-  return textHead
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60);
+export interface IncrementItem {
+  /** Repo-relative path. */
+  file: string;
+  /** 1-indexed line of the row or the item's first line. */
+  line: number;
+  /** The heading the item sits under, for the message. */
+  section: string;
+  /** The item's first line, trimmed and bounded. */
+  text: string;
+  /** Whether the item — continuation lines included — cites a lane or a drop. */
+  cited: boolean;
 }
 
-export function ingestCandidates(
-  refs: ForwardReference[],
-  noise: Set<string> = FALSE_POSITIVE_BASELINE,
-): IngestCandidate[] {
-  const out: IngestCandidate[] = [];
-  const seen = new Map<string, number>();
-  for (const r of refs) {
-    const key = baselineKey(r);
-    if (noise.has(key)) continue;
-    const d = r.disposition;
-    if (d?.kind === 'none' || d?.kind === 'malformed') continue;
-    // Two references whose text heads coincide would be one Seed; number the repeats in file
-    // order so each promise keeps its own identity. A backstop — the text is meant to differ.
-    const base = `${r.file}#${anchorOf(key.slice(r.file.length + 2))}`;
-    const n = (seen.get(base) ?? 0) + 1;
-    seen.set(base, n);
-    const ref = n === 1 ? base : `${base}~${n}`;
-    const body = `${r.text}\n— ${r.file}:${r.line}`;
-    if (d?.kind === 'lane') out.push({ ref, body, lane_id: d.lane, kind: 'lane' });
-    else if (d?.kind === 'deferred') out.push({ ref, body, kind: 'deferred' });
-    else out.push({ ref, body, kind: 'undisposed' });
+const TABLE_ROW_RE = /^\s*\|/;
+const TABLE_SEPARATOR_RE = /^\s*\|[\s:|-]+\|\s*$/;
+const TOP_LIST_ITEM_RE = /^(?:[-*+]|\d+[.)])\s+/;
+const FENCE_RE = /^\s*(?:```|~~~)/;
+
+/**
+ * Every row and top-level list item inside an Increments/Phases section of one markdown file.
+ *
+ * A section runs to the next heading of the same or a higher level, so a `####` under `##
+ * Increments` stays inside it. A table's first row is its header and its second the separator —
+ * neither is an increment. A list item owns its indented continuation lines, so a citation on the
+ * item's second line counts. Fenced code is skipped: an example table in a code block is not a plan.
+ */
+export function findIncrementItems(file: string, text: string): IncrementItem[] {
+  const lines = text.split('\n');
+  const out: IncrementItem[] = [];
+  let section: { level: number; title: string } | null = null;
+  let inFence = false;
+  let tableRow = 0;
+  let item: IncrementItem | null = null;
+
+  const closeItem = (): void => {
+    if (item) out.push(item);
+    item = null;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (FENCE_RE.test(line)) {
+      inFence = !inFence;
+      closeItem();
+      continue;
+    }
+    if (inFence) continue;
+
+    const heading = /^(#{1,6})\s/.exec(line);
+    if (heading) {
+      closeItem();
+      tableRow = 0;
+      const level = heading[1]!.length;
+      if (section && level <= section.level) section = null;
+      const m = INCREMENTS_HEADING_RE.exec(line);
+      if (!section && m?.groups) section = { level, title: m.groups['title']!.trim() };
+      continue;
+    }
+    if (!section) continue;
+
+    if (TABLE_ROW_RE.test(line)) {
+      closeItem();
+      tableRow += 1;
+      // Row 1 is the header; the separator is skipped wherever it falls.
+      if (tableRow === 1 || TABLE_SEPARATOR_RE.test(line)) continue;
+      out.push(entry(file, i, section.title, line, citesDisposition(line)));
+      continue;
+    }
+    tableRow = 0;
+
+    if (TOP_LIST_ITEM_RE.test(line)) {
+      closeItem();
+      item = entry(file, i, section.title, line, citesDisposition(line));
+      continue;
+    }
+    // An indented line continues the open item; a blank line or unindented prose ends it.
+    if (item && /^\s+\S/.test(line)) {
+      const open: IncrementItem = item;
+      open.cited ||= citesDisposition(line);
+      continue;
+    }
+    closeItem();
   }
+  closeItem();
   return out;
+}
+
+function entry(
+  file: string,
+  i: number,
+  section: string,
+  line: string,
+  cited: boolean,
+): IncrementItem {
+  return { file, line: i + 1, section, text: line.trim().slice(0, 120), cited };
+}
+
+/**
+ * Increment items that predate the rule, keyed exactly as {@link baselineKey} keys forward
+ * references. A burn-down, never a silent exemption: new docs get no entry, and an entry whose item
+ * is gone (or now cites a lane) is rot, reported by the gate.
+ */
+export function incrementFailures(
+  items: IncrementItem[],
+  baseline: ReadonlySet<string>,
+): IncrementItem[] {
+  return items.filter((it) => !it.cited && !baseline.has(baselineKey(it)));
+}
+
+/** Baseline entries protecting nothing: the item is gone, or it cites a disposition now. */
+export function incrementBaselineRot(
+  items: IncrementItem[],
+  baseline: ReadonlySet<string>,
+): string[] {
+  const uncited = new Set(items.filter((it) => !it.cited).map(baselineKey));
+  return [...baseline].filter((b) => !uncited.has(b));
 }

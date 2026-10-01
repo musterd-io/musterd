@@ -11,6 +11,10 @@
  *   docs/wiki/**                 — where the "designed and not built" lists live.
  *   content/roadmap.data.ts      — every `building:` string names a remainder by construction.
  *
+ * ADR 487 adds a STRUCTURAL rule over a wider set — decisions, specs, plans, design and wiki: in any
+ * section headed Increments or Phases, every row or top-level item cites a lane id, `parked <lane
+ * id>`, or `dropped — <reason>`. Phrasing stops mattering there; the table is what is checked.
+ *
  * Code comments are deliberately NOT scanned (ADR 373 §Decision): a phrase list that must survive
  * ordinary engineering prose is a much noisier problem than one surviving four document genres, and
  * the ADR declines to guess at that noise floor. `census.ts`'s "increment 3 will auto-provision" is
@@ -23,8 +27,15 @@
  *
  * Runs on Node's native TypeScript (no build step, no deps), like its sibling gates.
  */
-import { collectForwardReferences } from './intents-corpus.ts';
-import { FORWARD_BASELINE, failures, measureCoverage } from './intents.ts';
+import { collectForwardReferences, collectIncrementItems } from './intents-corpus.ts';
+import { INCREMENTS_BASELINE } from './intents-increments-baseline.ts';
+import {
+  FORWARD_BASELINE,
+  failures,
+  incrementBaselineRot,
+  incrementFailures,
+  measureCoverage,
+} from './intents.ts';
 
 const refs = collectForwardReferences();
 const bad = failures(refs, FORWARD_BASELINE);
@@ -50,9 +61,31 @@ for (const rot of cov.rot) {
   );
 }
 
-if (bad.length > 0 || cov.rot.length > 0) {
+const items = collectIncrementItems();
+const badItems = incrementFailures(items, INCREMENTS_BASELINE);
+const itemRot = incrementBaselineRot(items, INCREMENTS_BASELINE);
+
+for (const it of badItems) {
   process.stderr.write(
-    `\n${bad.length} undisposed forward reference(s), ${cov.rot.length} stale baseline entr(ies).\n`,
+    `✗ ${it.file}:${it.line} — an increment with no lane or disposition (ADR 487)\n` +
+      `    section: ${it.section}\n` +
+      `    item:    ${it.text}\n` +
+      `    cite one of:  <lane id>  |  parked <lane id>  |  dropped — <reason>\n`,
+  );
+}
+
+for (const rot of itemRot) {
+  process.stderr.write(
+    `✗ INCREMENTS_BASELINE — stale entry, protects nothing any more: "${rot}"\n` +
+      `    the item is gone or now cites a disposition; drop the entry (ADR 296's baseline-rot rule)\n`,
+  );
+}
+
+const failed = bad.length + cov.rot.length + badItems.length + itemRot.length;
+if (failed > 0) {
+  process.stderr.write(
+    `\n${bad.length} undisposed forward reference(s), ${cov.rot.length} stale baseline entr(ies); ` +
+      `${badItems.length} undisposed increment(s), ${itemRot.length} stale increment baseline entr(ies).\n`,
   );
   process.exit(1);
 }
@@ -67,4 +100,8 @@ process.stdout.write(
     `(precision ${precision}%); ${cov.disposed} disposed, ${FORWARD_BASELINE.size} on the burn-down\n` +
     `  a floor, not an inventory: code comments are out of scope by design (ADR 373), the phrase list is ` +
     `hand-kept, and the noise labels are one seat's\n`,
+);
+process.stdout.write(
+  `✓ increments: ${items.length} item(s) in Increments/Phases sections — ` +
+    `${items.length - INCREMENTS_BASELINE.size} cite a lane or a drop, ${INCREMENTS_BASELINE.size} on the burn-down\n`,
 );

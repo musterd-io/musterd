@@ -30,3 +30,11 @@ would then be the finding, and the honest disposition of the gate follows from A
 **What this watch cannot tell you** is unchanged from its predecessor: association, not cause. A
 seat that writes the marker has already decided the work is worth a lane. The falsifier is
 one-directional on purpose.
+
+**2026-09-30 — the series moves, the population does not.** ADR 487 (lane `01M3T8MQ6ZJQPC2MXD3RCK5YX9`)
+removed `intents:ingest`, which the `series:` line names. This watch's population was already read
+by `git log -S` and the lane store, not by the ingest; at revisit_by, list the markers with
+`git grep -nE 'Follows-up:\s*`?0[0-9A-HJKMNP-TV-Z]{25}'` over `docs/decisions`, `docs/wiki` and
+`content/roadmap.data.ts`. The void clause on scanned surfaces does not fire: ADR 487's wider
+surfaces belong to a separate structural rule, and the phrase check's surfaces, `FORWARD_RE` and
+`STRUCTURAL_RE` are unchanged.

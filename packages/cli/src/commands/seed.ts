@@ -35,9 +35,7 @@ export async function seedCommand(parsed: Parsed): Promise<number> {
     if (parsed.flags['json'] === true) {
       process.stdout.write(JSON.stringify({ seeds: visible }) + '\n');
     } else if (visible.length === 0) {
-      process.stdout.write(
-        "no active Seeds — send an idea through the Team's Slack capture, or `pnpm intents:ingest`\n",
-      );
+      process.stdout.write("no active Seeds — send an idea through the Team's Slack capture\n");
     } else {
       for (const seed of visible) process.stdout.write(renderSeed(seed) + '\n');
     }
@@ -51,8 +49,10 @@ export async function seedCommand(parsed: Parsed): Promise<number> {
     return 0;
   }
 
-  // ADR 373 increment 2: a document-recorded intention is a Seed. One at a time, or a batch the
-  // `intents:ingest` script pipes in. Idempotent on `ref`: re-running captures nothing twice.
+  // ADR 373 increment 2: a document-recorded intention is a Seed. One at a time, or a batch from a
+  // file or stdin. Idempotent on `ref`: re-running captures nothing twice. The `intents:ingest`
+  // script that piped the repo's forward references in was retired by ADR 487 (2026-09-30) — a
+  // plan's increments are lanes now; the Seed tray is for a human's ideas.
   if (sub === 'capture') {
     const batch = flagStr(parsed.flags, 'batch');
     const items: CaptureRepoSeed[] = batch
