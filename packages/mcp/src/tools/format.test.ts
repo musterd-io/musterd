@@ -1,6 +1,6 @@
 import type { MemberSummary } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { formatMember, formatRoster, notReadyMessage } from './format.js';
+import { buildSkewOf, formatMember, formatRoster, notReadyMessage } from './format.js';
 
 const base = { team: 'dawn', lifecycle: 'forever' as const, created_at: 0, role: '' };
 
@@ -134,5 +134,26 @@ describe('notReadyMessage — evicted session (ADR 237)', () => {
     );
     expect(msg).toMatch(/haven't joined the team yet/i);
     expect(msg).not.toMatch(/evicted/i);
+  });
+});
+
+// Lane 01M3TWWQST: the adapter runs from whatever checkout its dist lives in — on a dogfood machine
+// `~/.musterd/runtime`, which the auto-refresher has ALREADY rebuilt by the time the daemon differs.
+// "Rebuild this worktree" sent every seat to build the wrong checkout after every refresh.
+describe('buildSkewOf — the remedy matches what is on disk', () => {
+  const sha = (c: string) => c.repeat(40);
+  const client = { build: sha('a'), daemonBuild: async () => sha('b') };
+
+  it('dist on disk already matches the daemon → only /mcp reload, no rebuild', async () => {
+    const w = await buildSkewOf(client, () => ({ build: sha('b'), checkout: '/x/runtime' }));
+    expect(w?.text).toContain('/mcp reload');
+    expect(w?.text).not.toMatch(/pnpm build|rebuild/i);
+  });
+
+  it('dist on disk is stale too → names the checkout to rebuild, then reload', async () => {
+    const w = await buildSkewOf(client, () => ({ build: sha('a'), checkout: '/x/runtime' }));
+    expect(w?.text).toContain('pnpm -C /x/runtime build');
+    expect(w?.text).toContain('/mcp reload');
+    expect(w?.text).not.toContain('this worktree');
   });
 });
