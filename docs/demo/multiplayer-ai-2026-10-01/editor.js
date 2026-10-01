@@ -1,10 +1,12 @@
 // Edit this page in the browser and save it back to its own file.
 //
 //   E        toggle edit mode (text on the page, plus the speaker notes on a deck)
-//   ⌘S / ^S  save: the first time, pick this same .html file; after that it saves straight back
+//   ⌘S / ^S  save straight back to this file
 //
-// Saving needs Chrome or Edge (the File System Access API). It never rewrites the whole page: it
-// re-reads the file from disk, replaces only the text of the elements you edited, and writes it
+// Open the page through serve.mjs (`node docs/demo/multiplayer-ai-2026-10-01/serve.mjs`) and a save
+// goes straight to disk, in any browser. Opened as a plain file instead, the browser will not let
+// a page write to disk on its own: the first save asks you to pick this same file (Chrome/Edge
+// only), later saves reuse it. Either way it never rewrites the whole page: it re-reads the file, replaces only the text of the elements you edited, and writes it
 // back, so the git diff is just your edit and a teammate's change made meanwhile survives. An edit
 // it cannot place exactly once (the text changed on disk underneath you, or it is ambiguous) is
 // refused and named, never guessed.
@@ -243,18 +245,47 @@
     return { out, done, refused };
   }
 
+  // served by serve.mjs: read and write the file over HTTP, no picker. Any other server answers
+  // the save with something other than 204, and we fall back to the picker.
+  const served = location.protocol.startsWith('http');
+  const viaServer = {
+    name: decodeURIComponent(location.pathname.split('/').pop()),
+    read: async () => {
+      const r = await fetch(location.pathname, { cache: 'no-store' });
+      if (!r.ok) throw new Error(`could not re-read the file (${r.status})`);
+      return r.text();
+    },
+    write: async (text) => {
+      const r = await fetch('/__save?path=' + encodeURIComponent(location.pathname), {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain;charset=utf-8', 'x-page-editor': '1' },
+        body: text,
+      });
+      if (r.status !== 204) throw Object.assign(new Error(`this server cannot save (${r.status}); run serve.mjs`), { noServer: true });
+    },
+  };
+  async function viaPicker() {
+    if (!window.showOpenFilePicker) throw new Error('open the page through serve.mjs, or use Chrome or Edge');
+    const h = await getHandle();
+    return {
+      name: h.name,
+      read: async () => (await h.getFile()).text(),
+      write: async (text) => {
+        const w = await h.createWritable();
+        await w.write(text);
+        await w.close();
+      },
+    };
+  }
+
   async function save() {
     if (!dirty.size) return say('nothing to save');
-    if (!window.showOpenFilePicker) return say('saving needs Chrome or Edge');
     try {
-      const h = await getHandle();
-      const src = await (await h.getFile()).text();
+      const io = served ? viaServer : await viaPicker();
+      const h = { name: io.name };
+      const src = await io.read();
       const { out, done, refused } = patch(src);
-      if (out !== src) {
-        const w = await h.createWritable();
-        await w.write(out);
-        await w.close();
-      }
+      if (out !== src) await io.write(out);
       for (const k of done) {
         const d = dirty.get(k);
         const now = d.get();

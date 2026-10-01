@@ -783,10 +783,12 @@ below promises anything about what an agent does outside the roster.
   showing `convene_huddles on`. A member holding a session open does not wake; its huddle waits in
   its inbox.
 
-**Editing the deck or the cheat sheet in the browser.** Both pages load `editor.js`. Open the file in
-Chrome or Edge, press **E** to edit any text on the page (on the deck, the speaker notes too), and
-**⌘S** to save: the first save asks you to pick that same `.html` file, later saves go straight
-back. A save re-reads the file and replaces only the text you changed, so the diff is just your
+**Editing the deck or the cheat sheet in the browser.** Both pages load `editor.js`. Run
+`node docs/demo/multiplayer-ai-2026-10-01/serve.mjs` and open the URL it prints
+(`http://localhost:4860/…/deck.html`), press **E** to edit any text on the page (on the deck, the
+speaker notes too), and **⌘S** saves straight to the file. Opened as a plain file instead, the
+browser cannot write on its own: the first save asks you to pick that same `.html` (Chrome or
+Edge), later saves reuse it. A save re-reads the file and replaces only the text you changed, so the diff is just your
 edit; an edit whose text changed on disk meanwhile is refused and named. Press **E** again to
 leave edit mode before presenting: while it is on, a click places the caret and never advances.
 Commit the result like any other change.
