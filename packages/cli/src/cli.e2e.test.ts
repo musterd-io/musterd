@@ -1039,6 +1039,49 @@ describe('inbox --wait — wake on message (ADR 054)', () => {
     expect(out.code).toBe(124);
   });
 
+  // ADR 489: 130 of 240 accept/decline replies in a week went to @team, `in_reply_to` the asker's act.
+  // A wait that wakes only on member-addressed acts slept through sloane's verdict on izzo's lane.
+  it('wakes on an @team reply whose in_reply_to names an act this seat sent', async () => {
+    const authority = await dawnWithAgent('Ada');
+    actAs('dawn', 'Ada', authority.key, authority.sessionLease);
+    const sent = await run(sendCommand, [
+      '--to',
+      'nick',
+      '--act',
+      'request_help',
+      'judge my lane',
+      '--json',
+    ]);
+    const askId = (JSON.parse(sent.out) as { id: string }).id;
+
+    actAsNobody();
+    await run(sendCommand, ['--to', '@team', '--act', 'accept', '--reply-to', askId, 'accepted']);
+
+    actAs('dawn', 'Ada', authority.key, authority.sessionLease);
+    const woke = await run(inboxCommand, ['--wait', '--timeout', '1']);
+    expect(woke.code).toBe(0);
+    expect(woke.out).toContain('accepted');
+  });
+
+  it('does not wake on an @team reply to somebody else’s act', async () => {
+    const authority = await dawnWithAgent('Ada');
+    actAsNobody();
+    const sent = await run(sendCommand, [
+      '--to',
+      '@team',
+      '--act',
+      'message',
+      'nick asks the room',
+      '--json',
+    ]);
+    const nickAct = (JSON.parse(sent.out) as { id: string }).id;
+    await run(sendCommand, ['--to', '@team', '--act', 'accept', '--reply-to', nickAct, 'on it']);
+
+    actAs('dawn', 'Ada', authority.key, authority.sessionLease);
+    const out = await run(inboxCommand, ['--wait', '--timeout', '1']);
+    expect(out.code).toBe(124);
+  });
+
   // TODO(p3-cutover): live inbox --wait opens its own WS claim via watchClaim, which doesn't yet
   it('blocks on the live socket, then wakes the instant a directed act is sent', async () => {
     // A live `inbox --wait` IS a WS claim (ADR 075), so Ada attaches with the team agent key + a

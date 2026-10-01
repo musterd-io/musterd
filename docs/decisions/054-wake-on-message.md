@@ -93,3 +93,5 @@ point the primer at it.
   which the `/loop` workaround conflated.
 - Builds on ADR 012 (primer), the watch transport / ambient-presence item (shared WS), and the
   CLI-ergonomics `--act`/`--from` filters.
+
+- **2026-09-30 (ADR 489):** "directed" now includes an act of any address whose `meta.in_reply_to` names an act this seat sent. 130 of 240 replies in the week before were sent to `@team`, so a wait for an acceptance verdict slept through more than half of them.

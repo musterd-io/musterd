@@ -36,6 +36,13 @@ export interface Connection {
    * Undefined from an older client; the comparison then falls back to the label.
    */
   workspaceKey?: string | null;
+  /**
+   * The surface the claim declared (`claude-code`, `cli`, …). ADR 092's grace-gated reap treats a
+   * same-workspace successor as a reload of its predecessor, and a reload keeps its surface: a
+   * `musterd inbox --wait` (surface `cli`) in an adapter's workspace is a second reader, not a
+   * reload, and must not reap the adapter (ADR 489). Undefined on a pending connection.
+   */
+  surface?: string;
   send: (frame: WSServerFrame) => void;
   /** Force-close the underlying socket (used to displace a superseded same-identity session). */
   close?: () => void;
@@ -176,4 +183,15 @@ export class Hub {
     }
     return n;
   }
+}
+
+/**
+ * ADR 489: is a same-workspace successor declaring `surface` a reload of `old` — the case ADR 092's
+ * grace-gated reap exists for? A reload keeps its surface; a different surface in the same folder is
+ * a second reader (the seat's own `musterd inbox --wait`), and reaping the adapter for it left the
+ * seat deaf and Claude Code's MCP server disconnected. An `old` with no recorded surface keeps the
+ * ADR 092 behaviour.
+ */
+export function isReloadOf(old: { surface?: string }, surface: string | undefined): boolean {
+  return old.surface === undefined || surface === undefined || old.surface === surface;
 }

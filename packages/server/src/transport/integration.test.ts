@@ -3028,7 +3028,13 @@ describe('WebSocket', async () => {
       delete process.env['MUSTERD_SUPERSEDE_GRACE_MS'];
     });
 
-    async function occupyAda(ws: TestWs, agentKey: string, grant: string, workspace: string) {
+    async function occupyAda(
+      ws: TestWs,
+      agentKey: string,
+      grant: string,
+      workspace: string,
+      surface = 'claude-code',
+    ) {
       ws.send({
         type: 'claim',
         v: PROTOCOL_VERSION,
@@ -3036,11 +3042,38 @@ describe('WebSocket', async () => {
         key: agentKey,
         target: { seat: 'Ada' },
         grant,
-        surface: 'claude-code',
+        surface,
         workspace,
       });
       expect((await ws.waitFor('occupied')).type).toBe('occupied');
     }
+
+    it('a durable same-workspace CLI wait does NOT reap the live adapter — a different surface is not a reload (ADR 489)', async () => {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, team.json.human_credential);
+      const grant = await standingGrant(team.json.human_credential, 'Ada');
+
+      const adapter = new TestWs();
+      await adapter.open();
+      await occupyAda(adapter, team.json.agent_key, grant, 'repo@main');
+
+      // `musterd inbox --wait` from the same workspace: surface cli, and it stays past the grace.
+      const wait = new TestWs();
+      await wait.open();
+      await occupyAda(wait, team.json.agent_key, grant, 'repo@main', 'cli');
+
+      await expect(adapter.waitFor('error', 400)).rejects.toThrow(/timeout/);
+      await expect(wait.waitFor('error', 50)).rejects.toThrow(/timeout/);
+      const teamId = (await getTeamBySlug(sqliteDriver(server.db), 'dawn'))!.id;
+      expect(
+        (await listAudit(sqliteDriver(server.db), teamId)).some(
+          (r) => r.action === 'claim.duplicate_workspace' || r.action === 'claim.superseded',
+        ),
+      ).toBe(false);
+
+      wait.close();
+      adapter.close();
+    });
 
     it('a durable same-workspace successor reaps its predecessor with same_workspace:true', async () => {
       const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
