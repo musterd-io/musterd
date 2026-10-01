@@ -365,6 +365,15 @@ const local = (ms: number) => {
   return `${String(d.getFullYear())}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 
+/** `local()` plus its zone and the UTC instant, so the header reads against `--json`'s ISO `since`. */
+const stamped = (ms: number) => {
+  const zone =
+    new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' })
+      .formatToParts(new Date(ms))
+      .find((p) => p.type === 'timeZoneName')?.value ?? '';
+  return `${local(ms)} ${zone} = ${new Date(ms).toISOString().slice(0, 16)}Z`;
+};
+
 const k = (n: number | null) =>
   n === null ? '—' : n >= 10_000 ? `${String(Math.round(n / 1000))}k` : String(n);
 const med = (c: { median: number | null; n: number }) => `${k(c.median)} (n=${String(c.n)})`;
@@ -393,7 +402,7 @@ function main(): void {
     return;
   }
   console.log(
-    `=== ADR 436 wake contract rail (${team}, wakes since ${local(since.getTime())}) ===`,
+    `=== ADR 436 wake contract rail (${team}, wakes since ${stamped(since.getTime())}) ===`,
   );
   console.log(
     '  harness         wakes  priced        floor (prompt tok)  musterd reads  tool calls    in thread  no act',
