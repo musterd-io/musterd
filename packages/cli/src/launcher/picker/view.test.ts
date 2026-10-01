@@ -123,7 +123,8 @@ describe('renderPicker (spec §3.1, no color, 80 columns)', () => {
       status: 'ok',
       now: NOW,
     }).state;
-    s = reduce(s, { type: 'key', key: { name: 'return' } }).state;
+    s = reduce(s, { type: 'key', key: { name: 'return' } }).state; // the harness step
+    s = reduce(s, { type: 'key', key: { name: 'return' } }).state; // pick → the live question
     const lines = renderPicker(s, { cols: 80, rows: 24 });
     // Wrapped to the width, never clipped: the `(y/N)` must stay visible.
     expect(lines.slice(-2)).toEqual([
@@ -185,5 +186,24 @@ describe('renderPicker (spec §3.1, no color, 80 columns)', () => {
     expect(renderPicker(s, { cols: 120, rows: 24 }).at(-1)).toBe(
       '  set up slate here → ~/musterd/revive/agents/slate · codex (⇥ to change) · ⏎ set up and launch · esc cancel',
     );
+  });
+
+  it('the harness step names how many are configured, even one, and which was used last', () => {
+    let s = initialState(FILE, '', NOW);
+    s = reduce(s, { type: 'live', live: {}, status: 'ok', now: NOW }).state;
+    s = reduce(s, { type: 'key', key: { name: 'return' } }).state;
+    const one = { ...s.choose!, options: ['claude-code'], index: 0 };
+    expect(renderPicker({ ...s, choose: one }, { cols: 80, rows: 24 }).slice(-3)).toEqual([
+      '  stanley · 1 harness configured',
+      '  › claude    last used',
+      '  ⏎ launch · ↑↓ choose · esc back',
+    ]);
+    const two = { ...s.choose!, options: ['claude-code', 'codex'], index: 1 };
+    expect(renderPicker({ ...s, choose: two }, { cols: 80, rows: 24 }).slice(-4)).toEqual([
+      '  stanley · 2 harnesses configured',
+      '    claude    last used',
+      '  › codex',
+      '  ⏎ launch · ↑↓ choose · esc back',
+    ]);
   });
 });

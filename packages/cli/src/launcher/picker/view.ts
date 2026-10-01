@@ -134,6 +134,24 @@ function window(items: { line: string; selected: boolean }[], room: number): str
 }
 
 function footer(s: PickerState, cols: number): string[] {
+  if (s.choose) {
+    // The harness step: always shown for an agent seat, so a one-harness seat says it has one.
+    const c = s.choose;
+    const last = s.file.seats[c.seat.address]?.harness ?? null;
+    const n = c.options.length;
+    return [
+      `  ${c.seat.member} · ${n} harness${n === 1 ? '' : 'es'} configured`,
+      ...c.options.map((h, i) => {
+        const marker = i === c.index ? `${theme.accent('›')} ` : '  ';
+        const label =
+          h === last
+            ? `${padEndVisible(harnessLabel(h), 10)}${theme.meta('last used')}`
+            : harnessLabel(h);
+        return `  ${marker}${label}`;
+      }),
+      theme.meta('  ⏎ launch · ↑↓ choose · esc back'),
+    ];
+  }
   if (s.create) {
     const d = s.create;
     if (d.naming) {

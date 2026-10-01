@@ -65,6 +65,11 @@ export interface PickerState {
   query: string;
   cursor: number;
   harness: Record<string, string>;
+  /**
+   * The harness step: an agent seat's configured harnesses, shown even when there is one, and
+   * launched only on an explicit pick (nick, 2026-10-01).
+   */
+  choose: { seat: Seat; mode: 'fresh' | 'resume'; options: string[]; index: number } | null;
   confirm: { seat: Seat; mode: 'fresh' | 'resume' } | null;
   help: boolean;
   /** Each team's agent members from its roster, for "on the team · not here". */
@@ -107,6 +112,7 @@ export function initialState(file: LauncherFile, query: string, now: number): Pi
     query,
     cursor: 0,
     harness: {},
+    choose: null,
     confirm: null,
     help: false,
     agents: {},
@@ -257,24 +263,56 @@ function activate(s: PickerState, mode: 'fresh' | 'resume'): Step {
     };
   }
   if (row?.kind === 'seat') {
-    if (s.live[row.seat.address])
-      return { state: { ...s, confirm: { seat: row.seat, mode } }, outcome: null };
-    return {
-      state: s,
-      outcome: {
-        kind: 'launch',
-        seat: row.seat,
-        mode,
-        harness: shownHarness(s, row.seat),
-        force: s.liveStatus === 'ok' && !s.unknownLive.includes(row.seat.address),
-      },
-    };
+    // An agent seat always goes through the harness step; a human seat gets a login shell.
+    if (row.seat.kind !== 'human') {
+      const configured = row.seat.harnesses.filter((h) => h !== 'musterd');
+      const current = shownHarness(s, row.seat)!;
+      const options = configured.length ? configured : [current];
+      const index = Math.max(0, options.indexOf(current));
+      return { state: { ...s, choose: { seat: row.seat, mode, options, index } }, outcome: null };
+    }
+    return launchOrConfirm(s, row.seat, mode);
   }
   if (mode === 'fresh' && row?.kind === 'team' && row.here)
     return push(s, { kind: 'projects', team: row.team });
   if (mode === 'fresh' && row?.kind === 'project')
     return push(s, { kind: 'members', team: row.team, project: row.project });
   return { state: s, outcome: null };
+}
+
+/** Launch a picked seat, or ask first when it is already live. */
+function launchOrConfirm(s: PickerState, seat: Seat, mode: 'fresh' | 'resume'): Step {
+  if (s.live[seat.address]) return { state: { ...s, confirm: { seat, mode } }, outcome: null };
+  return {
+    state: s,
+    outcome: {
+      kind: 'launch',
+      seat,
+      mode,
+      harness: shownHarness(s, seat),
+      force: s.liveStatus === 'ok' && !s.unknownLive.includes(seat.address),
+    },
+  };
+}
+
+/** Keys in the harness step: ↑↓ choose, ⏎ launches the chosen one, esc goes back to the list. */
+function onChooseKey(s: PickerState, c: NonNullable<PickerState['choose']>, key: Key): Step {
+  const set = (choose: PickerState['choose']): Step => ({ state: { ...s, choose }, outcome: null });
+  const n = c.options.length;
+  if (key.name === 'escape' || key.name === 'left') return set(null);
+  if (key.name === 'up' || (key.ctrl && key.name === 'p'))
+    return set({ ...c, index: (c.index - 1 + n) % n });
+  if (key.name === 'down' || key.name === 'tab' || (key.ctrl && key.name === 'n'))
+    return set({ ...c, index: (c.index + 1) % n });
+  if (key.name === 'return') {
+    const picked = {
+      ...s,
+      choose: null,
+      harness: { ...s.harness, [c.seat.address]: c.options[c.index]! },
+    };
+    return launchOrConfirm(picked, c.seat, c.mode);
+  }
+  return set(c);
 }
 
 /**
@@ -303,6 +341,7 @@ function onKey(s: PickerState, key: Key): Step {
   const none = (state: PickerState): Step => ({ state, outcome: null });
   if (key.ctrl && key.name === 'c') return { state: s, outcome: { kind: 'quit', code: 130 } };
   if (s.create) return onCreateKey(s, s.create, key);
+  if (s.choose) return onChooseKey(s, s.choose, key);
   if (s.confirm) {
     if (key.name === 'y' || key.sequence === 'Y') {
       const { seat, mode } = s.confirm;
