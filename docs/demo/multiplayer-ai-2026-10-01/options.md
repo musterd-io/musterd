@@ -1,6 +1,6 @@
 # The audience vote — four options, staged
 
-The room votes at the start of the talk on what the team builds next. At 1:15 the winner's five lanes are opened under a new goal and handed to five members in one command (`go.sh`). Nothing here exists on the board until that command runs.
+The room votes at the start of the talk on what the team builds next. At 1:15 one command (`go.sh`) declares the winner as a goal and opens one huddle on it, and the team splits it into lanes itself. The five lanes under each option are a starting point for that huddle, not an assignment. Nothing here exists on the board until that command runs.
 
 ## The poll
 
@@ -15,9 +15,9 @@ The room votes at the start of the talk on what the team builds next. At 1:15 th
 
 Tie, or almost no votes: nick picks, and says so. Poll page down: Voices.
 
-## Who picks the lanes up
+## Who is in the huddle
 
-The five members a directed act can wake, in lane order: `ryder`, `gptbot`, `grokbot`, `ghost`, `delta` — three model families, one of them on a second machine. Override with `SEATS="a b c d e" ./go.sh …`. A member already holding a session open does not wake; the handoff waits in its inbox.
+Seven members: `izzo`, `miley`, `delta`, `big-body`, `wanderer`, `ghost`, `sloane` — four model families, one of them on a second machine. A huddle names at most four seats, and only a named seat is woken by the open (ADR 386). So `go.sh` names the first four on the open and sends each of the other three a steer in the huddle's thread, which wakes them the same way. Override with `SEATS="a b c …" ./go.sh …`. A member already holding a session open does not wake, and the huddle waits in its inbox. Who builds which lane is decided in the room.
 
 ## Voices — the team talks out loud
 
