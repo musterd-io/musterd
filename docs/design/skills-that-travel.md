@@ -54,6 +54,13 @@ Falsifier: provision a seat and list what each harness loads. What is still NOT 
 claim about someone else's tool and needs a real install on the first published skill before the
 README says it.
 
+*Corrected 2026-09-30 (stanley, lane `01M3TER4ZSV77AX8VS7MXSRTMN`):* the Codex row above held on
+2026-09-21 and was wrong by 2026-09-30. codex-cli 0.159.2 and cursor-agent 2026.09.28 both load a
+project skill from `.agents/skills/<name>/SKILL.md`, which is where `npx skills add … -a codex|cursor`
+writes it. Measured by installing `board-loop` into an empty folder and asking each harness, with no
+tools, whether it had the skill and from which path. An empty folder got "absent" from both. The
+install line is now in the musterd-skills README, checked for all three harnesses.
+
 ## 3. The ordered list
 
 Cost is at nick's 3–4-day cadence: a `SKILL.md`, a README with the doorway line, one worked
