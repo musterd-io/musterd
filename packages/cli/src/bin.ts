@@ -82,6 +82,13 @@ async function main(argv: string[]): Promise<number> {
     }
   }
 
+  // A word that is not a command is a seat address (ADR 491 Decision 2). Commands always win, and
+  // the launcher returns before the postambles: a launched session never pays for the nudge.
+  if (!isCommand(command)) {
+    const { launchByName } = await import('./launcher/byName.js');
+    return launchByName(command, rest);
+  }
+
   const code = await instrumentedDispatch(command, rest);
   // Agent-side reachability (ADR 046) and the seat tab title (ADR 160): best-effort postambles.
   const { reachabilityNudge } = await import('./commands/helpers.js');

@@ -738,6 +738,29 @@ export const CATALOG: readonly CommandEntry[] = [
       'for you and which daemon/db is being read (so a wrong-db “everyone offline” is obvious).',
   },
   {
+    name: 'seats',
+    signature: '[--json]',
+    summary:
+      'every seat on this machine — what bare `musterd` picks from; launch one with `musterd <name>`',
+    group: 'team',
+    primary: true,
+    detail:
+      'The seat catalog (ADR 491): every Workspace under ~/musterd/<team>/<project>/<member> and in ' +
+      'the bindings registry, with its harnesses, where it is live, and when it was last used. ' +
+      "`musterd <name>` launches a seat's harness in its Workspace (a member name unique on this " +
+      'machine, `project/member`, or the full `team/project/member`); `-r` resumes the last session, ' +
+      '`--harness <id>` picks one, `--path` prints the folder, `--force` opens a second session on a ' +
+      'live seat. `musterd -` is the last seat again. Commands always win over seat names.',
+    examples: [
+      'musterd seats',
+      'musterd seats --json',
+      'musterd stanley',
+      'musterd revive/agents/stanley -r',
+      'musterd -',
+      'cd "$(musterd stanley --path)"',
+    ],
+  },
+  {
     name: 'audit',
     signature: '[--limit <n>] [--before <ms-epoch>] [--authorized-by <seat>] [--json]',
     summary: 'read the governance audit log (admin-only)',
