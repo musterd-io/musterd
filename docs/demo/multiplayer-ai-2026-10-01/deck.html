@@ -33,6 +33,9 @@
   .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(20px,3vw,48px)}
   .cards.c2{grid-template-columns:1fr 1fr}
   .cards.c5{grid-template-columns:repeat(5,1fr);gap:clamp(14px,2vw,32px)}
+  .harness{display:flex;align-items:baseline;gap:clamp(10px,1.6vw,24px);flex-wrap:wrap;border-top:2px solid var(--line);padding-top:clamp(12px,1.4vw,22px)}
+  .harness b{font-family:var(--display);font-size:clamp(18px,2.2vw,32px);font-weight:750;color:var(--ink)}
+  .harness span{font-size:clamp(13px,1.45vw,20px);color:var(--mut)}
   .card .n{font-family:var(--mono);font-weight:700;color:var(--acct);font-size:clamp(12px,1.2vw,16px)}
   .card{background:none;border:none;border-top:3px solid var(--acc);border-radius:0;padding:clamp(14px,1.6vw,26px) 0 0;display:flex;flex-direction:column;gap:10px}
   .card h3{font-family:var(--display);font-size:clamp(16px,1.9vw,26px);font-weight:700;color:var(--acct)}
@@ -101,7 +104,7 @@
 <section class="slide panel" data-sec="Problem">
   <p class="eyebrow">Where it started</p>
   <div style="display:flex;flex-direction:column;gap:clamp(12px,1.8vw,28px)">
-    <p class="quote"><span class="mark">“</span>I-as-a-human would serve as kind of the coordination layer. When one agent wanted to ask a question or provide a status update, they would tell me something, which I would then copy and paste to the other agent.</p>
+    <p class="quote"><span class="mark">“</span>When one agent wanted to ask a question or provide a status update, they would tell me something, which I would then copy and paste to the other agent.</p>
     <p class="attr">— Nick Sanders, June 2026</p>
   </div>
   <span aria-hidden="true"></span>
@@ -122,7 +125,7 @@
   <p class="eyebrow">The thesis</p>
   <h2>A persistent team is the primitive.</h2>
   <div class="cards">
-    <div class="card"><h3>A persistent roster</h3><p>A member outlasts every session it has run in, on any harness.</p></div>
+    <div class="card"><h3>A persistent roster</h3><p>A member outlasts every session it runs in. Its inbox, lanes and record survive a restart.</p></div>
     <div class="card"><h3>One owner per lane</h3><p>Claimed before the first edit. Two lanes touching the same files get a warning at claim time.</p></div>
     <div class="card"><h3>Humans on the same roster</h3><p>Same acts, same inbox. Agents bring you questions with a clock on them.</p></div>
   </div>
@@ -134,14 +137,14 @@
   <p class="eyebrow">How it works</p>
   <h2>Every member runs the same loop.</h2>
   <div class="cards c5">
-    <div class="card"><span class="n">1</span><h3>Join</h3><p>A seat on the roster, from Claude Code, Codex, Cursor or the CLI.</p></div>
+    <div class="card"><span class="n">1</span><h3>Join</h3><p>A named member on the roster. People join from the CLI.</p></div>
     <div class="card"><span class="n">2</span><h3>Claim</h3><p>One lane, one owner, its files named before the first edit.</p></div>
-    <div class="card"><span class="n">3</span><h3>Talk in acts</h3><p>Request help, hand off, decline, challenge. Each lands at the next tool call.</p></div>
-    <div class="card"><span class="n">4</span><h3>Ask a person</h3><p>With a tier and a clock. Going ahead unanswered is written down.</p></div>
+    <div class="card"><span class="n">3</span><h3>Talk in acts</h3><p>Request help, hand off, decline, challenge. Each reaches the other agent at its next tool call.</p></div>
+    <div class="card"><span class="n">4</span><h3>Ask a person</h3><p>Urgent questions wait for an answer. The rest time out, and going ahead is written down.</p></div>
     <div class="card"><span class="n">5</span><h3>Close twice</h3><p>The builder submits. Another member accepts the outcome.</p></div>
   </div>
-  <span aria-hidden="true"></span>
-  <aside hidden>Advance here on 'an act on that roster'. The live demo shows steps 2, 4 and 5; step 3 comes back in the handoff question. This is the guidance every seat is given: check the inbox at every task boundary, report on start and finish, claim before you build, ask a person before acting big.</aside>
+  <p class="harness"><b>Bring your agents, from any harness.</b><span>Fully supported today: Claude Code · Codex · Cursor · OpenCode. Coming: musterd’s own harness.</span></p>
+  <aside hidden>Advance here on 'an act on that roster'. The live demo shows steps 2, 4 and 5; step 3 comes back in the handoff question. This is the guidance every member is given: check the inbox at every task boundary, report on start and finish, claim before you build, ask a person before acting big.</aside>
 </section>
 
 <section class="slide acc" data-sec="Live">
@@ -153,15 +156,15 @@
     <p><span>3</span>Done is two claims — the builder says merged; someone else says this is what we wanted.</p>
   </div>
   <span aria-hidden="true"></span>
-  <aside hidden>Switch to /live and the terminal now. Do not come back to slides until the handoff beat. If delta is in tonight, it is beat 4: a seat that was not running wakes on a directed act.</aside>
+  <aside hidden>Switch to /live and the terminal now. Do not come back to slides until the handoff beat. If delta is in tonight, it is beat 4: an agent that was not running wakes on a directed act.</aside>
 </section>
 
 <section class="slide" data-sec="Questions">
   <p class="eyebrow">Big question 1 · handoff</p>
   <h2>A handoff carries the lane itself.</h2>
   <div class="cards c2">
-    <div class="card"><h3 class="mut">What it carries</h3><p class="strong">The thread.<br>The lane.<br>The branch, at its commit.</p><p>The receiver builds on the diff.</p></div>
-    <div class="card"><h3 class="mut">What the receiver can do</h3><p class="strong">Accept.<br>Decline.<br>Hold the author to acceptance.</p><p>Every handoff is an offer from one owner to another.</p></div>
+    <div class="card"><h3 class="mut">What it carries</h3><p class="strong">The thread.<br>The lane.<br>The branch, at its commit.</p><p>The receiver builds on the diff, so nothing gets built twice.</p></div>
+    <div class="card"><h3 class="mut">What the receiver can do</h3><p class="strong">Accept.<br>Decline.<br>Challenge.</p><p>Every handoff is an offer from one owner to another.</p></div>
   </div>
   <span aria-hidden="true"></span>
   <aside hidden>Our first answer was wrong. Early on, a handoff was prose: here is what I did, carry on. We measured what that produced, and a whole class of the waste was byte-identical work. A handoff that carries too little context recreates the exact problem the orchestration critics warn about. And the receiver can decline, which makes a handoff an offer between owners.</aside>
@@ -181,7 +184,7 @@
   <p class="eyebrow">Open source</p>
   <div style="display:flex;flex-direction:column;gap:clamp(14px,2vw,32px)">
     <p class="cmd"><span class="p">$</span> npx @musterd/cli init</p>
-    <p class="sub" style="max-width:52ch">About thirty seconds to a team. If you run more than one agent, try it with your team for two weeks — I'll sit with you for the first hour.</p>
+    <p class="sub" style="max-width:52ch">One command to a team. If you run more than one agent, try it with your team for two weeks — I'll sit with you for the first hour.</p>
     <p class="sub" style="max-width:60ch;font-size:clamp(14px,1.6vw,22px)">Nick Sanders · <b style="color:var(--ink)">@Nick_ASanders</b> · sandrise.io/nicksanders · <b style="color:var(--ink)">twitch.tv/sandrise_ai</b> — where musterd is built live, every day.</p>
   </div>
   <p class="foot">musterd.io · github.com/SandRiseStudio/musterd</p>
@@ -189,14 +192,14 @@
 </section>
 
 <section class="slide panel" data-sec="Q&amp;A">
-  <p class="eyebrow">For Q&amp;A · how each piece earned its place</p>
+  <p class="eyebrow">How each piece earned its place</p>
   <div class="evo">
     <p class="h">2026</p><p class="h">What we measured</p><p class="h">What it forced</p>
     <p class="d">30 Jun</p><p class="m">37% of the code produced was thrown away; handoffs carried a description of the work</p><p class="b">Lanes: one owner, claimed before the first keystroke. A handoff carries the branch.</p>
     <p class="d">30 Jun</p><p class="m">Replies waited up to 207 minutes on me as the relay</p><p class="b">The inbox reaches an agent at its next tool call.</p>
-    <p class="d">17 Jul</p><p class="m">7 approvals for every exchange; 0 requests for help had reached me</p><p class="b">The human as a member. Asks carry a tier and a clock.</p>
+    <p class="d">17 Jul</p><p class="m">7 approvals for every exchange; 0 requests for help had reached me</p><p class="b">The human as a member. Agents ask with a deadline.</p>
     <p class="d">28 Jul</p><p class="m">“Done” meant the builder said so</p><p class="b">Done is two claims: someone else accepts the outcome.</p>
-    <p class="d">5 Sep</p><p class="m">A seat whose session was closed could not be reached</p><p class="b">Wake: a seat comes back on a message — about 24 s cold, on a second machine.</p>
+    <p class="d">5 Sep</p><p class="m">An agent whose session was closed could not be reached</p><p class="b">Wake: the agent comes back on a message — about 24 s cold, on a second machine.</p>
   </div>
   <span aria-hidden="true"></span>
   <aside hidden>Held back for Q&A — not in the seven minutes. Use it when someone asks how it evolved or what you tried. Each row is a measured problem and what it forced; dates are 2026. Long form: docs/wiki/how-musterd-got-here.md. Wake (row 5) rests on ADRs that are still proposed — say 'we are building toward' if pressed.</aside>
