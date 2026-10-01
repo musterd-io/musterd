@@ -241,7 +241,10 @@ withDrivers('integration', (_o, kind) => {
     send(frame: unknown) {
       this.ws.send(JSON.stringify(frame));
     }
-    waitFor(type: string, ms = 1000): Promise<WSServerFrame> {
+    // The default is only ever a POSITIVE wait's patience: every "must not arrive" check passes
+    // its own short window. 1 s was too little for an `occupied` on the PGlite double under
+    // coverage (main and #1922, 2026-10-01), and a longer default slows only a test already failing.
+    waitFor(type: string, ms = 5000): Promise<WSServerFrame> {
       const existing = this.frames.find((f) => f.type === type);
       if (existing) return Promise.resolve(existing);
       return new Promise((resolve, reject) => {
