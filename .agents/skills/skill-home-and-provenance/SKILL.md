@@ -52,8 +52,7 @@ belongs to in the directory itself.
 A bridge carries the frontmatter its harness needs so the skill is *findable*,
 and a body of two or three lines pointing at the canonical path. Verify the
 path your harness actually reads before writing a README sentence that claims
-it — harness skill surfaces differ more than their docs suggest, and at least
-one has none at all.
+it — harness skill surfaces differ more than their docs suggest, and they move.
 
 Measured against four harnesses (2026-09-21; falsifier: provision a seat and
 list the files each harness reads):
@@ -61,15 +60,20 @@ list the files each harness reads):
 | Harness | Where a project-level skill is read from |
 | --- | --- |
 | Claude Code | `.claude/skills/<name>/SKILL.md`, frontmatter `name` + `description` |
-| Cursor | `.cursor/rules/<name>.mdc`, frontmatter `description` + `alwaysApply` |
+| Cursor | `.cursor/rules/<name>.mdc`, frontmatter `description` + `alwaysApply`. **Also `.agents/skills/<name>/SKILL.md`** (cursor-agent 2026.09.28, measured 2026-09-30) |
 | Grok | `.grok/skills/<name>/SKILL.md` |
-| Codex | **no project-level skill or rule shell** — reach it from `AGENTS.md`, which Codex does read |
+| Codex | `.agents/skills/<name>/SKILL.md` (codex-cli 0.159.2, measured 2026-09-30). ~~No project-level skill or rule shell~~ — true on 2026-09-21, wrong by 2026-09-30. On an older Codex, reach it from `AGENTS.md`, which Codex does read |
 
-That last row is the one worth carrying. A plan that assumes every harness has
-a skill directory will quietly ship a skill Codex never loads; the honest
-version is a pointer in the file Codex already reads. Re-check this table before
-trusting it — these surfaces move, and a stale row here is exactly the failure
-the skill is about.
+The Codex row is the one worth carrying, twice over. On 2026-09-21 a plan that
+assumed every harness had a skill directory would have shipped a skill Codex
+never loaded. Nine days later that row was wrong in the other direction. Re-check
+this table before trusting it: these surfaces move, and a stale row here is
+exactly the failure the skill is about.
+
+How the 2026-09-30 rows were measured: `npx skills add … --skill board-loop -a
+<harness>` into an empty folder, then the harness was asked, with no tools, whether
+it had a skill named board-loop and from which path. The same question in a folder
+with nothing installed got "absent" from both, so the answer was not a guess.
 
 A bridge is provisioned per workspace, not committed, when it names a path
 specific to one agent's checkout. Commit bridges only when every reader shares

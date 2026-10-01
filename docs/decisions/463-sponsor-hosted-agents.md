@@ -1,9 +1,9 @@
-# 463 — Sponsor-hosted agents: a sponsored agent runs on its sponsor's own machine, provisioned by the sponsor's own host
+# 463 — Sponsor-hosted agents
 
-- Status: proposed — 2026-09-28
+- Status: accepted — 2026-09-28 (#1779, after big-body's security review); all increments landed 2026-09-29
 - Date: 2026-09-28
 - Lane: `01M3FBKS3987E8FDXC4WQ8FY6C` (goal `seat-continuity`)
-- Supersedes: ADR 460 (never merged; branch `docs/adr-auto-wake-created-agents`, PR #1765 closed)
+- Replaces: the unmerged ADR 460 draft (branch `docs/adr-auto-wake-created-agents`, PR #1765, closed)
 - Builds on: ADR 131 (residency), ADR 344 (seat-scoped credentials), ADR 395 (host key), ADR 447 (layout), ADR 449/452/456/459 (sponsored agents)
 - Design: `docs/superpowers/specs/2026-09-28-sponsor-hosted-agents-design.md`
 - Plan: `docs/superpowers/plans/2026-09-28-sponsor-hosted-agents.md`
@@ -193,8 +193,9 @@ never provisioned a second time. `--no-provision` opts out; `musterd host provis
   planned PRs became seven because increment 3 split at `provisionSeat`. `SPEC.md` is unchanged:
   host provisions are daemon-local HTTP, not envelope acts. Falsifier still open: nothing has run
   on a real sponsor's machine against the live daemon, only the in-process Scenario E.
-- The work lands in five PRs, each alone: (1) this ADR; (2) sponsor-scoped authority and host-key
-  scoping; (3) the residual closed in code; (4) provisions; (5) the provisioner, Scenario E, docs.
+- The work was planned as five PRs, each alone: (1) this ADR; (2) sponsor-scoped authority and
+  host-key scoping; (3) the residual closed in code; (4) provisions; (5) the provisioner, Scenario
+  E, docs. It landed as seven (the 2026-09-29 note above).
 
 ## Observability & Evaluation
 

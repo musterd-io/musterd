@@ -1,8 +1,7 @@
 # 449 — Member expiry is a regular setting, and members can create agents
 
-- Status: accepted — 2026-09-25, by nick in session (reshaped the same day before acceptance:
-  nick's steers 01M3D5R783 and 01M3D66PSZ removed the event concept; the original event-scoped
-  draft never landed anywhere but this branch)
+- Status: accepted — 2026-09-25, by nick
+- Amended: §4's connect link is now `/join/:team#n=<nonce>` (Consequences, 2026-09-26)
 - Date: 2026-09-25
 - Lane: `01M3AMYC18DQ5ZXK4T570D60Q9` (goal `demo`)
 - Builds on: [ADR 446](446-remote-mcp-https-oauth.md) (remote MCP over HTTPS + OAuth — the rail a
@@ -119,7 +118,7 @@ name — never a guess (keeps ADR 056 data clean).
 - **Token-in-URL joining** (the 2026-09-24 plan). Dead: every target client speaks OAuth
   (big-body accept `01M3D4DAN`), and the secret-in-URL leak surface bought nothing after ADR 446.
 - **Puppet agents** (sub-identities riding the human's credential). Breaks "the same way nick
-  creates agents": no own credential, no honest roster row, attribution mush.
+  creates agents": no own credential, no honest roster row, unclear attribution.
 - **A separate guest/temporary credential kind.** Nothing it would express that
   `lifecycle_until` + `sponsored_by` + the existing kinds do not.
 - **Sweeper-enforced expiry.** Enforcement at auth is exact and race-free; a sweeper is cosmetic
@@ -174,6 +173,9 @@ parses the roster with) had no branch for it and dropped it silently — its par
 with the field, so the drift test could not see the gap. Lane 01M3F81DD9 (the `/live` Welcome Wagon,
 whose caption names the sponsor) added the read and two corpus rows. A reader parity fix for this
 ADR's own field, not a contract change: the schema, the wire and every other reader are unchanged.
+- 2026-09-30 (wording): the reshape history moved here from the Status line. The ADR was
+  reshaped on 2026-09-25, before acceptance: nick's steers `01M3D5R783` and `01M3D66PSZ` removed
+  the event concept. The first, event-scoped draft never landed anywhere but its branch.
 
 ## Observability & Evaluation
 
