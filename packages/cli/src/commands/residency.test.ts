@@ -1,10 +1,18 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { bindingSeat } from '@musterd/protocol';
+import { ResidencyPolicySchema, bindingSeat } from '@musterd/protocol';
 import { describe, expect, it, vi } from 'vitest';
+import { parseArgs } from '../args.js';
 import type { HostRegistryEntry } from '../host/registry.js';
-import { ensureHostKey, harnessDrift, registryDrift, seatWorkspace } from './residency.js';
+import {
+  collectPolicyFlags,
+  ensureHostKey,
+  harnessDrift,
+  registryDrift,
+  renderPolicy,
+  seatWorkspace,
+} from './residency.js';
 
 /**
  * The drift lines are the remediation, so their wording is the contract (ADR 131 §1). Both faults
@@ -176,5 +184,35 @@ describe('seatWorkspace — which folder receives the grant (ADR 442)', () => {
     expect(seatWorkspace({ positionals: [], flags: {} })?.dir).toBe(root);
     spy.mockRestore();
     rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe('--convene-huddles (ADR 386)', () => {
+  const flags = (...argv: string[]) => collectPolicyFlags(parseArgs(['policy', ...argv]));
+
+  it('on and off set the knob the daemon reads', () => {
+    expect(flags('--convene-huddles', 'on')).toEqual({ convene_huddles: true });
+    expect(flags('--convene-huddles', 'off')).toEqual({ convene_huddles: false });
+  });
+
+  it('refuses anything but on|off, naming the flag', () => {
+    expect(() => flags('--convene-huddles', 'yes')).toThrow(/--convene-huddles wants on\|off/);
+  });
+
+  it('leaves the knob out when the flag is absent, so an enroll preserves an existing override', () => {
+    expect(flags('--flow', 'auto')).toEqual({ flow: 'auto' });
+    expect(flags()).toBeUndefined();
+  });
+
+  it('status says a seat convenes, starred when it is the seat’s own override', () => {
+    const on = ResidencyPolicySchema.parse({ convene_huddles: true });
+    expect(renderPolicy(on)).toContain('convenes huddles');
+    expect(renderPolicy(on, { convene_huddles: true })).toContain('convenes huddles*');
+  });
+
+  it('status names a seat that refuses being convened, and stays quiet at the default', () => {
+    const off = ResidencyPolicySchema.parse({});
+    expect(renderPolicy(off)).not.toContain('huddle');
+    expect(renderPolicy(off, { convene_huddles: false })).toContain('refuses huddle convene*');
   });
 });

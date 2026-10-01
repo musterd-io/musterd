@@ -51,7 +51,8 @@ import { findWorkspaceDir, resolve, resolveRead } from './helpers.js';
 const POLICY_FLAGS_USAGE =
   '[--lane both|interrupt|batched] [--cooldown <15m>] [--hourly-cap <n>] [--attempt-cap <n>] ' +
   '[--tool-policy reply-only|seat-policy] [--timeout <5m>] [--work-timeout <30m>] ' +
-  '[--flow manual|auto] [--max-turns <n>] [--budget <usd>] [--transcript-max <MiB, fractions OK>]';
+  '[--flow manual|auto] [--convene-huddles on|off] [--max-turns <n>] [--budget <usd>] ' +
+  '[--transcript-max <MiB, fractions OK>]';
 
 /**
  * The remediation every drift line points at. It carries `--as <admin>` because enrollment is an
@@ -185,7 +186,7 @@ export async function residencyCommand(parsed: Parsed): Promise<number> {
  * clears back to team defaults (`{}`). Ranges are enforced server-side (the 400 names the range);
  * here we only refuse shapes that cannot travel (non-numbers, malformed durations).
  */
-function collectPolicyFlags(parsed: Parsed): ResidencyPolicyOverride | undefined {
+export function collectPolicyFlags(parsed: Parsed): ResidencyPolicyOverride | undefined {
   const out: Record<string, unknown> = {};
   const num = (flag: string, key: string, scale = 1) => {
     const raw = flagStr(parsed.flags, flag);
@@ -213,6 +214,14 @@ function collectPolicyFlags(parsed: Parsed): ResidencyPolicyOverride | undefined
       throw new CliError(`--flow wants manual|auto (got "${flow}")`, 2);
     out['flow'] = flow;
   }
+  // ADR 386: does opening a huddle wake the seats it names? The daemon has read this
+  // knob since it shipped; until this flag no surface could set it.
+  const convene = flagStr(parsed.flags, 'convene-huddles');
+  if (convene !== undefined) {
+    if (convene !== 'on' && convene !== 'off')
+      throw new CliError(`--convene-huddles wants on|off (got "${convene}")`, 2);
+    out['convene_huddles'] = convene === 'on';
+  }
   num('max-turns', 'max_turns');
   const budget = flagStr(parsed.flags, 'budget');
   if (budget !== undefined) {
@@ -230,7 +239,10 @@ function collectPolicyFlags(parsed: Parsed): ResidencyPolicyOverride | undefined
 }
 
 /** One-line policy summary. With `override`, starred knobs are the seat-overridden ones. */
-function renderPolicy(policy: ResidencyPolicy, override?: ResidencyPolicyOverride | null): string {
+export function renderPolicy(
+  policy: ResidencyPolicy,
+  override?: ResidencyPolicyOverride | null,
+): string {
   const star = (key: keyof ResidencyPolicy) => (override && override[key] !== undefined ? '*' : '');
   const bits = [
     `lane ${policy.lane}${star('lane')}`,
@@ -242,6 +254,8 @@ function renderPolicy(policy: ResidencyPolicy, override?: ResidencyPolicyOverrid
     `work-timeout ${fmtDurationMs(policy.work_timeout_ms)}${star('work_timeout_ms')}`,
     `flow ${policy.flow}${star('flow')}`,
   ];
+  if (policy.convene_huddles) bits.push(`convenes huddles${star('convene_huddles')}`);
+  else if (override && override.convene_huddles === false) bits.push('refuses huddle convene*');
   if (policy.max_turns !== undefined) bits.push(`${policy.max_turns} turns${star('max_turns')}`);
   if (policy.budget_usd !== undefined)
     bits.push(`budget $${policy.budget_usd}${star('budget_usd')}`);
