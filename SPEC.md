@@ -571,3 +571,56 @@ event is added.
 Increment 1 serves the Done-line tools (`team_join` as no-op success when the bearer names the
 seat, `team_inbox_check`, `team_send`) with the adapter's input shapes; the rest of the surface
 converges in increment 3 after rehearsal says which tools a phone reaches for.
+
+## A.14 Durable review promises (unreleased — ADR 490)
+
+A review request is a root `request_help` Act with a typed `meta.review` artifact reference and a
+direct Member recipient. It has no existing `thread`; its body is the review context. This form
+rejects Team recipients and `meta.eligible`. Other `request_help` Acts, including untyped ones,
+retain their existing lifecycle.
+
+`meta.review` is one of:
+
+- `{ "kind": "pr", "repo": "owner/name", "number": 123 }`, with a positive integer PR number;
+- `{ "kind": "commit", "repo": "owner/name", "sha": "<40-or-64 hex digits>", "path?": "src/file.ts" }`, where `path` is repository-relative and has no `.` or `..` segment;
+- `{ "kind": "lane", "id": "<Lane ULID>" }`;
+- `{ "kind": "url", "url": "https://…" }`, absolute HTTPS with no userinfo, query string, or fragment.
+
+Artifact references carry no credentials or signed access tokens. Implementations validate the
+metadata through the shared protocol schema at every external boundary.
+
+Only an `accept` from the directly named recipient, with `meta.in_reply_to` naming the root request,
+creates a review promise. Its `thread` is the root request id. Repeated valid accepts derive one
+promise, selected by the minimum `(ts, id)` pair; the selected Act's origin timestamp is
+`accepted_at`. This timestamp uses the sender's clock. The request's direct recipient is the owner.
+
+The server derives open promises from the request, its accepted reply, and the absence of a `resolve`
+on the request's root thread. It returns these additive `NextBrief` arrays:
+
+```jsonc
+{
+  "request_reviews": [
+    { "request_id": "<Act ULID>", "requester": "nick", "owner": "Ada",
+      "context": "Please check the migration", "review": { "kind": "pr", "repo": "org/repo", "number": 42 },
+      "accepted_at": 1790812800000 }
+  ],
+  "requested_reviews": [ /* same row shape, for the requester */ ],
+  "review_closures": [
+    { "request_id": "<Act ULID>", "resolve_id": "<Act ULID>",
+      "closer": "Lin", "resolved_at": 1790816400000 }
+  ]
+}
+```
+
+`request_reviews` belongs to the accepting Member; `requested_reviews` belongs to the requester.
+Both include every matching open promise, oldest `accepted_at` first, with request id as the stable
+tie-breaker. The closing `resolve` is Team-addressed so requester and owner both receive it. Any
+Member may close the root thread, including the requester withdrawing the request. If a Member other
+than the owner closes it, `review_closures` gives the owner one notice until that Member's inbox
+cursor crosses the `resolve` Act. The requester sees the same `resolve` in the request thread.
+
+The three arrays are optional and have no schema defaults. A supporting daemon emits all three,
+including `[]`; omission means the daemon does not report the projection. CLI and MCP renderers
+preserve that distinction, and the weekly audit abstains when `requested_reviews` is absent. The
+promise is a reminder derived from Acts: it adds no table, Act, timer, or proof that review content
+or quality was checked. Lane acceptance remains represented by `owed_reviews` and `review_debt`.

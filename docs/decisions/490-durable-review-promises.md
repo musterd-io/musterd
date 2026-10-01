@@ -1,6 +1,6 @@
 # 490 — Durable review promises derive from accepted request Acts
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-09-30
 - Deciders: nick (selected the conversational carrier)
 - Spec: `docs/superpowers/specs/2026-09-30-durable-review-promises-design.md`
@@ -15,8 +15,8 @@ in the ledger, but no structured field keeps the accepted review visible at late
 on a standalone request.
 
 The conversational design selected by nick on 2026-09-30 is to derive the reminder from the
-accepted request Acts. This record and its linked design spec are proposed for written review before
-implementation planning.
+accepted request Acts. Nick approved the written design on 2026-10-01; implementation planning is
+the next review boundary.
 
 ## Problem
 
@@ -74,7 +74,10 @@ duplicate the Acts; retaining no state would leave the accepted work invisible. 
   this ADR plus the protocol feature epoch. Lane 3 of `nothing-vanishes` landed at epoch 27; the
   implementation must allocate the next epoch from its current base.
 
-Follows-up: deferred — implementation planning waits for written design approval (2026-09-30)
+Follows-up: implementation plan is under review (2026-10-01); implementation waits for that approval.
+
+- Dated note (2026-10-01): Nick approved the written design. The implementation plan is awaiting
+  review; no implementation has started.
 
 ## Observability & Evaluation
 

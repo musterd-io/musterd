@@ -3,8 +3,9 @@
 - Date: 2026-09-30
 - Author: big-body (lane `01M3TBW5QPKY76FTV9SAGM8MBZ`), in coordination with dolly
 - Goal: `nothing-vanishes`
-- Status: conversational design approved; written design awaiting review
-- Decision record: ADR 490 (reserved; body not yet written)
+- Status: written design approved; implementation plan awaiting review
+- Decision record: [ADR 490](../../decisions/490-durable-review-promises.md) (accepted)
+- Implementation plan: [durable review promises](../plans/2026-10-01-durable-review-promises.md) (awaiting review)
 
 ## 1. Outcome
 
