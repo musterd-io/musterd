@@ -42,6 +42,16 @@ async function main(argv: string[]): Promise<number> {
     return 1;
   }
 
+  // Bare `musterd` on a terminal opens the seat picker (ADR 491 Decision 1). Piped or redirected,
+  // it keeps printing help. MUSTERD_PAINT_PROBE is the bench's first-paint hook.
+  if (
+    argv.length === 0 &&
+    ((process.stdin.isTTY && process.stdout.isTTY) || process.env['MUSTERD_PAINT_PROBE'] === '1')
+  ) {
+    const { openPicker } = await import('./launcher/index.js');
+    return openPicker();
+  }
+
   // `--help`/`-h` anywhere prints usage and exits — never runs the command.
   const wantsHelp =
     !command ||

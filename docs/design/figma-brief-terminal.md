@@ -122,6 +122,29 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
 19. `cmd/launch-receipt` — the line `musterd <seat>` prints to stderr when the harness exits:
     `✓ stanley · claude · 42m · exit 0 · musterd - to go back` (green `✓` on exit 0, red `✗`
     otherwise; the last segment dim).
+20. `cmd/launcher-recent` — `$ musterd` in an 80-column terminal, after the roster answered. The
+    exact no-color text is `view.test.ts`'s first case:
+    ```
+    ● ● ○ musterd                                              revive · 3 seats here
+
+      recent
+    › stanley  revive/agents  claude   ○ idle  ★ last used · 2h
+      miley    revive/agents  claude   ● live  here · since 15:37
+      gptbot   revive/agents  codex    ○ idle  1d
+
+      ⏎ launch · ⌃R resume · type to search · → browse · esc quit
+    ```
+    The header shows ` · checking…` until the roster answers and ` · offline · live state
+    unavailable` when it cannot (rows then show `?`).
+21. `cmd/launcher-browse` — `→` from recent: `musterd › teams` (a team with no Workspace here is dim
+    `○ no Workspace here` and is skipped by the cursor), `musterd › revive` (projects, with the remote
+    name dim when it differs from the folder), and `musterd › revive › agents` (members).
+22. `cmd/launcher-live-confirm` — `⏎` on a live seat replaces the footer with the question,
+    word-wrapped to the terminal width (never clipped, so `(y/N)` always shows). At 80 columns:
+    ```
+      miley is live here (claude-code) since 15:37. Open a second session in the
+      same folder? (y/N)
+    ```
 
 ## Page: States (empty + error)
 

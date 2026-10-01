@@ -56,4 +56,18 @@ describe('static import closures (ADR 491)', () => {
     expect(rel(files)).not.toContain('config.ts');
     expect([...packages].sort()).toEqual(['@musterd/protocol/build-stamp', 'picocolors']);
   });
+  it('the launcher paint path loads only zod, picocolors and node builtins (ADR 491 §5.1)', () => {
+    const { files, packages } = staticClosure(join(SRC, 'launcher', 'index.ts'));
+    const names = rel(files);
+    for (const heavy of [
+      'client.ts',
+      'config.ts',
+      'launcher/catalog.ts',
+      'launcher/live.ts',
+      'launcher/byName.ts',
+    ])
+      expect(names, heavy).not.toContain(heavy);
+    expect(names.filter((f) => f.startsWith('commands/'))).toEqual([]);
+    expect([...packages].sort()).toEqual(['picocolors', 'zod']);
+  });
 });

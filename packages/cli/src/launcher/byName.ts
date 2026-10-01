@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline/promises';
 import { flagStr, type Parsed } from '../args.js';
@@ -28,6 +29,12 @@ export interface LaunchOptions {
   force: boolean;
 }
 
+/** What `openPicker` takes from the name path: the search, plus the flags typed with the name. */
+export interface PickerOpenOptions {
+  query: string;
+  defaults?: { mode: 'fresh' | 'resume'; harness: string | null; force: boolean };
+}
+
 /** Seams (tests). Every default is the real thing. */
 export interface LaunchDeps {
   catalog?: () => Catalog;
@@ -39,6 +46,8 @@ export interface LaunchDeps {
   err?: (s: string) => void;
   env?: NodeJS.ProcessEnv;
   now?: () => number;
+  /** The picker for an ambiguous name on a TTY (tests). */
+  picker?: (opts: PickerOpenOptions) => Promise<number>;
 }
 
 /**
@@ -59,7 +68,21 @@ export async function launchByName(
     if (word === '-') throw new CliError('no seat launched yet — run `musterd` to pick one', 2);
     throw unknownCommand(word, res.nearest);
   }
+  const mode =
+    parsed.positionals.includes('-r') || parsed.flags['resume'] !== undefined ? 'resume' : 'fresh';
+  const opts: LaunchOptions = {
+    mode,
+    harness: flagStr(parsed.flags, 'harness') ?? null,
+    force: parsed.flags['force'] === true,
+  };
   if (res.kind === 'ambiguous') {
+    const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+    // `--path` prints a folder: the picker launches, so an ambiguous `--path` names the candidates.
+    if (isTTY && parsed.flags['path'] === undefined) {
+      const open =
+        deps.picker ?? (async (o: PickerOpenOptions) => (await import('./index.js')).openPicker(o));
+      return open({ query: word, defaults: opts });
+    }
     throw new CliError(
       `"${word}" matches ${res.candidates.length} seats — name one:\n` +
         res.candidates.map((s) => `  musterd ${s.address}`).join('\n'),
@@ -70,17 +93,7 @@ export async function launchByName(
     (deps.out ?? ((s: string) => void process.stdout.write(s)))(`${res.seat.path}\n`);
     return 0;
   }
-  const mode =
-    parsed.positionals.includes('-r') || parsed.flags['resume'] !== undefined ? 'resume' : 'fresh';
-  return launchSeat(
-    res.seat,
-    {
-      mode,
-      harness: flagStr(parsed.flags, 'harness') ?? null,
-      force: parsed.flags['force'] === true,
-    },
-    deps,
-  );
+  return launchSeat(res.seat, opts, deps);
 }
 
 /** Live check → plan → record → supervise → record → receipt. Shared by the name path and the picker. */
@@ -93,6 +106,12 @@ export async function launchSeat(
   const now = deps.now ?? Date.now;
   const err = deps.err ?? ((s: string) => void process.stderr.write(s));
   if (seat.problem) throw new CliError(`${seat.address} needs repair — ${seat.problem.fix}`, 1);
+  // A picker row can come from a snapshot older than the folder (typed-ahead ⏎ before the scan).
+  if (!existsSync(seat.path))
+    throw new CliError(
+      `${seat.address}: its Workspace folder is gone (${seat.path}) — musterd seats lists what is here`,
+      1,
+    );
 
   if (!opts.force) {
     const live = liveFor(seat, await (deps.roster ?? fetchRoster)(seat.server, seat.team));
