@@ -1,5 +1,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
+import type { Driver } from './driver.js';
 import { migratePostgres } from './pg/migrate.js';
+import { ROLE } from './pg/tenancy.js';
 import { pgliteDriver } from './pgliteDriver.js';
 import { openTestDriver, testDriverKinds, withDrivers } from './testing.js';
 
@@ -111,6 +113,77 @@ describe('tenancy stamping (spec §12.1)', () => {
           "INSERT INTO teams (id, slug, display, created_at, updated_at) VALUES ('C','c','C',1,1)",
         ),
     ).rejects.toThrow(/row-level security/);
+    await d.close();
+  });
+});
+
+describe('session scope (the double holds scope per session, not per transaction)', () => {
+  async function twoTeams() {
+    const d = await pgliteDriver();
+    await migratePostgres(d.asOwner());
+    for (const id of ['A', 'B'])
+      await d
+        .asOperator()
+        .run(
+          'INSERT INTO teams (id, slug, display, created_at, updated_at) VALUES (?, ?, ?, 1, 1)',
+          [id, id.toLowerCase(), id],
+        );
+    return d;
+  }
+  const ids = async (h: Driver) =>
+    (await h.all<{ id: string }>('SELECT id FROM teams ORDER BY id')).map((r) => r.id);
+
+  it('interleaved operations on different scopes each see only their own', async () => {
+    const d = await twoTeams();
+    const a = d.forTeam('A');
+    const b = d.forTeam('B');
+    const op = d.asOperator();
+    const reads = await Promise.all(
+      Array.from({ length: 30 }, (_, i) =>
+        [ids(a), ids(b), ids(d), ids(op)][i % 4]!.then((r) => [i % 4, r] as const),
+      ),
+    );
+    const want = [['A'], ['B'], [], ['A', 'B']];
+    for (const [k, r] of reads) expect(r).toEqual(want[k]);
+    // A tx holds its scope against operations queued behind it.
+    const inTx = a.tx(async (t) => {
+      await new Promise((r) => setTimeout(r, 5));
+      return ids(t);
+    });
+    const [tx, other] = await Promise.all([inTx, ids(b)]);
+    expect(tx).toEqual(['A']);
+    expect(other).toEqual(['B']);
+    await d.close();
+  });
+
+  it('a team scope never leaks: the bare handle, owner DDL and a pooled client start clean', async () => {
+    const d = await twoTeams();
+    expect(await ids(d.forTeam('A'))).toEqual(['A']);
+    expect(await ids(d)).toEqual([]);
+    expect(await ids(d.forTeam('B'))).toEqual(['B']);
+    // exec is the owner path even right after an app-role scope (the app role cannot CREATE).
+    await d.forTeam('B').exec('CREATE TABLE scratch (id INT)');
+    // pgDriver's root handle stamps a role and no tenant: it must not inherit the double's last one.
+    expect(await ids(d.forTeam('A'))).toEqual(['A']);
+    const client = await d.poolFactory()('postgres://ignored').connect();
+    await client.query(`SET LOCAL ROLE ${ROLE.app}`);
+    expect((await client.query('SELECT id FROM teams', [])).rows).toEqual([]);
+    client.release();
+    await d.close();
+  });
+
+  it('a failed statement leaves the scope intact; a failed tx rolls back and keeps it', async () => {
+    const d = await twoTeams();
+    const a = d.forTeam('A');
+    await expect(a.run('SELECT nope FROM teams')).rejects.toThrow();
+    expect(await ids(a)).toEqual(['A']);
+    await expect(
+      a.tx(async (t) => {
+        await t.run("UPDATE teams SET display = 'x' WHERE id = 'A'");
+        throw new Error('boom');
+      }),
+    ).rejects.toThrow('boom');
+    expect(await a.get('SELECT display FROM teams')).toEqual({ display: 'A' });
     await d.close();
   });
 });
