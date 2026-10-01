@@ -125,6 +125,7 @@ import {
   verifyConsoleToken,
   type ConsoleClaims,
 } from '../cloud/consoleToken.js';
+import { hostAllows } from '../cloud/hostIsolation.js';
 import { trustsLocalPeer } from '../cloud/localTrust.js';
 import { checkUpgrade, readLocalIdentity, resolveRosterRoots } from '../config.js';
 import { operatorCtx, teamCtx, type Ctx } from '../context.js';
@@ -1875,6 +1876,7 @@ export async function handleHttp(
         boundHost: ctx.config.host,
         allowedHosts: ctx.config.allowedHosts,
         allowedOrigins: ctx.config.allowedOrigins,
+        hostSuffix: ctx.config.cloud?.hostSuffix ?? null,
       },
     );
     if (!requestCheck.ok) {
@@ -1893,6 +1895,10 @@ export async function handleHttp(
     const url = new URL(req.url ?? '/', 'http://localhost');
     const path = url.pathname;
     const method = req.method ?? 'GET';
+    // Cloud (spec §5.3): a team's host reaches only that team. 404, not 403 — a host must not be a
+    // way to learn which other teams exist. Before any route, so no route can forget it.
+    if (ctx.config.cloud && !hostAllows(req.headers.host, path, ctx.config.cloud.hostSuffix))
+      return sendJson(res, 404, { error: { code: 'not_found', message: 'not found' } });
     // Negotiate response compression once; sendJson consults this for bodies over the size threshold.
     negotiatedEncoding.set(res, pickEncoding(req.headers['accept-encoding']));
 

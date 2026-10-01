@@ -1,12 +1,16 @@
 import { existsSync, mkdtempSync } from 'node:fs';
+import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { PROTOCOL_VERSION } from '@musterd/protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import WebSocket from 'ws';
 import { SCHEMA_NEWER_SENTENCE, SCHEMA_OLDER_SENTENCE } from '../db/guard.js';
 import { LADDER } from '../db/ladder.js';
 import { openTestDriver, testCloudPools, type TestStore } from '../db/testing.js';
 import { TRACE_LADDER } from '../db/traceLadder.js';
 import { createServer } from '../index.js';
+import { addMember } from '../store/members.js';
 import { createTeam } from '../store/teams.js';
 import { testIssuer } from './testIssuer.js';
 
@@ -211,6 +215,99 @@ describe('cloud mode — creating a team takes a console token (1C task 5, spec 
       expect(((await r.json()) as { error: { message: string } }).error.message).toBe(
         'console unreachable',
       );
+    } finally {
+      await s.close();
+    }
+  });
+});
+
+/** An HTTP request with an explicit Host header (fetch will not send one it did not derive). */
+export function hostRequest(
+  url: string,
+  path: string,
+  host: string,
+  opts: { method?: string; headers?: Record<string, string>; body?: string } = {},
+): Promise<{ status: number; body: string }> {
+  const u = new URL(url);
+  return new Promise((resolve, reject) => {
+    const r = request(
+      {
+        host: u.hostname,
+        port: u.port,
+        path,
+        method: opts.method ?? 'GET',
+        headers: { host, ...(opts.headers ?? {}) },
+      },
+      (res) => {
+        let body = '';
+        res.on('data', (c: Buffer) => (body += c.toString()));
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
+      },
+    );
+    r.on('error', reject);
+    r.end(opts.body);
+  });
+}
+
+describe('cloud mode — a team host reaches only its own team (1C task 6, spec §5.3)', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("HTTP: another team's routes are 404 on this team's host; its own answer", async () => {
+    const { s, seed, url } = await bootCloud();
+    try {
+      const revive = await createTeam(seed!, { slug: 'revive' });
+      await createTeam(seed!, { slug: 'other' });
+      const { token } = await addMember(seed!, revive, { name: 'ada', kind: 'human', role: '' });
+      const auth = { authorization: `Bearer ${token}` };
+      const own = await hostRequest(url, '/teams/revive/members', 'revive.musterd.test', {
+        headers: auth,
+      });
+      expect(own.status).toBe(200);
+      // The SAME valid credential, sent to the other team's host: the host refuses before auth.
+      const cross = await hostRequest(url, '/teams/revive/members', 'other.musterd.test', {
+        headers: auth,
+      });
+      expect(cross.status).toBe(404);
+      // A team route on a host that names no team at all.
+      expect((await hostRequest(url, '/mcp/revive', 'musterd.test')).status).toBe(404);
+      // Global routes answer on any host.
+      expect((await hostRequest(url, '/health', 'other.musterd.test')).status).toBe(200);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('WS: a claim for another team on this host is refused as not_found', async () => {
+    const { s, seed, url } = await bootCloud();
+    try {
+      await createTeam(seed!, { slug: 'revive' });
+      const frameOn = async (host: string) => {
+        const ws = new WebSocket(url.replace('http', 'ws') + '/ws', { headers: { host } });
+        await new Promise((r, j) => (ws.once('open', r), ws.once('error', j)));
+        const first = new Promise<{ type: string; code?: string }>((r) =>
+          ws.once('message', (d) => r(JSON.parse(String(d)))),
+        );
+        ws.send(
+          JSON.stringify({
+            type: 'claim',
+            v: PROTOCOL_VERSION,
+            team: 'revive',
+            key: 'mskey_bogus',
+            target: { seat: 'ada' },
+            surface: 'cli',
+          }),
+        );
+        const f = await first;
+        ws.close();
+        return f;
+      };
+      expect(await frameOn('other.musterd.test')).toMatchObject({
+        type: 'error',
+        code: 'not_found',
+      });
+      // On its own host the same bogus claim gets past the host, as far as authentication
+      // (a `refused` frame: the key is wrong), never `not_found`.
+      expect(await frameOn('revive.musterd.test')).toMatchObject({ type: 'refused' });
     } finally {
       await s.close();
     }

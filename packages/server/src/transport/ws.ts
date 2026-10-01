@@ -7,6 +7,7 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
+import { hostTeam } from '../cloud/hostIsolation.js';
 import { checkUpgrade } from '../config.js';
 import { operatorCtx, teamCtx, type Ctx } from '../context.js';
 import { MusterdError, asMusterdError } from '../errors.js';
@@ -194,6 +195,7 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
         boundHost: rootCtx.config.host,
         allowedHosts: rootCtx.config.allowedHosts,
         allowedOrigins: rootCtx.config.allowedOrigins,
+        hostSuffix: rootCtx.config.cloud?.hostSuffix ?? null,
       },
     );
     if (!check.ok) {
@@ -205,7 +207,10 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   });
 
-  wss.on('connection', async (ws: WebSocket) => {
+  wss.on('connection', async (ws: WebSocket, upgrade: IncomingMessage) => {
+    // Cloud (spec §5.3): the team this connection's host names; a claim may name no other.
+    const cloudSuffix = rootCtx.config.cloud?.hostSuffix ?? null;
+    const hostTeamName = cloudSuffix ? hostTeam(upgrade.headers.host, cloudSuffix) : null;
     const state: ConnState = { connId: ulid(), authenticated: false };
     // The connection's ctx: operator until the claim names a team, that team's from then on.
     let ctx: Ctx = opCtx;
@@ -235,6 +240,9 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
           if (frame.v !== PROTOCOL_VERSION) {
             throw new MusterdError('version_mismatch', `server speaks ${PROTOCOL_VERSION}`);
           }
+          // Same refusal as an unknown team, so the host cannot probe which teams exist.
+          if (cloudSuffix && hostTeamName !== frame.team.toLowerCase())
+            throw new MusterdError('not_found', `no team "${frame.team}"`);
           const team = await requireTeam(ctx.db, frame.team);
           ctx = teamCtx(rootCtx, team.id);
 

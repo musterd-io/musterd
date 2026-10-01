@@ -384,7 +384,13 @@ export function hostnameOf(hostHeader: string): string {
  */
 export function checkUpgrade(
   headers: { host?: string | undefined; origin?: string | undefined },
-  cfg: { boundHost: string; allowedHosts: string[]; allowedOrigins: string[] },
+  cfg: {
+    boundHost: string;
+    allowedHosts: string[];
+    allowedOrigins: string[];
+    /** Cloud (spec §5.3): every `<team>.<suffix>` host is a public face. */
+    hostSuffix?: string | null;
+  },
 ): { ok: true } | { ok: false; reason: string } {
   // A present Origin means a browser; legitimate musterd clients (CLI, MCP via `ws`) send none. Allow
   // an explicitly-listed origin, OR a *same-origin* page the daemon itself serves — Origin host:port
@@ -397,7 +403,10 @@ export function checkUpgrade(
   // Origin carries no DNS-rebinding risk there and is not a reason to refuse. Rehearsal A
   // (2026-09-26): Anthropic's connector client sends an Origin, and the daemon 403'd it — before
   // the request log, so the phone saw "no server responded" and the box saw nothing.
-  const publicFace = cfg.allowedHosts.some((h) => normalizeHost(h) === hostname);
+  const suffix = cfg.hostSuffix ? normalizeHost(cfg.hostSuffix) : null;
+  const publicFace =
+    cfg.allowedHosts.some((h) => normalizeHost(h) === hostname) ||
+    (suffix !== null && (hostname === suffix || hostname.endsWith(`.${suffix}`)));
   if (
     !publicFace &&
     headers.origin !== undefined &&
