@@ -4065,6 +4065,38 @@
 }
 .lc-hcard__state {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lc-2);
+}
+.lc-hcard__kind {
+  margin-right: var(--lc-2);
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--lc-faint);
+}
+/* The room is live right now and will stop being so — the one place this card moves on its own. */
+.lc-hcard__live {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lc-accent);
+  animation: lc-hcard-live 2.4s ease-in-out infinite;
+}
+@keyframes lc-hcard-live {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--lc-accent) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--lc-accent) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-hcard__live {
+    animation: none;
+  }
 }
 .lc-hcard.is-spent .lc-hcard__count {
   color: var(--lc-warn-ink);
@@ -4127,6 +4159,30 @@
   font-size: 12px;
   color: var(--lc-faint);
   padding-left: var(--lc-2);
+}
+.lc-hcard__waiting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lc-2) var(--lc-4);
+}
+.lc-hcard__waiting-seat {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lc-2);
+  color: var(--lc-dim);
+}
+/* An empty seat: the avatar's outline, dashed, with no fill — the same circle a turn draws, waiting. */
+.lc-hcard__waiting-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--lc-border-2);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--lc-dim);
 }
 
 /* now marker */

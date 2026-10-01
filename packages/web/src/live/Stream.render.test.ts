@@ -121,3 +121,31 @@ describe('a huddle reads as one card in the stream, at its latest turn', () => {
     expect(html).toContain('2 turns');
   });
 });
+
+describe('the huddle card reads at a glance (polish)', () => {
+  const HUDDLE = { topic: { kind: 'goal', id: 'demo' }, room: 'https://b.example/h', anchor: 'docs/x.md' };
+  const t0 = Date.UTC(2026, 9, 1, 18, 0, 0);
+  const root = env({ id: '01R', from: 'nick', act: 'message', body: 'Pick a lane.', ts: t0, to: { kind: 'team' }, meta: { huddle: HUDDLE, eligible: ['sloane', 'ryder', 'dolly'] } });
+  const turn = env({ id: '01T', from: 'sloane', act: 'message', body: 'Lane 2.', ts: t0 + 60_000, thread: '01R' });
+  const render = (envs: Envelope[]) =>
+    renderToStaticMarkup(createElement(Stream, { envelopes: envs, roster, liveIds: new Set<string>() }));
+
+  it('splits the topic into its kind and its name instead of printing goal:demo', () => {
+    const html = render([root, turn]);
+    expect(html).not.toContain('goal:demo');
+    expect(html).toContain('lc-hcard__kind">goal<');
+    expect(html).toContain('>demo<');
+  });
+
+  it('shows who is still expected as empty seats, so the room visibly fills', () => {
+    const html = render([root, turn]);
+    expect(html.match(/lc-hcard__waiting-seat/g)).toHaveLength(2);
+    expect(html).toContain('yet to speak');
+  });
+
+  it('marks an open room live, and a closed one not', () => {
+    expect(render([root, turn])).toContain('lc-hcard__live');
+    const closed = env({ id: '01X', from: 'nick', act: 'resolve', body: 'done', ts: t0 + 90_000, thread: '01R' });
+    expect(render([root, turn, closed])).not.toContain('lc-hcard__live');
+  });
+});
