@@ -156,6 +156,9 @@ the terminal around every harness.
   before and after in one session at load average 7–11: `musterd --version` median 317 ms → 61 ms,
   `musterd help` 327 ms → 91 ms, against a `node -e 0` floor of about 49 ms (lane
   `01M3WA77DFGCEV344M9WTFX6NG`).
+- **2026-10-01 — increment 3 measured.** `pnpm bench:cli-start` first-paint median 118 ms (p90 136 ms)
+  at load average about 5, against a `node -e 0` floor of 77 ms in the same run and the 150 ms target
+  (lane `01M3WA7W55F50XC6TFV33K21PR`).
 
 ## Observability & Evaluation
 

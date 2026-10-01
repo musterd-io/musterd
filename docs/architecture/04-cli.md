@@ -70,6 +70,12 @@ src/
     supervise.ts      // runs the harness with the terminal handed over; ignores SIGINT/SIGQUIT, forwards SIGTERM/SIGHUP; the harness's exit code (128+n on a signal)
     rows.ts           // shared row and receipt rendering for the picker and `musterd seats`
     byName.ts         // `musterd <seat>` / `musterd -`: resolve, live check, plan, record, supervise, receipt
+    fuzzy.ts          // subsequence fuzzy scoring over seat addresses; every space-separated term must match; ties break on last use
+    index.ts          // openPicker: paint from the snapshot, then the catalog scan and roster reads patch rows; launches what was picked; MUSTERD_PAINT_PROBE is the bench's first-paint hook
+    picker/
+      state.ts        // the picker as a pure state machine: levels (recent → teams → projects → members), search, keys, the live-seat confirm → state or an outcome
+      view.ts         // pure renderer: state → screen lines; drops the address column below 70 columns and the harness column below 56
+      tty.ts          // the only terminal code: alternate screen, raw mode, keypresses, repaint, restore on every exit path
   help/               // the structured command catalog behind `musterd help` (ADR 113)
     catalog.ts        // pure, import-free command catalog (groups + entries) — the single source guidance:check reads
     plain.ts          // renderPlainHelp(): the uncolored HELP string derived from the catalog (guidance-safe)
@@ -336,6 +342,14 @@ Lane. `promote` is the explicit research-skipped override. Mutation success and 
 specified by `figma-brief-terminal.md`.
 
 **Agent-side reachability nudge (ADR 046).** After any **acting** command returns, `bin.ts` re-resolves the identity (`resolveRead`) and — only when there is one (env/binding — the only sources, ADR 442) — appends a one-line banner to **stderr** naming the directed acts waiting for that member: `⚑ N acts waiting for <me> — musterd inbox (since <t>)`. It is the agent-side mirror of `status`'s comeback summary, surfaced everywhere an agent already is so a heads-down agent can't sit on a `request_help` it never looked for. Built from the same `pendingActionSummary`/`openActionNeeded` predicate, so it self-clears once the inbox cursor advances or the thread is resolved. **Skipped** for commands that show the acts themselves or carry no identity (`inbox`, `nudge`, `status`, `serve`, `service`, `init`, `reset`, `role`, `uninstall`) and suppressed by `--json`/`--quiet`/`MUSTERD_NO_NUDGE=1`. Best-effort: any read failure is swallowed, and the read is bounded at `NUDGE_BUDGET_MS` (1.5 s) because `HttpClient` carries no AbortSignal (lane 01M3ABD9DM: a daemon that accepted the socket and never answered held a hook-fired `session start` for undici's 300 s header timeout after the command had finished) — the nudge never fails a command or delays it past that bound, and never touches stdout (keeps `--json`/pipes clean). No wire change (rides the existing inbox cursor, like `notify`).
+
+### `musterd` (bare)
+
+On a terminal, opens the seat picker ([ADR 491](../decisions/491-seat-launcher.md)): recent seats
+first, letters search every seat, `→` browses teams → projects → members, `⏎` launches fresh, `⌃R`
+resumes, `⇥` switches harness, `esc` goes back or quits (exit 0), `⌃C` quits (exit 130). The first
+screen paints from `~/.musterd/launcher.json`'s snapshot; the catalog scan and the roster reads patch
+it. Piped or redirected, bare `musterd` prints help.
 
 ### `musterd <seat> [-r | --resume] [--harness <id>] [--path] [--force]` · `musterd -`
 

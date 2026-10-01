@@ -1,8 +1,8 @@
+import type { Live } from './live.js';
 import { initialState, type PickerEvent } from './picker/state.js';
 import { runPicker, type PickerIO } from './picker/tty.js';
 import { renderPicker } from './picker/view.js';
 import { launcherFilePath, readLauncherFile, withSnapshot, writeLauncherFile } from './store.js';
-import type { Live } from './live.js';
 
 /**
  * Bare `musterd` on a terminal (ADR 491 Decision 1). Paints from the snapshot first — this module's
