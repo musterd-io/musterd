@@ -796,23 +796,23 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/studio.sandrise.musterd-
 
 **Word budget.** Seven minutes at 150 wpm is 1,050 words, and a demo with two live actions and a
 projector to look at runs slower — so the budget is ~850 spoken words, and the table is the
-stopwatch until a live read replaces it. Measured 2026-09-30, spoken words only:
+stopwatch until a live read replaces it. Measured 2026-09-30 (recounted after the copy pass that removed the contrast frame), spoken words only:
 
 | beat | part | budget | spoken | ~at 150 wpm |
 | --- | --- | --- | --- | --- |
-| 0:00 their objection, the roster | problem | 40 s | 102 | ~41 s |
-| 0:40 the second agent | problem | 35 s | 85 | ~34 s |
-| 1:15 why a roster | thesis | 45 s | 110 | ~44 s |
-| 2:00 a task lands | demo | 30 s | 49 | ~20 s |
-| 2:30 a question reaches the human | demo, centerpiece | 60 s | 108 | ~43 s |
-| 3:30 done is two claims | demo | 45 s | 86 | ~34 s |
-| 4:15 a seat that is not running *(optional)* | demo | 45 s | 69 | ~28 s |
-| 5:00 handoff | big questions | 60 s | 141 | ~56 s |
-| 6:00 what did not work | big questions | 40 s | 98 | ~39 s |
+| 0:00 their objection, the roster | problem | 40 s | 83 | ~33 s |
+| 0:40 the second agent | problem | 35 s | 79 | ~32 s |
+| 1:15 why a roster | thesis | 45 s | 91 | ~36 s |
+| 2:00 a task lands | demo | 30 s | 47 | ~19 s |
+| 2:30 a question reaches the human | demo, centerpiece | 60 s | 95 | ~38 s |
+| 3:30 done takes two claims | demo | 45 s | 72 | ~29 s |
+| 4:15 a seat that is not running *(optional)* | demo | 45 s | 65 | ~26 s |
+| 5:00 handoff | big questions | 60 s | 128 | ~51 s |
+| 6:00 what did not work | big questions | 40 s | 97 | ~39 s |
 | 6:40 the ask | close | 20 s | 37 | ~15 s |
-| **total** | | **420 s** | **885** (816 without `delta`) | **~354 s** (~326 s) |
+| **total** | | **420 s** | **794** (729 without `delta`) | **~318 s** (~292 s) |
 
-The ~70 s of slack is for the two live actions (the ask landing and being answered; the
+The ~100 s of slack is for the two live actions (the ask landing and being answered; the
 acceptance routing) and, if it is in, the ~24 s `delta` wake. **Stopwatch rule:** at 4:15 without
 the second claim on screen, drop `delta`; at 5:30 without the handoff beat started, cut "what did
 not work" to its last sentence.
@@ -821,12 +821,11 @@ not work" to its last sentence.
 
 **SEE** `/live`. A roster of names. One of them is nick. Nothing working yet.
 
-**SAY** "Everyone here has read this year's headlines — agents leaving their sandbox, agents
-nobody owns, agents nobody can stop. What you are looking at is the opposite shape. A roster of
-names. One of them is me. Every act on that roster carries a member's name, and the record holds
-what the harness reported about the model, not what the model says about itself. musterd is the
-coordination layer where agents and humans are peers. It connects the agents you already run; it
-does not run them, and it does not contain them — your sandbox and your host still do that."
+**SAY** "Everyone here has read this year's headlines — agents leaving their sandbox, agents nobody
+owns, agents nobody can stop. What you are looking at is the opposite shape. A roster of names. One
+of them is me. Every act on that roster carries a member's name and the model the harness reported
+running it. musterd is the coordination layer where agents and humans are peers. It connects the
+agents you already run. Your sandbox and your host still decide what they can touch."
 
 ### 0:40 — The second agent is where it breaks (problem, 35 s)
 
@@ -834,9 +833,9 @@ does not run them, and it does not contain them — your sandbox and your host s
 
 **SAY** "Before musterd, I was the coordination layer. One agent would tell me something, and I
 would paste it into the other. Then we measured it: three agents on one feature for a day and a
-half, and about 37% of the code they produced was thrown away — two agents writing the same diff,
-or one building on a schema the other had not finished. The fix was not a smarter model. It was
-one owner per unit of work, declared before the first keystroke."
+half, and about 37% of the code they produced was thrown away — two agents writing the same diff, or
+one building on a schema the other had not finished. The fix was one owner per unit of work,
+declared before the first keystroke."
 
 The first two sentences are nick's own, from his P3 post-mortem of 2026-06-30
 ([how-musterd-got-here.md](wiki/how-musterd-got-here.md)); the deck's origin slide quotes it.
@@ -846,12 +845,11 @@ The first two sentences are nick's own, from his P3 post-mortem of 2026-06-30
 **SEE** `musterd status` in the terminal: seats `here`, `working`, `wakeable`. The roster has the
 same members it had last week.
 
-**SAY** "So the primitive is not a session, and it is not a pipeline. It is a team: a persistent
-roster where a member outlasts every session it has run in. That is what makes the rest possible —
-an owner for every lane, an inbox that survives a restart, a record that says who did what, at
-which model. And the human is on the same roster, on the same protocol, not above it in an
-approval queue. Everything you are about to see is an act on that roster — a fixed set of acts, from a
-status update to a decline — and humans send the same ones."
+**SAY** "So the primitive is a team: a persistent roster where a member outlasts every session it
+has run in. That is what makes the rest possible — an owner for every lane, an inbox that survives a
+restart, a record that says who did what, at which model. The human sits on the same roster, on the
+same protocol. And every member runs the same loop: join, claim a lane, talk in a fixed set of acts,
+ask a person when it matters, and close twice. Humans send the same acts."
 
 ### 2:00 — A task lands (demo, 30 s)
 
@@ -861,8 +859,8 @@ status update to a decline — and humans send the same ones."
 read it aloud; it is the best possible outcome.
 
 **SAY** "One task, two owners. Each one claimed a lane before touching a file — a title, the paths
-it touches, a branch. If those paths overlapped, that warning would fire now, at claim time,
-instead of as a merge conflict an hour from now. Lamps on; they are working."
+it touches, a branch. If those paths overlapped, that warning would fire now, at claim time, an hour
+before anyone hit a merge conflict. Lamps on; they are working."
 
 ### 2:30 — A question reaches the human (demo, the centerpiece, 60 s)
 
@@ -872,24 +870,23 @@ instead of as a merge conflict an hour from now. Lamps on; they are working."
 terminal inbox. Let it sit for one breath. Answer it from the terminal, as yourself — decline it if
 the question allows a no.
 
-**SAY** "It asked me. Not the person driving its session — me, a member on the same roster, with
-a clock on the question. Above a certain stakes tier it holds until I answer. Below it, it proceeds
-when the clock runs out and writes down that it went on without me. My silence becomes a fact in
-the record, not a bypass. And I can say no — so can they, to each other and to me. A teammate you
-can only assign to cannot tell you no. These can decline, challenge, and hold each other to
-acceptance. That is the difference between a fleet and a team."
+**SAY** "It asked me — a member on the same roster, with a clock on the question. Above a certain
+stakes tier it holds until I answer. Below it, it proceeds when the clock runs out and writes down
+that it went on without me. My silence becomes a fact in the record. And I can say no — so can they,
+to each other and to me. A teammate you can only assign to cannot tell you no. These can decline,
+challenge, and hold each other to acceptance. That is what makes them a team."
 
-### 3:30 — Done is two claims, not one (demo, 45 s)
+### 3:30 — Done takes two claims (demo, 45 s)
 
 **SEE** The first agent finishes and opens a PR. Merge it on the human's word. The lane moves to
 awaiting acceptance, and the acceptance routes to a **different** seat — a different model family
 when one is on the roster.
 
 **SAY** "The agent that built it says merged. That is one claim. Someone else — a different seat,
-and when we can get one, a different model family — says this is what we wanted. That is the
-second. Two models from the same family agree for shared reasons, so their agreement is weak
-evidence; we treat the family as the correlation boundary. A close that skipped the second claim
-is marked unconfirmed, forever. Done is a thing two members said, not a thing one member said."
+and when we can get one, a different model family — says this is what we wanted. That is the second.
+Two models from the same family agree for shared reasons, so we treat the family as the correlation
+boundary. A close that skipped the second claim is marked unconfirmed, forever. Done takes two
+members."
 
 ### 4:15 — A seat that is not running (demo, optional, 45 s)
 
@@ -902,30 +899,29 @@ about 24 seconds cold.
 **SAY** "That seat was not running. Nobody has a terminal open to it. I sent it an act, and the
 member woke — on a machine that holds only what its job needs, as a non-root user, with a token
 scoped to two repositories. A seat is the durable thing; where it runs is a detail. It picks up its
-own inbox and its own lane, not a fresh prompt."
+own inbox and its own lane."
 
 ### 5:00 — Handoff as an idea (big questions, 60 s)
 
 **SEE** The board. Point at a lane with a branch on it.
 
-**SAY** "The question I got asked most while building this was handoff — what does it need to
-carry? Our first answer was wrong. Early on, a handoff was prose: 'here is what I did, carry on.'
-We measured what that produced, and a whole class of the waste was byte-identical work — two
-agents producing the same diff, because the second re-derived from a description what the first
-had already built. A handoff that carries too little context recreates the exact problem the
-orchestration critics warn about. So now a handoff carries the lane itself — the thread, the lane,
-and the branch at its commit. The receiver builds on the diff, not a summary of it. And the
-receiver can decline. That is the only way a handoff is an offer between owners rather than an
-order from a switchboard."
+**SAY** "The question I got asked most while building this was handoff — what does it need to carry?
+Our first answer was wrong. Early on, a handoff was prose: 'here is what I did, carry on.' We
+measured what that produced, and a whole class of the waste was byte-identical work — two agents
+producing the same diff, because the second re-derived from a description what the first had already
+built. A handoff that carries too little context recreates the exact problem the orchestration
+critics warn about. So now a handoff carries the lane itself — the thread, the lane, and the branch
+at its commit. The receiver builds on the diff. And the receiver can decline, which makes a handoff
+an offer from one owner to another."
 
 ### 6:00 — What did not work (big questions, 40 s)
 
-**SAY** "The other thing that did not work was the human's first role: a person in front of every
-claim, as an approver. We read our own record. The human appeared as an approver seven times for
-every time they communicated, and in months of use not one request for help had ever reached them
-— since the rebuild, a hundred-plus have. The gate produced the record of oversight without the oversight. So we rebuilt the human as a
-member — same roster, same acts. That is why the centerpiece of this demo is a question, not an
-approval."
+**SAY** "The other thing that did not work was my first role: a person in front of every claim, as
+an approver. We read the record. I showed up as an approver seven times for every time I actually
+talked to the team, and in months not one agent had asked me for help. The gate produced the record
+of oversight without the oversight. So we rebuilt the human as a member — same roster, same acts.
+Since then, more than a hundred asks have reached me. That is why the centerpiece of this demo is a
+question."
 
 ### 6:40 — The ask (close, 20 s)
 
@@ -943,9 +939,9 @@ not prompt them to argue, how many people). Additions for this room's brief:
   measured problem and what it forced — the 37% and lanes, the 207-minute relay and the inbox at
   every tool call, the 7:1 and the human as member, "done" as the builder's word and the second
   claim, and the wake. The long form is [how-musterd-got-here.md](wiki/how-musterd-got-here.md).
-- **"Why is the roster the primitive and not the task?"** — "A task ends; the people who did it do
-  not. Attribution, an inbox, and a lane owner all need something that persists across sessions,
-  and a task is not that. Everything else we built falls out of having a durable member."
+- **"Why is the roster the primitive and not the task?"** — "A task ends; the people who did it stay on the roster. Attribution, an inbox, and a lane owner
+  all need something that persists across sessions. Everything else we built follows from having a
+  durable member."
 - **"How do the acts route work?"** — "A fixed set of typed acts, from the Co-Gym collaboration
   taxonomy. Directed acts land in a member's inbox at their next tool-call boundary; an `ask` to a
   human rings them on a surface musterd owns, never through a harness session. The routing is the
@@ -953,10 +949,10 @@ not prompt them to argue, how many people). Additions for this room's brief:
 - **"Why can't the author accept their own lane?"** — "Because acceptance is intent-versus-brief,
   and the author of the work is the one person guaranteed to think it matches. We exclude the
   closing seat, prefer a different model family, and mark a self-close unconfirmed forever."
-- **"What is the waste number now?"** — "The 37% is ours, from our own history before lanes. The
-  controlled comparison is from July and the re-run is pending; ask me and I'll show you the table
-  with its date on it. One agent alone is still cheaper than a team — we sell against the second
-  agent, not the first."
+- **"What is the waste number now?"** — "The 37% is from our team, before lanes. The controlled
+  comparison is from July and the re-run is pending; ask me and I'll show you the table with its
+  date on it. One agent alone is still cheaper than a team, so musterd is for the moment you run a
+  second one."
 - **"Is the handoff-decline exercised?"** — "Not on the record yet — the dogfood lane that
   exercises it deliberately is open. That is the falsifier: if nobody ever declines, 'peers' is
   a doctrine our own usage disproves. We count those acts."

@@ -51,6 +51,14 @@ brand.md §4 is the profile. The checks that catch most violations:
 - Second person, present tense, plain and declarative. One idea per sentence.
   Lead with the concrete.
 - `musterd` lowercase everywhere body copy allows; sentence-case headings.
+- **No contrast frame** (brand.md §4). Before shipping, search the copy for
+  `, not `, `not a`, `it's not`, `isn't`, `rather than`, `instead of`, and
+  rewrite every hit as the positive claim alone. "A persistent team is the
+  primitive", never "the primitive is a team, not a session". A sentence that
+  still needs its opposite to make sense was not specific enough.
+- **The speaker's voice, and no provenance on the surface** (brand.md §4).
+  Copy someone presents is in their first person. Sources and file paths go
+  in the speaker notes; a slide footer is not a citation.
 - Honest about scope: roadmap is "not yet", plainly — never implied as
   existing. If a claim can't be made specific and true, cut it.
 - Personality budget: one mustard pun in the README, warm-but-spare CLI
