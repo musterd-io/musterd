@@ -43,6 +43,8 @@ import {
 } from '../live/memberIdentity';
 import { firehoseSound, roomTone } from '../live/sound';
 import { useLiveStream } from '../live/useLiveStream';
+import { HealthBanner } from '../live/HealthBanner';
+import { useServerHealth } from '../live/serverHealth';
 import { officeRoom } from '../live/officeRoom';
 import { useWorkingOn } from '../live/useWorkingOn';
 import { useReport } from '../live/useReport';
@@ -205,6 +207,8 @@ function LivePage() {
     recoverAttempts.current = 0;
   }, []);
 
+  // Cloud spec §7: a server that cannot reach its database says so on /health; show it.
+  const outage = useServerHealth();
   const stream = useLiveStream(cfg, {
     onCredentialInvalid: recoverObserver,
     onConnected: armRecovery,
@@ -517,6 +521,7 @@ function LivePage() {
 
   return (
     <main className="lc">
+      <HealthBanner reason={outage} />
       <header className="lc__topbar">
         {/* Operator chrome only. The team name and the connection/present signal moved into the
             office overlay, which carries them over the scene on both /live and /broadcast — repeating
