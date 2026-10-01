@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
+import type { Driver } from '../db/driver.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 
@@ -23,6 +24,14 @@ withDrivers('shutdown', (_o, kind) => {
    * an explicit timeout: a hang is the actual production symptom.
    */
   let server: RunningServer | null = null;
+  let db: Driver;
+
+  // The driver opens OUTSIDE each test's 5 s bound. A worker's first PGlite open pays the WASM boot
+  // and the migrations, and under CI load that alone ran past 5 s (main, 2026-10-01, run
+  // 36820631249) — a false "hang". The bound is for close(), the production symptom.
+  beforeEach(async () => {
+    db = await openTestDriver(kind);
+  });
 
   afterEach(() => {
     server = null;
@@ -40,7 +49,7 @@ withDrivers('shutdown', (_o, kind) => {
 
   describe('RunningServer.close() with live WebSocket clients', () => {
     it('resolves promptly while a client is connected (the daemon must always be able to exit)', async () => {
-      server = createServer({ db: await openTestDriver(kind), port: 0 });
+      server = createServer({ db, port: 0 });
       const { port } = await server.listen();
       const ws = await connect(port);
       expect(ws.readyState).toBe(WebSocket.OPEN);
@@ -52,7 +61,7 @@ withDrivers('shutdown', (_o, kind) => {
     }, 5_000);
 
     it('disconnects the client rather than leaving an orphaned socket', async () => {
-      server = createServer({ db: await openTestDriver(kind), port: 0 });
+      server = createServer({ db, port: 0 });
       const { port } = await server.listen();
       const ws = await connect(port);
       const closed = new Promise<void>((resolve) => ws.once('close', () => resolve()));
@@ -64,7 +73,7 @@ withDrivers('shutdown', (_o, kind) => {
     }, 5_000);
 
     it('still resolves with several clients connected (a full team, not one seat)', async () => {
-      server = createServer({ db: await openTestDriver(kind), port: 0 });
+      server = createServer({ db, port: 0 });
       const { port } = await server.listen();
       const clients = await Promise.all([
         await connect(port),
@@ -78,7 +87,7 @@ withDrivers('shutdown', (_o, kind) => {
     }, 5_000);
 
     it('is idempotent — a second signal must not throw or hang', async () => {
-      server = createServer({ db: await openTestDriver(kind), port: 0 });
+      server = createServer({ db, port: 0 });
       const { port } = await server.listen();
       const ws = await connect(port);
 

@@ -3231,7 +3231,11 @@ withDrivers('integration', (_o, kind) => {
         );
         expect(decided.status).toBe(200);
         expect((await challenger.waitFor('occupied')).type).toBe('occupied');
-        await expect(incumbent.waitFor('error', 50)).rejects.toThrow(/timeout/);
+        // The "not yet" half races the 120 ms grace timer, exactly as in the reconnect case below:
+        // under CI load the PGlite double let the grace elapse before the wait began (main,
+        // 2026-10-01, run 36820631249), so it is asserted on SQLite only.
+        if (kind === 'sqlite')
+          await expect(incumbent.waitFor('error', 50)).rejects.toThrow(/timeout/);
         expect(await incumbent.waitFor('error', 1000)).toMatchObject({
           code: 'superseded',
           same_workspace: true,
