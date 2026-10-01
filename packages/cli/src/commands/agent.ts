@@ -90,6 +90,10 @@ export async function agentCommand(
     http,
     harnesses,
     toolkit,
+    // A re-run (the documented grant repair) that names no --harness / --profile keeps what the
+    // Workspace already records, so it never unwires a harness `init` or `harness configure` added.
+    keepDesired: flagStr(parsed.flags, 'harness') === undefined,
+    keepToolkit: flagStr(parsed.flags, 'profile') === undefined,
     sourceDir: process.cwd(),
     rosterHome: loadConfig().rosterHome[team],
     role,

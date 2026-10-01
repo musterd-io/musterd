@@ -1,6 +1,6 @@
 import type { HttpClient } from '../client.js';
 import { CliError } from '../errors.js';
-import { writeSeatFile } from '../roster.js';
+import { seatFileExists, writeSeatFile } from '../roster.js';
 import { provisionSeat } from './provisionSeat.js';
 import type { ReconcileReport, reconcileHarnesses } from './reconcile/engine.js';
 import { provisionWorkspace, type Workspace } from './workspace.js';
@@ -20,6 +20,9 @@ export interface AgentSeatInput {
   >;
   harnesses: string[];
   toolkit: string;
+  /** Keep a Workspace's recorded desired set / toolkit (the caller named none). */
+  keepDesired?: boolean | undefined;
+  keepToolkit?: boolean | undefined;
   /** The checkout the new Workspace is made from (its git root and layout group). */
   sourceDir: string;
   /** Start commit for a new branch (`resolveBaseRef`). */
@@ -49,7 +52,11 @@ export async function provisionAgentSeat(input: AgentSeatInput): Promise<AgentSe
     ...(input.role ? { role: input.role } : {}),
     ...(input.hue !== undefined ? { hue: input.hue } : {}),
   };
-  if (input.rosterHome) writeSeatFile(input.rosterHome, name, { kind: 'agent', ...declared });
+  // ADR 058 §5: a file-backed team's seat file is written first — but only when there is none. The
+  // file is the single writer: rewriting it would drop a reused agent's role and hue, or turn a
+  // human teammate's file into an agent's before the kind check below refuses the name.
+  if (input.rosterHome && !seatFileExists(input.rosterHome, name))
+    writeSeatFile(input.rosterHome, name, { kind: 'agent', ...declared });
 
   // Idempotent: an already-declared agent is reused and its Workspace (re)built. `forbidden` for a
   // sponsor provisioning the agent they created (ADR 463 §3) is not adding a member either; the
@@ -88,6 +95,8 @@ export async function provisionAgentSeat(input: AgentSeatInput): Promise<AgentSe
     wiring: {
       desired: input.harnesses,
       toolkit: input.toolkit,
+      keepDesired: input.keepDesired === true,
+      keepToolkit: input.keepToolkit === true,
       ...(input.reconcile ? { reconcile: input.reconcile } : {}),
     },
     model: input.model,

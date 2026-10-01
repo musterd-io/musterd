@@ -37,7 +37,9 @@ export async function openPicker(
   );
   if (outcome.kind === 'quit') return outcome.code;
   if (outcome.kind === 'create') {
-    process.stderr.write(`setting up ${outcome.member} in ${outcome.team}/${outcome.project}…\n`);
+    process.stderr.write(
+      `setting up ${outcome.member} in ${outcome.team}/${outcome.project} (fetching origin first)…\n`,
+    );
     const [{ createSeat }, { buildCatalog }, { loadConfig }, os] = await Promise.all([
       import('./create.js'),
       import('./catalog.js'),

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -45,7 +45,7 @@ vi.mock('../config.js', () => ({
   saveBinding: h.saveBinding,
   saveWorkspaceSpec: h.saveWorkspaceSpec,
 }));
-vi.mock('../roster.js', () => ({ writeSeatFile: h.writeSeatFile }));
+vi.mock('../roster.js', () => ({ writeSeatFile: h.writeSeatFile, seatFileExists: () => false }));
 vi.mock('../onboard/harnesses/index.js', () => ({
   harnessAdapters: () =>
     ['claude-code', 'cursor', 'codex', 'opencode', 'grok', 'musterd'].map((id) => ({ id })),
@@ -159,27 +159,24 @@ describe('musterd agent <name>', () => {
     expect(specArg['surface']).toBeUndefined();
   });
 
-  it('writes the ADR 261 permissions floor into the WORKTREE so a non-interactive seat works day one', async () => {
+  it('records the desired set for the engine, which writes the ADR 261 floor as a ledger-owned fragment (spec §4.7(2))', async () => {
     const code = await agentCommand(parseArgs(['June']));
     expect(code).toBe(0);
-    const settings = JSON.parse(
-      readFileSync(join(h.workspace.dir, '.claude', 'settings.local.json'), 'utf8'),
-    ) as { permissions?: { allow?: string[]; deny?: string[] } };
-    // The ryder shape, closed at the source: Edit/Write and the repo gates present, no deny.
-    expect(settings.permissions?.allow).toEqual(expect.arrayContaining(['Edit', 'Write', 'Read']));
-    expect(settings.permissions?.allow?.some((e) => e.startsWith('Bash(pnpm '))).toBe(true);
-    expect(settings.permissions?.deny ?? []).toEqual([]);
+    // The floor is the claude-code permissions fragment (claudeCodeFragments.test.ts), so
+    // `uninstall` can release it; this command records intent and hands it to the engine.
+    expect(
+      JSON.parse(readFileSync(join(h.workspace.dir, '.musterd', 'provisioned.json'), 'utf8')),
+    ).toMatchObject({ desired: ['claude-code'], toolkit: '' });
+    expect(h.reconcile.mock.calls[0]![1]).toEqual(['claude-code']);
   });
 
-  it('--profile read-only layers the deny ceiling over the floor (ADR 261 decision 3)', async () => {
+  it('--profile read-only records that toolkit, whose deny ceiling the engine layers over the floor (ADR 261 decision 3)', async () => {
     const code = await agentCommand(parseArgs(['Watcher', '--profile', 'read-only']));
     expect(code).toBe(0);
-    const settings = JSON.parse(
-      readFileSync(join(h.workspace.dir, '.claude', 'settings.local.json'), 'utf8'),
-    ) as { permissions?: { allow?: string[]; deny?: string[] } };
-    expect(settings.permissions?.deny).toEqual(expect.arrayContaining(['Edit', 'Write']));
-    // Deny-wins-allows-kept: the floor's allows stay present and inert under the ceiling.
-    expect(settings.permissions?.allow).toContain('Read');
+    expect(
+      JSON.parse(readFileSync(join(h.workspace.dir, '.musterd', 'provisioned.json'), 'utf8'))
+        .toolkit,
+    ).toBe('read-only');
   });
 
   it('--profile provisions the workspace without touching the team fact (ADR 272 inc 2)', async () => {
@@ -197,11 +194,11 @@ describe('musterd agent <name>', () => {
       kind: 'agent',
       role: 'read-only',
     });
-    const settings = JSON.parse(
-      readFileSync(join(h.workspace.dir, '.claude', 'settings.local.json'), 'utf8'),
-    ) as { permissions?: { deny?: string[] } };
-    // Even a label that NAMES a profile compiles no ceiling — the coupling is what inc 2 removed.
-    expect(settings.permissions?.deny ?? []).toEqual([]);
+    // Even a label that NAMES a toolkit records none — the coupling is what inc 2 removed.
+    expect(
+      JSON.parse(readFileSync(join(h.workspace.dir, '.musterd', 'provisioned.json'), 'utf8'))
+        .toolkit,
+    ).toBe('');
   });
 
   it('--role <label> --profile <name> sets the label from one and the workspace from the other', async () => {
@@ -214,10 +211,10 @@ describe('musterd agent <name>', () => {
       kind: 'agent',
       role: 'auditor',
     });
-    const settings = JSON.parse(
-      readFileSync(join(h.workspace.dir, '.claude', 'settings.local.json'), 'utf8'),
-    ) as { permissions?: { deny?: string[] } };
-    expect(settings.permissions?.deny).toEqual(expect.arrayContaining(['Edit', 'Write']));
+    expect(
+      JSON.parse(readFileSync(join(h.workspace.dir, '.musterd', 'provisioned.json'), 'utf8'))
+        .toolkit,
+    ).toBe('read-only');
   });
 
   it('an unknown --profile still creates the seat — permissions are best-effort (floor-only, no throw)', async () => {
@@ -453,5 +450,24 @@ describe('musterd agent <name> --hue (ADR 374)', () => {
     await expect(agentCommand(parseArgs(['June', '--hue', '360']))).rejects.toThrow(/0.*359/);
     expect(h.writeSeatFile).not.toHaveBeenCalled();
     expect(h.addMember).not.toHaveBeenCalled();
+  });
+
+  it('a re-run that names no --harness keeps the Workspace recorded set (review I1)', async () => {
+    mkdirSync(join(h.workspace.dir, '.musterd'), { recursive: true });
+    writeFileSync(
+      join(h.workspace.dir, '.musterd', 'provisioned.json'),
+      JSON.stringify({
+        version: 3,
+        toolkit: '',
+        desired: ['claude-code', 'codex'],
+        contributions: {},
+        provisionedAt: 'x',
+      }),
+    );
+    await agentCommand(parseArgs(['June']));
+    expect(h.reconcile.mock.calls[0]![1]).toEqual(['claude-code', 'codex']);
+    h.reconcile.mockClear();
+    await agentCommand(parseArgs(['June', '--harness', 'cursor']));
+    expect(h.reconcile.mock.calls[0]![1]).toEqual(['cursor']);
   });
 });

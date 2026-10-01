@@ -117,10 +117,9 @@ describe('provisionSeat (ADR 463 §3, ADR 491)', () => {
     });
   });
 
-  it('keeps the ADR 261 permissions floor in the Workspace', async () => {
+  it('never writes the permissions floor itself — the engine fragment owns it (spec §4.7(2))', async () => {
     await provisionSeat(input());
-    const settings = JSON.parse(readFileSync(join(dir, '.claude', 'settings.local.json'), 'utf8'));
-    expect(settings.permissions.allow.length).toBeGreaterThan(0);
+    expect(existsSync(join(dir, '.claude', 'settings.local.json'))).toBe(false);
   });
 
   it('mints a credential scoped to this one seat, labelled by its first harness', async () => {
@@ -238,5 +237,66 @@ describe('provisionSeat (ADR 463 §3, ADR 491)', () => {
     const b = readBinding();
     expect(b.model).toBeUndefined();
     expect(b.driver).toBeUndefined();
+  });
+
+  it('keeps the recorded desired set and toolkit when the caller named neither (review I1)', async () => {
+    mkdirSync(join(dir, '.musterd'), { recursive: true });
+    writeFileSync(
+      join(dir, '.musterd', 'provisioned.json'),
+      JSON.stringify({
+        version: 3,
+        toolkit: 'old',
+        desired: ['claude-code', 'codex'],
+        contributions: {},
+        provisionedAt: 'x',
+      }),
+    );
+    const i = input({
+      wiring: {
+        desired: ['claude-code'],
+        toolkit: '',
+        keepDesired: true,
+        keepToolkit: true,
+        reconcile: vi.fn(async () => report() as never),
+      },
+    });
+    await provisionSeat(i);
+    const prov = JSON.parse(readFileSync(join(dir, '.musterd', 'provisioned.json'), 'utf8'));
+    expect(prov).toMatchObject({ desired: ['claude-code', 'codex'], toolkit: 'old' });
+    expect((i.wiring.reconcile as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1]).toEqual([
+      'claude-code',
+      'codex',
+    ]);
+  });
+
+  it('revokes the credential when writing the binding fails after the mint (review I4)', async () => {
+    const file = join(dir, 'not-a-folder');
+    writeFileSync(file, 'x');
+    const i = input({ workspace: () => ({ dir: file, kind: 'folder', created: false }) });
+    await expect(provisionSeat(i)).rejects.toThrow();
+    expect(i.http.revokeBootstrapCredential).toHaveBeenCalledWith('acme', 'cred-1');
+  });
+
+  it('a selected harness that is not installed is incomplete wiring, not wired (review I5)', async () => {
+    const pending = {
+      ok: true,
+      results: [
+        {
+          harness: 'codex',
+          resourceKey: '',
+          scope: '',
+          action: 'none',
+          result: 'pending',
+          recovery: 'none',
+          detail: 'codex not found',
+        },
+      ],
+    };
+    const r = await provisionSeat(
+      input({
+        wiring: { desired: ['codex'], toolkit: '', reconcile: vi.fn(async () => pending as never) },
+      }),
+    );
+    expect(r.wiringError).toBe('codex: pending — codex not found');
   });
 });

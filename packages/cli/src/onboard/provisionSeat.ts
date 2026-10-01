@@ -2,10 +2,8 @@ import type { Binding } from '@musterd/protocol';
 import type { HttpClient } from '../client.js';
 import { saveBinding, saveWorkspaceSpec } from '../config.js';
 import { loadProvisioning, saveProvisioning } from './manifest.js';
-import { installSeatPermissions } from './permissions.js';
 import { defaultHarnessContext } from './reconcile/context.js';
 import { reconcileHarnesses, type ReconcileReport } from './reconcile/engine.js';
-import { loadToolkit } from './toolkit.js';
 import type { Workspace } from './workspace.js';
 
 /**
@@ -15,8 +13,8 @@ import type { Workspace } from './workspace.js';
  * wiring. `musterd agent`, a sponsor's host and the launcher all run it.
  *
  * The caller owns declaring the member, the seat file, and creating the Workspace, which arrives as
- * a factory called AFTER the mint. A factory that throws gets the minted credential revoked: there
- * is no other rollback, and every step is idempotent, so running the same set-up again finishes it.
+ * a factory called AFTER the mint. Any failure before the desired set is recorded revokes the minted
+ * credential; after that, every step is idempotent, so running the same set-up again finishes it.
  */
 export interface ProvisionSeatInput {
   team: string;
@@ -26,8 +24,18 @@ export interface ProvisionSeatInput {
     Partial<Pick<HttpClient, 'revokeBootstrapCredential'>>;
   /** Create (or reuse) the seat's Workspace. Called once, after the credential is minted. */
   workspace: () => Workspace;
-  /** The harnesses this Workspace launches (the ADR 281 desired set) and its toolkit. */
-  wiring: { desired: string[]; toolkit: string; reconcile?: typeof reconcileHarnesses };
+  /**
+   * The harnesses this Workspace launches (the ADR 281 desired set) and its toolkit. `keepDesired` /
+   * `keepToolkit`: a Workspace that already records one keeps it — a re-run that named no
+   * `--harness` / `--profile` must not unwire what `init` or `harness configure` added.
+   */
+  wiring: {
+    desired: string[];
+    toolkit: string;
+    keepDesired?: boolean;
+    keepToolkit?: boolean;
+    reconcile?: typeof reconcileHarnesses;
+  };
   /** A declared model for the seat's binding (ADR 101). Never a guess. */
   model?: string | undefined;
   /** The human steering this seat, if any (ADR 155). */
@@ -45,7 +53,8 @@ export interface ProvisionSeatResult {
   wiringError: string | null;
 }
 
-const WIRED = new Set(['applied', 'unchanged', 'satisfied-unmanaged', 'pending']);
+/** `pending` (selected but not installed) is NOT wired: launching it would fail at spawn. */
+const WIRED = new Set(['applied', 'unchanged', 'satisfied-unmanaged']);
 
 /** Throws only when the credential cannot be minted or the Workspace cannot be made. */
 export async function provisionSeat(input: ProvisionSeatInput): Promise<ProvisionSeatResult> {
@@ -69,52 +78,48 @@ export async function provisionSeat(input: ProvisionSeatInput): Promise<Provisio
     grant = undefined;
   }
 
+  // Everything from here to the recorded desired set can fail after the mint (the Workspace, a
+  // full disk, a corrupt `.musterd`). Any failure revokes the credential, which is then written
+  // nowhere, so it cannot be left live (spec §4.7(3)). The standing grant has no revoke API.
   let ws: Workspace;
+  let desired: string[];
   try {
     ws = input.workspace();
+    const binding: Binding = {
+      version: 2,
+      server,
+      team,
+      agent_key: agentKey,
+      claim: { mode: 'seat', name },
+      ...(grant !== undefined ? { grant } : {}),
+      ...(input.model !== undefined ? { model: input.model } : {}),
+      // Per-Workspace, never the shared harness entry (ADR 165 inc 2).
+      autojoin: true,
+      ...(input.driver ? { driver: input.driver } : {}),
+    };
+    saveBinding(ws.dir, binding);
+    saveWorkspaceSpec(ws.dir, { version: 2, server, team, claim: { mode: 'seat', name } });
+
+    // Desire BEFORE reconciliation (ADR 282): a stop right after this leaves honest intent that the
+    // next `musterd wire` resumes. A re-provisioned Workspace keeps its recorded contributions. The
+    // permissions floor is the engine's fragment (spec §4.7(2)), so it is ledger-owned and
+    // `uninstall` can release it — nothing here writes it directly.
+    const prior = loadProvisioning(ws.dir);
+    const recorded = prior.kind === 'valid' ? prior.value : null;
+    desired = input.wiring.keepDesired && recorded ? recorded.desired : input.wiring.desired;
+    saveProvisioning(ws.dir, {
+      version: 3,
+      toolkit: input.wiring.keepToolkit && recorded ? recorded.toolkit : input.wiring.toolkit,
+      desired,
+      contributions: recorded?.contributions ?? {},
+      provisionedAt: new Date().toISOString(),
+    });
   } catch (err) {
-    const id = (mint.credential as { id?: string } | undefined)?.id;
-    if (id && http.revokeBootstrapCredential) {
-      await http.revokeBootstrapCredential(team, id).catch(() => undefined);
+    if (http.revokeBootstrapCredential) {
+      await http.revokeBootstrapCredential(team, mint.credential.id).catch(() => undefined);
     }
     throw err;
   }
-
-  const binding: Binding = {
-    version: 2,
-    server,
-    team,
-    agent_key: agentKey,
-    claim: { mode: 'seat', name },
-    ...(grant !== undefined ? { grant } : {}),
-    ...(input.model !== undefined ? { model: input.model } : {}),
-    // Per-Workspace, never the shared harness entry (ADR 165 inc 2).
-    autojoin: true,
-    ...(input.driver ? { driver: input.driver } : {}),
-  };
-  saveBinding(ws.dir, binding);
-  // ADR 261: the permissions floor (plus the toolkit's lists) lands with the binding, so a
-  // non-interactive session can write on day one. Best-effort: it never fails seat creation.
-  try {
-    installSeatPermissions(
-      ws.dir,
-      input.wiring.toolkit ? loadToolkit(ws.dir, input.wiring.toolkit) : undefined,
-    );
-  } catch {
-    // an unknown toolkit or a broken settings file — `musterd init --check` reports it
-  }
-  saveWorkspaceSpec(ws.dir, { version: 2, server, team, claim: { mode: 'seat', name } });
-
-  // Desire BEFORE reconciliation (ADR 282): a stop right after this leaves honest intent that the
-  // next `musterd wire` resumes. A re-provisioned Workspace keeps its recorded contributions.
-  const prior = loadProvisioning(ws.dir);
-  saveProvisioning(ws.dir, {
-    version: 3,
-    toolkit: input.wiring.toolkit,
-    desired: input.wiring.desired,
-    contributions: prior.kind === 'valid' ? prior.value.contributions : {},
-    provisionedAt: new Date().toISOString(),
-  });
 
   let wiring: ReconcileReport | null = null;
   let wiringError: string | null = null;
@@ -124,7 +129,7 @@ export async function provisionSeat(input: ProvisionSeatInput): Promise<Provisio
     process.chdir(ws.dir);
     wiring = await (input.wiring.reconcile ?? reconcileHarnesses)(
       defaultHarnessContext(ws.dir, process.env, { team }),
-      input.wiring.desired,
+      desired,
       { legacyRepair: false },
     );
     const bad = wiring.results.filter((r) => !WIRED.has(r.result));

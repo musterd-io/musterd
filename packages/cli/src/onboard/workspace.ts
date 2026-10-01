@@ -179,10 +179,13 @@ function addWorktree(top: string, dir: string, branch: string, base?: string): v
  */
 export function resolveBaseRef(top: string): string | null {
   try {
+    // Never prompt: git's HTTPS credential prompt and ssh's passphrase / host-key prompts open
+    // /dev/tty directly, which `stdio: 'ignore'` does not stop — they would hang the launcher.
     execFileSync('git', ['fetch', 'origin', '--quiet'], {
       cwd: top,
       timeout: 20_000,
       stdio: 'ignore',
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_SSH_COMMAND: 'ssh -o BatchMode=yes' },
     });
   } catch {
     // offline or no origin — fall back to what is already fetched

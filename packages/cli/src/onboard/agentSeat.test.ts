@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CliError } from '../errors.js';
+import { readSeatFiles, writeSeatFile } from '../roster.js';
 import { provisionAgentSeat, type AgentSeatInput } from './agentSeat.js';
 
 let dir: string;
@@ -63,5 +64,30 @@ describe('provisionAgentSeat (ADR 491)', () => {
       members: [{ name: 'ada', kind: 'human' }],
     });
     await expect(provisionAgentSeat(i)).rejects.toThrow(/as a human, not an agent/);
+  });
+
+  it('never rewrites an existing seat file — a human seat stays human, an agent keeps its role (review I3)', async () => {
+    const home = join(dir, 'roster');
+    writeSeatFile(home, 'nick', { kind: 'human', role: 'founder' });
+    const i = input({ name: 'nick', rosterHome: home });
+    (i.http.addMember as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new CliError('exists', 9, 'conflict'),
+    );
+    (i.http.roster as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      members: [{ name: 'nick', kind: 'human' }],
+    });
+    await expect(provisionAgentSeat(i)).rejects.toThrow(/as a human/);
+    expect(readSeatFiles(home)['nick']).toMatchObject({ kind: 'human', role: 'founder' });
+
+    writeSeatFile(home, 'ada', { kind: 'agent', role: 'engineer' });
+    const j = input({ rosterHome: home });
+    (j.http.addMember as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new CliError('exists', 9, 'conflict'),
+    );
+    (j.http.roster as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      members: [{ name: 'ada', kind: 'agent' }],
+    });
+    await provisionAgentSeat(j);
+    expect(readSeatFiles(home)['ada']).toMatchObject({ kind: 'agent', role: 'engineer' });
   });
 });
