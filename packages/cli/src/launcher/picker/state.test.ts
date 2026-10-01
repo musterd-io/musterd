@@ -82,7 +82,7 @@ describe('picker state (spec §3)', () => {
       kind: 'launch',
       seat: SEATS[0],
       mode: 'fresh',
-      harness: null,
+      harness: 'claude-code',
       force: false,
     });
     expect(press(s0, k('down'), k('r', { ctrl: true })).outcome).toMatchObject({
@@ -150,7 +150,7 @@ describe('picker state (spec §3)', () => {
       kind: 'launch',
       seat: SEATS[0],
       mode: 'fresh',
-      harness: null,
+      harness: 'claude-code',
       force: true,
     });
   });
@@ -172,5 +172,36 @@ describe('picker state (spec §3)', () => {
     const sel = selectableRows(next)[next.cursor];
     expect(sel?.kind === 'seat' && sel.seat.member).toBe('miley');
     expect(next.scanning).toBe(false);
+  });
+
+  it('a seat whose roster did not answer is never launched with force (review: one answering team marked all ok)', () => {
+    let s = initialState(FILE, '', 1_000);
+    s = reduce(s, {
+      type: 'live',
+      live: {},
+      status: 'ok',
+      unknown: ['revive/agents/stanley'],
+      now: 1_000,
+    }).state;
+    const out = reduce(s, { type: 'key', key: { name: 'return' } }).outcome;
+    expect(out).toMatchObject({ kind: 'launch', force: false });
+  });
+
+  it('launches the harness the row shows: the one used last, and ⇥ cycles from it', () => {
+    const file: LauncherFile = {
+      ...FILE,
+      seats: {
+        ...FILE.seats,
+        'revive/agents/stanley': { ...FILE.seats['revive/agents/stanley']!, harness: 'codex' },
+      },
+    };
+    const s = initialState(file, '', 1_000);
+    expect(reduce(s, { type: 'key', key: { name: 'return' } }).outcome).toMatchObject({
+      harness: 'codex',
+    });
+    const tabbed = reduce(s, { type: 'key', key: { name: 'tab' } }).state;
+    expect(reduce(tabbed, { type: 'key', key: { name: 'return' } }).outcome).toMatchObject({
+      harness: 'claude-code',
+    });
   });
 });

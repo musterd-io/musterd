@@ -11,7 +11,14 @@ import { launcherFilePath, readLauncherFile, withSnapshot, writeLauncherFile } f
  * the first frame to stdout and reports the time since process start: the bench's first-paint probe.
  */
 export async function openPicker(
-  opts: { query?: string; io?: PickerIO; env?: NodeJS.ProcessEnv; home?: string } = {},
+  opts: {
+    query?: string;
+    /** Flags typed with an ambiguous name (`musterd stan -r`): they apply to the seat picked. */
+    defaults?: { mode: 'fresh' | 'resume'; harness: string | null; force: boolean };
+    io?: PickerIO;
+    env?: NodeJS.ProcessEnv;
+    home?: string;
+  } = {},
 ): Promise<number> {
   const env = opts.env ?? process.env;
   const path = launcherFilePath(env);
@@ -30,10 +37,11 @@ export async function openPicker(
   );
   if (outcome.kind === 'quit') return outcome.code;
   const { launchSeat } = await import('./byName.js');
+  const d = opts.defaults;
   return launchSeat(outcome.seat, {
-    mode: outcome.mode,
-    harness: outcome.harness,
-    force: outcome.force,
+    mode: d?.mode === 'resume' ? 'resume' : outcome.mode,
+    harness: d?.harness ?? outcome.harness,
+    force: outcome.force || (d?.force ?? false),
   });
 }
 
@@ -73,13 +81,15 @@ async function refresh(
     const rosters = await fetchRosters(catalog.seats);
     const live: Record<string, Live> = {};
     let answered = catalog.seats.length === 0;
+    const unknown: string[] = [];
     for (const seat of catalog.seats) {
       const members = rosters.get(rosterKey(seat)) ?? null;
       if (members) answered = true;
+      else unknown.push(seat.address);
       const l = liveFor(seat, members);
       if (l) live[seat.address] = l;
     }
-    dispatch({ type: 'live', live, status: answered ? 'ok' : 'offline', now: Date.now() });
+    dispatch({ type: 'live', live, status: answered ? 'ok' : 'offline', unknown, now: Date.now() });
   } catch {
     dispatch({ type: 'live', live: {}, status: 'offline', now: Date.now() });
   }

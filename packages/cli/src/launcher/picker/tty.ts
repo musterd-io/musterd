@@ -13,6 +13,13 @@ export interface PickerIO {
   output: NodeJS.WriteStream;
 }
 
+type Sig = 'SIGINT' | 'SIGTERM' | 'SIGHUP';
+/** Signal registration (tests). Defaults to `process`. */
+export interface SignalSeam {
+  on(sig: Sig, fn: () => void): unknown;
+  off(sig: Sig, fn: () => void): unknown;
+}
+
 const ALT_ON = '\u001b[?1049h';
 const ALT_OFF = '\u001b[?1049l';
 const HIDE = '\u001b[?25l';
@@ -32,6 +39,7 @@ export function runPicker(
   io: PickerIO,
   start: (dispatch: (e: PickerEvent) => void) => void,
   reducer: typeof reduce = reduce,
+  signals: SignalSeam = process,
 ): Promise<PickerOutcome> {
   return new Promise((resolve, reject) => {
     let state = initial;
@@ -58,6 +66,7 @@ export function runPicker(
       io.input.off('keypress', onKey);
       io.output.off('resize', paint);
       process.off('exit', restore);
+      for (const [sig, fn] of onSignal) signals.off(sig, fn);
       restore();
       settle();
     };
@@ -73,10 +82,22 @@ export function runPicker(
         finish(() => reject(err));
       }
     };
+    const onSignal = (
+      [
+        ['SIGINT', 2],
+        ['SIGTERM', 15],
+        ['SIGHUP', 1],
+      ] as const
+    ).map(
+      ([sig, n]) => [sig, () => finish(() => resolve({ kind: 'quit', code: 128 + n }))] as const,
+    );
     const onKey = (str: string | undefined, key: Key | undefined): void =>
       dispatch({ type: 'key', key: key ?? { sequence: str } });
 
     process.on('exit', restore);
+    // `exit` never fires when a signal ends the process, so a SIGTERM, a SIGHUP or a `kill -INT`
+    // while the picker is open restores the terminal here and quits 128 + n.
+    for (const [sig, fn] of onSignal) signals.on(sig, fn);
     emitKeypressEvents(io.input);
     if (io.input.isTTY) io.input.setRawMode(true);
     io.input.on('keypress', onKey);

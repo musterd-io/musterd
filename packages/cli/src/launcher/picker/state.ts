@@ -1,4 +1,5 @@
 import { rankSeats } from '../fuzzy.js';
+import { chooseHarness } from '../labels.js';
 import type { Live } from '../live.js';
 import { lastUsedAt, type LauncherFile, type Seat, type TeamEntry } from '../store.js';
 
@@ -41,6 +42,8 @@ export interface PickerState {
   file: LauncherFile;
   live: Record<string, Live>;
   liveStatus: 'pending' | 'ok' | 'offline';
+  /** Seats whose team's roster did not answer: their live state is unknown, never "idle". */
+  unknownLive: string[];
   scanning: boolean;
   level: Level;
   stack: Level[];
@@ -55,11 +58,17 @@ export interface PickerState {
 export type PickerEvent =
   | { type: 'key'; key: Key }
   | { type: 'catalog'; seats: Seat[]; teams: TeamEntry[]; stale: number; now: number }
-  | { type: 'live'; live: Record<string, Live>; status: 'ok' | 'offline'; now: number };
+  | {
+      type: 'live';
+      live: Record<string, Live>;
+      status: 'ok' | 'offline';
+      unknown?: string[];
+      now: number;
+    };
 
 export type PickerOutcome =
   | { kind: 'launch'; seat: Seat; mode: 'fresh' | 'resume'; harness: string | null; force: boolean }
-  | { kind: 'quit'; code: 0 | 130 };
+  | { kind: 'quit'; code: number };
 
 type Step = { state: PickerState; outcome: PickerOutcome | null };
 
@@ -71,6 +80,7 @@ export function initialState(file: LauncherFile, query: string, now: number): Pi
     file,
     live: {},
     liveStatus: 'pending',
+    unknownLive: [],
     scanning: true,
     level: { kind: 'recent' },
     stack: [],
@@ -196,8 +206,8 @@ function activate(s: PickerState, mode: 'fresh' | 'resume'): Step {
         kind: 'launch',
         seat: row.seat,
         mode,
-        harness: s.harness[row.seat.address] ?? null,
-        force: s.liveStatus === 'ok',
+        harness: shownHarness(s, row.seat),
+        force: s.liveStatus === 'ok' && !s.unknownLive.includes(row.seat.address),
       },
     };
   }
@@ -208,12 +218,24 @@ function activate(s: PickerState, mode: 'fresh' | 'resume'): Step {
   return { state: s, outcome: null };
 }
 
+/**
+ * The harness a row shows and ⏎ launches: the one picked with ⇥, else what `chooseHarness` would
+ * pick (the one used last). Null for a human seat, which gets a login shell.
+ */
+export function shownHarness(s: PickerState, seat: Seat): string | null {
+  if (seat.kind === 'human') return null;
+  return (
+    s.harness[seat.address] ??
+    chooseHarness(seat, null, s.file.seats[seat.address]?.harness ?? null)
+  );
+}
+
 function cycleHarness(s: PickerState): PickerState {
   const row = selectableRows(s)[s.cursor];
   if (row?.kind !== 'seat') return s;
   const choices = row.seat.harnesses.filter((h) => h !== 'musterd');
   if (choices.length < 2) return s;
-  const current = s.harness[row.seat.address] ?? choices[0]!;
+  const current = shownHarness(s, row.seat) ?? choices[0]!;
   const next = choices[(choices.indexOf(current) + 1) % choices.length]!;
   return { ...s, harness: { ...s.harness, [row.seat.address]: next } };
 }
@@ -230,7 +252,7 @@ function onKey(s: PickerState, key: Key): Step {
           kind: 'launch',
           seat,
           mode,
-          harness: s.harness[seat.address] ?? null,
+          harness: shownHarness(s, seat),
           force: true,
         },
       };
@@ -287,6 +309,9 @@ export function reduce(s: PickerState, e: PickerEvent): Step {
     return { state: clamp(next, at === -1 ? s.cursor : at), outcome: null };
   }
   if (e.type === 'live')
-    return { state: { ...s, live: e.live, liveStatus: e.status, now: e.now }, outcome: null };
+    return {
+      state: { ...s, live: e.live, liveStatus: e.status, unknownLive: e.unknown ?? [], now: e.now },
+      outcome: null,
+    };
   return onKey(s, e.key);
 }

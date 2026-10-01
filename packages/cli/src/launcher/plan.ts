@@ -1,7 +1,9 @@
 import { CliError } from '../errors.js';
 import { resolveAdapter, type HarnessAdapter } from '../onboard/reconcile/fragments.js';
-import { harnessLabel } from './labels.js';
+import { chooseHarness, harnessLabel } from './labels.js';
 import type { Recent, Seat } from './store.js';
+
+export { chooseHarness };
 
 /** What to run, where (ADR 491 Decision 5). */
 export interface LaunchPlan {
@@ -22,19 +24,6 @@ export interface PlanInput {
   recent: Recent | null;
   registry: HarnessAdapter[];
   env: NodeJS.ProcessEnv;
-}
-
-/** Asked for > the harness used last (if still desired) > first desired > last session > claude-code. */
-export function chooseHarness(
-  seat: Seat,
-  requested: string | null,
-  recentHarness: string | null,
-): string {
-  if (requested) return requested;
-  const launchable = seat.harnesses.filter((h) => h !== 'musterd');
-  if (recentHarness && (launchable.length === 0 || launchable.includes(recentHarness)))
-    return recentHarness;
-  return launchable[0] ?? seat.last_session?.harness ?? 'claude-code';
 }
 
 export async function planLaunch(input: PlanInput): Promise<LaunchPlan> {

@@ -2,7 +2,7 @@ import { theme } from '../../render/theme.js';
 import { padEndVisible, visibleLen } from '../../render/ui.js';
 import { ago, describeLive, describeLiveLong, seatLine } from '../rows.js';
 import { lastUsedAt } from '../store.js';
-import { rows, selectable, type PickerState, type Row } from './state.js';
+import { rows, selectable, shownHarness, type PickerState, type Row } from './state.js';
 
 export interface PickerSize {
   cols: number;
@@ -91,13 +91,7 @@ function body(s: PickerState, cols: number): { line: string; selected: boolean }
             : used !== null
               ? `${seat.address === s.file.last ? '★ last used · ' : ''}${ago(used, s.now)}`
               : '';
-        const harness =
-          seat.kind === 'human'
-            ? 'human'
-            : (s.harness[seat.address] ??
-              seat.harnesses.find((h) => h !== 'musterd') ??
-              seat.last_session?.harness ??
-              'claude-code');
+        const harness = seat.kind === 'human' ? 'human' : (shownHarness(s, seat) ?? 'claude-code');
         return {
           line: seatLine(seat, {
             selected,
@@ -105,7 +99,11 @@ function body(s: PickerState, cols: number): { line: string; selected: boolean }
             addressWidth: row.showAddress ? addressWidth : null,
             showHarness: cols >= 56,
             harness,
-            state: live ? 'live' : s.liveStatus === 'offline' ? 'unknown' : 'idle',
+            state: live
+              ? 'live'
+              : s.liveStatus === 'offline' || s.unknownLive.includes(seat.address)
+                ? 'unknown'
+                : 'idle',
             tail,
           }),
           selected,

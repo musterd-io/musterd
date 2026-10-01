@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
-import { launchByName, type LaunchDeps } from './byName.js';
+import { launchByName, launchSeat, type LaunchDeps } from './byName.js';
 import type { Catalog } from './catalog.js';
 import type { Seat } from './store.js';
 
@@ -190,6 +190,38 @@ describe('launchByName (ADR 491 Decision 2)', () => {
     expect(confirm.mock.calls[0]?.[0]).toMatch(
       /^stanley is live here \(claude-code\).*Open a second session in the same folder\? \(y\/N\) $/,
     );
+    expect(supervise).not.toHaveBeenCalled();
+    expect(existsSync(join(dir, 'launcher.json'))).toBe(false);
+  });
+
+  it('an ambiguous name with --path refuses instead of opening the picker (review)', async () => {
+    const picker = vi.fn(async () => 0);
+    const { d } = deps({ isTTY: true, picker });
+    await expect(launchByName('miley', parseArgs(['--path']), d)).rejects.toMatchObject({
+      exitCode: 2,
+    });
+    expect(picker).not.toHaveBeenCalled();
+  });
+
+  it('an ambiguous name on a TTY carries -r, --harness and --force into the picker (review)', async () => {
+    const picker = vi.fn(async () => 0);
+    const { d } = deps({ isTTY: true, picker });
+    await launchByName('miley', parseArgs(['-r', '--harness', 'codex', '--force']), d);
+    expect(picker).toHaveBeenCalledWith({
+      query: 'miley',
+      defaults: { mode: 'resume', harness: 'codex', force: true },
+    });
+  });
+
+  it('refuses a seat whose folder is gone, before recording or spawning (review: stale snapshot)', async () => {
+    const { d, supervise } = deps();
+    await expect(
+      launchSeat(
+        seat('revive/agents/gone', { path: join(dir, 'no-such-folder') }),
+        { mode: 'fresh', harness: null, force: true },
+        d,
+      ),
+    ).rejects.toThrow(/folder is gone/);
     expect(supervise).not.toHaveBeenCalled();
     expect(existsSync(join(dir, 'launcher.json'))).toBe(false);
   });

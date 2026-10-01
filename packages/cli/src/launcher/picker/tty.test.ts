@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import { EMPTY_LAUNCHER_FILE, type Seat } from '../store.js';
@@ -69,5 +70,19 @@ describe('runPicker (ADR 491)', () => {
     await expect(done).rejects.toThrow('boom');
     expect(t.input.setRawMode).toHaveBeenLastCalledWith(false);
     expect(t.written().endsWith('\u001b[?25h\u001b[?1049l')).toBe(true);
+  });
+
+  it('a signal while open restores the terminal and quits 128 + n (review: SIGTERM left the alt screen on)', async () => {
+    const t = io();
+    const signals = new EventEmitter();
+    const done = runPicker(STATE, t as never, () => {}, reduce, signals as never);
+    signals.emit('SIGTERM');
+    const outcome = await Promise.race([
+      done,
+      new Promise((r) => setTimeout(() => r('hung'), 200)),
+    ]);
+    expect(outcome).toEqual({ kind: 'quit', code: 143 });
+    expect(t.written().endsWith('\u001b[?25h\u001b[?1049l')).toBe(true);
+    expect(signals.listenerCount('SIGTERM')).toBe(0);
   });
 });
