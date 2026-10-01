@@ -29,7 +29,10 @@ export interface ProvisionDeps {
   /** Host-key auth: claim and report. */
   client: Pick<HttpClient, 'claimProvisions' | 'reportProvision'>;
   /** The sponsor's own identity: mint the seat's credential and grant, enroll its residency. */
-  sponsor: Pick<HttpClient, 'mintBootstrapCredential' | 'issueGrant' | 'enrollResidency'>;
+  sponsor: Pick<
+    HttpClient,
+    'mintBootstrapCredential' | 'issueGrant' | 'enrollResidency' | 'revokeBootstrapCredential'
+  >;
   team: string;
   server: string;
   /** This host's label — the one the daemon's provision rows and residency enrollments name. */
@@ -138,7 +141,7 @@ async function standUp(deps: ProvisionDeps, row: HostProvision): Promise<void> {
         team: deps.team,
         name: seat,
         server: deps.server,
-        harness: deps.harness,
+        wiring: { desired: [deps.harness.id], toolkit: '' },
         http: deps.sponsor,
         workspace: () => {
           try {

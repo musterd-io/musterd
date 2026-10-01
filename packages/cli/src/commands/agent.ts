@@ -3,26 +3,22 @@ import { flagStr, type Parsed, flagHue } from '../args.js';
 import { loadConfig } from '../config.js';
 import { CliError } from '../errors.js';
 import { infraTouchWarning } from '../infra-gate.js';
-import { HARNESSES } from '../onboard/harnesses/index.js';
-import { provisionSeat } from '../onboard/provisionSeat.js';
-import { provisionWorkspace } from '../onboard/workspace.js';
+import { provisionAgentSeat } from '../onboard/agentSeat.js';
+import { harnessAdapters } from '../onboard/harnesses/index.js';
 import { theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
-import { writeSeatFile } from '../roster.js';
 import { resolve, resolveRead } from './helpers.js';
 
 /**
  * `musterd agent <name>` — one command to add an agent AND give it an isolated, ready-to-run
  * workspace (ADR 065). It (1) adds/revives the agent member on the team, (2) creates a git worktree
  * (own branch + tree) — a sibling folder outside git — (3) writes that folder's binding, and
- * (4) registers the musterd MCP server there with autojoin, for the chosen harness. Opening a session
- * of that harness in the printed folder then *is* that agent, with no binding thrash against your own
- * seat.
+ * (4) records the desired harness set (`provisioned.json`) and wires it through the reconcile engine
+ * (ADR 491), the same engine `musterd init` and `musterd wire` drive — so the repo-shared Claude Code
+ * entry keeps its launch marker (ADR 286). `musterd <name>` then launches it.
  *
- * `--harness <claude-code|cursor|codex|opencode|grok>` picks the harness to wire (default claude-code) — the same
- * pluggable adapters `musterd init` uses (ADR 038/085), so a Cursor or Codex user gets a genuinely
- * wired workspace, not a Claude-Code-only one. `--here` keeps the legacy single-folder behavior;
- * `--path <dir>` targets an explicit folder.
+ * `--harness <id[,id…]>` names the set to wire (default claude-code). `--here` keeps the legacy
+ * single-folder behavior; `--path <dir>` targets an explicit folder.
  */
 export async function agentCommand(
   parsed: Parsed,
@@ -34,29 +30,21 @@ export async function agentCommand(
   const name = parsed.positionals[0];
   if (!name || /\s/.test(name)) {
     throw new CliError(
-      'usage: musterd agent <name> [--role <label>] [--profile <profile>] [--model <id>] [--harness <claude-code|cursor|codex|opencode|grok>] [--driver <you>] [--here | --path <dir>]',
+      'usage: musterd agent <name> [--role <label>] [--profile <profile>] [--model <id>] [--harness <id[,id…]>] [--driver <you>] [--here | --path <dir>]',
       2,
     );
   }
   // ADR 272 inc 2 — the split: `--role` is the team fact (roster label) and `--profile` is the
-  // local setup (workspace provisioning); neither implies the other. Pre-rename, one flag did both.
+  // local setup (the Workspace's toolkit); neither implies the other.
   const role = flagStr(parsed.flags, 'role');
-  const profileName = flagStr(parsed.flags, 'profile');
-  // ADR 374: the seat's colour, if the creator chose one; otherwise assigned at write (file-backed)
-  // or by the daemon (db-only). Validated first so a typo touches nothing.
+  const toolkit = flagStr(parsed.flags, 'profile') ?? '';
+  // ADR 374: the seat's colour, if the creator chose one. Validated first so a typo touches nothing.
   const hue = flagHue(parsed.flags);
-  // Model attestation (ADR 101): persist a *declared* model into the seat's binding.json so the adapter
-  // attests by default instead of rotting to `unknown`. `--model` wins, else the ambient env the CLI
-  // runs in (MUSTERD_MODEL / ANTHROPIC_MODEL, via the shared resolver). Never a guess — undefined stays
-  // honestly `unknown` (warn-never-block); the `init --check` note catches an unattested live seat.
+  // Model attestation (ADR 101): a *declared* model only — `--model`, else the ambient env. Never a guess.
   const model = flagStr(parsed.flags, 'model') ?? resolveAttestedModel(process.env);
 
-  // Driver co-presence (ADR 021, activated by ADR 155 Inc 1): opt-in per workspace. `--driver <you>`
-  // writes `driver` into the seat's binding.json so the adapter reports who is steering — which makes
-  // the steering human read `working`/present on the roster instead of offline. `--driver` bare uses
-  // the acting identity (`--as`). Absent = no driver (unchanged, warn-never-block): presence is a
-  // convenience the operator grants, never inferred behind their back. Bare `--driver` names the
-  // member THIS folder resolves to (ADR 442 removed `--as`).
+  // Driver co-presence (ADR 021/155): opt-in per Workspace. Bare `--driver` names the member THIS
+  // folder resolves to (ADR 442 removed `--as`).
   let driver: string | undefined;
   const driverFlag = parsed.flags['driver'];
   if (typeof driverFlag === 'string' && driverFlag.trim()) {
@@ -71,94 +59,51 @@ export async function agentCommand(
       );
   }
 
-  // Which harness to wire (ADR 038/085 registry — the same adapters `init` drives). Default to Claude
-  // Code for back-compat; a bad id fails fast with the valid set rather than silently doing nothing.
-  const harnessId = flagStr(parsed.flags, 'harness') ?? 'claude-code';
-  const harness = HARNESSES.find((h) => h.id === harnessId);
-  if (!harness) {
+  // The desired harness set (ADR 281 registry). A bad id fails fast with the valid set.
+  const known = harnessAdapters().map((a) => a.id);
+  const harnesses = (flagStr(parsed.flags, 'harness') ?? 'claude-code')
+    .split(',')
+    .map((h) => h.trim())
+    .filter(Boolean);
+  const unknown = harnesses.filter((h) => !known.includes(h));
+  if (unknown.length || harnesses.length === 0) {
     throw new CliError(
-      `unknown harness "${harnessId}" — choose one of: ${HARNESSES.map((h) => h.id).join(', ')}`,
+      `unknown harness "${unknown.join(', ')}" — choose from: ${known.join(', ')}`,
       2,
     );
   }
 
-  // Adding a member is an admin act — needs an active identity (binding/env/--as), like `team add`.
+  // Adding a member is an admin act — needs an active identity, like `team add`.
   const { team, http, config } = resolve(parsed.flags);
 
-  // The warn-only infra-touch gate (ADR 227 inc 2). This verb re-provisions through
-  // harness.configure, which rewrites the MACHINE-SHARED MCP entry every seat on this repo root
-  // launches through (ADR 143) and reinstalls hooks — infra consequences the 01KZ9CGYGH outage
-  // proved out. One added line for a non-`platform` seat (the daemon writes the audit row), then
-  // proceed; every failure mode is silence, same contract as `service`/`reset`.
+  // The warn-only infra-touch gate (ADR 227 inc 2): wiring writes harness config other seats on this
+  // repo root launch through. One added line for a non-`platform` seat, then proceed.
   const gateWarn = await (deps.infraGate ?? infraTouchWarning)('agent');
   if (gateWarn) process.stdout.write(`${theme.warn(sym.warn)} ${theme.warn(gateWarn)}\n`);
 
-  // ADR 058 §5: write the seat file first for a file-backed team so the file stays the single writer;
-  // db-only teams skip this and the daemon originates. addMember revives a soft-removed name (ADR 065).
-  const home = loadConfig().rosterHome[team];
-  if (home)
-    writeSeatFile(home, name, {
-      kind: 'agent',
-      ...(role ? { role } : {}),
-      ...(hue !== undefined ? { hue } : {}),
-    });
-  // Declare the seat (v0.3: no per-seat token — the agent claims it with the team agent key on launch).
-  // Idempotent: if the seat is already declared (e.g. you ran `team add <name>` first, or re-ran this
-  // command), reuse it and just (re)build the workspace instead of dead-ending on a conflict — a
-  // ready-to-run workspace is the whole point of this command. Guard against reusing a *human* seat.
-  let reused = false;
-  try {
-    await http.addMember(team, {
-      name,
-      kind: 'agent',
-      ...(role ? { role } : {}),
-      ...(hue !== undefined ? { hue } : {}),
-    });
-  } catch (err) {
-    // `conflict`: already declared (re-run, or `team add` first). `forbidden`: the caller is not an
-    // admin — but a sponsor provisioning a Workspace for the agent they created (ADR 463 §3) is
-    // not adding a member, the agent already exists. Both fall through to the roster check; a
-    // `forbidden` for a name that is NOT an existing agent still fails with the daemon's message.
-    // Whether this caller may provision THIS agent is the daemon's call at the credential mint
-    // (ADR 463 §1), not the CLI's: a non-sponsor is refused there.
-    if (!(err instanceof CliError) || (err.code !== 'conflict' && err.code !== 'forbidden'))
-      throw err;
-    const { members } = await http.roster(team);
-    const existing = members.find((m) => m.name === name);
-    if (err.code === 'forbidden' && existing?.kind !== 'agent') throw err;
-    if (existing && existing.kind !== 'agent') {
-      throw new CliError(
-        `"${name}" already exists in "${team}" as a ${existing.kind}, not an agent — ` +
-          `pick a different name for the agent workspace`,
-        err.exitCode,
-      );
-    }
-    reused = true;
-  }
-  // Steps 2–5 of ADR 065 — credential, grant, binding, permissions, spec, harness wiring — are one
-  // shared sequence (`provisionSeat`, ADR 463 §3), so a sponsor's host provisions exactly what this
-  // command does. The workspace is made after the credential is minted, as it always was.
-  const here = Boolean(parsed.flags['here']);
-  const {
-    workspace: ws,
-    granted,
-    mcpError,
-  } = await provisionSeat({
-    team,
+  // Member declaration, credential, grant, binding, permissions, spec, desired set and wiring are one
+  // shared sequence (`provisionAgentSeat`), so this command and the launcher cannot drift.
+  const r = await provisionAgentSeat({
     name,
+    team,
     server: config.server,
-    harness,
     http,
-    workspace: () =>
-      provisionWorkspace(name, {
-        here,
-        team,
-        ...(flagStr(parsed.flags, 'path') ? { path: flagStr(parsed.flags, 'path')! } : {}),
-      }),
+    harnesses,
+    toolkit,
+    // A re-run (the documented grant repair) that names no --harness / --profile keeps what the
+    // Workspace already records, so it never unwires a harness `init` or `harness configure` added.
+    keepDesired: flagStr(parsed.flags, 'harness') === undefined,
+    keepToolkit: flagStr(parsed.flags, 'profile') === undefined,
+    sourceDir: process.cwd(),
+    rosterHome: loadConfig().rosterHome[team],
+    role,
+    hue,
     model,
     driver,
-    profileName,
+    here: parsed.flags['here'] === true,
+    path: flagStr(parsed.flags, 'path'),
   });
+  const ws = r.workspace;
 
   if (parsed.flags['json']) {
     process.stdout.write(
@@ -168,16 +113,17 @@ export async function agentCommand(
         dir: ws.dir,
         kind: ws.kind,
         branch: ws.branch ?? null,
-        harness: harness.id,
-        mcpRegistered: mcpError === null,
-        granted,
+        harness: harnesses[0],
+        harnesses,
+        mcpRegistered: r.wiringError === null,
+        granted: r.granted,
       }) + '\n',
     );
     return 0;
   }
 
   process.stdout.write(
-    `${theme.ok(sym.ok)} ${reused ? 'reused' : 'added'} ${theme.memberName(name, 'agent')} ${theme.meta(`(agent${role ? `, ${role}` : ''})`)} ${reused ? 'on' : 'to'} ${team}\n`,
+    `${theme.ok(sym.ok)} ${r.reused ? 'reused' : 'added'} ${theme.memberName(name, 'agent')} ${theme.meta(`(agent${role ? `, ${role}` : ''})`)} ${r.reused ? 'on' : 'to'} ${team}\n`,
   );
   const where =
     ws.kind === 'worktree'
@@ -187,20 +133,20 @@ export async function agentCommand(
         : 'this folder';
   process.stdout.write(`${theme.ok(sym.ok)} workspace ${ws.dir} ${theme.meta(`(${where})`)}\n`);
 
-  if (mcpError === null) {
+  if (r.wiringError === null) {
     process.stdout.write(
-      success(`wired the musterd MCP server there for ${harness.label} (autojoin)`, {
-        next: `open a ${harness.label} session in ${ws.dir} — it joins as ${name} automatically`,
+      success(`wired the musterd MCP server there for ${harnesses.join(', ')} (autojoin)`, {
+        next: `musterd ${name} — launches it there; it joins as ${name} automatically`,
       }) + '\n',
     );
   } else {
-    // Member + workspace + binding are set up; only the harness wiring failed (e.g. the harness CLI
-    // isn't installed). Point at `musterd init` in the folder, which re-runs the same harness adapter.
+    // Member, Workspace, binding and provisioned.json are written; only the wiring is incomplete
+    // (e.g. the harness CLI isn't installed). `musterd wire` resumes from the recorded desired set.
     process.stdout.write(
-      `${theme.warn(sym.warn)} couldn't auto-register the musterd MCP server for ${harness.label} (${mcpError}).\n` +
+      `${theme.warn(sym.warn)} the harness wiring is incomplete (${r.wiringError}).\n` +
         theme.meta(
-          `  finish the wiring by running \`musterd init\` in ${ws.dir} and choosing ${harness.label} — ` +
-            `the binding.json is already written, so it only needs the harness config.`,
+          `  finish it by running \`musterd wire\` in ${ws.dir} — the binding and provisioned.json ` +
+            `are already written, so it only needs the harness config.`,
         ) +
         '\n',
     );

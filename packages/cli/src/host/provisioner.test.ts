@@ -50,7 +50,8 @@ function deps(over: Partial<ProvisionDeps> = {}, rows: HostProvision[] = [row()]
     workspace: input.workspace(),
     agentKey: 'msac_x',
     granted: true,
-    mcpError: null,
+    wiring: null,
+    wiringError: null,
   }));
   const upsertHostEntry = vi.fn();
   const writeBinding = vi.fn();
@@ -97,7 +98,7 @@ describe('provisionOnce (ADR 463 §3)', () => {
       team: 'acme',
       name: 'dana-scout',
       server: 'http://localhost:4849',
-      harness,
+      wiring: { desired: ['claude-code'], toolkit: '' },
       http: t.sponsor,
     });
     // the workspace factory carries the team and the host's repo, and --clone off
@@ -161,7 +162,8 @@ describe('provisionOnce (ADR 463 §3)', () => {
       workspace: input.workspace(),
       agentKey: 'x',
       granted: true,
-      mcpError: null,
+      wiring: null,
+      wiringError: null,
     }));
     await provisionOnce(t.d);
     expect(t.client.reportProvision).toHaveBeenCalledWith('acme', '01PROV', {

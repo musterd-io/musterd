@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,9 +19,7 @@ const h = vi.hoisted(() => ({
   saveBinding: vi.fn(),
   saveWorkspaceSpec: vi.fn(),
   writeSeatFile: vi.fn(),
-  configure: vi.fn(async () => ({ target: 'claude mcp', activation: '' })),
-  configureCursor: vi.fn(async () => ({ target: '.cursor/mcp.json', activation: '' })),
-  configureCodex: vi.fn(async () => ({ target: '.codex/config.toml', activation: '' })),
+  reconcile: vi.fn(async () => ({ ok: true, results: [] as unknown[] })),
   // dir is set to a real temp dir per-test (the command chdir's into it to register MCP).
   workspace: { dir: '', kind: 'worktree' as const, branch: 'agent/June', created: true },
   rosterHome: {} as Record<string, string>,
@@ -47,14 +45,12 @@ vi.mock('../config.js', () => ({
   saveBinding: h.saveBinding,
   saveWorkspaceSpec: h.saveWorkspaceSpec,
 }));
-vi.mock('../roster.js', () => ({ writeSeatFile: h.writeSeatFile }));
+vi.mock('../roster.js', () => ({ writeSeatFile: h.writeSeatFile, seatFileExists: () => false }));
 vi.mock('../onboard/harnesses/index.js', () => ({
-  HARNESSES: [
-    { id: 'claude-code', label: 'Claude Code', surface: 'claude-code', configure: h.configure },
-    { id: 'cursor', label: 'Cursor', surface: 'cursor', configure: h.configureCursor },
-    { id: 'codex', label: 'Codex', surface: 'codex', configure: h.configureCodex },
-  ],
+  harnessAdapters: () =>
+    ['claude-code', 'cursor', 'codex', 'opencode', 'grok', 'musterd'].map((id) => ({ id })),
 }));
+vi.mock('../onboard/reconcile/engine.js', () => ({ reconcileHarnesses: h.reconcile }));
 vi.mock('../onboard/workspace.js', () => ({ provisionWorkspace: () => h.workspace }));
 
 const { agentCommand } = await import('./agent.js');
@@ -90,7 +86,7 @@ describe('musterd agent <name>', () => {
       expect(code).toBe(0); // warn-never-block: the provisioning still ran
       expect(infraGate).toHaveBeenCalledWith('agent');
       expect(chunks.join('')).toContain('nick holds platform');
-      expect(h.configure).toHaveBeenCalled(); // proceeded through to the shared-entry write
+      expect(h.reconcile).toHaveBeenCalled(); // proceeded through to the wiring
     });
 
     it('stays silent when the gate answers null — holder, human shell, or unreachable daemon', async () => {
@@ -144,12 +140,9 @@ describe('musterd agent <name>', () => {
     // The adapter anchors on the binding it finds by walking up from its **cwd** — genuinely per-worktree,
     // unlike the shared config — so the env was never needed here. Omitting it makes the shared entry
     // identical for every seat, and therefore harmless.
-    const entry = h.configure.mock.calls[0]![0] as { env: Record<string, string> };
-    expect(entry.env.MUSTERD_BINDING).toBeUndefined();
-    // ADR 165 + increment 2 completed what the comment above began: the shared entry carries
-    // NOTHING. Surface/key/claim live in binding.json; autojoin/driver (the last two baked names)
-    // moved there too — the entry env is fully empty for the agent path.
-    expect(entry.env).toEqual({});
+    // ADR 491: wiring runs through the reconcile engine; nothing secret is handed to it (ADR 143/165).
+    expect(JSON.stringify(h.reconcile.mock.calls[0])).not.toMatch(/mskey_|msgr_/);
+    expect(h.reconcile.mock.calls[0]![1]).toEqual(['claude-code']);
 
     // The secret-free committed launch spec is written (no agent_key/grant fields).
     expect(h.saveWorkspaceSpec).toHaveBeenCalledWith(
@@ -166,27 +159,24 @@ describe('musterd agent <name>', () => {
     expect(specArg['surface']).toBeUndefined();
   });
 
-  it('writes the ADR 261 permissions floor into the WORKTREE so a non-interactive seat works day one', async () => {
+  it('records the desired set for the engine, which writes the ADR 261 floor as a ledger-owned fragment (spec §4.7(2))', async () => {
     const code = await agentCommand(parseArgs(['June']));
     expect(code).toBe(0);
-    const settings = JSON.parse(
-      readFileSync(join(h.workspace.dir, '.claude', 'settings.local.json'), 'utf8'),
-    ) as { permissions?: { allow?: string[]; deny?: string[] } };
-    // The ryder shape, closed at the source: Edit/Write and the repo gates present, no deny.
-    expect(settings.permissions?.allow).toEqual(expect.arrayContaining(['Edit', 'Write', 'Read']));
-    expect(settings.permissions?.allow?.some((e) => e.startsWith('Bash(pnpm '))).toBe(true);
-    expect(settings.permissions?.deny ?? []).toEqual([]);
+    // The floor is the claude-code permissions fragment (claudeCodeFragments.test.ts), so
+    // `uninstall` can release it; this command records intent and hands it to the engine.
+    expect(
+      JSON.parse(readFileSync(join(h.workspace.dir, '.musterd', 'provisioned.json'), 'utf8')),
+    ).toMatchObject({ desired: ['claude-code'], toolkit: '' });
+    expect(h.reconcile.mock.calls[0]![1]).toEqual(['claude-code']);
   });
 
-  it('--profile read-only layers the deny ceiling over the floor (ADR 261 decision 3)', async () => {
+  it('--profile read-only records that toolkit, whose deny ceiling the engine layers over the floor (ADR 261 decision 3)', async () => {
     const code = await agentCommand(parseArgs(['Watcher', '--profile', 'read-only']));
     expect(code).toBe(0);
-    const settings = JSON.parse(
-      readFileSync(join(h.workspace.dir, '.claude', 'settings.local.json'), 'utf8'),
-    ) as { permissions?: { allow?: string[]; deny?: string[] } };
-    expect(settings.permissions?.deny).toEqual(expect.arrayContaining(['Edit', 'Write']));
-    // Deny-wins-allows-kept: the floor's allows stay present and inert under the ceiling.
-    expect(settings.permissions?.allow).toContain('Read');
+    expect(
+      JSON.parse(readFileSync(join(h.workspace.dir, '.musterd', 'provisioned.json'), 'utf8'))
+        .toolkit,
+    ).toBe('read-only');
   });
 
   it('--profile provisions the workspace without touching the team fact (ADR 272 inc 2)', async () => {
@@ -204,11 +194,11 @@ describe('musterd agent <name>', () => {
       kind: 'agent',
       role: 'read-only',
     });
-    const settings = JSON.parse(
-      readFileSync(join(h.workspace.dir, '.claude', 'settings.local.json'), 'utf8'),
-    ) as { permissions?: { deny?: string[] } };
-    // Even a label that NAMES a profile compiles no ceiling — the coupling is what inc 2 removed.
-    expect(settings.permissions?.deny ?? []).toEqual([]);
+    // Even a label that NAMES a toolkit records none — the coupling is what inc 2 removed.
+    expect(
+      JSON.parse(readFileSync(join(h.workspace.dir, '.musterd', 'provisioned.json'), 'utf8'))
+        .toolkit,
+    ).toBe('');
   });
 
   it('--role <label> --profile <name> sets the label from one and the workspace from the other', async () => {
@@ -221,10 +211,10 @@ describe('musterd agent <name>', () => {
       kind: 'agent',
       role: 'auditor',
     });
-    const settings = JSON.parse(
-      readFileSync(join(h.workspace.dir, '.claude', 'settings.local.json'), 'utf8'),
-    ) as { permissions?: { deny?: string[] } };
-    expect(settings.permissions?.deny).toEqual(expect.arrayContaining(['Edit', 'Write']));
+    expect(
+      JSON.parse(readFileSync(join(h.workspace.dir, '.musterd', 'provisioned.json'), 'utf8'))
+        .toolkit,
+    ).toBe('read-only');
   });
 
   it('an unknown --profile still creates the seat — permissions are best-effort (floor-only, no throw)', async () => {
@@ -236,8 +226,8 @@ describe('musterd agent <name>', () => {
     const code = await agentCommand(parseArgs(['June', '--driver', 'nick']));
     expect(code).toBe(0);
     // The entry is repo-root-shared: a driver baked there marked EVERY sibling worktree as driven.
-    const entry = h.configure.mock.calls[0]![0] as { env: Record<string, string> };
-    expect(entry.env.MUSTERD_DRIVER).toBeUndefined();
+    // ADR 491: wiring runs through the reconcile engine; nothing secret is handed to it (ADR 143/165).
+    expect(JSON.stringify(h.reconcile.mock.calls[0])).not.toMatch(/mskey_|msgr_/);
     const binding = h.saveBinding.mock.calls[0]![1] as Record<string, unknown>;
     expect(binding.driver).toBe('nick');
   });
@@ -264,9 +254,8 @@ describe('musterd agent <name>', () => {
       h.workspace.dir,
       expect.objectContaining({ grant: 'msgr_standing' }),
     );
-    // ...and is NOT inlined into the harness env (no secret baked into the config).
-    const entry = h.configure.mock.calls[0]![0] as { env: Record<string, string> };
-    expect(entry.env.MUSTERD_GRANT).toBeUndefined();
+    // ADR 491: wiring runs through the reconcile engine; nothing secret is handed to it (ADR 143/165).
+    expect(JSON.stringify(h.reconcile.mock.calls[0])).not.toMatch(/mskey_|msgr_/);
   });
 
   it('still comes online if the grant mint fails (falls back to the approval lane)', async () => {
@@ -276,37 +265,31 @@ describe('musterd agent <name>', () => {
     // No grant in the binding; autojoin will route through the approval lane instead.
     const binding = h.saveBinding.mock.calls[0]![1] as Record<string, unknown>;
     expect(binding.grant).toBeUndefined();
-    const entry = h.configure.mock.calls[0]![0] as { env: Record<string, string> };
-    expect(entry.env.MUSTERD_GRANT).toBeUndefined();
+    // ADR 491: wiring runs through the reconcile engine; nothing secret is handed to it (ADR 143/165).
+    expect(JSON.stringify(h.reconcile.mock.calls[0])).not.toMatch(/mskey_|msgr_/);
   });
 
   it('--harness cursor wires the Cursor adapter — and bakes no surface anywhere', async () => {
     const code = await agentCommand(parseArgs(['June', '--harness', 'cursor']));
     expect(code).toBe(0);
-    expect(h.configureCursor).toHaveBeenCalled();
-    expect(h.configure).not.toHaveBeenCalled();
+    expect(h.reconcile.mock.calls[0]![1]).toEqual(['cursor']);
     // v2 identity carries no surface (ADR 281): the launcher provides it at runtime (ADR 286).
     const bindingArg = h.saveBinding.mock.calls[0]![1] as Record<string, unknown>;
     expect(bindingArg['surface']).toBeUndefined();
     const specArg = h.saveWorkspaceSpec.mock.calls[0]![1] as Record<string, unknown>;
     expect(specArg['surface']).toBeUndefined();
-    const entry = h.configureCursor.mock.calls[0]![0] as { env: Record<string, string> };
-    expect(entry.env.MUSTERD_SURFACE).toBeUndefined();
+    expect(JSON.stringify(h.reconcile.mock.calls[0])).not.toMatch(/MUSTERD_SURFACE/);
   });
 
   it('--harness codex wires the Codex adapter', async () => {
     const code = await agentCommand(parseArgs(['June', '--harness', 'codex']));
     expect(code).toBe(0);
-    expect(h.configureCodex).toHaveBeenCalled();
-    expect(h.configure).not.toHaveBeenCalled();
-    const entry = h.configureCodex.mock.calls[0]![0] as { env: Record<string, string> };
-    expect(entry.env.MUSTERD_SURFACE).toBeUndefined();
+    expect(h.reconcile.mock.calls[0]![1]).toEqual(['codex']);
   });
 
   it('defaults to the claude-code harness when --harness is omitted', async () => {
     await agentCommand(parseArgs(['June']));
-    expect(h.configure).toHaveBeenCalled();
-    expect(h.configureCursor).not.toHaveBeenCalled();
+    expect(h.reconcile.mock.calls[0]![1]).toEqual(['claude-code']);
   });
 
   it('rejects an unknown harness with the valid set', async () => {
@@ -324,7 +307,7 @@ describe('musterd agent <name>', () => {
   });
 
   it('still succeeds when MCP registration fails (member + workspace already done)', async () => {
-    h.configure.mockRejectedValueOnce(new Error('claude not found'));
+    h.reconcile.mockRejectedValueOnce(new Error('claude not found'));
     const code = await agentCommand(parseArgs(['June']));
     expect(code).toBe(0);
     expect(h.saveBinding).toHaveBeenCalled(); // workspace was still provisioned
@@ -339,7 +322,7 @@ describe('musterd agent <name>', () => {
     const code = await agentCommand(parseArgs(['June']));
     expect(code).toBe(0);
     expect(h.saveBinding).toHaveBeenCalled(); // workspace still provisioned
-    expect(h.configure).toHaveBeenCalled(); // MCP still wired
+    expect(h.reconcile).toHaveBeenCalled(); // still wired
   });
 
   it('refuses to reuse a seat that already exists as a human', async () => {
@@ -378,7 +361,7 @@ describe('musterd agent <name>', () => {
         label: 'claude-code:dana-scout',
       });
       expect(h.saveBinding).toHaveBeenCalled();
-      expect(h.configure).toHaveBeenCalled();
+      expect(h.reconcile).toHaveBeenCalled();
       expect(chunks.join('')).toContain('reused');
     });
 
@@ -467,5 +450,24 @@ describe('musterd agent <name> --hue (ADR 374)', () => {
     await expect(agentCommand(parseArgs(['June', '--hue', '360']))).rejects.toThrow(/0.*359/);
     expect(h.writeSeatFile).not.toHaveBeenCalled();
     expect(h.addMember).not.toHaveBeenCalled();
+  });
+
+  it('a re-run that names no --harness keeps the Workspace recorded set (review I1)', async () => {
+    mkdirSync(join(h.workspace.dir, '.musterd'), { recursive: true });
+    writeFileSync(
+      join(h.workspace.dir, '.musterd', 'provisioned.json'),
+      JSON.stringify({
+        version: 3,
+        toolkit: '',
+        desired: ['claude-code', 'codex'],
+        contributions: {},
+        provisionedAt: 'x',
+      }),
+    );
+    await agentCommand(parseArgs(['June']));
+    expect(h.reconcile.mock.calls[0]![1]).toEqual(['claude-code', 'codex']);
+    h.reconcile.mockClear();
+    await agentCommand(parseArgs(['June', '--harness', 'cursor']));
+    expect(h.reconcile.mock.calls[0]![1]).toEqual(['cursor']);
   });
 });
