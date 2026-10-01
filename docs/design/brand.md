@@ -117,6 +117,9 @@ Single mono size at `14 / 22`; bold for emphasis; never italic in terminal frame
 - **Lowercase product name**, sentence-case headings.
 - **Respect the reader's intelligence.** Short sentences. One idea per sentence. Lead with the concrete.
 - **Honest about scope.** When something is roadmap, say "not yet" plainly — never imply it exists.
+- **No contrast frame.** Never "X, not Y", "it's not X, it's Y", "X rather than Y" or "X instead of Y". Say what the thing is and stop. The frame argues with a position nobody in the room took, and it is the most recognisable tell of machine-written copy (nick, 2026-09-30). Scope stays honest by stating it plainly — "your sandbox and your host decide what an agent can touch" — without setting it against a straw man.
+- **Copy a person says is in that person's voice.** A slide or a script line for nick reads as nick talking to the room — never as an assistant reporting to him ("measured on our own history").
+- **Provenance lives off the surface.** File paths, ADR numbers and how-we-measured go in speaker notes, docs and the wiki. A slide carries the claim; the person presenting carries the source.
 - The single allowed bit of personality: one mustard pun in the README, and warm-but-spare microcopy in the CLI (e.g. empty inbox: `inbox empty — nobody's mustered anything yet`).
 
 ---
