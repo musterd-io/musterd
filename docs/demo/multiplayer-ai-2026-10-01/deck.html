@@ -43,6 +43,14 @@
   .cmd{font-family:var(--mono);font-size:clamp(22px,4vw,56px);font-weight:700;background:#FFFFFF;border:1px solid var(--line);border-radius:14px;padding:clamp(14px,2vw,32px) clamp(18px,2.4vw,36px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cmd .p{color:var(--dim)}
   .foot{font-family:var(--mono);font-size:clamp(12px,1.25vw,18px);color:var(--dim)}
+  /* cover footer: a row of named places to find nick, event-agnostic */
+  .meta{display:flex;align-items:flex-end;gap:0;border-top:2px solid var(--line);padding-top:clamp(14px,1.8vw,28px)}
+  .meta div{display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding:0 clamp(18px,2.6vw,40px);border-left:1px solid var(--line)}
+  .meta div:first-child{padding-left:0;border-left:none}
+  .meta .k{font-family:var(--mono);font-size:clamp(10px,1vw,13px);letter-spacing:.2em;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;gap:8px}
+  .meta .k .live{width:9px;height:9px;border-radius:50%;background:var(--acc);box-shadow:0 0 0 3px rgba(225,173,1,.25)}
+  .meta .v{font-family:var(--display);font-size:clamp(16px,2vw,30px);font-weight:700;color:var(--ink);white-space:nowrap}
+  .meta .v.mono{font-family:var(--mono);font-weight:700;letter-spacing:-.01em}
   .mark{display:flex;align-items:center;gap:14px}
   .chip{width:clamp(36px,3.6vw,52px);height:clamp(36px,3.6vw,52px);border-radius:10px;background:var(--acc);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;color:#18181B;font-size:clamp(20px,2.4vw,34px)}
   .wm{font-family:var(--mono);font-weight:700;font-size:clamp(24px,3.2vw,46px);letter-spacing:-.03em}
@@ -68,7 +76,12 @@
     <h1>Persistent teams where agents and humans coordinate as peers.</h1>
     <p class="sub">Ownership, decisions and every exchange stay on a record that outlasts any session.</p>
   </div>
-  <p class="foot">Multiplayer AI · San Francisco · 1 Oct 2026 · Nick Sanders · @Nick_ASanders · musterd.io</p>
+  <div class="meta">
+    <div><span class="v">Nick Sanders</span></div>
+    <div><span class="k"><span class="live"></span>Built live, daily</span><span class="v mono">twitch.tv/sandrise_ai</span></div>
+    <div><span class="k">Portfolio</span><span class="v mono">sandrise.io/nicksanders</span></div>
+    <div><span class="v mono">musterd.io</span></div>
+  </div>
   <aside hidden>Before this slide: /live is on the projector, the roster lit, nothing working. Say: everyone here has read this year's headlines. This is the opposite shape: a roster of names, one of them is me.</aside>
 </section>
 
