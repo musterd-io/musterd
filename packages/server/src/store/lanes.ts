@@ -55,6 +55,10 @@ interface LaneRow {
   merged_json: string | null;
   /** Why the lane is parked (ADR 466, v78); null whenever `state !== 'parked'`. */
   parked_json: string | null;
+  /** What the close said is left (ADR 487, v81): JSON `"none"` or a lane-id list; null reads as none. */
+  follows_up_json: string | null;
+  /** Why the lane was dropped (ADR 487, v81). */
+  abandon_reason: string | null;
   state: string;
   created_by: string;
   created_at: number;
@@ -89,6 +93,10 @@ function rowToLane(row: LaneRow, teamSlug: string): Lane {
     merged: row.merged_json ? (JSON.parse(row.merged_json) as Lane['merged']) : null,
     state: row.state as LaneState,
     ...(row.parked_json ? { parked: JSON.parse(row.parked_json) as Lane['parked'] } : {}),
+    ...(row.follows_up_json
+      ? { follows_up: JSON.parse(row.follows_up_json) as Lane['follows_up'] }
+      : {}),
+    ...(row.abandon_reason ? { abandon_reason: row.abandon_reason } : {}),
     created_by: row.created_by,
     created_at: row.created_at,
     claimed_at: row.claimed_at,
@@ -250,6 +258,8 @@ export async function openLane(
     stakes_provenance: rule ? 'defaulted' : null,
     merged_json: null,
     parked_json: null,
+    follows_up_json: null,
+    abandon_reason: null,
     state: claim ? 'claimed' : 'open',
     created_by: createdBy,
     created_at: now,
@@ -464,6 +474,13 @@ async function updateLaneInTx(
   // the HTTP layer strips `merged` before this write (ADR 305), because MCP/CLI resolve send a
   // partial object and wholesale replace dropped `authorized_by` and the ADR 300 verification tier.
   const merged = patch.merged !== undefined ? patch.merged : existing.merged;
+  // ADR 487: the close's answer is kept once given; a later answer (a re-submit) replaces it.
+  const followsUp =
+    patch.follows_up !== undefined ? patch.follows_up : (existing.follows_up ?? null);
+  // The drop reason rides `abandoned` the way the park record rides `parked`: set by the patch on or
+  // after the move in, kept while it stays abandoned, cleared if the lane is ever reopened.
+  const abandonReason =
+    state !== 'abandoned' ? null : (patch.abandon_reason ?? existing.abandon_reason ?? null);
   const risk = patch.risk ?? existing.risk;
   const stakes = patch.stakes ?? existing.stakes;
   // ADR 244: editing stakes takes OWNERSHIP of the value. A worker overriding a policy-defaulted
@@ -488,6 +505,8 @@ async function updateLaneInTx(
     stakes_provenance: stakesProvenance,
     merged_json: merged ? JSON.stringify(merged) : null,
     parked_json: parked ? JSON.stringify(parked) : null,
+    follows_up_json: followsUp !== null ? JSON.stringify(followsUp) : null,
+    abandon_reason: abandonReason,
     state,
     // claimed_at describes the CURRENT tenure: sticky while held, cleared by the release above so a
     // re-claim stamps fresh rather than inheriting the previous holder's timestamp.
@@ -530,6 +549,8 @@ async function updateLaneInTx(
     'stakes_provenance',
     'merged_json',
     'parked_json',
+    'follows_up_json',
+    'abandon_reason',
     'state',
     'claimed_at',
     'resolved_at',
@@ -543,6 +564,27 @@ async function updateLaneInTx(
   const after = (await getLane(db, teamId, id, teamSlug))!;
   if (audit)
     await recordLaneEdges(db, teamId, existing, after, patch.owner_seat !== undefined, audit);
+  // ADR 487 §5.1: a named follow-up with no goal joins this lane's goal, in the same transaction —
+  // so the local path and the hub's arbitration both attach it, and a refused write attaches
+  // nothing. One already on a goal keeps it. The policy (`decideFollowsUp`) has already refused a
+  // list whose goalless lanes would have nowhere to go.
+  if (Array.isArray(patch.follows_up) && after.goal_id !== null) {
+    for (const nextId of patch.follows_up) {
+      if (nextId === id) continue;
+      const named = await getLane(db, teamId, nextId, teamSlug);
+      if (named && named.goal_id === null)
+        await updateLaneInTx(
+          db,
+          teamId,
+          nextId,
+          teamSlug,
+          { goal_id: after.goal_id },
+          now,
+          undefined,
+          audit,
+        );
+    }
+  }
   return after;
 }
 
@@ -560,6 +602,8 @@ const AUDITED_LANE_FIELDS = [
   'stakes',
   'merged',
   'parked',
+  'follows_up',
+  'abandon_reason',
 ] as const;
 
 /** Which auditable fields differ between two reads of a lane (arrays/objects by value). */

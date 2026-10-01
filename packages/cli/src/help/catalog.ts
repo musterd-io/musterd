@@ -634,7 +634,8 @@ export const CATALOG: readonly CommandEntry[] = [
   },
   {
     name: 'done',
-    signature: '[<lane-id>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--json]',
+    signature:
+      '[<lane-id>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>] [--json]',
     summary:
       'close your work — mark the lane done (or submit it, with a merge attestation), then show what’s next',
     group: 'work',

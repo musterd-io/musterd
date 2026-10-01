@@ -133,6 +133,7 @@ import {
   acceptanceAskBody,
   deliverLaneAskAct,
   deliverLaneAskSuperseded,
+  followsUpNotice,
   noGoalNotice,
   priorOwnerNotice,
   rerouteDepartedAcceptances,
@@ -6329,6 +6330,7 @@ export async function handleHttp(
               acceptanceAskBody(lane.title, {
                 overlapNotice,
                 noGoalNotice: noGoalNotice(lane.goal_id),
+                followsUpNotice: await followsUpNotice(ctx.db, team.id, lane),
               }),
               {
                 species: 'approve',
@@ -6506,6 +6508,7 @@ export async function handleHttp(
               acceptanceAskBody(lane.title, {
                 overlapNotice: priorOwnerNotice(named.reviewer, priorOwners),
                 noGoalNotice: noGoalNotice(lane.goal_id),
+                followsUpNotice: await followsUpNotice(ctx.db, team.id, lane),
               }),
               {
                 species: 'approve',

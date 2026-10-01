@@ -6030,6 +6030,37 @@ describe('two-stage close (ADR 169)', () => {
     });
   });
 
+  it('ADR 487: a part-of-several lane is refused a submit until follows_up answers, then the ask carries it', async () => {
+    const { ada, gee } = await setup();
+    const lane = await post(
+      '/teams/dawn/lanes',
+      { title: 'store fix 1/2', goal_id: 'store', claim: true },
+      ada,
+    );
+    const laneId = lane.json.lane.id as string;
+    const next = await post('/teams/dawn/lanes', { title: 'store fix, the rest' }, ada);
+    const nextId = next.json.lane.id as string;
+
+    const refused = await patchLane(laneId, { state: 'awaiting_acceptance' }, ada);
+    expect(refused.status).toBe(400);
+    expect(JSON.stringify(refused.json)).toContain('follows_up');
+
+    const ok = await patchLane(
+      laneId,
+      { state: 'awaiting_acceptance', follows_up: [nextId], acceptor: 'gee' },
+      ada,
+    );
+    expect(ok.status).toBe(200);
+    expect(ok.json.lane.follows_up).toEqual([nextId]);
+    const board = await req('GET', '/teams/dawn/lanes', undefined, ada);
+    const attached = (board.json.lanes as { id: string; goal_id: string | null }[]).find(
+      (l) => l.id === nextId,
+    );
+    expect(attached?.goal_id).toBe('store');
+    const inbox = await req('GET', '/teams/dawn/inbox', undefined, gee);
+    expect(JSON.stringify(inbox.json)).toContain(`Follows up: ${nextId} [open]`);
+  });
+
   it('lane_ready persists the stage-one attestation, stays contending, and asks a cross-family reviewer', async () => {
     const { nickTok, ada, gee } = await setup();
     const lane = await post(

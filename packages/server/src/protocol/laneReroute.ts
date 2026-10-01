@@ -3,10 +3,12 @@ import {
   type AskTier,
   type Lane,
   askContract,
+  leftoverSignal,
   makeEnvelope,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Ctx } from '../context.js';
+import type { Driver } from '../db/driver.js';
 import { appendLaneEventRequired, laneOwnerHistory } from '../store/audit.js';
 import { getLane, listLanes } from '../store/lanes.js';
 import { getMemberByName } from '../store/members.js';
@@ -47,6 +49,7 @@ export function acceptanceAskBody(
     peerFindings?: string;
     overlapNotice?: string;
     noGoalNotice?: string;
+    followsUpNotice?: string;
   } = {},
 ): string {
   const checklist =
@@ -59,7 +62,8 @@ export function acceptanceAskBody(
     // Lane 01M2P2E2H6: the acceptor learns what `accept` DOES before they send one, not from the
     // ack afterwards. Appended to the checklist so both the peer and human bodies below carry it.
     ACCEPTANCE_MOVES_NOTICE;
-  const overlap = (opts.overlapNotice ?? '') + (opts.noGoalNotice ?? '');
+  const overlap =
+    (opts.followsUpNotice ?? '') + (opts.overlapNotice ?? '') + (opts.noGoalNotice ?? '');
   if (opts.human && opts.peerFindings !== undefined) {
     return (
       `[lane] human acceptance required: "${title}" — peer accepted with: "${opts.peerFindings}". ` +
@@ -87,6 +91,29 @@ export function priorOwnerNotice(reviewer: string, priorOwners: string[]): strin
         'accept if you can judge it independently, or decline and say "recusing — I authored this" ' +
         'so it routes to someone else.'
     : '';
+}
+
+/**
+ * What the worker said is left (ADR 487 §5.1), so the acceptor judges the plan's shape along with
+ * the outcome: each named lane with its state (and a drop's reason), or an explicit `none` when the
+ * lane declared itself one part of several. Silent otherwise — a one-shot lane has nothing to show.
+ */
+export async function followsUpNotice(db: Driver, teamId: string, lane: Lane): Promise<string> {
+  const answer = lane.follows_up ?? null;
+  if (answer === null) return '';
+  if (answer === 'none')
+    return leftoverSignal(lane) !== null
+      ? ' Follows up: none — the worker says nothing is left of this part.'
+      : '';
+  const parts: string[] = [];
+  for (const id of answer) {
+    const next = await getLane(db, teamId, id, lane.team);
+    if (!next) parts.push(`${id} (gone)`);
+    else if (next.state === 'abandoned')
+      parts.push(`${id} dropped — ${next.abandon_reason ?? 'no reason'}`);
+    else parts.push(`${id} [${next.state}] "${next.title}"`);
+  }
+  return ` Follows up: ${parts.join('; ')}.`;
 }
 
 export function noGoalNotice(goalId: string | null): string {
@@ -222,6 +249,7 @@ export async function rerouteAcceptances(
       acceptanceAskBody(lane.title, {
         overlapNotice: priorOwnerNotice(pick.reviewer, priorOwners),
         noGoalNotice: noGoalNotice(lane.goal_id),
+        followsUpNotice: await followsUpNotice(ctx.db, team.id, lane),
       }),
       {
         species: 'approve',

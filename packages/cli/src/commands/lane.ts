@@ -27,10 +27,10 @@ const USAGE =
   '  musterd lane park <id> --reason "<why not now>" [--until <date>]   (humans only, ADR 466)\n' +
   '  musterd lane unpark <id>                                           (humans only)\n' +
   '  musterd lane handoff <id> --to <seat> [--branch <ref>] [--note <why>]\n' +
-  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--clear-merged]\n' +
-  '  musterd lane submit <id> [--to <seat>] [--pr <n>] [--sha <sha>] [--authorized-by <human>]\n' +
+  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--clear-merged] [--abandon-reason "<why>"]\n' +
+  '  musterd lane submit <id> [--to <seat>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>]\n' +
   '                          [--branch b]\n' +
-  '  musterd lane resolve <id> [--pr <n>] [--sha <sha>] [--authorized-by <human>]\n' +
+  '  musterd lane resolve <id> [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>]\n' +
   '  musterd lanes [--project p] [--mine] [--open] [--json]';
 
 /**
@@ -196,6 +196,9 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
             ...(submit && flagStr(parsed.flags, 'to') !== undefined
               ? { acceptor: flagStr(parsed.flags, 'to')! }
               : {}),
+            // ADR 487 §5.1: what is left after this lane. Refused as missing only when the lane
+            // declares itself one part of several; the daemon's refusal names this flag.
+            ...followsUpFlag(flagStr(parsed.flags, 'follows-up')),
           },
     );
     const label = sub === 'claim' ? 'claimed' : submit ? 'submitted for acceptance' : 'done';
@@ -320,6 +323,10 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       // ADR 305 amendment 2 (lane 01M2GR0434): the one verb for NONE — a lane stamped with the
       // wrong merge had no way back. Owner or admin only; the daemon refuses a counterpart.
       ...(parsed.flags['clear-merged'] === true ? { merged: null } : {}),
+      // ADR 487: why a lane is dropped — with --state abandoned, or later on an abandoned lane.
+      ...(flagStr(parsed.flags, 'abandon-reason') !== undefined
+        ? { abandon_reason: flagStr(parsed.flags, 'abandon-reason')! }
+        : {}),
     });
     process.stdout.write(`${theme.ok('✓')} lane updated\n${renderLane(res.lane)}\n`);
     renderWarnings(res.warnings);
@@ -442,4 +449,15 @@ export function renderSubmitReport(res: Awaited<ReturnType<HttpClient['updateLan
       ) + '\n',
     );
   }
+}
+
+/** `--follows-up a,b` / `--follows-up none` → the ADR 487 patch field; absent sends nothing. */
+export function followsUpFlag(raw: string | undefined): { follows_up?: 'none' | string[] } {
+  if (raw === undefined) return {};
+  const ids = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (ids.length === 1 && ids[0]!.toLowerCase() === 'none') return { follows_up: 'none' };
+  return ids.length > 0 ? { follows_up: ids } : {};
 }

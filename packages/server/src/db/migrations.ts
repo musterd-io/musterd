@@ -1984,6 +1984,20 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    // v81 — ADR 487 (nothing vanishes): what a closing lane said is left (`follows_up_json`: the
+    // JSON of `"none"` or a lane-id list; null reads as none) and why a lane was dropped
+    // (`abandon_reason`). Both nullable, beside `parked_json`; no backfill — every existing close
+    // predates the question.
+    version: 81,
+    up: (db) => {
+      const laneCols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
+      if (!laneCols.includes('follows_up_json'))
+        db.exec('ALTER TABLE lanes ADD COLUMN follows_up_json TEXT');
+      if (!laneCols.includes('abandon_reason'))
+        db.exec('ALTER TABLE lanes ADD COLUMN abandon_reason TEXT');
+    },
+  },
 ];
 
 function currentVersion(db: Database): number {
