@@ -41,6 +41,7 @@ const BOOLEAN_FLAGS = new Set([
   'stdin',
   'reset-policy',
   'wake',
+  'trace',
   'enforce-clear',
   'no-title',
   'refresh-guidance',

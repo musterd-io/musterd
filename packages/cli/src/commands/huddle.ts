@@ -13,6 +13,7 @@ import { flagStr, type Parsed } from '../args.js';
 import { readBindingAt } from '../config.js';
 import { CliError } from '../errors.js';
 import { TIMELINE_WINDOW } from '../render/huddles.js';
+import { renderHuddleTrace } from '../render/huddleTrace.js';
 import { renderMessageRow } from '../render/rows.js';
 import { theme } from '../render/theme.js';
 import { bindThread } from '../session/continuity.js';
@@ -35,7 +36,7 @@ import { parseRecipients } from './send.js';
 const USAGE =
   'usage:\n' +
   '  musterd huddle list [--all]\n' +
-  '  musterd huddle show <huddle-id>\n' +
+  '  musterd huddle show <huddle-id> [--trace]\n' +
   '  musterd huddle open --topic <goal|lane|design>:<id> --anchor <path|pr|lane> [--to a,b|@team] [--turns N] [--until <ms|ISO>] [--room <url>] "<why we are huddling>"\n' +
   '  musterd huddle say <huddle-id> [--act message|challenge|steer|insight] [--to <seat>] "<turn>"\n' +
   '  musterd huddle close <huddle-id> --anchor-ref <ref|none> "<what landed, or why nothing did>"';
@@ -285,6 +286,17 @@ export async function huddleCommand(parsed: Parsed): Promise<number> {
     const wanted = parsed.positionals[1];
     if (!wanted) throw new CliError(`name the huddle id\n${USAGE}`, 2);
     const view = huddles.find((h) => h.id === wanted || h.id.startsWith(wanted));
+    // --trace (ADR 493): the daemon's joined timeline — each seat's wake, tool steps and turn. A
+    // full id older than the timeline window is still asked for directly.
+    if (parsed.flags['trace'] === true) {
+      const trace = await http.getHuddleTrace(team, view?.id ?? wanted);
+      if (json) {
+        process.stdout.write(JSON.stringify(trace) + '\n');
+        return 0;
+      }
+      process.stdout.write(renderHuddleTrace(trace, kindOf, process.stdout.columns || 100) + '\n');
+      return 0;
+    }
     if (!view) {
       throw new CliError(
         `no huddle ${wanted} in the recent timeline — \`musterd huddle list --all\` shows what is there`,

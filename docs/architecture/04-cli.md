@@ -83,6 +83,7 @@ src/
     theme.ts          // mutable ANSI color instance + roles from brand.md; setColorEnabled wires --no-color (ADR 113)
     ui.ts             // shared layout toolkit: glyph set, termWidth, defList, success/heading/hint, visible-length padding (ADR 113)
     rows.ts           // renderMessageRow, renderStatusTable, renderBanner, renderPresence
+    huddleTrace.ts    // renderHuddleTrace (ADR 493): `huddle show <id> --trace` — seat table (fastest to speak first; wake; time-to-turn) over the daemon's merged event list, clock first; draws, never joins
     huddles.ts        // the roster's huddle join (ADR 378): huddleMarks turns deriveHuddles' huddle-major answer into the seat-major one a roll-call row asks — open rooms only, spoken not merely named; owns TIMELINE_WINDOW so `status` and `huddle list` read the same window
     title.ts          // terminal-tab seat title (ADR 160): pure terminalTitleFor decision + best-effort /dev/tty OSC-0 writer, called from the bin.ts postamble
     help.ts           // the pretty grouped/per-command/JSON help renderers + did-you-mean (ADR 113)
@@ -208,7 +209,7 @@ src/
     team.ts           // Team/member management, scoped bootstrap lifecycle + readiness-gated legacy cutover (ADR 344/350), policy, and roster export
     fmt.ts            // musterd fmt [--check] — canonicalize .musterd roster files: team + seats + roles (ADR 058 guard 2)
     send.ts           // send
-    huddle.ts         // huddle open/say/close — a huddle is a thread: meta.huddle on the root, turns in the thread, resolve names the anchor; lays the whiteboard room out best-effort, never spawns it (ADR 378)
+    huddle.ts         // huddle open/say/close/show (show --trace reads GET /huddles/:id/trace, ADR 493) — a huddle is a thread: meta.huddle on the root, turns in the thread, resolve names the anchor; lays the whiteboard room out best-effort, never spawns it (ADR 378)
     inbox.ts          // inbox [--watch] [--wait] [--limit <n>] — bounded recent window + day-grouped smart dates, always-show-unread (ADR 054/117)
     nudge.ts          // `inbox --waiting`: the waiting-acts banner + the acts behind it, read-only — the approval-prompt hook target (ADR 053); `musterd nudge` is the hidden pre-2026-09-03 alias
     reap.ts           // musterd reap [--yes] (ADR 242): list orphaned MCP sidecars from the daemon's footprint tick; --yes asks the daemon to kill them (re-verified server-side, audited)

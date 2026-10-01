@@ -114,6 +114,7 @@ import {
   TRACE_SEAT_TIMELINE_DEFAULT,
   TRACE_SEAT_TIMELINE_MAX,
   TraceSeatTimelineResponseSchema,
+  HuddleTraceSchema,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
@@ -210,6 +211,7 @@ import {
   reportProvision,
   toProvision,
 } from '../store/hostProvisions.js';
+import { loadHuddleTrace } from '../store/huddleTrace.js';
 import { rowsToEnvelopes } from '../store/hydrate.js';
 import { listInterruptCandidates } from '../store/interruptCandidates.js';
 import {
@@ -5775,6 +5777,20 @@ export async function handleHttp(
       // per-seat timeline). Same ADR 128 scoping as the session read — "not yours" and "not there"
       // are the same empty answer — and the store read never selects the content column, so this
       // wire cannot carry it whatever the team's trace.content policy says.
+      // One huddle as a single timeline (ADR 493): the open, each seat's wake, its structural tool
+      // steps, its turn, the close. Readable by a Member in the room or an admin; anyone else gets the
+      // same 404 as a missing huddle (ADR 128 — not an oracle for which huddles exist).
+      if (method === 'GET' && /^\/huddles\/[^/]+\/trace$/.test(rest)) {
+        const { team, member } = await authTouch(ctx, slug, req);
+        const id = decodeURIComponent(rest.slice('/huddles/'.length, -'/trace'.length));
+        const trace = await loadHuddleTrace(ctx.db, ctx.traceDb, team, id, Date.now());
+        const inRoom = trace?.seats.some((s) => s.seat === member.name) ?? false;
+        if (!trace || !(inRoom || resolveCapabilities(member).is_admin)) {
+          return sendJson(res, 404, { error: { code: 'not_found', message: 'no such huddle' } });
+        }
+        return sendJson(res, 200, HuddleTraceSchema.parse(trace));
+      }
+
       if (method === 'GET' && rest.startsWith('/trace/seats/')) {
         const { team, member } = await authTouch(ctx, slug, req);
         const seat = decodeURIComponent(rest.slice('/trace/seats/'.length));

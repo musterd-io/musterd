@@ -146,6 +146,31 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
       same folder? (y/N)
     ```
 
+### Huddle trace frame (ADR 493)
+
+23. `cmd/huddle-show-trace` — `musterd huddle show <id> --trace`, no-color, 80 columns: a head line
+    (`huddle trace <topic> <open|closed> · <id prefix> · N seats`), the open/close line with the
+    room's run time, a seat table ordered fastest-to-speak first (silent seats last, `not yet`), then
+    one event per line, clock first. Accent on the head; seat names in their kind colour; `act`
+    bold, `hook` yellow, other kinds dim; a tool's outcome green when `ok`, red otherwise. The
+    renderer snapshot (`render/huddleTrace.test.ts`) pins these rows:
+    ```
+    huddle trace goal:demo closed · 01M3WBAWCE · 4 seats
+      opened by izzo 11:23:30 · closed 11:30:35 (7m 05s)
+
+      seat      in as    wake                       harness      to turn
+      izzo      opener   —                          claude-code  —
+      miley     named    resumed · 27.5s · $0.56    claude-code  +1.4m
+      ryder     named    fresh · 44.2s · $2.31      claude-code  +5.6m
+      lazara    steered  —                          —            not yet
+
+      11:23:30  izzo      act    message: REHEARSAL 3
+      11:24:20  miley     wake   woke · resumed
+      11:24:26  miley     tool   Bash  ok 11.0s
+      11:24:32  lazara    hook   hook timeout 10.0s
+      11:24:54  miley     act    message: I'd take lane 2
+    ```
+
 ## Page: States (empty + error)
 
 1. `state/empty-inbox` — `inbox empty — nobody's mustered anything yet` (dim). (Exact string; the CLI uses it verbatim.)
