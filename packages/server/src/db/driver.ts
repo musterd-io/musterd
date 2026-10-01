@@ -46,6 +46,13 @@ export type DriverErrorCode =
   | 'unavailable'
   | 'no_tenant_scope';
 
+/**
+ * The stable sentence (cloud spec §5.5 / §7) for a store that cannot be reached: what a
+ * `DriverError('unavailable')` carries, what `/health` reports, what a 503 says. Matched by probes
+ * and banners — never reworded.
+ */
+export const DATABASE_UNREACHABLE_SENTENCE = 'database unreachable';
+
 export class DriverError extends Error {
   constructor(
     message: string,

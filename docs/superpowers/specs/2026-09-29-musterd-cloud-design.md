@@ -403,6 +403,20 @@ what make that widening defensible; ADR 475's Consequences name it.
    banner can match it; it is not free text.
 6. **Schema version guard** (§6): refuse to start if the schema is newer than the binary knows.
 
+*(2026-10-01, increment 1C built — `docs/architecture/03-server.md` §Cloud mode; plan
+`docs/superpowers/plans/2026-09-30-cloud-increment-1c-cloud-mode.md`.)* What building it decided
+where this section was silent: **(a)** "admin routes" in increment 1 is `POST /teams`; team-level
+`is_admin` seats keep governing their own team with their own credential, which is already explicit.
+**(b)** The loopback-only machine verbs (store prune/compact, node enroll, the sign-in handoff) are
+**not mounted** on Cloud — 404, not 403. **(c)** Seat provisioning off-machine was already
+admin-only; on Cloud there is no other way in. **(d)** OAuth's TLS-except-loopback becomes
+TLS-always, read from the edge's `x-forwarded-proto`. **(e)** A host/path team mismatch is 404, so a
+host cannot probe which teams exist. **(f)** Rate limits (4 above) are lane 01M3W3EQ67, outside
+increment 1's acceptance. **(g)** The guard also refuses an **older** schema ("schema older than
+this build"): the migrate step did not run. **(h)** A third stable sentence, "console unreachable",
+is the 503 when the console's JWKS cannot be fetched. **(i)** A 503 body carries `code:
+server_error` — the protocol has no unavailable code, and adding one is an ADR (hard rule 1).
+
 ## 6. Schema changes and deploys
 
 Today migrations are forward-only and an older binary runs silently against a newer schema

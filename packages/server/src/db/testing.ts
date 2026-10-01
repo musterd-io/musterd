@@ -2,7 +2,7 @@ import { describe } from 'vitest';
 import type { Driver } from './driver.js';
 import { openDb } from './open.js';
 import { migratePostgres, migrateTracePostgres } from './pg/migrate.js';
-import { pgDriver, type PgDriver } from './pgDriver.js';
+import { pgDriver, type PgDriver, type PoolFactory } from './pgDriver.js';
 import { pgliteDriver, type PgliteDriver } from './pgliteDriver.js';
 import { sqliteDriver } from './sqliteDriver.js';
 import { openTraceDriver } from './traceDb.js';
@@ -136,6 +136,28 @@ function realPostgres(store: TestStore) {
     })();
   }
   return p;
+}
+
+/**
+ * Pools for a cloud-mode server (1C): `createServer({ cloudPools })` runs the production `pgDriver`
+ * over the pooled PGlite instances, so the cloud path is exercised end to end without a network.
+ * Truncation is the caller's: open the seed handle(s) with `openTestDriver('pglite')` FIRST — that
+ * is what empties the instance. `urls` records every URL the driver asked a pool for.
+ */
+export async function testCloudPools(): Promise<{
+  factories: { main: PoolFactory; trace: PoolFactory };
+  urls: string[];
+}> {
+  const urls: string[] = [];
+  const logged =
+    (f: PoolFactory): PoolFactory =>
+    (url) => {
+      urls.push(url);
+      return f(url);
+    };
+  const main = (await pooledPglite('main')).d.poolFactory();
+  const trace = (await pooledPglite('trace')).d.poolFactory();
+  return { factories: { main: logged(main), trace: logged(trace) }, urls };
 }
 
 export function withDrivers(

@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { TOKEN_PREFIXES } from '@musterd/protocol';
 import { z } from 'zod';
+import { resolveCloudConfig, type CloudConfig } from './cloud/mode.js';
 
 export interface TlsConfig {
   /** Filesystem path to the PEM certificate (chain). */
@@ -12,6 +13,10 @@ export interface TlsConfig {
 }
 
 export interface ResolvedConfig {
+  /** `MUSTERD_MODE` (spec 2026-09-29 §5): every cloud effect keys on this; unset is self-hosted. */
+  mode: 'self-hosted' | 'cloud';
+  /** The cloud block — database URLs, console JWKS, host suffix — or null when self-hosted. */
+  cloud: CloudConfig | null;
   port: number;
   host: string;
   dbPath: string;
@@ -247,12 +252,18 @@ export function resolveConfig(opts?: ConfigOptions): ResolvedConfig {
     );
   }
   const tls: TlsConfig | null = certPath && keyPath ? { certPath, keyPath } : null;
+  const cloud = resolveCloudConfig(process.env);
 
   return {
+    mode: cloud ? 'cloud' : 'self-hosted',
+    cloud,
     port: opts?.port ?? (envPort ? Number(envPort) : DEFAULT_PORT),
     host: opts?.host ?? process.env['MUSTERD_HOST'] ?? DEFAULT_HOST,
-    dbPath: opts?.dbPath ?? defaultDbPath(),
-    traceDbPath: opts?.traceDbPath ?? defaultTraceDbPath(opts?.dbPath ?? defaultDbPath()),
+    // A cloud store has no file (the stores are the Postgres URLs above); name it so from the start.
+    dbPath: cloud ? 'postgres' : (opts?.dbPath ?? defaultDbPath()),
+    traceDbPath: cloud
+      ? 'postgres'
+      : (opts?.traceDbPath ?? defaultTraceDbPath(opts?.dbPath ?? defaultDbPath())),
     heartbeatIntervalMs: envMs('MUSTERD_HEARTBEAT_INTERVAL_MS', HEARTBEAT_INTERVAL_MS),
     presenceTimeoutMs: envMs('MUSTERD_PRESENCE_TIMEOUT_MS', PRESENCE_TIMEOUT_MS),
     agentIdleMs: envMs('MUSTERD_AGENT_IDLE_MS', AGENT_IDLE_MS),
@@ -270,7 +281,8 @@ export function resolveConfig(opts?: ConfigOptions): ResolvedConfig {
     observerIdleCap: envMs('MUSTERD_OBSERVER_IDLE_CAP', OBSERVER_IDLE_CAP),
     supersedeGraceMs: envMs('MUSTERD_SUPERSEDE_GRACE_MS', SUPERSEDE_GRACE_MS),
     tls,
-    trustProxy: opts?.trustProxy ?? envBool('MUSTERD_INSECURE_TRUST_PROXY'),
+    // Cloud sits behind Cloudflare + Fly: every request arrives from the edge proxy (spec §5.1).
+    trustProxy: cloud ? true : (opts?.trustProxy ?? envBool('MUSTERD_INSECURE_TRUST_PROXY')),
     scheme: tls ? 'wss' : 'ws',
     allowedHosts: envList('MUSTERD_ALLOWED_HOSTS'),
     allowedOrigins: envList('MUSTERD_ALLOWED_ORIGINS'),
@@ -372,7 +384,13 @@ export function hostnameOf(hostHeader: string): string {
  */
 export function checkUpgrade(
   headers: { host?: string | undefined; origin?: string | undefined },
-  cfg: { boundHost: string; allowedHosts: string[]; allowedOrigins: string[] },
+  cfg: {
+    boundHost: string;
+    allowedHosts: string[];
+    allowedOrigins: string[];
+    /** Cloud (spec §5.3): every `<team>.<suffix>` host is a public face. */
+    hostSuffix?: string | null;
+  },
 ): { ok: true } | { ok: false; reason: string } {
   // A present Origin means a browser; legitimate musterd clients (CLI, MCP via `ws`) send none. Allow
   // an explicitly-listed origin, OR a *same-origin* page the daemon itself serves — Origin host:port
@@ -385,7 +403,10 @@ export function checkUpgrade(
   // Origin carries no DNS-rebinding risk there and is not a reason to refuse. Rehearsal A
   // (2026-09-26): Anthropic's connector client sends an Origin, and the daemon 403'd it — before
   // the request log, so the phone saw "no server responded" and the box saw nothing.
-  const publicFace = cfg.allowedHosts.some((h) => normalizeHost(h) === hostname);
+  const suffix = cfg.hostSuffix ? normalizeHost(cfg.hostSuffix) : null;
+  const publicFace =
+    cfg.allowedHosts.some((h) => normalizeHost(h) === hostname) ||
+    (suffix !== null && (hostname === suffix || hostname.endsWith(`.${suffix}`)));
   if (
     !publicFace &&
     headers.origin !== undefined &&

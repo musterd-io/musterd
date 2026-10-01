@@ -1,4 +1,5 @@
 import { ERROR_HTTP_STATUS, type ErrorBody, type ErrorCode } from '@musterd/protocol';
+import { DATABASE_UNREACHABLE_SENTENCE, DriverError } from './db/driver.js';
 
 /** The single server error type. Carries a protocol error code; transports serialize it. */
 export class MusterdError extends Error {
@@ -19,6 +20,24 @@ export class MusterdError extends Error {
 
   toFrame(): { type: 'error'; code: ErrorCode; message: string } {
     return { type: 'error', code: this.code, message: this.message };
+  }
+}
+
+/**
+ * The server cannot serve right now, for a reason that is one of a small set of STABLE SENTENCES
+ * (cloud spec §5.5 / §7: "database unreachable", "console unreachable") — a probe or a banner
+ * matches the message, so it is never free text. HTTP 503. The wire `code` is `server_error`: the
+ * protocol has no unavailable code, and adding one is an ADR (hard rule 1); the status and the
+ * sentence carry the meaning.
+ */
+export class ServiceUnavailable extends MusterdError {
+  constructor(sentence: string) {
+    super('server_error', sentence);
+    this.name = 'ServiceUnavailable';
+  }
+
+  override get httpStatus(): number {
+    return 503;
   }
 }
 
@@ -55,6 +74,10 @@ export class SessionLeaseRefused extends MusterdError {
 /** Coerce any thrown value into a MusterdError (unknown errors become server_error). */
 export function asMusterdError(err: unknown): MusterdError {
   if (err instanceof MusterdError) return err;
+  // An unreachable store is an honest 503 with the stable sentence (cloud spec §7) — never a 500
+  // carrying the driver's socket error, which would leak a host and match no probe.
+  if (err instanceof DriverError && err.code === 'unavailable')
+    return new ServiceUnavailable(DATABASE_UNREACHABLE_SENTENCE);
   const message = err instanceof Error ? err.message : String(err);
   return new MusterdError('server_error', message);
 }

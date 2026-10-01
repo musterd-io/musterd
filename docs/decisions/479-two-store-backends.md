@@ -88,6 +88,13 @@ that declined the spike lane.
   gone. On real Neon Postgres ([`docs/perf/neon-pass.md`](../perf/neon-pass.md)) the tenancy leak
   test passed 4/4, and the pass found one bug the double hid — `pg` returns BIGINT as a string —
   fixed in the driver. Ten more SQLite-isms surfaced and were fixed in source.
+- **2026-10-01 (plan 1C, lane 01M3TTYRQW):** the Postgres backend is reachable in production
+  shape. `MUSTERD_MODE=cloud` builds `pgDriver` for both stores from `MUSTERD_DATABASE_*_URL` and
+  never opens a SQLite file; boot refuses any schema version but its own (migration is the separate
+  `migrateCloud` step); an unreachable store is a 503 "database unreachable" on every transport.
+  Cloud tests run the production driver over PGlite through `pgliteDriver().poolFactory()` — which
+  surfaced that the double must mirror node-postgres's simple protocol for parameterless queries
+  (the multi-statement baseline). `03-server.md` §Cloud mode lists the rest.
 
 ## Observability & Evaluation
 

@@ -1,5 +1,6 @@
+import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
-import { pgDriver } from './pgDriver.js';
+import { pgDriver, pgPoolFactory } from './pgDriver.js';
 
 /**
  * The choreography against a fake pool — what goes down the wire, in what order, on which client.
@@ -198,5 +199,43 @@ describe('pgDriver choreography (spec §12.1)', () => {
     const d = pgDriver({ ...urls, pools: f.factory });
     await d.close();
     await expect(d.get('SELECT 1')).rejects.toMatchObject({ code: 'closed' });
+  });
+});
+
+/**
+ * Review C1: node-postgres EMITS a dropped connection — on the pool for an idle client (pg-pool's
+ * idle listener), on the client itself while it is checked out — and an `'error'` event with no
+ * listener is an uncaught exception. Neon suspending, failing over or recycling connections would
+ * take the whole Cloud server down instead of serving the 503. The fake pool above cannot show it;
+ * this builds the REAL production pool (lazy: it connects to nothing) and fires the events.
+ */
+describe('the production pool survives a dropped connection (review C1)', () => {
+  const dropped = () =>
+    Object.assign(new Error('terminating connection due to administrator command'), {
+      code: '57P01',
+    });
+
+  it('an idle client dying (emitted on the pool) does not throw', async () => {
+    const pool = pgPoolFactory({ poolSize: 1 })(
+      'postgres://u:p@127.0.0.1:1/db',
+    ) as unknown as EventEmitter & { end(): Promise<void> };
+    try {
+      expect(() => pool.emit('error', dropped(), new EventEmitter())).not.toThrow();
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it('a checked-out client dying (emitted on the client) does not throw', async () => {
+    const pool = pgPoolFactory({ poolSize: 1 })(
+      'postgres://u:p@127.0.0.1:1/db',
+    ) as unknown as EventEmitter & { end(): Promise<void> };
+    try {
+      const client = new EventEmitter();
+      pool.emit('connect', client); // what pg-pool emits for every new client
+      expect(() => client.emit('error', dropped())).not.toThrow();
+    } finally {
+      await pool.end();
+    }
   });
 });

@@ -89,6 +89,13 @@ export const LADDER: PortableMigration[] = [
       }
     },
   },
+  {
+    // v84 — cloud 1C (spec §4.3): a console token redeems ONCE across every server, so its `jti`
+    // is a row, not a process cache. Global — no tenant owns a console token (pg/tenancy.ts).
+    // `exp` is the token's NumericDate (seconds); expired rows are pruned on redemption.
+    version: 84,
+    sql: 'CREATE TABLE IF NOT EXISTS console_token_jti (jti TEXT PRIMARY KEY, exp BIGINT NOT NULL)',
+  },
 ];
 
 /** The SQLite view of a ladder: what `migrations.ts` / `traceDb.ts` append after their legacy entries. */

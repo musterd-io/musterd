@@ -12,7 +12,7 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
-import { isLocalPeer } from '../config.js';
+import { trustsLocalPeer } from '../cloud/localTrust.js';
 import { teamCtx, type Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { asMusterdError, MusterdError } from '../errors.js';
@@ -147,9 +147,10 @@ export function __oauthBucketSizeForTest(): number {
   return buckets.size;
 }
 
-/** TLS opinion (ADR 446 §1): loopback is plaintext-safe; anything else must arrive via https. */
+/** TLS opinion (ADR 446 §1): loopback is plaintext-safe; anything else must arrive via https. On
+ *  Cloud nothing is loopback (spec §5.1): the edge terminates TLS and says so in x-forwarded-proto. */
 export function isTlsPeer(ctx: Ctx, req: IncomingMessage): boolean {
-  if (isLocalPeer(req.socket.remoteAddress, ctx.config.trustProxy)) return true;
+  if (trustsLocalPeer(ctx, req)) return true;
   const proto = req.headers['x-forwarded-proto'];
   const first = Array.isArray(proto) ? proto[0] : proto;
   return first?.split(',')[0]?.trim().toLowerCase() === 'https';
@@ -192,6 +193,21 @@ function sendTokenError(
   description: string,
 ): void {
   sendOAuthJson(res, status, { error, error_description: description });
+}
+
+/**
+ * An unreachable store is the SERVER's failure, never the client's credential's (cloud spec §7;
+ * review I2). RFC 6749 clients act on the token endpoint's codes — a refresh token answered
+ * `invalid_grant` is discarded, a client answered `invalid_client` forgets its registration — so a
+ * database blip reported as either would sign every connector out. It is a 503 with the stable
+ * sentence instead, and the client retries. Returns whether it answered.
+ */
+function sendIfUnavailable(res: ServerResponse, err: unknown): boolean {
+  const me = asMusterdError(err);
+  if (me.httpStatus !== 503) return false;
+  res.setHeader('retry-after', '5');
+  sendTokenError(res, 503, 'temporarily_unavailable', me.message);
+  return true;
 }
 
 /** OAuth bodies are consent forms and small JSON — 64 KiB is orders of magnitude of headroom. */
@@ -449,7 +465,7 @@ export async function handleOAuthRoutes(
   // Decline 4: every OAuth route — including discovery and registration — refuses non-TLS
   // except loopback, exactly as the ADR claims. Metadata is public info, but a uniform rule
   // has no carve-outs to misread, and loopback + tunneled https both pass regardless.
-  const prm = path.match(/^\/.well-known\/oauth-protected-resource\/mcp\/([^/]+)$/);
+  const prm = path.match(/^\/\.well-known\/oauth-protected-resource\/mcp\/([^/]+)$/);
   if (method === 'GET' && prm) {
     requireTlsPeer(ctx, req, 'OAuth discovery');
     const slug = decodeURIComponent(prm[1]!);
@@ -457,7 +473,7 @@ export async function handleOAuthRoutes(
     sendOAuthJson(res, 200, metadataFor(ctx, req, slug).resource);
     return true;
   }
-  const asmTeam = path.match(/^\/.well-known\/oauth-authorization-server\/([^/]+)$/);
+  const asmTeam = path.match(/^\/\.well-known\/oauth-authorization-server\/([^/]+)$/);
   if (method === 'GET' && asmTeam) {
     requireTlsPeer(ctx, req, 'OAuth discovery');
     const slug = decodeURIComponent(asmTeam[1]!);
@@ -487,7 +503,7 @@ export async function handleOAuthRoutes(
   // iOS app failed with "could not start sign in" before ever reaching the sign-in page
   // (Rehearsal A, lane 01M3FDG1MD).
   const asmInserted = path.match(
-    /^(?:\/.well-known\/(?:oauth-authorization-server|openid-configuration)\/oauth\/([^/]+)|\/oauth\/([^/]+)\/.well-known\/(?:oauth-authorization-server|openid-configuration))$/,
+    /^(?:\/\.well-known\/(?:oauth-authorization-server|openid-configuration)\/oauth\/([^/]+)|\/oauth\/([^/]+)\/\.well-known\/(?:oauth-authorization-server|openid-configuration))$/,
   );
   if (method === 'GET' && asmInserted) {
     requireTlsPeer(ctx, req, 'OAuth discovery');
@@ -901,7 +917,8 @@ export async function handleOAuthRoutes(
     // Unknown client is 401 invalid_client on both grants (RFC 6749 §5.2) — never an oracle.
     try {
       await getClient(ctx.db, team.id, tokenReq.client_id);
-    } catch {
+    } catch (err) {
+      if (sendIfUnavailable(res, err)) return true;
       // CIMD is syntax-checked only here. Grant redemption below is the authority; do not fetch.
       if (!isCimdClientId(tokenReq.client_id)) {
         sendTokenError(res, 401, 'invalid_client', 'unknown client for this team');
@@ -950,6 +967,7 @@ export async function handleOAuthRoutes(
         });
         return true;
       } catch (err) {
+        if (sendIfUnavailable(res, err)) return true;
         const me = asMusterdError(err);
         sendTokenError(res, 400, 'invalid_grant', me.message);
         return true;
@@ -978,6 +996,7 @@ export async function handleOAuthRoutes(
       });
       return true;
     } catch (err) {
+      if (sendIfUnavailable(res, err)) return true;
       const me = asMusterdError(err);
       const reused = /reused/.test(me.message);
       if (reused) {

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createServer as createHttpServer, type Server } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import type { Database } from 'better-sqlite3';
+import { loopsFor } from './cloud/loops.js';
 import {
   RECONCILE_DEBOUNCE_MS,
   assertBindSecurity,
@@ -12,6 +13,8 @@ import { operatorCtx, type Ctx } from './context.js';
 import type { Driver } from './db/driver.js';
 import { schemaVersionOf } from './db/migrations.js';
 import { openDriver } from './db/open.js';
+import { assertSchemaCurrent } from './db/pg/migrate.js';
+import { pgDriver, type PoolFactory } from './db/pgDriver.js';
 import { sqliteDriver, type SqliteDriver } from './db/sqliteDriver.js';
 import { openTraceDriver } from './db/traceDb.js';
 import { startFootprintSampler } from './footprint/sampler.js';
@@ -62,6 +65,12 @@ export interface ServerOptions {
   rosterRoots?: string[];
   /** The commit this daemon boots from (ADR 130) — resolved by the embedder; surfaced on /health. */
   buildRef?: string;
+  /**
+   * Cloud mode only, tests only (1C): the pools `pgDriver` draws connections from, in place of a
+   * `pg.Pool` per configured URL — `testCloudPools()` backs them with PGlite. Production never
+   * passes this; the URLs in the cloud config are the store.
+   */
+  cloudPools?: { main: PoolFactory; trace: PoolFactory };
 }
 
 export interface RunningServer {
@@ -116,11 +125,19 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     trustProxy: config.trustProxy,
   });
   // ADR 479: the store is a Driver; a raw better-sqlite3 handle (tests, the CLI) is wrapped here.
+  // Cloud mode (spec §5): the store is the configured Postgres — never a file, never a fallback.
+  const cloud = config.cloud;
   const db: Driver = opts.db
     ? isDriver(opts.db)
       ? opts.db
       : sqliteDriver(opts.db)
-    : openDriver(config.dbPath);
+    : cloud
+      ? pgDriver({
+          appUrl: cloud.databaseAppUrl,
+          operatorUrl: cloud.databaseOperatorUrl,
+          ...(opts.cloudPools ? { pools: opts.cloudPools.main } : {}),
+        })
+      : openDriver(config.dbPath);
   // The handle is the FACT; `config.dbPath` is only the intention, and an injected `opts.db` never
   // opened it. Reconciled here, once, so every reader downstream is honest by construction: the
   // startup log line, the `dbPath` accessor, and `db` on /health — which exists precisely so a
@@ -137,7 +154,13 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     ? isDriver(opts.traceDb)
       ? opts.traceDb
       : sqliteDriver(opts.traceDb)
-    : openTraceDriver(opts.db ? ':memory:' : config.traceDbPath);
+    : cloud && !opts.db
+      ? pgDriver({
+          appUrl: cloud.traceDatabaseAppUrl,
+          operatorUrl: cloud.traceDatabaseOperatorUrl,
+          ...(opts.cloudPools ? { pools: opts.cloudPools.trace } : {}),
+        })
+      : openTraceDriver(opts.db ? ':memory:' : config.traceDbPath);
   config.traceDbPath =
     sqliteHandle(traceDb)?.name ?? (traceDb.dialect === 'sqlite' ? config.traceDbPath : 'postgres');
   const hub = new Hub();
@@ -158,6 +181,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   const opCtx = operatorCtx(ctx);
   const opDb = opCtx.db;
   const opTraceDb = opCtx.traceDb;
+  const loops = loopsFor(config.mode);
 
   const handler = async (
     req: import('node:http').IncomingMessage,
@@ -247,6 +271,12 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       return config.scheme;
     },
     async listen() {
+      // Cloud (spec §6): migrations are a separate step; a server whose database is not at exactly
+      // its own schema version refuses to start, before it binds or starts a loop.
+      if (config.cloud && opDb.dialect === 'postgres') {
+        await assertSchemaCurrent(opDb, 'main');
+        await assertSchemaCurrent(opTraceDb, 'trace');
+      }
       // Start telemetry before binding so the first envelope is already instrumented. No-op + instant
       // when no OTLP endpoint is configured (off by default — observability.md §4 / ADR 015).
       stopTelemetry = await startTelemetry();
@@ -260,7 +290,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       }
       // Boot floor (ADR 058): project the durable files into the db before serving, so the roster the
       // first request sees matches git. Idempotent — safe to re-run; the watcher takes over at runtime.
-      if (ctx.rosterRoots.length > 0) {
+      if (loops.has('roster_watch') && ctx.rosterRoots.length > 0) {
         const summary = await reconcileAll(opDb, ctx.rosterRoots);
         log.info({ msg: 'reconcile_boot', teams: summary.length, roots: ctx.rosterRoots.length });
       }
@@ -269,110 +299,117 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         http.listen(config.port, config.host, async () => {
           const addr = http.address();
           boundPort = typeof addr === 'object' && addr ? addr.port : config.port;
-          stopReaper = startReaper(opCtx);
-          stopSeeds = startSeedsIngest(opCtx);
-          stopSync = startSyncPush(opCtx);
-          stopPull = startSyncPull(opCtx);
+          // Cloud runs only the loops that are about the database (cloud/loops.ts names the rest).
+          if (loops.has('reaper')) stopReaper = startReaper(opCtx);
+          if (loops.has('seeds_ingest')) stopSeeds = startSeedsIngest(opCtx);
+          if (loops.has('sync_push')) stopSync = startSyncPush(opCtx);
+          if (loops.has('sync_pull')) stopPull = startSyncPull(opCtx);
           // ADR 453 §4: its own loop, so a stalled /sync/trace never delays /sync/push.
-          stopTracePush = startTracePush(opCtx);
-          stopFootprint = startFootprintSampler(opCtx);
+          if (loops.has('trace_push')) stopTracePush = startTracePush(opCtx);
+          if (loops.has('footprint')) stopFootprint = startFootprintSampler(opCtx);
           // ADR 445 increment 3a: content past its window is nulled, structural rows stay; the
           // window is config (ADR 478 §3: 7 days locally).
-          stopTracePrune = startTraceContentPrune(
-            opTraceDb,
-            (r) => {
-              if (r.pruned > 0)
-                log.info({
-                  msg: 'trace_content_pruned',
-                  rows: r.pruned,
-                  cutoff: r.cutoff,
-                  captured_through: r.capturedThrough,
-                });
-            },
-            (err) => log.warn({ msg: 'trace_prune_failed', err: String(err) }),
-            { maxAgeMs: config.traceContentRetentionMs },
-          );
+          if (loops.has('trace_prune'))
+            stopTracePrune = startTraceContentPrune(
+              opTraceDb,
+              (r) => {
+                if (r.pruned > 0)
+                  log.info({
+                    msg: 'trace_content_pruned',
+                    rows: r.pruned,
+                    cutoff: r.cutoff,
+                    captured_through: r.capturedThrough,
+                  });
+              },
+              (err) => log.warn({ msg: 'trace_prune_failed', err: String(err) }),
+              { maxAgeMs: config.traceContentRetentionMs },
+            );
           // ADR 478 §1/§5: churn-class audit rows past their window are archived, then pruned, daily;
           // an in-memory store has no archive dir and is skipped. One `store.pruned` row per team.
-          stopAuditRetention = startAuditRetention(
-            opDb,
-            {
-              archiveDir: defaultArchiveDir(config.dbPath),
-              maxAgeMs: config.auditChurnRetentionMs,
-            },
-            async (r) => {
-              if (r.pruned === 0) return;
-              log.info({
-                msg: 'audit_churn_pruned',
-                rows: r.pruned,
-                bytes: r.archivedBytes,
-                cutoff: r.cutoff,
-              });
-              for (const [teamId, rows] of Object.entries(r.perTeam)) {
-                await appendAudit(opDb, teamId, {
-                  actor: null,
-                  action: 'store.pruned',
-                  target: null,
-                  result: 'allow',
-                  detail: {
-                    class: 'audit_churn',
-                    rows,
-                    bytes: r.archivedBytes,
-                    archive: defaultArchiveDir(config.dbPath),
-                  },
+          if (loops.has('audit_retention'))
+            stopAuditRetention = startAuditRetention(
+              opDb,
+              {
+                archiveDir: defaultArchiveDir(config.dbPath),
+                maxAgeMs: config.auditChurnRetentionMs,
+              },
+              async (r) => {
+                if (r.pruned === 0) return;
+                log.info({
+                  msg: 'audit_churn_pruned',
+                  rows: r.pruned,
+                  bytes: r.archivedBytes,
+                  cutoff: r.cutoff,
                 });
-              }
-            },
-            (err) => log.warn({ msg: 'audit_prune_failed', err: String(err) }),
-          );
+                for (const [teamId, rows] of Object.entries(r.perTeam)) {
+                  await appendAudit(opDb, teamId, {
+                    actor: null,
+                    action: 'store.pruned',
+                    target: null,
+                    result: 'allow',
+                    detail: {
+                      class: 'audit_churn',
+                      rows,
+                      bytes: r.archivedBytes,
+                      archive: defaultArchiveDir(config.dbPath),
+                    },
+                  });
+                }
+              },
+              (err) => log.warn({ msg: 'audit_prune_failed', err: String(err) }),
+            );
           // ADR 445 §Observability: a quiet session below 0.98 tool coverage is audited, once.
-          stopTraceCoverage = startTraceCoverageSweep(
-            opDb,
-            opTraceDb,
-            async (sessions) => {
-              for (const s of sessions) {
-                await appendAudit(opDb, s.team_id, {
-                  actor: null,
-                  action: 'trace.coverage_low',
-                  target: s.seat,
-                  result: 'allow',
-                  detail: {
-                    harness: s.harness,
-                    session_digest: s.session_digest,
-                    post_tool_use: s.post_tool_use,
-                    r2_tool_uses: s.r2_tool_uses,
-                    coverage: s.coverage,
-                  },
-                });
-              }
-            },
-            (err) => log.warn({ msg: 'trace_coverage_sweep_failed', err: String(err) }),
-          );
+          if (loops.has('trace_coverage'))
+            stopTraceCoverage = startTraceCoverageSweep(
+              opDb,
+              opTraceDb,
+              async (sessions) => {
+                for (const s of sessions) {
+                  await appendAudit(opDb, s.team_id, {
+                    actor: null,
+                    action: 'trace.coverage_low',
+                    target: s.seat,
+                    result: 'allow',
+                    detail: {
+                      harness: s.harness,
+                      session_digest: s.session_digest,
+                      post_tool_use: s.post_tool_use,
+                      r2_tool_uses: s.r2_tool_uses,
+                      coverage: s.coverage,
+                    },
+                  });
+                }
+              },
+              (err) => log.warn({ msg: 'trace_coverage_sweep_failed', err: String(err) }),
+            );
           // ADR 459 §4: expired members read as departed on the roster. Hygiene only — auth
           // already refused them — so one audited row per swept member, and a failing pass logs on.
-          stopExpiredSweep = await startExpiredMemberSweep(
-            opDb,
-            async (swept) => {
-              for (const m of swept) {
-                await appendAudit(opDb, m.team_id, {
-                  actor: null,
-                  action: 'member.expired_swept',
-                  target: m.name,
-                  result: 'allow',
-                  detail: { lifecycle_until: m.lifecycle_until },
-                });
-                // ADR 463 §4.4: expiry takes the enrollment and anything the member sponsored.
-                await revokeExpiredMember(opDb, m.team_id, m);
-              }
-              if (swept.length > 0) log.info({ msg: 'expired_members_swept', count: swept.length });
-            },
-            (err) => log.warn({ msg: 'expired_sweep_failed', err: String(err) }),
-          );
+          if (loops.has('expired_member_sweep'))
+            stopExpiredSweep = await startExpiredMemberSweep(
+              opDb,
+              async (swept) => {
+                for (const m of swept) {
+                  await appendAudit(opDb, m.team_id, {
+                    actor: null,
+                    action: 'member.expired_swept',
+                    target: m.name,
+                    result: 'allow',
+                    detail: { lifecycle_until: m.lifecycle_until },
+                  });
+                  // ADR 463 §4.4: expiry takes the enrollment and anything the member sponsored.
+                  await revokeExpiredMember(opDb, m.team_id, m);
+                }
+                if (swept.length > 0)
+                  log.info({ msg: 'expired_members_swept', count: swept.length });
+              },
+              (err) => log.warn({ msg: 'expired_sweep_failed', err: String(err) }),
+            );
           // ADR 463 §2: a provision that can no longer finish hands the sponsor a connect link.
-          stopProvisionSweep = await startProvisionSweep(opCtx, (err) =>
-            log.warn({ msg: 'provision_sweep_failed', err: String(err) }),
-          );
-          await startWatching();
+          if (loops.has('provision_sweep'))
+            stopProvisionSweep = await startProvisionSweep(opCtx, (err) =>
+              log.warn({ msg: 'provision_sweep_failed', err: String(err) }),
+            );
+          if (loops.has('roster_watch')) await startWatching();
           log.info({
             msg: 'listening',
             host: config.host,
@@ -390,6 +427,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       // Re-resolve roster roots from the registry (a team may have been exported since boot), then
       // re-reconcile and re-point the watcher. Explicit (test) roots are fixed and not re-resolved.
       // Wired to SIGHUP by the daemon bin — the lib never grabs process signals (tests would clash).
+      if (!loops.has('roster_watch')) return; // Cloud: no roster files to re-read
       if (!rootsExplicit) ctx.rosterRoots = resolveRosterRoots();
       const summary = await reconcileAll(opDb, ctx.rosterRoots);
       await broadcastReconciled(ctx, summary);

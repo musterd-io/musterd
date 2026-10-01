@@ -117,12 +117,28 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
-import { checkUpgrade, isLocalPeer, readLocalIdentity, resolveRosterRoots } from '../config.js';
+import {
+  CONSOLE_UNREACHABLE_SENTENCE,
+  ConsoleTokenError,
+  jwksFor,
+  redeemJti,
+  verifyConsoleToken,
+  type ConsoleClaims,
+} from '../cloud/consoleToken.js';
+import { cloudHealth } from '../cloud/health.js';
+import { hostAllows } from '../cloud/hostIsolation.js';
+import { trustsLocalPeer } from '../cloud/localTrust.js';
+import { checkUpgrade, readLocalIdentity, resolveRosterRoots } from '../config.js';
 import { operatorCtx, teamCtx, type Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { schemaVersionOf } from '../db/migrations.js';
 import { traceDbBytes, traceSchemaVersion } from '../db/traceDb.js';
-import { MusterdError, SessionLeaseRefused, asMusterdError } from '../errors.js';
+import {
+  MusterdError,
+  ServiceUnavailable,
+  SessionLeaseRefused,
+  asMusterdError,
+} from '../errors.js';
 import { reapOrphans } from '../footprint/reap.js';
 import { log, redactPath } from '../log.js';
 import { saveNodeEnrollment } from '../node/state.js';
@@ -1647,7 +1663,11 @@ function requireLocalPeer(
   action: string,
   onDeny?: () => void,
 ): void {
-  if (isLocalPeer(req.socket.remoteAddress, ctx.config.trustProxy)) return;
+  // Cloud (Decision 2 of the 1C plan): these verbs are about THIS machine, and on Cloud there is no
+  // machine a caller owns — the route is not there, rather than refused.
+  if (ctx.config.mode === 'cloud')
+    throw new MusterdError('not_found', `${action} is not available on musterd Cloud`);
+  if (trustsLocalPeer(ctx, req)) return;
   onDeny?.();
   throw new MusterdError(
     'forbidden',
@@ -1658,7 +1678,7 @@ function requireLocalPeer(
 }
 
 async function authProvision(ctx: Ctx, slug: string, req: IncomingMessage): Promise<void> {
-  if (isLocalPeer(req.socket.remoteAddress, ctx.config.trustProxy)) return;
+  if (trustsLocalPeer(ctx, req)) return;
   try {
     await authAdmin(ctx, slug, req);
   } catch (e) {
@@ -1673,6 +1693,54 @@ async function authProvision(ctx: Ctx, slug: string, req: IncomingMessage): Prom
     }
     throw e;
   }
+}
+
+/**
+ * Cloud admin auth (spec §4.3): the bearer must be a console token for THIS server. Verification
+ * failures are 401 with the reason; a console whose keys cannot be fetched is a 503 with the stable
+ * sentence — the caller's token may be fine, so it is not refused as if it were not.
+ */
+async function requireConsoleToken(ctx: Ctx, req: IncomingMessage): Promise<ConsoleClaims> {
+  const cloud = ctx.config.cloud!;
+  try {
+    return await verifyConsoleToken(bearer(req), {
+      jwks: jwksFor(cloud.consoleJwksUrl),
+      audience: cloud.consoleAudience,
+    });
+  } catch (e) {
+    throw consoleTokenRefusal(e);
+  }
+}
+
+async function redeemConsoleToken(ctx: Ctx, claims: ConsoleClaims): Promise<void> {
+  try {
+    await redeemJti(ctx.db, claims.jti, claims.exp);
+  } catch (e) {
+    throw consoleTokenRefusal(e);
+  }
+}
+
+function consoleTokenRefusal(e: unknown): unknown {
+  if (!(e instanceof ConsoleTokenError)) return e;
+  if (e.reason === 'console_unreachable')
+    return new ServiceUnavailable(CONSOLE_UNREACHABLE_SENTENCE);
+  return new MusterdError('unauthorized', e.message);
+}
+
+/**
+ * The viewer of a roster read. Self-hosted: best-effort ({@link tryAuth}) — the projection scopes
+ * itself to the caller, and an anonymous caller is on this machine. Cloud: the read requires a
+ * credential for this team (spec §4.3: no code path serves a team's rows without one; review I3) —
+ * anonymous on the internet is not anonymous on loopback.
+ */
+async function rosterViewer(
+  ctx: Ctx,
+  slug: string,
+  req: IncomingMessage,
+): Promise<MemberRow | null> {
+  if (!ctx.config.cloud) return tryAuth(ctx, slug, req);
+  return (await authMember(ctx.db, slug, bearer(req), actingSeat(req), agentSessionLease(req)))
+    .member;
 }
 
 /** Best-effort: resolve the calling seat from a bearer token if one is present and valid, else null.
@@ -1825,6 +1893,7 @@ export async function handleHttp(
         boundHost: ctx.config.host,
         allowedHosts: ctx.config.allowedHosts,
         allowedOrigins: ctx.config.allowedOrigins,
+        hostSuffix: ctx.config.cloud?.hostSuffix ?? null,
       },
     );
     if (!requestCheck.ok) {
@@ -1843,10 +1912,19 @@ export async function handleHttp(
     const url = new URL(req.url ?? '/', 'http://localhost');
     const path = url.pathname;
     const method = req.method ?? 'GET';
+    // Cloud (spec §5.3): a team's host reaches only that team. 404, not 403 — a host must not be a
+    // way to learn which other teams exist. Before any route, so no route can forget it.
+    if (ctx.config.cloud && !hostAllows(req.headers.host, path, ctx.config.cloud.hostSuffix))
+      return sendJson(res, 404, { error: { code: 'not_found', message: 'not found' } });
     // Negotiate response compression once; sendJson consults this for bodies over the size threshold.
     negotiatedEncoding.set(res, pickEncoding(req.headers['accept-encoding']));
 
     if (method === 'GET' && path === '/health') {
+      // Cloud (spec §5.5): ok, or one stable sentence — nothing about the machine.
+      if (ctx.config.cloud) {
+        const h = await cloudHealth(ctx.db, ctx.traceDb);
+        return sendJson(res, h.status, h.body);
+      }
       // db + schema are exposed so clients can confirm *which* database this daemon serves
       // (a daemon silently serving the wrong db reads as "everyone offline" — dogfood finding).
       // `connections` is the cross-team live-session count the CLI's `service stop|restart` guard
@@ -2031,7 +2109,11 @@ export async function handleHttp(
     }
 
     if (method === 'POST' && path === '/teams') {
+      // Cloud (spec §4.3 / §5.2): creating a team is an admin operation, and on Cloud an admin
+      // operation carries a console token — verified, and its jti redeemed once across every server.
+      const consoleToken = ctx.config.cloud ? await requireConsoleToken(ctx, req) : null;
       const body = parseOrBadRequest(CreateTeamBody, await readJson(req));
+      if (consoleToken) await redeemConsoleToken(ctx, consoleToken);
       const team = await createTeam(ctx.db, { slug: body.slug, display: body.display ?? null });
       const { row, token } = await addMember(ctx.db, team, {
         name: body.creator.name,
@@ -2142,7 +2224,7 @@ export async function handleHttp(
             display: team.display,
             working_hours: parseWorkingHours(team.working_hours),
           },
-          members: await summarize(ctx, slug, team.id, await tryAuth(ctx, slug, req)),
+          members: await summarize(ctx, slug, team.id, await rosterViewer(ctx, slug, req)),
         });
       }
 
@@ -2318,7 +2400,7 @@ export async function handleHttp(
 
       if (method === 'GET' && rest === '/members') {
         const team = await requireTeam(ctx.db, slug);
-        const viewer = await tryAuth(ctx, slug, req);
+        const viewer = await rosterViewer(ctx, slug, req);
         let members = await summarize(ctx, slug, team.id, viewer);
         // ADR 227 close-out: the discovery filter runs HERE, not in the client, so the daemon can
         // see role queries at all. Each authenticated filtered read leaves a `roster.role_query`
@@ -7505,7 +7587,7 @@ export async function handleHttp(
           target: target.name,
           result: 'allow',
           detail: {
-            via: isLocalPeer(req.socket.remoteAddress, ctx.config.trustProxy) ? 'local' : 'admin',
+            via: trustsLocalPeer(ctx, req) ? 'local' : 'admin',
           },
         });
         for (const leaseId of revoked) {
@@ -7549,7 +7631,7 @@ export async function handleHttp(
           target: target.name,
           result: 'allow',
           detail: {
-            via: isLocalPeer(req.socket.remoteAddress, ctx.config.trustProxy) ? 'local' : 'admin',
+            via: trustsLocalPeer(ctx, req) ? 'local' : 'admin',
           },
         });
         if (oauthRevoked > 0) {

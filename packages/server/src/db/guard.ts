@@ -13,3 +13,17 @@ export function assertSchemaNotNewer(have: number, max: number): void {
       `${SCHEMA_NEWER_SENTENCE}: database is at schema ${have}, this build knows ${max}`,
     );
 }
+
+/**
+ * Cloud (spec §6): migration is a separate step run before the rollout, never on boot. A server that
+ * finds its database BEHIND its own ladder was deployed without that step; it refuses rather than
+ * serve queries against columns that do not exist yet.
+ */
+export const SCHEMA_OLDER_SENTENCE = 'schema older than this build';
+
+export function assertSchemaNotOlder(have: number, max: number): void {
+  if (have < max)
+    throw new Error(
+      `${SCHEMA_OLDER_SENTENCE}: database is at schema ${have}, this build needs ${max} — run the migrate step (scripts/cloud/migrate.mjs) first`,
+    );
+}

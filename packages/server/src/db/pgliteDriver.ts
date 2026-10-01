@@ -2,6 +2,7 @@ import type { PGlite, Transaction } from '@electric-sql/pglite';
 import { toPostgres } from './dialect.js';
 import { DriverError, type Driver, type Params } from './driver.js';
 import { ROLE, TENANT_SETTING } from './pg/tenancy.js';
+import type { Client, PoolFactory } from './pgDriver.js';
 
 /**
  * PGlite behind the async Driver — the Postgres test double (ADR 479 §1/§3). Not a runtime import
@@ -21,6 +22,14 @@ export interface PgliteDriver extends Driver {
   asOwner(): Driver;
   /** Observe every statement (the SqliteDriver seam), so a query-shape count runs on both engines. */
   onStatement(listener: (sql: string) => void): () => void;
+  /**
+   * This PGlite as a `pgDriver` pool (1C): so a test can run the REAL production driver — its
+   * BEGIN / SET LOCAL ROLE / set_config / COMMIT choreography — against the double's schema and
+   * RLS. Each `connect()` holds PGlite's own transaction lock until `release()`, so a client's
+   * statements are never interleaved with another's; the URL is ignored (one database), and
+   * `end()` never closes the shared instance.
+   */
+  poolFactory(): PoolFactory;
 }
 
 type Scope = { role: 'owner' | 'app' | 'operator'; team: string | null };
@@ -138,6 +147,9 @@ export async function pgliteDriver(opts: { dataDir?: string } = {}): Promise<Pgl
         if (depth > 0) throw noRescope('asOwner');
         return connection({ role: 'owner', team: null });
       },
+      poolFactory() {
+        return () => ({ connect: () => pooledClient(), end: async () => undefined });
+      },
       async close() {
         if (depth > 0) return;
         closed = true;
@@ -145,5 +157,42 @@ export async function pgliteDriver(opts: { dataDir?: string } = {}): Promise<Pgl
       },
     };
   };
+  // One "connection": a PGlite transaction held open until release. pgDriver sends BEGIN/COMMIT/
+  // ROLLBACK itself; here PGlite's transaction is the BEGIN, a clean release is the COMMIT, and a
+  // release(err) — or a ROLLBACK seen first — throws out of the callback, which rolls it back.
+  const pooledClient = (): Promise<Client> =>
+    new Promise<Client>((resolveClient, rejectClient) => {
+      pg.transaction(async (t) => {
+        let finish!: (err: unknown) => void;
+        const finished = new Promise<unknown>((r) => (finish = r));
+        let rolledBack = false;
+        resolveClient({
+          async query(text: string, values?: unknown[]) {
+            if (text === 'BEGIN' || text === 'COMMIT') return { rows: [], rowCount: null };
+            if (text === 'ROLLBACK') {
+              rolledBack = true;
+              return { rows: [], rowCount: null };
+            }
+            // node-postgres sends a query with no values over the SIMPLE protocol, where several
+            // statements are one query (the baseline DDL relies on it); PGlite's `query` is always
+            // extended, so mirror the wire: no values → `exec`, and the last statement's result.
+            if (!values || values.length === 0) {
+              const last = (await t.exec(text)).at(-1);
+              return { rows: last?.rows ?? [], rowCount: last?.affectedRows ?? null };
+            }
+            const r = await t.query(text, values);
+            return { rows: r.rows, rowCount: r.affectedRows ?? r.rows.length };
+          },
+          release(err?: unknown) {
+            finish(err ?? (rolledBack ? new Error('rolled back') : undefined));
+          },
+        });
+        const err = await finished;
+        if (err) throw err;
+      }).catch((e: unknown) => {
+        // A rollback we asked for is not an error; a failure to open the transaction is.
+        if (!(e instanceof Error) || e.message !== 'rolled back') rejectClient(e);
+      });
+    });
   return connection({ role: 'app', team: null });
 }

@@ -6489,3 +6489,13 @@
   font-size: 0.74em;
   color: var(--lc-faint);
 }
+
+/* Cloud spec §7: the server's outage sentence ("database unreachable"), verbatim, above the room.
+   Quiet in shape, loud in colour — it is the one thing on the page that is not the team's doing. */
+.lc-health {
+  padding: 6px 16px;
+  background: var(--lc-danger);
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+}
