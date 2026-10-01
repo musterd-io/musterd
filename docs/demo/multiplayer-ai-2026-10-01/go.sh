@@ -5,7 +5,7 @@
 #
 #   ./go.sh voices|eyes|replay|benchmark  # do it
 #   ./go.sh voices --dry-run              # print the commands, change nothing
-#   SEATS="izzo miley big-body ghost wanderer sloane" ./go.sh eyes
+#   SEATS="izzo miley ghost ryder wanderer lazara" ./go.sh eyes
 #
 # A huddle names at most four seats (MAX_ELIGIBLE, ADR 254), and only a named seat is convened —
 # woken if it is offline (ADR 386); a @team huddle wakes nobody. So the first four SEATS are named on
@@ -20,7 +20,7 @@ set -euo pipefail
 option="${1:-}"
 dry=0
 [[ "${2:-}" == "--dry-run" ]] && dry=1
-read -r -a seats <<< "${SEATS:-izzo miley big-body ghost wanderer sloane}"
+read -r -a seats <<< "${SEATS:-izzo miley ghost ryder wanderer lazara}"
 anchor="docs/demo/multiplayer-ai-2026-10-01/options.md"
 
 run() {

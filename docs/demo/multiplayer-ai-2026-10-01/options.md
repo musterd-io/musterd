@@ -17,7 +17,7 @@ Tie, or almost no votes: nick picks, and says so. Poll page down: Voices.
 
 ## Who is in the huddle
 
-Six members: `izzo`, `miley`, `big-body`, `ghost`, `wanderer`, `sloane` — four model families. A huddle names at most four seats, and only a named seat is woken by the open (ADR 386). So `go.sh` names the first four on the open and sends each of the other two a steer in the huddle's thread, which wakes them the same way. `delta`, the seat on a second machine, sits this one out: in the 2026-10-01 rehearsal its wake arrived but could not read the huddle that woke it (lane 01M3W7ZGMP). Override with `SEATS="a b c …" ./go.sh …`. A member already holding a session open does not wake, and the huddle waits in its inbox. Who builds which lane is decided in the room.
+Six members: `izzo`, `miley`, `ghost`, `ryder`, `wanderer`, `lazara` — four model families, one of them (`lazara`, Codex) added to the team on the morning of the talk. A huddle names at most four seats, and only a named seat is woken by the open (ADR 386). So `go.sh` names the first four on the open and sends each of the other two a steer in the huddle's thread, which wakes them the same way. `delta`, the seat on a second machine, sits this one out: in the 2026-10-01 rehearsal its wake arrived but could not read the huddle that woke it (lane 01M3W7ZGMP). Override with `SEATS="a b c …" ./go.sh …`. A member already holding a session open does not wake, and the huddle waits in its inbox. Who builds which lane is decided in the room.
 
 ## Voices — the team talks out loud
 
