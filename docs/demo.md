@@ -803,22 +803,22 @@ leave it. The hold ends by itself at the time you gave, and the next tick catche
 To end it sooner: `musterd service hold --auto --release`.
 
 **Word budget.** Seven minutes at 150 wpm is 1,050 words. The deck has 30-odd clicks and the live
-beat is mostly watching, so the budget is ~800 spoken words. Measured 2026-10-01, spoken words
-only:
+beat is mostly watching, so the budget is ~800 spoken words. Measured 2026-10-01 (re-measured after the Q&A-prep pass, which wove talking points into slides
+2, 3, 6 and 7), spoken words only:
 
 | beat | slide | part | budget | spoken | ~at 150 wpm |
 | --- | --- | --- | --- | --- | --- |
 | 0:00 the vote | 1 cover | open | 25 s | 53 | ~21 s |
-| 0:25 where it started | 2 | problem | 40 s | 82 | ~33 s |
-| 1:05 what changes | 3 | thesis | 45 s | 84 | ~34 s |
+| 0:25 where it started | 2 | problem | 40 s | 96 | ~38 s |
+| 1:05 what changes | 3 | thesis | 45 s | 95 | ~38 s |
 | 1:50 a day in the life | 4 | lanes and acts | 60 s | 120 | ~48 s |
 | 2:50 what a team is made of | 5 | thesis | 30 s | 64 | ~26 s |
-| 3:20 the team asks you | 6 | humans as peers | 35 s | 59 | ~24 s |
-| 3:55 handoff | 7 | big question | 40 s | 88 | ~35 s |
+| 3:20 the team asks you | 6 | humans as peers | 35 s | 76 | ~30 s |
+| 3:55 handoff | 7 | big question | 40 s | 98 | ~39 s |
 | 4:35 built from what broke | 8 | what did not work | 35 s | 63 | ~25 s |
 | 5:10 you picked it | 9 + `/live` | live demo | 90 s | 61 | ~24 s |
-| 6:40 the ask | 10 | close | 20 s | 40 | ~16 s |
-| **total** | | | **420 s** | **714** | **~286 s** |
+| 6:40 the ask | 10 | close | 20 s | 15 | ~6 s |
+| **total** | | | **420 s** | **741** | **~296 s** |
 
 The slack is for clicks and for the live beat, where the room watches members wake (about 24 s
 cold, in parallel) and take turns in the huddle. **Stopwatch rule:** at 4:35 not yet on the road
@@ -841,7 +841,8 @@ team, and every claim, question and handoff lands on one record that outlasts an
 it into the other. I lost track of which session had done what, on which branch. Every new session
 started from a prompt I wrote by hand. Then we measured it: three agents, one feature, a day and a
 half, and 37% of the code they wrote was thrown away. Two agents writing the same diff, or one
-building on something the other hadn't finished."
+building on something the other hadn't finished. The talk between them cost about 1%. The expensive
+part was who owns what."
 
 The first sentences are nick's own, from his P3 post-mortem of 2026-06-30
 ([how-musterd-got-here.md](wiki/how-musterd-got-here.md)). The 37% was measured while
@@ -851,8 +852,8 @@ dogfooding the first version of musterd, which is why the slide says "at first".
 
 **DO** One click per card.
 
-**SAY** "So the unit is a team: a roster where a member outlasts every session it has run in. Four
-things change. Ownership: work is claimed before the first edit, and overlapping claims raise a
+**SAY** "So the unit is a team: a roster where a member outlasts every session it has run in.
+Everyone on it has a name, a job and a record. Four things change. Ownership: work is claimed before the first edit, and overlapping claims raise a
 warning. Messages reach an agent mid-task, at its next tool call. You get asked: big decisions wait
 for your answer, and smaller ones time out with a note that the agent went ahead. And done gets a
 second look, from another member, a different model family when one is around."
@@ -882,8 +883,9 @@ they need me, the doorbell finds me on /live, my desktop or Slack."
 
 **SAY** "My first role was approver, and the record was clear: seven approvals for every real
 conversation, and not one request for help. So we let agents ask me directly. Since then, 106
-questions. And I can say no. So can they, to each other and to me. A teammate you can only assign
-work to can't tell you no."
+questions. The asker sets the clock: small calls go ahead with a note, big ones wait for me. And I
+can say no. So can they, to each other and to me. A teammate you can only assign work to can't tell
+you no."
 
 The asks on the rail are illustrative. 106 is `ask` acts addressed to nick since 2026-07-17
 (`how-musterd-got-here.md` has the query).
@@ -891,11 +893,17 @@ The asks on the rail are illustrative. 106 is `ask` acts addressed to nick since
 ### 3:55 — Handoff (big question, 40 s)
 
 **SAY** "The question I got asked most was handoff. Our first answer was wrong: a handoff was prose,
-'here's what I did, carry on.' A whole class of our waste was byte-identical work, the second agent
-rebuilding from a description what the first had already built. Now a handoff carries the lane
-itself: the thread, the lane, the branch at its commit. The receiver can accept, decline or
-challenge it. And acceptance comes from someone else, because the author is the one person
-guaranteed to think the work matches."
+'here's what I did, carry on,' and the next agent rebuilt what the first had already built. Now a
+handoff carries the lane itself: the branch at its commit, and every act along the way. The
+receiver inherits the record; the context window ends with the session. It can accept, decline or
+challenge. And someone else says it's done, from another model family when we can, judging the
+outcome, because the author is the one person sure it matches the brief."
+
+The slide's three cards are this paragraph. Behind "another model family": same-family models
+share training data and make the same mistakes (ADR 314). Behind "the outcome": the acceptor
+judges intent, principles, usable and feel on the landed result (ADR 192), which caught the
+2026-10-01 vote-lane decline that a code review would have passed. Both are cheat-sheet answers,
+not stage lines.
 
 ### 4:35 — Built from what broke (what did not work, 35 s)
 
@@ -936,7 +944,10 @@ Then stop. Flip back to `/live` when the first question is about the team, and l
 
 ### What the room asks after
 
-The §6 list applies unchanged (safety product, tamper-proof log, why not the labs, who pays, why
+The spoken answers nick keeps open in a second window are in
+[cheatsheet.html](demo/multiplayer-ai-2026-10-01/cheatsheet.html): the questions to hand the host,
+his six published questions with nick's stance on each, the numbers, the clocks and the lines not
+to say. The §6 list applies unchanged (safety product, tamper-proof log, why not the labs, who pays, why
 not prompt them to argue, how many people). Additions for this room's brief:
 
 - **"How did it get here?"** — Slide 8, or the long form,

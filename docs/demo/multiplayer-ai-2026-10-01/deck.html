@@ -66,6 +66,7 @@
   .pain.cur .ic{background:var(--acc);border-color:var(--acc);color:#18181B}
   .stat{background:#fff;border:1px solid var(--line);border-radius:22px;padding:clamp(22px,3vw,48px);display:flex;flex-direction:column;gap:clamp(10px,1.2vw,16px);box-shadow:0 14px 34px rgba(24,24,27,.07);opacity:0;transform:scale(.94)}
   .stat.shown{opacity:1;transform:none}
+  .stat p.talk{font-family:var(--mono);font-size:clamp(12px,1.25vw,17px);color:var(--acct);letter-spacing:.02em}
   .stat .big{font-family:var(--display);font-size:clamp(84px,13vw,210px);font-weight:800;line-height:.9;letter-spacing:-.04em;color:var(--accn)}
   .stat p{font-size:clamp(16px,1.8vw,26px);color:var(--mut);line-height:1.35}
   .bar{position:relative;height:clamp(16px,1.6vw,24px);border-radius:6px;background:#E4E4E7;overflow:hidden}
@@ -163,6 +164,7 @@
   .ba .from .num.z{color:#A1A1AA}
   .ba .from .num.h{color:var(--accn)}
   .ba .from p{font-size:clamp(14px,1.6vw,22px);color:var(--mut);max-width:22ch;line-height:1.35}
+  .ba .clockline{font-family:var(--mono);font-size:clamp(12px,1.3vw,18px);color:var(--acct);max-width:34ch;line-height:1.45;border-left:3px solid var(--acc);padding-left:14px}
   .rail{display:flex;flex-direction:column;gap:12px}
   .ask{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;background:#fff;border:1px solid var(--line);border-left:4px solid var(--hue);border-radius:12px;padding:14px 16px;box-shadow:0 6px 20px rgba(24,24,27,.06);opacity:0}
   .ask .av{width:36px;height:36px;border-radius:50%;background:var(--hue);color:#fff;font-weight:700;display:grid;place-items:center;font-family:var(--mono);font-size:14px}
@@ -312,22 +314,24 @@
       <p>of the code they produced was thrown away.</p>
       <div class="bar"><i class="kept"></i><i class="lost"></i></div>
       <div class="legend"><span>reached main</span><span class="l">thrown away</span></div>
+      <p class="talk">Talk between them: about 1% of tokens.</p>
     </div>
   </div>
-  <aside hidden>Click through the four pains, then the number. One agent would tell me something and I would paste it into the other. I was not sure which worktree or branch a session was on. Every new session started from a prompt I wrote by hand. Then, two days of dogfooding the first version of musterd, we measured it: about 37% of the code three agents produced on one feature was thrown away. The fix was one owner per piece of work, declared before the first keystroke. (From nick's P3 notes, 2026-06-30.)</aside>
+  <aside hidden>Click through the four pains, then the number. One agent would tell me something and I would paste it into the other. I was not sure which worktree or branch a session was on. Every new session started from a prompt I wrote by hand. Then, two days of dogfooding the first version of musterd, we measured it: about 37% of the code three agents produced on one feature was thrown away. And the talk between them cost about 1% of the tokens: the expensive part was who owns what. The fix was one owner per piece of work, declared before the first keystroke. (From nick's P3 notes, 2026-06-30; the 1% is the same dogfood's token count.)</aside>
 </section>
 
 <!-- 3 · what changes -->
 <section class="slide" data-sec="Why it works" data-title="What changes">
   <p class="eyebrow a" style="--i:0">What changes</p>
   <h2 class="a" style="--i:1">What changes when your agents work as one team.</h2>
+  <p class="sub a" style="--i:2">Everyone has a name, a job and a record.</p>
   <div class="vcards">
     <div class="vcard frag"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><h3>Ownership</h3><ul><li style="--j:0">Work is claimed before the first edit</li><li style="--j:1">Overlapping claims raise a warning</li></ul></div>
     <div class="vcard frag"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg><h3>Messages reach agents mid-task</h3><ul><li style="--j:0">Delivered at the next tool call</li><li style="--j:1">Teammates reach each other directly</li></ul></div>
     <div class="vcard frag"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.5"/><path d="M12 15h.01"/></svg><h3>You get asked</h3><ul><li style="--j:0">Agents ask you clarifying questions</li><li style="--j:1">Big decisions wait for your answer, however long it takes</li><li style="--j:2">Smaller ones time out, and the agent records that it went ahead</li></ul></div>
     <div class="vcard frag"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><h3>Done gets a second look</h3><ul><li style="--j:0">The builder submits</li><li style="--j:1">Another member checks the outcome, cross-family if available</li></ul></div>
   </div>
-  <aside hidden>One card per click. The team is the unit: a persistent roster where a member outlasts every session it has run in, with an owner for every piece of work, an inbox that survives a restart, and a record of who did what at which model. The human sits on the same roster.</aside>
+  <aside hidden>Open on the line under the title: a team is the oldest coordination technology people have. Everyone has a name and a job, every piece of work has an owner, you know who to ask and they can tell you no, someone else checks your work, and the team remembers who did what. Agents in a chat share airtime; agents on a team each have a name, a job and a record. Then one card per click. The team is the unit: a persistent roster where a member outlasts every session it has run in, with an owner for every piece of work, an inbox that survives a restart, and a record of who did what at which model. The human sits on the same roster.</aside>
 </section>
 
 <!-- 4 · one session, step by step -->
@@ -368,7 +372,7 @@
       <div class="tile"><b>The doorbell</b><p>An ask reaches you where you already are: /live, a desktop notification, Slack.</p></div>
       <div class="tile"><b>/live</b><p>The office: who’s here, who’s working, every act as it lands.</p></div></div>
   </div>
-  <aside hidden>One column per click. Seats, roles, toolkits and workspaces are the glossary's words: a seat is the durable position a member keeps; a role is granted by the team; a toolkit equips a workspace and grants nothing; a workspace is the folder a seat is bound to. Wake and resume is residency: an enrolled seat that is offline gets woken by a directed act. The doorbell rings humans only through musterd's own surfaces, never through an agent's session.</aside>
+  <aside hidden>One column per click. Seats, roles, toolkits and workspaces are the glossary's words: a seat is the durable position a member keeps; a role is granted by the team; a toolkit equips a workspace and grants nothing; a workspace is the folder a seat is bound to. Wake and resume is residency: an enrolled seat that is offline gets woken by a directed act. The doorbell rings humans only through musterd's own surfaces, never through an agent's session. If memory comes up: the record is the team's memory; each seat keeps one private note on where it left off; a finding the team should know goes in as an insight anyone can search; knowledge worth keeping goes in the wiki, in the repo, reviewed like code. Any vector store is a cache we can rebuild.</aside>
 </section>
 
 <!-- 5 · the team asks you -->
@@ -379,6 +383,7 @@
       <h2 class="a" style="--i:1">The team asks you.</h2>
       <div class="from a" style="--i:2"><span class="num z">0</span><p>requests for help reached me while I was the approver — seven approvals for every real exchange.</p></div>
       <div class="from a" style="--i:3"><span class="num h">106</span><p>questions have reached me since agents could ask me directly.</p></div>
+      <p class="clockline a" style="--i:4">The asker sets the clock. Small calls go ahead with a note. Big ones wait for me.</p>
     </div>
     <div class="rail" aria-label="the asks rail, as /live shows it">
       <div class="ask" style="--hue:#7C5CFF;--i:0;--dur:9s"><span class="av">iz</span><span class="t"><small>izzo · approve · blocking</small>Merge the wake-cap change before the demo?</span><svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16" pathLength="100"/><circle class="clock" cx="20" cy="20" r="16" pathLength="100"/></svg></div>
@@ -386,18 +391,19 @@
       <div class="ask" style="--hue:#E4572E;--i:2;--dur:4s"><span class="av">gh</span><span class="t"><small>ghost · escalate · advisory</small>Two lanes touch the same file. Split or pair?</span><svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16" pathLength="100"/><circle class="clock" cx="20" cy="20" r="16" pathLength="100"/></svg></div>
     </div>
   </div>
-  <aside hidden>My first role was approver: seven approvals for every time I actually talked to the team, and not one agent had asked me for help. We rebuilt the human as a member; since then, more than a hundred asks have reached me. The rail on the right is how /live shows them, each with its clock. The asks shown are illustrative.</aside>
+  <aside hidden>My first role was approver: seven approvals for every time I actually talked to the team, and not one agent had asked me for help. We rebuilt the human as a member; since then, more than a hundred asks have reached me. The rail on the right is how /live shows them, each with its clock. The asks shown are illustrative. The clock line: the agent that asks owns the deadline. Advisory waits 3 minutes and standard 5, then the agent goes ahead and records the risk and what it chose; blocking holds, however long. Messages and handoffs carry no clock: they ask for nothing, or wait on the receiver. Why it matters: when I relayed by hand, replies waited 207, 110 and 42 minutes; with two agents live, 0 to 7. Co-Gym measured the same thing: take notifications away and the win rate falls from 70% to 30%. Speed matters less than a known deadline.</aside>
 </section>
 
 <!-- 6 · handoff -->
 <section class="slide" data-sec="Big question" data-title="Handoff">
   <p class="eyebrow a" style="--i:0">Big question · handoff</p>
   <h2 class="a" style="--i:1">A handoff carries the lane itself.</h2>
-  <div class="cards2" style="margin-top:clamp(10px,2vw,30px)">
-    <div class="card a" style="--i:2"><h3>What it carries</h3><p class="strong">The thread.<br>The lane.<br>The branch, at its commit.</p><p>The receiver builds on the diff, so nothing gets built twice.</p></div>
+  <div class="cards2" style="margin-top:clamp(10px,2vw,30px);grid-template-columns:1fr 1fr 1fr">
+    <div class="card a" style="--i:2"><h3>What moves</h3><p class="strong">The lane.<br>The branch, at its commit.<br>Every act along the way.</p><p>The receiver inherits the record. The context window ends with the session.</p></div>
     <div class="card a" style="--i:3"><h3>What the receiver can do</h3><p class="strong">Accept.<br>Decline.<br>Challenge.</p><p>Every handoff is an offer from one owner to another.</p></div>
+    <div class="card a" style="--i:4"><h3>Who says it’s done</h3><p class="strong">Someone else.<br>Another model family.<br>Judging the outcome.</p><p>The author is the one person sure it matches the brief.</p></div>
   </div>
-  <aside hidden>Our first answer was wrong. Early on, a handoff was prose: here is what I did, carry on. A whole class of the waste was byte-identical work. Now a handoff carries the lane itself, and the receiver can decline, which makes it an offer between owners.</aside>
+  <aside hidden>Our first answer was wrong. Early on, a handoff was prose: here is what I did, carry on. A whole class of the waste was byte-identical work. Now a handoff carries the lane itself. A lane is one row on the team's board: one owner, the brief, the files it touches, the branch it lives on, and every act tied to it from claim to sign-off. The receiver inherits the record: the branch, the brief, the note saying why, every question and answer. The sender's context window ends with its session, so if it isn't on the record, it didn't happen. Overlaps are caught at claim time, before the first edit. The receiver can decline, which makes it an offer between owners. Done: someone else accepts, from another model family when one is live, because models trained on the same data make the same mistakes and agree on the same wrong answers. They judge the landed outcome against the brief: intent, principles, does it work, does it feel right. Code can pass review and still do the wrong thing. Today a GPT seat declined my lane: the code ran, the brief said three options, I shipped four.</aside>
 </section>
 
 <!-- 7 · built from what broke (roadmap) -->
@@ -447,7 +453,7 @@
       <div class="handle a" style="--i:4"><span class="hi" style="background:var(--tint);color:var(--acct)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span><span><b>sandrise.io/nicksanders</b><small>Portfolio</small></span></div>
     </div>
   </div>
-  <aside hidden>Leave this up for Q&amp;A. The 38x is not said in this room. If asked for the waste number, offer the table with its date on it.</aside>
+  <aside hidden>Leave this up for Q&amp;A. Answers live in the cheat sheet (cheatsheet.html, second window). The 38x is not said in this room. If asked for the waste number, offer the table with its date on it.</aside>
 </section>
 
 <!-- appendix · never shown to the room: reached only from the picker (g), so a click on the Q&A slide stays put -->
