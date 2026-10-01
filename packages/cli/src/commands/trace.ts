@@ -5,6 +5,7 @@ import { CliError } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
 import { theme } from '../render/theme.js';
 import { sessionDigest } from '../session/digest.js';
+import { snapshotTodos } from '../todos/snapshot.js';
 import { tapHook } from '../trace/hook.js';
 import { tailOpencodeSession } from '../trace/opencode.js';
 import { tailTranscript } from '../trace/tail.js';
@@ -102,6 +103,13 @@ async function tailAfterHook(
       dir: opts.dir,
       harness: opts.harness,
       sessionId,
+      transcriptPath,
+    });
+    // ADR 487 §5.2: the same turn-boundary read carries the unfinished-to-do snapshot.
+    await snapshotTodos({
+      binding: opts.binding,
+      dir: opts.dir,
+      harness: opts.harness,
       transcriptPath,
     });
   } catch {

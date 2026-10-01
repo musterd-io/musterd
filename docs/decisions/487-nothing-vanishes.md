@@ -109,6 +109,15 @@ The five lanes under goal `nothing-vanishes` carry the build; the spec's §7 map
   anyone closing an unowned lane), never of an acceptor; and an absent answer is stored as null,
   which reads as none. The MCP field is one undescribed string (`"none"` or comma-separated ids) to
   hold the tools-list budget at +88 B; the refusal names the shape when it fires.
+- **2026-09-30 — the to-do snapshot landed smaller than Decision 4 (lane 4,
+  `01M3T8N0ZBKPBWDYWEEDNH30ED`).** Measured before building: zero to-do tool calls in 14 days —
+  673 Claude Code transcripts (`TodoWrite`, `TaskCreate`, `TaskUpdate`) and 61 Codex sessions
+  (`update_plan`). nick chose to build it as cheap insurance for other teams, with three cuts: (1)
+  Claude Code and Codex only — Cursor registers no stop hook and keeps no transcript a hook can open;
+  (2) no new hook — it rides the turn-boundary reads the trace tail already makes (Claude `Stop`,
+  Codex per-call), and calls the daemon only when the unfinished list changed; (3) no seat-memory
+  fallback — seat memory is one hand-written note, last write wins, and a turn-end hook would
+  overwrite it every turn. A seat with no live lane gets no snapshot. S1 now feeds `leftoverSignal`.
 
 ## Observability & Evaluation
 

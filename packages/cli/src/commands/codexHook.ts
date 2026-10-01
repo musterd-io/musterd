@@ -3,6 +3,7 @@ import type { Parsed } from '../args.js';
 import { findBinding, saveBinding } from '../config.js';
 import { CliError } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
+import { snapshotTodos } from '../todos/snapshot.js';
 import { tapHook } from '../trace/hook.js';
 import { tailTranscript } from '../trace/tail.js';
 import { findWorkspaceDir } from './helpers.js';
@@ -17,6 +18,7 @@ export type CodexHookDeps = {
   probe?: SessionStartProbe;
   tap?: typeof tapHook;
   tail?: typeof tailTranscript;
+  todos?: typeof snapshotTodos;
 };
 
 type CodexHookCommand = 'start' | 'end' | 'post-tool-use';
@@ -99,6 +101,13 @@ async function tailCodex(
     dir: local.dir,
     harness: 'codex',
     sessionId,
+    transcriptPath: path,
+  });
+  // ADR 487 §5.2: the same read point carries the unfinished-to-do snapshot (`update_plan`).
+  await (deps.todos ?? snapshotTodos)({
+    binding: local.binding,
+    dir: local.dir,
+    harness: 'codex',
     transcriptPath: path,
   });
 }

@@ -848,6 +848,12 @@ export async function decideFollowsUp(
     const signal = leftoverSignal({
       title: body.title ?? before.title,
       detail: body.detail !== undefined ? body.detail : before.detail,
+      unfinished_todos:
+        body.unfinished_todos !== undefined
+          ? body.unfinished_todos.length > 0
+            ? { items: body.unfinished_todos, at: 0 }
+            : null
+          : before.unfinished_todos,
     });
     if (signal === null) return;
     throw new MusterdError(

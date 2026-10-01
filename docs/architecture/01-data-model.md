@@ -173,6 +173,7 @@ only an active explorer's posted question creates `needs_clarification` (ADR 291
 - **v77 (`musterd/0.4`, lane 01M3D4069F):** adds `idx_messages_from_act_ts` on `messages(from_member, act, ts, id)` and runs `ANALYZE messages`. The roster reads each member's latest `status_update` (`latestStatusUpdate`). Without this index that read searched `idx_messages_from_reply` and sorted in a temp B-tree, about 4 ms per member. That was ~100 ms of a ~118 ms `GET /teams/:slug` on the live copy, and the route's p95 in the 2026-09-28 tunnel bench was 2.2 s. The index serves the lookup and its `ORDER BY`: 1.7 ms for 25 members.
 - **v78 (`musterd/0.4`, ADR 466):** adds nullable `lanes.parked_json` — `{by, at, reason, until?}` for a lane in the `parked` state, set on the move in and cleared on the move out (same shape and reason as `merged_json`). No backfill: no lane was parked before it.
 - **v81 (ADR 487):** adds nullable `lanes.follows_up_json` — what a closing lane said is left, the JSON of `"none"` or a lane-id list (null reads as none) — and `lanes.abandon_reason` (≤ 280), set on or after the move to `abandoned` and cleared if the lane is reopened. No backfill: every earlier close predates the question.
+- **v82 (ADR 487 §5.2):** adds nullable `lanes.unfinished_todos_json` — `{items, at}`, the seat session's unfinished to-do titles written by the turn-end hook, last write wins (an empty list clears it); kept on a closed lane so the acceptor and the weekly sweep can read it. No backfill.
 
 ## Seed data for tests (`06-testing.md` references this)
 

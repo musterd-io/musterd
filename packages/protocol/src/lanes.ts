@@ -286,11 +286,26 @@ export const LaneFollowsUpSchema = z.union([
 ]);
 export type LaneFollowsUp = z.infer<typeof LaneFollowsUpSchema>;
 
+/** ADR 487 §5.2 bounds: a snapshot is a list of titles, not the transcript. */
+export const LANE_TODOS_MAX_ITEMS = 20;
+export const LANE_TODO_MAX_CHARS = 140;
+
+/**
+ * What the seat's session left unfinished when its turn last ended (ADR 487 §5.2) — the to-do
+ * tool's own titles, last write wins, written by the harness hook onto the seat's most recently
+ * updated live lane. Advisory, never an assignment; `at` dates it for the weekly sweep.
+ */
+export const LaneTodosSchema = z.object({
+  items: z.array(z.string().min(1).max(LANE_TODO_MAX_CHARS)).min(1).max(LANE_TODOS_MAX_ITEMS),
+  at: z.number().int(),
+});
+export type LaneTodos = z.infer<typeof LaneTodosSchema>;
+
 /**
  * S2 (ADR 487 §5.1): a lane whose title or detail declares a part — `N of M`, `N/M`, `increment N`,
  * `phase N`, or an increment id like `1A` — has a tail somewhere, so its close must say where.
- * Returns the matched text (for the refusal) or null. S1, an unfinished to-do snapshot, joins
- * this once `unfinished_todos` exists (lane 4).
+ * S1 joins them: a lane carrying an unfinished to-do snapshot (`unfinished_todos`, ADR 487 §5.2)
+ * has work its session never finished. Returns the matched text (for the refusal) or null.
  *
  * Deliberately broad: a false positive costs one `follows_up: "none"`; a miss costs the plan.
  */
@@ -301,7 +316,13 @@ const PART_SIGNALS: readonly RegExp[] = [
   /\bphases?\s+\d+/i,
   /\b\d{1,2}[A-H]\b/,
 ];
-export function leftoverSignal(lane: { title: string; detail: string | null }): string | null {
+export function leftoverSignal(lane: {
+  title: string;
+  detail: string | null;
+  unfinished_todos?: LaneTodos | null | undefined;
+}): string | null {
+  const todos = lane.unfinished_todos?.items.length ?? 0;
+  if (todos > 0) return `${todos} unfinished to-do${todos === 1 ? '' : 's'}`;
   for (const text of [lane.title, lane.detail ?? '']) {
     for (const re of PART_SIGNALS) {
       const m = re.exec(text);
@@ -420,6 +441,8 @@ export const LaneSchema = z.object({
   follows_up: LaneFollowsUpSchema.nullable().optional(),
   /** ADR 487: why the lane was dropped (≤ 280), set on or after the move to `abandoned`. */
   abandon_reason: z.string().nullable().optional(),
+  /** ADR 487 §5.2: the seat session's unfinished to-dos, last write wins. Absent reads as none. */
+  unfinished_todos: LaneTodosSchema.nullable().optional(),
   /**
    * Board-projection annotation (ADR 169/191), never stored: for a `done` lane, whether the close
    * was a counterpart *acceptance* (derived from the `lane.closed` audit row's closer vs
@@ -606,6 +629,14 @@ export const UpdateLaneSchema = z.object({
    * Mirrors `park_reason`. Required on an abandoned lane named in another lane's `follows_up`.
    */
   abandon_reason: z.string().min(1).max(280).optional(),
+  /**
+   * ADR 487 §5.2: replace the lane's unfinished to-do snapshot with these titles (the harness hook
+   * sends the whole list, last write wins); an empty list clears it. The daemon stamps `at`.
+   */
+  unfinished_todos: z
+    .array(z.string().min(1).max(LANE_TODO_MAX_CHARS))
+    .max(LANE_TODOS_MAX_ITEMS)
+    .optional(),
 });
 export type UpdateLane = z.infer<typeof UpdateLaneSchema>;
 
