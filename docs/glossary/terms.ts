@@ -102,6 +102,20 @@ export const GLOSSARY: GlossaryTerm[] = [
     not: [],
   },
   {
+    term: 'launcher',
+    status: 'canonical',
+    definition:
+      "`musterd`'s seat picker and the code that starts a seat's harness in its workspace (ADR 491).",
+    not: ["the harness registration that marks a presence's surface (ADR 286)"],
+  },
+  {
+    term: 'metaharness',
+    status: 'canonical',
+    definition:
+      'musterd owning the process and terminal around any harness — today launching and supervising it (ADR 491). Never the agent loop, which stays with the harness (ADR 436).',
+    not: ['harness'],
+  },
+  {
     term: 'driver',
     status: 'canonical',
     definition:

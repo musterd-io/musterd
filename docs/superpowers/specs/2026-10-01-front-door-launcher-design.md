@@ -3,8 +3,8 @@
 - Date: 2026-10-01
 - Author: stanley (lane `01M3WA6YT5FBW479G07YKTJSWB`), brainstormed with nick
 - Goal: `front-door`
-- Status: design, awaiting nick's review. Once approved, an ADR in the same lane records the
-  decisions in §2 and §6.
+- Status: approved by nick 2026-10-01; the decisions in §2 and §6 are recorded in
+  [ADR 491](../../decisions/491-seat-launcher.md).
 - Approaches considered: §9.
 - Relates to: [ADR 281](../../decisions/281-multi-harness-worktree-selection.md) (the harness
   adapter registry), [ADR 286](../../decisions/286-launcher-surface-convergence.md) (launch
@@ -369,7 +369,7 @@ rollback, reports the step that failed, and launches nothing.
 
 These decisions cost almost nothing in v1 and keep the later options open.
 
-1. **Four words for four layers.** They go into the glossary with the ADR.
+1. **Names for the layers.** Launcher and Metaharness go into the glossary with ADR 491.
    - **Launcher:** what v1 builds. To the user it is just `musterd`.
    - **Metaharness:** musterd owning the process and the terminal around any harness. Today that
      is launching and supervising. Later it can mean owning the terminal itself: a status line, an
@@ -378,14 +378,17 @@ These decisions cost almost nothing in v1 and keep the later options open.
    - **Harness:** owns the agent loop, and stays Claude Code, Codex, Cursor, OpenCode, Grok.
      ADR 436 decided musterd does not take over the loop and set a date to revisit it. The
      native harness (ADR 251) is the existing exception.
-   - **Console:** the native macOS app from the 2026-08-20 design, one more view over the same
-     layers. "Replace Terminal" means console plus metaharness.
+   - **The macOS app** from the 2026-08-20 design: one more view over the same layers. "Replace
+     Terminal" means that app plus the metaharness. It stays unnamed for now. The spec first called
+     it the console, but [ADR 475](../../decisions/475-cloud-hosted-teams-postgres.md) already
+     gives **Console** to `app.musterd.io`, and one word gets one meaning. It is named when work on
+     it starts.
 2. **Three layers, built once.**
    - **Data:** the catalog and live layer, exposed as `musterd seats --json`. It replaces the
-     `musterd sessions --json` the console design planned, so there is one command, not two.
+     `musterd sessions --json` the macOS app design planned, so there is one command, not two.
    - **Launch:** the launch plan and the supervisor are the only code that knows how to start a
      harness. The wake backends and ADR 425's governed launch can move onto it.
-   - **Faces:** the picker today; the console, deep links and `/live` later. No face holds
+   - **Faces:** the picker today; the macOS app, deep links and `/live` later. No face holds
      discovery or launch logic.
 3. **musterd is the parent process of every harness it launches.** In v1 that buys the receipt
    and recents. It is also where the metaharness grows: the same process can take over the
@@ -403,7 +406,7 @@ Every increment is a lane under the `front-door` goal, chained by `depends_on`.
 
 | Increment | Lane                         | Delivers                                                                                                            |
 | --------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Design    | `01M3WA6YT5FBW479G07YKTJSWB` | This spec, and the ADR: bare `musterd` opens the picker on a TTY, seat names as a fallback, musterd as the parent process, the recents file, the four words in the glossary |
+| Design    | `01M3WA6YT5FBW479G07YKTJSWB` | This spec, ADR 491 (bare `musterd` opens the picker on a TTY, seat names as a fallback, musterd as the parent process, the recents file, Launcher and Metaharness in the glossary), and the implementation plan |
 | 1         | `01M3WA77DFGCEV344M9WTFX6NG` | Fast entry: lazy command loading and the import-graph test. Every command starts faster.                            |
 | 2         | `01M3WA7J4YRC21TCGGW9PSDK9E` | Launch by name: catalog, recents, resolve, launch entries, supervisor, receipt; `musterd <seat>`, `musterd -`, `musterd seats` |
 | 3         | `01M3WA7W55F50XC6TFV33K21PR` | The picker: search, drill-down with here and last-used marks, the live layer, the live-seat prompt                 |
@@ -414,8 +417,8 @@ Every increment is a lane under the `front-door` goal, chained by `depends_on`.
 - **The metaharness proper:** musterd owns each launched harness's terminal. It needs a
   pseudo-terminal, which means `node-pty` (a native dependency, so an ADR) or a small native
   helper.
-- **The macOS console:** lane `01M03AEZ1BVFB7T3FQPVWHNWF9` (open, unowned). It would read
-  `musterd seats --json` and use the launch layer.
+- **The macOS app:** lane `01M03AEZ1BVFB7T3FQPVWHNWF9` (open, unowned), and its name. It would
+  read `musterd seats --json` and use the launch layer.
 - **The project as a team fact** (§6.6).
 - **Seat links** (§6.4).
 - **Two live sessions on one seat:** lane `01M3TB3EY9502QJBHJ154XTM01` (open) tells both
@@ -430,7 +433,7 @@ Every increment is a lane under the `front-door` goal, chained by `depends_on`.
   makes every command faster. musterd stays the parent process, which is the metaharness seam.
 - **B. TypeScript with Ink (React for terminals).** A richer component model for a future
   multi-pane terminal interface. Rejected: a new dependency and React on every launch, against a
-  150 ms budget, and the heavy interface is the console's job.
+  150 ms budget, and the heavy interface is the macOS app's job.
 - **C. A native Go binary with Bubble Tea.** About 5 ms to start, the best terminal UI toolkit,
   and it could `exec` straight into the harness. Rejected: a second language and toolchain in the
   monorepo, and its data would either duplicate the discovery logic or come from the slow Node CLI,

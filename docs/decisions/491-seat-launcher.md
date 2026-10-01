@@ -1,3 +1,162 @@
 # 491 — The seat launcher: bare `musterd` opens a seat picker and musterd becomes the harness's parent process
 
-(Reserved 2026-10-01 by stanley, lane `01M3WA6YT5FBW479G07YKTJSWB` — body follows in this PR.)
+- Status: accepted
+- Date: 2026-10-01
+- Deciders: nick (directed the brainstorm and approved the spec), stanley (lane
+  `01M3WA6YT5FBW479G07YKTJSWB`)
+- Spec: `docs/superpowers/specs/2026-10-01-front-door-launcher-design.md`
+- Goal: `front-door`
+- Relates to: [ADR 281](281-multi-harness-worktree-selection.md) (the harness adapter registry and <!-- vocab:ok -->(slug predates ADR 296 vocabulary)
+  the desired harness set), [ADR 286](286-launcher-surface-convergence.md) (the launch marker that
+  names a Presence's Surface), [ADR 425](425-governed-launcher-adapter-handoff.md) (the governed
+  launch plan), [ADR 436](436-wake-edge-is-a-contract-not-a-loop.md) (musterd does not take over
+  the agent loop), [ADR 447](447-team-first-workspace-layout.md) (the
+  `~/musterd/<team>/<project>/<member>` layout), [ADR 475](475-cloud-hosted-teams-postgres.md)
+  (which already gives the word "Console" to `app.musterd.io`), [ADR 190](190-vitest-machine-state-isolation.md)
+  (tests never touch `~/.musterd`)
+
+## Context
+
+To work as a seat today, nick opens a terminal, types `cd ~/musterd/revive/agents/stanley`, and
+starts the harness by hand. He has to remember the team, the project folder and the member, and
+type the path in every new terminal. Bare `musterd` prints the help page.
+
+The pieces a launcher needs mostly exist. `~/.musterd/config.json` indexes every Workspace on the
+machine under `bindings`; each Workspace's `.musterd/provisioned.json` holds its desired harnesses
+(ADR 281) and `.musterd/binding.json` records its last harness session. The daemon roster says who
+is present where, and the session enumerators ([ADR 166](166-session-liveness-by-enumeration.md))
+say whether a harness session is live.
+`musterd agent` already provisions a seat non-interactively. What does not exist is anything that
+starts an interactive harness for a seat: the host backends spawn headless wakes only, and ADR 425's
+governed launch plan has no callers.
+
+Two measurements framed the design. `musterd --version` took 1.4–2.4 s against 0.16–0.7 s for
+`node -e 0` (load average 44 at the time; the ratio is the finding), because `bin.ts` statically
+imports all 65 command modules and OpenTelemetry. And one repo carries three names: the folder
+`agents`, the lanes' project `runtime` (from `git rev-parse --git-common-dir`), and the remote
+`musterd`.
+
+## Problem
+
+Getting into a seat should take one keystroke for a recent seat and a few for any other, with no
+path to remember and no `cd`, interactively by default and by name in scripts. The launcher has to
+feel instant on a CLI that today takes over a second to print its version, must not leak the
+secrets in `binding.json`, and should not lock out the larger direction nick wants: musterd owning
+the terminal around every harness.
+
+## Decision
+
+1. **Bare `musterd` on a TTY opens the seat picker.** It lists recent seats first, searches every
+   seat as you type, and drills down team → project → member. Every level marks what is on this
+   machine and what is only on the team, and which entry was used last. Piped or redirected, bare
+   `musterd` prints the help page as before; `musterd help` is unchanged.
+2. **A word that is not a command is a seat address.** `musterd <word>` resolves, in order: a
+   command (commands always win); `-` (the seat launched last); an exact address
+   (`team/project/member`, or `team@host/project/member` when two servers host same-named teams) or
+   a member name unique on this machine. Several matches open the picker filtered to the word on a
+   TTY and exit 2 with the candidates' addresses otherwise. No match keeps today's
+   `unknown command` error, which also suggests the nearest seat name when one is close. Flags:
+   `-r`/`--resume`, `--harness <id>`, `--path` (print the Workspace path and launch nothing), and
+   `--force` (launch a live seat without a TTY, which is otherwise refused with exit 1).
+3. **musterd is the parent process of every harness it launches.** It spawns the harness in the
+   seat's Workspace with the terminal handed over (`stdio: 'inherit'`), ignores `SIGINT` and
+   `SIGQUIT` while it runs, forwards `SIGTERM` and `SIGHUP`, and exits with the harness's code
+   (`128 + n` for a harness killed by signal `n`), printing one receipt line to stderr. It adds
+   nothing to the harness's environment: identity still arrives through the Workspace's MCP
+   registration and its `MUSTERD_LAUNCH_SURFACE` marker (ADR 286). This owns the process, not the
+   agent loop; ADR 436 stands.
+4. **A harness session starts fresh unless resume is asked for.** `⌃R` in the picker or `-r` by
+   name resumes through the harness's own resume: with the session id recorded in `binding.json`
+   when its harness matches, otherwise with the harness's continue-most-recent form.
+5. **Each harness declares its own interactive launch.** Every adapter in the ADR 281 registry
+   gains a launch entry (fresh, resume with an id, resume without one); the launcher holds no
+   per-harness switch. The native `musterd` harness is the headless `musterd host` loop and has no
+   interactive entry. A human seat launches the member's login shell in the Workspace.
+6. **A seat that is already live is launched again only after a warning.** The picker names where
+   it is live (a tty here, or another node) and asks y/N; without a TTY it needs `--force`.
+7. **One read model for every face.** A seat catalog built from `config.bindings` plus a scan of the
+   ADR 447 layout, overlaid with the roster, local liveness and recents, is what the picker shows
+   and what `musterd seats [--json]` prints. It parses `binding.json` through `BindingSchema` and
+   copies named non-secret fields only; no secret reaches the catalog or its output. Future faces,
+   such as a macOS app, read this catalog rather than enumerating seats themselves.
+8. **Recents live in `~/.musterd/launcher.json`.** Machine-local, secret-free, located through
+   `machineStatePath` with a `MUSTERD_LAUNCHER` override (ADR 190), parsed through a zod schema on
+   read and validated before every write. A corrupt file is set aside and rebuilt empty; it never
+   blocks a launch. "Last used" is the newest of this file, the recorded session start, and the
+   newest transcript.
+9. **The launcher stays fast by construction.** `bin.ts` loads commands lazily. The launcher entry's
+   static import closure may not include `@opentelemetry/*`, `@clack/*` or any `commands/*` module,
+   and a test enforces it. The first screen paints from disk; live sources load and answer after it,
+   each time-boxed. The target is a first paint under 150 ms on an idle machine, reported by a bench
+   script rather than asserted in CI.
+10. **Creating a seat reuses `musterd agent` and fixes it.** "Set up here" (an agent member with no
+    Workspace on this machine) and `+ new seat` take the `musterd agent` path, which also gains two
+    fixes: it writes `provisioned.json`, and it wires harnesses through the reconcile engine instead
+    of the single-harness `harness.configure`. A new Workspace is a `git worktree` of a checkout of
+    the same project already on this machine, started from the remote's default branch, not from
+    whatever branch that checkout has open. A project with no checkout on this machine cannot be set
+    up from the launcher.
+11. **The glossary gains two words.** **Launcher**: the seat picker and the code that starts a seat's
+    harness in its Workspace; not the harness registration that marks a Presence's Surface
+    (ADR 286). **Metaharness**: musterd owning the process and terminal around any harness, which
+    today means launching and supervising it; never the agent loop, which stays with the harness
+    (ADR 436).
+
+## Alternatives rejected
+
+- **Ink (React for terminals).** A richer component model for a multi-pane terminal interface,
+  but a new runtime dependency and React on every launch against a 150 ms budget.
+- **A native Go binary with Bubble Tea.** About 5 ms to start and it could `exec` into the harness,
+  but it adds a second language and toolchain, and its data would either duplicate seat discovery
+  or come from the slow Node CLI.
+- **A zsh function with fzf.** Instant, but shell-specific, unable to create seats, and with no path
+  to a metaharness.
+- **An explicit verb (`musterd open stanley`).** Collision-proof, but nick chose the bare name;
+  commands winning plus the full address covers the collision case.
+- **Resume by default.** Feels continuous, but transcripts grow long and stale contexts mislead;
+  orientation from seat memory and the inbox is the continuity mechanism
+  ([ADR 430](430-wake-context-packet-v2.md)).
+- **Jump to the tab where a live seat runs, or hide live seats.** nick chose a warning that still
+  allows a second session.
+- **"Console" for the macOS app.** ADR 475 already gives "Console" to `app.musterd.io`; reusing it
+  would give one word two meanings. The macOS app is named when work on it starts.
+
+## Consequences
+
+- Bare `musterd` on a terminal no longer prints help. Anyone who relied on that types
+  `musterd help`; piped and redirected output is unchanged.
+- A new command can shadow a seat with the same name. The full address always reaches the seat, so
+  nothing becomes unreachable.
+- Each launched harness has an idle Node parent of about 35 MB for its whole run.
+- Two harness sessions on one seat become possible by explicit choice. Telling both sessions about
+  each other is lane `01M3TB3EY9502QJBHJ154XTM01` (open); the launcher's prompt is the first
+  warning.
+- Lazy command loading changes how every command is imported, so every command starts faster, and
+  the CLI end-to-end suite has to stay green across that change.
+- The picker shows a project by its folder name, with the remote's name dimmed when different.
+  Making the project a team-level fact with one name and a repo URL would let the launcher set up a
+  project with no checkout here; that needs a decision of its own and is not taken here.
+- New screens get frames in `docs/design/figma-brief-terminal.md`, as CLI output must match them.
+- The work lands in four lanes under goal `front-door`, chained by `depends_on`: fast entry
+  `01M3WA77DFGCEV344M9WTFX6NG`, launch by name `01M3WA7J4YRC21TCGGW9PSDK9E`, the picker
+  `01M3WA7W55F50XC6TFV33K21PR`, and creating seats `01M3WA85HQRSA7V08FEQQ489HM`.
+
+## Observability & Evaluation
+
+- **Traces:** none in this decision. OpenTelemetry is kept off the launcher's path on purpose
+  (Decision 9). The local evidence is `~/.musterd/launcher.json` and the receipt line, and neither
+  holds a secret.
+- **Eval:** three automated checks run in CI.
+  - *Secrets.* A test greps every catalog and `--json` output for `mskey_`, `msgr_`, `mscr_` and
+    `msla_`. Any hit fails the build.
+  - *Import closure.* The import-graph test fails the build when the launcher entry's static
+    closure reaches `@opentelemetry/*`, `@clack/*` or `commands/*`.
+  - *Terminal frames.* Snapshot tests hold every picker screen to its frame in
+    `docs/design/figma-brief-terminal.md`.
+- **Experiment:** two measured claims, each with a falsifier.
+  - *Adoption.* For the seven days after the picker's lane (`01M3WA7W55F50XC6TFV33K21PR`) closes,
+    nick reaches seats through `musterd` only. Falsifier: three or more times in that week he types
+    a Workspace path or `cd` to reach a seat. If that happens, the picker's shape is reopened.
+  - *Speed.* The bench reports first paint on an idle machine once the picker lands. Falsifier: a
+    median above 150 ms. If that happens, approach C (a native front end over
+    `musterd seats --json`) is reconsidered.
