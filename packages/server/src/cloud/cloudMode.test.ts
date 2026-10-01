@@ -361,3 +361,34 @@ describe('cloud mode — no team rows without a credential for that team (review
     }
   });
 });
+
+describe('cloud mode — a look-alike discovery path reaches no team (review M1)', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("'/_well-known/…' is not OAuth discovery — 404 on any host, never another team's metadata", async () => {
+    const { s, seed, url } = await bootCloud();
+    try {
+      await createTeam(seed!, { slug: 'revive' });
+      await createTeam(seed!, { slug: 'other' });
+      const tls = { 'x-forwarded-proto': 'https' };
+      // The real path, on the right host, still answers (the edge terminated TLS).
+      const real = await hostRequest(
+        url,
+        '/.well-known/oauth-authorization-server/other',
+        'other.musterd.test',
+        { headers: tls },
+      );
+      expect(real.status).toBe(200);
+      for (const p of [
+        '/_well-known/oauth-authorization-server/other',
+        '/xwell-known/oauth-protected-resource/mcp/other',
+        '/Xwell-known/openid-configuration/oauth/other',
+      ]) {
+        const r = await hostRequest(url, p, 'revive.musterd.test', { headers: tls });
+        expect(r.status, p).toBe(404);
+      }
+    } finally {
+      await s.close();
+    }
+  });
+});

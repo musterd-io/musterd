@@ -450,7 +450,7 @@ export async function handleOAuthRoutes(
   // Decline 4: every OAuth route — including discovery and registration — refuses non-TLS
   // except loopback, exactly as the ADR claims. Metadata is public info, but a uniform rule
   // has no carve-outs to misread, and loopback + tunneled https both pass regardless.
-  const prm = path.match(/^\/.well-known\/oauth-protected-resource\/mcp\/([^/]+)$/);
+  const prm = path.match(/^\/\.well-known\/oauth-protected-resource\/mcp\/([^/]+)$/);
   if (method === 'GET' && prm) {
     requireTlsPeer(ctx, req, 'OAuth discovery');
     const slug = decodeURIComponent(prm[1]!);
@@ -458,7 +458,7 @@ export async function handleOAuthRoutes(
     sendOAuthJson(res, 200, metadataFor(ctx, req, slug).resource);
     return true;
   }
-  const asmTeam = path.match(/^\/.well-known\/oauth-authorization-server\/([^/]+)$/);
+  const asmTeam = path.match(/^\/\.well-known\/oauth-authorization-server\/([^/]+)$/);
   if (method === 'GET' && asmTeam) {
     requireTlsPeer(ctx, req, 'OAuth discovery');
     const slug = decodeURIComponent(asmTeam[1]!);
@@ -488,7 +488,7 @@ export async function handleOAuthRoutes(
   // iOS app failed with "could not start sign in" before ever reaching the sign-in page
   // (Rehearsal A, lane 01M3FDG1MD).
   const asmInserted = path.match(
-    /^(?:\/.well-known\/(?:oauth-authorization-server|openid-configuration)\/oauth\/([^/]+)|\/oauth\/([^/]+)\/.well-known\/(?:oauth-authorization-server|openid-configuration))$/,
+    /^(?:\/\.well-known\/(?:oauth-authorization-server|openid-configuration)\/oauth\/([^/]+)|\/oauth\/([^/]+)\/\.well-known\/(?:oauth-authorization-server|openid-configuration))$/,
   );
   if (method === 'GET' && asmInserted) {
     requireTlsPeer(ctx, req, 'OAuth discovery');
