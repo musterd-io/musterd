@@ -783,6 +783,14 @@ below promises anything about what an agent does outside the roster.
   showing `convene_huddles on`. A member holding a session open does not wake; its huddle waits in
   its inbox.
 
+**Editing the deck or the cheat sheet in the browser.** Both pages load `editor.js`. Open the file in
+Chrome or Edge, press **E** to edit any text on the page (on the deck, the speaker notes too), and
+**⌘S** to save: the first save asks you to pick that same `.html` file, later saves go straight
+back. A save re-reads the file and replaces only the text you changed, so the diff is just your
+edit; an edit whose text changed on disk meanwhile is refused and named. Press **E** again to
+leave edit mode before presenting: while it is on, a click places the caret and never advances.
+Commit the result like any other change.
+
 **Hold the autorefresher (not the daemon), an hour before doors.** The autorefresher restarts the daemon onto `main`
 once a merge burst settles for 10 minutes. On a team that merges all evening, that can land
 inside the seven minutes. When it does, `/live` drops and reconnects, and every adapter-held seat
