@@ -138,7 +138,9 @@ landed on main as SQLite entries and moved into the ladder as pairs, so Postgres
 adds `team_id` to the four tables that were owned only through `members` / `seeds` — `presence`,
 `inbox_cursors`, `seat_memory`, `seed_thread_entries` — backfilled from the owner, orphans dropped,
 `NOT NULL` on Postgres; the store writes it on every insert (member-keyed tables take it off the
-`members` row in the same `INSERT … SELECT`).
+`members` row in the same `INSERT … SELECT`). v84 (cloud increment 1C) adds `console_token_jti (jti TEXT PRIMARY
+KEY, exp BIGINT NOT NULL)`, portable SQL: a console token's id, redeemed once across every Cloud
+server (cloud design §4.3) — a duplicate insert is a replay; expired rows are pruned on redemption.
 
 **Tenancy (cloud design §12.1).** On Postgres every team-owned table carries `team_id` (`teams`:
 its `id`) and one derived row-level-security policy, `tenant`, on
@@ -150,7 +152,7 @@ role and no tenant, so it sees no row (fail-closed); `asOperator()` runs as `mus
 cannot bypass RLS; migrations run as the owner, a separate step. The seam is the transport: `http.ts`
 scopes `ctx` where it resolves `/teams/:slug`, `ws.ts` where the claim frame names its team
 (`03-server.md` §Auth); store code never sets tenant context. Tables that are not team-owned —
-`schema_meta`, `footprint_machine`, `footprint_stacks` — are the `GLOBAL_TABLES` allowlist in
+`schema_meta`, `footprint_machine`, `footprint_stacks`, `console_token_jti` — are the `GLOBAL_TABLES` allowlist in
 `db/pg/tenancy.ts`; the inventory test fails on a table in neither set. On SQLite (one team per
 file) `forTeam` and `asOperator` return the handle itself.
 
@@ -159,7 +161,10 @@ file) `forTeam` and `asOperator` return the handle itself.
 Both engines refuse to run against a database whose `schema_version` is past what the build's
 ladder knows (cloud design §6; `db/guard.ts`, the stable sentence "schema newer than this build"):
 under expand/contract the old binary keeps serving the expanded schema, but never one contracted by
-something newer. `runMigrations` (both SQLite ladders) and `migratePostgres` share the check.
+something newer. `runMigrations` (both SQLite ladders) and `migratePostgres` share the check. A
+Cloud server goes one step further: migrations never run on boot, and `listen()` refuses a database
+at any version but its own — older is "schema older than this build", the migrate step not run
+(`assertSchemaCurrent`, `03-server.md` §Cloud mode).
 
 ### Shared Seeds (unreleased — ADR 291)
 

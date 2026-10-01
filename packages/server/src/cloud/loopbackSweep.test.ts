@@ -27,7 +27,12 @@ const ROWS: Row[] = [
   { gate: 'requireLocalPeer', method: 'POST', path: '/node/enroll', want: 404 },
   { gate: 'requireLocalPeer', method: 'POST', path: '/teams/revive/signin-handoff', want: 404 },
   { gate: 'requireLocalPeer', method: 'GET', path: '/teams/revive/local-identity', want: 404 },
-  { gate: 'requireLocalPeer', method: 'GET', path: '/teams/revive/signin-handoff/n0nce', want: 404 },
+  {
+    gate: 'requireLocalPeer',
+    method: 'GET',
+    path: '/teams/revive/signin-handoff/n0nce',
+    want: 404,
+  },
   // Seat provisioning and credential rotation: an admin credential, never "you are local".
   { gate: 'authProvision', method: 'POST', path: '/teams/revive/members', want: 401 },
   {
@@ -36,9 +41,19 @@ const ROWS: Row[] = [
     path: '/teams/revive/members/bot/agent-seat-credential/rotate',
     want: 401,
   },
-  { gate: 'authProvision', method: 'POST', path: '/teams/revive/members/ada/credential/rotate', want: 401 },
+  {
+    gate: 'authProvision',
+    method: 'POST',
+    path: '/teams/revive/members/ada/credential/rotate',
+    want: 401,
+  },
   // OAuth + remote MCP: plaintext was fine from loopback; on Cloud only the edge's https counts.
-  { gate: 'tls', method: 'GET', path: '/.well-known/oauth-protected-resource/mcp/revive', want: 403 },
+  {
+    gate: 'tls',
+    method: 'GET',
+    path: '/.well-known/oauth-protected-resource/mcp/revive',
+    want: 403,
+  },
   { gate: 'tls', method: 'GET', path: '/.well-known/oauth-authorization-server/revive', want: 403 },
   { gate: 'tls', method: 'GET', path: '/oauth/revive/.well-known/openid-configuration', want: 403 },
   { gate: 'tls', method: 'POST', path: '/oauth/revive/register', want: 403 },
