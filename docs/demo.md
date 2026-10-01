@@ -770,6 +770,30 @@ words — *"when I say go, raise a standard-tier ask to nick about the task"*. I
 `musterd status` must say `wakeable · resumable` before anyone sits down. The frame rule holds:
 the human seat is visible the whole time.
 
+**Freeze the daemon, an hour before doors.** The autorefresher restarts the daemon onto `main`
+once a merge burst settles for 10 minutes. On a team that merges all evening, that can land
+inside the seven minutes. When it does, `/live` drops and reconnects, and every adapter-held seat
+is deaf for one lease-renewal window (`docs/wiki/huddles.md`). Nothing pauses it yet, so take
+its LaunchAgent out for the slot:
+
+```bash
+launchctl bootout gui/$(id -u)/studio.sandrise.musterd-autorefresh   # freeze
+launchctl list | grep musterd-autorefresh                             # prints nothing = frozen
+curl -s localhost:4849/health | grep -o '"ok":true'                    # daemon up
+musterd status                                                         # nick present; delta wakeable · resumable if it is in
+```
+
+Leave the guardian running. It restarts the daemon only when the daemon is down, and that is the
+recovery you want on stage. If you want tonight's merges in the demo, run `musterd service
+refresh` *before* the freeze, then wait a minute for the seats to re-lease, not during the slot.
+The served `/live` bundle can still republish on a merge, but an open page does not reload, so
+leave it. **After the talk**, put the autorefresher back. It catches up to `main` on its next
+tick:
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/studio.sandrise.musterd-autorefresh.plist
+```
+
 **Word budget.** Seven minutes at 150 wpm is 1,050 words, and a demo with two live actions and a
 projector to look at runs slower — so the budget is ~850 spoken words, and the table is the
 stopwatch until a live read replaces it. Measured 2026-09-30, spoken words only:
