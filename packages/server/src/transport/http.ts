@@ -125,6 +125,7 @@ import {
   verifyConsoleToken,
   type ConsoleClaims,
 } from '../cloud/consoleToken.js';
+import { cloudHealth } from '../cloud/health.js';
 import { hostAllows } from '../cloud/hostIsolation.js';
 import { trustsLocalPeer } from '../cloud/localTrust.js';
 import { checkUpgrade, readLocalIdentity, resolveRosterRoots } from '../config.js';
@@ -1903,6 +1904,11 @@ export async function handleHttp(
     negotiatedEncoding.set(res, pickEncoding(req.headers['accept-encoding']));
 
     if (method === 'GET' && path === '/health') {
+      // Cloud (spec §5.5): ok, or one stable sentence — nothing about the machine.
+      if (ctx.config.cloud) {
+        const h = await cloudHealth(ctx.db, ctx.traceDb);
+        return sendJson(res, h.status, h.body);
+      }
       // db + schema are exposed so clients can confirm *which* database this daemon serves
       // (a daemon silently serving the wrong db reads as "everyone offline" — dogfood finding).
       // `connections` is the cross-team live-session count the CLI's `service stop|restart` guard

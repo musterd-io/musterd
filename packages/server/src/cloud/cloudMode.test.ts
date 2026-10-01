@@ -313,3 +313,79 @@ describe('cloud mode — a team host reaches only its own team (1C task 6, spec 
     }
   });
 });
+
+describe('cloud mode — /health says ok or one stable sentence (1C task 7, spec §5.5 / §7)', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  /** A cloud server whose coordination database can be pulled out from under it. */
+  async function bootWithOutage() {
+    stubCloudEnv();
+    const seed = await openTestDriver('pglite');
+    await openTestDriver('pglite', { store: 'trace' });
+    const pools = (await testCloudPools()).factories;
+    let down = false;
+    const refused = () =>
+      Object.assign(new Error('connect ECONNREFUSED 10.0.0.1:5432'), { code: 'ECONNREFUSED' });
+    const main = (u: string) => {
+      const p = pools.main(u);
+      return {
+        connect: () => (down ? Promise.reject(refused()) : p.connect()),
+        end: () => p.end(),
+      };
+    };
+    const s = createServer({ cloudPools: { ...pools, main }, rosterRoots: [], port: 0 });
+    await s.listen();
+    return {
+      s,
+      seed,
+      url: `http://127.0.0.1:${s.port}`,
+      setDown: (v: boolean) => void (down = v),
+    };
+  }
+
+  it('is exactly {ok:true} when the databases answer — no path, counts, or build on Cloud', async () => {
+    const { s, url } = await bootCloud();
+    try {
+      const r = await fetch(url + '/health');
+      expect(r.status).toBe(200);
+      expect(await r.json()).toEqual({ ok: true });
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('database down: /health is 503 "database unreachable"; recovery is automatic', async () => {
+    const { s, url, setDown } = await bootWithOutage();
+    try {
+      setDown(true);
+      const down = await fetch(url + '/health');
+      expect(down.status).toBe(503);
+      expect(await down.json()).toEqual({ ok: false, reason: 'database unreachable' });
+      setDown(false);
+      const up = await fetch(url + '/health');
+      expect(up.status).toBe(200);
+      expect(await up.json()).toEqual({ ok: true });
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('database down: a team route is a 503 with the same sentence, never a 500 or stale data', async () => {
+    const { s, seed, url, setDown } = await bootWithOutage();
+    try {
+      const revive = await createTeam(seed, { slug: 'revive' });
+      const { token } = await addMember(seed, revive, { name: 'ada', kind: 'human', role: '' });
+      setDown(true);
+      const r = await hostRequest(url, '/teams/revive/members', 'revive.musterd.test', {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(r.status).toBe(503);
+      expect(JSON.parse(r.body)).toEqual({
+        error: { code: 'server_error', message: 'database unreachable' },
+      });
+    } finally {
+      setDown(false);
+      await s.close();
+    }
+  });
+});

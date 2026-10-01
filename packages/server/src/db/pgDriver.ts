@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { toPostgres } from './dialect.js';
-import { DriverError, type Driver, type Params } from './driver.js';
+import { DATABASE_UNREACHABLE_SENTENCE, DriverError, type Driver, type Params } from './driver.js';
 import { ROLE, TENANT_SETTING } from './pg/tenancy.js';
 
 /**
@@ -52,10 +52,9 @@ const UNREACHABLE = new Set([
   '08006', // connection_failure
   '53300', // too_many_connections
 ]);
-const UNAVAILABLE_SENTENCE = 'database unreachable';
 const unavailable = (e: unknown) =>
   new DriverError(
-    `${UNAVAILABLE_SENTENCE}: ${e instanceof Error ? e.message : String(e)}`,
+    `${DATABASE_UNREACHABLE_SENTENCE}: ${e instanceof Error ? e.message : String(e)}`,
     'unavailable',
   );
 const isUnreachable = (e: unknown) => {
