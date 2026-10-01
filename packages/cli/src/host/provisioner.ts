@@ -138,7 +138,7 @@ async function standUp(deps: ProvisionDeps, row: HostProvision): Promise<void> {
         team: deps.team,
         name: seat,
         server: deps.server,
-        harness: deps.harness,
+        wiring: { desired: [deps.harness.id], toolkit: '' },
         http: deps.sponsor,
         workspace: () => {
           try {

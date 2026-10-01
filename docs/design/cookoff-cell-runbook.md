@@ -126,7 +126,7 @@ musterd agent dot
 ```
 
 Each `musterd agent` prints `✓ workspace …/cell-D-<seat> (git worktree on branch agent/<seat>)` and
-`✓ wired the musterd MCP server there for Claude Code (autojoin)`. The seats each get **their own
+`✓ wired the musterd MCP server there for claude-code (autojoin)`. The seats each get **their own
 worktree of the fixture on branch `agent/<seat>`**, so the three agents genuinely contend on the shared
 modules (`tariff.ts`, `config.ts`, `schema.ts`, `router.ts`) the trap taxonomy targets. A dedicated
 team + db also keeps the run's coordination traffic out of the dogfood ledger.

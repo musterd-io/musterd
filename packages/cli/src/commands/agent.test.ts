@@ -19,9 +19,7 @@ const h = vi.hoisted(() => ({
   saveBinding: vi.fn(),
   saveWorkspaceSpec: vi.fn(),
   writeSeatFile: vi.fn(),
-  configure: vi.fn(async () => ({ target: 'claude mcp', activation: '' })),
-  configureCursor: vi.fn(async () => ({ target: '.cursor/mcp.json', activation: '' })),
-  configureCodex: vi.fn(async () => ({ target: '.codex/config.toml', activation: '' })),
+  reconcile: vi.fn(async () => ({ ok: true, results: [] as unknown[] })),
   // dir is set to a real temp dir per-test (the command chdir's into it to register MCP).
   workspace: { dir: '', kind: 'worktree' as const, branch: 'agent/June', created: true },
   rosterHome: {} as Record<string, string>,
@@ -49,12 +47,10 @@ vi.mock('../config.js', () => ({
 }));
 vi.mock('../roster.js', () => ({ writeSeatFile: h.writeSeatFile }));
 vi.mock('../onboard/harnesses/index.js', () => ({
-  HARNESSES: [
-    { id: 'claude-code', label: 'Claude Code', surface: 'claude-code', configure: h.configure },
-    { id: 'cursor', label: 'Cursor', surface: 'cursor', configure: h.configureCursor },
-    { id: 'codex', label: 'Codex', surface: 'codex', configure: h.configureCodex },
-  ],
+  harnessAdapters: () =>
+    ['claude-code', 'cursor', 'codex', 'opencode', 'grok', 'musterd'].map((id) => ({ id })),
 }));
+vi.mock('../onboard/reconcile/engine.js', () => ({ reconcileHarnesses: h.reconcile }));
 vi.mock('../onboard/workspace.js', () => ({ provisionWorkspace: () => h.workspace }));
 
 const { agentCommand } = await import('./agent.js');
@@ -90,7 +86,7 @@ describe('musterd agent <name>', () => {
       expect(code).toBe(0); // warn-never-block: the provisioning still ran
       expect(infraGate).toHaveBeenCalledWith('agent');
       expect(chunks.join('')).toContain('nick holds platform');
-      expect(h.configure).toHaveBeenCalled(); // proceeded through to the shared-entry write
+      expect(h.reconcile).toHaveBeenCalled(); // proceeded through to the wiring
     });
 
     it('stays silent when the gate answers null — holder, human shell, or unreachable daemon', async () => {
@@ -144,12 +140,9 @@ describe('musterd agent <name>', () => {
     // The adapter anchors on the binding it finds by walking up from its **cwd** — genuinely per-worktree,
     // unlike the shared config — so the env was never needed here. Omitting it makes the shared entry
     // identical for every seat, and therefore harmless.
-    const entry = h.configure.mock.calls[0]![0] as { env: Record<string, string> };
-    expect(entry.env.MUSTERD_BINDING).toBeUndefined();
-    // ADR 165 + increment 2 completed what the comment above began: the shared entry carries
-    // NOTHING. Surface/key/claim live in binding.json; autojoin/driver (the last two baked names)
-    // moved there too — the entry env is fully empty for the agent path.
-    expect(entry.env).toEqual({});
+    // ADR 491: wiring runs through the reconcile engine; nothing secret is handed to it (ADR 143/165).
+    expect(JSON.stringify(h.reconcile.mock.calls[0])).not.toMatch(/mskey_|msgr_/);
+    expect(h.reconcile.mock.calls[0]![1]).toEqual(['claude-code']);
 
     // The secret-free committed launch spec is written (no agent_key/grant fields).
     expect(h.saveWorkspaceSpec).toHaveBeenCalledWith(
@@ -236,8 +229,8 @@ describe('musterd agent <name>', () => {
     const code = await agentCommand(parseArgs(['June', '--driver', 'nick']));
     expect(code).toBe(0);
     // The entry is repo-root-shared: a driver baked there marked EVERY sibling worktree as driven.
-    const entry = h.configure.mock.calls[0]![0] as { env: Record<string, string> };
-    expect(entry.env.MUSTERD_DRIVER).toBeUndefined();
+    // ADR 491: wiring runs through the reconcile engine; nothing secret is handed to it (ADR 143/165).
+    expect(JSON.stringify(h.reconcile.mock.calls[0])).not.toMatch(/mskey_|msgr_/);
     const binding = h.saveBinding.mock.calls[0]![1] as Record<string, unknown>;
     expect(binding.driver).toBe('nick');
   });
@@ -264,9 +257,8 @@ describe('musterd agent <name>', () => {
       h.workspace.dir,
       expect.objectContaining({ grant: 'msgr_standing' }),
     );
-    // ...and is NOT inlined into the harness env (no secret baked into the config).
-    const entry = h.configure.mock.calls[0]![0] as { env: Record<string, string> };
-    expect(entry.env.MUSTERD_GRANT).toBeUndefined();
+    // ADR 491: wiring runs through the reconcile engine; nothing secret is handed to it (ADR 143/165).
+    expect(JSON.stringify(h.reconcile.mock.calls[0])).not.toMatch(/mskey_|msgr_/);
   });
 
   it('still comes online if the grant mint fails (falls back to the approval lane)', async () => {
@@ -276,37 +268,31 @@ describe('musterd agent <name>', () => {
     // No grant in the binding; autojoin will route through the approval lane instead.
     const binding = h.saveBinding.mock.calls[0]![1] as Record<string, unknown>;
     expect(binding.grant).toBeUndefined();
-    const entry = h.configure.mock.calls[0]![0] as { env: Record<string, string> };
-    expect(entry.env.MUSTERD_GRANT).toBeUndefined();
+    // ADR 491: wiring runs through the reconcile engine; nothing secret is handed to it (ADR 143/165).
+    expect(JSON.stringify(h.reconcile.mock.calls[0])).not.toMatch(/mskey_|msgr_/);
   });
 
   it('--harness cursor wires the Cursor adapter — and bakes no surface anywhere', async () => {
     const code = await agentCommand(parseArgs(['June', '--harness', 'cursor']));
     expect(code).toBe(0);
-    expect(h.configureCursor).toHaveBeenCalled();
-    expect(h.configure).not.toHaveBeenCalled();
+    expect(h.reconcile.mock.calls[0]![1]).toEqual(['cursor']);
     // v2 identity carries no surface (ADR 281): the launcher provides it at runtime (ADR 286).
     const bindingArg = h.saveBinding.mock.calls[0]![1] as Record<string, unknown>;
     expect(bindingArg['surface']).toBeUndefined();
     const specArg = h.saveWorkspaceSpec.mock.calls[0]![1] as Record<string, unknown>;
     expect(specArg['surface']).toBeUndefined();
-    const entry = h.configureCursor.mock.calls[0]![0] as { env: Record<string, string> };
-    expect(entry.env.MUSTERD_SURFACE).toBeUndefined();
+    expect(JSON.stringify(h.reconcile.mock.calls[0])).not.toMatch(/MUSTERD_SURFACE/);
   });
 
   it('--harness codex wires the Codex adapter', async () => {
     const code = await agentCommand(parseArgs(['June', '--harness', 'codex']));
     expect(code).toBe(0);
-    expect(h.configureCodex).toHaveBeenCalled();
-    expect(h.configure).not.toHaveBeenCalled();
-    const entry = h.configureCodex.mock.calls[0]![0] as { env: Record<string, string> };
-    expect(entry.env.MUSTERD_SURFACE).toBeUndefined();
+    expect(h.reconcile.mock.calls[0]![1]).toEqual(['codex']);
   });
 
   it('defaults to the claude-code harness when --harness is omitted', async () => {
     await agentCommand(parseArgs(['June']));
-    expect(h.configure).toHaveBeenCalled();
-    expect(h.configureCursor).not.toHaveBeenCalled();
+    expect(h.reconcile.mock.calls[0]![1]).toEqual(['claude-code']);
   });
 
   it('rejects an unknown harness with the valid set', async () => {
@@ -324,7 +310,7 @@ describe('musterd agent <name>', () => {
   });
 
   it('still succeeds when MCP registration fails (member + workspace already done)', async () => {
-    h.configure.mockRejectedValueOnce(new Error('claude not found'));
+    h.reconcile.mockRejectedValueOnce(new Error('claude not found'));
     const code = await agentCommand(parseArgs(['June']));
     expect(code).toBe(0);
     expect(h.saveBinding).toHaveBeenCalled(); // workspace was still provisioned
@@ -339,7 +325,7 @@ describe('musterd agent <name>', () => {
     const code = await agentCommand(parseArgs(['June']));
     expect(code).toBe(0);
     expect(h.saveBinding).toHaveBeenCalled(); // workspace still provisioned
-    expect(h.configure).toHaveBeenCalled(); // MCP still wired
+    expect(h.reconcile).toHaveBeenCalled(); // still wired
   });
 
   it('refuses to reuse a seat that already exists as a human', async () => {
@@ -378,7 +364,7 @@ describe('musterd agent <name>', () => {
         label: 'claude-code:dana-scout',
       });
       expect(h.saveBinding).toHaveBeenCalled();
-      expect(h.configure).toHaveBeenCalled();
+      expect(h.reconcile).toHaveBeenCalled();
       expect(chunks.join('')).toContain('reused');
     });
 

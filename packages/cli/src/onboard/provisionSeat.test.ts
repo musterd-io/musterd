@@ -1,14 +1,23 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Harness } from './harness.js';
 import { provisionSeat, type ProvisionSeatInput } from './provisionSeat.js';
 import type { Workspace } from './workspace.js';
 
 /**
- * ADR 463 §3 — the one seat-provisioning sequence, shared by `musterd agent` and a sponsor's host.
- * Real files in a tmp Workspace; only the daemon (`http`) and the harness are faked.
+ * ADR 463 §3 / ADR 491 — the one seat-provisioning sequence, shared by `musterd agent`, a sponsor's
+ * host and the launcher. Real files in a tmp Workspace; only the daemon (`http`) and the reconcile
+ * engine are faked.
  */
 let dir: string;
 let ws: Workspace;
@@ -19,44 +28,56 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-function fakeHarness(configure = vi.fn(async () => ({ target: 'fake', activation: '' }))) {
-  return {
-    harness: { id: 'claude-code', label: 'Claude Code', configure } as unknown as Harness,
-    configure,
-  };
-}
+const report = (ok = true) => ({
+  ok,
+  results: ok
+    ? []
+    : [
+        {
+          harness: 'claude-code',
+          resourceKey: 'k',
+          scope: 'folder',
+          action: 'write',
+          result: 'failed',
+          recovery: 'none',
+          detail: 'claude not found',
+        },
+      ],
+});
 
 function input(over: Partial<ProvisionSeatInput> = {}): ProvisionSeatInput {
   return {
     team: 'acme',
     name: 'dana-scout',
     server: 'http://localhost:4849',
-    harness: fakeHarness().harness,
     http: {
       mintBootstrapCredential: vi.fn(async () => ({
-        credential: {} as never,
+        credential: { id: 'cred-1' } as never,
         agent_key: 'msac_x',
       })),
       issueGrant: vi.fn(async () => ({ grant: {} as never, token: 'msgr_y' })),
+      revokeBootstrapCredential: vi.fn(async () => ({ ok: true as const })),
     },
     workspace: () => ws,
+    wiring: {
+      desired: ['claude-code', 'musterd'],
+      toolkit: '',
+      reconcile: vi.fn(async () => report() as never),
+    },
     ...over,
   };
 }
 
 const readBinding = () => JSON.parse(readFileSync(join(dir, '.musterd', 'binding.json'), 'utf8'));
 
-describe('provisionSeat (ADR 463 §3)', () => {
-  it('writes the seat’s binding 0600, the secret-free spec, and wires the harness once', async () => {
-    const { harness, configure } = fakeHarness();
-    const r = await provisionSeat(
-      input({ harness, model: 'claude-opus-5-5', driver: 'dana', profileName: undefined }),
-    );
-    expect(r).toMatchObject({ agentKey: 'msac_x', granted: true, mcpError: null });
+describe('provisionSeat (ADR 463 §3, ADR 491)', () => {
+  it('writes the binding 0600, the secret-free spec and provisioned.json, then reconciles once', async () => {
+    const i = input({ model: 'claude-opus-5-5', driver: 'dana' });
+    const r = await provisionSeat(i);
+    expect(r).toMatchObject({ agentKey: 'msac_x', granted: true, wiringError: null });
     expect(r.workspace).toBe(ws);
 
-    const binding = readBinding();
-    expect(binding).toMatchObject({
+    expect(readBinding()).toMatchObject({
       version: 2,
       server: 'http://localhost:4849',
       team: 'acme',
@@ -76,17 +97,33 @@ describe('provisionSeat (ADR 463 §3)', () => {
     });
     expect(spec).not.toMatch(/msac_x|msgr_y|agent_key|grant/);
 
-    expect(configure).toHaveBeenCalledTimes(1);
-    const [entry, agentBinding] = configure.mock.calls[0] as unknown as [
-      { env?: Record<string, string> },
-      { agent_key: string },
+    const reconcile = i.wiring.reconcile as unknown as ReturnType<typeof vi.fn>;
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    const [ctx, desired, opts] = reconcile.mock.calls[0] as [
+      { worktreeRoot: string; team?: string },
+      string[],
+      { legacyRepair: boolean },
     ];
-    // The shared harness entry never carries a secret (ADR 143/165).
-    expect(JSON.stringify(entry)).not.toMatch(/msac_x|msgr_y/);
-    expect(agentBinding.agent_key).toBe('msac_x');
+    expect(ctx.worktreeRoot).toBe(realpathSync(dir));
+    expect(ctx.team).toBe('acme');
+    expect(desired).toEqual(['claude-code', 'musterd']);
+    expect(opts.legacyRepair).toBe(false);
+    const prov = JSON.parse(readFileSync(join(dir, '.musterd', 'provisioned.json'), 'utf8'));
+    expect(prov).toMatchObject({
+      version: 3,
+      toolkit: '',
+      desired: ['claude-code', 'musterd'],
+      contributions: {},
+    });
   });
 
-  it('mints a credential scoped to this one seat, labelled by harness', async () => {
+  it('keeps the ADR 261 permissions floor in the Workspace', async () => {
+    await provisionSeat(input());
+    const settings = JSON.parse(readFileSync(join(dir, '.claude', 'settings.local.json'), 'utf8'));
+    expect(settings.permissions.allow.length).toBeGreaterThan(0);
+  });
+
+  it('mints a credential scoped to this one seat, labelled by its first harness', async () => {
     const i = input();
     await provisionSeat(i);
     expect(i.http.mintBootstrapCredential).toHaveBeenCalledWith('acme', {
@@ -139,17 +176,60 @@ describe('provisionSeat (ADR 463 §3)', () => {
     expect(readBinding().agent_key).toBe('msac_x');
   });
 
-  it('a failed harness wiring is reported, not thrown, and leaves the binding written', async () => {
-    const { harness } = fakeHarness(
-      vi.fn(async () => {
-        throw new Error('claude not installed');
+  it('reports incomplete wiring without throwing — the binding is already written', async () => {
+    const i = input({
+      wiring: {
+        desired: ['claude-code'],
+        toolkit: '',
+        reconcile: vi.fn(async () => report(false) as never),
+      },
+    });
+    const r = await provisionSeat(i);
+    expect(r.wiringError).toBe('claude-code: failed — claude not found');
+    expect(readBinding().claim).toEqual({ mode: 'seat', name: 'dana-scout' });
+  });
+
+  it('keeps the prior contributions when it re-provisions a Workspace', async () => {
+    mkdirSync(join(dir, '.musterd'), { recursive: true });
+    writeFileSync(
+      join(dir, '.musterd', 'provisioned.json'),
+      JSON.stringify({
+        version: 3,
+        toolkit: 'old',
+        desired: ['codex'],
+        contributions: { codex: ['k1'] },
+        provisionedAt: 'x',
       }),
     );
+    await provisionSeat(input());
+    const prov = JSON.parse(readFileSync(join(dir, '.musterd', 'provisioned.json'), 'utf8'));
+    expect(prov.contributions).toEqual({ codex: ['k1'] });
+    expect(prov.desired).toEqual(['claude-code', 'musterd']);
+  });
+
+  it('revokes the minted credential when the Workspace cannot be made, then rethrows', async () => {
+    const i = input({
+      workspace: () => {
+        throw new Error('disk full');
+      },
+    });
+    await expect(provisionSeat(i)).rejects.toThrow('disk full');
+    expect(i.http.revokeBootstrapCredential).toHaveBeenCalledWith('acme', 'cred-1');
+  });
+
+  it('restores the process cwd after wiring, even when reconcile throws', async () => {
     const before = process.cwd();
-    const r = await provisionSeat(input({ harness }));
-    expect(r.mcpError).toBe('claude not installed');
-    expect(readBinding().agent_key).toBe('msac_x');
-    // The chdir the wiring needs is always undone.
+    const i = input({
+      wiring: {
+        desired: ['claude-code'],
+        toolkit: '',
+        reconcile: vi.fn(async () => {
+          throw new Error('x');
+        }),
+      },
+    });
+    const r = await provisionSeat(i);
+    expect(r.wiringError).toBe('x');
     expect(process.cwd()).toBe(before);
   });
 
