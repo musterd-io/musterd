@@ -52,6 +52,11 @@ export interface WorkspaceOpts {
    * inside a repo) honours it; `--here` / `--path` are unaffected.
    */
   clone?: boolean;
+  /**
+   * Start a NEW branch from this commit-ish instead of the checkout's HEAD (ADR 491: a seat set up
+   * from the launcher starts at the remote's default branch). Ignored when the branch already exists.
+   */
+  base?: string;
 }
 
 /**
@@ -139,25 +144,57 @@ function realpathNearest(p: string): string {
 }
 
 /** ADR 463 §3: a self-contained clone of `top` on its own `branch`, with `.musterd/` kept out of git. */
-function addClone(top: string, dir: string, branch: string): void {
+function addClone(top: string, dir: string, branch: string, base?: string): void {
   mkdirSync(dirname(dir), { recursive: true });
   execFileSync('git', ['clone', '--quiet', top, dir], { encoding: 'utf8' });
-  git(['switch', '-c', branch], dir);
+  // A local clone hard-links the whole object store, so a commit resolved in `top` exists here too.
+  git(base ? ['switch', '-c', branch, base] : ['switch', '-c', branch], dir);
   // A clone has its own `.git/info/exclude`: the binding must never be committable from it.
   const exclude = join(dir, '.git', 'info', 'exclude');
   mkdirSync(dirname(exclude), { recursive: true });
   appendFileSync(exclude, '\n.musterd/\n');
 }
 
-function addWorktree(top: string, dir: string, branch: string): void {
+function addWorktree(top: string, dir: string, branch: string, base?: string): void {
   mkdirSync(dirname(dir), { recursive: true });
   try {
-    // New branch off HEAD so the member has its own line to commit on.
-    git(['worktree', 'add', '-b', branch, dir, 'HEAD'], top);
+    // New branch so the member has its own line to commit on: off `base` when given (no upstream —
+    // the seat's branch is its own), else off HEAD as before.
+    git(
+      base
+        ? ['worktree', 'add', '--no-track', '-b', branch, dir, base]
+        : ['worktree', 'add', '-b', branch, dir, 'HEAD'],
+      top,
+    );
   } catch {
     // Branch already exists (e.g. a prior run): attach a worktree to it.
     git(['worktree', 'add', dir, branch], top);
   }
+}
+
+/**
+ * The remote's default branch tip as a commit sha (ADR 491), after a best-effort fetch — offline,
+ * the last-known tip. `origin/HEAD` first (absent in a repo built with `init` + `remote add`), then
+ * `origin/main`. Null when there is no remote to start from.
+ */
+export function resolveBaseRef(top: string): string | null {
+  try {
+    execFileSync('git', ['fetch', 'origin', '--quiet'], {
+      cwd: top,
+      timeout: 20_000,
+      stdio: 'ignore',
+    });
+  } catch {
+    // offline or no origin — fall back to what is already fetched
+  }
+  for (const ref of ['origin/HEAD', 'origin/main']) {
+    try {
+      return git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], top);
+    } catch {
+      // next
+    }
+  }
+  return null;
 }
 
 /**
@@ -200,7 +237,7 @@ export function provisionWorkspace(name: string, opts: WorkspaceOpts = {}): Work
       top !== null && !(realpathNearest(dir) + '/').startsWith(realpathNearest(top) + '/');
     if (created && outside) {
       const branch = opts.branch ?? `agent/${name}`;
-      addWorktree(top, dir, branch);
+      addWorktree(top, dir, branch, opts.base);
       identity(dir);
       return { dir, kind: 'worktree', branch, created };
     }
@@ -223,8 +260,8 @@ export function provisionWorkspace(name: string, opts: WorkspaceOpts = {}): Work
       identity(dir);
       return { dir, kind: 'worktree', branch, created: false };
     }
-    if (opts.clone) addClone(top, dir, branch);
-    else addWorktree(top, dir, branch);
+    if (opts.clone) addClone(top, dir, branch, opts.base);
+    else addWorktree(top, dir, branch, opts.base);
     identity(dir);
     return { dir, kind: opts.clone ? 'folder' : 'worktree', branch, created: true };
   }
