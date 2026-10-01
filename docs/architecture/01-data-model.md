@@ -148,7 +148,7 @@ its `id`) and one derived row-level-security policy, `tenant`, on
 `Driver` is the seam: `forTeam(teamId)` stamps every transaction it opens with `SET LOCAL ROLE
 musterd_app` and `set_config('app.team_id', …, true)`; the unscoped connection handle stamps the
 role and no tenant, so it sees no row (fail-closed); `asOperator()` runs as `musterd_operator`
-(BYPASSRLS) and is the greppable list of every cross-tenant read. The app role owns nothing and
+(BYPASSRLS) and is the greppable list of every cross-tenant read. (The PGlite test double holds the same scopes at session level instead — one connection, switched only on change; `03-server.md`.) The app role owns nothing and
 cannot bypass RLS; migrations run as the owner, a separate step. The seam is the transport: `http.ts`
 scopes `ctx` where it resolves `/teams/:slug`, `ws.ts` where the claim frame names its team
 (`03-server.md` §Auth); store code never sets tenant context. Tables that are not team-owned —
