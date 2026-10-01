@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ResidencyPolicySchema, bindingSeat } from '@musterd/protocol';
 import { describe, expect, it, vi } from 'vitest';
-import type { HostRegistryEntry } from '../host/registry.js';
 import { parseArgs } from '../args.js';
+import type { HostRegistryEntry } from '../host/registry.js';
 import {
   collectPolicyFlags,
   ensureHostKey,
@@ -187,7 +187,7 @@ describe('seatWorkspace — which folder receives the grant (ADR 442)', () => {
   });
 });
 
-describe('--convene-huddles (ADR 378 increment 4)', () => {
+describe('--convene-huddles (ADR 386)', () => {
   const flags = (...argv: string[]) => collectPolicyFlags(parseArgs(['policy', ...argv]));
 
   it('on and off set the knob the daemon reads', () => {

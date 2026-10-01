@@ -214,7 +214,7 @@ export function collectPolicyFlags(parsed: Parsed): ResidencyPolicyOverride | un
       throw new CliError(`--flow wants manual|auto (got "${flow}")`, 2);
     out['flow'] = flow;
   }
-  // ADR 378 increment 4: does opening a huddle wake the seats it names? The daemon has read this
+  // ADR 386: does opening a huddle wake the seats it names? The daemon has read this
   // knob since it shipped; until this flag no surface could set it.
   const convene = flagStr(parsed.flags, 'convene-huddles');
   if (convene !== undefined) {
