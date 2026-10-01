@@ -145,6 +145,13 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
       miley is live here (claude-code) since 15:37. Open a second session in the
       same folder? (y/N)
     ```
+23. `cmd/launcher-create` — in `musterd › revive › agents`, below the seats: `on the team · not here`,
+    each agent member with `⏎ set up here` (dim), then `+ new seat` (accent). `⏎` on a member replaces
+    the footer with the set-up line, word-wrapped to the terminal width like frame 22:
+    `  set up slate here → ~/musterd/revive/agents/slate · claude (⇥ to change) · ⏎ set up and launch · esc cancel`;
+    `+ new seat` first asks `  new seat in revive/agents › ▏   ⏎ next · esc cancel`. With no human
+    Workspace of yours in the project, the section is one dim line:
+    `set up your own seat here first: musterd human <you>`.
 
 ## Page: States (empty + error)
 
