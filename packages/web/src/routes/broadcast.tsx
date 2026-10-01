@@ -77,6 +77,16 @@ function captureFpsFromUrl(): number {
  * day frame beyond rounding, one pen cup at Δ91) for a real 15 fps. `&sprites=0` is the escape
  * hatch and the A/B arm. `/live` never reads this: viewers keep the direct render.
  */
+/**
+ * The stage's transform: pinned to the window's centre by CSS (`left/top: 50%`), pulled back by half its
+ * own size, then scaled. Scaling a stage that a grid merely "centred" scaled it about the wrong point
+ * whenever the window was smaller than the stage — the grid track grew to the stage and started at 0 —
+ * so a 1280×720 preview drew the 1080 stage at x=320..1600 and a phone-width one entirely off-screen.
+ */
+export function stageTransform(scale: number): string {
+  return `translate(-50%, -50%) scale(${scale})`;
+}
+
 export function spritesFromUrl(search: string): boolean {
   return new URLSearchParams(search).get('sprites') !== '0';
 }
@@ -320,7 +330,7 @@ function BroadcastPage() {
     <main className="bc">
       <div
         className="bc__stage lc"
-        style={{ width: stage.w, height: stage.h, transform: `scale(${scale})` }}
+        style={{ width: stage.w, height: stage.h, transform: stageTransform(scale) }}
       >
         {team && (
           <>

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_STAGE, spritesFromUrl, stageSize } from './broadcast';
+import { DEFAULT_STAGE, spritesFromUrl, stageSize, stageTransform } from './broadcast';
 
 describe('stageSize', () => {
   it('reads the 720p rung off the query', () => {
@@ -59,5 +59,16 @@ describe('spritesFromUrl', () => {
     expect(spritesFromUrl('?h=1080&fps=15&sprites=0')).toBe(false);
     expect(spritesFromUrl('?sprites')).toBe(true);
     expect(spritesFromUrl('?sprites=false')).toBe(true);
+  });
+});
+
+describe('stageTransform', () => {
+  it('centres the stage on the window BEFORE scaling it, so a smaller window letterboxes evenly', () => {
+    // big-body's decline (2026-10-01): at a 1280×720 window the stage drew at x=320..1600 — the grid
+    // track grew to the stage's 1920px and started at 0, so "scale about the centre" scaled about a
+    // point 320px right of the window's. Pinned to the window's centre (CSS left/top 50%), then pulled
+    // back by half its own size, then scaled: the centre is the window's at every scale.
+    expect(stageTransform(2 / 3)).toBe('translate(-50%, -50%) scale(0.6666666666666666)');
+    expect(stageTransform(1)).toBe('translate(-50%, -50%) scale(1)');
   });
 });
