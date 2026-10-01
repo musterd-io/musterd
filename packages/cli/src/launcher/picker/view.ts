@@ -1,0 +1,178 @@
+import { theme } from '../../render/theme.js';
+import { padEndVisible, visibleLen } from '../../render/ui.js';
+import { ago, describeLive, describeLiveLong, seatLine } from '../rows.js';
+import { lastUsedAt } from '../store.js';
+import { rows, selectable, type PickerState, type Row } from './state.js';
+
+export interface PickerSize {
+  cols: number;
+  rows: number;
+}
+
+// eslint-disable-next-line no-control-regex
+const ANSI = /\x1b\[[0-9;]*m/g;
+
+/** The picker screen as lines (spec §3): header, list, footer. Pure — tty.ts writes it. */
+export function renderPicker(s: PickerState, size: PickerSize): string[] {
+  const out: string[] = [header(s, size.cols), ''];
+  if (s.query) out.push(`  ${theme.meta('search ›')} ${s.query}▏`);
+  const list = s.help ? helpLines().map((line) => ({ line, selected: false })) : body(s, size.cols);
+  const foot = footer(s, size.cols);
+  const room = Math.max(1, size.rows - out.length - 1 - foot.length);
+  out.push(...window(list, room), '', ...foot);
+  return out.map((l) => clip(l, size.cols));
+}
+
+function header(s: PickerState, cols: number): string {
+  const crumbs =
+    s.level.kind === 'teams'
+      ? ['teams']
+      : s.level.kind === 'projects'
+        ? [s.level.team]
+        : s.level.kind === 'members'
+          ? [s.level.team, s.level.project]
+          : [];
+  const left = `${theme.presenceDot('online')} ${theme.presenceDot('away')} ${theme.presenceDot('offline')} ${['musterd', ...crumbs].join(' › ')}`;
+  const teams = [...new Set(s.seats.map((x) => x.team))].sort().join(', ');
+  const status =
+    s.liveStatus === 'pending'
+      ? ' · checking…'
+      : s.liveStatus === 'offline'
+        ? ' · offline · live state unavailable'
+        : '';
+  const right = theme.meta(`${teams ? `${teams} · ` : ''}${s.seats.length} seats here${status}`);
+  const gap = Math.max(1, cols - visibleLen(left) - visibleLen(right));
+  return left + ' '.repeat(gap) + right;
+}
+
+function body(s: PickerState, cols: number): { line: string; selected: boolean }[] {
+  const all = rows(s);
+  if (all.length === 0) {
+    return [
+      {
+        line: s.scanning
+          ? '  finding seats…'
+          : '  no seats on this machine yet — run `musterd init` in a project checkout',
+        selected: false,
+      },
+    ];
+  }
+  const seatRows = all.filter((r): r is Extract<Row, { kind: 'seat' }> => r.kind === 'seat');
+  const nameWidth = Math.max(8, ...seatRows.map((r) => r.seat.member.length + 2));
+  const showAddress = cols >= 70 && seatRows.some((r) => r.showAddress);
+  const addressWidth = showAddress
+    ? Math.max(...seatRows.map((r) => `${r.seat.team}/${r.seat.project}`.length)) + 2
+    : null;
+  const sel = all.filter(selectable)[s.cursor];
+  return all.map((row) => {
+    const selected = row === sel;
+    const marker = selected ? `${theme.accent('›')} ` : '  ';
+    switch (row.kind) {
+      case 'heading':
+        return { line: `  ${theme.meta(row.label)}`, selected };
+      case 'team':
+        return {
+          line: `${marker}${padEndVisible(row.team, 9)}${row.here ? `${theme.ok('●')} here  ${row.count} seats` : theme.meta('○ no Workspace here')}${row.star ? '  ★' : ''}`,
+          selected,
+        };
+      case 'project':
+        return {
+          line: `${marker}${padEndVisible(row.project, 9)}${theme.ok('●')} here  ${row.count} seats${row.star ? '  ★' : ''}${row.remote ? `  ${theme.meta(row.remote)}` : ''}`,
+          selected,
+        };
+      case 'seat': {
+        const { seat } = row;
+        const live = s.live[seat.address];
+        const used = lastUsedAt(seat, s.file);
+        const tail = live
+          ? describeLive(live, s.now)
+          : seat.problem
+            ? theme.warn('needs repair')
+            : used !== null
+              ? `${seat.address === s.file.last ? '★ last used · ' : ''}${ago(used, s.now)}`
+              : '';
+        const harness =
+          seat.kind === 'human'
+            ? 'human'
+            : (s.harness[seat.address] ??
+              seat.harnesses.find((h) => h !== 'musterd') ??
+              seat.last_session?.harness ??
+              'claude-code');
+        return {
+          line: seatLine(seat, {
+            selected,
+            nameWidth,
+            addressWidth: row.showAddress ? addressWidth : null,
+            showHarness: cols >= 56,
+            harness,
+            state: live ? 'live' : s.liveStatus === 'offline' ? 'unknown' : 'idle',
+            tail,
+          }),
+          selected,
+        };
+      }
+    }
+  });
+}
+
+/** The `room` lines around the selected one, so the cursor never scrolls off screen. */
+function window(items: { line: string; selected: boolean }[], room: number): string[] {
+  const at = Math.max(
+    0,
+    items.findIndex((x) => x.selected),
+  );
+  const start = Math.min(Math.max(0, at - room + 1), Math.max(0, items.length - room));
+  return items.slice(start, start + room).map((x) => x.line);
+}
+
+function footer(s: PickerState, cols: number): string[] {
+  if (s.confirm) {
+    const live = s.live[s.confirm.seat.address];
+    const where = live ? describeLiveLong(live, s.now) : 'elsewhere';
+    // Wrapped, never clipped: a question whose `(y/N)` is cut off cannot be answered.
+    return wrap(
+      `${s.confirm.seat.member} is live ${where}. Open a second session in the same folder? (y/N)`,
+      cols - 2,
+    ).map((l) => `  ${l}`);
+  }
+  if (s.help) return [theme.meta('  any key to go back')];
+  if (s.query) return [theme.meta('  ⏎ launch · ⌃R resume · esc clear')];
+  if (s.level.kind === 'recent')
+    return [theme.meta('  ⏎ launch · ⌃R resume · type to search · → browse · esc quit')];
+  if (s.level.kind === 'members')
+    return [theme.meta('  ⏎ launch · ⌃R resume · ⇥ harness · ← back · esc back')];
+  return [theme.meta('  ⏎ open · ← back · type to search · esc back')];
+}
+
+/** Word-wrap plain text to `width` columns; a word longer than the width is left to `clip`. */
+function wrap(text: string, width: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    if (line && [...line].length + 1 + [...word].length > width) {
+      lines.push(line);
+      line = word;
+    } else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function helpLines(): string[] {
+  return [
+    '  ↑ ↓ / ⌃P ⌃N   move',
+    '  ⏎              launch fresh · open a team or project',
+    '  ⌃R             resume the last session',
+    '  ⇥              next harness, when the seat has several',
+    '  → ←            into a level · back out',
+    '  letters        search every seat',
+    '  esc            clear · back · quit',
+    '  ⌃C             quit',
+  ];
+}
+
+function clip(line: string, cols: number): string {
+  if (visibleLen(line) <= cols) return line;
+  const plain = line.replace(ANSI, '');
+  return [...plain].slice(0, Math.max(0, cols - 1)).join('') + '…';
+}
