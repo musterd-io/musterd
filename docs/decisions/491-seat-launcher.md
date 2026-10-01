@@ -152,6 +152,10 @@ the terminal around every harness.
 - The work lands in four lanes under goal `front-door`, chained by `depends_on`: fast entry
   `01M3WA77DFGCEV344M9WTFX6NG`, launch by name `01M3WA7J4YRC21TCGGW9PSDK9E`, the picker
   `01M3WA7W55F50XC6TFV33K21PR`, and creating seats `01M3WA85HQRSA7V08FEQQ489HM`.
+- **2026-10-01 — increment 1 measured** (PR #1931). `pnpm bench:cli-start`, 15 runs per probe,
+  before and after in one session at load average 7–11: `musterd --version` median 317 ms → 61 ms,
+  `musterd help` 327 ms → 91 ms, against a `node -e 0` floor of about 49 ms (lane
+  `01M3WA77DFGCEV344M9WTFX6NG`).
 
 ## Observability & Evaluation
 
