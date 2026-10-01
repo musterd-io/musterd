@@ -120,5 +120,8 @@
 // lane_update. A lane that declares itself one part of several is refused a close until
 // `follows_up` is answered; an older adapter cannot send the field, so the refusal names it and the
 // roster's `behind` hint is the cue to rebuild.
-export const FEATURE_EPOCH = 27 as const;
+// Epoch 28 — ADR 490 (durable review promises): typed `request_help` review references, optional
+// `NextBrief` promise/closure rows, and the minimal Team audit read. Older clients still parse
+// envelopes and briefs but cannot validate or render the new projections.
+export const FEATURE_EPOCH = 28 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;

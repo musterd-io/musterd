@@ -102,6 +102,7 @@ Base `http://localhost:4849`. JSON in/out. Auth via `Authorization: Bearer <memb
 | `POST` | `/teams/:slug/unbind`                        | —                                                                   | `{ "ok", "member" }`                                              | `unbind`: the caller releases **its own** seat (authed by own token) — clears presence + `bound_at` back to _declared_; the seat stays on the team (ADR 058)                                                                                                                    |
 | `POST` | `/teams/:slug/messages`                      | `{ "envelope" }`                                                    | `{ "ack": <message> }`                                            | send via HTTP (no live socket)                                                                                                                                                                                                                                                  |
 | `GET`  | `/teams/:slug/inbox?since=<cursor>&unread=1` | —                                                                   | `{ "messages":[…], "cursor":{…} }`                                | inbox fetch                                                                                                                                                                                                                                                                     |
+| `GET`  | `/teams/:slug/review-promises?open=1`         | —                                                                   | `{ "review_promises": ReviewPromiseAuditRow[] }`                   | ADR 490: active Member of the named Team; minimal open rows for the weekly audit, with no request context or artifact reference                                                                                                                                                  |
 | `GET`  | `/teams/:slug/messages?since=<ts>&limit=<n>` | —                                                                   | `{ "messages":[…] }`                                              | whole-team timeline (firehose history backfill, ADR 061)                                                                                                                                                                                                                        |
 | `POST` | `/teams/:slug/inbox/cursor`                  | `{ "last_read_message_id" }`                                        | `{ "cursor" }`                                                    | mark read                                                                                                                                                                                                                                                                       |
 | `POST` | `/teams/:slug/presence`                      | `{ "surface","status?" }`                                           | `{ "presence" }`                                                  | stateless presence ping                                                                                                                                                                                                                                                         |
@@ -203,6 +204,21 @@ portable/fresh only when the flag is enabled.
 inbox wakes are not edges. `WakeProgressBodySchema` is a strict `{ lease_id }` body for
 `POST /teams/:slug/residency/wake-progress` — presence of the POST means spawned; it does not
 settle the lease (ADR 262). Extra keys are rejected; this is not `wake-report`.
+
+## Durable review promises (ADR 490, SPEC A.14)
+
+`review-promise.ts` owns the shared reference and projection schemas. `meta.review` is a strict
+PR, commit, Lane, or credential-free HTTPS URL reference, accepted only on a root `request_help`
+Act addressed to one Member and without `meta.eligible`. `ReviewPromiseOpenRowSchema` carries the
+request id, requester, owner, context, reference, and `accepted_at`; `ReviewPromiseClosureRowSchema`
+carries the request and resolve ids, closer, and `resolved_at`.
+
+`NextBrief.request_reviews`, `requested_reviews`, and `review_closures` are optional and have no
+defaults. A missing field means the daemon does not report that projection; a present empty array
+means it supports the projection and found no rows. `ReviewPromisesQuerySchema` accepts only
+`open=1`. The Team route returns a required `review_promises` array of strict
+`ReviewPromiseAuditRowSchema` entries (`request_id`, `requester`, `owner`, `accepted_at`) and omits
+request prose and artifact references.
 
 **Serving the web UI (ADR 062).** With `--web-root <dir>` / `MUSTERD_WEB_ROOT` the daemon also serves a built web UI from that directory: any unmatched `GET` outside the API namespaces (`/health`, `/teams/*`) returns a file, with extensionless client routes (e.g. `/live`) falling back to `index.html`. This puts the dashboard, the HTTP API, and the WS on one origin — no CORS, no proxy — and the WS upgrade gate (above) admits a **same-origin** `Origin` (its host:port equals the `Host` header) so the daemon-served page can connect. Off by default (API-only).
 

@@ -44,6 +44,48 @@ describe('EnvelopeSchema', () => {
     expect(env.meta).toMatchObject({ progress: 0.5, futureField: 'keep me' });
   });
 
+  describe('typed review requests (ADR 490)', () => {
+    const review = { kind: 'pr', repo: 'org/repo', number: 42 };
+
+    it('accepts review metadata on a root request_help to one Member', () => {
+      const env = makeEnvelope({ ...base, act: 'request_help', meta: { review } });
+      expect(env.meta).toMatchObject({ review });
+    });
+
+    it('keeps unknown meta keys forward-compatible beside review metadata', () => {
+      const env = makeEnvelope({
+        ...base,
+        act: 'request_help',
+        meta: { review, futureField: 'preserved' },
+      });
+      expect(env.meta).toMatchObject({ review, futureField: 'preserved' });
+    });
+
+    it('rejects Team, eligible-set, non-root, and non-request_help forms', () => {
+      expect(() =>
+        makeEnvelope({
+          ...base,
+          act: 'request_help',
+          to: { kind: 'team' },
+          meta: { review },
+        }),
+      ).toThrow(/meta\.review/);
+      expect(() =>
+        makeEnvelope({
+          ...base,
+          act: 'request_help',
+          meta: { review, eligible: ['Lin', 'Mira'] },
+        }),
+      ).toThrow(/meta\.review/);
+      expect(() =>
+        makeEnvelope({ ...base, act: 'request_help', thread: 'root-1', meta: { review } }),
+      ).toThrow(/meta\.review/);
+      expect(() => makeEnvelope({ ...base, act: 'message', meta: { review } })).toThrow(
+        /meta\.review/,
+      );
+    });
+  });
+
   it('requires meta.in_reply_to on accept', () => {
     expect(() => makeEnvelope({ ...base, act: 'accept' })).toThrow();
     const ok = makeEnvelope({ ...base, act: 'accept', meta: { in_reply_to: 'msg-0' } });

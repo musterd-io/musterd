@@ -9,6 +9,7 @@ import {
   type EmptyPool,
   type LaneState,
 } from './lanes.wire.js';
+import { ReviewPromiseClosureRowSchema, ReviewPromiseOpenRowSchema } from './review-promise.js';
 import { SEED_SOURCES } from './seeds.wire.js';
 
 /**
@@ -833,6 +834,12 @@ export const NextBriefSchema = z.object({
       }),
     )
     .default([]),
+  /** Accepted typed review requests this Member owns. Absent means the daemon predates ADR 490. */
+  request_reviews: z.array(ReviewPromiseOpenRowSchema).optional(),
+  /** Accepted typed review requests this Member made. Absent means the daemon predates ADR 490. */
+  requested_reviews: z.array(ReviewPromiseOpenRowSchema).optional(),
+  /** Non-owner closes still awaiting the owner's inbox cursor, when reported by an ADR 490 daemon. */
+  review_closures: z.array(ReviewPromiseClosureRowSchema).optional(),
   /** The latest `handoff` act to you or @team — the human-authored *why*, enrichment when present. */
   why: z
     .object({
