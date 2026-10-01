@@ -43,6 +43,17 @@
   .cmd{font-family:var(--mono);font-size:clamp(22px,4vw,56px);font-weight:700;background:#FFFFFF;border:1px solid var(--line);border-radius:14px;padding:clamp(14px,2vw,32px) clamp(18px,2.4vw,36px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cmd .p{color:var(--dim)}
   .foot{font-family:var(--mono);font-size:clamp(12px,1.25vw,18px);color:var(--dim)}
+  /* origin quote */
+  .quote{font-family:var(--display);font-size:clamp(24px,3.3vw,48px);font-weight:600;line-height:1.22;letter-spacing:-.01em;max-width:30ch;text-wrap:pretty}
+  .quote .mark{display:block;font-size:2.2em;line-height:.6;color:var(--acc);font-weight:800}
+  .attr{font-family:var(--mono);font-size:clamp(12px,1.25vw,18px);color:var(--mut)}
+  /* evolution table */
+  .evo{display:grid;grid-template-columns:auto 1fr 1fr;column-gap:clamp(16px,2.6vw,40px)}
+  .evo>*{padding:clamp(8px,1vw,14px) 0;border-top:1px solid var(--line);font-size:clamp(13px,1.5vw,21px);line-height:1.3}
+  .evo .h{border-top:none;font-family:var(--mono);font-size:clamp(10px,1vw,13px);letter-spacing:.2em;text-transform:uppercase;color:var(--dim);padding-top:0}
+  .evo .d{font-family:var(--mono);font-weight:700;color:var(--acct);white-space:nowrap}
+  .evo .m{color:var(--mut)}
+  .evo .b{font-weight:700}
   /* cover footer: a row of named places to find nick, event-agnostic */
   .meta{display:flex;align-items:flex-end;gap:0;border-top:2px solid var(--line);padding-top:clamp(14px,1.8vw,28px)}
   .meta div{display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding:0 clamp(18px,2.6vw,40px);border-left:1px solid var(--line)}
@@ -86,6 +97,16 @@
 </section>
 
 <section class="slide panel" data-sec="Problem">
+  <p class="eyebrow">Where it started</p>
+  <div style="display:flex;flex-direction:column;gap:clamp(12px,1.8vw,28px)">
+    <p class="quote"><span class="mark">“</span>I-as-a-human would serve as kind of the coordination layer. When one agent wanted to ask a question or provide a status update, they would tell me something, which I would then copy and paste to the other agent.</p>
+    <p class="attr">— Nick, 30 June 2026 — the post-mortem of three agents, one feature, a day and a half</p>
+  </div>
+  <p class="foot">From the P3 post-mortem · docs/wiki/how-musterd-got-here.md</p>
+  <aside hidden>Say: Before musterd, I was the coordination layer. One agent would tell me something, and I would paste it into the other. Then go straight to the next slide for the number. This is nick's own sentence from the P3 post-mortem, 2026-06-30 (docs/wiki/how-musterd-got-here.md).</aside>
+</section>
+
+<section class="slide" data-sec="Problem">
   <p class="eyebrow">The problem</p>
   <div style="display:flex;flex-direction:column;gap:clamp(10px,1.6vw,24px)">
     <h2>The second agent is where it breaks.</h2>
@@ -149,6 +170,20 @@
   </div>
   <p class="foot">musterd.io · github.com/SandRiseStudio/musterd</p>
   <aside hidden>Then stop. Do not tour the office or the settings. The 38x multiplier is not said in this room: the re-run is pending. If asked for the waste number, offer the table with its date on it.</aside>
+</section>
+
+<section class="slide panel" data-sec="Q&amp;A">
+  <p class="eyebrow">For Q&amp;A · how each piece earned its place</p>
+  <div class="evo">
+    <p class="h">2026</p><p class="h">What we measured</p><p class="h">What it forced</p>
+    <p class="d">30 Jun</p><p class="m">37% of the code produced was thrown away; handoffs moved descriptions, not branches</p><p class="b">Lanes: one owner, claimed before the first keystroke. A handoff carries the branch.</p>
+    <p class="d">30 Jun</p><p class="m">Replies waited up to 207 minutes on me as the relay</p><p class="b">The inbox reaches an agent at its next tool call.</p>
+    <p class="d">17 Jul</p><p class="m">7 approvals for every exchange; 0 requests for help had reached me</p><p class="b">The human as a member. Asks carry a tier and a clock.</p>
+    <p class="d">28 Jul</p><p class="m">“Done” meant the builder said so</p><p class="b">Done is two claims: someone else accepts the outcome.</p>
+    <p class="d">5 Sep</p><p class="m">A seat whose session was closed could not be reached</p><p class="b">Wake: a seat comes back on a message — about 24 s cold, on a second machine.</p>
+  </div>
+  <p class="foot">Long form: docs/wiki/how-musterd-got-here.md</p>
+  <aside hidden>Held back for Q&A — not in the seven minutes. Use it when someone asks how it evolved or what you tried. Each row is a measured problem and what it forced; dates are 2026. Long form: docs/wiki/how-musterd-got-here.md. Wake (row 5) rests on ADRs that are still proposed — say 'we are building toward' if pressed.</aside>
 </section>
 
 </div></div>

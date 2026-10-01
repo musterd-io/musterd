@@ -801,16 +801,16 @@ stopwatch until a live read replaces it. Measured 2026-09-30, spoken words only:
 | beat | part | budget | spoken | ~at 150 wpm |
 | --- | --- | --- | --- | --- |
 | 0:00 their objection, the roster | problem | 40 s | 102 | ~41 s |
-| 0:40 the second agent | problem | 35 s | 84 | ~34 s |
+| 0:40 the second agent | problem | 35 s | 85 | ~34 s |
 | 1:15 why a roster | thesis | 45 s | 110 | ~44 s |
 | 2:00 a task lands | demo | 30 s | 49 | ~20 s |
 | 2:30 a question reaches the human | demo, centerpiece | 60 s | 108 | ~43 s |
 | 3:30 done is two claims | demo | 45 s | 86 | ~34 s |
 | 4:15 a seat that is not running *(optional)* | demo | 45 s | 69 | ~28 s |
 | 5:00 handoff | big questions | 60 s | 141 | ~56 s |
-| 6:00 what did not work | big questions | 40 s | 97 | ~39 s |
+| 6:00 what did not work | big questions | 40 s | 98 | ~39 s |
 | 6:40 the ask | close | 20 s | 37 | ~15 s |
-| **total** | | **420 s** | **883** (814 without `delta`) | **~353 s** (~326 s) |
+| **total** | | **420 s** | **885** (816 without `delta`) | **~354 s** (~326 s) |
 
 The ~70 s of slack is for the two live actions (the ask landing and being answered; the
 acceptance routing) and, if it is in, the ~24 s `delta` wake. **Stopwatch rule:** at 4:15 without
@@ -832,11 +832,14 @@ does not run them, and it does not contain them — your sandbox and your host s
 
 **SEE** Still the roster. Point at the two agents.
 
-**SAY** "One agent on a repo is fine. The moment you run a second one, the waste starts. On our
-own team, before lanes, about 37% of the code produced was thrown away — two agents writing the
-same diff, or one building on a schema the other had not finished. We measured that on our own
-history, and the number survived our own skepticism. The fix was not a smarter model. It was one
-owner per unit of work, declared before the first keystroke."
+**SAY** "Before musterd, I was the coordination layer. One agent would tell me something, and I
+would paste it into the other. Then we measured it: three agents on one feature for a day and a
+half, and about 37% of the code they produced was thrown away — two agents writing the same diff,
+or one building on a schema the other had not finished. The fix was not a smarter model. It was
+one owner per unit of work, declared before the first keystroke."
+
+The first two sentences are nick's own, from his P3 post-mortem of 2026-06-30
+([how-musterd-got-here.md](wiki/how-musterd-got-here.md)); the deck's origin slide quotes it.
 
 ### 1:15 — Why a roster (thesis, 45 s)
 
@@ -936,6 +939,10 @@ Then stop.
 The §6 list applies unchanged (safety product, tamper-proof log, why not the labs, who pays, why
 not prompt them to argue, how many people). Additions for this room's brief:
 
+- **"How did it get here?"** — The deck's last slide, held back for this: five dated rows, each a
+  measured problem and what it forced — the 37% and lanes, the 207-minute relay and the inbox at
+  every tool call, the 7:1 and the human as member, "done" as the builder's word and the second
+  claim, and the wake. The long form is [how-musterd-got-here.md](wiki/how-musterd-got-here.md).
 - **"Why is the roster the primitive and not the task?"** — "A task ends; the people who did it do
   not. Attribution, an inbox, and a lane owner all need something that persists across sessions,
   and a task is not that. Everything else we built falls out of having a durable member."
