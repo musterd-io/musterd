@@ -12,6 +12,7 @@ import { operatorCtx, type Ctx } from './context.js';
 import type { Driver } from './db/driver.js';
 import { schemaVersionOf } from './db/migrations.js';
 import { openDriver } from './db/open.js';
+import { pgDriver, type PoolFactory } from './db/pgDriver.js';
 import { sqliteDriver, type SqliteDriver } from './db/sqliteDriver.js';
 import { openTraceDriver } from './db/traceDb.js';
 import { startFootprintSampler } from './footprint/sampler.js';
@@ -62,6 +63,12 @@ export interface ServerOptions {
   rosterRoots?: string[];
   /** The commit this daemon boots from (ADR 130) — resolved by the embedder; surfaced on /health. */
   buildRef?: string;
+  /**
+   * Cloud mode only, tests only (1C): the pools `pgDriver` draws connections from, in place of a
+   * `pg.Pool` per configured URL — `testCloudPools()` backs them with PGlite. Production never
+   * passes this; the URLs in the cloud config are the store.
+   */
+  cloudPools?: { main: PoolFactory; trace: PoolFactory };
 }
 
 export interface RunningServer {
@@ -116,11 +123,19 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     trustProxy: config.trustProxy,
   });
   // ADR 479: the store is a Driver; a raw better-sqlite3 handle (tests, the CLI) is wrapped here.
+  // Cloud mode (spec §5): the store is the configured Postgres — never a file, never a fallback.
+  const cloud = config.cloud;
   const db: Driver = opts.db
     ? isDriver(opts.db)
       ? opts.db
       : sqliteDriver(opts.db)
-    : openDriver(config.dbPath);
+    : cloud
+      ? pgDriver({
+          appUrl: cloud.databaseAppUrl,
+          operatorUrl: cloud.databaseOperatorUrl,
+          ...(opts.cloudPools ? { pools: opts.cloudPools.main } : {}),
+        })
+      : openDriver(config.dbPath);
   // The handle is the FACT; `config.dbPath` is only the intention, and an injected `opts.db` never
   // opened it. Reconciled here, once, so every reader downstream is honest by construction: the
   // startup log line, the `dbPath` accessor, and `db` on /health — which exists precisely so a
@@ -137,7 +152,13 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     ? isDriver(opts.traceDb)
       ? opts.traceDb
       : sqliteDriver(opts.traceDb)
-    : openTraceDriver(opts.db ? ':memory:' : config.traceDbPath);
+    : cloud && !opts.db
+      ? pgDriver({
+          appUrl: cloud.traceDatabaseAppUrl,
+          operatorUrl: cloud.traceDatabaseOperatorUrl,
+          ...(opts.cloudPools ? { pools: opts.cloudPools.trace } : {}),
+        })
+      : openTraceDriver(opts.db ? ':memory:' : config.traceDbPath);
   config.traceDbPath =
     sqliteHandle(traceDb)?.name ?? (traceDb.dialect === 'sqlite' ? config.traceDbPath : 'postgres');
   const hub = new Hub();
