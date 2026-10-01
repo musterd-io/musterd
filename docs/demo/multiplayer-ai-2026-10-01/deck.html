@@ -3,227 +3,414 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>musterd — Multiplayer AI demo</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@500;700&display=swap">
 <style>
   /* committed cuts (ADR 477) so the venue's Wi-Fi cannot reflow the deck; paths are repo-relative */
   @font-face{font-family:'Recursive Casual';src:url(../../../packages/web/src/styles/fonts/recursive-casual.woff2) format('woff2');font-weight:400 800;font-display:block}
   @font-face{font-family:'Recursive';src:url(../../../packages/web/src/styles/fonts/recursive-linear.woff2) format('woff2');font-weight:400 800;font-display:block}
   @font-face{font-family:'Recursive Mono';src:url(../../../packages/web/src/styles/fonts/recursive-mono.woff2) format('woff2');font-weight:400 800;font-display:block}
   :root{--bg:#FAFAFA;--panel:#F4F4F5;--ink:#18181B;--mut:#52525B;--dim:#52525B;--acc:#E1AD01;--acct:#7A5A06;--accn:#8F6B00;--accd:#3F2F00;--line:#E4E4E7;
-    --sans:'Recursive',system-ui,-apple-system,Helvetica,Arial,sans-serif;--display:'Recursive Casual','Recursive',system-ui,sans-serif;--mono:'Recursive Mono','JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+    --sans:'Recursive',system-ui,-apple-system,Helvetica,Arial,sans-serif;--display:'Recursive Casual','Recursive',system-ui,sans-serif;--mono:'Recursive Mono','JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
+    --ease:cubic-bezier(.22,1,.36,1)}
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
   body{background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
-  .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:0}
-  .deck{position:relative;width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;max-height:100vh}
-  .slide{position:absolute;inset:0;padding:clamp(36px,5vw,96px);display:none;flex-direction:column;justify-content:space-between;gap:clamp(12px,1.6vw,24px);border-radius:0;background:var(--bg)}
-  :fullscreen .rail,:fullscreen .hint{display:none}
-  .slide.on{display:flex;animation:fade .32s ease}
+  .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  .deck{position:relative;width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;max-height:100vh;overflow:hidden}
+  .slide{position:absolute;inset:0;padding:clamp(36px,5vw,96px);display:flex;flex-direction:column;justify-content:space-between;gap:clamp(12px,1.6vw,24px);background:var(--bg);
+    opacity:0;visibility:hidden;transform:translateX(3%);transition:opacity .5s var(--ease),transform .6s var(--ease),visibility 0s .6s}
+  .slide.on{opacity:1;visibility:visible;transform:none;transition:opacity .5s var(--ease),transform .6s var(--ease)}
+  .slide.past{transform:translateX(-3%)}
   .slide.panel{background:var(--panel)}
   .slide.acc{background:var(--acc);color:#18181B}
-  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-  @media (prefers-reduced-motion:reduce){.slide.on{animation:none}}
+  /* micro: children marked .a rise in, staggered by --i */
+  .slide .a{opacity:0;transform:translateY(14px)}
+  .slide.on .a{animation:rise .7s var(--ease) both;animation-delay:calc(.15s + var(--i,0)*.12s)}
+  @keyframes rise{to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.slide,.slide.on{transition:none;transform:none}.slide.on .a{animation:none;opacity:1;transform:none}}
+
   .eyebrow{font-family:var(--mono);font-size:clamp(11px,1.1vw,14px);letter-spacing:.24em;text-transform:uppercase;color:var(--acct)}
-  .acc .eyebrow,.acc .foot{color:var(--accd)}
-  h1{font-family:var(--display);font-size:clamp(30px,4.6vw,64px);font-weight:750;line-height:1.05;letter-spacing:-.02em;text-wrap:balance}
+  .acc .eyebrow{color:var(--accd)}
+  h1{font-family:var(--display);font-size:clamp(32px,5.2vw,76px);font-weight:780;line-height:1.02;letter-spacing:-.02em;text-wrap:balance}
   h2{font-family:var(--display);font-size:clamp(26px,3.6vw,52px);font-weight:700;line-height:1.08;letter-spacing:-.015em;text-wrap:balance}
   .sub{font-size:clamp(16px,2vw,28px);color:var(--mut);line-height:1.35;max-width:40ch}
   .big{font-family:var(--display);font-size:clamp(80px,14vw,220px);font-weight:800;line-height:.9;letter-spacing:-.04em;color:var(--accn)}
   .row{display:flex;align-items:flex-end;gap:clamp(16px,3vw,44px)}
-  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(20px,3vw,48px)}
-  .cards.c2{grid-template-columns:1fr 1fr}
-  .cards.c5{grid-template-columns:repeat(5,1fr);gap:clamp(14px,2vw,32px)}
-  .harness{display:flex;align-items:baseline;gap:clamp(10px,1.6vw,24px);flex-wrap:wrap;border-top:2px solid var(--line);padding-top:clamp(12px,1.4vw,22px)}
-  .harness b{font-family:var(--display);font-size:clamp(18px,2.2vw,32px);font-weight:750;color:var(--ink)}
-  .harness span{font-size:clamp(13px,1.45vw,20px);color:var(--mut)}
-  .card .n{font-family:var(--mono);font-weight:700;color:var(--acct);font-size:clamp(12px,1.2vw,16px)}
-  .card{background:none;border:none;border-top:3px solid var(--acc);border-radius:0;padding:clamp(14px,1.6vw,26px) 0 0;display:flex;flex-direction:column;gap:10px}
-  .card h3{font-family:var(--display);font-size:clamp(16px,1.9vw,26px);font-weight:700;color:var(--acct)}
-  .card h3.mut{color:var(--mut);font-size:clamp(14px,1.5vw,20px)}
-  .card p{font-size:clamp(13px,1.45vw,20px);color:var(--mut);line-height:1.4}
-  .card p.strong{font-size:clamp(18px,2.2vw,30px);font-weight:700;color:var(--ink);line-height:1.25}
-  .list{display:flex;flex-direction:column;gap:clamp(8px,1.2vw,18px)}
-  .list p{font-size:clamp(16px,2.3vw,32px);font-weight:700;line-height:1.2}
-  .list p span{font-family:var(--mono);margin-right:.6em;opacity:.7}
-  .cmd{font-family:var(--mono);font-size:clamp(22px,4vw,56px);font-weight:700;background:#FFFFFF;border:1px solid var(--line);border-radius:14px;padding:clamp(14px,2vw,32px) clamp(18px,2.4vw,36px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .cmd .p{color:var(--dim)}
   .foot{font-family:var(--mono);font-size:clamp(12px,1.25vw,18px);color:var(--dim)}
+
+  /* cover */
+  .mark{display:flex;align-items:center;gap:14px}
+  .mark img{width:clamp(36px,3.6vw,52px);height:auto}
+  .wm{font-family:var(--mono);font-weight:700;font-size:clamp(24px,3.2vw,46px);letter-spacing:-.03em}
+  .cover-body{display:grid;grid-template-columns:1fr auto;gap:clamp(20px,4vw,64px);align-items:center}
+  .qr{display:flex;flex-direction:column;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:clamp(12px,1.4vw,20px);box-shadow:0 10px 30px rgba(24,24,27,.08)}
+  .qr svg{width:clamp(120px,15vw,220px);height:auto;display:block}
+  .qr b{font-family:var(--display);font-size:clamp(14px,1.5vw,20px)}
+  .qr span{font-family:var(--mono);font-size:clamp(10px,.9vw,12px);color:var(--dim);letter-spacing:.12em;text-transform:uppercase}
+  .meta{display:flex;align-items:flex-end;border-top:2px solid var(--line);padding-top:clamp(12px,1.6vw,24px)}
+  .meta div{display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding:0 clamp(18px,2.6vw,40px);border-left:1px solid var(--line)}
+  .meta div:first-child{padding-left:0;border-left:none}
+  .meta .k{font-family:var(--mono);font-size:clamp(10px,1vw,13px);letter-spacing:.2em;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;gap:8px}
+  .meta .k .live{width:9px;height:9px;border-radius:50%;background:var(--acc);animation:pulse 1.8s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(225,173,1,.5)}50%{box-shadow:0 0 0 7px rgba(225,173,1,0)}}
+  .meta .v{font-family:var(--display);font-size:clamp(15px,1.8vw,26px);font-weight:700;white-space:nowrap}
+  .meta .v.mono{font-family:var(--mono)}
+
   /* origin quote */
   .quote{font-family:var(--display);font-size:clamp(24px,3.3vw,48px);font-weight:600;line-height:1.22;letter-spacing:-.01em;max-width:30ch;text-wrap:pretty}
-  .quote .mark{display:block;font-size:2.2em;line-height:.6;color:var(--acc);font-weight:800}
+  .quote .qm{display:block;font-size:2.2em;line-height:.6;color:var(--acc);font-weight:800}
   .attr{font-family:var(--mono);font-size:clamp(12px,1.25vw,18px);color:var(--mut)}
-  /* evolution table */
+
+  /* 37% bar */
+  .waste{display:flex;flex-direction:column;gap:10px;width:100%}
+  .bar{position:relative;height:clamp(18px,2vw,28px);border-radius:6px;background:#E4E4E7;overflow:hidden}
+  .bar i{position:absolute;inset:0 auto 0 0;width:0;border-radius:6px}
+  .bar .kept{background:#A1A1AA}.bar .lost{background:var(--acc)}
+  .slide.on .bar .kept{animation:grow 1.2s var(--ease) .5s both;--w:63%}
+  .slide.on .bar .lost{animation:grow 1.2s var(--ease) 1.1s both;--w:37%;left:63%;}
+  @keyframes grow{from{width:0}to{width:var(--w)}}
+  .legend{display:flex;gap:24px;font-family:var(--mono);font-size:clamp(11px,1.1vw,15px);color:var(--mut)}
+  .legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:8px;background:#A1A1AA}
+  .legend span.l::before{background:var(--acc)}
+
+  /* value cards */
+  .vcards{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(14px,1.8vw,28px)}
+  .vcard{background:#fff;border:1px solid var(--line);border-radius:16px;padding:clamp(16px,2vw,28px);display:flex;flex-direction:column;gap:clamp(8px,1vw,14px);box-shadow:0 6px 20px rgba(24,24,27,.05)}
+  .vcard .ic{width:clamp(30px,2.8vw,42px);height:clamp(30px,2.8vw,42px);color:var(--acct);background:#FBF3D5;border-radius:10px;padding:6px}
+  .vcard h3{font-family:var(--display);font-size:clamp(17px,1.9vw,27px);font-weight:750;line-height:1.15}
+  .vcard ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .vcard li{position:relative;padding-left:18px;font-size:clamp(13px,1.35vw,19px);color:var(--mut);line-height:1.35}
+  .vcard li::before{content:"";position:absolute;left:0;top:.55em;width:7px;height:7px;border-radius:50%;background:var(--acc)}
+  .slide .vcard li{opacity:0;transform:translateX(-6px)}
+  .slide.on .vcard li{animation:rise .5s var(--ease) both;animation-delay:calc(.5s + var(--i,0)*.12s + var(--j,0)*.1s)}
+  .slide.on .vcard .ic{animation:pop .5s var(--ease) both;animation-delay:calc(.25s + var(--i,0)*.12s)}
+  @keyframes pop{from{transform:scale(.4);opacity:0}to{transform:none;opacity:1}}
+  /* the member graph: titles first, one node opens per click */
+  .graph{position:relative;width:100%;aspect-ratio:1600/640;margin-top:clamp(4px,1vw,14px)}
+  .gedges{position:absolute;inset:0;width:100%;height:100%;overflow:visible;color:#D4D4D8}
+  .edge{fill:none;stroke:#D4D4D8;stroke-width:2;stroke-dasharray:3 5;transition:stroke .4s}
+  .edge.lit{stroke:var(--acc);stroke-dasharray:100;stroke-dashoffset:100;animation:drawedge .7s var(--ease) forwards;color:var(--acc)}
+  .edge.loop.lit{stroke-dasharray:4 6;animation:none;stroke:var(--acct)}
+  @keyframes drawedge{to{stroke-dashoffset:0}}
+  .elab{font-family:var(--mono);font-size:14px;fill:#A1A1AA;transition:fill .4s}
+  .elab.lit{fill:var(--acct)}
+  .gnode{position:absolute;transform:translateX(-50%);width:13.4%;display:flex;flex-direction:column;align-items:stretch}
+  .gnode .gt{display:flex;align-items:center;gap:8px;justify-content:center;background:#fff;border:2px solid var(--line);border-radius:999px;padding:clamp(5px,.6vw,9px) clamp(8px,1vw,14px);font-family:var(--display);font-weight:700;font-size:clamp(13px,1.45vw,21px);color:var(--ink);white-space:nowrap;transition:border-color .35s,background .35s,box-shadow .35s}
+  .gnode.hub .gt{font-size:clamp(15px,1.7vw,25px);padding:clamp(7px,.8vw,12px) clamp(10px,1.2vw,18px)}
+  .gnode .gt em{font-style:normal;font-family:var(--mono);font-size:.68em;color:var(--dim);width:1.7em;height:1.7em;border-radius:50%;display:grid;place-items:center;background:var(--panel);transition:background .35s,color .35s}
+  .gnode .gd{max-height:0;opacity:0;overflow:hidden;transform:translateY(-4px);transition:max-height .5s var(--ease),opacity .4s var(--ease) .05s,transform .5s var(--ease)}
+  .gnode .gd{background:var(--panel);border-radius:12px;margin-top:4px}
+  .gnode .gd p{font-size:clamp(11px,1.1vw,15px);color:var(--mut);line-height:1.33;text-align:center;padding:clamp(5px,.6vw,9px) 4px 4px}
+  .gnode .how{padding-bottom:6px}
+  .gnode .gd p b{color:var(--ink)}
+  .gnode .how{display:flex;flex-wrap:wrap;gap:4px;justify-content:center}
+  .gnode .how span{font-family:var(--mono);font-size:clamp(9px,.82vw,11.5px);color:var(--acct);background:#FBF3D5;border-radius:999px;padding:2px 7px;white-space:nowrap}
+  .gnode.shown .gt{border-color:var(--acc);box-shadow:0 6px 18px rgba(225,173,1,.22);animation:popdot .45s var(--ease)}
+  .gnode.shown .gt em{background:var(--acc);color:#18181B}
+  .gnode.shown .gd{max-height:12em;opacity:1;transform:none}
+  @keyframes popdot{50%{transform:scale(1.07)}}
+  .harness.slim{border-top:none;padding-top:0;gap:clamp(12px,1.8vw,26px)}
+  .harness.slim b{flex-basis:auto;font-size:clamp(15px,1.6vw,23px)}
+  .harness.slim .logo{font-size:clamp(12px,1.25vw,17px)}
+  .harness.slim .logo img,.harness.slim .logo svg{width:clamp(18px,1.6vw,24px);height:clamp(18px,1.6vw,24px)}
+  @media (prefers-reduced-motion:reduce){.vcard li{opacity:1!important;transform:none!important;animation:none!important}.gnode .gd,.edge{transition:none;animation:none!important}}
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(18px,2.6vw,40px)}
+  .cards.c5{grid-template-columns:repeat(5,1fr);gap:clamp(14px,2vw,32px)}
+  .cards.c2{grid-template-columns:1fr 1fr}
+  .card{border-top:3px solid var(--acc);padding-top:clamp(14px,1.6vw,26px);display:flex;flex-direction:column;gap:10px}
+  .card .ic{width:clamp(28px,2.6vw,40px);height:clamp(28px,2.6vw,40px);color:var(--acct)}
+  .card .n{font-family:var(--mono);font-weight:700;color:var(--acct);font-size:clamp(12px,1.2vw,16px)}
+  .card h3{font-family:var(--display);font-size:clamp(16px,1.9vw,26px);font-weight:700;color:var(--acct)}
+  .card p{font-size:clamp(13px,1.45vw,20px);color:var(--mut);line-height:1.4}
+  .card code.how{display:block;margin-top:auto;padding-top:10px;border-top:1px dashed var(--line);font-family:var(--mono);font-size:clamp(10px,1vw,13px);color:var(--acct);line-height:1.5}
+  .howline{font-family:var(--mono);font-size:clamp(11px,1.1vw,15px);color:var(--dim)}
+  .card p.strong{font-size:clamp(18px,2.2vw,30px);font-weight:700;color:var(--ink);line-height:1.25}
+
+  /* harness logos */
+  .harness{display:flex;align-items:center;gap:clamp(14px,2.2vw,34px);flex-wrap:wrap;border-top:2px solid var(--line);padding-top:clamp(12px,1.4vw,22px)}
+  .harness b{font-family:var(--display);font-size:clamp(18px,2.2vw,32px);font-weight:750;flex-basis:100%}
+  .logo{display:flex;align-items:center;gap:10px;font-size:clamp(14px,1.6vw,22px);font-weight:700}
+  .logo img,.logo svg{width:clamp(22px,2.2vw,32px);height:clamp(22px,2.2vw,32px)}
+  .logo.cc{font-family:'Inter',system-ui,sans-serif;color:#D97757}
+  .logo.cx{font-family:'Inter',system-ui,sans-serif;color:#0D0D0D}
+  .logo.cu{font-family:'Inter',system-ui,sans-serif;color:#0D0D0D}
+  .logo.oc{font-family:'JetBrains Mono',monospace;color:#0D0D0D;letter-spacing:-.02em}
+  .logo.md{font-family:'JetBrains Mono',monospace;color:#18181B}
+  .logo .soon{font-family:var(--mono);font-size:.6em;color:var(--dim);font-weight:400;letter-spacing:.1em;text-transform:uppercase}
+
+  /* asks rail mock (from /live) */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:clamp(24px,4vw,64px);align-items:center}
+  .ba{display:flex;flex-direction:column;gap:clamp(14px,2vw,28px)}
+  .ba .from{display:flex;align-items:baseline;gap:16px}
+  .ba .from .num{font-family:var(--display);font-size:clamp(48px,7vw,110px);font-weight:800;line-height:.9;letter-spacing:-.03em}
+  .ba .from .num.z{color:#A1A1AA}
+  .ba .from .num.h{color:var(--accn)}
+  .ba .from p{font-size:clamp(14px,1.6vw,22px);color:var(--mut);max-width:22ch;line-height:1.35}
+  .rail{display:flex;flex-direction:column;gap:12px}
+  .ask{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;background:#fff;border:1px solid var(--line);border-left:4px solid var(--hue);border-radius:12px;padding:14px 16px;box-shadow:0 6px 20px rgba(24,24,27,.06)}
+  .ask .av{width:36px;height:36px;border-radius:50%;background:var(--hue);color:#fff;font-weight:700;display:grid;place-items:center;font-family:var(--mono);font-size:14px}
+  .ask .t{font-size:clamp(13px,1.3vw,18px);line-height:1.3}
+  .ask .t small{display:block;font-family:var(--mono);font-size:.72em;color:var(--dim);letter-spacing:.06em;margin-bottom:2px}
+  .ask svg{width:40px;height:40px;transform:rotate(-90deg)}
+  .ask circle.track{fill:none;stroke:#E4E4E7;stroke-width:4}
+  .ask circle.clock{fill:none;stroke:var(--hue);stroke-width:4;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:0}
+  .slide.on .ask circle.clock{animation:tick var(--dur,8s) linear .6s both}
+  @keyframes tick{from{stroke-dashoffset:0}to{stroke-dashoffset:100}}
+  .slide.on .ask{animation:slidein .6s var(--ease) both;animation-delay:calc(.4s + var(--i,0)*.35s)}
+  @keyframes slidein{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:none}}
+
+  /* huddle gather (live slide) */
+  .live-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(20px,3vw,48px);align-items:center}
+  .list{display:flex;flex-direction:column;gap:clamp(8px,1.2vw,18px)}
+  .list p{font-size:clamp(15px,2vw,28px);font-weight:700;line-height:1.2}
+  .list p{display:grid;grid-template-columns:1.6em 1fr}
+  .list p span{font-family:var(--mono);opacity:.7}
+  .huddle{width:100%;height:auto;max-height:62vh;justify-self:center;overflow:visible}
+  .huddle .spoke{stroke:#18181B;stroke-opacity:.25;stroke-width:2;stroke-dasharray:4 6}
+  .huddle .mem{transform:translate(var(--x0),var(--y0));opacity:0}
+  .slide.on .huddle .mem{animation:gather 1.4s var(--ease) both;animation-delay:calc(.5s + var(--k)*.14s)}
+  @keyframes gather{to{transform:translate(var(--x),var(--y));opacity:1}}
+  .huddle .lbl{font-family:var(--mono);font-size:15px;font-weight:700;fill:#18181B}
+  .huddle .ini{font-family:var(--mono);font-size:15px;font-weight:700;fill:#fff}
+  /* evolution arcs */
+  .arcs{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(10px,1.2vw,18px)}
+  .arc{background:#fff;border:1px solid var(--line);border-radius:14px;padding:clamp(10px,1.1vw,16px) clamp(12px,1.3vw,18px);display:flex;flex-direction:column;gap:5px}
+  .arc-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .arc h3{font-family:var(--display);font-size:clamp(14px,1.45vw,20px);font-weight:750}
+  .arc-h span{font-family:var(--mono);font-size:clamp(9px,.85vw,12px);color:var(--acct);white-space:nowrap}
+  .arc p{font-size:clamp(11px,1.05vw,14.5px);line-height:1.3;color:var(--mut);display:grid;grid-template-columns:4.2em 1fr;gap:6px}
+  .arc p b{font-family:var(--mono);font-size:.78em;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--dim);padding-top:.15em}
+  .arc p.af{color:var(--ink);font-weight:600}
+  .arc p.af b{color:var(--accn)}
+  /* evolution */
   .evo{display:grid;grid-template-columns:auto 1fr 1fr;column-gap:clamp(16px,2.6vw,40px)}
   .evo>*{padding:clamp(8px,1vw,14px) 0;border-top:1px solid var(--line);font-size:clamp(13px,1.5vw,21px);line-height:1.3}
   .evo .h{border-top:none;font-family:var(--mono);font-size:clamp(10px,1vw,13px);letter-spacing:.2em;text-transform:uppercase;color:var(--dim);padding-top:0}
   .evo .d{font-family:var(--mono);font-weight:700;color:var(--acct);white-space:nowrap}
-  .evo .m{color:var(--mut)}
+  .evo .mm{color:var(--mut)}
   .evo .b{font-weight:700}
-  /* cover footer: a row of named places to find nick, event-agnostic */
-  .meta{display:flex;align-items:flex-end;gap:0;border-top:2px solid var(--line);padding-top:clamp(14px,1.8vw,28px)}
-  .meta div{display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding:0 clamp(18px,2.6vw,40px);border-left:1px solid var(--line)}
-  .meta div:first-child{padding-left:0;border-left:none}
-  .meta .k{font-family:var(--mono);font-size:clamp(10px,1vw,13px);letter-spacing:.2em;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;gap:8px}
-  .meta .k .live{width:9px;height:9px;border-radius:50%;background:var(--acc);box-shadow:0 0 0 3px rgba(225,173,1,.25)}
-  .meta .v{font-family:var(--display);font-size:clamp(16px,2vw,30px);font-weight:700;color:var(--ink);white-space:nowrap}
-  .meta .v.mono{font-family:var(--mono);font-weight:700;letter-spacing:-.01em}
-  .mark{display:flex;align-items:center;gap:14px}
-  .chip{width:clamp(36px,3.6vw,52px);height:clamp(36px,3.6vw,52px);border-radius:10px;background:var(--acc);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;color:#18181B;font-size:clamp(20px,2.4vw,34px)}
-  .wm{font-family:var(--mono);font-weight:700;font-size:clamp(24px,3.2vw,46px);letter-spacing:-.03em}
-  .rail{position:fixed;left:0;right:0;bottom:0;height:64px;display:flex;align-items:center;gap:20px;padding:0 22px;background:var(--panel);border-top:1px solid var(--line);z-index:20}
-  .rail::before{content:"";position:absolute;top:-1px;left:0;height:2px;width:100%;background:var(--acc);transform:scaleX(var(--p,0));transform-origin:left;transition:transform .4s ease}
-  .map{display:flex;gap:clamp(8px,1.6vw,22px);flex:1;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
-  .stop{display:flex;align-items:center;gap:8px;color:var(--dim);background:none;border:none;font:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer;padding:0}
-  .stop .dot{width:7px;height:7px;border-radius:50%;background:#D4D4D8}
-  .stop.act{color:var(--ink)} .stop.act .dot{background:var(--acc);box-shadow:0 0 0 4px rgba(225,173,1,.2)}
-  .stop.done{color:var(--mut)} .stop.done .dot{background:var(--acc);opacity:.6}
-  .count{font-family:var(--mono);font-size:12px;color:var(--dim);white-space:nowrap}
-  .hint{position:fixed;top:14px;right:18px;font-family:var(--mono);font-size:11px;color:var(--dim);z-index:20}
-  .notes{position:fixed;left:18px;right:18px;bottom:72px;display:none;background:rgba(255,255,255,.97);border:1px solid var(--line);border-radius:12px;padding:16px 20px;font-size:15px;line-height:1.5;color:var(--mut);z-index:25;max-height:32vh;overflow:auto}
+  .cmd{font-family:var(--mono);font-size:clamp(22px,4vw,56px);font-weight:700;background:#fff;border:1px solid var(--line);border-radius:14px;padding:clamp(14px,2vw,32px) clamp(18px,2.4vw,36px);white-space:nowrap}
+  .cmd .p{color:var(--dim)}
+  .cmd .caret{display:inline-block;width:.55em;height:1em;background:var(--acc);vertical-align:-.12em;margin-left:.15em;animation:blink 1.1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  /* chrome: progress rail, slide picker, notes */
+  .rail-bar{position:fixed;left:0;right:0;bottom:0;height:4px;z-index:20}
+  .rail-bar i{position:absolute;inset:0 auto 0 0;background:var(--acc);width:calc(var(--p,0)*100%);transition:width .45s var(--ease)}
+  .picker{position:fixed;top:14px;right:18px;z-index:30;font-family:var(--mono)}
+  .picker button{appearance:none;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.92);box-shadow:0 2px 10px rgba(0,0,0,.06);color:var(--ink);font:inherit;font-size:12px;letter-spacing:.04em;padding:8px 12px;cursor:pointer;max-width:min(320px,48vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .picker button:hover{border-color:var(--acc)}
+  .menu{position:absolute;top:calc(100% + 8px);right:0;width:min(320px,calc(100vw - 36px));max-height:calc(100vh - 100px);overflow-y:auto;padding:8px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 34px rgba(0,0,0,.14);display:none}
+  .menu.open{display:block}
+  .menu .sec{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--acct);padding:9px 8px 4px}
+  .menu button{display:flex;gap:10px;width:100%;border:none;box-shadow:none;background:transparent;text-align:left;font-family:var(--sans);font-size:13px;padding:7px 8px;border-radius:7px;max-width:none}
+  .menu button:hover,.menu button.cur{background:var(--panel)}
+  .menu button em{font-style:normal;font-family:var(--mono);color:var(--dim);min-width:1.6em}
+  .notes{position:fixed;left:18px;right:18px;bottom:14px;display:none;background:rgba(255,255,255,.97);border:1px solid var(--line);border-radius:12px;padding:16px 20px;font-size:15px;line-height:1.5;color:var(--mut);z-index:25;max-height:32vh;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,.1)}
   .notes.show{display:block}
+  :fullscreen .picker{display:none}
 </style>
 <body>
-<div class="hint">← → space · n notes · f fullscreen</div>
 <div class="stage"><div class="deck">
 
-<section class="slide" data-sec="Problem">
-  <div class="mark"><div class="chip">m</div><div class="wm">musterd</div></div>
-  <div style="display:flex;flex-direction:column;gap:clamp(10px,1.6vw,24px)">
-    <h1>Persistent teams where agents and humans coordinate as peers.</h1>
-    <p class="sub">Ownership, decisions and every exchange stay on a record that outlasts any session.</p>
+<section class="slide" data-sec="Opening" data-title="musterd">
+  <div class="mark a" style="--i:0"><img src="../../design/assets/chip.svg" alt=""><div class="wm">musterd</div></div>
+  <div class="cover-body">
+    <div style="display:flex;flex-direction:column;gap:clamp(10px,1.6vw,24px)">
+      <h1 class="a" style="--i:1">Turn the agents you already run into a team.</h1>
+      <p class="sub a" style="--i:2">Every claim, question and handoff lands on one record that outlasts any session.</p>
+    </div>
+    <div class="qr a" style="--i:3">
+      <svg id="qr" viewBox="0 0 29 29" shape-rendering="crispEdges" aria-label="QR code placeholder"></svg>
+      <b>Vote: what should the team build next?</b>
+      <span>placeholder — poll link goes here</span>
+    </div>
   </div>
-  <div class="meta">
+  <div class="meta a" style="--i:4">
     <div><span class="v">Nick Sanders</span></div>
     <div><span class="k"><span class="live"></span>Built live, daily</span><span class="v mono">twitch.tv/sandrise_ai</span></div>
     <div><span class="k">Portfolio</span><span class="v mono">sandrise.io/nicksanders</span></div>
     <div><span class="v mono">musterd.io</span></div>
   </div>
-  <aside hidden>Before this slide: /live is on the projector, the roster lit, nothing working. Say: everyone here has read this year's headlines. This is the opposite shape: a roster of names, one of them is me.</aside>
+  <aside hidden>The QR is up while you are introduced. Say: scan that and vote — whatever wins, the team starts on in about five minutes. Then: everyone here has read this year's headlines about agents nobody owns. This is the opposite shape.</aside>
 </section>
 
-<section class="slide panel" data-sec="Problem">
-  <p class="eyebrow">Where it started</p>
+<section class="slide panel" data-sec="The problem" data-title="Where it started">
+  <p class="eyebrow a" style="--i:0">Where it started</p>
   <div style="display:flex;flex-direction:column;gap:clamp(12px,1.8vw,28px)">
-    <p class="quote"><span class="mark">“</span>When one agent wanted to ask a question or provide a status update, they would tell me something, which I would then copy and paste to the other agent.</p>
-    <p class="attr">— Nick Sanders, June 2026</p>
+    <p class="quote a" style="--i:1"><span class="qm">“</span>When one agent wanted to ask a question or provide a status update, they would tell me something, which I would then copy and paste to the other agent.</p>
+    <p class="attr a" style="--i:2">— Nick Sanders, June 2026</p>
   </div>
-  <span aria-hidden="true"></span>
-  <aside hidden>Say: Before musterd, I was the coordination layer. One agent would tell me something, and I would paste it into the other. Then go straight to the next slide for the number. This is nick's own sentence from the P3 post-mortem, 2026-06-30 (docs/wiki/how-musterd-got-here.md).</aside>
+  <span></span>
+  <aside hidden>Say: Before musterd, I was the coordination layer. One agent would tell me something, and I would paste it into the other. Then go to the number.</aside>
 </section>
 
-<section class="slide" data-sec="Problem">
-  <p class="eyebrow">The problem</p>
-  <div style="display:flex;flex-direction:column;gap:clamp(10px,1.6vw,24px)">
-    <h2>The second agent is where it breaks.</h2>
-    <div class="row"><p class="big">37%</p><p class="sub" style="padding-bottom:.5em">of the code three agents produced on one feature was thrown away. Two of them wrote the same diff; one built on a schema another had not finished.</p></div>
+<section class="slide" data-sec="The problem" data-title="The second agent">
+  <p class="eyebrow a" style="--i:0">The problem</p>
+  <div style="display:flex;flex-direction:column;gap:clamp(14px,2vw,28px)">
+    <h2 class="a" style="--i:1">The second agent is where it breaks.</h2>
+    <div class="row a" style="--i:2"><p class="big">37%</p><p class="sub" style="padding-bottom:.5em">of the code three agents produced on one feature was thrown away. Two of them wrote the same diff; one built on a schema another had not finished.</p></div>
+    <div class="waste a" style="--i:3">
+      <div class="bar"><i class="kept"></i><i class="lost"></i></div>
+      <div class="legend"><span>reached main</span><span class="l">thrown away</span></div>
+    </div>
   </div>
-  <span aria-hidden="true"></span>
-  <aside hidden>Then we measured it: three agents on one feature for a day and a half, and about 37% of the code they produced was thrown away — two agents writing the same diff, or one building on a schema the other had not finished. The fix was one owner per unit of work, declared before the first keystroke.</aside>
+  <span></span>
+  <aside hidden>Then we measured it: three agents on one feature for a day and a half, and about 37% of the code they produced was thrown away. The fix was one owner per unit of work, declared before the first keystroke.</aside>
 </section>
 
-<section class="slide" data-sec="Thesis">
-  <p class="eyebrow">The thesis</p>
-  <h2>A persistent team is the primitive.</h2>
-  <div class="cards">
-    <div class="card"><h3>A persistent roster</h3><p>A member outlasts every session it runs in. Its inbox, lanes and record survive a restart.</p></div>
-    <div class="card"><h3>One owner per lane</h3><p>Claimed before the first edit. Two lanes touching the same files get a warning at claim time.</p></div>
-    <div class="card"><h3>Humans on the same roster</h3><p>Same acts, same inbox. Agents bring you questions with a clock on them.</p></div>
+<section class="slide" data-sec="Why it works" data-title="What changes">
+  <p class="eyebrow a" style="--i:0">What changes</p>
+  <h2 class="a" style="--i:1">What changes when your agents work as one team.</h2>
+  <div class="vcards">
+    <div class="vcard a" style="--i:2"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><h3>Ownership</h3><ul><li style="--j:0">Work is claimed before the first edit</li><li style="--j:1">Overlapping claims raise a warning</li></ul></div>
+    <div class="vcard a" style="--i:3"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg><h3>Messages reach agents mid-task</h3><ul><li style="--j:0">Delivered at the next tool call</li><li style="--j:1">Teammates reach each other directly</li></ul></div>
+    <div class="vcard a" style="--i:4"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.5"/><path d="M12 15h.01"/></svg><h3>You get asked</h3><ul><li style="--j:0">Agents ask you clarifying questions</li><li style="--j:1">Big decisions wait for your answer, however long it takes</li><li style="--j:2">Smaller ones time out, and the agent records that it went ahead</li></ul></div>
+    <div class="vcard a" style="--i:5"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><h3>Done gets a second look</h3><ul><li style="--j:0">The builder submits</li><li style="--j:1">Another member checks the outcome, from another model family when one is around</li></ul></div>
   </div>
-  <span aria-hidden="true"></span>
-  <aside hidden>So the primitive is a team: a persistent roster where a member outlasts every session it has run in. That is what makes the rest possible — an owner for every lane, an inbox that survives a restart, a record that says who did what, at which model. The human sits on the same roster, on the same protocol. Advance to the loop slide here: every member runs the same loop — join, claim a lane, talk in a fixed set of acts, ask a person when it matters, and close twice.</aside>
+  <span></span>
+  <aside hidden>So the team is the unit: a persistent roster where a member outlasts every session it has run in. An owner for every piece, an inbox that survives a restart, a record of who did what at which model. The human sits on the same roster.</aside>
 </section>
 
-<section class="slide panel" data-sec="Thesis">
-  <p class="eyebrow">How it works</p>
-  <h2>Every member runs the same loop.</h2>
-  <div class="cards c5">
-    <div class="card"><span class="n">1</span><h3>Join</h3><p>A named member on the roster. People join from the CLI.</p></div>
-    <div class="card"><span class="n">2</span><h3>Claim</h3><p>One lane, one owner, its files named before the first edit.</p></div>
-    <div class="card"><span class="n">3</span><h3>Talk in acts</h3><p>Request help, hand off, decline, challenge. Each reaches the other agent at its next tool call.</p></div>
-    <div class="card"><span class="n">4</span><h3>Ask a person</h3><p>Urgent questions wait for an answer. The rest time out, and going ahead is written down.</p></div>
-    <div class="card"><span class="n">5</span><h3>Close twice</h3><p>The builder submits. Another member accepts the outcome.</p></div>
+<section class="slide panel" data-sec="Why it works" data-title="How every member works">
+  <p class="eyebrow a" style="--i:0">How it works</p>
+  <h2 class="a" style="--i:1">How every member works.</h2>
+  <div class="graph"><svg class="gedges" viewBox="0 0 1600 640" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs><path class="edge" data-to="1" d="M120,260 L345,260" pathLength="100" marker-end="url(#ah)"/><path class="edge" data-to="2" d="M345,260 L570,260" pathLength="100" marker-end="url(#ah)"/><path class="edge" data-to="3" d="M570,260 L810,260" pathLength="100" marker-end="url(#ah)"/><path class="edge" data-to="3" d="M810,55 L810,260" pathLength="100" marker-end="url(#ah)"/><path class="edge" data-to="5" d="M810,260 L1050,90" pathLength="100" marker-end="url(#ah)"/><path class="edge" data-to="6" d="M810,260 L1050,402" pathLength="100" marker-end="url(#ah)"/><path class="edge" data-to="7" d="M810,260 L1270,260" pathLength="100" marker-end="url(#ah)"/><path class="edge" data-to="8" d="M1270,260 L1480,260" pathLength="100" marker-end="url(#ah)"/><path class="edge loop" data-to="8" d="M1480,450 C1480,632 120,632 120,450" pathLength="100"/><text class="elab" data-to="8" x="800.0" y="628" text-anchor="middle">next session · any harness</text></svg><div class="gnode frag" data-k="0" style="left:7.50%;top:35.94%"><div class="gt"><em>1</em>Join</div><div class="gd"><p>Takes its seat. Same name every session.</p><div class="how"><span>SessionStart hook</span><span>MCP tool call</span></div></div></div><div class="gnode frag" data-k="1" style="left:21.56%;top:35.94%"><div class="gt"><em>2</em>Orient</div><div class="gd"><p><b>Tier 1</b> addressed to it: handle now. <b>Tier 2</b> open work: surface, don’t act. Then stamps ready.</p><div class="how"><span>skill</span><span>SessionStart hook</span></div></div></div><div class="gnode frag" data-k="2" style="left:35.62%;top:35.94%"><div class="gt"><em>3</em>Claim</div><div class="gd"><p>Takes one piece and names its files before building.</p><div class="how"><span>MCP tool call</span><span>PreToolUse hook</span></div></div></div><div class="gnode frag hub" data-k="3" style="left:50.62%;top:35.94%"><div class="gt"><em>4</em>Build</div><div class="gd"><p>Posts a status when it starts and finishes.</p><div class="how"><span>MCP tool call</span></div></div></div><div class="gnode frag" data-k="4" style="left:50.62%;top:3.90%"><div class="gt"><em>5</em>Inbox</div><div class="gd"><p>Checked after every tool call, so it can be redirected mid-task.</p><div class="how"><span>PostToolUse hook</span></div></div></div><div class="gnode frag" data-k="5" style="left:65.62%;top:9.37%"><div class="gt"><em>6</em>Teammates</div><div class="gd"><p>Help · handoff with branch · decline · challenge</p><div class="how"><span>MCP tool call</span></div></div></div><div class="gnode frag" data-k="6" style="left:65.62%;top:58.13%"><div class="gt"><em>7</em>Ask a person</div><div class="gd"><p>Says how long it waits. Big decisions wait for you.</p><div class="how"><span>MCP tool call</span><span>/live · Slack</span></div></div></div><div class="gnode frag" data-k="7" style="left:79.38%;top:35.94%"><div class="gt"><em>8</em>Close</div><div class="gd"><p>Submits after merge. Another member accepts or sends it back.</p><div class="how"><span>MCP tool call</span></div></div></div><div class="gnode frag" data-k="8" style="left:92.50%;top:35.94%"><div class="gt"><em>9</em>Hand over</div><div class="gd"><p>Saves where it left off for the next session.</p><div class="how"><span>MCP tool call</span><span>SessionEnd hook</span></div></div></div></div>
+  <div class="harness slim a" style="--i:3">
+    <b>Bring your agents, from any harness.</b>
+    <span class="logo cc"><img src="../../../packages/web/src/live/provider-logos/claude.svg" alt="">Claude Code</span>
+    <span class="logo cx"><img src="../../../packages/web/src/live/provider-logos/openai.svg" alt="">Codex</span>
+    <span class="logo cu"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#0D0D0D" d="M12 1.5 2.9 6.75v10.5L12 22.5l9.1-5.25V6.75L12 1.5Zm0 2.3 7.1 4.1L12 12 4.9 7.9 12 3.8Z"/></svg>Cursor</span>
+    <span class="logo oc"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" fill="#0D0D0D"/><rect x="7" y="7" width="10" height="10" fill="#FAFAFA"/><rect x="9" y="9" width="6" height="6" fill="#0D0D0D"/></svg>opencode</span>
+    <span class="logo md"><img src="../../design/assets/chip.svg" alt="">musterd harness <span class="soon">coming</span></span>
   </div>
-  <p class="harness"><b>Bring your agents, from any harness.</b><span>Fully supported today: Claude Code · Codex · Cursor · OpenCode. Coming: musterd’s own harness.</span></p>
-  <aside hidden>Advance here on 'an act on that roster'. The live demo shows steps 2, 4 and 5; step 3 comes back in the handoff question. This is the guidance every member is given: check the inbox at every task boundary, report on start and finish, claim before you build, ask a person before acting big.</aside>
+  <aside hidden>Titles are up; each click opens the next node. Join; orient (tier 1 is anything addressed to it, handled now; tier 2 is open work, surfaced but not acted on); claim before building; build, with the inbox checked after every tool call; work with teammates or ask a person; close; hand over, and the next session, on any harness, picks it up. The hooks named are Claude Code’s; other harnesses get the same moments.</aside>
 </section>
 
-<section class="slide acc" data-sec="Live">
-  <p class="eyebrow">Live · team revive</p>
-  <h1>Three things you will see happen.</h1>
-  <div class="list">
-    <p><span>1</span>A task lands — two owners, two lanes, no contention.</p>
-    <p><span>2</span>A question reaches the human — with a clock on it.</p>
-    <p><span>3</span>Done is two claims — the builder says merged; someone else says this is what we wanted.</p>
+<section class="slide" data-sec="Why it works" data-title="The team asks you">
+  <p class="eyebrow a" style="--i:0">The human on the team</p>
+  <div class="split">
+    <div class="ba">
+      <h2 class="a" style="--i:1">The team asks you.</h2>
+      <div class="from a" style="--i:2"><span class="num z">0</span><p>requests for help reached me while I was the approver — seven approvals for every real exchange.</p></div>
+      <div class="from a" style="--i:3"><span class="num h">106</span><p>questions have reached me since I became a member of the team.</p></div>
+    </div>
+    <div class="rail" aria-label="the asks rail, as /live shows it">
+      <div class="ask" style="--hue:#7C5CFF;--i:0;--dur:9s"><span class="av">iz</span><span class="t"><small>izzo · approve · blocking</small>Merge the wake-cap change before the demo?</span><svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16" pathLength="100"/><circle class="clock" cx="20" cy="20" r="16" pathLength="100"/></svg></div>
+      <div class="ask" style="--hue:#0EA5A4;--i:1;--dur:6s"><span class="av">mi</span><span class="t"><small>miley · consult · standard</small>Ring or bar for the tier clock on the rail?</span><svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16" pathLength="100"/><circle class="clock" cx="20" cy="20" r="16" pathLength="100"/></svg></div>
+      <div class="ask" style="--hue:#E4572E;--i:2;--dur:4s"><span class="av">gh</span><span class="t"><small>ghost · escalate · advisory</small>Two lanes touch the same file. Split or pair?</span><svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16" pathLength="100"/><circle class="clock" cx="20" cy="20" r="16" pathLength="100"/></svg></div>
+    </div>
   </div>
-  <span aria-hidden="true"></span>
-  <aside hidden>Switch to /live and the terminal now. Do not come back to slides until the handoff beat. If delta is in tonight, it is beat 4: an agent that was not running wakes on a directed act.</aside>
+  <span></span>
+  <aside hidden>My first role was approver: I showed up as an approver seven times for every time I actually talked to the team, and not one agent had asked me for help. We rebuilt the human as a member — since then, more than a hundred asks have reached me. The rail on the right is how /live shows them: each ask in the agent's colour, with its clock running. The asks shown are illustrative.</aside>
 </section>
 
-<section class="slide" data-sec="Questions">
-  <p class="eyebrow">Big question 1 · handoff</p>
-  <h2>A handoff carries the lane itself.</h2>
+<section class="slide acc" data-sec="Live" data-title="You picked it">
+  <p class="eyebrow a" style="--i:0">Live · team revive</p>
+  <div class="live-grid">
+    <div style="display:flex;flex-direction:column;gap:clamp(14px,2vw,28px)">
+      <h1 class="a" style="--i:1">You picked it. Watch the team split it.</h1>
+      <div class="list">
+        <p class="a" style="--i:2"><span>1</span>I open one huddle and name seven members.</p>
+        <p class="a" style="--i:3"><span>2</span>They gather, split the work, and each claims a lane.</p>
+        <p class="a" style="--i:4"><span>3</span>When they need me, the question lands with a clock on it.</p>
+      </div>
+    </div>
+    <svg class="huddle a" style="--i:2" id="huddle" viewBox="-185 -175 370 370" aria-label="seven members gathering round a huddle"></svg>
+    </div>
+  </div>
+  <span></span>
+  <aside hidden>Show the poll result, name the winner, then switch to /live and open the huddle. Do not come back to slides until the handoff question.</aside>
+</section>
+
+<section class="slide" data-sec="Big questions" data-title="Handoff">
+  <p class="eyebrow a" style="--i:0">Big question · handoff</p>
+  <h2 class="a" style="--i:1">A handoff carries the lane itself.</h2>
   <div class="cards c2">
-    <div class="card"><h3 class="mut">What it carries</h3><p class="strong">The thread.<br>The lane.<br>The branch, at its commit.</p><p>The receiver builds on the diff, so nothing gets built twice.</p></div>
-    <div class="card"><h3 class="mut">What the receiver can do</h3><p class="strong">Accept.<br>Decline.<br>Challenge.</p><p>Every handoff is an offer from one owner to another.</p></div>
+    <div class="card a" style="--i:2"><h3 style="color:var(--mut);font-size:clamp(14px,1.5vw,20px)">What it carries</h3><p class="strong">The thread.<br>The lane.<br>The branch, at its commit.</p><p>The receiver builds on the diff, so nothing gets built twice.</p></div>
+    <div class="card a" style="--i:3"><h3 style="color:var(--mut);font-size:clamp(14px,1.5vw,20px)">What the receiver can do</h3><p class="strong">Accept.<br>Decline.<br>Challenge.</p><p>Every handoff is an offer from one owner to another.</p></div>
   </div>
-  <span aria-hidden="true"></span>
-  <aside hidden>Our first answer was wrong. Early on, a handoff was prose: here is what I did, carry on. We measured what that produced, and a whole class of the waste was byte-identical work. A handoff that carries too little context recreates the exact problem the orchestration critics warn about. And the receiver can decline, which makes a handoff an offer between owners.</aside>
+  <span></span>
+  <aside hidden>Our first answer was wrong. Early on, a handoff was prose: here is what I did, carry on. A whole class of the waste was byte-identical work. Now a handoff carries the lane itself, and the receiver can decline, which makes it an offer between owners.</aside>
 </section>
 
-<section class="slide panel" data-sec="Questions">
-  <p class="eyebrow">Big question 2 · what did not work</p>
-  <div style="display:flex;flex-direction:column;gap:clamp(10px,1.6vw,24px)">
-    <h2>The human as approver produced the record of oversight without the oversight.</h2>
-    <div class="row"><p class="big">7:1</p><p class="sub" style="padding-bottom:.5em">approvals for every real exchange with me — and in months, not one agent had asked me for help. Since we rebuilt the human as a member, more than a hundred have.</p></div>
-  </div>
-  <span aria-hidden="true"></span>
-  <aside hidden>My first role was a person in front of every claim, as an approver. I showed up as an approver seven times for every time I actually talked to the team, and not one agent had asked me for help. The gate produced the record of oversight without the oversight. So we rebuilt the human as a member — since then, more than a hundred asks have reached me. That is why the centerpiece of this demo is a question.</aside>
-</section>
-
-<section class="slide" data-sec="Close">
-  <p class="eyebrow">Open source</p>
+<section class="slide" data-sec="Close" data-title="Try it">
+  <p class="eyebrow a" style="--i:0">Open source</p>
   <div style="display:flex;flex-direction:column;gap:clamp(14px,2vw,32px)">
-    <p class="cmd"><span class="p">$</span> npx @musterd/cli init</p>
-    <p class="sub" style="max-width:52ch">One command to a team. If you run more than one agent, try it with your team for two weeks — I'll sit with you for the first hour.</p>
-    <p class="sub" style="max-width:60ch;font-size:clamp(14px,1.6vw,22px)">Nick Sanders · <b style="color:var(--ink)">@Nick_ASanders</b> · sandrise.io/nicksanders · <b style="color:var(--ink)">twitch.tv/sandrise_ai</b> — where musterd is built live, every day.</p>
+    <p class="cmd a" style="--i:1"><span class="p">$</span> npx @musterd/cli init<span class="caret"></span></p>
+    <p class="sub a" style="--i:2;max-width:52ch">One command to a team. If you run more than one agent, try it with your team for two weeks — I'll sit with you for the first hour.</p>
+    <p class="sub a" style="--i:3;max-width:60ch;font-size:clamp(14px,1.6vw,22px)">Nick Sanders · <b style="color:var(--ink)">@Nick_ASanders</b> · sandrise.io/nicksanders · <b style="color:var(--ink)">twitch.tv/sandrise_ai</b> — where musterd is built live, every day.</p>
   </div>
-  <p class="foot">musterd.io · github.com/SandRiseStudio/musterd</p>
-  <aside hidden>Then stop. Do not tour the office or the settings. The 38x multiplier is not said in this room: the re-run is pending. If asked for the waste number, offer the table with its date on it.</aside>
+  <p class="foot a" style="--i:4">musterd.io · github.com/SandRiseStudio/musterd</p>
+  <aside hidden>Then stop. The 38x is not said in this room.</aside>
 </section>
 
-<section class="slide panel" data-sec="Q&amp;A">
-  <p class="eyebrow">How each piece earned its place</p>
-  <div class="evo">
-    <p class="h">2026</p><p class="h">What we measured</p><p class="h">What it forced</p>
-    <p class="d">30 Jun</p><p class="m">37% of the code produced was thrown away; handoffs carried a description of the work</p><p class="b">Lanes: one owner, claimed before the first keystroke. A handoff carries the branch.</p>
-    <p class="d">30 Jun</p><p class="m">Replies waited up to 207 minutes on me as the relay</p><p class="b">The inbox reaches an agent at its next tool call.</p>
-    <p class="d">17 Jul</p><p class="m">7 approvals for every exchange; 0 requests for help had reached me</p><p class="b">The human as a member. Agents ask with a deadline.</p>
-    <p class="d">28 Jul</p><p class="m">“Done” meant the builder said so</p><p class="b">Done is two claims: someone else accepts the outcome.</p>
-    <p class="d">5 Sep</p><p class="m">An agent whose session was closed could not be reached</p><p class="b">Wake: the agent comes back on a message — about 24 s cold, on a second machine.</p>
+<section class="slide panel" data-sec="Q&amp;A" data-title="Built from what broke">
+  <p class="eyebrow a" style="--i:0">How musterd evolved</p>
+  <h2 class="a" style="--i:1">Built from what broke.</h2>
+  <div class="arcs">
+    <div class="arc a" style="--i:2"><div class="arc-h"><h3>Lanes</h3><span>Jul 1</span></div><p class="bf"><b>Before</b>37% of the code three agents wrote was thrown away</p><p class="bt"><b>Built</b>Claim before you build; overlapping claims warn</p><p class="af"><b>After</b>0.9% thrown away in a later 2.5-day read (uncontrolled)</p></div>
+    <div class="arc a" style="--i:3"><div class="arc-h"><h3>Handoffs</h3><span>Aug 4</span></div><p class="bf"><b>Before</b>80% of handoffs never said which work they handed over</p><p class="bt"><b>Built</b>A handoff carries its lane and branch</p><p class="af"><b>After</b>No handoff without a lane since the day it shipped</p></div>
+    <div class="arc a" style="--i:4"><div class="arc-h"><h3>Reaching agents mid-task</h3><span>Jul 3</span></div><p class="bf"><b>Before</b>Replies waited up to 207 minutes on me as the relay</p><p class="bt"><b>Built</b>A line after every tool call</p><p class="af"><b>After</b>First check: 0 of 67 lines reached the model. Fixed the next day.</p></div>
+    <div class="arc a" style="--i:5"><div class="arc-h"><h3>The human as a member</h3><span>Jul 17</span></div><p class="bf"><b>Before</b>7 approvals for every real exchange; 0 requests for help</p><p class="bt"><b>Built</b>Asks with a tier and a clock</p><p class="af"><b>After</b>106 asks and 13 requests for help since</p></div>
+    <div class="arc a" style="--i:6"><div class="arc-h"><h3>Done takes two</h3><span>Jul 28</span></div><p class="bf"><b>Before</b>2 of 21 threads ever closed</p><p class="bt"><b>Built</b>The builder submits; another member accepts</p><p class="af"><b>After</b>Confirmed closes went from 16 to 142</p></div>
+    <div class="arc a" style="--i:7"><div class="arc-h"><h3>Knowing the model</h3><span>Jul 24</span></div><p class="bf"><b>Before</b>A seat showed the wrong model for weeks</p><p class="bt"><b>Built</b>The model the harness sees outranks the declared one</p><p class="af"><b>After</b>4 of 4 seats agree</p></div>
+    <div class="arc a" style="--i:8"><div class="arc-h"><h3>Sessions that start themselves</h3><span>Aug 5</span></div><p class="bf"><b>Before</b>23 sessions started by hand in one day</p><p class="bt"><b>Built</b>The board wakes the member it needs</p><p class="af"><b>After</b>22 sessions started themselves</p></div>
+    <div class="arc a" style="--i:9"><div class="arc-h"><h3>The cloud seat</h3><span>Sep 5</span></div><p class="bf"><b>Before</b>Every process on the cloud machine ran as root</p><p class="bt"><b>Built</b>Drop root, scope the token, close the port</p><p class="af"><b>After</b>Only the network daemon runs as root; it wakes in 24 s</p></div>
+    <div class="arc a" style="--i:10"><div class="arc-h"><h3>Tools shaped by use</h3><span>Jul 15</span></div><p class="bf"><b>Before</b>70% of failed tool calls were one wrong field name</p><p class="bt"><b>Built</b>Accept the common mistake, explain the rest</p><p class="af"><b>After</b>Those errors fell from 16 a day to 1</p></div>
   </div>
-  <span aria-hidden="true"></span>
-  <aside hidden>Held back for Q&A — not in the seven minutes. Use it when someone asks how it evolved or what you tried. Each row is a measured problem and what it forced; dates are 2026. Long form: docs/wiki/how-musterd-got-here.md. Wake (row 5) rests on ADRs that are still proposed — say 'we are building toward' if pressed.</aside>
+  <span></span>
+  <aside hidden>For Q&amp;A. Each card is a problem we measured in our own team, what we built, and what we measured after. The lanes number is one later window with no control; say so. Every date is 2026. Sources: docs/wiki/how-musterd-got-here.md and ADRs 083, 231, 088, 145/147, 169/192/225, 158, 179/250, 390, 144.</aside>
 </section>
 
 </div></div>
+<div class="picker"><button id="pick" aria-haspopup="true"></button><div class="menu" id="menu"></div></div>
 <div class="notes" id="notes"></div>
-<div class="rail"><div class="map" id="map"></div><div class="count" id="count"></div></div>
+<div class="rail-bar"><i></i></div>
 <script>
-  const slides=[...document.querySelectorAll('.slide')];
-  const secs=[...new Set(slides.map(s=>s.dataset.sec))];
-  const map=document.getElementById('map'), count=document.getElementById('count'), notes=document.getElementById('notes');
-  secs.forEach(sec=>{const b=document.createElement('button');b.className='stop';b.innerHTML='<span class="dot"></span>'+sec;b.onclick=()=>go(slides.findIndex(s=>s.dataset.sec===sec));map.appendChild(b)});
+  // placeholder QR: finder squares + a deterministic pattern — replaced when the poll link exists
+  (function(){const N=29,svg=document.getElementById('qr');let r='<rect width="29" height="29" fill="#fff"/>';let s=7;
+    const rnd=()=>{s=(s*9301+49297)%233280;return s/233280};
+    const finder=(x,y)=>`<rect x="${x}" y="${y}" width="7" height="7" fill="#18181B"/><rect x="${x+1}" y="${y+1}" width="5" height="5" fill="#fff"/><rect x="${x+2}" y="${y+2}" width="3" height="3" fill="#18181B"/>`;
+    const inF=(x,y)=>(x<8&&y<8)||(x>20&&y<8)||(x<8&&y>20);
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(!inF(x,y)&&rnd()<.48)r+=`<rect x="${x}" y="${y}" width="1" height="1" fill="#18181B"/>`;
+    svg.innerHTML=r+finder(0,0)+finder(22,0)+finder(0,22);})();
+
+  (function(){const svg=document.getElementById('huddle');const M=[['izzo','#7C5CFF'],['miley','#0EA5A4'],['delta','#2563EB'],['big-body','#16A34A'],['wanderer','#DB2777'],['ghost','#E4572E'],['sloane','#9333EA']];
+    let h='';const R=130;
+    M.forEach(([n],k)=>{const a=-Math.PI/2+k*2*Math.PI/M.length;h+=`<line class="spoke" x1="${Math.cos(a)*44}" y1="${Math.sin(a)*44}" x2="${Math.cos(a)*(R-26)}" y2="${Math.sin(a)*(R-26)}"/>`});
+    h+='<circle r="44" fill="#18181B"/><text text-anchor="middle" dy="5" class="lbl" style="fill:#E1AD01">huddle</text>';
+    M.forEach(([n,c],k)=>{const a=-Math.PI/2+k*2*Math.PI/M.length,x=Math.cos(a)*R,y=Math.sin(a)*R,lx=Math.cos(a)*44,ly=Math.sin(a)*44+(Math.sin(a)>.3?10:Math.sin(a)<-.3?-2:5);
+      
+      h+=`<g class="mem" style="--x:${x}px;--y:${y}px;--x0:${x*1.9}px;--y0:${y*1.9}px;--k:${k}"><circle r="24" fill="${c}"/><text text-anchor="middle" dy="5" class="ini">${n==='big-body'?'bb':n.slice(0,2)}</text><text class="lbl" text-anchor="middle" y="44">${n}</text></g>`});
+    svg.innerHTML=h;})();
+  const slides=[...document.querySelectorAll('.slide')], pick=document.getElementById('pick'), menu=document.getElementById('menu'), notes=document.getElementById('notes');
   let i=Math.max(0,Math.min(slides.length-1,parseInt(location.hash.slice(1))||0));
-  function go(n){i=Math.max(0,Math.min(slides.length-1,n));slides.forEach((s,k)=>s.classList.toggle('on',k===i));
-    const cur=slides[i].dataset.sec;[...map.children].forEach((b,k)=>{b.classList.toggle('act',secs[k]===cur);b.classList.toggle('done',secs.indexOf(secs[k])<secs.indexOf(cur))});
-    count.textContent=(i+1)+' / '+slides.length;document.documentElement.style.setProperty('--p',(i+1)/slides.length);
+  let html='',last='';
+  slides.forEach((s,k)=>{const sec=s.dataset.sec;if(sec!==last){html+=`<div class="sec">${sec}</div>`;last=sec}
+    html+=`<button data-k="${k}"><em>${k+1}</em>${s.dataset.title}</button>`});
+  menu.innerHTML=html;
+  menu.addEventListener('click',e=>{const b=e.target.closest('button');if(b){go(+b.dataset.k);menu.classList.remove('open')}});
+  pick.addEventListener('click',e=>{e.stopPropagation();menu.classList.toggle('open')});
+  const frags=s=>[...s.querySelectorAll('.frag')];
+  function syncEdges(sl){const shown=new Set(frags(sl).filter(x=>x.classList.contains('shown')).map(x=>x.dataset.k));sl.querySelectorAll('[data-to]').forEach(e=>e.classList.toggle('lit',shown.has(e.dataset.to)))}
+  function next(){const f=frags(slides[i]).filter(x=>!x.classList.contains('shown'));if(f.length){f[0].classList.add('shown');syncEdges(slides[i]);return}go(i+1)}
+  function prev(){const f=frags(slides[i]).filter(x=>x.classList.contains('shown'));if(f.length){f[f.length-1].classList.remove('shown');syncEdges(slides[i]);return}go(i-1,true)}
+  function go(n,back){const from=i;i=Math.max(0,Math.min(slides.length-1,n));
+    frags(slides[i]).forEach(x=>x.classList.toggle('shown',!!back&&i<from));syncEdges(slides[i]);
+    slides.forEach((s,k)=>{s.classList.toggle('on',k===i);s.classList.toggle('past',k<i)});
+    pick.textContent=`${i+1} / ${slides.length} · ${slides[i].dataset.title} ▾`;
+    [...menu.querySelectorAll('button')].forEach(b=>b.classList.toggle('cur',+b.dataset.k===i));
+    document.documentElement.style.setProperty('--p',(i+1)/slides.length);
     const a=slides[i].querySelector('aside');notes.textContent=a?a.textContent:'';history.replaceState(null,'','#'+i)}
-  addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();go(i+1)}
-    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1)}
+  addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();next()}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();prev()}
     else if(e.key==='Home')go(0);else if(e.key==='End')go(slides.length-1);
     else if(e.key==='n')notes.classList.toggle('show');
+    else if(e.key==='g')menu.classList.toggle('open');
+    else if(e.key==='Escape')menu.classList.remove('open');
     else if(e.key==='f'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}});
-  addEventListener('click',e=>{if(e.target.closest('.rail,.notes'))return;go(i+1)});
+  addEventListener('click',e=>{if(e.target.closest('.picker,.notes'))return;if(menu.classList.contains('open')){menu.classList.remove('open');return}next()});
   go(i);
 </script>
 </body>
