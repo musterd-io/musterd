@@ -39,7 +39,8 @@ describe('runPicker (ADR 491)', () => {
     const t = io();
     const done = runPicker(STATE, t as never, () => {});
     t.input.write('sta');
-    t.input.write('\r');
+    t.input.write('\r'); // opens the harness step
+    t.input.write('\r'); // picks the preselected harness
     expect(await done).toMatchObject({
       kind: 'launch',
       seat: { member: 'stanley' },

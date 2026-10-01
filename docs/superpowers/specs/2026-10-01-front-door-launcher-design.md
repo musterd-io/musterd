@@ -76,6 +76,15 @@ review trail stays honest:
    only as a folder-bound identity, and provisioning has no rollback today (§4.7).
 7. **`launcher.json` sits beside `config.json`,** not behind a new environment override (§4.5).
 
+Dogfooding the shipped picker (2026-10-01) changed one more, at nick's direction:
+
+8. **A seat's harness is always picked, never assumed.** `⏎` or `⌃R` on an agent seat opens a harness
+   step listing the harnesses the seat is configured for — shown even when there is only one, so the
+   screen says it has one — with the one used last preselected; `⏎` launches the pick, `esc` goes
+   back. A live seat's question follows the pick. A human seat (a login shell) has no step.
+   `musterd <seat>` by name is unchanged: it takes `--harness`, or the one used last. Lane
+   `01M3WTTQ6V81YVCKS2FZ5FKNDZ`.
+
 ## 3. The experience
 
 ### 3.1 Bare `musterd`
@@ -127,8 +136,8 @@ musterd › revive › projects               nick     human   ○       3d
 | Key                    | Does                                                                         |
 | ---------------------- | ---------------------------------------------------------------------------- |
 | `↑` `↓` (`⌃P` `⌃N`)    | Move                                                                         |
-| `⏎`                    | Launch a fresh harness session; on a team or project row, enter that level   |
-| `⌃R`                   | Resume the seat's last harness session                                       |
+| `⏎`                    | On a seat, open the harness step (pick, then launch fresh); on a team or project row, enter that level |
+| `⌃R`                   | Open the harness step, then resume the seat's last session in that harness   |
 | `tab`                  | Next harness, when the seat has several (the row shows which one is chosen)  |
 | `→` / `←`              | Into a level / back out                                                      |
 | letters, digits, space | Search                                                                       |

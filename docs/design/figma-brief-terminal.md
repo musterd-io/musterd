@@ -152,6 +152,15 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
     `+ new seat` first asks `  new seat in revive/agents › ▏   ⏎ next · esc cancel`. With no human
     Workspace of yours in the project, the section is one dim line:
     `set up your own seat here first: musterd human <you>`.
+24. `cmd/launcher-harness-step` — `⏎` or `⌃R` on an agent seat replaces the footer with the seat's
+    configured harnesses, shown even when there is one; the one used last carries a dim `last used`:
+    ```
+      stanley · 1 harness configured
+      › claude    last used
+      ⏎ launch · ↑↓ choose · esc back
+    ```
+    With several, `↑↓` (or `⇥`) moves the accent `›`; `⏎` launches the pick (a live seat then asks
+    frame 22's question); `esc` returns to the list.
 
 ### Huddle trace frame (ADR 493)
 

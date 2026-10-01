@@ -78,14 +78,15 @@ describe('picker state (spec §3)', () => {
   });
 
   it('⏎ launches the selected seat fresh; ⌃R resumes', () => {
-    expect(press(s0, k('return')).outcome).toEqual({
+    // ⏎ opens the harness step; the second ⏎ picks the preselected harness.
+    expect(press(s0, k('return'), k('return')).outcome).toEqual({
       kind: 'launch',
       seat: SEATS[0],
       mode: 'fresh',
       harness: 'claude-code',
       force: false,
     });
-    expect(press(s0, k('down'), k('r', { ctrl: true })).outcome).toMatchObject({
+    expect(press(s0, k('down'), k('r', { ctrl: true }), k('return')).outcome).toMatchObject({
       seat: SEATS[1],
       mode: 'resume',
     });
@@ -131,7 +132,7 @@ describe('picker state (spec §3)', () => {
   it('⇥ cycles the harness on a seat with several, and the launch carries it', () => {
     const { state } = press(s0, k('tab'));
     expect(state.harness['revive/agents/stanley']).toBe('codex');
-    expect(press(state, k('return')).outcome).toMatchObject({ harness: 'codex' });
+    expect(press(state, k('return'), k('return')).outcome).toMatchObject({ harness: 'codex' });
   });
 
   it('a live seat asks first; y launches with force, anything else cancels', () => {
@@ -143,7 +144,7 @@ describe('picker state (spec §3)', () => {
       status: 'ok',
       now: 2_000,
     }).state;
-    const asking = press(live, k('return')).state;
+    const asking = press(live, k('return'), k('return')).state;
     expect(asking.confirm?.seat).toEqual(SEATS[0]);
     expect(press(asking, k('n')).state.confirm).toBeNull();
     expect(press(asking, k('y')).outcome).toEqual({
@@ -157,7 +158,7 @@ describe('picker state (spec §3)', () => {
 
   it('when the roster answered, a launch skips the re-check', () => {
     const ok = reduce(s0, { type: 'live', live: {}, status: 'ok', now: 2_000 }).state;
-    expect(press(ok, k('return')).outcome).toMatchObject({ force: true });
+    expect(press(ok, k('return'), k('return')).outcome).toMatchObject({ force: true });
   });
 
   it('a fresh catalog keeps the cursor on the same seat', () => {
@@ -183,7 +184,7 @@ describe('picker state (spec §3)', () => {
       unknown: ['revive/agents/stanley'],
       now: 1_000,
     }).state;
-    const out = reduce(s, { type: 'key', key: { name: 'return' } }).outcome;
+    const out = press(s, k('return'), k('return')).outcome;
     expect(out).toMatchObject({ kind: 'launch', force: false });
   });
 
@@ -196,11 +197,9 @@ describe('picker state (spec §3)', () => {
       },
     };
     const s = initialState(file, '', 1_000);
-    expect(reduce(s, { type: 'key', key: { name: 'return' } }).outcome).toMatchObject({
-      harness: 'codex',
-    });
+    expect(press(s, k('return'), k('return')).outcome).toMatchObject({ harness: 'codex' });
     const tabbed = reduce(s, { type: 'key', key: { name: 'tab' } }).state;
-    expect(reduce(tabbed, { type: 'key', key: { name: 'return' } }).outcome).toMatchObject({
+    expect(press(tabbed, k('return'), k('return')).outcome).toMatchObject({
       harness: 'claude-code',
     });
   });

@@ -159,6 +159,10 @@ the terminal around every harness.
 - **2026-10-01 — increment 3 measured.** `pnpm bench:cli-start` first-paint median 118 ms (p90 136 ms)
   at load average about 5, against a `node -e 0` floor of 77 ms in the same run and the 150 ms target
   (lane `01M3WA7W55F50XC6TFV33K21PR`).
+- **2026-10-01 — the picker always asks for the harness.** After dogfooding, nick asked that a seat
+  configured for one harness still show that it has one and still be picked. `⏎`/`⌃R` on an agent
+  seat now opens a harness step (spec §2 item 8, terminal frame 24); `musterd <seat>` by name is
+  unchanged (lane `01M3WTTQ6V81YVCKS2FZ5FKNDZ`).
 
 ## Observability & Evaluation
 
