@@ -133,10 +133,14 @@ describe('CIMD URL and address boundary (ADR 470)', () => {
       expect.objectContaining({
         url: expect.objectContaining({ hostname: 'chatgpt.com' }),
         address: '8.8.8.8',
-        timeoutMs: 3_000,
         maxBytes: 5_120,
       }),
     );
+    // The request gets what is LEFT of the 3s budget (`deadlineAt - Date.now()`, real clock), so an
+    // exact 3_000 raced the runner: it failed under coverage load on PR #1914 (lane 01M3TWWXMW).
+    const { timeoutMs } = request.mock.calls[0]![0] as { timeoutMs: number };
+    expect(timeoutMs).toBeGreaterThan(0);
+    expect(timeoutMs).toBeLessThanOrEqual(3_000);
   });
 
   it('pins the real HTTPS lookup callback and preserves hostname for TLS and Host', async () => {
