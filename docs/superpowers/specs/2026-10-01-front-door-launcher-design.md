@@ -31,8 +31,8 @@ any other seat with a few. He never types a path and never runs `cd`.
 What exists today (measured 2026-10-01):
 
 - Bare `musterd` prints the help page.
-- `packages/cli/src/bin.ts` statically imports all 65 command modules plus OpenTelemetry before it
-  does anything. `musterd --version` took 1.4–2.4 s, against 0.16–0.7 s for `node -e 0`. The
+- `packages/cli/src/bin.ts` statically imports all 53 command modules (65 import statements) plus
+  OpenTelemetry before it does anything. `musterd --version` took 1.4–2.4 s, against 0.16–0.7 s for `node -e 0`. The
   machine was at load average 44, so the absolute numbers are inflated; the ratio is the finding.
 - Nothing launches an interactive harness. The host backends spawn headless wakes only
   (`host/backends/claudeCode.ts`), and `buildGovernedLaunchPlan` (ADR 425) has no callers.
@@ -64,6 +64,18 @@ Three details changed while writing this spec, and nick's review covers them:
 3. **"Set up here" offers agent members only.** Setting up another human's seat on your machine
    is not a launcher action.
 
+Reading the code before writing the plan (2026-10-01) corrected four more, recorded here so the
+review trail stays honest:
+
+4. **Live state comes from the roster alone.** The tty and transcript signals are gone: the
+   session enumerators are synchronous and measured 0.3–3 s, which would freeze the picker (§5.1).
+   The live prompt names the harness and the time instead of a tty.
+5. **The first screen paints from a snapshot.** Importing the protocol schemas measured about
+   740 ms cold, so the full scan runs after the first paint (§4.5, §5.1).
+6. **Creating a seat acts from your own human Workspace and revokes on failure.** The CLI writes
+   only as a folder-bound identity, and provisioning has no rollback today (§4.7).
+7. **`launcher.json` sits beside `config.json`,** not behind a new environment override (§4.5).
+
 ## 3. The experience
 
 ### 3.1 Bare `musterd`
@@ -76,7 +88,7 @@ column fills in as answers arrive.
 
   recent
 › stanley   revive/agents   claude   ○ idle   ★ last used · 2h
-  miley     revive/agents   claude   ● live   here · tty s008 · since 3:37 PM
+  miley     revive/agents   claude   ● live   here · since 15:37
   gptbot    revive/agents   codex    ○ idle   1d
 
   ⏎ launch · ⌃R resume · type to search · → browse · esc quit
@@ -130,7 +142,7 @@ musterd › revive › projects               nick     human   ○       3d
   itself the way it does today (session-start hooks, seat memory, inbox).
 - **A human seat** (such as `nick`): your login shell starts in the Workspace.
 - **A seat that is already live:** the picker asks first.
-  `miley is live here in tty s008 since 3:37 PM. Open a second session in the same folder? (y/N)`,
+  `miley is live here (claude-code) since 15:37. Open a second session in the same folder? (y/N)`,
   or `… is live on mini-2 …` for a Presence on another node.
 - **A team member with no Workspace here:** `⏎ set up here` shows where the Workspace will go and
   which harness it gets (`tab` to change), then creates it (§4.7) and launches.
@@ -184,7 +196,7 @@ All new code lives in `packages/cli/src/launcher/` except the two entry changes.
 | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
 | `bin.ts` (changed)                      | A command table of lazy imports replaces the 65 static ones. Bare `musterd` on a TTY imports only `launcher/`. The `default:` arm tries `resolve` before `unknown command`. | —                        |
 | `launcher/catalog.ts`                   | Builds the seat catalog from disk (§4.2). Pure, given a filesystem and env seam.                                             | disk                     |
-| `launcher/live.ts`                      | The live layer: roster Presences, team-only members, local liveness and tty, transcript times. Each source is time-boxed.    | daemon, disk, `ps`       |
+| `launcher/live.ts`                      | The live layer: roster Presences and team-only members, one unauthenticated roster read per (server, team), each time-boxed. | daemon                   |
 | `launcher/recents.ts`                   | Reads and writes `~/.musterd/launcher.json` (§4.5).                                                                          | disk                     |
 | `launcher/resolve.ts`                   | Turns `stanley`, `revive/agents/stanley` or `-` into one seat, or an ambiguity or no-match result (§3.6).                    | catalog, recents         |
 | `launcher/fuzzy.ts`                     | Scores a query against seat addresses and harness names; ties break on last use.                                            | —                        |
@@ -199,8 +211,9 @@ All new code lives in `packages/cli/src/launcher/` except the two entry changes.
 The flow:
 
 1. `musterd` on a TTY imports `launcher/` only.
-2. `catalog` reads disk and the picker paints (budget: 150 ms).
-3. `live` queries run in parallel; each answer patches rows in place.
+2. The picker paints from the snapshot in `launcher.json` (budget: 150 ms).
+3. The catalog scan and the `live` roster reads run after that; each answer patches rows in place,
+   and the new catalog is written back as the next snapshot.
 4. You pick a seat. A live seat asks y/N; a seat with no Workspace here goes through `create`.
 5. `plan` builds the command, the picker restores the terminal, and `supervise` runs the harness.
 6. The harness exits; `supervise` writes recents, prints the receipt and exits with the harness's
@@ -212,9 +225,8 @@ The flow:
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Seats on this machine | `config.bindings` plus a scan of `~/musterd/*/*/*/.musterd/binding.json`, deduplicated by real path. An index entry whose folder is gone is skipped and counted. |
 | A seat's harnesses    | `provisioned.json` → `desired` (ADR 281). The default is the harness used last, then the first in registry order.                                       |
-| Last used (at paint)  | The newer of `launcher.json` and `binding.json` → `session.started_at` / `ended_at`.                                                                     |
-| Last used (live)      | Also the newest transcript, from the harness session enumerators (ADR 166), so a seat launched by hand still sorts correctly.                            |
-| Live                  | Roster Presences (any Surface, any node, via `http.roster`), plus local liveness (a transcript written in the last 10 minutes, ADR 166) and `ps` for the tty. |
+| Last used             | The newer of `launcher.json` and `binding.json` → `session.started_at` / `ended_at`. The session capture hooks write the latter, so a seat launched by hand still sorts correctly. |
+| Live                  | Roster Presences (any Surface, any node), matched to seats by team and member name. `node` absent means the queried daemon's own machine; otherwise `node_label` names the other one. |
 | Team-only members     | The roster's agent members minus the seats with a Workspace in this project here.                                                                       |
 | Teams                 | The identities in `config.json`. A team with no Workspace here is listed greyed.                                                                        |
 | Projects              | The folders under each team's directory (ADR 447), with the git remote's name when it differs (§4.3).                                                   |
@@ -232,7 +244,9 @@ fact is an input to the next brainstorm (§8), not part of v1.
 Each harness adapter in the ADR 281 registry gains a launch entry, so the launcher holds no
 per-harness switch and a new harness joins by declaring its own. The forms below were checked
 against each CLI's `--help` on 2026-10-01. Binaries resolve through the existing resolvers
-(`claudeBin.ts`, `codexBin.ts`, `grokBin.ts`, `opencodeBin.ts`) plus one for `cursor-agent`.
+(`claudeBin.ts`, `codexBin.ts`, `grokBin.ts`, `opencodeBin.ts`) plus a new one for `cursor-agent`,
+which probes that name only: on this machine the bare `agent` on `PATH` is Grok's binary, not
+Cursor's.
 
 | Harness id         | Fresh                          | Resume, with a recorded session id | Resume, without one          |
 | ------------------ | ------------------------------ | ---------------------------------- | ---------------------------- |
@@ -248,8 +262,9 @@ A recorded id is used only when `binding.json` → `session.harness` matches the
 
 ### 4.5 The recents file
 
-`~/.musterd/launcher.json`, located through `machineStatePath` with a `MUSTERD_LAUNCHER` override so
-tests never touch the real one (ADR 190):
+`~/.musterd/launcher.json`, beside `config.json` (`machineConfigRoot()`), so the `MUSTERD_CONFIG`
+override the test setup already pins keeps tests off the real one (ADR 190). It holds the recents
+and a secret-free snapshot of the last catalog, which is what the first screen paints from (§5.1):
 
 ```json
 {
@@ -264,13 +279,33 @@ tests never touch the real one (ADR 190):
       "ended_at": 1790880378628,
       "exit": 0
     }
+  },
+  "snapshot": {
+    "taken_at": 1790877858100,
+    "seats": [
+      {
+        "address": "revive/agents/stanley",
+        "team": "revive",
+        "project": "agents",
+        "member": "stanley",
+        "server": "http://127.0.0.1:4849",
+        "path": "/Users/nick/musterd/revive/agents/stanley",
+        "kind": "agent",
+        "harnesses": ["claude-code"],
+        "remote": "musterd",
+        "last_session": { "harness": "claude-code", "started_at": 1790871171397 },
+        "problem": null
+      }
+    ],
+    "teams": [{ "team": "revive", "here": true }]
   }
 }
 ```
 
 It is parsed through a zod schema on read and validated before every write, the ADR 286 §3 rule
 applied to a new local file. A corrupt file is renamed aside and rebuilt empty; it never blocks a
-launch. It holds no secret.
+launch. It holds no secret: the snapshot carries no harness session id, so a resume always reads
+the id fresh from `binding.json`.
 
 ### 4.6 The supervisor
 
@@ -289,28 +324,40 @@ launch. It holds no secret.
 ### 4.7 Creating a seat
 
 `create.ts` reuses the path `musterd agent` takes today: `addMember` (tolerating an existing
-member), then `provisionSeat` (claim credential, standing grant, `binding.json`, permissions floor,
-`workspace.json`), then `provisionWorkspace`. It fixes two gaps that `musterd agent` has today, and
-`musterd agent` gets the same fixes:
+member), then `provisionSeat` (claim credential, standing grant, `binding.json`, `workspace.json`),
+then `provisionWorkspace`. It fixes three gaps that `musterd agent` has today, and `musterd agent`
+gets the same fixes:
 
-1. It writes `provisioned.json`, the desired harness set from ADR 281. Today only `musterd init`,
-   `harness configure`, the reconcile engine and uninstall write it.
+1. It writes `provisioned.json`, the desired harness set from ADR 281, before wiring. Today only
+   `musterd init`, `harness configure`, the reconcile engine and uninstall write it.
 2. It wires harnesses through the reconcile engine instead of the single-harness
-   `harness.configure`.
+   `harness.configure`. The legacy path writes the repo-shared Claude Code entry with an empty
+   environment, which drops the `MUSTERD_LAUNCH_SURFACE` marker for every sibling Workspace of the
+   same repo (ADR 286). The engine's permissions fragment replaces the separate
+   `installSeatPermissions` write, so the floor is ledger-owned and `uninstall` can release it.
+3. A failure after the credential is minted revokes that credential. There is no other rollback:
+   every step is idempotent, so the error names the failed step, nothing launches, and running the
+   same set-up again finishes it.
 
-The new Workspace is a `git worktree` of a checkout of the same project already on this machine,
-started from the remote's default branch after a fetch (`origin/HEAD`), not from whatever branch
-that sibling has checked out. With no remote, it starts from the sibling's `HEAD`. A project with
-no checkout on this machine cannot be set up in v1. Any failure uses provisioning's existing
-rollback, reports the step that failed, and launches nothing.
+**Who acts.** Adding a member is a write, and the CLI only writes as an identity bound to a folder
+(ADR 036, ADR 442), never as an identity it finds in the machine config. So `create.ts` acts as
+you, from your own human seat's Workspace in the same team and project, which is also the checkout
+the new Workspace is made from. Where you have no human Workspace in that project, the picker shows
+`set up your own seat here first: musterd human <you>` instead of `set up here` and `+ new seat`.
+
+The new Workspace is a `git worktree` of that checkout, started from the remote's default branch
+after a best-effort fetch (`origin/HEAD`, else `origin/main`), not from whatever branch the checkout
+has open. With no remote, it starts from the checkout's `HEAD`. A project with no checkout on this
+machine cannot be set up in v1.
 
 ### 4.8 Invariants
 
 - No `@musterd/protocol` schema changes and no new runtime dependency. The picker is drawn with
   `node:readline` keypress events on the existing `render/` theme.
 - Secrets never enter the catalog. It parses `binding.json` through `BindingSchema` and copies
-  named non-secret fields only. A test greps every catalog and `--json` output for `mskey_`,
-  `msgr_`, `mscr_` and `msla_`.
+  named non-secret fields only. A test runs every catalog, snapshot and `--json` output through
+  `containsMusterdCredential`, which knows every registered prefix (`binding.json` alone holds
+  `mskey_`, `msgr_`, `msac_` and `msls_` values).
 - Launching an existing seat writes nothing in its Workspace. Only `~/.musterd/launcher.json`
   changes.
 - A seat's address is `team/project/member`. When two servers host a team with the same name, the
@@ -321,15 +368,18 @@ rollback, reports the step that failed, and launches nothing.
 
 ### 5.1 Speed budget
 
-- **First paint under 150 ms** on an idle machine. Enforced deterministically by an import-graph
-  test: the launcher entry's static import closure may not include `@opentelemetry/*`,
-  `@clack/*` or any `commands/*` module. The live layer, and with it the HTTP client, is imported
-  after the first paint, so it sits outside that closure. A bench script reports the measured time;
-  a timing assertion would be flaky in CI.
-- **The known risk is zod.** The catalog parses `binding.json` and `provisioned.json` through the
-  protocol schemas, so zod is on the paint path. Increment 1 measures that import. If it breaks the
-  budget, the catalog imports the two schema modules directly rather than the protocol package's
-  root. It never falls back to an unvalidated parse.
+- **First paint under 150 ms** on an idle machine. The first screen paints from the snapshot in
+  `launcher.json` (§4.5), parsed with zod alone. The full catalog scan needs the protocol schemas,
+  and importing `@musterd/protocol` measured about 740 ms cold on 2026-10-01 (under load; zod alone
+  was 89 ms), so the scan runs after the first paint and replaces the rows when it lands. A first
+  run with no snapshot paints `finding seats…` and fills in.
+- **Enforced deterministically by an import-graph test:** the launcher entry's static import closure
+  may not include `@musterd/protocol`, `@opentelemetry/*`, `@clack/*`, `ws`, `client.ts`,
+  `config.ts` or any `commands/*` module. A bench script reports the measured time; a timing
+  assertion would be flaky in CI.
+- **No synchronous scans on the picker's thread.** The harness session enumerators (ADR 166) are
+  synchronous and measured 0.3–3 s per scan on this machine, which would freeze the keyboard, so
+  the launcher does not use them: live state comes from the roster alone.
 - **Under 16 ms from keypress to repaint.**
 - **Every live source is time-boxed** (about 300 ms for the daemon). A late answer still patches
   its row; a failed one shows `?` and never blocks the screen or a launch.
@@ -341,10 +391,10 @@ rollback, reports the step that failed, and launches nothing.
 | Daemon down                                                    | Local seats paint; the header says `offline · live state unavailable`; launching still works      |
 | Harness not installed                                          | Row greyed `claude not installed`, with an install hint; `tab` to another harness if the seat has one |
 | Broken seat (missing or invalid binding, retired launch marker) | `needs repair` and the exact command (`musterd harness configure`); nothing is repaired automatically |
-| Index entry whose folder is gone                               | Skipped; the footer says `2 stale · musterd init --prune-bindings`                                 |
+| Index entry whose folder is gone                               | Skipped; the footer says `2 stale · musterd init --prune-bindings --apply`                         |
 | Ambiguous name or typo                                         | Without a TTY, exit 2 with the candidates; on a TTY, the picker opens filtered; near a command, it suggests the command |
 | Live seat, no TTY                                              | Refused with exit 1 unless `--force`                                                               |
-| Seat creation fails partway                                    | Provisioning's existing rollback; the error names the failed step; nothing launches                |
+| Seat creation fails partway                                    | A minted credential is revoked; the error names the failed step; nothing launches; re-running finishes it |
 | `⌃C` or a crash inside the picker                              | The terminal is always restored (raw mode off, cursor shown) by an exit handler; exit 130          |
 | Narrow terminal, `NO_COLOR`, `TERM=dumb`                       | Columns drop off (path first, then harness); plain output with no color                           |
 
@@ -360,7 +410,7 @@ rollback, reports the step that failed, and launches nothing.
   `⌃C` reaches the child and not musterd, and the receipt line.
 - **End to end through `bin.js`:** `musterd seats --json`, `musterd <seat> --path`, the ambiguity
   and live-seat exit codes, and that piped bare `musterd` still prints help.
-- **Secrets:** the grep test in §4.8.
+- **Secrets:** the credential check in §4.8.
 - **Speed:** the import-graph test in §5.1.
 - **Dogfood:** nick uses `musterd` as his only way into a seat for a week. Every time he still
   types a path or `cd`, that is a bug against this goal.

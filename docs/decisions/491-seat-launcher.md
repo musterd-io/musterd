@@ -30,11 +30,15 @@ say whether a harness session is live.
 starts an interactive harness for a seat: the host backends spawn headless wakes only, and ADR 425's
 governed launch plan has no callers.
 
-Two measurements framed the design. `musterd --version` took 1.4–2.4 s against 0.16–0.7 s for
-`node -e 0` (load average 44 at the time; the ratio is the finding), because `bin.ts` statically
-imports all 65 command modules and OpenTelemetry. And one repo carries three names: the folder
-`agents`, the lanes' project `runtime` (from `git rev-parse --git-common-dir`), and the remote
-`musterd`.
+Four measurements framed the design, all taken 2026-10-01 on a machine at load average 44, so the
+ratios are the finding rather than the absolute times:
+
+- `musterd --version` took 1.4–2.4 s against 0.16–0.7 s for `node -e 0`, because `bin.ts`
+  statically imports all 53 command modules (65 import statements) and OpenTelemetry.
+- A cold import of `@musterd/protocol` took about 740 ms, zod alone 89 ms.
+- The session enumerators are synchronous and took 0.3–3 s per scan, blocking the event loop.
+- One repo carries three names: the folder `agents`, the lanes' project `runtime` (from
+  `git rev-parse --git-common-dir`), and the remote `musterd`.
 
 ## Problem
 
@@ -72,30 +76,38 @@ the terminal around every harness.
    gains a launch entry (fresh, resume with an id, resume without one); the launcher holds no
    per-harness switch. The native `musterd` harness is the headless `musterd host` loop and has no
    interactive entry. A human seat launches the member's login shell in the Workspace.
-6. **A seat that is already live is launched again only after a warning.** The picker names where
-   it is live (a tty here, or another node) and asks y/N; without a TTY it needs `--force`.
+6. **A seat that is already live is launched again only after a warning.** Live means a Presence on
+   the team's roster. The picker names where it is live (here or another node), with its harness and
+   since when, and asks y/N; without a TTY it needs `--force`.
 7. **One read model for every face.** A seat catalog built from `config.bindings` plus a scan of the
-   ADR 447 layout, overlaid with the roster, local liveness and recents, is what the picker shows
-   and what `musterd seats [--json]` prints. It parses `binding.json` through `BindingSchema` and
-   copies named non-secret fields only; no secret reaches the catalog or its output. Future faces,
-   such as a macOS app, read this catalog rather than enumerating seats themselves.
-8. **Recents live in `~/.musterd/launcher.json`.** Machine-local, secret-free, located through
-   `machineStatePath` with a `MUSTERD_LAUNCHER` override (ADR 190), parsed through a zod schema on
-   read and validated before every write. A corrupt file is set aside and rebuilt empty; it never
-   blocks a launch. "Last used" is the newest of this file, the recorded session start, and the
-   newest transcript.
-9. **The launcher stays fast by construction.** `bin.ts` loads commands lazily. The launcher entry's
-   static import closure may not include `@opentelemetry/*`, `@clack/*` or any `commands/*` module,
-   and a test enforces it. The first screen paints from disk; live sources load and answer after it,
-   each time-boxed. The target is a first paint under 150 ms on an idle machine, reported by a bench
+   ADR 447 layout, overlaid with the roster and recents, is what the picker shows and what
+   `musterd seats [--json]` prints. It parses `binding.json` through `BindingSchema` and copies named
+   non-secret fields only; no secret reaches the catalog or its output. Future faces, such as a
+   macOS app, read this catalog rather than enumerating seats themselves.
+8. **Recents and a catalog snapshot live in `~/.musterd/launcher.json`.** Machine-local and
+   secret-free (the snapshot carries no harness session id), beside `config.json` so the
+   `MUSTERD_CONFIG` override isolates it in tests (ADR 190), parsed through a zod schema on read and
+   validated before every write. A corrupt file is set aside and rebuilt empty; it never blocks a
+   launch. "Last used" is the newer of this file and the session start recorded in `binding.json`.
+9. **The launcher stays fast by construction.** `bin.ts` loads commands lazily. The first screen
+   paints from the snapshot, parsed with zod alone; the catalog scan, which needs the protocol
+   schemas, and the roster reads run after it, each time-boxed, and patch rows in place. The
+   launcher entry's static import closure may not include `@musterd/protocol`, `@opentelemetry/*`,
+   `@clack/*`, `ws`, `client.ts`, `config.ts` or any `commands/*` module, and a test enforces it.
+   Nothing synchronous and slow runs on the picker's thread, so the launcher does not use the session
+   enumerators. The target is a first paint under 150 ms on an idle machine, reported by a bench
    script rather than asserted in CI.
 10. **Creating a seat reuses `musterd agent` and fixes it.** "Set up here" (an agent member with no
-    Workspace on this machine) and `+ new seat` take the `musterd agent` path, which also gains two
-    fixes: it writes `provisioned.json`, and it wires harnesses through the reconcile engine instead
-    of the single-harness `harness.configure`. A new Workspace is a `git worktree` of a checkout of
-    the same project already on this machine, started from the remote's default branch, not from
-    whatever branch that checkout has open. A project with no checkout on this machine cannot be set
-    up from the launcher.
+    Workspace on this machine) and `+ new seat` take the `musterd agent` path, which also gains three
+    fixes: it writes `provisioned.json`; it wires harnesses through the reconcile engine instead of
+    the single-harness `harness.configure`, whose empty environment strips the
+    `MUSTERD_LAUNCH_SURFACE` marker from the repo-shared Claude Code entry (ADR 286); and a failure
+    after the credential is minted revokes that credential. It acts as you, from your own human
+    seat's Workspace in the same team and project, because the CLI writes only as a folder-bound
+    identity (ADR 036, ADR 442); without one, the launcher says how to make it. A new Workspace is a
+    `git worktree` of that checkout, started from the remote's default branch, not from whatever
+    branch the checkout has open. A project with no checkout on this machine cannot be set up from
+    the launcher.
 11. **The glossary gains two words.** **Launcher**: the seat picker and the code that starts a seat's
     harness in its Workspace; not the harness registration that marks a Presence's Surface
     (ADR 286). **Metaharness**: musterd owning the process and terminal around any harness, which
@@ -147,10 +159,12 @@ the terminal around every harness.
   (Decision 9). The local evidence is `~/.musterd/launcher.json` and the receipt line, and neither
   holds a secret.
 - **Eval:** three automated checks run in CI.
-  - *Secrets.* A test greps every catalog and `--json` output for `mskey_`, `msgr_`, `mscr_` and
-    `msla_`. Any hit fails the build.
+  - *Secrets.* A test runs every catalog, snapshot and `--json` output through
+    `containsMusterdCredential`, which knows every registered credential prefix. Any hit fails the
+    build.
   - *Import closure.* The import-graph test fails the build when the launcher entry's static
-    closure reaches `@opentelemetry/*`, `@clack/*` or `commands/*`.
+    closure reaches `@musterd/protocol`, `@opentelemetry/*`, `@clack/*`, `ws`, `client.ts`,
+    `config.ts` or `commands/*`.
   - *Terminal frames.* Snapshot tests hold every picker screen to its frame in
     `docs/design/figma-brief-terminal.md`.
 - **Experiment:** two measured claims, each with a falsifier.
