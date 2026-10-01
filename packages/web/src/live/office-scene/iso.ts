@@ -78,7 +78,7 @@ export function nearDepth(lx: number, ly: number, w: number, d: number): number 
  * it (`SCENE_DROP`). Fitting only the floor diamond (the old behaviour) let the wall tops clip off the
  * top of the panel at wide/short aspect ratios, which is why the back corner was getting cut off.
  */
-export function fitFloor(panelW: number, panelH: number): Fit {
+export function fitFloor(panelW: number, panelH: number, zoom = 1): Fit {
   const projW = FLOOR * KX * 2;
   const projH = SCENE_RISE + FLOOR * KY * 2 + SCENE_DROP;
   // 0.94 → 0.96 (nick, 2026-08-03): the scene is height-bound at every aspect the product uses, so this
@@ -86,10 +86,12 @@ export function fitFloor(panelW: number, panelH: number): Fit {
   // It stays under 1 because the margin is what keeps the wall tops and the contact shadow off the panel
   // edge — the scene is drawn to its box, not inset within it.
   const margin = 0.96;
-  const scale = Math.max(
-    0.05,
-    Math.min((panelW * margin) / projW, (panelH * margin) / projH),
-  );
+  /* `zoom` > 1 deliberately crops: the whole room no longer fits, and what leaves the frame first is
+     what the fit centres away from — the back-wall tops, the front floor tip, the empty corners.
+     /broadcast passes 1.09 (nick, 2026-10-01, chosen from mocked arms 1.00–1.25): the largest
+     centred step that keeps the entrance door whole. Constant, so every sprite key stays valid. */
+  const scale =
+    Math.max(0.05, Math.min((panelW * margin) / projW, (panelH * margin) / projH)) * zoom;
   const ox = panelW / 2;
   // Centre the full box vertically. Its top (the wall tops) sits `SCENE_RISE·scale` above the floor's
   // back corner, so place the back corner that far below the box top → symmetric margins top and bottom.
