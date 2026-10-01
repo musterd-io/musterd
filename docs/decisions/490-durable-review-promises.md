@@ -82,6 +82,10 @@ Follows-up: update and review the implementation plan after the A.14 amendment i
   The design spec and SPEC A.14 now add a member-authenticated Team read for open promises with
   only request id, requester, owner, and acceptance time; the audit abstains when that route is
   unsupported and treats a supported empty list as zero open promises.
+- Dated note (2026-10-01): the protocol contract is implemented in Lane
+  `01M3TWJWBTPETEV8RSZDTRZS9N`, PR #1939, at feature epoch 28: shared review-promise row schemas,
+  root `request_help` `meta.review` validation, and optional no-default `NextBrief` arrays. This
+  PR has not merged; server derivation remains in a later implementation lane.
 
 ## Observability & Evaluation
 
