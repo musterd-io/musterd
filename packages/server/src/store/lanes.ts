@@ -59,6 +59,8 @@ interface LaneRow {
   follows_up_json: string | null;
   /** Why the lane was dropped (ADR 487, v81). */
   abandon_reason: string | null;
+  /** The seat session's unfinished to-dos (ADR 487 §5.2, v82): JSON `{items, at}`; null = none. */
+  unfinished_todos_json: string | null;
   state: string;
   created_by: string;
   created_at: number;
@@ -97,6 +99,9 @@ function rowToLane(row: LaneRow, teamSlug: string): Lane {
       ? { follows_up: JSON.parse(row.follows_up_json) as Lane['follows_up'] }
       : {}),
     ...(row.abandon_reason ? { abandon_reason: row.abandon_reason } : {}),
+    ...(row.unfinished_todos_json
+      ? { unfinished_todos: JSON.parse(row.unfinished_todos_json) as Lane['unfinished_todos'] }
+      : {}),
     created_by: row.created_by,
     created_at: row.created_at,
     claimed_at: row.claimed_at,
@@ -260,6 +265,7 @@ export async function openLane(
     parked_json: null,
     follows_up_json: null,
     abandon_reason: null,
+    unfinished_todos_json: null,
     state: claim ? 'claimed' : 'open',
     created_by: createdBy,
     created_at: now,
@@ -481,6 +487,14 @@ async function updateLaneInTx(
   // after the move in, kept while it stays abandoned, cleared if the lane is ever reopened.
   const abandonReason =
     state !== 'abandoned' ? null : (patch.abandon_reason ?? existing.abandon_reason ?? null);
+  // ADR 487 §5.2: the hook sends the whole list (last write wins); an empty one clears it. Kept on
+  // a closed lane, so the acceptor and the weekly sweep can still read what was left.
+  const todos =
+    patch.unfinished_todos === undefined
+      ? (existing.unfinished_todos ?? null)
+      : patch.unfinished_todos.length === 0
+        ? null
+        : { items: patch.unfinished_todos, at: now };
   const risk = patch.risk ?? existing.risk;
   const stakes = patch.stakes ?? existing.stakes;
   // ADR 244: editing stakes takes OWNERSHIP of the value. A worker overriding a policy-defaulted
@@ -507,6 +521,7 @@ async function updateLaneInTx(
     parked_json: parked ? JSON.stringify(parked) : null,
     follows_up_json: followsUp !== null ? JSON.stringify(followsUp) : null,
     abandon_reason: abandonReason,
+    unfinished_todos_json: todos !== null ? JSON.stringify(todos) : null,
     state,
     // claimed_at describes the CURRENT tenure: sticky while held, cleared by the release above so a
     // re-claim stamps fresh rather than inheriting the previous holder's timestamp.
@@ -551,6 +566,7 @@ async function updateLaneInTx(
     'parked_json',
     'follows_up_json',
     'abandon_reason',
+    'unfinished_todos_json',
     'state',
     'claimed_at',
     'resolved_at',
@@ -604,6 +620,7 @@ const AUDITED_LANE_FIELDS = [
   'parked',
   'follows_up',
   'abandon_reason',
+  'unfinished_todos',
 ] as const;
 
 /** Which auditable fields differ between two reads of a lane (arrays/objects by value). */

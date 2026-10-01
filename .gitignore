@@ -46,6 +46,7 @@ coverage/
 # adapter-vs-daemon skew (izzo, 2026-09-25, on 52a9cfa).
 **/.musterd/trace-policy.json
 **/.musterd/trace-tail.json
+**/.musterd/todos.json
 # ADR 442 wall 1c: the per-session ledger of subagents this session spawned (the Agent PostToolUse
 # hook writes it; the SendMessage gate reads it). Machine-local and per-session — unignored, it
 # stamped every seat's build `<sha>-dirty` (ryder, 2026-09-25, on 434c9625).

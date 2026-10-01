@@ -1998,6 +1998,17 @@ export const MIGRATIONS: Migration[] = [
         db.exec('ALTER TABLE lanes ADD COLUMN abandon_reason TEXT');
     },
   },
+  {
+    // v82 — ADR 487 §5.2: the seat session's unfinished to-do snapshot on its lane
+    // (`unfinished_todos_json`: `{items, at}`, last write wins; null reads as none). Nullable, no
+    // backfill.
+    version: 82,
+    up: (db) => {
+      const laneCols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
+      if (!laneCols.includes('unfinished_todos_json'))
+        db.exec('ALTER TABLE lanes ADD COLUMN unfinished_todos_json TEXT');
+    },
+  },
 ];
 
 function currentVersion(db: Database): number {

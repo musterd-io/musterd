@@ -213,6 +213,60 @@ withDrivers('follows_up', (o) => {
     });
   });
 
+  describe('unfinished_todos — the session snapshot (ADR 487 §5.2)', () => {
+    it('stores the list with a stamp, replaces it whole, and clears on an empty list', async () => {
+      const { db, team } = await seed();
+      const l = await openLane(db, team.id, team.slug, 'dolly', { title: 'fix it', claim: true });
+      const a = (await updateLane(
+        db,
+        team.id,
+        l.id,
+        team.slug,
+        { unfinished_todos: ['wire the hook', 'docs'] },
+        7,
+      ))!;
+      expect(a.unfinished_todos).toEqual({ items: ['wire the hook', 'docs'], at: 7 });
+      const b = (await updateLane(
+        db,
+        team.id,
+        l.id,
+        team.slug,
+        { unfinished_todos: ['docs'] },
+        8,
+      ))!;
+      expect(b.unfinished_todos).toEqual({ items: ['docs'], at: 8 });
+      const c = (await updateLane(db, team.id, l.id, team.slug, { unfinished_todos: [] }))!;
+      expect(c.unfinished_todos).toBeUndefined();
+    });
+
+    it('S1: a one-shot lane carrying unfinished to-dos must answer follows_up to close', async () => {
+      const { db, team } = await seed();
+      const l = await openLane(db, team.id, team.slug, 'dolly', { title: 'fix it', claim: true });
+      const withTodos = (await updateLane(db, team.id, l.id, team.slug, {
+        unfinished_todos: ['docs'],
+      }))!;
+      const err = await refusal(() =>
+        decideFollowsUp(db, team.id, worker, withTodos, { state: 'done' }),
+      );
+      expect(err.message).toContain('1 unfinished to-do');
+      await expect(
+        decideFollowsUp(db, team.id, worker, withTodos, { state: 'done', follows_up: 'none' }),
+      ).resolves.toBe(undefined);
+    });
+
+    it('the acceptor sees what was left unfinished', async () => {
+      const { db, team } = await seed();
+      const l = await openLane(db, team.id, team.slug, 'dolly', { title: 'fix it', claim: true });
+      const sub = (await updateLane(db, team.id, l.id, team.slug, {
+        unfinished_todos: ['docs'],
+        follows_up: 'none',
+      }))!;
+      const notice = await followsUpNotice(db, team.id, sub);
+      expect(notice).toContain('Follows up: none');
+      expect(notice).toContain('Unfinished to-dos at submit: docs');
+    });
+  });
+
   describe('followsUpNotice — what the acceptor sees', () => {
     it('lists each named lane with its state, and a drop with its reason', async () => {
       const { db, team } = await seed();

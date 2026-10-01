@@ -312,7 +312,8 @@ Something addressed to a human rings them through surfaces musterd owns, never a
   abandoned one carrying `abandon_reason`; goalless ones join the closing lane's goal inside the
   store's write transaction (so the hub path does it too), and a goalless lane naming goalless ones is
   refused with the `goal_id` / `team_goal_declare` repair. The acceptance ask carries the answer
-  (`followsUpNotice`).
+  (`followsUpNotice`). S1 joins the signal: a lane carrying `unfinished_todos` (§5.2, written by the
+  harness hook, last write wins) must answer too, and the ask lists the first five.
 - **Repo capture (ADR 373 inc 2).** `POST /teams/:slug/seeds/repo` `{ref, body, captured_at?,
   lane_id?}` — a document-recorded intention as a Seed with `source: 'repo'`, idempotent on `ref`
   (201 created / 200 already held); `lane_id` links + promotes. Any seated Member.

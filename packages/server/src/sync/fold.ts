@@ -236,6 +236,7 @@ async function projectLaneEvent(
         parked: 'parked_json',
         follows_up: 'follows_up_json',
         abandon_reason: 'abandon_reason',
+        unfinished_todos: 'unfinished_todos_json',
       };
       for (const [field, change] of Object.entries(changes)) {
         const col = column[field];
@@ -245,7 +246,12 @@ async function projectLaneEvent(
         else if (field === 'risk')
           value = Array.isArray(value) && value.length > 0 ? JSON.stringify(value) : null;
         else if (field === 'stakes') value = value === 'normal' ? null : value;
-        else if (field === 'merged' || field === 'parked' || field === 'follows_up')
+        else if (
+          field === 'merged' ||
+          field === 'parked' ||
+          field === 'follows_up' ||
+          field === 'unfinished_todos'
+        )
           value = value === null ? null : JSON.stringify(value);
         await db.run(`UPDATE lanes SET ${col} = ?, updated_at = ? WHERE team_id = ? AND id = ?`, [
           value,

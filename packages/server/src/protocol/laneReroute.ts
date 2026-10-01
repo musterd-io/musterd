@@ -99,6 +99,14 @@ export function priorOwnerNotice(reviewer: string, priorOwners: string[]): strin
  * lane declared itself one part of several. Silent otherwise — a one-shot lane has nothing to show.
  */
 export async function followsUpNotice(db: Driver, teamId: string, lane: Lane): Promise<string> {
+  const todos = lane.unfinished_todos?.items ?? [];
+  const left = todos.length
+    ? ` Unfinished to-dos at submit: ${todos.slice(0, 5).join('; ')}${todos.length > 5 ? `; +${todos.length - 5} more` : ''}.`
+    : '';
+  return (await followsUpAnswer(db, teamId, lane)) + left;
+}
+
+async function followsUpAnswer(db: Driver, teamId: string, lane: Lane): Promise<string> {
   const answer = lane.follows_up ?? null;
   if (answer === null) return '';
   if (answer === 'none')
