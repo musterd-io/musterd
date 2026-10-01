@@ -1,77 +1,19 @@
 #!/usr/bin/env node
-import { startTelemetry, telemetryEnabled } from '@musterd/telemetry';
-import { SpanStatusCode, trace } from '@opentelemetry/api';
-import { parseArgs } from './args.js';
-import { agentCommand } from './commands/agent.js';
-import { archaeologyCommand } from './commands/archaeology.js';
-import { auditCommand } from './commands/audit.js';
-import { availabilityCommand } from './commands/availability.js';
-import { boardCommand } from './commands/board.js';
-import { broadcastCommand } from './commands/broadcast.js';
-import { claimCommand } from './commands/claim.js';
-import { codexHookCommand } from './commands/codexHook.js';
-import { doneCommand } from './commands/done.js';
-import { doorbellCommand } from './commands/doorbell.js';
-import { fmtCommand } from './commands/fmt.js';
-import { gateCommand } from './commands/gate.js';
-import { goalCommand } from './commands/goal.js';
-import { harnessCommand } from './commands/harness.js';
-import { reachabilityNudge } from './commands/helpers.js';
-import { hostCommand } from './commands/host.js';
-import { huddleCommand } from './commands/huddle.js';
-import { humanCommand } from './commands/human.js';
-import { inboxCommand } from './commands/inbox.js';
-import { initCommand } from './commands/init.js';
-import { insightCommand } from './commands/insight.js';
-import { integrationCommand } from './commands/integration.js';
-import { laneCommand, lanesCommand } from './commands/lane.js';
-import { liveCommand } from './commands/live.js';
-import { memoryCommand } from './commands/memory.js';
-import { nextCommand } from './commands/next.js';
-import { nodeCommand } from './commands/node.js';
-import { notifyCommand } from './commands/notify.js';
-import { nudgeCommand } from './commands/nudge.js';
-import { reapCommand } from './commands/reap.js';
-import { reclaimCommand } from './commands/reclaim.js';
-import { reloadCommand } from './commands/reload.js';
-import { reportCommand } from './commands/report.js';
-import { requestsCommand } from './commands/requests.js';
-import { resetCommand } from './commands/reset.js';
-import { residencyCommand } from './commands/residency.js';
-import { roleCommand } from './commands/role.js';
-import { seedCommand } from './commands/seed.js';
-import { sendCommand } from './commands/send.js';
-import { serveCommand } from './commands/serve.js';
-import { serviceCommand } from './commands/service.js';
-import { sessionCommand } from './commands/session.js';
-import { statusCommand } from './commands/status.js';
-import { storeCommand } from './commands/store.js';
-import { streamCommand } from './commands/stream.js';
-import { surfaceCommand } from './commands/surface.js';
-import { teamCommand } from './commands/team.js';
-import { toolkitCommand } from './commands/toolkit.js';
-import { traceCommand } from './commands/trace.js';
-import { unbindCommand } from './commands/unbind.js';
-import { uninstallCommand } from './commands/uninstall.js';
-import { wakeContextCommand } from './commands/wake-context.js';
-import { whoamiCommand } from './commands/whoami.js';
-import { wireCommand } from './commands/wire.js';
+import { parseArgs, type Parsed } from './args.js';
+import { COMMANDS, isCommand } from './commandTable.js';
 import { CliError } from './errors.js';
 import { exitAfterFlush } from './exit.js';
-import {
-  nearestCommand,
-  renderCommandHelp,
-  renderGroupHelp,
-  renderHelp,
-  renderHelpJson,
-  wantsCommandHelp,
-} from './render/help.js';
+import { nodeVersionTooOld } from './nodeVersion.js';
 import { setColorEnabled, theme } from './render/theme.js';
-import { emitTerminalTitle, terminalTitleFor } from './render/title.js';
 import { sym } from './render/ui.js';
-import { nodeVersionTooOld } from './runtime.js';
 import { cliVersion } from './version.js';
 
+/*
+ * Everything heavy loads on demand (ADR 491): a command module only when it runs, help and its
+ * catalog only when help is asked for, telemetry only when an OTLP endpoint is configured, and
+ * the reachability nudge and the tab title only after a command returned. `importClosure.test.ts`
+ * holds this file's static import graph to that.
+ */
 async function main(argv: string[]): Promise<number> {
   // Honor `--no-color` before any render. NO_COLOR / non-TTY are handled by picocolors' auto-detect;
   // this is the one place the flag is wired, and every command renders through the theme seam.
@@ -80,9 +22,8 @@ async function main(argv: string[]): Promise<number> {
   const command = argv[0];
   const rest = parseArgs(argv.slice(1));
 
-  // `--version`/`-v`/`version` print the CLI version and exit (ADR 067) — the first thing a fresh
-  // agent reaches for. Checked before help so `musterd --version` isn't swallowed by the help path.
-  // Allowed on Node <22 so a bad install can still identify itself (ADR 156).
+  // `--version`/`-v`/`version` print the CLI version and exit (ADR 067) — checked before help so
+  // `musterd --version` isn't swallowed by the help path. Allowed on Node <22 (ADR 156).
   if (
     command === 'version' ||
     command === '--version' ||
@@ -101,8 +42,7 @@ async function main(argv: string[]): Promise<number> {
     return 1;
   }
 
-  // `--help`/`-h` anywhere prints usage and exits — never runs the command (e.g. `notify --help`
-  // must not launch the resident notifier).
+  // `--help`/`-h` anywhere prints usage and exits — never runs the command.
   const wantsHelp =
     !command ||
     command === 'help' ||
@@ -111,73 +51,66 @@ async function main(argv: string[]): Promise<number> {
     rest.flags['help'] === true ||
     argv.slice(1).some((a) => a === '--help' || a === '-h');
   if (wantsHelp) {
-    // `help --json` → the machine-readable catalog (for agents/agentic workflows); `help <command>`
-    // or `help <group>` → focused detail; otherwise the grouped overview (`--full` inlines the rest).
+    const help = await import('./render/help.js');
     if (rest.flags['json'] === true) {
-      process.stdout.write(renderHelpJson() + '\n');
+      process.stdout.write(help.renderHelpJson() + '\n');
       return 0;
     }
     const topic = command === 'help' ? rest.positionals[0] : undefined;
     if (topic) {
-      const detail = renderCommandHelp(topic) ?? renderGroupHelp(topic);
+      const detail = help.renderCommandHelp(topic) ?? help.renderGroupHelp(topic);
       if (detail) {
         process.stdout.write(detail + '\n');
         return 0;
       }
-      // Unknown topic — fall through to the overview, but say what we couldn't find first.
-      const near = nearestCommand(topic);
+      const near = help.nearestCommand(topic);
       process.stderr.write(
         `${theme.warn(sym.warn)} no command "${topic}"${near ? ` — did you mean "${near}"?` : ''}\n`,
       );
     }
-    process.stdout.write(renderHelp({ full: rest.flags['full'] === true }) + '\n');
+    process.stdout.write(help.renderHelp({ full: rest.flags['full'] === true }) + '\n');
     return 0;
   }
 
-  // The OTHER word order: `musterd agent help`. Checked here, before dispatch, because the command
-  // itself cannot tell a help request from an argument — `agent` reads that positional as a seat name
-  // and provisions a worktree for it. See `wantsCommandHelp` for the incident this closes.
-  if (wantsCommandHelp(command, rest.positionals)) {
-    process.stdout.write(renderCommandHelp(command)! + '\n');
-    return 0;
+  // The other word order: `musterd agent help`. `wantsCommandHelp` only ever answers yes to exactly
+  // one `help` positional, so the help module loads only then.
+  if (rest.positionals.length === 1 && rest.positionals[0] === 'help') {
+    const { renderCommandHelp, wantsCommandHelp } = await import('./render/help.js');
+    if (wantsCommandHelp(command, rest.positionals)) {
+      process.stdout.write(renderCommandHelp(command)! + '\n');
+      return 0;
+    }
   }
 
   const code = await instrumentedDispatch(command, rest);
-  // Agent-side reachability (ADR 046): append a one-line nudge to stderr when a directed act is
-  // waiting for the acting member, so a heads-down agent that never runs `inbox` still sees it.
-  // Best-effort — never fails the command, never touches stdout (keeps --json/pipes clean).
+  // Agent-side reachability (ADR 046) and the seat tab title (ADR 160): best-effort postambles.
+  const { reachabilityNudge } = await import('./commands/helpers.js');
   const nudge = await reachabilityNudge(command, rest);
   if (nudge) process.stderr.write(nudge + '\n');
-  // Seat tab title (ADR 160): retitle the hosting terminal after every acting command, so any
-  // terminal-hosted harness that shells out to musterd labels itself. Best-effort; /dev/tty only.
+  const { emitTerminalTitle, terminalTitleFor } = await import('./render/title.js');
   const title = terminalTitleFor(command, rest);
   if (title) emitTerminalTitle(title);
   return code;
 }
 
 /**
- * CLI telemetry (ADR 089): boot the shared SDK and run the command inside a `musterd.cli.command`
- * span — the command word only, never argv (bodies, tokens and paths live there). Off by default
- * (no OTLP endpoint → plain dispatch). Two carve-outs: `serve` (the daemon owns that process's
- * telemetry and its service name) and `inbox --interrupt-check` (the ADR 088 tool-boundary probe
- * has a sub-50ms budget an SDK boot would blow). Shutdown force-flushes with a hard cap — a
- * short-lived process must never hold its exit hostage to a dead collector.
+ * CLI telemetry (ADR 089): run the command inside a `musterd.cli.command` span when an OTLP
+ * endpoint is configured — the command word only, never argv. Skipped for `serve` (the daemon owns
+ * that process's telemetry), `codex-hook`, `inbox --interrupt-check`, `gate` and `trace` (each rides
+ * a tool-call budget an SDK boot would blow). Both modules load only when telemetry may run.
  */
-async function instrumentedDispatch(
-  command: string,
-  rest: ReturnType<typeof parseArgs>,
-): Promise<number> {
+async function instrumentedDispatch(command: string, rest: Parsed): Promise<number> {
   const skip =
     command === 'serve' ||
     command === 'codex-hook' ||
     (command === 'inbox' && rest.flags['interrupt-check'] === true) ||
-    // The PreToolUse gate (ADR 150) rides every tool call like the interrupt probe — an SDK boot would
-    // blow its budget and add latency to the loop. Best-effort + fail-open; no telemetry span.
     command === 'gate' ||
-    // The trace tap (ADR 445 R1) rides the hooks the gate does not; same budget, same reasoning.
     command === 'trace';
-  if (skip || !telemetryEnabled()) return dispatch(command, rest);
+  if (skip) return dispatch(command, rest);
+  const { startTelemetry, telemetryEnabled } = await import('@musterd/telemetry');
+  if (!telemetryEnabled()) return dispatch(command, rest);
   const telemetry = await startTelemetry({ serviceName: 'musterd-cli' });
+  const { SpanStatusCode, trace } = await import('@opentelemetry/api');
   try {
     return await trace
       .getTracer('musterd-cli')
@@ -201,122 +134,16 @@ async function instrumentedDispatch(
   }
 }
 
-async function dispatch(command: string, rest: ReturnType<typeof parseArgs>): Promise<number> {
-  switch (command) {
-    case 'init':
-      return initCommand(rest);
-    case 'agent':
-      return agentCommand(rest);
-    case 'human':
-      return humanCommand(rest);
-    case 'audit':
-      return auditCommand(rest);
-    case 'archaeology':
-      return archaeologyCommand(rest);
-    case 'serve':
-      return serveCommand(rest);
-    case 'service':
-      return serviceCommand(rest);
-    case 'broadcast':
-      return broadcastCommand(rest);
-    case 'stream':
-      return streamCommand(rest);
-    case 'integration':
-      return integrationCommand(rest);
-    case 'team':
-      return teamCommand(rest);
-    case 'send':
-      return sendCommand(rest);
-    case 'lane':
-      return laneCommand(rest);
-    case 'huddle':
-      return huddleCommand(rest);
-    case 'seed':
-      return seedCommand(rest);
-    case 'lanes':
-      return lanesCommand(rest);
-    case 'next':
-      return nextCommand(rest);
-    case 'node':
-      return nodeCommand(rest);
-    case 'done':
-      return doneCommand(rest);
-    case 'goal':
-      return goalCommand(rest);
-    case 'report':
-      return reportCommand(rest);
-    case 'board':
-      return boardCommand(rest);
-    case 'live':
-      return liveCommand(rest);
-    case 'inbox':
-      return inboxCommand(rest);
-    case 'nudge':
-      return nudgeCommand(rest);
-    case 'reap':
-      return reapCommand(rest);
-    case 'whoami':
-      return whoamiCommand(rest);
-    case 'store':
-      return storeCommand(rest);
-    case 'status':
-      return statusCommand(rest);
-    case 'availability':
-      return availabilityCommand(rest);
-    case 'doorbell':
-      return doorbellCommand(rest);
-    case 'insight':
-      return insightCommand(rest);
-    case 'memory':
-      return memoryCommand(rest);
-    case 'wake-context':
-      return wakeContextCommand(rest);
-    case 'notify':
-      return notifyCommand(rest);
-    case 'claim':
-      return claimCommand(rest);
-    case 'codex-hook':
-      return codexHookCommand(rest);
-    case 'fmt':
-      return fmtCommand(rest);
-    case 'unbind':
-      return unbindCommand(rest);
-    case 'reload':
-      return reloadCommand(rest);
-    case 'reclaim':
-      return reclaimCommand(rest);
-    case 'requests':
-      return requestsCommand(rest);
-    case 'residency':
-      return residencyCommand(rest);
-    case 'session':
-      return sessionCommand(rest);
-    case 'gate':
-      return gateCommand(rest);
-    case 'trace':
-      return traceCommand(rest);
-    case 'harness':
-      return harnessCommand(rest);
-    case 'surface':
-      return surfaceCommand(rest);
-    case 'host':
-      return hostCommand(rest);
-    case 'wire':
-      return wireCommand(rest);
-    case 'role':
-      return roleCommand(rest);
-    case 'toolkit':
-      return toolkitCommand(rest);
-    case 'reset':
-      return resetCommand(rest);
-    case 'uninstall':
-      return uninstallCommand(rest);
-    default: {
-      const near = nearestCommand(command);
-      const suggestion = near ? ` — did you mean "${near}"?` : '';
-      throw new CliError(`unknown command "${command}"${suggestion}  ·  musterd help`, 2);
-    }
+async function dispatch(command: string, rest: Parsed): Promise<number> {
+  const load = isCommand(command) ? COMMANDS[command] : undefined;
+  if (!load) {
+    const { nearestCommand } = await import('./render/help.js');
+    const near = nearestCommand(command);
+    const suggestion = near ? ` — did you mean "${near}"?` : '';
+    throw new CliError(`unknown command "${command}"${suggestion}  ·  musterd help`, 2);
   }
+  const run = await load();
+  return run(rest);
 }
 
 main(process.argv.slice(2))
