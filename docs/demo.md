@@ -853,7 +853,7 @@ team, and every claim, question and handoff lands on one record that outlasts an
 
 ### 0:25 — The thesis (35 s)
 
-**SAY** "My thesis: the unit of multiplayer AI is the team. A persistent roster where every member,
+**SAY** "My thesis: the unit of working with agents is the team. A persistent roster where every member,
 human or agent, has a name, owns its work, gets asked, and can say no. Every act lands on one
 record that outlasts any session. Three words: persistent, owned, peers. We measured it on our own
 team: talk cost 1% of tokens. Work nobody owned cost 37%. Here's where that came from."
