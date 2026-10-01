@@ -465,7 +465,7 @@
     svg.innerHTML=r+finder(0,0)+finder(22,0)+finder(0,22);})();
 
   // huddle ring (live slide)
-  (function(){const svg=document.getElementById('huddle');const M=[['izzo','#7C5CFF'],['miley','#0EA5A4'],['big-body','#16A34A'],['wanderer','#DB2777'],['ghost','#E4572E'],['sloane','#9333EA']];
+  (function(){const svg=document.getElementById('huddle');const M=[['izzo','#7C5CFF'],['miley','#0EA5A4'],['ghost','#E4572E'],['ryder','#16A34A'],['wanderer','#DB2777'],['lazara','#9333EA']];
     let h='';const R=130;
     M.forEach((m,k)=>{const a=-Math.PI/2+k*2*Math.PI/M.length;h+=`<line class="spoke" x1="${Math.cos(a)*44}" y1="${Math.sin(a)*44}" x2="${Math.cos(a)*(R-26)}" y2="${Math.sin(a)*(R-26)}"/>`});
     h+='<circle r="44" fill="#18181B"/><text text-anchor="middle" dy="5" class="lbl" style="fill:#E1AD01">huddle</text>';
