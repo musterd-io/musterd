@@ -79,6 +79,15 @@ that declined the spike lane.
   an ungrouped correlated column, `instr`, scalar `MAX(a, b)` — which is decision 3 doing its job
   (rules and the source fixes: `01-data-model.md` §Two dialects). Hook-path cost of the async
   layer: 1.05× worst at p95 ([`docs/perf/async-store-layer.md`](../perf/async-store-layer.md)).
+- **2026-09-30 (plan 1B, lane 01M3SQHCJN):** Postgres is a real backend. `pg` behind the Driver
+  ([ADR 486](486-pg-driver-dependency.md)); `forTeam` / `asOperator` stamp role and `app.team_id`
+  per transaction, and every team-owned table carries a derived, forced RLS policy. The schema is a
+  frozen v80 baseline plus one portable ladder from v81 (ADR 487's two lane migrations moved into
+  it; `team_id` on the four member-owned tables is v83); both engines refuse a newer schema
+  (spec §6). Every `packages/server` test file runs on SQLite and PGlite; the hybrid test handle is
+  gone. On real Neon Postgres ([`docs/perf/neon-pass.md`](../perf/neon-pass.md)) the tenancy leak
+  test passed 4/4, and the pass found one bug the double hid — `pg` returns BIGINT as a string —
+  fixed in the driver. Ten more SQLite-isms surfaced and were fixed in source.
 
 ## Observability & Evaluation
 

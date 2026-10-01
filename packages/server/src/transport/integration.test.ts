@@ -3077,12 +3077,12 @@ withDrivers('integration', (_o, kind) => {
       });
 
       async function occupyAda(
-      ws: TestWs,
-      agentKey: string,
-      grant: string,
-      workspace: string,
-      surface = 'claude-code',
-    ) {
+        ws: TestWs,
+        agentKey: string,
+        grant: string,
+        workspace: string,
+        surface = 'claude-code',
+      ) {
         ws.send({
           type: 'claim',
           v: PROTOCOL_VERSION,
@@ -3097,33 +3097,40 @@ withDrivers('integration', (_o, kind) => {
       }
 
       it('a durable same-workspace CLI wait does NOT reap the live adapter — a different surface is not a reload (ADR 489)', async () => {
-      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
-      await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, team.json.human_credential);
-      const grant = await standingGrant(team.json.human_credential, 'Ada');
+        const team = await post('/teams', {
+          slug: 'dawn',
+          creator: { name: 'nick', kind: 'human' },
+        });
+        await post(
+          '/teams/dawn/members',
+          { name: 'Ada', kind: 'agent' },
+          team.json.human_credential,
+        );
+        const grant = await standingGrant(team.json.human_credential, 'Ada');
 
-      const adapter = new TestWs();
-      await adapter.open();
-      await occupyAda(adapter, team.json.agent_key, grant, 'repo@main');
+        const adapter = new TestWs();
+        await adapter.open();
+        await occupyAda(adapter, team.json.agent_key, grant, 'repo@main');
 
-      // `musterd inbox --wait` from the same workspace: surface cli, and it stays past the grace.
-      const wait = new TestWs();
-      await wait.open();
-      await occupyAda(wait, team.json.agent_key, grant, 'repo@main', 'cli');
+        // `musterd inbox --wait` from the same workspace: surface cli, and it stays past the grace.
+        const wait = new TestWs();
+        await wait.open();
+        await occupyAda(wait, team.json.agent_key, grant, 'repo@main', 'cli');
 
-      await expect(adapter.waitFor('error', 400)).rejects.toThrow(/timeout/);
-      await expect(wait.waitFor('error', 50)).rejects.toThrow(/timeout/);
-      const teamId = (await getTeamBySlug(server.store, 'dawn'))!.id;
-      expect(
-        (await listAudit(server.store, teamId)).some(
-          (r) => r.action === 'claim.duplicate_workspace' || r.action === 'claim.superseded',
-        ),
-      ).toBe(false);
+        await expect(adapter.waitFor('error', 400)).rejects.toThrow(/timeout/);
+        await expect(wait.waitFor('error', 50)).rejects.toThrow(/timeout/);
+        const teamId = (await getTeamBySlug(server.store, 'dawn'))!.id;
+        expect(
+          (await listAudit(server.store, teamId)).some(
+            (r) => r.action === 'claim.duplicate_workspace' || r.action === 'claim.superseded',
+          ),
+        ).toBe(false);
 
-      wait.close();
-      adapter.close();
-    });
+        wait.close();
+        adapter.close();
+      });
 
-    it('a durable same-workspace successor reaps its predecessor with same_workspace:true', async () => {
+      it('a durable same-workspace successor reaps its predecessor with same_workspace:true', async () => {
         const team = await post('/teams', {
           slug: 'dawn',
           creator: { name: 'nick', kind: 'human' },
@@ -6179,37 +6186,37 @@ withDrivers('integration', (_o, kind) => {
     });
 
     it('ADR 487: a part-of-several lane is refused a submit until follows_up answers, then the ask carries it', async () => {
-    const { ada, gee } = await setup();
-    const lane = await post(
-      '/teams/dawn/lanes',
-      { title: 'store fix 1/2', goal_id: 'store', claim: true },
-      ada,
-    );
-    const laneId = lane.json.lane.id as string;
-    const next = await post('/teams/dawn/lanes', { title: 'store fix, the rest' }, ada);
-    const nextId = next.json.lane.id as string;
+      const { ada, gee } = await setup();
+      const lane = await post(
+        '/teams/dawn/lanes',
+        { title: 'store fix 1/2', goal_id: 'store', claim: true },
+        ada,
+      );
+      const laneId = lane.json.lane.id as string;
+      const next = await post('/teams/dawn/lanes', { title: 'store fix, the rest' }, ada);
+      const nextId = next.json.lane.id as string;
 
-    const refused = await patchLane(laneId, { state: 'awaiting_acceptance' }, ada);
-    expect(refused.status).toBe(400);
-    expect(JSON.stringify(refused.json)).toContain('follows_up');
+      const refused = await patchLane(laneId, { state: 'awaiting_acceptance' }, ada);
+      expect(refused.status).toBe(400);
+      expect(JSON.stringify(refused.json)).toContain('follows_up');
 
-    const ok = await patchLane(
-      laneId,
-      { state: 'awaiting_acceptance', follows_up: [nextId], acceptor: 'gee' },
-      ada,
-    );
-    expect(ok.status).toBe(200);
-    expect(ok.json.lane.follows_up).toEqual([nextId]);
-    const board = await req('GET', '/teams/dawn/lanes', undefined, ada);
-    const attached = (board.json.lanes as { id: string; goal_id: string | null }[]).find(
-      (l) => l.id === nextId,
-    );
-    expect(attached?.goal_id).toBe('store');
-    const inbox = await req('GET', '/teams/dawn/inbox', undefined, gee);
-    expect(JSON.stringify(inbox.json)).toContain(`Follows up: ${nextId} [open]`);
-  });
+      const ok = await patchLane(
+        laneId,
+        { state: 'awaiting_acceptance', follows_up: [nextId], acceptor: 'gee' },
+        ada,
+      );
+      expect(ok.status).toBe(200);
+      expect(ok.json.lane.follows_up).toEqual([nextId]);
+      const board = await req('GET', '/teams/dawn/lanes', undefined, ada);
+      const attached = (board.json.lanes as { id: string; goal_id: string | null }[]).find(
+        (l) => l.id === nextId,
+      );
+      expect(attached?.goal_id).toBe('store');
+      const inbox = await req('GET', '/teams/dawn/inbox', undefined, gee);
+      expect(JSON.stringify(inbox.json)).toContain(`Follows up: ${nextId} [open]`);
+    });
 
-  it('lane_ready persists the stage-one attestation, stays contending, and asks a cross-family reviewer', async () => {
+    it('lane_ready persists the stage-one attestation, stays contending, and asks a cross-family reviewer', async () => {
       const { nickTok, ada, gee } = await setup();
       const lane = await post(
         '/teams/dawn/lanes',
