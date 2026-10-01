@@ -41,7 +41,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node ../../scripts/stamp-build.mjs",
+    "build": "tsc -p tsconfig.json && node ../../scripts/stamp-build.mjs && cp src/db/pg/*.sql dist/db/pg/",
     "test": "vitest run"
   },
   "dependencies": {
@@ -50,6 +50,7 @@
     "@musterd/telemetry": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
     "better-sqlite3": "^11.7.0",
+    "pg": "^8.23.1",
     "ulid": "^2.3.0",
     "ws": "^8.18.0",
     "zod": "^3.24.1"
@@ -60,6 +61,7 @@
     "@opentelemetry/sdk-metrics": "^2.8.0",
     "@opentelemetry/sdk-trace-base": "^2.8.0",
     "@types/better-sqlite3": "^7.6.12",
+    "@types/pg": "^8.23.1",
     "@types/ws": "^8.5.13"
   }
 }

@@ -87,13 +87,15 @@ export async function findLowCoverageSessions(
   }>(
     `SELECT team_id, seat, MIN(harness) AS harness, session_digest,
             ${POST_TOOL_USE_ONCE} AS post,
-            SUM(CASE WHEN kind = 'usage'
-                     THEN COALESCE(json_extract(detail, '$.tool_uses'), 0) ELSE 0 END) AS r2,
+            CAST(SUM(CASE WHEN kind = 'usage'
+                     THEN COALESCE(CAST(json_extract(detail, '$.tool_uses') AS INTEGER), 0) ELSE 0 END) AS INTEGER) AS r2,
             MAX(received_at) AS last
        FROM trace_events
       WHERE received_at >= ?
       GROUP BY team_id, seat, session_digest
-     HAVING last >= ? AND last < ? AND r2 > 0`,
+     -- The aggregates, not their aliases: Postgres cannot see a SELECT alias from HAVING.
+     HAVING MAX(received_at) >= ? AND MAX(received_at) < ?
+        AND SUM(CASE WHEN kind = 'usage' THEN COALESCE(CAST(json_extract(detail, '$.tool_uses') AS INTEGER), 0) ELSE 0 END) > 0`,
     [since - TRACE_COVERAGE_LOOKBACK_MS, since, quietBefore],
   );
   const low = sessions.filter((s) => s.post / s.r2 < TRACE_COVERAGE_TARGET);

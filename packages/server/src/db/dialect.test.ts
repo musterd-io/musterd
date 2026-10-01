@@ -97,4 +97,19 @@ describe('toPostgres', () => {
     const lines = readFileSync(new URL('./dialect.ts', import.meta.url), 'utf8').split('\n').length;
     expect(lines).toBeLessThan(DIALECT_SOURCE_LINE_BUDGET);
   });
+
+  it('CAST(… AS INTEGER) becomes BIGINT — a 64-bit epoch-millis cast overflows Postgres INTEGER', () => {
+    expect(toPostgres("SELECT CAST(json_extract(detail, '$.to') AS INTEGER) AS t FROM audit")).toBe(
+      "SELECT CAST((detail::jsonb ->> 'to') AS BIGINT) AS t FROM audit",
+    );
+    // Only the type name, never a literal that happens to contain the word.
+    expect(toPostgres("SELECT 'AS INTEGER' AS s")).toBe("SELECT 'AS INTEGER' AS s");
+  });
+
+  it('null-safe IS / IS NOT against a bound value become IS [NOT] DISTINCT FROM', () => {
+    expect(toPostgres('SELECT 1 FROM m WHERE from_member IS NOT ? AND to_member IS ?')).toBe(
+      'SELECT 1 FROM m WHERE from_member IS DISTINCT FROM $1 AND to_member IS NOT DISTINCT FROM $2',
+    );
+    expect(toPostgres('SELECT 1 WHERE x IS NOT NULL')).toBe('SELECT 1 WHERE x IS NOT NULL');
+  });
 });

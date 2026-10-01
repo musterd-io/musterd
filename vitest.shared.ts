@@ -35,3 +35,13 @@
  * fixed 80ms sleep there was a real clock-vs-condition race, and raising it would have been wrong.
  */
 export const TEST_TIMEOUT_MS = 30_000;
+
+/**
+ * Worker cap (plan 1B, 2026-09-30). With every server test on both engines, each worker boots a
+ * PGlite per store (two-daemon files boot four); at one worker per core on an 8-core laptop that
+ * is CPU starvation, not parallelism — the server suite took 837 s with 29 load-induced timeouts,
+ * and 521 s green at 4. docs/perf/test-suite-parallelism.md (2026-07-29) measured the SQLite-only
+ * suite and found a cap NOT faster then; PGlite changed the arithmetic. CI runners have 4 cores,
+ * so this only changes local runs. Re-measure before raising it.
+ */
+export const MAX_WORKERS = 4;

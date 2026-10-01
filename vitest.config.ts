@@ -2,7 +2,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig } from 'vitest/config';
 import { workspaceSrcAliases } from './tests/setup/workspace-src-aliases.ts';
-import { TEST_TIMEOUT_MS } from './vitest.shared.ts';
+import { MAX_WORKERS, TEST_TIMEOUT_MS } from './vitest.shared.ts';
 
 export default defineConfig({
   // Workspace imports resolve to src, never to gitignored dist/ — a stale dist must not be able to
@@ -27,6 +27,9 @@ export default defineConfig({
     // The timeout and its measured rationale live in vitest.shared.ts, so every package config
     // gets the same number — a value tuned only here reached `pnpm test` and nothing else.
     testTimeout: TEST_TIMEOUT_MS,
+    // A beforeEach that opens the PGlite double pays the worker's first migration; same ceiling.
+    hookTimeout: TEST_TIMEOUT_MS,
+    maxWorkers: MAX_WORKERS,
     // NO_COLOR pins picocolors OFF in tests so render assertions (plain `▌`/lengths) are deterministic
     // regardless of the runner — CI sets `CI=1`, which otherwise makes picocolors emit ANSI and breaks
     // the row/clip render tests. Production color is unaffected (test-env only). See ADR 106.

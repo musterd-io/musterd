@@ -1,190 +1,179 @@
 import { makeEnvelope } from '@musterd/protocol';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { Driver } from '../db/driver.js';
 import { openDb } from '../db/open.js';
-import { openTestDb } from '../db/testing.js';
+import { withDrivers } from '../db/testing.js';
 import { addMember, hashToken } from './members.js';
 import { insertMessage } from './messages.js';
 import { authenticateNode, bindNode } from './nodes.js';
 import { createTeam } from './teams.js';
 
-/**
- * `bindNode` — the hub's half of enrollment, and where ADR 331's owed refusal path lives.
- *
- * ADR 331 §Decision 1 moved allocation of the node id to the joiner: it presents the ULID migration
- * v47 minted for it rather than receiving a fresh one. That is a change of who allocates the
- * identifier, not of who vouches for it — the hub still authenticates the invite, still writes the
- * binding itself, and still has to be able to refuse. These tests are that refusal.
- */
+let openStore: () => Promise<Driver>;
 
-async function seed(slug = 'revive') {
-  const db = openTestDb(':memory:');
-  const team = await createTeam(db, { slug });
-  const ada = (await addMember(db, team, { name: 'ada', kind: 'agent' })).row;
-  return { db, team, ada };
-}
-
-/** Mint this daemon's own local node row the way a live daemon does — by sending. */
-async function mintLocalNode(
-  db: ReturnType<typeof openDb>,
-  teamId: string,
-  memberId: string,
-  slug = 'revive',
-): string {
-  await insertMessage(
-    db,
-    teamId,
-    memberId,
-    null,
-    makeEnvelope({
-      id: `m-${slug}`,
-      team: slug,
-      from: 'ada',
-      to: { kind: 'team' as const },
-      act: 'message',
-      body: 'hi',
-      ts: 1000,
-      meta: null,
-    }),
-  );
-  return db
-    .prepare<[string], { node_id: string }>('SELECT node_id FROM local_node WHERE team_id = ?')
-    .get(teamId)!.node_id;
-}
-
-describe('bindNode (ADR 331 §Decision 1 — presented by the joiner, vouched for by the hub)', async () => {
-  it('inserts a presented id the hub has never seen', async () => {
-    const { db, team } = await seed();
-    expect(
-      await bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_aaa', 'nick'),
-    ).not.toBeNull();
-
-    const row = db
-      .prepare<
-        [string],
-        { credential_hash: string; enrolled_at: number | null; label: string; next_seq: number }
-      >('SELECT credential_hash, enrolled_at, label, next_seq FROM nodes WHERE id = ?')
-      .get('node-remote');
-    expect(row?.credential_hash).toBe(hashToken('msnode_aaa'));
-    expect(row?.enrolled_at).not.toBeNull();
-    expect(row?.label).toBe('laptop');
-    // A fresh origin starts its sequence at 1 — the remote's stream is its own, not continued.
-    expect(row?.next_seq).toBe(1);
-    await db.close();
+withDrivers('nodes.bind', (o) => {
+  // Set per test, not at collection: describe.each collects every driver before any test runs.
+  beforeEach(() => {
+    openStore = o;
   });
 
-  it('refuses an id already bound to a DIFFERENT credential — the ADR 331 debt', async () => {
-    const { db, team } = await seed();
-    await bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_aaa', 'nick');
+  /**
+   * `bindNode` — the hub's half of enrollment, and where ADR 331's owed refusal path lives.
+   *
+   * ADR 331 §Decision 1 moved allocation of the node id to the joiner: it presents the ULID migration
+   * v47 minted for it rather than receiving a fresh one. That is a change of who allocates the
+   * identifier, not of who vouches for it — the hub still authenticates the invite, still writes the
+   * binding itself, and still has to be able to refuse. These tests are that refusal.
+   */
 
-    expect(await bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_bbb', 'nick')).toBeNull();
-    // The first credential still stands — a refused rebind must not half-apply.
-    expect(
-      db
-        .prepare<
-          [string],
-          { credential_hash: string }
-        >('SELECT credential_hash FROM nodes WHERE id = ?')
-        .get('node-remote')?.credential_hash,
-    ).toBe(hashToken('msnode_aaa'));
-    await db.close();
-  });
+  async function seed(slug = 'revive') {
+    const db = await openStore();
+    const team = await createTeam(db, { slug });
+    const ada = (await addMember(db, team, { name: 'ada', kind: 'agent' })).row;
+    return { db, team, ada };
+  }
 
-  it("refuses the hub's OWN local node id — a joiner must not bind the hub's origin", async () => {
-    const { db, team, ada } = await seed();
-    const ours = await mintLocalNode(db, team.id, ada.id);
-
-    // `credential_hash IS NULL` alone would ADMIT this: a hub never enrolls with itself, so its own
-    // row is permanently unbound. Binding it would let the joiner stamp events as the hub.
-    expect(await bindNode(db, team.id, ours, 'impostor', 'msnode_ccc', 'nick')).toBeNull();
-    expect(
-      db
-        .prepare<
-          [string],
-          { credential_hash: string | null }
-        >('SELECT credential_hash FROM nodes WHERE id = ?')
-        .get(ours)?.credential_hash,
-    ).toBeNull();
-    await db.close();
-  });
-
-  it("does not disturb the hub's own stamping after a remote node enrolls", async () => {
-    const { db, team, ada } = await seed();
-    const ours = await mintLocalNode(db, team.id, ada.id);
-    await bindNode(db, team.id, '00000000000000000000000000', 'laptop', 'msnode_aaa', 'nick');
-
+  /** Mint this daemon's own local node row the way a live daemon does — by sending. */
+  async function mintLocalNode(
+    db: ReturnType<typeof openDb>,
+    teamId: string,
+    memberId: string,
+    slug = 'revive',
+  ): string {
     await insertMessage(
       db,
-      team.id,
-      ada.id,
+      teamId,
+      memberId,
       null,
       makeEnvelope({
-        id: 'm-after',
-        team: 'revive',
+        id: `m-${slug}`,
+        team: slug,
         from: 'ada',
         to: { kind: 'team' as const },
         act: 'message',
-        body: 'still ours',
-        ts: 2000,
+        body: 'hi',
+        ts: 1000,
         meta: null,
       }),
     );
+    return (await db.get('SELECT node_id FROM local_node WHERE team_id = ?', [teamId]))!.node_id;
+  }
 
-    const row = db
-      .prepare<
-        [string],
-        { origin_node: string; origin_seq: number }
-      >('SELECT origin_node, origin_seq FROM messages WHERE id = ?')
-      .get('m-after');
-    expect(row?.origin_node).toBe(ours);
-    expect(row?.origin_seq).toBe(2);
-    await db.close();
-  });
+  describe('bindNode (ADR 331 §Decision 1 — presented by the joiner, vouched for by the hub)', async () => {
+    it('inserts a presented id the hub has never seen', async () => {
+      const { db, team } = await seed();
+      expect(
+        await bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_aaa', 'nick'),
+      ).not.toBeNull();
 
-  it("refuses another team's hub-local node id — the cross-team form of the same hole", async () => {
-    // miley's review finding (2026-08-27, review 01M12KQHT8). The hub hosts two teams. A joiner
-    // enrolling into A presents the id of the hub's own local row for B. Every guard scoped to A
-    // passes: A's local_node names a different id, and B's row is `credential_hash IS NULL` because
-    // a hub never enrolls with itself — permanently. An `ON CONFLICT DO UPDATE` then writes the
-    // joiner's credential onto B's origin identity, leaving `team_id` as B, and reports success.
-    // The joiner can thereafter authenticate as team B's node.
-    const db = openTestDb(':memory:');
-    const a = await createTeam(db, { slug: 'alpha' });
-    const b = await createTeam(db, { slug: 'bravo' });
-    const adaA = (await addMember(db, a, { name: 'ada', kind: 'agent' })).row;
-    const adaB = (await addMember(db, b, { name: 'ada', kind: 'agent' })).row;
-    await mintLocalNode(db, a.id, adaA.id, 'alpha');
-    const hubLocalB = await mintLocalNode(db, b.id, adaB.id, 'bravo');
+      const row = await db.get(
+        'SELECT credential_hash, enrolled_at, label, next_seq FROM nodes WHERE id = ?',
+        ['node-remote'],
+      );
+      expect(row?.credential_hash).toBe(hashToken('msnode_aaa'));
+      expect(row?.enrolled_at).not.toBeNull();
+      expect(row?.label).toBe('laptop');
+      // A fresh origin starts its sequence at 1 — the remote's stream is its own, not continued.
+      expect(row?.next_seq).toBe(1);
+      await db.close();
+    });
 
-    expect(await bindNode(db, a.id, hubLocalB, 'impostor', 'msnode_ccc', 'nick')).toBeNull();
+    it('refuses an id already bound to a DIFFERENT credential — the ADR 331 debt', async () => {
+      const { db, team } = await seed();
+      await bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_aaa', 'nick');
 
-    // B's hub identity must still be unbound and still B's.
-    const row = db
-      .prepare<
-        [string],
-        { credential_hash: string | null; team_id: string }
-      >('SELECT credential_hash, team_id FROM nodes WHERE id = ?')
-      .get(hubLocalB);
-    expect(row?.credential_hash).toBeNull();
-    expect(row?.team_id).toBe(b.id);
-    expect(await authenticateNode(db, b.id, 'msnode_ccc')).toBeNull();
-    await db.close();
-  });
+      expect(await bindNode(db, team.id, 'node-remote', 'laptop', 'msnode_bbb', 'nick')).toBeNull();
+      // The first credential still stands — a refused rebind must not half-apply.
+      expect(
+        (await db.get('SELECT credential_hash FROM nodes WHERE id = ?', ['node-remote']))
+          ?.credential_hash,
+      ).toBe(hashToken('msnode_aaa'));
+      await db.close();
+    });
 
-  it('binds the same presented id independently per team — a node is a machine-TEAM principal', async () => {
-    const db = openTestDb(':memory:');
-    const one = await createTeam(db, { slug: 'one' });
-    const two = await createTeam(db, { slug: 'two' });
+    it("refuses the hub's OWN local node id — a joiner must not bind the hub's origin", async () => {
+      const { db, team, ada } = await seed();
+      const ours = await mintLocalNode(db, team.id, ada.id);
 
-    expect(await bindNode(db, one.id, 'node-a', 'laptop', 'msnode_aaa', 'nick')).not.toBeNull();
-    // The SAME id under a second team is a distinct principal by ADR 331 §1 — but `nodes.id` is a
-    // global PRIMARY KEY, so the row already exists and is already bound. It must refuse rather
-    // than silently re-point the existing row's team.
-    expect(await bindNode(db, two.id, 'node-a', 'laptop', 'msnode_bbb', 'nick')).toBeNull();
-    expect(
-      db
-        .prepare<[string], { team_id: string }>('SELECT team_id FROM nodes WHERE id = ?')
-        .get('node-a')?.team_id,
-    ).toBe(one.id);
-    await db.close();
+      // `credential_hash IS NULL` alone would ADMIT this: a hub never enrolls with itself, so its own
+      // row is permanently unbound. Binding it would let the joiner stamp events as the hub.
+      expect(await bindNode(db, team.id, ours, 'impostor', 'msnode_ccc', 'nick')).toBeNull();
+      expect(
+        (await db.get('SELECT credential_hash FROM nodes WHERE id = ?', [ours]))?.credential_hash,
+      ).toBeNull();
+      await db.close();
+    });
+
+    it("does not disturb the hub's own stamping after a remote node enrolls", async () => {
+      const { db, team, ada } = await seed();
+      const ours = await mintLocalNode(db, team.id, ada.id);
+      await bindNode(db, team.id, '00000000000000000000000000', 'laptop', 'msnode_aaa', 'nick');
+
+      await insertMessage(
+        db,
+        team.id,
+        ada.id,
+        null,
+        makeEnvelope({
+          id: 'm-after',
+          team: 'revive',
+          from: 'ada',
+          to: { kind: 'team' as const },
+          act: 'message',
+          body: 'still ours',
+          ts: 2000,
+          meta: null,
+        }),
+      );
+
+      const row = await db.get('SELECT origin_node, origin_seq FROM messages WHERE id = ?', [
+        'm-after',
+      ]);
+      expect(row?.origin_node).toBe(ours);
+      expect(row?.origin_seq).toBe(2);
+      await db.close();
+    });
+
+    it("refuses another team's hub-local node id — the cross-team form of the same hole", async () => {
+      // miley's review finding (2026-08-27, review 01M12KQHT8). The hub hosts two teams. A joiner
+      // enrolling into A presents the id of the hub's own local row for B. Every guard scoped to A
+      // passes: A's local_node names a different id, and B's row is `credential_hash IS NULL` because
+      // a hub never enrolls with itself — permanently. An `ON CONFLICT DO UPDATE` then writes the
+      // joiner's credential onto B's origin identity, leaving `team_id` as B, and reports success.
+      // The joiner can thereafter authenticate as team B's node.
+      const db = await openStore();
+      const a = await createTeam(db, { slug: 'alpha' });
+      const b = await createTeam(db, { slug: 'bravo' });
+      const adaA = (await addMember(db, a, { name: 'ada', kind: 'agent' })).row;
+      const adaB = (await addMember(db, b, { name: 'ada', kind: 'agent' })).row;
+      await mintLocalNode(db, a.id, adaA.id, 'alpha');
+      const hubLocalB = await mintLocalNode(db, b.id, adaB.id, 'bravo');
+
+      expect(await bindNode(db, a.id, hubLocalB, 'impostor', 'msnode_ccc', 'nick')).toBeNull();
+
+      // B's hub identity must still be unbound and still B's.
+      const row = await db.get('SELECT credential_hash, team_id FROM nodes WHERE id = ?', [
+        hubLocalB,
+      ]);
+      expect(row?.credential_hash).toBeNull();
+      expect(row?.team_id).toBe(b.id);
+      expect(await authenticateNode(db, b.id, 'msnode_ccc')).toBeNull();
+      await db.close();
+    });
+
+    it('binds the same presented id independently per team — a node is a machine-TEAM principal', async () => {
+      const db = await openStore();
+      const one = await createTeam(db, { slug: 'one' });
+      const two = await createTeam(db, { slug: 'two' });
+
+      expect(await bindNode(db, one.id, 'node-a', 'laptop', 'msnode_aaa', 'nick')).not.toBeNull();
+      // The SAME id under a second team is a distinct principal by ADR 331 §1 — but `nodes.id` is a
+      // global PRIMARY KEY, so the row already exists and is already bound. It must refuse rather
+      // than silently re-point the existing row's team.
+      expect(await bindNode(db, two.id, 'node-a', 'laptop', 'msnode_bbb', 'nick')).toBeNull();
+      expect((await db.get('SELECT team_id FROM nodes WHERE id = ?', ['node-a']))?.team_id).toBe(
+        one.id,
+      );
+      await db.close();
+    });
   });
 });

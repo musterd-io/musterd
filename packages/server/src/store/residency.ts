@@ -2042,10 +2042,12 @@ export async function hostAsleepMs(
   from: number,
   to: number,
 ): Promise<number> {
+  // The outer CAST: SUM over 64-bit values is `numeric` on Postgres and comes back as a string;
+  // cast to the integer type both engines return as a number.
   const row = await db.get<{ ms: number }>(
-    `SELECT COALESCE(SUM(MAX(0,
+    `SELECT CAST(COALESCE(SUM(MAX(0,
                 MIN(CAST(json_extract(detail, '$.to') AS INTEGER), ?)
-                - MAX(CAST(json_extract(detail, '$.from') AS INTEGER), ?))), 0) AS ms
+                - MAX(CAST(json_extract(detail, '$.from') AS INTEGER), ?))), 0) AS INTEGER) AS ms
          FROM audit
         WHERE team_id = ? AND action = 'residency.host_suspended' AND ts >= ? ${MINTED_HERE}`,
     [to, from, teamId, from],

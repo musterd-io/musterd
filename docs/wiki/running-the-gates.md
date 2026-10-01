@@ -72,6 +72,34 @@ Measured: #987 passed `pnpm format:check` locally with an edited-but-uncommitted
 
 **Commit first, then run `pnpm format:check`.** And when a diff gate fires on a frozen `## Decision` you cannot edit, the waiver is the honest move — `Snapshot-debt: none — <why this is not a snapshot you are asserting>` — not a hunt for a way to make the term disappear.
 
+## Every server test runs on both engines; two daemons need two doubles; `pg` is the Neon pass, never CI (2026-09-30, plan 1B; falsify: `grep -rn openTestDb packages/server/src` — if it finds a call, the hybrid is back) <!-- claim: other -->
+
+Plan 1B finished what 1A started: the SQLite-only hybrid test handle is deleted and every
+`packages/server` test file — store, sync, transport, the daemon itself — runs under `withDrivers`
+on SQLite and the PGlite double. Three things the conversion taught, so the next test does not
+relearn them:
+
+- **A test that boots two daemons (a hub and a joiner) gives the second one its own PGlite:**
+  `openTestDriver(kind, { instance: 'b' })` (and `{ store: 'trace', instance: 'b' }` for its
+  trace store). Two handles on one instance share every table, and the symptom is not an error but
+  a hub that "already knows" the joiner's rows (census.test's `duplicate key … j-0`, node-enroll's
+  409). The double truncates with `RESTART IDENTITY`, so `row_seq` numbers from 1 like a fresh
+  file's rowid.
+- **Engine DDL in a fixture is spelled per engine, in the test:** a refusal trigger, an `UPDATE OF`
+  observer, `json_set`, `PRAGMA table_info`, `sqlite_master`. Write the SQLite and the Postgres
+  form side by side behind `db.dialect`, or mark a ladder-replay test `it.runIf(kind === 'sqlite')`
+  — the Postgres side of a migration is pinned by `db/pg/drift.test.ts`. Never `DROP TABLE` on the
+  pooled double (rename and restore in `finally`): the next test in the file needs it.
+- **`MUSTERD_TEST_DRIVER=pg` is REAL Postgres** from `~/.musterd/cloud/neon.env` (mode 600; three
+  URLs). It is what `scripts/cloud/neon-pass.mjs` runs and records in `docs/perf/neon-pass.md`. CI
+  never has the env file, so `pg` is never a CI mode; a `pg` run without the file fails at the first
+  `openTestDriver`.
+
+Running many files at once boots many PGlite instances (one per worker per store; two-daemon files
+boot four). On an 8-core laptop a 12-file transport batch under full parallelism looked like a hang
+and was not one — it was CPU starvation. `--maxWorkers=3` is the honest local loop for a batch;
+the whole server suite is measured on `docs/perf/neon-pass.md`.
+
 ## The store suite runs on two engines; pick one when you are iterating (2026-09-30, plan 1A; falsify: `MUSTERD_TEST_DRIVER=sqlite pnpm -C packages/server exec vitest run src/store/teamMemory.test.ts` — if a `[pglite]` block still runs, this is wrong) <!-- claim: other -->
 
 Every `withDrivers(...)` block in `packages/server` runs on SQLite **and** the PGlite test double by

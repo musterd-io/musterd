@@ -41,13 +41,13 @@ export async function setCursor(
   if (!row) throw new Error(`setCursor: unknown message id ${lastReadMessageId}`);
   const now = Date.now();
   await db.run(
-    `INSERT INTO inbox_cursors (member_id, last_read_message_id, last_read_ts, updated_at)
-     VALUES (?, ?, ?, ?)
+    `INSERT INTO inbox_cursors (member_id, team_id, last_read_message_id, last_read_ts, updated_at)
+     SELECT id, team_id, ?, ?, ? FROM members WHERE id = ?
      ON CONFLICT(member_id) DO UPDATE SET
        last_read_message_id = excluded.last_read_message_id,
        last_read_ts = excluded.last_read_ts,
        updated_at = excluded.updated_at`,
-    [memberId, lastReadMessageId, row.created_at, now],
+    [lastReadMessageId, row.created_at, now, memberId],
   );
   return {
     member_id: memberId,

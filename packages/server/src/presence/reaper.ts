@@ -26,6 +26,27 @@ import { getPolicy, getTeamById, getTeamBySlug, listActiveTeams } from '../store
 
 /** Periodically remove stale presence rows and emit offline events for members who lost all presence. */
 export function startReaper(ctx: Ctx): () => void {
+  const tick = reaperTick(ctx);
+  // One tick at a time: an async tick can straddle the next interval (a slow sweep, a queue wait),
+  // and two overlapping ticks would each act on the same rows (review I2, 2026-09-30).
+  let running = false;
+  const handle = setInterval(() => {
+    if (running) return;
+    running = true;
+    void tick().finally(() => {
+      running = false;
+    });
+  }, ctx.config.reaperIntervalMs);
+  handle.unref?.();
+  return () => clearInterval(handle);
+}
+
+/**
+ * One reaper pass, with the loop's continuity clocks closed over. Exported so a test can run a
+ * single tick against the ctx the daemon hands the loop (spec §12.1: the OPERATOR ctx — a reaper
+ * that saw one team's rows would "succeed" at reaping nothing).
+ */
+export function reaperTick(ctx: Ctx): () => Promise<void> {
   // ADR 236: this loop is its own reachability probe. `lastTickAt` is when it last ran and
   // `continuousSince` is the start of its current unbroken run — initialised to boot, because before
   // that the loop was not running either (a restart is an absence like any other). A lease that was
@@ -262,16 +283,5 @@ export function startReaper(ctx: Ctx): () => void {
       log.info({ msg: 'reap_offline', member: member.name });
     }
   };
-  // One tick at a time: an async tick can straddle the next interval (a slow sweep, a queue wait),
-  // and two overlapping ticks would each act on the same rows (review I2, 2026-09-30).
-  let running = false;
-  const handle = setInterval(() => {
-    if (running) return;
-    running = true;
-    void tick().finally(() => {
-      running = false;
-    });
-  }, ctx.config.reaperIntervalMs);
-  handle.unref?.();
-  return () => clearInterval(handle);
+  return tick;
 }

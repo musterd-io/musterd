@@ -42,7 +42,9 @@ export async function deriveTraceReport(
 ): Promise<TraceReport> {
   const now = opts.now ?? Date.now();
   const since = now - opts.days * 24 * 60 * 60 * 1000;
-  const inSeats = seats.length > 0 ? `AND seat IN (${seats.map(() => '?').join(',')})` : 'AND 0';
+  // `1 = 0`, not a bare `0`: Postgres wants a boolean where SQLite takes an integer.
+  const inSeats =
+    seats.length > 0 ? `AND seat IN (${seats.map(() => '?').join(',')})` : 'AND 1 = 0';
   const seatArgs = [...seats];
 
   // ── coverage: R1 PostToolUse ÷ R2 usage.tool_uses, per harness ──

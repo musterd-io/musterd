@@ -402,9 +402,9 @@ async function projectRecordEvent(
     );
     if (!seed) return 'seed_unborn';
     await db.run(
-      `INSERT OR IGNORE INTO seed_thread_entries (id, seed_id, kind, body, member_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [entryId, seed.id, kind, body, memberId, createdAt],
+      `INSERT OR IGNORE INTO seed_thread_entries (id, seed_id, team_id, kind, body, member_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [entryId, seed.id, teamId, kind, body, memberId, createdAt],
     );
     return 'applied';
   }
@@ -416,7 +416,7 @@ async function projectRecordEvent(
     await db.run(
       `INSERT INTO incident_reports (id, team_id, gate, seat, sig, ref, message_id, lane_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET lane_id = COALESCE(excluded.lane_id, lane_id)`,
+       ON CONFLICT(id) DO UPDATE SET lane_id = COALESCE(excluded.lane_id, incident_reports.lane_id)`,
       [
         reportId,
         teamId,
@@ -464,7 +464,7 @@ const CONTINUITY_VERBS = new Set([
 async function projectContinuityEvent(
   db: Driver,
   teamId: string,
-  seat: { id: string; name: string },
+  seat: { id: string; name: string; team_id: string },
   event: SyncPullLaneEvent['event'],
   now: number,
 ): Promise<'applied' | 'unknown' | 'cursor_unborn'> {
@@ -490,12 +490,13 @@ async function projectContinuityEvent(
       if (cleared?.t != null && cleared.t >= savedAt) return 'applied';
     }
     await db.run(
-      `INSERT INTO seat_memory (member_id, headline, body, saved_at)
-       VALUES (?, ?, ?, ?)
+      `INSERT INTO seat_memory (member_id, team_id, headline, body, saved_at)
+       VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(member_id) DO UPDATE SET
          headline = excluded.headline, body = excluded.body, saved_at = excluded.saved_at`,
       [
         seat.id,
+        seat.team_id,
         typeof detail['headline'] === 'string' ? detail['headline'] : '',
         typeof detail['body'] === 'string' ? detail['body'] : '',
         savedAt,
@@ -541,13 +542,13 @@ async function projectContinuityEvent(
       return 'applied';
     }
     await db.run(
-      `INSERT INTO inbox_cursors (member_id, last_read_message_id, last_read_ts, updated_at)
-       VALUES (?, ?, ?, ?)
+      `INSERT INTO inbox_cursors (member_id, team_id, last_read_message_id, last_read_ts, updated_at)
+       VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(member_id) DO UPDATE SET
          last_read_message_id = excluded.last_read_message_id,
          last_read_ts = excluded.last_read_ts,
          updated_at = excluded.updated_at`,
-      [seat.id, messageId, row.created_at, now],
+      [seat.id, seat.team_id, messageId, row.created_at, now],
     );
     return 'applied';
   }
@@ -599,11 +600,12 @@ async function projectPresenceEvent(
       if (await db.get('SELECT 1 FROM presence WHERE id = ?', [presenceId])) return 'applied';
       const model = str('model');
       await db.run(
-        `INSERT INTO presence (id, member_id, surface, status, conn_id, last_seen_at, held_until, provenance, workspace, driver, model, model_source, build, epoch, guidance_epoch, wake_lease, node, created_at)
-         VALUES (?, ?, ?, 'online', NULL, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+        `INSERT INTO presence (id, member_id, team_id, surface, status, conn_id, last_seen_at, held_until, provenance, workspace, driver, model, model_source, build, epoch, guidance_epoch, wake_lease, node, created_at)
+         VALUES (?, ?, ?, ?, 'online', NULL, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
         [
           presenceId,
           member.id,
+          member.team_id,
           surface,
           event.ts,
           str('provenance'),

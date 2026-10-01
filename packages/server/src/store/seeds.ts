@@ -394,6 +394,7 @@ type ThreadKind = 'clarification' | 'answer' | 'brief' | 'conclusion';
 async function appendThread(
   db: Driver,
   entryId: string,
+  teamId: string,
   seedId: string,
   memberId: string,
   kind: ThreadKind,
@@ -401,9 +402,9 @@ async function appendThread(
   now: number,
 ): Promise<void> {
   await db.run(
-    `INSERT INTO seed_thread_entries (id, seed_id, kind, body, member_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [entryId, seedId, kind, body, memberId, now],
+    `INSERT INTO seed_thread_entries (id, seed_id, team_id, kind, body, member_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [entryId, seedId, teamId, kind, body, memberId, now],
   );
 }
 
@@ -424,7 +425,7 @@ async function applyThread(
   now: number,
 ): Promise<void> {
   const entryId = ulid(now);
-  await appendThread(db, entryId, seed.id, actor.id, kind, body, now);
+  await appendThread(db, entryId, teamId, seed.id, actor.id, kind, body, now);
   await appendReplicatedEvent(db, teamId, {
     actor: actor.name,
     action: 'record.seed_thread',

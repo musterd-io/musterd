@@ -453,8 +453,8 @@ export async function deriveSteeringMetrics(
             AND act IN ('accept','handoff','status_update','resolve')
             AND (
               in_reply_to = ?
-              OR (? IS NOT NULL AND json_extract(meta, '$.goal_id') = ?)
-              OR (? IS NOT NULL AND json_extract(meta, '$.goal_id') = ?)
+              OR (CAST(? AS TEXT) IS NOT NULL AND json_extract(meta, '$.goal_id') = ?)
+              OR (CAST(? AS TEXT) IS NOT NULL AND json_extract(meta, '$.goal_id') = ?)
             )`,
       [teamId, w.recipient_id, w.ts, w.id, laneGoal, laneGoal, withRef, withRef],
     );

@@ -53,6 +53,7 @@ CREATE INDEX idx_members_team ON members(team_id);
 CREATE TABLE presence (
   id            TEXT PRIMARY KEY,            -- ULID (one per attachment/connection)
   member_id     TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  team_id       TEXT,                        -- v83: the member's team, so one RLS policy shape covers every table; NOT NULL on Postgres, always written by the store on SQLite
   surface       TEXT NOT NULL CHECK (surface IN ('cli','claude-code','codex','opencode','grok','cursor','web','ios','slack','other','musterd')),
   status        TEXT NOT NULL DEFAULT 'online' CHECK (status IN ('online','away','offline')),
   conn_id       TEXT,                        -- transport connection id (WS), null for stateless HTTP pings
@@ -87,6 +88,7 @@ CREATE INDEX idx_messages_to_member ON messages(to_member);
 -- A member's unread = messages addressed to them (or their team/broadcast) with ts > cursor_ts.
 CREATE TABLE inbox_cursors (
   member_id   TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  team_id     TEXT,                          -- v83, as on presence
   last_read_message_id TEXT,                 -- ULID of last acknowledged message
   last_read_ts INTEGER NOT NULL DEFAULT 0,   -- ts of that message
   updated_at  INTEGER NOT NULL,
@@ -118,18 +120,46 @@ The store is written once, in SQLite's SQL, against the async `Driver` (`03-serv
 Postgres side never sees hand-written Postgres: `db/dialect.ts` translates each statement's text,
 memoised per statement — `?` → `$n` outside literals, `json_extract` → `->>` / `#>>` (a `= 1` /
 `<> 0` flag test compares as jsonb so JSON `true`/`false` qualify; an ordering compare casts to
-numeric), `LIKE` → `ILIKE`, `INSERT OR IGNORE` → `ON CONFLICT DO NOTHING`, `instr` → `strpos`,
+numeric), `LIKE` → `ILIKE`, `INSERT OR IGNORE` → `ON CONFLICT DO NOTHING`, `instr` → `strpos`, `CAST(… AS INTEGER)` →
+`BIGINT` (Postgres `INTEGER` is 32-bit; an epoch-millis cast overflows it), the null-safe `x IS ?` /
+`x IS NOT ?` → `IS [NOT] DISTINCT FROM ?`,
 two-argument `MAX`/`MIN` → `GREATEST`/`LEAST`. What the translator will not paper over, the SQL
 avoids: positional `?` params only (never better-sqlite3's `@name` objects), `CAST(? AS TEXT)`
 where a bare `? IS NULL` would leave Postgres unable to type the parameter, columns qualified in
 `ON CONFLICT … DO UPDATE`, no SELECT alias reused in `WHERE`, every grouped-query column in its
 `GROUP BY`, and `SUM(CASE WHEN … THEN 1 ELSE 0 END)` rather than summing a boolean. The one
 dialect branch above the driver is `store/teamMemory.ts` (FTS5 `MATCH` locally, the tsvector
-table in Postgres). `withDrivers` runs a store test on both engines by default, and the PGlite
-double loads `db/pgSchema.ts` — the SQLite ladder's current DDL translated, interim until plan 1B
-gives Postgres a ladder of its own.
+table in Postgres). `withDrivers` runs a store test on both engines by default; the PGlite double
+is migrated by `db/pg/migrate.ts` — the frozen v80 baseline (`db/pg/0080-baseline.sql`) and then
+the portable `db/ladder.ts` from v81, the same ladder SQLite runs after its legacy entries. From v81
+on there is one ladder: an entry is portable SQL both engines accept, or an explicit `{sqlite,
+postgres}` pair when they differ (SQLite cannot `ALTER COLUMN … SET NOT NULL`). v81 and v82 (ADR 487: `lanes.follows_up_json`, `abandon_reason`, `unfinished_todos_json`)
+landed on main as SQLite entries and moved into the ladder as pairs, so Postgres has them too. v83
+adds `team_id` to the four tables that were owned only through `members` / `seeds` — `presence`,
+`inbox_cursors`, `seat_memory`, `seed_thread_entries` — backfilled from the owner, orphans dropped,
+`NOT NULL` on Postgres; the store writes it on every insert (member-keyed tables take it off the
+`members` row in the same `INSERT … SELECT`).
+
+**Tenancy (cloud design §12.1).** On Postgres every team-owned table carries `team_id` (`teams`:
+its `id`) and one derived row-level-security policy, `tenant`, on
+`current_setting('app.team_id', true)` — ENABLE and FORCE, so the owner is bound too. The
+`Driver` is the seam: `forTeam(teamId)` stamps every transaction it opens with `SET LOCAL ROLE
+musterd_app` and `set_config('app.team_id', …, true)`; the unscoped connection handle stamps the
+role and no tenant, so it sees no row (fail-closed); `asOperator()` runs as `musterd_operator`
+(BYPASSRLS) and is the greppable list of every cross-tenant read. The app role owns nothing and
+cannot bypass RLS; migrations run as the owner, a separate step. The seam is the transport: `http.ts`
+scopes `ctx` where it resolves `/teams/:slug`, `ws.ts` where the claim frame names its team
+(`03-server.md` §Auth); store code never sets tenant context. Tables that are not team-owned —
+`schema_meta`, `footprint_machine`, `footprint_stacks` — are the `GLOBAL_TABLES` allowlist in
+`db/pg/tenancy.ts`; the inventory test fails on a table in neither set. On SQLite (one team per
+file) `forTeam` and `asOperator` return the handle itself.
 
 ## Migrations
+
+Both engines refuse to run against a database whose `schema_version` is past what the build's
+ladder knows (cloud design §6; `db/guard.ts`, the stable sentence "schema newer than this build"):
+under expand/contract the old binary keeps serving the expanded schema, but never one contracted by
+something newer. `runMigrations` (both SQLite ladders) and `migratePostgres` share the check.
 
 ### Shared Seeds (unreleased — ADR 291)
 
@@ -147,6 +177,7 @@ only an active explorer's posted question creates `needs_clarification` (ADR 291
 
 - **trace v1:** `trace_events` — one row per harness hook event: `id` (ULID), `team_id`, `seat`, `session_digest` (the ADR 131 §5 keyed HMAC, never the raw id), `seq` (daemon-assigned, monotonic per `(team_id, session_digest)`, `UNIQUE` with them), `ts`, `received_at`, `harness`, `kind` (the `TraceEvent` kinds), `tool_name`, `tool_use_id`, `agent_id`, `parent_agent_id`, `duration_ms`, `outcome`, `detail` (bounded structural JSON), and three columns reserved for increment 1b and unwritten in 1a: `content`, `redactions`, `truncated`. Indexes on `(team_id, seat, ts)` and `(team_id, tool_use_id)`. No foreign key can reference the coordination store; `team_id` is plain text.
 - **trace v2 (increment 3a):** `trace_events.content_pruned_at` (when the 30-day lifecycle nulled `content`; NULL while content is live or was never captured) and the partial index `idx_trace_events_content_age ON (received_at) WHERE content IS NOT NULL`, the prune's scan. `schema_meta` also holds `content_captured_through` once `pnpm corpus:snapshot` has captured this file — the highest `received_at` in the captured image, stamped monotonically; the prune never goes past it.
+- **trace v4 (1B, portable — `db/traceLadder.ts`):** `trace_events.row_seq` — the `/sync/trace` push cursor's column, replacing SQLite's `rowid` which Postgres lacks: on SQLite an `AFTER INSERT` trigger mirrors `rowid` into it (existing rows backfilled), on Postgres it is `BIGINT GENERATED ALWAYS AS IDENTITY`; `idx_trace_events_row_seq ON (team_id, row_seq)`. Nothing deletes from the table, so it only grows and the ADR 453 cursor argument holds unchanged.
 - **trace v3 (ADR 453):** `trace_events.origin_node TEXT` (NULL = minted by this daemon; a node id = received over `/sync/trace` from that joiner) and `idx_trace_events_origin ON (team_id, origin_node)`. `schema_meta` gains, on a joiner, `sync_trace_cursor:<team_id>` (the highest rowid the hub acked) and `sync_trace_id_key` (a random 32-byte key, minted once, never sent — the HMAC key under which `tool_use_id` / `agent_id` / `parent_agent_id` cross as 24-hex digests). `rowid` is the cursor because nothing deletes from this table (the content prune is an UPDATE).
 
 - Single forward-only migration runner. `schema_meta.schema_version` gates it. v1 ships version `1` = the DDL above. A migration is a `(version, up(db))` pair in `packages/server/src/db/migrations.ts`; the runner applies any with version > current inside a transaction, then bumps `schema_version`.

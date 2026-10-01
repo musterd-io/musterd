@@ -3,6 +3,8 @@ import { sparsifyPolicy } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
 import { monotonicFactory as monotonicUlid } from 'ulid';
 import type { Driver } from './driver.js';
+import { assertSchemaNotNewer } from './guard.js';
+import { sqliteLadder } from './ladder.js';
 import { SCHEMA_V1_SQL } from './schema.js';
 
 export interface Migration {
@@ -19,7 +21,9 @@ export interface Migration {
 }
 
 /** Forward-only migrations, applied in order. No down-migrations in v1. */
-export const MIGRATIONS: Migration[] = [
+/** 1–80: the SQLite-only legacy ladder, frozen. From v81 the portable `LADDER` (ladder.ts) is
+ *  appended — the same entries Postgres runs after its v80 baseline (spec §12.2). */
+const LEGACY: Migration[] = [
   {
     version: 1,
     up: (db) => {
@@ -1984,32 +1988,9 @@ export const MIGRATIONS: Migration[] = [
       `);
     },
   },
-  {
-    // v81 — ADR 487 (nothing vanishes): what a closing lane said is left (`follows_up_json`: the
-    // JSON of `"none"` or a lane-id list; null reads as none) and why a lane was dropped
-    // (`abandon_reason`). Both nullable, beside `parked_json`; no backfill — every existing close
-    // predates the question.
-    version: 81,
-    up: (db) => {
-      const laneCols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
-      if (!laneCols.includes('follows_up_json'))
-        db.exec('ALTER TABLE lanes ADD COLUMN follows_up_json TEXT');
-      if (!laneCols.includes('abandon_reason'))
-        db.exec('ALTER TABLE lanes ADD COLUMN abandon_reason TEXT');
-    },
-  },
-  {
-    // v82 — ADR 487 §5.2: the seat session's unfinished to-do snapshot on its lane
-    // (`unfinished_todos_json`: `{items, at}`, last write wins; null reads as none). Nullable, no
-    // backfill.
-    version: 82,
-    up: (db) => {
-      const laneCols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
-      if (!laneCols.includes('unfinished_todos_json'))
-        db.exec('ALTER TABLE lanes ADD COLUMN unfinished_todos_json TEXT');
-    },
-  },
 ];
+
+export const MIGRATIONS: Migration[] = [...LEGACY, ...sqliteLadder()];
 
 function currentVersion(db: Database): number {
   const row = db
@@ -2054,6 +2035,8 @@ function tableExists(db: Database, name: string): boolean {
  */
 export function runMigrations(db: Database, ladder: readonly Migration[] = MIGRATIONS): number {
   const have = tableExists(db, 'schema_meta') ? currentVersion(db) : 0;
+  // Spec §6: a database a NEWER build migrated is refused, not served (guard.ts).
+  assertSchemaNotNewer(have, ladder[ladder.length - 1]!.version);
   let applied = have;
   for (const m of ladder) {
     if (m.version <= applied) continue;

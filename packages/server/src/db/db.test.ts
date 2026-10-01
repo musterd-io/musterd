@@ -7,20 +7,20 @@ import { describe, expect, it } from 'vitest';
 import { addMember } from '../store/members.js';
 import { createTeam, getTeamBySlug } from '../store/teams.js';
 import { MIGRATIONS, runMigrations } from './migrations.js';
+import { openDb } from './open.js';
 import { seedDawn } from './seed.js';
 import { sqliteDriver } from './sqliteDriver.js';
-import { openTestDb } from './testing.js';
 
 describe('db', async () => {
   it('opens in-memory, migrates to the latest schema, sets foreign_keys', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     const ver = db
       .prepare<[], { value: string }>("SELECT value FROM schema_meta WHERE key='schema_version'")
       .get();
     // Bumped with every migration, deliberately ABSOLUTE rather than read from the MIGRATIONS
     // array: a test written against the constant under test cannot fail (ryder's ADR 236 finding —
     // one of his five mutants survived for exactly that reason).
-    expect(ver?.value).toBe('82');
+    expect(ver?.value).toBe('83');
     const fk = db.prepare<[], { foreign_keys: number }>('PRAGMA foreign_keys').get();
     expect(fk?.foreign_keys).toBe(1);
     await db.close();
@@ -127,7 +127,7 @@ describe('db', async () => {
     // Migration tests may rewind only the version marker to replay an older migration. The latest
     // OAuth rebuild must tolerate that replay and preserve every live binding and grant.
     db.prepare("UPDATE schema_meta SET value = '79' WHERE key = 'schema_version'").run();
-    expect(runMigrations(db)).toBe(82);
+    expect(runMigrations(db)).toBe(83);
     expect(db.prepare('SELECT COUNT(*) AS n FROM oauth_client_bindings').get()).toEqual({ n: 1 });
     expect(db.prepare('SELECT COUNT(*) AS n FROM oauth_codes').get()).toEqual({ n: 1 });
     expect(db.prepare('SELECT COUNT(*) AS n FROM oauth_tokens').get()).toEqual({ n: 2 });
@@ -136,7 +136,7 @@ describe('db', async () => {
   });
 
   it('adds durable legacy-bootstrap migration and cutover evidence (ADR 350)', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     const credentialCols = (
       db.prepare('PRAGMA table_info(agent_bootstrap_credentials)').all() as { name: string }[]
     ).map((column) => column.name);
@@ -151,8 +151,8 @@ describe('db', async () => {
   });
 
   it('v14 widens messages.act beyond the frozen v5 CHECK (steering acts persist, ADR 103)', async () => {
-    const db = openTestDb(':memory:');
-    await seedDawn(db);
+    const db = openDb(':memory:');
+    await seedDawn(sqliteDriver(db));
     const team = db.prepare<[], { id: string }>('SELECT id FROM teams LIMIT 1').get();
     const member = db.prepare<[], { id: string }>('SELECT id FROM members LIMIT 1').get();
     // Inserting a `steer` (unknown to the v5 CHECK vocabulary) must not throw at the DB layer.
@@ -168,7 +168,7 @@ describe('db', async () => {
   });
 
   it('v12 adds the goal_id join column on lanes (ADR 084)', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     const laneCols = (db.prepare('PRAGMA table_info(lanes)').all() as { name: string }[]).map(
       (c) => c.name,
     );
@@ -177,7 +177,7 @@ describe('db', async () => {
   });
 
   it('v15 adds the model attestation column on presence (ADR 101)', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     const presenceCols = (
       db.prepare('PRAGMA table_info(presence)').all() as { name: string }[]
     ).map((c) => c.name);
@@ -186,7 +186,7 @@ describe('db', async () => {
   });
 
   it('v34 adds the wake correlation token on presence (ADR 241)', () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     const cols = db.prepare("SELECT name FROM pragma_table_info('presence')").pluck().all();
     expect(cols).toContain('wake_lease');
     // Nullable and never backfilled: an occupancy no wake caused genuinely has no lease, and the
@@ -201,7 +201,7 @@ describe('db', async () => {
   });
 
   it('v69 adds the attested guidance epoch on presence (ADR 417)', () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     const cols = db.prepare("SELECT name FROM pragma_table_info('presence')").pluck().all();
     expect(cols).toContain('guidance_epoch');
     // Nullable, and deliberately NOT `NOT NULL DEFAULT 0`: an unstamped workspace and an older
@@ -218,7 +218,7 @@ describe('db', async () => {
   });
 
   it('v19 adds the resumable-attestation columns on residency (ADR 131 inc 4)', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     const cols = (db.prepare('PRAGMA table_info(residency)').all() as { name: string }[]).map(
       (c) => c.name,
     );
@@ -227,7 +227,7 @@ describe('db', async () => {
   });
 
   it('v65 adds the hue column on members (ADR 374)', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     const cols = db
       .prepare<[], { name: string }>("SELECT name FROM pragma_table_info('members')")
       .all()
@@ -237,7 +237,7 @@ describe('db', async () => {
   });
 
   it('v66 rebuilds seeds so slack_user_id may be NULL, carrying every relay Seed over (ADR 373 inc 2)', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     const team = await createTeam(sqliteDriver(db), { slug: 'revive' });
     await addMember(sqliteDriver(db), team, { name: 'nick', kind: 'human', slackUserId: 'U1' });
     const member = db
@@ -256,7 +256,7 @@ describe('db', async () => {
       `INSERT INTO seed_thread_entries (id, seed_id, kind, body, member_id, created_at)
        VALUES ('t1', 's1', 'clarification', 'why?', ?, 2)`,
     ).run(member.id);
-    expect(runMigrations(db)).toBe(82);
+    expect(runMigrations(db)).toBe(83);
     const col = (db.pragma('table_info(seeds)') as { name: string; notnull: number }[]).find(
       (c) => c.name === 'slack_user_id',
     );
@@ -280,7 +280,7 @@ describe('db', async () => {
   });
 
   it('v20 adds last_offline_reason on members (ADR 141)', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     const cols = (db.prepare('PRAGMA table_info(members)').all() as { name: string }[]).map(
       (c) => c.name,
     );
@@ -289,7 +289,7 @@ describe('db', async () => {
   });
 
   it('v30 seeds revive working hours without overwriting an explicit schedule (ADR 206)', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     await createTeam(sqliteDriver(db), { slug: 'revive' });
     db.prepare("UPDATE schema_meta SET value = '29' WHERE key = 'schema_version'").run();
     runMigrations(db);
@@ -302,8 +302,8 @@ describe('db', async () => {
       }),
     );
 
-    const explicit = openTestDb(':memory:');
-    await createTeam(explicit, {
+    const explicit = openDb(':memory:');
+    await createTeam(sqliteDriver(explicit), {
       slug: 'revive',
       workingHours: {
         timezone: 'UTC',
@@ -314,7 +314,7 @@ describe('db', async () => {
     });
     explicit.prepare("UPDATE schema_meta SET value = '29' WHERE key = 'schema_version'").run();
     runMigrations(explicit);
-    expect((await getTeamBySlug(explicit, 'revive'))?.working_hours).toBe(
+    expect((await getTeamBySlug(sqliteDriver(explicit), 'revive'))?.working_hours).toBe(
       JSON.stringify({ timezone: 'UTC', days: ['sat'], start: '09:00', end: '10:00' }),
     );
     await db.close();
@@ -322,7 +322,7 @@ describe('db', async () => {
   });
 
   it('v25 indexes audit by action, and the planner actually picks it over (team_id, ts)', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     const indexes = (
       db
         .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='audit'")
@@ -363,7 +363,7 @@ describe('db', async () => {
   });
 
   it('v10 adds the P3.1 substrate: grants + requests tables, team/member secret columns', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     // New tables exist and are queryable.
     expect(() => db.prepare('SELECT id FROM grants LIMIT 0').all()).not.toThrow();
     expect(() => db.prepare('SELECT id FROM requests LIMIT 0').all()).not.toThrow();
@@ -380,8 +380,8 @@ describe('db', async () => {
   });
 
   it('seedDawn produces the canonical fixture', async () => {
-    const db = openTestDb(':memory:');
-    const s = await seedDawn(db);
+    const db = openDb(':memory:');
+    const s = await seedDawn(sqliteDriver(db));
     const members = db
       .prepare<
         [string],
@@ -398,7 +398,7 @@ describe('db', async () => {
   });
 
   it('is idempotent when migrations re-run', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     // running again should not throw or duplicate
     const before = db.prepare('SELECT count(*) AS n FROM schema_meta').get() as { n: number };
     expect(before.n).toBe(1);
@@ -444,7 +444,7 @@ describe('db', async () => {
     member(1, 'm-obs', 'web-legacy');
     member(0, 'm-reg', 'nick');
 
-    expect(runMigrations(db)).toBe(82); // runs v18…v81 (governed authorization substrate, audit actor attestation, guidance epoch, doorbell, in_reply_to column, oauth, member sponsorship, agent connect nonces, team invites, agent connectors, roster status index, lane parked state, host provisions, Team-scoped OAuth client bindings, lane follows_up + abandon_reason, lane unfinished_todos)
+    expect(runMigrations(db)).toBe(83); // runs v18…v83 (governed authorization substrate, audit actor attestation, guidance epoch, doorbell, in_reply_to column, oauth, member sponsorship, agent connect nonces, team invites, agent connectors, roster status index, lane parked state, host provisions, Team-scoped OAuth client bindings, lane follows_up + abandon_reason, lane unfinished_todos, team_id on the four member-owned tables)
 
     const scope = (id: string) =>
       db
@@ -508,7 +508,7 @@ describe('db', async () => {
     );
     team('t2', 'dawn', null);
 
-    expect(runMigrations(db)).toBe(82);
+    expect(runMigrations(db)).toBe(83);
 
     const policy = (id: string) =>
       db
@@ -530,7 +530,7 @@ describe('v39 — the presence surface CHECK admits `musterd` (ADR 251 §2)', ()
     // handler and the client hung with no response at all. ADR 251 §2's roster-distinctness — the
     // whole reason native occupancies carry their own surface — was unimplementable as shipped, and
     // was only masked because the binding re-read used to overwrite the surface before it was sent.
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     db.prepare(
       "INSERT INTO teams (id, slug, created_at, updated_at) VALUES ('t1','dawn',1,1)",
     ).run();
@@ -556,7 +556,7 @@ describe('v39 — the presence surface CHECK admits `musterd` (ADR 251 §2)', ()
 
 describe('v44 — the presence surface CHECK admits `opencode` (ADR 321 §2)', () => {
   it('accepts an opencode presence, and still refuses an unknown surface', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     db.prepare(
       "INSERT INTO teams (id, slug, created_at, updated_at) VALUES ('t1','dawn',1,1)",
     ).run();
@@ -586,7 +586,7 @@ describe('v44 — the presence surface CHECK admits `opencode` (ADR 321 §2)', (
 
 describe('v41 — incident convergence (spec 2026-08-14)', () => {
   it('adds lanes.kind and the incident_reports table', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     const laneCols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
     expect(laneCols).toContain('kind');
     const cols = db.prepare("SELECT name FROM pragma_table_info('incident_reports')").pluck().all();
@@ -610,7 +610,7 @@ describe('v41 — incident convergence (spec 2026-08-14)', () => {
     const path = join(dir, 'musterd.db');
     try {
       // First open creates all three; each must come out 600.
-      let db = openTestDb(path);
+      let db = openDb(path);
       db.prepare('CREATE TABLE IF NOT EXISTS t (x)').run();
       await db.close();
       const mode = (p: string) => statSync(p).mode & 0o777;
@@ -619,7 +619,7 @@ describe('v41 — incident convergence (spec 2026-08-14)', () => {
       for (const suffix of ['', '-wal', '-shm']) {
         if (existsSync(path + suffix)) chmodSync(path + suffix, 0o644);
       }
-      db = openTestDb(path);
+      db = openDb(path);
       for (const suffix of ['', '-wal', '-shm']) {
         if (existsSync(path + suffix)) expect(mode(path + suffix)).toBe(0o600);
       }
@@ -840,7 +840,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
     stage(db, 'm1', 1, 1);
 
     db.prepare("UPDATE schema_meta SET value = '49' WHERE key = 'schema_version'").run();
-    expect(runMigrations(db)).toBe(82);
+    expect(runMigrations(db)).toBe(83);
 
     expect(db.prepare('SELECT COUNT(*) AS n FROM sync_log').get()).toEqual({ n: 1 });
     db.close();
@@ -855,7 +855,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
     db.exec('DROP INDEX idx_messages_origin; DROP TABLE sync_pull_cursor;');
     db.prepare("UPDATE schema_meta SET value = '55' WHERE key = 'schema_version'").run();
 
-    expect(runMigrations(db)).toBe(82);
+    expect(runMigrations(db)).toBe(83);
 
     expect(
       db.prepare("SELECT name FROM sqlite_master WHERE name = 'sync_pull_cursor'").get(),
@@ -871,7 +871,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
   it('v58 stamps audit with the origin pair, unique only where a stamp exists', () => {
     const db = withRemoteNode();
     db.prepare("UPDATE schema_meta SET value = '57' WHERE key = 'schema_version'").run();
-    expect(runMigrations(db)).toBe(82);
+    expect(runMigrations(db)).toBe(83);
 
     const insert = db.prepare(
       `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq)
@@ -907,7 +907,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
   });
 
   it('v61 adds presence.node (null = local) with an index', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     const cols = db
       .prepare<[], { name: string }>('PRAGMA table_info(presence)')
       .all()
@@ -924,7 +924,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
   });
 
   it('v63 rekeys seat_nodes to (member_id, node_id), carrying every existing binding over (ADR 358)', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     // Rebuild the v59 shape with a row in it, then replay v60+ over it.
     await db.exec(`
       DROP TABLE seat_nodes;
@@ -941,7 +941,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
       INSERT INTO seat_nodes VALUES ('m', 't', 'nA', 5);
     `);
     db.prepare("UPDATE schema_meta SET value = '62' WHERE key = 'schema_version'").run();
-    expect(runMigrations(db)).toBe(82);
+    expect(runMigrations(db)).toBe(83);
     expect(db.prepare('SELECT member_id, node_id, bound_at FROM seat_nodes').all()).toEqual([
       { member_id: 'm', node_id: 'nA', bound_at: 5 },
     ]);
@@ -953,7 +953,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
     await db.close();
   });
   it('v71 adds messages.in_reply_to as a generated column the discharge lookup can seek on', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     await db.exec(`
       INSERT INTO teams (id, slug, created_at, updated_at) VALUES ('t', 'alpha', 1, 1);
       INSERT INTO members (id, team_id, name, kind, role, lifecycle, observer, created_at, updated_at)
@@ -982,7 +982,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
     expect(plan).toMatch(/idx_messages_in_reply_to \(team_id=\? AND in_reply_to=\?\)/);
     // A replay must not re-add the column: table_info hides a VIRTUAL column, table_xinfo shows it.
     db.prepare("UPDATE schema_meta SET value = '70' WHERE key = 'schema_version'").run();
-    expect(runMigrations(db)).toBe(82);
+    expect(runMigrations(db)).toBe(83);
     await db.close();
   });
 });
@@ -995,7 +995,7 @@ describe('v47 — nodes table + (origin_node, origin_seq) backfill (ADR 331)', (
  */
 describe('v45 — incident_reports ids become ULIDs (ADR 325 prereq)', () => {
   it('rebuilds a populated integer-id table, preserving arrival order in the new ids', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     await db.exec(`
       DROP TABLE incident_reports;
       CREATE TABLE incident_reports (
@@ -1049,7 +1049,7 @@ describe('v45 — incident_reports ids become ULIDs (ADR 325 prereq)', () => {
  */
 describe('v77 — the roster status lookup is served by an index, with no sort', () => {
   it('latestStatusUpdate seeks idx_messages_from_act_ts and reads it in order', async () => {
-    const db = openTestDb(':memory:');
+    const db = openDb(':memory:');
     // The same SQL as latestStatusUpdate (store/messages.ts).
     const plan = db
       .prepare<[], { detail: string }>(

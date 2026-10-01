@@ -3,8 +3,8 @@ import type { Database } from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveConfig, type ResolvedConfig } from '../config.js';
 import type { Ctx } from '../context.js';
-import { sqliteDriver } from '../db/sqliteDriver.js';
-import { openTestDb } from '../db/testing.js';
+import type { Driver } from '../db/driver.js';
+import { withDrivers } from '../db/testing.js';
 import { appendAudit, listAudit } from '../store/audit.js';
 import { openLane, updateLane } from '../store/lanes.js';
 import { addMember } from '../store/members.js';
@@ -22,466 +22,485 @@ import { createTeam } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
 import { startReaper } from './reaper.js';
 
-/**
- * The reaper is a `setInterval` tick, so drive it with fake timers: seed a stale row, advance one
- * `reaperIntervalMs`, and assert the tick's side effects (offline broadcast, request expiry, audit).
- */
-describe('startReaper', async () => {
-  let db: Database;
-  let hub: Hub;
-  let config: ResolvedConfig;
-  let ctx: Ctx;
-  let stop: (() => void) | undefined;
+let openStore: () => Promise<Driver>;
 
+withDrivers('reaper', (o) => {
+  // Set per test, not at collection: describe.each collects every driver before any test runs.
   beforeEach(() => {
-    vi.useFakeTimers();
-    db = openTestDb(':memory:');
-    hub = new Hub();
-    config = resolveConfig();
-    ctx = { db: sqliteDriver(db), hub, config, rosterRoots: [] };
-  });
-
-  afterEach(() => {
-    stop?.();
-    stop = undefined;
-    vi.useRealTimers();
-    db.close();
-  });
-
-  async function seatWithPresence(name: string): Promise<{ memberId: string; presenceId: string }> {
-    const team = await createTeam(db, { slug: 'dawn' });
-    const { row } = await addMember(db, team, { name, kind: 'agent' });
-    const presence = await attach(db, row.id, 'cli', 'conn-1');
-    return { memberId: row.id, presenceId: presence.id };
-  }
-
-  it('reaps a stale live presence and broadcasts the member offline', async () => {
-    const { presenceId } = await seatWithPresence('Ada');
-    // Backdate the row so it is already stale, then let one tick sweep it.
-    db.prepare('UPDATE presence SET last_seen_at = ? WHERE id = ?').run(
-      Date.now() - config.presenceTimeoutMs - 1,
-      presenceId,
-    );
-    const broadcast = vi.spyOn(hub, 'broadcastTeam');
-
-    stop = startReaper(ctx);
-    // A freshly started loop has not heard a full timeout window yet, so it judges nobody: before
-    // this, a daemon bounce reaped every presence on its first tick and every session lease with it
-    // (lane 01M1HNY302). The row survives until the loop has actually been listening that long.
-    await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
-    expect(broadcast).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs);
-
-    expect(broadcast).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ type: 'presence', member: 'Ada', status: 'offline' }),
-    );
-  });
-
-  it('a stall as long as the timeout restarts the listening window — a row is not reaped on the tick that notices the gap', async () => {
-    const broadcast = vi.spyOn(hub, 'broadcastTeam');
-
-    stop = startReaper(ctx);
-    // Run continuously long enough that the loop is entitled to judge, then take a live seat.
-    await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs);
-    const { presenceId } = await seatWithPresence('Cy');
-
-    // The process stalls (a suspend, a blocked event loop): the clock moves, no tick runs, and no
-    // heartbeat could have been heard either. The row goes stale purely because nobody was there.
-    vi.setSystemTime(Date.now() + config.presenceTimeoutMs * 4);
-    await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
-    expect(broadcast).not.toHaveBeenCalled();
-    expect(await presenceById(db, presenceId)).toBeDefined();
-
-    // Given a full window with the loop actually running and still no heartbeat, it is silent.
-    await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs);
-    expect(broadcast).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ type: 'presence', member: 'Cy', status: 'offline' }),
-    );
-  });
-
-  it('a tick that itself blocks past the timeout reaps nothing — the guard and the cutoff run on the clock the tick started with', async () => {
-    const broadcast = vi.spyOn(hub, 'broadcastTeam');
-
-    stop = startReaper(ctx);
-    await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs);
-    const { presenceId } = await seatWithPresence('Di');
-
-    // The next tick starts on time and then blocks inside its own body for longer than the timeout
-    // (a wedged daemon straight after a host resume — measured 2026-09-14 15:57:46Z, one tick of
-    // ~104s that reaped ghost, wanderer and dolly 51s in while their sockets were open). Every
-    // Date.now() after the tick's first read returns a clock past the timeout; the seat's
-    // heartbeat is in the socket buffer, unreadable until the tick returns.
-    const faked = Date.now;
-    let reads = 0;
-    vi.spyOn(Date, 'now').mockImplementation(() => {
-      reads += 1;
-      return reads === 1 ? faked() : faked() + config.presenceTimeoutMs + 1;
-    });
-    await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
-    vi.restoreAllMocks();
-
-    expect(broadcast).not.toHaveBeenCalled();
-    expect(await presenceById(db, presenceId)).toBeDefined();
-  });
-
-  it('does not broadcast offline when only a grace-held row expires', async () => {
-    const { presenceId } = await seatWithPresence('Bo');
-    // A released (held) presence expiring is not a state change — the member already went offline.
-    await release(db, presenceId, config.reclaimGraceMs);
-    db.prepare('UPDATE presence SET held_until = ?, last_seen_at = ? WHERE id = ?').run(
-      Date.now() - 1,
-      Date.now() - config.presenceTimeoutMs - 1,
-      presenceId,
-    );
-    const broadcast = vi.spyOn(hub, 'broadcastTeam');
-
-    stop = startReaper(ctx);
-    await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
-
-    expect(broadcast).not.toHaveBeenCalled();
-  });
-
-  it('expires a pending claim request past its deadline and refuses the session', async () => {
-    const team = await createTeam(db, { slug: 'dawn' });
-    const req = await createRequest(sqliteDriver(db), team.id, {
-      kind: 'claim',
-      from_session: 'sess-9',
-      target: 'seat:Ada',
-    });
-    db.prepare('UPDATE requests SET expires_at = ? WHERE id = ?').run(Date.now() - 1, req.id);
-    const deliver = vi.spyOn(hub, 'deliverClaimDecision').mockReturnValue(true);
-
-    stop = startReaper(ctx);
-    await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
-
-    expect(deliver).toHaveBeenCalledWith(
-      'sess-9',
-      expect.objectContaining({ type: 'refused', code: 'expired_grant' }),
-    );
-    const audit = (await listAudit(db, team.id)).find((a) => a.action === 'request.expired');
-    expect(audit).toBeDefined();
-  });
-
-  it('is a no-op tick when nothing is stale, and stop() clears the interval', async () => {
-    await seatWithPresence('Fresh');
-    const broadcast = vi.spyOn(hub, 'broadcastTeam');
-
-    stop = startReaper(ctx);
-    await vi.advanceTimersByTimeAsync(config.reaperIntervalMs * 2);
-    expect(broadcast).not.toHaveBeenCalled();
-
-    stop();
-    stop = undefined;
-    // After stopping, further time must not trigger any more work.
-    await vi.advanceTimersByTimeAsync(config.reaperIntervalMs * 5);
-    expect(broadcast).not.toHaveBeenCalled();
+    openStore = o;
   });
 
   /**
-   * ADR 236: an expired lease means one of two opposite things — the host tried and failed (burn the
-   * attempt budget, or a crash-looping host retries forever) or the host was not there at all (burn
-   * nothing, or the act is retired before anyone could answer it). The discriminator is the reaper's
-   * own cadence: a 15-second loop that did not fire for a quarter hour was suspended, not late.
-   *
-   * The suspension is simulated the way macOS causes it — the wall clock jumps while the timer queue
-   * does not fire — via `setSystemTime` followed by a single interval.
+   * The reaper is a `setInterval` tick, so drive it with fake timers: seed a stale row, advance one
+   * `reaperIntervalMs`, and assert the tick's side effects (offline broadcast, request expiry, audit).
    */
-  describe('a lease that expired while the host was unreachable (ADR 236)', async () => {
-    const HOST = 'laptop.local';
+  describe('startReaper', async () => {
+    let db: Database;
+    let hub: Hub;
+    let config: ResolvedConfig;
+    let ctx: Ctx;
+    let stop: (() => void) | undefined;
 
-    /** A real due wake, leased through `claimWakeLeases` — same rows production writes. */
-    async function leaseDueWake(): Promise<{ teamId: string; seat: string }> {
-      const team = await createTeam(db, { slug: 'revive' });
-      const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
-      const ada = (await addMember(db, team, { name: 'Ada', kind: 'agent' })).row;
-      await enrollResidency(db, team.id, {
-        member_id: ada.id,
-        harness: 'claude-code',
-        host: HOST,
-        grant_id: 'g1',
-        authorized_by: 'nick',
+    beforeEach(async () => {
+      vi.useFakeTimers();
+      db = await openStore();
+      hub = new Hub();
+      config = resolveConfig();
+      ctx = { db: db, hub, config, rosterRoots: [] };
+    });
+
+    afterEach(() => {
+      stop?.();
+      stop = undefined;
+      vi.useRealTimers();
+      db.close();
+    });
+
+    async function seatWithPresence(
+      name: string,
+    ): Promise<{ memberId: string; presenceId: string }> {
+      const team = await createTeam(db, { slug: 'dawn' });
+      const { row } = await addMember(db, team, { name, kind: 'agent' });
+      const presence = await attach(db, row.id, 'cli', 'conn-1');
+      return { memberId: row.id, presenceId: presence.id };
+    }
+
+    it('reaps a stale live presence and broadcasts the member offline', async () => {
+      const { presenceId } = await seatWithPresence('Ada');
+      // Backdate the row so it is already stale, then let one tick sweep it.
+      await db.run('UPDATE presence SET last_seen_at = ? WHERE id = ?', [
+        Date.now() - config.presenceTimeoutMs - 1,
+        presenceId,
+      ]);
+      const broadcast = vi.spyOn(hub, 'broadcastTeam');
+
+      stop = startReaper(ctx);
+      // A freshly started loop has not heard a full timeout window yet, so it judges nobody: before
+      // this, a daemon bounce reaped every presence on its first tick and every session lease with it
+      // (lane 01M1HNY302). The row survives until the loop has actually been listening that long.
+      await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
+      expect(broadcast).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs);
+
+      expect(broadcast).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ type: 'presence', member: 'Ada', status: 'offline' }),
+      );
+    });
+
+    it('a stall as long as the timeout restarts the listening window — a row is not reaped on the tick that notices the gap', async () => {
+      const broadcast = vi.spyOn(hub, 'broadcastTeam');
+
+      stop = startReaper(ctx);
+      // Run continuously long enough that the loop is entitled to judge, then take a live seat.
+      await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs);
+      const { presenceId } = await seatWithPresence('Cy');
+
+      // The process stalls (a suspend, a blocked event loop): the clock moves, no tick runs, and no
+      // heartbeat could have been heard either. The row goes stale purely because nobody was there.
+      vi.setSystemTime(Date.now() + config.presenceTimeoutMs * 4);
+      await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
+      expect(broadcast).not.toHaveBeenCalled();
+      expect(await presenceById(db, presenceId)).toBeDefined();
+
+      // Given a full window with the loop actually running and still no heartbeat, it is silent.
+      await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs);
+      expect(broadcast).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ type: 'presence', member: 'Cy', status: 'offline' }),
+      );
+    });
+
+    it('a tick that itself blocks past the timeout reaps nothing — the guard and the cutoff run on the clock the tick started with', async () => {
+      const broadcast = vi.spyOn(hub, 'broadcastTeam');
+
+      stop = startReaper(ctx);
+      await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs);
+      const { presenceId } = await seatWithPresence('Di');
+
+      // The next tick starts on time and then blocks inside its own body for longer than the timeout
+      // (a wedged daemon straight after a host resume — measured 2026-09-14 15:57:46Z, one tick of
+      // ~104s that reaped ghost, wanderer and dolly 51s in while their sockets were open). Every
+      // Date.now() after the tick's first read returns a clock past the timeout; the seat's
+      // heartbeat is in the socket buffer, unreadable until the tick returns.
+      const faked = Date.now;
+      let reads = 0;
+      vi.spyOn(Date, 'now').mockImplementation(() => {
+        reads += 1;
+        return reads === 1 ? faked() : faked() + config.presenceTimeoutMs + 1;
       });
+      await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
+      vi.restoreAllMocks();
+
+      expect(broadcast).not.toHaveBeenCalled();
+      expect(await presenceById(db, presenceId)).toBeDefined();
+    });
+
+    it('does not broadcast offline when only a grace-held row expires', async () => {
+      const { presenceId } = await seatWithPresence('Bo');
+      // A released (held) presence expiring is not a state change — the member already went offline.
+      await release(db, presenceId, config.reclaimGraceMs);
+      await db.run('UPDATE presence SET held_until = ?, last_seen_at = ? WHERE id = ?', [
+        Date.now() - 1,
+        Date.now() - config.presenceTimeoutMs - 1,
+        presenceId,
+      ]);
+      const broadcast = vi.spyOn(hub, 'broadcastTeam');
+
+      stop = startReaper(ctx);
+      await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
+
+      expect(broadcast).not.toHaveBeenCalled();
+    });
+
+    it('expires a pending claim request past its deadline and refuses the session', async () => {
+      const team = await createTeam(db, { slug: 'dawn' });
+      const req = await createRequest(db, team.id, {
+        kind: 'claim',
+        from_session: 'sess-9',
+        target: 'seat:Ada',
+      });
+      await db.run('UPDATE requests SET expires_at = ? WHERE id = ?', [Date.now() - 1, req.id]);
+      const deliver = vi.spyOn(hub, 'deliverClaimDecision').mockReturnValue(true);
+
+      stop = startReaper(ctx);
+      await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
+
+      expect(deliver).toHaveBeenCalledWith(
+        'sess-9',
+        expect.objectContaining({ type: 'refused', code: 'expired_grant' }),
+      );
+      const audit = (await listAudit(db, team.id)).find((a) => a.action === 'request.expired');
+      expect(audit).toBeDefined();
+    });
+
+    it('is a no-op tick when nothing is stale, and stop() clears the interval', async () => {
+      await seatWithPresence('Fresh');
+      const broadcast = vi.spyOn(hub, 'broadcastTeam');
+
+      stop = startReaper(ctx);
+      await vi.advanceTimersByTimeAsync(config.reaperIntervalMs * 2);
+      expect(broadcast).not.toHaveBeenCalled();
+
+      stop();
+      stop = undefined;
+      // After stopping, further time must not trigger any more work.
+      await vi.advanceTimersByTimeAsync(config.reaperIntervalMs * 5);
+      expect(broadcast).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ADR 236: an expired lease means one of two opposite things — the host tried and failed (burn the
+     * attempt budget, or a crash-looping host retries forever) or the host was not there at all (burn
+     * nothing, or the act is retired before anyone could answer it). The discriminator is the reaper's
+     * own cadence: a 15-second loop that did not fire for a quarter hour was suspended, not late.
+     *
+     * The suspension is simulated the way macOS causes it — the wall clock jumps while the timer queue
+     * does not fire — via `setSystemTime` followed by a single interval.
+     */
+    describe('a lease that expired while the host was unreachable (ADR 236)', async () => {
+      const HOST = 'laptop.local';
+
+      /** A real due wake, leased through `claimWakeLeases` — same rows production writes. */
+      async function leaseDueWake(): Promise<{ teamId: string; seat: string }> {
+        const team = await createTeam(db, { slug: 'revive' });
+        const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
+        const ada = (await addMember(db, team, { name: 'Ada', kind: 'agent' })).row;
+        await enrollResidency(db, team.id, {
+          member_id: ada.id,
+          harness: 'claude-code',
+          host: HOST,
+          grant_id: 'g1',
+          authorized_by: 'nick',
+        });
+        await insertMessage(
+          db,
+          team.id,
+          nick.id,
+          ada.id,
+          makeEnvelope({
+            id: 'u1',
+            team: team.slug,
+            from: nick.name,
+            to: { kind: 'member', name: ada.name },
+            act: 'message',
+            body: 'x',
+            thread: null,
+            meta: { urgent: true, urgent_reason: 'wake me' },
+            ts: Date.now(),
+          }),
+        );
+        const orders = await claimWakeLeases(
+          db,
+          team.id,
+          team.slug,
+          HOST,
+          config.presenceTimeoutMs,
+        );
+        expect(orders).toHaveLength(1);
+        return { teamId: team.id, seat: ada.name };
+      }
+
+      const rows = async (teamId: string, action: string) =>
+        (await listAudit(db, teamId)).filter((a) => a.action === action);
+      const detailOf = (row: { detail: unknown }) =>
+        JSON.parse(row.detail as string) as Record<string, unknown>;
+
+      /** Sleep the host: the clock jumps, the timer queue does not fire, then one tick catches up —
+       *  so the tick that follows observes exactly `gapMs` since the previous one. */
+      async function suspendThenTick(gapMs: number) {
+        vi.setSystemTime(Date.now() + gapMs - config.reaperIntervalMs);
+        await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
+      }
+
+      it('burns the attempt budget when the loop ran on schedule (a host-reported failure)', async () => {
+        const { teamId } = await leaseDueWake();
+        stop = startReaper(ctx);
+        // Ticks fire every interval throughout: the daemon was demonstrably alive the whole time.
+        await vi.advanceTimersByTimeAsync(WAKE_LEASE_TTL_MS + config.reaperIntervalMs);
+
+        expect(await rows(teamId, 'residency.wake_failed')).toHaveLength(1);
+        expect(detailOf((await rows(teamId, 'residency.wake_failed'))[0]!).reason).toBe(
+          'lease_expired',
+        );
+        expect(await rows(teamId, 'residency.wake_deferred')).toHaveLength(0);
+      });
+
+      // ADR 252: `residency.wake_cost` is written only when a host REPORTS, so a wake that spawned a
+      // session and then died on its lease is paid for and invisible. The session's own attested
+      // token is the evidence — the expiry row carries the fact, and deliberately no dollar figure:
+      // no cost source exists on this path, and a made-up number is worse than an honest gap.
+      it('stamps session_captured on an expired lease that a session attested (paid, unpriced)', async () => {
+        const { teamId } = await leaseDueWake();
+        const leaseId = (await db.get('SELECT id FROM wake_leases WHERE team_id = ?', [teamId]))!
+          .id;
+        await appendAudit(db, teamId, {
+          actor: null,
+          action: 'residency.session_captured',
+          target: 'Ada',
+          result: 'allow',
+          detail: { harness: 'claude-code', enrolled: true, wake_lease: leaseId },
+        });
+
+        stop = startReaper(ctx);
+        await vi.advanceTimersByTimeAsync(WAKE_LEASE_TTL_MS + config.reaperIntervalMs);
+
+        const failed = detailOf((await rows(teamId, 'residency.wake_failed'))[0]!);
+        expect(failed.reason).toBe('lease_expired');
+        expect(failed.session_captured).toBe(true);
+        expect(failed).not.toHaveProperty('cost_usd');
+      });
+
+      it('says nothing when no session claimed the lease — silence, not a denial', async () => {
+        const { teamId } = await leaseDueWake();
+        // A session captured under a DIFFERENT lease must not be credited to this one: the join is
+        // by identity, never by "a session happened around then" (the ADR 238→241 inference).
+        await appendAudit(db, teamId, {
+          actor: null,
+          action: 'residency.session_captured',
+          target: 'Ada',
+          result: 'allow',
+          detail: { harness: 'claude-code', enrolled: true, wake_lease: 'some-other-lease' },
+        });
+
+        stop = startReaper(ctx);
+        await vi.advanceTimersByTimeAsync(WAKE_LEASE_TTL_MS + config.reaperIntervalMs);
+
+        expect(detailOf((await rows(teamId, 'residency.wake_failed'))[0]!)).not.toHaveProperty(
+          'session_captured',
+        );
+      });
+
+      it('defers instead — and records the suspension — when the loop did not run', async () => {
+        const { teamId, seat } = await leaseDueWake();
+        stop = startReaper(ctx);
+        await suspendThenTick(15 * 60_000);
+
+        expect(await rows(teamId, 'residency.wake_failed')).toHaveLength(0);
+        const deferred = await rows(teamId, 'residency.wake_deferred');
+        expect(deferred).toHaveLength(1);
+        expect(deferred[0]!.target).toBe(seat);
+        expect(detailOf(deferred[0]!).reason).toBe('host_unreachable');
+
+        const suspended = await rows(teamId, 'residency.host_suspended');
+        expect(suspended).toHaveLength(1);
+        expect(detailOf(suspended[0]!).gap_ms).toBeGreaterThanOrEqual(15 * 60_000);
+      });
+
+      it('does not read a minute of scheduler lateness as absence (the threshold has headroom)', async () => {
+        // Pinned in absolute time, not against the constant: a loaded machine can starve a 15-second
+        // loop for a minute, and calling that "the host was gone" would defer every real failure.
+        const { teamId } = await leaseDueWake();
+        stop = startReaper(ctx);
+        await suspendThenTick(60_000);
+
+        expect(await rows(teamId, 'residency.host_suspended')).toHaveLength(0);
+      });
+
+      it('treats a gap under the suspend threshold as ordinary lateness, not absence', async () => {
+        const { teamId } = await leaseDueWake();
+        stop = startReaper(ctx);
+        await suspendThenTick(HOST_SUSPEND_GAP_MS - 1_000);
+        // ...then keep ticking on schedule until the lease is genuinely past its TTL.
+        await vi.advanceTimersByTimeAsync(WAKE_LEASE_TTL_MS);
+
+        expect(await rows(teamId, 'residency.host_suspended')).toHaveLength(0);
+        expect(await rows(teamId, 'residency.wake_deferred')).toHaveLength(0);
+        expect(await rows(teamId, 'residency.wake_failed')).toHaveLength(1);
+      });
+
+      it('a deferred expiry burns no attempt budget: the act re-leases once the snooze lifts', async () => {
+        const { teamId } = await leaseDueWake();
+        const team = { id: teamId };
+        stop = startReaper(ctx);
+        await suspendThenTick(15 * 60_000);
+
+        // Lift the deferral snooze; nothing else about the act has changed.
+        await db.run("UPDATE audit SET ts = ? WHERE action = 'residency.wake_deferred'", [
+          Date.now() - 10 * 60_000,
+        ]);
+        const again = await claimWakeLeases(db, team.id, 'revive', HOST, config.presenceTimeoutMs);
+        expect(again).toHaveLength(1);
+        expect(again[0]!.act_id).toBe('u1');
+      });
+
+      it('stops deferring once the host has been awake past the ceiling (defer is bounded)', async () => {
+        const { teamId } = await leaseDueWake();
+        // Backdate the act's first lease so the host has since been awake well past the ceiling —
+        // the sleep below is subtracted from that span, so the margin has to exceed it.
+        await db.run("UPDATE audit SET ts = ? WHERE action = 'residency.wake_leased'", [
+          Date.now() - (WAKE_UNREACHABLE_CEILING_MS + 30 * 60_000),
+        ]);
+        stop = startReaper(ctx);
+        await suspendThenTick(15 * 60_000);
+
+        expect(await rows(teamId, 'residency.wake_deferred')).toHaveLength(0);
+        expect(await rows(teamId, 'residency.wake_failed')).toHaveLength(1);
+      });
+
+      it('counts only awake time toward the ceiling: a long sleep does not spend it', async () => {
+        const { teamId } = await leaseDueWake();
+        const now = Date.now();
+        // The act's first lease is older than the ceiling in WALL-CLOCK time — but the host spent
+        // nearly all of that span asleep, in one recorded suspension. Awake time is what rules.
+        await db.run("UPDATE audit SET ts = ? WHERE action = 'residency.wake_leased'", [
+          now - (WAKE_UNREACHABLE_CEILING_MS + 60 * 60_000),
+        ]);
+        await appendAudit(db, teamId, {
+          actor: null,
+          action: 'residency.host_suspended',
+          target: 'daemon',
+          result: 'allow',
+          detail: {
+            gap_ms: WAKE_UNREACHABLE_CEILING_MS,
+            from: now - (WAKE_UNREACHABLE_CEILING_MS + 30 * 60_000),
+            to: now - 30 * 60_000,
+          },
+        });
+        stop = startReaper(ctx);
+        await suspendThenTick(15 * 60_000);
+
+        expect(await rows(teamId, 'residency.wake_failed')).toHaveLength(0);
+        expect(await rows(teamId, 'residency.wake_deferred')).toHaveLength(1);
+      });
+    });
+  });
+
+  /**
+   * Lane 01M2RQ8W0RR838P2KW3SP6SYGV — the silent departure.
+   *
+   * ADR 412 re-routes an acceptance when a seat says goodbye. A reaped seat says nothing: it emits
+   * `presence.detached` with reason 'reaped' and no `residency.session_ended`, so 412's trigger never
+   * fires. On revive, where `loops.sweep` is not armed, such an ask waits forever — the 12h
+   * `stale_acceptance` warning is advisory and ADR 229's 24h close never runs.
+   */
+  describe('startReaper — an acceptance held by a seat that vanished without a goodbye', async () => {
+    let db: Database;
+    let hub: Hub;
+    let config: ResolvedConfig;
+    let ctx: Ctx;
+    let stop: (() => void) | undefined;
+
+    beforeEach(async () => {
+      vi.useFakeTimers();
+      db = await openStore();
+      hub = new Hub();
+      config = resolveConfig();
+      ctx = { db: db, hub, config, rosterRoots: [] };
+    });
+
+    afterEach(() => {
+      stop?.();
+      stop = undefined;
+      vi.useRealTimers();
+      db.close();
+    });
+
+    async function laneHeldByADepartedSeat() {
+      const team = await createTeam(db, { slug: 'dawn' });
+      const worker = (await addMember(db, team, { name: 'Kim', kind: 'agent' })).row;
+      const gone = (await addMember(db, team, { name: 'delta', kind: 'agent' })).row;
+      const live = (await addMember(db, team, { name: 'Lin', kind: 'agent' })).row;
+      // Lin is here and says what she is running; the picker routes on the live occupancy (ADR 101).
+      await attach(db, live.id, 'cli', 'conn-lin', { model: 'gpt-5.6-sol' });
+      // delta held a presence and it went stale — the reap, not a goodbye.
+      const stale = await attach(db, gone.id, 'cli', 'conn-delta', { model: 'claude-opus-5' });
+      await db.run('UPDATE presence SET last_seen_at = ? WHERE id = ?', [
+        Date.now() - config.presenceTimeoutMs - 1,
+        stale.id,
+      ]);
+      const lane = await openLane(db, team.id, team.slug, 'Kim', {
+        title: 'kim lane',
+        claim: true,
+      });
+      await updateLane(db, team.id, lane.id, team.slug, { state: 'awaiting_acceptance' });
       await insertMessage(
         db,
         team.id,
-        nick.id,
-        ada.id,
+        worker.id,
+        gone.id,
         makeEnvelope({
-          id: 'u1',
+          id: 'ask-vanished',
           team: team.slug,
-          from: nick.name,
-          to: { kind: 'member', name: ada.name },
-          act: 'message',
-          body: 'x',
-          thread: null,
-          meta: { urgent: true, urgent_reason: 'wake me' },
-          ts: Date.now(),
+          from: 'Kim',
+          to: { kind: 'member', name: 'delta' },
+          act: 'ask',
+          body: '[lane] acceptance requested',
+          meta: { species: 'approve', tier: 'standard', lane_review: { lane: lane.id } },
+          ts: 1_000,
         }),
       );
-      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, config.presenceTimeoutMs);
-      expect(orders).toHaveLength(1);
-      return { teamId: team.id, seat: ada.name };
+      return { team, lane };
     }
 
-    const rows = async (teamId: string, action: string) =>
-      (await listAudit(db, teamId)).filter((a) => a.action === action);
-    const detailOf = (row: { detail: unknown }) =>
-      JSON.parse(row.detail as string) as Record<string, unknown>;
+    const rerouted = async (teamId: string) =>
+      (await listAudit(db, teamId)).filter((r) => r.action === 'lane.review_rerouted');
 
-    /** Sleep the host: the clock jumps, the timer queue does not fire, then one tick catches up —
-     *  so the tick that follows observes exactly `gapMs` since the previous one. */
-    async function suspendThenTick(gapMs: number) {
-      vi.setSystemTime(Date.now() + gapMs - config.reaperIntervalMs);
-      await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
-    }
-
-    it('burns the attempt budget when the loop ran on schedule (a host-reported failure)', async () => {
-      const { teamId } = await leaseDueWake();
-      stop = startReaper(ctx);
-      // Ticks fire every interval throughout: the daemon was demonstrably alive the whole time.
-      await vi.advanceTimersByTimeAsync(WAKE_LEASE_TTL_MS + config.reaperIntervalMs);
-
-      expect(await rows(teamId, 'residency.wake_failed')).toHaveLength(1);
-      expect(detailOf((await rows(teamId, 'residency.wake_failed'))[0]!).reason).toBe(
-        'lease_expired',
-      );
-      expect(await rows(teamId, 'residency.wake_deferred')).toHaveLength(0);
-    });
-
-    // ADR 252: `residency.wake_cost` is written only when a host REPORTS, so a wake that spawned a
-    // session and then died on its lease is paid for and invisible. The session's own attested
-    // token is the evidence — the expiry row carries the fact, and deliberately no dollar figure:
-    // no cost source exists on this path, and a made-up number is worse than an honest gap.
-    it('stamps session_captured on an expired lease that a session attested (paid, unpriced)', async () => {
-      const { teamId } = await leaseDueWake();
-      const leaseId = db
-        .prepare<[string], { id: string }>('SELECT id FROM wake_leases WHERE team_id = ?')
-        .get(teamId)!.id;
-      await appendAudit(db, teamId, {
-        actor: null,
-        action: 'residency.session_captured',
-        target: 'Ada',
-        result: 'allow',
-        detail: { harness: 'claude-code', enrolled: true, wake_lease: leaseId },
-      });
+    it('re-routes the acceptance to a live seat once the holder has been reaped', async () => {
+      const { team, lane } = await laneHeldByADepartedSeat();
 
       stop = startReaper(ctx);
-      await vi.advanceTimersByTimeAsync(WAKE_LEASE_TTL_MS + config.reaperIntervalMs);
+      // The loop judges nobody until it has listened for a full timeout window (lane 01M1HNY302).
+      await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs * 2);
 
-      const failed = detailOf((await rows(teamId, 'residency.wake_failed'))[0]!);
-      expect(failed.reason).toBe('lease_expired');
-      expect(failed.session_captured).toBe(true);
-      expect(failed).not.toHaveProperty('cost_usd');
+      const rows = await rerouted(team.id);
+      expect(rows).toHaveLength(1);
+      const detail = JSON.parse(rows[0]!.detail as string);
+      expect(detail.lane).toBe(lane.id);
+      expect(detail.from_reviewer).toBe('delta');
+      expect(detail.superseded_ask).toBe('ask-vanished');
+      expect(detail.reviewer).toBe('Lin');
+      expect(detail.route).toBe('reaped');
     });
 
-    it('says nothing when no session claimed the lease — silence, not a denial', async () => {
-      const { teamId } = await leaseDueWake();
-      // A session captured under a DIFFERENT lease must not be credited to this one: the join is
-      // by identity, never by "a session happened around then" (the ADR 238→241 inference).
-      await appendAudit(db, teamId, {
-        actor: null,
-        action: 'residency.session_captured',
-        target: 'Ada',
-        result: 'allow',
-        detail: { harness: 'claude-code', enrolled: true, wake_lease: 'some-other-lease' },
-      });
+    it('re-routes a lane at most once, however many ticks pass', async () => {
+      const { team } = await laneHeldByADepartedSeat();
 
       stop = startReaper(ctx);
-      await vi.advanceTimersByTimeAsync(WAKE_LEASE_TTL_MS + config.reaperIntervalMs);
+      await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs * 20);
 
-      expect(detailOf((await rows(teamId, 'residency.wake_failed'))[0]!)).not.toHaveProperty(
-        'session_captured',
-      );
+      expect(await rerouted(team.id)).toHaveLength(1);
     });
-
-    it('defers instead — and records the suspension — when the loop did not run', async () => {
-      const { teamId, seat } = await leaseDueWake();
-      stop = startReaper(ctx);
-      await suspendThenTick(15 * 60_000);
-
-      expect(await rows(teamId, 'residency.wake_failed')).toHaveLength(0);
-      const deferred = await rows(teamId, 'residency.wake_deferred');
-      expect(deferred).toHaveLength(1);
-      expect(deferred[0]!.target).toBe(seat);
-      expect(detailOf(deferred[0]!).reason).toBe('host_unreachable');
-
-      const suspended = await rows(teamId, 'residency.host_suspended');
-      expect(suspended).toHaveLength(1);
-      expect(detailOf(suspended[0]!).gap_ms).toBeGreaterThanOrEqual(15 * 60_000);
-    });
-
-    it('does not read a minute of scheduler lateness as absence (the threshold has headroom)', async () => {
-      // Pinned in absolute time, not against the constant: a loaded machine can starve a 15-second
-      // loop for a minute, and calling that "the host was gone" would defer every real failure.
-      const { teamId } = await leaseDueWake();
-      stop = startReaper(ctx);
-      await suspendThenTick(60_000);
-
-      expect(await rows(teamId, 'residency.host_suspended')).toHaveLength(0);
-    });
-
-    it('treats a gap under the suspend threshold as ordinary lateness, not absence', async () => {
-      const { teamId } = await leaseDueWake();
-      stop = startReaper(ctx);
-      await suspendThenTick(HOST_SUSPEND_GAP_MS - 1_000);
-      // ...then keep ticking on schedule until the lease is genuinely past its TTL.
-      await vi.advanceTimersByTimeAsync(WAKE_LEASE_TTL_MS);
-
-      expect(await rows(teamId, 'residency.host_suspended')).toHaveLength(0);
-      expect(await rows(teamId, 'residency.wake_deferred')).toHaveLength(0);
-      expect(await rows(teamId, 'residency.wake_failed')).toHaveLength(1);
-    });
-
-    it('a deferred expiry burns no attempt budget: the act re-leases once the snooze lifts', async () => {
-      const { teamId } = await leaseDueWake();
-      const team = { id: teamId };
-      stop = startReaper(ctx);
-      await suspendThenTick(15 * 60_000);
-
-      // Lift the deferral snooze; nothing else about the act has changed.
-      db.prepare("UPDATE audit SET ts = ? WHERE action = 'residency.wake_deferred'").run(
-        Date.now() - 10 * 60_000,
-      );
-      const again = await claimWakeLeases(db, team.id, 'revive', HOST, config.presenceTimeoutMs);
-      expect(again).toHaveLength(1);
-      expect(again[0]!.act_id).toBe('u1');
-    });
-
-    it('stops deferring once the host has been awake past the ceiling (defer is bounded)', async () => {
-      const { teamId } = await leaseDueWake();
-      // Backdate the act's first lease so the host has since been awake well past the ceiling —
-      // the sleep below is subtracted from that span, so the margin has to exceed it.
-      db.prepare("UPDATE audit SET ts = ? WHERE action = 'residency.wake_leased'").run(
-        Date.now() - (WAKE_UNREACHABLE_CEILING_MS + 30 * 60_000),
-      );
-      stop = startReaper(ctx);
-      await suspendThenTick(15 * 60_000);
-
-      expect(await rows(teamId, 'residency.wake_deferred')).toHaveLength(0);
-      expect(await rows(teamId, 'residency.wake_failed')).toHaveLength(1);
-    });
-
-    it('counts only awake time toward the ceiling: a long sleep does not spend it', async () => {
-      const { teamId } = await leaseDueWake();
-      const now = Date.now();
-      // The act's first lease is older than the ceiling in WALL-CLOCK time — but the host spent
-      // nearly all of that span asleep, in one recorded suspension. Awake time is what rules.
-      db.prepare("UPDATE audit SET ts = ? WHERE action = 'residency.wake_leased'").run(
-        now - (WAKE_UNREACHABLE_CEILING_MS + 60 * 60_000),
-      );
-      await appendAudit(db, teamId, {
-        actor: null,
-        action: 'residency.host_suspended',
-        target: 'daemon',
-        result: 'allow',
-        detail: {
-          gap_ms: WAKE_UNREACHABLE_CEILING_MS,
-          from: now - (WAKE_UNREACHABLE_CEILING_MS + 30 * 60_000),
-          to: now - 30 * 60_000,
-        },
-      });
-      stop = startReaper(ctx);
-      await suspendThenTick(15 * 60_000);
-
-      expect(await rows(teamId, 'residency.wake_failed')).toHaveLength(0);
-      expect(await rows(teamId, 'residency.wake_deferred')).toHaveLength(1);
-    });
-  });
-});
-
-/**
- * Lane 01M2RQ8W0RR838P2KW3SP6SYGV — the silent departure.
- *
- * ADR 412 re-routes an acceptance when a seat says goodbye. A reaped seat says nothing: it emits
- * `presence.detached` with reason 'reaped' and no `residency.session_ended`, so 412's trigger never
- * fires. On revive, where `loops.sweep` is not armed, such an ask waits forever — the 12h
- * `stale_acceptance` warning is advisory and ADR 229's 24h close never runs.
- */
-describe('startReaper — an acceptance held by a seat that vanished without a goodbye', async () => {
-  let db: Database;
-  let hub: Hub;
-  let config: ResolvedConfig;
-  let ctx: Ctx;
-  let stop: (() => void) | undefined;
-
-  beforeEach(() => {
-    vi.useFakeTimers();
-    db = openTestDb(':memory:');
-    hub = new Hub();
-    config = resolveConfig();
-    ctx = { db: sqliteDriver(db), hub, config, rosterRoots: [] };
-  });
-
-  afterEach(() => {
-    stop?.();
-    stop = undefined;
-    vi.useRealTimers();
-    db.close();
-  });
-
-  async function laneHeldByADepartedSeat() {
-    const team = await createTeam(db, { slug: 'dawn' });
-    const worker = (await addMember(db, team, { name: 'Kim', kind: 'agent' })).row;
-    const gone = (await addMember(db, team, { name: 'delta', kind: 'agent' })).row;
-    const live = (await addMember(db, team, { name: 'Lin', kind: 'agent' })).row;
-    // Lin is here and says what she is running; the picker routes on the live occupancy (ADR 101).
-    await attach(db, live.id, 'cli', 'conn-lin', { model: 'gpt-5.6-sol' });
-    // delta held a presence and it went stale — the reap, not a goodbye.
-    const stale = await attach(db, gone.id, 'cli', 'conn-delta', { model: 'claude-opus-5' });
-    db.prepare('UPDATE presence SET last_seen_at = ? WHERE id = ?').run(
-      Date.now() - config.presenceTimeoutMs - 1,
-      stale.id,
-    );
-    const lane = await openLane(db, team.id, team.slug, 'Kim', { title: 'kim lane', claim: true });
-    await updateLane(db, team.id, lane.id, team.slug, { state: 'awaiting_acceptance' });
-    await insertMessage(
-      db,
-      team.id,
-      worker.id,
-      gone.id,
-      makeEnvelope({
-        id: 'ask-vanished',
-        team: team.slug,
-        from: 'Kim',
-        to: { kind: 'member', name: 'delta' },
-        act: 'ask',
-        body: '[lane] acceptance requested',
-        meta: { species: 'approve', tier: 'standard', lane_review: { lane: lane.id } },
-        ts: 1_000,
-      }),
-    );
-    return { team, lane };
-  }
-
-  const rerouted = async (teamId: string) =>
-    (await listAudit(db, teamId)).filter((r) => r.action === 'lane.review_rerouted');
-
-  it('re-routes the acceptance to a live seat once the holder has been reaped', async () => {
-    const { team, lane } = await laneHeldByADepartedSeat();
-
-    stop = startReaper(ctx);
-    // The loop judges nobody until it has listened for a full timeout window (lane 01M1HNY302).
-    await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs * 2);
-
-    const rows = await rerouted(team.id);
-    expect(rows).toHaveLength(1);
-    const detail = JSON.parse(rows[0]!.detail as string);
-    expect(detail.lane).toBe(lane.id);
-    expect(detail.from_reviewer).toBe('delta');
-    expect(detail.superseded_ask).toBe('ask-vanished');
-    expect(detail.reviewer).toBe('Lin');
-    expect(detail.route).toBe('reaped');
-  });
-
-  it('re-routes a lane at most once, however many ticks pass', async () => {
-    const { team } = await laneHeldByADepartedSeat();
-
-    stop = startReaper(ctx);
-    await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs * 20);
-
-    expect(await rerouted(team.id)).toHaveLength(1);
   });
 });

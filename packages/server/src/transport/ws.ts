@@ -8,7 +8,7 @@ import {
 import { ulid } from 'ulid';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import { checkUpgrade } from '../config.js';
-import type { Ctx } from '../context.js';
+import { operatorCtx, teamCtx, type Ctx } from '../context.js';
 import { MusterdError, asMusterdError } from '../errors.js';
 import { log } from '../log.js';
 import { routeEnvelope } from '../protocol/route.js';
@@ -175,8 +175,11 @@ function emitPresence(
   );
 }
 
-export function attachWsServer(ctx: Ctx, server: import('node:http').Server): WebSocketServer {
+export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
+  // Spec §12.1: a connection is operator-scoped only long enough to resolve the claim frame's team;
+  // from the claim on, its ctx is that team's (below). On SQLite every handle is the same one.
+  const opCtx = operatorCtx(rootCtx);
 
   server.on('upgrade', (req: IncomingMessage, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -188,9 +191,9 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
     const check = checkUpgrade(
       { host: req.headers.host, origin: req.headers.origin },
       {
-        boundHost: ctx.config.host,
-        allowedHosts: ctx.config.allowedHosts,
-        allowedOrigins: ctx.config.allowedOrigins,
+        boundHost: rootCtx.config.host,
+        allowedHosts: rootCtx.config.allowedHosts,
+        allowedOrigins: rootCtx.config.allowedOrigins,
       },
     );
     if (!check.ok) {
@@ -204,6 +207,8 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
 
   wss.on('connection', async (ws: WebSocket) => {
     const state: ConnState = { connId: ulid(), authenticated: false };
+    // The connection's ctx: operator until the claim names a team, that team's from then on.
+    let ctx: Ctx = opCtx;
 
     // Plan 1A: the frame handler is async (store calls await), so a per-connection chain keeps one
     // socket's frames in arrival order — the synchronous handler serialised them for free before.
@@ -231,6 +236,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             throw new MusterdError('version_mismatch', `server speaks ${PROTOCOL_VERSION}`);
           }
           const team = await requireTeam(ctx.db, frame.team);
+          ctx = teamCtx(rootCtx, team.id);
 
           // Step 1: authenticate the bootstrap key or a self-identifying seat credential. An agent
           // seat credential is accepted only to reconnect through this claim handshake (ADR 337).

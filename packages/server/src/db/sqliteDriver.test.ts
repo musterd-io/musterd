@@ -148,4 +148,13 @@ describe('sqliteDriver', () => {
     await d.close();
     await expect(d.get('SELECT 1')).rejects.toMatchObject({ code: 'closed' });
   });
+  it('forTeam and asOperator are the handle itself on SQLite (one tenant per file)', async () => {
+    const d = fresh();
+    expect(d.forTeam('t1')).toBe(d);
+    expect(d.asOperator()).toBe(d);
+    await d.tx(async (t) => {
+      expect(t.forTeam('t1')).toBe(t);
+      expect(t.asOperator()).toBe(t);
+    });
+  });
 });

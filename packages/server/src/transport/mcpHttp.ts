@@ -4,7 +4,7 @@ import { McpServer, createMcpHandler, type McpHttpHandler } from '@modelcontextp
 import { ACTS, ActSchema, makeEnvelope, type Act, type Recipient } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
-import type { Ctx } from '../context.js';
+import { teamCtx, type Ctx } from '../context.js';
 import { asMusterdError, MusterdError } from '../errors.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { getCursor } from '../store/cursors.js';
@@ -500,6 +500,8 @@ export async function handleMcpRoute(
   // Redaction lane 01M3AMYGN5: the slug is attacker-controlled path input and may itself be
   // credential-shaped — never echo it (requireTeam's `no team "X"` would write it back out).
   const team = await requireTeamRedacted(ctx.db, slug);
+  // Spec §12.1: from here the request is this team's (the caller handed us the operator ctx).
+  ctx = teamCtx(ctx, team.id);
   if (!isTlsPeer(ctx, req)) {
     res.writeHead(403, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     res.end(

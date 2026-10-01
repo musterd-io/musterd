@@ -245,7 +245,7 @@ export async function ingestBatch(
       // silently decline to insert, every number allocated is a number stored: the order is dense.
       const hubSeq = (await t.get<{ hub_seq: number }>(
         `INSERT INTO sync_meta (team_id, next_hub_seq) VALUES (?, 2)
-           ON CONFLICT(team_id) DO UPDATE SET next_hub_seq = next_hub_seq + 1
+           ON CONFLICT(team_id) DO UPDATE SET next_hub_seq = sync_meta.next_hub_seq + 1
            RETURNING next_hub_seq - 1 AS hub_seq`,
         [teamId],
       ))!.hub_seq;
