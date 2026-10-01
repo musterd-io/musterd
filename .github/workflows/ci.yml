@@ -68,12 +68,30 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup
 
+      # ADR 492: the PGlite leg of the `withDrivers` blocks (ADR 479 §3) runs where it can catch
+      # something. Those blocks live in packages/server and execute server + protocol source under
+      # the locked deps and root test config — a PR touching none of that runs SQLite only. A push
+      # to main always runs both. On pull_request the checkout is GitHub's merge commit, so
+      # HEAD^1..HEAD is exactly the PR's change; no second parent means "not sure" → both.
+      - name: Pick test drivers
+        id: drivers
+        run: |
+          kinds=both; why="push to ${GITHUB_REF_NAME}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            if git rev-parse -q --verify HEAD^2 >/dev/null; then
+              hit=$(git diff --name-only HEAD^1 HEAD | grep -m1 -E '^(packages/(server|protocol)/|pnpm-lock\.yaml$|package\.json$|vitest\.config\.ts$|\.github/)' || true)
+              if [ -n "$hit" ]; then why="the PR touches $hit"; else kinds=sqlite; why="the PR touches nothing the PGlite leg executes"; fi
+            else
+              why="no merge commit to diff"
+            fi
+          fi
+          echo "kinds=$kinds" >> "$GITHUB_OUTPUT"
+          echo "MUSTERD_TEST_DRIVER=$kinds — $why (ADR 492)" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Tests + coverage
         run: pnpm coverage
         env:
-          # ADR 479 §3: every `withDrivers` block runs on SQLite AND the PGlite test double here —
-          # the default already, named so a local `MUSTERD_TEST_DRIVER=sqlite` habit never reaches CI.
-          MUSTERD_TEST_DRIVER: both
+          MUSTERD_TEST_DRIVER: ${{ steps.drivers.outputs.kinds }}
 
   # The other half of web a11y. `pnpm lint` gates the STRUCTURAL half (jsx-a11y as errors, #493);
   # that eslint block names colour contrast as the first thing it cannot see, and until now

@@ -102,8 +102,12 @@ the whole server suite is measured on `docs/perf/neon-pass.md`.
 
 ## The store suite runs on two engines; pick one when you are iterating (2026-09-30, plan 1A; falsify: `MUSTERD_TEST_DRIVER=sqlite pnpm -C packages/server exec vitest run src/store/teamMemory.test.ts` — if a `[pglite]` block still runs, this is wrong) <!-- claim: other -->
 
-Every `withDrivers(...)` block in `packages/server` runs on SQLite **and** the PGlite test double by
-default, and CI pins `MUSTERD_TEST_DRIVER=both` (ADR 479 §3). PGlite boots once per vitest worker
+~~Every `withDrivers(...)` block in `packages/server` runs on SQLite **and** the PGlite test double by
+default, and CI pins `MUSTERD_TEST_DRIVER=both` (ADR 479 §3).~~ CHANGED 2026-10-01 by ADR 492: unset
+is now `sqlite` (a dozen seats share one laptop). CI runs `both` on a pull request that touches
+`packages/server`, `packages/protocol`, the lockfile, `package.json`, `vitest.config.ts` or
+`.github/`, and on every push to `main`; any other PR runs `sqlite`, and the `coverage` job summary
+says which and why. Set `MUSTERD_TEST_DRIVER=both` locally when you change store or server SQL. PGlite boots once per vitest worker
 (~3–4 s), so a both-driver file costs a few seconds more than its SQLite half. While iterating:
 `MUSTERD_TEST_DRIVER=sqlite` is the fast loop; `MUSTERD_TEST_DRIVER=pglite` reproduces a
 Postgres-side failure alone. A PGlite error carries the translated statement after `in:` — read
