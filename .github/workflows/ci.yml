@@ -77,6 +77,7 @@ jobs:
         id: drivers
         run: |
           kinds=both; why="push to ${GITHUB_REF_NAME}"
+          TEMP_FORCE_SQLITE=1
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             if git rev-parse -q --verify HEAD^2 >/dev/null; then
               hit=$(git diff --name-only HEAD^1 HEAD | grep -m1 -E '^(packages/(server|protocol)/|pnpm-lock\.yaml$|package\.json$|vitest\.config\.ts$|\.github/)' || true)
@@ -85,6 +86,7 @@ jobs:
               why="no merge commit to diff"
             fi
           fi
+          kinds=sqlite; why="TEMP: forced sqlite to check the coverage floors (revert before merge)"
           echo "kinds=$kinds" >> "$GITHUB_OUTPUT"
           echo "MUSTERD_TEST_DRIVER=$kinds — $why (ADR 492)" | tee -a "$GITHUB_STEP_SUMMARY"
 
