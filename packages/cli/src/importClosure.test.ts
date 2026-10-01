@@ -34,7 +34,13 @@ export function staticClosure(entry: string): { files: Set<string>; packages: Se
         continue;
       }
       const parts = spec.split('/');
-      packages.add(spec.startsWith('@musterd/') ? spec : spec.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]!);
+      packages.add(
+        spec.startsWith('@musterd/')
+          ? spec
+          : spec.startsWith('@')
+            ? parts.slice(0, 2).join('/')
+            : parts[0]!,
+      );
     }
   }
   return { files, packages };

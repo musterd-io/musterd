@@ -17,7 +17,8 @@ The human surface. `npx`-installable, bin name `musterd`. Talks to the server ov
 
 ```
 src/
-  bin.ts              // shebang entry; parse argv; dispatch; map errors -> exit codes
+  bin.ts              // shebang entry: version, Node gate, help, then dispatch through the lazy command table — commands, help, telemetry, the nudge and the tab title load on demand (ADR 491); map errors -> exit codes
+  commandTable.ts     // every command word → a lazy loader, so `--version`, help and the launcher never load the 53 command modules (ADR 491); commandTable.test.ts keeps it in step with the help catalog
   help.ts             // re-exports the plain `HELP` string (from help/plain.ts) so guidance:check can import it; ADR 085
   args.ts             // argv parser → { command, positionals, flags }; `--args` keeps a value that starts with `--` (quote it), every other flag still refuses one so a missing value cannot swallow the next flag
   config.ts           // load/save ~/.musterd/config.json; per-folder binding lookup; saveBinding merge-guards hook-written session + model_observed and same-seat claimed seat_credential (omit = preserve), with atomic publication seam for migration recovery; capture writers pass { drop: { model_observed: true } } to clear on session-id change (ADR 268/340/350)
@@ -45,7 +46,8 @@ src/
     snapshot.ts       // snapshotTodos: offset cursor in .musterd/todos.json, PATCHes `unfinished_todos` onto the seat's most recently updated live lane only when the list changed; no lane → nothing (no seat-memory fallback); fail-open, 1.5s budget
   workingTree.ts      // session-start marker + the advisory a stage-shaped `git add -A` earns for paths that PREDATE this session; local-only, warn-never-deny (ADR 239 verdict)
   version.ts          // cliVersion(): read @musterd/cli package.json version for `musterd --version` (ADR 067)
-  runtime.ts          // Node ≥22 gate + packaged-vs-checkout detection for doctor / bin (ADR 156)
+  nodeVersion.ts      // the Node ≥22 gate, split from runtime.ts so bin.ts runs it without loading @musterd/protocol (ADR 156/491)
+  runtime.ts          // packaged-vs-checkout detection for doctor / bin (ADR 156); re-exports the Node gate from nodeVersion.ts
   process.ts          // injected synchronous process runner: missing binary → code 127, shared by read-only inspectors
   errors.ts           // CliError(code) -> message + exit code
   exit.ts             // exitAfterFlush: exit only once stdout+stderr have drained — a piped render was cut at 64 KB by a bare process.exit()
