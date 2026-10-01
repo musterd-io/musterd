@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { log } from '../log.js';
 import { toPostgres } from './dialect.js';
 import { DATABASE_UNREACHABLE_SENTENCE, DriverError, type Driver, type Params } from './driver.js';
 import { ROLE, TENANT_SETTING } from './pg/tenancy.js';
@@ -62,24 +63,47 @@ const isUnreachable = (e: unknown) => {
   return typeof code === 'string' && UNREACHABLE.has(code);
 };
 
+/**
+ * The production pool: a `pg.Pool` per URL. Exported so its event handling is testable.
+ *
+ * node-postgres reports a dropped connection as an EVENT — on the pool when an idle client's
+ * backend dies (pg-pool's idle listener), on the client itself while it is checked out — and an
+ * `'error'` event with no listener is an uncaught exception: Neon suspending, failing over or
+ * recycling connections would take the whole server down (review C1). Both are handled: the dead
+ * client is discarded by the pool, the statement it was running already failed with the driver's
+ * `unavailable` error, and the next checkout connects afresh — the 503-then-recover of spec §7.
+ * Only the code is logged: a message can carry a host (hard rule 5).
+ */
+export function pgPoolFactory(
+  opts: Pick<PgDriverOptions, 'poolSize' | 'acquireTimeoutMs'> = {},
+): PoolFactory {
+  const dropped = (e: unknown) =>
+    log.warn({ msg: 'pg_connection_error', code: (e as { code?: unknown })?.code ?? null });
+  return (connectionString) => {
+    const pool = new pg.Pool({
+      connectionString,
+      // BIGINT (oid 20) and COUNT(*) come back as strings from `pg`; every epoch-millis column
+      // and count is compared as a number by the store (none is near 2^53). Parsed per pool,
+      // never via the global pg.types (the PGlite double does the same; the Neon pass found it).
+      types: {
+        getTypeParser: (oid: number, format?: unknown) =>
+          oid === 20
+            ? (v: string) => Number(v)
+            : (pg.types.getTypeParser as (o: number, f?: unknown) => unknown)(oid, format),
+      } as never,
+      max: opts.poolSize ?? 10,
+      connectionTimeoutMillis: opts.acquireTimeoutMs ?? 5_000,
+    });
+    pool.on('error', dropped);
+    pool.on('connect', (client: { on(event: 'error', fn: (e: unknown) => void): unknown }) =>
+      client.on('error', dropped),
+    );
+    return pool;
+  };
+}
+
 export function pgDriver(opts: PgDriverOptions): PgDriver {
-  const make: PoolFactory =
-    opts.pools ??
-    ((connectionString) =>
-      new pg.Pool({
-        connectionString,
-        // BIGINT (oid 20) and COUNT(*) come back as strings from `pg`; every epoch-millis column
-        // and count is compared as a number by the store (none is near 2^53). Parsed per pool,
-        // never via the global pg.types (the PGlite double does the same; the Neon pass found it).
-        types: {
-          getTypeParser: (oid: number, format?: unknown) =>
-            oid === 20
-              ? (v: string) => Number(v)
-              : (pg.types.getTypeParser as (o: number, f?: unknown) => unknown)(oid, format),
-        } as never,
-        max: opts.poolSize ?? 10,
-        connectionTimeoutMillis: opts.acquireTimeoutMs ?? 5_000,
-      }));
+  const make: PoolFactory = opts.pools ?? pgPoolFactory(opts);
   const pools: Partial<Record<Scope['role'], PoolLike>> = {};
   const pool = (role: Scope['role']): PoolLike => {
     const have = pools[role];
