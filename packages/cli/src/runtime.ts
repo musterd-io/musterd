@@ -6,27 +6,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { GUIDANCE_CONTENT_VERSION } from '@musterd/protocol';
 
-/** Matches monorepo `engines.node` and published package engines (ADR 156). */
-export const MIN_NODE_MAJOR = 22;
-
-/** One-line fix shown whenever we refuse Node &lt;22 (bin gate + service install). */
-export function nodeUpgradeHint(): string {
-  return `export PATH="/opt/homebrew/opt/node@22/bin:$PATH" && musterd <cmd>`;
-}
-
-/**
- * If `version` (default `process.version`) is below {@link MIN_NODE_MAJOR}, return a refusal
- * message; otherwise null.
- */
-export function nodeVersionTooOld(version: string = process.version): string | null {
-  const m = /^v(\d+)\./.exec(version);
-  const major = m ? Number(m[1]) : NaN;
-  if (!Number.isFinite(major) || major >= MIN_NODE_MAJOR) return null;
-  return (
-    `musterd needs Node >=${MIN_NODE_MAJOR} (you are on ${version}). ` +
-    `Put a matching node first on PATH, e.g.\n  ${nodeUpgradeHint()}`
-  );
-}
+export { MIN_NODE_MAJOR, nodeUpgradeHint, nodeVersionTooOld } from './nodeVersion.js';
 
 /**
  * Infer whether this `musterd` binary is running from the musterd git monorepo.
