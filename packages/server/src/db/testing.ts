@@ -15,16 +15,19 @@ import { openTraceDriver } from './traceDb.js';
 export type DriverKind = 'sqlite' | 'pglite' | 'pg';
 
 /**
- * Which drivers a `withDrivers` block runs on. MUSTERD_TEST_DRIVER=sqlite|pglite|both; the default
- * is `both` (ADR 479 §3: a Cloud-only bug must fail the suite, not wait for a deploy). `sqlite`
- * is the fast local loop; `pglite` alone reproduces a Postgres-side failure.
+ * Which drivers a `withDrivers` block runs on. MUSTERD_TEST_DRIVER=sqlite|pglite|both; unset is
+ * `sqlite` (ADR 492: a dozen seats share one laptop). CI picks `both` for any PR that touches what
+ * these blocks execute and on every push to main (ADR 479 §3 — a Cloud-only bug must fail the
+ * suite, not wait for a deploy); set `both` locally when changing store or server SQL, `pglite`
+ * alone to reproduce a Postgres-side failure.
  */
 export function testDriverKinds(): DriverKind[] {
   const env = process.env['MUSTERD_TEST_DRIVER'];
   if (env === 'pglite') return ['pglite'];
   if (env === 'sqlite') return ['sqlite'];
   if (env === 'pg') return ['pg'];
-  return ['sqlite', 'pglite'];
+  if (env === 'both') return ['sqlite', 'pglite'];
+  return ['sqlite'];
 }
 
 export type TestStore = 'main' | 'trace';

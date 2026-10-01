@@ -189,10 +189,12 @@ describe('session scope (the double holds scope per session, not per transaction
 });
 
 describe('withDrivers', () => {
-  it('reads MUSTERD_TEST_DRIVER and defaults to both drivers (ADR 479 §3)', () => {
+  it('reads MUSTERD_TEST_DRIVER and defaults to sqlite (ADR 492; CI sets both)', () => {
     const prev = process.env['MUSTERD_TEST_DRIVER'];
     try {
       delete process.env['MUSTERD_TEST_DRIVER'];
+      expect(testDriverKinds()).toEqual(['sqlite']);
+      process.env['MUSTERD_TEST_DRIVER'] = 'both';
       expect(testDriverKinds()).toEqual(['sqlite', 'pglite']);
       process.env['MUSTERD_TEST_DRIVER'] = 'sqlite';
       expect(testDriverKinds()).toEqual(['sqlite']);

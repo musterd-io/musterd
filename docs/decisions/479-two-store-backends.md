@@ -95,6 +95,11 @@ that declined the spike lane.
   Cloud tests run the production driver over PGlite through `pgliteDriver().poolFactory()` — which
   surfaced that the double must mirror node-postgres's simple protocol for parameterless queries
   (the multi-statement baseline). `03-server.md` §Cloud mode lists the rest.
+- **2026-10-01 (ADR 492, lane 01M3WMAM5G):** decision 3 still holds for every change that can reach
+  the `withDrivers` blocks, but no longer for every change. CI's `coverage` job runs `both` on a
+  pull request that touches `packages/server`, `packages/protocol`, the lockfile, `package.json`,
+  `vitest.config.ts` or `.github/`, and on every push to `main`; other PRs run SQLite only. The
+  local default with `MUSTERD_TEST_DRIVER` unset is now `sqlite`.
 
 ## Observability & Evaluation
 
