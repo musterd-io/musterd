@@ -1727,6 +1727,22 @@ function consoleTokenRefusal(e: unknown): unknown {
   return new MusterdError('unauthorized', e.message);
 }
 
+/**
+ * The viewer of a roster read. Self-hosted: best-effort ({@link tryAuth}) — the projection scopes
+ * itself to the caller, and an anonymous caller is on this machine. Cloud: the read requires a
+ * credential for this team (spec §4.3: no code path serves a team's rows without one; review I3) —
+ * anonymous on the internet is not anonymous on loopback.
+ */
+async function rosterViewer(
+  ctx: Ctx,
+  slug: string,
+  req: IncomingMessage,
+): Promise<MemberRow | null> {
+  if (!ctx.config.cloud) return tryAuth(ctx, slug, req);
+  return (await authMember(ctx.db, slug, bearer(req), actingSeat(req), agentSessionLease(req)))
+    .member;
+}
+
 /** Best-effort: resolve the calling seat from a bearer token if one is present and valid, else null.
  *  Used by the roster reads to scope the projection (ADR 071) without making them require auth. */
 async function tryAuth(ctx: Ctx, slug: string, req: IncomingMessage): Promise<MemberRow | null> {
@@ -2208,7 +2224,7 @@ export async function handleHttp(
             display: team.display,
             working_hours: parseWorkingHours(team.working_hours),
           },
-          members: await summarize(ctx, slug, team.id, await tryAuth(ctx, slug, req)),
+          members: await summarize(ctx, slug, team.id, await rosterViewer(ctx, slug, req)),
         });
       }
 
@@ -2384,7 +2400,7 @@ export async function handleHttp(
 
       if (method === 'GET' && rest === '/members') {
         const team = await requireTeam(ctx.db, slug);
-        const viewer = await tryAuth(ctx, slug, req);
+        const viewer = await rosterViewer(ctx, slug, req);
         let members = await summarize(ctx, slug, team.id, viewer);
         // ADR 227 close-out: the discovery filter runs HERE, not in the client, so the daemon can
         // see role queries at all. Each authenticated filtered read leaves a `roster.role_query`

@@ -394,6 +394,10 @@ changes nothing. It requires `MUSTERD_DATABASE_APP_URL`, `MUSTERD_DATABASE_OPERA
    coverage, expired-member and provision sweeps. Not the roster watcher, the footprint sampler,
    federation sync, or audit retention (it archives to a local file first; Cloud retention arrives
    with the backup pipeline, §7).
+7. **No team rows without a credential (§4.3).** The roster reads (`GET /teams/:slug`,
+   `GET /teams/:slug/members`) answer an anonymous caller on a loopback daemon — the projection scopes
+   itself to whoever asks, and anonymous there means "on this machine". On Cloud they require a
+   credential for the team (`rosterViewer`), so the internet cannot list a team's members.
 
 Rate limits and quotas (§5.4) are their own lane, not part of increment 1's acceptance.
 

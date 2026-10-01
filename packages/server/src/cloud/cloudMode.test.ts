@@ -4,15 +4,23 @@ import { join } from 'node:path';
 import { PROTOCOL_VERSION } from '@musterd/protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
+import type { Driver } from '../db/driver.js';
 import { SCHEMA_NEWER_SENTENCE, SCHEMA_OLDER_SENTENCE } from '../db/guard.js';
 import { LADDER } from '../db/ladder.js';
 import { openTestDriver, testCloudPools, type TestStore } from '../db/testing.js';
 import { TRACE_LADDER } from '../db/traceLadder.js';
 import { createServer } from '../index.js';
-import { addMember } from '../store/members.js';
+import { addMember, mintCredential } from '../store/members.js';
+import type { TeamRow } from '../store/rows.js';
 import { createTeam } from '../store/teams.js';
 import { bootCloud, hostRequest, stubCloudEnv } from './testing.js';
 import { testIssuer } from './testIssuer.js';
+
+/** A human seat's real credential (`mscr_`) — what authenticates a person on every route. */
+async function humanCredential(db: Driver, team: TeamRow, name: string): Promise<string> {
+  const { row } = await addMember(db, team, { name, kind: 'human', role: '' });
+  return (await mintCredential(db, row.id)).credential;
+}
 
 describe('cloud mode — store selection (1C task 2)', () => {
   afterEach(() => vi.unstubAllEnvs());
@@ -198,7 +206,7 @@ describe('cloud mode — a team host reaches only its own team (1C task 6, spec 
     try {
       const revive = await createTeam(seed!, { slug: 'revive' });
       await createTeam(seed!, { slug: 'other' });
-      const { token } = await addMember(seed!, revive, { name: 'ada', kind: 'human', role: '' });
+      const token = await humanCredential(seed!, revive, 'ada');
       const auth = { authorization: `Bearer ${token}` };
       const own = await hostRequest(url, '/teams/revive/members', 'revive.musterd.test', {
         headers: auth,
@@ -315,7 +323,7 @@ describe('cloud mode — /health says ok or one stable sentence (1C task 7, spec
     const { s, seed, url, setDown } = await bootWithOutage();
     try {
       const revive = await createTeam(seed, { slug: 'revive' });
-      const { token } = await addMember(seed, revive, { name: 'ada', kind: 'human', role: '' });
+      const token = await humanCredential(seed, revive, 'ada');
       setDown(true);
       const r = await hostRequest(url, '/teams/revive/members', 'revive.musterd.test', {
         headers: { authorization: `Bearer ${token}` },
@@ -326,6 +334,29 @@ describe('cloud mode — /health says ok or one stable sentence (1C task 7, spec
       });
     } finally {
       setDown(false);
+      await s.close();
+    }
+  });
+});
+
+describe('cloud mode — no team rows without a credential for that team (review I3, spec §4.3)', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('the roster reads that were anonymous on a loopback daemon need a credential on Cloud', async () => {
+    const { s, seed, url } = await bootCloud();
+    try {
+      const revive = await createTeam(seed!, { slug: 'revive' });
+      const token = await humanCredential(seed!, revive, 'ada');
+      for (const path of ['/teams/revive', '/teams/revive/members']) {
+        const anon = await hostRequest(url, path, 'revive.musterd.test');
+        expect(anon.status, `${path} anonymous`).toBe(401);
+        expect(anon.body, `${path} leaks no member`).not.toContain('ada');
+        const authed = await hostRequest(url, path, 'revive.musterd.test', {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        expect(authed.status, `${path} with a credential`).toBe(200);
+      }
+    } finally {
       await s.close();
     }
   });
