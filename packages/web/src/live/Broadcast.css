@@ -23,10 +23,14 @@
 }
 
 .bc__stage {
-  position: relative;
+  /* Pinned to the window's centre and scaled from there (`stageTransform`): the grid's centring broke
+     the moment the stage outgrew the window, because the track grew to fit it and began at 0. */
+  position: absolute;
+  left: 50%;
+  top: 50%;
   width: 1920px;
   height: 1080px;
-  flex: none; /* the stage is a fixed box inside .bc, not a flex child of it */
+  flex: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -79,6 +83,33 @@
 @container (min-width: 1600px) {
   .bc .lc-team {
     zoom: 1.12;
+  }
+}
+
+/* /live's narrow-WINDOW layouts must not reach the stage. They are `@media` queries, which ask about
+   the browser window; the stage is a fixed 1920 or 1280 frame scaled to fit it, so a small preview
+   window (or big-body's 390px check, 2026-10-01) folded the room away, moved the column to the left
+   and cut the ticker to one item inside a frame that is still full width. Undo exactly those three. */
+@media (max-width: 880px) {
+  .bc .lc__canvas,
+  .bc .lc__canvas.is-team-collapsed {
+    --col-office: minmax(0, 1fr);
+    --col-team: clamp(280px, 24%, 460px);
+    grid-template-columns: var(--col-office) var(--col-team);
+  }
+  .bc .lc-office {
+    display: flex;
+  }
+  .bc .lc-team {
+    grid-column: 2;
+  }
+}
+@media (max-width: 720px) {
+  .bc .lc-ticker__item:not(:first-child) {
+    display: inline-flex;
+  }
+  .bc .lc-ticker__item:first-child {
+    max-width: 44%;
   }
 }
 
