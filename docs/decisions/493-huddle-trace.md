@@ -1,8 +1,8 @@
 # 493 — Huddle trace: one daemon-side timeline of a huddle
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-10-01
-- Deciders: nick (asked for the view on the CLI and `/live`), izzo
+- Deciders: nick (asked for the view on the CLI and `/live`; chose the read scope and the structure-only tool rows on 2026-10-01), izzo
 - Lanes: `01M3WNKRPC` (CLI, izzo), `01M3WN919X` and `01M3WNPZ8K` (`/live`, miley)
 - Relates to: ADR 128 (recipient scoping), ADR 254 (eligible sets), ADR 378 (huddles), ADR 386
   (convening wakes a named seat), ADR 445 (structural trace events)
@@ -37,7 +37,7 @@ copies would drift.
 
 1. Add `GET /teams/:slug/huddles/:id/trace`. It answers `HuddleTraceSchema` (a new, additive schema
    in `@musterd/protocol`):
-   - `huddle`: the `HuddleView`;
+   - `huddle`: the header — `id`, `topic`, `anchor`, `opener`, `opened_at`, `body` and `closed`;
    - `seats`: one row per seat in the room, with:
      - `seat` and `harness`;
      - `summoned`: `opener`, `named`, `steered` or `joined`;
@@ -46,14 +46,17 @@ copies would drift.
        cost_usd}`;
      - `first_turn_at` and `time_to_turn_ms`;
    - `events`: one merged, `ts`-sorted list of `{ts, seat, kind, label, act_id?, tool_name?,
-     outcome?, duration_ms?}`, where `kind` is `act`, `wake`, `tool` or `session`.
+     outcome?, duration_ms?}`, where `kind` is `act`, `wake`, `tool`, `hook` (a musterd hook whose
+     outcome was not `ok`, such as a timeout) or `session`;
+   - `truncated`: whether the list was cut (§5).
 2. The daemon assembles the answer from the records above. Wake rows join by `detail.act` in the
    huddle's thread. Tool rows are the seat's `trace_events` within the huddle's window, which runs
    from its open to its close, or to now while it is open, capped at two hours. Rows are selected by
    window, not by wake, so a seat attended in a visible terminal shows its steps too.
 3. **Who may read it.** A Member in the huddle may read it: the opener, a named seat, a steered
    seat, or one that has taken a turn. So may a team admin. Anyone else gets the same 404 as a
-   missing huddle (ADR 128: the route must not reveal that a huddle exists).
+   missing huddle (ADR 128: the route must not reveal that a huddle exists). `/live` reads it as
+   its signed-in Member under the same rule, so an admin's `/live` sees every huddle's trace.
 4. **What the trace may carry.** Tool events carry structure only: `kind`, `tool_name`, `outcome`
    and `duration_ms`. They never carry content or `detail`, whatever the team's `trace.content`
    policy is. This is the same limit as the seat timeline (ADR 445).
@@ -70,9 +73,24 @@ copies would drift.
   gap is visible, not hidden.
 - Host-only facts stay absent: the exit code and the woke latency are not persisted, so they are
   not in the trace.
+- Checked against rehearsal huddle `01M3WBAWCE` on a copy of the 2026-10-01 database: the seat
+  order, wake outcomes and per-seat tool steps match the five harness transcripts. One gap: the
+  Grok tap records most tool calls as `other`, so wanderer's steps show that name rather than the
+  tool's. That is a tap fix, not a trace fix.
 - The route is additive. Older clients ignore it, and no existing schema changes.
 
-## Observability
+## Observability & Evaluation
 
-- Falsifier: a rehearsal huddle whose `--trace` output does not match the seats' own transcripts,
-  either for the order of turns or for a seat's tool calls between its wake and its turn.
+**Traces.** No new trace event. The route reads existing records: thread Acts, `residency.*` audit
+rows and structural `trace_events`. It writes nothing.
+
+**Eval.** Dataset: rehearsal huddle `01M3WBAWCE` (2026-10-01), five seats on four harnesses, with
+izzo's hand-built timeline from the seats' own transcripts as the reference. Baseline: no surface
+showed a seat's wake or tool steps for a huddle; building the view took five transcripts in four
+formats. Target: `--trace` gives the same speaking order, wake outcome and per-seat tool steps as
+the reference, with no transcript read.
+
+**Experiment.** n/a. This is a read view over stored facts, not a behaviour change to measure.
+
+Falsifier: a rehearsal huddle whose `--trace` output does not match the seats' own transcripts,
+either for the order of turns or for a seat's tool calls between its wake and its turn.

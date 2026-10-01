@@ -35,6 +35,7 @@ export * from './model.js';
 export * from './wakeLease.js';
 export * from './huddle.js';
 export * from './huddleView.js';
+export * from './huddleTrace.js';
 export * from './seatfile.js';
 export * from './errors.js';
 export * from './frames.js';

@@ -53,6 +53,8 @@ import {
   TraceIngestResponseSchema,
   type TraceSessionResponse,
   TraceSessionResponseSchema,
+  HuddleTraceSchema,
+  type HuddleTrace,
   WakeLeasesResponseSchema,
   DoorbellRingsResponseSchema,
   type DoorbellRingsResponse,
@@ -1524,6 +1526,22 @@ export class HttpClient {
     const parsed = TraceIngestResponseSchema.safeParse(json);
     if (!parsed.success) {
       throw new CliError('trace ingest response did not match the protocol schema', 1);
+    }
+    return parsed.data;
+  }
+
+  /**
+   * One huddle as a single timeline (ADR 493) — `GET /teams/:slug/huddles/:id/trace`. A Member in
+   * the room or an admin reads it; anyone else gets a 404, the same as a missing huddle.
+   */
+  async getHuddleTrace(slug: string, huddleId: string): Promise<HuddleTrace> {
+    const json = await this.request(
+      'GET',
+      `/teams/${slug}/huddles/${encodeURIComponent(huddleId)}/trace`,
+    );
+    const parsed = HuddleTraceSchema.safeParse(json);
+    if (!parsed.success) {
+      throw new CliError('huddle trace response did not match the protocol schema', 1);
     }
     return parsed.data;
   }
