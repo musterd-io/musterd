@@ -38,14 +38,18 @@ export function StreamHuddleCard({
   return (
     <article
       className={`lc-hcard${now ? ' lc-row--now' : ''}${view.closed ? ' is-closed' : ''}${budget.phase === 'spent' ? ' is-spent' : ''}`}
-      aria-label={`huddle on ${view.topic}`}
+      aria-label={`huddle on ${view.topic.replace(":", " ")}`}
     >
       <div className="lc-hcard__head">
         <time className="lc-row__ts">{clock(view.openedAt)}</time>
         <span className="lc-badge lc-badge--huddle">huddle</span>
-        <span className="lc-hcard__topic">{view.topic}</span>
+        <Topic topic={view.topic} />
         <span className="lc-hcard__count">{turns}</span>
-        <span className="lc-hcard__state">{view.closed ? 'closed' : 'open'}</span>
+        <span className="lc-hcard__state">
+          {/* Live only while it is: the dot goes when the room closes (motion means "now"). */}
+          {!view.closed && <span className="lc-hcard__live" aria-hidden="true" />}
+          {view.closed ? 'closed' : 'open'}
+        </span>
       </div>
       <div id={`lc-msg-${view.id}`} className="lc-hcard__line lc-hcard__line--open">
         <Who name={view.opener} idx={idx} />
@@ -76,10 +80,34 @@ export function StreamHuddleCard({
         </div>
       ) : (
         silent.length > 0 && (
-          <div className="lc-hcard__foot">{silent.join(', ')} yet to speak</div>
+          // Who is still expected, drawn as empty seats beside the filled ones above — the room
+          // visibly fills as each one speaks and moves up into the turns.
+          <div className="lc-hcard__foot lc-hcard__waiting">
+            {silent.map((n) => (
+              <span key={n} className="lc-hcard__waiting-seat">
+                <span className="lc-hcard__waiting-dot" aria-hidden="true">
+                  {initial(n)}
+                </span>
+                {n}
+              </span>
+            ))}
+            <span>yet to speak</span>
+          </div>
         )
       )}
     </article>
+  );
+}
+
+/** `goal:demo` → a quiet `goal` and the name that matters, `demo`. */
+function Topic({ topic }: { topic: string }) {
+  const i = topic.indexOf(':');
+  if (i < 0) return <span className="lc-hcard__topic">{topic}</span>;
+  return (
+    <span className="lc-hcard__topic">
+      <span className="lc-hcard__kind">{topic.slice(0, i)}</span>
+      {topic.slice(i + 1)}
+    </span>
   );
 }
 
