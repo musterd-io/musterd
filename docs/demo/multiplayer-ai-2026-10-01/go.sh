@@ -58,7 +58,17 @@ named=("${seats[@]:0:4}")
 rest=("${seats[@]:4}")
 to=$(IFS=,; echo "${named[*]}")
 
-why="The room at Multiplayer AI voted for ${goal_title%% —*} (goal ${goal_id}). Split it into lanes yourselves: ${anchor} has five staged specs for it — a starting point, not an assignment. Open or claim a lane each under goal ${goal_id} and say your plan IN THIS ROOM: every turn is a reply in this thread (team_send with thread = this act's id, or musterd huddle say <this act's id>), never a direct message. Ask nick if the brief is unclear."
+# The winner's five staged lane specs ride in the huddle body itself, read from the options.md beside
+# this script, so a seat whose checkout is behind main still sees them (the anchor path alone would
+# resolve to whatever options.md that seat's worktree has).
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+specs=$(awk -v g="$goal_id" '
+  BEGIN{IGNORECASE=1}
+  /^## /{on = ($0 ~ "^## " g " |^## " g "$|^## " toupper(substr(g,1,1)) substr(g,2) " ")}
+  on' "$here/options.md" | sed -e 's/[[:space:]]*$//' | grep -v '^$' || true)
+why="The room at Multiplayer AI voted for ${goal_title%% —*} (goal ${goal_id}). Split it into lanes yourselves: ${anchor} has five staged specs for it — a starting point, not an assignment, and they are copied below. Open or claim a lane each under goal ${goal_id} and say your plan IN THIS ROOM: every turn is a reply in this thread (team_send with thread = this act's id, or musterd huddle say <this act's id>), never a direct message. Ask nick if the brief is unclear.
+
+${specs}"
 nudge() {
   echo "You're in the ${goal_id} huddle ($1): read it with \`musterd huddle show $1\`, then help split ${goal_id} into lanes there. Every turn goes in that room: \`musterd huddle say $1 \"…\"\` or team_send with thread $1, never a direct message."
 }

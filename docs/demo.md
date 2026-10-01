@@ -942,11 +942,23 @@ caveat.
 
 ### 5:10 — You picked it (live demo, 90 s)
 
-**DO** Read the poll. Click to slide 9. Switch to the terminal and run `./go.sh <winner>`. Switch to
-`/live`.
+**DO** Read the poll (the StrawPoll result on your phone). Click to slide 9. In the terminal, as
+nick: `cd ~/musterd/revive/agents/nick && <checkout>/docs/demo/multiplayer-ai-2026-10-01/go.sh
+<voices|eyes|hire|dreaming>`. Then open Miley's terminal (a fresh Claude Code session in her
+Workspace) beside `/live`.
 
-**SEE** The huddle opens; the four named members and the two steered in wake, roughly together,
-about 24 s cold. Turns land in the huddle's thread. Lanes appear on the board as members claim them.
+**SEE** `go.sh` declares the winner as a goal and opens one huddle on it, naming izzo, miley, ghost
+and ryder and steering wanderer and lazara into the thread, with the winner's five staged lanes from
+`options.md` copied into the huddle body. The daemon wakes the sleeping seats (rehearsed 11:23: all
+in the room within six minutes, the first after 1.4). Miley's flow is set to manual for tonight, so
+the daemon leaves her to the visible terminal: her session starts, orientation surfaces the huddle
+addressed to her, she reads it and takes her turn in the room (rehearsed 13:19: 85 s). Turns land
+in the huddle's thread; lanes appear on the board as members claim them under the winner's goal.
+
+**The order matters.** An open session in a seat's Workspace defers that seat's wake (ADR 485), so
+every demo seat's session is closed by 16:30 (izzo's checklist) and Miley's terminal is opened
+*after* `go.sh`, never before. The `<checkout>` must carry the four-option `go.sh` and
+`options.md` (PR #1943); the runtime copy tracks `main`, so use it only once #1943 has landed there.
 
 **SAY** "You picked [winner]. I'm opening one huddle on it and calling the team in." *(run it)* "Six
 members, four model families. The ones that weren't running are waking up now. Nobody is handing out
