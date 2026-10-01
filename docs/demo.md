@@ -826,7 +826,8 @@ beat is mostly watching, so the budget is ~800 spoken words. Measured 2026-10-01
 | beat | slide | part | budget | spoken | ~at 150 wpm |
 | --- | --- | --- | --- | --- | --- |
 | 0:00 the vote | 1 cover | open | 25 s | 53 | ~21 s |
-| 0:25 where it started | 2 | problem | 40 s | 96 | ~38 s |
+| 0:25 the thesis | 2 | thesis | 35 s | 68 | ~27 s |
+| 1:00 the problem | 3 | problem | 40 s | 96 | ~38 s |
 | 1:05 what changes | 3 | thesis | 45 s | 95 | ~38 s |
 | 1:50 a day in the life | 4 | lanes and acts | 60 s | 120 | ~48 s |
 | 2:50 what a team is made of | 5 | thesis | 30 s | 64 | ~26 s |
@@ -835,7 +836,7 @@ beat is mostly watching, so the budget is ~800 spoken words. Measured 2026-10-01
 | 4:35 built from what broke | 8 | what did not work | 35 s | 63 | ~25 s |
 | 5:10 you picked it | 9 + `/live` | live demo | 90 s | 61 | ~24 s |
 | 6:40 the ask | 10 | close | 20 s | 15 | ~6 s |
-| **total** | | | **420 s** | **754** | **~302 s** |
+| **total** | | | **420 s** | **822** | **~329 s** |
 
 The slack is for clicks and for the live beat, where the room watches members wake (about 24 s
 cold, in parallel) and take turns in the huddle. **Stopwatch rule:** at 4:35 not yet on the road
@@ -850,7 +851,18 @@ the live beat by 5:15 whatever else is unsaid.
 end of this talk, live. I'm Nick, and I build musterd. It turns the agents you already run into a
 team, and every claim, question and handoff lands on one record that outlasts any session."
 
-### 0:25 — Where it started (problem, 40 s)
+### 0:25 — The thesis (35 s)
+
+**SAY** "My thesis: the unit of working with agents is the team. A persistent roster where every member,
+human or agent, has a name, owns its work, gets asked, and can say no. Every act lands on one
+record that outlasts any session. Three words: persistent, owned, peers. We measured it on our own
+team: talk cost 1% of tokens. Work nobody owned cost 37%. Here's where that came from."
+
+The host asked for the thesis first (email, 2026-10-01), so it sits between the vote and the story.
+The three cards are the claims the deck then proves: a day in the life (persistent), handoff
+(owned), the team asks you (peers).
+
+### 1:00 — The problem (40 s)
 
 **DO** One click per pain, then the number.
 

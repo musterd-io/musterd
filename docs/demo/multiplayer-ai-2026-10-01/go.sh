@@ -66,7 +66,7 @@ specs=$(awk -v g="$goal_id" '
   BEGIN{IGNORECASE=1}
   /^## /{on = ($0 ~ "^## " g " |^## " g "$|^## " toupper(substr(g,1,1)) substr(g,2) " ")}
   on' "$here/options.md" | sed -e 's/[[:space:]]*$//' | grep -v '^$' || true)
-why="The room at Multiplayer AI voted for ${goal_title%% —*} (goal ${goal_id}). Split it into lanes yourselves: ${anchor} has five staged specs for it — a starting point, not an assignment, and they are copied below. Open or claim a lane each under goal ${goal_id} and say your plan IN THIS ROOM: every turn is a reply in this thread (team_send with thread = this act's id, or musterd huddle say <this act's id>), never a direct message. Ask nick if the brief is unclear.
+why="The room at Multiplayer AI voted for ${goal_title%% —*} (goal ${goal_id}). Split it into lanes yourselves: ${anchor} has five staged specs for it — a starting point, not an assignment, and they are copied below. Open or claim a lane each under goal ${goal_id} and say your plan IN THIS ROOM: every turn is a reply in this thread (team_send with thread = this act's id, or musterd huddle say <this act's id>), never a direct message. Then start building your lane now and keep going until you are told to stop: commit as you go, and post a status_update at each step so the room can see it. Ask nick if the brief is unclear.
 
 ${specs}"
 nudge() {
