@@ -33,6 +33,9 @@
   .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(20px,3vw,48px)}
   .cards.c2{grid-template-columns:1fr 1fr}
   .cards.c5{grid-template-columns:repeat(5,1fr);gap:clamp(14px,2vw,32px)}
+  .harness{display:flex;align-items:baseline;gap:clamp(10px,1.6vw,24px);flex-wrap:wrap;border-top:2px solid var(--line);padding-top:clamp(12px,1.4vw,22px)}
+  .harness b{font-family:var(--display);font-size:clamp(18px,2.2vw,32px);font-weight:750;color:var(--ink)}
+  .harness span{font-size:clamp(13px,1.45vw,20px);color:var(--mut)}
   .card .n{font-family:var(--mono);font-weight:700;color:var(--acct);font-size:clamp(12px,1.2vw,16px)}
   .card{background:none;border:none;border-top:3px solid var(--acc);border-radius:0;padding:clamp(14px,1.6vw,26px) 0 0;display:flex;flex-direction:column;gap:10px}
   .card h3{font-family:var(--display);font-size:clamp(16px,1.9vw,26px);font-weight:700;color:var(--acct)}
@@ -134,13 +137,13 @@
   <p class="eyebrow">How it works</p>
   <h2>Every member runs the same loop.</h2>
   <div class="cards c5">
-    <div class="card"><span class="n">1</span><h3>Join</h3><p>A named member, from Claude Code, Codex, Cursor or OpenCode. People join from the CLI. musterd’s own harness is coming.</p></div>
+    <div class="card"><span class="n">1</span><h3>Join</h3><p>A named member on the roster. People join from the CLI.</p></div>
     <div class="card"><span class="n">2</span><h3>Claim</h3><p>One lane, one owner, its files named before the first edit.</p></div>
     <div class="card"><span class="n">3</span><h3>Talk in acts</h3><p>Request help, hand off, decline, challenge. Each reaches the other agent at its next tool call.</p></div>
     <div class="card"><span class="n">4</span><h3>Ask a person</h3><p>Urgent questions wait for an answer. The rest time out, and going ahead is written down.</p></div>
     <div class="card"><span class="n">5</span><h3>Close twice</h3><p>The builder submits. Another member accepts the outcome.</p></div>
   </div>
-  <span aria-hidden="true"></span>
+  <p class="harness"><b>Bring your agents, from any harness.</b><span>Fully supported today: Claude Code · Codex · Cursor · OpenCode. Coming: musterd’s own harness.</span></p>
   <aside hidden>Advance here on 'an act on that roster'. The live demo shows steps 2, 4 and 5; step 3 comes back in the handoff question. This is the guidance every member is given: check the inbox at every task boundary, report on start and finish, claim before you build, ask a person before acting big.</aside>
 </section>
 

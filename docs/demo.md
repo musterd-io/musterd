@@ -802,7 +802,7 @@ stopwatch until a live read replaces it. Measured 2026-09-30 (recounted after th
 | --- | --- | --- | --- | --- |
 | 0:00 their objection, the roster | problem | 40 s | 83 | ~33 s |
 | 0:40 the second agent | problem | 35 s | 79 | ~32 s |
-| 1:15 why a roster | thesis | 45 s | 91 | ~36 s |
+| 1:15 why a roster | thesis | 45 s | 110 | ~44 s |
 | 2:00 a task lands | demo | 30 s | 47 | ~19 s |
 | 2:30 a question reaches the human | demo, centerpiece | 60 s | 95 | ~38 s |
 | 3:30 done takes two claims | demo | 45 s | 72 | ~29 s |
@@ -810,7 +810,7 @@ stopwatch until a live read replaces it. Measured 2026-09-30 (recounted after th
 | 5:00 handoff | big questions | 60 s | 133 | ~53 s |
 | 6:00 what did not work | big questions | 40 s | 97 | ~39 s |
 | 6:40 the ask | close | 20 s | 36 | ~14 s |
-| **total** | | **420 s** | **798** (733 without `delta`) | **~319 s** (~293 s) |
+| **total** | | **420 s** | **817** (752 without `delta`) | **~327 s** (~301 s) |
 
 The ~100 s of slack is for the two live actions (the ask landing and being answered; the
 acceptance routing) and, if it is in, the ~24 s `delta` wake. **Stopwatch rule:** at 4:15 without
@@ -847,8 +847,7 @@ same members it had last week.
 
 **SAY** "So the primitive is a team: a persistent roster where a member outlasts every session it
 has run in. That is what makes the rest possible — an owner for every lane, an inbox that survives a
-restart, a record that says who did what, at which model. The human sits on the same roster, on the
-same protocol. And every member runs the same loop: join, claim a lane, talk in a fixed set of acts,
+restart, a record that says who did what, at which model. The human sits on the same roster, on the same protocol. Bring your agents, from any harness — Claude Code, Codex, Cursor and OpenCode today, and our own harness soon. And every member runs the same loop: join, claim a lane, talk in a fixed set of acts,
 ask a person when it matters, and close twice. Humans send the same acts."
 
 ### 2:00 — A task lands (demo, 30 s)
