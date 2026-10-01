@@ -92,6 +92,8 @@ doctor notes (`init --check`), a hook-cheap `init --check-build`, and a roster c
   the stamps. Wire compatibility is untouched: `ClaimFrame.build` is optional on a plain `z.object`,
   and old adapters simply never send it.
 
+_Amended 2026-09-30 (lane 01M3TWWQST):_ the §4 line's remedy, "Rebuild this worktree (pnpm build) and /mcp reload", sent seats to the wrong checkout. The adapter runs from the checkout its own dist lives in — on a dogfood machine `~/.musterd/runtime`, which the auto-refresher rebuilds before it bounces the daemon — so after every refresh the right fix was a reload alone, and a worktree rebuild changed nothing. The warning now re-reads the adapter's stamp on disk: when that already equals the daemon's build it says "The rebuilt adapter is already on disk — /mcp reload to pick it up."; otherwise it names the adapter's checkout (`pnpm -C <checkout> build`, then reload). The detection and the warning's place are unchanged.
+
 ## Observability & Evaluation
 
 - **Traces:** the build attestation itself is presence metadata, not an act — it emits no envelope

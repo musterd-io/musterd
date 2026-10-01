@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   MODEL_UNKNOWN,
   DriftCacheSchema,
@@ -9,6 +10,7 @@ import {
   describeSyncWedge,
   type SyncWedge,
 } from '@musterd/protocol';
+import { readBuildStamp } from '@musterd/protocol/build-stamp';
 
 /**
  * The roster, rendered for an **agent** to read (`team_status` / `team_members`).
@@ -585,21 +587,42 @@ export async function buildSkewWarning(client: {
  * the fact; `text` is carried too, so a client that only prints stays useful. Same silence rules as
  * before — an unknown side is never reported as skew.
  */
-export async function buildSkewOf(client: {
-  build: string | undefined;
-  daemonBuild: () => Promise<string | undefined>;
-}): Promise<BuildSkewWarning | null> {
+export async function buildSkewOf(
+  client: {
+    build: string | undefined;
+    daemonBuild: () => Promise<string | undefined>;
+  },
+  onDisk: () => { build: string | undefined; checkout: string } = adapterOnDisk,
+): Promise<BuildSkewWarning | null> {
   const mine = client.build;
   if (!mine) return null;
   const daemon = await client.daemonBuild();
   if (!daemon || daemon === mine) return null;
+  // Lane 01M3TWWQST: the remedy depends on the dist ON DISK, not on the seat's worktree. The adapter
+  // runs from its own checkout — on a dogfood machine `~/.musterd/runtime`, which the auto-refresher
+  // rebuilt before the daemon bounced — so the usual case needs only a reload, and "rebuild this
+  // worktree" sent every seat to build a checkout the adapter never loads.
+  const disk = onDisk();
+  const remedy =
+    disk.build === daemon
+      ? 'The rebuilt adapter is already on disk — /mcp reload to pick it up.'
+      : `Rebuild the adapter's checkout (pnpm -C ${disk.checkout} build), then /mcp reload.`;
   return {
     kind: 'build_skew',
     adapter: mine,
     daemon,
     text:
       `⚠ your musterd adapter (${mine.slice(0, 7)}) differs from the daemon (${daemon.slice(0, 7)})` +
-      ` — this session runs stale tools. Rebuild this worktree (pnpm build) and /mcp reload to pick it up.`,
+      ` — this session runs stale tools. ${remedy}`,
+  };
+}
+
+/** This adapter's dist as it is on disk NOW (not the stamp it booted with), and the checkout it
+ *  lives in — `tools/` sits four levels below the repo root in both `src/` and `dist/`. */
+function adapterOnDisk(): { build: string | undefined; checkout: string } {
+  return {
+    build: readBuildStamp(import.meta.url),
+    checkout: resolve(fileURLToPath(import.meta.url), '../../../../..'),
   };
 }
 
