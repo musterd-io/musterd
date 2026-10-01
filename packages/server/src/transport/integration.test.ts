@@ -241,7 +241,10 @@ withDrivers('integration', (_o, kind) => {
     send(frame: unknown) {
       this.ws.send(JSON.stringify(frame));
     }
-    waitFor(type: string, ms = 1000): Promise<WSServerFrame> {
+    // The default is only ever a POSITIVE wait's patience: every "must not arrive" check passes
+    // its own short window. 1 s was too little for an `occupied` on the PGlite double under
+    // coverage (main and #1922, 2026-10-01), and a longer default slows only a test already failing.
+    waitFor(type: string, ms = 5000): Promise<WSServerFrame> {
       const existing = this.frames.find((f) => f.type === type);
       if (existing) return Promise.resolve(existing);
       return new Promise((resolve, reject) => {
@@ -3231,7 +3234,11 @@ withDrivers('integration', (_o, kind) => {
         );
         expect(decided.status).toBe(200);
         expect((await challenger.waitFor('occupied')).type).toBe('occupied');
-        await expect(incumbent.waitFor('error', 50)).rejects.toThrow(/timeout/);
+        // The "not yet" half races the 120 ms grace timer, exactly as in the reconnect case below:
+        // under CI load the PGlite double let the grace elapse before the wait began (main,
+        // 2026-10-01, run 36820631249), so it is asserted on SQLite only.
+        if (kind === 'sqlite')
+          await expect(incumbent.waitFor('error', 50)).rejects.toThrow(/timeout/);
         expect(await incumbent.waitFor('error', 1000)).toMatchObject({
           code: 'superseded',
           same_workspace: true,
