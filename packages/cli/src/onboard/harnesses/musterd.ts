@@ -18,6 +18,7 @@ export const musterdAdapter: HarnessAdapter = {
   id: 'musterd',
   surface: 'musterd',
   adapterVersion: 1,
+  interactive: null,
   availability: async () => ({ available: true, detail: 'native host (ships with the CLI)' }),
   target: async () => ({ containers: [] }),
   desiredFragments: async () => [],
@@ -67,6 +68,7 @@ export const musterdCoreAdapter: HarnessAdapter = {
   id: MUSTERD_CORE_ID,
   surface: 'musterd',
   adapterVersion: 1,
+  interactive: null,
   availability: async () => ({ available: true }),
   target: async (ctx) => ({
     containers: [

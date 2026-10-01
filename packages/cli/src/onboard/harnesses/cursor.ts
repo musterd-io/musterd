@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { resolveCursorAgentBin } from '../../cursorAgentBin.js';
 import { writeJsonAtomic } from '../atomicWrite.js';
 import { applyFileMap, guidanceFileMap, observeFileMap } from '../guidance.js';
 import {
@@ -501,6 +502,11 @@ export const cursorAdapter: HarnessAdapter = {
   id: 'cursor',
   surface: 'cursor',
   adapterVersion: 2,
+  interactive: {
+    resolveBin: () => resolveCursorAgentBin(),
+    fresh: () => [],
+    resume: (id) => (id ? ['--resume', id] : ['--continue']),
+  },
 
   async availability(ctx) {
     // Installed iff the user-level Cursor dir exists. Read through the seam so scenario tests can

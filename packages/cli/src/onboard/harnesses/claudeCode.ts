@@ -1364,6 +1364,11 @@ export const claudeCodeAdapter: HarnessAdapter = {
   id: 'claude-code',
   surface: 'claude-code',
   adapterVersion: 2,
+  interactive: {
+    resolveBin: () => resolveClaudeBin(),
+    fresh: () => [],
+    resume: (id) => (id ? ['--resume', id] : ['--continue']),
+  },
 
   async availability(ctx) {
     const exec = ctx.exec ?? nodeExec;

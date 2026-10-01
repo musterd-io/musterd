@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { BINDING_DIR, WorktreeProvisioningSchema } from '@musterd/protocol';
+import { resolveCodexBin } from '../../codexBin.js';
 import { readModelFromTranscript } from '../../session/transcript-model.js';
 import {
   registeredFromEnv,
@@ -304,6 +305,11 @@ export const codexAdapter: HarnessAdapter = {
   id: 'codex',
   surface: 'codex',
   adapterVersion: 2,
+  interactive: {
+    resolveBin: () => resolveCodexBin(),
+    fresh: () => [],
+    resume: (id) => (id ? ['resume', id] : ['resume', '--last']),
+  },
 
   async availability(ctx) {
     const home = ctx.env['HOME'] ?? homedir();
