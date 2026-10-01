@@ -34,18 +34,20 @@ export function buildCatalog(input: CatalogInput): Catalog {
   const realRoof = realpathOr(roof);
   const stale: string[] = [];
   const dirs = new Set<string>();
-  for (const dir of Object.keys(input.config.bindings)) {
+  const refs = new Map<string, { team: string; seat: string }>();
+  for (const [dir, ref] of Object.entries(input.config.bindings)) {
     if (!existsSync(join(dir, '.musterd', 'binding.json'))) {
       stale.push(dir);
       continue;
     }
     dirs.add(realpathOr(dir));
+    refs.set(realpathOr(dir), ref);
   }
   for (const dir of layoutWorkspaces(roof)) dirs.add(realpathOr(dir));
 
   const drafts: Draft[] = [];
   for (const dir of [...dirs].sort()) {
-    const draft = readSeat(dir, realRoof);
+    const draft = readSeat(dir, realRoof, refs.get(dir));
     if (draft) drafts.push(draft);
   }
   const seats = addressed(drafts);
@@ -60,18 +62,32 @@ export function buildCatalog(input: CatalogInput): Catalog {
   return { taken_at: input.now ?? Date.now(), seats, teams, stale: stale.sort() };
 }
 
-function readSeat(dir: string, roof: string): Draft | null {
+function readSeat(
+  dir: string,
+  roof: string,
+  ref: { team: string; seat: string } | undefined,
+): Draft | null {
   const layout = layoutParts(dir, roof);
   const got = loadBinding(dir);
   if (got.kind === 'missing') return null;
   if (got.kind !== 'valid') {
-    if (!layout) return null; // an unreadable binding outside the layout has no name to show
+    // A broken binding names nothing itself: the layout path or the bindings registry entry does.
+    const name =
+      layout ??
+      (ref
+        ? {
+            team: ref.team,
+            project: originRepoName(dir) ?? basename(dirname(dir)),
+            member: ref.seat,
+          }
+        : null);
+    if (!name) return null;
     const problem: SeatProblem =
       got.kind === 'legacy'
         ? { kind: 'binding-legacy', fix: `cd ${dir} && musterd harness configure` }
         : { kind: 'binding-invalid', fix: `cd ${dir} && musterd init --check` };
     return {
-      ...layout,
+      ...name,
       server: '',
       path: dir,
       kind: 'agent',

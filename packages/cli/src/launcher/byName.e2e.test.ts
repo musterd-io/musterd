@@ -91,6 +91,31 @@ describe('the launcher through the built binary (ADR 491)', () => {
     expect(file.last).toBe('acme/proj/ada');
   });
 
+  it('⌃C reaches the harness, not musterd: the receipt prints and the harness code comes back', async () => {
+    // A terminal sends ⌃C to the whole foreground process group; `detached` gives musterd its own.
+    const ready = join(home, 'ready');
+    writeFileSync(
+      join(bin, 'claude'),
+      '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 1.0.0; exit 0; fi\n' +
+        `trap 'exit 130' INT\ntouch '${ready}'\nwhile :; do sleep 0.05; done\n`,
+    );
+    const child = spawn(process.execPath, [BIN, 'ada'], {
+      cwd: home,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
+    });
+    let stderr = '';
+    child.stderr.on('data', (c: Buffer) => (stderr += c.toString()));
+    const closed = new Promise<number | null>((r) => child.on('close', (code) => r(code)));
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(ready) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 25));
+    expect(existsSync(ready)).toBe(true);
+    process.kill(-child.pid!, 'SIGINT');
+    expect(await closed).toBe(130);
+    expect(stderr).toMatch(/^✗ ada · claude · \d+s · exit 130 · musterd - to go back\n$/);
+  }, 20_000);
+
   it('--path prints the folder for `cd "$(musterd ada --path)"`', async () => {
     const r = await musterd(['ada', '--path']);
     expect(r).toMatchObject({

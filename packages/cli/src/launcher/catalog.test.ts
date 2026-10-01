@@ -135,6 +135,27 @@ describe('buildCatalog (ADR 491)', () => {
     expect(byMember.get('mid')?.problem?.fix).toBe(`cd ${v2} && musterd harness configure`);
   });
 
+  it('flags a broken registry Workspace outside the layout, named from the registry entry', () => {
+    const outside = seatDir(
+      'acme',
+      'foo',
+      'old',
+      { server: 'http://127.0.0.1:4849', team: 'acme', surface: 'claude-code' },
+      undefined,
+      join(home, 'code'),
+    );
+    const cat = buildCatalog({
+      home,
+      config: { ...emptyConfig, bindings: { [outside]: { team: 'acme', seat: 'old' } } },
+    });
+    expect(cat.seats.map((s) => [s.address, s.problem])).toEqual([
+      [
+        'acme/foo/old',
+        { kind: 'binding-legacy', fix: `cd ${outside} && musterd harness configure` },
+      ],
+    ]);
+  });
+
   it('adds registry Workspaces outside the layout and counts entries whose folder is gone', () => {
     const outside = seatDir(
       'x',
