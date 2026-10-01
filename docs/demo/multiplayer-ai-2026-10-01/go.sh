@@ -3,7 +3,7 @@
 # the goal into lanes itself — nothing here opens or hands out a lane. Run it as nick, from nick's
 # Workspace, at the live demo (docs/demo.md §8, 5:10).
 #
-#   ./go.sh voices|eyes|replay|benchmark  # do it
+#   ./go.sh voices|eyes|hire|dreaming     # do it
 #   ./go.sh voices --dry-run              # print the commands, change nothing
 #   SEATS="izzo miley ghost ryder wanderer lazara" ./go.sh eyes
 #
@@ -36,16 +36,16 @@ case "$option" in
     goal_id=eyes
     goal_title="Eyes — members can look at the office floor"
     ;;
-  replay)
-    goal_id=replay
-    goal_title="Replay — the team's day in thirty seconds"
+  hire)
+    goal_id=hire
+    goal_title="Hire — the team grows itself: find the gap, post the job, interview candidate models"
     ;;
-  benchmark)
-    goal_id=wideswe
-    goal_title="Benchmark — the team takes on WideSWE, cross-repository coding"
+  dreaming)
+    goal_id=dreaming
+    goal_title="Dreaming — idle agents re-read the day overnight and wake up wiser"
     ;;
   *)
-    echo "usage: $0 voices|eyes|replay|benchmark [--dry-run]" >&2
+    echo "usage: $0 voices|eyes|hire|dreaming [--dry-run]" >&2
     exit 2
     ;;
 esac

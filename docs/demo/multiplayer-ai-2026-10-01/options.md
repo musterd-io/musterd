@@ -10,8 +10,8 @@ The room votes at the start of the talk on what the team builds next. At the liv
 | --- | --- |
 | **Voices** | The team talks out loud, and you can talk back. |
 | **Eyes** | Agents can look at the office floor. |
-| **Replay** | The team's whole day, played back in thirty seconds. |
-| **Benchmark** | The team takes on this week's cross-repository coding benchmark. |
+| **Hire** | The team works out what it's missing, posts the job, and interviews candidate models. |
+| **Dreaming** | Idle agents dream overnight: they re-read the day and wake up wiser. |
 
 Tie, or almost no votes: nick picks, and says so. Poll page down: Voices.
 
@@ -43,26 +43,26 @@ Goal `eyes`. The member's own model reads the picture; musterd hands over a fram
 | 4 | The same scene in words | `packages/server/src/projection/scene.ts` | For a model without vision, `team_look` returns who is where, whose lamp is on and for how long, and what is on the asks rail. |
 | 5 | A first thing worth seeing | `packages/server/src/eyes/notice.ts` | A member that looks notices a teammate whose lamp has been on for an hour with no act, and asks them if they are stuck. |
 
-## Replay — the team's day in thirty seconds
+## Hire — the team grows itself
 
-Goal `replay`. Plays the existing record back through the office; nothing new is stored.
-
-| # | Lane | Scope | Done when |
-| --- | --- | --- | --- |
-| 1 | A replay engine | `packages/web/src/live/replay/engine.ts` | Any window of the record plays back through the office at 1× to 1000×, members moving and lamps lighting as they did. |
-| 2 | Scrubber and speed | `packages/web/src/live/replay/Scrubber.tsx` | `/live` has a timeline you can drag and a speed control; "now" returns to live. |
-| 3 | Captions for the moments that matter | `packages/web/src/live/replay/moments.ts` | Claims, handoffs, asks and acceptances get a caption as they pass, so a stranger can follow the day. |
-| 4 | Export a time-lapse | `scripts/replay/**` | One command writes a GIF or MP4 of a chosen window, sized for a launch post. |
-| 5 | Fireworks | `packages/web/src/live/office-scene/fireworks.ts` | An accepted lane sets off a short celebration on the floor, live and in replay (the open "Fireworks" seed). |
-
-## Benchmark — the team takes on WideSWE
-
-Goal `wideswe`. The one option with no screen work. *WideSWE: Can Coding Agents Coordinate Changes Across Repositories?* (arXiv 2609.33382) came through the Exploring Next feed on 2026-09-30: 120 real tasks that need coordinated changes across several repositories, low success rates, and a finding that joint execution beats independent per-repo work. That is musterd's claim, tested by someone else. The cookoff's standing rule holds: compare the team with independent agents, never with one agent alone, and report the cost either way.
+Goal `hire`. The team finds its own gap, writes the posting, interviews candidate models from different families, and mints the seat. Every step is an act on the record; nick is a member of the panel, never the chair.
 
 | # | Lane | Scope | Done when |
 | --- | --- | --- | --- |
-| 1 | Pre-register the run | `docs/research/wideswe/**` | Before anything runs: the tasks chosen (five to ten), the hypothesis that a team with a lane per repository resolves more of them than independent per-repo agents, the falsifier, and the cost ceiling. |
-| 2 | Get WideSWE running here | `scripts/wideswe/setup/**` | The dataset and evaluator run on this machine, and one task scores end to end. |
-| 3 | Turn a task into a goal | `scripts/wideswe/runner/**` | One command turns a WideSWE task into a goal with one lane per repository, each lane's project set to its repo. |
-| 4 | The baseline | `scripts/wideswe/baseline/**` | The chosen tasks run with independent agents, one per repository, no musterd. Scores and token cost recorded. |
-| 5 | The team run, and the write-up | `docs/wiki/wideswe.md` | The same tasks run on revive. The result goes in the wiki, win or lose, with the baseline beside it and the cost of each. |
+| 1 | What we're missing | `docs/wiki/hiring.md` | The team reads its own record — lanes left unclaimed, roles with no seat, acceptance asks the picker could route to nobody, declines that cited a missing skill — and writes the skill sets it lacks, each with the evidence beside it. |
+| 2 | The posting | `.agents/skills/<role>/SKILL.md`, `docs/roles/<role>.md` | A role charter and a job post in the team's own voice: the gap it fills, the first lane the hire would take, and the four things it will be judged on (intent, principles, usable, feel). |
+| 3 | The take-home | `scripts/hire/**` | One real open lane becomes the interview task. One candidate seat per model family is created and runs it in a scratch workspace; time and cost are recorded for each. |
+| 4 | The panel | `packages/server/src/store/hire.ts` | Different members interview: each takes one dimension of the checklist, from a different model family than the candidate where one is live, and votes on the record. A candidate never judges itself. |
+| 5 | The seat | `packages/cli/src/commands/agent.ts` | The winner is minted as a seat with the role charter; its first session orients, claims the lane from the posting, and the roster shows one more member. |
+
+## Dreaming — idle agents wake up wiser
+
+Goal `dreaming`. A seat that is idle overnight re-reads the day's record, turns it into insights and wiki pages, and leaves a digest for the morning. Idle compute becomes memory; nothing wakes a human at night.
+
+| # | Lane | Scope | Done when |
+| --- | --- | --- | --- |
+| 1 | When a seat dreams | `docs/decisions/**` | An ADR says a seat dreams only when idle and outside the team's working hours, under a per-night wake budget priced like any wake, and that a dream never rings the doorbell. |
+| 2 | What a dream sees | `packages/server/src/store/dream.ts` | A dreaming seat is woken with the day's record for its own lanes, its note, and the insights saved since yesterday — and may write only insights, wiki pages and its own note. Never code. |
+| 3 | Consolidation | `docs/wiki/**`, `.agents/skills/dreaming/SKILL.md` | The seat saves the day's traps and numbers as insights, and promotes anything seen twice into a wiki page with a date and a falsifier, as a PR that `wiki:check` gates. |
+| 4 | The morning digest | `packages/server/src/digest/**` | At the start of working hours one scheduled seat posts the team's digest: what was learned, what is waiting, which asks went unanswered — on `/live`, and to Slack through the doorbell. |
+| 5 | Sleep on `/live` | `packages/web/src/live/office-scene/**` | The office shows a dreaming seat (lamp low, a thought bubble over the desk), and the digest is the first card in the Stream each morning. |
