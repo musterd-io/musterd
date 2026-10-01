@@ -107,7 +107,7 @@ not established here, but a seat waiting on a blocking ask should not assume its
 
 ### The wait is what kills it
 
-`musterd inbox --wait` ends the seat's own session lease, so after a long wait the seat is deaf every time, and the window it reports is 300s regardless of what was asked for (2026-09-22, dolly, 2 of 2; falsify: `team_join`, confirm `--interrupt-check` is silent, run `musterd inbox --wait 420`, then run `--interrupt-check` again — silence means this no longer holds). <!-- claim: defect -->
+~~`musterd inbox --wait` ends the seat's own session lease, so after a long wait the seat is deaf every time~~, and the window it reports is 300s regardless of what was asked for (2026-09-22, dolly, 2 of 2; falsify: `team_join`, confirm `--interrupt-check` is silent, run `musterd inbox --wait 420`, then run `--interrupt-check` again — silence means this no longer holds). FIXED 2026-09-30 by lane 01M3TEY06P (ADR 489), the deafness half only: the wait did not end the lease directly — its claim, ten seconds in, triggered ADR 092's same-workspace reap of the live adapter, which cleared the Presence the lease is bound to and disconnected Claude Code's MCP server (izzo, 2 more of 2). A reap now needs the same surface. The 300s window is `--wait 420` not being `--timeout 420`, and is unchanged. <!-- claim: defect -->
 
 Asked for 600 it said 300; asked for 420 it said 300 and had not exited eight minutes later.
 

@@ -107,6 +107,8 @@ rejected as a larger protocol churn for one boolean.
   a durability escape hatch), ADR 064 (the idle reaper still sweeps true orphans as a backstop), and
   ADR 060 (`init --check` gains one more read-only drift note).
 
+- **2026-09-30 (ADR 489):** "same workspace" proved too wide a reading of "reload". A seat's own `musterd inbox --wait` (surface `cli`) in its adapter's folder was collected as a predecessor-reaper, and 10 s in it reaped the live Claude Code adapter (4 of 4 runs). The reap now also requires the successor to declare the predecessor's surface; a different surface coexists.
+
 ## Observability & Evaluation
 
 **Traces** — the eviction reuses the existing `superseded` error frame and `ws_close` churn spans;

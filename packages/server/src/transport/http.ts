@@ -434,6 +434,7 @@ import {
   recordTraceReplicated,
 } from '../telemetry.js';
 import { assertSponsorCaller, assertSponsorOf } from './authSponsor.js';
+import { isReloadOf } from './hub.js';
 import { handleMcpRoute } from './mcpHttp.js';
 import { broadcastMemberAdded } from './memberAdded.js';
 import { checkRateLimit, handleOAuthRoutes } from './oauth.js';
@@ -2658,7 +2659,9 @@ export async function handleHttp(
             let displaced = 0;
             for (const old of liveConns) {
               if (sameWorkspace(old.workspace)) {
-                sameWorkspacePredecessors.push(old.connId);
+                // ADR 489: reap later only a same-surface reload, never a second reader.
+                if (isReloadOf(old, existing.surface ?? undefined))
+                  sameWorkspacePredecessors.push(old.connId);
                 continue;
               }
               old.send?.({

@@ -596,17 +596,33 @@ async function watchInbox(
  * Does `env` wake a `--wait`? A **directed act for this seat** by default (broadcast journal traffic
  * shouldn't wake a waiting agent — ADR 054), never the seat's own send, optionally narrowed by
  * `--from`/`--act`. The same directed-to-me notion `isActionNeeded` uses, minus request_help-to-team.
+ * `replyToMe` widens "directed" by one shape (ADR 489): an act of any address whose `in_reply_to`
+ * names an act this seat sent — an acceptance verdict sent to @team is still the answer it waits for.
  */
 function wakesWait(
   env: Envelope,
   me: string,
   filter: { from?: string | undefined; act?: string | undefined },
+  replyToMe = false,
 ): boolean {
   if (env.from === me) return false; // never wake on my own echo
-  if (!(env.to.kind === 'member' && env.to.name === me)) return false;
+  if (!replyToMe && !(env.to.kind === 'member' && env.to.name === me)) return false;
   if (filter.from && env.from !== filter.from) return false;
   if (filter.act && env.act !== filter.act) return false;
   return true;
+}
+
+const ULID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+/** The millisecond timestamp a ULID carries in its first ten characters; undefined if not a ULID. */
+function ulidMs(id: string): number | undefined {
+  if (id.length !== 26) return undefined;
+  let ms = 0;
+  for (const c of id.slice(0, 10).toUpperCase()) {
+    const v = ULID_ALPHABET.indexOf(c);
+    if (v < 0) return undefined;
+    ms = ms * 32 + v;
+  }
+  return ms;
 }
 
 /**
@@ -640,14 +656,37 @@ async function waitInbox(
     return 0;
   };
 
+  // ADR 489: is `env` a reply to an act this seat sent? The inbox never returns a seat's own sends,
+  // so the referenced act is read back from the team timeline at its id's own timestamp (an act's
+  // `ts` trails its ULID time by 0–35 ms, measured over 300 acts on 2026-09-30). Memoised per id.
+  const mine = new Map<string, Promise<boolean>>();
+  const repliesToMe = (env: Envelope): Promise<boolean> => {
+    const ref = (env.meta as { in_reply_to?: unknown } | null | undefined)?.['in_reply_to'];
+    if (typeof ref !== 'string' || env.from === identity.name) return Promise.resolve(false);
+    const at = ulidMs(ref);
+    if (at === undefined) return Promise.resolve(false);
+    let hit = mine.get(ref);
+    if (!hit) {
+      hit = http
+        .messages(team, { since: at - 1000, limit: 200 })
+        .then((r) => r.messages.some((m) => m.id === ref && m.from === identity.name))
+        .catch(() => false);
+      mine.set(ref, hit);
+    }
+    return hit;
+  };
+  const wakes = async (env: Envelope): Promise<boolean> =>
+    wakesWait(env, identity.name, filter) ||
+    (wakesWait(env, identity.name, filter, true) && (await repliesToMe(env)));
+
   // The earliest unread act that should wake this wait, if any.
   const findPending = async (): Promise<Envelope | undefined> => {
     const pending = await http.inbox(team, { unread: true }).catch(() => undefined);
     if (!pending) return undefined;
-    return pending.messages.find(
-      (m) =>
-        envelopePosition(m) > pending.cursor.last_read_ts && wakesWait(m, identity.name, filter),
-    );
+    for (const m of pending.messages) {
+      if (envelopePosition(m) > pending.cursor.last_read_ts && (await wakes(m))) return m;
+    }
+    return undefined;
   };
 
   // Startup-race guard: a directed act may have landed between the last check and this wait. Drain the
@@ -699,9 +738,9 @@ async function waitInbox(
         });
       },
       onDeliver: (env) => {
-        if (done || !wakesWait(env, identity.name, filter)) return;
-        finish(0, async () => {
-          await deliver(env);
+        if (done) return;
+        void wakes(env).then((hit) => {
+          if (hit && !done) finish(0, async () => void (await deliver(env)));
         });
       },
       onError: (msg) => {

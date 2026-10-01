@@ -62,7 +62,7 @@ import {
   requireTeam,
 } from '../store/teams.js';
 import { recordError, recordPresenceChurn } from '../telemetry.js';
-import type { Connection } from './hub.js';
+import { isReloadOf, type Connection } from './hub.js';
 
 /** Encode a ClaimTarget to the requests table's single-string format. */
 function encodeTarget(t: ClaimTarget): string {
@@ -624,6 +624,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
                   visibility: targetMember ? messageVisibilityOf(targetMember) : 'public',
                   workspace: frame.workspace ?? null,
                   workspaceKey: frame.workspace_key ?? null,
+                  surface: frame.surface,
                   send: (f) => send(ws, f),
                   close: () => ws.close(),
                 };
@@ -711,7 +712,9 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             let displaced = 0;
             for (const old of ctx.hub.connsForMember(targetMember.id)) {
               if (sameWorkspace(old)) {
-                sameWorkspacePredecessors.push(old.connId);
+                // ADR 489: only a same-surface successor is a reload of `old`. A CLI wait or watch
+                // in an adapter's workspace is a second reader — neither reaped nor displaced.
+                if (isReloadOf(old, frame.surface)) sameWorkspacePredecessors.push(old.connId);
                 continue;
               }
               old.send?.({
@@ -819,6 +822,7 @@ export function attachWsServer(ctx: Ctx, server: import('node:http').Server): We
             visibility: messageVisibilityOf(targetMember),
             workspace: frame.workspace ?? null,
             workspaceKey: frame.workspace_key ?? null,
+            surface: frame.surface,
             send: (f) => send(ws, f),
             close: () => ws.close(),
           };
