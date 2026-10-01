@@ -14,9 +14,10 @@ const trace: HuddleTrace = {
       summoned_by: '01R',
       wake: { lease_id: 'l', leased_at: t0 + 1_000, spawned_at: t0 + 3_000, session: 'resumed', outcome: 'woke', duration_ms: 81_000, cost_usd: 0.4 },
       first_turn_at: t0 + 84_000,
+      first_turn_act_id: '01T',
       time_to_turn_ms: 84_000,
     },
-    { seat: 'ghost', harness: null, summoned: 'named', summoned_at: t0, summoned_by: '01R', wake: null, first_turn_at: null, time_to_turn_ms: null },
+    { seat: 'ghost', harness: null, summoned: 'named', summoned_at: t0, summoned_by: '01R', wake: null, first_turn_at: null, first_turn_act_id: null, time_to_turn_ms: null },
   ],
   events: [
     { ts: t0, seat: 'izzo', kind: 'act', label: 'opened' },
