@@ -127,6 +127,7 @@ describe('service refresh --auto (the tick)', () => {
     autoState?: { read: () => string | null; write: (sha: string) => void };
     outageState?: { read: () => string | null; write: (s: string) => void };
     blockedState?: { read: () => string | null; write: (s: string) => void };
+    holdState?: { read: () => string | null; write: (s: string) => void };
     touch?: (ok: (s: string) => void) => Promise<void>;
     refreshSharedHooks?: (dir: string) => string[];
   }) =>
@@ -148,11 +149,40 @@ describe('service refresh --auto (the tick)', () => {
         // fresh one per test — it debounces the alarm on the failure cause, so a shared store makes
         // the second test in a file that fails the same way silently expect no notification.
         blockedState: over.blockedState ?? memState(),
+        // Lane 01M3TE3VN1: the demo hold — a fresh empty store, so no test is ever held by accident.
+        holdState: over.holdState ?? memState(),
         // ADR 408 inc 5: default to a no-op so no test ever writes this machine's real shared
         // Codex hooks file — the production default reaches a path outside the temp dir.
         refreshSharedHooks: over.refreshSharedHooks ?? (() => []),
       }),
     );
+
+  // Lane 01M3TE3VN1: `service hold --auto` — a demo must not have the daemon bounce under it.
+  it('an active hold skips the bounce and says until when', async () => {
+    const hold = memState(String(Date.now() + 3600_000));
+    const { code, out } = await tick({
+      ctx: ctx(autoRunner({ behind: 3 })),
+      health: async () => ({ connections: 2, build: 'oldsha0' }),
+      holdState: hold,
+    });
+    expect(code).toBe(0);
+    expect(out).toMatch(/held until \d\d:\d\d .*not bouncing \(3 commits behind\)/);
+    expect(calls.some((c) => c.cmd === 'pnpm')).toBe(false);
+    expect(hold.write).not.toHaveBeenCalled();
+  });
+
+  it('an expired hold clears itself and the tick refreshes as normal', async () => {
+    const hold = memState(String(Date.now() - 60_000));
+    const { code, out } = await tick({
+      ctx: ctx(autoRunner({ behind: 1 })),
+      health: async () => ({ connections: 0, build: 'oldsha0' }),
+      holdState: hold,
+    });
+    expect(code).toBe(0);
+    expect(out).toContain('hold expired');
+    expect(hold.write).toHaveBeenCalledWith('');
+    expect(calls.some((c) => c.cmd === 'pnpm')).toBe(true);
+  });
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'autorefresh-tick-'));
@@ -996,6 +1026,56 @@ describe('service <verb> --auto (lifecycle dispatch)', () => {
     expect(out).toContain('installed + started the daemon auto-refresher');
     expect(out).toContain('every 90s');
     expect(out).toContain('idle only'); // the mode's quiet-period summary
+  });
+
+  // Lane 01M3TE3VN1: the demo hold's operator surface.
+  const run = async (
+    argv: string[],
+    holdState: { read: () => string | null; write: (s: string) => void },
+  ) => {
+    const chunks: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation((c: never) => {
+      chunks.push(String(c));
+      return true;
+    });
+    try {
+      const code = await serviceCommand(parseArgs(argv), {
+        platform: 'darwin',
+        ctx: daemonCtx(),
+        autoRefreshCtx: arCtx(),
+        holdState,
+      });
+      return { code, out: chunks.join('') };
+    } finally {
+      spy.mockRestore();
+    }
+  };
+  const store = (v: string | null = null) => {
+    let cur = v;
+    return { read: () => cur, write: (x: string) => void (cur = x || null) };
+  };
+
+  it('hold --auto --for writes the expiry; status --auto shows it; --release clears it', async () => {
+    const hold = store();
+    const before = Date.now();
+    const set = await run(['hold', '--auto', '--for', '2h'], hold);
+    expect(set.code).toBe(0);
+    expect(Number(hold.read())).toBeGreaterThanOrEqual(before + 2 * 3600_000);
+    expect(set.out).toMatch(/holding daemon refreshes until \d\d:\d\d \(2h0?m? left\)/);
+
+    const st = await run(['status', '--auto'], hold);
+    expect(st.out).toMatch(/hold: until \d\d:\d\d/);
+
+    const rel = await run(['hold', '--auto', '--release'], hold);
+    expect(rel.code).toBe(0);
+    expect(hold.read()).toBeNull();
+    expect(rel.out).toContain('released');
+  });
+
+  it('hold --auto refuses a hold past the 12h cap and writes nothing', async () => {
+    const hold = store();
+    await expect(run(['hold', '--auto', '--for', '20h'], hold)).rejects.toThrow(/12h/);
+    expect(hold.read()).toBeNull();
   });
 });
 

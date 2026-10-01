@@ -326,9 +326,13 @@ export const CATALOG: readonly CommandEntry[] = [
       'into the plist. NOT `--host`: that flag is the daemon’s bind host. Bouncing `--wake`/`--live` ' +
       'drops no teammate session, so neither takes the live-session guard. ' +
       '`install --otlp-endpoint <url>` persists the standard OTLP endpoint in the daemon plist; ' +
-      'it is daemon-install-only, preserved on reinstall, and an empty value clears it.',
+      'it is daemon-install-only, preserved on reinstall, and an empty value clears it. ' +
+      '`hold --auto --until HH:MM` (or `--for 2h`, max 12h) stops the auto-refresher bouncing the ' +
+      'daemon for a demo or pitch; the hold clears itself when it expires, `--release` ends it early, ' +
+      'and a manual `refresh` still works.',
     examples: [
       'musterd service install',
+      'musterd service hold --auto --until 21:30',
       'musterd service install --otlp-endpoint http://127.0.0.1:4318',
       'musterd service refresh',
       'musterd service status',

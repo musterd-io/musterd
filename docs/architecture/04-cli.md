@@ -120,6 +120,7 @@ src/
     guardian.ts       // `service --guardian`: the pure-code on-call tick (collect → classify → act → stamp, never throws) + the instrument-silence status line (ADR 263)
     siteGap.ts        // `service site-gap`: landed is not live (ADR 308 §Observability) — pure comparison of the build marker musterd.io serves (`/build.json`) against origin/main on `packages/web`, the one-open-ask-per-deployed-ref damping, and the ask body; the live build-publisher runs it every poll as the `live` seat
     handover.ts       // ADR 274's bounded refresh-handover record: the writer owns lifecycle; the guardian only reads a valid, current record
+    hold.ts           // pure: `service hold --auto`'s time-boxed demo hold (lane 01M3TE3VN1) — parse `--until HH:MM`/`--for 2h` (capped at 12h), read the `autorefresh/hold-until` stamp as none/held/expired, and the `until 21:30 (1h12m left)` line; the tick skips the bounce while held and clears an expired stamp itself
     logTrim.ts        // pure-ish: size-capped retention for the service logs (ADR 224) — copy-truncate to `<name>.1`, run by the auto-refresh tick; an explicit log list, never a `*.log` glob (the musterd home is a shared temp dir under test isolation)
   onboard/            // the `musterd init` interactive onboarding (@clack/prompts; ADR 005)
     init.ts           // the flow: daemon -> folder-check -> team -> intent -> where-it-runs -> configure -> primer -> wait-to-join
