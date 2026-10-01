@@ -70,7 +70,12 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   (Member inheritance is resolved by the daemon), including timezone and weekday grouping (ADR 206).
 - **Log drawer** (`live/LogDrawer.tsx`, hosting `live/Stream.tsx`) — every message, one keystroke
   away (ADR 464 lane 2): the act feed, newest-last, live rows type out, threaded replies indent,
-  day/now dividers, the model stamp and the click-through. `L` opens it, Escape closes it, and a
+  day/now dividers, the model stamp and the click-through. A huddle is ONE card in the feed
+  (`live/StreamHuddleCard.tsx`, placed by `huddles.ts` `streamPlacement`): its root and thread rows
+  fold into it, each turn with its time-to-turn (`+1.4m`), and the card sits at the huddle's latest
+  row, so it rides the live edge while the room talks and stays where it closed. The office floor is
+  unaffected: every huddle act is still its own bubble. The huddle rail's "in the log" opens the
+  drawer on the card. `L` opens it, Escape closes it, and a
   speech-bubble click opens it on its act (`live/reveal.ts`). The stream column and companion mode
   it replaced retired on 2026-09-28.
 - **Busyness meter** (`live/TopMeter.tsx`, from `live/busyness.ts`) — in the top bar: the team,
@@ -163,6 +168,7 @@ live/
   coalesce.ts                   // at most one run in flight + one trailing run per gap — the roster refetch's burst guard (viewers × presence frames)
   format.ts                     // act tone/label, laneEvent recovery, roster/colour/status projections
   Stream.tsx                    // the act feed + ACT_GLYPH + typewriter; hosted by the log drawer on /live (lazy)
+  StreamHuddleCard.tsx          // a huddle as one card in the feed: header, turn lines with time-to-turn, close/yet-to-speak footer
   reveal.ts                     // the "reveal this act in the log" window event + revealWhenMounted (the drawer mounts the stream lazily)
   LogDrawer.tsx                 // the /live log drawer (ADR 464 lane 2): a right-edge dialog around the stream; Escape closes, focus returns
   busyness.ts                   // envelopes + roster → last-act age, acts over the loaded span (bucketed), who is working (pure, node-tested)

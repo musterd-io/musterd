@@ -1,6 +1,14 @@
 import type { Envelope, MemberSummary } from '@musterd/protocol';
 import { eligibleOf } from '@musterd/protocol/wire';
-import { Fragment, type ReactElement, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  Fragment,
+  type ReactElement,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   actLabel,
   actTone,
@@ -23,8 +31,10 @@ import {
   type RichToken,
   hueOf,
 } from './format';
+import { streamPlacement } from './huddles';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { REVEAL_EVENT, scrollToMessage } from './reveal';
+import { StreamHuddleCard } from './StreamHuddleCard';
 import {
   INITIAL_WINDOW,
   anchoredScrollTop,
@@ -56,6 +66,9 @@ export function Stream({
   // Index by id over the FULL array (not the rendered window) so a reply quote can still show the
   // text of a parent whose row is currently above the window.
   const byId = new Map(envelopes.map((e) => [e.id, e]));
+  // A huddle is one card, drawn where its latest row sits (`streamPlacement`). Folded over the FULL
+  // timeline so a card is whole even when its root is above the mounted window.
+  const { cardAt, folded } = useMemo(() => streamPlacement(envelopes), [envelopes]);
 
   const scrollRef = useRef<HTMLElement>(null);
   const rowsRef = useRef<HTMLDivElement>(null);
@@ -221,13 +234,16 @@ export function Stream({
         )}
         {visible.map((e, i) => {
           const gi = hidden + i; // global index — day dividers stay correct across the window cut
+          // A huddle's earlier rows live inside its card, which renders at the latest one.
+          const card = cardAt.get(e.id);
+          if (!card && folded.has(e.id)) return null;
           const isNow = e.id === lastId;
           const prev = gi > 0 ? envelopes[gi - 1]! : null;
           // The first mounted row always labels its day, so a window that opens mid-day still tells
           // the reader when they are.
           const newDay = i === 0 || !prev || dayKey(e.ts) !== dayKey(prev.ts);
           return (
-            <Fragment key={e.id}>
+            <Fragment key={card ? `huddle-${card.id}` : e.id}>
               {newDay && (
                 <div className="lc-day">
                   <span className="lc-day__label">{dayLabel(e.ts)}</span>
@@ -241,7 +257,17 @@ export function Stream({
                   <span className="lc-now__line" />
                 </div>
               )}
-              <Row env={e} idx={idx} byId={byId} now={isNow} animate={liveIds.has(e.id)} />
+              {card ? (
+                <StreamHuddleCard
+                  view={card}
+                  byId={byId}
+                  idx={idx}
+                  now={isNow}
+                  liveIds={liveIds}
+                />
+              ) : (
+                <Row env={e} idx={idx} byId={byId} now={isNow} animate={liveIds.has(e.id)} />
+              )}
             </Fragment>
           );
         })}

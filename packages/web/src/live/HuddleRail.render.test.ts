@@ -117,6 +117,11 @@ describe('HuddleRail', () => {
     expect(out).toContain('01LANE7');
   });
 
+  it('opens the log on the room when /live passes the click-through, and not on a stream', () => {
+    expect(html([huddle()], { onShow: () => {} })).toContain('in the log');
+    expect(html([huddle()], { roomLink: false })).not.toContain('in the log');
+  });
+
   it('names the anchor — where the huddle says its output will land', () => {
     expect(html([huddle()])).toContain('docs/design/asks-rail.md');
   });
