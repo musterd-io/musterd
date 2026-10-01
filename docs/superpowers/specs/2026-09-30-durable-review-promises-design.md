@@ -8,10 +8,11 @@
 
 ## 1. Outcome
 
-When a Member accepts a typed `request_help` that asks for a review, the promise remains visible in
-that Member's `team_next` brief until its request thread is explicitly resolved. The accepted Act
-identifies who owns the promise; the original request identifies what is to be reviewed; a `resolve`
-on the request thread closes it under the existing thread-close semantics.
+When a Member accepts a directly addressed, typed `request_help` that asks for a review, the promise
+remains visible in that Member's `team_next` brief, and the requester sees who accepted it and how
+long it has been waiting. Both views derive from the request Acts and remain open until the request
+thread is resolved. A missing projection field means the daemon predates this feature; it is not an
+empty result.
 
 This closes the gap between a request being accepted and the review work being finished. An `accept`
 currently discharges the request's open inbox loop, while no structured state remains for `team_next`
@@ -21,6 +22,8 @@ to display.
 
 - Applies only to an explicitly typed review request. Generic help requests keep their existing
   accept/decline lifecycle.
+- A typed review request addresses one Member directly. Team targets and eligible sets are out of
+  scope for this increment; a single recipient keeps ownership and decline semantics unambiguous.
 - This is a reminder and record of the accepted promise. It does not verify the content or quality of
   a review.
 - Lane acceptance remains separate: `owed_reviews` is still work assigned by an acceptance ask, and
@@ -41,30 +44,53 @@ completion edge without a second store.
 
 ## 4. Chosen carrier: derive from the Act ledger
 
-1. A review `request_help` carries a typed `meta.review` object with a stable, credential-free
-   artifact reference; it must not embed a credential or signed access token. The request body
-   remains the human-readable context. It is a root Act with no existing `thread`, so resolving it
-   closes only this review request. A request without this marker is unchanged.
-2. A review request must name one Member directly or use a Team `meta.eligible` set. A plain Team
-   request is not allowed for this typed form because it has no bounded owner set.
-3. Only an answer from the direct recipient or a Member in the eligible set may settle the typed
-   request. The first such `accept` or `decline` by server receipt order controls it. A decline
-   creates no promise; an accept creates one promise owned by that responder. Later answers do not
-   create additional promises.
-4. The controlling `accept` must have `meta.in_reply_to` naming the typed review request and set
-   `thread` to the request Act id.
-5. A `resolve` on that thread closes the promise under the existing thread-close semantics and
-   authority (any Member may resolve). No timer expires it, and no new Act or obligation table is
-   introduced.
-6. The server derives open promises from the request, its controlling accepted reply, and the
-   absence of a `resolve` on that thread. It orders them by server receipt time, oldest first, and
-   returns them only to their owner in `NextBrief.request_reviews`.
-7. Each `request_reviews` item carries the request id, requester, original request context, artifact
-   reference, and acceptance time. The field is additive and defaults to `[]`; because `client.next()`
-   casts rather than parses the response, renderers also read it as `request_reviews ?? []` for older
-   daemons. The CLI and MCP render this list separately from `owed_reviews` and `review_debt`.
+1. A review `request_help` carries a typed `meta.review` reference and is a root Act with no existing
+   `thread`, so resolving it closes only this review request. Its body remains the human-readable
+   context. The reference is a discriminated union: `{kind:'pr', repo, number}` where `repo` is a
+   GitHub `owner/name` slug and `number` is a positive integer; `{kind:'commit', repo, sha, path?}`
+   with the same `repo`, a full 40- or 64-digit hexadecimal `sha`, and an optional repository-relative
+   path without `.` or `..` segments; `{kind:'lane', id}` with an existing Lane ULID; or
+   `{kind:'url', url}`. A URL is absolute HTTPS and rejects userinfo, query strings and fragments.
+   Artifact refs contain no credentials or signed access tokens. Parse this metadata through the
+   shared protocol schema at each external boundary.
+   Other `request_help` Acts are unchanged; old, untyped requests are not inferred to be reviews from
+   their body.
+2. A typed review request addresses exactly one Member. Team targets and `meta.eligible` are not
+   accepted for this form. Only that recipient's `accept` with `meta.in_reply_to` naming the request
+   Act creates a promise; the named recipient is the owner. A direct recipient's `decline` creates no
+   promise. Repeated accepts from that recipient derive one row, selected deterministically by the
+   minimum `(ts, id)` pair; `accepted_at` is that Act's origin timestamp. The owner is fixed by the
+   root request's direct target, so this projection needs no cross-daemon owner arbitration. `ts` is
+   the sender's clock, not receipt time, and the seven-day audit inherits any sender clock skew.
+3. A controlling `accept` sets `thread` to the request Act id. A `resolve` on that root thread
+   closes the promise under existing semantics; any Member may resolve, and the requester may use it
+   to withdraw the request. For this typed request, the closing `resolve` is Team-addressed so both
+   requester and owner receive it. If someone other than the owner resolves it,
+   `NextBrief.review_closures` gives the owner one notice, including the closer, until the owner's
+   inbox cursor has crossed that `resolve` Act. The requester sees the same `resolve` Act in the
+   request thread. No timer expires a promise, and no new Act or obligation table is introduced.
+4. The server derives each open promise from the typed request, its accepted reply, and the absence
+   of a `resolve` on that thread. It returns an owner-side `NextBrief.request_reviews` row to the
+   accepting Member and a requester-side `NextBrief.requested_reviews` row to the requester. Both
+   lists include every matching open promise, oldest `accepted_at` first, with request id as the
+   stable tie-breaker. The second row says who accepted and when, so the requester can chase a quiet
+   owner or withdraw.
+5. Both open-row types carry request id, requester, owner, original request context, artifact
+   reference, and `accepted_at`. The closure notice carries request id, resolve Act id, closer, and
+   resolve timestamp. Lane 5's weekly sweep can use
+   `requested_reviews[].accepted_at` to flag long-open promises.
+6. The protocol schema keeps these three fields optional and without defaults so a new client can
+   parse an older daemon's response without inventing a value. A daemon that supports the feature
+   MUST emit all three arrays, including `[]` when it has observed no matching rows. An omitted field
+   means "this daemon does not report this projection," while a present empty array means "this
+   daemon reports none." CLI/MCP renderers preserve that distinction by showing the section as
+   unsupported when its field is absent and as empty only when it is `[]`; the weekly audit abstains
+   when `requested_reviews` is absent. The CLI and MCP render these lists separately from
+   `owed_reviews` and `review_debt`. When a thread closes, open rows disappear; the `resolve` Act
+   remains in that request's thread as the closure receipt.
 
-The request's `meta.review` shape and `NextBrief.request_reviews` are shared protocol fields. Their
+The request's `meta.review` shape and `NextBrief.request_reviews`, `requested_reviews`, and
+`review_closures` are shared protocol fields. Their
 normative wire definition belongs in the single `SPEC.md` (Appendix A while unreleased), and any
 schema change is gated by ADR 490 and the protocol feature epoch. The existing `nothing-vanishes`
 lane 3 merge (#1897) brought the current epoch to 27; implementation must start from that base and
@@ -86,14 +112,27 @@ thread-close Act to end the obligation.
 
 The system records the accepted promise and whether its thread is closed; it cannot prove that a
 review actually happened or represent a separate cancellation reason. An unresolved promise remains
-on its owner's `team_next` until a Member closes the thread. The implementation should pin these
-cases:
+on its owner's and requester's `team_next` until a Member closes the thread. The implementation
+inherits the freshness of that daemon's replicated Act ledger; it does not add a cross-daemon
+read-after-write barrier. The implementation should pin these cases:
 
 - accepted typed request appears for the accepting Member after its inbox loop is discharged;
+- the requester sees the accepted owner and age, and lane 5's sweep can identify open requests older
+  than seven days from `requested_reviews[].accepted_at`;
 - resolving the root request thread removes it;
 - declined, unaccepted, and untyped requests do not create a row;
-- an eligible set's first valid answer settles the request, yields at most one owner, and other
-  Members do not inherit the promise;
+- only the directly named Member can create the promise; a Team or eligible-set typed request is
+  rejected;
+- duplicate accepts from the direct recipient produce one row with the same selected Act and owner on
+  every synchronized machine;
+- the requester sees the accepted owner and age, then both open rows disappear when the thread is
+  resolved;
+- a Team-addressed non-owner resolution creates one owner-side notice, with the closer, until the
+  owner's inbox cursor crosses that `resolve` Act;
+- a supported daemon emits empty arrays when there are no rows; a response from an older daemon omits
+  the fields, and renderers/audit report unsupported data rather than treating absence as zero;
+- lane 5's audit abstains when `requested_reviews` is absent and reports an empty population only
+  when the supported daemon returns `[]`;
 - Lane acceptance remains represented only by `owed_reviews` / `review_debt`.
 
 These are deterministic projection and boundary checks; no new database table, dependency, timer, or
