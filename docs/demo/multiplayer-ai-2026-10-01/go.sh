@@ -58,9 +58,9 @@ named=("${seats[@]:0:4}")
 rest=("${seats[@]:4}")
 to=$(IFS=,; echo "${named[*]}")
 
-why="The room at Multiplayer AI voted for ${goal_title%% —*} (goal ${goal_id}). Split it into lanes yourselves: ${anchor} has five staged specs for it — a starting point, not an assignment. Open or claim a lane each under goal ${goal_id}, say your plan in this room, and ask nick if the brief is unclear."
+why="The room at Multiplayer AI voted for ${goal_title%% —*} (goal ${goal_id}). Split it into lanes yourselves: ${anchor} has five staged specs for it — a starting point, not an assignment. Open or claim a lane each under goal ${goal_id} and say your plan IN THIS ROOM: every turn is a reply in this thread (team_send with thread = this act's id, or musterd huddle say <this act's id>), never a direct message. Ask nick if the brief is unclear."
 nudge() {
-  echo "You're in the ${goal_id} huddle: read it with \`musterd huddle show $1\`, then help split ${goal_id} into lanes there."
+  echo "You're in the ${goal_id} huddle ($1): read it with \`musterd huddle show $1\`, then help split ${goal_id} into lanes there. Every turn goes in that room: \`musterd huddle say $1 \"…\"\` or team_send with thread $1, never a direct message."
 }
 
 if (( ! dry )); then
