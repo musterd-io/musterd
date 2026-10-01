@@ -1,7 +1,9 @@
 import {
+  isAwaitingAcceptance,
   LANE_TERMINAL_STATES,
   type Lane,
   LaneSchema,
+  leftoverSignal,
   SeatBoundElsewhereRefusalSchema,
   type SeatNodeTrusted,
   SeatNodeTrustedSchema,
@@ -359,6 +361,7 @@ export async function decideLanePatch(
       );
   }
   decideParkPatch(member, before, body);
+  await decideFollowsUp(db, teamId, member, before, body);
   // A CLAIM is distinguishable from a HANDOFF by who the new owner is: taking it for yourself is
   // a claim; naming someone else is a deliberate give-away that must keep working. Only a
   // self-directed takeover of a LIVE incumbent is refused — an offline or departed owner stays
@@ -804,5 +807,89 @@ export function decideParkPatch(
       `lane "${before.id}" is parked by ${before.parked?.by ?? 'a human'}: ` +
         `"${before.parked?.reason ?? ''}". It is kept, not offered — it cannot be claimed or ` +
         `handed off until a human unparks it (musterd lane unpark ${before.id}).`,
+    );
+}
+
+/**
+ * The `follows_up` / `abandon_reason` rules (ADR 487 §5.1), shared by the local and hub paths.
+ *
+ * Closing a lane asks what is left — but only when something points to leftover work. A lane that
+ * declares itself one part of several ({@link leftoverSignal}) is refused a submit or close until
+ * `follows_up` is answered; every other close proceeds as before, because a mandatory answer on
+ * one-shot work becomes a rubber stamp. Asked of the lane's own closer (its owner, or anyone
+ * closing an unowned lane) — never of an acceptor, whose accept judges the outcome, not the plan.
+ *
+ * A named list is validated before the write: each id an existing lane other than this one; an
+ * abandoned one must say why; and a goalless one needs a goal to join, so a one-lane start with no
+ * goal is refused with the repair — that refusal is how it becomes a Goal the moment it grows a
+ * tail. The attach itself happens in the store's write transaction.
+ */
+export async function decideFollowsUp(
+  db: Driver,
+  teamId: string,
+  member: { name: string; kind: string },
+  before: Lane,
+  body: UpdateLane,
+): Promise<void> {
+  const target = body.state ?? before.state;
+  if (body.abandon_reason !== undefined && target !== 'abandoned')
+    throw new MusterdError(
+      'bad_request',
+      `abandon_reason says why a lane is dropped, so it rides the move to abandoned — lane ` +
+        `"${before.id}" is ${before.state}${body.state !== undefined ? `, patch sets ${body.state}` : ''}`,
+    );
+  const submitting = isAwaitingAcceptance(target) && !isAwaitingAcceptance(before.state);
+  const resolving =
+    target === 'done' && body.state !== undefined && !LANE_TERMINAL_STATES.has(before.state);
+  const closer = before.owner_seat === null || before.owner_seat === member.name;
+  if (body.follows_up === undefined) {
+    if (!(submitting || resolving) || !closer) return;
+    if (before.follows_up !== undefined && before.follows_up !== null) return;
+    const signal = leftoverSignal({
+      title: body.title ?? before.title,
+      detail: body.detail !== undefined ? body.detail : before.detail,
+    });
+    if (signal === null) return;
+    throw new MusterdError(
+      'bad_request',
+      `lane "${before.id}" declares itself one part of several ("${signal}"), so closing it must ` +
+        `say what is left (ADR 487): pass follows_up — the lane ids that carry the rest ` +
+        `(lane_open them first if they do not exist; drop one with lane_update {state:'abandoned', ` +
+        `abandon_reason}), or "none" if nothing is. CLI: --follows-up <id,id|none>. An older ` +
+        `adapter has no such field — rebuild (pnpm build) and reload.`,
+    );
+  }
+  if (body.follows_up === 'none') return;
+  const ids = [...new Set(body.follows_up)];
+  if (ids.includes(before.id))
+    throw new MusterdError(
+      'bad_request',
+      `follows_up names lane "${before.id}" itself — name the lanes that carry what is left`,
+    );
+  const named: Lane[] = [];
+  for (const id of ids) {
+    const lane = await getLane(db, teamId, id, before.team);
+    if (!lane)
+      throw new MusterdError(
+        'bad_request',
+        `follows_up names "${id}", which is no lane on this team — lane_open it first, then ` +
+          `name its full id`,
+      );
+    if (lane.state === 'abandoned' && !lane.abandon_reason)
+      throw new MusterdError(
+        'bad_request',
+        `follows_up names lane "${id}", which is abandoned with no reason — a drop is fine, a ` +
+          `silent one is not: lane_update {id:'${id}', abandon_reason:'…'} first`,
+      );
+    named.push(lane);
+  }
+  const goal = body.goal_id !== undefined ? body.goal_id : before.goal_id;
+  const goalless = named.filter((l) => l.goal_id === null);
+  if (goal === null && goalless.length > 0)
+    throw new MusterdError(
+      'bad_request',
+      `lane "${before.id}" is on no goal, and neither is ${goalless.map((l) => `"${l.id}"`).join(', ')} ` +
+        `— a lane with a tail is a plan, and a plan is a Goal. Link this lane first ` +
+        `(lane_update {id:'${before.id}', goal_id}) or declare one (team_goal_declare), then close.`,
     );
 }

@@ -116,5 +116,9 @@
 // `musterd session label-nudge` clause (the sweep it announced was retired by ADR 442; the
 // subcommand stays a silent no-op for hooks written before this epoch). The bump keeps an older
 // checkout's `init` from rewriting the clause back in.
-export const FEATURE_EPOCH = 26 as const;
+// Epoch 27 — ADR 487 (nothing vanishes): `follows_up` on lane submit/resolve and `abandon_reason` on
+// lane_update. A lane that declares itself one part of several is refused a close until
+// `follows_up` is answered; an older adapter cannot send the field, so the refusal names it and the
+// roster's `behind` hint is the cue to rebuild.
+export const FEATURE_EPOCH = 27 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;

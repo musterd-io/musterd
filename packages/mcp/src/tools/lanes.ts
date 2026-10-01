@@ -84,6 +84,24 @@ function branchCleanupHint(lane: Lane): string {
   );
 }
 
+/**
+ * ADR 487 §5.1 — what a close says is left: `"none"` or comma-separated lane ids. One undescribed
+ * string, because the tools list is budgeted and the daemon's refusal — sent only when the lane
+ * declares itself one part of several — names the field and its shape at the moment it matters.
+ */
+const FOLLOWS_UP_INPUT = z.string().optional();
+
+export function followsUpPatch(raw: string | string[] | undefined): {
+  follows_up?: 'none' | string[];
+} {
+  if (raw === undefined) return {};
+  const ids = (Array.isArray(raw) ? raw : raw.split(','))
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (ids.length === 1 && ids[0]!.toLowerCase() === 'none') return { follows_up: 'none' };
+  return ids.length > 0 ? { follows_up: ids } : {};
+}
+
 export function registerLanes(
   server: McpServer,
   client: MusterdClient,
@@ -271,6 +289,8 @@ export function registerLanes(
         // until is a date string, advisory. Undescribed on purpose: the tools list is budgeted.
         park_reason: z.string().optional(),
         park_until: z.string().optional(),
+        // ADR 487 — with state "abandoned": why it is dropped. Undescribed for the same budget.
+        abandon_reason: z.string().optional(),
         // ADR 305 amendment 2 (lane 01M2GR0434): the one verb for NONE. A lane stamped with the
         // wrong merge — someone else's PR, a SHA that was never this branch — had no way back.
         merged: z
@@ -304,6 +324,7 @@ export function registerLanes(
     authorized_by?: string | undefined;
     branch?: string | undefined;
     acceptor?: string | undefined;
+    follows_up?: string | undefined;
   }) => {
     try {
       // Merge-verified submit: awaiting_acceptance MEANS landed. The repo is the source of
@@ -357,6 +378,7 @@ export function registerLanes(
         // and an out-of-band acceptance binds to nothing: the named seat's `accept` had no
         // server-composed ask to answer, so the owner self-closed reviewed work as unverified.
         ...(args.acceptor !== undefined ? { acceptor: args.acceptor } : {}),
+        ...followsUpPatch(args.follows_up),
       });
       // ADR 235. The old advice — "wait ≤5m; on silence, lane_resolve yourself" — was correct while
       // an unaccepted lane hung forever: self-close was the only escape. With a backstop armed it
@@ -446,6 +468,7 @@ export function registerLanes(
           .describe(
             'route the acceptance ask to THIS seat instead of the picker\'s choice; recorded as route "named"',
           ),
+        follows_up: FOLLOWS_UP_INPUT,
       },
     },
     laneSubmitHandler,
@@ -474,6 +497,7 @@ export function registerLanes(
           .string()
           .optional()
           .describe('the human whose authority the merge ran under'),
+        follows_up: FOLLOWS_UP_INPUT,
       },
     },
     async (args) => {
@@ -519,6 +543,7 @@ export function registerLanes(
         const { lane, warnings, notices, closed } = await client.updateLane(args.id, {
           state: 'done',
           ...(Object.keys(merged).length ? { merged } : {}),
+          ...followsUpPatch(args.follows_up),
         });
         // ADR 192 advisory nudge: closing your own lane is an unconfirmed close — legal, honest,
         // and worth one line. A counterpart closing someone else's lane accepts it; no nudge.

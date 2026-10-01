@@ -274,6 +274,43 @@ export const LaneParkSchema = z.object({
 });
 export type LanePark = z.infer<typeof LaneParkSchema>;
 
+/**
+ * What a closing lane says is left (ADR 487 §5.1): `"none"`, or the lanes that carry the rest — each
+ * an existing lane in any state. Answered on `lane_submit` / `lane_resolve`; optional, and refused
+ * as missing only when {@link leftoverSignal} finds the lane declares itself one part of several.
+ * Absent reads as none.
+ */
+export const LaneFollowsUpSchema = z.union([
+  z.literal('none'),
+  z.array(z.string().min(1)).min(1).max(20),
+]);
+export type LaneFollowsUp = z.infer<typeof LaneFollowsUpSchema>;
+
+/**
+ * S2 (ADR 487 §5.1): a lane whose title or detail declares a part — `N of M`, `N/M`, `increment N`,
+ * `phase N`, or an increment id like `1A` — has a tail somewhere, so its close must say where.
+ * Returns the matched text (for the refusal) or null. S1, an unfinished to-do snapshot, joins
+ * this once `unfinished_todos` exists (lane 4).
+ *
+ * Deliberately broad: a false positive costs one `follows_up: "none"`; a miss costs the plan.
+ */
+const PART_SIGNALS: readonly RegExp[] = [
+  /\b\d+\s+of\s+\d+\b/i,
+  /(?<![\d/.-])\b\d{1,2}\/\d{1,2}\b(?![\d/.-])/,
+  /\bincrements?\s+\d+/i,
+  /\bphases?\s+\d+/i,
+  /\b\d{1,2}[A-H]\b/,
+];
+export function leftoverSignal(lane: { title: string; detail: string | null }): string | null {
+  for (const text of [lane.title, lane.detail ?? '']) {
+    for (const re of PART_SIGNALS) {
+      const m = re.exec(text);
+      if (m) return m[0];
+    }
+  }
+  return null;
+}
+
 export const LaneSchema = z.object({
   id: z.string(),
   team: z.string(),
@@ -376,6 +413,13 @@ export const LaneSchema = z.object({
   state: LaneStateSchema,
   /** Present iff `state === 'parked'` (ADR 466). Optional (like `kind`) so older daemons and fixtures stay assignable; absent reads as not parked. */
   parked: LaneParkSchema.nullable().optional(),
+  /**
+   * ADR 487: what the close said is left — `"none"` or the lanes carrying the rest. Optional and
+   * nullable (like `parked`): absent or null reads as none, so older daemons stay assignable.
+   */
+  follows_up: LaneFollowsUpSchema.nullable().optional(),
+  /** ADR 487: why the lane was dropped (≤ 280), set on or after the move to `abandoned`. */
+  abandon_reason: z.string().nullable().optional(),
   /**
    * Board-projection annotation (ADR 169/191), never stored: for a `done` lane, whether the close
    * was a counterpart *acceptance* (derived from the `lane.closed` audit row's closer vs
@@ -551,6 +595,17 @@ export const UpdateLaneSchema = z.object({
   park_reason: z.string().min(1).max(280).optional(),
   /** Advisory revisit date (ms) for a park — shown, never acted on. Ignored off the park move. */
   park_until: z.number().int().optional(),
+  /**
+   * ADR 487 §5.1: what is left after this lane — `"none"` or the lane ids carrying the rest. Rides
+   * a submit or a close; required only when the lane declares itself one part of several. Each
+   * named lane must exist; one with no goal is attached to this lane's goal.
+   */
+  follows_up: LaneFollowsUpSchema.optional(),
+  /**
+   * ADR 487: why this lane is dropped — on the move into `abandoned`, or later on an abandoned lane.
+   * Mirrors `park_reason`. Required on an abandoned lane named in another lane's `follows_up`.
+   */
+  abandon_reason: z.string().min(1).max(280).optional(),
 });
 export type UpdateLane = z.infer<typeof UpdateLaneSchema>;
 

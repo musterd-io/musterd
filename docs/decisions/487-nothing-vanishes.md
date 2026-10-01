@@ -103,6 +103,12 @@ The five lanes under goal `nothing-vanishes` carry the build; the spec's §7 map
   structural rule only; the phrase check keeps ADR 373's three, because the open ADR 373 watch voids
   if they move inside its window. `intents:ingest` is gone; the 32 `repo` Seeds were closed against
   spec Appendix B.
+- **2026-09-30 — the close question landed (lane 3, `01M3T8MW01JB0JV0MKNB7WVWFZ`).** S2 only: S1 (an
+  unfinished to-do snapshot) joins `leftoverSignal` with `unfinished_todos` in lane 4. Two readings
+  the Decision left open, stated here: the question is asked of the lane's own closer (its owner, or
+  anyone closing an unowned lane), never of an acceptor; and an absent answer is stored as null,
+  which reads as none. The MCP field is one undescribed string (`"none"` or comma-separated ids) to
+  hold the tools-list budget at +88 B; the refusal names the shape when it fires.
 
 ## Observability & Evaluation
 

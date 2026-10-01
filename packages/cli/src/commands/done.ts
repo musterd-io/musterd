@@ -3,10 +3,10 @@ import { flagStr, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
 import { resolve } from './helpers.js';
-import { renderSubmitReport } from './lane.js';
+import { followsUpFlag, renderSubmitReport } from './lane.js';
 
 /**
- * `musterd done [<lane-id>] [--pr <n>] [--sha <sha>] [--authorized-by <human>]` — close the unit of
+ * `musterd done [<lane-id>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>]` — close the unit of
  * work (ADR 049 as amended by 084) and chain into orientation. Auto-targets your single live lane
  * when no id is given; the toil-killer half of the next/done pair.
  *
@@ -65,7 +65,7 @@ export async function doneCommand(parsed: Parsed): Promise<number> {
   const pr = prRaw !== undefined ? Number(prRaw) : undefined;
   if (pr !== undefined && !Number.isInteger(pr)) {
     throw new CliError(
-      'usage: musterd done [<lane-id>] [--pr <n>] [--sha <sha>] [--authorized-by <human>]',
+      'usage: musterd done [<lane-id>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>]',
       2,
     );
   }
@@ -78,11 +78,13 @@ export async function doneCommand(parsed: Parsed): Promise<number> {
   };
   const submitting = Object.keys(merged).length > 0;
 
-  const res = await http.updateLane(
-    team,
-    id,
-    submitting ? { state: 'awaiting_acceptance', merged } : { state: 'done' },
-  );
+  const res = await http.updateLane(team, id, {
+    ...(submitting
+      ? { state: 'awaiting_acceptance' as const, merged }
+      : { state: 'done' as const }),
+    // ADR 487 §5.1: what is left — required only when the lane declares itself one part of several.
+    ...followsUpFlag(flagStr(parsed.flags, 'follows-up')),
+  });
   process.stdout.write(
     `${theme.ok('✓')} ${submitting ? 'submitted for acceptance' : 'done'}\n${laneLine(res.lane)}\n`,
   );

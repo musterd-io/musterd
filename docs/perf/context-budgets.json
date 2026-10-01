@@ -2,8 +2,8 @@
   "note": "Standing-context byte budgets (spec 2026-08-03, `pnpm context:check`). Every byte musterd injects into a seat's context — tools/list render, primer, hook nudges — measured statically from source-of-truth exports. Raising any budget requires replacing that item's `justification`. bytes are UTF-8 of the model-readable text; estTokens = bytes/4 (the SurfaceRender formula).",
   "items": {
     "toolsListDefaultBytes": {
-      "budget": 18340,
-      "justification": "2026-09-28 (18331 B, ADR 466 `parked` lane state: +`parked` in every lane-state enum and `park_reason`/`park_until` on lane_update, left undescribed to cost 44 B over the 2026-08-27 budget) + 9 B, deliberately NOT +5%: main had already spent the old headroom, and this raise should buy only the parked state. Pays rent via ADR 466 eval (a shelved lane no longer offered to, or claimable by, agents). Re-baseline with headroom at the next deliberate trim."
+      "budget": 18430,
+      "justification": "2026-09-30 (18428 B, ADR 487 nothing-vanishes: `follows_up` on lane_submit and lane_resolve and `abandon_reason` on lane_update, all three undescribed — the daemon's refusal teaches the shape when a lane declares itself one part of several — costing 88 B over the 2026-09-28 budget) + 2 B, deliberately NOT +5%, as ADR 466's raise: this buys only the three fields. Pays rent via ADR 487 eval (no declared increment, follow-up or to-do left with no lane or disposition, docs/watches/2026-09-30-nothing-vanishes.md). Previous: 2026-09-28 (18331 B, ADR 466 `parked` lane state: +`parked` in every lane-state enum and `park_reason`/`park_until` on lane_update, left undescribed to cost 44 B over the 2026-08-27 budget) + 9 B, deliberately NOT +5%: main had already spent the old headroom, and this raise should buy only the parked state. Pays rent via ADR 466 eval (a shelved lane no longer offered to, or claimable by, agents). Re-baseline with headroom at the next deliberate trim."
     },
     "toolsListMutedBytes": {
       "budget": 8042,
@@ -22,12 +22,12 @@
       "justification": "post-trim 2026-08-03 (92 B) + 5% headroom"
     },
     "perTurnTotalBytes": {
-      "budget": 18437,
-      "justification": "2026-09-28: ADR 468's ceiling (18384 B, the 2026-08-27 18487 B minus the removed 103 B labelNudgeBytes part) raised to the sum of its parts' budgets after ADR 466's `parked` state took toolsListDefaultBytes to 18340 B (18340 + 97 = 18437 B), no headroom beyond that — see toolsListDefaultBytes."
+      "budget": 18527,
+      "justification": "2026-09-30: raised to the sum of its parts' budgets after ADR 487 took toolsListDefaultBytes to 18430 B (18430 + 97 = 18527 B), no headroom beyond that — see toolsListDefaultBytes. Previous: 2026-09-28: ADR 468's ceiling (18384 B, the 2026-08-27 18487 B minus the removed 103 B labelNudgeBytes part) raised to the sum of its parts' budgets after ADR 466's `parked` state took toolsListDefaultBytes to 18340 B (18340 + 97 = 18437 B), no headroom beyond that — see toolsListDefaultBytes."
     },
     "perSessionTotalBytes": {
-      "budget": 21730,
-      "justification": "2026-09-28 (ADR 468): the 2026-08-27 ceiling (21833 B = 20793 B + 5%) minus the 103 B labelNudgeBytes part"
+      "budget": 21747,
+      "justification": "2026-09-30: raised to the sum of its parts' budgets after ADR 487 took toolsListDefaultBytes to 18430 B (18430 + 2665 + 555 + 97 = 21747 B), no headroom beyond that — see toolsListDefaultBytes. Previous: 2026-09-28 (ADR 468): the 2026-08-27 ceiling (21833 B = 20793 B + 5%) minus the 103 B labelNudgeBytes part"
     }
   }
 }
