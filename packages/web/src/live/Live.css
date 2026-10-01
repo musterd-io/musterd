@@ -4155,6 +4155,71 @@
 .lc-hcard__line.is-steer .lc-hcard__body {
   color: var(--lc-faint);
 }
+/* A seat's name is the way into its path (huddle replay increment 2): it reads as the name it
+   was, with an underline on hover/focus to say it opens. */
+.lc-hcard__seat-btn {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: var(--lc-r-sm);
+}
+.lc-hcard__seat-btn:hover .lc-chip__name,
+.lc-hcard__seat-btn:focus-visible .lc-chip__name,
+.lc-hcard__seat-btn[aria-expanded='true'] .lc-chip__name {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--lc-accent) 60%, transparent);
+}
+/* The path: wake, then each tool call — a quieter column under the turn it led to, on the same
+   +Δ clock as the turns, so the gap before a turn is readable as the work that filled it. */
+.lc-hcard__path {
+  grid-column: 1 / -1;
+  list-style: none;
+  margin: 0 0 var(--lc-2) 28px;
+  padding: var(--lc-2) var(--lc-4);
+  border-left: 1px dashed var(--lc-border-2);
+  font-size: 12px;
+}
+.lc-hcard__path ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  column-gap: var(--lc-4);
+  row-gap: 2px;
+}
+.lc-hcard__step {
+  display: contents;
+}
+.lc-hcard__step-text {
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  color: var(--lc-dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lc-hcard__step--wake .lc-hcard__step-text {
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--lc-text);
+}
+.lc-hcard__step-note {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--lc-faint);
+  white-space: nowrap;
+}
+.lc-hcard__path--note {
+  color: var(--lc-faint);
+  margin: 0;
+}
 .lc-hcard__foot {
   font-size: 12px;
   color: var(--lc-faint);

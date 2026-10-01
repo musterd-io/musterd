@@ -149,3 +149,28 @@ describe('the huddle card reads at a glance (polish)', () => {
     expect(render([root, turn, closed])).not.toContain('lc-hcard__live');
   });
 });
+
+describe('a seat in the huddle card opens its path (replay increment 2)', () => {
+  const HUDDLE = { topic: { kind: 'goal', id: 'demo' }, room: 'https://b.example/h', anchor: 'docs/x.md' };
+  const t0 = Date.UTC(2026, 9, 1, 18, 0, 0);
+  const envs = [
+    env({ id: '01R', from: 'nick', act: 'message', body: 'Pick.', ts: t0, meta: { huddle: HUDDLE } }),
+    env({ id: '01A', from: 'sloane', act: 'message', body: 'Lane 2.', ts: t0 + 60_000, thread: '01R' }),
+    env({ id: '01B', from: 'sloane', act: 'message', body: 'And 4.', ts: t0 + 90_000, thread: '01R' }),
+  ];
+  const cfg = { team: 'revive', token: 't' } as never;
+  const render = (withCfg: boolean) =>
+    renderToStaticMarkup(
+      createElement(Stream, { envelopes: envs, roster, liveIds: new Set<string>(), ...(withCfg ? { cfg } : {}) }),
+    );
+
+  it('makes a seat\'s FIRST turn its door, closed until clicked', () => {
+    const html = render(true);
+    expect(html.match(/lc-hcard__seat-btn/g)).toHaveLength(1);
+    expect(html).toContain('aria-expanded="false"');
+  });
+
+  it('draws plain names where there is no daemon to ask (a stream, a test)', () => {
+    expect(render(false)).not.toContain('lc-hcard__seat-btn');
+  });
+});

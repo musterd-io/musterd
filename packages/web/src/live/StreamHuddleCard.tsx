@@ -1,5 +1,8 @@
-import type { Envelope, HuddleView, MemberSummary } from '@musterd/protocol';
+import type { Envelope, HuddleTrace, HuddleView, MemberSummary } from '@musterd/protocol';
+import { Fragment, useState } from 'react';
+import type { LiveConfig } from './client';
 import { clock, hueOf, initial, kindOf, memberAvatar } from './format';
+import { PATH_MAX_LINES, fetchHuddleTrace, seatPath } from './huddleTrace';
 import { huddleBudget, sinceOpen } from './huddles';
 
 /**
@@ -19,6 +22,7 @@ export function StreamHuddleCard({
   idx,
   now,
   liveIds,
+  cfg,
 }: {
   view: HuddleView;
   byId: Map<string, Envelope>;
@@ -27,7 +31,20 @@ export function StreamHuddleCard({
   now: boolean;
   /** Rows that arrived live this session — a turn among them enters with the row animation. */
   liveIds: Set<string>;
+  /** The viewer's daemon config — present on /live, where a seat's line opens its path. */
+  cfg?: LiveConfig | undefined;
 }) {
+  // Huddle replay increment 2: a seat's name opens its path (wake → tools → turn), read once per
+  // card from the daemon's huddle trace (ADR 493) on the first click and kept for the rest.
+  const [openSeat, setOpenSeat] = useState<string | null>(null);
+  const [trace, setTrace] = useState<HuddleTrace | 'loading' | 'missing' | null>(null);
+  const toggle = (seat: string) => {
+    setOpenSeat((cur) => (cur === seat ? null : seat));
+    if (cfg && trace === null) {
+      setTrace('loading');
+      fetchHuddleTrace(cfg, view.id).then(setTrace, () => setTrace('missing'));
+    }
+  };
   const budget = huddleBudget(view, Date.now());
   const silent = view.named.filter((n) => !view.spoke.includes(n));
   const closing = view.closed ? closeRow(view, byId) : undefined;
@@ -57,19 +74,35 @@ export function StreamHuddleCard({
       </div>
       {view.turns.length > 0 && (
         <ol className="lc-hcard__turns">
-          {view.turns.map((t) => (
+          {view.turns.map((t, i) => (
+            <Fragment key={t.id}>
             <li
-              key={t.id}
               id={`lc-msg-${t.id}`}
               className={`lc-hcard__line${t.act === 'steer' ? ' is-steer' : ''}${liveIds.has(t.id) ? ' lc-row--enter' : ''}`}
             >
-              <Who name={t.from} idx={idx} />
+              {cfg && firstTurnOf(view, t.from) === i ? (
+                <button
+                  type="button"
+                  className="lc-hcard__seat-btn"
+                  aria-expanded={openSeat === t.from}
+                  title={`${t.from}'s path through this huddle — wake, tool calls, turn`}
+                  onClick={() => toggle(t.from)}
+                >
+                  <Who name={t.from} idx={idx} />
+                </button>
+              ) : (
+                <Who name={t.from} idx={idx} />
+              )}
               <span className="lc-hcard__since">{sinceOpen(t.ts - view.openedAt)}</span>
               <span className="lc-hcard__body">
                 {t.act === 'steer' && <span className="lc-badge lc-badge--steer">steer</span>}
                 {t.body}
               </span>
             </li>
+            {openSeat === t.from && firstTurnOf(view, t.from) === i && (
+              <Path trace={trace} seat={t.from} />
+            )}
+            </Fragment>
           ))}
         </ol>
       )}
@@ -96,6 +129,54 @@ export function StreamHuddleCard({
         )
       )}
     </article>
+  );
+}
+
+/** A seat's path opens under its FIRST turn — the one its wake and tool calls led up to. */
+function firstTurnOf(view: HuddleView, seat: string): number {
+  return view.turns.findIndex((t) => t.from === seat);
+}
+
+function Path({
+  trace,
+  seat,
+}: {
+  trace: HuddleTrace | 'loading' | 'missing' | null;
+  seat: string;
+}) {
+  if (trace === null || trace === 'loading')
+    return <li className="lc-hcard__path lc-hcard__path--note">reading {seat}'s path…</li>;
+  if (trace === 'missing')
+    return (
+      <li className="lc-hcard__path lc-hcard__path--note">
+        No trace for this room yet — this daemon may not serve huddle traces.
+      </li>
+    );
+  const lines = seatPath(trace, seat);
+  if (lines.length === 0)
+    return (
+      <li className="lc-hcard__path lc-hcard__path--note">
+        No wake or tool steps recorded for {seat} — it may run without the trace hook.
+      </li>
+    );
+  const shown = lines.slice(0, PATH_MAX_LINES);
+  return (
+    <li className="lc-hcard__path">
+      <ol>
+        {shown.map((l, k) => (
+          <li key={k} className={`lc-hcard__step lc-hcard__step--${l.kind}`}>
+            <span className="lc-hcard__since">{l.since}</span>
+            <span className="lc-hcard__step-text">{l.text}</span>
+            {/* Always present: the path is a 3-column grid of `display: contents` rows, so a missing
+                cell would shift every later row by one. */}
+            <span className="lc-hcard__step-note">{l.note ?? ''}</span>
+          </li>
+        ))}
+      </ol>
+      {lines.length > shown.length && (
+        <p className="lc-hcard__path--note">+{lines.length - shown.length} more steps</p>
+      )}
+    </li>
   );
 }
 
