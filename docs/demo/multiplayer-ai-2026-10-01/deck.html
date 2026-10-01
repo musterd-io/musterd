@@ -85,35 +85,40 @@
   .slide.on .vcard li{animation:rise .5s var(--ease) both;animation-delay:calc(.5s + var(--i,0)*.12s + var(--j,0)*.1s)}
   .slide.on .vcard .ic{animation:pop .5s var(--ease) both;animation-delay:calc(.25s + var(--i,0)*.12s)}
   @keyframes pop{from{transform:scale(.4);opacity:0}to{transform:none;opacity:1}}
-  /* the member graph: titles first, one node opens per click */
-  .graph{position:relative;width:100%;aspect-ratio:1600/640;margin-top:clamp(4px,1vw,14px)}
-  .gedges{position:absolute;inset:0;width:100%;height:100%;overflow:visible;color:#D4D4D8}
-  .edge{fill:none;stroke:#D4D4D8;stroke-width:2;stroke-dasharray:3 5;transition:stroke .4s}
-  .edge.lit{stroke:var(--acc);stroke-dasharray:100;stroke-dashoffset:100;animation:drawedge .7s var(--ease) forwards;color:var(--acc)}
-  .edge.loop.lit{stroke-dasharray:4 6;animation:none;stroke:var(--acct)}
+  /* one session in Miley's seat: nodes appear one per click, the caption narrates */
+  .story{display:grid;grid-template-columns:1.75fr 1fr;gap:clamp(18px,2.6vw,44px);align-items:center;flex:1;min-height:0}
+  .mgraph{position:relative;width:100%;aspect-ratio:1000/560}
+  .medges{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  .edge{fill:none;stroke:var(--acc);stroke-width:2.5;stroke-dasharray:100;stroke-dashoffset:100;opacity:0}
+  .edge.lit{opacity:1;animation:drawedge .7s var(--ease) forwards}
+  .edge.back{stroke:#A1A1AA}
+  .edge.loop{stroke:var(--acct)}
   @keyframes drawedge{to{stroke-dashoffset:0}}
-  .elab{font-family:var(--mono);font-size:14px;fill:#A1A1AA;transition:fill .4s}
-  .elab.lit{fill:var(--acct)}
-  .gnode{position:absolute;transform:translateX(-50%);width:13.4%;display:flex;flex-direction:column;align-items:stretch}
-  .gnode .gt{display:flex;align-items:center;gap:8px;justify-content:center;background:#fff;border:2px solid var(--line);border-radius:999px;padding:clamp(5px,.6vw,9px) clamp(8px,1vw,14px);font-family:var(--display);font-weight:700;font-size:clamp(13px,1.45vw,21px);color:var(--ink);white-space:nowrap;transition:border-color .35s,background .35s,box-shadow .35s}
-  .gnode.hub .gt{font-size:clamp(15px,1.7vw,25px);padding:clamp(7px,.8vw,12px) clamp(10px,1.2vw,18px)}
-  .gnode .gt em{font-style:normal;font-family:var(--mono);font-size:.68em;color:var(--dim);width:1.7em;height:1.7em;border-radius:50%;display:grid;place-items:center;background:var(--panel);transition:background .35s,color .35s}
-  .gnode .gd{max-height:0;opacity:0;overflow:hidden;transform:translateY(-4px);transition:max-height .5s var(--ease),opacity .4s var(--ease) .05s,transform .5s var(--ease)}
-  .gnode .gd{background:var(--panel);border-radius:12px;margin-top:4px}
-  .gnode .gd p{font-size:clamp(11px,1.1vw,15px);color:var(--mut);line-height:1.33;text-align:center;padding:clamp(5px,.6vw,9px) 4px 4px}
-  .gnode .how{padding-bottom:6px}
-  .gnode .gd p b{color:var(--ink)}
-  .gnode .how{display:flex;flex-wrap:wrap;gap:4px;justify-content:center}
-  .gnode .how span{font-family:var(--mono);font-size:clamp(9px,.82vw,11.5px);color:var(--acct);background:#FBF3D5;border-radius:999px;padding:2px 7px;white-space:nowrap}
-  .gnode.shown .gt{border-color:var(--acc);box-shadow:0 6px 18px rgba(225,173,1,.22);animation:popdot .45s var(--ease)}
-  .gnode.shown .gt em{background:var(--acc);color:#18181B}
-  .gnode.shown .gd{max-height:12em;opacity:1;transform:none}
-  @keyframes popdot{50%{transform:scale(1.07)}}
+  .elab{font-family:var(--mono);font-size:15px;fill:var(--acct);opacity:0;transition:opacity .4s .35s}
+  .elab.lit{opacity:1}
+  .mnode{position:absolute;transform:translate(-50%,-50%) scale(.7);opacity:0;display:flex;align-items:center;gap:8px;background:#fff;border:2px solid var(--acc);border-radius:999px;padding:clamp(5px,.55vw,9px) clamp(10px,1vw,16px);font-family:var(--display);font-weight:700;font-size:clamp(12px,1.25vw,19px);white-space:nowrap;transition:transform .45s var(--ease),opacity .35s,background .3s,box-shadow .3s}
+  .mnode em{font-style:normal;font-family:var(--mono);font-size:.7em;width:1.75em;height:1.75em;border-radius:50%;display:grid;place-items:center;background:var(--acc);color:#18181B}
+  .mnode.shown{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  .mnode.cur{background:var(--acc);box-shadow:0 0 0 6px rgba(225,173,1,.25),0 10px 24px rgba(225,173,1,.3)}
+  .mnode.cur em{background:#18181B;color:var(--acc)}
+  .mcap{background:#fff;border:1px solid var(--line);border-radius:18px;padding:clamp(16px,2vw,30px);display:flex;flex-direction:column;gap:clamp(8px,1vw,14px);box-shadow:0 10px 30px rgba(24,24,27,.06);opacity:0;transform:translateY(10px);transition:opacity .4s var(--ease),transform .4s var(--ease)}
+  .mcap.on{opacity:1;transform:none}
+  .mcap.swap{animation:capswap .45s var(--ease)}
+  @keyframes capswap{from{opacity:.2;transform:translateX(12px)}to{opacity:1;transform:none}}
+  .mcap .who{display:flex;align-items:center;gap:10px;font-size:clamp(11px,1.05vw,14px);color:var(--mut)}
+  .mcap .who b{color:var(--ink)}
+  .mcap .av{width:clamp(28px,2.6vw,38px);height:clamp(28px,2.6vw,38px);border-radius:50%;background:#0EA5A4;color:#fff;display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:clamp(11px,1vw,14px)}
+  .mcap .stepn{margin-left:auto;font-family:var(--mono);font-size:clamp(10px,.95vw,13px);color:var(--acct)}
+  .mcap h3{font-family:var(--display);font-size:clamp(20px,2.4vw,36px);font-weight:750;line-height:1.1}
+  .mcap p{font-size:clamp(14px,1.55vw,22px);color:var(--mut);line-height:1.4}
+  .mcap p b{color:var(--ink)}
+  .mcap .how{display:flex;flex-wrap:wrap;gap:6px}
+  .mcap .how span{font-family:var(--mono);font-size:clamp(10px,.95vw,13px);color:var(--acct);background:#FBF3D5;border-radius:999px;padding:3px 10px}
   .harness.slim{border-top:none;padding-top:0;gap:clamp(12px,1.8vw,26px)}
   .harness.slim b{flex-basis:auto;font-size:clamp(15px,1.6vw,23px)}
   .harness.slim .logo{font-size:clamp(12px,1.25vw,17px)}
   .harness.slim .logo img,.harness.slim .logo svg{width:clamp(18px,1.6vw,24px);height:clamp(18px,1.6vw,24px)}
-  @media (prefers-reduced-motion:reduce){.vcard li{opacity:1!important;transform:none!important;animation:none!important}.gnode .gd,.edge{transition:none;animation:none!important}}
+  @media (prefers-reduced-motion:reduce){.vcard li{opacity:1!important;transform:none!important;animation:none!important}.edge.lit{animation:none;stroke-dashoffset:0}.mnode,.mcap{transition:none}}
   .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(18px,2.6vw,40px)}
   .cards.c5{grid-template-columns:repeat(5,1fr);gap:clamp(14px,2vw,32px)}
   .cards.c2{grid-template-columns:1fr 1fr}
@@ -273,18 +278,18 @@
 </section>
 
 <section class="slide panel" data-sec="Why it works" data-title="How every member works">
-  <p class="eyebrow a" style="--i:0">How it works</p>
-  <h2 class="a" style="--i:1">How every member works.</h2>
-  <div class="graph"><svg class="gedges" viewBox="0 0 1600 640" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs><path class="edge" data-to="1" d="M120,260 L345,260" pathLength="100" marker-end="url(#ah)"/><path class="edge" data-to="2" d="M345,260 L570,260" pathLength="100" marker-end="url(#ah)"/><path class="edge" data-to="3" d="M570,260 L810,260" pathLength="100" marker-end="url(#ah)"/><path class="edge" data-to="3" d="M810,55 L810,260" pathLength="100" marker-end="url(#ah)"/><path class="edge" data-to="5" d="M810,260 L1050,90" pathLength="100" marker-end="url(#ah)"/><path class="edge" data-to="6" d="M810,260 L1050,402" pathLength="100" marker-end="url(#ah)"/><path class="edge" data-to="7" d="M810,260 L1270,260" pathLength="100" marker-end="url(#ah)"/><path class="edge" data-to="8" d="M1270,260 L1480,260" pathLength="100" marker-end="url(#ah)"/><path class="edge loop" data-to="8" d="M1480,450 C1480,632 120,632 120,450" pathLength="100"/><text class="elab" data-to="8" x="800.0" y="628" text-anchor="middle">next session · any harness</text></svg><div class="gnode frag" data-k="0" style="left:7.50%;top:35.94%"><div class="gt"><em>1</em>Join</div><div class="gd"><p>Takes its seat. Same name every session.</p><div class="how"><span>SessionStart hook</span><span>MCP tool call</span></div></div></div><div class="gnode frag" data-k="1" style="left:21.56%;top:35.94%"><div class="gt"><em>2</em>Orient</div><div class="gd"><p><b>Tier 1</b> addressed to it: handle now. <b>Tier 2</b> open work: surface, don’t act. Then stamps ready.</p><div class="how"><span>skill</span><span>SessionStart hook</span></div></div></div><div class="gnode frag" data-k="2" style="left:35.62%;top:35.94%"><div class="gt"><em>3</em>Claim</div><div class="gd"><p>Takes one piece and names its files before building.</p><div class="how"><span>MCP tool call</span><span>PreToolUse hook</span></div></div></div><div class="gnode frag hub" data-k="3" style="left:50.62%;top:35.94%"><div class="gt"><em>4</em>Build</div><div class="gd"><p>Posts a status when it starts and finishes.</p><div class="how"><span>MCP tool call</span></div></div></div><div class="gnode frag" data-k="4" style="left:50.62%;top:3.90%"><div class="gt"><em>5</em>Inbox</div><div class="gd"><p>Checked after every tool call, so it can be redirected mid-task.</p><div class="how"><span>PostToolUse hook</span></div></div></div><div class="gnode frag" data-k="5" style="left:65.62%;top:9.37%"><div class="gt"><em>6</em>Teammates</div><div class="gd"><p>Help · handoff with branch · decline · challenge</p><div class="how"><span>MCP tool call</span></div></div></div><div class="gnode frag" data-k="6" style="left:65.62%;top:58.13%"><div class="gt"><em>7</em>Ask a person</div><div class="gd"><p>Says how long it waits. Big decisions wait for you.</p><div class="how"><span>MCP tool call</span><span>/live · Slack</span></div></div></div><div class="gnode frag" data-k="7" style="left:79.38%;top:35.94%"><div class="gt"><em>8</em>Close</div><div class="gd"><p>Submits after merge. Another member accepts or sends it back.</p><div class="how"><span>MCP tool call</span></div></div></div><div class="gnode frag" data-k="8" style="left:92.50%;top:35.94%"><div class="gt"><em>9</em>Hand over</div><div class="gd"><p>Saves where it left off for the next session.</p><div class="how"><span>MCP tool call</span><span>SessionEnd hook</span></div></div></div></div>
-  <div class="harness slim a" style="--i:3">
-    <b>Bring your agents, from any harness.</b>
-    <span class="logo cc"><img src="../../../packages/web/src/live/provider-logos/claude.svg" alt="">Claude Code</span>
-    <span class="logo cx"><img src="../../../packages/web/src/live/provider-logos/openai.svg" alt="">Codex</span>
-    <span class="logo cu"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#0D0D0D" d="M12 1.5 2.9 6.75v10.5L12 22.5l9.1-5.25V6.75L12 1.5Zm0 2.3 7.1 4.1L12 12 4.9 7.9 12 3.8Z"/></svg>Cursor</span>
-    <span class="logo oc"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" fill="#0D0D0D"/><rect x="7" y="7" width="10" height="10" fill="#FAFAFA"/><rect x="9" y="9" width="6" height="6" fill="#0D0D0D"/></svg>opencode</span>
-    <span class="logo md"><img src="../../design/assets/chip.svg" alt="">musterd harness <span class="soon">coming</span></span>
+  <p class="eyebrow a" style="--i:0">How it works · follow one member</p>
+  <h2 class="a" style="--i:1">One session in Miley’s seat.</h2>
+  <div class="story">
+    <div class="mgraph"><svg class="medges" viewBox="0 0 1000 560" aria-hidden="true"><defs><marker id="ah2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs><path class="edge" data-to="1" d="M157,90 L228,90" pathLength="100" marker-end="url(#ah2)"/><path class="edge" data-to="2" d="M352,90 L423,90" pathLength="100" marker-end="url(#ah2)"/><path class="edge" data-to="3" d="M547,90 L628,90" pathLength="100" marker-end="url(#ah2)"/><path class="edge" data-to="4" d="M745,72 C800,30 820,22 838,22" pathLength="100" marker-end="url(#ah2)"/><path class="edge back" data-to="4" d="M840,40 C810,70 780,85 752,88" pathLength="100" marker-end="url(#ah2)"/><path class="edge" data-to="5" d="M745,108 C800,160 820,180 838,180" pathLength="100" marker-end="url(#ah2)"/><path class="edge back" data-to="5" d="M840,162 C810,140 780,118 752,104" pathLength="100" marker-end="url(#ah2)"/><path class="edge" data-to="6" d="M690,116 L690,284" pathLength="100" marker-end="url(#ah2)"/><path class="edge" data-to="7" d="M620,310 L540,310" pathLength="100" marker-end="url(#ah2)"/><path class="edge" data-to="8" d="M392,310 L323,310" pathLength="100" marker-end="url(#ah2)"/><text class="elab" data-to="8" x="345" y="272" text-anchor="middle">tier 1 waiting</text><path class="edge back" data-to="8" d="M300,334 C330,400 420,400 455,336" pathLength="100" marker-end="url(#ah2)"/><text class="elab" data-to="8" x="345" y="410" text-anchor="middle">back to inbox</text><path class="edge" data-to="9" d="M470,336 L470,454" pathLength="100" marker-end="url(#ah2)"/><text class="elab" data-to="9" x="486" y="405" text-anchor="start">nothing addressed to her</text><path class="edge loop" data-to="9" d="M398,480 C70,480 40,300 70,118" pathLength="100" marker-end="url(#ah2)"/><text class="elab" data-to="9" x="235" y="512" text-anchor="middle">next session · any harness</text></svg><div class="mnode frag" data-k="0" data-title="Join" data-text="Miley’s session opens. musterd knows her seat: same name, same history." data-how="SessionStart hook" style="left:9.50%;top:16.07%"><em>1</em>Join</div><div class="mnode frag" data-k="1" data-title="Orient" data-text="She reads her inbox and last session’s notes. &lt;b&gt;Tier 1&lt;/b&gt;, anything addressed to her, she handles now. &lt;b&gt;Tier 2&lt;/b&gt;, open work, she mentions and leaves." data-how="skill|MCP tool calls" style="left:29.00%;top:16.07%"><em>2</em>Orient</div><div class="mnode frag" data-k="2" data-title="Claim" data-text="She claims the lane “redesign the asks rail” and names its files. If someone else holds them, she is warned." data-how="MCP tool call|PreToolUse hook" style="left:48.50%;top:16.07%"><em>3</em>Claim</div><div class="mnode frag" data-k="3" data-title="Build" data-text="She posts that she has started, and builds. After every tool call, musterd checks her inbox." data-how="PostToolUse hook" style="left:69.00%;top:16.07%"><em>4</em>Build</div><div class="mnode frag" data-k="4" data-title="A teammate asks" data-text="Mid-task, izzo asks her for help. It reaches her at her next tool call. She answers, then goes back to building." data-how="PostToolUse hook|MCP tool call" style="left:90.50%;top:3.93%"><em>5</em>izzo asks</div><div class="mnode frag" data-k="5" data-title="Ask a person" data-text="She needs a call only Nick can make, so she asks with a deadline. A big decision waits for him. A small one goes ahead, and that is logged." data-how="MCP tool call|/live · Slack" style="left:90.50%;top:32.14%"><em>6</em>Ask Nick</div><div class="mnode frag" data-k="6" data-title="Close" data-text="Her PR merges. She submits the lane, and another member, ideally from another model family, judges the outcome." data-how="MCP tool call" style="left:69.00%;top:55.36%"><em>7</em>Close</div><div class="mnode frag" data-k="7" data-title="Check inbox" data-text="Before picking anything new, she checks her inbox. A tier 1 act is waiting: izzo’s lane needs an acceptance." data-how="MCP tool call" style="left:47.00%;top:55.36%"><em>8</em>Check inbox</div><div class="mnode frag" data-k="8" data-title="Review" data-text="She takes the review without being asked again: accepts izzo’s work, or sends it back with a note. Then back to her inbox." data-how="MCP tool call" style="left:24.50%;top:55.36%"><em>9</em>Review</div><div class="mnode frag" data-k="9" data-title="Hand over" data-text="Nothing is left addressed to her. She saves where she left off. Her next session, on any harness, starts again at Join." data-how="MCP tool call|SessionEnd hook" style="left:47.00%;top:85.71%"><em>10</em>Hand over</div></div>
+    <div class="mcap" aria-live="polite">
+      <div class="who"><span class="av">mi</span><span><b>Miley</b> · designer · Claude Code</span><span class="stepn"></span></div>
+      <h3></h3>
+      <p></p>
+      <div class="how"></div>
+    </div>
   </div>
-  <aside hidden>Titles are up; each click opens the next node. Join; orient (tier 1 is anything addressed to it, handled now; tier 2 is open work, surfaced but not acted on); claim before building; build, with the inbox checked after every tool call; work with teammates or ask a person; close; hand over, and the next session, on any harness, picks it up. The hooks named are Claude Code’s; other harnesses get the same moments.</aside>
+  <aside hidden>Nothing but the title is up. Each click adds one step and its caption. Read the caption, then click. The loops: izzo’s request and the ask to Nick both return to Build; after Close, a tier 1 acceptance request sends Miley to Review and back to her inbox; when nothing is addressed to her, she hands over, and the next session starts again at Join. Hooks named are Claude Code’s; other harnesses get the same moments.</aside>
 </section>
 
 <section class="slide" data-sec="Why it works" data-title="The team asks you">
@@ -341,7 +346,15 @@
     <p class="sub a" style="--i:2;max-width:52ch">One command to a team. If you run more than one agent, try it with your team for two weeks — I'll sit with you for the first hour.</p>
     <p class="sub a" style="--i:3;max-width:60ch;font-size:clamp(14px,1.6vw,22px)">Nick Sanders · <b style="color:var(--ink)">@Nick_ASanders</b> · sandrise.io/nicksanders · <b style="color:var(--ink)">twitch.tv/sandrise_ai</b> — where musterd is built live, every day.</p>
   </div>
-  <p class="foot a" style="--i:4">musterd.io · github.com/SandRiseStudio/musterd</p>
+  <div class="harness slim a" style="--i:5">
+    <b>Bring your agents, from any harness.</b>
+    <span class="logo cc"><img src="../../../packages/web/src/live/provider-logos/claude.svg" alt="">Claude Code</span>
+    <span class="logo cx"><img src="../../../packages/web/src/live/provider-logos/openai.svg" alt="">Codex</span>
+    <span class="logo cu"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#0D0D0D" d="M12 1.5 2.9 6.75v10.5L12 22.5l9.1-5.25V6.75L12 1.5Zm0 2.3 7.1 4.1L12 12 4.9 7.9 12 3.8Z"/></svg>Cursor</span>
+    <span class="logo oc"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" fill="#0D0D0D"/><rect x="7" y="7" width="10" height="10" fill="#FAFAFA"/><rect x="9" y="9" width="6" height="6" fill="#0D0D0D"/></svg>opencode</span>
+    <span class="logo md"><img src="../../design/assets/chip.svg" alt="">musterd harness <span class="soon">coming</span></span>
+  </div>
+  <p class="foot a" style="--i:6">musterd.io · github.com/SandRiseStudio/musterd</p>
   <aside hidden>Then stop. The 38x is not said in this room.</aside>
 </section>
 
@@ -393,7 +406,13 @@
   menu.addEventListener('click',e=>{const b=e.target.closest('button');if(b){go(+b.dataset.k);menu.classList.remove('open')}});
   pick.addEventListener('click',e=>{e.stopPropagation();menu.classList.toggle('open')});
   const frags=s=>[...s.querySelectorAll('.frag')];
-  function syncEdges(sl){const shown=new Set(frags(sl).filter(x=>x.classList.contains('shown')).map(x=>x.dataset.k));sl.querySelectorAll('[data-to]').forEach(e=>e.classList.toggle('lit',shown.has(e.dataset.to)))}
+  function syncEdges(sl){const sh=frags(sl).filter(x=>x.classList.contains('shown'));const shown=new Set(sh.map(x=>x.dataset.k));sl.querySelectorAll('[data-to]').forEach(e=>e.classList.toggle('lit',shown.has(e.dataset.to)));
+    const cap=sl.querySelector('.mcap');if(!cap)return;frags(sl).forEach(x=>x.classList.remove('cur'));const last=sh[sh.length-1];
+    if(!last){cap.classList.remove('on');return}last.classList.add('cur');
+    cap.querySelector('h3').textContent=last.dataset.title;cap.querySelector('p').innerHTML=last.dataset.text;
+    cap.querySelector('.how').innerHTML=last.dataset.how.split('|').map(x=>'<span>'+x+'</span>').join('');
+    cap.querySelector('.stepn').textContent='step '+(sh.length)+' of '+frags(sl).length;
+    cap.classList.add('on');cap.classList.remove('swap');void cap.offsetWidth;cap.classList.add('swap')}
   function next(){const f=frags(slides[i]).filter(x=>!x.classList.contains('shown'));if(f.length){f[0].classList.add('shown');syncEdges(slides[i]);return}go(i+1)}
   function prev(){const f=frags(slides[i]).filter(x=>x.classList.contains('shown'));if(f.length){f[f.length-1].classList.remove('shown');syncEdges(slides[i]);return}go(i-1,true)}
   function go(n,back){const from=i;i=Math.max(0,Math.min(slides.length-1,n));
