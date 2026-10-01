@@ -48,6 +48,9 @@ export const MAX_LIFETIME_S = 60;
 export const SKEW_S = 5;
 /** An unknown `kid` refetches the JWKS at most this often — a rotated key lands within it. */
 export const JWKS_REFETCH_MS = 30_000;
+/** A cached key set is trusted this long; past it, the set is refetched before any key is used —
+ *  so a key the console revokes stops working everywhere within this bound (review I4). */
+export const JWKS_MAX_AGE_MS = 10 * 60_000;
 
 const refuse = (reason: ConsoleTokenRefusal, detail: string) =>
   new ConsoleTokenError(reason, `console token refused (${reason}): ${detail}`);
@@ -57,13 +60,23 @@ const Jwks = z.object({
 });
 
 /**
- * The console's published keys, fetched on first use and cached by `kid`. A `kid` the cache does
- * not hold triggers one refetch, at most every {@link JWKS_REFETCH_MS} — so a key rotation is
- * picked up, and a flood of tokens naming made-up kids cannot turn into a flood of fetches.
+ * The console's published keys, cached by `kid`, with three rules (spec §4.3; review I4/M5):
+ * - **A set is trusted for {@link JWKS_MAX_AGE_MS}.** Past that it is refetched before any key is
+ *   used, and if the refetch fails the verification fails CLOSED (`console_unreachable`) — so a key
+ *   the console revokes stops working on every server within the max age, never "until restart".
+ * - **An unknown `kid` refetches at most every {@link JWKS_REFETCH_MS}**, so a rotation lands and a
+ *   flood of made-up kids cannot become a flood of fetches.
+ * - **One fetch at a time** (concurrent misses share it), and a failed fetch backs off for the same
+ *   {@link JWKS_REFETCH_MS} instead of being retried by every request during a console outage.
  */
 export class JwksCache {
   private keys = new Map<string, KeyObject>();
+  /** Last SUCCESSFUL fetch — what the max age is measured from. */
   private fetchedAt: number | null = null;
+  /** Last attempt, success or not — what the refetch interval and the failure backoff use. */
+  private attemptedAt: number | null = null;
+  private lastFailure: ConsoleTokenError | null = null;
+  private inflight: Promise<void> | null = null;
   private readonly now: () => number;
   private readonly timeoutMs: number;
   constructor(
@@ -75,34 +88,42 @@ export class JwksCache {
   }
 
   async key(kid: string): Promise<KeyObject> {
-    const have = this.keys.get(kid);
-    if (have) return have;
-    if (this.fetchedAt === null || this.now() - this.fetchedAt >= JWKS_REFETCH_MS) {
-      await this.refresh();
-      const got = this.keys.get(kid);
-      if (got) return got;
+    const now = this.now();
+    const fresh = this.fetchedAt !== null && now - this.fetchedAt < JWKS_MAX_AGE_MS;
+    const recentlyTried = this.attemptedAt !== null && now - this.attemptedAt < JWKS_REFETCH_MS;
+    if (fresh) {
+      const have = this.keys.get(kid);
+      if (have) return have;
+      if (!recentlyTried) await this.refresh();
+    } else if (recentlyTried && this.lastFailure) {
+      throw this.lastFailure; // backing off a failed fetch; a stale set is not used meanwhile
+    } else {
+      await this.refresh(); // never fetched, or past its max age: fetch before trusting any key
     }
+    const got = this.keys.get(kid);
+    if (got) return got;
     throw refuse('unknown_key', 'the console has not published this key');
   }
 
-  private async refresh(): Promise<void> {
+  private refresh(): Promise<void> {
+    this.inflight ??= this.fetchKeys().finally(() => {
+      this.inflight = null;
+    });
+    return this.inflight;
+  }
+
+  private async fetchKeys(): Promise<void> {
+    this.attemptedAt = this.now();
     let body: unknown;
     try {
       const r = await fetch(this.url, { signal: AbortSignal.timeout(this.timeoutMs) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       body = await r.json();
     } catch (e) {
-      throw new ConsoleTokenError(
-        'console_unreachable',
-        `${CONSOLE_UNREACHABLE_SENTENCE}: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      throw this.failed(`${e instanceof Error ? e.message : String(e)}`);
     }
     const parsed = Jwks.safeParse(body);
-    if (!parsed.success)
-      throw new ConsoleTokenError(
-        'console_unreachable',
-        `${CONSOLE_UNREACHABLE_SENTENCE}: JWKS is malformed`,
-      );
+    if (!parsed.success) throw this.failed('JWKS is malformed');
     const next = new Map<string, KeyObject>();
     for (const jwk of parsed.data.keys) {
       // ES256 only: an EC P-256 key. Anything else in the set is not a key this server will use.
@@ -115,6 +136,15 @@ export class JwksCache {
     }
     this.keys = next;
     this.fetchedAt = this.now();
+    this.lastFailure = null;
+  }
+
+  private failed(detail: string): ConsoleTokenError {
+    this.lastFailure = new ConsoleTokenError(
+      'console_unreachable',
+      `${CONSOLE_UNREACHABLE_SENTENCE}: ${detail}`,
+    );
+    return this.lastFailure;
   }
 }
 

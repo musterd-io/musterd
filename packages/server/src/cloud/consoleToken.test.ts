@@ -4,6 +4,8 @@ import { withDrivers } from '../db/testing.js';
 import {
   ConsoleTokenError,
   JTI_RETENTION_S,
+  JWKS_MAX_AGE_MS,
+  JWKS_REFETCH_MS,
   JwksCache,
   redeemJti,
   verifyConsoleToken,
@@ -106,6 +108,45 @@ describe('verifyConsoleToken (1C task 5, spec §4.3)', () => {
     expect(issuer.fetches).toBe(2);
     const bogus = testIssuer({ kid: 'nobody' });
     expect(await refusal(verify(bogus.token(AUD)))).toBe('unknown_key');
+    expect(issuer.fetches).toBe(2);
+  });
+
+  it('a key the console stopped publishing stops working within the max age (review I4)', async () => {
+    const later = now + JWKS_MAX_AGE_MS + 1_000;
+    // Signed with the soon-revoked key, valid at `later` — what an attacker holding it would send.
+    const revokedKeyToken = issuer.token(AUD, { exp: Math.floor(later / 1000) + 30 });
+    await verify(issuer.token(AUD)); // the cache holds the key
+    issuer.rotate(); // the console revokes it: the JWKS now publishes only a new key
+    now = later;
+    expect(await refusal(verify(revokedKeyToken))).toBe('unknown_key');
+    expect(issuer.fetches).toBe(2);
+  });
+
+  it('a stale cache with the console unreachable fails closed, not open', async () => {
+    const later = now + JWKS_MAX_AGE_MS + 1_000;
+    const token = issuer.token(AUD, { exp: Math.floor(later / 1000) + 30 });
+    await verify(issuer.token(AUD));
+    issuer.setDown(true);
+    now = later;
+    expect(await refusal(verify(token))).toBe('console_unreachable');
+  });
+
+  it('concurrent misses share one fetch (single flight)', async () => {
+    const tokens = Array.from({ length: 5 }, () => issuer.token(AUD));
+    const got = await Promise.all(tokens.map((t) => refusal(verify(t))));
+    expect(got).toEqual(Array(5).fill('accepted'));
+    expect(issuer.fetches).toBe(1);
+  });
+
+  it('a failed fetch backs off: no refetch for JWKS_REFETCH_MS (review M5)', async () => {
+    issuer.setDown(true);
+    expect(await refusal(verify(issuer.token(AUD)))).toBe('console_unreachable');
+    now += 1_000;
+    expect(await refusal(verify(issuer.token(AUD)))).toBe('console_unreachable');
+    expect(issuer.fetches).toBe(1);
+    issuer.setDown(false);
+    now += JWKS_REFETCH_MS;
+    expect(await refusal(verify(issuer.token(AUD)))).toBe('accepted');
     expect(issuer.fetches).toBe(2);
   });
 

@@ -20,6 +20,8 @@ export interface TestIssuer {
   token(aud: string, over?: Record<string, unknown>): string;
   /** Replace the signing key (new kid); the JWKS publishes only the new one. */
   rotate(): void;
+  /** While down, the JWKS answers 503 (still counted in `fetches`). */
+  setDown(down: boolean): void;
   serve(): Promise<void>;
   close(): Promise<void>;
 }
@@ -34,6 +36,7 @@ export function testIssuer(opts: { kid?: string } = {}): TestIssuer {
   let server: Server | null = null;
   let url = '';
   let fetches = 0;
+  let down = false;
   const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
 
   const issuer: TestIssuer = {
@@ -71,6 +74,9 @@ export function testIssuer(opts: { kid?: string } = {}): TestIssuer {
     rotate() {
       key = fresh(randomUUID());
     },
+    setDown(v) {
+      down = v;
+    },
     async serve() {
       server = createServer((req, res) => {
         if (req.url !== '/jwks') {
@@ -78,6 +84,10 @@ export function testIssuer(opts: { kid?: string } = {}): TestIssuer {
           return;
         }
         fetches++;
+        if (down) {
+          res.writeHead(503).end();
+          return;
+        }
         res
           .writeHead(200, { 'content-type': 'application/json' })
           .end(JSON.stringify(issuer.jwks()));
