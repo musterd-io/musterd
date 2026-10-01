@@ -37,7 +37,7 @@ import {
   stepPet,
 } from './pet';
 import { createReceptionist, receptionistCue, stepReceptionist } from './receptionist';
-import { fitFloor, project, type Fit, type Pt } from './iso';
+import { fitBox, project, ROOM_BOX, type Fit, type Pt } from './iso';
 import {
   CHAIR_OFF,
   COFFEE_STAND,
@@ -66,6 +66,7 @@ import { createWelcomeRoom, type WelcomeSoundAt } from './welcomeRoom';
 import {
   animatedDeskAnchors,
   boardAnchor,
+  furnishedBox,
   coffeeAnchor,
   DARK_PALETTE,
   deskHasProp,
@@ -318,10 +319,12 @@ export interface OfficeOptions {
    */
   sprites?: boolean;
   /**
-   * Fit past "the whole room" by this factor (`fitFloor`'s zoom). `/broadcast` passes 1.09 so the
-   * people and plates read larger on a stream; everything else leaves it at 1. Constant per mount.
+   * What the panel is fitted to. `'room'` (default): the whole scene, margins and all — the musterd.io
+   * hero and /office-preview. `'furnished'`: the furnished room (`furnishedBox`), so people and plates
+   * read larger while the door and the agile board are always in frame — /live and /broadcast.
+   * Constant per mount, so every sprite key stays valid.
    */
-  zoom?: number;
+  fit?: 'room' | 'furnished';
 }
 
 export function mountOffice(
@@ -400,8 +403,11 @@ export function mountOffice(
 
   let width = Math.max(1, host.clientWidth);
   let height = Math.max(1, host.clientHeight);
-  const zoom = options.zoom ?? 1;
-  let fit: Fit = fitFloor(width, height, zoom);
+  // The furnished box carries its own breathing room (FURNISHED_PAD, TOP_TRIM), so it fits flush;
+  // the whole-room box keeps the 0.96 margin it has always had.
+  const fitTo = options.fit === 'furnished' ? furnishedBox() : ROOM_BOX;
+  const fitMargin = options.fit === 'furnished' ? 1 : 0.96;
+  let fit: Fit = fitBox(width, height, fitTo, fitMargin);
 
   const actors: Actors = createActors();
   /** The office dog (pet.ts): asleep in the baked frame; stirred by the ambient scheduler below. */
@@ -673,7 +679,7 @@ export function mountOffice(
     // consumer's stylesheet; `/live`'s `!important` rules still win over these, so nothing moves there.
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
-    fit = fitFloor(width, height, zoom);
+    fit = fitBox(width, height, fitTo, fitMargin);
     // Every sprite key carries the fit, so a resize only strands the old rasters — drop them.
     sprites?.clear();
   }

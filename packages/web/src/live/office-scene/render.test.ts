@@ -3,8 +3,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { homePoses } from './actors';
 import { memberColor } from '../format';
-import { depth, fitFloor, project } from './iso';
-import { BENCH, BOOKSHELVES, CHAIR_OFF, DESK_D, DESK_SLOTS, DESK_W, FWD, KEYBOARD_ALONG, LOUNGE, NOOK, PLANTS, WORKING_HOURS_CALENDAR } from './layout';
+import { depth, fitBox, fitFloor, project, ROOM_BOX } from './iso';
+import { BENCH, ENTRANCE, BOOKSHELVES, CHAIR_OFF, DESK_D, DESK_SLOTS, DESK_W, FWD, KEYBOARD_ALONG, LOUNGE, NOOK, PLANTS, WORKING_HOURS_CALENDAR } from './layout';
 import { computeLightEnv } from './lighting';
 import type { PetMode, PetState } from './pet';
 import type { ReceptionistState } from './receptionist';
@@ -62,6 +62,7 @@ import {
   renderScene,
   shelfRnd,
   WIDEST_PANEL_HALF,
+  furnishedBox,
 } from './render';
 import { assignSeats } from './seating';
 import type { OfficeNode, Pose, WelcomePaint } from './types';
@@ -1709,5 +1710,36 @@ describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
     expect(texts).not.toContain('hello');
     expect(paints).not.toContain(BOOT_LED);
     expect(paints).not.toContain('hsl(22, 68%, 62%)');
+  });
+});
+
+describe('furnishedBox (2026-10-01: /live and /broadcast fit the furnished room)', () => {
+  it('sits inside the whole scene and keeps the door and the agile board whole', () => {
+    const f = furnishedBox();
+    expect(f.left).toBeGreaterThan(ROOM_BOX.left);
+    expect(f.right).toBeLessThan(ROOM_BOX.right);
+    expect(f.top).toBeGreaterThan(ROOM_BOX.top);
+    expect(f.bottom).toBeLessThan(ROOM_BOX.bottom);
+    const unit = { ox: 0, oy: 0, scale: 1 };
+    const doorOuter = project(ENTRANCE.lx - 42, ENTRANCE.ly + 44 + 5, unit);
+    const board = boardAnchor(unit);
+    expect(f.left).toBeLessThan(doorOuter.x);
+    expect(f.right).toBeGreaterThan(board.x + board.w);
+  });
+
+  it('a height-bound panel grows; a width-bound one never crops the door', () => {
+    const grow = (w: number, h: number) =>
+      fitBox(w, h, furnishedBox(), 1).scale / fitBox(w, h, ROOM_BOX).scale;
+    const wide = grow(1400, 700); // a laptop /live room panel — height-bound
+    expect(wide).toBeGreaterThan(1.07);
+    for (const [w, h] of [[1459, 1080], [390, 500], [700, 900]] as const) {
+      const fit = fitBox(w, h, furnishedBox(), 1);
+      const door = project(ENTRANCE.lx - 42, ENTRANCE.ly + 44 + 5, fit);
+      expect(door.x).toBeGreaterThanOrEqual(0);
+      const b = boardAnchor(fit);
+      expect(b.x + b.w).toBeLessThanOrEqual(w);
+    }
+    // eslint-disable-next-line no-console
+    console.log('furnished/room scale', { laptop: wide, broadcast: grow(1459, 1080), phone: grow(390, 500) });
   });
 });

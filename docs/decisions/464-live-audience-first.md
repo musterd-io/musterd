@@ -96,8 +96,8 @@ ones seen wandering.
   measured per lane.
 - **2026-10-01 — on `/broadcast` the ticker floats over the room's foot** (nick; lane
   01M3TGXD23). It is still under the office, but no longer a 40px row of the frame: the room is
-  height-bound, so the row went back to the room (1040 → 1080), together with a fixed 1.09× framing.
-  `/live` keeps the ticker as a row.
+  height-bound, so the row went back to the room (1040 → 1080). `/live` keeps the ticker as a row.
+  The same day both surfaces moved from a fixed 1.09× to fitting the furnished room (08-web.md).
 
 ## Observability & Evaluation
 

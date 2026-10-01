@@ -2,7 +2,7 @@ import { canvasFont } from '../canvasFont';
 import type { WorkingHours } from '@musterd/protocol';
 import type { Appearance } from './appearance';
 import { drawCharacter } from './character';
-import { depth, FLOOR, KX, KY, project, THICK, WALL_H, type Fit, type Pt } from './iso';
+import { depth, FLOOR, KX, KY, project, THICK, WALL_H, type Fit, type FitBox, type Pt } from './iso';
 import { deviceBox, measureBounds, type SpriteCache } from './sprite-cache';
 import { STRIDE, type PetState } from './pet';
 import { RECEPTION_CUE_S, RECEPTIONIST_WAKE_S, type ReceptionistState } from './receptionist';
@@ -1346,6 +1346,35 @@ function workingHoursSign(
 function magicRnd(n: number): number {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return x - Math.floor(x);
+}
+
+/**
+ * The FURNISHED room, as a fit box (iso.ts `FitBox`): what /live and /broadcast fit to instead of the
+ * whole scene. The whole-scene box spends the panel on things nobody watches — the back-wall tops at the
+ * corner, the string-light headroom, the slab and its contact shadow — so fitting it left the people and
+ * plates smaller than they need be (nick, 2026-10-01, from mocked framings 1.00–1.25).
+ *
+ * Every edge is read from what is drawn there, not chosen:
+ *   left   the entrance door's outer post — arrivals walk in through it, so it is never cropped;
+ *   right  the agile board's outer edge (`boardAnchor`) — a click target on /live;
+ *   top    the walls, minus `TOP_TRIM` at the back corner where they stand tallest and carry nothing;
+ *   bottom the floor's front tip and its slab edge, minus the contact shadow pooled under it.
+ * Horizontally the door and the board sit within ~30 units of the room's corners, so the gain is almost
+ * all vertical: a height-bound panel grows ~10%, a width-bound one barely moves but never loses the door.
+ */
+const FURNISHED_PAD = 6;
+const TOP_TRIM = 24;
+export function furnishedBox(): FitBox {
+  const unit: Fit = { ox: 0, oy: 0, scale: 1 };
+  const doorPlane = ENTRANCE.lx - 42; // drawEntrance's `wx`
+  const doorOuter = project(doorPlane, ENTRANCE.ly + 44 + 5, unit); // the outer post, half its 10 out
+  const board = boardAnchor(unit);
+  return {
+    left: doorOuter.x - FURNISHED_PAD,
+    right: board.x + board.w + FURNISHED_PAD,
+    top: -WALL_H + TOP_TRIM,
+    bottom: FLOOR * KY * 2 + THICK,
+  };
 }
 
 /**
