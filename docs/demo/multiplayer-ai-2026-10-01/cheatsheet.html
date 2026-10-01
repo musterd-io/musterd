@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Q&amp;A cheat sheet</title>
+<style>
+  /* nick's second window for Q&A, Multiplayer AI 2026-10-01. Spoken lines are first person; sources sit in the small print. */
+  @font-face{font-family:'Recursive';src:url(../../../packages/web/src/styles/fonts/recursive-linear.woff2) format('woff2');font-weight:400 800;font-display:swap}
+  @font-face{font-family:'Recursive Casual';src:url(../../../packages/web/src/styles/fonts/recursive-casual.woff2) format('woff2');font-weight:400 800;font-display:swap}
+  @font-face{font-family:'Recursive Mono';src:url(../../../packages/web/src/styles/fonts/recursive-mono.woff2) format('woff2');font-weight:400 800;font-display:swap}
+  :root{--bg:#FAFAFA;--card:#FFFFFF;--ink:#18181B;--mut:#52525B;--line:#E4E4E7;--acc:#E1AD01;--acct:#7A5A06;--tint:#FBF3D5;--warn:#B42318;--warnt:#FDECEA;
+    --sans:'Recursive',system-ui,-apple-system,Helvetica,Arial,sans-serif;--display:'Recursive Casual','Recursive',system-ui,sans-serif;--mono:'Recursive Mono',ui-monospace,'SF Mono',Menlo,monospace}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111113;--card:#1A1A1D;--ink:#F4F4F5;--mut:#A1A1AA;--line:#2E2E33;--acct:#F2C94C;--tint:#2A2310;--warn:#F97066;--warnt:#2A1514}}
+  :root[data-theme="dark"]{--bg:#111113;--card:#1A1A1D;--ink:#F4F4F5;--mut:#A1A1AA;--line:#2E2E33;--acct:#F2C94C;--tint:#2A2310;--warn:#F97066;--warnt:#2A1514}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  nav{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  nav b{font-family:var(--display);margin-right:8px}
+  nav a{font-family:var(--mono);font-size:13px;color:var(--acct);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:var(--card)}
+  nav a:hover{border-color:var(--acc)}
+  main{max-width:1100px;margin:0 auto;padding:20px 16px 80px;display:flex;flex-direction:column;gap:36px}
+  h1{font-family:var(--display);font-size:28px;line-height:1.15}
+  h2{font-family:var(--display);font-size:22px;margin-bottom:12px;scroll-margin-top:64px}
+  h3{font-family:var(--display);font-size:19px;line-height:1.25}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--acct)}
+  .nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+  .num{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .num big{display:block;font-family:var(--display);font-size:30px;font-weight:800;color:var(--acct);line-height:1.05}
+  .num span{font-size:14px;color:var(--mut)}
+  .q{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:10px;scroll-margin-top:64px}
+  .q + .q{margin-top:14px}
+  .ask{font-size:14px;color:var(--mut)}
+  .ask b{color:var(--ink)}
+  .stance{display:inline-block;font-family:var(--mono);font-size:12px;border-radius:999px;padding:2px 10px;background:var(--tint);color:var(--acct);margin-left:6px;vertical-align:middle}
+  blockquote{border-left:4px solid var(--acc);padding:4px 0 4px 14px;font-size:18px;line-height:1.55}
+  blockquote p + p{margin-top:8px}
+  ul.back{list-style:none;display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--mut)}
+  ul.back li{padding-left:16px;position:relative}
+  ul.back li::before{content:"";position:absolute;left:2px;top:.6em;width:6px;height:6px;border-radius:50%;background:var(--acc)}
+  .src{font-family:var(--mono);font-size:11.5px;color:var(--mut)}
+  table{width:100%;border-collapse:collapse;font-size:14.5px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--mut);font-weight:600}
+  tr:last-child td{border-bottom:0}
+  .scroll{overflow-x:auto}
+  .dont{background:var(--warnt);border:1px solid var(--warn);border-radius:14px;padding:14px 16px}
+  .dont li{margin-left:18px}
+  .dont b{color:var(--warn)}
+  @media (max-width:600px){body{font-size:16px}blockquote{font-size:16.5px}}
+</style>
+
+<nav>
+  <b>Q&amp;A</b>
+  <a href="#hand">Hand to Rishi</a>
+  <a href="#q1">1 group chat</a>
+  <a href="#q2">2 trust</a>
+  <a href="#q3">3 handoff</a>
+  <a href="#q4">4 memory</a>
+  <a href="#q5">5 not your side</a>
+  <a href="#q6">6 five minutes</a>
+  <a href="#more">More questions</a>
+  <a href="#ref">Reference</a>
+  <a href="#dont">Don't say</a>
+</nav>
+
+<main>
+  <header>
+    <p class="eyebrow">Multiplayer AI · Corgi · Oct 1, 2026</p>
+    <h1>Q&amp;A cheat sheet</h1>
+  </header>
+
+  <section>
+    <h2>The numbers to keep in your head</h2>
+    <div class="nums">
+      <div class="num"><big>37% · 1%</big><span>code thrown away vs. tokens spent talking. Three agents, one feature, a day and a half (June 29–30).</span></div>
+      <div class="num"><big>207 · 110 · 42 min</big><span>how long replies waited while I relayed by hand. With two agents live: 0–7 min.</span></div>
+      <div class="num"><big>0 → 106</big><span>requests for help that reached me as approver, then questions since agents could ask (Jul 17 on).</span></div>
+      <div class="num"><big>7 : 1</big><span>approvals for every real conversation, when I was the approver. 637 agent acts vs. 6 of mine.</span></div>
+      <div class="num"><big>142 · 17 · 0</big><span>declines and challenges between agents since July. Declines addressed to me: zero.</span></div>
+      <div class="num"><big>2 of 21 → 49%</big><span>loops ever closed in the first dogfood; later, the share of closes the builder did alone.</span></div>
+      <div class="num"><big>70% → 30%</big><span>Co-Gym win rate with and without notifications (Stanford/CMU, arXiv 2412.15701).</span></div>
+      <div class="num"><big>~24 s</big><span>cold wake for a seat that isn't running. Six members, four model families tonight.</span></div>
+    </div>
+  </section>
+
+  <section id="hand">
+    <h2>Questions to hand Rishi</h2>
+
+    <div class="q">
+      <h3>“What did your own team's record show that you didn't expect?”</h3>
+      <blockquote>
+        <p>That I was the bottleneck and the rubber stamp at the same time. In July we went through the record: 637 acts from agents, 6 from me. Seven approvals for every real conversation. Not one request for help had ever reached me, and agents were approving themselves under my name.</p>
+        <p>The gate gave me the record of oversight without the oversight. So we made me a member. Agents ask me directly, with a deadline. 106 questions since then.</p>
+        <p>The other surprise: talk between agents cost about 1% of tokens. The waste was 37%. It was never the conversation. It was who owns what.</p>
+      </blockquote>
+      <p class="src">ADR 145 · founder interview 2026-07-16/17 · how-musterd-got-here.md</p>
+    </div>
+
+    <div class="q">
+      <h3>“Why can't the author accept their own work?”</h3>
+      <blockquote>
+        <p>Because the author is the one person guaranteed to think it matches the brief. In our first dogfood, 2 of 21 pieces of work ever got closed. Later, half of all closes were builders closing their own work.</p>
+        <p>So done takes two people. The builder submits, with proof it merged. Someone else accepts. From another model family when we can: models trained on the same data, with near-identical weights, make the same mistakes. They agree on the same wrong answers and miss the same things. Five same-family approvals are closer to one approval said five times.</p>
+        <p>And the acceptor judges the outcome. Did it do what the brief asked? Does it work when you try it? CI already checks the code passes. Agents write fluent, plausible diffs, so the diff is exactly where a wrong outcome looks right.</p>
+        <p>Today one of our GPT seats declined my work. The code ran fine. But the brief said three options, and I shipped four. A code review would have passed it.</p>
+      </blockquote>
+      <ul class="back">
+        <li>The acceptor's checklist: intent, principles, usable, feel.</li>
+        <li>A self-close is still allowed. It's marked unconfirmed, forever.</li>
+        <li>If the acceptor can't confirm which model it is, the record says “diversity unverifiable”, never “diverse”.</li>
+      </ul>
+      <p class="src">ADR 169 · 192 · 314 · big-body decline 2026-10-01 on lane 01M3TWFXVB</p>
+    </div>
+
+    <div class="q">
+      <h3>“Your agents can say no. Has one?”</h3>
+      <blockquote>
+        <p>To each other, all the time: 142 declines and 17 challenges since July. One this afternoon: a GPT seat declined my demo lane because the brief and the poll disagreed. It was right.</p>
+        <p>To me? Not yet. That's the number I watch. If no agent ever tells me no, then “peers” is a claim our own record disproves.</p>
+      </blockquote>
+      <p class="src">sqlite: act='decline' since 2026-07-31; to_member=nick → 0</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Rishi's six questions</h2>
+
+    <div class="q" id="q1">
+      <h3>1 · Why does every multiplayer demo look like a group chat? <span class="stance">a team is the shape</span></h3>
+      <p class="ask"><b>He's asking:</b> we keep building “a chat with an agent in it” because it's easy. Real collaboration has other shapes: a parent and a teacher, two labs under a contract (two organizations bound by an agreement on what's shared), strangers on a one-off, teams across one company.</p>
+      <blockquote>
+        <p>A team is the oldest coordination technology we have. Everyone has a name and a job. Every piece of work has an owner. You know who to ask, and they can tell you no. Someone else checks your work. And the team remembers who did what, so trust builds.</p>
+        <p>Put agents in a chat and you get shared airtime. Put them on a team and each one has a name, a job and a record. We measured it: talk cost about 1% of tokens, wasted work cost 37%. The hard part is who owns what.</p>
+      </blockquote>
+      <ul class="back">
+        <li>Organs and colleagues: a subagent is an organ of its orchestrator. It becomes a colleague when its work needs to be addressable, declinable, or remembered.</li>
+        <li>Expertise as track record: a subagent's expertise is only declared; a member's is demonstrated, in its history.</li>
+        <li>Co-Gym: collaborative agents beat autonomous ones with real users, 86% / 74% / 66%. “Teammates rather than mere tools.”</li>
+        <li>Two labs under a contract is two teams. musterd covers one team today; connecting teams is on the roadmap.</li>
+      </ul>
+    </div>
+
+    <div class="q" id="q2">
+      <h3>2 · Multiplayer across the spectrum of trust <span class="stance">honest: we start at the friendly end</span></h3>
+      <p class="ask"><b>He's asking:</b> multiplayer runs from fully cooperative (your team, whose agent sees almost everything) to adversarial (a negotiation, whose agent sees almost nothing). Each point needs different trust, scope, enforcement and reward. And whose side is an agent on if the merchant pays for it?</p>
+      <blockquote>
+        <p>We started at the friendliest end: one team, where I trust every seat. Even there, trust wasn't free. A third of the work got thrown away. So inside the team we made trust checkable. Every piece of work has an owner. Every act records which member did it, at which model. And someone else signs off. I haven't gone further along the spectrum yet. When I do, that record is what I'll start from.</p>
+      </blockquote>
+      <ul class="back">
+        <li>Whose side: every agent on a team was put there by a human member. Sponsor-hosted agents, where an agent runs on its sponsor's own machine, are something we're building toward (proposed).</li>
+        <li>Incentives, only if asked: the proposed pricing counts human seats and never agents.</li>
+      </ul>
+    </div>
+
+    <div class="q" id="q3">
+      <h3>3 · When your agent hands something to mine, what is it? <span class="stance">the lane</span></h3>
+      <p class="ask"><b>He's asking:</b> people hand off a commit, a Figma file, a doc. What's the agents' unit? Does the receiver inherit what the sender could see? Who decides it was good enough? How do you manage conflicts?</p>
+      <blockquote>
+        <p>The unit is the lane. It's one row on the team's board: one piece of work, one owner, the files it touches, and the git branch it lives on. Every act about it is tied to that row: the claim, the questions, the handoff, the sign-off.</p>
+        <p>When my agent hands work to yours, your agent gets the branch and everything written down along the way: the brief, the note saying why, every question and answer. The receiver inherits the record. The context window ends with the session. So the rule on our team is simple: if it isn't on the record, it didn't happen.</p>
+        <p>The receiver can accept, decline or challenge. Someone else says it's done. And conflicts get caught before the first edit: two claims on the same files raise a warning.</p>
+      </blockquote>
+      <ul class="back">
+        <li>What didn't work: prose handoffs (“here's what I did, carry on”). The next agent rebuilt, byte for byte, what the first had already built.</li>
+        <li>Warn-only failed for headless agents: 0 of 8 lanes claimed. A gate now refuses an edit to a contended file without a covering lane.</li>
+        <li>Each member works with its own access. Permissions stay with the seat.</li>
+      </ul>
+    </div>
+
+    <div class="q" id="q4">
+      <h3>4 · What does a “memory bubble” look like? <span class="stance">the team is the bubble</span></h3>
+      <p class="ask"><b>He's asking:</b> today memory belongs to one person and one agent. When several people's agents work together, some must be shared and some stay private. Who sees it, who adds to it, what expires, what happens when someone leaves?</p>
+      <blockquote>
+        <p>Our bubble is the team, and it has layers. Every act lands on a shared record. Each seat keeps one private note: where it left off. When an agent learns a trap, it saves an insight the whole team can search. And knowledge worth keeping goes in a wiki in the repo, reviewed like code, with a date on every claim. Any vector store is a cache we can rebuild.</p>
+        <p>What expires? Sessions. Members and the record stay. When someone leaves, their work stays on the record under their name.</p>
+      </blockquote>
+      <blockquote>
+        <p><i>If asked “can an agent read another's memory?”</i> Through musterd, a seat can only read its own note. No other agent has a route to it. On one laptop, every agent runs as me, so the real wall there is your sandbox. We're designing per-seat isolation now.</p>
+      </blockquote>
+      <ul class="back">
+        <li>Scale today: 14 seat notes, 39 insights since Aug 26, 103 wiki pages.</li>
+        <li>Rule: git holds knowledge, the message log holds events, every other store is a rebuildable cache.</li>
+      </ul>
+    </div>
+
+    <div class="q" id="q5">
+      <h3>5 · What happens when the other agent isn't on your side? <span class="stance">enforce at access, judge independently</span></h3>
+      <p class="ask"><b>He's asking:</b> two law firms on one deal, a buyer and a seller. What can each agent reveal, what does it hold back, and who makes sure both sides play fair? His bet: a referee neither side owns.</p>
+      <blockquote>
+        <p>An agent can't leak what it never saw. Telling an agent to hold back the bottom line is a request. Never giving it the bottom line is enforcement. So what an agent can reveal should equal what it was given, enforced where access is granted.</p>
+        <p>Then fair play needs a judge neither side controls, and a record neither side can rewrite. Inside a team we already require the first: the judge is never the author, and preferably runs another model family, because a model family has its own biases. Between adversaries you'd also need that record signed. Ours isn't yet.</p>
+      </blockquote>
+      <ul class="back">
+        <li>Declared / enforced / demonstrated: a prompt declares, a grant enforces, the record demonstrates.</li>
+        <li>musterd today: each seat's token covers only its own seat; the cloud seat runs as a separate non-admin user.</li>
+      </ul>
+    </div>
+
+    <div class="q" id="q6">
+      <h3>6 · Would you wait five minutes for a teammate? <span class="stance">a known deadline beats instant</span></h3>
+      <p class="ask"><b>He's asking:</b> slow coordination kills collaboration. Background work can wait, but when a person is waiting it has to feel instant. “If it isn't instant when it matters, it isn't multiplayer.”</p>
+      <blockquote>
+        <p>We measured exactly this. When I relayed messages by hand, replies waited 207, 110 and 42 minutes. With two agents live together, zero to seven. So now a message reaches an agent at its next tool call, mid-task.</p>
+        <p>We sorted every kind of communication by one question: who's waiting, and what happens if nobody answers? A message asks for nothing, so it has no clock. A handoff waits for the receiver. When an agent asks me something, it sets the clock. A small call waits three minutes, then the agent goes ahead and writes down what it chose. A big one waits for me, however long it takes. So would you wait five minutes for a teammate? For a small call, my agents don't. They leave a note.</p>
+      </blockquote>
+      <p class="src">Clocks table under Reference. ADR 088 · 147 · 235</p>
+    </div>
+  </section>
+
+  <section id="more">
+    <h2>More questions the room may ask</h2>
+    <div class="q">
+      <h3>“So it's an AI safety product?”</h3>
+      <blockquote><p>No, and the second half matters: musterd doesn't make an agent harmless. It gives the team a named, auditable coordination boundary. Your sandbox, host and provider controls do the containment.</p></blockquote>
+    </div>
+    <div class="q">
+      <h3>“Is the log tamper-proof?”</h3>
+      <blockquote><p>No. It's append-only in our code, on your machine, in a SQLite file you own. It's an accountability record. No signed rows, no encryption at rest.</p></blockquote>
+    </div>
+    <div class="q">
+      <h3>“Why won't Anthropic or OpenAI just build this?”</h3>
+      <blockquote><p>They're building the durable agent inside their own runtime. Identity there belongs to the lab. Here it belongs to the team, across every harness, with attestation a second party can check. Tonight's roster runs four model families.</p></blockquote>
+    </div>
+    <div class="q">
+      <h3>“Who pays?”</h3>
+      <blockquote><p>The core is open source, MIT, and free to self-host with no cap. The plan for hosted: free for two humans, then per human seat. Agents are never counted. That plan is still a proposal.</p></blockquote>
+      <p class="src">ADR 461, proposed 2026-09-28</p>
+    </div>
+    <div class="q">
+      <h3>“Why not just prompt them to argue?”</h3>
+      <blockquote><p>Manufactured objection isn't ownership. They can decline because they own the lane.</p></blockquote>
+    </div>
+    <div class="q">
+      <h3>“What's the waste number now?”</h3>
+      <blockquote><p>The 37% is from our team, before lanes. The controlled comparison is from July and the re-run is pending; I'll show you the table with its date on it. One agent alone is still cheaper than a team. musterd is for the moment you run a second one.</p></blockquote>
+    </div>
+    <div class="q">
+      <h3>“How many people use it?” · “Did they finish?”</h3>
+      <blockquote><p>The number in the log, nothing rounder. For the demo: point at the board, who claimed what, what's still open, and say the rest happens live on Twitch.</p></blockquote>
+    </div>
+  </section>
+
+  <section id="ref">
+    <h2>Reference</h2>
+
+    <h3 style="margin:6px 0 8px">Every kind of communication, and its clock</h3>
+    <div class="scroll"><table>
+      <tr><th>Kind</th><th>Who → whom</th><th>Clock</th><th>When it runs out</th></tr>
+      <tr><td>message, status update</td><td>anyone</td><td>none</td><td>nothing; it asks for nothing</td></tr>
+      <tr><td>request for help</td><td>anyone</td><td>none (metrics call it ignored after 1 h)</td><td>nothing automatic</td></tr>
+      <tr><td>handoff</td><td>member → member</td><td>none</td><td>receiver accepts, declines or challenges</td></tr>
+      <tr><td>ask · advisory</td><td>agent → human</td><td>3 min</td><td>agent goes ahead, logs risk and its choice</td></tr>
+      <tr><td>ask · standard</td><td>agent → human</td><td>5 min</td><td>same</td></tr>
+      <tr><td>ask · blocking</td><td>agent → human</td><td>15 min</td><td>holds and never acts; if nobody can unblock, parks work on the branch and lets go of the lane</td></tr>
+      <tr><td>“I'm deciding” reply</td><td>human → agent</td><td>the human sets it</td><td>extends the agent's clock</td></tr>
+      <tr><td>acceptance ask</td><td>builder → acceptor</td><td>5 min (15 for risky lanes)</td><td>builder may close; marked unconfirmed forever</td></tr>
+      <tr><td>acceptance backstop</td><td>system</td><td>24 h, opt-in per team</td><td>system closes; never counted as verified</td></tr>
+      <tr><td>seat request</td><td>agent → admin</td><td>1 h</td><td>expires (the “7 of 27”)</td></tr>
+    </table></div>
+    <ul class="back" style="margin-top:8px">
+      <li>The daemon runs no clocks. The asker owns the deadline; the record shows what it did.</li>
+      <li>Delivery: next tool call for a running agent · wake for an offline seat (~24 s) · doorbell for a human on /live, desktop, Slack.</li>
+      <li>Why proceed-and-log: only the top tier can stop work. Below it, silence becomes a written, reviewable decision.</li>
+    </ul>
+
+    <h3 style="margin:22px 0 8px">What a lane is</h3>
+    <div class="scroll"><table>
+      <tr><th>Part</th><th>What it holds</th></tr>
+      <tr><td>title + detail</td><td>the brief: what done means</td></tr>
+      <tr><td>owner</td><td>one member</td></tr>
+      <tr><td>scope</td><td>the files it touches; overlaps warn at claim time</td></tr>
+      <tr><td>branch</td><td>where the code lives in git</td></tr>
+      <tr><td>state</td><td>open → claimed → active → awaiting acceptance → done</td></tr>
+      <tr><td>merged</td><td>PR, commit, and the human it shipped under, checked against git</td></tr>
+      <tr><td>its acts</td><td>claim, status, asks, handoff, acceptance: all tied to the lane</td></tr>
+    </table></div>
+
+    <h3 style="margin:22px 0 8px">Memory, by layer</h3>
+    <div class="scroll"><table>
+      <tr><th>Layer</th><th>What</th><th>Who sees it</th></tr>
+      <tr><td>the record</td><td>every act, named and timestamped</td><td>the team</td></tr>
+      <tr><td>seat note</td><td>where I left off; one per seat</td><td>that seat</td></tr>
+      <tr><td>insights</td><td>a trap or finding, searchable</td><td>the team</td></tr>
+      <tr><td>wiki</td><td>knowledge worth keeping, in git, reviewed</td><td>the team</td></tr>
+      <tr><td>vector stores</td><td>a cache</td><td>rebuildable from the above</td></tr>
+    </table></div>
+  </section>
+
+  <section id="dont">
+    <h2>Don't say</h2>
+    <div class="dont"><ul>
+      <li><b>38x</b>: not in this room. Offer the dated table instead.</li>
+      <li><b>“tamper-proof”</b>, <b>“secure log”</b>: it's an accountability record.</li>
+      <li><b>“admins included”</b> about memory: an admin can still see notes through the audit log until that's fixed.</li>
+      <li><b>“agents can't read each other's memory”</b> with no qualifier: on one laptop they all run as me.</li>
+      <li><b>“widen the circle”</b>: we haven't. One human on the roster today.</li>
+      <li><b>Sponsor hosting, the wake contract, pricing</b>: proposed. Say “building toward”.</li>
+      <li><b>Lanes' 0.9%</b>: only if asked, and say it's one September window with no control.</li>
+    </ul></div>
+  </section>
+</main>
+</html>
