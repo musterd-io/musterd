@@ -317,7 +317,28 @@ export class HttpClient {
     }
   }
 
-  private async claimAgentLease(): Promise<{ lease: string; close: () => void } | undefined> {
+  /**
+   * The claim this client holds for its whole life (ADR 339: one claim per COMMAND, closed when its
+   * work completes). Lane 01M3THHYQE: claiming afresh before every request and closing after it made
+   * one `musterd status` write six claim.occupied rows, each superseding the last. Cleared on a lease
+   * refusal so the retry below claims anew; released by {@link close} or by the process exiting.
+   */
+  private heldClaim: Promise<{ lease: string; close: () => void } | undefined> | undefined;
+
+  /** Release the held claim's Presence, if any. One-shot commands need not call it — `bin.ts` exits
+   *  the process, which closes the socket — but a long-lived caller holding a client must. */
+  close(): void {
+    const held = this.heldClaim;
+    this.heldClaim = undefined;
+    void held?.then((c) => c?.close());
+  }
+
+  private claimAgentLease(): Promise<{ lease: string; close: () => void } | undefined> {
+    this.heldClaim ??= this.claimAgentLeaseOnce();
+    return this.heldClaim;
+  }
+
+  private async claimAgentLeaseOnce(): Promise<{ lease: string; close: () => void } | undefined> {
     const { key, seat, surface, team } = this.opts;
     if (
       !this.opts.claimSeatPerRequest ||
@@ -504,7 +525,6 @@ export class HttpClient {
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
     } catch (err) {
-      claim?.close();
       if (isConnRefused(err)) {
         throw new CliError(
           `can't reach team server at ${this.opts.server} — is the daemon running? (musterd serve)`,
@@ -513,7 +533,6 @@ export class HttpClient {
       }
       throw err;
     }
-    claim?.close();
     const text = await res.text();
     const json = text ? JSON.parse(text) : {};
     if (!res.ok) {
@@ -535,6 +554,8 @@ export class HttpClient {
           this.opts.claimSeatPerRequest === true &&
           isSessionLeaseRefusal(parsed.data.error)
         ) {
+          // The held claim's lease was just refused — it died with its Presence (a bounce, a reap).
+          this.close();
           const fresh = await this.claimSessionLease().catch(() => undefined);
           if (fresh) {
             this.opts.sessionLease = fresh.lease;
