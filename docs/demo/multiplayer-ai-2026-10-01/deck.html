@@ -37,6 +37,10 @@
   .frag{transition:opacity .45s var(--ease),transform .45s var(--ease)}
 
   /* cover */
+  /* the mark on every header line but the cover: same row as the eyebrow, right edge, out of the picker's way */
+  .brand{position:absolute;top:clamp(36px,5vw,96px);right:clamp(36px,5vw,96px);display:flex;align-items:center;gap:8px;font-family:var(--mono);font-weight:700;font-size:clamp(13px,1.3vw,18px);letter-spacing:-.02em;color:var(--ink);opacity:0;animation:rise .7s var(--ease) .15s both}
+  .slide:not(.on) .brand{animation:none}
+  .brand img{width:clamp(20px,1.9vw,28px);height:auto}
   .mark{display:flex;align-items:center;gap:14px}
   .mark img{width:clamp(36px,3.6vw,52px);height:auto}
   .wm{font-family:var(--mono);font-weight:700;font-size:clamp(24px,3.2vw,46px);letter-spacing:-.03em}
@@ -795,6 +799,7 @@
 
 <!-- 2 · where it started (the problem) -->
 <section class="slide panel" data-sec="The problem" data-title="Where it started">
+  <div class="brand" aria-hidden="true"><img src="../../design/assets/chip.svg" alt=""><span>musterd</span></div>
   <p class="eyebrow a" style="--i:0">Where it started · June 2026</p>
   <h2 class="a" style="--i:1">Acting as coordinator between agents.</h2>
   <div class="origin grow">
@@ -819,6 +824,7 @@
 
 <!-- 3 · what changes -->
 <section class="slide" data-sec="Why it works" data-title="What changes">
+  <div class="brand" aria-hidden="true"><img src="../../design/assets/chip.svg" alt=""><span>musterd</span></div>
   <p class="eyebrow a" style="--i:0">What changes</p>
   <h2 class="a" style="--i:1">When you and your agents work as a team.</h2>
   <p class="sub a" style="--i:2">Everyone can be addressed, has a job and a record.</p>
@@ -833,6 +839,7 @@
 
 <!-- 4 · one session, step by step -->
 <section class="slide panel" data-sec="Why it works" data-title="A day in the life" data-hook="session">
+  <div class="brand" aria-hidden="true"><img src="../../design/assets/chip.svg" alt=""><span>musterd</span></div>
   <p class="eyebrow a" style="--i:0">How every member works</p>
   <h2 class="a" style="--i:1">A day in the life in the musterd office.</h2>
   <div class="story">
@@ -849,6 +856,7 @@
 
 <!-- 4b · what's in the box -->
 <section class="slide" data-sec="Why it works" data-title="What a team is made of">
+  <div class="brand" aria-hidden="true"><img src="../../design/assets/chip.svg" alt=""><span>musterd</span></div>
   <p class="eyebrow a" style="--i:0">Under the hood</p>
   <h2 class="a" style="--i:1">What a musterd team is made of.</h2>
   <div class="box">
@@ -874,6 +882,7 @@
 
 <!-- 5b · what it looks like: one example per part of slide 5 -->
 <section class="slide" data-sec="Why it works" data-title="What it looks like">
+  <div class="brand" aria-hidden="true"><img src="../../design/assets/chip.svg" alt=""><span>musterd</span></div>
   <p class="eyebrow a" style="--i:0">On screen · illustrative</p>
   <h2 class="a" style="--i:1">What a team looks like at work.</h2>
   <div class="looks grow">
@@ -910,6 +919,7 @@
 
 <!-- 6 · handoff -->
 <section class="slide" data-sec="Big question" data-title="Handoff">
+  <div class="brand" aria-hidden="true"><img src="../../design/assets/chip.svg" alt=""><span>musterd</span></div>
   <p class="eyebrow a" style="--i:0">Big question · handoff</p>
   <h2 class="a" style="--i:1">A handoff carries the lane itself.</h2>
   <div class="cards2" style="margin:auto 0;grid-template-columns:1fr 1fr 1fr">
@@ -922,6 +932,7 @@
 
 <!-- 7 · built from what broke (roadmap) -->
 <section class="slide panel" data-sec="How it evolved" data-title="Built from what broke" data-hook="road">
+  <div class="brand" aria-hidden="true"><img src="../../design/assets/chip.svg" alt=""><span>musterd</span></div>
   <p class="eyebrow a" style="--i:0">How musterd evolved · 2026</p>
   <h2 class="a" style="--i:1">Built from what broke.</h2>
   <div class="road" id="road"></div>
@@ -930,6 +941,7 @@
 
 <!-- 8 · live demo -->
 <section class="slide acc" data-sec="Live" data-title="You picked it">
+  <div class="brand" aria-hidden="true"><img src="../../design/assets/chip.svg" alt=""><span>musterd</span></div>
   <p class="eyebrow a" style="--i:0">Live Demo · team revive</p>
   <div class="live-grid">
     <div style="display:flex;flex-direction:column;gap:clamp(14px,2vw,28px)">
@@ -955,6 +967,7 @@
 
 <!-- 9 · thank you / Q&A -->
 <section class="slide" data-sec="Thanks" data-title="Thank you · questions">
+  <div class="brand" aria-hidden="true"><img src="../../design/assets/chip.svg" alt=""><span>musterd</span></div>
   <p class="eyebrow a" style="--i:0">Thank you</p>
   <div class="thanks">
     <div style="display:flex;flex-direction:column;gap:clamp(14px,2vw,28px)">
@@ -981,6 +994,7 @@
 
 <!-- appendix · never shown to the room: reached only from the picker (g), so a click on the Q&A slide stays put -->
 <section class="slide" data-sec="Appendix" data-title="Where the field is going" data-appendix>
+  <div class="brand" aria-hidden="true"><img src="../../design/assets/chip.svg" alt=""><span>musterd</span></div>
   <p class="eyebrow a" style="--i:0">Appendix · for questions</p>
   <h2 class="a" style="--i:1">Where the field is going, and where musterd stands.</h2>
   <div class="vcards">
