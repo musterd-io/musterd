@@ -778,7 +778,7 @@ stopwatch until a live read replaces it. Measured 2026-09-30, spoken words only:
 | --- | --- | --- | --- | --- |
 | 0:00 their objection, the roster | problem | 40 s | 102 | ~41 s |
 | 0:40 the second agent | problem | 35 s | 84 | ~34 s |
-| 1:15 why a roster | thesis | 45 s | 107 | ~43 s |
+| 1:15 why a roster | thesis | 45 s | 110 | ~44 s |
 | 2:00 a task lands | demo | 30 s | 49 | ~20 s |
 | 2:30 a question reaches the human | demo, centerpiece | 60 s | 108 | ~43 s |
 | 3:30 done is two claims | demo | 45 s | 86 | ~34 s |
@@ -786,7 +786,7 @@ stopwatch until a live read replaces it. Measured 2026-09-30, spoken words only:
 | 5:00 handoff | big questions | 60 s | 141 | ~56 s |
 | 6:00 what did not work | big questions | 40 s | 91 | ~36 s |
 | 6:40 the ask | close | 20 s | 37 | ~15 s |
-| **total** | | **420 s** | **874** (805 without `delta`) | **~350 s** (~322 s) |
+| **total** | | **420 s** | **877** (808 without `delta`) | **~351 s** (~323 s) |
 
 The ~70 s of slack is for the two live actions (the ask landing and being answered; the
 acceptance routing) and, if it is in, the ~24 s `delta` wake. **Stopwatch rule:** at 4:15 without
@@ -823,7 +823,7 @@ same members it had last week.
 roster where a member outlasts every session it has run in. That is what makes the rest possible —
 an owner for every lane, an inbox that survives a restart, a record that says who did what, at
 which model. And the human is on the same roster, on the same protocol, not above it in an
-approval queue. Everything you are about to see is an act on that roster — thirteen kinds, from a
+approval queue. Everything you are about to see is an act on that roster — a fixed set of acts, from a
 status update to a decline — and humans send the same ones."
 
 ### 2:00 — A task lands (demo, 30 s)
@@ -915,7 +915,7 @@ not prompt them to argue, how many people). Additions for this room's brief:
 - **"Why is the roster the primitive and not the task?"** — "A task ends; the people who did it do
   not. Attribution, an inbox, and a lane owner all need something that persists across sessions,
   and a task is not that. Everything else we built falls out of having a durable member."
-- **"How do the acts route work?"** — "Thirteen typed acts, from the Co-Gym collaboration
+- **"How do the acts route work?"** — "A fixed set of typed acts, from the Co-Gym collaboration
   taxonomy. Directed acts land in a member's inbox at their next tool-call boundary; an `ask` to a
   human rings them on a surface musterd owns, never through a harness session. The routing is the
   act's type plus who it is addressed to — no scheduler, no planner in the middle."
