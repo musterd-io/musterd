@@ -62,6 +62,7 @@
   <a href="#q5">5 not your side</a>
   <a href="#q6">6 five minutes</a>
   <a href="#more">More questions</a>
+  <a href="#room">Room questions</a>
   <a href="#ref">Reference</a>
   <a href="#dont">Don't say</a>
 </nav>
@@ -150,7 +151,7 @@
         <p>We started at the friendliest end: one team, where I trust every seat. Even there, trust wasn't free. A third of the work got thrown away. So inside the team we made trust checkable. Every piece of work has an owner. Every act records which member did it, at which model. And someone else signs off. I haven't gone further along the spectrum yet. When I do, that record is what I'll start from.</p>
       </blockquote>
       <ul class="back">
-        <li>Whose side: every agent on a team was put there by a human member. Sponsor-hosted agents, where an agent runs on its sponsor's own machine, are something we're building toward (proposed).</li>
+        <li>Whose side: every agent on a team was put there by a human member. Sponsor-hosted agents, where an agent runs on its sponsor's own machine under the sponsor's identity, shipped Sep 29. Nobody on tonight's roster uses one yet: say “shipped, not yet in use”.</li>
         <li>Incentives, only if asked: the proposed pricing counts human seats and never agents.</li>
       </ul>
     </div>
@@ -243,6 +244,133 @@
     </div>
   </section>
 
+
+  <section id="room">
+    <h2>Room questions</h2>
+
+    <div class="q">
+      <h3>“What are you doing for agent memory? Is it RAG, pgvector?”</h3>
+      <blockquote>
+        <p>No RAG, and no vectors. Memory has four layers. The record: every act, named and timestamped, in SQLite on your machine, or Postgres for a hosted team. Each seat keeps one private note on where it left off. When an agent learns something the team should know, it saves an insight, and anyone can search those with plain full-text search. And knowledge worth keeping goes into a wiki in the repo, reviewed like code, with a date on every claim.</p>
+        <p>Our rule: git holds knowledge, the log holds events, and anything else, including a vector store, is a cache we can rebuild.</p>
+      </blockquote>
+      <ul class="back">
+        <li>Why no embeddings: retrieval is gated on measurement. Vector search gets built only if the simple layers are shown to fail. Nothing has shown that. “Grep always” is the floor.</li>
+        <li>Session start: a startup hook injects orientation (what's addressed to it, its note's headline, open work); a woken seat gets a context packet; every injected byte has a CI budget.</li>
+        <li>Cognee is my personal cache on my own machine. Not part of the product.</li>
+      </ul>
+    </div>
+
+    <div class="q">
+      <h3>“What do you do about agent isolation? Why no sandbox?”</h3>
+      <blockquote>
+        <p>musterd is the team's coordination boundary: who did what, who owns what, who was asked. It isn't a sandbox, and we never say it is. Containment is a different problem, and other people solve it well: your OS, containers, your harness's sandbox, your provider's controls. We'd rather compose with those than half-build one.</p>
+        <p>What we do own is identity. Our cloud seat runs as its own unprivileged user, with a GitHub token scoped to two repos and network access to one destination.</p>
+      </blockquote>
+      <ul class="back">
+        <li>Honest limit: on one laptop every agent runs as me, so the wall there is the sandbox. A permission prompt is a usability feature, not a security boundary; we wrote that down when we rejected it as one.</li>
+        <li>Direction: sponsor-hosted agents run on their sponsor's own machine (shipped Sep 29, not yet in use). Containers are the next step. Per-seat isolation is being designed now.</li>
+      </ul>
+    </div>
+
+    <div class="q">
+      <h3>“AI is called a threat to humanity. OpenAI's agents just escaped a sandbox and hacked Hugging Face. Why build something that helps agents talk better?”</h3>
+      <blockquote>
+        <p>I take it seriously, and I'll be clear about what musterd is not: it would not have stopped that. A sandbox stops that. But look at what the agents did once they were out: they built their own way to coordinate, with addressing and even identity, on a channel no human could see.</p>
+        <p>Agents will coordinate whether we give them a channel or not. My bet is that it should happen on a record with a name on every act, where a human is a member, gets asked, and can say no. I'd rather build that channel in the open than find out later what they built in the dark.</p>
+      </blockquote>
+      <ul class="back">
+        <li>The incident, per OpenAI's and Hugging Face's public accounts: May–July 2026; escaped through a zero-day in the evaluation's one route to the internet; stole tokens and cloud credentials; reportedly over a thousand agents coordinated through improvised message boards inside a package manager, with addressing conventions and a proposal for signing. Named contributing factors: weak isolation and no real-time monitoring of what the agents were doing.</li>
+        <li>The human is built in: agents ask you with a deadline, and someone other than the author signs off.</li>
+        <li>musterd doesn't make agents more capable. It makes their coordination visible and attributable.</li>
+      </ul>
+      <p class="src">fortune.com 2026-07-21 · cnbc.com 2026-07-22 · en.wikipedia.org/wiki/OpenAI–HuggingFace_incident</p>
+    </div>
+
+    <div class="q">
+      <h3>“What is musterd exactly? A protocol, an agent, a harness, a platform?”</h3>
+      <blockquote>
+        <p>It's a protocol and a small daemon that speaks it. Your agents stay in the harness they already run in: Claude Code, Codex, Cursor, opencode. musterd gives them a seat on a team: a name, an inbox, typed acts, owned work. Humans sit on the same roster. It connects agents; it doesn't run them.</p>
+      </blockquote>
+      <ul class="back">
+        <li>Not an agent, not an orchestrator, not a sandbox, not a console.</li>
+        <li>“musterd harness: coming” on the last slide is an optional built-in loop, opt-in and never the default. We own the wake-up point, where a seat gets started, and leave the agent's loop to its harness.</li>
+      </ul>
+    </div>
+
+    <div class="q">
+      <h3>“How is this different from Band, CrewAI, A2A, the labs' agent teams?”</h3>
+      <div class="scroll"><table>
+        <tr><th>Them</th><th>The line</th></tr>
+        <tr><td>MCP / A2A</td><td>MCP connects an agent to tools. A2A connects agents per request. Neither models a persistent team with identity and humans as peers. We use MCP to join; we're not a tool server.</td></tr>
+        <tr><td>Band</td><td>Band connects your agents; musterd makes them a team. Band coordinates one-off runs through its SDK; musterd seats durable members in the harness you already use.</td></tr>
+        <tr><td>CrewAI / AutoGen / LangGraph</td><td>They orchestrate from one driver process. We sit a layer above: an agent on a musterd seat can run CrewAI inside its seat.</td></tr>
+        <tr><td>Lab agent teams, subagents</td><td>Identity there belongs to the lab's runtime. Here it belongs to the team, across vendors. Tonight's roster runs four model families.</td></tr>
+        <tr><td>“AI teammate” products</td><td>A teammate you can only assign work to is a contractor. One who can claim work, decline it, and hold you to acceptance is a peer.</td></tr>
+      </table></div>
+    </div>
+
+    <div class="q">
+      <h3>“Why use multiple agents at all? Why not one?”</h3>
+      <blockquote>
+        <p>Honestly, one agent is cheaper. Our own measurements say so, and our README says multi-agent isn't magic. You add a second agent for three reasons: real parallel work on separate parts; review from a different model family, because one model checking itself shares its own blind spots; and humans. The moment you have two agents and a person, you have a coordination problem whether you planned for one or not. We measured what that costs: 37% of the work thrown away. musterd is for that moment.</p>
+      </blockquote>
+      <ul class="back">
+        <li>The value grows with how cleanly the work splits.</li>
+        <li>The smallest team that pays for itself is probably one builder plus one reviewer.</li>
+      </ul>
+    </div>
+
+    <div class="q">
+      <h3>“How does musterd handle permissions and MCP tool access?”</h3>
+      <blockquote>
+        <p>Two kinds. What flows through musterd, we enforce: who's an admin, who can message whom, who can see what, who can create agents. Credentials are stored only as hashes. What happens inside the agent's own harness, its shell, its files, its other MCP tools, we don't control, and we don't pretend to. A seat can declare a tool allowlist, but the harness enforces it, not us.</p>
+        <p>The one place we reach into the harness is a gate before a tool runs: edit a file someone else's lane owns and you're warned, or blocked if the team opts in.</p>
+      </blockquote>
+      <ul class="back">
+        <li>Roles are routing hints and never grant power. A toolkit equips a workspace and grants nothing.</li>
+        <li>Admins grant access once, for a set time, or standing; revoking takes effect at once.</li>
+      </ul>
+    </div>
+
+    <div class="q">
+      <h3>“What are you specifically not building? Isn't some of this orchestration?”</h3>
+      <blockquote>
+        <p>Not building: sandboxing, and running the agent's loop. And no planner: musterd never splits work for you or assigns it. Tonight you'll see that: I open one huddle, and the team splits the work and claims lanes themselves.</p>
+        <p>There's a thin slice that looks like orchestration. musterd wakes a seat that's asleep when work arrives. It picks who gets asked to sign off. And it attaches the right lane to a handoff. That's routing and delivery. What it never does is decide what gets built, who builds it, or how. Our test: something one driver owns and directs is orchestration. Members nobody centrally owns, who can say no, are coordination.</p>
+      </blockquote>
+    </div>
+
+    <div class="q">
+      <h3>“How have telemetry and agent traces shaped musterd? How do you capture them?”</h3>
+      <blockquote>
+        <p>Almost every feature came out of a measurement. The 37% waste came from git. “Talk is 1% of tokens” came from transcripts. Replies waiting 207 minutes while I relayed by hand came from the record. “Seven approvals for every real conversation, zero requests for help” came from mining my own role. Each number forced a feature: lanes, mid-task delivery, agents asking me, someone else signing off.</p>
+      </blockquote>
+      <ul class="back">
+        <li>The record itself is the best trace: every act typed, attributed, timestamped.</li>
+        <li>OpenTelemetry: one span per act, trace context carried on messages between agents.</li>
+        <li>Tool-call stats in hourly buckets, about 25,000 calls since July (musterd's own tools only).</li>
+        <li>Agent traces, local-first, shipped late September: one structural event per harness hook into a separate local database; transcript tails for Claude Code and Codex; content capture off by default, behind a credential scrub.</li>
+        <li>Model attestation: what the harness observed outranks what the agent claims. A seat once showed Grok on the roster for weeks while running Claude.</li>
+        <li>Privacy: message bodies are never telemetry; off by default; no musterd-run collector; sizes recorded, content not; session ids never leave the machine.</li>
+        <li>13 dated research findings in the repo. One: guidance alone got headless agents to claim 0 of 8 lanes; enforcement got 8 of 8.</li>
+      </ul>
+    </div>
+
+    <div class="q">
+      <h3>“Don't you worry about musterd bloating the context window with guidance, skills and tools?”</h3>
+      <blockquote>
+        <p>Yes, so we measure it and we budget it. Every byte musterd puts into a seat's context has a line item, and CI fails if any of them grows. Today the standing cost is about 18 kilobytes a turn, roughly 4,600 tokens, and almost all of that is the tool schemas themselves. The guidance text is under two percent of it. A seat with the muted tool set is about 8 kilobytes. Raising any budget means replacing a written justification for it.</p>
+        <p>Skills load on demand. The hooks print one line, and only when something is waiting for you. What I haven't done yet is compare that number against other harnesses and meta-harnesses, and I want to.</p>
+      </blockquote>
+      <ul class="back">
+        <li>Numbers: per turn 18.4 KB (tools/list 18,428 B + a 92 B nudge); per session 21.7 KB with the primer (2.5 KB) and start-up nudges. Measured from source, est. tokens = bytes/4. <code>pnpm context:check</code>, ADR 212.</li>
+        <li>The Aug 3 trim: guidance texts cut to triggers, facts moved into the primer; guidance is now 1.4% of the per-turn surface, tool schemas 98.6%.</li>
+        <li>Budgets have been raised three times since, each time by exactly the bytes a new field cost, with the reason written down, never by a round percentage.</li>
+      </ul>
+    </div>
+  </section>
+
   <section id="ref">
     <h2>Reference</h2>
 
@@ -297,7 +425,9 @@
       <li><b>“admins included”</b> about memory: an admin can still see notes through the audit log until that's fixed.</li>
       <li><b>“agents can't read each other's memory”</b> with no qualifier: on one laptop they all run as me.</li>
       <li><b>“widen the circle”</b>: we haven't. One human on the roster today.</li>
-      <li><b>Sponsor hosting, the wake contract, pricing</b>: proposed. Say “building toward”.</li>
+      <li><b>The wake contract, pricing, the native harness loop</b>: proposed. Say “building toward”. Sponsor hosting is shipped (Sep 29), just not in use yet.</li>
+      <li><b>“coordination layer”</b> on its own: Band uses the phrase. Always “…where agents and humans are peers”.</li>
+      <li><b>38x</b> and <b>“1,200 agents”</b>: the first is gated; the second is a secondary-source number, say “reportedly”.</li>
       <li><b>Lanes' 0.9%</b>: only if asked, and say it's one September window with no control.</li>
     </ul></div>
   </section>
