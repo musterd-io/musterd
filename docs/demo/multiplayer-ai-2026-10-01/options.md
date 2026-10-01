@@ -1,6 +1,6 @@
 # The audience vote — four options, staged
 
-The room votes at the start of the talk on what the team builds next. At 1:15 one command (`go.sh`) declares the winner as a goal and opens one huddle on it, and the team splits it into lanes itself. The five lanes under each option are a starting point for that huddle, not an assignment. Nothing here exists on the board until that command runs.
+The room votes at the start of the talk on what the team builds next. At the live demo, the last beat of the talk (`docs/demo.md` §8, 5:10), one command (`go.sh`) declares the winner as a goal and opens one huddle on it, and the team splits it into lanes itself. The five lanes under each option are a starting point for that huddle, not an assignment. Nothing here exists on the board until that command runs.
 
 ## The poll
 

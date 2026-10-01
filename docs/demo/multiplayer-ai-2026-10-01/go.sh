@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The audience vote's go-command: declare the winning goal and open ONE huddle on it. The team splits
 # the goal into lanes itself — nothing here opens or hands out a lane. Run it as nick, from nick's
-# Workspace, at 1:15.
+# Workspace, at the live demo (docs/demo.md §8, 5:10).
 #
 #   ./go.sh voices|eyes|replay|benchmark  # do it
 #   ./go.sh voices --dry-run              # print the commands, change nothing
