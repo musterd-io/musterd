@@ -8,21 +8,20 @@ describe('which background loops a server runs (1C task 8)', () => {
 
   it('cloud runs the database loops and none that read this machine', () => {
     expect([...loopsFor('cloud')].sort()).toEqual(
-      [
-        'reaper',
-        'seeds_ingest',
-        'trace_prune',
-        'trace_coverage',
-        'expired_member_sweep',
-        'provision_sweep',
-      ].sort(),
+      ['reaper', 'trace_prune', 'trace_coverage', 'expired_member_sweep', 'provision_sweep'].sort(),
     );
   });
 
-  it.each(['roster_watch', 'footprint', 'sync_push', 'sync_pull', 'trace_push', 'audit_retention'])(
-    'cloud does not run %s',
-    (loop) => {
-      expect(loopsFor('cloud').has(loop as never)).toBe(false);
-    },
-  );
+  it.each([
+    'roster_watch',
+    'footprint',
+    'sync_push',
+    'sync_pull',
+    'trace_push',
+    'audit_retention',
+    // Review M4: an admin-set relay URL is fetched with no public-host check — not on a fleet.
+    'seeds_ingest',
+  ])('cloud does not run %s', (loop) => {
+    expect(loopsFor('cloud').has(loop as never)).toBe(false);
+  });
 });

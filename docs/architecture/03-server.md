@@ -25,7 +25,7 @@ src/
     consoleToken.ts   // §4.3 console tokens: verifyConsoleToken (ES256 compact JWS via node:crypto — shape, then alg, then signature, then claims; aud-bound, ≤60 s, 5 s skew), JwksCache (by kid; a set is trusted 10 min (JWKS_MAX_AGE_MS) then refetched before use — a revoked key stops working within it, and a stale set with the console down fails CLOSED; an unknown kid refetches at most every 30 s; one fetch in flight; a failed fetch backs off 30 s; failure → console_unreachable), jwksFor(url), redeemJti(db, jti, exp) — refuses a token past exp + skew AT REDEMPTION (a slow body reaches it after verification), then one insert into console_token_jti, a duplicate is a replay; rows are pruned on the way in once an hour past their exp (JTI_RETENTION_S), so a prune can never reopen a token
     hostIsolation.ts  // §5.3: hostTeam(host, suffix) (one DNS label under the suffix), pathTeam(path) (every route shape that names a team), hostAllows — a team host reaches only its team's routes; the caller answers 404
     health.ts         // §5.5: cloudHealth(db, traceDb) → 200 {ok:true} | 503 {ok:false, reason:"database unreachable"} — SELECT 1 on both operator handles, nothing about the machine
-    loops.ts          // loopsFor(mode): the background loops a server starts — Cloud drops the machine-local ones (roster watch, footprint, federation sync push/pull/trace push, audit retention's file archive)
+    loops.ts          // loopsFor(mode): the background loops a server starts — Cloud drops the machine-local ones (roster watch, footprint, federation sync push/pull/trace push, audit retention's file archive) and seeds ingest (an admin-set relay URL fetched with no public-host check)
     migrate.ts        // §6: migrateCloud(env) — the separate migrate step, as the OWNER (MUSTERD_DATABASE_OWNER_URL, MUSTERD_TRACE_DATABASE_OWNER_URL; the server never reads either); scripts/cloud/migrate.mjs runs it
     testIssuer.ts     // §5.2 test issuer (tests only; no runtime module imports it): an ES256 key, a JWKS on 127.0.0.1, token(aud) in the console's shape, rotate()
     testing.ts        // cloud test support (tests only): stubCloudEnv, bootCloud (a listening cloud server over the pooled PGlite stores via testCloudPools), hostRequest (an explicit Host header)
@@ -393,10 +393,11 @@ changes nothing. It requires `MUSTERD_DATABASE_APP_URL`, `MUSTERD_DATABASE_OPERA
    answers the same outage `503 temporarily_unavailable` + `Retry-After`, never `invalid_grant` /
    `invalid_client` — RFC 6749 clients discard a refresh token or a registration on those. `/live`
    shows the sentence as a banner (`packages/web/src/live/serverHealth.ts`).
-6. **Only the database loops run** (`cloud/loops.ts`): reaper, seeds ingest, trace prune, trace
-   coverage, expired-member and provision sweeps. Not the roster watcher, the footprint sampler,
-   federation sync, or audit retention (it archives to a local file first; Cloud retention arrives
-   with the backup pipeline, §7).
+6. **Only the database loops run** (`cloud/loops.ts`): reaper, trace prune, trace coverage,
+   expired-member and provision sweeps. Not the roster watcher, the footprint sampler, federation
+   sync, audit retention (it archives to a local file first; Cloud retention arrives with the backup
+   pipeline, §7), or seeds ingest (it fetches a relay URL a team admin sets, with no public-host
+   check — on a fleet, an outbound request any customer could aim inside the platform).
 7. **No team rows without a credential (§4.3).** The roster reads (`GET /teams/:slug`,
    `GET /teams/:slug/members`) answer an anonymous caller on a loopback daemon — the projection scopes
    itself to whoever asks, and anonymous there means "on this machine". On Cloud they require a
