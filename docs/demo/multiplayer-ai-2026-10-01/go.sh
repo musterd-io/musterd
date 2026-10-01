@@ -2,7 +2,7 @@
 # The audience vote's go-command: declare the winning goal, open its five lanes, and hand each
 # to a member who can wake. Run it as nick, from nick's team home, at 1:15.
 #
-#   ./go.sh voices|eyes|replay            # do it
+#   ./go.sh voices|eyes|replay|benchmark  # do it
 #   ./go.sh voices --dry-run              # print the commands, change nothing
 #   SEATS="ryder gptbot grokbot ghost delta" ./go.sh eyes
 #
@@ -96,8 +96,33 @@ case "$option" in
       "An accepted lane sets off a short celebration on the floor, live and in replay (the open Fireworks seed)."
     )
     ;;
+  benchmark)
+    goal_id=wideswe
+    goal_title="Benchmark — the team takes on WideSWE, cross-repository coding"
+    titles=(
+      "WideSWE: pre-register the run — tasks, hypothesis, falsifier, cost ceiling"
+      "WideSWE: get the dataset and evaluator running here; one task scores end to end"
+      "WideSWE: one command turns a task into a goal with a lane per repository"
+      "WideSWE: the baseline — independent per-repo agents, no musterd"
+      "WideSWE: the team run on revive, and the write-up, win or lose"
+    )
+    scopes=(
+      "docs/research/wideswe/**"
+      "scripts/wideswe/setup/**"
+      "scripts/wideswe/runner/**"
+      "scripts/wideswe/baseline/**"
+      "docs/wiki/wideswe.md"
+    )
+    details=(
+      "Paper: arXiv 2609.33382 (via the Exploring Next feed, 2026-09-30). Before anything runs: choose five to ten tasks; state the hypothesis that a team with a lane per repository resolves more than independent per-repo agents; name the falsifier and the cost ceiling."
+      "The WideSWE dataset and evaluator run on this machine, and one task scores end to end."
+      "One command turns a WideSWE task into a goal with one lane per repository, each lane's project set to its repo."
+      "The chosen tasks run with independent agents, one per repository, no musterd. Scores and token cost recorded."
+      "The same tasks run on revive. The result goes in docs/wiki/wideswe.md, win or lose, with the baseline beside it and the cost of each. Compare with independent agents, never with one agent alone."
+    )
+    ;;
   *)
-    echo "usage: $0 voices|eyes|replay [--dry-run]" >&2
+    echo "usage: $0 voices|eyes|replay|benchmark [--dry-run]" >&2
     exit 2
     ;;
 esac
