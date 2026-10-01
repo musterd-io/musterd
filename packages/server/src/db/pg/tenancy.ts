@@ -29,6 +29,8 @@ export const GLOBAL_TABLES: readonly string[] = [
   'schema_meta',
   'footprint_machine',
   'footprint_stacks',
+  // Cloud 1C (spec §4.3): a redeemed console-token id — about the console, not any one team.
+  'console_token_jti',
 ];
 
 /**

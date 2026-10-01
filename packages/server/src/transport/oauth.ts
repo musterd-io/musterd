@@ -12,7 +12,7 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
-import { isLocalPeer } from '../config.js';
+import { trustsLocalPeer } from '../cloud/localTrust.js';
 import { teamCtx, type Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { asMusterdError, MusterdError } from '../errors.js';
@@ -147,9 +147,10 @@ export function __oauthBucketSizeForTest(): number {
   return buckets.size;
 }
 
-/** TLS opinion (ADR 446 §1): loopback is plaintext-safe; anything else must arrive via https. */
+/** TLS opinion (ADR 446 §1): loopback is plaintext-safe; anything else must arrive via https. On
+ *  Cloud nothing is loopback (spec §5.1): the edge terminates TLS and says so in x-forwarded-proto. */
 export function isTlsPeer(ctx: Ctx, req: IncomingMessage): boolean {
-  if (isLocalPeer(req.socket.remoteAddress, ctx.config.trustProxy)) return true;
+  if (trustsLocalPeer(ctx, req)) return true;
   const proto = req.headers['x-forwarded-proto'];
   const first = Array.isArray(proto) ? proto[0] : proto;
   return first?.split(',')[0]?.trim().toLowerCase() === 'https';

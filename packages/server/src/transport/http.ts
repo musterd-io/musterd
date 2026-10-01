@@ -117,12 +117,26 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
-import { checkUpgrade, isLocalPeer, readLocalIdentity, resolveRosterRoots } from '../config.js';
+import {
+  CONSOLE_UNREACHABLE_SENTENCE,
+  ConsoleTokenError,
+  jwksFor,
+  redeemJti,
+  verifyConsoleToken,
+  type ConsoleClaims,
+} from '../cloud/consoleToken.js';
+import { trustsLocalPeer } from '../cloud/localTrust.js';
+import { checkUpgrade, readLocalIdentity, resolveRosterRoots } from '../config.js';
 import { operatorCtx, teamCtx, type Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { schemaVersionOf } from '../db/migrations.js';
 import { traceDbBytes, traceSchemaVersion } from '../db/traceDb.js';
-import { MusterdError, SessionLeaseRefused, asMusterdError } from '../errors.js';
+import {
+  MusterdError,
+  ServiceUnavailable,
+  SessionLeaseRefused,
+  asMusterdError,
+} from '../errors.js';
 import { reapOrphans } from '../footprint/reap.js';
 import { log, redactPath } from '../log.js';
 import { saveNodeEnrollment } from '../node/state.js';
@@ -1647,7 +1661,11 @@ function requireLocalPeer(
   action: string,
   onDeny?: () => void,
 ): void {
-  if (isLocalPeer(req.socket.remoteAddress, ctx.config.trustProxy)) return;
+  // Cloud (Decision 2 of the 1C plan): these verbs are about THIS machine, and on Cloud there is no
+  // machine a caller owns — the route is not there, rather than refused.
+  if (ctx.config.mode === 'cloud')
+    throw new MusterdError('not_found', `${action} is not available on musterd Cloud`);
+  if (trustsLocalPeer(ctx, req)) return;
   onDeny?.();
   throw new MusterdError(
     'forbidden',
@@ -1658,7 +1676,7 @@ function requireLocalPeer(
 }
 
 async function authProvision(ctx: Ctx, slug: string, req: IncomingMessage): Promise<void> {
-  if (isLocalPeer(req.socket.remoteAddress, ctx.config.trustProxy)) return;
+  if (trustsLocalPeer(ctx, req)) return;
   try {
     await authAdmin(ctx, slug, req);
   } catch (e) {
@@ -1673,6 +1691,38 @@ async function authProvision(ctx: Ctx, slug: string, req: IncomingMessage): Prom
     }
     throw e;
   }
+}
+
+/**
+ * Cloud admin auth (spec §4.3): the bearer must be a console token for THIS server. Verification
+ * failures are 401 with the reason; a console whose keys cannot be fetched is a 503 with the stable
+ * sentence — the caller's token may be fine, so it is not refused as if it were not.
+ */
+async function requireConsoleToken(ctx: Ctx, req: IncomingMessage): Promise<ConsoleClaims> {
+  const cloud = ctx.config.cloud!;
+  try {
+    return await verifyConsoleToken(bearer(req), {
+      jwks: jwksFor(cloud.consoleJwksUrl),
+      audience: cloud.consoleAudience,
+    });
+  } catch (e) {
+    throw consoleTokenRefusal(e);
+  }
+}
+
+async function redeemConsoleToken(ctx: Ctx, claims: ConsoleClaims): Promise<void> {
+  try {
+    await redeemJti(ctx.db, claims.jti, claims.exp);
+  } catch (e) {
+    throw consoleTokenRefusal(e);
+  }
+}
+
+function consoleTokenRefusal(e: unknown): unknown {
+  if (!(e instanceof ConsoleTokenError)) return e;
+  if (e.reason === 'console_unreachable')
+    return new ServiceUnavailable(CONSOLE_UNREACHABLE_SENTENCE);
+  return new MusterdError('unauthorized', e.message);
 }
 
 /** Best-effort: resolve the calling seat from a bearer token if one is present and valid, else null.
@@ -2031,7 +2081,11 @@ export async function handleHttp(
     }
 
     if (method === 'POST' && path === '/teams') {
+      // Cloud (spec §4.3 / §5.2): creating a team is an admin operation, and on Cloud an admin
+      // operation carries a console token — verified, and its jti redeemed once across every server.
+      const consoleToken = ctx.config.cloud ? await requireConsoleToken(ctx, req) : null;
       const body = parseOrBadRequest(CreateTeamBody, await readJson(req));
+      if (consoleToken) await redeemConsoleToken(ctx, consoleToken);
       const team = await createTeam(ctx.db, { slug: body.slug, display: body.display ?? null });
       const { row, token } = await addMember(ctx.db, team, {
         name: body.creator.name,
@@ -7495,7 +7549,7 @@ export async function handleHttp(
           target: target.name,
           result: 'allow',
           detail: {
-            via: isLocalPeer(req.socket.remoteAddress, ctx.config.trustProxy) ? 'local' : 'admin',
+            via: trustsLocalPeer(ctx, req) ? 'local' : 'admin',
           },
         });
         for (const leaseId of revoked) {
@@ -7539,7 +7593,7 @@ export async function handleHttp(
           target: target.name,
           result: 'allow',
           detail: {
-            via: isLocalPeer(req.socket.remoteAddress, ctx.config.trustProxy) ? 'local' : 'admin',
+            via: trustsLocalPeer(ctx, req) ? 'local' : 'admin',
           },
         });
         if (oauthRevoked > 0) {

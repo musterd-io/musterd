@@ -23,6 +23,24 @@ export class MusterdError extends Error {
 }
 
 /**
+ * The server cannot serve right now, for a reason that is one of a small set of STABLE SENTENCES
+ * (cloud spec §5.5 / §7: "database unreachable", "console unreachable") — a probe or a banner
+ * matches the message, so it is never free text. HTTP 503. The wire `code` is `server_error`: the
+ * protocol has no unavailable code, and adding one is an ADR (hard rule 1); the status and the
+ * sentence carry the meaning.
+ */
+export class ServiceUnavailable extends MusterdError {
+  constructor(sentence: string) {
+    super('server_error', sentence);
+    this.name = 'ServiceUnavailable';
+  }
+
+  override get httpStatus(): number {
+    return 503;
+  }
+}
+
+/**
  * An `unauthorized` whose seat the server had ALREADY proved (ADR 391).
  *
  * `authByAgentSeatCredential` resolves the `msac_` credential to a real Member before it looks at
