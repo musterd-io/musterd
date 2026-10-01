@@ -6,6 +6,7 @@ import { MusterdError } from '../errors.js';
 import { followsUpNotice } from '../protocol/laneReroute.js';
 import { decideFollowsUp } from '../sync/claim.js';
 import { getLane, openLane, updateLane } from './lanes.js';
+import { staleGoals } from './orientation.js';
 import { createTeam } from './teams.js';
 
 let openStore: () => Promise<Driver>;
@@ -294,5 +295,37 @@ withDrivers('follows_up', (o) => {
       const one = await openLane(db, team.id, team.slug, 'dolly', { title: 'fix it' });
       expect(await followsUpNotice(db, team.id, one)).toBe('');
     });
+  });
+});
+
+describe('staleGoals — the stale-goal line (ADR 487 §5.4)', () => {
+  const DAY = 86_400_000;
+  const now = 100 * DAY;
+  const l = (id: string, goal: string, state: Lane['state'], updated_at: number) =>
+    ({ id, title: id, goal_id: goal, state, updated_at }) as Lane;
+  const goals = [{ id: 'g', status: 'in-flight' }];
+
+  it('names an in-flight goal whose live lanes all sat a week, with its oldest lane', () => {
+    expect(
+      staleGoals(
+        goals,
+        [l('a', 'g', 'open', now - 9 * DAY), l('b', 'g', 'active', now - 8 * DAY)],
+        now,
+      ),
+    ).toEqual([{ goal: 'g', lane: 'a', lane_title: 'a', idle_ms: 9 * DAY }]);
+  });
+
+  it('stays quiet when any live lane moved, or the only waiting lane is parked', () => {
+    expect(
+      staleGoals(
+        goals,
+        [l('a', 'g', 'open', now - 9 * DAY), l('b', 'g', 'active', now - DAY)],
+        now,
+      ),
+    ).toEqual([]);
+    expect(staleGoals(goals, [l('a', 'g', 'parked', now - 30 * DAY)], now)).toEqual([]);
+    expect(
+      staleGoals([{ id: 'g', status: 'planned' }], [l('a', 'g', 'open', now - 30 * DAY)], now),
+    ).toEqual([]);
   });
 });

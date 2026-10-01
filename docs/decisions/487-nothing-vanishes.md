@@ -118,6 +118,17 @@ The five lanes under goal `nothing-vanishes` carry the build; the spec's §7 map
   Codex per-call), and calls the daemon only when the unfinished list changed; (3) no seat-memory
   fallback — seat memory is one hand-written note, last write wins, and a turn-end hook would
   overwrite it every turn. A seat with no live lane gets no snapshot. S1 now feeds `leftoverSignal`.
+- **2026-09-30 — guidance, the stale-goal line and the audit landed (lane 5,
+  `01M3T8N2ZP55HNR99GKDD69RKE`).** The guidance line is in `guidance.ts` (the musterd skill).
+  `team_next` carries `stale_goals`. The weekly audit is `pnpm goals:audit` (`scripts/goals-audit.ts`):
+  the sweep LaunchAgent runs it `--weekly --post` from the daemon's checkout, where the docs live,
+  and it posts as the `sweep` service seat only when it finds something. nick chose this home over
+  derived `team_next` lines and a daemon timer. It adds one passenger to the ADR 166 slot sweep,
+  whose header promised to touch no daemon; the slot sweep itself stays read-only, and the header now
+  says what rides along. Check 2 counts only lanes closed after #1897 merged (2026-10-01T00:42Z),
+  the moment the close question began to exist. Its first hand-run found two items, both real: lane 2
+  closed before the field existed, and lane 3's own answer was dropped by a daemon not yet
+  refreshed. The cutoff fixed the first; lane 3's answer was re-recorded.
 
 ## Observability & Evaluation
 
