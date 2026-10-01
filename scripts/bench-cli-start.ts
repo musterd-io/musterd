@@ -25,6 +25,7 @@ export const PROBES: Probe[] = [
   { name: 'node -e 0 (floor)', argv: ['-e', '0'] },
   { name: 'musterd --version', argv: [BIN, '--version'] },
   { name: 'musterd help', argv: [BIN, 'help'] },
+  { name: 'musterd (first paint)', argv: [BIN], env: { MUSTERD_PAINT_PROBE: '1' } },
 ];
 
 function once(p: Probe): number {

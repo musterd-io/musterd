@@ -60,6 +60,11 @@ export async function launchByName(
     throw unknownCommand(word, res.nearest);
   }
   if (res.kind === 'ambiguous') {
+    const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+    if (isTTY) {
+      const { openPicker } = await import('./index.js');
+      return openPicker({ query: word });
+    }
     throw new CliError(
       `"${word}" matches ${res.candidates.length} seats — name one:\n` +
         res.candidates.map((s) => `  musterd ${s.address}`).join('\n'),
