@@ -930,8 +930,7 @@ that can happen on stage.
 
 **DO** Back to the deck, slide 10.
 
-**SAY** "It's open source: `npx @musterd/cli init`. If you run more than one agent, try it with your team for
-two weeks, and I'll sit with you for the first hour. I build it live on Twitch every day. Thank you."
+**SAY** "It's open source, at musterd.io. I build it live on Twitch every day. Thank you."
 
 Then stop. Flip back to `/live` when the first question is about the team, and leave it up.
 
