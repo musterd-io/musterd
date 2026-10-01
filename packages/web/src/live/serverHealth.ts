@@ -12,9 +12,17 @@ export function healthReason(status: number, body: unknown): string | null {
   return ok === false && typeof reason === 'string' && reason ? reason : null;
 }
 
-/** Poll quickly while down (recovery is automatic, so the banner should clear soon after). */
-export function healthPollMs(reason: string | null): number {
-  return reason ? 5_000 : 30_000;
+/**
+ * When to ask `/health` again, or null to stop. Only a Cloud server can answer the outage shape,
+ * and its body is exactly `{ok}` (+ `reason`). A self-hosted daemon answers a detailed body (`v`,
+ * `db`, counts — and computing it is not free), so once one has answered there is nothing to watch
+ * for: polling stops. Unknown (a network failure, a proxy page) keeps a slow poll. While down, poll
+ * quickly so the banner clears soon after the automatic recovery.
+ */
+export function healthPollAfter(status: number, body: unknown): number | null {
+  if (healthReason(status, body)) return 5_000;
+  const selfHosted = status === 200 && typeof body === 'object' && body !== null && 'v' in body;
+  return selfHosted ? null : 30_000;
 }
 
 /** The current outage sentence, or null. A failed fetch is not an outage claim: it shows nothing. */
@@ -24,16 +32,19 @@ export function useServerHealth(): string | null {
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const tick = async () => {
-      let next: string | null = null;
+      let status = 0;
+      let body: unknown = null;
       try {
         const r = await fetch('/health', { signal: AbortSignal.timeout(2500) });
-        next = healthReason(r.status, await r.json().catch(() => null));
+        status = r.status;
+        body = await r.json().catch(() => null);
       } catch {
-        next = null;
+        // a failed fetch is not an outage claim: it shows nothing and keeps a slow poll
       }
       if (!alive) return;
-      setReason(next);
-      timer = setTimeout(() => void tick(), healthPollMs(next));
+      setReason(healthReason(status, body));
+      const after = healthPollAfter(status, body);
+      if (after !== null) timer = setTimeout(() => void tick(), after);
     };
     void tick();
     return () => {

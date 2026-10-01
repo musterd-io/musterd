@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { HealthBanner } from './HealthBanner';
-import { healthPollMs, healthReason } from './serverHealth';
+import { healthPollAfter, healthReason } from './serverHealth';
 
 /** Cloud spec §7: database down → `/health` is 503 with a stable sentence, and `/live` says so. */
 describe('healthReason', () => {
@@ -23,13 +23,30 @@ describe('healthReason', () => {
   });
 
   it('polls quickly while down, so the banner clears soon after recovery', () => {
-    expect(healthPollMs('database unreachable')).toBeLessThan(healthPollMs(null));
+    const down = healthPollAfter(503, { ok: false, reason: 'database unreachable' });
+    const up = healthPollAfter(200, { ok: true });
+    expect(down).not.toBeNull();
+    expect(up).not.toBeNull();
+    expect(down!).toBeLessThan(up!);
+  });
+
+  it('stops polling a self-hosted daemon — its detailed /health is costly and can never be the Cloud 503', () => {
+    expect(
+      healthPollAfter(200, { ok: true, v: 'musterd/0.3', epoch: 14, connections: 3 }),
+    ).toBeNull();
+  });
+
+  it('keeps polling when it cannot tell (a network failure or a proxy page)', () => {
+    expect(healthPollAfter(0, null)).not.toBeNull();
+    expect(healthPollAfter(502, '<html>bad gateway</html>')).not.toBeNull();
   });
 });
 
 describe('HealthBanner', () => {
   it('renders the sentence verbatim as an alert', () => {
-    const html = renderToStaticMarkup(createElement(HealthBanner, { reason: 'database unreachable' }));
+    const html = renderToStaticMarkup(
+      createElement(HealthBanner, { reason: 'database unreachable' }),
+    );
     expect(html).toContain('role="alert"');
     expect(html).toContain('database unreachable');
   });
