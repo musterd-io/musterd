@@ -45,6 +45,8 @@ key as routine authority.
 
 _Amended 2026-09-01 (lane 01M1F7Y4N):_ a failed or timed-out reclaim degrades to the stored lease (fail-soft on the read path). The HTTP request still runs; if the stored lease is stale the server rejects it, but the CLI never hangs. This is the correct inversion of #1143's default-off: forgetting the opt-in fails loud and local, forgetting a close handler failed silent and global. `watchClaim` now settles on `close` (1001 probe) and `claimSessionLease` times out after 3 s (`CLAIM_LEASE_TIMEOUT_MS`).
 
+_Amended 2026-09-30 (lane 01M3THHYQE):_ the client had drifted from Decision 1–3 — it claimed before every _request_ and closed after each, so one `musterd status` wrote six `claim.occupied` rows, each `claim.superseded` the last (measured on 82618aa; it made ADR 489's falsifier unreadable). `HttpClient` now holds one claim for its life and reuses its lease across requests, which is what this ADR decided. A lease refusal drops the held claim before the one-retry reclaim; `HttpClient.close()` releases it for a long-lived caller, and a one-shot command's `process.exit` closes the socket.
+
 ## Observability & Evaluation
 
 - Traces: existing claim and HTTP request logs record the normal attachment and

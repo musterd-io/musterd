@@ -1394,6 +1394,26 @@ describe('hook-path reads must not reclaim the seat (the #1130 claim storm)', ()
     expect(Array.isArray(res.messages)).toBe(true);
   });
 
+  // Lane 01M3THHYQE. ADR 339 claims once per COMMAND ("before its HTTP work … closes the WebSocket
+  // when its work completes"); the client claimed once per REQUEST and closed after each, so one
+  // `musterd status` wrote six claim.occupied rows and five claim.superseded rows evicting its own
+  // previous claim — measured 2026-09-30 on 82618aa, the noise that made ADR 489's falsifier unreadable.
+  it('one opted-in client claims ONCE across all its requests (ADR 339: per command, not per request)', async () => {
+    await bindAvaWithStaleLease();
+    const since = Date.now();
+    const { http } = resolveRead({}, { claimSeatPerRequest: true });
+    for (let i = 0; i < 3; i++) await http.inbox('dawn', { unread: true, limit: 1 });
+    const claims = server.db
+      .prepare<[number], { action: string }>(
+        "SELECT action FROM audit WHERE ts >= ? AND target = 'ava' AND action LIKE 'claim.%'",
+      )
+      .all(since)
+      .map((r) => r.action);
+    expect(claims.filter((a) => a === 'claim.occupied')).toHaveLength(1);
+    expect(claims).not.toContain('claim.duplicate_workspace');
+    http.close();
+  });
+
   it('DEFAULTS to not reclaiming — a read path that never considered the flag cannot storm', async () => {
     await bindAvaWithStaleLease();
     const { http, explicit } = resolveRead({});
