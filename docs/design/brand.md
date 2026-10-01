@@ -143,6 +143,8 @@ What the gate enforces is narrower than what this table publishes, and the diffe
 | **Toolkit** | What a workspace is equipped with: MCP servers, tools, allow-entries. No authority — installing one grants nothing. | not "profile", not "kit", not "template" |
 | **Workspace** | The folder a seat is bound to. | not "worktree" (git implementation detail) |
 | **Harness** | The agent runtime family: Claude Code, Cursor, Codex. | not "surface"; not "platform" |
+| **Launcher** | `musterd`'s seat picker and the code that starts a seat's harness in its workspace ([ADR 491](../decisions/491-seat-launcher.md)). | not the harness registration that marks a Presence's Surface ([ADR 286](../decisions/286-launcher-surface-convergence.md)) |
+| **Metaharness** | musterd owning the process and terminal around any harness — today launching and supervising it ([ADR 491](../decisions/491-seat-launcher.md)). Never the agent loop, which stays with the harness ([ADR 436](../decisions/436-wake-edge-is-a-contract-not-a-loop.md)). | not a harness |
 | **Driver** | How a harness session runs: desktop, terminal, IDE, headless. Already the wire field (`presence.driver`). | not a harness; not a surface |
 | **Scope** | The paths a lane may touch. The wire token since 2026-08-24 (ADR 296 tier 2, epoch 14); legacy `surface_globs` accepted on read. | not "surface" |
 | **Permissions** | The harness-native allow/ask/deny rules musterd compiles into the workspace (ADR 261). | not "capabilities" |
