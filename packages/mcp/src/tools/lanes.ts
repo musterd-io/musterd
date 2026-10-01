@@ -628,6 +628,12 @@ export function fmtNext(b: NextBrief, landed: ReadonlyMap<string, Landed> = new 
       lines.push(`  ${g.id} [${g.status}] "${g.title}"${story}${wave}`);
     }
   }
+  // ADR 487 §5.4: a plan that stopped moving. `?? []` for an older daemon, as above.
+  for (const s of b.stale_goals ?? [])
+    lines.push(
+      `  ⚠ ${s.goal} has not moved in ${shortDuration(s.idle_ms)} — oldest untouched: ` +
+        `${s.lane} "${s.lane_title}"`,
+    );
   if (owed.length) {
     const now = Date.now();
     lines.push(`\n⧗ owed by you — ${owed.length} lane(s) waiting on your verdict:`);

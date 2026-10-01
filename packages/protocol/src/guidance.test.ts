@@ -222,6 +222,7 @@ describe('version-bump discipline (ADR 085)', () => {
     36: '3c5ea4ea5e81d976', // ADR 476 (lane 01M3QA4KCZ): + "Answering a critique" — a challenge/steer/review note/human critique is answered with the check run, not a verdict; commit before you ask; a wrong concession is a ledger entry; do not overcorrect (measured 2026-09-29: 6/6 challenges conceded, 0 declined)
     37: 'a9d10eeef196e6d2', // ADR 476 (lane 01M3R90KKD): + "Send a `challenge` when you doubt a peer's claim" — the guidance taught answering a challenge, never sending one (17 all-time vs ~90 disagreeing plain messages, 2026-09-29)
     38: '1897b4cf15b9b634', // ADR 235 has THREE close contracts; step 3 taught two. Restores the dropped one — acceptor asked, NO backstop: wait ≤5m, then self-close — which the submit hint always gave, so a seat reading both saw a contradiction (lane 01M3SF2356, 2026-09-30)
+    39: 'dce7b2689034424f', // + more than one increment? declare a Goal and open every increment's lane now; follows_up / abandon_reason on close (ADR 487, lane 01M3T8N2ZP)
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {

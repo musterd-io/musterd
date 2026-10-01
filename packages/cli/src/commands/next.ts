@@ -57,6 +57,13 @@ function render(brief: NextBrief): void {
       w(theme.meta(`    answer: \`musterd send --act accept --reply-to ${r.ask_id} "…"\``) + '\n');
     }
   }
+  // ADR 487 §5.4: a goal whose live lanes have all stopped moving. `?? []` for an older daemon.
+  for (const g of brief.stale_goals ?? [])
+    w(
+      theme.warn(`⚠ goal ${g.goal} has not moved in ${shortDuration(g.idle_ms)}`) +
+        theme.meta(` — oldest untouched: ${g.lane} "${g.lane_title}"`) +
+        '\n',
+    );
   if (brief.in_flight.length > 0) {
     w(`\n${theme.accent('carrying')} (${brief.in_flight.length}):\n`);
     for (const l of brief.in_flight) w(laneLine(l) + '\n');

@@ -20,6 +20,13 @@
  * Read-only over the fleet. Touches no seat, no daemon, no lane — which is the property that makes
  * it safe to run on a timer. Append-only JSONL so samples accumulate across runs.
  *
+ * ONE PASSENGER (ADR 487 §5.4, 2026-09-30). The same tick launches `scripts/goals-audit.ts --weekly
+ * --post` — the nothing-vanishes audit — because this is the one scheduled agent that runs from the
+ * daemon's checkout, which is where the docs that audit reads live. The slot sweep itself stays
+ * read-only; the audit is a separate process that runs at most once a week (its own stamp), posts
+ * one `status_update` as the `sweep` service seat only when it finds something, and can never fail
+ * this run (a child process capped at 60s, its exit status ignored, errors to the log).
+ *
  * SCHEDULED (ADR 166 follow-through): `musterd service install --sweep` runs this every 5 minutes.
  * The cadence is derived, not chosen by taste — a `demoted` case persists for at least
  * `LOCAL_SESSION_LIVE_MS` (10 min) from the last touch of the slot's transcript, so any interval
@@ -35,9 +42,11 @@
  *
  *   node --disable-warning=ExperimentalWarning scripts/research/adr-166-slot-sweep.ts [--out <path>] [--json] [--quiet]
  */
+import { spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 // Imports the BUILT cli — the same artifact the wake guard loads, so the sweep cannot drift from
 // what production actually judges. Run `pnpm build` first.
 import { osNotify } from '../../packages/cli/dist/notify/os.js';
@@ -169,4 +178,17 @@ if (process.argv[1]?.endsWith('adr-166-slot-sweep.ts')) {
   }
   // Non-zero on a finding so launchd's log and any wrapper see a real failure, never a quiet no-op.
   if (s.demoted > 0) process.exitCode = 1;
+
+  // ADR 487 §5.4: the weekly nothing-vanishes audit rides this tick (see the header). Weekly by its
+  // own stamp, so 2,015 of every 2,016 ticks it reads one file and exits.
+  try {
+    const audit = join(dirname(fileURLToPath(import.meta.url)), '..', 'goals-audit.ts');
+    spawnSync(
+      process.execPath,
+      ['--disable-warning=ExperimentalWarning', audit, '--weekly', '--post'],
+      { stdio: 'inherit', timeout: 60_000 },
+    );
+  } catch (err) {
+    process.stderr.write(`goals-audit did not run: ${(err as Error).message}\n`);
+  }
 }

@@ -286,6 +286,9 @@ export const LaneFollowsUpSchema = z.union([
 ]);
 export type LaneFollowsUp = z.infer<typeof LaneFollowsUpSchema>;
 
+/** ADR 487 §5.4: how long a Goal's live lanes may all sit untouched before `team_next` says so. */
+export const GOAL_STALE_DAYS = 7;
+
 /** ADR 487 §5.2 bounds: a snapshot is a list of titles, not the transcript. */
 export const LANE_TODOS_MAX_ITEMS = 20;
 export const LANE_TODO_MAX_CHARS = 140;
@@ -751,6 +754,22 @@ export const NextBriefSchema = z.object({
    * offered, so the brief says it exists and where to look (`lane_board`) without inviting pickup.
    */
   parked_total: z.number().int().nonnegative().default(0),
+  /**
+   * In-flight Goals that have stopped moving (ADR 487 §5.4): every live, unparked lane under the goal
+   * has gone {@link GOAL_STALE_DAYS} without an update. One row per goal naming its oldest untouched
+   * lane. Advisory and derived — never a wake (ADR 258's posture); a parked lane is a human's
+   * "not now" and does not count as stalling.
+   */
+  stale_goals: z
+    .array(
+      z.object({
+        goal: z.string(),
+        lane: z.string(),
+        lane_title: z.string(),
+        idle_ms: z.number().int().nonnegative(),
+      }),
+    )
+    .default([]),
   /**
    * Recorded intentions nobody has started: open Seeds awaiting exploration, oldest first
    * (ADR 373 increment 4).

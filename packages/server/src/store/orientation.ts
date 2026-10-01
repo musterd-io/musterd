@@ -1,6 +1,8 @@
 import {
   compareGoals,
+  GOAL_STALE_DAYS,
   isAwaitingAcceptance,
+  LANE_TERMINAL_STATES,
   type Lane,
   type NextBrief,
   type NextSummary,
@@ -303,6 +305,7 @@ export async function deriveNext(
   // pool, not the other way around. Ordering is the shared ADR 257 rule (shelved last, `in-flight`
   // before `planned`, then most recently declared first).
   const goals = allGoals.filter((g) => g.status !== 'shipped').sort(compareGoals);
+  const stale_goals = staleGoals(goals, all, now);
 
   // value-layer design: the team's oldest lanes waiting on acceptance — review debt as ambient
   // candidate work for ANY seat (owed_reviews stays the directed slice). Cap 3, oldest first.
@@ -380,6 +383,7 @@ export async function deriveNext(
     shipped,
     up_next,
     parked_total,
+    stale_goals,
     up_next_seeds,
     up_next_seeds_total,
     owed_reviews,
@@ -390,4 +394,34 @@ export async function deriveNext(
     ...(review_debt.length ? { review_debt } : {}),
     incidents,
   };
+}
+
+/**
+ * ADR 487 §5.4 — the stale-goal line. An in-flight Goal whose live, unparked lanes have ALL gone
+ * {@link GOAL_STALE_DAYS} without an update is a plan that stopped: its next increment exists on the
+ * board and nobody has touched it. Named once, with the oldest untouched lane, so the reader knows
+ * where to start. A goal with no such lane is not stale — it is shipped, parked, or planned.
+ */
+export function staleGoals(
+  goals: readonly { id: string; status: string }[],
+  lanes: readonly Lane[],
+  now: number,
+): NextBrief['stale_goals'] {
+  const cutoff = now - GOAL_STALE_DAYS * 86_400_000;
+  const out: NextBrief['stale_goals'] = [];
+  for (const g of goals) {
+    if (g.status !== 'in-flight') continue;
+    const live = lanes.filter(
+      (l) => l.goal_id === g.id && !LANE_TERMINAL_STATES.has(l.state) && l.state !== 'parked',
+    );
+    if (live.length === 0 || live.some((l) => l.updated_at >= cutoff)) continue;
+    const oldest = live.reduce((a, l) => (l.updated_at < a.updated_at ? l : a));
+    out.push({
+      goal: g.id,
+      lane: oldest.id,
+      lane_title: oldest.title,
+      idle_ms: now - oldest.updated_at,
+    });
+  }
+  return out;
 }
