@@ -770,7 +770,7 @@ words — *"when I say go, raise a standard-tier ask to nick about the task"*. I
 `musterd status` must say `wakeable · resumable` before anyone sits down. The frame rule holds:
 the human seat is visible the whole time.
 
-**Freeze the daemon, an hour before doors.** The autorefresher restarts the daemon onto `main`
+**Freeze the autorefresher (not the daemon), an hour before doors.** The autorefresher restarts the daemon onto `main`
 once a merge burst settles for 10 minutes. On a team that merges all evening, that can land
 inside the seven minutes. When it does, `/live` drops and reconnects, and every adapter-held seat
 is deaf for one lease-renewal window (`docs/wiki/huddles.md`). Nothing pauses it yet, so take
