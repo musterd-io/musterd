@@ -10,8 +10,8 @@
       "justification": "2026-09-03 re-baseline (7659 B) + 5% headroom. Two things bought this raise, and the second is the reason it is a re-baseline rather than a bump: (1) `team_join {wait}` (ADR 095) costs 91 B and pays rent by removing a measured stall — of 33 claim requests opened from an MCP surface since 2026-07-03, only 5 were decided inside the 120s block the argument makes optional (docs/wiki/claim-approval-latency.md); (2) the prior budget was set 2026-08-27 at 7232 B + 5%, and main had drifted to 7568 B by 2026-09-03 — 336 of its 362 B headroom spent by unattributed growth, so the next byte from any source was going to fail this gate whoever added it. Falsify the rent: if no seat uses `wait: 0` by the next re-baseline, cut the argument and take the bytes back."
     },
     "primerBytes": {
-      "budget": 2665,
-      "justification": "post-trim 2026-08-03 (2538 B) + 5% headroom"
+      "budget": 2722,
+      "justification": "2026-09-30 (2722 B, ADR 487 via ADR 085 layering: the \"several-step plan is a Goal with every step's lane\" rule moves INTO the primer because planning has no cue to open the skill, so a skill-only rule never fires; +57 B, folded into the existing lane bullet so the 35-line cap holds), no headroom added — this buys only the one clause. Previous: post-trim 2026-08-03 (2538 B) + 5% headroom"
     },
     "sessionStartNudgesBytes": {
       "budget": 555,
@@ -26,8 +26,8 @@
       "justification": "2026-09-30: raised to the sum of its parts' budgets after ADR 487 took toolsListDefaultBytes to 18430 B (18430 + 97 = 18527 B), no headroom beyond that — see toolsListDefaultBytes. Previous: 2026-09-28: ADR 468's ceiling (18384 B, the 2026-08-27 18487 B minus the removed 103 B labelNudgeBytes part) raised to the sum of its parts' budgets after ADR 466's `parked` state took toolsListDefaultBytes to 18340 B (18340 + 97 = 18437 B), no headroom beyond that — see toolsListDefaultBytes."
     },
     "perSessionTotalBytes": {
-      "budget": 21747,
-      "justification": "2026-09-30: raised to the sum of its parts' budgets after ADR 487 took toolsListDefaultBytes to 18430 B (18430 + 2665 + 555 + 97 = 21747 B), no headroom beyond that — see toolsListDefaultBytes. Previous: 2026-09-28 (ADR 468): the 2026-08-27 ceiling (21833 B = 20793 B + 5%) minus the 103 B labelNudgeBytes part"
+      "budget": 21804,
+      "justification": "2026-09-30: raised to the sum of its parts' budgets after the ADR 487 primer clause took primerBytes to 2722 B (18430 + 2722 + 555 + 97 = 21804 B), no headroom beyond that — see primerBytes. Previous: 2026-09-30: raised to the sum of its parts' budgets after ADR 487 took toolsListDefaultBytes to 18430 B (18430 + 2665 + 555 + 97 = 21747 B), no headroom beyond that — see toolsListDefaultBytes. Previous: 2026-09-28 (ADR 468): the 2026-08-27 ceiling (21833 B = 20793 B + 5%) minus the 103 B labelNudgeBytes part"
     }
   }
 }

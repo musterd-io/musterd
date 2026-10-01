@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 39;
+export const GUIDANCE_CONTENT_VERSION = 40;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -179,10 +179,9 @@ export function renderSkillBody(opts: { team: string }): string {
     '- Link a lane to a Goal with `--goal <id>` so status derives up the plan — `team_goal_declare` /',
     '  `musterd goal declare` opens one, `team_goals` / `musterd goal list` shows the board, and',
     '  `team_goal_outcome` / `team_goal_retract` record how it ended or withdraw it.',
-    "- **More than one increment? Declare a Goal and open every increment's lane now** — build, park or",
-    '  drop each one (ADR 487). A later step that lives only in a doc vanishes when step one closes. A lane',
-    '  titled `2/5` or `increment 2` must say what is left when it closes: `follows_up` on',
-    '  `lane_submit` / `lane_resolve` (the lane ids, or `none`); drop one with `abandon_reason`.',
+    "- **A plan's steps, once their lanes exist (ADR 487):** build, park (a human parks — `ask` one) or",
+    '  drop each. A lane titled `2/5` or `increment 2` must say what is left when it closes: `follows_up`',
+    '  on `lane_submit` / `lane_resolve` (the lane ids, or `none`); drop one with `abandon_reason`.',
     '- `musterd next` gives your orientation brief (what you carry, what to pick up). **`musterd done`',
     '  records two different things and says which** — with a merge attestation (`--pr`/`--sha`) it *is*',
     '  a submit (→ `awaiting_acceptance`, acceptor routed); without one it is an **unconfirmed**',

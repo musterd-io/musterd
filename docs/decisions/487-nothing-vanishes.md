@@ -129,6 +129,12 @@ The five lanes under goal `nothing-vanishes` carry the build; the spec's §7 map
   the moment the close question began to exist. Its first hand-run found two items, both real: lane 2
   closed before the field existed, and lane 3's own answer was dropped by a daemon not yet
   refreshed. The cutoff fixed the first; lane 3's answer was re-recorded.
+- **2026-09-30 — the trigger rule moved to the primer (lane `01M3TW8NNN6YBQQFY34PGCFMED`).** Lane 5
+  put "more than one increment? declare a Goal" in the skill only. ADR 085 says the skill holds
+  on-demand playbooks and the primer holds the loop kernel; a rule whose moment (writing a plan)
+  carries no cue to open the skill is kernel, so a skill-only copy never fires. The primer's lane
+  bullet now carries it (+57 B, within the 35-line cap); the skill keeps only the mechanics
+  (`follows_up`, `abandon_reason`, parking), so the rule lives in one layer.
 
 ## Observability & Evaluation
 
