@@ -9,7 +9,7 @@
   @font-face{font-family:'Recursive Casual';src:url(../../../packages/web/src/styles/fonts/recursive-casual.woff2) format('woff2');font-weight:400 800;font-display:block}
   @font-face{font-family:'Recursive';src:url(../../../packages/web/src/styles/fonts/recursive-linear.woff2) format('woff2');font-weight:400 800;font-display:block}
   @font-face{font-family:'Recursive Mono';src:url(../../../packages/web/src/styles/fonts/recursive-mono.woff2) format('woff2');font-weight:400 800;font-display:block}
-  :root{--bg:#FAFAFA;--panel:#F4F4F5;--ink:#18181B;--mut:#52525B;--dim:#52525B;--acc:#E1AD01;--acct:#7A5A06;--accn:#8F6B00;--accd:#3F2F00;--line:#E4E4E7;
+  :root{--bg:#FAFAFA;--panel:#F4F4F5;--ink:#18181B;--mut:#52525B;--dim:#52525B;--acc:#E1AD01;--acct:#7A5A06;--accn:#8F6B00;--accd:#3F2F00;--line:#E4E4E7;--tint:#FBF3D5;
     --sans:'Recursive',system-ui,-apple-system,Helvetica,Arial,sans-serif;--display:'Recursive Casual','Recursive',system-ui,sans-serif;--mono:'Recursive Mono','JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
     --ease:cubic-bezier(.22,1,.36,1)}
   *{box-sizing:border-box;margin:0;padding:0}
@@ -17,26 +17,24 @@
   body{background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
   .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
   .deck{position:relative;width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;max-height:100vh;overflow:hidden}
-  .slide{position:absolute;inset:0;padding:clamp(36px,5vw,96px);display:flex;flex-direction:column;justify-content:space-between;gap:clamp(12px,1.6vw,24px);background:var(--bg);
+  .slide{position:absolute;inset:0;padding:clamp(36px,5vw,96px);display:flex;flex-direction:column;gap:clamp(12px,1.6vw,24px);background:var(--bg);
     opacity:0;visibility:hidden;transform:translateX(3%);transition:opacity .5s var(--ease),transform .6s var(--ease),visibility 0s .6s}
   .slide.on{opacity:1;visibility:visible;transform:none;transition:opacity .5s var(--ease),transform .6s var(--ease)}
   .slide.past{transform:translateX(-3%)}
   .slide.panel{background:var(--panel)}
   .slide.acc{background:var(--acc);color:#18181B}
-  /* micro: children marked .a rise in, staggered by --i */
+  .slide.spread{justify-content:space-between}
   .slide .a{opacity:0;transform:translateY(14px)}
   .slide.on .a{animation:rise .7s var(--ease) both;animation-delay:calc(.15s + var(--i,0)*.12s)}
   @keyframes rise{to{opacity:1;transform:none}}
-  @media (prefers-reduced-motion:reduce){.slide,.slide.on{transition:none;transform:none}.slide.on .a{animation:none;opacity:1;transform:none}}
-
   .eyebrow{font-family:var(--mono);font-size:clamp(11px,1.1vw,14px);letter-spacing:.24em;text-transform:uppercase;color:var(--acct)}
   .acc .eyebrow{color:var(--accd)}
   h1{font-family:var(--display);font-size:clamp(32px,5.2vw,76px);font-weight:780;line-height:1.02;letter-spacing:-.02em;text-wrap:balance}
-  h2{font-family:var(--display);font-size:clamp(26px,3.6vw,52px);font-weight:700;line-height:1.08;letter-spacing:-.015em;text-wrap:balance}
+  h2{font-family:var(--display);font-size:clamp(26px,3.4vw,50px);font-weight:700;line-height:1.08;letter-spacing:-.015em;text-wrap:balance}
   .sub{font-size:clamp(16px,2vw,28px);color:var(--mut);line-height:1.35;max-width:40ch}
-  .big{font-family:var(--display);font-size:clamp(80px,14vw,220px);font-weight:800;line-height:.9;letter-spacing:-.04em;color:var(--accn)}
-  .row{display:flex;align-items:flex-end;gap:clamp(16px,3vw,44px)}
   .foot{font-family:var(--mono);font-size:clamp(12px,1.25vw,18px);color:var(--dim)}
+  .grow{flex:1;min-height:0}
+  .frag{transition:opacity .45s var(--ease),transform .45s var(--ease)}
 
   /* cover */
   .mark{display:flex;align-items:center;gap:14px}
@@ -51,42 +49,51 @@
   .meta div{display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding:0 clamp(18px,2.6vw,40px);border-left:1px solid var(--line)}
   .meta div:first-child{padding-left:0;border-left:none}
   .meta .k{font-family:var(--mono);font-size:clamp(10px,1vw,13px);letter-spacing:.2em;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;gap:8px}
-  .meta .k .live{width:9px;height:9px;border-radius:50%;background:var(--acc);animation:pulse 1.8s ease-in-out infinite}
-  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(225,173,1,.5)}50%{box-shadow:0 0 0 7px rgba(225,173,1,0)}}
-  .meta .v{font-family:var(--display);font-size:clamp(15px,1.8vw,26px);font-weight:700;white-space:nowrap}
+  .meta .k .live{width:9px;height:9px;border-radius:50%;background:#9146FF;animation:pulse 1.8s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(145,70,255,.5)}50%{box-shadow:0 0 0 7px rgba(145,70,255,0)}}
+  .meta .v{font-family:var(--display);font-size:clamp(15px,1.8vw,26px);font-weight:700;white-space:nowrap;display:flex;align-items:center;gap:10px}
   .meta .v.mono{font-family:var(--mono)}
+  .meta .v svg{width:clamp(18px,1.8vw,26px);height:clamp(18px,1.8vw,26px);flex:none}
 
-  /* origin quote */
-  .quote{font-family:var(--display);font-size:clamp(24px,3.3vw,48px);font-weight:600;line-height:1.22;letter-spacing:-.01em;max-width:30ch;text-wrap:pretty}
-  .quote .qm{display:block;font-size:2.2em;line-height:.6;color:var(--acc);font-weight:800}
-  .attr{font-family:var(--mono);font-size:clamp(12px,1.25vw,18px);color:var(--mut)}
-
-  /* 37% bar */
-  .waste{display:flex;flex-direction:column;gap:10px;width:100%}
-  .bar{position:relative;height:clamp(18px,2vw,28px);border-radius:6px;background:#E4E4E7;overflow:hidden}
+  /* where it started */
+  .origin{display:grid;grid-template-columns:1.15fr 1fr;gap:clamp(24px,4vw,64px);align-items:center}
+  .pains{display:flex;flex-direction:column;gap:clamp(12px,1.6vw,22px)}
+  .pain{display:grid;grid-template-columns:auto 1fr;gap:clamp(12px,1.4vw,20px);align-items:center;opacity:0;transform:translateX(-18px)}
+  .pain.shown{opacity:1;transform:none}
+  .pain .ic{width:clamp(38px,3.4vw,52px);height:clamp(38px,3.4vw,52px);border-radius:12px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;color:var(--acct);transition:background .3s,border-color .3s}
+  .pain .ic svg{width:55%;height:55%}
+  .pain p{font-size:clamp(16px,1.9vw,27px);font-weight:600;line-height:1.25}
+  .pain.cur .ic{background:var(--acc);border-color:var(--acc);color:#18181B}
+  .stat{background:#fff;border:1px solid var(--line);border-radius:20px;padding:clamp(18px,2.4vw,36px);display:flex;flex-direction:column;gap:clamp(10px,1.2vw,16px);box-shadow:0 14px 34px rgba(24,24,27,.07);opacity:0;transform:scale(.94)}
+  .stat.shown{opacity:1;transform:none}
+  .stat .big{font-family:var(--display);font-size:clamp(70px,10vw,160px);font-weight:800;line-height:.9;letter-spacing:-.04em;color:var(--accn)}
+  .stat p{font-size:clamp(14px,1.55vw,22px);color:var(--mut);line-height:1.35}
+  .bar{position:relative;height:clamp(16px,1.6vw,24px);border-radius:6px;background:#E4E4E7;overflow:hidden}
   .bar i{position:absolute;inset:0 auto 0 0;width:0;border-radius:6px}
-  .bar .kept{background:#A1A1AA}.bar .lost{background:var(--acc)}
-  .slide.on .bar .kept{animation:grow 1.2s var(--ease) .5s both;--w:63%}
-  .slide.on .bar .lost{animation:grow 1.2s var(--ease) 1.1s both;--w:37%;left:63%;}
+  .bar .kept{background:#A1A1AA}.bar .lost{background:var(--acc);left:63%}
+  .stat.shown .bar .kept{animation:grow 1.1s var(--ease) .25s both;--w:63%}
+  .stat.shown .bar .lost{animation:grow 1.1s var(--ease) .9s both;--w:37%}
   @keyframes grow{from{width:0}to{width:var(--w)}}
-  .legend{display:flex;gap:24px;font-family:var(--mono);font-size:clamp(11px,1.1vw,15px);color:var(--mut)}
+  .legend{display:flex;gap:20px;font-family:var(--mono);font-size:clamp(11px,1vw,14px);color:var(--mut)}
   .legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:8px;background:#A1A1AA}
   .legend span.l::before{background:var(--acc)}
 
   /* value cards */
-  .vcards{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(14px,1.8vw,28px)}
-  .vcard{background:#fff;border:1px solid var(--line);border-radius:16px;padding:clamp(16px,2vw,28px);display:flex;flex-direction:column;gap:clamp(8px,1vw,14px);box-shadow:0 6px 20px rgba(24,24,27,.05)}
-  .vcard .ic{width:clamp(30px,2.8vw,42px);height:clamp(30px,2.8vw,42px);color:var(--acct);background:#FBF3D5;border-radius:10px;padding:6px}
+  .vcards{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(14px,1.8vw,28px);margin-top:clamp(10px,2vw,30px)}
+  .vcard{background:#fff;border:1px solid var(--line);border-radius:16px;padding:clamp(16px,2vw,28px);display:flex;flex-direction:column;gap:clamp(8px,1vw,14px);box-shadow:0 6px 20px rgba(24,24,27,.05);opacity:0;transform:translateY(22px) scale(.97)}
+  .vcard.shown{opacity:1;transform:none}
+  .vcard.cur{border-color:var(--acc);box-shadow:0 12px 30px rgba(225,173,1,.2)}
+  .vcard .ic{width:clamp(30px,2.8vw,42px);height:clamp(30px,2.8vw,42px);color:var(--acct);background:var(--tint);border-radius:10px;padding:6px}
+  .vcard.shown .ic{animation:pop .5s var(--ease) .1s both}
+  @keyframes pop{from{transform:scale(.4);opacity:0}to{transform:none;opacity:1}}
   .vcard h3{font-family:var(--display);font-size:clamp(17px,1.9vw,27px);font-weight:750;line-height:1.15}
   .vcard ul{list-style:none;display:flex;flex-direction:column;gap:8px}
-  .vcard li{position:relative;padding-left:18px;font-size:clamp(13px,1.35vw,19px);color:var(--mut);line-height:1.35}
+  .vcard li{position:relative;padding-left:18px;font-size:clamp(13px,1.35vw,19px);color:var(--mut);line-height:1.35;opacity:0;transform:translateY(8px)}
   .vcard li::before{content:"";position:absolute;left:0;top:.55em;width:7px;height:7px;border-radius:50%;background:var(--acc)}
-  .slide .vcard li{opacity:0;transform:translateX(-6px)}
-  .slide.on .vcard li{animation:rise .5s var(--ease) both;animation-delay:calc(.5s + var(--i,0)*.12s + var(--j,0)*.1s)}
-  .slide.on .vcard .ic{animation:pop .5s var(--ease) both;animation-delay:calc(.25s + var(--i,0)*.12s)}
-  @keyframes pop{from{transform:scale(.4);opacity:0}to{transform:none;opacity:1}}
-  /* one session in Miley's seat: nodes appear one per click, the caption narrates */
-  .story{display:grid;grid-template-columns:1.75fr 1fr;gap:clamp(18px,2.6vw,44px);align-items:center;flex:1;min-height:0}
+  .vcard.shown li{animation:rise .5s var(--ease) both;animation-delay:calc(.25s + var(--j,0)*.12s)}
+
+  /* one session, step by step */
+  .story{display:grid;grid-template-columns:1.8fr 1fr;gap:clamp(18px,2.4vw,40px);align-items:center;flex:1;min-height:0}
   .mgraph{position:relative;width:100%;aspect-ratio:1000/560}
   .medges{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
   .edge{fill:none;stroke:var(--acc);stroke-width:2.5;stroke-dasharray:100;stroke-dashoffset:100;opacity:0}
@@ -94,10 +101,12 @@
   .edge.back{stroke:#A1A1AA}
   .edge.loop{stroke:var(--acct)}
   @keyframes drawedge{to{stroke-dashoffset:0}}
-  .elab{font-family:var(--mono);font-size:15px;fill:var(--acct);opacity:0;transition:opacity .4s .35s}
+  .elab{font-family:var(--mono);font-size:14px;fill:var(--acct);opacity:0;transition:opacity .4s .35s}
   .elab.lit{opacity:1}
   .mnode{position:absolute;transform:translate(-50%,-50%) scale(.7);opacity:0;display:flex;align-items:center;gap:8px;background:#fff;border:2px solid var(--acc);border-radius:999px;padding:clamp(5px,.55vw,9px) clamp(10px,1vw,16px);font-family:var(--display);font-weight:700;font-size:clamp(12px,1.25vw,19px);white-space:nowrap;transition:transform .45s var(--ease),opacity .35s,background .3s,box-shadow .3s}
   .mnode em{font-style:normal;font-family:var(--mono);font-size:.7em;width:1.75em;height:1.75em;border-radius:50%;display:grid;place-items:center;background:var(--acc);color:#18181B}
+  .mnode .me{width:1.6em;height:1.6em;border-radius:50%;background:#0EA5A4;color:#fff;display:grid;place-items:center;font-family:var(--mono);font-size:.68em}
+  .mnode.hub{border-style:dashed}
   .mnode.shown{opacity:1;transform:translate(-50%,-50%) scale(1)}
   .mnode.cur{background:var(--acc);box-shadow:0 0 0 6px rgba(225,173,1,.25),0 10px 24px rgba(225,173,1,.3)}
   .mnode.cur em{background:#18181B;color:var(--acc)}
@@ -110,40 +119,27 @@
   .mcap .av{width:clamp(28px,2.6vw,38px);height:clamp(28px,2.6vw,38px);border-radius:50%;background:#0EA5A4;color:#fff;display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:clamp(11px,1vw,14px)}
   .mcap .stepn{margin-left:auto;font-family:var(--mono);font-size:clamp(10px,.95vw,13px);color:var(--acct)}
   .mcap h3{font-family:var(--display);font-size:clamp(20px,2.4vw,36px);font-weight:750;line-height:1.1}
-  .mcap p{font-size:clamp(14px,1.55vw,22px);color:var(--mut);line-height:1.4}
-  .mcap p b{color:var(--ink)}
+  .mcap ul{list-style:none;display:flex;flex-direction:column;gap:clamp(6px,.8vw,10px)}
+  .mcap li{position:relative;padding-left:20px;font-size:clamp(14px,1.5vw,21px);color:var(--mut);line-height:1.3}
+  .mcap li::before{content:"";position:absolute;left:2px;top:.5em;width:8px;height:8px;border-radius:50%;background:var(--acc)}
+  .mcap li b{color:var(--ink)}
   .mcap .how{display:flex;flex-wrap:wrap;gap:6px}
-  .mcap .how span{font-family:var(--mono);font-size:clamp(10px,.95vw,13px);color:var(--acct);background:#FBF3D5;border-radius:999px;padding:3px 10px}
-  .harness.slim{border-top:none;padding-top:0;gap:clamp(12px,1.8vw,26px)}
-  .harness.slim b{flex-basis:auto;font-size:clamp(15px,1.6vw,23px)}
-  .harness.slim .logo{font-size:clamp(12px,1.25vw,17px)}
-  .harness.slim .logo img,.harness.slim .logo svg{width:clamp(18px,1.6vw,24px);height:clamp(18px,1.6vw,24px)}
-  @media (prefers-reduced-motion:reduce){.vcard li{opacity:1!important;transform:none!important;animation:none!important}.edge.lit{animation:none;stroke-dashoffset:0}.mnode,.mcap{transition:none}}
-  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(18px,2.6vw,40px)}
-  .cards.c5{grid-template-columns:repeat(5,1fr);gap:clamp(14px,2vw,32px)}
-  .cards.c2{grid-template-columns:1fr 1fr}
-  .card{border-top:3px solid var(--acc);padding-top:clamp(14px,1.6vw,26px);display:flex;flex-direction:column;gap:10px}
-  .card .ic{width:clamp(28px,2.6vw,40px);height:clamp(28px,2.6vw,40px);color:var(--acct)}
-  .card .n{font-family:var(--mono);font-weight:700;color:var(--acct);font-size:clamp(12px,1.2vw,16px)}
-  .card h3{font-family:var(--display);font-size:clamp(16px,1.9vw,26px);font-weight:700;color:var(--acct)}
-  .card p{font-size:clamp(13px,1.45vw,20px);color:var(--mut);line-height:1.4}
-  .card code.how{display:block;margin-top:auto;padding-top:10px;border-top:1px dashed var(--line);font-family:var(--mono);font-size:clamp(10px,1vw,13px);color:var(--acct);line-height:1.5}
-  .howline{font-family:var(--mono);font-size:clamp(11px,1.1vw,15px);color:var(--dim)}
-  .card p.strong{font-size:clamp(18px,2.2vw,30px);font-weight:700;color:var(--ink);line-height:1.25}
+  .mcap .how span{font-family:var(--mono);font-size:clamp(10px,.95vw,13px);color:var(--acct);background:var(--tint);border-radius:999px;padding:3px 10px}
 
-  /* harness logos */
-  .harness{display:flex;align-items:center;gap:clamp(14px,2.2vw,34px);flex-wrap:wrap;border-top:2px solid var(--line);padding-top:clamp(12px,1.4vw,22px)}
-  .harness b{font-family:var(--display);font-size:clamp(18px,2.2vw,32px);font-weight:750;flex-basis:100%}
-  .logo{display:flex;align-items:center;gap:10px;font-size:clamp(14px,1.6vw,22px);font-weight:700}
-  .logo img,.logo svg{width:clamp(22px,2.2vw,32px);height:clamp(22px,2.2vw,32px)}
-  .logo.cc{font-family:'Inter',system-ui,sans-serif;color:#D97757}
-  .logo.cx{font-family:'Inter',system-ui,sans-serif;color:#0D0D0D}
-  .logo.cu{font-family:'Inter',system-ui,sans-serif;color:#0D0D0D}
-  .logo.oc{font-family:'JetBrains Mono',monospace;color:#0D0D0D;letter-spacing:-.02em}
-  .logo.md{font-family:'JetBrains Mono',monospace;color:#18181B}
-  .logo .soon{font-family:var(--mono);font-size:.6em;color:var(--dim);font-weight:400;letter-spacing:.1em;text-transform:uppercase}
-
-  /* asks rail mock (from /live) */
+  /* what's in the box */
+  .box{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(12px,1.6vw,24px);margin-top:clamp(6px,1.4vw,22px)}
+  .col{display:flex;flex-direction:column;gap:clamp(8px,1vw,14px);opacity:0;transform:translateY(20px)}
+  .col.shown{opacity:1;transform:none}
+  .col h3{display:flex;align-items:center;gap:10px;font-family:var(--display);font-size:clamp(15px,1.6vw,23px);font-weight:750}
+  .col h3 span{width:1.6em;height:1.6em;border-radius:50%;display:grid;place-items:center;background:var(--line);font-family:var(--mono);font-size:.7em;transition:background .3s}
+  .col.shown h3 span{background:var(--acc)}
+  .tile{background:#fff;border:1px solid var(--line);border-radius:14px;padding:clamp(10px,1.1vw,16px);opacity:0;transform:translateY(10px)}
+  .col.shown .tile{animation:rise .5s var(--ease) both}
+  .col.shown .tile:nth-of-type(1){animation-delay:.15s}.col.shown .tile:nth-of-type(2){animation-delay:.27s}.col.shown .tile:nth-of-type(3){animation-delay:.39s}
+  .col.cur .tile{border-color:#EFC94C}
+  .tile b{display:block;font-family:var(--display);font-size:clamp(14px,1.45vw,20px);margin-bottom:3px}
+  .tile p{font-size:clamp(12px,1.2vw,16px);color:var(--mut);line-height:1.35}
+  /* the team asks you */
   .split{display:grid;grid-template-columns:1fr 1fr;gap:clamp(24px,4vw,64px);align-items:center}
   .ba{display:flex;flex-direction:column;gap:clamp(14px,2vw,28px)}
   .ba .from{display:flex;align-items:baseline;gap:16px}
@@ -152,23 +148,61 @@
   .ba .from .num.h{color:var(--accn)}
   .ba .from p{font-size:clamp(14px,1.6vw,22px);color:var(--mut);max-width:22ch;line-height:1.35}
   .rail{display:flex;flex-direction:column;gap:12px}
-  .ask{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;background:#fff;border:1px solid var(--line);border-left:4px solid var(--hue);border-radius:12px;padding:14px 16px;box-shadow:0 6px 20px rgba(24,24,27,.06)}
+  .ask{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;background:#fff;border:1px solid var(--line);border-left:4px solid var(--hue);border-radius:12px;padding:14px 16px;box-shadow:0 6px 20px rgba(24,24,27,.06);opacity:0}
   .ask .av{width:36px;height:36px;border-radius:50%;background:var(--hue);color:#fff;font-weight:700;display:grid;place-items:center;font-family:var(--mono);font-size:14px}
   .ask .t{font-size:clamp(13px,1.3vw,18px);line-height:1.3}
   .ask .t small{display:block;font-family:var(--mono);font-size:.72em;color:var(--dim);letter-spacing:.06em;margin-bottom:2px}
   .ask svg{width:40px;height:40px;transform:rotate(-90deg)}
   .ask circle.track{fill:none;stroke:#E4E4E7;stroke-width:4}
   .ask circle.clock{fill:none;stroke:var(--hue);stroke-width:4;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:0}
+  .slide.on .ask{animation:slidein .6s var(--ease) both;animation-delay:calc(.4s + var(--i,0)*.35s)}
   .slide.on .ask circle.clock{animation:tick var(--dur,8s) linear .6s both}
   @keyframes tick{from{stroke-dashoffset:0}to{stroke-dashoffset:100}}
-  .slide.on .ask{animation:slidein .6s var(--ease) both;animation-delay:calc(.4s + var(--i,0)*.35s)}
   @keyframes slidein{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:none}}
 
-  /* huddle gather (live slide) */
-  .live-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(20px,3vw,48px);align-items:center}
+  /* handoff */
+  .cards2{display:grid;grid-template-columns:1fr 1fr;gap:clamp(24px,3vw,48px)}
+  .card{border-top:3px solid var(--acc);padding-top:clamp(14px,1.6vw,26px);display:flex;flex-direction:column;gap:10px}
+  .card h3{font-family:var(--display);color:var(--mut);font-size:clamp(14px,1.5vw,20px)}
+  .card p{font-size:clamp(13px,1.45vw,20px);color:var(--mut);line-height:1.4}
+  .card p.strong{font-size:clamp(18px,2.2vw,30px);font-weight:700;color:var(--ink);line-height:1.25}
+
+  /* the roadmap */
+  .road{position:relative;width:100%;aspect-ratio:1600/560;margin-top:auto;margin-bottom:auto}
+  .road::before{content:"";position:absolute;inset:-4% -2%;background-image:radial-gradient(#D4D4D8 1px,transparent 1.2px);background-size:22px 22px;opacity:.55;border-radius:24px;mask-image:radial-gradient(ellipse at center,#000 55%,transparent 80%);-webkit-mask-image:radial-gradient(ellipse at center,#000 55%,transparent 80%)}
+  .road svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  .road .base{fill:none;stroke:#D4D4D8;stroke-width:3;stroke-dasharray:2 9;stroke-linecap:round}
+  .road .seg{fill:none;stroke:url(#roadgrad);stroke-width:6;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:100;opacity:0;filter:drop-shadow(0 0 6px rgba(225,173,1,.55))}
+  .road .seg.lit{opacity:1;animation:drawedge .8s var(--ease) forwards}
+  .ms{position:absolute;width:0;height:0}
+  .ms .dot{position:absolute;left:-11px;top:-11px;width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid #D4D4D8;transform:scale(.5);opacity:0;transition:all .45s var(--ease)}
+  .ms.shown .dot{opacity:1;transform:none;border-color:var(--acc);background:var(--acc)}
+  .ms.cur .dot{box-shadow:0 0 0 7px rgba(225,173,1,.28),0 0 28px 6px rgba(225,173,1,.55)}
+  .ms .burst{position:absolute;left:-11px;top:-11px;width:22px;height:22px;border-radius:50%;border:2px solid var(--acc);opacity:0}
+  .ms.cur .burst{animation:burst 1.1s var(--ease) .1s}
+  @keyframes burst{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(4.2)}}
+  .ms .mc{position:absolute;left:0;width:clamp(150px,15.5vw,250px);transform:translate(-50%,0) translateY(10px);opacity:0;transition:opacity .5s var(--ease) .15s,transform .5s var(--ease) .15s;background:#fff;border:1px solid var(--line);border-radius:14px;padding:clamp(8px,.9vw,13px) clamp(10px,1vw,15px);box-shadow:0 8px 24px rgba(24,24,27,.07)}
+  .ms.up .mc{bottom:22px}
+  .ms.down .mc{top:22px}
+  .ms .stem{position:absolute;left:-1px;width:2px;background:linear-gradient(var(--acc),transparent);opacity:0;transition:opacity .4s .1s}
+  .ms.up .stem{bottom:11px;height:12px}.ms.down .stem{top:11px;height:12px}
+  .ms.shown .mc{opacity:1;transform:translate(-50%,0)}
+  .ms.shown .stem{opacity:1}
+  .ms.cur .mc{border-color:var(--acc)}
+  .mc .d{font-family:var(--mono);font-size:clamp(9px,.85vw,12px);color:var(--acct);letter-spacing:.08em;text-transform:uppercase}
+  .mc h4{font-family:var(--display);font-size:clamp(13px,1.3vw,18px);font-weight:750;line-height:1.15;margin:2px 0 4px}
+  .mc .bf{font-size:clamp(10px,.98vw,13.5px);color:#71717A;line-height:1.3}
+  .mc .af{font-size:clamp(10px,.98vw,13.5px);color:var(--ink);font-weight:650;line-height:1.3;margin-top:2px}
+  .mc .af::before{content:"→ ";color:var(--accn)}
+  .ms.end .dot{border-color:#9146FF}
+  .ms.end.shown .dot{background:#9146FF;border-color:#9146FF}
+  .ms.end.cur .dot{box-shadow:0 0 0 7px rgba(145,70,255,.25),0 0 28px 6px rgba(145,70,255,.5)}
+  .ms.end .mc{border-color:#9146FF}
+
+  /* live: huddle */
+  .live-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(20px,3vw,48px);align-items:center;flex:1}
   .list{display:flex;flex-direction:column;gap:clamp(8px,1.2vw,18px)}
-  .list p{font-size:clamp(15px,2vw,28px);font-weight:700;line-height:1.2}
-  .list p{display:grid;grid-template-columns:1.6em 1fr}
+  .list p{display:grid;grid-template-columns:1.6em 1fr;font-size:clamp(15px,2vw,28px);font-weight:700;line-height:1.2}
   .list p span{font-family:var(--mono);opacity:.7}
   .huddle{width:100%;height:auto;max-height:62vh;justify-self:center;overflow:visible}
   .huddle .spoke{stroke:#18181B;stroke-opacity:.25;stroke-width:2;stroke-dasharray:4 6}
@@ -177,48 +211,52 @@
   @keyframes gather{to{transform:translate(var(--x),var(--y));opacity:1}}
   .huddle .lbl{font-family:var(--mono);font-size:15px;font-weight:700;fill:#18181B}
   .huddle .ini{font-family:var(--mono);font-size:15px;font-weight:700;fill:#fff}
-  /* evolution arcs */
-  .arcs{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(10px,1.2vw,18px)}
-  .arc{background:#fff;border:1px solid var(--line);border-radius:14px;padding:clamp(10px,1.1vw,16px) clamp(12px,1.3vw,18px);display:flex;flex-direction:column;gap:5px}
-  .arc-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-  .arc h3{font-family:var(--display);font-size:clamp(14px,1.45vw,20px);font-weight:750}
-  .arc-h span{font-family:var(--mono);font-size:clamp(9px,.85vw,12px);color:var(--acct);white-space:nowrap}
-  .arc p{font-size:clamp(11px,1.05vw,14.5px);line-height:1.3;color:var(--mut);display:grid;grid-template-columns:4.2em 1fr;gap:6px}
-  .arc p b{font-family:var(--mono);font-size:.78em;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--dim);padding-top:.15em}
-  .arc p.af{color:var(--ink);font-weight:600}
-  .arc p.af b{color:var(--accn)}
-  /* evolution */
-  .evo{display:grid;grid-template-columns:auto 1fr 1fr;column-gap:clamp(16px,2.6vw,40px)}
-  .evo>*{padding:clamp(8px,1vw,14px) 0;border-top:1px solid var(--line);font-size:clamp(13px,1.5vw,21px);line-height:1.3}
-  .evo .h{border-top:none;font-family:var(--mono);font-size:clamp(10px,1vw,13px);letter-spacing:.2em;text-transform:uppercase;color:var(--dim);padding-top:0}
-  .evo .d{font-family:var(--mono);font-weight:700;color:var(--acct);white-space:nowrap}
-  .evo .mm{color:var(--mut)}
-  .evo .b{font-weight:700}
-  .cmd{font-family:var(--mono);font-size:clamp(22px,4vw,56px);font-weight:700;background:#fff;border:1px solid var(--line);border-radius:14px;padding:clamp(14px,2vw,32px) clamp(18px,2.4vw,36px);white-space:nowrap}
+
+  /* thank you */
+  .thanks{display:grid;grid-template-columns:1.1fr 1fr;gap:clamp(24px,4vw,64px);align-items:center;flex:1}
+  .cmd{font-family:var(--mono);font-size:clamp(18px,2.6vw,38px);font-weight:700;background:#fff;border:1px solid var(--line);border-radius:14px;padding:clamp(12px,1.6vw,24px) clamp(16px,2vw,28px);white-space:nowrap}
   .cmd .p{color:var(--dim)}
   .cmd .caret{display:inline-block;width:.55em;height:1em;background:var(--acc);vertical-align:-.12em;margin-left:.15em;animation:blink 1.1s steps(1) infinite}
   @keyframes blink{50%{opacity:0}}
+  .handles{display:flex;flex-direction:column;gap:clamp(10px,1.3vw,18px)}
+  .handle{display:grid;grid-template-columns:clamp(34px,3vw,46px) 1fr;gap:14px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:clamp(10px,1.1vw,16px) clamp(12px,1.3vw,18px)}
+  .handle .hi{width:100%;aspect-ratio:1;border-radius:10px;display:grid;place-items:center}
+  .handle .hi svg,.handle .hi img{width:60%;height:60%}
+  .handle b{display:block;font-family:var(--mono);font-size:clamp(14px,1.6vw,22px)}
+  .handle small{display:block;font-size:clamp(11px,1.05vw,14px);color:var(--mut)}
+  .harness{display:flex;align-items:center;gap:clamp(12px,1.8vw,26px);flex-wrap:wrap}
+  .harness b{font-family:var(--display);font-size:clamp(15px,1.6vw,23px);font-weight:750;flex-basis:100%}
+  .logo{display:flex;align-items:center;gap:8px;font-size:clamp(12px,1.25vw,17px);font-weight:700}
+  .logo img,.logo svg{width:clamp(18px,1.6vw,24px);height:clamp(18px,1.6vw,24px)}
+  .logo.cc{font-family:'Inter',system-ui,sans-serif;color:#D97757}
+  .logo.cx,.logo.cu{font-family:'Inter',system-ui,sans-serif;color:#0D0D0D}
+  .logo.oc,.logo.md{font-family:'JetBrains Mono',monospace;color:#0D0D0D}
+  .logo .soon{font-family:var(--mono);font-size:.62em;color:var(--dim);font-weight:400;letter-spacing:.1em;text-transform:uppercase}
 
-  /* chrome: progress rail, slide picker, notes */
+  /* chrome */
   .rail-bar{position:fixed;left:0;right:0;bottom:0;height:4px;z-index:20}
   .rail-bar i{position:absolute;inset:0 auto 0 0;background:var(--acc);width:calc(var(--p,0)*100%);transition:width .45s var(--ease)}
   .picker{position:fixed;top:14px;right:18px;z-index:30;font-family:var(--mono)}
-  .picker button{appearance:none;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.92);box-shadow:0 2px 10px rgba(0,0,0,.06);color:var(--ink);font:inherit;font-size:12px;letter-spacing:.04em;padding:8px 12px;cursor:pointer;max-width:min(320px,48vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .picker button:hover{border-color:var(--acc)}
+  .picker>button{appearance:none;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.92);box-shadow:0 2px 10px rgba(0,0,0,.06);color:var(--ink);font:inherit;font-size:12px;letter-spacing:.04em;padding:8px 12px;cursor:pointer;max-width:min(340px,48vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .menu{position:absolute;top:calc(100% + 8px);right:0;width:min(320px,calc(100vw - 36px));max-height:calc(100vh - 100px);overflow-y:auto;padding:8px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 34px rgba(0,0,0,.14);display:none}
   .menu.open{display:block}
   .menu .sec{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--acct);padding:9px 8px 4px}
-  .menu button{display:flex;gap:10px;width:100%;border:none;box-shadow:none;background:transparent;text-align:left;font-family:var(--sans);font-size:13px;padding:7px 8px;border-radius:7px;max-width:none}
+  .menu button{display:flex;gap:10px;width:100%;border:none;background:transparent;text-align:left;font-family:var(--sans);font-size:13px;padding:7px 8px;border-radius:7px;cursor:pointer}
   .menu button:hover,.menu button.cur{background:var(--panel)}
   .menu button em{font-style:normal;font-family:var(--mono);color:var(--dim);min-width:1.6em}
-  .notes{position:fixed;left:18px;right:18px;bottom:14px;display:none;background:rgba(255,255,255,.97);border:1px solid var(--line);border-radius:12px;padding:16px 20px;font-size:15px;line-height:1.5;color:var(--mut);z-index:25;max-height:32vh;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,.1)}
+  .nav{position:fixed;right:18px;bottom:16px;z-index:30;display:flex;gap:8px}
+  .nav button{appearance:none;width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.88);box-shadow:0 2px 10px rgba(0,0,0,.08);font-size:20px;line-height:1;color:var(--ink);cursor:pointer;opacity:.55;transition:opacity .2s,border-color .2s}
+  .nav button:hover{opacity:1;border-color:var(--acc)}
+  .notes{position:fixed;left:18px;right:90px;bottom:14px;display:none;background:rgba(255,255,255,.97);border:1px solid var(--line);border-radius:12px;padding:16px 20px;font-size:15px;line-height:1.5;color:var(--mut);z-index:25;max-height:32vh;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,.1)}
   .notes.show{display:block}
   :fullscreen .picker{display:none}
+  @media (prefers-reduced-motion:reduce){.slide,.slide.on{transition:none;transform:none}.slide.on .a,.vcard.shown li,.edge.lit,.road .seg.lit{animation:none;opacity:1;transform:none;stroke-dashoffset:0}}
 </style>
 <body>
 <div class="stage"><div class="deck">
 
-<section class="slide" data-sec="Opening" data-title="musterd">
+<!-- 1 · cover -->
+<section class="slide spread" data-sec="Opening" data-title="musterd">
   <div class="mark a" style="--i:0"><img src="../../design/assets/chip.svg" alt=""><div class="wm">musterd</div></div>
   <div class="cover-body">
     <div style="display:flex;flex-direction:column;gap:clamp(10px,1.6vw,24px)">
@@ -233,68 +271,93 @@
   </div>
   <div class="meta a" style="--i:4">
     <div><span class="v">Nick Sanders</span></div>
-    <div><span class="k"><span class="live"></span>Built live, daily</span><span class="v mono">twitch.tv/sandrise_ai</span></div>
+    <div><span class="k"><span class="live"></span>Built live, daily</span><span class="v mono"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#9146FF" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0 1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg>twitch.tv/sandrise_ai</span></div>
     <div><span class="k">Portfolio</span><span class="v mono">sandrise.io/nicksanders</span></div>
     <div><span class="v mono">musterd.io</span></div>
   </div>
-  <aside hidden>The QR is up while you are introduced. Say: scan that and vote — whatever wins, the team starts on in about five minutes. Then: everyone here has read this year's headlines about agents nobody owns. This is the opposite shape.</aside>
+  <aside hidden>The QR is up while you are introduced. Say: scan that and vote; whatever wins, the team starts on at the end of the talk. Then: everyone here has read this year's headlines about agents nobody owns. This is the opposite shape.</aside>
 </section>
 
+<!-- 2 · where it started (the problem) -->
 <section class="slide panel" data-sec="The problem" data-title="Where it started">
-  <p class="eyebrow a" style="--i:0">Where it started</p>
-  <div style="display:flex;flex-direction:column;gap:clamp(12px,1.8vw,28px)">
-    <p class="quote a" style="--i:1"><span class="qm">“</span>When one agent wanted to ask a question or provide a status update, they would tell me something, which I would then copy and paste to the other agent.</p>
-    <p class="attr a" style="--i:2">— Nick Sanders, June 2026</p>
-  </div>
-  <span></span>
-  <aside hidden>Say: Before musterd, I was the coordination layer. One agent would tell me something, and I would paste it into the other. Then go to the number.</aside>
-</section>
-
-<section class="slide" data-sec="The problem" data-title="The second agent">
-  <p class="eyebrow a" style="--i:0">The problem</p>
-  <div style="display:flex;flex-direction:column;gap:clamp(14px,2vw,28px)">
-    <h2 class="a" style="--i:1">The second agent is where it breaks.</h2>
-    <div class="row a" style="--i:2"><p class="big">37%</p><p class="sub" style="padding-bottom:.5em">of the code three agents produced on one feature was thrown away. Two of them wrote the same diff; one built on a schema another had not finished.</p></div>
-    <div class="waste a" style="--i:3">
+  <p class="eyebrow a" style="--i:0">Where it started · June 2026</p>
+  <h2 class="a" style="--i:1">Before musterd, I was the coordination layer.</h2>
+  <div class="origin grow">
+    <div class="pains">
+      <div class="pain frag"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><p>Copy-pasting every question and status update between sessions</p></div>
+      <div class="pain frag"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v3"/><path d="M11 14h.01"/></svg></span><p>Losing track of which session had done what, on which branch</p></div>
+      <div class="pain frag"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.9 17.9 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><path d="m1 1 22 22"/></svg></span><p>Messages sat unread until I told an agent to check</p></div>
+      <div class="pain frag"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span><p>Work done twice, or built on something unfinished</p></div>
+    </div>
+    <div class="stat frag">
+      <span class="eyebrow">Three agents · one feature · a day and a half</span>
+      <span class="big">37%</span>
+      <p>of the code they produced was thrown away.</p>
       <div class="bar"><i class="kept"></i><i class="lost"></i></div>
       <div class="legend"><span>reached main</span><span class="l">thrown away</span></div>
     </div>
   </div>
-  <span></span>
-  <aside hidden>Then we measured it: three agents on one feature for a day and a half, and about 37% of the code they produced was thrown away. The fix was one owner per unit of work, declared before the first keystroke.</aside>
+  <aside hidden>Click through the four pains, then the number. One agent would tell me something and I would paste it into the other. I was not sure which worktree or branch a session was on. A message sat until I told the agent to check. Then we measured it: about 37% of the code three agents produced on one feature was thrown away. The fix was one owner per piece of work, declared before the first keystroke. (From nick's P3 notes, 2026-06-30.)</aside>
 </section>
 
+<!-- 3 · what changes -->
 <section class="slide" data-sec="Why it works" data-title="What changes">
   <p class="eyebrow a" style="--i:0">What changes</p>
   <h2 class="a" style="--i:1">What changes when your agents work as one team.</h2>
   <div class="vcards">
-    <div class="vcard a" style="--i:2"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><h3>Ownership</h3><ul><li style="--j:0">Work is claimed before the first edit</li><li style="--j:1">Overlapping claims raise a warning</li></ul></div>
-    <div class="vcard a" style="--i:3"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg><h3>Messages reach agents mid-task</h3><ul><li style="--j:0">Delivered at the next tool call</li><li style="--j:1">Teammates reach each other directly</li></ul></div>
-    <div class="vcard a" style="--i:4"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.5"/><path d="M12 15h.01"/></svg><h3>You get asked</h3><ul><li style="--j:0">Agents ask you clarifying questions</li><li style="--j:1">Big decisions wait for your answer, however long it takes</li><li style="--j:2">Smaller ones time out, and the agent records that it went ahead</li></ul></div>
-    <div class="vcard a" style="--i:5"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><h3>Done gets a second look</h3><ul><li style="--j:0">The builder submits</li><li style="--j:1">Another member checks the outcome, from another model family when one is around</li></ul></div>
+    <div class="vcard frag"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><h3>Ownership</h3><ul><li style="--j:0">Work is claimed before the first edit</li><li style="--j:1">Overlapping claims raise a warning</li></ul></div>
+    <div class="vcard frag"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg><h3>Messages reach agents mid-task</h3><ul><li style="--j:0">Delivered at the next tool call</li><li style="--j:1">Teammates reach each other directly</li></ul></div>
+    <div class="vcard frag"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.5"/><path d="M12 15h.01"/></svg><h3>You get asked</h3><ul><li style="--j:0">Agents ask you clarifying questions</li><li style="--j:1">Big decisions wait for your answer, however long it takes</li><li style="--j:2">Smaller ones time out, and the agent records that it went ahead</li></ul></div>
+    <div class="vcard frag"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><h3>Done gets a second look</h3><ul><li style="--j:0">The builder submits</li><li style="--j:1">Another member checks the outcome, cross-family if available</li></ul></div>
   </div>
-  <span></span>
-  <aside hidden>So the team is the unit: a persistent roster where a member outlasts every session it has run in. An owner for every piece, an inbox that survives a restart, a record of who did what at which model. The human sits on the same roster.</aside>
+  <aside hidden>One card per click. The team is the unit: a persistent roster where a member outlasts every session it has run in, with an owner for every piece of work, an inbox that survives a restart, and a record of who did what at which model. The human sits on the same roster.</aside>
 </section>
 
-<section class="slide panel" data-sec="Why it works" data-title="How every member works">
-  <p class="eyebrow a" style="--i:0">How it works · follow one member</p>
-  <h2 class="a" style="--i:1">One session in Miley’s seat.</h2>
+<!-- 4 · one session, step by step -->
+<section class="slide panel" data-sec="Why it works" data-title="One session, step by step" data-hook="session">
+  <p class="eyebrow a" style="--i:0">How every member works</p>
+  <h2 class="a" style="--i:1">One session, step by step.</h2>
   <div class="story">
-    <div class="mgraph"><svg class="medges" viewBox="0 0 1000 560" aria-hidden="true"><defs><marker id="ah2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs><path class="edge" data-to="1" d="M157,90 L228,90" pathLength="100" marker-end="url(#ah2)"/><path class="edge" data-to="2" d="M352,90 L423,90" pathLength="100" marker-end="url(#ah2)"/><path class="edge" data-to="3" d="M547,90 L628,90" pathLength="100" marker-end="url(#ah2)"/><path class="edge" data-to="4" d="M745,72 C800,30 820,22 838,22" pathLength="100" marker-end="url(#ah2)"/><path class="edge back" data-to="4" d="M840,40 C810,70 780,85 752,88" pathLength="100" marker-end="url(#ah2)"/><path class="edge" data-to="5" d="M745,108 C800,160 820,180 838,180" pathLength="100" marker-end="url(#ah2)"/><path class="edge back" data-to="5" d="M840,162 C810,140 780,118 752,104" pathLength="100" marker-end="url(#ah2)"/><path class="edge" data-to="6" d="M690,116 L690,284" pathLength="100" marker-end="url(#ah2)"/><path class="edge" data-to="7" d="M620,310 L540,310" pathLength="100" marker-end="url(#ah2)"/><path class="edge" data-to="8" d="M392,310 L323,310" pathLength="100" marker-end="url(#ah2)"/><text class="elab" data-to="8" x="345" y="272" text-anchor="middle">tier 1 waiting</text><path class="edge back" data-to="8" d="M300,334 C330,400 420,400 455,336" pathLength="100" marker-end="url(#ah2)"/><text class="elab" data-to="8" x="345" y="410" text-anchor="middle">back to inbox</text><path class="edge" data-to="9" d="M470,336 L470,454" pathLength="100" marker-end="url(#ah2)"/><text class="elab" data-to="9" x="486" y="405" text-anchor="start">nothing addressed to her</text><path class="edge loop" data-to="9" d="M398,480 C70,480 40,300 70,118" pathLength="100" marker-end="url(#ah2)"/><text class="elab" data-to="9" x="235" y="512" text-anchor="middle">next session · any harness</text></svg><div class="mnode frag" data-k="0" data-title="Join" data-text="Miley’s session opens. musterd knows her seat: same name, same history." data-how="SessionStart hook" style="left:9.50%;top:16.07%"><em>1</em>Join</div><div class="mnode frag" data-k="1" data-title="Orient" data-text="She reads her inbox and last session’s notes. &lt;b&gt;Tier 1&lt;/b&gt;, anything addressed to her, she handles now. &lt;b&gt;Tier 2&lt;/b&gt;, open work, she mentions and leaves." data-how="skill|MCP tool calls" style="left:29.00%;top:16.07%"><em>2</em>Orient</div><div class="mnode frag" data-k="2" data-title="Claim" data-text="She claims the lane “redesign the asks rail” and names its files. If someone else holds them, she is warned." data-how="MCP tool call|PreToolUse hook" style="left:48.50%;top:16.07%"><em>3</em>Claim</div><div class="mnode frag" data-k="3" data-title="Build" data-text="She posts that she has started, and builds. After every tool call, musterd checks her inbox." data-how="PostToolUse hook" style="left:69.00%;top:16.07%"><em>4</em>Build</div><div class="mnode frag" data-k="4" data-title="A teammate asks" data-text="Mid-task, izzo asks her for help. It reaches her at her next tool call. She answers, then goes back to building." data-how="PostToolUse hook|MCP tool call" style="left:90.50%;top:3.93%"><em>5</em>izzo asks</div><div class="mnode frag" data-k="5" data-title="Ask a person" data-text="She needs a call only Nick can make, so she asks with a deadline. A big decision waits for him. A small one goes ahead, and that is logged." data-how="MCP tool call|/live · Slack" style="left:90.50%;top:32.14%"><em>6</em>Ask Nick</div><div class="mnode frag" data-k="6" data-title="Close" data-text="Her PR merges. She submits the lane, and another member, ideally from another model family, judges the outcome." data-how="MCP tool call" style="left:69.00%;top:55.36%"><em>7</em>Close</div><div class="mnode frag" data-k="7" data-title="Check inbox" data-text="Before picking anything new, she checks her inbox. A tier 1 act is waiting: izzo’s lane needs an acceptance." data-how="MCP tool call" style="left:47.00%;top:55.36%"><em>8</em>Check inbox</div><div class="mnode frag" data-k="8" data-title="Review" data-text="She takes the review without being asked again: accepts izzo’s work, or sends it back with a note. Then back to her inbox." data-how="MCP tool call" style="left:24.50%;top:55.36%"><em>9</em>Review</div><div class="mnode frag" data-k="9" data-title="Hand over" data-text="Nothing is left addressed to her. She saves where she left off. Her next session, on any harness, starts again at Join." data-how="MCP tool call|SessionEnd hook" style="left:47.00%;top:85.71%"><em>10</em>Hand over</div></div>
+    <div class="mgraph" id="mgraph"></div>
     <div class="mcap" aria-live="polite">
       <div class="who"><span class="av">mi</span><span><b>Miley</b> · designer · Claude Code</span><span class="stepn"></span></div>
       <h3></h3>
-      <p></p>
+      <ul></ul>
       <div class="how"></div>
     </div>
   </div>
-  <aside hidden>Nothing but the title is up. Each click adds one step and its caption. Read the caption, then click. The loops: izzo’s request and the ask to Nick both return to Build; after Close, a tier 1 acceptance request sends Miley to Review and back to her inbox; when nothing is addressed to her, she hands over, and the next session starts again at Join. Hooks named are Claude Code’s; other harnesses get the same moments.</aside>
+  <aside hidden>Only the title is up. Each click adds one step and its caption; read the caption, then click. The inbox is the hub: it is checked after every tool call, a teammate's question arrives through it, and after Miley submits her work a tier 1 review request sends her to review someone else's, then back to the inbox. Wrap up is not the handoff act: a handoff transfers a lane, with its branch, to another member when she cannot finish it. "Ready for review" shows the flow we are moving to (open the PR, then review); today the merge comes first. Hooks named are Claude Code's; other harnesses get the same moments.</aside>
 </section>
 
+<!-- 4b · what's in the box -->
+<section class="slide" data-sec="Why it works" data-title="What's in the box">
+  <p class="eyebrow a" style="--i:0">What’s in the box</p>
+  <h2 class="a" style="--i:1">The pieces that make it a team.</h2>
+  <div class="box">
+    <div class="col frag"><h3><span>1</span>Who is on it</h3>
+      <div class="tile"><b>Seats</b><p>A member’s durable position. It stays while they’re away.</p></div>
+      <div class="tile"><b>Roles</b><p>A charter the team grants: designer, platform, security.</p></div>
+      <div class="tile"><b>Humans</b><p>On the same roster, with the same acts.</p></div></div>
+    <div class="col frag"><h3><span>2</span>Where they work</h3>
+      <div class="tile"><b>Workspaces</b><p>Each seat gets its own folder. The folder is the identity.</p></div>
+      <div class="tile"><b>Toolkits</b><p>The MCP servers and tools a workspace is equipped with.</p></div>
+      <div class="tile"><b>Skills &amp; hooks</b><p>Teach the rules, and remind the agent at the right moment.</p></div></div>
+    <div class="col frag"><h3><span>3</span>How work moves</h3>
+      <div class="tile"><b>Goals &amp; lanes</b><p>What the team is after, split into owned pieces.</p></div>
+      <div class="tile"><b>The board</b><p>Who owns what, what’s waiting on review, in a browser.</p></div>
+      <div class="tile"><b>Huddles</b><p>A few members work one question together, with a turn budget.</p></div></div>
+    <div class="col frag"><h3><span>4</span>Always reachable</h3>
+      <div class="tile"><b>Wake &amp; resume</b><p>A message wakes a seat that isn’t running. About 24 s, cold.</p></div>
+      <div class="tile"><b>The doorbell</b><p>An ask rings the human on /live, a desktop banner, or Slack.</p></div>
+      <div class="tile"><b>/live</b><p>The office: who’s here, who’s working, every act as it lands.</p></div></div>
+  </div>
+  <aside hidden>One column per click. Seats, roles, toolkits and workspaces are the glossary's words: a seat is the durable position a member keeps; a role is granted by the team; a toolkit equips a workspace and grants nothing; a workspace is the folder a seat is bound to. Wake and resume is residency: an enrolled seat that is offline gets woken by a directed act. The doorbell rings humans only through musterd's own surfaces, never through an agent's session.</aside>
+</section>
+
+<!-- 5 · the team asks you -->
 <section class="slide" data-sec="Why it works" data-title="The team asks you">
   <p class="eyebrow a" style="--i:0">The human on the team</p>
-  <div class="split">
+  <div class="split grow">
     <div class="ba">
       <h2 class="a" style="--i:1">The team asks you.</h2>
       <div class="from a" style="--i:2"><span class="num z">0</span><p>requests for help reached me while I was the approver — seven approvals for every real exchange.</p></div>
@@ -306,78 +369,75 @@
       <div class="ask" style="--hue:#E4572E;--i:2;--dur:4s"><span class="av">gh</span><span class="t"><small>ghost · escalate · advisory</small>Two lanes touch the same file. Split or pair?</span><svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16" pathLength="100"/><circle class="clock" cx="20" cy="20" r="16" pathLength="100"/></svg></div>
     </div>
   </div>
-  <span></span>
-  <aside hidden>My first role was approver: I showed up as an approver seven times for every time I actually talked to the team, and not one agent had asked me for help. We rebuilt the human as a member — since then, more than a hundred asks have reached me. The rail on the right is how /live shows them: each ask in the agent's colour, with its clock running. The asks shown are illustrative.</aside>
+  <aside hidden>My first role was approver: seven approvals for every time I actually talked to the team, and not one agent had asked me for help. We rebuilt the human as a member; since then, more than a hundred asks have reached me. The rail on the right is how /live shows them, each with its clock. The asks shown are illustrative.</aside>
 </section>
 
+<!-- 6 · handoff -->
+<section class="slide" data-sec="Big question" data-title="Handoff">
+  <p class="eyebrow a" style="--i:0">Big question · handoff</p>
+  <h2 class="a" style="--i:1">A handoff carries the lane itself.</h2>
+  <div class="cards2" style="margin-top:clamp(10px,2vw,30px)">
+    <div class="card a" style="--i:2"><h3>What it carries</h3><p class="strong">The thread.<br>The lane.<br>The branch, at its commit.</p><p>The receiver builds on the diff, so nothing gets built twice.</p></div>
+    <div class="card a" style="--i:3"><h3>What the receiver can do</h3><p class="strong">Accept.<br>Decline.<br>Challenge.</p><p>Every handoff is an offer from one owner to another.</p></div>
+  </div>
+  <aside hidden>Our first answer was wrong. Early on, a handoff was prose: here is what I did, carry on. A whole class of the waste was byte-identical work. Now a handoff carries the lane itself, and the receiver can decline, which makes it an offer between owners.</aside>
+</section>
+
+<!-- 7 · built from what broke (roadmap) -->
+<section class="slide panel" data-sec="How it evolved" data-title="Built from what broke" data-hook="road">
+  <p class="eyebrow a" style="--i:0">How musterd evolved · 2026</p>
+  <h2 class="a" style="--i:1">Built from what broke.</h2>
+  <div class="road" id="road"></div>
+  <aside hidden>Click along the road. Each stop is a problem measured in our own team, what we built, and what we measured after. Lanes' 0.9% is one later window with no control. Messages mid-task: the first check found 0 of 67 lines reached the model; it was fixed the next day. The last stop is tonight: the room's vote.</aside>
+</section>
+
+<!-- 8 · live demo -->
 <section class="slide acc" data-sec="Live" data-title="You picked it">
   <p class="eyebrow a" style="--i:0">Live · team revive</p>
   <div class="live-grid">
     <div style="display:flex;flex-direction:column;gap:clamp(14px,2vw,28px)">
       <h1 class="a" style="--i:1">You picked it. Watch the team split it.</h1>
       <div class="list">
-        <p class="a" style="--i:2"><span>1</span>I open one huddle and name seven members.</p>
+        <p class="a" style="--i:2"><span>1</span>I open one huddle and call the team in.</p>
         <p class="a" style="--i:3"><span>2</span>They gather, split the work, and each claims a lane.</p>
         <p class="a" style="--i:4"><span>3</span>When they need me, the question lands with a clock on it.</p>
       </div>
     </div>
-    <svg class="huddle a" style="--i:2" id="huddle" viewBox="-185 -175 370 370" aria-label="seven members gathering round a huddle"></svg>
+    <svg class="huddle a" style="--i:2" id="huddle" viewBox="-185 -175 370 370" aria-label="six members gathering round a huddle"></svg>
+  </div>
+  <aside hidden>Show the poll result, name the winner, then switch to /live and open the huddle. A huddle names up to four members; the other two are steered into the thread, and all six get woken. delta sits out tonight: its wake cannot read the huddle yet (rehearsal, lane 01M3W7ZGMP). Come back for the last slide when the room starts asking questions.</aside>
+</section>
+
+<!-- 9 · thank you / Q&A -->
+<section class="slide" data-sec="Thanks" data-title="Thank you · questions">
+  <p class="eyebrow a" style="--i:0">Thank you</p>
+  <div class="thanks">
+    <div style="display:flex;flex-direction:column;gap:clamp(14px,2vw,28px)">
+      <h1 class="a" style="--i:1">Questions?</h1>
+      <p class="cmd a" style="--i:2"><span class="p">$</span> npx @musterd/cli init<span class="caret"></span></p>
+      <p class="sub a" style="--i:3;max-width:44ch">Open source. If you run more than one agent, try it with your team for two weeks. I'll sit with you for the first hour.</p>
+      <div class="harness a" style="--i:4">
+        <b>Bring your agents, from any harness.</b>
+        <span class="logo cc"><img src="../../../packages/web/src/live/provider-logos/claude.svg" alt="">Claude Code</span>
+        <span class="logo cx"><img src="../../../packages/web/src/live/provider-logos/openai.svg" alt="">Codex</span>
+        <span class="logo cu"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#0D0D0D" d="M12 1.5 2.9 6.75v10.5L12 22.5l9.1-5.25V6.75L12 1.5Zm0 2.3 7.1 4.1L12 12 4.9 7.9 12 3.8Z"/></svg>Cursor</span>
+        <span class="logo oc"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" fill="#0D0D0D"/><rect x="7" y="7" width="10" height="10" fill="#FAFAFA"/><rect x="9" y="9" width="6" height="6" fill="#0D0D0D"/></svg>opencode</span>
+        <span class="logo md"><img src="../../design/assets/chip.svg" alt="">musterd harness <span class="soon">coming</span></span>
+      </div>
+    </div>
+    <div class="handles">
+      <div class="handle a" style="--i:2"><span class="hi" style="background:#0D0D0D"><svg viewBox="0 0 24 24"><path fill="#fff" d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg></span><span><b>@Nick_ASanders</b><small>X</small></span></div>
+      <div class="handle a" style="--i:3"><span class="hi" style="background:#9146FF"><svg viewBox="0 0 24 24"><path fill="#fff" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0 1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg></span><span><b>twitch.tv/sandrise_ai</b><small>musterd, built live every day</small></span></div>
+      <div class="handle a" style="--i:4"><span class="hi" style="background:var(--tint);color:var(--acct)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span><span><b>sandrise.io/nicksanders</b><small>Portfolio</small></span></div>
+      <div class="handle a" style="--i:5"><span class="hi" style="background:var(--acc)"><img src="../../design/assets/chip.svg" alt=""></span><span><b>musterd.io</b><small>github.com/SandRiseStudio/musterd</small></span></div>
     </div>
   </div>
-  <span></span>
-  <aside hidden>Show the poll result, name the winner, then switch to /live and open the huddle. Do not come back to slides until the handoff question.</aside>
-</section>
-
-<section class="slide" data-sec="Big questions" data-title="Handoff">
-  <p class="eyebrow a" style="--i:0">Big question · handoff</p>
-  <h2 class="a" style="--i:1">A handoff carries the lane itself.</h2>
-  <div class="cards c2">
-    <div class="card a" style="--i:2"><h3 style="color:var(--mut);font-size:clamp(14px,1.5vw,20px)">What it carries</h3><p class="strong">The thread.<br>The lane.<br>The branch, at its commit.</p><p>The receiver builds on the diff, so nothing gets built twice.</p></div>
-    <div class="card a" style="--i:3"><h3 style="color:var(--mut);font-size:clamp(14px,1.5vw,20px)">What the receiver can do</h3><p class="strong">Accept.<br>Decline.<br>Challenge.</p><p>Every handoff is an offer from one owner to another.</p></div>
-  </div>
-  <span></span>
-  <aside hidden>Our first answer was wrong. Early on, a handoff was prose: here is what I did, carry on. A whole class of the waste was byte-identical work. Now a handoff carries the lane itself, and the receiver can decline, which makes it an offer between owners.</aside>
-</section>
-
-<section class="slide" data-sec="Close" data-title="Try it">
-  <p class="eyebrow a" style="--i:0">Open source</p>
-  <div style="display:flex;flex-direction:column;gap:clamp(14px,2vw,32px)">
-    <p class="cmd a" style="--i:1"><span class="p">$</span> npx @musterd/cli init<span class="caret"></span></p>
-    <p class="sub a" style="--i:2;max-width:52ch">One command to a team. If you run more than one agent, try it with your team for two weeks — I'll sit with you for the first hour.</p>
-    <p class="sub a" style="--i:3;max-width:60ch;font-size:clamp(14px,1.6vw,22px)">Nick Sanders · <b style="color:var(--ink)">@Nick_ASanders</b> · sandrise.io/nicksanders · <b style="color:var(--ink)">twitch.tv/sandrise_ai</b> — where musterd is built live, every day.</p>
-  </div>
-  <div class="harness slim a" style="--i:5">
-    <b>Bring your agents, from any harness.</b>
-    <span class="logo cc"><img src="../../../packages/web/src/live/provider-logos/claude.svg" alt="">Claude Code</span>
-    <span class="logo cx"><img src="../../../packages/web/src/live/provider-logos/openai.svg" alt="">Codex</span>
-    <span class="logo cu"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#0D0D0D" d="M12 1.5 2.9 6.75v10.5L12 22.5l9.1-5.25V6.75L12 1.5Zm0 2.3 7.1 4.1L12 12 4.9 7.9 12 3.8Z"/></svg>Cursor</span>
-    <span class="logo oc"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" fill="#0D0D0D"/><rect x="7" y="7" width="10" height="10" fill="#FAFAFA"/><rect x="9" y="9" width="6" height="6" fill="#0D0D0D"/></svg>opencode</span>
-    <span class="logo md"><img src="../../design/assets/chip.svg" alt="">musterd harness <span class="soon">coming</span></span>
-  </div>
-  <p class="foot a" style="--i:6">musterd.io · github.com/SandRiseStudio/musterd</p>
-  <aside hidden>Then stop. The 38x is not said in this room.</aside>
-</section>
-
-<section class="slide panel" data-sec="Q&amp;A" data-title="Built from what broke">
-  <p class="eyebrow a" style="--i:0">How musterd evolved</p>
-  <h2 class="a" style="--i:1">Built from what broke.</h2>
-  <div class="arcs">
-    <div class="arc a" style="--i:2"><div class="arc-h"><h3>Lanes</h3><span>Jul 1</span></div><p class="bf"><b>Before</b>37% of the code three agents wrote was thrown away</p><p class="bt"><b>Built</b>Claim before you build; overlapping claims warn</p><p class="af"><b>After</b>0.9% thrown away in a later 2.5-day read (uncontrolled)</p></div>
-    <div class="arc a" style="--i:3"><div class="arc-h"><h3>Handoffs</h3><span>Aug 4</span></div><p class="bf"><b>Before</b>80% of handoffs never said which work they handed over</p><p class="bt"><b>Built</b>A handoff carries its lane and branch</p><p class="af"><b>After</b>No handoff without a lane since the day it shipped</p></div>
-    <div class="arc a" style="--i:4"><div class="arc-h"><h3>Reaching agents mid-task</h3><span>Jul 3</span></div><p class="bf"><b>Before</b>Replies waited up to 207 minutes on me as the relay</p><p class="bt"><b>Built</b>A line after every tool call</p><p class="af"><b>After</b>First check: 0 of 67 lines reached the model. Fixed the next day.</p></div>
-    <div class="arc a" style="--i:5"><div class="arc-h"><h3>The human as a member</h3><span>Jul 17</span></div><p class="bf"><b>Before</b>7 approvals for every real exchange; 0 requests for help</p><p class="bt"><b>Built</b>Asks with a tier and a clock</p><p class="af"><b>After</b>106 asks and 13 requests for help since</p></div>
-    <div class="arc a" style="--i:6"><div class="arc-h"><h3>Done takes two</h3><span>Jul 28</span></div><p class="bf"><b>Before</b>2 of 21 threads ever closed</p><p class="bt"><b>Built</b>The builder submits; another member accepts</p><p class="af"><b>After</b>Confirmed closes went from 16 to 142</p></div>
-    <div class="arc a" style="--i:7"><div class="arc-h"><h3>Knowing the model</h3><span>Jul 24</span></div><p class="bf"><b>Before</b>A seat showed the wrong model for weeks</p><p class="bt"><b>Built</b>The model the harness sees outranks the declared one</p><p class="af"><b>After</b>4 of 4 seats agree</p></div>
-    <div class="arc a" style="--i:8"><div class="arc-h"><h3>Sessions that start themselves</h3><span>Aug 5</span></div><p class="bf"><b>Before</b>23 sessions started by hand in one day</p><p class="bt"><b>Built</b>The board wakes the member it needs</p><p class="af"><b>After</b>22 sessions started themselves</p></div>
-    <div class="arc a" style="--i:9"><div class="arc-h"><h3>The cloud seat</h3><span>Sep 5</span></div><p class="bf"><b>Before</b>Every process on the cloud machine ran as root</p><p class="bt"><b>Built</b>Drop root, scope the token, close the port</p><p class="af"><b>After</b>Only the network daemon runs as root; it wakes in 24 s</p></div>
-    <div class="arc a" style="--i:10"><div class="arc-h"><h3>Tools shaped by use</h3><span>Jul 15</span></div><p class="bf"><b>Before</b>70% of failed tool calls were one wrong field name</p><p class="bt"><b>Built</b>Accept the common mistake, explain the rest</p><p class="af"><b>After</b>Those errors fell from 16 a day to 1</p></div>
-  </div>
-  <span></span>
-  <aside hidden>For Q&amp;A. Each card is a problem we measured in our own team, what we built, and what we measured after. The lanes number is one later window with no control; say so. Every date is 2026. Sources: docs/wiki/how-musterd-got-here.md and ADRs 083, 231, 088, 145/147, 169/192/225, 158, 179/250, 390, 144.</aside>
+  <aside hidden>Leave this up for Q&amp;A. The 38x is not said in this room. If asked for the waste number, offer the table with its date on it.</aside>
 </section>
 
 </div></div>
 <div class="picker"><button id="pick" aria-haspopup="true"></button><div class="menu" id="menu"></div></div>
+<div class="nav"><button id="prevb" aria-label="Back">‹</button><button id="nextb" aria-label="Forward">›</button></div>
 <div class="notes" id="notes"></div>
 <div class="rail-bar"><i></i></div>
 <script>
@@ -389,39 +449,114 @@
     for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(!inF(x,y)&&rnd()<.48)r+=`<rect x="${x}" y="${y}" width="1" height="1" fill="#18181B"/>`;
     svg.innerHTML=r+finder(0,0)+finder(22,0)+finder(0,22);})();
 
-  (function(){const svg=document.getElementById('huddle');const M=[['izzo','#7C5CFF'],['miley','#0EA5A4'],['delta','#2563EB'],['big-body','#16A34A'],['wanderer','#DB2777'],['ghost','#E4572E'],['sloane','#9333EA']];
+  // huddle ring (live slide)
+  (function(){const svg=document.getElementById('huddle');const M=[['izzo','#7C5CFF'],['miley','#0EA5A4'],['big-body','#16A34A'],['wanderer','#DB2777'],['ghost','#E4572E'],['sloane','#9333EA']];
     let h='';const R=130;
-    M.forEach(([n],k)=>{const a=-Math.PI/2+k*2*Math.PI/M.length;h+=`<line class="spoke" x1="${Math.cos(a)*44}" y1="${Math.sin(a)*44}" x2="${Math.cos(a)*(R-26)}" y2="${Math.sin(a)*(R-26)}"/>`});
+    M.forEach((m,k)=>{const a=-Math.PI/2+k*2*Math.PI/M.length;h+=`<line class="spoke" x1="${Math.cos(a)*44}" y1="${Math.sin(a)*44}" x2="${Math.cos(a)*(R-26)}" y2="${Math.sin(a)*(R-26)}"/>`});
     h+='<circle r="44" fill="#18181B"/><text text-anchor="middle" dy="5" class="lbl" style="fill:#E1AD01">huddle</text>';
-    M.forEach(([n,c],k)=>{const a=-Math.PI/2+k*2*Math.PI/M.length,x=Math.cos(a)*R,y=Math.sin(a)*R,lx=Math.cos(a)*44,ly=Math.sin(a)*44+(Math.sin(a)>.3?10:Math.sin(a)<-.3?-2:5);
-      
+    M.forEach(([n,c],k)=>{const a=-Math.PI/2+k*2*Math.PI/M.length,x=Math.cos(a)*R,y=Math.sin(a)*R;
       h+=`<g class="mem" style="--x:${x}px;--y:${y}px;--x0:${x*1.9}px;--y0:${y*1.9}px;--k:${k}"><circle r="24" fill="${c}"/><text text-anchor="middle" dy="5" class="ini">${n==='big-body'?'bb':n.slice(0,2)}</text><text class="lbl" text-anchor="middle" y="44">${n}</text></g>`});
     svg.innerHTML=h;})();
+
+  // one session, step by step: nodes (in click order), edges (appear with a step), captions
+  (function(){
+    const W=1000,H=560, host=document.getElementById('mgraph');
+    const S=[
+      {k:'join',  l:'Join',x:80,y:80, me:true, t:'Join', b:['Miley’s session opens','Same seat, same name, same history'], how:['SessionStart hook','MCP tool call']},
+      {k:'orient',l:'Orient',x:258,y:80, t:'Orient', b:['Reads her inbox and last session’s notes','<b>Tier 1</b> (addressed to her): handles it now','<b>Tier 2</b> (open work): waits for direction','Stamps herself oriented'], how:['musterd-orient skill','SessionStart hook','CLI: orient-stamp']},
+      {k:'claim', l:'Claim',x:425,y:80, t:'Claim', b:['Claims “redesign the asks rail”','Names the files it touches','Warned if someone else holds them'], how:['MCP tool call','PreToolUse hook']},
+      {k:'build', l:'Build',x:595,y:80, t:'Build', b:['Posts that she has started','Builds the change'], how:['MCP tool call']},
+      {k:'inbox', l:'Inbox',x:595,y:300, hub:true, t:'Inbox', b:['Checked after every tool call','Surfaces anything addressed to her','Every step comes back here'], how:['PostToolUse hook']},
+      {k:'mate',  l:'A teammate asks',x:860,y:300, t:'A teammate asks', b:['izzo asks Miley for help','Reaches her at her next tool call','She answers, then gets back to building'], how:['PostToolUse hook','MCP tool call']},
+      {k:'admin', l:'Ask a human admin',x:862,y:80, t:'Ask a human admin', b:['A call only Nick can make','She asks with a deadline','Big decisions wait for his answer','Small ones go ahead, and that is logged'], how:['MCP tool call','/live · Slack']},
+      {k:'ready', l:'Ready for review',x:345,y:205, t:'Ready for review', b:['Opens a PR','Submits the lane for review','A cross-family member reviews, if available'], how:['MCP tool call']},
+      {k:'review',l:'Review',x:595,y:480, t:'Review', b:['A tier 1 review request lands: izzo’s PR','She takes it without being asked twice','Approves, or sends it back with a note'], how:['MCP tool call']},
+      {k:'wrap',  l:'Wrap up',x:250,y:455, t:'Wrap up', b:['Nothing left addressed to her','Saves where she left off','Next session, on any harness, picks it up'], how:['MCP tool call','SessionEnd hook']},
+    ];
+    const ix={};S.forEach((n,i)=>ix[n.k]=i);
+    // [d, appears with step, class, label, lx, ly, anchor]
+    const E=[
+      ['M146,80 L202,80','orient'],['M314,80 L378,80','claim'],['M472,80 L542,80','build'],
+      ['M585,104 L585,272','inbox'],['M605,274 L605,106','inbox','back'],
+      ['M655,300 L765,300','mate'],['M835,276 C800,200 720,130 650,100','mate','back','answers, keeps building',780,190,'start'],
+      ['M650,72 L740,72','admin'],['M740,90 L650,90','admin','back'],
+      ['M548,100 C500,140 460,170 420,186','ready'],['M400,228 C450,262 500,290 532,296','ready','','checks inbox',462,300,'end'],
+      ['M585,326 L585,454','review','','↓ tier 1 review request',616,380,'start'],['M605,454 L605,326','review','back','↑ back to inbox',616,404,'start'],
+      ['M535,318 C460,350 380,400 320,440','wrap','','nothing waiting',418,358,'end'],
+      ['M188,458 C80,458 40,280 66,106','wrap','loop','next session · any harness',150,520,'middle'],
+    ];
+    let paths='';
+    E.forEach(([d,at,cls,lab,lx,ly,anc])=>{const k=ix[at];
+      paths+=`<path class="edge ${cls||''}" data-to="${k}" d="${d}" pathLength="100" marker-end="url(#ah2)"/>`;
+      if(lab)paths+=`<text class="elab" data-to="${k}" x="${lx}" y="${ly}" text-anchor="${anc}">${lab}</text>`});
+    let nodes='';
+    S.forEach((n,i)=>{nodes+=`<div class="mnode frag${n.hub?' hub':''}" data-k="${i}" style="left:${n.x/W*100}%;top:${n.y/H*100}%">${n.me?'<span class="me">mi</span>':''}<em>${i+1}</em>${n.l}</div>`});
+    host.innerHTML=`<svg class="medges" viewBox="0 0 ${W} ${H}" aria-hidden="true"><defs><marker id="ah2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>${paths}</svg>${nodes}`;
+    window.__session=S;
+  })();
+
+  // the roadmap: chronological stops along a glowing road
+  (function(){
+    const host=document.getElementById('road');const W=1600,H=560;
+    const R=[
+      {d:'Jun 30',t:'The switchboard',bf:'I copy-pasted between sessions',af:'37% of the code thrown away'},
+      {d:'Jul 1',t:'Lanes',bf:'Two agents built the same thing',af:'0.9% thrown away, later read'},
+      {d:'Jul 3',t:'Messages mid-task',bf:'Replies waited up to 207 min',af:'Arrive at the next tool call'},
+      {d:'Jul 15',t:'Tools shaped by use',bf:'70% of failed calls: one field',af:'16 errors a day, down to 1'},
+      {d:'Jul 17',t:'The human as a member',bf:'0 requests for help',af:'106 asks, 13 requests'},
+      {d:'Jul 24',t:'Knowing the model',bf:'Wrong model shown for weeks',af:'4 of 4 seats agree'},
+      {d:'Jul 28',t:'Done takes two',bf:'2 of 21 threads closed',af:'142 confirmed closes'},
+      {d:'Aug 4',t:'Handoffs',bf:'80% named no lane',af:'None since'},
+      {d:'Aug 5',t:'Sessions start themselves',bf:'23 started by hand in a day',af:'22 started themselves'},
+      {d:'Sep 5',t:'The cloud seat',bf:'Everything ran as root',af:'Scoped, and wakes in 24 s'},
+      {d:'Tonight',t:'You pick what’s next',bf:'The vote from the start of the talk',af:'The team starts on it live',end:true},
+    ];
+    const n=R.length,x0=70,x1=1530;
+    const P=R.map((r,i)=>({x:x0+(x1-x0)*i/(n-1),y:285+70*Math.sin(i*1.05)}));
+    let segs='',base='M'+P[0].x+','+P[0].y;
+    for(let i=1;i<n;i++){const a=P[i-1],b=P[i],dx=(b.x-a.x)/2;const c=` C${a.x+dx},${a.y} ${b.x-dx},${b.y} ${b.x},${b.y}`;base+=c;
+      segs+=`<path class="seg" data-to="${i}" d="M${a.x},${a.y}${c}" pathLength="100"/>`}
+    let ms='';
+    R.forEach((r,i)=>{const p=P[i],up=(i%2===0);
+      ms+=`<div class="ms frag ${up?'up':'down'}${r.end?' end':''}" data-k="${i}" style="left:${p.x/W*100}%;top:${p.y/H*100}%"><span class="stem"></span><span class="burst"></span><span class="dot"></span><div class="mc"><div class="d">${r.d}</div><h4>${r.t}</h4><div class="bf">${r.bf}</div><div class="af">${r.af}</div></div></div>`});
+    host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="roadgrad" x1="0" x2="1"><stop offset="0" stop-color="#E1AD01"/><stop offset=".85" stop-color="#E1AD01"/><stop offset="1" stop-color="#9146FF"/></linearGradient></defs><path class="base" d="${base}"/>${segs}</svg>${ms}`;
+  })();
+
+  // navigation: slides, click-revealed fragments, back and forward
   const slides=[...document.querySelectorAll('.slide')], pick=document.getElementById('pick'), menu=document.getElementById('menu'), notes=document.getElementById('notes');
   let i=Math.max(0,Math.min(slides.length-1,parseInt(location.hash.slice(1))||0));
+  const frags=s=>[...s.querySelectorAll('.frag')];
+  const hooks={
+    session(sl,sh){const cap=sl.querySelector('.mcap');const last=sh[sh.length-1];
+      if(!last){cap.classList.remove('on');return}
+      const n=window.__session[+last.dataset.k];
+      cap.querySelector('h3').textContent=n.t;
+      cap.querySelector('ul').innerHTML=n.b.map(x=>'<li>'+x+'</li>').join('');
+      cap.querySelector('.how').innerHTML=n.how.map(x=>'<span>'+x+'</span>').join('');
+      cap.querySelector('.stepn').textContent='step '+sh.length+' of '+frags(sl).length;
+      cap.classList.add('on');cap.classList.remove('swap');void cap.offsetWidth;cap.classList.add('swap')}
+  };
+  function refresh(sl){const sh=frags(sl).filter(x=>x.classList.contains('shown'));const ks=new Set(sh.map(x=>x.dataset.k));
+    sl.querySelectorAll('[data-to]').forEach(e=>e.classList.toggle('lit',ks.has(e.dataset.to)));
+    frags(sl).forEach(x=>x.classList.remove('cur'));if(sh.length)sh[sh.length-1].classList.add('cur');
+    const h=sl.dataset.hook;if(h&&hooks[h])hooks[h](sl,sh)}
   let html='',last='';
   slides.forEach((s,k)=>{const sec=s.dataset.sec;if(sec!==last){html+=`<div class="sec">${sec}</div>`;last=sec}
     html+=`<button data-k="${k}"><em>${k+1}</em>${s.dataset.title}</button>`});
   menu.innerHTML=html;
   menu.addEventListener('click',e=>{const b=e.target.closest('button');if(b){go(+b.dataset.k);menu.classList.remove('open')}});
   pick.addEventListener('click',e=>{e.stopPropagation();menu.classList.toggle('open')});
-  const frags=s=>[...s.querySelectorAll('.frag')];
-  function syncEdges(sl){const sh=frags(sl).filter(x=>x.classList.contains('shown'));const shown=new Set(sh.map(x=>x.dataset.k));sl.querySelectorAll('[data-to]').forEach(e=>e.classList.toggle('lit',shown.has(e.dataset.to)));
-    const cap=sl.querySelector('.mcap');if(!cap)return;frags(sl).forEach(x=>x.classList.remove('cur'));const last=sh[sh.length-1];
-    if(!last){cap.classList.remove('on');return}last.classList.add('cur');
-    cap.querySelector('h3').textContent=last.dataset.title;cap.querySelector('p').innerHTML=last.dataset.text;
-    cap.querySelector('.how').innerHTML=last.dataset.how.split('|').map(x=>'<span>'+x+'</span>').join('');
-    cap.querySelector('.stepn').textContent='step '+(sh.length)+' of '+frags(sl).length;
-    cap.classList.add('on');cap.classList.remove('swap');void cap.offsetWidth;cap.classList.add('swap')}
-  function next(){const f=frags(slides[i]).filter(x=>!x.classList.contains('shown'));if(f.length){f[0].classList.add('shown');syncEdges(slides[i]);return}go(i+1)}
-  function prev(){const f=frags(slides[i]).filter(x=>x.classList.contains('shown'));if(f.length){f[f.length-1].classList.remove('shown');syncEdges(slides[i]);return}go(i-1,true)}
+  function next(){const f=frags(slides[i]).filter(x=>!x.classList.contains('shown'));if(f.length){f[0].classList.add('shown');refresh(slides[i]);return}go(i+1)}
+  function prev(){const f=frags(slides[i]).filter(x=>x.classList.contains('shown'));if(f.length){f[f.length-1].classList.remove('shown');refresh(slides[i]);return}go(i-1,true)}
   function go(n,back){const from=i;i=Math.max(0,Math.min(slides.length-1,n));
-    frags(slides[i]).forEach(x=>x.classList.toggle('shown',!!back&&i<from));syncEdges(slides[i]);
+    frags(slides[i]).forEach(x=>x.classList.toggle('shown',!!back&&i<from));refresh(slides[i]);
     slides.forEach((s,k)=>{s.classList.toggle('on',k===i);s.classList.toggle('past',k<i)});
     pick.textContent=`${i+1} / ${slides.length} · ${slides[i].dataset.title} ▾`;
     [...menu.querySelectorAll('button')].forEach(b=>b.classList.toggle('cur',+b.dataset.k===i));
     document.documentElement.style.setProperty('--p',(i+1)/slides.length);
     const a=slides[i].querySelector('aside');notes.textContent=a?a.textContent:'';history.replaceState(null,'','#'+i)}
+  document.getElementById('prevb').addEventListener('click',e=>{e.stopPropagation();prev()});
+  document.getElementById('nextb').addEventListener('click',e=>{e.stopPropagation();next()});
   addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();next()}
     else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();prev()}
     else if(e.key==='Home')go(0);else if(e.key==='End')go(slides.length-1);
@@ -429,7 +564,7 @@
     else if(e.key==='g')menu.classList.toggle('open');
     else if(e.key==='Escape')menu.classList.remove('open');
     else if(e.key==='f'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}});
-  addEventListener('click',e=>{if(e.target.closest('.picker,.notes'))return;if(menu.classList.contains('open')){menu.classList.remove('open');return}next()});
+  addEventListener('click',e=>{if(e.target.closest('.picker,.notes,.nav'))return;if(menu.classList.contains('open')){menu.classList.remove('open');return}next()});
   go(i);
 </script>
 </body>
