@@ -62,9 +62,7 @@ duplicate the Acts; retaining no state would leave the accepted work invisible. 
   check is added.
 - The three brief fields are optional and have no schema defaults. An older daemon's omitted fields
   remain absent after `NextBriefSchema.safeParse`; a capable daemon emits all three arrays, including
-  empty ones. Renderers label an absent section unsupported and show it as empty only for `[]`. The
-  weekly audit abstains when `requested_reviews` is absent and treats `[]` as a supported empty
-  population.
+  empty ones. Renderers label an absent section unsupported and show it as empty only for `[]`.
 - The root-thread requirement keeps a resolve scoped to this review request. Existing `resolve`
   authority means another Member can close it; the Act ledger records who did, and the owner gets a
   one-time notice when that was someone else.
@@ -74,10 +72,16 @@ duplicate the Acts; retaining no state would leave the accepted work invisible. 
   this ADR plus the protocol feature epoch. Lane 3 of `nothing-vanishes` landed at epoch 27; the
   implementation must allocate the next epoch from its current base.
 
-Follows-up: implementation plan is under review (2026-10-01); implementation waits for that approval.
+Follows-up: update and review the implementation plan after the A.14 amendment is accepted (Lane
+`01M3TBW5QPKY76FTV9SAGM8MBZ`); implementation waits for plan approval.
 
 - Dated note (2026-10-01): Nick approved the written design. The implementation plan is awaiting
   review; no implementation has started.
+- Dated note (2026-10-01): review of the implementation plan found that the scheduled `sweep`
+  Member cannot obtain the Team-wide population from per-caller `NextBrief.requested_reviews`.
+  The design spec and SPEC A.14 now add a member-authenticated Team read for open promises with
+  only request id, requester, owner, and acceptance time; the audit abstains when that route is
+  unsupported and treats a supported empty list as zero open promises.
 
 ## Observability & Evaluation
 

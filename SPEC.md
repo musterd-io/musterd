@@ -621,6 +621,17 @@ cursor crosses the `resolve` Act. The requester sees the same `resolve` in the r
 
 The three arrays are optional and have no schema defaults. A supporting daemon emits all three,
 including `[]`; omission means the daemon does not report the projection. CLI and MCP renderers
-preserve that distinction, and the weekly audit abstains when `requested_reviews` is absent. The
-promise is a reminder derived from Acts: it adds no table, Act, timer, or proof that review content
-or quality was checked. Lane acceptance remains represented by `owed_reviews` and `review_debt`.
+preserve that distinction. The weekly audit uses the Team-wide route below and abstains if it is
+unsupported. This promise is a reminder derived from Acts: it adds no table, Act, timer, or proof
+that review content or quality was checked. Lane acceptance remains represented by `owed_reviews`
+and `review_debt`.
+
+The weekly audit runs as the `sweep` service Member and cannot read another Member's per-caller
+`requested_reviews` rows from `NextBrief`. A supporting daemon MUST expose
+`GET /teams/:slug/review-promises?open=1` to an authenticated active Member of the named Team. It
+returns `{ "review_promises": [...] }` with every open promise in that Team, ordered by
+`accepted_at` ascending and then `request_id` ascending. Each row contains only `request_id`,
+`requester`, `owner`, and `accepted_at`; it does not include the request context or artifact
+reference. A supporting daemon MUST include `review_promises: []` when the Team has no open
+promises. The weekly audit abstains if this route is unsupported and treats `[]` as a supported
+empty population.
