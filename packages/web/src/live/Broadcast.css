@@ -37,9 +37,11 @@
 /* The room and the team column, as on /live — but the column is sized off the STAGE, not the
    window: `vw` here is whatever window the capturer opened, and a 16:9 frame must lay out the same
    in every one. 21% of 1920 is 403 → the 400 cap; of 1280 it is 269 → the 280 floor, which keeps a
-   lane title on two lines at the 720 rung. */
+   lane title on two lines at the 720 rung.
+   Widened 2026-10-01 (nick): 24% / 460 cap and the column's type 12% up, a step toward how the 720
+   rung reads without giving the room away — the room gives 60px at 1080 and keeps the door. */
 .bc__canvas {
-  --col-team: clamp(280px, 21%, 400px);
+  --col-team: clamp(280px, 24%, 460px);
   animation: none;
 }
 /* The ticker floats over the room's foot instead of taking a 40px row of the frame (nick, 2026-10-01).
@@ -50,7 +52,7 @@
 .bc__stage > .lc-ticker {
   position: absolute;
   left: 0;
-  right: clamp(280px, 21%, 400px);
+  right: clamp(280px, 24%, 460px);
   bottom: 0;
   z-index: var(--lc-z-overlay);
   background: none;
@@ -63,6 +65,21 @@
 }
 .bc .lc-office__corner {
   bottom: calc(40px + var(--lc-3) + 26px);
+}
+
+/* The column's type, one step larger on a stream (read from across a room, through an encode).
+   `zoom` scales the whole column together — names, chips, lane titles, row rhythm — so its proportions
+   are the ones /live was designed and contrast-gated at, just bigger. Chrome is the only renderer.
+   Only at the 1080 rung: at 720 the column already reads this large (its 280px floor is 28% of the
+   frame), and the extra step there costs a visible card. The stage's own width says which rung —
+   the window does not (see `.bc__canvas` above), hence a container query, not a media query. */
+.bc__stage {
+  container-type: inline-size;
+}
+@container (min-width: 1600px) {
+  .bc .lc-team {
+    zoom: 1.12;
+  }
 }
 
 /* Nothing on a stream can be pointed at: no pointer cursor pretending otherwise. */
