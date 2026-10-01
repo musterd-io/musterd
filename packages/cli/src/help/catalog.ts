@@ -919,7 +919,9 @@ export const CATALOG: readonly CommandEntry[] = [
       'seat’s own folder). Who authorizes is the folder you run from — an admin’s Workspace (ADR 442). Knobs ' +
       '(inc 5) — on `on` they override THIS seat, on `policy` they set the TEAM defaults: ' +
       '--lane both|interrupt|batched, --cooldown 15m, --hourly-cap N, --attempt-cap N, ' +
-      '--tool-policy reply-only|seat-policy, --timeout 5m, --max-turns N, --budget USD, ' +
+      '--tool-policy reply-only|seat-policy, --timeout 5m, --work-timeout 30m, --flow manual|auto, ' +
+      '--convene-huddles on|off (does opening a huddle wake the seats it names — ADR 378), ' +
+      '--max-turns N, --budget USD, ' +
       '--transcript-max MiB (fractions OK — the default bound is 0.25, i.e. 256 KiB); ' +
       '--reset-policy clears a seat back to team defaults. There is no ' +
       '`--lane off` — "stop waking this seat" is `residency off`. The roster shows enrolled offline ' +
@@ -928,6 +930,7 @@ export const CATALOG: readonly CommandEntry[] = [
       'musterd residency on --seat scout --workspace ~/musterd/acme/app/scout',
       'musterd residency on --seat scout --workspace ~/musterd/acme/app/scout --lane batched --budget 2',
       'musterd residency policy --cooldown 15m --hourly-cap 4',
+      'musterd residency policy --convene-huddles on',
       'musterd residency status',
       'musterd residency off',
     ],
