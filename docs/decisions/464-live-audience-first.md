@@ -94,6 +94,10 @@ ones seen wandering.
 - The contrast gate must measure the faded "declared" badge and the provider-tinted chips.
   Budgets are expected to hold, because four retired surfaces pay for the new ones. That is
   measured per lane.
+- **2026-10-01 — on `/broadcast` the ticker floats over the room's foot** (nick; lane
+  01M3TGXD23). It is still under the office, but no longer a 40px row of the frame: the room is
+  height-bound, so the row went back to the room (1040 → 1080), together with a fixed 1.09× framing.
+  `/live` keeps the ticker as a row.
 
 ## Observability & Evaluation
 

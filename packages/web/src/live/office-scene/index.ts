@@ -317,6 +317,11 @@ export interface OfficeOptions {
    * reference honest.
    */
   sprites?: boolean;
+  /**
+   * Fit past "the whole room" by this factor (`fitFloor`'s zoom). `/broadcast` passes 1.09 so the
+   * people and plates read larger on a stream; everything else leaves it at 1. Constant per mount.
+   */
+  zoom?: number;
 }
 
 export function mountOffice(
@@ -395,7 +400,8 @@ export function mountOffice(
 
   let width = Math.max(1, host.clientWidth);
   let height = Math.max(1, host.clientHeight);
-  let fit: Fit = fitFloor(width, height);
+  const zoom = options.zoom ?? 1;
+  let fit: Fit = fitFloor(width, height, zoom);
 
   const actors: Actors = createActors();
   /** The office dog (pet.ts): asleep in the baked frame; stirred by the ambient scheduler below. */
@@ -667,7 +673,7 @@ export function mountOffice(
     // consumer's stylesheet; `/live`'s `!important` rules still win over these, so nothing moves there.
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
-    fit = fitFloor(width, height);
+    fit = fitFloor(width, height, zoom);
     // Every sprite key carries the fit, so a resize only strands the old rasters — drop them.
     sprites?.clear();
   }

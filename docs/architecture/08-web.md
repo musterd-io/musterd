@@ -92,7 +92,9 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   and the per-seat `trace` expander (ADR 445). Collapsed, it is a rail of avatars with logo pips.
   `/broadcast` mounts the same column `still` beside the room, with the headline ticker under it
   (ADR 464 lane 5): no hover, no expanding, no operator notes, sized off the 16:9 stage rather than
-  the window. The overlay reel and the floating work stack it replaced are gone.
+  the window. There the ticker floats over the room's foot rather than taking a row, and the room is
+  framed at `BROADCAST_ZOOM` (1.09×, `fitFloor`'s zoom) — the whole room minus its empty margins,
+  entrance door kept (2026-10-01). The overlay reel and the floating work stack it replaced are gone.
 - **Ask banner** (`live/AsksStrip.tsx`, words from `live/askPhrase.ts`) — the top of the office
   (ADR 464 §6): "✋ ryder is asking nick: *question* · holding until answered · 4:12", Approve / Deny
   inline for an answerer, "+N more waiting" opens the sheet, a settled outcome for ~6s

@@ -42,6 +42,29 @@
   --col-team: clamp(280px, 21%, 400px);
   animation: none;
 }
+/* The ticker floats over the room's foot instead of taking a 40px row of the frame (nick, 2026-10-01).
+   The room is height-bound at every aspect (`fitFloor`), so a row given back to it is room on screen:
+   1040 → 1080 at the 1080 rung. It spans the room only — `right` is the team column's own width,
+   resolved against the stage exactly as `--col-team` is — and drops its ground and rule, because over
+   the room's foot it sits on the floor's margin, where the chips carry their own paper. */
+.bc__stage > .lc-ticker {
+  position: absolute;
+  left: 0;
+  right: clamp(280px, 21%, 400px);
+  bottom: 0;
+  z-index: var(--lc-z-overlay);
+  background: none;
+  border-top: none;
+}
+/* …and the watermark and the corner stacked above it rise clear of it together (Live.css keeps the
+   corner 26px above the mark), rather than sitting under the ticker's last chip. */
+.bc .lc-office__mark {
+  bottom: calc(40px + var(--lc-3));
+}
+.bc .lc-office__corner {
+  bottom: calc(40px + var(--lc-3) + 26px);
+}
+
 /* Nothing on a stream can be pointed at: no pointer cursor pretending otherwise. */
 .bc .lc-team-card__hit {
   cursor: default;
