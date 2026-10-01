@@ -31,6 +31,7 @@ import {
   type RichToken,
   hueOf,
 } from './format';
+import type { LiveConfig } from './client';
 import { streamPlacement } from './huddles';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { REVEAL_EVENT, scrollToMessage } from './reveal';
@@ -54,12 +55,15 @@ export function Stream({
   liveIds,
   collapsed = false,
   onCollapse,
+  cfg,
 }: {
   envelopes: Envelope[];
   roster: MemberSummary[];
   liveIds: Set<string>;
   collapsed?: boolean;
   onCollapse?: () => void;
+  /** The viewer's daemon config — lets a huddle card open a seat's path (ADR 493). */
+  cfg?: LiveConfig | undefined;
 }) {
   const idx = rosterIndex(roster);
   const lastId = envelopes.length ? envelopes[envelopes.length - 1]!.id : null;
@@ -264,6 +268,7 @@ export function Stream({
                   idx={idx}
                   now={isNow}
                   liveIds={liveIds}
+                  cfg={cfg}
                 />
               ) : (
                 <Row env={e} idx={idx} byId={byId} now={isNow} animate={liveIds.has(e.id)} />

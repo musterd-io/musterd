@@ -75,7 +75,9 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   fold into it, each turn with its time-to-turn (`+1.4m`), and the card sits at the huddle's latest
   row, so it rides the live edge while the room talks and stays where it closed. The office floor is
   unaffected: every huddle act is still its own bubble. The huddle rail's "in the log" opens the
-  drawer on the card. `L` opens it, Escape closes it, and a
+  drawer on the card. A seat's name on its first turn opens its path through the room (huddle replay
+  increment 2): its wake, then each tool call and hook on the same +Δ clock, read once per card from
+  the daemon's huddle trace (`GET /huddles/:id/trace`, ADR 493) by `live/huddleTrace.ts`. `L` opens it, Escape closes it, and a
   speech-bubble click opens it on its act (`live/reveal.ts`). The stream column and companion mode
   it replaced retired on 2026-09-28.
 - **Busyness meter** (`live/TopMeter.tsx`, from `live/busyness.ts`) — in the top bar: the team,
@@ -169,6 +171,7 @@ live/
   format.ts                     // act tone/label, laneEvent recovery, roster/colour/status projections
   Stream.tsx                    // the act feed + ACT_GLYPH + typewriter; hosted by the log drawer on /live (lazy)
   StreamHuddleCard.tsx          // a huddle as one card in the feed: header, turn lines with time-to-turn, close/yet-to-speak footer
+  huddleTrace.ts                // the huddle trace fetch (ADR 493, type-only protocol import) + seatPath: one seat's wake → tools → hooks, in time order
   reveal.ts                     // the "reveal this act in the log" window event + revealWhenMounted (the drawer mounts the stream lazily)
   LogDrawer.tsx                 // the /live log drawer (ADR 464 lane 2): a right-edge dialog around the stream; Escape closes, focus returns
   busyness.ts                   // envelopes + roster → last-act age, acts over the loaded span (bucketed), who is working (pure, node-tested)

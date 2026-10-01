@@ -618,7 +618,7 @@ function LivePage() {
           />
           <LogDrawer open={logOpen} onClose={closeLog} title={`Team log — ${team}`}>
             <Suspense fallback={<p className="lc-drawer__loading">Opening the log…</p>}>
-              <LazyStream envelopes={envelopes} roster={roster} liveIds={liveIds} />
+              <LazyStream envelopes={envelopes} roster={roster} liveIds={liveIds} cfg={cfg ?? undefined} />
             </Suspense>
           </LogDrawer>
           {boardOpen && (
