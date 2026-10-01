@@ -57,17 +57,17 @@
 
   /* where it started */
   .origin{display:grid;grid-template-columns:1.15fr 1fr;gap:clamp(24px,4vw,64px);align-items:center}
-  .pains{display:flex;flex-direction:column;gap:clamp(12px,1.6vw,22px)}
+  .pains{display:flex;flex-direction:column;gap:clamp(16px,2.4vw,36px)}
   .pain{display:grid;grid-template-columns:auto 1fr;gap:clamp(12px,1.4vw,20px);align-items:center;opacity:0;transform:translateX(-18px)}
   .pain.shown{opacity:1;transform:none}
-  .pain .ic{width:clamp(38px,3.4vw,52px);height:clamp(38px,3.4vw,52px);border-radius:12px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;color:var(--acct);transition:background .3s,border-color .3s}
+  .pain .ic{width:clamp(44px,4.2vw,64px);height:clamp(44px,4.2vw,64px);border-radius:12px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;color:var(--acct);transition:background .3s,border-color .3s}
   .pain .ic svg{width:55%;height:55%}
-  .pain p{font-size:clamp(16px,1.9vw,27px);font-weight:600;line-height:1.25}
+  .pain p{font-size:clamp(18px,2.25vw,32px);font-weight:600;line-height:1.25}
   .pain.cur .ic{background:var(--acc);border-color:var(--acc);color:#18181B}
-  .stat{background:#fff;border:1px solid var(--line);border-radius:20px;padding:clamp(18px,2.4vw,36px);display:flex;flex-direction:column;gap:clamp(10px,1.2vw,16px);box-shadow:0 14px 34px rgba(24,24,27,.07);opacity:0;transform:scale(.94)}
+  .stat{background:#fff;border:1px solid var(--line);border-radius:22px;padding:clamp(22px,3vw,48px);display:flex;flex-direction:column;gap:clamp(10px,1.2vw,16px);box-shadow:0 14px 34px rgba(24,24,27,.07);opacity:0;transform:scale(.94)}
   .stat.shown{opacity:1;transform:none}
-  .stat .big{font-family:var(--display);font-size:clamp(70px,10vw,160px);font-weight:800;line-height:.9;letter-spacing:-.04em;color:var(--accn)}
-  .stat p{font-size:clamp(14px,1.55vw,22px);color:var(--mut);line-height:1.35}
+  .stat .big{font-family:var(--display);font-size:clamp(84px,13vw,210px);font-weight:800;line-height:.9;letter-spacing:-.04em;color:var(--accn)}
+  .stat p{font-size:clamp(16px,1.8vw,26px);color:var(--mut);line-height:1.35}
   .bar{position:relative;height:clamp(16px,1.6vw,24px);border-radius:6px;background:#E4E4E7;overflow:hidden}
   .bar i{position:absolute;inset:0 auto 0 0;width:0;border-radius:6px}
   .bar .kept{background:#A1A1AA}.bar .lost{background:var(--acc);left:63%}
@@ -92,8 +92,23 @@
   .vcard li::before{content:"";position:absolute;left:0;top:.55em;width:7px;height:7px;border-radius:50%;background:var(--acc)}
   .vcard.shown li{animation:rise .5s var(--ease) both;animation-delay:calc(.25s + var(--j,0)*.12s)}
 
+  /* premium icons */
+  .ico{position:relative;display:inline-block;width:2.2em;height:2.2em;flex:none;filter:drop-shadow(0 .25em .45em var(--glow))}
+  .ico svg{width:100%;height:100%;display:block}
+  .ico::after{content:"";position:absolute;inset:0;border-radius:29%;background:linear-gradient(115deg,transparent 38%,rgba(255,255,255,.7) 50%,transparent 62%);background-size:260% 100%;background-position:130% 0;pointer-events:none}
+  .ico b{position:absolute;top:-.38em;right:-.42em;min-width:1.25em;height:1.25em;padding:0 .22em;border-radius:999px;background:#18181B;color:#FFD54A;font-family:var(--mono);font-size:.5em;font-weight:700;display:grid;place-items:center;box-shadow:0 0 0 2px #fff}
+  .ico .sp{position:absolute;width:.62em;height:.62em;top:-.3em;left:-.3em;background:#FFD54A;clip-path:polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%);opacity:0;filter:drop-shadow(0 0 3px #FFD54A)}
+  .ico .sp.s2{top:auto;left:auto;bottom:-.2em;right:-.25em;width:.45em;height:.45em;background:#fff}
+  @keyframes twinkle{0%{opacity:0;transform:scale(0) rotate(0)}40%{opacity:1;transform:scale(1.15) rotate(45deg)}100%{opacity:0;transform:scale(0) rotate(90deg)}}
+  @keyframes sheen{from{background-position:130% 0}to{background-position:-30% 0}}
+  .shown>.ico .sp,.shown .ico .sp{animation:twinkle .9s var(--ease) .2s both}
+  .shown>.ico .sp.s2,.shown .ico .sp.s2{animation-delay:.42s}
+  .cur .ico .sp{animation:twinkle 2.4s ease-in-out .2s infinite}
+  .cur .ico .sp.s2{animation-delay:1.3s}
+  .cur .ico::after,.mcap.on h3 .ico::after{animation:sheen 1.6s var(--ease) .25s both}
+  @media (prefers-reduced-motion:reduce){.ico .sp,.ico::after{animation:none!important}}
   /* one session, step by step */
-  .story{display:grid;grid-template-columns:1.8fr 1fr;gap:clamp(18px,2.4vw,40px);align-items:center;flex:1;min-height:0}
+  .story{display:grid;grid-template-columns:2.35fr 1fr;gap:clamp(18px,2.4vw,40px);align-items:center;flex:1;min-height:0}
   .mgraph{position:relative;width:100%;aspect-ratio:1000/560}
   .medges{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
   .edge{fill:none;stroke:var(--acc);stroke-width:2.5;stroke-dasharray:100;stroke-dashoffset:100;opacity:0}
@@ -117,8 +132,10 @@
   .mcap .who{display:flex;align-items:center;gap:10px;font-size:clamp(11px,1.05vw,14px);color:var(--mut)}
   .mcap .who b{color:var(--ink)}
   .mcap .av{width:clamp(28px,2.6vw,38px);height:clamp(28px,2.6vw,38px);border-radius:50%;background:#0EA5A4;color:#fff;display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:clamp(11px,1vw,14px)}
-  .mcap .stepn{margin-left:auto;font-family:var(--mono);font-size:clamp(10px,.95vw,13px);color:var(--acct)}
-  .mcap h3{font-family:var(--display);font-size:clamp(20px,2.4vw,36px);font-weight:750;line-height:1.1}
+  .mcap .who>span:nth-child(2){white-space:nowrap}
+  .mcap .stepn{white-space:nowrap;margin-left:auto;font-family:var(--mono);font-size:clamp(10px,.95vw,13px);color:var(--acct)}
+  .mcap h3{font-family:var(--display);font-size:clamp(20px,2.4vw,36px);font-weight:750;line-height:1.1;display:flex;align-items:center;gap:.4em}
+  .mcap h3 .ico{width:1.5em;height:1.5em}
   .mcap ul{list-style:none;display:flex;flex-direction:column;gap:clamp(6px,.8vw,10px)}
   .mcap li{position:relative;padding-left:20px;font-size:clamp(14px,1.5vw,21px);color:var(--mut);line-height:1.3}
   .mcap li::before{content:"";position:absolute;left:2px;top:.5em;width:8px;height:8px;border-radius:50%;background:var(--acc)}
@@ -127,18 +144,17 @@
   .mcap .how span{font-family:var(--mono);font-size:clamp(10px,.95vw,13px);color:var(--acct);background:var(--tint);border-radius:999px;padding:3px 10px}
 
   /* what's in the box */
-  .box{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(12px,1.6vw,24px);margin-top:clamp(6px,1.4vw,22px)}
-  .col{display:flex;flex-direction:column;gap:clamp(8px,1vw,14px);opacity:0;transform:translateY(20px)}
+  .box{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(14px,1.8vw,28px);margin-top:clamp(10px,2vw,30px);flex:1;min-height:0;margin-bottom:clamp(10px,2vw,30px)}
+  .col{display:flex;flex-direction:column;gap:clamp(10px,1.2vw,18px);opacity:0;transform:translateY(20px)}
   .col.shown{opacity:1;transform:none}
-  .col h3{display:flex;align-items:center;gap:10px;font-family:var(--display);font-size:clamp(15px,1.6vw,23px);font-weight:750}
-  .col h3 span{width:1.6em;height:1.6em;border-radius:50%;display:grid;place-items:center;background:var(--line);font-family:var(--mono);font-size:.7em;transition:background .3s}
-  .col.shown h3 span{background:var(--acc)}
-  .tile{background:#fff;border:1px solid var(--line);border-radius:14px;padding:clamp(10px,1.1vw,16px);opacity:0;transform:translateY(10px)}
+  .col h3{display:flex;align-items:center;gap:.55em;font-family:var(--display);font-size:clamp(17px,1.85vw,27px);font-weight:750}
+  .col h3 .ico{width:1.8em;height:1.8em}
+  .tile{flex:1;display:flex;flex-direction:column;justify-content:center;background:#fff;border:1px solid var(--line);border-radius:16px;padding:clamp(12px,1.4vw,22px);opacity:0;transform:translateY(10px);box-shadow:0 6px 18px rgba(24,24,27,.04)}
   .col.shown .tile{animation:rise .5s var(--ease) both}
   .col.shown .tile:nth-of-type(1){animation-delay:.15s}.col.shown .tile:nth-of-type(2){animation-delay:.27s}.col.shown .tile:nth-of-type(3){animation-delay:.39s}
   .col.cur .tile{border-color:#EFC94C}
-  .tile b{display:block;font-family:var(--display);font-size:clamp(14px,1.45vw,20px);margin-bottom:3px}
-  .tile p{font-size:clamp(12px,1.2vw,16px);color:var(--mut);line-height:1.35}
+  .tile b{display:block;font-family:var(--display);font-size:clamp(16px,1.7vw,25px);margin-bottom:4px}
+  .tile p{font-size:clamp(13px,1.4vw,20px);color:var(--mut);line-height:1.35}
   /* the team asks you */
   .split{display:grid;grid-template-columns:1fr 1fr;gap:clamp(24px,4vw,64px);align-items:center}
   .ba{display:flex;flex-direction:column;gap:clamp(14px,2vw,28px)}
@@ -168,7 +184,7 @@
   .card p.strong{font-size:clamp(18px,2.2vw,30px);font-weight:700;color:var(--ink);line-height:1.25}
 
   /* the roadmap */
-  .road{position:relative;width:100%;aspect-ratio:1600/560;margin-top:auto;margin-bottom:auto}
+  .road{position:relative;width:100%;aspect-ratio:1600/640;margin-top:auto;margin-bottom:auto}
   .road::before{content:"";position:absolute;inset:-4% -2%;background-image:radial-gradient(#D4D4D8 1px,transparent 1.2px);background-size:22px 22px;opacity:.55;border-radius:24px;mask-image:radial-gradient(ellipse at center,#000 55%,transparent 80%);-webkit-mask-image:radial-gradient(ellipse at center,#000 55%,transparent 80%)}
   .road svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
   .road .base{fill:none;stroke:#D4D4D8;stroke-width:3;stroke-dasharray:2 9;stroke-linecap:round}
@@ -181,16 +197,16 @@
   .ms .burst{position:absolute;left:-11px;top:-11px;width:22px;height:22px;border-radius:50%;border:2px solid var(--acc);opacity:0}
   .ms.cur .burst{animation:burst 1.1s var(--ease) .1s}
   @keyframes burst{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(4.2)}}
-  .ms .mc{position:absolute;left:0;width:clamp(150px,15.5vw,250px);transform:translate(-50%,0) translateY(10px);opacity:0;transition:opacity .5s var(--ease) .15s,transform .5s var(--ease) .15s;background:#fff;border:1px solid var(--line);border-radius:14px;padding:clamp(8px,.9vw,13px) clamp(10px,1vw,15px);box-shadow:0 8px 24px rgba(24,24,27,.07)}
-  .ms.up .mc{bottom:22px}
-  .ms.down .mc{top:22px}
+  .ms .mc{position:absolute;left:0;width:clamp(124px,12.6vw,202px);transform:translate(-50%,0) translateY(10px);opacity:0;transition:opacity .5s var(--ease) .15s,transform .5s var(--ease) .15s;background:#fff;border:1px solid var(--line);border-radius:14px;padding:clamp(8px,.9vw,13px) clamp(10px,1vw,15px);box-shadow:0 8px 24px rgba(24,24,27,.07)}
+  .ms.up .mc{bottom:26px}
+  .ms.down .mc{top:26px}
   .ms .stem{position:absolute;left:-1px;width:2px;background:linear-gradient(var(--acc),transparent);opacity:0;transition:opacity .4s .1s}
-  .ms.up .stem{bottom:11px;height:12px}.ms.down .stem{top:11px;height:12px}
+  .ms.up .stem{bottom:11px;height:16px}.ms.down .stem{top:11px;height:16px}
   .ms.shown .mc{opacity:1;transform:translate(-50%,0)}
   .ms.shown .stem{opacity:1}
   .ms.cur .mc{border-color:var(--acc)}
   .mc .d{font-family:var(--mono);font-size:clamp(9px,.85vw,12px);color:var(--acct);letter-spacing:.08em;text-transform:uppercase}
-  .mc h4{font-family:var(--display);font-size:clamp(13px,1.3vw,18px);font-weight:750;line-height:1.15;margin:2px 0 4px}
+  .mc h4{font-family:var(--display);font-size:clamp(13px,1.32vw,19px);font-weight:750;line-height:1.15;margin:2px 0 4px}
   .mc .bf{font-size:clamp(10px,.98vw,13.5px);color:#71717A;line-height:1.3}
   .mc .af{font-size:clamp(10px,.98vw,13.5px);color:var(--ink);font-weight:650;line-height:1.3;margin-top:2px}
   .mc .af::before{content:"→ ";color:var(--accn)}
@@ -253,6 +269,7 @@
   @media (prefers-reduced-motion:reduce){.slide,.slide.on{transition:none;transform:none}.slide.on .a,.vcard.shown li,.edge.lit,.road .seg.lit{animation:none;opacity:1;transform:none;stroke-dashoffset:0}}
 </style>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="pg-join" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A855F7"/><stop offset="1" stop-color="#EC4899"/></linearGradient><linearGradient id="pg-orient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22D3EE"/><stop offset="1" stop-color="#0D9488"/></linearGradient><linearGradient id="pg-claim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FB923C"/><stop offset="1" stop-color="#DC2626"/></linearGradient><linearGradient id="pg-build" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FB7185"/><stop offset="1" stop-color="#BE123C"/></linearGradient><linearGradient id="pg-inbox" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#38BDF8"/><stop offset="1" stop-color="#2563EB"/></linearGradient><linearGradient id="pg-mate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#34D399"/><stop offset="1" stop-color="#059669"/></linearGradient><linearGradient id="pg-admin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FBBF24"/><stop offset="1" stop-color="#D97706"/></linearGradient><linearGradient id="pg-ready" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#818CF8"/><stop offset="1" stop-color="#4F46E5"/></linearGradient><linearGradient id="pg-review" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A3E635"/><stop offset="1" stop-color="#16A34A"/></linearGradient><linearGradient id="pg-wrap" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6366F1"/><stop offset="1" stop-color="#312E81"/></linearGradient><linearGradient id="pg-team" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A855F7"/><stop offset="1" stop-color="#EC4899"/></linearGradient><linearGradient id="pg-place" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#38BDF8"/><stop offset="1" stop-color="#2563EB"/></linearGradient><linearGradient id="pg-flow" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FB923C"/><stop offset="1" stop-color="#DC2626"/></linearGradient><linearGradient id="pg-bell" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FBBF24"/><stop offset="1" stop-color="#D97706"/></linearGradient><linearGradient id="pg-gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".5" stop-color="#fff" stop-opacity=".06"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs></svg>
 <div class="stage"><div class="deck">
 
 <!-- 1 · cover -->
@@ -281,12 +298,12 @@
 <!-- 2 · where it started (the problem) -->
 <section class="slide panel" data-sec="The problem" data-title="Where it started">
   <p class="eyebrow a" style="--i:0">Where it started · June 2026</p>
-  <h2 class="a" style="--i:1">Before musterd, I was the coordination layer.</h2>
+  <h2 class="a" style="--i:1">At first, I was the coordination layer.</h2>
   <div class="origin grow">
     <div class="pains">
       <div class="pain frag"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><p>Copy-pasting every question and status update between sessions</p></div>
       <div class="pain frag"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v3"/><path d="M11 14h.01"/></svg></span><p>Losing track of which session had done what, on which branch</p></div>
-      <div class="pain frag"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.9 17.9 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/><path d="m1 1 22 22"/></svg></span><p>Messages sat unread until I told an agent to check</p></div>
+      <div class="pain frag"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><p>Writing a hand-off prompt for every new session</p></div>
       <div class="pain frag"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span><p>Work done twice, or built on something unfinished</p></div>
     </div>
     <div class="stat frag">
@@ -297,7 +314,7 @@
       <div class="legend"><span>reached main</span><span class="l">thrown away</span></div>
     </div>
   </div>
-  <aside hidden>Click through the four pains, then the number. One agent would tell me something and I would paste it into the other. I was not sure which worktree or branch a session was on. A message sat until I told the agent to check. Then we measured it: about 37% of the code three agents produced on one feature was thrown away. The fix was one owner per piece of work, declared before the first keystroke. (From nick's P3 notes, 2026-06-30.)</aside>
+  <aside hidden>Click through the four pains, then the number. One agent would tell me something and I would paste it into the other. I was not sure which worktree or branch a session was on. Every new session started from a prompt I wrote by hand. Then, two days of dogfooding the first version of musterd, we measured it: about 37% of the code three agents produced on one feature was thrown away. The fix was one owner per piece of work, declared before the first keystroke. (From nick's P3 notes, 2026-06-30.)</aside>
 </section>
 
 <!-- 3 · what changes -->
@@ -314,9 +331,9 @@
 </section>
 
 <!-- 4 · one session, step by step -->
-<section class="slide panel" data-sec="Why it works" data-title="One session, step by step" data-hook="session">
+<section class="slide panel" data-sec="Why it works" data-title="A day in the life" data-hook="session">
   <p class="eyebrow a" style="--i:0">How every member works</p>
-  <h2 class="a" style="--i:1">One session, step by step.</h2>
+  <h2 class="a" style="--i:1">A day in the life of a musterd member.</h2>
   <div class="story">
     <div class="mgraph" id="mgraph"></div>
     <div class="mcap" aria-live="polite">
@@ -330,25 +347,25 @@
 </section>
 
 <!-- 4b · what's in the box -->
-<section class="slide" data-sec="Why it works" data-title="What's in the box">
-  <p class="eyebrow a" style="--i:0">What’s in the box</p>
-  <h2 class="a" style="--i:1">The pieces that make it a team.</h2>
+<section class="slide" data-sec="Why it works" data-title="What a team is made of">
+  <p class="eyebrow a" style="--i:0">Under the hood</p>
+  <h2 class="a" style="--i:1">What a musterd team is made of.</h2>
   <div class="box">
-    <div class="col frag"><h3><span>1</span>Who is on it</h3>
+    <div class="col frag"><h3 data-ico="team">Who is on it</h3>
       <div class="tile"><b>Seats</b><p>A member’s durable position. It stays while they’re away.</p></div>
       <div class="tile"><b>Roles</b><p>A charter the team grants: designer, platform, security.</p></div>
       <div class="tile"><b>Humans</b><p>On the same roster, with the same acts.</p></div></div>
-    <div class="col frag"><h3><span>2</span>Where they work</h3>
-      <div class="tile"><b>Workspaces</b><p>Each seat gets its own folder. The folder is the identity.</p></div>
+    <div class="col frag"><h3 data-ico="place">Where they work</h3>
+      <div class="tile"><b>Workspaces</b><p>Each seat works in its own folder, or its own git worktree if you want one.</p></div>
       <div class="tile"><b>Toolkits</b><p>The MCP servers and tools a workspace is equipped with.</p></div>
       <div class="tile"><b>Skills &amp; hooks</b><p>Teach the rules, and remind the agent at the right moment.</p></div></div>
-    <div class="col frag"><h3><span>3</span>How work moves</h3>
+    <div class="col frag"><h3 data-ico="flow">How work moves</h3>
       <div class="tile"><b>Goals &amp; lanes</b><p>What the team is after, split into owned pieces.</p></div>
       <div class="tile"><b>The board</b><p>Who owns what, what’s waiting on review, in a browser.</p></div>
       <div class="tile"><b>Huddles</b><p>A few members work one question together, with a turn budget.</p></div></div>
-    <div class="col frag"><h3><span>4</span>Always reachable</h3>
+    <div class="col frag"><h3 data-ico="bell">Always reachable</h3>
       <div class="tile"><b>Wake &amp; resume</b><p>A message wakes a seat that isn’t running. About 24 s, cold.</p></div>
-      <div class="tile"><b>The doorbell</b><p>An ask rings the human on /live, a desktop banner, or Slack.</p></div>
+      <div class="tile"><b>The doorbell</b><p>An ask reaches you where you already are: /live, a desktop notification, Slack.</p></div>
       <div class="tile"><b>/live</b><p>The office: who’s here, who’s working, every act as it lands.</p></div></div>
   </div>
   <aside hidden>One column per click. Seats, roles, toolkits and workspaces are the glossary's words: a seat is the durable position a member keeps; a role is granted by the team; a toolkit equips a workspace and grants nothing; a workspace is the folder a seat is bound to. Wake and resume is residency: an enrolled seat that is offline gets woken by a directed act. The doorbell rings humans only through musterd's own surfaces, never through an agent's session.</aside>
@@ -388,7 +405,7 @@
   <p class="eyebrow a" style="--i:0">How musterd evolved · 2026</p>
   <h2 class="a" style="--i:1">Built from what broke.</h2>
   <div class="road" id="road"></div>
-  <aside hidden>Click along the road. Each stop is a problem measured in our own team, what we built, and what we measured after. Lanes' 0.9% is one later window with no control. Messages mid-task: the first check found 0 of 67 lines reached the model; it was fixed the next day. The last stop is tonight: the room's vote.</aside>
+  <aside hidden>Click along the road: each stop is something that broke in our own team, what we built, and what changed. Lanes' 0.9% is one September window with no control. Agents ask you: humans were members from the first day; this is when agents could actually reach me, and when the approval gate stopped being my job. Someone else signs off: the builder submits, a different member accepts the landed outcome. Cross-family review needs the record to know which model did the work, which is why we fixed model attestation the month before. Huddles are new; tonight's demo is one. The cloud seat exists because a laptop running every agent at once slows to a crawl.</aside>
 </section>
 
 <!-- 8 · live demo -->
@@ -426,7 +443,7 @@
       </div>
     </div>
     <div class="handles">
-      <div class="handle a" style="--i:2"><span class="hi" style="background:#0D0D0D"><svg viewBox="0 0 24 24"><path fill="#fff" d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg></span><span><b>@Nick_ASanders</b><small>X</small></span></div>
+      
       <div class="handle a" style="--i:3"><span class="hi" style="background:#9146FF"><svg viewBox="0 0 24 24"><path fill="#fff" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0 1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg></span><span><b>twitch.tv/sandrise_ai</b><small>musterd, built live every day</small></span></div>
       <div class="handle a" style="--i:4"><span class="hi" style="background:var(--tint);color:var(--acct)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span><span><b>sandrise.io/nicksanders</b><small>Portfolio</small></span></div>
       <div class="handle a" style="--i:5"><span class="hi" style="background:var(--acc)"><img src="../../design/assets/chip.svg" alt=""></span><span><b>musterd.io</b><small>github.com/SandRiseStudio/musterd</small></span></div>
@@ -458,13 +475,18 @@
       h+=`<g class="mem" style="--x:${x}px;--y:${y}px;--x0:${x*1.9}px;--y0:${y*1.9}px;--k:${k}"><circle r="24" fill="${c}"/><text text-anchor="middle" dy="5" class="ini">${n==='big-body'?'bb':n.slice(0,2)}</text><text class="lbl" text-anchor="middle" y="44">${n}</text></g>`});
     svg.innerHTML=h;})();
 
+  // premium icons: a glossy gradient tile, a white duotone glyph, two sparkles
+  const GLYPH={join:['#EC4899','<path d="M4 21h13"/><path d="M6 21V4.6A1.6 1.6 0 0 1 7.6 3h6.8A1.6 1.6 0 0 1 16 4.6V21"/><path d="M6 3.4l6.2 1.9v16.1L6 21z" fill="#fff" fill-opacity=".4"/><circle cx="10.4" cy="12.6" r=".95" fill="#fff" stroke="none"/><path d="M20 4.6l.65 1.5 1.5.65-1.5.65-.65 1.5-.65-1.5-1.5-.65 1.5-.65z" fill="#fff" stroke="none"/>'],orient:['#0D9488','<circle cx="12" cy="12" r="9"/><path d="M15.6 8.4l-2.2 5-5 2.2 2.2-5z" fill="#fff" fill-opacity=".4"/><path d="M15.6 8.4l-2.2 5-2.8-2.8z" fill="#fff" stroke="none"/><path d="M12 1.8v1.8M12 20.4v1.8M1.8 12h1.8M20.4 12h1.8" stroke-opacity=".75"/>'],claim:['#DC2626','<path d="M5.5 21.5V3"/><path d="M5.5 4h12l-2.6 4.2 2.6 4.3h-12" fill="#fff" fill-opacity=".4"/><path d="M3 21.5h5"/><path d="M20.2 15.2l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z" fill="#fff" stroke="none"/>'],build:['#BE123C','<path d="M12 2.8l8 4.6v9.2l-8 4.6-8-4.6V7.4z"/><path d="M12 2.8l8 4.6-8 4.6-8-4.6z" fill="#fff" fill-opacity=".42" stroke="none"/><path d="M4 7.4l8 4.6 8-4.6"/><path d="M12 12v9.2"/>'],inbox:['#2563EB','<path d="M3 13.5h5l1.6 2.6h4.8l1.6-2.6h5v5a1.8 1.8 0 0 1-1.8 1.8H4.8A1.8 1.8 0 0 1 3 18.5z" fill="#fff" fill-opacity=".4"/><path d="M3 13.5l2.4-5.6a1.8 1.8 0 0 1 1.7-1.1h1.2M21 13.5l-2.4-5.6a1.8 1.8 0 0 0-1.7-1.1h-1.2"/><path d="M12 2.5v8.6M8.8 8l3.2 3.2L15.2 8"/>'],mate:['#059669','<path d="M9 8V5.6a2.1 2.1 0 0 1 2.1-2.1h7.8A2.1 2.1 0 0 1 21 5.6v5.3a2.1 2.1 0 0 1-2.1 2.1H18v2.8l-2.2-2.4" stroke-opacity=".8"/><path d="M3 10.2A2.2 2.2 0 0 1 5.2 8h8.6a2.2 2.2 0 0 1 2.2 2.2v5.6a2.2 2.2 0 0 1-2.2 2.2H8.3L4.6 21v-3A2.2 2.2 0 0 1 3 15.8z" fill="#fff" fill-opacity=".4"/><circle cx="7.2" cy="13" r=".95" fill="#fff" stroke="none"/><circle cx="9.5" cy="13" r=".95" fill="#fff" stroke="none"/><circle cx="11.8" cy="13" r=".95" fill="#fff" stroke="none"/>'],admin:['#D97706','<path d="M12 3a8.6 8.6 0 0 1 7.5 12.8L20.8 21l-5.2-1.2A8.6 8.6 0 1 1 12 3z" fill="#fff" fill-opacity=".32"/><path d="M9.5 9.6a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.3-2.5 3.8"/><circle cx="12" cy="17" r="1.1" fill="#fff" stroke="none"/>'],ready:['#4F46E5','<circle cx="6" cy="5.5" r="2.3" fill="#fff" fill-opacity=".4"/><circle cx="6" cy="18.5" r="2.3" fill="#fff" fill-opacity=".4"/><circle cx="18" cy="18.5" r="2.3" fill="#fff" fill-opacity=".4"/><path d="M6 7.8v8.4"/><path d="M18 16.2V9.5a3 3 0 0 0-3-3h-3.5"/><path d="M13.8 4l-2.5 2.5 2.5 2.5"/>'],review:['#16A34A','<circle cx="10.5" cy="10.5" r="7" fill="#fff" fill-opacity=".32"/><path d="M15.6 15.6l5 5"/><path d="M7.6 10.7l2 2 3.8-3.9"/>'],wrap:['#312E81','<path d="M19.5 14.6A8 8 0 1 1 9.4 4.5a6.4 6.4 0 0 0 10.1 10.1z" fill="#fff" fill-opacity=".36"/><path d="M17.5 2.8l.55 1.3 1.3.55-1.3.55-.55 1.3-.55-1.3-1.3-.55 1.3-.55z" fill="#fff" stroke="none"/><path d="M21.2 8.4l.35.85.85.35-.85.35-.35.85-.35-.85-.85-.35.85-.35z" fill="#fff" stroke="none"/>'],team:['#EC4899','<circle cx="9" cy="8" r="3.4" fill="#fff" fill-opacity=".4"/><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0"/><circle cx="16.8" cy="9.2" r="2.7"/><path d="M15.6 14.3a5.2 5.2 0 0 1 5.8 5.2"/>'],place:['#2563EB','<path d="M3 7.2a2 2 0 0 1 2-2h4.2l2 2.3H19a2 2 0 0 1 2 2v8.3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="#fff" fill-opacity=".4"/><circle cx="9" cy="16.4" r="1.25" fill="#fff" stroke="none"/><circle cx="15" cy="12.4" r="1.25" fill="#fff" stroke="none"/><path d="M9 15.1v-3.2M9 13.4c0-1 2.6-1 4.8-1"/>'],flow:['#DC2626','<rect x="3" y="4" width="18" height="16" rx="3" fill="#fff" fill-opacity=".32"/><path d="M7 9h7M7 12.5h10M7 16h5"/><circle cx="17.2" cy="9" r="1.2" fill="#fff" stroke="none"/>'],bell:['#D97706','<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.6 2H4.4z" fill="#fff" fill-opacity=".4"/><path d="M10 20.6a2.2 2.2 0 0 0 4 0"/><path d="M12 3v2"/><path d="M20.6 6.2l1.2-1.2M3.4 6.2L2.2 5" stroke-opacity=".8"/>']};
+  function ico(k,n){const [glow,g]=GLYPH[k];return `<span class="ico" style="--glow:${glow}66"><svg viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="14" fill="url(#pg-${k})"/><rect width="48" height="48" rx="14" fill="url(#pg-gloss)"/><rect x=".75" y=".75" width="46.5" height="46.5" rx="13.25" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.5"/><g transform="translate(12 12)" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${g}</g></svg>${n?`<b>${n}</b>`:''}<i class="sp"></i><i class="sp s2"></i></span>`}
+  document.querySelectorAll('[data-ico]').forEach(e=>e.insertAdjacentHTML('afterbegin',ico(e.dataset.ico)));
+
   // one session, step by step: nodes (in click order), edges (appear with a step), captions
   (function(){
     const W=1000,H=560, host=document.getElementById('mgraph');
     const S=[
-      {k:'join',  l:'Join',x:80,y:80, me:true, t:'Join', b:['Miley’s session opens','Same seat, same name, same history'], how:['SessionStart hook','MCP tool call']},
-      {k:'orient',l:'Orient',x:258,y:80, t:'Orient', b:['Reads her inbox and last session’s notes','<b>Tier 1</b> (addressed to her): handles it now','<b>Tier 2</b> (open work): waits for direction','Stamps herself oriented'], how:['musterd-orient skill','SessionStart hook','CLI: orient-stamp']},
-      {k:'claim', l:'Claim',x:425,y:80, t:'Claim', b:['Claims “redesign the asks rail”','Names the files it touches','Warned if someone else holds them'], how:['MCP tool call','PreToolUse hook']},
+      {k:'join',  l:'Join',x:80,y:80, me:true, t:'Join', b:['Miley’s session opens','Sees what’s waiting for her','Her first inbox check takes her seat: same name, same history'], how:['SessionStart hook','MCP tool call']},
+      {k:'orient',l:'Orient',x:258,y:80, t:'Orient', b:['Picks up her notes from last session','<b>Tier 1</b> (addressed to her): handles it now','<b>Tier 2</b> (open work): waits for direction','Stamps herself oriented'], how:['musterd-orient skill','SessionStart hook','CLI: orient-stamp']},
+      {k:'claim', l:'Claim',x:425,y:80, t:'Claim', b:['The team’s goal is split into lanes','She claims one: “redesign the asks rail”','Names the files the lane touches','Warned if someone else holds them'], how:['MCP tool call','PreToolUse hook']},
       {k:'build', l:'Build',x:595,y:80, t:'Build', b:['Posts that she has started','Builds the change'], how:['MCP tool call']},
       {k:'inbox', l:'Inbox',x:595,y:300, hub:true, t:'Inbox', b:['Checked after every tool call','Surfaces anything addressed to her','Every step comes back here'], how:['PostToolUse hook']},
       {k:'mate',  l:'A teammate asks',x:860,y:300, t:'A teammate asks', b:['izzo asks Miley for help','Reaches her at her next tool call','She answers, then gets back to building'], how:['PostToolUse hook','MCP tool call']},
@@ -490,36 +512,37 @@
       paths+=`<path class="edge ${cls||''}" data-to="${k}" d="${d}" pathLength="100" marker-end="url(#ah2)"/>`;
       if(lab)paths+=`<text class="elab" data-to="${k}" x="${lx}" y="${ly}" text-anchor="${anc}">${lab}</text>`});
     let nodes='';
-    S.forEach((n,i)=>{nodes+=`<div class="mnode frag${n.hub?' hub':''}" data-k="${i}" style="left:${n.x/W*100}%;top:${n.y/H*100}%">${n.me?'<span class="me">mi</span>':''}<em>${i+1}</em>${n.l}</div>`});
+    S.forEach((n,i)=>{nodes+=`<div class="mnode frag${n.hub?' hub':''}" data-k="${i}" style="left:${n.x/W*100}%;top:${n.y/H*100}%">${n.me?'<span class="me">mi</span>':''}${ico(n.k,i+1)}${n.l}</div>`});
     host.innerHTML=`<svg class="medges" viewBox="0 0 ${W} ${H}" aria-hidden="true"><defs><marker id="ah2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>${paths}</svg>${nodes}`;
     window.__session=S;
   })();
 
   // the roadmap: chronological stops along a glowing road
   (function(){
-    const host=document.getElementById('road');const W=1600,H=560;
+    const host=document.getElementById('road');const W=1600,H=640;
     const R=[
-      {d:'Jun 30',t:'The switchboard',bf:'I copy-pasted between sessions',af:'37% of the code thrown away'},
-      {d:'Jul 1',t:'Lanes',bf:'Two agents built the same thing',af:'0.9% thrown away, later read'},
-      {d:'Jul 3',t:'Messages mid-task',bf:'Replies waited up to 207 min',af:'Arrive at the next tool call'},
-      {d:'Jul 15',t:'Tools shaped by use',bf:'70% of failed calls: one field',af:'16 errors a day, down to 1'},
-      {d:'Jul 17',t:'The human as a member',bf:'0 requests for help',af:'106 asks, 13 requests'},
-      {d:'Jul 24',t:'Knowing the model',bf:'Wrong model shown for weeks',af:'4 of 4 seats agree'},
-      {d:'Jul 28',t:'Done takes two',bf:'2 of 21 threads closed',af:'142 confirmed closes'},
-      {d:'Aug 4',t:'Handoffs',bf:'80% named no lane',af:'None since'},
-      {d:'Aug 5',t:'Sessions start themselves',bf:'23 started by hand in a day',af:'22 started themselves'},
-      {d:'Sep 5',t:'The cloud seat',bf:'Everything ran as root',af:'Scoped, and wakes in 24 s'},
-      {d:'Tonight',t:'You pick what’s next',bf:'The vote from the start of the talk',af:'The team starts on it live',end:true},
+      {d:'Jun 9',t:'One team',bf:'Agents talked through me',af:'A roster, an inbox, typed acts'},
+      {d:'Jul 1',t:'Lanes',bf:'37% of the code thrown away',af:'0.9% in a September read'},
+      {d:'Jul 5',t:'Messages mid-task',bf:'Replies waited up to 207 min',af:'Arrive at the next tool call'},
+      {d:'Jul 6',t:'Memory',bf:'Every session started blank',af:'Picks up where the last left off'},
+      {d:'Jul 17',t:'Agents ask you',bf:'0 requests for help reached me',af:'106 asks, 13 requests'},
+      {d:'Jul 28',t:'Someone else signs off',bf:'2 of 21 threads ever closed',af:'142 confirmed closes'},
+      {d:'Jul 31',t:'Sessions start themselves',bf:'I started 23 by hand in a day',af:'22 started themselves, Aug 5'},
+      {d:'Aug 4',t:'Handoffs carry the lane',bf:'80% named no lane',af:'None since'},
+      {d:'Aug 24',t:'Cross-family review',bf:'Claude checking Claude',af:'Another model family checks'},
+      {d:'Sep 3',t:'Huddles',bf:'Group work had no shape',af:'One room, one question, a turn budget'},
+      {d:'Sep 5',t:'The cloud seat',bf:'Too many agents slowed my laptop',af:'A seat in the cloud, awake in 24 s'},
+      {d:'Sep 23',t:'The doorbell',bf:'Asks waited until I looked',af:'Rings me on /live, desktop, Slack'},
     ];
     const n=R.length,x0=70,x1=1530;
-    const P=R.map((r,i)=>({x:x0+(x1-x0)*i/(n-1),y:285+70*Math.sin(i*1.05)}));
+    const P=R.map((r,i)=>({x:x0+(x1-x0)*i/(n-1),y:320+62*Math.sin(i*1.05)}));
     let segs='',base='M'+P[0].x+','+P[0].y;
     for(let i=1;i<n;i++){const a=P[i-1],b=P[i],dx=(b.x-a.x)/2;const c=` C${a.x+dx},${a.y} ${b.x-dx},${b.y} ${b.x},${b.y}`;base+=c;
       segs+=`<path class="seg" data-to="${i}" d="M${a.x},${a.y}${c}" pathLength="100"/>`}
     let ms='';
     R.forEach((r,i)=>{const p=P[i],up=(i%2===0);
       ms+=`<div class="ms frag ${up?'up':'down'}${r.end?' end':''}" data-k="${i}" style="left:${p.x/W*100}%;top:${p.y/H*100}%"><span class="stem"></span><span class="burst"></span><span class="dot"></span><div class="mc"><div class="d">${r.d}</div><h4>${r.t}</h4><div class="bf">${r.bf}</div><div class="af">${r.af}</div></div></div>`});
-    host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="roadgrad" x1="0" x2="1"><stop offset="0" stop-color="#E1AD01"/><stop offset=".85" stop-color="#E1AD01"/><stop offset="1" stop-color="#9146FF"/></linearGradient></defs><path class="base" d="${base}"/>${segs}</svg>${ms}`;
+    host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="roadgrad" x1="0" x2="1"><stop offset="0" stop-color="#F59E0B"/><stop offset=".5" stop-color="#E1AD01"/><stop offset="1" stop-color="#F97316"/></linearGradient></defs><path class="base" d="${base}"/>${segs}</svg>${ms}`;
   })();
 
   // navigation: slides, click-revealed fragments, back and forward
@@ -530,7 +553,7 @@
     session(sl,sh){const cap=sl.querySelector('.mcap');const last=sh[sh.length-1];
       if(!last){cap.classList.remove('on');return}
       const n=window.__session[+last.dataset.k];
-      cap.querySelector('h3').textContent=n.t;
+      cap.querySelector('h3').innerHTML=ico(n.k)+'<span>'+n.t+'</span>';
       cap.querySelector('ul').innerHTML=n.b.map(x=>'<li>'+x+'</li>').join('');
       cap.querySelector('.how').innerHTML=n.how.map(x=>'<span>'+x+'</span>').join('');
       cap.querySelector('.stepn').textContent='step '+sh.length+' of '+frags(sl).length;
