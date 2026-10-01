@@ -49,6 +49,7 @@ import { CliError } from '../errors.js';
 import { probeUpgradeHost, parseTailscaleSelf } from '../integrations/tailscale.js';
 import { realExec, type Exec } from '../process.js';
 import { theme } from '../render/theme.js';
+import { resolveRead } from './helpers.js';
 
 const USAGE =
   'usage: musterd stream <doctor|build|start|stop|status|ensure> [--app <name>] [--team <slug>] [--once] [--reason <text>] [--json]';
@@ -100,7 +101,7 @@ export async function streamCommand(parsed: Parsed, deps: StreamDeps = {}): Prom
   const repoRoot = findRepoRoot(cwd);
   const statePath = deps.statePath ?? join(dirname(configPath()), 'stream', 'state.json');
   const now = deps.now ?? (() => Date.now());
-  const who = deps.who ?? currentSeatName;
+  const who = deps.who ?? (() => currentSeatName(parsed.flags));
   const launch = deps.launch ?? realLaunch;
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const sendAsk = deps.sendAsk ?? defaultSendAsk;
@@ -545,11 +546,15 @@ async function realLaunch(flyArgs: string[]): Promise<LaunchResult> {
   });
 }
 
-/** The CLI's resolved seat for the current team — the `by` on start/stop provenance. */
-function currentSeatName(): string {
+/**
+ * The `by` on start/stop provenance: the seat the INVOKING folder resolves to, the same answer
+ * `musterd whoami` gives there (ADR 442 — a folder is the member it is bound to, or nobody). It once
+ * read the machine-global config's `current`, so a stop run from miley's workspace was recorded as
+ * whoever last claimed on the laptop (lane 01M3TDDDET).
+ */
+export function currentSeatName(flags: Record<string, string | boolean>): string {
   try {
-    const config = loadConfig();
-    return (config.current && config.identities[config.current]?.name) || 'unknown';
+    return resolveRead(flags).identity?.name ?? 'unknown';
   } catch {
     return 'unknown';
   }
