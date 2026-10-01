@@ -33,6 +33,7 @@ const sample: HuddleTrace = {
         cost_usd: 0.56,
       },
       first_turn_at: 1_790_879_081_124,
+      first_turn_act_id: '01M3WBC8N4A2VVHNJ9JD8Y08DV',
       time_to_turn_ms: 71_124,
     },
   ],
@@ -63,7 +64,13 @@ describe('HuddleTraceSchema (ADR 493)', () => {
   });
 
   it('accepts a seat that was never woken (attended in a terminal) and has not spoken yet', () => {
-    const seat = { ...sample.seats[0]!, wake: null, first_turn_at: null, time_to_turn_ms: null };
+    const seat = {
+      ...sample.seats[0]!,
+      wake: null,
+      first_turn_at: null,
+      first_turn_act_id: null,
+      time_to_turn_ms: null,
+    };
     expect(HuddleTraceSchema.parse({ ...sample, seats: [seat] }).seats[0]!.wake).toBeNull();
   });
 

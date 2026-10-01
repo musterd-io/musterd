@@ -58,7 +58,13 @@ const WAKE_ACTIONS = [
 ] as const;
 
 const TOOL_KINDS = new Set(['PreToolUse', 'PostToolUse', 'PostToolUseFailure']);
-const SESSION_KINDS = new Set(['SessionStart', 'SessionEnd', 'Stop', 'UserPromptSubmit']);
+const SESSION_PHASE: Record<string, HuddleTraceEvent['phase']> = {
+  SessionStart: 'started',
+  UserPromptSubmit: 'prompted',
+  Stop: 'stopped',
+  SessionEnd: 'ended',
+};
+const SESSION_KINDS = new Set(Object.keys(SESSION_PHASE));
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -133,13 +139,19 @@ export function assembleHuddleTrace(inp: HuddleTraceInputs): HuddleTrace | null 
     const w = wakes.get(seat)!;
     switch (a.action) {
       case 'residency.wake_leased':
-        events.push({ ts: a.ts, seat, kind: 'wake', label: 'wake leased' });
+        events.push({ ts: a.ts, seat, kind: 'wake', phase: 'leased', label: 'wake leased' });
         break;
       case 'residency.woke': {
         const s = str(a.detail?.['session']);
         if (s === 'fresh' || s === 'resumed') w.session = s;
         if (w.outcome !== 'failed') w.outcome = 'woke';
-        events.push({ ts: a.ts, seat, kind: 'wake', label: s ? `woke · ${s}` : 'woke' });
+        events.push({
+          ts: a.ts,
+          seat,
+          kind: 'wake',
+          phase: 'woke',
+          label: s ? `woke · ${s}` : 'woke',
+        });
         break;
       }
       case 'residency.wake_failed': {
@@ -149,13 +161,14 @@ export function assembleHuddleTrace(inp: HuddleTraceInputs): HuddleTrace | null 
           ts: a.ts,
           seat,
           kind: 'wake',
+          phase: 'failed',
           label: reason ? `wake failed: ${reason}` : 'wake failed',
         });
         break;
       }
       case 'residency.wake_deferred':
         if (w.outcome === 'leased') w.outcome = 'deferred';
-        events.push({ ts: a.ts, seat, kind: 'wake', label: 'wake deferred' });
+        events.push({ ts: a.ts, seat, kind: 'wake', phase: 'deferred', label: 'wake deferred' });
         break;
       case 'residency.wake_cost': {
         w.duration_ms = num(a.detail?.['duration_ms']);
@@ -163,13 +176,19 @@ export function assembleHuddleTrace(inp: HuddleTraceInputs): HuddleTrace | null 
         const parts = ['settled'];
         if (w.duration_ms !== null) parts.push(`${(w.duration_ms / 1000).toFixed(1)}s`);
         if (w.cost_usd !== null) parts.push(`$${w.cost_usd.toFixed(2)}`);
-        events.push({ ts: a.ts, seat, kind: 'wake', label: parts.join(' · ') });
+        events.push({ ts: a.ts, seat, kind: 'wake', phase: 'settled', label: parts.join(' · ') });
         break;
       }
       case 'residency.session_captured': {
         const h = str(a.detail?.['harness']);
         if (h && !harnessOf.has(seat)) harnessOf.set(seat, h);
-        events.push({ ts: a.ts, seat, kind: 'session', label: 'captured by its wake' });
+        events.push({
+          ts: a.ts,
+          seat,
+          kind: 'session',
+          phase: 'captured',
+          label: 'captured by its wake',
+        });
         break;
       }
     }
@@ -220,7 +239,13 @@ export function assembleHuddleTrace(inp: HuddleTraceInputs): HuddleTrace | null 
         ...(r.duration_ms !== null ? { duration_ms: r.duration_ms } : {}),
       });
     } else if (SESSION_KINDS.has(r.kind)) {
-      events.push({ ts: r.ts, seat: r.seat, kind: 'session', label: r.kind });
+      events.push({
+        ts: r.ts,
+        seat: r.seat,
+        kind: 'session',
+        phase: SESSION_PHASE[r.kind]!,
+        label: r.kind,
+      });
     }
   }
 
@@ -228,8 +253,9 @@ export function assembleHuddleTrace(inp: HuddleTraceInputs): HuddleTrace | null 
   const truncated = events.length > HUDDLE_TRACE_MAX_EVENTS;
 
   const seatRows: HuddleTraceSeat[] = [...seats].map(([seat, s]) => {
-    const first =
-      seat === view.opener ? view.openedAt : (view.turns.find((t) => t.from === seat)?.ts ?? null);
+    const turn = view.turns.find((t) => t.from === seat);
+    const first = seat === view.opener ? view.openedAt : (turn?.ts ?? null);
+    const firstId = seat === view.opener ? view.id : (turn?.id ?? null);
     return {
       seat,
       harness: harnessOf.get(seat) ?? null,
@@ -238,6 +264,7 @@ export function assembleHuddleTrace(inp: HuddleTraceInputs): HuddleTrace | null 
       summoned_by: s.by,
       wake: wakes.get(seat) ?? null,
       first_turn_at: first,
+      first_turn_act_id: firstId,
       time_to_turn_ms: first === null ? null : Math.max(0, first - s.at),
     };
   });

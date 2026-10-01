@@ -28,6 +28,7 @@ const trace: HuddleTrace = {
       summoned_by: 'R',
       wake: null,
       first_turn_at: T0,
+      first_turn_act_id: 'R',
       time_to_turn_ms: 0,
     },
     {
@@ -46,6 +47,7 @@ const trace: HuddleTrace = {
         cost_usd: 2.31,
       },
       first_turn_at: T0 + 336_000,
+      first_turn_act_id: 'T2',
       time_to_turn_ms: 336_000,
     },
     {
@@ -64,6 +66,7 @@ const trace: HuddleTrace = {
         cost_usd: 0.56,
       },
       first_turn_at: T0 + 84_000,
+      first_turn_act_id: 'T1',
       time_to_turn_ms: 84_000,
     },
     {
@@ -74,6 +77,7 @@ const trace: HuddleTrace = {
       summoned_by: 'S',
       wake: null,
       first_turn_at: null,
+      first_turn_act_id: null,
       time_to_turn_ms: null,
     },
   ],

@@ -221,8 +221,16 @@ describe('assembleHuddleTrace (ADR 493)', () => {
 
   it('measures time-to-turn from when the seat was summoned', () => {
     const by = Object.fromEntries(build()!.seats.map((s) => [s.seat, s]));
-    expect(by['miley']).toMatchObject({ first_turn_at: T0 + 71_000, time_to_turn_ms: 71_000 });
-    expect(by['ryder']).toMatchObject({ first_turn_at: null, time_to_turn_ms: null });
+    expect(by['miley']).toMatchObject({
+      first_turn_at: T0 + 71_000,
+      first_turn_act_id: 'T1',
+      time_to_turn_ms: 71_000,
+    });
+    expect(by['ryder']).toMatchObject({
+      first_turn_at: null,
+      first_turn_act_id: null,
+      time_to_turn_ms: null,
+    });
     expect(by['miley']!.harness).toBe('claude-code');
     expect(by['lazara']!.harness).toBe('codex');
   });
@@ -247,6 +255,19 @@ describe('assembleHuddleTrace (ADR 493)', () => {
     ]);
     expect(ev.some((e) => e.label.startsWith('woke'))).toBe(true);
     expect(ev.some((e) => e.label === 'settled · 27.5s · $0.56')).toBe(true);
+  });
+
+  it('names every wake and session step with a stable phase', () => {
+    const phases = build()!
+      .events.filter((e) => e.kind === 'wake' || e.kind === 'session')
+      .map((e) => `${e.seat}:${e.phase}`);
+    expect(phases).toEqual([
+      'miley:leased',
+      'lazara:leased',
+      'miley:captured',
+      'miley:woke',
+      'miley:settled',
+    ]);
   });
 
   it('shows a tool call once: the completed row, not also its PreToolUse', () => {
