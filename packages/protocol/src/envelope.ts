@@ -10,6 +10,7 @@ import {
 } from './envelope.wire.js';
 import { AnchorRefSchema, HuddleMetaSchema } from './huddle.js';
 import { BlockedBySchema } from './incident.js';
+import { ReviewPromiseReferenceSchema } from './review-promise.js';
 import { PROTOCOL_VERSION } from './version.js';
 
 /** The envelope's validator-free half lives in `envelope.wire.js`; this module is its zod face. */
@@ -136,6 +137,44 @@ export function actMetaRules(
   ctx: z.RefinementCtx,
 ): void {
   const meta = env.meta ?? {};
+  if ('review' in meta) {
+    const review = meta['review'];
+    if (!ReviewPromiseReferenceSchema.safeParse(review).success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['meta', 'review'],
+        message: 'meta.review must be a valid typed review reference',
+      });
+    }
+    if (env.act !== 'request_help') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['meta', 'review'],
+        message: 'meta.review is only valid on request_help',
+      });
+    }
+    if (env.thread !== undefined && env.thread !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['meta', 'review'],
+        message: 'meta.review must be on a root request_help with no thread',
+      });
+    }
+    if (env.to?.kind !== 'member') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['meta', 'review'],
+        message: 'meta.review must address exactly one Member',
+      });
+    }
+    if (meta['eligible'] !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['meta', 'review'],
+        message: 'meta.review cannot be combined with meta.eligible',
+      });
+    }
+  }
   if (env.act === 'accept' || env.act === 'decline') {
     const replyTo = meta['in_reply_to'];
     if (typeof replyTo !== 'string' || replyTo.length === 0) {
