@@ -18,7 +18,9 @@ export type SeedState = (typeof SEED_STATES)[number];
 /**
  * Where a Seed was captured. `slack` arrives through the relay (ADR 248/311); `repo` is a
  * document-recorded intention — a `Follows-up:` marker or an undisposed forward reference in this
- * repo's own documents — captured by `pnpm intents:ingest` (ADR 373 increment 2). The relay
+ * repo's own documents — captured by `musterd seed capture --ref` (ADR 373 increment 2; the bulk
+ * `intents:ingest` script was retired by ADR 487, 2026-09-30, so no new `repo` Seeds arrive in
+ * bulk — a plan's increments are lanes now). The relay
  * boundary itself stays Slack-only; widening THIS set is the whole schema delta ADR 373 authorizes.
  *
  * Here rather than in `seeds.ts` because the orientation brief carries a Seed's source

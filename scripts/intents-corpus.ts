@@ -1,11 +1,20 @@
 /*
- * The three surfaces ADR 373 scans, shared by the gate (`check-intents.ts`) and the ingest
- * (`ingest-intents.ts`) so the two can never disagree about what counts as the corpus.
+ * The surfaces `intents:check` scans.
+ *
+ * Two corpora, on purpose. The phrase check reads ADR 373's three surfaces and no more: the open
+ * ADR 373 watch (`docs/watches/2026-09-14-adr-373-follows-up-advances-successor.md`) voids if they
+ * move inside its window. ADR 487's structural rule reads the wider set — specs, plans and design
+ * docs are where increment tables live.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { type ForwardReference, findForwardReferences } from './intents.ts';
+import {
+  type ForwardReference,
+  type IncrementItem,
+  findForwardReferences,
+  findIncrementItems,
+} from './intents.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const repoRoot = join(here, '..');
@@ -16,6 +25,16 @@ const SURFACES = [
   { dir: join(repoRoot, 'docs', 'wiki'), ext: '.md' },
 ] as const;
 const ROADMAP = join(repoRoot, 'content', 'roadmap.data.ts');
+
+/** ADR 487 Decision 5: where a plan's Increments/Phases sections live. The roadmap is generated
+ *  from typed data and has no headings, so it is not on this list. */
+const INCREMENT_SURFACES = [
+  join(repoRoot, 'docs', 'decisions'),
+  join(repoRoot, 'docs', 'superpowers', 'specs'),
+  join(repoRoot, 'docs', 'superpowers', 'plans'),
+  join(repoRoot, 'docs', 'design'),
+  join(repoRoot, 'docs', 'wiki'),
+] as const;
 
 function filesUnder(dir: string, ext: string): string[] {
   let entries: string[];
@@ -47,4 +66,14 @@ export function collectForwardReferences(): ForwardReference[] {
     // roadmap gates say so far more loudly than this one would.
   }
   return refs;
+}
+
+export function collectIncrementItems(): IncrementItem[] {
+  const items: IncrementItem[] = [];
+  for (const dir of INCREMENT_SURFACES) {
+    for (const file of filesUnder(dir, '.md')) {
+      items.push(...findIncrementItems(relative(repoRoot, file), readFileSync(file, 'utf8')));
+    }
+  }
+  return items;
 }

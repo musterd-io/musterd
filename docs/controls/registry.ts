@@ -190,10 +190,10 @@ export const CONTROLS: Control[] = [
     id: 'adr-373-forward-reference-names-a-disposition',
     kind: 'gate',
     claim:
-      'A sentence in an ADR, a wiki page or the roadmap data that promises future work names a lane, a dated deferral with a reopen trigger, or a dated none — and `pnpm intents:check` fails when it names nothing.',
-    where: 'scripts/check-intents.ts, run from format:check (so every PR); shapes and baselines in scripts/intents.ts',
+      'A sentence in an ADR, a wiki page or the roadmap data that promises future work names a lane, a dated deferral with a reopen trigger, or a dated none — and `pnpm intents:check` fails when it names nothing. Since ADR 487 (2026-09-30) it also fails any row or top-level item in an Increments/Phases section of an ADR, spec, plan, design doc or wiki page that cites no lane id, `parked <lane id>`, or `dropped — <reason>`.',
+    where: 'scripts/check-intents.ts, run from format:check (so every PR); shapes and baselines in scripts/intents.ts; the increments burn-down in scripts/intents-increments-baseline.ts',
     exercise:
-      'Add a line reading "That is left for a sibling lane." to any docs/wiki page and run `pnpm intents:check` — it must exit 1 naming that file and line. Then delete the line.',
+      'Add a line reading "That is left for a sibling lane." to any docs/wiki page and run `pnpm intents:check` — it must exit 1 naming that file and line. Then delete the line. For the structural rule: add `## Increments` and `1. a later step` to any docs/superpowers/specs file — it must exit 1 naming that item; delete both.',
     motivatedBy:
       "2026-09-03 sweep: 62 wiki pages, 364 ADRs, 86 roadmap items and all 843 lanes read against the code turned up 9 items of recorded work with no lane, no goal and no implementation. ADR 354 §Consequences said \"Left for a sibling lane\" and no lane was opened; census.ts said \"increment 3 will auto-provision\" and increment 3 had no owner.",
     counterfactual:

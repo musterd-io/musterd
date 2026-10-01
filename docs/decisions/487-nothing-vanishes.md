@@ -97,6 +97,12 @@ The five lanes under goal `nothing-vanishes` carry the build; the spec's §7 map
   human to park it; until then the lane stays `open`, which is still a visible disposition.
   `follows_up` (lane 3) accepts an open lane for exactly this reason. Dropping (`abandoned`) stays
   self-serve. The triage in lane 1 followed this: nick chose the parks, and he runs them.
+- **2026-09-30 — the structural rule landed (lane 2, `01M3T8MQ6ZJQPC2MXD3RCK5YX9`).** Measured at
+  merge: 163 rows and items in Increments/Phases sections, 12 citing a lane or a drop, 151 on the
+  burn-down (`scripts/intents-increments-baseline.ts`). Decision 5's wider surfaces apply to the
+  structural rule only; the phrase check keeps ADR 373's three, because the open ADR 373 watch voids
+  if they move inside its window. `intents:ingest` is gone; the 32 `repo` Seeds were closed against
+  spec Appendix B.
 
 ## Observability & Evaluation
 

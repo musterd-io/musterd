@@ -174,9 +174,7 @@ describe('seed command', () => {
     expect(promoted.out).toMatch(new RegExp(`^✓ Seed ${seedId} — promoted to Lane 01`));
 
     const tray = await capture(() => seedCommand(parseArgs(['list'])));
-    expect(tray.out).toBe(
-      "no active Seeds — send an idea through the Team's Slack capture, or `pnpm intents:ingest`\n",
-    );
+    expect(tray.out).toBe("no active Seeds — send an idea through the Team's Slack capture\n");
     const history = await capture(() => seedCommand(parseArgs(['list', '--history'])));
     expect(history.out).toContain(`${seedId} promoted`);
   });

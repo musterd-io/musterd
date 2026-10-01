@@ -539,7 +539,7 @@ export const CATALOG: readonly CommandEntry[] = [
       '  brief <id> --file <path>      submit an exhaustive brief and open its Lane\n' +
       '  conclude <id> --file <path> "<conclusion>"   finish without a Lane\n' +
       '  promote <id>                  deliberately skip research and open a Lane\n' +
-      '  capture --ref <path#anchor> [--lane <id>] "<text>"   a document-recorded intention (ADR 373); --batch <file|-> for `pnpm intents:ingest`',
+      '  capture --ref <path#anchor> [--lane <id>] "<text>"   a document-recorded intention (ADR 373); --batch <file|-> for many',
     examples: ['musterd seed list', 'musterd seed claim 01SEED…'],
   },
   {

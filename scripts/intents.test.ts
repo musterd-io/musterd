@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { INCREMENTS_BASELINE } from './intents-increments-baseline.ts';
 import {
-  anchorOf,
   baselineKey,
-  ingestCandidates,
+  citesDisposition,
   DISPOSITION_WINDOW,
   FALSE_POSITIVE_BASELINE,
   failures,
   findForwardReferences,
   FORWARD_BASELINE,
+  findIncrementItems,
+  incrementBaselineRot,
+  incrementFailures,
   measureCoverage,
   parseDisposition,
 } from './intents.ts';
@@ -180,87 +183,92 @@ describe('the meter separates debt from the instrument’s own noise', () => {
   });
 });
 
-describe('ingestCandidates — which references become Seeds (ADR 373 increment 2)', () => {
-  const text = [
-    'kill. Left for a sibling lane; this ADR fixes the attestation, not the judgement.',
-    'Follows-up: 01M1MMHJP3PQY1QWNJCHV3XEMA',
-    '',
-    'The relabel is a separate lane.',
-    'Follows-up: deferred — a second seat relabels the set (2026-09-03)',
-    '',
-    'Undo is not yet built.',
-    '',
-    '',
-    '',
-    '',
-    '',
-    'The exporter is a separate lane too.',
-    'Follows-up: none — the export path shipped 2026-08-19 (2026-09-03)',
-    '',
-    'Malformed one is a separate lane.',
-    'Follows-up: deferred (2026-09-03)',
-  ].join('\n');
+const inc = (text: string) => findIncrementItems('docs/superpowers/specs/x.md', text);
 
-  it('captures undisposed and deferred references open, lane-disposed ones promoted, and skips none/malformed', () => {
-    const refs = f(text);
-    const out = ingestCandidates(refs, new Set());
-    expect(out.map((c) => c.kind)).toEqual(['lane', 'deferred', 'undisposed']);
-    expect(out[0]).toMatchObject({
-      lane_id: '01M1MMHJP3PQY1QWNJCHV3XEMA',
-      ref: 'docs/decisions/999-x.md#kill-left-for-a-sibling-lane-this-adr-fixes-the-attestatio',
-    });
-    expect(out[0]!.body).toBe(
-      'kill. Left for a sibling lane; this ADR fixes the attestation, not the judgement.\n— docs/decisions/999-x.md:1',
+describe('findIncrementItems — an Increments/Phases section is checked row by row (ADR 487)', () => {
+  it('checks every data row of a table, never the header or the separator', () => {
+    const items = inc(
+      [
+        '## 7. Increments',
+        '',
+        '| # | Lane | Touches |',
+        '| --- | --- | --- |',
+        '| 1 | `01M3T8MJK8H4M86DZJEBMW6KM8` — this spec | docs |',
+        '| 2 | the docs gate | scripts |',
+      ].join('\n'),
     );
-    expect(out[1]!.lane_id).toBeUndefined();
+    expect(items.map((i) => [i.line, i.cited])).toEqual([
+      [5, true],
+      [6, false],
+    ]);
+    expect(items[1]!.section).toBe('7. Increments');
   });
 
-  it('never captures the instrument’s own noise', () => {
-    const refs = f('Undo is not yet built.');
-    expect(ingestCandidates(refs, new Set([baselineKey(refs[0]!)]))).toEqual([]);
+  it('accepts the three dispositions and nothing else', () => {
+    expect(citesDisposition('1. ship it — lane 01M3TAKF3Y')).toBe(true);
+    expect(citesDisposition('2. the gate — parked `01M3TAM9XH`')).toBe(true);
+    expect(citesDisposition('3. host move — dropped — superseded by ADR 475')).toBe(true);
+    expect(citesDisposition('4. host move — dropped')).toBe(false);
+    expect(citesDisposition('5. later, maybe its own lane')).toBe(false);
+    expect(citesDisposition('6. see ADR 487 (2026-09-30)')).toBe(false);
   });
 
-  it('the anchor is stable under editing above the line and safe in a URL', () => {
-    const a = ingestCandidates(f('Undo is not yet built.'), new Set())[0]!.ref;
-    const b = ingestCandidates(f('\n\n# heading\n\nUndo is not yet built.'), new Set())[0]!.ref;
-    expect(a).toBe(b);
-    expect(a).toBe('docs/decisions/999-x.md#undo-is-not-yet-built');
-    expect(anchorOf('`init`-undo / per-folder uninstall — **follow')).toBe(
-      'init-undo-per-folder-uninstall-follow',
+  it('a list item owns its indented continuation, so a citation on line two counts', () => {
+    const items = inc(
+      [
+        '## Increments',
+        '1. **The ladder** — a pure judgement over the binding,',
+        '   shipped as lane 01KZAEGF2KXXXXXXXXXXXXXXXX.',
+        '2. **The audit row** — needs a client to server path.',
+        '   - a sub-bullet is part of item 2, not an increment',
+      ].join('\n'),
     );
+    expect(items.map((i) => i.cited)).toEqual([true, false]);
   });
 
-  it('every entry on the burn-down is a candidate', () => {
-    const undisposed = [...FORWARD_BASELINE].map((key) => {
-      const [file, text] = key.split('::') as [string, string];
-      return { file, line: 1, phrase: '', text, disposition: null };
-    });
-    expect(ingestCandidates(undisposed)).toHaveLength(FORWARD_BASELINE.size);
+  it('a section ends at the next heading of its level; deeper headings stay inside', () => {
+    const items = inc(
+      [
+        '## Increments',
+        '### Increment 1 detail',
+        '- one',
+        '## Consequences',
+        '- not an increment',
+      ].join('\n'),
+    );
+    expect(items.map((i) => i.text)).toEqual(['- one']);
   });
 
-  it("a bare `building:` key carries its string's first line, so five keys are five references", () => {
-    const roadmap = [
-      '    building:',
-      "      'increments 3–5 — remaining platform services',",
-      '  },',
-      '  {',
-      '    building:',
-      "      'M4–M5 — the weekly digest emit',",
-    ].join('\n');
-    const refs = findForwardReferences('content/roadmap.data.ts', roadmap);
-    expect(refs.map((r) => r.text)).toEqual([
-      "building: 'increments 3–5 — remaining platform services',",
-      "building: 'M4–M5 — the weekly digest emit',",
-    ]);
-    const out = ingestCandidates(refs, new Set());
-    expect(new Set(out.map((c) => c.ref)).size).toBe(2);
+  it('names the plural only: one phase as a heading is that phase, and H1 is the title', () => {
+    expect(inc('## Phase 2 — build\n- step')).toEqual([]);
+    expect(inc("# 487 — a plan's increments are lanes\n- not a section")).toEqual([]);
+    expect(inc('## The five phases\n- P0')).toHaveLength(1);
   });
 
-  it('numbers colliding anchors in file order rather than folding them into one Seed', () => {
-    const refs = f('Undo is not yet built.\n\n\n\n\n\nUndo is not yet built.');
-    expect(ingestCandidates(refs, new Set()).map((c) => c.ref)).toEqual([
-      'docs/decisions/999-x.md#undo-is-not-yet-built',
-      'docs/decisions/999-x.md#undo-is-not-yet-built~2',
-    ]);
+  it('skips fenced code — an example table is not a plan', () => {
+    expect(inc('## Increments\n```\n| a | b |\n|---|---|\n| 1 | x |\n```')).toEqual([]);
+  });
+
+  it('prose paragraphs in the section are not items', () => {
+    expect(inc('## Increments\nEach lands alone, in order.\n')).toEqual([]);
+  });
+});
+
+describe('the increments baseline is a burn-down', () => {
+  const items = inc('## Increments\n1. old, undisposed\n2. new, undisposed');
+  const old = new Set([baselineKey(items[0]!)]);
+
+  it('fails only what the baseline does not cover', () => {
+    expect(incrementFailures(items, old).map((i) => i.line)).toEqual([3]);
+  });
+
+  it('reports an entry whose item now cites a lane, or is gone, as rot', () => {
+    const disposed = inc('## Increments\n1. old, undisposed — 01M3TAKF3Y');
+    expect(incrementBaselineRot(disposed, old)).toEqual([...old]);
+    expect(incrementBaselineRot(items, old)).toEqual([]);
+  });
+
+  it('every committed entry is keyed the way baselineKey keys an item', () => {
+    for (const key of INCREMENTS_BASELINE) expect(key).toMatch(/^docs\/[^:]+\.md::.+/);
   });
 });
