@@ -77,6 +77,11 @@ copies would drift.
   order, wake outcomes and per-seat tool steps match the five harness transcripts. One gap: the
   Grok tap records most tool calls as `other`, so wanderer's steps show that name rather than the
   tool's. That is a tap fix, not a trace fix.
+- 2026-10-01 (#1942 follow-up, miley's asks for `/live`): two additive fields. A seat also carries
+  `first_turn_act_id`, so a surface can attach the seat's steps to its turn line. A `wake` or
+  `session` event also carries `phase`, one stable word for its step (`leased`, `captured`,
+  `woke`, `failed`, `deferred`, `settled`, `started`, `prompted`, `stopped`, `ended`), so every
+  surface words it the same way.
 - The route is additive. Older clients ignore it, and no existing schema changes.
 
 ## Observability & Evaluation

@@ -45,15 +45,33 @@ export const HuddleTraceSeatSchema = z.object({
   summoned_by: z.string().nullable(),
   wake: HuddleTraceWakeSchema.nullable(),
   first_turn_at: z.number().int().min(0).nullable(),
+  /** The act id of that first turn, so a surface can attach the seat's steps to its turn line. */
+  first_turn_act_id: z.string().nullable(),
   time_to_turn_ms: z.number().int().min(0).nullable(),
 });
 export type HuddleTraceSeat = z.infer<typeof HuddleTraceSeatSchema>;
+
+/** A stable word for each wake or session step, so every surface says it the same way (ADR 493). */
+export const HUDDLE_TRACE_PHASES = [
+  'leased',
+  'captured',
+  'woke',
+  'failed',
+  'deferred',
+  'settled',
+  'started',
+  'prompted',
+  'stopped',
+  'ended',
+] as const;
 
 export const HuddleTraceEventSchema = z.object({
   ts: z.number().int().min(0),
   seat: z.string(),
   kind: HuddleTraceEventKindSchema,
   label: z.string(),
+  /** Set on `wake` and `session` events: the step, in {@link HUDDLE_TRACE_PHASES}. */
+  phase: z.enum(HUDDLE_TRACE_PHASES).optional(),
   act_id: z.string().optional(),
   tool_name: z.string().optional(),
   outcome: z.string().optional(),
