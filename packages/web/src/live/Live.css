@@ -712,6 +712,19 @@
 .lc-team {
   grid-column: 2;
 }
+/* Big screens — a TV, a projector, a 1920+ monitor across a desk — read the column from further away
+   (nick, 2026-10-01). The same step /broadcast takes at its 1080 rung: a little wider, and the
+   column's type 12% up via `zoom`, so its proportions stay the ones the contrast gate measured.
+   A laptop is untouched. Not on /broadcast (its own rule keys off the STAGE width, Broadcast.css),
+   and not on the collapsed avatar rail. */
+@media (min-width: 1600px) {
+  .lc__canvas:not(.bc__canvas):not(.is-team-collapsed):not(.is-office-collapsed) {
+    --col-team: clamp(300px, 24vw, 460px);
+  }
+  .lc__canvas:not(.bc__canvas):not(.is-team-collapsed) .lc-team {
+    zoom: 1.12;
+  }
+}
 @keyframes lc-fade {
   from {
     opacity: 0;

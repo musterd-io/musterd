@@ -72,30 +72,46 @@ export function nearDepth(lx: number, ly: number, w: number, d: number): number 
 }
 
 /**
- * Fit the *whole scene* into a panel: centre it and pick the largest scale that leaves a small margin.
- * The projected box is width 2·FLOOR·KX; its height is the full vertical extent — the back walls rising
- * above the diamond (`SCENE_RISE`), the diamond itself (2·FLOOR·KY), and the slab + contact shadow below
- * it (`SCENE_DROP`). Fitting only the floor diamond (the old behaviour) let the wall tops clip off the
- * top of the panel at wide/short aspect ratios, which is why the back corner was getting cut off.
+ * A box to fit, in screen px at scale 1, relative to the floor's BACK corner (where `project(0, 0)`
+ * lands). `x` runs left/right of that corner, `y` down from it — negative `top` is above the corner.
  */
-export function fitFloor(panelW: number, panelH: number, zoom = 1): Fit {
-  const projW = FLOOR * KX * 2;
-  const projH = SCENE_RISE + FLOOR * KY * 2 + SCENE_DROP;
-  // 0.94 → 0.96 (nick, 2026-08-03): the scene is height-bound at every aspect the product uses, so this
-  // number is the room's size on screen, and 6% of unused height on a 720p stream is a wasted 43 pixels.
-  // It stays under 1 because the margin is what keeps the wall tops and the contact shadow off the panel
-  // edge — the scene is drawn to its box, not inset within it.
-  const margin = 0.96;
-  /* `zoom` > 1 deliberately crops: the whole room no longer fits, and what leaves the frame first is
-     what the fit centres away from — the back-wall tops, the front floor tip, the empty corners.
-     /broadcast passes 1.09 (nick, 2026-10-01, chosen from mocked arms 1.00–1.25): the largest
-     centred step that keeps the entrance door whole. Constant, so every sprite key stays valid. */
-  const scale =
-    Math.max(0.05, Math.min((panelW * margin) / projW, (panelH * margin) / projH)) * zoom;
-  const ox = panelW / 2;
-  // Centre the full box vertically. Its top (the wall tops) sits `SCENE_RISE·scale` above the floor's
-  // back corner, so place the back corner that far below the box top → symmetric margins top and bottom.
-  const boxTop = (panelH - projH * scale) / 2;
-  const oy = boxTop + SCENE_RISE * scale;
-  return { ox, oy, scale };
+export interface FitBox {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/**
+ * The whole scene: the floor diamond (2·FLOOR·KX wide), the back walls rising above its back corner
+ * (`SCENE_RISE`), and the slab + contact shadow below its front corner (`SCENE_DROP`). Fitting only the
+ * floor diamond (the old behaviour) let the wall tops clip off the top of the panel at wide/short aspect
+ * ratios, which is why the back corner was getting cut off.
+ */
+export const ROOM_BOX: FitBox = {
+  left: -FLOOR * KX,
+  right: FLOOR * KX,
+  top: -SCENE_RISE,
+  bottom: FLOOR * KY * 2 + SCENE_DROP,
+};
+
+/**
+ * Fit a box into a panel: the largest scale that leaves `margin` of the binding axis, the box centred.
+ * 0.94 → 0.96 (nick, 2026-08-03): the scene is height-bound at most aspects the product uses, so the
+ * margin is the room's size on screen, and 6% of unused height on a 720p stream is 43 wasted pixels.
+ */
+export function fitBox(panelW: number, panelH: number, box: FitBox, margin = 0.96): Fit {
+  const bw = box.right - box.left;
+  const bh = box.bottom - box.top;
+  const scale = Math.max(0.05, Math.min((panelW * margin) / bw, (panelH * margin) / bh));
+  return {
+    ox: panelW / 2 - ((box.left + box.right) / 2) * scale,
+    oy: panelH / 2 - ((box.top + box.bottom) / 2) * scale,
+    scale,
+  };
+}
+
+/** Fit the whole scene, margin and all — the musterd.io hero and /office-preview; /live and /broadcast fit the furnished room instead (`furnishedBox` in render.ts). */
+export function fitFloor(panelW: number, panelH: number): Fit {
+  return fitBox(panelW, panelH, ROOM_BOX);
 }

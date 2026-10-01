@@ -136,7 +136,7 @@ export function OfficeScene({
   broadcast = false,
   captureFps,
   sprites = false,
-  zoom = 1,
+  fit = 'room',
   entries,
   board,
   asks,
@@ -169,8 +169,8 @@ export function OfficeScene({
   /** Cache the static furniture as sprites instead of redrawing the room every frame (spec
    * 2026-09-17). On for `/broadcast` (ADR 488, `&sprites=0` opts out); `/live` never passes it. */
   sprites?: boolean;
-  /** Fit past the whole room by this factor — `/broadcast` passes 1.09, `/live` leaves it at 1. */
-  zoom?: number;
+  /** What the room is fitted to — `'furnished'` on /live and /broadcast (see `mountOffice`). */
+  fit?: 'room' | 'furnished';
   /** Handed the scene handle once it mounts (and `null` on teardown) — the broadcast route publishes it
    * as `window.__office` so a capturer can probe the scene. */
   onReady?: (handle: OfficeHandle | null) => void;
@@ -264,7 +264,7 @@ export function OfficeScene({
           broadcast,
           ...(captureFps !== undefined ? { captureFps } : {}),
           sprites,
-          zoom,
+          fit,
           interactiveLabels: !broadcast,
           showWorkCues: workCues === 'hybrid',
         });
@@ -282,7 +282,7 @@ export function OfficeScene({
       handleRef.current = null;
       onReadyRef.current?.(null);
     };
-  }, [broadcast, captureFps, sprites, zoom, workCues]);
+  }, [broadcast, captureFps, sprites, fit, workCues]);
 
   useEffect(() => {
     handleRef.current?.update(data);

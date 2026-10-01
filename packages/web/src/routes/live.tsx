@@ -572,6 +572,7 @@ function LivePage() {
           >
             <OfficeScene
               {...officeRoom(team, stream, { entries, board, asks })}
+              fit="furnished"
               collapsed={collapsed.office}
               onCollapse={() => toggleCollapse('office')}
               onActClick={onActClick}

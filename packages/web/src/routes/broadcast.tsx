@@ -77,13 +77,6 @@ function captureFpsFromUrl(): number {
  * day frame beyond rounding, one pen cup at Δ91) for a real 15 fps. `&sprites=0` is the escape
  * hatch and the A/B arm. `/live` never reads this: viewers keep the direct render.
  */
-/**
- * How far past "the whole room" the stream frames the office. nick chose 1.09 centred on 2026-10-01
- * from mocked arms between 1.00 and 1.25: the largest centred step that keeps the entrance door whole,
- * which is where arrivals walk in. Constant, so the sprite cache's keys stay valid.
- */
-export const BROADCAST_ZOOM = 1.09;
-
 export function spritesFromUrl(search: string): boolean {
   return new URLSearchParams(search).get('sprites') !== '0';
 }
@@ -337,7 +330,7 @@ function BroadcastPage() {
                 broadcast
                 captureFps={captureFps}
                 sprites={sprites}
-                zoom={BROADCAST_ZOOM}
+                fit="furnished"
                 topSlot={<StreamAskBanner envelopes={envelopes} roster={roster} />}
                 cornerSlot={broadcastCorner(team, shipped)}
                 onReady={onSceneReady}
