@@ -392,3 +392,91 @@ describe('cloud mode — a look-alike discovery path reaches no team (review M1)
     }
   });
 });
+
+describe('cloud mode — a database blip at the token endpoint is a 503, never a dead grant (review I2)', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  /** A cloud server whose coordination store drops the connection on statements matching `blip`. */
+  async function bootWithBlip(blip: RegExp) {
+    stubCloudEnv();
+    const seed = await openTestDriver('pglite');
+    await openTestDriver('pglite', { store: 'trace' });
+    const pools = (await testCloudPools()).factories;
+    const main = (u: string) => {
+      const p = pools.main(u);
+      return {
+        connect: async () => {
+          const c = await p.connect();
+          return {
+            query: (text: string, values?: unknown[]) =>
+              blip.test(text)
+                ? Promise.reject(
+                    Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }),
+                  )
+                : c.query(text, values),
+            release: (err?: unknown) => c.release(err),
+          };
+        },
+        end: () => p.end(),
+      };
+    };
+    const s = createServer({ cloudPools: { ...pools, main }, rosterRoots: [], port: 0 });
+    await s.listen();
+    await createTeam(seed, { slug: 'revive' });
+    return { s, url: `http://127.0.0.1:${s.port}` };
+  }
+  const CIMD = 'https://client.example/oauth/metadata.json';
+  const token = (url: string, body: Record<string, string>) =>
+    hostRequest(url, '/oauth/revive/token', 'revive.musterd.test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forwarded-proto': 'https' },
+      body: JSON.stringify(body),
+    });
+  const expectUnavailable = (r: { status: number; body: string }) => {
+    expect(r.status, r.body).toBe(503);
+    expect(JSON.parse(r.body)).toMatchObject({ error_description: 'database unreachable' });
+  };
+
+  it('the client lookup failing is not "unknown client" (invalid_client makes a client forget its registration)', async () => {
+    const { s, url } = await bootWithBlip(/oauth_clients/);
+    try {
+      expectUnavailable(
+        await token(url, {
+          grant_type: 'refresh_token',
+          refresh_token: 'msrt_x',
+          client_id: 'mcp-client',
+        }),
+      );
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('refresh rotation failing is not invalid_grant (RFC 6749 clients discard the refresh token)', async () => {
+    const { s, url } = await bootWithBlip(/oauth_tokens/);
+    try {
+      expectUnavailable(
+        await token(url, { grant_type: 'refresh_token', refresh_token: 'msrt_x', client_id: CIMD }),
+      );
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('code redemption failing is not invalid_grant either', async () => {
+    const { s, url } = await bootWithBlip(/oauth_codes/);
+    try {
+      expectUnavailable(
+        await token(url, {
+          grant_type: 'authorization_code',
+          code: 'mscode_x',
+          redirect_uri: 'https://client.example/cb',
+          client_id: CIMD,
+          code_verifier: 'v'.repeat(43),
+        }),
+      );
+    } finally {
+      await s.close();
+    }
+  });
+});

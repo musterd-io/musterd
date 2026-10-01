@@ -388,8 +388,11 @@ changes nothing. It requires `MUSTERD_DATABASE_APP_URL`, `MUSTERD_DATABASE_OPERA
    `POST /teams`) answer on any host.
 5. **`/health` is ok or one sentence (§5.5).** `200 {ok:true}` or `503 {ok:false, reason:"database
    unreachable"}` — no path, counts, or build. Any request that meets an unreachable store is a 503
-   with the same sentence; recovery is automatic (the pool reconnects). `/live` shows the sentence
-   as a banner (`packages/web/src/live/serverHealth.ts`).
+   with the same sentence; recovery is automatic (the pool reconnects — and a dropped pooled
+   connection is an `error` event the pool handles, never a process exit). The OAuth token endpoint
+   answers the same outage `503 temporarily_unavailable` + `Retry-After`, never `invalid_grant` /
+   `invalid_client` — RFC 6749 clients discard a refresh token or a registration on those. `/live`
+   shows the sentence as a banner (`packages/web/src/live/serverHealth.ts`).
 6. **Only the database loops run** (`cloud/loops.ts`): reaper, seeds ingest, trace prune, trace
    coverage, expired-member and provision sweeps. Not the roster watcher, the footprint sampler,
    federation sync, or audit retention (it archives to a local file first; Cloud retention arrives

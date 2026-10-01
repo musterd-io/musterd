@@ -195,6 +195,21 @@ function sendTokenError(
   sendOAuthJson(res, status, { error, error_description: description });
 }
 
+/**
+ * An unreachable store is the SERVER's failure, never the client's credential's (cloud spec §7;
+ * review I2). RFC 6749 clients act on the token endpoint's codes — a refresh token answered
+ * `invalid_grant` is discarded, a client answered `invalid_client` forgets its registration — so a
+ * database blip reported as either would sign every connector out. It is a 503 with the stable
+ * sentence instead, and the client retries. Returns whether it answered.
+ */
+function sendIfUnavailable(res: ServerResponse, err: unknown): boolean {
+  const me = asMusterdError(err);
+  if (me.httpStatus !== 503) return false;
+  res.setHeader('retry-after', '5');
+  sendTokenError(res, 503, 'temporarily_unavailable', me.message);
+  return true;
+}
+
 /** OAuth bodies are consent forms and small JSON — 64 KiB is orders of magnitude of headroom. */
 const OAUTH_BODY_MAX_BYTES = 64 * 1024;
 
@@ -902,7 +917,8 @@ export async function handleOAuthRoutes(
     // Unknown client is 401 invalid_client on both grants (RFC 6749 §5.2) — never an oracle.
     try {
       await getClient(ctx.db, team.id, tokenReq.client_id);
-    } catch {
+    } catch (err) {
+      if (sendIfUnavailable(res, err)) return true;
       // CIMD is syntax-checked only here. Grant redemption below is the authority; do not fetch.
       if (!isCimdClientId(tokenReq.client_id)) {
         sendTokenError(res, 401, 'invalid_client', 'unknown client for this team');
@@ -951,6 +967,7 @@ export async function handleOAuthRoutes(
         });
         return true;
       } catch (err) {
+        if (sendIfUnavailable(res, err)) return true;
         const me = asMusterdError(err);
         sendTokenError(res, 400, 'invalid_grant', me.message);
         return true;
@@ -979,6 +996,7 @@ export async function handleOAuthRoutes(
       });
       return true;
     } catch (err) {
+      if (sendIfUnavailable(res, err)) return true;
       const me = asMusterdError(err);
       const reused = /reused/.test(me.message);
       if (reused) {
