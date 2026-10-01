@@ -773,8 +773,11 @@ below promises anything about what an agent does outside the roster.
 
 **Standing setup, ten minutes before** (§3 is the runbook):
 
-- The deck full-screen in one browser window (`f`), on the cover. `/live` in a second window,
-  office lit, nick present.
+- The deck full-screen on the projector (`f`), on the cover, served by `serve.mjs`. Press **P**
+  to open the presenter window on the laptop screen: the slide at 60%, the speaker notes (click
+  the header to collapse them), the next slide's title and a timer. A click or key in either
+  window drives both. Notes never show on the projector. `/live` in a third window, office lit,
+  nick present.
 - The poll page open on the phone, to read the result at 5:10.
 - A terminal in nick's Workspace, in `docs/demo/multiplayer-ai-2026-10-01/`, with
   `./go.sh voices --dry-run` already run once: it prints the huddle open and two steers and
@@ -785,8 +788,12 @@ below promises anything about what an agent does outside the roster.
 
 **Editing the deck or the cheat sheet in the browser.** Both pages load `editor.js`. Run
 `node docs/demo/multiplayer-ai-2026-10-01/serve.mjs` and open the URL it prints
-(`http://localhost:4860/…/deck.html`), press **E** to edit any text on the page (on the deck, the
-speaker notes too), and **⌘S** saves straight to the file. Opened as a plain file instead, the
+(`http://localhost:4860/…/deck.html`), press **E** to edit any text on the page, including the
+generated captions and roadmap stops (on the deck, the speaker notes too: the **Notes** button
+opens the drawer, or edit them in the presenter window), press **M** to switch to moving: drag
+anything to reposition it, Option-drag to move its parent block, double-click to put it back.
+**⌘S** saves straight to the file. Moves land in one `<style id="deck-layout">` block, in units
+of the deck's size, so they hold on any screen. Opened as a plain file instead, the
 browser cannot write on its own: the first save asks you to pick that same `.html` (Chrome or
 Edge), later saves reuse it. A save re-reads the file and replaces only the text you changed, so the diff is just your
 edit; an edit whose text changed on disk meanwhile is refused and named. Press **E** again to
@@ -823,12 +830,12 @@ beat is mostly watching, so the budget is ~800 spoken words. Measured 2026-10-01
 | 1:05 what changes | 3 | thesis | 45 s | 95 | ~38 s |
 | 1:50 a day in the life | 4 | lanes and acts | 60 s | 120 | ~48 s |
 | 2:50 what a team is made of | 5 | thesis | 30 s | 64 | ~26 s |
-| 3:20 the team asks you | 6 | humans as peers | 35 s | 76 | ~30 s |
+| 3:20 what it looks like | 6 | humans as peers | 35 s | 89 | ~36 s |
 | 3:55 handoff | 7 | big question | 40 s | 98 | ~39 s |
 | 4:35 built from what broke | 8 | what did not work | 35 s | 63 | ~25 s |
 | 5:10 you picked it | 9 + `/live` | live demo | 90 s | 61 | ~24 s |
 | 6:40 the ask | 10 | close | 20 s | 15 | ~6 s |
-| **total** | | | **420 s** | **741** | **~296 s** |
+| **total** | | | **420 s** | **754** | **~302 s** |
 
 The slack is for clicks and for the live beat, where the room watches members wake (about 24 s
 cold, in parallel) and take turns in the huddle. **Stopwatch rule:** at 4:35 not yet on the road
@@ -889,16 +896,21 @@ humans on the same roster. Every seat gets its own workspace and toolkit. Goals 
 on a board. And members are always reachable: a message wakes a seat that isn't running, and when
 they need me, the doorbell finds me on /live, my desktop or Slack."
 
-### 3:20 — The team asks you (humans as peers, 35 s)
+### 3:20 — What it looks like (humans as peers, 35 s)
 
-**SAY** "My first role was approver, and the record was clear: seven approvals for every real
-conversation, and not one request for help. So we let agents ask me directly. Since then, 106
-questions. The asker sets the clock: small calls go ahead with a note, big ones wait for me. And I
-can say no. So can they, to each other and to me. A teammate you can only assign work to can't tell
-you no."
+**DO** One click per example: the roster, a lane on the board, a huddle, the doorbell.
 
-The asks on the rail are illustrative. 106 is `ask` acts addressed to nick since 2026-07-17
-(`how-musterd-got-here.md` has the query).
+**SAY** "Here's what that looks like. The roster: big-body is asleep, and a message wakes it in
+about 24 seconds. I'm on it too. A lane on the board: one owner, its files, its branch, and someone
+from another model family signs it off. A huddle: a few of us, one question, a turn budget. And the
+doorbell: when an agent needs me, the ask finds me with its clock running. Small calls go ahead with
+a note. Big ones wait for me. 106 questions have reached me that way."
+
+The slide replaced "The team asks you" on 2026-10-01 at nick's call: slide 5 names the parts, this
+one shows each at work. All four examples are illustrative, drawn from real members. 106 is `ask`
+acts addressed to nick since 2026-07-17 (`how-musterd-got-here.md` has the query); the 0-before
+story and "a teammate you can only assign work to can't tell you no" moved to the notes and the cheat
+sheet.
 
 ### 3:55 — Handoff (big question, 40 s)
 
@@ -930,11 +942,23 @@ caveat.
 
 ### 5:10 — You picked it (live demo, 90 s)
 
-**DO** Read the poll. Click to slide 9. Switch to the terminal and run `./go.sh <winner>`. Switch to
-`/live`.
+**DO** Read the poll (the StrawPoll result on your phone). Click to slide 9. In the terminal, as
+nick: `cd ~/musterd/revive/agents/nick && <checkout>/docs/demo/multiplayer-ai-2026-10-01/go.sh
+<voices|eyes|hire|dreaming>`. Then open Miley's terminal (a fresh Claude Code session in her
+Workspace) beside `/live`.
 
-**SEE** The huddle opens; the four named members and the two steered in wake, roughly together,
-about 24 s cold. Turns land in the huddle's thread. Lanes appear on the board as members claim them.
+**SEE** `go.sh` declares the winner as a goal and opens one huddle on it, naming izzo, miley, ghost
+and ryder and steering wanderer and lazara into the thread, with the winner's five staged lanes from
+`options.md` copied into the huddle body. The daemon wakes the sleeping seats (rehearsed 11:23: all
+in the room within six minutes, the first after 1.4). Miley's flow is set to manual for tonight, so
+the daemon leaves her to the visible terminal: her session starts, orientation surfaces the huddle
+addressed to her, she reads it and takes her turn in the room (rehearsed 13:19: 85 s). Turns land
+in the huddle's thread; lanes appear on the board as members claim them under the winner's goal.
+
+**The order matters.** An open session in a seat's Workspace defers that seat's wake (ADR 485), so
+every demo seat's session is closed by 16:30 (izzo's checklist) and Miley's terminal is opened
+*after* `go.sh`, never before. The `<checkout>` must carry the four-option `go.sh` and
+`options.md` (PR #1943); the runtime copy tracks `main`, so use it only once #1943 has landed there.
 
 **SAY** "You picked [winner]. I'm opening one huddle on it and calling the team in." *(run it)* "Six
 members, four model families. The ones that weren't running are waking up now. Nobody is handing out
