@@ -103,6 +103,26 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
 16. `cmd/integration-generate-tailscale` — the exact no-color frame for `musterd integration generate tailscale --write`: one success line, `Tailscale transport policy is current`. Preview identifies generated `policy.hujson` and `workloads.json`; `--check` uses `Tailscale transport policy is stale; run musterd integration generate tailscale --write` when either managed file differs. Generated output contains only explicit tag ownership, exact workload-to-Aperture HTTPS ACLs, and opaque node keys; never credentials, runtime node IDs, paths, or a claim that transport is active.
 17. [`cmd/integration-doctor/blocked`](https://figma.com/design/tgJ7dUNgGmlIMYBVVA5qIQ?node-id=18-4) — combined selected failures: red `✗` on the failed check, dim `→` repair and `·` skipped dependent checks, with both section headings `blocked`. Selected failure exits **1**; invalid command/URL usage exits **2**; neither selected renders both sections `off` and exits **0**.
 
+### Seat launcher frames (ADR 491)
+
+18. `cmd/seats` — `$ musterd seats` (no color, 80 columns):
+    ```
+    seats on this machine · 3
+
+    revive/agents
+      stanley  claude   ○ idle  2h
+      miley    claude   ● live  here · since 15:37
+      gptbot   codex    ○ idle  needs repair
+
+    2 stale · musterd init --prune-bindings --apply
+    ```
+    Columns: member (longest + 2), harness (9), state (8), then the tail. The tail is `here · since`
+    or `on <node> · since` when live, `needs repair` in yellow when broken, otherwise when it was last
+    used.
+19. `cmd/launch-receipt` — the line `musterd <seat>` prints to stderr when the harness exits:
+    `✓ stanley · claude · 42m · exit 0 · musterd - to go back` (green `✓` on exit 0, red `✗`
+    otherwise; the last segment dim).
+
 ## Page: States (empty + error)
 
 1. `state/empty-inbox` — `inbox empty — nobody's mustered anything yet` (dim). (Exact string; the CLI uses it verbatim.)

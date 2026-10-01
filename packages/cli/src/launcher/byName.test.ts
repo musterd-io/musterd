@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
-import type { Catalog } from './catalog.js';
 import { launchByName, type LaunchDeps } from './byName.js';
+import type { Catalog } from './catalog.js';
 import type { Seat } from './store.js';
 
 let dir: string;

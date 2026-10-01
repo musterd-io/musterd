@@ -30,6 +30,7 @@ src/
   claudeBin.ts        // PATH-robust `claude` binary resolution, shared by init/doctor detection and the wake actuator (launchd's minimal PATH; ADR 131 inc 3)
   codexBin.ts         // PATH-robust, shell-free `codex` binary resolution plus read-only `--version`/help capability probe; an unresolved or incompatible install stays non-wakeable (ADR 216)
   opencodeBin.ts      // PATH-robust `opencode` binary resolution plus the read-only residency preflight (run --format json + --session advertised); an unresolved or incompatible install stays non-wakeable (ADR 321)
+  cursorAgentBin.ts   // PATH-robust `cursor-agent` resolution for the launcher — that name only, never the bare `agent`, which Grok also installs (ADR 491)
   grokBin.ts          // PATH-robust `grok` binary resolution plus the read-only residency preflight (`-p` / `-r` advertised); an unresolved or incompatible install stays non-wakeable (ADR 352)
   roster.ts           // durable seat-file writer: buildSeat + writeSeatFile (ADR 058 §5, file = single writer)
   roster-roles/
@@ -58,6 +59,17 @@ src/
     governed-transport.ts // committed transport manifest loader + deterministic Tailscale tag/ACL and workload mapping renderer (ADR 402)
     report.ts          // stable report composition + exact terminal rendering for independent optional postures
     tailscale.ts       // typed Tailscale status/Serve parsing + bounded Host-gate upgrade probe; no mutation commands
+  launcher/           // the seat launcher (ADR 491): bare `musterd` picks a seat and starts its harness; `musterd <seat>` does it by name
+    labels.ts         // short harness labels (`claude-code` → `claude`) and the registry-ordered launchable set the picker paints with
+    address.ts        // seat addresses: team/project/member, host-qualified when two servers on this machine host a same-named team
+    store.ts          // ~/.musterd/launcher.json beside config.json: recents + the secret-free catalog snapshot the first screen paints from; zod-validated read and write, a corrupt file is set aside
+    catalog.ts        // the seat catalog: config.bindings ∪ a scan of ~/musterd/<team>/<project>/<member>, read through the protocol loaders, named non-secret fields only; `originRepoName` reads git's files without a subprocess
+    resolve.ts        // `musterd <word>` → one seat, an ambiguity, or no match (commands are ruled out before it runs)
+    live.ts           // the live layer: one unauthenticated, time-boxed roster read per (server, team); Presence → here/elsewhere; the team's agent members
+    plan.ts           // (seat, harness, fresh|resume) → { bin, args, cwd } from the adapter's interactive entry; a human seat gets a login shell
+    supervise.ts      // runs the harness with the terminal handed over; ignores SIGINT/SIGQUIT, forwards SIGTERM/SIGHUP; the harness's exit code (128+n on a signal)
+    rows.ts           // shared row and receipt rendering for the picker and `musterd seats`
+    byName.ts         // `musterd <seat>` / `musterd -`: resolve, live check, plan, record, supervise, receipt
   help/               // the structured command catalog behind `musterd help` (ADR 113)
     catalog.ts        // pure, import-free command catalog (groups + entries) — the single source guidance:check reads
     plain.ts          // renderPlainHelp(): the uncolored HELP string derived from the catalog (guidance-safe)
@@ -205,6 +217,7 @@ src/
     wake-context.ts   // wake-context --act/--lane — recipient-scoped, body-free orientation index; names explicit reads without loading them (ADR 209)
     claim.ts          // claim a seat by name or open role (ADR 032/034/036); the ONE occupancy verb since ADR 377 — `--team/--key/--grant` cover the fresh-folder bootstrap `join` used to, `--detach` is join's one-shot HTTP claim (Presence outlives the process); MCP twin `team_join`
     lane.ts           // lane open/claim/release/park/unpark/handoff/update/resolve + the lanes board (parked lanes grouped last, ADR 466); --goal on open and update (ADR 083/084/256); counterpart resolve ignores --pr/--sha (ADR 305); submit empty_pool copy (ADR 404); --follows-up on submit/resolve and --abandon-reason on update (ADR 487)
+    seats.ts          // `musterd seats [--json]`: the seat catalog + live state, the launcher's read model (ADR 491)
     seed.ts           // shared Seed tray/read/claim/clarification/brief/conclude/promote Surface (ADR 319)
     next.ts           // the orientation brief: carrying / up-next / shipped / handoff why (ADR 049/084); the ⚠ stale-goal line (ADR 487)
     node.ts           // machine credentials (ADR 328, federation 3a): invite/join/rotate/revoke/list. `join <hub-url> <code>` does NOT call the hub — it asks THIS machine's daemon to enroll, so the process holding the nodes row also holds the credential and writes node.json. join/list use resolveRead (a fresh laptop has no bound identity; the code plus being on-machine is the authority); the admin verbs use resolve. join prints no credential — it went to disk
@@ -323,6 +336,25 @@ Lane. `promote` is the explicit research-skipped override. Mutation success and 
 specified by `figma-brief-terminal.md`.
 
 **Agent-side reachability nudge (ADR 046).** After any **acting** command returns, `bin.ts` re-resolves the identity (`resolveRead`) and — only when there is one (env/binding — the only sources, ADR 442) — appends a one-line banner to **stderr** naming the directed acts waiting for that member: `⚑ N acts waiting for <me> — musterd inbox (since <t>)`. It is the agent-side mirror of `status`'s comeback summary, surfaced everywhere an agent already is so a heads-down agent can't sit on a `request_help` it never looked for. Built from the same `pendingActionSummary`/`openActionNeeded` predicate, so it self-clears once the inbox cursor advances or the thread is resolved. **Skipped** for commands that show the acts themselves or carry no identity (`inbox`, `nudge`, `status`, `serve`, `service`, `init`, `reset`, `role`, `uninstall`) and suppressed by `--json`/`--quiet`/`MUSTERD_NO_NUDGE=1`. Best-effort: any read failure is swallowed, and the read is bounded at `NUDGE_BUDGET_MS` (1.5 s) because `HttpClient` carries no AbortSignal (lane 01M3ABD9DM: a daemon that accepted the socket and never answered held a hook-fired `session start` for undici's 300 s header timeout after the command had finished) — the nudge never fails a command or delays it past that bound, and never touches stdout (keeps `--json`/pipes clean). No wire change (rides the existing inbox cursor, like `notify`).
+
+### `musterd <seat> [-r | --resume] [--harness <id>] [--path] [--force]` · `musterd -`
+
+Launches a seat's harness in its Workspace, with musterd as the harness's parent process
+([ADR 491](../decisions/491-seat-launcher.md)). `<seat>` is a member name unique on this machine,
+`project/member`, or `team/project/member` (`team@host/project/member` when two servers host a team
+with the same name). Commands always win over seat names. `-` is the seat launched last.
+
+- Fresh by default; `-r` resumes the harness's last session.
+- `--path` prints the Workspace path and launches nothing: `cd "$(musterd stanley --path)"`.
+- A live seat asks `(y/N)` on a TTY and is refused without one unless `--force`.
+- When the harness exits: one receipt line on stderr, and the harness's exit code (128 + n on signal n).
+- Exit codes: 2 for no match or an ambiguous name (the candidates are listed); 1 for a seat that needs
+  repair, a live seat without `--force`, or a harness that is not installed.
+
+### `musterd seats [--json]`
+
+Every seat on this machine and where it is live — the launcher's read model. `--json` carries no
+secret and no harness session id.
 
 ### `musterd init`
 
