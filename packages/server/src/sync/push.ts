@@ -156,6 +156,17 @@ type Pending =
  * sort on `origin_seq` and the sequence the hub sees is dense. Bounded after the merge, not per
  * table — bounding each side first could ship seq 501 of one kind ahead of seq 3 of the other.
  */
+/**
+ * The audit half of the unpushed tail, exported for the plan assert in db.test.ts. The literal
+ * `origin_seq > 0` is what proves the partial `idx_audit_origin` applies (v58; see
+ * HELD_HEAD_AUDIT_SQL in fold.ts) — a bound cursor alone does not, and the read scanned the whole
+ * table every tick.
+ */
+export const UNPUSHED_AUDIT_SQL = `SELECT * FROM audit
+        WHERE team_id = ? AND origin_node = ? AND origin_seq > ? AND origin_seq > 0
+        ORDER BY origin_seq
+        LIMIT ?`;
+
 async function unpushed(
   ctx: Ctx,
   teamId: string,
@@ -175,13 +186,7 @@ async function unpushed(
     )
   ).map((r) => ({ kind: 'message', seq: r.origin_seq, row: r, from: r.from_name, to: r.to_name }));
   const lanes: Pending[] = (
-    await ctx.db.all<AuditRow>(
-      `SELECT * FROM audit
-        WHERE team_id = ? AND origin_node = ? AND origin_seq > ?
-        ORDER BY origin_seq
-        LIMIT ?`,
-      [teamId, nodeId, after, SYNC_PUSH_MAX_BATCH],
-    )
+    await ctx.db.all<AuditRow>(UNPUSHED_AUDIT_SQL, [teamId, nodeId, after, SYNC_PUSH_MAX_BATCH])
   ).map((r) => ({ kind: 'lane', seq: r.origin_seq, row: r }));
   return [...messages, ...lanes].sort((a, b) => a.seq - b.seq).slice(0, SYNC_PUSH_MAX_BATCH);
 }
