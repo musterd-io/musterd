@@ -152,6 +152,38 @@ per machine) — the seat starts a fresh session on the joiner, with its musterd
 The hub's worktree for the seat goes stale; leave it or `git worktree remove` it from
 `~/.musterd/runtime`.
 
+## Starting a joiner over — `bootstrap.sh reset --yes`
+
+For a joiner whose enrolment is wedged or abandoned. There is no repair in place, and each obvious
+one makes it worse (all read from the code, 2026-10-02):
+
+- **Deleting the poisoned rows locally** trades the `403 bound_elsewhere` wedge for a `409` livelock:
+  the hub requires a dense `origin_seq` per node, and a hole is refused forever (ADR 331, 335).
+- **`musterd node unbind <seat>` on the hub** lets the joiner's refused events in as hub history —
+  re-routed acceptances included — and re-binds a hub-resident seat to the joiner.
+- **`musterd node trust`** is for human seats; an agent seat's refusal is not clearable by it.
+- **Re-enrolling the same machine** fails: the hub refuses a node id it already knows, revoked or
+  not, and the id lives in the daemon DB (`local_node`).
+
+So reset the machine: a fresh DB gets a fresh node id.
+
+```sh
+# hub, as nick — cut the old node off (its id is in the joiner's ~/.musterd/node.json)
+musterd node revoke <old-node-id>
+# joiner — re-download the script from main, then:
+bash ~/bootstrap.sh reset --yes
+```
+
+`reset` updates the runtime to `main` and refuses to go on if the build predates the joiner reaper
+guards (#1976, #1978: a fresh joiner would wedge again within minutes). It stops this machine's
+three LaunchAgents, moves **everything under `~/.musterd` except `runtime/` and the log** into
+`~/.musterd-reset-<stamp>/`, and removes the human Workspace worktree (a fresh checkout whose binding
+is dead anyway). It keeps the build and the roster clone, and refuses if any other member Workspace
+exists — a reset kills their credentials, so move those seats off first. It ends by printing the
+rest: mint a new invite on the hub, `bash ~/bootstrap.sh machine` here, then `musterd node trust
+<new id>` on the hub. The revoked node stays in `musterd node list` as `revoked` forever (ADR 328
+§5), and nick's node set keeps the dead id; it is inert.
+
 ## Verify — the lane's done-means
 
 1. **Cross-machine wake.** From the hub: `musterd send --act steer --to ryder 'wake check'`. A
@@ -195,3 +227,26 @@ Append; never rewrite. Dated, with what was measured and what was done about it.
      enrolling. The script now writes a two-line shim instead of linking.
   Also: the repo went private on 2026-10-02, so the `raw.githubusercontent.com` download 404s
   unauthenticated — fetch through `gh api` (above).
+- **2026-10-02 (the first wedge, then the audits)** — Air 2 enrolled, was trusted, and drained at
+  ~1.4 s per 500-event page. Within a minute its reaper had re-routed eleven old acceptances **as**
+  the reviewers wanderer, gptbot, ghost and kimi, who live on the hub; the hub refused the batch
+  `403 bound_elsewhere` (`kind: lane` in `sync_push_cursor.refused_json`) and every later push
+  queued behind it. A joiner sees a hub seat as "gone" only because it is not resident there. Fixed
+  for that sweep in #1976. Three read-only audits (residence rules and recovery, the reaper and
+  presence, every daemon loop) found the same class in three more places — incident claim-window
+  routing (messages sent AS a reporter), the ADR 229 backstop (closes lanes the hub may have
+  accepted since), departed-seat release — fixed together in #1978, test-first with a hub case and
+  a joiner case per sweep. Open lanes for the rest: `audit_retention` deleting a joiner's unpushed
+  churn rows after 5 days (a permanent `409`, 01M3ZBT9VY), `seeds_ingest` running on a joiner
+  (01M3ZBTDJ5), and smaller leftovers (01M3ZBTJKD). The recovery is the reset above.
+- **2026-10-02 (the pull failures)** — while draining, Air 2's pull logged `TypeError: fetch failed`
+  about once per tick, each one ending the drain until the next minute; `tailscale ping` was a
+  direct LAN path at 17 ms. The log line hid undici's `.cause`; #1978's `failureFields()` now prints
+  it (`UND_ERR_SOCKET: other side closed`, a connect timeout, …). The cause is still unknown — read
+  it on the next drain before changing anything.
+- **2026-10-02 (more setup edges)** — `musterd service restart` refuses while a session is
+  connected, and a joiner's only session is its own wake actuator, so the script passes `--force`.
+  `musterd human` asks to confirm on a TTY when `team create` already minted the credential; behind
+  `| tee` the question is invisible and the run hangs, so the script passes `--rotate`. The
+  autorefresh service seat cannot be minted on a joiner (the roster already names it) and ticks
+  unattributed; cosmetic. A revoked node id can never enrol again (above).

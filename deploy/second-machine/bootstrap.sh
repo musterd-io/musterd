@@ -6,6 +6,7 @@
 #
 #   bootstrap.sh machine                 # 1 runtime · 2 services · 3 team home · 4 enrol · 5 key
 #   bootstrap.sh seat <name> <harness>   # 6 give an agent seat a Workspace here, wakeable
+#   bootstrap.sh reset --yes             # start this machine over: un-enrol, state aside, keep the build
 #
 # Run as the human (the one who created the team), from a shell whose `node` is ≥22: `musterd
 # service install` embeds that node into every plist (AGENTS.md "TRAP"). The guide is
@@ -69,8 +70,17 @@ step_runtime() {
     log "cloning $WORK_REPO → $RUNTIME"
     gh repo clone "$WORK_REPO" "$RUNTIME" -- --branch "$MUSTERD_RUNTIME_REF"
   fi
-  if [ ! -f "$RUNTIME/packages/cli/dist/bin.js" ]; then
-    log "building the runtime (first time: minutes — better-sqlite3 compiles)"
+  # Track the ref the way autorefresh does. A joiner on a build older than the hub's can stop the
+  # fold (sync_fold_newer_build), and one older than the joiner guards (#1976, #1978) wedges itself.
+  git -C "$RUNTIME" fetch -q origin "$MUSTERD_RUNTIME_REF" >>"$LOG" 2>&1 \
+    && git -C "$RUNTIME" merge -q --ff-only "origin/$MUSTERD_RUNTIME_REF" >>"$LOG" 2>&1 \
+    || log "runtime: could not fast-forward to origin/$MUSTERD_RUNTIME_REF — using what is checked out"
+  # `dist/build.json` is the truth of what the BUILD is (ADR 135); HEAD says only what is checked out.
+  local head built
+  head="$(git -C "$RUNTIME" rev-parse HEAD)"
+  built="$(node -p 'try{require(process.argv[1]).ref||""}catch(e){""}' "$RUNTIME/packages/cli/dist/build.json" 2>/dev/null || true)"
+  if [ ! -f "$RUNTIME/packages/cli/dist/bin.js" ] || [ "$built" != "$head" ]; then
+    log "building the runtime at ${head:0:8} (first time: minutes — better-sqlite3 compiles)"
     ( cd "$RUNTIME" && pnpm install --frozen-lockfile && pnpm -r build ) >>"$LOG" 2>&1
   fi
   if ! command -v musterd >/dev/null; then
@@ -83,7 +93,7 @@ step_runtime() {
     export PATH="$bin:$PATH"
     command -v musterd >/dev/null || die "\`musterd\` is still not on PATH — run \`pnpm setup\`, reopen the shell, and re-run"
   fi
-  log "runtime: $(git -C "$RUNTIME" rev-parse --short HEAD) · $(musterd --version 2>/dev/null | head -1)"
+  log "runtime: ${head:0:8} · $(musterd --version 2>/dev/null | head -1)"
 }
 
 # ── 2. services: daemon (loopback), wake actuator, autorefresh — launchd, like the hub ───────
@@ -153,7 +163,7 @@ step_enrol() {
 
 # ── 5. this daemon's own team agent key (never the hub's — cloud-seat findings 2 and 14) ─────
 step_key() {
-  if [ "$(jq -r --arg t "$MUSTERD_TEAM" '.agentKeys[$t] // empty' "$CONFIG" 2>/dev/null)" != "" ]; then
+  if [ -n "$(node -p 'try{(require(process.argv[1]).agentKeys||{})[process.argv[2]]||""}catch(e){""}' "$CONFIG" "$MUSTERD_TEAM" 2>/dev/null || true)" ]; then
     return 0
   fi
   ( cd "$(human_ws)" && musterd team agent-key --rotate --yes ) >>"$LOG" 2>&1
@@ -190,6 +200,61 @@ step_seat() {
   log "verify: (cd $ws && musterd harness status) — $harness selected AND available, every fragment settled. Then open it once: \`musterd $name\`"
 }
 
+# ── reset: start this machine over, keeping the build and the roster clone ──────────────────────
+# A joiner can end up in state that cannot be repaired in place (second-machine run, 2026-10-02: its
+# reaper wrote events AS seats that live on the hub, and the hub refused every batch for good — ADR
+# 360). The node id lives in the daemon DB and the hub never lets a revoked id enrol again, so the DB
+# goes with it: stop the services, move everything under ~/.musterd aside EXCEPT the build, drop the
+# human Workspace (a fresh checkout whose binding is dead anyway), and let `machine` rebuild the rest.
+# Nothing else is deleted — it all lands in ~/.musterd-reset-<stamp>/.
+step_reset() {
+  [ "${1:-}" = "--yes" ] || die "reset un-enrols this machine and moves its musterd state aside. Re-run as: bash ~/bootstrap.sh reset --yes"
+  step_runtime
+  # A build that predates the joiner reaper guards re-wedges a fresh joiner within minutes. Refuse
+  # BEFORE touching anything. Delete this check once every machine is past #1978.
+  grep -q joinerTeams "$RUNTIME/packages/server/dist/presence/reaper.js" 2>/dev/null \
+    || die "this build predates the joiner reaper guards (#1978) — a fresh enrolment would wedge again. Wait for it to land on main, then re-run reset"
+  local others="" d
+  for d in "$TEAM_HOME"/*/*/; do
+    [ -d "$d" ] || continue
+    [ "$(basename "$d")" = "$MUSTERD_HUMAN" ] || others="$others$d
+"
+  done
+  [ -z "$others" ] || die "member Workspaces other than ${MUSTERD_HUMAN}'s exist here, and a reset kills their credentials — move those seats off this machine first:
+$others"
+  local old_node
+  old_node="$(node -p 'try{(require(process.argv[1]).nodes||{})[process.argv[2]].node_id}catch(e){""}' "$HOME/.musterd/node.json" "$MUSTERD_TEAM" 2>/dev/null || true)"
+
+  log "stopping this machine's musterd services"
+  local label
+  for label in studio.sandrise.musterd-host studio.sandrise.musterd-autorefresh studio.sandrise.musterd; do
+    launchctl bootout "gui/$(id -u)/$label" >>"$LOG" 2>&1 || true
+    rm -f "$HOME/Library/LaunchAgents/$label.plist"
+  done
+  for _ in $(seq 1 20); do local_health || break; sleep 1; done
+  ! local_health || die "a daemon is still answering on :${MUSTERD_HUB_PORT} — stop it (launchctl list | grep musterd) and re-run"
+
+  local stash f ws
+  stash="$HOME/.musterd-reset-$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$stash"
+  while IFS= read -r f; do
+    case "${f##*/}" in runtime|second-machine.log) continue ;; esac
+    mv "$f" "$stash/"
+  done < <(find "$HOME/.musterd" -mindepth 1 -maxdepth 1)
+  ws="$(human_ws)"
+  if [ -n "$ws" ]; then
+    git -C "$RUNTIME" worktree remove --force "$ws" >>"$LOG" 2>&1 || mv "$ws" "$stash/human-workspace"
+    git -C "$RUNTIME" worktree prune >>"$LOG" 2>&1 || true
+  fi
+  git -C "$RUNTIME" branch -D "human/$MUSTERD_HUMAN" >>"$LOG" 2>&1 || true
+  log "reset done: state moved to $stash; the build and the roster clone are untouched"
+  printf '\nNext:\n'
+  printf '  1. On the HUB, as %s:   musterd node revoke %s\n' "$MUSTERD_HUMAN" "${old_node:-<the old node id>}"
+  printf '                           musterd node invite --label "%s"\n' "$(hostname -s)"
+  printf '  2. Here:                 MUSTERD_INVITE=msinv_… bash ~/bootstrap.sh machine\n'
+  printf '  3. On the HUB:           musterd node trust <the new node id>\n\n'
+}
+
 case "${1:-}" in
   machine)
     preflight; step_runtime; step_services; step_team; step_enrol; step_key
@@ -199,8 +264,11 @@ case "${1:-}" in
     [ $# -eq 3 ] || die "usage: bootstrap.sh seat <name> <claude-code|codex|grok|opencode>"
     preflight; step_seat "$2" "$3"
     ;;
+  reset)
+    preflight; step_reset "${2:-}"
+    ;;
   *)
-    echo "usage: bootstrap.sh machine | bootstrap.sh seat <name> <harness>" >&2
+    echo "usage: bootstrap.sh machine | seat <name> <harness> | reset --yes" >&2
     exit 2
     ;;
 esac
