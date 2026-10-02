@@ -11,8 +11,14 @@ import { postgresUrl } from './mode.js';
  */
 export async function migrateCloud(
   env: Record<string, string | undefined>,
-  opts: { pools?: { main: PoolFactory; trace: PoolFactory } } = {},
+  opts: { pools?: { main: PoolFactory; trace: PoolFactory }; report?: (line: string) => void } = {},
 ): Promise<{ main: number; trace: number }> {
+  // ADR 496: after the ladder the catalog is verified; a repair (replaying the idempotent ladder
+  // when the catalog lacks what a version row claims) is opted into per run, never assumed.
+  const ladder = {
+    repair: env['MUSTERD_MIGRATE_REPAIR'] === '1',
+    ...(opts.report ? { report: opts.report } : {}),
+  };
   const mainUrl = postgresUrl(env, 'MUSTERD_DATABASE_OWNER_URL');
   const traceUrl = postgresUrl(env, 'MUSTERD_TRACE_DATABASE_OWNER_URL');
   // pgDriver wants app/operator URLs; the owner handle is the only one this step opens.
@@ -28,8 +34,8 @@ export async function migrateCloud(
   const trace = open(traceUrl, opts.pools?.trace);
   try {
     return {
-      main: await migratePostgres(main.asOwner()),
-      trace: await migrateTracePostgres(trace.asOwner()),
+      main: await migratePostgres(main.asOwner(), ladder),
+      trace: await migrateTracePostgres(trace.asOwner(), ladder),
     };
   } finally {
     await main.close();

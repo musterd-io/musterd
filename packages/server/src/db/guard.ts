@@ -27,3 +27,11 @@ export function assertSchemaNotOlder(have: number, max: number): void {
       `${SCHEMA_OLDER_SENTENCE}: database is at schema ${have}, this build needs ${max} — run the migrate step (scripts/cloud/migrate.mjs) first`,
     );
 }
+
+/**
+ * ADR 496: the version row is a claim, not evidence. A database can say v84 and lack a column v81
+ * adds — musterd-1b did, migrated from a branch before the ladder's numbers were final — so after
+ * the ladder the live catalog is compared with what baseline + ladder land on, and a table or
+ * column that should be there and is not refuses the migrate step and the boot with this sentence.
+ */
+export const SCHEMA_DRIFT_SENTENCE = 'schema drift';

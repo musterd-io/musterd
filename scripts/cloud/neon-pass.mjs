@@ -7,6 +7,8 @@
  *
  *   node scripts/cloud/neon-pass.mjs            # the whole pass
  *   node scripts/cloud/neon-pass.mjs --migrate  # migrate + grant only
+ *   node scripts/cloud/neon-pass.mjs --repair   # … replaying the ladder when the catalog lacks a
+ *                                               # column the version row claims (ADR 496)
  *
  * Reads ~/.musterd/cloud/neon.env (mode 600, refused otherwise):
  *   DATABASE_OWNER_URL='postgres://<owner login>:…@<direct host>/musterd'
@@ -78,9 +80,13 @@ async function migrateAndGrant(env) {
     poolSize: 2,
   });
   try {
-    const mainVersion = await migratePostgres(main.asOwner());
+    const ladder = {
+      repair: process.argv.includes('--repair'),
+      report: (line) => console.log(line),
+    };
+    const mainVersion = await migratePostgres(main.asOwner(), ladder);
     await main.asOwner().exec(grants);
-    const traceVersion = await migrateTracePostgres(trace.asOwner());
+    const traceVersion = await migrateTracePostgres(trace.asOwner(), ladder);
     await trace.asOwner().exec(grants);
     const v = await main.asOwner().get('SELECT version() AS v');
     return { mainVersion, traceVersion, server: v?.v, migrateMs: Date.now() - t0 };
