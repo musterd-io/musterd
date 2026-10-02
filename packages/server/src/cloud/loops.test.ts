@@ -8,7 +8,14 @@ describe('which background loops a server runs (1C task 8)', () => {
 
   it('cloud runs the database loops and none that read this machine', () => {
     expect([...loopsFor('cloud')].sort()).toEqual(
-      ['reaper', 'trace_prune', 'trace_coverage', 'expired_member_sweep', 'provision_sweep'].sort(),
+      [
+        'reaper',
+        'trace_prune',
+        'trace_coverage',
+        'expired_member_sweep',
+        'provision_sweep',
+        'digest',
+      ].sort(),
     );
   });
 
