@@ -1859,6 +1859,57 @@ describe('value layer: goal outcome + review debt + claim-time linking', () => {
   });
 });
 
+describe('team_next review promises (ADR 490)', () => {
+  const base = {
+    member: 'Ada',
+    in_flight: [],
+    shipped: [],
+    up_next: [],
+    owed_reviews: [],
+    why: null,
+    next_goal: null,
+    goals: [],
+  };
+
+  it('renders the three projections the daemon sent, prose only', async () => {
+    const next = vi.fn(async () => ({
+      ...base,
+      request_reviews: [
+        {
+          request_id: 'req1',
+          requester: 'nick',
+          owner: 'Ada',
+          context: 'please check the migration',
+          review: { kind: 'pr', repo: 'org/repo', number: 42 },
+          accepted_at: Date.now() - 2 * 3_600_000,
+        },
+      ],
+      requested_reviews: [],
+      review_closures: [
+        { request_id: 'req0', resolve_id: 'done0', closer: 'nick', resolved_at: Date.now() },
+      ],
+    }));
+    const handlers = captureAll(registerLanes, { next } as Partial<MusterdClient>);
+    const res = await handlers['team_next']!({});
+    const out = text(res);
+    expect(out).toContain('review promises — 1 you accepted, still open:');
+    expect(out).toContain('req1 for nick · accepted 2h ago');
+    expect(out).toContain('"please check the migration" · PR org/repo#42');
+    expect(out).toContain('review closed for you — by someone else, 1:');
+    expect(out).toContain('req0 closed by nick');
+    // Prose only: the tool's structured content gains nothing for this (ADR 490 increment 4).
+    expect((res as { structuredContent?: unknown }).structuredContent).toBeUndefined();
+  });
+
+  it('a legacy brief with all three fields absent says the daemon does not report them', async () => {
+    const next = vi.fn(async () => ({ ...base }));
+    const handlers = captureAll(registerLanes, { next } as Partial<MusterdClient>);
+    const out = text(await handlers['team_next']!({}));
+    expect(out).toContain('review promises: not reported by this daemon');
+    expect(out).not.toContain('review promises —');
+  });
+});
+
 describe('lane_submit merge verification (merge-verified submit)', () => {
   const submittedLane: Lane = {
     id: 'L1',

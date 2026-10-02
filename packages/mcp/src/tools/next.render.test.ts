@@ -288,3 +288,84 @@ describe('fmtNext — a carried lane whose work landed is unsubmitted, not carri
     expect(fmtNext(carrying())).not.toContain('LANDED');
   });
 });
+
+describe('fmtNext — review promises (ADR 490)', () => {
+  const H = 3_600_000;
+  const PR = { kind: 'pr', repo: 'org/repo', number: 42 } as const;
+  const supported = (): NextBrief => ({
+    ...brief(null),
+    request_reviews: [],
+    requested_reviews: [],
+    review_closures: [],
+  });
+
+  it('shows what the reader accepted, with the context, the artifact and the close call', () => {
+    const b = supported();
+    b.request_reviews = [
+      {
+        request_id: 'req1',
+        requester: 'nick',
+        owner: 'miley',
+        context: 'please check the migration',
+        review: PR,
+        accepted_at: Date.now() - 2 * H,
+      },
+    ];
+    const out = fmtNext(b);
+    expect(out).toContain('review promises — 1 you accepted, still open:');
+    expect(out).toContain('req1 for nick · accepted 2h ago');
+    expect(out).toContain('"please check the migration" · PR org/repo#42');
+    expect(out).toContain("team_send {act:'resolve', thread:'req1'");
+    expect(out).not.toContain('nothing in flight');
+  });
+
+  it('shows what the reader asked for — who accepted and how long ago — in the daemon order', () => {
+    const b = supported();
+    b.requested_reviews = [
+      {
+        request_id: 'req1',
+        requester: 'miley',
+        owner: 'stanley',
+        context: 'older',
+        review: { kind: 'lane', id: '01ARZ3NDEKTSV4RRFFQ69G5FAV' },
+        accepted_at: Date.now() - 3 * 24 * H,
+      },
+      {
+        request_id: 'req2',
+        requester: 'miley',
+        owner: 'izzo',
+        context: 'newer',
+        review: { kind: 'commit', repo: 'org/repo', sha: 'a'.repeat(40), path: 'src/x.ts' },
+        accepted_at: Date.now() - H,
+      },
+    ];
+    const out = fmtNext(b);
+    expect(out).toContain('reviews you asked for — 2 accepted, still open:');
+    expect(out.indexOf('req1 stanley accepted 3d ago')).toBeLessThan(
+      out.indexOf('req2 izzo accepted 1h ago'),
+    );
+    expect(out).toContain('"older" · lane 01ARZ3NDEKTSV4RRFFQ69G5FAV');
+    expect(out).toContain('"newer" · org/repo@aaaaaaa src/x.ts');
+    expect(out).not.toContain('review promises —');
+  });
+
+  it('shows a close by someone other than the owner, once, with the resolve to read', () => {
+    const b = supported();
+    b.review_closures = [
+      { request_id: 'req1', resolve_id: 'done1', closer: 'nick', resolved_at: Date.now() - H },
+    ];
+    const out = fmtNext(b);
+    expect(out).toContain('review closed for you — by someone else, 1:');
+    expect(out).toContain('req1 closed by nick 1h ago');
+    expect(out).toContain('resolve done1 — team_inbox_check and it is gone');
+  });
+
+  it('absent arrays are an older daemon and say so; empty arrays are quiet', () => {
+    const legacy = fmtNext(brief(null));
+    expect(legacy).toContain('review promises: not reported by this daemon');
+    expect(legacy).toContain('nothing in flight');
+    const empty = fmtNext(supported());
+    expect(empty).not.toContain('review');
+    expect(empty).toContain('nothing in flight');
+  });
+});
