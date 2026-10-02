@@ -17,6 +17,7 @@ import { assertSchemaCurrent } from './db/pg/migrate.js';
 import { pgDriver, type PoolFactory } from './db/pgDriver.js';
 import { sqliteDriver, type SqliteDriver } from './db/sqliteDriver.js';
 import { openTraceDriver } from './db/traceDb.js';
+import { startDigestSchedule } from './digest/schedule.js';
 import { startFootprintSampler } from './footprint/sampler.js';
 import { log, redactPath } from './log.js';
 import { startReaper } from './presence/reaper.js';
@@ -220,6 +221,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   const wss = attachWsServer(ctx, http);
   let stopReaper: (() => void) | null = null;
   let stopSeeds: (() => void) | null = null;
+  let stopDigest: (() => void) | null = null;
   let stopSync: (() => void) | null = null;
   let stopPull: (() => void) | null = null;
   let stopFootprint: (() => void) | null = null;
@@ -302,6 +304,8 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
           // Cloud runs only the loops that are about the database (cloud/loops.ts names the rest).
           if (loops.has('reaper')) stopReaper = startReaper(opCtx);
           if (loops.has('seeds_ingest')) stopSeeds = startSeedsIngest(opCtx);
+          // ADR 494 §5: the morning digest, posted at each team's working-hours start.
+          if (loops.has('digest')) stopDigest = startDigestSchedule(opCtx);
           if (loops.has('sync_push')) stopSync = startSyncPush(opCtx);
           if (loops.has('sync_pull')) stopPull = startSyncPull(opCtx);
           // ADR 453 §4: its own loop, so a stalled /sync/trace never delays /sync/push.
@@ -453,6 +457,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       closing = new Promise((resolve) => {
         stopReaper?.();
         stopSeeds?.();
+        stopDigest?.();
         stopSync?.();
         stopPull?.();
         stopFootprint?.();

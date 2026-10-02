@@ -14,6 +14,7 @@ export const LOOPS = [
   'expired_member_sweep',
   'provision_sweep',
   'roster_watch',
+  'digest',
 ] as const;
 export type LoopName = (typeof LOOPS)[number];
 

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { makeEnvelope, type WaitingOnEntry } from '@musterd/protocol';
+import { type Envelope, makeEnvelope, type WaitingOnEntry } from '@musterd/protocol';
 import { encodeTime } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { postSlackWebhook } from '../notify/slack.js';
@@ -220,6 +220,11 @@ export interface PostDigestOpts {
   day: string;
   nightStart: number;
   now?: number;
+  /**
+   * How the post is stored and delivered. Defaults to a bare insert; the schedule passes the
+   * daemon's routed send, so the digest reaches `/live` viewers live (ADR 494 §5).
+   */
+  send?: (env: Envelope) => Promise<MessageRow>;
 }
 
 /**
@@ -254,23 +259,19 @@ export async function postDigest(
   const id = digestMessageId(team.id, opts.day);
   let row: MessageRow;
   try {
-    row = await insertMessage(
-      db,
-      team.id,
-      from.id,
-      null,
-      makeEnvelope({
-        id,
-        team: team.slug,
-        from: from.name,
-        to: { kind: 'team' },
-        act: 'message',
-        body,
-        meta,
-        ts: now,
-      }),
-      { now },
-    );
+    const env = makeEnvelope({
+      id,
+      team: team.slug,
+      from: from.name,
+      to: { kind: 'team' },
+      act: 'message',
+      body,
+      meta,
+      ts: now,
+    });
+    row = opts.send
+      ? await opts.send(env)
+      : await insertMessage(db, team.id, from.id, null, env, { now });
   } catch (err) {
     // An overlapping retry won the day's id first. Read the record rather than the driver's
     // error code, so this is the same on SQLite and Postgres; anything else is a real failure.
