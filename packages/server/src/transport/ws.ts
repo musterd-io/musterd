@@ -15,6 +15,7 @@ import { log } from '../log.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { parseEnvelope } from '../protocol/validate.js';
 import { appendAudit } from '../store/audit.js';
+import { settleProvenance } from '../store/dream.js';
 import { consumeGrant, refreshGrant, validateGrant } from '../store/grants.js';
 import {
   agentKeyMayOccupy,
@@ -492,11 +493,22 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
 
           // ADR 444: a wake never displaces an attended session. Refused before any authorization
           // step so the claim has no side effects — no grant consumed, no request opened.
+          // ADR 494 §4: provenance settled against the frame's lease token — `dream` only with a
+          // dream lease of this seat's, and a dream lease cannot be shed.
+          const frameProvenance =
+            targetMember && targetMember.kind === 'agent'
+              ? ((await settleProvenance(
+                  ctx.db,
+                  targetMember,
+                  frame.provenance,
+                  frame.wake_lease,
+                )) ?? null)
+              : null;
           if (
             targetMember &&
             targetMember.kind === 'agent' &&
             targetMember.observer === 0 &&
-            frame.provenance === 'wake' &&
+            (frameProvenance === 'wake' || frameProvenance === 'dream') &&
             (await heldByAttendedSession(
               ctx.db,
               ctx.hub.connsForMember(targetMember.id).map((c) => c.presenceId),
@@ -774,7 +786,7 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
             // which is the word the wake actuators read to conclude a seat is their own spawned
             // child (`verified.provenance !== 'wake'` in backends/claudeCode.ts, codex.ts, grok.ts,
             // opencode.ts). A person's shell must not be able to say it.
-            provenance: targetMember.kind === 'agent' ? (frame.provenance ?? null) : null,
+            provenance: frameProvenance,
             workspace: frame.workspace ?? null,
             driver: frame.driver ?? null,
             model: frame.model ?? null,

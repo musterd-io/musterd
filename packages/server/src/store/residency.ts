@@ -15,9 +15,11 @@ import type {
 } from '@musterd/protocol';
 import {
   WAKE_CONTEXT_BUDGET,
+  dreamBlocker,
   eligibleOf,
   isAwaitingAcceptance,
   LANE_TERMINAL_STATES,
+  lastWorkingDayEnd,
   ResidencyPolicyOverrideSchema,
   ResidencyPolicySchema,
 } from '@musterd/protocol';
@@ -39,8 +41,8 @@ import {
   rowToEnvelope,
 } from './messages.js';
 import { hasLivePresence, listReclaimableMemberIds } from './presence.js';
-import type { MemberRow, MessageRow } from './rows.js';
-import { getPolicy } from './teams.js';
+import { type MemberRow, type MessageRow, parseWorkingHours } from './rows.js';
+import { getPolicy, getTeamById } from './teams.js';
 import { deriveContext } from './wakeContextBody.js';
 
 /**
@@ -1276,6 +1278,20 @@ async function dueDispatchContinuationWorkOrders(
 
 /** Was this act sent from a provenance-`wake` occupancy? Server-stamped at insert (v21) — the
  *  ping-pong demotion read (ADR 131 §4). Null (pre-v21 rows, no live presence at send) ⇒ not wake. */
+/** Of these act ids, the ones sent from a dream session (ADR 494 §4). One query, none when empty. */
+async function dreamSentIds(
+  db: Driver,
+  ids: ReadonlyArray<string | undefined>,
+): Promise<Set<string>> {
+  const wanted = ids.filter((id): id is string => id !== undefined);
+  if (wanted.length === 0) return new Set();
+  const rows = await db.all<{ id: string }>(
+    `SELECT id FROM messages WHERE from_provenance = 'dream' AND id IN (${wanted.map(() => '?').join(', ')})`,
+    wanted,
+  );
+  return new Set(rows.map((r) => r.id));
+}
+
 async function sentFromWake(db: Driver, actId: string): Promise<boolean> {
   const row = await db.get<{ from_provenance: string | null }>(
     'SELECT from_provenance FROM messages WHERE id = ?',
@@ -1406,7 +1422,13 @@ async function dueCandidates(
   //
   // The fold reads the party-scoped team timeline, not the inbox: `listInbox` excludes the member's
   // own sends and a deferring `wait` IS the member's own send.
-  const due = [...immediate, ...batched];
+  // ADR 494 §4 "no chain": an act a dream sent is never a wake reason, on either lane — one
+  // seat's dream cannot wake a second seat, so a night has no chains to bound.
+  const fromDream = await dreamSentIds(
+    db,
+    [...immediate, ...batched].map((c) => c.act_id),
+  );
+  const due = [...immediate, ...batched].filter((c) => !fromDream.has(c.act_id ?? ''));
   // Nothing is due, so there is nothing to suppress — and the only use of the scan below is
   // `due.flatMap`, which returns [] over an empty array whatever the deferrals say. Before this the
   // 2,000-row window was marshalled per seat per poll to filter a list that was already empty: the
@@ -1541,6 +1563,56 @@ function composeProvisionedLine(seat: string, teamSlug: string, sponsor: string)
   );
 }
 
+/**
+ * The dream wake's line (ADR 494 §1): it answers no act and works no lane, so it names neither —
+ * only that this is a dream, where the packet is, and the skill that says what a dream may write.
+ */
+function composeDreamLine(seat: string, teamSlug: string): string {
+  return (
+    `${wakePrefix(teamSlug)} you are seat "${seat}", woken to dream: read your packet with ` +
+    '`musterd dream`, follow the dreaming skill (.agents/skills/dreaming/SKILL.md), write only ' +
+    'insights, wiki pages and your seat note, then stop.'
+  );
+}
+
+/**
+ * Tonight's dream spend for one seat (ADR 494 §3): dream leases taken since the night began, less
+ * the ones the host deferred (a working human never spends a budget), and their reported cost.
+ */
+async function dreamNight(
+  db: Driver,
+  teamId: string,
+  seatName: string,
+  nightStart: number,
+): Promise<{ count: number; costUsd: number }> {
+  const leased = await db.all<{ lease_id: string | null }>(
+    `SELECT json_extract(detail, '$.lease_id') AS lease_id FROM audit
+        WHERE team_id = ? AND action = 'residency.wake_leased' AND target = ? AND ts >= ?
+          AND json_extract(detail, '$.derivation') = 'dream' ${MINTED_HERE}`,
+    [teamId, seatName, nightStart],
+  );
+  if (leased.length === 0) return { count: 0, costUsd: 0 };
+  const deferred = new Set(
+    (
+      await db.all<{ lease_id: string | null }>(
+        `SELECT json_extract(detail, '$.lease_id') AS lease_id FROM audit
+            WHERE team_id = ? AND action = 'residency.wake_deferred' AND target = ? AND ts >= ?`,
+        [teamId, seatName, nightStart],
+      )
+    ).map((r) => r.lease_id),
+  );
+  const spent = new Set(leased.map((r) => r.lease_id).filter((id) => !deferred.has(id)));
+  const costs = await db.all<{ lease_id: string | null; cost: number | null }>(
+    `SELECT json_extract(detail, '$.lease_id') AS lease_id,
+            json_extract(detail, '$.cost_usd') AS cost FROM audit
+        WHERE team_id = ? AND action = 'residency.wake_cost' AND target = ? AND ts >= ?`,
+    [teamId, seatName, nightStart],
+  );
+  let costUsd = 0;
+  for (const c of costs) if (spent.has(c.lease_id) && typeof c.cost === 'number') costUsd += c.cost;
+  return { count: spent.size, costUsd };
+}
+
 export async function claimWakeLeases(
   db: Driver,
   teamId: string,
@@ -1564,6 +1636,8 @@ export async function claimWakeLeases(
         (ledgerMemo ??= await openDirectedLedger(t, teamId));
       const reviewLoopOn = teamPolicy.loops?.review === true;
       const dispatchLoopOn = teamPolicy.loops?.dispatch === true;
+      // ADR 494 §2: the Team's schedule, read once; a Member's own schedule replaces it (ADR 206).
+      const teamHours = parseWorkingHours((await getTeamById(t, teamId))?.working_hours);
       for (const enrollment of enrollments) {
         const member = await getMemberById(t, enrollment.member_id);
         if (!member || member.left_at !== null) continue;
@@ -1680,6 +1754,7 @@ export async function claimWakeLeases(
         }
         // ADR 434 §c, read once per seat per poll and only when something is due.
         const horizon = candidates.length > 0 ? await wakeHorizon(t, teamId, member.name) : null;
+        let leased = false;
         for (const candidate of candidates) {
           const exhKey = wakeExhaustionKey(candidate.act_id, candidate.lane_id);
           const edge = loopEdgeOf(candidate);
@@ -1881,7 +1956,103 @@ export async function claimWakeLeases(
             derivation: candidate.derivation,
             ...(candidate.lane_id !== undefined ? { lane_id: candidate.lane_id } : {}),
           });
+          leased = true;
           break; // one lease per seat per poll
+        }
+        // ADR 494: nothing asked-for was leased, so the seat may be due a dream — idle (the live
+        // presence and deferral-snooze gates above already passed), cooled, outside its working
+        // hours, inside tonight's count and budget. A dream never shares a pass with another wake.
+        if (!leased && policy.dream_enabled && cooled) {
+          const hours = parseWorkingHours(member.working_hours) ?? teamHours;
+          const nightStart = hours ? lastWorkingDayEnd(hours, now) : null;
+          const night =
+            nightStart === null
+              ? { count: 0, costUsd: 0 }
+              : await dreamNight(t, teamId, member.name, nightStart);
+          const blocker = dreamBlocker({
+            enabled: policy.dream_enabled,
+            enrolled: true,
+            live: false,
+            otherWakeDue: false,
+            hours,
+            now,
+            dreamsTonight: night.count,
+            nightlyWakes: policy.dream_nightly_wakes,
+            costTonightUsd: night.costUsd,
+            ...(policy.dream_budget_usd !== undefined
+              ? { budgetUsd: policy.dream_budget_usd }
+              : {}),
+          });
+          if (blocker === null) {
+            const lease: WakeLeaseRow = {
+              id: ulid(),
+              team_id: teamId,
+              member_id: member.id,
+              act_id: null,
+              lane_id: null,
+              host,
+              lane: 'batched',
+              status: 'leased',
+              created_at: now,
+              expires_at: now + WAKE_LEASE_TTL_MS,
+              edge: null,
+              spawned_at: null,
+            };
+            await t.run(
+              `INSERT INTO wake_leases (id, team_id, member_id, act_id, lane_id, host, lane, status, created_at, expires_at, edge, spawned_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                lease.id,
+                lease.team_id,
+                lease.member_id,
+                lease.act_id,
+                lease.lane_id,
+                lease.host,
+                lease.lane,
+                lease.status,
+                lease.created_at,
+                lease.expires_at,
+                lease.edge,
+                lease.spawned_at,
+              ],
+            );
+            await appendAudit(t, teamId, {
+              actor: null,
+              action: 'residency.wake_leased',
+              target: member.name,
+              result: 'allow',
+              detail: {
+                lease_id: lease.id,
+                act: 'dream',
+                sender: 'dream',
+                lane: 'batched',
+                host,
+                derivation: 'dream',
+                continuity_requirement: 'portable',
+                intended_delivery: 'fresh',
+              },
+            });
+            orders.push({
+              lease_id: lease.id,
+              seat: member.name,
+              lane: 'batched',
+              composed_line: composeDreamLine(member.name, teamSlug),
+              expires_at: lease.expires_at,
+              // A dream writes wiki pages and opens a PR, so it runs under the seat's own tool
+              // policy; the write fence (store/dream.ts) is what keeps it to memory.
+              tool_policy: 'seat-policy',
+              bounds: {
+                timeout_ms: policy.work_timeout_ms,
+                ...(policy.max_turns !== undefined ? { max_turns: policy.max_turns } : {}),
+                ...(policy.budget_usd !== undefined ? { budget_usd: policy.budget_usd } : {}),
+              },
+              transcript_max_bytes: policy.transcript_max_bytes,
+              // ADR 494 §3: always fresh — a dream re-reads the record, it never resumes a life.
+              continuity_requirement: 'portable',
+              intended_delivery: 'fresh',
+              derivation: 'dream',
+            });
+          }
         }
       }
       return orders;

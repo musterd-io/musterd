@@ -1,3 +1,4 @@
+import type { Provenance } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { getMemberById } from './members.js';
 import { getMemory } from './memory.js';
@@ -263,4 +264,43 @@ export function dreamMayWrite(seat: string, w: DreamWrite): DreamVerdict {
     case 'other':
       return { ok: false, reason: `a dream may not ${w.what}` };
   }
+}
+
+/**
+ * The provenance a session's attestation settles to (ADR 494 §4: `dream` is server-derived from
+ * the lease, as `wake` is meant to be — ADR 131 §6). A session presenting this seat's own dream
+ * lease is a dream whatever it attests, so it cannot shed the word; a session attesting `dream`
+ * without one is not believed — a wake if it carries another lease of its own, otherwise nothing. Every
+ * other attestation passes through unchanged.
+ */
+export async function settleProvenance(
+  db: Driver,
+  member: { id: string },
+  attested: Provenance | null | undefined,
+  lease: string | null | undefined,
+): Promise<Provenance | null | undefined> {
+  if (lease && (await isDreamLease(db, member.id, lease))) return 'dream';
+  if (attested !== 'dream') return attested;
+  return lease && (await isOwnLease(db, member.id, lease)) ? 'wake' : undefined;
+}
+
+async function isOwnLease(db: Driver, memberId: string, leaseId: string): Promise<boolean> {
+  const row = await db.get<{ n: number }>(
+    'SELECT COUNT(*) AS n FROM wake_leases WHERE id = ? AND member_id = ?',
+    [leaseId, memberId],
+  );
+  return (row?.n ?? 0) > 0;
+}
+
+async function isDreamLease(db: Driver, memberId: string, leaseId: string): Promise<boolean> {
+  const row = await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM wake_leases w
+        WHERE w.id = ? AND w.member_id = ?
+          AND EXISTS (SELECT 1 FROM audit a
+                       WHERE a.team_id = w.team_id AND a.action = 'residency.wake_leased'
+                         AND json_extract(a.detail, '$.lease_id') = w.id
+                         AND json_extract(a.detail, '$.derivation') = 'dream')`,
+    [leaseId, memberId],
+  );
+  return (row?.n ?? 0) > 0;
 }

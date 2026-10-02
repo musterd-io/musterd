@@ -184,7 +184,7 @@ import {
   memberDoorbellPrefs,
   setDoorbellPrefs,
 } from '../store/doorbell.js';
-import { buildDreamPacket } from '../store/dream.js';
+import { buildDreamPacket, settleProvenance } from '../store/dream.js';
 import { latestFootprint } from '../store/footprint.js';
 import { listGoals } from '../store/goals.js';
 import {
@@ -1221,10 +1221,15 @@ async function authTouch(
   const build = attestedBuildHeader(req); // all credentials — the binary is the binary (ADR 135)
   // Provenance describes the *current* animation source (newest-wins, owner call 2026-07-14) —
   // agent seats only, mirroring the model gate: a human shell must not label itself `wake`.
-  const provenance = auth.member.kind === 'agent' ? provenanceHeader(req) : undefined;
   // ADR 241: same agent-only gate as provenance, and it travels WITH it — the ambient row's
   // provenance and its lease token describe one session, so a human shell can stamp neither.
   const wakeLease = auth.member.kind === 'agent' ? wakeLeaseHeader(req) : undefined;
+  // ADR 494 §4: `dream` is settled from the lease, never taken from the header alone.
+  const provenance =
+    auth.member.kind === 'agent'
+      ? ((await settleProvenance(ctx.db, auth.member, provenanceHeader(req), wakeLease)) ??
+        undefined)
+      : undefined;
   // Snapshot the ambient row before the touch so a real model change can audit (source: ambient).
   // ADR 246: taken UNCONDITIONALLY now. It used to be read only when a model header was present,
   // which made the one case that mattered invisible — a touch carrying NO model that attaches a
@@ -4344,10 +4349,20 @@ export async function handleHttp(
 
         // ADR 444: a wake never displaces an attended session — the WS `hello` refuses at the same
         // point. Before every occupy branch, so no grant is consumed and nothing is displaced.
+        // ADR 494 §4: the claim's provenance, settled against the session's lease token.
+        const claimProvenance =
+          targetMember.kind === 'agent'
+            ? ((await settleProvenance(
+                ctx.db,
+                targetMember,
+                body.provenance,
+                wakeLeaseHeader(req),
+              )) ?? null)
+            : null;
         if (
           targetMember.kind === 'agent' &&
           targetMember.observer === 0 &&
-          body.provenance === 'wake' &&
+          (claimProvenance === 'wake' || claimProvenance === 'dream') &&
           (await heldByAttendedSession(
             ctx.db,
             ctx.hub.connsForMember(targetMember.id).map((c) => c.presenceId),
@@ -4379,7 +4394,7 @@ export async function handleHttp(
         // seats only. A human shell must not be able to label its own occupancy `wake` — the wake
         // actuators read that word to decide a seat is their child and not a stranger's session.
         const claimAttachContext = {
-          provenance: targetMember.kind === 'agent' ? (body.provenance ?? null) : null,
+          provenance: claimProvenance,
           workspace: body.workspace ?? null,
           driver: null,
           model: body.model ?? null,
