@@ -2,9 +2,15 @@
 
 One enforced git loop (ADR 106): branch from fresh origin/main → PR → `gh pr merge --squash --auto --delete-branch` → sync by rebase + `--force-with-lease`, never merge — plus the two traps that stall or pollute it.
 
-## The loop (ADR 106, enforced by branch protection since 2026-07-07)
+## The loop (ADR 106, enforced by branch protection since 2026-07-07, with a gap on 2026-10-02 — below)
 
-Branch `feat/`|`fix/`|`docs/` from fresh `origin/main`; commits are throwaway (squash-merge). Fast local smoke only — CI is the authority. `gh pr create` → `gh pr merge --squash --auto --delete-branch`, walk away. Sync a stale branch by `git rebase origin/main` + `git push --force-with-lease`; never `merge main`, never bare `--force`. Required checks on main: `gates` + `Cursor Bugbot`; linear history; squash-only.
+Branch `feat/`|`fix/`|`docs/` from fresh `origin/main`; commits are throwaway (squash-merge). Fast local smoke only — CI is the authority. `gh pr create` → `gh pr merge --squash --auto --delete-branch`, walk away. Sync a stale branch by `git rebase origin/main` + `git push --force-with-lease`; never `merge main`, never bare `--force`. Required checks on main: ~~`gates` + `Cursor Bugbot`~~ `gates` only since ADR 180 (corrected 2026-10-02); linear history; squash-only.
+
+## Protection vanishes when the repo goes private on a Free org, and does not come back by itself (2026-10-02; falsify: `gh api repos/SandRiseStudio/musterd/branches/main/protection --jq .required_status_checks.contexts` prints `["gates"]`, and no merged PR's `mergedAt` is earlier than its head's `gates` check-run `completed_at`) <!-- claim: defect -->
+
+On 2026-10-02 nick made the repo private to keep it that way while the platform matures. The `SandRiseStudio` org was on GitHub Free, which offers branch protection and rulesets only for public repos. Both APIs then answered 403 "Upgrade to GitHub Pro or make this repository public". With no required check, `gh pr merge --auto` does not wait: it merges at once. #1957 (17:43Z) and #1961 (18:21Z) merged before their `gates` finished. Both went green afterwards. Every sampled merge from #1500 (09-16) to #1954 (10-02 00:22Z) came seconds after `gates`, so the lapse began between 00:22Z and 17:43Z.
+
+Upgrading the org to Team (nick, ~19:00Z) did **not** restore the old rules: `branches/main/protection` answered 404 "Branch not protected" and `rulesets` was `[]`. izzo re-applied them through the API at about 19:00Z, exactly as ADR 106 §2 and ADR 180 set them: `gates` required with `strict: false`, a PR required with 0 approvals, linear history, no force-push, no deletion, and `enforce_admins: false`. Checked right after: a PR with a failed `gates` (#1958) and one with `gates` still running (#1962) both read `BLOCKED`. The sign to watch for is a PR that merges within a minute of `gh pr merge --auto`, before its `gates` run has finished.
 
 ## Waiting for "merged" never sees a red CI (2026-09-21, nick's observation, lane 01M32Z1PD9; falsify: arm the state-only waiter below on a PR whose `gates` is red — it must exit within one poll; if it runs to its timeout, the trap holds) <!-- claim: defect -->
 
