@@ -47,6 +47,8 @@ src/
     traceDb.ts        // ADR 445 §3: openTraceDb(path) + TRACE_MIGRATIONS — `trace.db` beside `musterd.db`, its own schema_meta and ladder (`migrations:check` parses both); traceSchemaVersion + traceDbBytes (file + WAL) for /health; CONTENT_CAPTURED_THROUGH_KEY, the schema_meta key corpus:snapshot stamps
     schema.ts         // SCHEMA_V1_SQL: the DDL from 01-data-model.md as a TS constant (ADR 003)
     seed.ts           // seedDawn(db) test helper
+  digest/           // the morning digest (goal dreaming, lane 4): buildDigest (the night's learned insights + waiting-on + unanswered asks, all on the receipt clock per ADR 335) + renderDigestMarkdown (three sections, meta.digest = { day }) + postDigest (one ordinary team message per day, idempotent on the day key lane 5 pins)
+    digest.ts         // buildDigest + renderDigestMarkdown + postDigest (goal dreaming, lane 4)
   store/
     teams.ts          // Team CRUD/policy + scoped bootstrap credential lifecycle, legacy exchange/readiness, transactional cutover (ADR 344/350); restateUnstampedPolicy (ADR 398: one-shot stamp of pre-kind stored policy when the hub has joiners)
     members.ts        // addMember (issues token), getMember, authMember(token), leaveMember (releases in-flight claims — ADR 196), sweepExpiredMembers + startExpiredMemberSweep (hourly cosmetic left_at for past-until members — ADR 459 §4), reapStaleObservers + reapExcessIdleObservers; takenHues is live roster only — observers do not occupy the hue floor (ADR 409)
