@@ -28,7 +28,7 @@ src/
     loops.ts          // loopsFor(mode): the background loops a server starts — Cloud drops the machine-local ones (roster watch, footprint, federation sync push/pull/trace push, audit retention's file archive) and seeds ingest (an admin-set relay URL fetched with no public-host check)
     migrate.ts        // §6: migrateCloud(env) — the separate migrate step, as the OWNER (MUSTERD_DATABASE_OWNER_URL, MUSTERD_TRACE_DATABASE_OWNER_URL; the server never reads either); scripts/cloud/migrate.mjs runs it
     testIssuer.ts     // §5.2 test issuer (tests only; no runtime module imports it): an ES256 key, a JWKS on 127.0.0.1, token(aud) in the console's shape, rotate()
-    testing.ts        // cloud test support (tests only): stubCloudEnv, bootCloud (a listening cloud server over the pooled PGlite stores via testCloudPools), hostRequest (an explicit Host header)
+    testing.ts        // cloud test support (tests only): stubCloudEnv, bootCloud (a listening cloud server over the pooled PGlite stores via testCloudPools), bootCloudWithOutage (the same, with setDown(v) refusing every new main-store connection), hostRequest (an explicit Host header)
   db/
     open.ts           // openDb(path): Database; sets PRAGMAs; runs migrations
     pgDriver.ts       // ADR 486: node-postgres behind Driver — one pg.Pool per role (app, operator; owner only with ownerUrl, for migratePostgres); EVERY statement runs in a transaction on one pooled client stamped SET LOCAL ROLE + set_config(app.team_id) (root = app role, no tenant: fail-closed), ROLLBACK + release(err) on failure so a pooled connection carries nothing to the next checkout; nested = SAVEPOINT; tx handles die on settle (tx_closed) and cannot rescope; ECONN*/57P*/08*/53300 → DriverError('unavailable') carrying DATABASE_UNREACHABLE_SENTENCE (driver.ts); the choreography test injects a fake pool, the wire is the Neon pass
@@ -395,7 +395,11 @@ changes nothing. It requires `MUSTERD_DATABASE_APP_URL`, `MUSTERD_DATABASE_OPERA
 5. **`/health` is ok or one sentence (§5.5).** `200 {ok:true}` or `503 {ok:false, reason:"database
    unreachable"}` — no path, counts, or build. Any request that meets an unreachable store is a 503
    with the same sentence; recovery is automatic (the pool reconnects — and a dropped pooled
-   connection is an `error` event the pool handles, never a process exit). The OAuth token endpoint
+   connection is an `error` event the pool handles, never a process exit). No background path lets the
+   outage exit the process either: a socket close, the reaper's tick, the same-workspace eviction
+   timer and the expired-member sweep each log one stable line (`ws_cleanup_failed`,
+   `reaper_tick_failed`, `ws_supersede_failed`, `expired_sweep_failed`) and carry on
+   (`cloud/outage.test.ts`). The 2026-10-02 load test found all four exiting it (lane `01M3ZC3EXN`). The OAuth token endpoint
    answers the same outage `503 temporarily_unavailable` + `Retry-After`, never `invalid_grant` /
    `invalid_client` — RFC 6749 clients discard a refresh token or a registration on those. `/live`
    shows the sentence as a banner (`packages/web/src/live/serverHealth.ts`).

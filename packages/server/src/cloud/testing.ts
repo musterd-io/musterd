@@ -40,6 +40,33 @@ export async function bootCloud(over: Record<string, string> = {}, opts: { fresh
   return { s, seed, url: `http://127.0.0.1:${s.port}` };
 }
 
+/** A cloud server whose coordination database can be pulled out from under it: `setDown(true)`
+ *  refuses every new connection on the main store's pools (app and operator alike). */
+export async function bootCloudWithOutage() {
+  stubCloudEnv();
+  const seed = await openTestDriver('pglite');
+  await openTestDriver('pglite', { store: 'trace' });
+  const pools = (await testCloudPools()).factories;
+  let down = false;
+  const refused = () =>
+    Object.assign(new Error('connect ECONNREFUSED 10.0.0.1:5432'), { code: 'ECONNREFUSED' });
+  const main = (u: string) => {
+    const p = pools.main(u);
+    return {
+      connect: () => (down ? Promise.reject(refused()) : p.connect()),
+      end: () => p.end(),
+    };
+  };
+  const s = createServer({ cloudPools: { ...pools, main }, rosterRoots: [], port: 0 });
+  await s.listen();
+  return {
+    s,
+    seed,
+    url: `http://127.0.0.1:${s.port}`,
+    setDown: (v: boolean) => void (down = v),
+  };
+}
+
 /** An HTTP request with an explicit Host header (fetch will not send one it did not derive). */
 export function hostRequest(
   url: string,

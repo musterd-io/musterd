@@ -121,7 +121,7 @@ async function scheduleSameWorkspaceEviction(
     result: 'allow',
     detail: { predecessors: predecessorConnIds.length, grace_ms: ctx.config.supersedeGraceMs },
   });
-  const timer = setTimeout(async () => {
+  const reap = async () => {
     // Reap only if the successor is still attached — a probe that disconnected within the grace never
     // reaches here (its conn is gone), so the incumbent is preserved (ADR 068's anti-flap intact).
     if (!ctx.hub.getConn(successorConnId)) return;
@@ -149,6 +149,14 @@ async function scheduleSameWorkspaceEviction(
         detail: { same_workspace: true, evicted },
       });
     }
+  };
+  // A timer has no caller to hand a rejection to: on Postgres a store call can reject (a pool
+  // timeout, an outage), and an unhandled rejection exits the server (lane 01M3ZC3EXN). The
+  // predecessor's row is already detached from the hub; the reaper clears it on its next pass.
+  const timer = setTimeout(() => {
+    reap().catch((err: unknown) =>
+      log.warn({ msg: 'ws_supersede_failed', member: memberName, err: String(err) }),
+    );
   }, ctx.config.supersedeGraceMs);
   timer.unref?.();
   return timer;
@@ -1141,8 +1149,15 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
     };
 
     // Behind the frame chain: a frame still in flight must settle before the row is released.
+    // Caught: on Postgres `release` rejects when the pool cannot hand out a connection, and an
+    // unhandled rejection here exited the server mid-load test, dropping every team on the machine
+    // (2026-10-02, lane 01M3ZC3EXN). A row left behind ages out: the reaper takes it offline.
     const closeAfterFrames = () => {
-      chain = chain.then(cleanup, cleanup);
+      chain = chain
+        .then(cleanup, cleanup)
+        .catch((err: unknown) =>
+          log.warn({ msg: 'ws_cleanup_failed', conn: state.connId, err: String(err) }),
+        );
     };
     ws.on('close', closeAfterFrames);
     ws.on('error', closeAfterFrames);
