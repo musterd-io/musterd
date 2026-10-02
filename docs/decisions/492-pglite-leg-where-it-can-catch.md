@@ -71,6 +71,27 @@ are not `withDrivers` blocks and keep running under every setting.
   a both-driver one; the PGlite-only lines are mostly in tests that open PGlite directly and still
   run.
 - ADR 479 keeps its decision; its Consequences carry a dated note pointing here.
+- **2026-10-02 — interim eval reading, day 2 of 7 (fifty, lane `01M3Z1KE11`).** The trace works.
+  Every docs, web and CLI PR since #1940 logs `MUSTERD_TEST_DRIVER=sqlite — the PR touches
+  nothing the PGlite leg executes`. Every server or protocol PR logs `both` and names its first
+  path (#1939, #1942, #1949, #1959). Over 16 filtered PRs (#1943–#1965, without #1938 and #1941,
+  which ran the TEMP lines that #1940 removed), the median `coverage` job is **5m05s**
+  (3m26s–10m07s), against the 14-min baseline. Two things affect that number, and the final
+  reading has to separate them:
+  - **#1934 landed 16 minutes before this ADR.** It made the PGlite double 1.4–1.5× faster, so
+    both-driver runs got faster too (`main` test step 920s at 20:38Z, then 725–736s that
+    evening). Part of the drop against the fixed baseline comes from #1934.
+  - **Runner speed changes from day to day.** From about 17:40Z on 2026-10-02 the runners were
+    about 2× slower on the same code. The setup step went from 31s to 58s, and #1962 measured
+    `lanes.test.ts` at 14.5s, then 44.8s. Filtered PRs that afternoon took 7m31s–10m07s. So the
+    final reading compares each filtered PR with a **both-driver `main` run on the same day**,
+    not only with the 14-min baseline. Same-day PGlite half of the test step: about 7.5 min on
+    10-01 (sqlite PRs 250–300s, `main` 725–736s), about 9 min on 10-02 (534s, 1077–1120s).
+  - **Decision 2 checks every merge, but not every run finishes.** `ci.yml` cancels an older run
+    on a ref when a newer push arrives (`cancel-in-progress`). Of the last 30 `main` pushes
+    (to 2026-10-02 19:27Z), 19 runs were cancelled, 10 passed and 1 was still running. A merge is checked by the next `main` run that finishes, which
+    includes it, and that can be several merges later. No `main` run failed in this period, so
+    the falsifier has not fired. The final reading is due 2026-10-08.
 
 ## Observability & Evaluation
 
