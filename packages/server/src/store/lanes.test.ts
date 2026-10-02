@@ -1,5 +1,5 @@
 import { ACCEPTANCE_STALE_MS, makeEnvelope, type Lane } from '@musterd/protocol';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { openDb } from '../db/open.js';
 import { withDrivers } from '../db/testing.js';
@@ -1285,8 +1285,21 @@ withDrivers('lanes', (o) => {
       return row?.n ?? 0;
     }
 
+    // On Postgres the fixture is real schema — on the Neon pass it is the SHARED test database, and a
+    // trigger left on `lanes` fires for every file after this one (2026-10-02). Dropped after each test.
+    let observed: Driver | null = null;
+    afterEach(async () => {
+      if (observed?.dialect === 'postgres')
+        await observed.exec(`
+          DROP TRIGGER IF EXISTS observe_title_writes ON lanes;
+          DROP FUNCTION IF EXISTS observe_title_writes_fn();
+          DROP TABLE IF EXISTS title_writes;`);
+      observed = null;
+    });
+
     /** An `UPDATE OF title` trigger, in each engine's spelling; re-creatable on the pooled double. */
     async function observeTitleWrites(db: Driver): Promise<void> {
+      observed = db;
       if (db.dialect === 'sqlite') {
         await db.exec(`
           CREATE TEMP TABLE title_writes (at INTEGER);

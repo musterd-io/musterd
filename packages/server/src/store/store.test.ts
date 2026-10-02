@@ -379,7 +379,8 @@ withDrivers('store', (o) => {
              BEGIN
                SELECT RAISE(ABORT, 'injected audit failure');
              END`
-          : `CREATE FUNCTION fail_bootstrap_cutover_audit_fn() RETURNS trigger LANGUAGE plpgsql AS $$
+          : `DROP TRIGGER IF EXISTS fail_bootstrap_cutover_audit ON audit;
+             CREATE OR REPLACE FUNCTION fail_bootstrap_cutover_audit_fn() RETURNS trigger LANGUAGE plpgsql AS $$
              BEGIN
                IF NEW.action = 'bootstrap_credential.cutover' THEN
                  RAISE EXCEPTION 'injected audit failure';
@@ -390,16 +391,25 @@ withDrivers('store', (o) => {
                FOR EACH ROW EXECUTE FUNCTION fail_bootstrap_cutover_audit_fn()`,
       );
 
-      await expect(
-        cutoverLegacyBootstrap(db, { teamId: team.id, actor: 'Nick', force: false, now: 100 }),
-      ).rejects.toThrow(/injected audit failure/);
-      expect(await getAgentKeyHash(db, team.id)).not.toBeNull();
-      expect((await requireTeam(db, team.slug)).bootstrap_cutover_at).toBeNull();
-      expect(
-        (await db.get(
-          "SELECT COUNT(*) AS count FROM agent_bootstrap_credentials WHERE use_kind = 'legacy' AND state = 'active'",
-        ))!.count,
-      ).toBe(1);
+      // The trigger is real schema on Postgres — on the Neon pass, the shared test database — so it
+      // goes when the test does, whatever the assertions did.
+      try {
+        await expect(
+          cutoverLegacyBootstrap(db, { teamId: team.id, actor: 'Nick', force: false, now: 100 }),
+        ).rejects.toThrow(/injected audit failure/);
+        expect(await getAgentKeyHash(db, team.id)).not.toBeNull();
+        expect((await requireTeam(db, team.slug)).bootstrap_cutover_at).toBeNull();
+        expect(
+          (await db.get(
+            "SELECT COUNT(*) AS count FROM agent_bootstrap_credentials WHERE use_kind = 'legacy' AND state = 'active'",
+          ))!.count,
+        ).toBe(1);
+      } finally {
+        if (db.dialect === 'postgres')
+          await db.exec(
+            'DROP TRIGGER IF EXISTS fail_bootstrap_cutover_audit ON audit; DROP FUNCTION IF EXISTS fail_bootstrap_cutover_audit_fn()',
+          );
+      }
     });
 
     it('mints and resolves a target-scoped bootstrap credential', async () => {
