@@ -4,6 +4,7 @@ import {
   hasServer,
   listServers,
   readPlugin,
+  readServer,
   readServerEnv,
   removePlugins,
   removeServers,
@@ -73,6 +74,52 @@ describe('upsertServer', () => {
   it('writes into an empty config', () => {
     const out = upsertServer('', 'musterd', { command: 'node', args: [], env: {} });
     expect(out).toBe('[mcp_servers.musterd]\ncommand = "node"\nargs = []\n');
+  });
+
+  it('writes and reads back default_tools_approval_mode (ADR 495)', () => {
+    const s = {
+      command: 'node',
+      args: ['/abs/index.js'],
+      env: { MUSTERD_LAUNCH_SURFACE: 'codex' },
+      default_tools_approval_mode: 'approve' as const,
+    };
+    const out = upsertServer(USER, 'musterd', s);
+    expect(out).toContain('default_tools_approval_mode = "approve"');
+    expect(readServer(out, 'musterd')).toEqual(s);
+    // A table without the key reads back without it, so the fingerprint of an older entry differs.
+    const bare = upsertServer(USER, 'musterd', { command: 'node', args: [], env: {} });
+    expect(readServer(bare, 'musterd')).toEqual({ command: 'node', args: [], env: {} });
+  });
+
+  it("keeps a hand-added per-tool approval subtable when musterd's table is rewritten", () => {
+    const hand = [
+      '[mcp_servers.musterd]',
+      'command = "node"',
+      'args = ["a"]',
+      '',
+      '[mcp_servers.musterd.tools.team_join]',
+      'approval_mode = "approve"',
+      '',
+    ].join('\n');
+    const out = upsertServer(hand, 'musterd', {
+      command: 'node',
+      args: ['b'],
+      env: {},
+      default_tools_approval_mode: 'approve',
+    });
+    expect(out).toContain('[mcp_servers.musterd.tools.team_join]');
+    expect(listServers(out).filter((s) => s === 'musterd')).toHaveLength(1);
+  });
+
+  it('refuses an approval mode Codex does not accept', () => {
+    expect(() =>
+      upsertServer('', 'musterd', {
+        command: 'node',
+        args: [],
+        env: {},
+        default_tools_approval_mode: 'bogus' as never,
+      }),
+    ).toThrow(/refusing to write an invalid Codex mcp_servers\.musterd/);
   });
 });
 
