@@ -38,6 +38,35 @@ function step(n, what) {
   console.log(`\n── ${n}. ${what}`);
 }
 
+/**
+ * Create the one-shot migrate machine through the Machines API. `fly machine run` cannot be used:
+ * flyctl looks an image up inside the app it runs in, and the image lives in the SERVING app's
+ * repository (2026-10-02, first deploy: `Could not find image`). The API takes any image ref the
+ * org can pull. The Fly token is read in-process and never printed.
+ */
+async function createMigrateMachine(image) {
+  const token = run('fly', ['auth', 'token'], { capture: true }).trim();
+  const res = await fetch(`https://api.machines.dev/v1/apps/${MIGRATE_APP}/machines`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      region: 'iad',
+      config: {
+        image,
+        init: { cmd: ['node', 'scripts/cloud/migrate.mjs'] },
+        restart: { policy: 'no' },
+        guest: { cpu_kind: 'shared', cpus: 1, memory_mb: 512 },
+        metadata: { purpose: 'migrate' },
+      },
+    }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.id) {
+    throw new Error(`creating the migrate machine → ${res.status} ${body.error ?? ''}`.trim());
+  }
+  return body.id;
+}
+
 /** The exit code a stopped one-shot machine reported, from its event log. */
 function exitCodeOf(machineId) {
   const machines = JSON.parse(
@@ -74,31 +103,8 @@ try {
   ]);
 
   step(2, `migrate in ${MIGRATE_APP}`);
-  const started = run(
-    'fly',
-    [
-      'machine',
-      'run',
-      image,
-      'node',
-      'scripts/cloud/migrate.mjs',
-      '--app',
-      MIGRATE_APP,
-      '--region',
-      'iad',
-      '--restart',
-      'no',
-      '--vm-size',
-      'shared-cpu-1x',
-      '--vm-memory',
-      '512',
-      '--detach',
-    ],
-    { capture: true },
-  );
-  const id =
-    /Machine ID:\s*([0-9a-f]+)/i.exec(started)?.[1] ?? /\b([0-9a-f]{14})\b/.exec(started)?.[1];
-  if (!id) throw new Error('could not read the migrate machine id from `fly machine run`');
+  const id = await createMigrateMachine(image);
+  console.log(`migrate machine ${id}`);
   try {
     run('fly', [
       'machine',
