@@ -42,6 +42,16 @@
  *     # limits (register 5/min: RAMP ≥ 12s per human), set DURATION past RAMP so every arrival
  *     # lands in the sample, and read the arrival-burst numbers from a loopback run instead.
  *   DAEMON_CPUS=0 taskset -c 1-7 node scripts/perf/demo-audience-load.mjs   # Linux: isolate the daemon
+ *   TARGET=https://<team>.musterd.dev BENCH_ADMIN_CREDENTIAL=<an admin's mscr_> HUMANS=75 AGENTS=75 \
+ *     VIEWERS=75 RAMP=1000 DURATION=1300 node scripts/perf/demo-audience-load.mjs
+ *     # a REMOTE server (musterd Cloud, spec §8.1): no child daemon. The harness seeds the team over
+ *     # its admin API (LANES lanes, then every human and agent seat with its credential), and every
+ *     # population goes the long way — OAuth + /mcp, the hook rail, /live's reads and its WS, and the
+ *     # /health prober, all through the edge. Use a FRESH team per run (scripts/cloud/staging-issuer.mjs
+ *     # create-team) so every run starts from the same board. One driver is one address, so the
+ *     # per-IP OAuth limits bind as on a tunnel run: RAMP ≥ 12 s per human. No child means no CPU or
+ *     # loop delay from here; the report prints the run window to read the host's own metrics for.
+ *     # Runs on a bench machine next to the target, never the shared laptop (scripts/cloud/bench-run.mjs).
  *
  * Do not run it at audience scale on a laptop: the client side alone saturates one. It runs on a
  * throwaway Fly machine — scripts/perf/loadbench.fly.toml.
@@ -156,6 +166,82 @@ async function serve() {
   process.send({ type: 'ready', port, team: team.slug, humans, agents });
 }
 
+// ── the remote side (TARGET) ──────────────────────────────────────────────────────────────────
+
+/**
+ * Seed a REMOTE team the way an operator would, through its admin API — what serve() does through
+ * the store: LANES lanes on the board, then each human seat (POST /members hands back its
+ * credential) and each agent seat (POST /members, then the admin rotate mints its seat credential:
+ * the HTTP twin of mintAgentSeatCredential). The admin credential arrives in the environment (a
+ * Fly secret on the bench app); neither it nor anything the seed mints is ever printed.
+ */
+async function seedTarget(target) {
+  const admin = process.env.BENCH_ADMIN_CREDENTIAL;
+  if (!admin)
+    throw new Error('TARGET needs BENCH_ADMIN_CREDENTIAL, an admin credential for the team');
+  const slug = process.env.TEAM ?? new URL(target).hostname.split('.')[0];
+  const HUMANS = env('HUMANS', 50);
+  const AGENTS = env('AGENTS', 50);
+  const LANES = env('LANES', 1200);
+  const CONCURRENCY = env('SEED_CONCURRENCY', 8);
+  const headers = { authorization: `Bearer ${admin}`, 'content-type': 'application/json' };
+  const post = async (label, path, body) => {
+    for (let attempt = 1; ; attempt++) {
+      const r = await fetch(`${target}/teams/${slug}${path}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+      const j = await r.json().catch(() => null);
+      if (r.ok) return j;
+      // The seed is setup, not the sample: ride out a transient 5xx, never a refusal.
+      if (r.status >= 500 && attempt < 4) {
+        await new Promise((res) => setTimeout(res, 1000 * attempt));
+        continue;
+      }
+      throw new Error(`seed ${label} → ${r.status} ${j?.code ?? ''} ${j?.message ?? ''}`.trim());
+    }
+  };
+  const pool = async (n, fn) => {
+    let i = 0;
+    const worker = async () => {
+      while (i < n) await fn(i++);
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, n) }, worker));
+  };
+  const t0 = performance.now();
+  // The same board serve() seeds: revive-sized, with the `detail` body that makes GET /lanes heavy.
+  const detail = 'Done when: '.padEnd(1800, 'the acceptance criteria are met and recorded. ');
+  await pool(LANES, (i) =>
+    post('POST /lanes', '/lanes', {
+      title: `bench lane ${i}`,
+      detail,
+      scope: [`packages/p${i % 40}/**`],
+    }),
+  );
+  const stamp = Date.now().toString(36);
+  const humans = new Array(HUMANS);
+  await pool(HUMANS, async (i) => {
+    const name = `aud-${stamp}-h${i}`;
+    const j = await post('POST /members (human)', '/members', { name, kind: 'human' });
+    humans[i] = { name, token: j.human_credential };
+  });
+  const agents = new Array(AGENTS);
+  await pool(AGENTS, async (i) => {
+    const name = `aud-${stamp}-a${i}`;
+    await post('POST /members (agent)', '/members', { name, kind: 'agent' });
+    const j = await post(
+      'POST /members/:name/agent-seat-credential/rotate',
+      `/members/${encodeURIComponent(name)}/agent-seat-credential/rotate`,
+      {},
+    );
+    agents[i] = { name, token: j.seat_credential };
+  });
+  const secs = ((performance.now() - t0) / 1000).toFixed(0);
+  console.log(`seeded ${slug}: ${LANES} lanes, ${HUMANS} humans, ${AGENTS} agents in ${secs}s`);
+  return { team: slug, humans, agents };
+}
+
 // ── the audience side ─────────────────────────────────────────────────────────────────────────
 
 async function drive() {
@@ -178,6 +264,10 @@ async function drive() {
   const HUMAN_RAIL = process.env.HUMAN_RAIL ?? 'mcp';
   /** Public origin for the human rail only (the tunnel leg); agents/viewers stay loopback. */
   const REMOTE_URL = process.env.REMOTE_URL?.replace(/\/$/, '') ?? null;
+  /** A remote server to drive instead of a child daemon (musterd Cloud); see the header. */
+  const TARGET = process.env.TARGET?.replace(/\/$/, '') ?? null;
+  if (TARGET && REMOTE_URL)
+    throw new Error('TARGET and REMOTE_URL are exclusive: under TARGET every population is remote');
 
   // DAEMON_CPUS (Linux) pins the daemon to those cores with taskset, so the audience cannot steal its
   // CPU — run the driver itself under `taskset -c <the other cores>` for the same reason. Without it
@@ -187,13 +277,15 @@ async function drive() {
     env: { ...process.env, MUSTERD_SILENT: '1' },
     stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
   };
-  const child = process.env.DAEMON_CPUS
-    ? spawn(
-        'taskset',
-        ['-c', process.env.DAEMON_CPUS, process.execPath, self, '--server'],
-        childOpts,
-      )
-    : fork(self, ['--server'], childOpts);
+  const child = TARGET
+    ? null
+    : process.env.DAEMON_CPUS
+      ? spawn(
+          'taskset',
+          ['-c', process.env.DAEMON_CPUS, process.execPath, self, '--server'],
+          childOpts,
+        )
+      : fork(self, ['--server'], childOpts);
   const next = (type) =>
     new Promise((res) => {
       const on = (m) => {
@@ -204,8 +296,9 @@ async function drive() {
       };
       child.on('message', on);
     });
-  const ready = await next('ready');
-  const base = `http://127.0.0.1:${ready.port}`;
+  const ready = TARGET ? await seedTarget(TARGET) : await next('ready');
+  const base = TARGET ?? `http://127.0.0.1:${ready.port}`;
+  const wsUrl = TARGET ? `${TARGET.replace(/^http/, 'ws')}/ws` : `ws://127.0.0.1:${ready.port}/ws`;
   const T = `/teams/${ready.team}`;
 
   /** Per-endpoint latency samples, keyed by a route label (never a raw path — no ids, no tokens). */
@@ -352,9 +445,10 @@ async function drive() {
         // Loopback only: a real edge writes these itself, and Cloudflare refuses a client request
         // that carries CF-Connecting-IP outright (403 "error code: 1000") — so through REMOTE_URL
         // every human would die at the edge before reaching the daemon.
-        const edge = REMOTE_URL
-          ? {}
-          : { 'x-forwarded-proto': 'https', 'cf-connecting-ip': `198.51.100.${(i % 200) + 1}` };
+        const edge =
+          REMOTE_URL || TARGET
+            ? {}
+            : { 'x-forwarded-proto': 'https', 'cf-connecting-ip': `198.51.100.${(i % 200) + 1}` };
         const bearer = await signIn(h, edge);
         if (!bearer) return;
         let session = null;
@@ -507,7 +601,7 @@ async function drive() {
           if (!inFlight) schedule();
         } else startFetch();
       };
-      const ws = new WebSocket(`ws://127.0.0.1:${ready.port}/ws`);
+      const ws = new WebSocket(wsUrl);
       sockets.push(ws);
       let hb;
       ws.on('open', () =>
@@ -545,10 +639,11 @@ async function drive() {
           }
         }
       });
-      ws.on('close', () => clearInterval(hb));
-      ws.on('error', () => {
-        errors++;
+      ws.on('close', (code) => {
+        clearInterval(hb);
+        if (!stopping) fail('WS /ws (viewer)', `close ${code}`);
       });
+      ws.on('error', () => fail('WS /ws (viewer)', 'error'));
     }),
   );
 
@@ -565,14 +660,16 @@ async function drive() {
     }
   })();
 
-  child.send({ type: 'start' });
-  const started = await next('started');
+  child?.send({ type: 'start' });
+  const started = child ? await next('started') : null;
+  const windowStart = new Date();
   await new Promise((r) => setTimeout(r, DURATION));
   stopping = true;
   for (const t of timers) clearTimeout(t);
   await prober;
-  child.send({ type: 'stop', cpu0: started.cpu0, t0: started.t0 });
-  const stats = await next('stats');
+  const windowEnd = new Date();
+  child?.send({ type: 'stop', cpu0: started.cpu0, t0: started.t0 });
+  const stats = child ? await next('stats') : null;
   for (const ws of sockets) ws.terminate();
 
   // ── report ──
@@ -582,17 +679,24 @@ async function drive() {
   };
   const f = (n) => (Number.isFinite(n) ? n.toFixed(0).padStart(6) : '     -');
   const all = [...samples.values()].flatMap((s) => s.ms);
-  const cpuPct = ((stats.cpu.user + stats.cpu.system) / 1e3 / stats.wallMs) * 100;
+  const origin = TARGET ? `target ${new URL(TARGET).host}` : REMOTE_URL ? 'tunnel' : 'loopback';
+  const db = TARGET ? 'remote' : process.env.DB_COPY ? 'copy' : 'synthetic-file';
   console.log(
     `humans=${ready.humans.length} agents=${ready.agents.length} viewers=${VIEWERS} ` +
-      `daemon_cpus=${process.env.DAEMON_CPUS ?? 'shared'} roster=${ROSTER} ` +
-      `human_rail=${HUMAN_RAIL} human_origin=${REMOTE_URL ? 'tunnel' : 'loopback'} ` +
-      `duration=${DURATION / 1000}s ramp=${RAMP / 1000}s db=${process.env.DB_COPY ? 'copy' : 'synthetic-file'}`,
+      `daemon_cpus=${TARGET ? 'remote' : (process.env.DAEMON_CPUS ?? 'shared')} roster=${ROSTER} ` +
+      `human_rail=${HUMAN_RAIL} human_origin=${origin} ` +
+      `duration=${DURATION / 1000}s ramp=${RAMP / 1000}s db=${db}`,
   );
-  console.log(
-    `daemon  cpu ${cpuPct.toFixed(0)}%  rss ${stats.rssMb.toFixed(0)} MB  ` +
-      `loop delay p50 ${stats.eld.p50.toFixed(1)} p99 ${stats.eld.p99.toFixed(1)} max ${stats.eld.max.toFixed(0)} ms`,
-  );
+  if (stats) {
+    const cpuPct = ((stats.cpu.user + stats.cpu.system) / 1e3 / stats.wallMs) * 100;
+    console.log(
+      `daemon  cpu ${cpuPct.toFixed(0)}%  rss ${stats.rssMb.toFixed(0)} MB  ` +
+        `loop delay p50 ${stats.eld.p50.toFixed(1)} p99 ${stats.eld.p99.toFixed(1)} max ${stats.eld.max.toFixed(0)} ms`,
+    );
+  } else
+    console.log(
+      `daemon  remote — read its host metrics for ${windowStart.toISOString()} → ${windowEnd.toISOString()}`,
+    );
   console.log(
     `requests ${all.length} (${(all.length / (DURATION / 1000)).toFixed(1)}/s)  errors ${errors}  ` +
       `presence frames ${presenceFrames}  lane frames ${laneFrames}`,
