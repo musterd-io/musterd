@@ -148,6 +148,16 @@ export function normalizeActivity(a: (typeof ACTIVITIES_ON_WIRE)[number]): Activ
  * `wake` (ADR 131 §6) = musterd resurrected this session because a directed act was waiting —
  * machine-initiated, roster/stream/office-distinguishable, and the ping-pong bound's join key:
  * acts sent from a `wake` occupancy only qualify for other seats' *batched* wake lane.
+ * `dream` (goal dreaming) = musterd woke an idle seat outside working hours to re-read its day —
+ * nothing directed was waiting, and the session may write only insights, wiki pages and its note.
  */
-export const PROVENANCES = ['session', 'asked', 'hook', 'scheduled', 'daemon', 'wake'] as const;
+export const PROVENANCES = [
+  'session',
+  'asked',
+  'hook',
+  'scheduled',
+  'daemon',
+  'wake',
+  'dream',
+] as const;
 export type Provenance = (typeof PROVENANCES)[number];

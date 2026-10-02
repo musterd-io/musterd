@@ -346,6 +346,8 @@ export type AuditAction =
   // never Act/memory/source bodies (Observability §). Deny detail: `{ reason:'forbidden',
   // target_kind }` only — same verb so probes are visible without disclosing target existence.
   | 'residency.context_read'
+  // Goal dreaming: a seat read its own dream packet. Detail is sizes and counts only — never a body.
+  | 'dream.packet_read'
   // ADR 211: a recipient postponed one directed act with a deferring `wait`. Detail is the condition
   // KIND only (`{ until: 'lane' | 'reply' }`) — never the lane id, never a body (ADR 051). There is
   // no `raised` counterpart by design: a raise is derived at read time and has no event, and
@@ -636,6 +638,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'residency.wake_cost': 'none',
   'residency.wake_report_rejected': 'none',
   'residency.context_read': 'actor',
+  'dream.packet_read': 'actor',
   'inbox.deferred': 'actor',
   'mcp.surface_rendered': 'actor',
   'ask.raised': 'actor',

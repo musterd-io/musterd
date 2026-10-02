@@ -21,6 +21,7 @@ Twin grade: **same** = same name, same meaning; **meaning** = same meaning, diff
 | `whoami` | — | none (the primer tells the agent who it is) | which seat this folder resolves to |
 | `availability` | `team_availability` (added 2026-09-03, lane item 6) | same | availability (ADR 044) |
 | `wake-context` | `team_wake_context` | same | bounded wake packet (ADR 209) |
+| `dream` | — | none (a dreaming session reads it once a night) | this seat's dream packet (goal dreaming) |
 | `notify` | — | none | OS notification poller while away (ADR 035) |
 
 ### Talking

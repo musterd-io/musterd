@@ -184,6 +184,7 @@ import {
   memberDoorbellPrefs,
   setDoorbellPrefs,
 } from '../store/doorbell.js';
+import { buildDreamPacket } from '../store/dream.js';
 import { latestFootprint } from '../store/footprint.js';
 import { listGoals } from '../store/goals.js';
 import {
@@ -5653,6 +5654,33 @@ export async function handleHttp(
           }
           throw e;
         }
+      }
+
+      // Goal dreaming, lane 2: the dream packet — the caller's own day (its lanes' acts, its note,
+      // the team's insights since its last dream). A seat reads only its own; there is no target.
+      // Kept off /wake-context so the ADR 204 wire contract stays as it is.
+      if (method === 'GET' && rest === '/dream') {
+        const { team, member } = await authTouch(ctx, slug, req);
+        const rawSince = url.searchParams.get('since');
+        const built = await buildDreamPacket(
+          ctx.db,
+          team,
+          member,
+          rawSince !== null && /^\d+$/.test(rawSince) ? { since: Number(rawSince) } : {},
+        );
+        await appendAudit(ctx.db, team.id, {
+          actor: member.name,
+          action: 'dream.packet_read',
+          target: member.name,
+          result: 'allow',
+          detail: {
+            bytes: built.used_bytes,
+            lanes: built.packet.lanes.length,
+            learned: built.packet.learned.length,
+            truncated: built.truncated,
+          },
+        });
+        return sendJson(res, 200, built);
       }
 
       // The insight report (ADR 050/084) — one server-side projection: flow metrics, the waiting-on

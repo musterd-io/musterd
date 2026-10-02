@@ -848,6 +848,15 @@ export const CATALOG: readonly CommandEntry[] = [
       'The fast tier under docs/wiki/: promote a durable finding there once it proves out.',
   },
   {
+    name: 'dream',
+    signature: '[--since <epoch-ms>]',
+    summary: "print this seat's dream packet as JSON",
+    group: 'remembering',
+    primary: false,
+    detail:
+      "Goal dreaming: the day a dreaming session re-reads — your lanes' acts, your note, and insights saved since your last dream (else 24h). Your own seat only; the server bounds it to 24 KB.",
+  },
+  {
     name: 'wake-context',
     signature: '--act <id> | --lane <id>',
     summary: 'read a bounded, body-free wake orientation index',

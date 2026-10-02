@@ -16,6 +16,7 @@ import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import { ringDoorbell } from '../notify/doorbell.js';
 import { appendAudit } from '../store/audit.js';
+import { dreamMayWrite, isDreaming } from '../store/dream.js';
 import { incidentReporters, recordBlockedReport } from '../store/incidents.js';
 import { recordLaneClose } from '../store/laneClose.js';
 import {
@@ -161,6 +162,21 @@ async function routeEnvelopeInner(
   // Observer seats (ADR 063) are read-only — they watch the firehose but cannot speak.
   if (sender.observer) {
     throw new MusterdError('forbidden', 'observer seats are read-only and cannot send');
+  }
+  // ADR 494 / goal dreaming: a seat woken to dream sends insights and nothing else — no ask, no
+  // handoff, no message that could wake a teammate or ring a human at night.
+  if (await isDreaming(ctx.db, sender.id)) {
+    const verdict = dreamMayWrite(sender.name, { kind: 'act', act: env.act });
+    if (!verdict.ok) {
+      await appendAudit(ctx.db, team.id, {
+        actor: sender.name,
+        action: 'send.denied',
+        target: env.to.kind === 'member' ? env.to.name : null,
+        result: 'deny',
+        detail: { provenance: 'dream', act: env.act },
+      });
+      throw new MusterdError('forbidden', verdict.reason);
+    }
   }
 
   // ADR 211 §1: only the RECIPIENT of an act may defer it. The fold already ignores other people's
