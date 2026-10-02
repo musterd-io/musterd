@@ -20,6 +20,12 @@ import { hasEnrolledJoiners, laneGenesis, readStaged } from './log.js';
  * Every way the fold can stop has its own `error` line here, distinguishable from offline (`warn`)
  * — the push side learned that lesson at ADR 335 §7. A stall is reported once per distinct
  * blocker, not once per tick; the set clears when the fold moves again.
+ *
+ * A tick DRAINS rather than pages once (second-machine lane 01M3YZ0AY0, 2026-10-02): a page that
+ * came back full is followed by the next one immediately, and the 60 s interval is only the wait
+ * between pages when the hub had nothing more. A fresh joiner folds the whole log before it can
+ * see a new act (docs/perf/cloud-seat.md finding 9), and at one page per tick revive's 156k-event
+ * log put the first wake on a new laptop five hours out.
  */
 
 export const SYNC_PULL_INTERVAL_MS = 60_000;
@@ -217,12 +223,55 @@ async function fetchPage(
   return SyncPullResponseSchema.parse(await res.json());
 }
 
+/** What one page of a pull came to. `full` says the hub may hold more: the page carried
+ *  SYNC_PULL_MAX_BATCH events and the fold took every one. A short page is the head; a fold stop
+ *  part-way is reported above and retried next tick, so it is never "full" — that is what keeps a
+ *  blocked fold from spinning inside a drain. */
+export interface PullPage {
+  applied: number;
+  full: boolean;
+}
+
 /** One team's pull pass. Returns how many events were applied. Exported for through-DB tests. */
 export async function pullTeam(
   ctx: Ctx,
   team: { id: string; slug: string },
   now: number = Date.now(),
 ): Promise<number> {
+  return (await pullPage(ctx, team, now)).applied;
+}
+
+/**
+ * Drain one team within a tick: page after page while each comes back full. `stopped` is read
+ * between pages, so a daemon shutting down finishes the page in flight and fetches no more.
+ */
+export async function drainTeam(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  deps: {
+    pull?: (ctx: Ctx, team: { id: string; slug: string }) => Promise<PullPage>;
+    stopped?: () => boolean;
+  } = {},
+): Promise<{ pages: number; applied: number }> {
+  const pull = deps.pull ?? pullPage;
+  const stopped = deps.stopped ?? (() => false);
+  let pages = 0;
+  let applied = 0;
+  for (;;) {
+    const page = await pull(ctx, team);
+    pages += 1;
+    applied += page.applied;
+    if (!page.full || stopped()) return { pages, applied };
+  }
+}
+
+/** One page of one team's pull: fetch past the cursor, fold, report any stop. */
+export async function pullPage(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  now: number = Date.now(),
+): Promise<PullPage> {
+  const none: PullPage = { applied: 0, full: false };
   const nodeId = await localNodeId(ctx, team.id);
   // Same rule as push.ts: an enrollment is this daemon's only if it names this daemon's node row.
   const record = readNodeState().nodes[team.slug];
@@ -231,7 +280,7 @@ export async function pullTeam(
   // a hub is defined by who is enrolled WITH it, not by whether it has spoken. (push.ts needs the
   // row because it has nothing to push without one; the fold has plenty to apply.)
   const isHub = !enrollment && (await hasEnrolledJoiners(ctx.db, team.id, nodeId ?? ''));
-  if (!enrollment && !isHub) return 0;
+  if (!enrollment && !isHub) return none;
 
   const cursor = await readPullCursor(ctx.db, team.id);
   // The hub sends its watermark; folding our own staged log (the loopback arm) reads it from the
@@ -246,7 +295,7 @@ export async function pullTeam(
   // Node liveness lands even when the page is empty: a quiet team still needs to know its
   // machines are alive (presence replication §3). The hub reads its own table and folds none.
   if (page.nodes.length > 0) await foldNodeLiveness(ctx.db, team.id, page.nodes);
-  if (page.events.length === 0) return 0;
+  if (page.events.length === 0) return none;
 
   const result = await foldBatch(ctx.db, team.id, page.events, now, page.lane_genesis);
   if (result.stop) {
@@ -266,20 +315,26 @@ export async function pullTeam(
       log.warn({ msg: 'incident_hook_failed', team: team.slug, err: String(err) });
     }
   }
-  return result.applied;
+  return {
+    applied: result.applied,
+    full: page.events.length === SYNC_PULL_MAX_BATCH && result.stop === null,
+  };
 }
 
 /** Start the pull loop. Returns a stop function (same contract as startSyncPush). */
 export function startSyncPull(ctx: Ctx): () => void {
   let running = false;
+  let stopped = false;
   const tick = async () => {
     if (running) return;
     running = true;
     try {
       for (const team of await listActiveTeams(ctx.db)) {
+        if (stopped) break;
         try {
-          const applied = await pullTeam(ctx, team);
-          if (applied > 0) log.info({ msg: 'sync_pulled', team: team.slug, applied });
+          const { pages, applied } = await drainTeam(ctx, team, { stopped: () => stopped });
+          if (pages > 1) log.info({ msg: 'sync_drained', team: team.slug, pages, applied });
+          else if (applied > 0) log.info({ msg: 'sync_pulled', team: team.slug, applied });
         } catch (error) {
           // Offline is the expected failure for a laptop; the classified stops above already wrote
           // their own error line before this warn.
@@ -292,5 +347,8 @@ export function startSyncPull(ctx: Ctx): () => void {
   };
   const handle = setInterval(() => void tick(), SYNC_PULL_INTERVAL_MS);
   if (typeof handle.unref === 'function') handle.unref();
-  return () => clearInterval(handle);
+  return () => {
+    stopped = true;
+    clearInterval(handle);
+  };
 }

@@ -1270,3 +1270,14 @@ Never `cat` a whole config/binding/token file to read one field; query the singl
 and `/data/home/.musterd` as credential-bearing until proven otherwise. Also: the seat CLI answers
 only from a *seat-bound* workspace — `/data/agents-delta` refused with "the team agent key is
 bootstrap-only", `/data/musterd-delta` worked.
+
+## 2026-10-02 — the drain is no longer one page per minute (second-machine lane 01M3YZ0AY0)
+
+Finding 9's "minutes, not seconds" was measured against 22,496 events. The hub's log stood at
+156,557 when nick's second MacBook Air was about to enroll, which at a full page (500) per 60 s tick
+is 313 ticks — **5.2 hours** before the new machine could see a new act or wake a seat. The lever
+finding 9 named (a pull that starts near the head) stays unbuilt; the cheaper one shipped instead:
+`sync/pull.ts` now **drains** within a tick — a page that came back full and folded whole is followed
+by the next page immediately, and the 60 s interval is only the wait once a page comes up short. A
+fold stop part-way is never "full", so a blocked fold still waits for its tick and never spins.
+Measured figure for the Air's first drain goes in `docs/guides/second-machine.md` when it runs.

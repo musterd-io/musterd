@@ -14,7 +14,7 @@ import { insertMessage } from '../store/messages.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
 import { foldBatch } from './fold.js';
-import { pullTeam } from './pull.js';
+import { drainTeam, pullTeam } from './pull.js';
 import { pushTeam } from './push.js';
 
 withDrivers('pull', (_o, kind) => {
@@ -373,6 +373,76 @@ withDrivers('pull', (_o, kind) => {
         last_hub_seq: 0,
         stop: null,
       });
+    });
+  });
+});
+
+/**
+ * The drain (second-machine lane 01M3YZ0AY0): a fresh joiner folds the whole log before it can see
+ * a new act, and at one page per tick revive's 156k events were five hours away. These run the loop's
+ * paging decision against a stub pull — no daemons, no DB — because the decision is the whole change.
+ */
+describe('drainTeam — a full page is followed by the next one now, not next tick', () => {
+  const team = { id: 't', slug: 'bravo' };
+  const ctx = {} as Ctx;
+  /** A pull stub that serves pages in order and records each call; past the end it is quiet. */
+  function pages(seq: Array<{ applied: number; full: boolean }>) {
+    const calls: number[] = [];
+    return {
+      calls,
+      pull: async () => {
+        const next = seq[calls.length] ?? { applied: 0, full: false };
+        calls.push(next.applied);
+        return next;
+      },
+    };
+  }
+
+  it('keeps pulling while pages come back full, and stops on the first short one', async () => {
+    const p = pages([
+      { applied: 500, full: true },
+      { applied: 500, full: true },
+      { applied: 120, full: false },
+    ]);
+    expect(await drainTeam(ctx, team, { pull: p.pull })).toEqual({ pages: 3, applied: 1120 });
+    expect(p.calls).toHaveLength(3);
+  });
+
+  it('a short first page is one pull — the quiet-team tick is unchanged', async () => {
+    const p = pages([{ applied: 3, full: false }]);
+    expect(await drainTeam(ctx, team, { pull: p.pull })).toEqual({ pages: 1, applied: 3 });
+    expect(p.calls).toHaveLength(1);
+  });
+
+  it('a full page that was also the last costs one extra, empty pull', async () => {
+    const p = pages([{ applied: 500, full: true }]);
+    expect(await drainTeam(ctx, team, { pull: p.pull })).toEqual({ pages: 2, applied: 500 });
+  });
+
+  it('a fold stop part-way is not a full page: the next tick retries it, nothing spins', async () => {
+    // pullPage reports a page with a stop as not full even when the hub sent a full one.
+    const p = pages([
+      { applied: 500, full: true },
+      { applied: 17, full: false },
+      { applied: 500, full: true },
+    ]);
+    expect(await drainTeam(ctx, team, { pull: p.pull })).toEqual({ pages: 2, applied: 517 });
+  });
+
+  it('stop ends the drain after the page in flight', async () => {
+    let stopped = false;
+    const p = pages([
+      { applied: 500, full: true },
+      { applied: 500, full: true },
+    ]);
+    const pull = async () => {
+      const r = await p.pull();
+      stopped = true;
+      return r;
+    };
+    expect(await drainTeam(ctx, team, { pull, stopped: () => stopped })).toEqual({
+      pages: 1,
+      applied: 500,
     });
   });
 });
