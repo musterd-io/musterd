@@ -509,17 +509,22 @@ would have arrived at an empty roster — and took nightly dumps only after `rev
 already there. Import, export and the dump pipeline now land **before** any seat moves, and the
 cutover is import-then-switch. §4.6 and §4.8 had no increment; they have one.)*
 
-| # | Increment | Done when |
-| --- | --- | --- |
-| 0 | PGlite spike (two days) | pass/fail recorded; store-layer shape chosen |
-| 1 | App tier + Postgres + cloud mode, with the test issuer (§5.2) | §8's four, plus the 503 test |
-| 2 | Accounts + console (sign-in, KMS-signed console tokens and identity statements, create team) | a disposable team created from the console; the increment-2 token tests |
-| 3 | Import / export + backups (nightly R2 dumps of both databases, **one** restore drill) | a copy of `revive` imported from `musterd.db` into a staging team; exported back and restored on a laptop daemon; one drill recorded |
-| 4 | Seat link: `musterd login`, `claim --team`, seat authorization + device code, invite roles and the talk-only ceiling (§4.6), hooks (§4.7), `/live` sign-in | **cutover**: `revive` imported fresh, every seat on Cloud, the seat bar (§8) green, the laptop daemon off — in that order |
-| 5 | Trace capture on Cloud (§4.8: consent, retention job, support grants, 7-day content dumps) | `revive`'s consenting humans and their seats capturing; the increment-5 tests |
-| 6 | Ops (status page, out-of-band alerts, monthly drill cadence) | one month of drills recorded |
-| 7 | Billing (ADR 461) | strangers can pay |
-| 8 | Hosted agents (Cloud compute) | later; ADR 463 covers sponsor-hosted until then |
+| # | Increment | Done when | Lanes |
+| --- | --- | --- | --- |
+| 0 | PGlite spike (two days) | pass/fail recorded; store-layer shape chosen | `01M3MT842A` (done) |
+| 1 | App tier + Postgres + cloud mode, with the test issuer (§5.2) | §8's four, plus the 503 test | done: 1A `01M3R7F6H0`, 1B `01M3SQHCJN`, 1C `01M3TTYRQW`. 1D `01M3TTYWVB`, built from: provision `01M3Z42764`, deploy pipeline `01M3Z43NHT`, full Neon pass `01M3Z429Q3`, load test `01M3Z44C56`, batching if the load test needs it `01M3Z455NE`, rolling schema deploy `01M3Z44EMJ` |
+| 2 | Accounts + console (sign-in, KMS-signed console tokens and identity statements, create team) | a disposable team created from the console; the increment-2 token tests | `01M3TTZ0FH`, built from: console service `01M3Z42PED`, sign-in `01M3Z43QYB`, KMS console tokens `01M3Z43V58`, identity statement `01M3Z44K46`, create team + `PRIVACY.md` `01M3Z44MTV` |
+| 3 | Import / export + backups (nightly R2 dumps of both databases, **one** restore drill) | a copy of `revive` imported from `musterd.db` into a staging team; exported back and restored on a laptop daemon; one drill recorded | `01M3TTZ407`, built from: import `01M3Z42W1J`, export `01M3Z42YFH`, nightly dumps `01M3Z42KWH`, first drill `01M3Z4408C` |
+| 4 | Seat link: `musterd login`, `claim --team`, seat authorization + device code, invite roles and the talk-only ceiling (§4.6), hooks (§4.7), `/live` sign-in | **cutover**: `revive` imported fresh, every seat on Cloud, the seat bar (§8) green, the laptop daemon off — in that order | `01M3TTZ838`, built from: `musterd login` `01M3Z42SKR`, `claim --team` `01M3Z43Y67`, seat authorization `01M3Z44R44`, invite roles `01M3Z42GN1`, hooks `01M3Z42D1T`, `/live` sign-in `01M3Z458B2`, rate limits `01M3W3EQ67`, audit retention `01M3W6GWVN`, seeds relay `01M3W815KR` |
+| 5 | Trace capture on Cloud (§4.8: consent, retention job, support grants, 7-day content dumps) | `revive`'s consenting humans and their seats capturing; the increment-5 tests | `01M3TTZC6F`, built from: consent `01M3Z431BG`, capture `01M3Z4435M`, retention `01M3Z44TD7`, support grants `01M3Z44WVM`; the 7-day content dumps are in `01M3Z42KWH` |
+| 6 | Ops (status page, out-of-band alerts, monthly drill cadence) | one month of drills recorded | `01M3TTZDMF`, built from: probe + status page `01M3Z433WJ`, alerts `01M3Z44568`, observability `01M3Z436EA`, drill cadence `01M3Z44YMT` |
+| 7 | Billing (ADR 461) | strangers can pay | `01M3TTZJGX` |
+| 8 | Hosted agents (Cloud compute) | later; ADR 463 covers sponsor-hosted until then | `01M3TTZP5H` |
+
+*(2026-10-02, fifty, at nick's direction: every increment is split into lanes on the board. The
+increment's own lane is its acceptance lane and depends on the rest. Staging runs on Neon's free
+tier, nick's call on 2026-10-02. The cutover in increment 4 needs a paid plan, and that is asked
+again before it.)*
 
 Dogfood = 0–6. Strangers = +7. Between 4 and 5 the dogfood team runs with structural trace only
 (ADR 445's default), which is what self-hosted does today.
@@ -551,8 +556,8 @@ exporter. Litestream is **not** needed — the file-per-team shape that wanted i
 
 ## 11. Open, deliberately
 
-- Neon vs Fly MPG: revisit with performance data, then at billing.
-- Per-team encryption of captured content (crypto-shred on delete): after v1.
+- Neon vs Fly MPG: revisit with performance data, then at billing (lane `01M3Z4399C`).
+- Per-team encryption of captured content (crypto-shred on delete): after v1 (lane `01M3Z43BQE`).
 - Offline root key certifying the KMS key: only if a customer's threat model asks.
 - Hosted agents: increment 8, on the ADR 463 provisioning table.
 - ADR 461's org-tier policy pack vs base Cloud: the 7–365 retention range and per-author consent
