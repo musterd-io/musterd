@@ -1,0 +1,183 @@
+import { makeEnvelope } from '@musterd/protocol';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { Driver } from '../db/driver.js';
+import { withDrivers } from '../db/testing.js';
+import { buildDreamPacket, DREAM_BUDGET, dreamMayWrite } from './dream.js';
+import { openLane } from './lanes.js';
+import { addMember } from './members.js';
+import { saveMemory } from './memory.js';
+import { insertMessage } from './messages.js';
+import type { MemberRow, TeamRow } from './rows.js';
+import { createTeam } from './teams.js';
+
+let openStore: () => Promise<Driver>;
+
+const DAY = 24 * 60 * 60 * 1000;
+const NOW = 10 * DAY;
+
+withDrivers('dream', (o) => {
+  beforeEach(() => {
+    openStore = o;
+  });
+
+  async function seed() {
+    const db = await openStore();
+    const team = await createTeam(db, { slug: 'revive' });
+    const ryder = (await addMember(db, team, { name: 'ryder', kind: 'agent' })).row;
+    const izzo = (await addMember(db, team, { name: 'izzo', kind: 'agent' })).row;
+    return { db, team, ryder, izzo };
+  }
+
+  let n = 0;
+  async function say(
+    db: Driver,
+    team: TeamRow,
+    from: MemberRow,
+    act: string,
+    body: string,
+    ts: number,
+    meta: Record<string, unknown> | null = null,
+  ) {
+    const id = `01DREAM${String(n++).padStart(19, '0')}`;
+    await insertMessage(
+      db,
+      team.id,
+      from.id,
+      null,
+      makeEnvelope({
+        id,
+        team: team.slug,
+        from: from.name,
+        to: { kind: 'team' },
+        act: act as 'message',
+        body,
+        thread: null,
+        meta,
+        ts,
+      }),
+    );
+    return id;
+  }
+
+  describe('buildDreamPacket — what a dream sees', async () => {
+    it("carries the day's acts on the seat's own lanes, its note, and the team's insights since", async () => {
+      const { db, team, ryder, izzo } = await seed();
+      await saveMemory(db, ryder.id, { headline: 'h', body: 'yesterday: fence half done' });
+      const mine = await openLane(
+        db,
+        team.id,
+        team.slug,
+        'ryder',
+        { title: 'mine', claim: true },
+        NOW - DAY / 2,
+      );
+      const theirs = await openLane(
+        db,
+        team.id,
+        team.slug,
+        'izzo',
+        { title: 'theirs', claim: true },
+        NOW - DAY / 2,
+      );
+      const stale = await openLane(
+        db,
+        team.id,
+        team.slug,
+        'ryder',
+        { title: 'stale', claim: true },
+        NOW - 3 * DAY,
+      );
+
+      await say(db, team, ryder, 'status_update', `step 1 on ${mine.id}`, NOW - 3 * 3600_000);
+      await say(db, team, izzo, 'message', `review of ${mine.id}: looks right`, NOW - 2 * 3600_000);
+      await say(db, team, izzo, 'status_update', `step 1 on ${theirs.id}`, NOW - 3600_000);
+      await say(db, team, ryder, 'status_update', `old news on ${mine.id}`, NOW - 2 * DAY);
+      await say(db, team, izzo, 'insight', 'PGlite is 4x slower on cold start', NOW - 3600_000, {
+        headline: 'PGlite cold start',
+        tags: ['perf'],
+      });
+      await say(db, team, izzo, 'insight', 'an old one', NOW - 2 * DAY, { headline: 'old' });
+
+      const { packet, truncated } = await buildDreamPacket(db, team, ryder, { now: NOW });
+
+      expect(packet.since).toBe(NOW - DREAM_BUDGET.default_since_ms);
+      expect(packet.memory).toEqual({ body: 'yesterday: fence half done', truncated: false });
+      expect(packet.lanes.map((l) => l.id)).toEqual([mine.id]);
+      expect(packet.lanes[0]!.acts.map((a) => [a.from, a.body])).toEqual([
+        ['ryder', `step 1 on ${mine.id}`],
+        ['izzo', `review of ${mine.id}: looks right`],
+      ]);
+      expect(packet.learned).toEqual([
+        expect.objectContaining({ from: 'izzo', headline: 'PGlite cold start', tags: ['perf'] }),
+      ]);
+      expect(truncated).toBe(false);
+      void stale;
+    });
+
+    it('the window starts at `since` when given', async () => {
+      const { db, team, ryder, izzo } = await seed();
+      await say(db, team, izzo, 'insight', 'before', NOW - 2 * 3600_000, { headline: 'before' });
+      await say(db, team, izzo, 'insight', 'after', NOW - 3600_000, { headline: 'after' });
+      const { packet } = await buildDreamPacket(db, team, ryder, {
+        now: NOW,
+        since: NOW - 90 * 60_000,
+      });
+      expect(packet.learned.map((i) => i.headline)).toEqual(['after']);
+    });
+
+    it('fits the byte budget by dropping the oldest acts first, and keeps the note', async () => {
+      const { db, team, ryder } = await seed();
+      await saveMemory(db, ryder.id, { headline: 'h', body: 'note' });
+      const lane = await openLane(
+        db,
+        team.id,
+        team.slug,
+        'ryder',
+        { title: 'big', claim: true },
+        NOW - 3600_000,
+      );
+      const big = 'x'.repeat(DREAM_BUDGET.act_body_chars);
+      for (let i = 0; i < DREAM_BUDGET.lane_acts; i++)
+        await say(db, team, ryder, 'status_update', `${lane.id} #${i} ${big}`, NOW - 3600_000 + i);
+
+      const { packet, used_bytes, truncated } = await buildDreamPacket(db, team, ryder, {
+        now: NOW,
+      });
+
+      expect(used_bytes).toBeLessThanOrEqual(DREAM_BUDGET.limit_bytes);
+      expect(truncated).toBe(true);
+      expect(packet.memory?.body).toBe('note');
+      const acts = packet.lanes[0]!.acts;
+      expect(acts.at(-1)!.body).toContain(`#${DREAM_BUDGET.lane_acts - 1} `);
+      expect(packet.lanes[0]!.omitted + acts.length).toBe(DREAM_BUDGET.lane_acts);
+    });
+  });
+});
+
+describe('dreamMayWrite — the fence', () => {
+  it('allows insights, its own note, and wiki pages', () => {
+    expect(dreamMayWrite('ryder', { kind: 'act', act: 'insight' })).toEqual({ ok: true });
+    expect(dreamMayWrite('ryder', { kind: 'memory', seat: 'ryder' })).toEqual({ ok: true });
+    expect(dreamMayWrite('ryder', { kind: 'file', path: 'docs/wiki/pglite.md' })).toEqual({
+      ok: true,
+    });
+    expect(dreamMayWrite('ryder', { kind: 'file', path: './docs/wiki/a/b.md' })).toEqual({
+      ok: true,
+    });
+  });
+
+  it.each([
+    [{ kind: 'act', act: 'message' }, 'only insight'],
+    [{ kind: 'act', act: 'ask' }, 'only insight'],
+    [{ kind: 'memory', seat: 'izzo' }, 'own note'],
+    [{ kind: 'file', path: 'packages/server/src/store/dream.ts' }, 'never code'],
+    [{ kind: 'file', path: 'docs/wiki/../../packages/x.md' }, 'never code'],
+    [{ kind: 'file', path: 'docs/wiki/notes.ts' }, 'never code'],
+    [{ kind: 'lane' }, 'never moves a lane'],
+    [{ kind: 'other', what: 'ring the doorbell' }, 'ring the doorbell'],
+  ] as const)('refuses %o', (w, reason) => {
+    const v = dreamMayWrite('ryder', w);
+    expect(v.ok).toBe(false);
+    expect(!v.ok && v.reason).toContain(reason);
+  });
+});
