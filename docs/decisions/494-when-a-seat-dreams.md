@@ -121,8 +121,10 @@ gap: whatever a dream sends, nothing rings.
 ### 5. What a dream is not
 
 - **Not the morning digest.** The digest is posted at the start of working hours by a scheduled
-  seat. That is inside working hours, it is not a dream, and it rings through the doorbell like
-  any other act.
+  seat on its own schedule, not by a dream wake: the dream gate (§2) holds only outside working
+  hours, so no dream can post it. It is not a dream, so it falls under the ordinary ring rule (ADR
+  443 §2), and that rule rings no one for a team-addressed `message`. Getting the digest to Slack is
+  therefore the digest lane's own delivery path, not the doorbell's.
 - **Not an orchestrator.** A dream decides nothing about anyone's work. It reads the record and
   writes memory. ADR 131 §7's no-orchestrator line holds.
 - **Not on by default.** `dream.enabled` defaults to false everywhere. Turning it on is an admin
