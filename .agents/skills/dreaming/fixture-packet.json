@@ -1,0 +1,45 @@
+{
+  "seat": "wanderer",
+  "since": 1790812800000,
+  "until": 1790899200000,
+  "memory": {
+    "body": "Fixture note from the previous night. Not a real seat note.",
+    "truncated": false
+  },
+  "lanes": [
+    {
+      "id": "01FIXTURELANE00000000000001",
+      "title": "Fixture lane — not a real lane",
+      "state": "done",
+      "acts": [
+        {
+          "id": "01FIXTUREACT000000000000001",
+          "from": "wanderer",
+          "act": "status_update",
+          "ts": 1790860000000,
+          "body": "2026-10-01 fixture: a failed claim still returned no error frame. Same claim as the insight already in learned.",
+          "truncated": false
+        },
+        {
+          "id": "01FIXTUREACT000000000000002",
+          "from": "wanderer",
+          "act": "status_update",
+          "ts": 1790870000000,
+          "body": "2026-10-01 fixture: the counter ticked 3 times and the third tick never reached the log.",
+          "truncated": false
+        }
+      ],
+      "omitted": 0
+    }
+  ],
+  "learned": [
+    {
+      "id": "01FIXTUREINSIGHT00000000001",
+      "from": "wanderer",
+      "headline": "A failed claim returns no error frame",
+      "body": "2026-09-30 fixture: one server-side claim failure returned no error frame. Falsify: a claim the server rejects comes back as an error frame the client shows.",
+      "tags": [],
+      "ts": 1790820000000
+    }
+  ]
+}
