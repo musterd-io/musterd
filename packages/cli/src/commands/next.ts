@@ -4,6 +4,7 @@ import {
   shortDuration,
   type Lane,
   type NextBrief,
+  type ReviewPromiseReference,
 } from '@musterd/protocol';
 import type { Parsed } from '../args.js';
 import { theme } from '../render/theme.js';
@@ -21,8 +22,25 @@ function laneLine(l: Lane): string {
   return `  ${theme.meta(l.id)} ${l.state} "${l.title}"${goal}${branch}`;
 }
 
-/** Coarse elapsed time — the reader needs "hours, not minutes", never a precise duration. */
-function render(brief: NextBrief): void {
+/** ADR 490: the artifact a review promise names, one short token — never a credential. */
+function reviewRef(r: ReviewPromiseReference): string {
+  switch (r.kind) {
+    case 'pr':
+      return `PR ${r.repo}#${r.number}`;
+    case 'commit':
+      return `${r.repo}@${r.sha.slice(0, 7)}${r.path ? ` ${r.path}` : ''}`;
+    case 'lane':
+      return `lane ${r.id}`;
+    case 'url':
+      return r.url;
+  }
+}
+
+/**
+ * Coarse elapsed time — the reader needs "hours, not minutes", never a precise duration. `now` is
+ * injectable so the `cmd/next` frame can be pinned character-for-character.
+ */
+export function renderNext(brief: NextBrief, now = Date.now()): void {
   const w = process.stdout.write.bind(process.stdout);
   w(`${theme.accent('next')} — as ${theme.memberName(brief.member, 'agent')}\n`);
 
@@ -48,13 +66,52 @@ function render(brief: NextBrief): void {
   // OLD daemon can omit it, which makes tolerating that the new client's job.
   const owed = brief.owed_reviews ?? [];
   if (owed.length > 0) {
-    const now = Date.now();
     w(`\n${theme.accent('owed by you')} — ${owed.length} lane(s) waiting on your verdict:\n`);
     for (const r of owed) {
       w(
         `  ${theme.meta(r.lane.id)} "${r.lane.title}" — ${theme.memberName(r.from, 'agent')} has waited ${shortDuration(now - r.ts)}\n`,
       );
       w(theme.meta(`    answer: \`musterd send --act accept --reply-to ${r.ask_id} "…"\``) + '\n');
+    }
+  }
+  // ADR 490: review promises — accepted typed review requests, derived by the daemon from the Act
+  // ledger. Three sections, kept apart from `owed by you` on purpose: a promise on a standalone
+  // request is not a Lane verdict, and folding them would make "owed" mean two things. Each array is
+  // optional with no default, and the two states are different claims: absent means the daemon
+  // predates the projection and the brief says so; `[]` means supported and nothing to show.
+  const promised = brief.request_reviews;
+  const asked = brief.requested_reviews;
+  const closed = brief.review_closures;
+  if (promised === undefined)
+    w(theme.meta('\nreview promises: not reported by this daemon (predates ADR 490)') + '\n');
+  else if (promised.length > 0) {
+    w(`\n${theme.accent('review promises')} — ${promised.length} you accepted, still open:\n`);
+    for (const p of promised) {
+      w(
+        `  ${theme.meta(p.request_id)} for ${theme.memberName(p.requester, 'agent')} · accepted ${shortDuration(now - p.accepted_at)} ago\n`,
+      );
+      w(`    "${p.context}" · ${reviewRef(p.review)}\n`);
+      w(
+        theme.meta(`    close: \`musterd send --act resolve --thread ${p.request_id} "…"\``) + '\n',
+      );
+    }
+  }
+  if (asked !== undefined && asked.length > 0) {
+    w(`\n${theme.accent('reviews you asked for')} — ${asked.length} accepted, still open:\n`);
+    for (const p of asked) {
+      w(
+        `  ${theme.meta(p.request_id)} ${theme.memberName(p.owner, 'agent')} accepted ${shortDuration(now - p.accepted_at)} ago\n`,
+      );
+      w(`    "${p.context}" · ${reviewRef(p.review)}\n`);
+    }
+  }
+  if (closed !== undefined && closed.length > 0) {
+    w(`\n${theme.accent('review closed for you')} — by someone else, ${closed.length}:\n`);
+    for (const c of closed) {
+      w(
+        `  ${theme.meta(c.request_id)} closed by ${theme.memberName(c.closer, 'agent')} ${shortDuration(now - c.resolved_at)} ago\n`,
+      );
+      w(theme.meta(`    resolve ${c.resolve_id} — read your inbox and it is gone`) + '\n');
     }
   }
   // ADR 487 §5.4: a goal whose live lanes have all stopped moving. `?? []` for an older daemon.
@@ -123,6 +180,9 @@ function render(brief: NextBrief): void {
 
   if (
     owed.length === 0 &&
+    (promised?.length ?? 0) === 0 &&
+    (asked?.length ?? 0) === 0 &&
+    (closed?.length ?? 0) === 0 &&
     brief.in_flight.length === 0 &&
     brief.up_next.length === 0 &&
     seeds.length === 0 &&
@@ -144,6 +204,6 @@ export async function nextCommand(parsed: Parsed): Promise<number> {
     process.stdout.write(JSON.stringify(brief) + '\n');
     return 0;
   }
-  render(brief);
+  renderNext(brief);
   return 0;
 }

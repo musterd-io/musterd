@@ -11,7 +11,10 @@
  *      lanes, still lists increments with no lane — the plan's tail is on paper, not the board;
  *   2. a lane that declared itself one part of several (`leftoverSignal`) and closed with no
  *      `follows_up` — after lane 3 made the question exist, so history is not re-litigated;
- *   3. an unfinished-to-do snapshot older than 7 days that no `follows_up` answered.
+ *   3. an unfinished-to-do snapshot older than 7 days that no `follows_up` answered;
+ *   4. a review promise (ADR 490) accepted more than 7 days ago and still open — read Team-wide
+ *      from `GET /teams/:slug/review-promises?open=1`; an older daemon has no such route and this
+ *      check abstains, saying so, rather than reading silence as clean.
  *
  * Silence means clean: a run with no findings posts nothing. A finding is a pointer for a human or a
  * seat to dispose of, never an automatic action (ADR 338: a finding is not a fix request).
@@ -25,6 +28,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import type { ReviewPromiseAuditRow } from '@musterd/protocol';
 import { collectIncrementItems } from './intents-corpus.ts';
 import type { IncrementItem } from './intents.ts';
 
@@ -58,6 +62,8 @@ export function auditFindings(input: {
   items: readonly IncrementItem[];
   now: number;
   signal: (lane: AuditLane) => string | null;
+  /** ADR 490 Team-wide open promises; `undefined` means unsupported and check 4 abstains. */
+  reviewPromises?: readonly ReviewPromiseAuditRow[] | undefined;
 }): string[] {
   const out: string[] = [];
   const byId = new Map(input.lanes.map((l) => [l.id, l]));
@@ -104,7 +110,39 @@ export function auditFindings(input: {
       `lane ${short(l.id)} "${l.title}" has ${t.items.length} unfinished to-do(s) from ${days}d ago`,
     );
   }
+
+  // 4. A review promise open for more than a week (ADR 490). Strictly over: seven days exactly is
+  // not stale. Ids and names only — the audit row carries no context or artifact reference, and
+  // the finding repeats none.
+  for (const p of input.reviewPromises ?? []) {
+    if (input.now - p.accepted_at <= WEEK_MS) continue;
+    const days = Math.floor((input.now - p.accepted_at) / 86_400_000);
+    out.push(
+      `review ${short(p.request_id)} from ${p.requester}, accepted by ${p.owner} ${days}d ago, is still open`,
+    );
+  }
   return out;
+}
+
+/** The abstention line: printed, never posted — an unsupported read is not a finding. */
+export const REVIEW_PROMISES_UNSUPPORTED =
+  '· review promises not checked — this daemon has no review-promises read (ADR 490)';
+
+/**
+ * What a run prints. Findings are the body; with none, the all-clean line — unless the review
+ * promise check abstained, in which case the abstention stands alone, because "nothing found" is
+ * not a claim this run can make.
+ */
+export function formatAuditOutput(
+  findings: readonly string[],
+  reviewPromisesSupported: boolean,
+): string {
+  const lines: string[] = [];
+  if (!reviewPromisesSupported) lines.push(REVIEW_PROMISES_UNSUPPORTED);
+  if (findings.length > 0) lines.push(auditBody(findings));
+  else if (reviewPromisesSupported)
+    lines.push('✓ goals:audit — nothing without a lane or disposition');
+  return lines.join('\n') + '\n';
 }
 
 /** The one post: a count line and up to eight findings — a pointer, not a report. */
@@ -163,7 +201,13 @@ async function main(): Promise<void> {
       ? traceClient(binding, process.cwd())
       : null;
   if (!http) throw new Error('no sweep seat token and no seat binding in this folder');
-  const [{ lanes }, { goals }] = await Promise.all([http.laneBoard(team), http.goals(team)]);
+  // ADR 490: the Team-wide read, because `sweep` cannot see another Member's brief. `undefined`
+  // is an older daemon; `review_promises: []` is a supported, empty population.
+  const [{ lanes }, { goals }, promises] = await Promise.all([
+    http.laneBoard(team),
+    http.goals(team),
+    http.reviewPromises(team),
+  ]);
 
   const findings = auditFindings({
     lanes,
@@ -171,10 +215,9 @@ async function main(): Promise<void> {
     items: collectIncrementItems(),
     now,
     signal: (l) => leftoverSignal(l),
+    reviewPromises: promises?.review_promises,
   });
-  if (findings.length === 0)
-    process.stdout.write('✓ goals:audit — nothing without a lane or disposition\n');
-  else process.stdout.write(auditBody(findings) + '\n');
+  process.stdout.write(formatAuditOutput(findings, promises !== undefined));
 
   if (process.argv.includes('--post') && findings.length > 0) {
     if (!token) {
