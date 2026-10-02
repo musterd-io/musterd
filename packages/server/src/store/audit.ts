@@ -478,6 +478,10 @@ export type AuditAction =
   // or an unavailable id); `node.rotated` and `node.revoked` (actor = the admin, target = the node
   // id). No detail ever carries a credential, an invite code, or either one's hash.
   | 'node.invited'
+  // ADR 484: the challenge-evidence rail fired — an `accept` conceded a `challenge` without naming a
+  // check, and the sender was told once (actor = the conceding seat, target = the challenge id,
+  // detail `{ act }` = the accept's id). Counted by the eval; never stored on the act.
+  | 'challenge.accept_unverified'
   | 'node.enrolled'
   | 'node.enrollment_refused'
   | 'node.rotated'
@@ -667,6 +671,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'team.archive': 'actor',
   'footprint.reaped': 'actor',
   'node.invited': 'actor',
+  'challenge.accept_unverified': 'actor',
   'node.enrolled': 'none',
   'node.enrollment_refused': 'none',
   'node.rotated': 'actor',

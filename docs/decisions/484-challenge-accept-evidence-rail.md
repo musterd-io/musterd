@@ -48,6 +48,14 @@ it looks verified.
 - Building waits for the five-day read that decides activation. Follows-up: deferred — ADR 476's
   five-day read (2026-10-04)
 
+- **2026-10-02 (dolly, lane 01M3QTEEW1):** built switched OFF ahead of the five-day read, at
+  nick's direction. The switch is team policy `challenge_evidence_rail` (default `false`, admin-set
+  via `POST /teams/:slug/policy`). When on, `POST /messages` adds `evidence_notice` to the sender's
+  ack (rendered by `team_send` and `musterd send`) and writes `challenge.accept_unverified`
+  (target = the challenge id); the once-per-challenge rule above is read off that audit row. The
+  test is `isUnverifiedChallengeAccept` in `@musterd/protocol`, on ADR 481's shared `namesCheck`.
+  Off by default, so the 10-04 baseline is untouched; switching it on stays the read's call.
+
 ## Observability & Evaluation
 
 - **Traces:** the audit verb `challenge.accept_unverified`, with actor = sender, target =

@@ -541,12 +541,14 @@ export class MusterdClient {
     handoff_lane?: HandoffLaneAck;
     lane_verdict?: LaneVerdictWire;
     lane_ack?: { lane: string };
+    evidence_notice?: string;
   }> {
     return this.request('POST', `/teams/${this.config.team}/messages`, { envelope }) as Promise<{
       ask_contract?: AskContract;
       handoff_lane?: HandoffLaneAck;
       lane_verdict?: LaneVerdictWire;
       lane_ack?: { lane: string };
+      evidence_notice?: string;
     }>;
   }
 

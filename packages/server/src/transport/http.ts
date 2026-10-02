@@ -17,6 +17,7 @@ import {
   AvailabilityStatusSchema,
   PROTOCOL_VERSION,
   FEATURE_EPOCH,
+  CHALLENGE_EVIDENCE_NOTICE,
   GENERALIST_CAPABILITIES,
   ClaimTargetSchema,
   DecideRequestSchema,
@@ -115,6 +116,7 @@ import {
   TRACE_SEAT_TIMELINE_MAX,
   TraceSeatTimelineResponseSchema,
   HuddleTraceSchema,
+  isUnverifiedChallengeAccept,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
@@ -1877,6 +1879,43 @@ async function summarize(
 }
 
 /** Dispatch an HTTP request. Returns true if it handled the request (always, except non-matching upgrade). */
+
+/**
+ * ADR 484: the challenge-evidence rail. When the team switched it on and an `accept` concedes a
+ * `challenge` without naming a check, the SENDER's reply gains one line and an audit row records it
+ * fired. Never a refusal, never stored on the act, never shown to the challenger. Once per
+ * challenge per seat: a seat that concedes again after the warning has been told once.
+ */
+async function challengeEvidenceNotice(
+  ctx: Ctx,
+  teamId: string,
+  seat: string,
+  env: Envelope,
+): Promise<string | undefined> {
+  if (env.act !== 'accept') return undefined;
+  const parentId = (env.meta as { in_reply_to?: unknown } | null | undefined)?.in_reply_to;
+  if (typeof parentId !== 'string') return undefined;
+  if (!(await getPolicy(ctx.db, teamId)).challenge_evidence_rail) return undefined;
+  const parent = await ctx.db.get<{ act: string }>(
+    'SELECT act FROM messages WHERE team_id = ? AND id = ?',
+    [teamId, parentId],
+  );
+  if (!isUnverifiedChallengeAccept(env.act, parent?.act ?? null, env.body)) return undefined;
+  const told = await ctx.db.get<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM audit WHERE team_id = ? AND action = 'challenge.accept_unverified' AND actor = ? AND target = ?",
+    [teamId, seat, parentId],
+  );
+  if (Number(told?.n ?? 0) > 0) return undefined;
+  await appendAudit(ctx.db, teamId, {
+    actor: seat,
+    action: 'challenge.accept_unverified',
+    target: parentId,
+    result: 'allow',
+    detail: { act: env.id },
+  });
+  return CHALLENGE_EVIDENCE_NOTICE;
+}
+
 export async function handleHttp(
   rootCtx: Ctx,
   req: IncomingMessage,
@@ -4755,6 +4794,7 @@ export async function handleHttp(
           member.name,
           env.to.kind === 'member' ? env.to.name : null,
         );
+        const evidenceNotice = await challengeEvidenceNotice(ctx, team.id, member.name, env);
         // An `ask` ack additionally carries the derived tier contract WITH the reachability projection
         // (ADR 153 §1): `unblocker_reachable` is a fact only the daemon can compute (admin roster +
         // presence + enforcement policy), so it rides the send response beside the pure tier numbers the
@@ -4787,6 +4827,7 @@ export async function handleHttp(
           ...(result.handoff_lane ? { handoff_lane: result.handoff_lane } : {}),
           ...(result.lane_verdict ? { lane_verdict: result.lane_verdict } : {}),
           ...(result.lane_ack ? { lane_ack: result.lane_ack } : {}),
+          ...(evidenceNotice ? { evidence_notice: evidenceNotice } : {}),
         });
       }
 

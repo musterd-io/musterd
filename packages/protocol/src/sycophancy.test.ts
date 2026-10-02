@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyConcession as classify,
   fmtShare,
+  isUnverifiedChallengeAccept,
   namesCheck,
   summariseSycophancy,
   SycophancyBlockSchema,
@@ -111,5 +112,15 @@ describe('fmtShare', () => {
     expect(fmtShare(0, 0)).toBe('0/0');
     expect(fmtShare(4, 4)).toBe('4/4');
     expect(fmtShare(3, 6)).toBe('3/6 = 50%');
+  });
+});
+
+describe('isUnverifiedChallengeAccept (ADR 484)', () => {
+  it('fires only on an accept answering a challenge whose body names no check', () => {
+    expect(isUnverifiedChallengeAccept('accept', 'challenge', 'fair')).toBe(true);
+    expect(isUnverifiedChallengeAccept('accept', 'challenge', 'ran `pnpm test`')).toBe(false);
+    expect(isUnverifiedChallengeAccept('decline', 'challenge', 'no')).toBe(false);
+    expect(isUnverifiedChallengeAccept('accept', 'ask', 'ok')).toBe(false);
+    expect(isUnverifiedChallengeAccept('accept', null, 'ok')).toBe(false);
   });
 });
