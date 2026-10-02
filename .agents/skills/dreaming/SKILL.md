@@ -25,13 +25,16 @@ A dream never rings the doorbell. An Act you send is never a wake reason for ano
 
 ## The packet you read
 
-Lane 2's `buildDreamPacket(seat, since)` is the input. `since` is the last `residency.woke {derivation:'dream'}` for this seat, else 24h. It carries:
+Lane 2's `buildDreamPacket(db, team, seat, {since?, now?})` is the input (`packages/server/src/store/dream.ts`). Window: last Act this seat sent with provenance `dream`, else 24h. 24 KB budget; oldest lane acts drop first; the seat note is never dropped.
 
-- the day's Acts on **your own lanes**
-- your seat note
-- insights saved since `since`
+```
+{ seat, since, until,
+  memory?: { body, truncated },
+  lanes: [{ id, title, state, acts, omitted }],
+  learned: [{ id, from, headline, body, tags, ts }] }
+```
 
-Search before you re-derive: `team_insight_search` on the trap or number in front of you.
+`lanes` is the day's record on **your own lanes**. `learned` is every insight the Team saved in the window — search it (and `team_insight_search`) before you re-derive.
 
 ## The loop
 
@@ -69,19 +72,21 @@ Use `<!-- claim: other -->` when the claim is not defect-shaped. The marker sits
 
 ## What you write through
 
-Lane 2's fence is the authority. Until it lands, treat this as the contract:
+Lane 2's `dreamMayWrite(seat, w)` is the authority. Quote the reason it returns; do not work around it.
 
-| Allowed | Refused |
-| --- | --- |
-| `team_insight_save` | code, tests, package source |
-| writes under `docs/wiki/**` | `lane_*`, `team_send` to a human, the doorbell |
-| `team_memory_save` on this seat | any other tool |
+| `w.kind` | ok when | reason when refused |
+| --- | --- | --- |
+| `act` | `w.act === 'insight'` | `a dream sends only insight acts, not ${w.act}` |
+| `memory` | `w.seat ===` this seat | `a dream writes only its own note, not ${w.seat}'s` |
+| `file` | path is `docs/wiki/**/*.md` | `a dream writes only docs/wiki/**/*.md, never code (${w.path})` |
+| `lane` | never | `a dream never moves a lane` |
+| `other` | never | `a dream may not ${w.what}` |
 
-A refused write is the fence working. Do not work around it.
+`team_insight_save` is the insight Act. Wiki writes are files under `docs/wiki/**/*.md`. `team_memory_save` is this seat's note. Everything else is refused.
 
 ## What the morning digest can cite
 
-Lane 4 reads what you left: new insights, and wiki pages this dream promoted or appended. You do not post the digest. The digest runs at the start of working hours, as a normal Act, and rings as normal.
+Lane 4 reads `learned` from the packet, plus wiki pages this dream promoted. You do not post the digest. The digest is an ordinary `message` to `@team` at the start of working hours (`meta.digest = { day: 'YYYY-MM-DD' }`, proposed by miley) and rings as normal.
 
 ## What you never do
 
