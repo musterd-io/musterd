@@ -68,14 +68,29 @@ a store file fails for a reason other than the four kinds above, this page is wr
 | `permission denied for schema public` on a fixture's `CREATE TABLE` / `CREATE FUNCTION` | 3 (lanes 2, store 1) | Kind 4, test-side: the double runs `exec` as the owner by construction; the pg test kind ran it as the operator, who owns nothing in the schema. Fixed: `openTestDriver`'s handle runs `exec` as owner on both engines (production handles are untouched). |
 | Test timed out at 30 s, every test in the file | 6 (quiescence) | Kind 4, test-side, not Neon latency: the file opens its store inside `vi.useFakeTimers()`, and the pg kind's 250 ms settle in `openTestDriver` was a `setTimeout` a faked clock never fires — 6 × 30 s = the file's 182 s. Fixed: the settle uses the real timer captured at import. |
 
-The three harness fixes are verified on the PGlite double and by `pgDriver.test.ts`; their effect on
-Neon, and the 27 uncaptured tests, are confirmed by the rerun after the v81 repair (recorded below
-when it has run).
+### The confirming run — 2026-10-02 23:17–23:37Z
+
+After nick applied the two v81 statements (`~/.musterd/cloud/repair-1b-v81.sh`: columns before
+`none`, after `abandon_reason, follows_up_json`, version row untouched at 84), the same pass on
+build `e2240ff2` (the three harness fixes included), same machine shape, same project:
+
+| | |
+| --- | --- |
+| Migration | main v84 / trace v4 in 2.3 s, idempotent |
+| Tenancy + `db/pg` + double | **36/36 pass** (the new `onStatement` test included) |
+| Store files, per file, 240 s cap | **68/68 pass — 1,035 tests, 0 fail, 0 timeout**, 17.5 min wall, 1,049 s of file time |
+| Slowest files | residency 147 s (111), store 83 s (80), review 57 s (47), insights 53 s (55), lanes 49 s (66) |
+| quiescence | 8 s (was 182 s under the faked clock) |
+
+The seven files the first run's log window dropped (auditSubject, closeReason, deferralFold,
+delivery, followsUp, goals, governed) pass with the column present, which is the only thing that
+changed for them — the kind-5 attribution of their 27 tests stands. Every kind-4 file passes on
+Neon with its fix. The driver has no open finding.
 
 ### What it changes
 
-- The 1B claims stand on real Postgres: tenancy 4/4 on both passes, and 47 store files clean of any
-  driver kind; the one real driver bug stays the 09-30 BIGINT parser.
+- The 1B claims stand on real Postgres: tenancy 4/4 on every pass, and **the whole store suite —
+  68 files, 1,035 tests — passes on Neon**; the one real driver bug stays the 09-30 BIGINT parser.
 - **A version row is a claim, not evidence.** The Postgres ladder trusted `schema_version` and
   shipped a database that could not update a lane. Any Cloud database migrated from a branch before
   the ladder's numbers are final can carry the same hole; the migrate step has to read the catalog.
