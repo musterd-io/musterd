@@ -66,3 +66,104 @@ working day ended, so the per-night counts in §3 reset when the next working da
 
 ADR 206 said the schedule is informational in v1. This ADR is the first reader that acts on it,
 and only to *withhold* a wake: the schedule never makes a seat do anything during the day.
+
+### 3. The per-night budget, priced like any wake
+
+Add one block to `ResidencyPolicySchema`, set as a team default with a sparse per-seat override,
+like every other residency knob (ADR 131 §3 amendment):
+
+```ts
+dream: {
+  enabled: false,      // the switch; nothing dreams until an admin turns it on
+  nightly_wakes: 1,    // dream leases per seat per night, 1..3
+  budget_usd?: number, // optional ceiling on reported dream cost per seat per night
+}
+```
+
+- **Count.** A seat gets at most `nightly_wakes` dream leases a night, counted from
+  `residency.wake_leased {derivation: 'dream'}` rows inside the night. A failed or exhausted
+  dream counts; a **deferred** one does not (ADR 131 §5: a working human never spends a budget).
+- **Shared rails.** A dream is a wake, so it also counts against the seat's existing `cooldown_ms`
+  and `hourly_cap`, and against the same watchdog `timeout` and transcript bounds. A dream gets no
+  rail of its own and no exemption from any rail.
+- **Money.** When `budget_usd` is set, a seat whose reported dream cost for the night
+  (`residency.wake_cost` rows joined to tonight's dream leases) has reached it is not due another
+  dream that night. This stops the *next* lease; it never kills a running one, which keeps ADR 131's
+  honesty clause that `budget_usd` flags and never kills. An unreported cost reads as zero, so the
+  count is the bound that always holds and the money is the one that holds when the host reports.
+- **Fresh, never resumed.** A dream always starts a fresh session. Its job is to re-read the record,
+  not to continue a conversation, and ADR 131's measurements make a resumed life the expensive
+  case. The host's resume ladder is skipped for `derivation: 'dream'`.
+
+The wake block of the report (`Report.wake`) already prices every lease, so dream cost needs no new
+reader: it is the `dream` slice of the existing wake economics.
+
+### 4. A dream never rings the doorbell
+
+A dream-born session is stamped with provenance **`dream`**, an additive entry in `PROVENANCES`,
+server-derived from the lease the way `wake` is (ADR 131 §6): no wire field lets a client claim it,
+and no client can shed it. The seat's presence carries it while the dream runs, and every act it
+sends carries `from_provenance: 'dream'`.
+
+- **No ring.** `ringTargets` takes the act's `from_provenance` and returns no one for `dream`. No
+  doorbell record is written, so no sink fires: not `os`, not `slack`, not `webhook`. This is the
+  rule even for an `ask`, the act that otherwise always rings.
+- **No chain.** A `dream`-provenance act is never a wake reason for another seat, on any lane,
+  immediate or batched. One seat's dream cannot wake a second seat, so a night has no chains to
+  bound.
+- **Nothing is lost.** The act is still stored and still sits in its recipients' inboxes and on
+  `/live`. In the morning a human finds it there, and the morning digest names what is waiting.
+
+What a dream may write at all (insights, wiki pages, its own note; never code, never a lane) is the
+dream-packet lane's write fence. This section is the backstop that holds even if the fence has a
+gap: whatever a dream sends, nothing rings.
+
+### 5. What a dream is not
+
+- **Not the morning digest.** The digest is posted at the start of working hours by a scheduled
+  seat. That is inside working hours, it is not a dream, and it rings through the doorbell like
+  any other act.
+- **Not an orchestrator.** A dream decides nothing about anyone's work. It reads the record and
+  writes memory. ADR 131 §7's no-orchestrator line holds.
+- **Not on by default.** `dream.enabled` defaults to false everywhere. Turning it on is an admin
+  `residency policy` write, audited like every other policy write.
+
+## Consequences
+
+- Protocol, all additive and needing no wire bump: `WAKE_DERIVATIONS += 'dream'`,
+  `PROVENANCES += 'dream'`, `ResidencyPolicySchema.dream`, `isDreamDue`, and a `from_provenance`
+  input to `ringTargets`.
+- The lease derivation gains one pass, run only for enrolled seats whose effective policy has
+  `dream.enabled`. It reads working hours, which the store already holds, and the night's dream
+  leases and costs, which the audit already holds. No new table.
+- ADR 206's schedule stops being purely informational. It now withholds a wake; it still never
+  causes work in the day.
+- A team that sets no working hours never dreams. That is deliberate. The fix is to set a schedule,
+  not to guess one.
+- The ADR 131 §5 deferral guard and the ADR 088 composed-line bar apply unchanged: a dream's wake
+  line carries no body and names no sender, because there is none.
+- Cost is bounded per seat per night by `nightly_wakes` runs, each under the watchdog timeout, and
+  by `budget_usd` where the host reports cost. Across a team it is that times the number of seats
+  with `dream.enabled`.
+
+## Observability & Evaluation
+
+**Traces.** No new span. A dream is a `musterd.residency.wake` span with `derivation: 'dream'`,
+and every decision is an existing `residency.*` audit row with that derivation.
+
+**Eval.** Dataset: one week of `revive` nights with `dream.enabled` on two seats. Baseline: the
+same seats' audit before the switch, where no wake has `derivation: 'dream'`. Targets, each read
+from the audit and the doorbell rows alone:
+
+1. Every `residency.wake_leased {derivation: 'dream'}` falls outside the seat's effective working
+   hours, at a moment when the seat had no live presence and no other wake due.
+2. No seat has more than `nightly_wakes` dream leases in one night.
+3. No `doorbell.surfaced` row traces to an act with `from_provenance: 'dream'`.
+4. No `residency.woke` for any seat has a trigger act with `from_provenance: 'dream'`.
+
+**Experiment.** The value claim, that a dream leaves the team wiser, belongs to the consolidation
+and digest lanes, which can measure it (insights saved per night, wiki pages promoted, whether the
+morning's first session cites them). This ADR measures only that the gate, the budget and the
+doorbell rule hold.
+
+Falsifier: any one of the four targets above failing on a real night.
