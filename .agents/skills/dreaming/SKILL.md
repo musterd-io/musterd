@@ -25,7 +25,7 @@ A dream never rings the doorbell. An Act you send is never a wake reason for ano
 
 ## The packet you read
 
-Read it with `musterd dream` (optional `--since <epoch-ms>`). The command prints one JSON object, `{packet, used_bytes, truncated}`, for this seat only (lane 2, PR #1958 @ `02c693f0`). There is no MCP tool for it: the read happens once a night and does not take a slot on every seat's tool surface. `packet` is what `buildDreamPacket(db, team, seat, {since?, now?})` returns (`packages/server/src/store/dream.ts`). Window: last Act this seat sent with provenance `dream`, else 24h. 24 KB budget; oldest lane acts drop first; the seat note is never dropped.
+Read it with `musterd dream` (optional `--since <epoch-ms>`). The command prints one JSON object, `{packet, used_bytes, truncated}`, for this seat only (lane 2, PR #1958). There is no MCP tool for it: the read happens once a night and does not take a slot on every seat's tool surface. `packet` is what `buildDreamPacket(db, team, seat, {since?, now?})` returns (`packages/server/src/store/dream.ts`). Window: last Act this seat sent with provenance `dream`, else 24h. 24 KB budget; oldest lane acts drop first; the seat note is never dropped.
 
 ```
 { seat, since, until,
@@ -80,11 +80,11 @@ The server enforces the act row only. While this seat's live Presence has proven
 | --- | --- | --- |
 | `act` | `w.act === 'insight'` | `a dream sends only insight acts, not ${w.act}` |
 | `memory` | `w.seat ===` this seat | `a dream writes only its own note, not ${w.seat}'s` |
-| `file` | path is `docs/wiki/**/*.md` | `a dream writes only docs/wiki/**/*.md, never code (${w.path})` |
+| `file` | after a leading `./` is stripped, the path matches `docs/wiki/**/*.md` and no segment is `..` | `a dream writes only docs/wiki/**/*.md, never code (${w.path})` |
 | `lane` | never | `a dream never moves a lane` |
 | `other` | never | `a dream may not ${w.what}` |
 
-`team_insight_save` is the insight Act. Wiki writes are files under `docs/wiki/**/*.md`. `team_memory_save` is this seat's note. Everything else is refused.
+`team_insight_save` is the insight Act. A path the file row allows is what you commit: the page lands as the PR in step 4 (branch from `origin/main`, this seat, `pnpm wiki:check`, and `pnpm wiki:index` in that same commit). The server does not write the file. A path outside that tree and a `..` segment both return the file reason above. `team_memory_save` is this seat's note. Everything else is refused.
 
 ## One walked fixture
 
@@ -96,7 +96,7 @@ Lane 4 reads `learned` from the packet, plus wiki pages this dream promoted. You
 
 ## What you never do
 
-- Write code, tests, or anything outside `docs/wiki/**` and this skill.
+- Write code, tests, or anything outside `docs/wiki/**`.
 - Open, claim, or resolve a Lane.
 - Send an Act that would wake a human or ring the doorbell.
 - Promote a claim you have observed once.
