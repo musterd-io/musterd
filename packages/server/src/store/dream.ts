@@ -94,6 +94,20 @@ export async function lastDreamAt(
   return row?.ts ?? null;
 }
 
+/**
+ * Is this member dreaming right now — is its live presence a `dream` one? The same read
+ * `insertMessage` stamps `from_provenance` from, so the fence and the stamp can never disagree.
+ */
+export async function isDreaming(db: Driver, memberId: string): Promise<boolean> {
+  const row = await db.get<{ provenance: string | null }>(
+    `SELECT provenance FROM presence
+      WHERE member_id = ? AND held_until IS NULL
+      ORDER BY last_seen_at DESC, created_at DESC LIMIT 1`,
+    [memberId],
+  );
+  return row?.provenance === 'dream';
+}
+
 export async function buildDreamPacket(
   db: Driver,
   team: { id: string },
