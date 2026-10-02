@@ -26,7 +26,7 @@ export function actMayRing(act: string): boolean {
  *   147 routing), never every human;
  * - a `lane_review` acceptance ask rings only when directed to a human: between agents it is peer
  *   review, and team-addressed it waits on `/live` like `request_help` and `handoff`;
- * - nothing else rings.
+ * - nothing else rings, and nothing a dream sends rings at all (ADR 494 §4).
  */
 export function ringTargets(input: {
   act: string;
@@ -35,8 +35,11 @@ export function ringTargets(input: {
   meta: Record<string, unknown> | null | undefined;
   humans: ReadonlySet<string>;
   admins: ReadonlySet<string>;
+  /** The sending session's provenance. `dream` rings no one, whatever the act (ADR 494 §4). */
+  from_provenance?: string | null;
 }): string[] {
   const { act, to, meta, humans, admins } = input;
+  if (input.from_provenance === 'dream') return [];
   if (!DIRECTED_RINGS.has(act)) return [];
   if (to !== null && humans.has(to)) return [to];
   if (act !== 'ask' || isLaneReview(meta)) return [];
