@@ -43,6 +43,11 @@ primary_region = "iad"
     method = "GET"
     path = "/health"
     timeout = "5s"
+    # The checker calls the machine by its internal IP, and cloud mode's Host allow-list (ADR 040)
+    # admits only *.musterd.dev (2026-10-02, first roll: 403 "host not allowed: 172.19.x.x:8080").
+    # /health answers on any team host, so the check names one rather than widening the guard.
+    [http_service.checks.headers]
+      Host = "health.musterd.dev"
 
 [deploy]
   # One machine: blue-green starts the new machine, waits for /health, then retires the old one, so a
