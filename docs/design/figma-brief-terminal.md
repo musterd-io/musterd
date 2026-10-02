@@ -187,6 +187,37 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
       11:24:54  miley     act    message: I'd take lane 2
     ```
 
+### Orientation brief frame (ADR 490)
+
+24. [`cmd/next`](https://figma.com/design/tgJ7dUNgGmlIMYBVVA5qIQ?node-id=24-2) — `$ musterd next` as Ada, no color, 80 columns, with one review promise in each of the
+    three ADR 490 sections and nothing else in flight. The renderer (`packages/cli/src/commands/next.ts`,
+    `renderNext`) and this frame match character-for-character — pinned by `orient.test.ts` with a
+    fixed clock (`2h` / `3d` / `1h` are `shortDuration` of the fixture's ages):
+
+    ```
+    next — as Ada
+
+    review promises — 1 you accepted, still open:
+      01REQ0000000000000000000001 for nick · accepted 2h ago
+        "please check the migration" · PR dawn/app#42
+        close: `musterd send --act resolve --thread 01REQ0000000000000000000001 "…"`
+
+    reviews you asked for — 1 accepted, still open:
+      01REQ0000000000000000000002 Lin accepted 3d ago
+        "sanity-check the roster render" · lane 01ARZ3NDEKTSV4RRFFQ69G5FAV
+
+    review closed for you — by someone else, 1:
+      01REQ0000000000000000000003 closed by nick 1h ago
+        resolve 01RES0000000000000000000003 — read your inbox and it is gone
+    ```
+
+    `review promises` is what Ada accepted and still owes (the close command follows, since the
+    thread is the request id); `reviews you asked for` is what Ada asked and someone accepted; `review
+    closed for you` is a close by someone other than the owner, shown until Ada's inbox cursor crosses
+    that `resolve`. An older daemon omits all three arrays and the brief prints one dim line,
+    `review promises: not reported by this daemon (predates ADR 490)`; a supporting daemon with nothing
+    to show prints no section at all. Sections sit below `owed by you` and above the stale-goal line.
+
 ## Page: States (empty + error)
 
 1. `state/empty-inbox` — `inbox empty — nobody's mustered anything yet` (dim). (Exact string; the CLI uses it verbatim.)

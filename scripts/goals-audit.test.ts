@@ -5,7 +5,10 @@ import {
   auditBody,
   auditFindings,
   FOLLOWS_UP_SINCE,
+  formatAuditOutput,
+  REVIEW_PROMISES_UNSUPPORTED,
   TODOS_STALE_MS,
+  WEEK_MS,
 } from './goals-audit.ts';
 import type { IncrementItem } from './intents.ts';
 
@@ -30,7 +33,16 @@ const run = (
   lanes: AuditLane[],
   goals = [] as { id: string; status: string }[],
   items = [] as IncrementItem[],
-) => auditFindings({ lanes, goals, items, now: NOW, signal: (l) => leftoverSignal(l) });
+  reviewPromises?: { request_id: string; requester: string; owner: string; accepted_at: number }[],
+) =>
+  auditFindings({
+    lanes,
+    goals,
+    items,
+    now: NOW,
+    signal: (l) => leftoverSignal(l),
+    reviewPromises,
+  });
 
 const L1 = '01M3T8MJK8H4M86DZJEBMW6KM8';
 
@@ -89,6 +101,42 @@ describe('auditFindings — the three cheap checks (ADR 487 §5.4)', () => {
         }),
       ]),
     ).toEqual([]);
+  });
+});
+
+describe('4: review promises open past a week (ADR 490)', () => {
+  const promise = (age: number) => ({
+    request_id: '01REQ0000000000000000000001',
+    requester: 'nick',
+    owner: 'Ada',
+    accepted_at: NOW - age,
+  });
+
+  it('flags only a promise strictly older than seven days, naming ids and people only', () => {
+    expect(run([], [], [], [promise(WEEK_MS - 1)])).toEqual([]);
+    expect(run([], [], [], [promise(WEEK_MS)])).toEqual([]);
+    const out = run([], [], [], [promise(WEEK_MS + 1)]);
+    expect(out).toEqual(['review 01REQ00000 from nick, accepted by Ada 7d ago, is still open']);
+    expect(out[0]).not.toMatch(/context|repo|https?:/);
+  });
+
+  it('absent (unsupported) and [] (supported, empty) both find nothing — the output tells them apart', () => {
+    expect(run([], [], [], undefined)).toEqual([]);
+    expect(run([], [], [], [])).toEqual([]);
+    expect(formatAuditOutput([], true)).toBe(
+      '✓ goals:audit — nothing without a lane or disposition\n',
+    );
+    const abstained = formatAuditOutput([], false);
+    expect(abstained).toBe(REVIEW_PROMISES_UNSUPPORTED + '\n');
+    expect(abstained).not.toContain('✓');
+    expect(abstained).toContain('not checked');
+  });
+
+  it('with findings, an unsupported read prints the abstention above them and posts none of it', () => {
+    const out = formatAuditOutput(['f1'], false);
+    expect(out.split('\n')[0]).toBe(REVIEW_PROMISES_UNSUPPORTED);
+    expect(out).toContain('- f1');
+    expect(auditBody(['f1'])).not.toContain('not checked');
   });
 });
 

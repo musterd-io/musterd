@@ -28,6 +28,8 @@ import {
   SeedListSchema,
   SeedResultSchema,
   NextBriefSchema,
+  ReviewPromisesResponseSchema,
+  type ReviewPromisesResponse,
   NextSummarySchema,
   PROTOCOL_VERSION,
   ReportSchema,
@@ -1105,6 +1107,24 @@ export class HttpClient {
     const json = await this.request('GET', `/teams/${slug}/next`);
     const parsed = NextBriefSchema.safeParse(json);
     if (!parsed.success) throw new CliError('next response did not match the protocol schema', 1);
+    return parsed.data;
+  }
+
+  /** ADR 490: every open review promise in the Team, for the weekly audit —
+   *  `GET /teams/:slug/review-promises?open=1`. `undefined` is an older daemon with no such route
+   *  (`not_found`), which a caller keeps apart from a supported, empty `review_promises: []`. Any
+   *  other failure, and a body that is not the protocol's, stay errors. */
+  async reviewPromises(slug: string): Promise<ReviewPromisesResponse | undefined> {
+    let json: unknown;
+    try {
+      json = await this.request('GET', `/teams/${slug}/review-promises?open=1`);
+    } catch (err) {
+      if (err instanceof CliError && err.code === 'not_found') return undefined;
+      throw err;
+    }
+    const parsed = ReviewPromisesResponseSchema.safeParse(json);
+    if (!parsed.success)
+      throw new CliError('review-promises response did not match the protocol schema', 1);
     return parsed.data;
   }
 

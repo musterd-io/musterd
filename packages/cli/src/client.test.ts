@@ -433,3 +433,52 @@ describe('a refused session lease is re-claimed once, and the act is not lost (l
     expect(fetchStub).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('HttpClient.reviewPromises — the weekly audit read (ADR 490)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const reply = (status: number, body: unknown) =>
+    vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  const row = { request_id: 'req1', requester: 'nick', owner: 'Ada', accepted_at: 1_000 };
+
+  it('asks exactly /teams/:slug/review-promises?open=1 and returns the parsed rows', async () => {
+    const fetchFn = reply(200, { review_promises: [row] });
+    vi.stubGlobal('fetch', fetchFn);
+    const res = await new HttpClient(baseOpts).reviewPromises('dawn');
+    expect(res).toEqual({ review_promises: [row] });
+    expect(String(fetchFn.mock.calls[0][0])).toBe('http://x/teams/dawn/review-promises?open=1');
+    expect((fetchFn.mock.calls[0][1] as RequestInit).method).toBe('GET');
+  });
+
+  it('a supported, empty Team is `{review_promises: []}` — present, not absent', async () => {
+    vi.stubGlobal('fetch', reply(200, { review_promises: [] }));
+    expect(await new HttpClient(baseOpts).reviewPromises('dawn')).toEqual({ review_promises: [] });
+  });
+
+  it('an older daemon (not_found: no such route) is `undefined`', async () => {
+    vi.stubGlobal(
+      'fetch',
+      reply(404, { error: { code: 'not_found', message: 'no route for GET /teams/dawn/…' } }),
+    );
+    expect(await new HttpClient(baseOpts).reviewPromises('dawn')).toBeUndefined();
+  });
+
+  it('any other refusal still throws — a forbidden read is not an empty Team', async () => {
+    vi.stubGlobal('fetch', reply(403, { error: { code: 'forbidden', message: 'not on dawn' } }));
+    await expect(new HttpClient(baseOpts).reviewPromises('dawn')).rejects.toMatchObject({
+      code: 'forbidden',
+    });
+  });
+
+  it('a body that is not the protocol shape throws rather than reading as data', async () => {
+    vi.stubGlobal('fetch', reply(200, { review_promises: [{ request_id: 'r', extra: 1 }] }));
+    await expect(new HttpClient(baseOpts).reviewPromises('dawn')).rejects.toThrow(
+      /did not match the protocol schema/,
+    );
+  });
+});
