@@ -1,5 +1,7 @@
-# musterd Cloud — the serving app (cloud increment 1D, lane 01M3Z43NHT). Stateless: any machine serves
-# any team, so N ≥ 2 and rolling deploys (spec §3). Deploy only through scripts/cloud/deploy.mjs. It
+# musterd Cloud — the serving app (cloud increment 1D, lane 01M3Z43NHT). ONE machine for now (nick,
+# 2026-10-02): the Hub is in-process, so a second machine would not see the first one's WebSocket
+# pushes until cross-server fan-out exists (lane 01M3Z4EMH3, decided after the load test). Spec §3's
+# N ≥ 2 waits on that lane. Deploy only through scripts/cloud/deploy.mjs. It
 # migrates before it rolls, and `fly deploy` alone never migrates.
 #
 # Secrets (never here): MUSTERD_DATABASE_{APP,OPERATOR}_URL and their MUSTERD_TRACE_DATABASE_* twins,
@@ -26,7 +28,7 @@ primary_region = "iad"
   # A seat holds a WebSocket for hours. Machines never auto-stop under it.
   auto_stop_machines = "off"
   auto_start_machines = true
-  min_machines_running = 2
+  min_machines_running = 1
 
   [http_service.concurrency]
     type = "connections"
@@ -43,8 +45,9 @@ primary_region = "iad"
     timeout = "5s"
 
 [deploy]
-  strategy = "rolling"
-  max_unavailable = 1
+  # One machine: blue-green starts the new machine, waits for /health, then retires the old one, so a
+  # deploy is a brief overlap rather than a restart gap. Rolling with N = 1 would be downtime.
+  strategy = "bluegreen"
 
 [[vm]]
   size = "shared-cpu-1x"

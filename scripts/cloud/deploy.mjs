@@ -6,8 +6,8 @@
  *   2. migrate  run that image once in the MIGRATE app, which alone holds the owner URLs:
  *               `node scripts/cloud/migrate.mjs`, then read its exit code. A failed migrate stops here,
  *               and nothing new is serving;
- *   3. roll     `fly deploy --image` on the serving app: a rolling replace, one machine at a time,
- *               each gated on `/health`. A server refuses to boot on a schema that is not exactly
+ *   3. roll     `fly deploy --image` on the serving app: blue-green on ONE machine (nick, 2026-10-02;
+ *               lane 01M3Z4EMH3), the new machine gated on `/health` before the old one retires. A server refuses to boot on a schema that is not exactly
  *               its own, so step 2 must succeed first.
  *   4. check    `GET https://<probe>.musterd.dev/health` through Cloudflare.
  *
@@ -129,7 +129,8 @@ try {
     '--image',
     image,
     '--strategy',
-    'rolling',
+    'bluegreen',
+    '--ha=false',
     '--wait-timeout',
     '5m',
   ]);
