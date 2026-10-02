@@ -3607,7 +3607,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: transform 160ms var(--lc-ease-out);
+  transition: transform var(--lc-dur-1) var(--lc-ease-out);
 }
 .lc-digest:hover {
   transform: translateY(-1px);
