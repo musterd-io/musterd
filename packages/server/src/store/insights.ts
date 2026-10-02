@@ -156,7 +156,12 @@ export async function waitingOn(
   db: Driver,
   teamId: string,
   now: number = Date.now(),
+  /** Which clock ages a thread. `origin` (the default) is the envelope's `ts`, as the waiting ledger
+   *  has always read it; `receipt` is `created_at`, this daemon's own clock, for a reader that
+   *  promises receipt-clock ages (the morning digest — a sender's skewed stamp travels, ADR 335). */
+  opts: { clock?: 'origin' | 'receipt' } = {},
 ): Promise<WaitingOnEntry[]> {
+  const stamp = opts.clock === 'receipt' ? 'm.created_at' : 'm.ts';
   const resolved = new Set(
     (
       await db.all<{ thread_id: string }>(
@@ -168,7 +173,7 @@ export async function waitingOn(
 
   // Directed, action-needy acts: to a specific member, not a resolve. thread_key = thread_id or own id.
   const rows = await db.all<DirectedRow>(
-    `SELECT mt.name AS recipient, COALESCE(m.thread_id, m.id) AS thread_key, m.ts AS ts
+    `SELECT mt.name AS recipient, COALESCE(m.thread_id, m.id) AS thread_key, ${stamp} AS ts
          FROM messages m
          JOIN members mt ON mt.id = m.to_member
         WHERE m.team_id = ? AND m.to_kind = 'member' AND m.act != 'resolve'`,

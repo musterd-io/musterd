@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { makeEnvelope, type WaitingOnEntry } from '@musterd/protocol';
-import { ulid } from 'ulid';
+import { encodeTime } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { postSlackWebhook } from '../notify/slack.js';
 import { answeredByAnyoneSql, resolvedThreadSql } from '../store/discharge.js';
@@ -122,7 +123,7 @@ export async function buildDigest(
       body: r.body,
       ts: r.ts,
     })),
-    waiting: await waitingOn(db, teamId, now),
+    waiting: await waitingOn(db, teamId, now, { clock: 'receipt' }),
     unanswered: unansweredRows.map((r) => ({
       id: r.id,
       from: r.from_name,
@@ -200,6 +201,21 @@ async function deliverDigestToSlack(
   }
 }
 
+const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/**
+ * The one message id a team's digest for `day` can have: a ULID whose time is the day's UTC midnight
+ * and whose randomness is a hash of (team, day). Two overlapping schedule retries therefore insert
+ * the SAME primary key, and the store — not a check-then-insert race — lets exactly one through, on
+ * SQLite and Postgres alike.
+ */
+export function digestMessageId(teamId: string, day: string): string {
+  const hash = createHash('sha256').update(`digest\0${teamId}\0${day}`).digest();
+  let rand = '';
+  for (let i = 0; i < 16; i++) rand += CROCKFORD[hash[i]! % 32];
+  return encodeTime(Date.parse(`${day}T00:00:00Z`), 10) + rand;
+}
+
 export interface PostDigestOpts {
   day: string;
   nightStart: number;
@@ -235,26 +251,36 @@ export async function postDigest(
     now,
   });
   const { body, meta } = renderDigestMarkdown(digest);
-  const row = await insertMessage(
-    db,
-    team.id,
-    from.id,
-    null,
-    makeEnvelope({
-      id: ulid(),
-      team: team.slug,
-      from: from.name,
-      to: { kind: 'team' },
-      act: 'message',
-      body,
-      meta,
-      ts: now,
-    }),
-    { now },
-  );
+  const id = digestMessageId(team.id, opts.day);
+  let row: MessageRow;
+  try {
+    row = await insertMessage(
+      db,
+      team.id,
+      from.id,
+      null,
+      makeEnvelope({
+        id,
+        team: team.slug,
+        from: from.name,
+        to: { kind: 'team' },
+        act: 'message',
+        body,
+        meta,
+        ts: now,
+      }),
+      { now },
+    );
+  } catch (err) {
+    // An overlapping retry won the day's id first. Read the record rather than the driver's
+    // error code, so this is the same on SQLite and Postgres; anything else is a real failure.
+    const won = await db.get<{ id: string }>('SELECT id FROM messages WHERE id = ?', [id]);
+    if (won) return null;
+    throw err;
+  }
   // The digest lane's own delivery path (ADR 494 §5): detached, so the Slack
-  // POST can neither delay this return nor fail it. A retried schedule is a
-  // no-op above, so Slack gets one post per day too.
+  // POST can neither delay this return nor fail it. Only the post that won the
+  // day's id reaches here, so Slack gets one post per day too.
   void deliverDigestToSlack(db, team, digest);
   return row;
 }

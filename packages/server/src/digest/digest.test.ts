@@ -143,6 +143,36 @@ withDrivers('digest', (o) => {
       expect(digest.unanswered[0]!.age_ms).toBe(now - (nightStart + 5_000));
     });
 
+    // lazara's review of #1959: the module claims every age walks the receipt clock, but the
+    // waiting section delegated to `waitingOn`, which reads the origin `ts`. A sender whose clock
+    // is ten days behind must not make a thread look ten days old.
+    it('ages waiting threads by when this daemon received them, not the sender stamp', async () => {
+      const { db, team, nick, dana } = await seed();
+      const now = 2_000_000_000_000;
+      const nightStart = now - 6 * 3_600_000;
+      const receivedAt = nightStart + 3_000;
+      await insertMessage(
+        db,
+        team.id,
+        nick.id,
+        dana.id,
+        makeEnvelope({
+          id: ulid(),
+          team: 'dawn',
+          from: nick.name,
+          to: { kind: 'member', name: dana.name },
+          act: 'message',
+          body: 'can you look at this?',
+          ts: receivedAt - 10 * 86_400_000,
+        }),
+        { now: receivedAt },
+      );
+      const digest = await buildDigest(db, team.id, { day: '2033-05-18', nightStart, now });
+      expect(digest.waiting).toEqual([
+        { member: 'dana', threads: 1, oldest_age_ms: now - receivedAt },
+      ]);
+    });
+
     it('renders an empty night without empty sections', async () => {
       const { db, team } = await seed();
       const digest = await buildDigest(db, team.id, {
@@ -277,6 +307,46 @@ withDrivers('digest', (o) => {
         });
         expect(second).toBeNull();
         await new Promise((r) => setTimeout(r, 50));
+        expect(calls).toHaveLength(1);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    // lazara's review of #1959: the day guard was check-then-insert, so two overlapping retries
+    // of the schedule both passed the check, both posted, and both rang Slack.
+    it('posts exactly once when two schedule retries overlap — one record, one Slack post', async () => {
+      const { db, team, dana } = await seed();
+      await setPolicy(db, team.id, { ask_slack_webhook: 'https://hooks.slack.test/T/B/digest' });
+      const calls: string[] = [];
+      const realFetch = globalThis.fetch;
+      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith('https://hooks.slack.test/')) {
+          calls.push(url);
+          return new Response('ok', { status: 200 });
+        }
+        return realFetch(input as never, init);
+      });
+      try {
+        const now = 2_000_000_000_000;
+        const nightStart = now - 6 * 3_600_000;
+        const poster = { id: dana.id, name: dana.name };
+        const post = (at: number) =>
+          postDigest(db, { id: team.id, slug: team.slug }, poster, {
+            day: '2033-05-18',
+            nightStart,
+            now: at,
+          });
+        const results = await Promise.all([post(now), post(now + 1)]);
+        expect(results.filter((r) => r !== null)).toHaveLength(1);
+        const count = await db.get<{ n: number }>(
+          `SELECT COUNT(*) AS n FROM messages
+            WHERE team_id = ? AND meta IS NOT NULL AND json_extract(meta, '$.digest.day') = ?`,
+          [team.id, '2033-05-18'],
+        );
+        expect(count!.n).toBe(1);
+        await new Promise((r) => setTimeout(r, 100));
         expect(calls).toHaveLength(1);
       } finally {
         vi.unstubAllGlobals();
