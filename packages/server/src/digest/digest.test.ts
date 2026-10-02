@@ -1,12 +1,18 @@
 import { makeEnvelope } from '@musterd/protocol';
 import { ulid } from 'ulid';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
-import { createTeam } from '../store/teams.js';
-import { buildDigest, postDigest, renderDigestMarkdown } from './digest.js';
+import { createTeam, setPolicy } from '../store/teams.js';
+import {
+  buildDigest,
+  type Digest,
+  formatDigestSlackText,
+  postDigest,
+  renderDigestMarkdown,
+} from './digest.js';
 
 let openStore: () => Promise<Driver>;
 
@@ -152,6 +158,27 @@ withDrivers('digest', (o) => {
       expect(body).toContain('Every ask got an answer.');
     });
 
+    it('formats the Slack glance: counts, first headlines, /live footer', () => {
+      const digest: Digest = {
+        day: '2033-05-18',
+        nightStart: 1_999_000_000_000,
+        learned: [
+          { id: 'a', headline: 'the tunnel drops idle peers', body: 'b', ts: 1 },
+          { id: 'b', headline: 'cap the mint bucket', body: 'b', ts: 2 },
+          { id: 'c', headline: 'third thing', body: 'b', ts: 3 },
+          { id: 'd', headline: 'fourth thing', body: 'b', ts: 4 },
+        ],
+        waiting: [{ member: 'dana', threads: 2, oldest_age_ms: 60_000 }],
+        unanswered: [{ id: 'u', from: 'nick', to: 'dana', thread: null, age_ms: 30_000 }],
+      };
+      const text = formatDigestSlackText({ team: 'dawn', digest });
+      expect(text).toContain('[dawn] Overnight — 2033-05-18: 4 learned · 1 waiting · 1 unanswered');
+      expect(text).toContain('- the tunnel drops idle peers');
+      expect(text).toContain('- …and 1 more');
+      expect(text).not.toContain('fourth thing');
+      expect(text).toContain('/live');
+    });
+
     it('posts the digest as an ordinary team message, once per day', async () => {
       const { db, team, dana } = await seed();
       const now = 2_000_000_000_000;
@@ -195,6 +222,65 @@ withDrivers('digest', (o) => {
         [team.id, '2033-05-18'],
       );
       expect(count!.n).toBe(1);
+    });
+
+    it('posts the short form to the team Slack sink, once per day, never failing the post', async () => {
+      const { db, team, dana } = await seed();
+      // The legacy knob reads through as the team's Slack sink (doorbell §6).
+      await setPolicy(db, team.id, { ask_slack_webhook: 'https://hooks.slack.test/T/B/digest' });
+      // Intercept only the Slack host; the drivers under test share the global fetch.
+      const calls: { url: string; text: string }[] = [];
+      const realFetch = globalThis.fetch;
+      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith('https://hooks.slack.test/')) {
+          calls.push({ url, text: (JSON.parse(String(init?.body)) as { text: string }).text });
+          return new Response('ok', { status: 200 });
+        }
+        return realFetch(input as never, init);
+      });
+      try {
+        const now = 2_000_000_000_000;
+        const nightStart = now - 6 * 3_600_000;
+        await send(
+          db,
+          team.id,
+          dana,
+          'insight',
+          'the tunnel drops idle peers',
+          'team',
+          { headline: 'the tunnel drops idle peers' },
+          nightStart + 1_000,
+        );
+        const poster = { id: dana.id, name: dana.name };
+        const first = await postDigest(db, { id: team.id, slug: team.slug }, poster, {
+          day: '2033-05-18',
+          nightStart,
+          now,
+        });
+        expect(first).not.toBeNull();
+        // The Slack POST is detached — wait for it, then pin the text.
+        const deadline = Date.now() + 5_000;
+        while (calls.length === 0 && Date.now() < deadline)
+          await new Promise((r) => setTimeout(r, 10));
+        expect(calls).toHaveLength(1);
+        expect(calls[0]!.text).toContain(
+          '[dawn] Overnight — 2033-05-18: 1 learned · 0 waiting · 0 unanswered',
+        );
+        expect(calls[0]!.text).toContain('the tunnel drops idle peers');
+
+        // A retried schedule posts once on the record — and once to Slack.
+        const second = await postDigest(db, { id: team.id, slug: team.slug }, poster, {
+          day: '2033-05-18',
+          nightStart,
+          now: now + 60_000,
+        });
+        expect(second).toBeNull();
+        await new Promise((r) => setTimeout(r, 50));
+        expect(calls).toHaveLength(1);
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
   });
 });

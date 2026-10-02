@@ -1,7 +1,9 @@
 import { makeEnvelope, type WaitingOnEntry } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
+import { postSlackWebhook } from '../notify/slack.js';
 import { answeredByAnyoneSql, resolvedThreadSql } from '../store/discharge.js';
+import { getDoorbellPolicy } from '../store/doorbell.js';
 import { waitingOn } from '../store/insights.js';
 import { insertMessage } from '../store/messages.js';
 import type { MessageRow } from '../store/rows.js';
@@ -18,7 +20,16 @@ import type { MessageRow } from '../store/rows.js';
  * to `@team` with `meta.digest = { day }`, which is the key lane 5 pins in
  * the Stream. `day` and `nightStart` are the scheduler's — the team's local
  * date and the night boundary in the effective working-hours schedule
- * (ADRs 206/494) — so this module never guesses a timezone.
+ * (ADRs 206/494) — so this module never guesses a timezone. The scheduler is
+ * not this module: it invokes {@link postDigest} at working-hours start on its
+ * own schedule (ADR 494 §5), and the once-per-day guard makes a retried
+ * schedule post exactly once.
+ *
+ * Slack is the digest lane's own delivery path (ADR 494 §5): a team-addressed
+ * `message` rings no one under the ordinary ring rule (ADR 443 §2), so the
+ * doorbell can never carry it. {@link postDigest} therefore posts the short
+ * {@link formatDigestSlackText} form to the team's configured Slack sink
+ * itself — detached and best-effort, never delaying or failing the post.
  */
 
 export interface DigestLearned {
@@ -153,6 +164,42 @@ export function renderDigestMarkdown(digest: Digest): {
   return { body: `${lines.join('\n')}\n`, meta: { digest: { day: digest.day } } };
 }
 
+/**
+ * The Slack form of the digest: one glance line (counts per section) plus the
+ * first learned headlines. The full body lives in the posted message the
+ * Stream pins — Slack is the nudge, not the record.
+ */
+export function formatDigestSlackText(input: { team: string; digest: Digest }): string {
+  const { team, digest } = input;
+  const head =
+    `[${team}] Overnight — ${digest.day}: ` +
+    `${digest.learned.length} learned · ${digest.waiting.length} waiting · ${digest.unanswered.length} unanswered`;
+  const lines = digest.learned.slice(0, 3).map((l) => `- ${l.headline}`);
+  if (digest.learned.length > 3) lines.push(`- …and ${digest.learned.length - 3} more`);
+  lines.push('Full digest pinned first on /live.');
+  return `${head}\n${lines.join('\n')}`;
+}
+
+/**
+ * Post the digest to the team's configured Slack sink, if any. Best-effort by
+ * design (ADR 149's shape): no retry, no queue, never throws — a dead Slack
+ * neither delays nor fails the digest post. Unset sink (the default) means no
+ * outbound call at all.
+ */
+async function deliverDigestToSlack(
+  db: Driver,
+  team: { id: string; slug: string },
+  digest: Digest,
+): Promise<void> {
+  try {
+    const url = (await getDoorbellPolicy(db, team.id)).slack_url;
+    if (!url) return;
+    await postSlackWebhook(url, formatDigestSlackText({ team: team.slug, digest }));
+  } catch {
+    // A dead Slack must not fail the morning post — swallow and move on.
+  }
+}
+
 export interface PostDigestOpts {
   day: string;
   nightStart: number;
@@ -188,7 +235,7 @@ export async function postDigest(
     now,
   });
   const { body, meta } = renderDigestMarkdown(digest);
-  return insertMessage(
+  const row = await insertMessage(
     db,
     team.id,
     from.id,
@@ -205,4 +252,9 @@ export async function postDigest(
     }),
     { now },
   );
+  // The digest lane's own delivery path (ADR 494 §5): detached, so the Slack
+  // POST can neither delay this return nor fail it. A retried schedule is a
+  // no-op above, so Slack gets one post per day too.
+  void deliverDigestToSlack(db, team, digest);
+  return row;
 }
