@@ -1,0 +1,60 @@
+# musterd Cloud — the serving app (cloud increment 1D, lane 01M3Z43NHT). ONE machine for now (nick,
+# 2026-10-02): the Hub is in-process, so a second machine would not see the first one's WebSocket
+# pushes until cross-server fan-out exists (lane 01M3Z4EMH3, decided after the load test). Spec §3's
+# N ≥ 2 waits on that lane. Deploy only through scripts/cloud/deploy.mjs. It
+# migrates before it rolls, and `fly deploy` alone never migrates.
+#
+# Secrets (never here): MUSTERD_DATABASE_{APP,OPERATOR}_URL and their MUSTERD_TRACE_DATABASE_* twins,
+# staged by scripts/cloud/provision-neon.mjs. The owner URLs live only on the migrate app.
+app = "musterd-cloud"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  MUSTERD_MODE = "cloud"
+  MUSTERD_HOST = "0.0.0.0"
+  MUSTERD_PORT = "8080"
+  MUSTERD_CLOUD_HOST_SUFFIX = "musterd.dev"
+  # Increment 1D's staging issuer (workers/staging-jwks). Increment 2's console replaces both lines.
+  MUSTERD_CONSOLE_AUDIENCE = "https://musterd.dev"
+  MUSTERD_CONSOLE_JWKS_URL = "https://musterd-staging-jwks.nick-sanders-a.workers.dev/jwks"
+  # The web build writes dist/client (the published /live bundle, as `service` publishes it locally).
+  MUSTERD_WEB_ROOT = "/app/packages/web/dist/client"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # A seat holds a WebSocket for hours. Machines never auto-stop under it.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 400
+    hard_limit = 500
+
+  # `/health` is 200 or a 503 with one stable sentence (spec §5.5). A machine whose database is
+  # unreachable stops taking traffic until it answers 200 again.
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "15s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+    # The checker calls the machine by its internal IP, and cloud mode's Host allow-list (ADR 040)
+    # admits only *.musterd.dev (2026-10-02, first roll: 403 "host not allowed: 172.19.x.x:8080").
+    # /health answers on any team host, so the check names one rather than widening the guard.
+    [http_service.checks.headers]
+      Host = "health.musterd.dev"
+
+[deploy]
+  # One machine: blue-green starts the new machine, waits for /health, then retires the old one, so a
+  # deploy is a brief overlap rather than a restart gap. Rolling with N = 1 would be downtime.
+  strategy = "bluegreen"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
