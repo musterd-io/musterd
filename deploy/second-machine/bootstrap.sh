@@ -42,7 +42,7 @@ wait_local() {
 # ── preflight — what a human must have done first (the guide's "Before the script") ─────────
 preflight() {
   [ "$(id -u)" -ne 0 ] || die "run as yourself, never as root"
-  command -v tailscale >/dev/null || die "tailscale is not on PATH — install the Tailscale app and sign in"
+  command -v tailscale >/dev/null || die "tailscale is not on PATH — the Mac app does not add its CLI: menu-bar Tailscale → Settings → Install CLI (or: sudo ln -sf /Applications/Tailscale.app/Contents/MacOS/Tailscale /usr/local/bin/tailscale)"
   tailscale status >/dev/null 2>&1 || die "tailscale is not up — open the app and sign in to the same tailnet as the hub"
   local major
   major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
@@ -66,10 +66,18 @@ step_runtime() {
     log "cloning $WORK_REPO → $RUNTIME"
     gh repo clone "$WORK_REPO" "$RUNTIME" -- --branch "$MUSTERD_RUNTIME_REF"
   fi
-  if ! command -v musterd >/dev/null || [ ! -f "$RUNTIME/packages/cli/dist/bin.js" ]; then
+  if [ ! -f "$RUNTIME/packages/cli/dist/bin.js" ]; then
     log "building the runtime (first time: minutes — better-sqlite3 compiles)"
     ( cd "$RUNTIME" && pnpm install --frozen-lockfile && pnpm -r build ) >>"$LOG" 2>&1
-    ( cd "$RUNTIME/packages/cli" && pnpm link --global ) >>"$LOG" 2>&1
+  fi
+  if ! command -v musterd >/dev/null; then
+    # A plain shim in pnpm's global bin dir, not `pnpm link --global`: pnpm 12 removed that flag
+    # (second-machine run, 2026-10-02), and the shim is all the link ever amounted to.
+    local bin="${PNPM_HOME:-$HOME/Library/pnpm}"
+    mkdir -p "$bin"
+    printf '#!/bin/sh\nexec node "%s/packages/cli/dist/bin.js" "$@"\n' "$RUNTIME" >"$bin/musterd"
+    chmod +x "$bin/musterd"
+    export PATH="$bin:$PATH"
     command -v musterd >/dev/null || die "\`musterd\` is still not on PATH — run \`pnpm setup\`, reopen the shell, and re-run"
   fi
   log "runtime: $(git -C "$RUNTIME" rev-parse --short HEAD) · $(musterd --version 2>/dev/null | head -1)"
