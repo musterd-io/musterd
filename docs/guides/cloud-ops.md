@@ -11,7 +11,7 @@
 | Piece | Where | Notes |
 | --- | --- | --- |
 | Team endpoints | `*.musterd.dev` → Cloudflare (proxied) → Fly app `musterd-cloud` | Wildcard CNAME to `musterd-cloud.fly.dev`; Fly holds a Let's Encrypt `*.musterd.dev` certificate issued by DNS-01 (`_acme-challenge` CNAME, DNS only). IPs: shared v4, dedicated v6. |
-| Serving app | Fly `musterd-cloud`, org `personal` | **One machine** (nick, 2026-10-02) in iad, blue-green deploys. Holds the **app** and **operator** database URLs only. It can never change the schema. A second machine waits on cross-server fan-out (lane `01M3Z4EMH3`). |
+| Serving app | Fly `musterd-cloud`, org `personal` | **One machine** (nick, 2026-10-02) in iad, blue-green deploys, `shared-cpu-1x` with 512 MB. Holds the **app** and **operator** database URLs only. It can never change the schema. A second machine waits on cross-server fan-out (lane `01M3Z4EMH3`). Under sustained load a shared CPU is throttled to its baseline share once its burst balance runs out: the 2026-10-02 load test hit that after seven minutes (`docs/perf/daemon-load-baseline.md`). |
 | Migrate app | Fly `musterd-cloud-migrate` | No machines between deploys. Holds the **owner** URLs; the deploy runs the migrate step there before the rollout (spec §6). |
 | Database | Neon project `musterd-cloud` (`long-thunder-03987236`), aws-us-east-1, Postgres 17, **Launch plan** (nick, 2026-10-02), 7 days of point-in-time restore | Databases `musterd` and `musterd_trace`. Login users `musterd_app_login` / `musterd_operator_login`, made in SQL so they are not in `neon_superuser`. URLs use `sslmode=verify-full`. Fly's 15-second `/health` check keeps the compute awake. |
 | Staging console issuer | Key: `~/.musterd/cloud/staging-issuer.jwk` (mode 600, nick's laptop). JWKS: `https://musterd-staging-jwks.nick-sanders-a.workers.dev/jwks` (worker `workers/staging-jwks`) | Stands in for increment 2's console. It signs the tokens that create teams on staging. Retired by lane `01M3Z43V58`. |
@@ -74,6 +74,8 @@ One image per commit (`registry.fly.io/musterd-cloud:git-<sha>`):
 Fly's health checker calls the machine by its internal IP. Cloud mode's Host allow-list (ADR 040) refuses that, so the check sends `Host: health.musterd.dev` (`deploy/cloud/fly.toml`). The web UI is served from the web build's `dist/client`.
 
 **Teams on staging (2026-10-02):** `revive-staging` (nick is admin). It was created through the staging issuer, which exercised the console token, the JWKS, the single-use `jti` and the Neon writes end to end.
+
+The §8.1 load test (lane `01M3Z44C56`) makes a fresh team per run, so every run starts from the same board: `lb-smoke1` and `lb-run1` (2026-10-02) are throwaway bench teams, admin `owner`, credentials in `~/.musterd/cloud/teams/`. The harness takes the admin credential from the environment of the bench machine, and nothing it seeds is printed.
 
 ## Check it
 

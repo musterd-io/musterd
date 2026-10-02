@@ -282,3 +282,60 @@ next cost inside it is `seatWakeabilityFacts` (~14 ms, per-member audit lookups)
 worker inherits the daemon's single-core pin in this rig, so the pass is conservative for a
 multi-core host. Falsifier: a sustained run at 50/50/50 on this build or later with all-request
 p95 over 1 000 ms.
+
+## 2026-10-02 — musterd Cloud through Cloudflare → Fly → Neon at 75/75/75: invalid as acceptance, two defects found (lane 01M3Z44C56)
+
+Cloud spec §8.1 asks for ADR 451's population — 75 humans, 75 agents and 75 viewers — through the
+Cloudflare edge to the Fly app tier on Neon, with all-request p95 under 1 s. The harness gained
+`TARGET=<origin>`: no child daemon. It seeds a fresh team over the admin API (the same 1200-lane board,
+then each human seat with its credential and each agent seat through the admin seat-credential
+rotate), and every population and the `/health` prober go through the edge. Seeding took 69 s.
+
+| piece | what ran |
+| --- | --- |
+| driver | Fly `performance-4x`, iad, one-shot (`scripts/cloud/bench-run.mjs` from lane 01M3Z429Q3's branch at 3329764d), image from 4b29bfc0 |
+| target | team `lb-run1` on staging: app `musterd-cloud`, ONE `shared-cpu-1x` 512 MB machine in iad, image `git-de08ada65523` (#1969's branch tip), pg pool of 10 through Neon's pooler |
+| database | Neon `musterd-cloud`, aws-us-east-1, 1 CU fixed |
+| shape | RAMP=1000, DURATION=1300, as on 2026-09-28: one driver is one address, so arrivals stay under the per-IP OAuth register limit (5/min) |
+
+| run | requests | errors | all-request p50 | all-request p95 | `/health` p95 |
+| --- | --- | --- | --- | --- | --- |
+| 2026-09-28, tunnel, SQLite, one performance core, 50/50/50 | 36 358 (28/s) | 3 | — | 760 ms | — |
+| **2026-10-02, Cloud, shared-cpu-1x, 75/75/75** | 8 318 (6.4/s) | **6 241** | 11 899 ms | **42 392 ms** | 1 190 ms |
+
+The errors: 3 565 × 503 `database unreachable: timeout exceeded when trying to connect` (pool
+acquire timeouts), 2 385 × 401 on agent calls (no lease after a refused claim), 181 × 502/520/524 at
+the edge, 76 WebSocket closes, 34 × 500 on `/mcp`. The slowest routes by p95 were `GET /report`
+99.8 s, `POST /lanes` 84 s, agent `POST /messages` 82 s and `POST /claim` 60.5 s.
+
+**Why it is invalid as acceptance.** The shared vCPU was throttled. Per Fly's own metrics for the
+window, the machine ran 55–77 % busy from 22:07 to 22:13 UTC, then from 22:14 it showed 72–93 %
+steal and about 7 % busy until the end: Fly holds a shared CPU to its baseline share once its burst
+balance runs out. From then on every request queued behind a starved event loop, the pool's acquire
+timed out, and heartbeats arrived late enough for the server to reap sockets (close 4410). This
+measures the VM class, not the architecture. The staging size is `shared-cpu-1x` (#1969); a
+dedicated core is nick's call (2026-10-02).
+
+**Defect 1 — the server crashed under it** (lane `01M3ZC3EXN`). At 22:24:05 the process exited 1,
+not OOM. A viewer's WebSocket closed while the pool was exhausted, `release()` in the close handler
+threw `DriverError: database unreachable`, nothing caught the rejection, and Node exited. Fly
+restarted it in 3 s, and every socket and in-flight request on the machine dropped (the edge 502s).
+The presence reaper's tick and the same-workspace eviction timer have the same shape. On SQLite
+these never reject; on Postgres a pool timeout or an outage does, so a database blip takes down every
+team on the machine instead of answering 503 (spec §7).
+
+**Defect 2 — the 503 names the wrong cause** (lane `01M3ZC3G35`). Neon was reachable throughout; the
+pool queue timed out because the app was starved. An operator reading `database unreachable` would
+chase an outage that was not there, and `/mcp` answered the same cause with a bare 500.
+
+**What the burst minutes suggest (an estimate, not a measurement).** Before the throttle, about the
+first 30 of each population had arrived, and the vCPU was 55–77 % busy, up to a third of it in
+softirq — network packet processing. That fits the Neon pass's finding that every bare statement is
+its own five-round-trip transaction. The 2026-09-28 SQLite daemon used 35 % of a performance core at
+50 of each. So a dedicated core alone is unlikely to carry 75 of each at today's per-request cost.
+The levers: one transaction per request on the pg driver (lane `01M3Z455NE`), and a cache for
+`GET /report` on Postgres, which derives inline and uncached on every request (the worker and its
+5 s single-flight cache in `store/reportCache.ts` are SQLite-only).
+
+Falsifier: a sustained 75/75/75 run against a dedicated-core Cloud machine, on a build with the
+crash fix, with all-request p95 under 1 000 ms and no process exit.
