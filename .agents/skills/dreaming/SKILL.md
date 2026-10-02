@@ -40,7 +40,7 @@ Read it with `musterd dream` (optional `--since <epoch-ms>`). The command prints
 
 1. **Inventory.** From the packet, list each trap (something broke, went missing, or reached nobody) and each number (a count, a rate, a duration) you can state in one sentence.
 2. **Save new observations as insights.** For each item with no matching insight since `since`: `team_insight_save {headline, body}`. Headline like a commit subject. Body carries the date and the observation. The server rejects an insight body over 2048 bytes. Never put secrets in it.
-3. **Promote what you have seen twice.** A second dated observation of the **same claim** (this dream's insight plus an earlier insight, or this dream plus an existing wiki page) becomes a wiki page — or an append to the page that already holds it.
+3. **Promote what you have seen twice.** Two dated observations of the **same claim**, on two different dates (see Promotion rule), become a wiki page — or an append to the page that already holds it.
 4. **PR the wiki change.** Branch from `origin/main`, commit as this seat (ADR 109), open a PR. `pnpm wiki:check` must pass. Then `pnpm wiki:index` if you added a page, in the same commit as the page.
 5. **Note.** `team_memory_save` on this seat: what you promoted, what you left as insights, where you stopped. Last-write-wins, private, no secrets.
 
@@ -48,7 +48,13 @@ Stop when the packet is processed or the nightly budget is spent. One promotion 
 
 ## Promotion rule
 
-**Seen twice** means two dated observations of the same claim, in two insights or one insight plus an existing wiki page. A single vivid night stays an insight until a second dated observation arrives.
+**Seen twice** means two dated observations of the same claim, on two different dates. An observation is any one of:
+
+- a saved insight (in the packet's `learned`, or earlier),
+- an existing wiki page that already states the claim,
+- a dated act in this dream's packet (a lane act, a status, an incident) that shows the claim.
+
+Any two of these count — two insights, an insight and a page, or an earlier insight and tonight's lane act (the fixture walk's case). They must be two sightings, not one counted twice: the insight you save tonight *from* a packet act is the same observation as that act. A single vivid night stays an insight until a second dated observation arrives.
 
 A new wiki page:
 
