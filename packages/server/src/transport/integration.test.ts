@@ -10121,25 +10121,34 @@ withDrivers('integration', (_o, kind) => {
       });
     });
 
-    it('a dead sink endpoint cannot slow the send: 201 at once, one ok:false row, no retry', async () => {
+    it('a dead sink endpoint cannot slow the send: 201 while the sink call is still in flight, one ok:false row, no retry', async () => {
       const t = await team();
       await post('/teams/dawn/policy', slackPolicy, t.nick);
       let attempts = 0;
+      // The sink call hangs until the test lets it fail. A send that awaited the sink could not
+      // return while this gate is shut, so there is no clock and no budget to tune: this was a
+      // wall-clock bound (250 ms sqlite / 1500 ms PGlite against a 300 ms sink) that CI load alone
+      // tripped — 416 ms and 1700 ms on a busy runner, 2026-10-02 — at ~25 min a red.
+      let openGate!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        openGate = resolve;
+      });
       vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
         if (String(input).startsWith('https://hooks.slack.test/')) {
           attempts++;
-          await tick(300);
+          await gate;
           throw new Error('ECONNREFUSED');
         }
         return realFetch(input as never, init);
       });
       await post('/teams/dawn/availability', { status: 'off_hours' }, t.dee);
-      const started = Date.now();
       const sent = await send(t.ada, env('Ada', toDee, 'ask', 'x1', consult));
       expect(sent.status).toBe(201);
-      // The bound is about the SINK not slowing the send. The PGlite double pays two extra round
-      // trips per statement (BEGIN, SET LOCAL ROLE), so its send is slower for its own reasons.
-      expect(Date.now() - started).toBeLessThan(kind === 'sqlite' ? 250 : 1500);
+      // The send is back. The sink was reached (detached from it) and is still hanging, so its
+      // failure has not been recorded yet.
+      await pollUntil(() => attempts === 1, 2000);
+      expect(await surfaced(t.teamId)).toHaveLength(0);
+      openGate();
       await pollUntil(async () => (await surfaced(t.teamId)).length === 1, 2000);
       expect(JSON.parse((await surfaced(t.teamId))[0]!.detail!)).toMatchObject({
         surface: 'slack',
