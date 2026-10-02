@@ -192,6 +192,37 @@ function reportStop(ctx: Ctx, team: string, stop: FoldStop): void {
   }
 }
 
+/**
+ * A request that died because the connection it was written to had already been closed by the hub:
+ * undici surfaces it as `TypeError: fetch failed` whose cause is `UND_ERR_SOCKET` ("other side
+ * closed") or `ECONNRESET`. It is the keep-alive race — the hub's Node server closes an idle socket
+ * after 5 s, and a joiner whose event loop was held by a long fold writes its next request to the
+ * pooled socket before it has noticed. It says nothing about the hub being down (that is
+ * `ECONNREFUSED`, a timeout, or a bad status), so only this shape is retried.
+ */
+export function isStaleSocket(error: unknown): boolean {
+  if (!(error instanceof TypeError)) return false;
+  const code = (error.cause as { code?: unknown } | null | undefined)?.code;
+  return code === 'UND_ERR_SOCKET' || code === 'ECONNRESET';
+}
+
+/**
+ * Send a request again, at once, when it died on a stale pooled socket. The request never reached the
+ * hub's handler and a pull is a GET, so a second attempt (on a fresh connection — undici drops the
+ * dead one) cannot do harm. Without this the failure ended the whole drain tick and the next page
+ * waited a full SYNC_PULL_INTERVAL_MS (second-machine run, 2026-10-02: 10 pages a minute instead of
+ * one every second or two). Bounded: an outage that is really there still surfaces after `tries`.
+ */
+export async function withSocketRetry<T>(attempt: () => Promise<T>, tries = 3): Promise<T> {
+  for (let n = 1; ; n++) {
+    try {
+      return await attempt();
+    } catch (error) {
+      if (n >= tries || !isStaleSocket(error)) throw error;
+    }
+  }
+}
+
 async function fetchPage(
   hubUrl: string,
   credential: string,
@@ -201,10 +232,12 @@ async function fetchPage(
   const url = new URL(`/teams/${slug}/sync/pull`, hubUrl);
   url.searchParams.set('after', String(after));
   url.searchParams.set('limit', String(SYNC_PULL_MAX_BATCH));
-  const res = await fetch(url, {
-    headers: { authorization: `Bearer ${credential}` },
-    signal: AbortSignal.timeout(PULL_TIMEOUT_MS),
-  });
+  const res = await withSocketRetry(() =>
+    fetch(url, {
+      headers: { authorization: `Bearer ${credential}` },
+      signal: AbortSignal.timeout(PULL_TIMEOUT_MS),
+    }),
+  );
   if (res.status === 409) {
     // The hub's head is BELOW our cursor. A hub cannot un-hold what it acked; either this daemon's
     // cursor is wrong or the hub lost data. Neither is something a retry fixes, and believing the

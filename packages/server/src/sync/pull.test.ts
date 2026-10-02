@@ -14,7 +14,7 @@ import { insertMessage } from '../store/messages.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
 import { foldBatch } from './fold.js';
-import { drainTeam, pullTeam } from './pull.js';
+import { drainTeam, isStaleSocket, pullTeam, withSocketRetry } from './pull.js';
 import { pushTeam } from './push.js';
 
 withDrivers('pull', (_o, kind) => {
@@ -444,5 +444,74 @@ describe('drainTeam — a full page is followed by the next one now, not next ti
       pages: 1,
       applied: 500,
     });
+  });
+});
+
+/**
+ * Second-machine run, 2026-10-02: a joiner draining a long log folded a page in more than the hub's
+ * 5 s keep-alive window, the hub closed the idle socket, and the NEXT request — written to that pooled
+ * dead socket before the joiner's event loop had seen the close — died `fetch failed`
+ * (`UND_ERR_SOCKET: other side closed`). The tick ended, so the drain waited a minute per failure.
+ * The request never reached the hub's handler and a GET is idempotent: dial fresh and send it again.
+ */
+describe('withSocketRetry — a request that died on a socket the hub had already closed', () => {
+  const staleSocket = () =>
+    new TypeError('fetch failed', {
+      cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }),
+    });
+
+  it('names a stale pooled socket, and nothing else', () => {
+    expect(isStaleSocket(staleSocket())).toBe(true);
+    expect(
+      isStaleSocket(
+        new TypeError('fetch failed', {
+          cause: Object.assign(new Error('x'), { code: 'ECONNRESET' }),
+        }),
+      ),
+    ).toBe(true);
+    // A refused connection, a timeout and a plain error are the hub being down or slow, not a race.
+    expect(
+      isStaleSocket(
+        new TypeError('fetch failed', {
+          cause: Object.assign(new Error('x'), { code: 'ECONNREFUSED' }),
+        }),
+      ),
+    ).toBe(false);
+    expect(isStaleSocket(new DOMException('timed out', 'TimeoutError'))).toBe(false);
+    expect(isStaleSocket(new Error('boom'))).toBe(false);
+    expect(isStaleSocket(undefined)).toBe(false);
+  });
+
+  it('retries a stale socket and returns the next attempt, without waiting a tick', async () => {
+    let calls = 0;
+    const result = await withSocketRetry(async () => {
+      calls += 1;
+      if (calls === 1) throw staleSocket();
+      return 'page';
+    });
+    expect(result).toBe('page');
+    expect(calls).toBe(2);
+  });
+
+  it('gives up after the attempt budget and surfaces the last error', async () => {
+    let calls = 0;
+    await expect(
+      withSocketRetry(async () => {
+        calls += 1;
+        throw staleSocket();
+      }, 3),
+    ).rejects.toThrow('fetch failed');
+    expect(calls).toBe(3);
+  });
+
+  it('does not retry anything else — a hub that is down or a bad status fails at once', async () => {
+    let calls = 0;
+    await expect(
+      withSocketRetry(async () => {
+        calls += 1;
+        throw new Error('hub responded 500');
+      }),
+    ).rejects.toThrow('hub responded 500');
+    expect(calls).toBe(1);
   });
 });
