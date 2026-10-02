@@ -7,7 +7,12 @@ export {
   WORKING_DAYS,
   isClockTime,
   isIanaTimezone,
+  isWithinWorkingHours,
   isWorkingDayList,
+  lastWorkingDayEnd,
+  localDate,
+  nightKey,
+  workingDayStart,
   type WorkingDay,
   type WorkingHours,
 } from './working-hours.wire.js';

@@ -119,7 +119,19 @@ async function ring(ctx: Ctx, team: TeamRow, env: Envelope): Promise<void> {
   const humans = new Set(members.map((m) => m.name));
   const admins = new Set(members.filter((m) => resolveCapabilities(m).is_admin).map((m) => m.name));
   const to = env.to.kind === 'member' ? env.to.name : null;
-  const targets = ringTargets({ act: env.act, to, meta: env.meta, humans, admins });
+  // ADR 494 §4: the stored row carries the sender's provenance; a dream rings no one.
+  const sent = await ctx.db.get<{ from_provenance: string | null }>(
+    'SELECT from_provenance FROM messages WHERE team_id = ? AND id = ?',
+    [team.id, env.id],
+  );
+  const targets = ringTargets({
+    act: env.act,
+    to,
+    meta: env.meta,
+    humans,
+    admins,
+    from_provenance: sent?.from_provenance ?? null,
+  });
   if (targets.length === 0) return;
 
   const meta = env.meta ?? {};

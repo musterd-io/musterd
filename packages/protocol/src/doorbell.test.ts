@@ -226,3 +226,20 @@ describe('PolicySchema carries the doorbell', () => {
     expect(p.doorbell.webhook_url).toBeUndefined();
   });
 });
+
+// ADR 494 §4: whatever a dream sends, nothing rings — even an ask, the act that always rings.
+describe('ringTargets — dream provenance (ADR 494)', () => {
+  it('rings no one for an act sent from a dream', () => {
+    const humans = new Set(['nick']);
+    const base = {
+      act: 'ask',
+      to: 'nick',
+      meta: { species: 'consult', tier: 'advisory' },
+      humans,
+      admins: humans,
+    };
+    expect(ringTargets(base)).toEqual(['nick']);
+    expect(ringTargets({ ...base, from_provenance: 'dream' })).toEqual([]);
+    expect(ringTargets({ ...base, to: null, from_provenance: 'dream' })).toEqual([]);
+  });
+});

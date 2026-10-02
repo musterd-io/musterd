@@ -216,3 +216,28 @@ describe('--convene-huddles (ADR 386)', () => {
     expect(renderPolicy(off, { convene_huddles: false })).toContain('refuses huddle convene*');
   });
 });
+
+describe('--dream, --dream-nightly, --dream-budget (ADR 494)', () => {
+  const flags = (...argv: string[]) => collectPolicyFlags(parseArgs(['policy', ...argv]));
+
+  it('sets the dream knobs the daemon reads', () => {
+    expect(flags('--dream', 'on')).toEqual({ dream_enabled: true });
+    expect(flags('--dream', 'off')).toEqual({ dream_enabled: false });
+    expect(flags('--dream-nightly', '2', '--dream-budget', '1.5')).toEqual({
+      dream_nightly_wakes: 2,
+      dream_budget_usd: 1.5,
+    });
+  });
+
+  it('refuses a bad value, naming the flag', () => {
+    expect(() => flags('--dream', 'yes')).toThrow(/--dream wants on\|off/);
+    expect(() => flags('--dream-budget', 'lots')).toThrow(/--dream-budget wants dollars/);
+  });
+
+  it('status says a seat dreams, and stays quiet while dreaming is off', () => {
+    const on = ResidencyPolicySchema.parse({ dream_enabled: true, dream_nightly_wakes: 2 });
+    expect(renderPolicy(on)).toContain('dreams 2/night');
+    expect(renderPolicy(on, { dream_enabled: true })).toContain('dreams 2/night*');
+    expect(renderPolicy(ResidencyPolicySchema.parse({}))).not.toContain('dream');
+  });
+});

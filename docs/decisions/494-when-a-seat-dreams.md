@@ -152,6 +152,24 @@ gap: whatever a dream sends, nothing rings.
   `ResidencyPolicySchema.dream`, `isDreamDue` and the lease-derivation pass are not in that PR —
   they remain to be built.
 
+- **2026-10-02 — the trigger is built (lane 01M3Z4ZRMM).** What shipped, and three places it reads
+  the Decision more narrowly or differently:
+  - **Flat policy keys.** `dream_enabled`, `dream_nightly_wakes` (1–3, default 1) and
+    `dream_budget_usd?` sit directly on `ResidencyPolicySchema` instead of the sketched `dream: {…}`
+    block. The ADR 185 sparse merge handles two levels (policy → residency); a third nested level
+    would replace a whole `dream` block on any partial write. Same semantics, same defaults.
+  - **`dream` is lease-derived; `wake` is still attested.** `settleProvenance` (store/dream.ts)
+    settles every claim path (ambient touch, HTTP claim, WS claim): a session presenting this
+    seat's own dream lease is `dream` whatever it attests, and `dream` without one is not believed.
+    §4's "no client can claim it or shed it" now holds for `dream`. It does not yet hold for `wake`,
+    which the host still declares (ADR 131 §6 as built) — a separate change.
+  - **The packet is `GET /teams/:slug/dream`** (`musterd dream`), not a `team_wake_context` kind.
+    The dream's composed line names that command and the dreaming skill.
+  - The lease pass runs in `claimWakeLeases` only when no asked-for wake was leased this poll and the
+    seat is cooled; tonight's count excludes leases the host reported `residency.wake_deferred`.
+    Acts sent from a dream are dropped from both wake lanes, and a `dream` presence is not an
+    attended session (ADR 444).
+
 ## Observability & Evaluation
 
 **Traces.** No new span. A dream is a `musterd.residency.wake` span with `derivation: 'dream'`,

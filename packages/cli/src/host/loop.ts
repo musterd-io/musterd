@@ -484,9 +484,10 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
       }
       // Effective bounds (increment 5 / ADR 199): reply wakes only tighten the operator
       // `--timeout` ceiling. Work-orders use the seat's `work_timeout_ms` without that clamp —
-      // a coding session under a 5m host flag must not silently die at 5m.
+      // a coding session under a 5m host flag must not silently die at 5m. A dream (ADR 494) is
+      // a working session too: it re-reads the day and writes pages, so it is timed the same way.
       const policyTimeout = order.bounds?.timeout_ms;
-      const isWorkOrder = order.derivation === 'work_order';
+      const isWorkOrder = order.derivation === 'work_order' || order.derivation === 'dream';
       const timeoutMs =
         policyTimeout !== undefined
           ? isWorkOrder

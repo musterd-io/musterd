@@ -13,6 +13,9 @@ import {
   WakeProgressBodySchema,
   WakeReportBodySchema,
   WakeTurnBodySchema,
+  WakeOrderSchema,
+  dreamBlocker,
+  isDreamDue,
 } from './residency.js';
 
 describe('ResidencyPolicySchema (ADR 131 inc 5) — the knobs, defaults in ONE place', () => {
@@ -39,6 +42,8 @@ describe('ResidencyPolicySchema (ADR 131 inc 5) — the knobs, defaults in ONE p
       // paid action across a boundary nobody has watched. Flip after lane 01M1Q8GQGW reports.
       convene_huddles: false,
       work_timeout_ms: 30 * 60_000,
+      dream_enabled: false,
+      dream_nightly_wakes: 1,
     });
   });
 
@@ -313,5 +318,67 @@ describe('WakeContextPacket v2 (ADR 430)', () => {
       },
     };
     expect(WakeContextPacketSchema.safeParse(bad).success).toBe(false);
+  });
+});
+
+// ADR 494 §2–§3: the dream gate and the per-night budget, as one pure predicate the server feeds.
+describe('dreamBlocker / isDreamDue (ADR 494)', () => {
+  const hours = {
+    timezone: 'America/Los_Angeles',
+    days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const,
+    start: '08:00',
+    end: '22:30',
+  };
+  const night = Date.parse('2026-10-02T10:00:00Z'); // 03:00 PDT
+  const due = {
+    enabled: true,
+    enrolled: true,
+    live: false,
+    otherWakeDue: false,
+    hours: { ...hours, days: [...hours.days] },
+    now: night,
+    dreamsTonight: 0,
+    nightlyWakes: 1,
+    costTonightUsd: 0,
+  };
+
+  it('is due for an idle, enrolled, switched-on seat outside working hours', () => {
+    expect(dreamBlocker(due)).toBeNull();
+    expect(isDreamDue(due)).toBe(true);
+  });
+
+  it.each([
+    ['disabled', { enabled: false }],
+    ['not_enrolled', { enrolled: false }],
+    ['live', { live: true }],
+    ['other_wake_due', { otherWakeDue: true }],
+    ['no_schedule', { hours: null }],
+    ['working_hours', { now: Date.parse('2026-10-02T18:00:00Z') }],
+    ['night_count', { dreamsTonight: 1 }],
+    ['night_budget', { budgetUsd: 2, costTonightUsd: 2 }],
+  ] as const)('names %s as the blocker', (reason, override) => {
+    expect(dreamBlocker({ ...due, ...override })).toBe(reason);
+    expect(isDreamDue({ ...due, ...override })).toBe(false);
+  });
+
+  it('defaults dreaming off, one wake a night, and caps the night at three', () => {
+    const p = ResidencyPolicySchema.parse({});
+    expect(p.dream_enabled).toBe(false);
+    expect(p.dream_nightly_wakes).toBe(1);
+    expect(p.dream_budget_usd).toBeUndefined();
+    expect(() => ResidencyPolicySchema.parse({ dream_nightly_wakes: 4 })).toThrow();
+  });
+
+  it('accepts a dream order with no act, no sender and no lane', () => {
+    const order = WakeOrderSchema.parse({
+      lease_id: 'l1',
+      seat: 'miley',
+      lane: 'batched',
+      derivation: 'dream',
+      intended_delivery: 'fresh',
+      composed_line: 'dream',
+      expires_at: 1,
+    });
+    expect(order.derivation).toBe('dream');
   });
 });

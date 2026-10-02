@@ -250,7 +250,8 @@ export async function heldByAttendedSession(
       'SELECT provenance FROM presence WHERE id = ?',
       [id],
     );
-    if (row !== undefined && row.provenance !== 'wake') return true;
+    // A dream is daemon-spawned like a wake (ADR 494), so it is not an attended session either.
+    if (row !== undefined && row.provenance !== 'wake' && row.provenance !== 'dream') return true;
   }
   return false;
 }

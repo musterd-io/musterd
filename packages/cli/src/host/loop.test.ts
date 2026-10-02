@@ -179,6 +179,34 @@ describe('pollHostOnce (ADR 131 inc 3 — lease → actuate → report)', () => 
     expect(lines.join('\n')).not.toMatch(/clamped/);
   });
 
+  // ADR 494: a dream re-reads the day and writes pages — a working session, timed like a work order.
+  it('dream derivation uses the policy timeout without the reply-wake clamp (ADR 494)', async () => {
+    const { client } = fakeClient([
+      order({
+        lease_id: 'L-dream',
+        act_id: undefined,
+        act: undefined,
+        sender: undefined,
+        derivation: 'dream',
+        intended_delivery: 'fresh',
+        bounds: { timeout_ms: 1_800_000 },
+      }),
+    ]);
+    const { backend, specs } = fakeBackend();
+    const lines: string[] = [];
+    await pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', backend]]),
+        loadRegistry: () => ({ entries: [entryOf()] }),
+        clientFor: () => client,
+        log: (l) => lines.push(l),
+      }),
+    );
+    expect(specs).toHaveLength(1);
+    expect(specs[0]!.bounds.timeout_ms).toBe(1_800_000);
+    expect(lines.join('\n')).not.toMatch(/clamped/);
+  });
+
   /**
    * Lane 01M1J2V4EJ (2026-09-02): a pre-actuation fault is a property of THIS MACHINE, not of the
    * act — nothing spawned, nothing was paid, and the operator's fix is local. Reported as a failure

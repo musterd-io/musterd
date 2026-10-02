@@ -24,7 +24,7 @@ import type {
   WakeCompletion,
   WakeSpec,
 } from '../backend.js';
-import { ensurePinnedMusterd, wakeEnv } from '../pinnedBin.js';
+import { ensurePinnedMusterd, expectedProvenance, wakeEnv } from '../pinnedBin.js';
 
 /**
  * Backend #1: Claude Code, fresh-first with the increment-4 resume upgrade (ADR 131 §5). The
@@ -542,9 +542,10 @@ function runAttempt(
             `wake's own on its evidence: created in ${spec.workspace} after spawn (ADR 379). ` +
             `The workspace's musterd MCP dist may predate the lease token (rebuild it).`,
         );
-      } else if (verified.provenance !== 'wake') {
+      } else if (verified.provenance !== expectedProvenance(spec.order)) {
         ctx.log(
-          `note: occupancy attests provenance "${verified.provenance ?? 'none'}", not "wake" — ` +
+          `note: occupancy attests provenance "${verified.provenance ?? 'none'}", not ` +
+            `"${expectedProvenance(spec.order)}" — ` +
             `the workspace's musterd MCP dist may predate ADR 131 inc 3 (rebuild it)`,
         );
       }

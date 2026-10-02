@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { MemoryEnvelopeSchema } from './claim-handshake.js';
 import { WAKEABILITIES } from './model.js';
+import { type WorkingHours, isWithinWorkingHours } from './working-hours.wire.js';
 
 /**
  * Harness residency (ADR 131, increment 2) — the wake-ledger wire shapes. A seat *enrolls* into
@@ -128,6 +129,17 @@ export const ResidencyPolicySchema = z.object({
    *  30m. Work-orders do not clamp below this on the host (ADR 199); reply wakes still honor the
    *  operator `--timeout` ceiling. */
   work_timeout_ms: z.number().int().min(60_000).max(3_600_000).default(1_800_000),
+  /**
+   * ADR 494 §3: may this seat dream — an idle seat, outside its working hours, woken to re-read the
+   * day? Off everywhere by default; an admin turns it on as a team default or per seat. Flat keys
+   * rather than ADR 494's sketched `dream: {…}` block, so the ADR 185 sparse merge (two levels:
+   * policy → residency) holds without a third nested level (ADR 494 Consequences, 2026-10-02).
+   */
+  dream_enabled: z.boolean().default(false),
+  /** Dream leases per seat per night, 1–3. A failed dream counts; a deferred one does not. */
+  dream_nightly_wakes: z.number().int().min(1).max(3).default(1),
+  /** Optional ceiling on a seat's reported dream cost per night. Stops the next lease, never kills. */
+  dream_budget_usd: z.number().positive().max(100).optional(),
 });
 export type ResidencyPolicy = z.infer<typeof ResidencyPolicySchema>;
 
@@ -261,7 +273,7 @@ export type WakeLeasesBody = z.infer<typeof WakeLeasesBodySchema>;
  */
 /** How a wake was derived (ADR 191 / 199). Inbox lanes stay `immediate`/`batched`; board-triggered
  *  review and dispatch wakes are `work_order`. Optional on the wire for older hosts. */
-export const WAKE_DERIVATIONS = ['immediate', 'batched', 'work_order'] as const;
+export const WAKE_DERIVATIONS = ['immediate', 'batched', 'work_order', 'dream'] as const;
 export type WakeDerivation = (typeof WAKE_DERIVATIONS)[number];
 export const WakeDerivationSchema = z.enum(WAKE_DERIVATIONS);
 
@@ -555,6 +567,9 @@ export const WakeOrderSchema = z
     // written" — so it carries none; its composed line names the sponsor.
     if (o.reason === 'provisioned' && o.act_id === undefined && o.derivation !== 'work_order')
       return;
+    // ADR 494 §1: a dream answers no act and works no lane — its line says "dream" and the seat
+    // reads its own packet.
+    if (o.derivation === 'dream' && o.act_id === undefined && o.lane_id === undefined) return;
     if (o.act_id === undefined) {
       ctx.addIssue({
         code: 'custom',
@@ -585,6 +600,55 @@ export const WakeOrderSchema = z
     }
   });
 export type WakeOrder = z.infer<typeof WakeOrderSchema>;
+
+/** Why a seat is not due a dream (ADR 494 §2–§3), in the order the gate checks. */
+export type DreamBlocker =
+  | 'disabled'
+  | 'not_enrolled'
+  | 'live'
+  | 'other_wake_due'
+  | 'no_schedule'
+  | 'working_hours'
+  | 'night_count'
+  | 'night_budget';
+
+/** The facts the server gathers for one seat; the gate itself stays pure. */
+export interface DreamFacts {
+  /** Effective `dream_enabled`. */
+  enabled: boolean;
+  enrolled: boolean;
+  /** A live presence, or a host-reported live local session (ADR 131 §5). */
+  live: boolean;
+  /** Any immediate, batched or work_order wake is due — a dream always yields to asked-for work. */
+  otherWakeDue: boolean;
+  /** The effective schedule (Member's, else Team's — ADR 206). Null ⇒ the seat never dreams. */
+  hours: WorkingHours | null;
+  now: number;
+  /** Dream leases already taken tonight (deferred ones excluded). */
+  dreamsTonight: number;
+  nightlyWakes: number;
+  /** Reported dream cost tonight; unreported reads as zero. */
+  costTonightUsd: number;
+  budgetUsd?: number;
+}
+
+/** The first reason a seat is not due a dream, or null when it is (ADR 494 §2). */
+export function dreamBlocker(f: DreamFacts): DreamBlocker | null {
+  if (!f.enabled) return 'disabled';
+  if (!f.enrolled) return 'not_enrolled';
+  if (f.live) return 'live';
+  if (f.otherWakeDue) return 'other_wake_due';
+  if (!f.hours) return 'no_schedule';
+  if (isWithinWorkingHours(f.hours, f.now)) return 'working_hours';
+  if (f.dreamsTonight >= f.nightlyWakes) return 'night_count';
+  if (f.budgetUsd !== undefined && f.costTonightUsd >= f.budgetUsd) return 'night_budget';
+  return null;
+}
+
+/** ADR 494 §2: is this seat due a dream now? */
+export function isDreamDue(f: DreamFacts): boolean {
+  return dreamBlocker(f) === null;
+}
 
 /** Response of the wake-leases poll. */
 export const WakeLeasesResponseSchema = z.object({
