@@ -143,6 +143,10 @@ function ago(ms: number): string {
     : `${Math.floor(h / 24)}d${h % 24 === 0 ? '' : `${h % 24}h`}`;
 }
 
+/** A glanceable post, not a ledger: the first live digest ran ~6,000 characters and clipped. */
+const MAX_WAITING_ROWS = 5;
+const MAX_UNANSWERED_ROWS = 8;
+
 /** Render the digest as a morning post: three glance lines per section, full rows beneath. */
 export function renderDigestMarkdown(digest: Digest): {
   body: string;
@@ -154,14 +158,38 @@ export function renderDigestMarkdown(digest: Digest): {
   for (const l of digest.learned) lines.push(`- ${l.headline}`);
   lines.push('', '## Waiting');
   if (digest.waiting.length === 0) lines.push('- Nobody is waiting on anyone.');
-  for (const w of digest.waiting)
+  const waiting = [...digest.waiting].sort((a, b) => b.threads - a.threads);
+  for (const w of waiting.slice(0, MAX_WAITING_ROWS))
     lines.push(
       `- ${w.member}: ${w.threads} open thread${w.threads === 1 ? '' : 's'}, oldest ${ago(w.oldest_age_ms)}`,
     );
+  const waitingRest = waiting.slice(MAX_WAITING_ROWS);
+  if (waitingRest.length > 0) {
+    const threads = waitingRest.reduce((n, w) => n + w.threads, 0);
+    lines.push(`- …and ${waitingRest.length} more seats (${threads} threads)`);
+  }
   lines.push('', '## Unanswered asks');
   if (digest.unanswered.length === 0) lines.push('- Every ask got an answer.');
-  for (const u of digest.unanswered)
-    lines.push(`- ${u.from}${u.to ? ` → ${u.to}` : ''} (${ago(u.age_ms)} old)`);
+  // One row per from→to pair — the same seat asking the same human thirty times is one
+  // problem, not thirty lines — oldest pair first, so the cap keeps the longest-owed asks.
+  const pairs = new Map<string, { label: string; count: number; oldest: number }>();
+  for (const u of digest.unanswered) {
+    const label = `${u.from}${u.to ? ` → ${u.to}` : ''}`;
+    const pair = pairs.get(label);
+    if (pair) {
+      pair.count += 1;
+      pair.oldest = Math.max(pair.oldest, u.age_ms);
+    } else pairs.set(label, { label, count: 1, oldest: u.age_ms });
+  }
+  const rows = [...pairs.values()].sort((a, b) => b.oldest - a.oldest);
+  for (const r of rows.slice(0, MAX_UNANSWERED_ROWS))
+    lines.push(
+      r.count === 1
+        ? `- ${r.label} (${ago(r.oldest)} old)`
+        : `- ${r.label} ×${r.count} (oldest ${ago(r.oldest)})`,
+    );
+  const asksRest = rows.slice(MAX_UNANSWERED_ROWS).reduce((n, r) => n + r.count, 0);
+  if (asksRest > 0) lines.push(`- …and ${asksRest} more ask${asksRest === 1 ? '' : 's'}`);
   return { body: `${lines.join('\n')}\n`, meta: { digest: { day: digest.day } } };
 }
 

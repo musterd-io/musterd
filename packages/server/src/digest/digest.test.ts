@@ -188,6 +188,46 @@ withDrivers('digest', (o) => {
       expect(body).toContain('Every ask got an answer.');
     });
 
+    it('caps Waiting and Unanswered to the worst rows, with a tail that keeps the totals', () => {
+      const digest: Digest = {
+        day: '2033-05-18',
+        nightStart: 1_999_000_000_000,
+        learned: [],
+        waiting: Array.from({ length: 9 }, (_, i) => ({
+          member: `seat${i}`,
+          threads: 100 + i,
+          oldest_age_ms: (i + 1) * 86_400_000,
+        })),
+        unanswered: [
+          ...Array.from({ length: 4 }, (_, i) => ({
+            id: `a${i}`,
+            from: 'izzo',
+            to: 'nick',
+            thread: null,
+            age_ms: (70 + i) * 86_400_000,
+          })),
+          ...Array.from({ length: 12 }, (_, i) => ({
+            id: `b${i}`,
+            from: `ask${i}`,
+            to: 'nick',
+            thread: null,
+            age_ms: (i + 1) * 3_600_000,
+          })),
+        ],
+      };
+      const { body } = renderDigestMarkdown(digest);
+      const waitingRows = body.split('## Waiting')[1]!.split('## Unanswered')[0]!;
+      expect(waitingRows.match(/^- seat/gm)).toHaveLength(5);
+      // Worst first: the seat holding the most threads leads, and the tail counts the rest.
+      expect(waitingRows.indexOf('seat8')).toBeLessThan(waitingRows.indexOf('seat4'));
+      expect(waitingRows).toContain('…and 4 more seats (');
+      const askRows = body.split('## Unanswered asks')[1]!;
+      // Repeated from→to pairs collapse to one row with a count and the oldest age.
+      expect(askRows).toContain('- izzo → nick ×4 (oldest 73d)');
+      expect(askRows.match(/^- /gm)!.length).toBeLessThanOrEqual(9);
+      expect(askRows).toMatch(/…and \d+ more asks?/);
+    });
+
     it('formats the Slack glance: counts, first headlines, /live footer', () => {
       const digest: Digest = {
         day: '2033-05-18',
