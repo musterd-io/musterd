@@ -169,7 +169,6 @@ import {
   standingAcceptance,
 } from '../store/audit.js';
 import { applyCursorAdvance, getCursor } from '../store/cursors.js';
-import { buildDreamPacket } from '../store/dream.js';
 import { deferralFold } from '../store/deferralFold.js';
 import {
   actDelivery,
@@ -185,6 +184,7 @@ import {
   memberDoorbellPrefs,
   setDoorbellPrefs,
 } from '../store/doorbell.js';
+import { buildDreamPacket } from '../store/dream.js';
 import { latestFootprint } from '../store/footprint.js';
 import { listGoals } from '../store/goals.js';
 import {

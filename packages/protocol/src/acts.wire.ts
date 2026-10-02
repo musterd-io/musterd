@@ -151,5 +151,13 @@ export function normalizeActivity(a: (typeof ACTIVITIES_ON_WIRE)[number]): Activ
  * `dream` (goal dreaming) = musterd woke an idle seat outside working hours to re-read its day —
  * nothing directed was waiting, and the session may write only insights, wiki pages and its note.
  */
-export const PROVENANCES = ['session', 'asked', 'hook', 'scheduled', 'daemon', 'wake', 'dream'] as const;
+export const PROVENANCES = [
+  'session',
+  'asked',
+  'hook',
+  'scheduled',
+  'daemon',
+  'wake',
+  'dream',
+] as const;
 export type Provenance = (typeof PROVENANCES)[number];
