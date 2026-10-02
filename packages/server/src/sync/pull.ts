@@ -4,7 +4,7 @@ import {
   type SyncPullResponse,
 } from '@musterd/protocol';
 import type { Ctx } from '../context.js';
-import { log } from '../log.js';
+import { failureFields, log } from '../log.js';
 import { readNodeState } from '../node/state.js';
 import { handleFoldedMessages } from '../protocol/route.js';
 import { listActiveTeams } from '../store/teams.js';
@@ -338,7 +338,7 @@ export function startSyncPull(ctx: Ctx): () => void {
         } catch (error) {
           // Offline is the expected failure for a laptop; the classified stops above already wrote
           // their own error line before this warn.
-          log.warn({ msg: 'sync_pull_failed', team: team.slug, error: String(error) });
+          log.warn({ msg: 'sync_pull_failed', team: team.slug, ...failureFields(error) });
         }
       }
     } finally {

@@ -127,7 +127,7 @@ src/
     memberAdded.ts    // a Member was created → `presence: offline` to the team, the /live roster-refetch trigger (lane 01M3F81DD9): broadcastMemberAdded (POST /members, the sponsored mint) + broadcastReconciled (watcher/reload added+revived seats); observers are never announced
     test-auth.ts      // HTTP-test fixture: claim a named agent seat and return its msac_ credential plus msls_ Presence proof (ADR 337)
   presence/
-    reaper.ts         // setInterval: presence timeout, request/wake expiry, departed-seat claim release + observer TTL/cap (ADR 064/196); emit offline events
+    reaper.ts         // setInterval: presence timeout, request/wake expiry, departed-seat claim release + observer TTL/cap (ADR 064/196); emit offline events; the sweeps that decide things about the WHOLE team (departed-seat release, incident claim-window routing, reaped-acceptance re-route, the ADR 229 backstop) skip an enrolled joiner's team — those are the hub's decisions (ADR 361 §1, 371 §2), and a joiner deciding them from a partial replica writes messages AS hub-resident seats the hub refuses `bound_elsewhere` forever
   footprint/
     classify.ts       // pure sidecar classifier (ADR 242): allowlist match, stack grouping by nearest non-sidecar ancestor, live/orphaned/unattributed — pattern-identical with scripts/perf/seat-footprint.mjs
     scan.ts           // darwin scanners: ps → ProcSample[], sysctl vm.swapusage + vm_stat → MachineSample; throw-on-failure (callers own skip policy), non-darwin throws
@@ -151,7 +151,7 @@ src/
     watcher.ts        // debounced fs.watch over each roster root -> full reconcile (ADR 058)
   telemetry.ts        // minimal OpenTelemetry, off unless an OTLP endpoint is set (ADR 015)
   errors.ts           // MusterdError(code,message) + toHttp()/toFrame(); ServiceUnavailable(sentence) — HTTP 503, code server_error (no protocol code for it), the stable sentence as the message; asMusterdError maps DriverError('unavailable') to it, so HTTP, WS frames and MCP tool errors all say "database unreachable"
-  log.ts              // structured logger (07-conventions format) + redactPath: the request path made safe to log or echo (hard rule 5)
+  log.ts              // structured logger (07-conventions format) + redactPath: the request path made safe to log or echo (hard rule 5); failureFields: a failed call's error plus the undici `.cause` that `String(error)` hides (`fetch failed` → `UND_ERR_SOCKET: other side closed`), used by the sync loops' failure lines
 ```
 
 ## Key exported signatures

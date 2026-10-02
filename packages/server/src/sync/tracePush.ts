@@ -1,6 +1,6 @@
 import { SYNC_TRACE_MAX_BATCH, SyncTracePushResponseSchema } from '@musterd/protocol';
 import type { Ctx } from '../context.js';
-import { log } from '../log.js';
+import { failureFields, log } from '../log.js';
 import { readNodeState } from '../node/state.js';
 import { listActiveTeams } from '../store/teams.js';
 import { advanceSyncTraceCursor, readSyncTraceCursor, unpushedTraceRows } from '../store/trace.js';
@@ -138,7 +138,7 @@ export function startTracePush(ctx: Ctx): () => void {
             msg: 'trace_push_failed',
             team: team.slug,
             cursor: await readSyncTraceCursor(ctx.traceDb, team.id),
-            error: String(error),
+            ...failureFields(error),
           });
         }
       }

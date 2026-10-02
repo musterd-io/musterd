@@ -7,7 +7,7 @@ import {
 } from '@musterd/protocol';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
-import { log } from '../log.js';
+import { failureFields, log } from '../log.js';
 import { readNodeState } from '../node/state.js';
 import { REPLICATED_LEDGER_VERBS, type AuditRow } from '../store/audit.js';
 import { rowToEnvelope } from '../store/messages.js';
@@ -454,7 +454,7 @@ export function startSyncPush(ctx: Ctx): () => void {
         } catch (error) {
           // Offline is the expected failure mode for a laptop; log and retry next tick. Nothing is
           // lost, because the cursor did not move past an unacked batch.
-          log.warn({ msg: 'sync_push_failed', team: team.slug, error: String(error) });
+          log.warn({ msg: 'sync_push_failed', team: team.slug, ...failureFields(error) });
         }
       }
     } finally {

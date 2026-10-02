@@ -54,3 +54,18 @@ export function redactPath(path: string): string {
     })
     .join('/');
 }
+
+/**
+ * The log fields for a failed call. `String(error)` for a network failure is `TypeError: fetch
+ * failed` and nothing more: undici puts the reason (a reset socket, `other side closed`, a connect
+ * timeout) on `.cause`. A joiner's pull failed once a minute for ten minutes behind exactly that
+ * line, with no way to tell a flaky link from a hub that hung up (second-machine run, 2026-10-02).
+ */
+export function failureFields(error: unknown): { error: string; cause?: string } {
+  const cause = error instanceof Error ? error.cause : undefined;
+  if (cause === undefined || cause === null) return { error: String(error) };
+  const code =
+    typeof cause === 'object' && 'code' in cause ? String((cause as { code: unknown }).code) : '';
+  const text = cause instanceof Error ? cause.message : String(cause);
+  return { error: String(error), cause: code ? `${code}: ${text}` : text };
+}

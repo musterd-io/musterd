@@ -1216,13 +1216,17 @@ export async function releaseInFlightClaimsForSeat(
 /**
  * Sweep in-flight lanes whose owner has already soft-left (ADR 196). Clears historical ghosts
  * left by pre-fix `leaveMember` calls; the reaper runs this every tick.
+ *
+ * `skipTeams` names teams this daemon is only a replica of: releasing a lane is a hub-owned
+ * ownership edge (ADR 361 §1), so an enrolled joiner leaves it to the hub's own sweep.
  */
 export async function releaseDepartedSeatClaims(
   db: Driver,
   now: number = Date.now(),
+  skipTeams: ReadonlySet<string> = new Set(),
 ): Promise<{ team_id: string; seat: string; lane: string; state_before: string }[]> {
   return await db.tx(async (t) => {
-    const rows = await t.all<{
+    const found = await t.all<{
       lane: string;
       team_id: string;
       seat: string;
@@ -1232,6 +1236,7 @@ export async function releaseDepartedSeatClaims(
          JOIN members m ON m.team_id = l.team_id AND m.name = l.owner_seat
          WHERE m.left_at IS NOT NULL
            AND l.state IN ${RELEASE_ON_DEPART}`);
+    const rows = found.filter((r) => !skipTeams.has(r.team_id));
     for (const r of rows)
       await releaseLaneWithRecord(t, r.team_id, r.lane, r.seat, 'seat_departed_sweep', now);
     return rows;
