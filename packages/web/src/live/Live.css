@@ -3621,9 +3621,6 @@
   align-items: baseline;
   gap: var(--lc-2);
 }
-.lc-digest__moon {
-  color: var(--lc-lane-ink);
-}
 .lc-digest__title {
   font-family: var(--font-mono, monospace);
   font-size: var(--lc-type-meta);

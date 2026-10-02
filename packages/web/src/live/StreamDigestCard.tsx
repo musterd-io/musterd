@@ -14,9 +14,6 @@ export function StreamDigestCard({ env }: { env: Envelope }) {
   return (
     <button type="button" className="lc-digest" onClick={() => scrollToMessage(env.id)}>
       <span className="lc-digest__head">
-        <span className="lc-digest__moon" aria-hidden="true">
-          ☾
-        </span>
         <span className="lc-digest__title">Overnight</span>
         <span className="lc-digest__by">
           {env.from} · {clock(env.ts)}
