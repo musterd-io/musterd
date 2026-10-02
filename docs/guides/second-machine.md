@@ -51,10 +51,13 @@ Chosen so the joiner needs only two harness sign-ins:
 
 1. **Tailscale**: install the app, sign in to the same account. A member device has full tailnet
    reach, so no ACL change is needed (the cloud seat's tag policy is for machines that are not
-   yours).
-2. **Toolchain**: `brew install node@22 pnpm gh` · `export PATH="/opt/homebrew/opt/node@22/bin:$PATH"`
-   (put it in your shell rc — the service plists embed whichever `node` installs them, and a Node
-   20 install crashloops the daemon) · `pnpm setup` and reopen the shell.
+   yours). **Then turn on its CLI** — the Mac app does not put `tailscale` on PATH: menu-bar
+   Tailscale → Settings → _Install CLI_. `tailscale status` in a new Terminal must list the hub.
+2. **Toolchain**: Node 22 from the **nodejs.org macOS installer (.pkg)**, not Homebrew (see
+   Findings — on a macOS without a bottle, `brew install node@22` compiles for an hour). pnpm from
+   its standalone installer, which needs no sudo: `curl -fsSL https://get.pnpm.io/install.sh | sh -`.
+   `brew install gh`. The service plists embed whichever `node` installs them, and a Node 20
+   install crashloops the daemon.
 3. **Sign-ins**: `gh auth login` · `claude` (Claude Code, your Max account) · `codex` (OpenAI).
    Grok / OpenCode only if a seat of that harness moves here.
 4. **Stay awake**: System Settings → Battery → Options → _Prevent automatic sleeping on power
@@ -62,15 +65,17 @@ Chosen so the joiner needs only two harness sign-ins:
 
 ## The script — `bootstrap.sh machine`
 
+Two commands — the repo is private, so the download goes through `gh`, not a raw URL:
+
 ```sh
-curl -fsSLo ~/bootstrap.sh https://raw.githubusercontent.com/SandRiseStudio/musterd/main/deploy/second-machine/bootstrap.sh
+gh api repos/SandRiseStudio/musterd/contents/deploy/second-machine/bootstrap.sh -H "Accept: application/vnd.github.raw" > ~/bootstrap.sh
 bash ~/bootstrap.sh machine           # MUSTERD_HUB=nicks-laptop MUSTERD_TEAM=revive are the defaults
 ```
 
 Every step is a no-op once done, so a failure is fixed and the script re-run. In order:
 
 1. **Runtime** — clones `SandRiseStudio/musterd` to `~/.musterd/runtime` on `main`, builds it,
-   links `musterd` onto PATH. The joiner must run the hub's build: the sync wire format and the
+   writes a `musterd` shim into pnpm's global bin dir. The joiner must run the hub's build: the sync wire format and the
    schema are per-build, and a peer on a newer build stops the fold (`sync_fold_newer_build`).
    Autorefresh (step 2) keeps it on `main` from then on, as on the hub.
 2. **Services** — `musterd service install` (daemon, loopback), `--wake` (the actuator that wakes
@@ -83,7 +88,8 @@ Every step is a no-op once done, so a failure is fixed and the script re-run. In
 4. **Enrol** — stops here the first time and tells you to mint the invite **on the hub**:
 
    ```sh
-   # hub, from ~/musterd/revive (the invite is minted by the daemon the team was created on, ADR 376)
+   # hub, as nick, from your own Workspace (admin-only; minted by the daemon the team was created on, ADR 376)
+   cd ~/musterd/revive/agents/nick
    musterd node invite --label "air-2"            # → msinv_…  single use, 15 minutes
    # joiner
    MUSTERD_INVITE=msinv_… bash ~/bootstrap.sh machine
@@ -178,3 +184,14 @@ Append; never rewrite. Dated, with what was measured and what was done about it.
 - **2026-10-02 (before the run)** — the drain estimate: 156,557 hub events ÷ 500 per 60 s tick =
   5.2 h to the first wake. Fixed in `sync/pull.ts` (PR #1963) before enrolling: a tick drains.
   The measured first-drain time on the Air goes here.
+- **2026-10-02 (the run)** — four setup gaps, each now in the steps above or the script:
+  1. `brew install node@22` ran 30+ min on Air 2 (compiling — no bottle for that macOS build) and,
+     interrupted, left a broken `node` on PATH (`Library not loaded … /opt/homebrew/…`). Fix:
+     `brew uninstall --force --ignore-dependencies node@22 node`, then the nodejs.org `.pkg`.
+  2. `npm install -g pnpm` failed with permission denied, even under sudo (a root-owned `~/.npm`
+     from an earlier sudo). The standalone pnpm installer sidesteps both.
+  3. The Tailscale Mac app ships no CLI on PATH; the script's preflight now says how to add it.
+  4. pnpm 12 removed `pnpm link --global`, so the first run built everything and then died before
+     enrolling. The script now writes a two-line shim instead of linking.
+  Also: the repo went private on 2026-10-02, so the `raw.githubusercontent.com` download 404s
+  unauthenticated — fetch through `gh api` (above).

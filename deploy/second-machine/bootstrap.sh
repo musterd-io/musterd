@@ -31,6 +31,9 @@ CONFIG="$HOME/.musterd/config.json"
 LOG="$HOME/.musterd/second-machine.log"
 mkdir -p "$HOME/.musterd"
 
+ADMIN_DIR="$HOME/.musterd/second-machine-admin"
+# The human's member Workspace on this machine (ADR 447: ~/musterd/<team>/<repo>/<human>).
+human_ws() { ls -d "$TEAM_HOME"/*/"$MUSTERD_HUMAN" 2>/dev/null | head -1; }
 log() { printf '%s second-machine: %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOG" || true; }
 die() { log "✗ $*"; exit 1; }
 local_health() { curl -fsS -m 2 "http://127.0.0.1:${MUSTERD_HUB_PORT}/health" >/dev/null 2>&1; }
@@ -42,7 +45,7 @@ wait_local() {
 # ── preflight — what a human must have done first (the guide's "Before the script") ─────────
 preflight() {
   [ "$(id -u)" -ne 0 ] || die "run as yourself, never as root"
-  command -v tailscale >/dev/null || die "tailscale is not on PATH — install the Tailscale app and sign in"
+  command -v tailscale >/dev/null || die "tailscale is not on PATH — the Mac app does not add its CLI: menu-bar Tailscale → Settings → Install CLI (or: sudo ln -sf /Applications/Tailscale.app/Contents/MacOS/Tailscale /usr/local/bin/tailscale)"
   tailscale status >/dev/null 2>&1 || die "tailscale is not up — open the app and sign in to the same tailnet as the hub"
   local major
   major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
@@ -66,10 +69,18 @@ step_runtime() {
     log "cloning $WORK_REPO → $RUNTIME"
     gh repo clone "$WORK_REPO" "$RUNTIME" -- --branch "$MUSTERD_RUNTIME_REF"
   fi
-  if ! command -v musterd >/dev/null || [ ! -f "$RUNTIME/packages/cli/dist/bin.js" ]; then
+  if [ ! -f "$RUNTIME/packages/cli/dist/bin.js" ]; then
     log "building the runtime (first time: minutes — better-sqlite3 compiles)"
     ( cd "$RUNTIME" && pnpm install --frozen-lockfile && pnpm -r build ) >>"$LOG" 2>&1
-    ( cd "$RUNTIME/packages/cli" && pnpm link --global ) >>"$LOG" 2>&1
+  fi
+  if ! command -v musterd >/dev/null; then
+    # A plain shim in pnpm's global bin dir, not `pnpm link --global`: pnpm 12 removed that flag
+    # (second-machine run, 2026-10-02), and the shim is all the link ever amounted to.
+    local bin="${PNPM_HOME:-$HOME/Library/pnpm}"
+    mkdir -p "$bin"
+    printf '#!/bin/sh\nexec node "%s/packages/cli/dist/bin.js" "$@"\n' "$RUNTIME" >"$bin/musterd"
+    chmod +x "$bin/musterd"
+    export PATH="$bin:$PATH"
     command -v musterd >/dev/null || die "\`musterd\` is still not on PATH — run \`pnpm setup\`, reopen the shell, and re-run"
   fi
   log "runtime: $(git -C "$RUNTIME" rev-parse --short HEAD) · $(musterd --version 2>/dev/null | head -1)"
@@ -93,21 +104,39 @@ step_team() {
     mkdir -p "$(dirname "$TEAM_HOME")"
     gh repo clone "$ROSTER_REPO" "$TEAM_HOME"
   fi
-  ( cd "$TEAM_HOME" && musterd team create "$MUSTERD_TEAM" --as "$MUSTERD_HUMAN" ) >>"$LOG" 2>&1 \
-    || log "team create: already present — continuing"
+  # Create the team on THIS daemon, under the hub's slug, with the human as its first admin. It runs
+  # in a scratch folder: `team create` binds the folder it runs in, and the team root refuses a
+  # binding by position (ADR 447). Identity is the folder since ADR 442 — there is no `--as`.
+  if ! curl -fsS -m 2 "http://127.0.0.1:${MUSTERD_HUB_PORT}/teams/$MUSTERD_TEAM" >/dev/null 2>&1 \
+    && [ ! -f "$ADMIN_DIR/.musterd/binding.json" ]; then
+    mkdir -p "$ADMIN_DIR"
+    ( cd "$ADMIN_DIR" && musterd team create "$MUSTERD_TEAM" --member "$MUSTERD_HUMAN" ) 2>&1 | tee -a "$LOG"
+    [ -f "$ADMIN_DIR/.musterd/binding.json" ] || die "team create did not bind $ADMIN_DIR — read its output above"
+  fi
   # Declare the clone as this daemon's roster root (ADR 058). `team export` records this, but
   # refuses a folder that already holds team.toml — which every clone does (cloud-seat finding 4).
   # No CLI sets it on an existing home yet, so this edits config.json and restarts the daemon.
   node -e '
     const fs = require("fs"); const [p, team, home] = process.argv.slice(1);
-    const c = JSON.parse(fs.readFileSync(p, "utf8")); c.rosterHome = c.rosterHome || {};
+    const c = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : {};
+    c.rosterHome = c.rosterHome || {};
     if (c.rosterHome[team] !== home) {
       c.rosterHome[team] = home;
       fs.writeFileSync(p, JSON.stringify(c, null, 2) + "\n"); console.log("roster root declared");
     }' "$CONFIG" "$MUSTERD_TEAM" "$TEAM_HOME" | tee -a "$LOG"
-  musterd service restart >>"$LOG" 2>&1
+  # --force: the only session on a fresh joiner is its own wake actuator (second-machine run, 2026-10-02).
+  musterd service restart --force >>"$LOG" 2>&1
   wait_local
   log "team $MUSTERD_TEAM: roster root $TEAM_HOME"
+  # The human's own Workspace here (ADR 447): every later admin act — enrol, key, provisioning a
+  # seat, residency — resolves its identity from this folder. `--rotate` because `team create`
+  # already minted this human a credential here, and re-issuing it otherwise asks on the TTY —
+  # where the tee hides the question and the run hangs (second-machine run, 2026-10-02).
+  if [ -z "$(human_ws)" ]; then
+    ( cd "$RUNTIME" && musterd human "$MUSTERD_HUMAN" --team "$MUSTERD_TEAM" --rotate ) 2>&1 | tee -a "$LOG"
+  fi
+  [ -n "$(human_ws)" ] || die "no Workspace for $MUSTERD_HUMAN under $TEAM_HOME/*/ — read the output above"
+  log "human Workspace: $(human_ws)"
 }
 
 # ── 4. enrol at the hub (once; ~/.musterd/node.json is the proof) ──────────────────────────
@@ -116,8 +145,9 @@ step_enrol() {
     log "already enrolled for $MUSTERD_TEAM"
     return 0
   fi
-  [ -n "${MUSTERD_INVITE:-}" ] || die "not enrolled yet. On the HUB, from its team home: \`musterd node invite --label \"$(hostname -s)\"\` → then re-run with MUSTERD_INVITE=msinv_… (single use, 15 minutes)"
-  ( cd "$TEAM_HOME" && musterd node join "$HUB_URL" "$MUSTERD_INVITE" ) | tee -a "$LOG"
+  [ -n "${MUSTERD_INVITE:-}" ] || die "not enrolled yet. On the HUB, from your own Workspace there: \`musterd node invite --label \"$(hostname -s)\"\` → then re-run with MUSTERD_INVITE=msinv_… (single use, 15 minutes)"
+  ( cd "$(human_ws)" && musterd node join "$HUB_URL" "$MUSTERD_INVITE" ) 2>&1 | tee -a "$LOG"
+  grep -q "\"$MUSTERD_TEAM\"" "$HOME/.musterd/node.json" 2>/dev/null || die "node join did not enrol — read its output above (an expired invite needs a fresh one from the hub)"
   log "enrolled at $HUB_URL. NOW ON THE HUB, as $MUSTERD_HUMAN: \`musterd node trust <this machine's node id>\` — until then every push from here is refused 403 bound_elsewhere (ADR 358/360)"
 }
 
@@ -126,7 +156,7 @@ step_key() {
   if [ "$(jq -r --arg t "$MUSTERD_TEAM" '.agentKeys[$t] // empty' "$CONFIG" 2>/dev/null)" != "" ]; then
     return 0
   fi
-  ( cd "$TEAM_HOME" && musterd team agent-key --rotate --yes ) >>"$LOG" 2>&1
+  ( cd "$(human_ws)" && musterd team agent-key --rotate --yes ) >>"$LOG" 2>&1
   log "minted this daemon's team agent key (a fresh joiner holds no seats, so nothing was invalidated)"
 }
 
@@ -137,7 +167,7 @@ step_seat() {
   log "seat $name [$harness] — on the HUB first, as $MUSTERD_HUMAN: \`musterd residency off --seat $name\` and \`musterd node unbind $name\` (an agent seat lives on one machine, ADR 358 §3)"
   # From the runtime checkout: a worktree lands under ~/musterd/<team>/<repo>/<name> (ADR 447) and
   # the harness set is wired through the reconcile engine (ADR 491) — no hand edits.
-  ( cd "$RUNTIME" && musterd agent "$name" --harness "$harness" --as "$MUSTERD_HUMAN" ) | tee -a "$LOG"
+  ( cd "$(human_ws)" && musterd agent "$name" --harness "$harness" ) 2>&1 | tee -a "$LOG"
   local ws
   ws="$(ls -d "$TEAM_HOME"/*/"$name" 2>/dev/null | head -1)"
   [ -n "$ws" ] && [ -f "$ws/.musterd/binding.json" ] || die "no Workspace for $name under $TEAM_HOME/*/ — read the agent output above"
@@ -155,7 +185,7 @@ step_seat() {
   fi
   ( cd "$ws" && musterd init --refresh-hooks ) >>"$LOG" 2>&1 || log "init --refresh-hooks failed in $ws"
   ( cd "$ws" && musterd wire ) >>"$LOG" 2>&1 || log "musterd wire refused in $ws — the actuator may poll with a credential the wake endpoint rejects (finding 14)"
-  ( cd "$ws" && musterd residency on --seat "$name" --harness "$harness" --flow auto --as "$MUSTERD_HUMAN" ) | tee -a "$LOG" \
+  ( cd "$(human_ws)" && musterd residency on --seat "$name" --workspace "$ws" --harness "$harness" --flow auto ) 2>&1 | tee -a "$LOG" \
     || die "residency on refused — $name is not wakeable here until it succeeds"
   log "verify: (cd $ws && musterd harness status) — $harness selected AND available, every fragment settled. Then open it once: \`musterd $name\`"
 }
