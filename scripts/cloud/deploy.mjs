@@ -45,50 +45,29 @@ const MANIFEST_TYPES = [
 ].join(', ');
 
 /**
- * Copy one tag from the serving app's repository into the migrate app's, unchanged: a Fly machine
- * pulls only from its own app's repository (2026-10-02, second deploy: MANIFEST_UNKNOWN from the
- * migrate app for a tag the serving app's repository holds). Each blob is cross-repo MOUNTED, and
- * copied byte-for-byte only if the registry refuses the mount. The manifest is put back verbatim,
- * so both apps run the same digest.
+ * Wait until the registry serves the tag `fly deploy --build-only --push` just pushed. The push lands
+ * after flyctl returns (2026-10-02: the tag 404'd right after the build and answered 200 minutes
+ * later), and a machine created before it lands cannot pull its image.
  */
-async function copyImage(token, from, to, tag) {
-  const auth = { authorization: `Basic ${Buffer.from(`x:${token}`).toString('base64')}` };
-  const got = await fetch(`${REGISTRY}/${from}/manifests/${tag}`, {
-    headers: { ...auth, accept: MANIFEST_TYPES },
-  });
-  if (!got.ok) throw new Error(`reading ${from}:${tag} → ${got.status}`);
-  const raw = Buffer.from(await got.arrayBuffer());
-  const manifest = JSON.parse(raw.toString('utf8'));
-  for (const { digest } of [manifest.config, ...manifest.layers]) {
-    const mount = await fetch(
-      `${REGISTRY}/${to}/blobs/uploads/?mount=${encodeURIComponent(digest)}&from=${from}`,
-      { method: 'POST', headers: auth },
-    );
-    if (mount.status === 201) continue;
-    if (mount.status !== 202) throw new Error(`mounting ${digest} → ${mount.status}`);
-    const blob = await fetch(`${REGISTRY}/${from}/blobs/${digest}`, { headers: auth });
-    if (!blob.ok) throw new Error(`reading blob ${digest} → ${blob.status}`);
-    const location = new URL(mount.headers.get('location'), REGISTRY);
-    location.searchParams.set('digest', digest);
-    const put = await fetch(location, {
-      method: 'PUT',
-      headers: { ...auth, 'content-type': 'application/octet-stream' },
-      body: Buffer.from(await blob.arrayBuffer()),
-    });
-    if (put.status !== 201) throw new Error(`uploading ${digest} → ${put.status}`);
+async function waitForTag(token, repo, tag) {
+  const headers = {
+    authorization: `Basic ${Buffer.from(`x:${token}`).toString('base64')}`,
+    accept: MANIFEST_TYPES,
+  };
+  for (let waited = 0; waited <= 300; waited += 5) {
+    const res = await fetch(`${REGISTRY}/${repo}/manifests/${tag}`, { method: 'HEAD', headers });
+    if (res.ok) return waited;
+    if (res.status !== 404) throw new Error(`registry answered ${res.status} for ${repo}:${tag}`);
+    await new Promise((r) => setTimeout(r, 5000));
   }
-  const put = await fetch(`${REGISTRY}/${to}/manifests/${tag}`, {
-    method: 'PUT',
-    headers: { ...auth, 'content-type': manifest.mediaType },
-    body: raw,
-  });
-  if (put.status !== 201) throw new Error(`writing ${to}:${tag} → ${put.status}`);
+  throw new Error(`${repo}:${tag} never appeared in the registry (waited 300 s)`);
 }
 
 /**
- * Create the one-shot migrate machine through the Machines API, on the image {@link copyImage} put
- * in the migrate app's own repository (`fly machine run` resolves images through flyctl's app
- * lookup and cannot be pointed at it reliably). The Fly token never leaves this process.
+ * Create the one-shot migrate machine through the Machines API, on the SERVING app's image: a
+ * machine in one app pulls another app's image in the same org (verified 2026-10-02), so migrate
+ * and serve run one digest. flyctl's `fly machine run` looks the image up inside the migrate app
+ * and refuses it, so the API is called directly. The Fly token never leaves this process.
  */
 async function createMigrateMachine(token, image) {
   const res = await fetch(`https://api.machines.dev/v1/apps/${MIGRATE_APP}/machines`, {
@@ -112,17 +91,19 @@ async function createMigrateMachine(token, image) {
   return body.id;
 }
 
-/** The exit code a stopped one-shot machine reported, from its event log. */
+/**
+ * The exit code a stopped one-shot machine reported, from its `exit` event. Fly omits a zero
+ * `exit_code` (verified 2026-10-02: exit 3 carries `exit_code: 3`, exit 0 carries none), so an exit
+ * event without one is a clean exit. No exit event at all is null — the machine never ran.
+ */
 function exitCodeOf(machineId) {
   const machines = JSON.parse(
     run('fly', ['machines', 'list', '--app', MIGRATE_APP, '--json'], { capture: true }),
   );
   const m = machines.find((x) => x.id === machineId);
-  for (const ev of m?.events ?? []) {
-    const code = ev?.request?.exit_event?.exit_code;
-    if (typeof code === 'number') return code;
-  }
-  return null;
+  const exit = (m?.events ?? []).find((ev) => ev?.type === 'exit');
+  if (!exit) return null;
+  return exit.request?.exit_event?.exit_code ?? 0;
 }
 
 try {
@@ -149,8 +130,9 @@ try {
 
   step(2, `migrate in ${MIGRATE_APP}`);
   const token = run('fly', ['auth', 'token'], { capture: true }).trim();
-  await copyImage(token, APP, MIGRATE_APP, label);
-  const id = await createMigrateMachine(token, `registry.fly.io/${MIGRATE_APP}:${label}`);
+  const waited = await waitForTag(token, APP, label);
+  if (waited) console.log(`image appeared in the registry after ${waited} s`);
+  const id = await createMigrateMachine(token, image);
   console.log(`migrate machine ${id}`);
   try {
     run('fly', [
