@@ -52,7 +52,8 @@ const POLICY_FLAGS_USAGE =
   '[--lane both|interrupt|batched] [--cooldown <15m>] [--hourly-cap <n>] [--attempt-cap <n>] ' +
   '[--tool-policy reply-only|seat-policy] [--timeout <5m>] [--work-timeout <30m>] ' +
   '[--flow manual|auto] [--convene-huddles on|off] [--max-turns <n>] [--budget <usd>] ' +
-  '[--transcript-max <MiB, fractions OK>]';
+  '[--transcript-max <MiB, fractions OK>] [--dream on|off] [--dream-nightly <1-3>] ' +
+  '[--dream-budget <usd>]';
 
 /**
  * The remediation every drift line points at. It carries `--as <admin>` because enrollment is an
@@ -230,6 +231,21 @@ export function collectPolicyFlags(parsed: Parsed): ResidencyPolicyOverride | un
     out['budget_usd'] = n;
   }
   num('transcript-max', 'transcript_max_bytes', 1_048_576); // MiB → bytes
+  // ADR 494: may an idle seat dream outside working hours, how often a night, at what ceiling.
+  const dream = flagStr(parsed.flags, 'dream');
+  if (dream !== undefined) {
+    if (dream !== 'on' && dream !== 'off')
+      throw new CliError(`--dream wants on|off (got "${dream}")`, 2);
+    out['dream_enabled'] = dream === 'on';
+  }
+  num('dream-nightly', 'dream_nightly_wakes');
+  const dreamBudget = flagStr(parsed.flags, 'dream-budget');
+  if (dreamBudget !== undefined) {
+    const n = Number(dreamBudget);
+    if (!Number.isFinite(n))
+      throw new CliError(`--dream-budget wants dollars (got "${dreamBudget}")`, 2);
+    out['dream_budget_usd'] = n;
+  }
   if (parsed.flags['reset-policy'] === true) {
     if (Object.keys(out).length > 0)
       throw new CliError('--reset-policy clears every knob — drop the other policy flags', 2);
@@ -256,6 +272,15 @@ export function renderPolicy(
   ];
   if (policy.convene_huddles) bits.push(`convenes huddles${star('convene_huddles')}`);
   else if (override && override.convene_huddles === false) bits.push('refuses huddle convene*');
+  if (policy.dream_enabled) {
+    const ceiling =
+      policy.dream_budget_usd !== undefined
+        ? ` ≤$${policy.dream_budget_usd}${star('dream_budget_usd')}`
+        : '';
+    bits.push(
+      `dreams ${policy.dream_nightly_wakes}/night${star('dream_enabled') || star('dream_nightly_wakes')}${ceiling}`,
+    );
+  }
   if (policy.max_turns !== undefined) bits.push(`${policy.max_turns} turns${star('max_turns')}`);
   if (policy.budget_usd !== undefined)
     bits.push(`budget $${policy.budget_usd}${star('budget_usd')}`);

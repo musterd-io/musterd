@@ -18,6 +18,7 @@ import type {
 } from '../backend.js';
 import type { AgentLoopEngine, EngineTurn } from '../engine.js';
 import { anthropicEngine } from '../engines/anthropic.js';
+import { expectedProvenance } from '../pinnedBin.js';
 import { nativeMcpConfig, openNativeBridge, type NativeBridge } from './nativeBridge.js';
 
 /**
@@ -215,9 +216,10 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
           `⚡ woke ${seat}: invoke→roster ${(wakeLatencyMs / 1000).toFixed(1)}s, ` +
             `session=fresh provenance=${verified.provenance ?? 'unknown'} (native)`,
         );
-        if (verified.provenance !== 'wake') {
+        if (verified.provenance !== expectedProvenance(spec.order)) {
           ctx.log(
-            `note: occupancy attests provenance "${verified.provenance ?? 'none'}", not "wake" — ` +
+            `note: occupancy attests provenance "${verified.provenance ?? 'none'}", not ` +
+              `"${expectedProvenance(spec.order)}" — ` +
               `unexpected for an in-process bridge (config drift?)`,
           );
         }

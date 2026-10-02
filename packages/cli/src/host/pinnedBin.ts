@@ -204,3 +204,12 @@ export function wakeEnv(
   env['PATH'] = base['PATH'] ? `${pinnedDir}:${base['PATH']}` : pinnedDir;
   return env;
 }
+
+/**
+ * The provenance a woken session's presence should carry: `dream` for a dream order (the server
+ * derives it from the lease, ADR 494 §4), else `wake`. Only the verification log reads it — success
+ * keys on the lease match, never on the word.
+ */
+export function expectedProvenance(order: { derivation?: string | undefined }): 'wake' | 'dream' {
+  return order.derivation === 'dream' ? 'dream' : 'wake';
+}
