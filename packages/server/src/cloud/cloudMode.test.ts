@@ -13,7 +13,7 @@ import { createServer } from '../index.js';
 import { addMember, mintCredential } from '../store/members.js';
 import type { TeamRow } from '../store/rows.js';
 import { createTeam } from '../store/teams.js';
-import { bootCloud, hostRequest, stubCloudEnv } from './testing.js';
+import { bootCloud, bootCloudWithOutage, hostRequest, stubCloudEnv } from './testing.js';
 import { testIssuer } from './testIssuer.js';
 
 /** A human seat's real credential (`mscr_`) — what authenticates a person on every route. */
@@ -266,32 +266,6 @@ describe('cloud mode — a team host reaches only its own team (1C task 6, spec 
 describe('cloud mode — /health says ok or one stable sentence (1C task 7, spec §5.5 / §7)', () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  /** A cloud server whose coordination database can be pulled out from under it. */
-  async function bootWithOutage() {
-    stubCloudEnv();
-    const seed = await openTestDriver('pglite');
-    await openTestDriver('pglite', { store: 'trace' });
-    const pools = (await testCloudPools()).factories;
-    let down = false;
-    const refused = () =>
-      Object.assign(new Error('connect ECONNREFUSED 10.0.0.1:5432'), { code: 'ECONNREFUSED' });
-    const main = (u: string) => {
-      const p = pools.main(u);
-      return {
-        connect: () => (down ? Promise.reject(refused()) : p.connect()),
-        end: () => p.end(),
-      };
-    };
-    const s = createServer({ cloudPools: { ...pools, main }, rosterRoots: [], port: 0 });
-    await s.listen();
-    return {
-      s,
-      seed,
-      url: `http://127.0.0.1:${s.port}`,
-      setDown: (v: boolean) => void (down = v),
-    };
-  }
-
   it('is exactly {ok:true} when the databases answer — no path, counts, or build on Cloud', async () => {
     const { s, url } = await bootCloud();
     try {
@@ -304,7 +278,7 @@ describe('cloud mode — /health says ok or one stable sentence (1C task 7, spec
   });
 
   it('database down: /health is 503 "database unreachable"; recovery is automatic', async () => {
-    const { s, url, setDown } = await bootWithOutage();
+    const { s, url, setDown } = await bootCloudWithOutage();
     try {
       setDown(true);
       const down = await fetch(url + '/health');
@@ -320,7 +294,7 @@ describe('cloud mode — /health says ok or one stable sentence (1C task 7, spec
   });
 
   it('database down: a team route is a 503 with the same sentence, never a 500 or stale data', async () => {
-    const { s, seed, url, setDown } = await bootWithOutage();
+    const { s, seed, url, setDown } = await bootCloudWithOutage();
     try {
       const revive = await createTeam(seed, { slug: 'revive' });
       const token = await humanCredential(seed, revive, 'ada');

@@ -33,9 +33,13 @@ export function startReaper(ctx: Ctx): () => void {
   const handle = setInterval(() => {
     if (running) return;
     running = true;
-    void tick().finally(() => {
-      running = false;
-    });
+    // A failed tick is logged and the next one runs: on Postgres any store call can reject, and an
+    // unhandled rejection from this loop exited the server (lane 01M3ZC3EXN).
+    void tick()
+      .catch((err: unknown) => log.warn({ msg: 'reaper_tick_failed', err: String(err) }))
+      .finally(() => {
+        running = false;
+      });
   }, ctx.config.reaperIntervalMs);
   handle.unref?.();
   return () => clearInterval(handle);

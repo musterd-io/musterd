@@ -958,12 +958,14 @@ export const EXPIRED_SWEEP_FIRST_DELAY_MS = 60 * 1000;
  */
 export function startExpiredMemberSweep(
   db: Driver,
-  onPass: (swept: SweptMember[]) => void,
+  onPass: (swept: SweptMember[]) => void | Promise<void>,
   onError: (err: unknown) => void,
 ): () => void {
   const pass = async () => {
     try {
-      onPass(await sweepExpiredMembers(db));
+      // Awaited, so a follow-up that rejects (the daemon's revoke) reaches onError instead of
+      // escaping as an unhandled rejection that exits the server (lane 01M3ZC3EXN).
+      await onPass(await sweepExpiredMembers(db));
     } catch (err) {
       onError(err);
     }
