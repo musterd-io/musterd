@@ -21,6 +21,7 @@ import {
 } from '../store/review.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import { getTeamBySlug } from '../store/teams.js';
+import { joinerEnrollment } from '../sync/claim.js';
 import { routeEnvelope } from './route.js';
 
 /**
@@ -314,6 +315,12 @@ export async function sweepReapedAcceptances(ctx: Ctx, ref: TeamRef): Promise<st
   // rather than making every caller carry a row it does not have.
   const team = await getTeamBySlug(ctx.db, ref.slug);
   if (!team) return [];
+  // An enrolled JOINER never judges a departure (the ADR 371 §2 rule `handleBlockedReport` follows).
+  // Absence here means only "not resident on this machine": a fresh joiner mid-drain saw every
+  // reviewer as gone, re-routed their acceptances AS them, and the hub refused the batch
+  // `bound_elsewhere` — wedging the machine's every later push (second-machine run, 2026-10-02).
+  // Presence replicates to the hub, and the hub's own reaper re-routes.
+  if (await joinerEnrollment(ctx.db, team.id, team.slug)) return [];
   const out: string[] = [];
   const holders = new Set<string>();
   for (const lane of await listLanes(ctx.db, team.id, team.slug)) {

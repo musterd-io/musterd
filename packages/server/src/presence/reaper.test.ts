@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { makeEnvelope } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -5,10 +8,11 @@ import { resolveConfig, type ResolvedConfig } from '../config.js';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
+import { saveNodeEnrollment } from '../node/state.js';
 import { appendAudit, listAudit } from '../store/audit.js';
 import { openLane, updateLane } from '../store/lanes.js';
 import { addMember } from '../store/members.js';
-import { insertMessage } from '../store/messages.js';
+import { insertMessage, localNodeForTeam } from '../store/messages.js';
 import { attach, presenceById, release } from '../store/presence.js';
 import { createRequest } from '../store/requests.js';
 import {
@@ -501,6 +505,33 @@ withDrivers('reaper', (o) => {
       await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs * 20);
 
       expect(await rerouted(team.id)).toHaveLength(1);
+    });
+
+    it('an enrolled joiner never re-routes: the departure is the hub’s to judge', async () => {
+      // Second-machine run, 2026-10-02: a fresh joiner mid-drain saw every reviewer as absent (none
+      // of them is resident there), re-routed eleven old acceptances AS those reviewers, and the hub
+      // refused the batch `bound_elsewhere` — wedging every later push from the machine.
+      const dir = mkdtempSync(join(tmpdir(), 'musterd-reaper-joiner-'));
+      process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
+      try {
+        const { team } = await laneHeldByADepartedSeat();
+        const { id: nodeId } = await localNodeForTeam(db, team.id);
+        saveNodeEnrollment({
+          team: team.slug,
+          hub_url: 'http://hub.invalid:4849',
+          node_id: nodeId,
+          credential: 'msnode_test',
+          enrolled_at: 1,
+        });
+
+        stop = startReaper(ctx);
+        await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs * 2);
+
+        expect(await rerouted(team.id)).toHaveLength(0);
+      } finally {
+        delete process.env['MUSTERD_NODE_STATE'];
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 });
