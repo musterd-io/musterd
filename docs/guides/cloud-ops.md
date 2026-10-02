@@ -13,7 +13,7 @@
 | Team endpoints | `*.musterd.dev` → Cloudflare (proxied) → Fly app `musterd-cloud` | Wildcard CNAME to `musterd-cloud.fly.dev`; Fly holds a Let's Encrypt `*.musterd.dev` certificate issued by DNS-01 (`_acme-challenge` CNAME, DNS only). IPs: shared v4, dedicated v6. |
 | Serving app | Fly `musterd-cloud`, org `personal` | Holds the **app** and **operator** database URLs only. It can never change the schema. |
 | Migrate app | Fly `musterd-cloud-migrate` | No machines between deploys. Holds the **owner** URLs; the deploy runs the migrate step there before the rollout (spec §6). |
-| Database | Neon project `musterd-staging`, aws-us-east-1, Postgres 17, **free tier** | Databases `musterd` and `musterd_trace`. Login users `musterd_app_login` / `musterd_operator_login`, made in SQL so they are not in `neon_superuser`. Free tier suspends compute after 5 idle minutes, so the first request after a pause is slow. nick's call (2026-10-02): free tier for staging, and ask again before the increment-4 cutover. |
+| Database | Neon project `musterd-cloud` (`long-thunder-03987236`), aws-us-east-1, Postgres 17, **Launch plan** (nick, 2026-10-02), 7 days of point-in-time restore | Databases `musterd` and `musterd_trace`. Login users `musterd_app_login` / `musterd_operator_login`, made in SQL so they are not in `neon_superuser`. URLs use `sslmode=verify-full`. Fly's 15-second `/health` check keeps the compute awake. |
 | Staging console issuer | Key: `~/.musterd/cloud/staging-issuer.jwk` (mode 600, nick's laptop). JWKS: `https://musterd-staging-jwks.nick-sanders-a.workers.dev/jwks` (worker `workers/staging-jwks`) | Stands in for increment 2's console. It signs the tokens that create teams on staging. Retired by lane `01M3Z43V58`. |
 
 `musterd.io`, `musterd.ai` and `musterd.build` are on the same Cloudflare account and are not used
@@ -40,7 +40,9 @@ appearing on a command line:
 
 ```sh
 (umask 077; mkdir -p ~/.musterd/cloud && pbpaste > ~/.musterd/cloud/neon-api.key)
-node scripts/cloud/provision-neon.mjs      # from a checkout with `pnpm install` done
+chmod 600 ~/.musterd/cloud/neon-api.key   # the script refuses a key file others can read
+cd <a musterd checkout with `pnpm install` done>
+node scripts/cloud/provision-neon.mjs
 ```
 
 It finds or creates the Neon project, the two databases and the two login users, then stages the

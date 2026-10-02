@@ -8,7 +8,8 @@
  *   ~/.musterd/cloud/neon-api.key mode 600 — never typed on a command line)
  *
  * What it does, in order:
- *   1. Finds or creates the Neon project (default `musterd-staging`, aws-us-east-1, Postgres 17).
+ *   1. Finds or creates the Neon project (default `musterd-cloud`, aws-us-east-1, Postgres 17,
+ *      7 days of point-in-time restore — nick moved the org to the Launch plan on 2026-10-02).
  *   2. Ensures the `musterd` and `musterd_trace` databases, as the project's owner login.
  *   3. Creates the three NOLOGIN roles of `db/pg/tenancy.ts` if the ladder has not yet, and two
  *      login users made in SQL — `musterd_app_login` IN ROLE musterd_app, `musterd_operator_login`
@@ -21,8 +22,8 @@
  *
  * Prints names, counts and ids — never a URL or a password.
  *
- * Env: NEON_PROJECT (musterd-staging), NEON_REGION (aws-us-east-1), FLY_APP (musterd-cloud),
- * FLY_MIGRATE_APP (musterd-cloud-migrate).
+ * Env: NEON_PROJECT (musterd-cloud), NEON_ORG_ID (the key's only org), NEON_REGION
+ * (aws-us-east-1), FLY_APP (musterd-cloud), FLY_MIGRATE_APP (musterd-cloud-migrate).
  */
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -33,7 +34,7 @@ import { join } from 'node:path';
 
 const pg = createRequire(new URL('../../packages/server/package.json', import.meta.url))('pg');
 
-const PROJECT = process.env.NEON_PROJECT ?? 'musterd-staging';
+const PROJECT = process.env.NEON_PROJECT ?? 'musterd-cloud';
 const REGION = process.env.NEON_REGION ?? 'aws-us-east-1';
 const FLY_APP = process.env.FLY_APP ?? 'musterd-cloud';
 const FLY_MIGRATE_APP = process.env.FLY_MIGRATE_APP ?? 'musterd-cloud-migrate';
@@ -66,12 +67,30 @@ async function neon(method, path, body) {
   return json;
 }
 
+/** The Neon organization projects live in: NEON_ORG_ID, else the key's only organization. */
+async function orgId() {
+  if (process.env.NEON_ORG_ID) return process.env.NEON_ORG_ID;
+  const { organizations = [] } = await neon('GET', '/users/me/organizations');
+  if (organizations.length === 1) return organizations[0].id;
+  if (organizations.length === 0) return null;
+  throw new Error(`the key reaches ${organizations.length} Neon organizations; set NEON_ORG_ID`);
+}
+
 async function findOrCreateProject() {
-  const { projects } = await neon('GET', `/projects?search=${encodeURIComponent(PROJECT)}`);
+  const org = await orgId();
+  const scope = org ? `&org_id=${encodeURIComponent(org)}` : '';
+  const { projects } = await neon('GET', `/projects?search=${encodeURIComponent(PROJECT)}${scope}`);
   const found = projects.find((p) => p.name === PROJECT);
   if (found) return { id: found.id, created: false };
   const made = await neon('POST', '/projects', {
-    project: { name: PROJECT, region_id: REGION, pg_version: 17 },
+    project: {
+      name: PROJECT,
+      region_id: REGION,
+      pg_version: 17,
+      // Spec §3.2: 7 days of point-in-time restore, the Launch plan's ceiling.
+      history_retention_seconds: 7 * 24 * 3600,
+      ...(org ? { org_id: org } : {}),
+    },
   });
   return { id: made.project.id, created: true };
 }
@@ -94,7 +113,7 @@ async function ownerAndHosts(projectId) {
 }
 
 const url = (user, password, host, db) =>
-  `postgres://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}/${db}?sslmode=require`;
+  `postgres://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}/${db}?sslmode=verify-full`;
 
 async function withClient(connectionString, fn) {
   const c = new pg.Client({ connectionString });
