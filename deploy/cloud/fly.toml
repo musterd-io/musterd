@@ -20,7 +20,8 @@ primary_region = "iad"
   # Increment 1D's staging issuer (workers/staging-jwks). Increment 2's console replaces both lines.
   MUSTERD_CONSOLE_AUDIENCE = "https://musterd.dev"
   MUSTERD_CONSOLE_JWKS_URL = "https://musterd-staging-jwks.nick-sanders-a.workers.dev/jwks"
-  MUSTERD_WEB_ROOT = "/app/packages/web/dist"
+  # The web build writes dist/client (the published /live bundle, as `service` publishes it locally).
+  MUSTERD_WEB_ROOT = "/app/packages/web/dist/client"
 
 [http_service]
   internal_port = 8080
