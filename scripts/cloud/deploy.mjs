@@ -38,14 +38,59 @@ function step(n, what) {
   console.log(`\n── ${n}. ${what}`);
 }
 
+const REGISTRY = 'https://registry.fly.io/v2';
+const MANIFEST_TYPES = [
+  'application/vnd.oci.image.manifest.v1+json',
+  'application/vnd.docker.distribution.manifest.v2+json',
+].join(', ');
+
 /**
- * Create the one-shot migrate machine through the Machines API. `fly machine run` cannot be used:
- * flyctl looks an image up inside the app it runs in, and the image lives in the SERVING app's
- * repository (2026-10-02, first deploy: `Could not find image`). The API takes any image ref the
- * org can pull. The Fly token is read in-process and never printed.
+ * Copy one tag from the serving app's repository into the migrate app's, unchanged: a Fly machine
+ * pulls only from its own app's repository (2026-10-02, second deploy: MANIFEST_UNKNOWN from the
+ * migrate app for a tag the serving app's repository holds). Each blob is cross-repo MOUNTED, and
+ * copied byte-for-byte only if the registry refuses the mount. The manifest is put back verbatim,
+ * so both apps run the same digest.
  */
-async function createMigrateMachine(image) {
-  const token = run('fly', ['auth', 'token'], { capture: true }).trim();
+async function copyImage(token, from, to, tag) {
+  const auth = { authorization: `Basic ${Buffer.from(`x:${token}`).toString('base64')}` };
+  const got = await fetch(`${REGISTRY}/${from}/manifests/${tag}`, {
+    headers: { ...auth, accept: MANIFEST_TYPES },
+  });
+  if (!got.ok) throw new Error(`reading ${from}:${tag} → ${got.status}`);
+  const raw = Buffer.from(await got.arrayBuffer());
+  const manifest = JSON.parse(raw.toString('utf8'));
+  for (const { digest } of [manifest.config, ...manifest.layers]) {
+    const mount = await fetch(
+      `${REGISTRY}/${to}/blobs/uploads/?mount=${encodeURIComponent(digest)}&from=${from}`,
+      { method: 'POST', headers: auth },
+    );
+    if (mount.status === 201) continue;
+    if (mount.status !== 202) throw new Error(`mounting ${digest} → ${mount.status}`);
+    const blob = await fetch(`${REGISTRY}/${from}/blobs/${digest}`, { headers: auth });
+    if (!blob.ok) throw new Error(`reading blob ${digest} → ${blob.status}`);
+    const location = new URL(mount.headers.get('location'), REGISTRY);
+    location.searchParams.set('digest', digest);
+    const put = await fetch(location, {
+      method: 'PUT',
+      headers: { ...auth, 'content-type': 'application/octet-stream' },
+      body: Buffer.from(await blob.arrayBuffer()),
+    });
+    if (put.status !== 201) throw new Error(`uploading ${digest} → ${put.status}`);
+  }
+  const put = await fetch(`${REGISTRY}/${to}/manifests/${tag}`, {
+    method: 'PUT',
+    headers: { ...auth, 'content-type': manifest.mediaType },
+    body: raw,
+  });
+  if (put.status !== 201) throw new Error(`writing ${to}:${tag} → ${put.status}`);
+}
+
+/**
+ * Create the one-shot migrate machine through the Machines API, on the image {@link copyImage} put
+ * in the migrate app's own repository (`fly machine run` resolves images through flyctl's app
+ * lookup and cannot be pointed at it reliably). The Fly token never leaves this process.
+ */
+async function createMigrateMachine(token, image) {
   const res = await fetch(`https://api.machines.dev/v1/apps/${MIGRATE_APP}/machines`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
@@ -103,7 +148,9 @@ try {
   ]);
 
   step(2, `migrate in ${MIGRATE_APP}`);
-  const id = await createMigrateMachine(image);
+  const token = run('fly', ['auth', 'token'], { capture: true }).trim();
+  await copyImage(token, APP, MIGRATE_APP, label);
+  const id = await createMigrateMachine(token, `registry.fly.io/${MIGRATE_APP}:${label}`);
   console.log(`migrate machine ${id}`);
   try {
     run('fly', [
