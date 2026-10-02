@@ -103,6 +103,7 @@ src/
     roles.ts          // roles table: role defaults (capabilities + charter), projected from roles/*.toml (ADR 070)
     nodes.ts          // machine-credential store (ADR 328, federation 3a): mintInvite/consumeInvite (single-use msinv_, 15-min TTL) + bindNode (ON CONFLICT DO NOTHING — the hub refuses ANY id it already knows, which is what closes the cross-team capture of an unbound row) + rotateNode (same row, so origin stamps survive) / revokeNode (history stays) / authenticateNode / listNodes (credential masked to its kind)
     doorbell.ts       // the doorbell's state (ADR 443): doorbell_rings (held → queued → done) + members.doorbell_prefs (owner-only; may hold a personal URL) + actAnsweredOrResolved (discharge.ts's accept/decline and resolve shapes) + getDoorbellPolicy (reads ADR 149's ask_slack_webhook through as the team slack URL, blob never rewritten)
+    dream.ts          // what a dream sees (goal dreaming, lane 2): buildDreamPacket (the seat's own acts + insights since its last dream), dreamMayWrite / isDreaming — the write fence protocol/route.ts applies (a `dream` presence sends insight acts only, else send.denied), lastDreamAt
     rows.ts           // raw DB row shapes (TeamRow/MemberRow/PresenceRow/MessageRow) + toMember (resolves account_status + capabilities, ADR 070)
   protocol/
     validate.ts       // thin wrappers over @musterd/protocol schemas + error mapping
