@@ -11,10 +11,15 @@
  * is predictable and round-trips through {@link removeServers}.
  */
 
+/** The server-level tool approval Codex accepts (`default_tools_approval_mode`, codex 0.159). */
+export type CodexToolApprovalMode = 'auto' | 'prompt' | 'approve';
+
 export interface CodexServer {
   command: string;
   args: string[];
   env: Record<string, string>;
+  /** ADR 495: absent means Codex's own default — which prompts, and a headless wake cannot answer. */
+  default_tools_approval_mode?: CodexToolApprovalMode | undefined;
 }
 
 /** TOML basic-string quoting: escape backslash and double-quote, wrap in quotes. */
@@ -31,6 +36,9 @@ function key(k: string): string {
 export function renderServer(name: string, s: CodexServer): string {
   const lines = [`[mcp_servers.${key(name)}]`, `command = ${str(s.command)}`];
   lines.push(`args = [${s.args.map(str).join(', ')}]`);
+  if (s.default_tools_approval_mode !== undefined) {
+    lines.push(`default_tools_approval_mode = ${str(s.default_tools_approval_mode)}`);
+  }
   const envKeys = Object.keys(s.env);
   if (envKeys.length > 0) {
     lines.push('', `[mcp_servers.${key(name)}.env]`);
@@ -166,6 +174,7 @@ export const CodexServerSchema = z
     command: z.string().min(1),
     args: z.array(z.string()),
     env: z.record(z.string(), z.string()),
+    default_tools_approval_mode: z.enum(['auto', 'prompt', 'approve']).optional(),
   })
   .strict();
 
@@ -254,12 +263,14 @@ export function removePlugins(toml: string, ids: string[]): string {
 
 /**
  * Read one server's complete table back as a {@link CodexServer}, or null when absent/unreadable.
- * The read-back half {@link renderServer} writes — command, args, and the `.env` subtable — so a
- * fragment observation can fingerprint exactly what a re-render would be compared against.
+ * The read-back half {@link renderServer} writes — command, args, `default_tools_approval_mode` and
+ * the `.env` subtable — so a fragment observation can fingerprint exactly what a re-render would be
+ * compared against. Per-tool `.tools.<name>` subtables are someone else's and are not read.
  */
 export function readServer(toml: string, name: string): CodexServer | null {
   let command: string | undefined;
   let args: string[] | undefined;
+  let approval: CodexToolApprovalMode | undefined;
   for (const section of splitSections(toml)) {
     if (sectionHeader(section) !== `mcp_servers.${name}`) continue;
     for (const line of section.split('\n').slice(1)) {
@@ -271,8 +282,15 @@ export function readServer(toml: string, name: string): CodexServer | null {
           m[1]!.replace(/\\"/g, '"').replace(/\\\\/g, '\\'),
         );
       }
+      const dm = /^\s*default_tools_approval_mode\s*=\s*"(auto|prompt|approve)"\s*$/.exec(line);
+      if (dm) approval = dm[1] as CodexToolApprovalMode;
     }
   }
   if (command === undefined) return null;
-  return { command, args: args ?? [], env: readServerEnv(toml, name) };
+  return {
+    command,
+    args: args ?? [],
+    env: readServerEnv(toml, name),
+    ...(approval !== undefined ? { default_tools_approval_mode: approval } : {}),
+  };
 }

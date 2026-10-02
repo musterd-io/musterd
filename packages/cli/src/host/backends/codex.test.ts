@@ -58,15 +58,19 @@ describe('Codex residency argv', () => {
       'exec',
       '--json',
       '--dangerously-bypass-hook-trust',
+      '-c',
+      'projects={"/ws"={trust_level="trusted"}}',
       '-C',
       '/ws',
       'line',
     ]);
-    expect(buildCodexResumeArgs('line', 'thread')).toEqual([
+    expect(buildCodexResumeArgs('line', 'thread', '/ws')).toEqual([
       'exec',
       'resume',
       '--json',
       '--dangerously-bypass-hook-trust',
+      '-c',
+      'projects={"/ws"={trust_level="trusted"}}',
       'thread',
       'line',
     ]);
@@ -74,8 +78,27 @@ describe('Codex residency argv', () => {
     // hook-trust prompt (which a headless wake spawn could never show anyway) is deliberate — a
     // fresh/resume args build that silently drops the flag would go right back to hooks never
     // firing, exactly as invisible as the bug this fixed.
-    for (const args of [buildCodexFreshArgs('line', '/ws'), buildCodexResumeArgs('line', 'thread')])
-      expect(args).toContain('--dangerously-bypass-hook-trust');
+    const both = [
+      buildCodexFreshArgs('line', '/ws'),
+      buildCodexResumeArgs('line', 'thread', '/ws'),
+    ];
+    for (const args of both) expect(args).toContain('--dangerously-bypass-hook-trust');
+  });
+
+  it('trusts the workspace for this invocation only, as a TOML inline table (ADR 495)', () => {
+    // Codex loads `.codex/config.toml` — the musterd MCP entry — only for a trusted project, and a
+    // headless wake cannot answer the trust prompt. A dotted `projects."<dir>".trust_level` key is
+    // NOT honored by `-c` (codex 0.159.3); the inline table is. Paths are TOML-quoted.
+    expect(buildCodexFreshArgs('line', '/a "b"\\c')).toContain(
+      'projects={"/a \\"b\\"\\\\c"={trust_level="trusted"}}',
+    );
+    // Never a write to ~/.codex/config.toml (ADR 031), and never an approval or sandbox bypass.
+    const both = [buildCodexFreshArgs('line', '/ws'), buildCodexResumeArgs('line', 't', '/ws')];
+    for (const args of both) {
+      expect(args.join(' ')).not.toMatch(
+        /bypass-approvals|sandbox|approval_mode|ignore-user-config/,
+      );
+    }
   });
   it('accepts only a typed thread.started JSONL record', () => {
     expect(parseCodexThreadLine('{"type":"thread.started","thread_id":"t"}')).toBe('t');
@@ -332,7 +355,7 @@ describe('codexBackend', () => {
       await Promise.resolve();
       child.out('{"type":"thread.started","thread_id":"old"}');
       const result = await wake;
-      expect(calls[0]).toEqual(buildCodexResumeArgs('wake line', 'old'));
+      expect(calls[0]).toEqual(buildCodexResumeArgs('wake line', 'old', '/ws'));
       expect(spawnedEnv?.PATH).toBe('/Users/nick/.musterd/bin:/opt/homebrew/bin:/usr/bin');
       expect(result.outcome.session).toBe('resumed');
       child.exit();

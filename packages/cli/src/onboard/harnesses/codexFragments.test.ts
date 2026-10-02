@@ -51,8 +51,44 @@ describe('codexAdapter — managed fragments', () => {
     const intents = await intentsOf(ctxOf(memoryFs()));
     expect(intents.map((i) => i.fragmentKey).sort()).toEqual(['hooks', 'mcp.musterd']);
     expect(new Set(intents.map((i) => i.containerKey)).size).toBe(2);
-    const env = (intents.find((i) => i.fragmentKey === 'mcp.musterd')!.payload as CodexServer).env;
-    expect(env).toEqual({ MUSTERD_LAUNCH_SURFACE: 'codex' });
+    const payload = intents.find((i) => i.fragmentKey === 'mcp.musterd')!.payload as CodexServer;
+    expect(payload.env).toEqual({ MUSTERD_LAUNCH_SURFACE: 'codex' });
+    // ADR 495: a headless wake cannot answer a tool-approval prompt, so the entry approves its own.
+    expect(payload.default_tools_approval_mode).toBe('approve');
+  });
+
+  it('an owned entry from before ADR 495 observes as a different fingerprint, so reconcile updates it', async () => {
+    const fs = memoryFs();
+    fs.writeFile(
+      TOML,
+      [
+        '[mcp_servers.musterd]',
+        'command = "/n"',
+        'args = ["/a.js"]',
+        '',
+        '[mcp_servers.musterd.env]',
+        'MUSTERD_LAUNCH_SURFACE = "codex"',
+        '',
+        '[mcp_servers.musterd.tools.team_join]',
+        'approval_mode = "approve"',
+        '',
+      ].join('\n'),
+      0o600,
+    );
+    const ctx = ctxOf(fs);
+    const mcp = (await intentsOf(ctx)).find((i) => i.fragmentKey === 'mcp.musterd')!;
+    const before = await codexAdapter.observe(ctx, mcp);
+    expect(before.state).toBe('present');
+    expect(before.state === 'present' && before.fingerprint).not.toBe(mcp.fingerprint);
+
+    await codexAdapter.apply(ctx, { kind: 'write', intent: mcp });
+    const after = fs.readFile(TOML)!;
+    expect(after).toContain('default_tools_approval_mode = "approve"');
+    expect(after).toContain('[mcp_servers.musterd.tools.team_join]'); // a hand repair survives
+    expect(await codexAdapter.observe(ctx, mcp)).toEqual({
+      state: 'present',
+      fingerprint: mcp.fingerprint,
+    });
   });
 
   it('unrelated TOML sections and bytes remain unchanged, including comments and ordering', async () => {
@@ -68,6 +104,7 @@ describe('codexAdapter — managed fragments', () => {
     expect(after.startsWith(THEIR_TOML.trimEnd())).toBe(true); // their bytes verbatim, comments included
     expect(after).toContain('[mcp_servers.musterd]');
     expect(after).toContain('MUSTERD_LAUNCH_SURFACE = "codex"');
+    expect(after).toContain('default_tools_approval_mode = "approve"');
     expect(await codexAdapter.observe(ctx, mcp)).toEqual({
       state: 'present',
       fingerprint: mcp.fingerprint,

@@ -188,7 +188,8 @@ export const codex: Harness = {
   // (ADR 027 — never clobber the user's other `[mcp_servers.*]` tables or their other settings).
   // `${ENV}` secrets are written as references, never resolved/baked here; whether Codex expands them
   // is Codex's concern — musterd writes the template's reference string, never a real secret.
-  // Codex has no per-tool allowlist model, so permissions degrade to declared intent (none added).
+  // Role servers get no tool approvals here, so permissions degrade to declared intent (none added);
+  // only the musterd entry approves its own tools (ADR 495).
   async provision(plan: ProvisionPlan) {
     const path = projectConfigPath();
     let toml = readToml(path);
@@ -338,10 +339,13 @@ export const codexAdapter: HarnessAdapter = {
 
   async desiredFragments(ctx) {
     const launch = resolveMcpLaunch();
+    // ADR 495: `approve` — a headless `codex exec` wake refuses any tool call that would prompt, and
+    // the musterd tools are the seat's own coordination surface, so the entry approves them itself.
     const mcpPayload: CodexServer = {
       command: launch.command,
       args: launch.args,
       env: launchEntryEnv(CODEX_SURFACE),
+      default_tools_approval_mode: 'approve',
     };
     const hooks = [...codexHookCommands()].sort((a, b) => (a.event < b.event ? -1 : 1));
     const plugins = declaredCodexPlugins(ctx).map((id) => pluginIntent(ctx, id));
@@ -425,8 +429,7 @@ export const codexAdapter: HarnessAdapter = {
           if (!observed) return;
           const { ['MUSTERD_SURFACE']: _retired, ...rest } = observed.env;
           next = upsertServer(toml, 'musterd', {
-            command: observed.command,
-            args: observed.args,
+            ...observed,
             env: { ...rest, ...launchEntryEnv(CODEX_SURFACE) },
           });
         } else {

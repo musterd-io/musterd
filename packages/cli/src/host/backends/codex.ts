@@ -28,14 +28,41 @@ const RESUME_VERIFY_WINDOW_MS = 30_000;
  * never fire and a codex seat's resumable attestation, session capture, and ADR 246 model
  * observation are silently absent. */
 export function buildCodexFreshArgs(line: string, workspace: string): string[] {
-  return ['exec', '--json', '--dangerously-bypass-hook-trust', '-C', workspace, line];
+  return [
+    'exec',
+    '--json',
+    '--dangerously-bypass-hook-trust',
+    ...codexWorkspaceTrustArgs(workspace),
+    '-C',
+    workspace,
+    line,
+  ];
 }
 
 /** Exact captured thread only. Carries the same `--dangerously-bypass-hook-trust` as the fresh
  * form, for the same reason (ADR 359) — resume is a wake path too, and hooks must fire on it
- * identically or every resumed session goes right back to being unattested. */
-export function buildCodexResumeArgs(line: string, threadId: string): string[] {
-  return ['exec', 'resume', '--json', '--dangerously-bypass-hook-trust', threadId, line];
+ * identically or every resumed session goes right back to being unattested. The workspace trust
+ * rides along for the same reason (ADR 495). */
+export function buildCodexResumeArgs(line: string, threadId: string, workspace: string): string[] {
+  return [
+    'exec',
+    'resume',
+    '--json',
+    '--dangerously-bypass-hook-trust',
+    ...codexWorkspaceTrustArgs(workspace),
+    threadId,
+    line,
+  ];
+}
+
+/** ADR 495: Codex loads a project's `.codex/config.toml` — where the musterd MCP entry lives — only
+ * for a trusted project, and trust is normally granted at an interactive prompt a headless wake can
+ * never show. musterd wrote that file, so the wake trusts the workspace for THIS invocation only: a
+ * `-c` override, never a write to `~/.codex/config.toml` (ADR 031). It must be an inline table —
+ * codex 0.159.3 ignores the dotted `projects."<dir>".trust_level` form. JSON string quoting is
+ * valid TOML basic-string quoting for a path. */
+export function codexWorkspaceTrustArgs(workspace: string): string[] {
+  return ['-c', `projects={${JSON.stringify(workspace)}={trust_level="trusted"}}`];
 }
 
 const ThreadStartedSchema = z.object({
@@ -402,7 +429,7 @@ export function codexBackend(deps: CodexDeps = {}): ActuatorBackend {
         const resumed = await attempt(
           deps,
           bin,
-          buildCodexResumeArgs(spec.order.composed_line, captured),
+          buildCodexResumeArgs(spec.order.composed_line, captured, spec.workspace),
           captured,
           spec,
           ctx,
