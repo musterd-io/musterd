@@ -431,7 +431,11 @@ interface ReviewResolveRow {
   received_at: number;
 }
 
-type OwnedClosure = ReviewPromiseClosureRow & { owner: string; owner_id: string; received_at: number };
+type OwnedClosure = ReviewPromiseClosureRow & {
+  owner: string;
+  owner_id: string;
+  received_at: number;
+};
 
 /**
  * ADR 490 — review promises, derived from the Act ledger alone: a root `request_help` to one Member
@@ -558,7 +562,12 @@ export async function deriveTeamReviewPromises(
   teamId: string,
 ): Promise<ReviewPromiseAuditRow[]> {
   return (await deriveReviewPromises(db, teamId)).open.map(
-    ({ request_id, requester, owner, accepted_at }) => ({ request_id, requester, owner, accepted_at }),
+    ({ request_id, requester, owner, accepted_at }) => ({
+      request_id,
+      requester,
+      owner,
+      accepted_at,
+    }),
   );
 }
 

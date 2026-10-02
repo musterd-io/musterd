@@ -67,7 +67,7 @@ src/
     incidents.ts      // incident convergence inc 1 (ADR 266): recordBlockedReport pools blocked_by reports per (team, gate), opens ONE unowned kind:'incident' lane at 2 distinct seats, appends after; openIncidents/incidentReporters feed the team_next banner and the route hook's fan-out
     laneClose.ts      // recordLaneClose: the terminal edge's audit (verified/reason/grade + the ADR 109 merge join), shared by the board PATCH and an acceptor's accept (ADR 169/188/192/202)
     laneSweep.ts      // sweepAbandonedAcceptance: the backstop — closes a lane parked past the 24h grace in awaiting_acceptance as `review_swept`, never verified, since the ADR 217 reasons label a close and never cause one (ADR 229)
-    orientation.ts    // deriveNext: the `musterd next` / `team_next` orientation brief over lanes + the latest still-in-play handoff why (ADR 049/084; why uses the #745 `handoffNamedLaneOutOfPlay` predicate — awaiting_acceptance or terminal is not a live instruction); `stale_goals` (ADR 487 §5.4): an in-flight goal whose live, unparked lanes all sat GOAL_STALE_DAYS (7) untouched, named once with its oldest lane — derived, never a wake
+    orientation.ts    // deriveNext: the `musterd next` / `team_next` orientation brief over lanes + the latest still-in-play handoff why (ADR 049/084; why uses the #745 `handoffNamedLaneOutOfPlay` predicate — awaiting_acceptance or terminal is not a live instruction); `stale_goals` (ADR 487 §5.4): an in-flight goal whose live, unparked lanes all sat GOAL_STALE_DAYS (7) untouched, named once with its oldest lane — derived, never a wake; review promises (ADR 490): `deriveReviewPromises` / `deriveTeamReviewPromises` derive `request_reviews` / `requested_reviews` / `review_closures` and the Team audit rows from request_help + accept + resolve Acts alone — no table, no timer
     goals.ts          // declared-Goal seam: listGoals (meta.goal messages, status + epoch derived) + nextGoal + goalEpochBumps (ADR 048/084/111)
     staleness.ts      // stale-plan detection: stale_plan/stale_dependency lane warnings from goal-epoch vs claim-time (ADR 111)
     insights.ts       // the insight engine: flowMetrics + waitingOn + coordinationDensity + deriveSteeringMetrics + deriveSycophancy + deriveReport (ADR 050/084/125/481)
@@ -108,7 +108,7 @@ src/
     rows.ts           // raw DB row shapes (TeamRow/MemberRow/PresenceRow/MessageRow) + toMember (resolves account_status + capabilities, ADR 070)
   protocol/
     validate.ts       // thin wrappers over @musterd/protocol schemas + error mapping
-    route.ts          // routeEnvelope(): the ONE validate+persist+deliver path (WS & HTTP share it)
+    route.ts          // routeEnvelope(): the ONE validate+persist+deliver path (WS & HTTP share it); `threadReviewPromiseAct` (ADR 490): an accept of a typed review request takes the request id as its thread (refused on another), and the request's `resolve` must be Team-addressed
     gate.ts           // adjudicateGate(): PreToolUse enforcement decision for a matched tool call — dispatch by kind to gateA (lane-ownership deny) / gateB (action→ask: block = deny-IS-emit — raise a species:approve/tier:blocking ask via routeEnvelope, fingerprint dedup, human-accept release); one shapes-only lane.gate/action.gate row (ADR 150)
     laneReroute.ts    // re-routing an acceptance away from a reviewer who is no longer there — one implementation, two triggers: rerouteDepartedAcceptances (ADR 412, the explicit `/residency/session` goodbye) and sweepReapedAcceptances (ADR 414, the reaper noticing a silent departure). Owns the acceptance-ask composition (acceptanceAskBody/priorOwnerNotice/noGoalNotice) and delivery (deliverLaneAskAct/deliverLaneAskSuperseded) because the reaper needs them and `presence/` must not reach up into `transport/` Also `followsUpNotice`: the worker's `follows_up` answer on the acceptance ask (ADR 487).
   notify/
@@ -116,7 +116,7 @@ src/
     slack.ts          // the doorbell's `slack` sink: formatAskSlackText (ADR 149, ask body by intent) + formatDoorbellSlackText (non-ask acts named from the record, never a body) + postSlackWebhook — fire-and-forget, no redirects
     webhook.ts        // the doorbell's generic `webhook` sink: postDoorbellWebhook POSTs the record JSON as-is (no body by schema), 5 s abort, no redirects, never throws (ADR 443)
   transport/
-    http.ts           // HTTP route table (02-protocol HTTP API), including governed policy/launch/Aperture decisions (ADR 411) and POST /wake-context's recipient-scoped packet (ADR 209 — directed recipient or eligible-set named seat; v2 carries attributed, budgeted bodies via `deriveContext`, ADR 430; allow+deny `residency.context_read` audit records sizes and counts, never a body); authTouch ambient presence (ADR 057) + x-musterd-model re-attest for agent seats only (ADR 119/121) + x-musterd-build for all credentials (ADR 135); counterpart terminal PATCH strips merged (ADR 305)
+    http.ts           // HTTP route table (02-protocol HTTP API), including governed policy/launch/Aperture decisions (ADR 411) and POST /wake-context's recipient-scoped packet (ADR 209 — directed recipient or eligible-set named seat; v2 carries attributed, budgeted bodies via `deriveContext`, ADR 430; allow+deny `residency.context_read` audit records sizes and counts, never a body); authTouch ambient presence (ADR 057) + x-musterd-model re-attest for agent seats only (ADR 119/121) + x-musterd-build for all credentials (ADR 135); counterpart terminal PATCH strips merged (ADR 305); `GET /teams/:slug/review-promises?open=1` (ADR 490): every open review promise in the Team for the weekly audit — ids, names and `accepted_at` only
     oauth.ts          // OAuth 2.1 authorization server (ADR 446 §3): discovery metadata advertises CIMD and retains DCR; authorization resolves DCR first, then CIMD on a DCR miss after the per-IP limit; consent page with three proofs (seat credential, ADR 450 invite, ADR 452 agent connect — `connectNonceFrom` reads the pasted link), exact redirect checks, code/token/revoke with the member-standing check on both grants; token exchange does not fetch metadata; TLS-except-loopback, `oauth.*` audit omits CIMD URLs, OAuth-shaped token errors
     cimd.ts           // ADR 470: HTTPS-only Client ID Metadata Document resolver with URL/SSRF checks, all-answer public DNS validation and pinned connection, 3s/5 KiB JSON reads, redirect refusal, 256-entry freshness-aware LRU, coalescing, and 16-fetch process cap
     authSponsor.ts    // sponsor-scoped authority (ADR 463 §1): `assertSponsorCaller` (live human, good standing, `can_create_agents`) and `assertSponsorOf` (…and sponsors this live agent) — what lets a non-admin mint a `claim_seat` credential, a seat grant, and residency for their own agents only
@@ -320,6 +320,18 @@ Something addressed to a human rings them through surfaces musterd owns, never a
   `up_next_seeds` (open Seeds, oldest first, compact: id/source/ref/summary/submitted_by) and
   `up_next_seeds_total`, projected by `openSeedsForBrief` and rendered above `up_next` on both
   surfaces.
+- **Review promises (ADR 490).** An accepted typed review request — a root `request_help` to one
+  Member carrying `meta.review`, answered by that Member's `accept` naming it in `meta.in_reply_to`
+  — is a promise until a Team-addressed `resolve` lands on the request's thread. Derived from the
+  Act ledger alone (`deriveReviewPromises`, `store/orientation.ts`): duplicate accepts collapse to
+  the minimum `(ts, id)`, so every replica reports the same `accepted_at`. `GET /teams/:slug/next`
+  carries `request_reviews` (owner), `requested_reviews` (requester) and `review_closures` — a
+  non-owner close the owner has not read, judged against the inbox cursor on receipt order
+  `(created_at, id)`, never the sender's `ts` — all three emitted even when empty (absence is an
+  older daemon). `routeEnvelope` threads the accept onto the request id and refuses a
+  Member-addressed `resolve` of a typed request. `GET /teams/:slug/review-promises?open=1` returns
+  every open promise in the Team as `{request_id, requester, owner, accepted_at}` to any active
+  Member — the `sweep` audit's read, with no prose and no artifact reference.
 - **Parked lanes (ADR 466).** `parked` is a human's "kept, not now". `decideParkPatch`
   (`sync/claim.ts`, so the hub and the local path agree) admits a park only from a human, with a
   `park_reason`, from open/claimed/active/blocked; an unpark only from a human, to open or

@@ -292,11 +292,7 @@ import {
   seatBindings,
 } from '../store/nodes.js';
 import { revokeAllForMember } from '../store/oauth.js';
-import {
-  deriveNext,
-  deriveNextSummary,
-  deriveTeamReviewPromises,
-} from '../store/orientation.js';
+import { deriveNext, deriveNextSummary, deriveTeamReviewPromises } from '../store/orientation.js';
 import {
   currentBuild,
   attach,

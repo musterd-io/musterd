@@ -11078,4 +11078,157 @@ withDrivers('integration', (_o, kind) => {
       l.close();
     });
   });
+
+  describe('review promises (ADR 490): GET /next arrays + GET /teams/:slug/review-promises?open=1', () => {
+    const PR = { kind: 'pr', repo: 'org/repo', number: 42 };
+    const envelope = (
+      id: string,
+      from: string,
+      to: { kind: 'team' } | { kind: 'member'; name: string },
+      act: string,
+      extra: Record<string, unknown> = {},
+    ) => ({
+      envelope: {
+        id,
+        v: PROTOCOL_VERSION,
+        team: 'dawn',
+        from,
+        to,
+        act,
+        body: `${act} ${id}`,
+        ts: Date.now(),
+        ...extra,
+      },
+    });
+
+    /** nick, two agents, and one typed review request from nick that Ada accepted. */
+    async function seedPromise() {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const nickTok = team.json.human_credential as string;
+      const ada = { key: team.json.agent_key, seat: 'Ada' };
+      const lin = { key: team.json.agent_key, seat: 'Lin' };
+      await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, nickTok);
+      await post('/teams/dawn/members', { name: 'Lin', kind: 'agent' }, nickTok);
+      const ask = await post(
+        '/teams/dawn/messages',
+        envelope('req1', 'nick', { kind: 'member', name: 'Ada' }, 'request_help', {
+          body: 'please check the migration',
+          meta: { review: PR },
+        }),
+        nickTok,
+      );
+      expect(ask.status).toBe(201);
+      const ok = await post(
+        '/teams/dawn/messages',
+        envelope('ok1', 'Ada', { kind: 'member', name: 'nick' }, 'accept', {
+          meta: { in_reply_to: 'req1' },
+        }),
+        ada,
+      );
+      expect(ok.status).toBe(201);
+      return { nickTok, ada, lin };
+    }
+
+    it('the brief carries the promise for owner and requester, supported-empty for a bystander', async () => {
+      const { nickTok, ada, lin } = await seedPromise();
+      const owner = await get('/teams/dawn/next', ada);
+      expect(owner.status).toBe(200);
+      expect(owner.json.request_reviews).toHaveLength(1);
+      expect(owner.json.request_reviews[0]).toMatchObject({
+        request_id: 'req1',
+        requester: 'nick',
+        owner: 'Ada',
+        context: 'please check the migration',
+        review: PR,
+      });
+      expect(owner.json.requested_reviews).toEqual([]);
+      expect(owner.json.review_closures).toEqual([]);
+      const requester = await get('/teams/dawn/next', nickTok);
+      expect(
+        requester.json.requested_reviews.map((r: { request_id: string }) => r.request_id),
+      ).toEqual(['req1']);
+      const bystander = await get('/teams/dawn/next', lin);
+      expect(bystander.json.request_reviews).toEqual([]);
+      expect(bystander.json.requested_reviews).toEqual([]);
+      expect(bystander.json.review_closures).toEqual([]);
+    });
+
+    it('the Team read lists every open promise, oldest first, with ids, names and time only', async () => {
+      const { nickTok, ada, lin } = await seedPromise();
+      // A second promise, accepted later: Lin asks Ada.
+      await post(
+        '/teams/dawn/messages',
+        envelope('req2', 'Lin', { kind: 'member', name: 'Ada' }, 'request_help', {
+          meta: { review: { kind: 'lane', id: '01ARZ3NDEKTSV4RRFFQ69G5FAV' } },
+        }),
+        lin,
+      );
+      await post(
+        '/teams/dawn/messages',
+        envelope('ok2', 'Ada', { kind: 'member', name: 'Lin' }, 'accept', {
+          meta: { in_reply_to: 'req2' },
+        }),
+        ada,
+      );
+      // Any active Member of the Team may read it — including one who holds no promise.
+      const res = await get('/teams/dawn/review-promises?open=1', lin);
+      expect(res.status).toBe(200);
+      expect(res.json.review_promises.map((r: { request_id: string }) => r.request_id)).toEqual([
+        'req1',
+        'req2',
+      ]);
+      for (const row of res.json.review_promises) {
+        expect(Object.keys(row).sort()).toEqual([
+          'accepted_at',
+          'owner',
+          'request_id',
+          'requester',
+        ]);
+      }
+      expect(res.json.review_promises[0]).toMatchObject({ requester: 'nick', owner: 'Ada' });
+      expect(res.json.review_promises[1]).toMatchObject({ requester: 'Lin', owner: 'Ada' });
+      // The human's credential reads the same population.
+      const asNick = await get('/teams/dawn/review-promises?open=1', nickTok);
+      expect(asNick.json).toEqual(res.json);
+    });
+
+    it('a Team with nothing open answers a supported empty list, never absence', async () => {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const res = await get('/teams/dawn/review-promises?open=1', team.json.human_credential);
+      expect(res.status).toBe(200);
+      expect(res.json).toEqual({ review_promises: [] });
+    });
+
+    it('a Team resolve closes both rows; a non-owner close leaves the owner one notice', async () => {
+      const { nickTok, ada } = await seedPromise();
+      const withdrawn = await post(
+        '/teams/dawn/messages',
+        envelope('done1', 'nick', { kind: 'team' }, 'resolve', { thread: 'req1' }),
+        nickTok,
+      );
+      expect(withdrawn.status).toBe(201);
+      const audit = await get('/teams/dawn/review-promises?open=1', nickTok);
+      expect(audit.json).toEqual({ review_promises: [] });
+      const owner = await get('/teams/dawn/next', ada);
+      expect(owner.json.request_reviews).toEqual([]);
+      expect(owner.json.review_closures).toMatchObject([
+        { request_id: 'req1', resolve_id: 'done1', closer: 'nick' },
+      ]);
+      expect((await get('/teams/dawn/next', nickTok)).json.review_closures).toEqual([]);
+    });
+
+    it('refuses an unsupported query, an unauthenticated read, and a cross-Team credential', async () => {
+      const { nickTok } = await seedPromise();
+      const other = await post('/teams', { slug: 'dusk', creator: { name: 'kim', kind: 'human' } });
+      expect((await get('/teams/dawn/review-promises', nickTok)).status).toBe(400);
+      expect((await get('/teams/dawn/review-promises?open=all', nickTok)).status).toBe(400);
+      expect((await get('/teams/dawn/review-promises?open=1')).status).toBe(401);
+      const crossTeam = await get(
+        '/teams/dawn/review-promises?open=1',
+        other.json.human_credential,
+      );
+      expect([401, 403]).toContain(crossTeam.status);
+      expect(crossTeam.json.review_promises).toBeUndefined();
+    });
+  });
 });

@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { appendAudit } from './audit.js';
+import { setCursor } from './cursors.js';
 import { recordBlockedReport } from './incidents.js';
 import { openLane, updateLane } from './lanes.js';
 import { addMember, getMemberByName } from './members.js';
-import { setCursor } from './cursors.js';
 import { insertMessage } from './messages.js';
 import {
   WHY_BARE_MAX_AGE_MS,
@@ -1014,19 +1014,33 @@ withDrivers('orientation', (o) => {
       expect(owner.review_debt).toBeUndefined();
       // A bystander gets supported-empty arrays, never absence.
       const lin = await deriveNext(db, team.id, 'revive', 'lin');
-      expect([lin.request_reviews, lin.requested_reviews, lin.review_closures]).toEqual([[], [], []]);
+      expect([lin.request_reviews, lin.requested_reviews, lin.review_closures]).toEqual([
+        [],
+        [],
+        [],
+      ]);
     });
 
     it('derives nothing from untyped, unaccepted, declined or wrong-sender requests', async () => {
       const { db, team, send } = await reviewSeed();
       // Untyped request, accepted.
       await send('nick', 'stanley', { id: 'u1', act: 'request_help', ts: 1 });
-      await send('stanley', 'nick', { id: 'u1-ok', act: 'accept', ts: 2, meta: { in_reply_to: 'u1' } });
+      await send('stanley', 'nick', {
+        id: 'u1-ok',
+        act: 'accept',
+        ts: 2,
+        meta: { in_reply_to: 'u1' },
+      });
       // Typed, never answered.
       await send('nick', 'stanley', { id: 't1', act: 'request_help', ts: 3, meta: { review: PR } });
       // Typed, declined.
       await send('nick', 'stanley', { id: 't2', act: 'request_help', ts: 4, meta: { review: PR } });
-      await send('stanley', 'nick', { id: 't2-no', act: 'decline', ts: 5, meta: { in_reply_to: 't2' } });
+      await send('stanley', 'nick', {
+        id: 't2-no',
+        act: 'decline',
+        ts: 5,
+        meta: { in_reply_to: 't2' },
+      });
       // Typed, accepted by someone who was not asked.
       await send('nick', 'stanley', { id: 't3', act: 'request_help', ts: 6, meta: { review: PR } });
       await send('lin', 'nick', { id: 't3-ok', act: 'accept', ts: 7, meta: { in_reply_to: 't3' } });
@@ -1041,7 +1055,12 @@ withDrivers('orientation', (o) => {
 
     it('collapses duplicate accepts to the minimum (ts, id), whatever order they arrived in', async () => {
       const { db, team, send } = await reviewSeed();
-      await send('nick', 'stanley', { id: 'r1', act: 'request_help', ts: 100, meta: { review: PR } });
+      await send('nick', 'stanley', {
+        id: 'r1',
+        act: 'request_help',
+        ts: 100,
+        meta: { review: PR },
+      });
       const ok = (id: string, ts: number, at: number) =>
         send('stanley', 'nick', { id, act: 'accept', ts, meta: { in_reply_to: 'r1' } }, at);
       await ok('b-late', 300, 301);
@@ -1089,13 +1108,22 @@ withDrivers('orientation', (o) => {
       await send('nick', null, { id: 'r1-withdrawn', act: 'resolve', ts: 5, thread: 'r1' }, 3_000);
       await send('lin', 'stanley', { id: 'later', act: 'request_help', ts: 1 }, 4_000);
 
-      const notice = { request_id: 'r1', resolve_id: 'r1-withdrawn', closer: 'nick', resolved_at: 5 };
-      expect((await deriveNext(db, team.id, 'revive', 'stanley')).review_closures).toEqual([notice]);
+      const notice = {
+        request_id: 'r1',
+        resolve_id: 'r1-withdrawn',
+        closer: 'nick',
+        resolved_at: 5,
+      };
+      expect((await deriveNext(db, team.id, 'revive', 'stanley')).review_closures).toEqual([
+        notice,
+      ]);
       expect((await deriveNext(db, team.id, 'revive', 'nick')).review_closures).toEqual([]);
 
       // A cursor resting before the resolve (on the accept) keeps it.
       await setCursor(db, stanley.id, 'r1-ok');
-      expect((await deriveNext(db, team.id, 'revive', 'stanley')).review_closures).toEqual([notice]);
+      expect((await deriveNext(db, team.id, 'revive', 'stanley')).review_closures).toEqual([
+        notice,
+      ]);
       // On the resolve itself, it is read.
       await setCursor(db, stanley.id, 'r1-withdrawn');
       expect((await deriveNext(db, team.id, 'revive', 'stanley')).review_closures).toEqual([]);
