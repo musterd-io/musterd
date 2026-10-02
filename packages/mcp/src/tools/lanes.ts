@@ -9,6 +9,7 @@ import {
   type Lane,
   type LaneWarning,
   type NextBrief,
+  type ReviewPromiseReference,
 } from '@musterd/protocol';
 import { resolveProject } from '@musterd/protocol/project';
 import { z } from 'zod';
@@ -598,6 +599,24 @@ export function registerLanes(
   );
 }
 
+/**
+ * ADR 490: the artifact a review promise names, one short token — never a credential. The CLI
+ * renderer (`packages/cli/src/commands/next.ts`) carries the same labels; both surfaces render the
+ * daemon's one projection, so the copy is kept identical by hand and pinned by each surface's tests.
+ */
+function reviewRef(r: ReviewPromiseReference): string {
+  switch (r.kind) {
+    case 'pr':
+      return `PR ${r.repo}#${r.number}`;
+    case 'commit':
+      return `${r.repo}@${r.sha.slice(0, 7)}${r.path ? ` ${r.path}` : ''}`;
+    case 'lane':
+      return `lane ${r.id}`;
+    case 'url':
+      return r.url;
+  }
+}
+
 /** Coarse elapsed time — the reader needs "hours, not minutes", never a precise duration. */
 export function fmtNext(b: NextBrief, landed: ReadonlyMap<string, Landed> = new Map()): string {
   const lines: string[] = [`next — as ${b.member}`];
@@ -644,6 +663,42 @@ export function fmtNext(b: NextBrief, landed: ReadonlyMap<string, Landed> = new 
       lines.push(
         `    answer: team_send {act:'accept', to:'${r.from}', reply_to:'${r.ask_id}', body:'…'}`,
       );
+    }
+  }
+  // ADR 490: review promises — accepted typed review requests, derived by the daemon from the Act
+  // ledger. Kept apart from `owed by you` (a Lane verdict) on purpose, and the two absences are
+  // different claims: a missing array is a daemon that predates the projection and the brief says
+  // so; `[]` is supported and nothing to show. Same copy and order as `musterd next`.
+  const promised = b.request_reviews;
+  const asked = b.requested_reviews;
+  const closed = b.review_closures;
+  const now = Date.now();
+  if (promised === undefined)
+    lines.push('\nreview promises: not reported by this daemon — it predates ADR 490');
+  else if (promised.length) {
+    lines.push(`\nreview promises — ${promised.length} you accepted, still open:`);
+    for (const p of promised) {
+      lines.push(
+        `  ${p.request_id} for ${p.requester} · accepted ${shortDuration(now - p.accepted_at)} ago`,
+      );
+      lines.push(`    "${p.context}" · ${reviewRef(p.review)}`);
+      lines.push(`    close: team_send {act:'resolve', thread:'${p.request_id}', body:'…'}`);
+    }
+  }
+  if (asked !== undefined && asked.length) {
+    lines.push(`\nreviews you asked for — ${asked.length} accepted, still open:`);
+    for (const p of asked) {
+      lines.push(`  ${p.request_id} ${p.owner} accepted ${shortDuration(now - p.accepted_at)} ago`);
+      lines.push(`    "${p.context}" · ${reviewRef(p.review)}`);
+    }
+  }
+  if (closed !== undefined && closed.length) {
+    lines.push(`\nreview closed for you — by someone else, ${closed.length}:`);
+    for (const c of closed) {
+      lines.push(
+        `  ${c.request_id} closed by ${c.closer} ${shortDuration(now - c.resolved_at)} ago`,
+      );
+      lines.push(`    resolve ${c.resolve_id} — team_inbox_check and it is gone`);
     }
   }
   if (b.in_flight.length) {
@@ -751,6 +806,9 @@ export function fmtNext(b: NextBrief, landed: ReadonlyMap<string, Landed> = new 
   if (
     !goals.length &&
     !owed.length &&
+    !promised?.length &&
+    !asked?.length &&
+    !closed?.length &&
     !b.in_flight.length &&
     !b.up_next.length &&
     !seeds.length &&
