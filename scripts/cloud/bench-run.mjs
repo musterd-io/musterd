@@ -9,8 +9,10 @@
  *               registry (the push lands after flyctl returns, which deploy.mjs found the hard way);
  *   2. secrets  optionally stage NAME=VALUE lines from a local mode-600 file as Fly secrets on the
  *               bench app, through stdin, never printed (`--secrets-from <file>`);
- *   3. run      create a one-shot machine in iad through the Machines API with the command, wait
- *               for it to stop, print its logs, and read its exit code (Fly omits a zero code);
+ *   3. run      create a one-shot machine in iad through the Machines API with the command, stream
+ *               its log while it runs (`fly logs --no-tail` afterwards returns only the most recent
+ *               ~100 lines — the first 20 files of a 68-file pass were lost that way on 2026-10-02),
+ *               wait for it to stop, and read its exit code (Fly omits a zero code);
  *   4. clean    destroy the machine. Run it again to rerun; nothing persists between runs.
  *
  *   node scripts/cloud/bench-run.mjs --secrets-from ~/.musterd/cloud/neon.env -- \
@@ -19,7 +21,7 @@
  * Env: BENCH_APP (musterd-loadbench), BENCH_SIZE (performance-2x), BENCH_MEMORY_MB (4096),
  * BENCH_REGION (iad), BENCH_WAIT_MIN (180). Exits with the command's exit code.
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
 
 const APP = process.env.BENCH_APP ?? 'musterd-loadbench';
@@ -151,6 +153,7 @@ try {
   console.log(`── 3. run on ${SIZE} in ${REGION}: ${cmd.join(' ')}`);
   const id = await createMachine(token, image, cmd);
   console.log(`bench machine ${id}`);
+  const tail = spawn('fly', ['logs', '--app', APP, '--machine', id], { stdio: 'inherit' });
   let code = null;
   try {
     const deadline = Date.now() + WAIT_MIN * 60_000;
@@ -165,8 +168,10 @@ try {
         throw new Error(`bench machine still ${m?.state} after ${WAIT_MIN} min`);
       await new Promise((r) => setTimeout(r, 30_000));
     }
-    run('fly', ['logs', '--app', APP, '--machine', id, '--no-tail']);
+    // The log stream lags the machine by a few seconds; let the last lines land before it goes.
+    await new Promise((r) => setTimeout(r, 8_000));
   } finally {
+    tail.kill();
     run('fly', ['machine', 'destroy', id, '--app', APP, '--force'], { capture: true });
     console.log(`── 4. destroyed ${id}`);
   }

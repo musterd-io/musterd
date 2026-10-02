@@ -194,6 +194,26 @@ describe('pgDriver choreography (spec §12.1)', () => {
     expect(n).toBe(60);
   });
 
+  it('onStatement sees every store statement as written (? form), inside and outside a tx, never the stamping — and unsubscribes', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    const seen: string[] = [];
+    const off = d.onStatement((sql) => seen.push(sql));
+    await d.forTeam('A').get('SELECT 1 FROM teams WHERE id = ?', ['A']);
+    await d.asOperator().tx(async (t) => {
+      await t.run('UPDATE lanes SET state = ? WHERE id = ?', ['done', 'L']);
+      await t.tx((inner) => inner.all('SELECT * FROM audit WHERE target = ?', ['L']));
+    });
+    expect(seen).toEqual([
+      'SELECT 1 FROM teams WHERE id = ?',
+      'UPDATE lanes SET state = ? WHERE id = ?',
+      'SELECT * FROM audit WHERE target = ?',
+    ]);
+    off();
+    await d.asOperator().get('SELECT 2');
+    expect(seen).toHaveLength(3);
+  });
+
   it('close ends every pool and refuses further work', async () => {
     const f = fakePools();
     const d = pgDriver({ ...urls, pools: f.factory });
