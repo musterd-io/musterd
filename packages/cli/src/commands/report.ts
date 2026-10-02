@@ -1,11 +1,12 @@
-import type {
-  ActDelivery,
-  FlowMetrics,
-  Goal,
-  GoalFlow,
-  Report,
-  PeerDemand,
-  TraceReport,
+import {
+  fmtShare,
+  type ActDelivery,
+  type FlowMetrics,
+  type Goal,
+  type GoalFlow,
+  type Report,
+  type PeerDemand,
+  type TraceReport,
 } from '@musterd/protocol';
 import { flagStr, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
@@ -212,12 +213,37 @@ function render(r: Report, altitude: Altitude, liveness?: SweepFinding): void {
     w(`\n${theme.accent('wake')}:\n`);
     renderWake(r.wake, w);
   }
+  if (r.sycophancy) {
+    w(`\n${theme.accent('sycophancy')}:\n`);
+    renderSycophancy(r.sycophancy, w);
+  }
   w(`\n${theme.accent('waiting on')}:\n`);
   renderWaitingOn(r, w);
   if (liveness) {
     w(`\n${theme.accent('liveness')}:\n`);
     renderLiveness(liveness, w);
   }
+}
+
+/**
+ * ADR 476's two readouts (ADR 481 §3). No bare rates (ADR 294 §4): every number carries its
+ * numerator, denominator and channel, and a percentage appears only at n ≥ 5 (`fmtShare`).
+ * Team altitude only — `ic` and `exec` never show it.
+ */
+export function renderSycophancy(
+  s: NonNullable<Report['sycophancy']>,
+  w: (s: string) => void,
+): void {
+  const cut = theme.meta(`(since ${new Date(s.since).toISOString().slice(0, 10)}, agent acts)`);
+  w(`  unverified concessions ${cut}
+`);
+  w(`    challenge ${fmtShare(s.challenge.unverified, s.challenge.n)} ${theme.meta('accept → challenge')}
+`);
+  w(`    phrase    ${fmtShare(s.phrase.unverified, s.phrase.n)} ${theme.meta('concession wording')}
+`);
+  const a = s.challenge_answers;
+  w(`  challenge declines ${fmtShare(a.declines, a.answered)} ${theme.meta('of answered challenges')}
+`);
 }
 
 /** Wake metrics (ADR 131 inc 5) — the always-on claim's instrument panel. */

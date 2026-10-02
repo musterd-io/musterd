@@ -45,6 +45,7 @@ export * from './guidance.js';
 export * from './label.js';
 export * from './goals.js';
 export * from './insights.js';
+export * from './sycophancy.js';
 export * from './lanes.js';
 export * from './seeds.js';
 export * from './autoTarget.js';

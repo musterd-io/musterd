@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { GoalSchema } from './goals.js';
 import { FAMILY_POSTURE_STATES, WAKEABILITIES, type FamilyPosture } from './model.js';
+import { SycophancyBlockSchema } from './sycophancy.js';
 import { ToolCallMetricsSchema } from './tool-telemetry.js';
 
 /**
@@ -568,5 +569,9 @@ export const ReportSchema = z.object({
   /** Deferrals that never raised (ADR 211 Failure mode). Optional for back-compat with pre-211
    *  daemons — the server always sets it. */
   long_deferred: z.array(LongDeferredSchema).optional(),
+  /** ADR 476's two readouts over agent-authored acts (ADR 481) — derived at projection time, never
+   *  stored. Team-visible at `--altitude team` only. Optional for back-compat with pre-481 daemons —
+   *  the server always sets it. */
+  sycophancy: SycophancyBlockSchema.optional(),
 });
 export type Report = z.infer<typeof ReportSchema>;

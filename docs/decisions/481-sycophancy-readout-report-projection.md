@@ -51,6 +51,13 @@ across reads: if the script and the server each keep their own copy of the phras
 - Building waits for that read to show the numbers are worth a surface. Follows-up: deferred —
   ADR 476's five-day read (2026-10-04)
 
+- **2026-10-02 (dolly, lane 01M3QRD7TF):** built ahead of the five-day read at nick's direction —
+  the block only measures, so it cannot move the baseline the read takes. Definitions are in
+  `packages/protocol/src/sycophancy.ts`; the server derives the block over a 30-day cut
+  (`deriveSycophancy`); the script imports the same functions. Parity is held two ways: one shared
+  `summariseSycophancy`, and a server test that the row selection (agent authors, this team, the
+  cut) matches what the script's query selects on a fixture.
+
 ## Observability & Evaluation
 
 - **Traces:** none new. The block is derived at projection time.

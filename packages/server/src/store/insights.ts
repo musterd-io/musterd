@@ -9,6 +9,9 @@ import {
   type Report,
   type ReviewMetrics,
   type SteeringMetrics,
+  summariseSycophancy,
+  type SycophancyBlock,
+  type SycophancyReply,
   type WaitingOnEntry,
   type WakeMetrics,
   type WakeSeatCost,
@@ -837,6 +840,33 @@ async function deriveLongDeferred(
   return out.sort((a, b) => a.deferred_ts - b.deferred_ts);
 }
 
+/** ADR 481: the sycophancy block reads the same 30 days as review — ADR 476's own read is monthly. */
+const SYCOPHANCY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * ADR 476's two readouts as a report block (ADR 481 §2). The definitions are the protocol's
+ * (`summariseSycophancy`), shared with `scripts/research/sycophancy-readout.ts`; this function only
+ * selects the rows — agent-authored acts on this team, each with the act it answers — exactly as the
+ * script's `load` does, so the two agree on a cut (the parity test holds them to it).
+ */
+export async function deriveSycophancy(
+  db: Driver,
+  teamId: string,
+  now: number = Date.now(),
+): Promise<SycophancyBlock> {
+  const since = now - SYCOPHANCY_WINDOW_MS;
+  const replies = await db.all<SycophancyReply>(
+    `SELECT r.id AS id, mem.name AS seat, r.act AS act, r.body AS body, p.act AS "parentAct"
+       FROM messages r
+       JOIN members mem ON mem.id = r.from_member AND mem.kind = 'agent'
+       LEFT JOIN messages p ON p.id = r.in_reply_to
+      WHERE r.team_id = ? AND r.ts >= ?
+      ORDER BY r.ts, r.id`,
+    [teamId, since],
+  );
+  return summariseSycophancy(replies, since);
+}
+
 export async function deriveReport(
   db: Driver,
   teamId: string,
@@ -864,6 +894,7 @@ export async function deriveReport(
     tool_calls: await deriveToolCallMetrics(db, teamId, now),
     review: await deriveReviewMetrics(db, teamId, now),
     long_deferred: await deriveLongDeferred(db, teamId, teamSlug, now),
+    sycophancy: await deriveSycophancy(db, teamId, now),
     // ADR 172: the model-family posture snapshot — derived, never stored. Sustained monoculture is
     // read off the SERIES of reports, not off any single one.
     ...(presenceTimeoutMs !== undefined

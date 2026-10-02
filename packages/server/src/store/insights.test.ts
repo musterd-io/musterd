@@ -1,4 +1,9 @@
-import { makeEnvelope, type Act } from '@musterd/protocol';
+import {
+  makeEnvelope,
+  summariseSycophancy,
+  type Act,
+  type SycophancyReply,
+} from '@musterd/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { openDb } from '../db/open.js';
@@ -9,6 +14,7 @@ import {
   deriveReport,
   peerDemand,
   deriveSteeringMetrics,
+  deriveSycophancy,
   deriveWakeMetrics,
   flowMetrics,
   goalFlowMetrics,
@@ -1656,6 +1662,76 @@ withDrivers('insights', (o) => {
         c.legacy_unlabelled;
       expect(summed).toBe(c.total);
       expect(c.total).toBe(8);
+    });
+  });
+  describe('deriveSycophancy (ADR 481 — the readout as a report block)', async () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const T = 100 * DAY;
+
+    it('selects agent replies on this team in the 30-day cut — and counts exactly what the shared definitions count', async () => {
+      const { db, team, nick, ada } = await seed();
+      const other = await createTeam(db, { slug: 'other' });
+      const ghost = (await addMember(db, other, { name: 'ghost', kind: 'agent' })).row;
+      const put = async (
+        t: typeof team,
+        from: { id: string; name: string },
+        id: string,
+        act: Act,
+        body: string,
+        ts: number,
+        inReplyTo?: string,
+      ) =>
+        insertMessage(
+          db,
+          t.id,
+          from.id,
+          null,
+          makeEnvelope({
+            id,
+            team: t.slug,
+            from: from.name,
+            to: { kind: 'team' },
+            act,
+            body,
+            ts,
+            ...(inReplyTo ? { meta: { in_reply_to: inReplyTo } } : {}),
+          }),
+        );
+      await put(team, nick, 'ch1', 'challenge', 'are you sure?', T - 3 * DAY);
+      await put(team, nick, 'ch2', 'challenge', 'prove it', T - 2 * DAY);
+      await put(team, ada, 'a1', 'accept', 'fine', T - 3 * DAY + 1, 'ch1');
+      await put(
+        team,
+        ada,
+        'a2',
+        'decline',
+        'held: `pnpm test` still fails',
+        T - 2 * DAY + 1,
+        'ch2',
+      );
+      await put(team, ada, 'p1', 'message', 'good catch, fixing', T - DAY);
+      // excluded: a human's concession, an agent on another team, and one outside the window
+      await put(team, nick, 'h1', 'message', "you're right", T - DAY);
+      await put(other, ghost, 'o1', 'message', 'good catch', T - DAY);
+      await put(team, ada, 'old', 'message', 'good catch', T - 40 * DAY);
+
+      const since = T - 30 * DAY;
+      const oracle: SycophancyReply[] = [
+        { id: 'a1', seat: 'ada', act: 'accept', body: 'fine', parentAct: 'challenge' },
+        {
+          id: 'a2',
+          seat: 'ada',
+          act: 'decline',
+          body: 'held: `pnpm test` still fails',
+          parentAct: 'challenge',
+        },
+        { id: 'p1', seat: 'ada', act: 'message', body: 'good catch, fixing', parentAct: null },
+      ];
+      const block = await deriveSycophancy(db, team.id, T);
+      expect(block).toEqual(summariseSycophancy(oracle, since));
+      expect(block.challenge).toEqual({ unverified: 1, n: 1 });
+      expect(block.phrase).toEqual({ unverified: 1, n: 1 });
+      expect(block.challenge_answers).toEqual({ declines: 1, answered: 2 });
     });
   });
 });
