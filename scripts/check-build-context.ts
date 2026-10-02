@@ -73,6 +73,7 @@ const SEAT_STATE_ROOTS = ['.musterd', '.claude', '.codex'] as const;
  * nothing inside a Dockerfile records where it is run from — a human has to look.
  */
 export const KNOWN_WHOLE_CONTEXT: readonly string[] = [
+  'deploy/cloud/Dockerfile',
   'deploy/cloud-seat/Dockerfile',
   'scripts/broadcast/hosted.Dockerfile',
   'scripts/perf/broadcast-bench.Dockerfile',
