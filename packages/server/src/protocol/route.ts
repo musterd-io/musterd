@@ -359,6 +359,8 @@ async function routeEnvelopeInner(
     ).map((r) => r.id);
   }
 
+  outgoingEnv = await threadReviewPromiseAct(ctx, team, outgoingEnv);
+
   // Persist (append-only log) — the urgent-downgraded envelope when applicable, so the stored meta and
   // every delivery (direct + firehose, all derived from the row) carry the corrected flags.
   const message = await insertMessage(ctx.db, team.id, sender.id, toMemberId, outgoingEnv);
@@ -1182,4 +1184,43 @@ async function firstMemberNamed(
     if (m) return m;
   }
   return null;
+}
+
+/**
+ * ADR 490: a typed review request's thread is its own id, so the accept and the closing `resolve`
+ * both land on it. An `accept` naming the request takes that thread when it carries none and is
+ * refused when it names another; a `resolve` of the request must be Team-addressed, because the
+ * close reaches requester and owner both — a private one would close the promise for one party only.
+ */
+async function threadReviewPromiseAct(ctx: Ctx, team: TeamRow, env: Envelope): Promise<Envelope> {
+  const ref =
+    env.act === 'accept' ? env.meta?.['in_reply_to'] : env.act === 'resolve' ? env.thread : null;
+  if (typeof ref !== 'string' || !(await isTypedReviewRequest(ctx, team.id, ref))) return env;
+  if (env.act === 'resolve') {
+    if (env.to.kind === 'member') {
+      throw new MusterdError(
+        'validation',
+        'a typed review request is resolved to @team, so requester and owner both see the close',
+      );
+    }
+    return env;
+  }
+  if (env.thread === undefined || env.thread === null) return { ...env, thread: ref };
+  if (env.thread !== ref) {
+    throw new MusterdError(
+      'validation',
+      `an accept of typed review request ${ref} must be on its thread, not ${env.thread}`,
+    );
+  }
+  return env;
+}
+
+async function isTypedReviewRequest(ctx: Ctx, teamId: string, id: string): Promise<boolean> {
+  const row = await ctx.db.get<{ id: string }>(
+    `SELECT id FROM messages
+      WHERE team_id = ? AND id = ? AND act = 'request_help' AND thread_id IS NULL
+        AND to_kind = 'member' AND json_extract(meta, '$.review') IS NOT NULL`,
+    [teamId, id],
+  );
+  return row !== undefined;
 }
