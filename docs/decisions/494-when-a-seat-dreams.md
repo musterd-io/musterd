@@ -147,6 +147,10 @@ gap: whatever a dream sends, nothing rings.
 - Cost is bounded per seat per night by `nightly_wakes` runs, each under the watchdog timeout, and
   by `budget_usd` where the host reports cost. Across a team it is that times the number of seats
   with `dream.enabled`.
+- **2026-10-02 — landed in #1958 (lane 01M3X2FTNC).** `PROVENANCES += 'dream'` and the dream wake
+  packet and write fence are on `main`; a dreaming seat reads its packet with `musterd dream`.
+  `ResidencyPolicySchema.dream`, `isDreamDue` and the lease-derivation pass are not in that PR —
+  they remain to be built.
 
 ## Observability & Evaluation
 
