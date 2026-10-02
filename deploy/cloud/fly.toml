@@ -56,5 +56,9 @@ primary_region = "iad"
   strategy = "bluegreen"
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"
+  # A dedicated core for the §8.1 load-test week (nick, 2026-10-02; lane 01M3Z44C56). A shared CPU
+  # is held to its baseline share once its burst balance runs out: the first load run hit that after
+  # seven minutes (docs/perf/daemon-load-baseline.md). Revisit by 2026-10-09 — the passing run's
+  # numbers decide the permanent size. Deploys apply this, so it must match `fly scale vm`.
+  size = "performance-1x"
+  memory = "2048mb"
