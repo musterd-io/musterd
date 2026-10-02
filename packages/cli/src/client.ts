@@ -935,6 +935,14 @@ export class HttpClient {
       throw new CliError('wake-context response did not match the protocol schema', 1);
     return response.data.context;
   }
+  /** Goal dreaming, lane 2 — `GET /teams/:slug/dream`: the caller's own dream packet, never another seat's. */
+  dreamPacket(
+    slug: string,
+    since?: number,
+  ): Promise<{ packet: unknown; used_bytes: number; truncated: boolean }> {
+    const q = since === undefined ? '' : `?since=${encodeURIComponent(String(since))}`;
+    return this.request('GET', `/teams/${slug}/dream${q}`);
+  }
   reclaim(slug: string, member: string): Promise<{ ok: boolean; member: string }> {
     return this.request('POST', `/teams/${slug}/members/${encodeURIComponent(member)}/reclaim`);
   }

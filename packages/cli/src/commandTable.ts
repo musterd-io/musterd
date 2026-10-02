@@ -20,6 +20,7 @@ export const COMMANDS: Readonly<Record<string, () => Promise<CommandFn>>> = {
   'codex-hook': async () => (await import('./commands/codexHook.js')).codexHookCommand,
   done: async () => (await import('./commands/done.js')).doneCommand,
   doorbell: async () => (await import('./commands/doorbell.js')).doorbellCommand,
+  dream: async () => (await import('./commands/dream.js')).dreamCommand,
   fmt: async () => (await import('./commands/fmt.js')).fmtCommand,
   gate: async () => (await import('./commands/gate.js')).gateCommand,
   goal: async () => (await import('./commands/goal.js')).goalCommand,
