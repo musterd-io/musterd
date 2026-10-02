@@ -3,7 +3,7 @@ import { createServer as createHttpServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { makeEnvelope, type TraceEvent } from '@musterd/protocol';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
@@ -118,6 +118,18 @@ withDrivers('tracePush', (_o, kind) => {
       '%trace%' as any,
     ]))!.n,
   });
+
+  // The joiner's instance 'b' exists only for this two-daemon file, so it is never in the warm
+  // per-worker pool: its first open boots two PGlites and runs every migration. Pay that once,
+  // here, under a cold-boot budget, rather than inside the first test's 30s hook — on a slow
+  // runner (2026-10-02, ~3x) the cold boot alone overran it, and only on the first test.
+  beforeAll(async () => {
+    if (kind !== 'pglite') return;
+    await Promise.all([
+      openTestDriver(kind, { instance: 'b' }),
+      openTestDriver(kind, { store: 'trace', instance: 'b' }),
+    ]);
+  }, 180_000);
 
   beforeEach(async () => {
     dir = mkdtempSync(join(tmpdir(), 'musterd-tracepush-'));
