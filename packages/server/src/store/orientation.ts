@@ -6,6 +6,10 @@ import {
   type Lane,
   type NextBrief,
   type NextSummary,
+  type ReviewPromiseAuditRow,
+  type ReviewPromiseClosureRow,
+  type ReviewPromiseOpenRow,
+  ReviewPromiseReferenceSchema,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { handoffNamedLaneOutOfPlay, handoffNamesNoLane } from './delivery.js';
@@ -377,6 +381,16 @@ export async function deriveNext(
     })),
   );
 
+  // ADR 490: accepted typed review requests, derived from the Act ledger. All three arrays are
+  // emitted, empty included — absence is how an older daemon says it does not report them.
+  const promises = await deriveReviewPromises(db, teamId);
+  const request_reviews = promises.open.filter((p) => p.owner === member);
+  const requested_reviews = promises.open.filter((p) => p.requester === member);
+  const review_closures = await unreadClosures(
+    db,
+    promises.closures.filter((c) => c.owner === member),
+  );
+
   return {
     member,
     in_flight,
@@ -387,6 +401,9 @@ export async function deriveNext(
     up_next_seeds,
     up_next_seeds_total,
     owed_reviews,
+    request_reviews,
+    requested_reviews,
+    review_closures,
     review_debt_total,
     why,
     next_goal,
@@ -394,6 +411,155 @@ export async function deriveNext(
     ...(review_debt.length ? { review_debt } : {}),
     incidents,
   };
+}
+
+interface ReviewAcceptRow {
+  request_id: string;
+  requester: string;
+  owner: string;
+  owner_id: string;
+  context: string;
+  meta: string | null;
+  accepted_at: number;
+}
+
+interface ReviewResolveRow {
+  request_id: string;
+  resolve_id: string;
+  closer: string;
+  resolved_at: number;
+  received_at: number;
+}
+
+type OwnedClosure = ReviewPromiseClosureRow & { owner: string; owner_id: string; received_at: number };
+
+/**
+ * ADR 490 — review promises, derived from the Act ledger alone: a root `request_help` to one Member
+ * carrying `meta.review`, that Member's `accept` naming it in `meta.in_reply_to`, and no
+ * Team-addressed `resolve` on its thread. No table and no timer; the Acts are the record.
+ *
+ * Duplicate accepts collapse to the minimum `(ts, id)`, so every replica holding the same Acts picks
+ * the same `accepted_at`. A closed promise whose closer was not its owner becomes a closure candidate;
+ * {@link unreadClosures} decides, per owner cursor, whether it is still shown.
+ */
+export async function deriveReviewPromises(
+  db: Driver,
+  teamId: string,
+): Promise<{ open: ReviewPromiseOpenRow[]; closures: OwnedClosure[] }> {
+  const accepts = await db.all<ReviewAcceptRow>(
+    `SELECT r.id AS request_id, fr.name AS requester, tr.name AS owner, tr.id AS owner_id,
+            r.body AS context, r.meta AS meta, a.ts AS accepted_at
+       FROM messages r
+       JOIN members fr ON fr.id = r.from_member
+       JOIN members tr ON tr.id = r.to_member
+       JOIN messages a ON a.team_id = r.team_id
+                      AND a.act = 'accept'
+                      AND a.from_member = r.to_member
+                      AND json_extract(a.meta, '$.in_reply_to') = r.id
+      WHERE r.team_id = ?
+        AND r.act = 'request_help'
+        AND r.thread_id IS NULL
+        AND r.to_kind = 'member'
+        AND json_extract(r.meta, '$.review') IS NOT NULL
+      ORDER BY a.ts ASC, a.id ASC`,
+    [teamId],
+  );
+  const resolves = await db.all<ReviewResolveRow>(
+    `SELECT m.thread_id AS request_id, m.id AS resolve_id, f.name AS closer,
+            m.ts AS resolved_at, m.created_at AS received_at
+       FROM messages m
+       JOIN members f ON f.id = m.from_member
+      WHERE m.team_id = ?
+        AND m.act = 'resolve'
+        AND m.to_kind IN ('team', 'broadcast')
+        AND m.thread_id IS NOT NULL
+      ORDER BY m.created_at ASC, m.id ASC`,
+    [teamId],
+  );
+  // The first resolve received closes the thread; later ones change nothing.
+  const closedBy = new Map<string, ReviewResolveRow>();
+  for (const r of resolves) if (!closedBy.has(r.request_id)) closedBy.set(r.request_id, r);
+
+  const open: ReviewPromiseOpenRow[] = [];
+  const closures: OwnedClosure[] = [];
+  const seen = new Set<string>();
+  for (const a of accepts) {
+    // Ordered by (ts, id): the first row per request is the controlling accept.
+    if (seen.has(a.request_id)) continue;
+    seen.add(a.request_id);
+    const meta = parseMeta(a.meta);
+    // A folded Act from an older peer never passed this daemon's envelope check — re-parse here.
+    const review = ReviewPromiseReferenceSchema.safeParse(meta['review']);
+    if (!review.success || meta['eligible'] !== undefined) continue;
+    const closed = closedBy.get(a.request_id);
+    if (!closed) {
+      open.push({
+        request_id: a.request_id,
+        requester: a.requester,
+        owner: a.owner,
+        context: a.context,
+        review: review.data,
+        accepted_at: a.accepted_at,
+      });
+    } else if (closed.closer !== a.owner) {
+      closures.push({
+        request_id: a.request_id,
+        resolve_id: closed.resolve_id,
+        closer: closed.closer,
+        resolved_at: closed.resolved_at,
+        owner: a.owner,
+        owner_id: a.owner_id,
+        received_at: closed.received_at,
+      });
+    }
+  }
+  open.sort(
+    (x, y) =>
+      x.accepted_at - y.accepted_at ||
+      (x.request_id < y.request_id ? -1 : x.request_id > y.request_id ? 1 : 0),
+  );
+  return { open, closures };
+}
+
+/**
+ * ADR 490 — a non-owner close stays in front of the owner until their inbox cursor crosses the
+ * `resolve`. Compared on receipt order `(created_at, id)`, the order the cursor walks — never the
+ * sender's `ts`, which a skewed clock could place behind a cursor that has not read it.
+ */
+async function unreadClosures(
+  db: Driver,
+  closures: readonly OwnedClosure[],
+): Promise<ReviewPromiseClosureRow[]> {
+  if (closures.length === 0) return [];
+  const cursor = await db.get<{ last_read_ts: number; last_read_message_id: string | null }>(
+    'SELECT last_read_ts, last_read_message_id FROM inbox_cursors WHERE member_id = ?',
+    [closures[0]!.owner_id],
+  );
+  return closures
+    .filter(
+      (c) =>
+        !cursor ||
+        c.received_at > cursor.last_read_ts ||
+        (c.received_at === cursor.last_read_ts &&
+          (cursor.last_read_message_id === null || c.resolve_id > cursor.last_read_message_id)),
+    )
+    .sort((x, y) => x.received_at - y.received_at || (x.resolve_id < y.resolve_id ? -1 : 1))
+    .map(({ request_id, resolve_id, closer, resolved_at }) => ({
+      request_id,
+      resolve_id,
+      closer,
+      resolved_at,
+    }));
+}
+
+/** ADR 490 — the Team-wide open rows for the weekly audit: ids, names and time, no prose or refs. */
+export async function deriveTeamReviewPromises(
+  db: Driver,
+  teamId: string,
+): Promise<ReviewPromiseAuditRow[]> {
+  return (await deriveReviewPromises(db, teamId)).open.map(
+    ({ request_id, requester, owner, accepted_at }) => ({ request_id, requester, owner, accepted_at }),
+  );
 }
 
 /**

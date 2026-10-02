@@ -4,6 +4,8 @@ import { hostname } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
 import {
+  ReviewPromisesQuerySchema,
+  ReviewPromisesResponseSchema,
   WorkspaceRepairBodySchema,
   HostProvisionReportBodySchema,
   HostProvisionsClaimBodySchema,
@@ -290,7 +292,11 @@ import {
   seatBindings,
 } from '../store/nodes.js';
 import { revokeAllForMember } from '../store/oauth.js';
-import { deriveNext, deriveNextSummary } from '../store/orientation.js';
+import {
+  deriveNext,
+  deriveNextSummary,
+  deriveTeamReviewPromises,
+} from '../store/orientation.js';
 import {
   currentBuild,
   attach,
@@ -5644,6 +5650,26 @@ export async function handleHttp(
       if (method === 'GET' && rest === '/next') {
         const { team, member } = await authTouch(ctx, slug, req);
         return sendJson(res, 200, await deriveNext(ctx.db, team.id, team.slug, member.name));
+      }
+
+      // ADR 490: every open review promise in the Team, for the weekly audit — which runs as the
+      // `sweep` Member and cannot read anyone else's brief. Ids, names and acceptance time only.
+      if (method === 'GET' && rest === '/review-promises') {
+        const { team, member } = await authTouch(ctx, slug, req);
+        if (member.left_at !== null) {
+          throw new MusterdError('forbidden', `"${member.name}" is no longer on ${team.slug}`);
+        }
+        const query = ReviewPromisesQuerySchema.safeParse(Object.fromEntries(url.searchParams));
+        if (!query.success) {
+          throw new MusterdError('bad_request', 'review-promises supports only ?open=1');
+        }
+        return sendJson(
+          res,
+          200,
+          ReviewPromisesResponseSchema.parse({
+            review_promises: await deriveTeamReviewPromises(ctx.db, team.id),
+          }),
+        );
       }
 
       // Portable wake context (ADR 209): the recipient gets a bounded, server-derived index after

@@ -6,8 +6,14 @@ import { appendAudit } from './audit.js';
 import { recordBlockedReport } from './incidents.js';
 import { openLane, updateLane } from './lanes.js';
 import { addMember, getMemberByName } from './members.js';
+import { setCursor } from './cursors.js';
 import { insertMessage } from './messages.js';
-import { WHY_BARE_MAX_AGE_MS, deriveNext, deriveNextSummary } from './orientation.js';
+import {
+  WHY_BARE_MAX_AGE_MS,
+  deriveNext,
+  deriveNextSummary,
+  deriveTeamReviewPromises,
+} from './orientation.js';
 import { captureRepoSeed, createSeedFromRelay } from './seeds.js';
 import { createTeam } from './teams.js';
 
@@ -921,6 +927,194 @@ withDrivers('orientation', (o) => {
       expect(brief.up_next_seeds).toMatchObject([
         { source: 'slack', ref: null, summary: 'Which Surface should own this?' },
       ]);
+    });
+  });
+
+  // ADR 490: review promises are a projection of request, accept and resolve Acts — no table.
+  describe('review promises (ADR 490)', () => {
+    const PR = { kind: 'pr', repo: 'org/repo', number: 42 } as const;
+
+    async function reviewSeed() {
+      const base = await seed();
+      const lin = (await addMember(base.db, base.team, { name: 'lin', kind: 'agent' })).row;
+      const ids: Record<string, string> = {
+        nick: base.nick.id,
+        stanley: base.stanley.id,
+        lin: lin.id,
+      };
+      /** One Act; `at` is its receipt clock (`created_at`), `ts` the sender's clock. */
+      const send = async (
+        from: string,
+        to: string | null,
+        input: {
+          id: string;
+          act: 'request_help' | 'accept' | 'decline' | 'resolve';
+          ts: number;
+          body?: string;
+          thread?: string;
+          meta?: Record<string, unknown>;
+        },
+        at = input.ts,
+      ) =>
+        insertMessage(
+          base.db,
+          base.team.id,
+          ids[from]!,
+          to === null ? null : ids[to]!,
+          makeEnvelope({
+            team: 'revive',
+            from,
+            to: to === null ? { kind: 'team' } : { kind: 'member', name: to },
+            body: input.body ?? '',
+            ...input,
+          }),
+          { now: at },
+        );
+      /** nick asks stanley to review PR 42 and stanley accepts. */
+      const accepted = async (id: string, ts: number, owner = 'stanley') => {
+        await send('nick', owner, {
+          id,
+          act: 'request_help',
+          ts,
+          body: `review ${id}`,
+          meta: { review: PR },
+        });
+        await send(owner, 'nick', {
+          id: `${id}-ok`,
+          act: 'accept',
+          ts: ts + 10,
+          thread: id,
+          meta: { in_reply_to: id },
+        });
+      };
+      return { ...base, send, accepted };
+    }
+
+    it('shows an accepted, unresolved typed request to its owner and its requester', async () => {
+      const { db, team, accepted } = await reviewSeed();
+      await accepted('r1', 1_000);
+
+      const row = {
+        request_id: 'r1',
+        requester: 'nick',
+        owner: 'stanley',
+        context: 'review r1',
+        review: PR,
+        accepted_at: 1_010,
+      };
+      const owner = await deriveNext(db, team.id, 'revive', 'stanley');
+      expect(owner.request_reviews).toEqual([row]);
+      expect(owner.requested_reviews).toEqual([]);
+      expect(owner.review_closures).toEqual([]);
+      const requester = await deriveNext(db, team.id, 'revive', 'nick');
+      expect(requester.request_reviews).toEqual([]);
+      expect(requester.requested_reviews).toEqual([row]);
+      // Lane acceptance keeps its own fields: a review promise is neither.
+      expect(owner.owed_reviews).toEqual([]);
+      expect(owner.review_debt).toBeUndefined();
+      // A bystander gets supported-empty arrays, never absence.
+      const lin = await deriveNext(db, team.id, 'revive', 'lin');
+      expect([lin.request_reviews, lin.requested_reviews, lin.review_closures]).toEqual([[], [], []]);
+    });
+
+    it('derives nothing from untyped, unaccepted, declined or wrong-sender requests', async () => {
+      const { db, team, send } = await reviewSeed();
+      // Untyped request, accepted.
+      await send('nick', 'stanley', { id: 'u1', act: 'request_help', ts: 1 });
+      await send('stanley', 'nick', { id: 'u1-ok', act: 'accept', ts: 2, meta: { in_reply_to: 'u1' } });
+      // Typed, never answered.
+      await send('nick', 'stanley', { id: 't1', act: 'request_help', ts: 3, meta: { review: PR } });
+      // Typed, declined.
+      await send('nick', 'stanley', { id: 't2', act: 'request_help', ts: 4, meta: { review: PR } });
+      await send('stanley', 'nick', { id: 't2-no', act: 'decline', ts: 5, meta: { in_reply_to: 't2' } });
+      // Typed, accepted by someone who was not asked.
+      await send('nick', 'stanley', { id: 't3', act: 'request_help', ts: 6, meta: { review: PR } });
+      await send('lin', 'nick', { id: 't3-ok', act: 'accept', ts: 7, meta: { in_reply_to: 't3' } });
+
+      for (const who of ['nick', 'stanley', 'lin']) {
+        const brief = await deriveNext(db, team.id, 'revive', who);
+        expect(brief.request_reviews).toEqual([]);
+        expect(brief.requested_reviews).toEqual([]);
+      }
+      expect(await deriveTeamReviewPromises(db, team.id)).toEqual([]);
+    });
+
+    it('collapses duplicate accepts to the minimum (ts, id), whatever order they arrived in', async () => {
+      const { db, team, send } = await reviewSeed();
+      await send('nick', 'stanley', { id: 'r1', act: 'request_help', ts: 100, meta: { review: PR } });
+      const ok = (id: string, ts: number, at: number) =>
+        send('stanley', 'nick', { id, act: 'accept', ts, meta: { in_reply_to: 'r1' } }, at);
+      await ok('b-late', 300, 301);
+      await ok('b-tie', 200, 302);
+      await ok('a-tie', 200, 303);
+
+      const brief = await deriveNext(db, team.id, 'revive', 'stanley');
+      expect(brief.request_reviews).toHaveLength(1);
+      expect(brief.request_reviews![0]!.accepted_at).toBe(200);
+    });
+
+    it('orders open promises oldest acceptance first, request id breaking ties', async () => {
+      const { db, team, accepted } = await reviewSeed();
+      await accepted('r3', 500);
+      await accepted('r2', 100);
+      await accepted('r1', 100);
+
+      const brief = await deriveNext(db, team.id, 'revive', 'nick');
+      expect(brief.requested_reviews!.map((r) => r.request_id)).toEqual(['r1', 'r2', 'r3']);
+      expect(await deriveTeamReviewPromises(db, team.id)).toEqual([
+        { request_id: 'r1', requester: 'nick', owner: 'stanley', accepted_at: 110 },
+        { request_id: 'r2', requester: 'nick', owner: 'stanley', accepted_at: 110 },
+        { request_id: 'r3', requester: 'nick', owner: 'stanley', accepted_at: 510 },
+      ]);
+    });
+
+    it('closes both rows on a Team resolve, with no notice when the owner closed it', async () => {
+      const { db, team, send, accepted } = await reviewSeed();
+      await accepted('r1', 1_000);
+      await send('stanley', null, { id: 'r1-done', act: 'resolve', ts: 2_000, thread: 'r1' });
+
+      for (const who of ['nick', 'stanley']) {
+        const brief = await deriveNext(db, team.id, 'revive', who);
+        expect(brief.request_reviews).toEqual([]);
+        expect(brief.requested_reviews).toEqual([]);
+        expect(brief.review_closures).toEqual([]);
+      }
+    });
+
+    it("keeps one owner notice after a non-owner close until the owner's cursor crosses it", async () => {
+      const { db, team, stanley, send, accepted } = await reviewSeed();
+      await accepted('r1', 1_000);
+      // The requester withdraws. Its sender clock runs far behind receipt: the cursor comparison
+      // must use the receipt position, or this notice would read as already seen.
+      await send('nick', null, { id: 'r1-withdrawn', act: 'resolve', ts: 5, thread: 'r1' }, 3_000);
+      await send('lin', 'stanley', { id: 'later', act: 'request_help', ts: 1 }, 4_000);
+
+      const notice = { request_id: 'r1', resolve_id: 'r1-withdrawn', closer: 'nick', resolved_at: 5 };
+      expect((await deriveNext(db, team.id, 'revive', 'stanley')).review_closures).toEqual([notice]);
+      expect((await deriveNext(db, team.id, 'revive', 'nick')).review_closures).toEqual([]);
+
+      // A cursor resting before the resolve (on the accept) keeps it.
+      await setCursor(db, stanley.id, 'r1-ok');
+      expect((await deriveNext(db, team.id, 'revive', 'stanley')).review_closures).toEqual([notice]);
+      // On the resolve itself, it is read.
+      await setCursor(db, stanley.id, 'r1-withdrawn');
+      expect((await deriveNext(db, team.id, 'revive', 'stanley')).review_closures).toEqual([]);
+      // Past it, still read.
+      await setCursor(db, stanley.id, 'later');
+      expect((await deriveNext(db, team.id, 'revive', 'stanley')).review_closures).toEqual([]);
+    });
+
+    it('breaks a same-millisecond receipt tie on the resolve id, as the inbox cursor does', async () => {
+      const { db, team, stanley, send, accepted } = await reviewSeed();
+      await accepted('r1', 1_000);
+      await send('nick', null, { id: 'm-resolve', act: 'resolve', ts: 9, thread: 'r1' }, 3_000);
+      await send('lin', 'stanley', { id: 'a-before', act: 'request_help', ts: 1 }, 3_000);
+      await send('lin', 'stanley', { id: 'z-after', act: 'request_help', ts: 1 }, 3_000);
+
+      await setCursor(db, stanley.id, 'a-before');
+      expect((await deriveNext(db, team.id, 'revive', 'stanley')).review_closures).toHaveLength(1);
+      await setCursor(db, stanley.id, 'z-after');
+      expect((await deriveNext(db, team.id, 'revive', 'stanley')).review_closures).toEqual([]);
     });
   });
 });
