@@ -10,7 +10,9 @@ import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { saveNodeEnrollment } from '../node/state.js';
 import { appendAudit, listAudit } from '../store/audit.js';
-import { openLane, updateLane } from '../store/lanes.js';
+import { openIncidents, recordBlockedReport } from '../store/incidents.js';
+import { getLane, openLane, updateLane } from '../store/lanes.js';
+import { SWEEP_GRACE_MS } from '../store/laneSweep.js';
 import { addMember } from '../store/members.js';
 import { insertMessage, localNodeForTeam } from '../store/messages.js';
 import { attach, presenceById, release } from '../store/presence.js';
@@ -22,7 +24,7 @@ import {
   claimWakeLeases,
   enrollResidency,
 } from '../store/residency.js';
-import { createTeam } from '../store/teams.js';
+import { createTeam, setPolicy, type TeamRow } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
 import { startReaper } from './reaper.js';
 
@@ -532,6 +534,181 @@ withDrivers('reaper', (o) => {
         delete process.env['MUSTERD_NODE_STATE'];
         rmSync(dir, { recursive: true, force: true });
       }
+    });
+  });
+  /**
+   * What only the hub decides. Which seat is gone, which incident nobody claimed, which acceptance
+   * was abandoned are judgements about the WHOLE team, and an enrolled joiner holds a replica of it:
+   * partial mid-drain, stale after a sleep, and blind to every seat that lives on another machine
+   * (ADR 361 §1, ADR 371 §2). A joiner that makes them anyway writes hub-owned lane state from that
+   * replica and sends messages AS seats bound to the hub, which the hub refuses `bound_elsewhere`
+   * for good — the second-machine run wedged exactly that way on 2026-10-02 (see the guide's
+   * Findings). Each sweep runs a hub case and a joiner case on the same fixture, so a fixture that
+   * stops tripping the sweep fails the hub case instead of quietly passing the joiner one.
+   */
+  describe('startReaper — the decisions only the hub makes', async () => {
+    let db: Database;
+    let config: ResolvedConfig;
+    let ctx: Ctx;
+    let stop: (() => void) | undefined;
+    let dir: string;
+
+    beforeEach(async () => {
+      vi.useFakeTimers();
+      db = await openStore();
+      config = resolveConfig();
+      ctx = { db: db, hub: new Hub(), config, rosterRoots: [] };
+      dir = mkdtempSync(join(tmpdir(), 'musterd-reaper-hubonly-'));
+      process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
+    });
+
+    afterEach(() => {
+      stop?.();
+      stop = undefined;
+      vi.useRealTimers();
+      db.close();
+      delete process.env['MUSTERD_NODE_STATE'];
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    /** Leave this daemon enrolled as a joiner of `team`, the way `musterd node join` does. */
+    async function enrolAsJoiner(team: TeamRow) {
+      const { id } = await localNodeForTeam(db, team.id);
+      saveNodeEnrollment({
+        team: team.slug,
+        hub_url: 'http://hub.invalid:4849',
+        node_id: id,
+        credential: 'msnode_test',
+        enrolled_at: 1,
+      });
+    }
+
+    /** Let the reaper tick past its listening window, so every sweep has had its turn. */
+    async function reapOnce() {
+      stop = startReaper(ctx);
+      await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs * 2);
+    }
+
+    const auditRows = async (teamId: string, action: string) =>
+      (await listAudit(db, teamId)).filter((r) => r.action === action);
+
+    describe('an incident nobody claimed (ADR 271)', async () => {
+      async function unclaimedIncident(team: TeamRow) {
+        for (const [name, role] of [
+          ['izzo', 'reviewer'],
+          ['dolly', 'reviewer'],
+          ['stanley', 'platform'],
+        ] as const) {
+          await addMember(db, team, { name, kind: 'agent', role });
+        }
+        // Born well outside the claim window by the origin's clock — which is what a replayed
+        // incident looks like to a joiner that folded its birth and not yet its claim.
+        const at = Date.now() - 15 * 60_000;
+        const gate = 'ci:gates/A11y contrast';
+        await recordBlockedReport(db, team.id, team.slug, 'izzo', { gate }, 'm1', at);
+        await recordBlockedReport(db, team.id, team.slug, 'dolly', { gate }, 'm2', at);
+        const [lane] = await openIncidents(db, team.id, team.slug);
+        expect(lane).toBeDefined();
+        return lane!;
+      }
+
+      it('the hub hands it to the fallback role', async () => {
+        const team = await createTeam(db, { slug: 'dawn' });
+        const lane = await unclaimedIncident(team);
+
+        await reapOnce();
+
+        expect((await getLane(db, team.id, lane.id, team.slug))?.owner_seat).toBe('stanley');
+        expect(await auditRows(team.id, 'incident.routed')).toHaveLength(1);
+      });
+
+      it('an enrolled joiner leaves it for the hub: no claim, no announcement', async () => {
+        const team = await createTeam(db, { slug: 'dawn' });
+        const lane = await unclaimedIncident(team);
+        await enrolAsJoiner(team);
+
+        await reapOnce();
+
+        expect((await getLane(db, team.id, lane.id, team.slug))?.owner_seat).toBeNull();
+        expect(await auditRows(team.id, 'incident.routed')).toHaveLength(0);
+        expect(await auditRows(team.id, 'lane.claimed')).toHaveLength(0);
+      });
+    });
+
+    describe('an acceptance past the backstop grace (ADR 229)', async () => {
+      async function strandedAcceptance(team: TeamRow) {
+        await addMember(db, team, { name: 'dolly', kind: 'agent' });
+        const lane = await openLane(db, team.id, team.slug, 'dolly', {
+          title: 'stranded',
+          claim: true,
+        });
+        await updateLane(db, team.id, lane.id, team.slug, { state: 'awaiting_acceptance' });
+        await db.run('UPDATE lanes SET updated_at = ? WHERE id = ?', [
+          Date.now() - SWEEP_GRACE_MS - 60_000,
+          lane.id,
+        ]);
+        await setPolicy(db, team.id, { loops: { sweep: true } });
+        return lane;
+      }
+
+      it('the hub closes it, as the system', async () => {
+        const team = await createTeam(db, { slug: 'dawn' });
+        const lane = await strandedAcceptance(team);
+
+        await reapOnce();
+
+        expect((await getLane(db, team.id, lane.id, team.slug))?.state).toBe('done');
+      });
+
+      it('an enrolled joiner does not close it from a replica that may be a day stale', async () => {
+        const team = await createTeam(db, { slug: 'dawn' });
+        const lane = await strandedAcceptance(team);
+        await enrolAsJoiner(team);
+
+        await reapOnce();
+
+        expect((await getLane(db, team.id, lane.id, team.slug))?.state).toBe('awaiting_acceptance');
+        expect(await auditRows(team.id, 'lane.closed')).toHaveLength(0);
+      });
+    });
+
+    describe('a lane still owned by a seat that left (ADR 196)', async () => {
+      async function ghostLane(team: TeamRow) {
+        const june = await addMember(db, team, { name: 'June', kind: 'agent' });
+        const lane = await openLane(db, team.id, team.slug, 'June', {
+          title: 'ghost wip',
+          claim: true,
+        });
+        // Bypass leaveMember's own release — the historical ghost the sweep exists to clear.
+        await db.run('UPDATE members SET left_at = ? WHERE id = ?', [Date.now(), june.row.id]);
+        return lane;
+      }
+
+      it('the hub releases it', async () => {
+        const team = await createTeam(db, { slug: 'dawn' });
+        const lane = await ghostLane(team);
+
+        await reapOnce();
+
+        expect(await getLane(db, team.id, lane.id, team.slug)).toMatchObject({
+          state: 'open',
+          owner_seat: null,
+        });
+      });
+
+      it('an enrolled joiner leaves it: the hub released it already, or will', async () => {
+        const team = await createTeam(db, { slug: 'dawn' });
+        const lane = await ghostLane(team);
+        await enrolAsJoiner(team);
+
+        await reapOnce();
+
+        expect(await getLane(db, team.id, lane.id, team.slug)).toMatchObject({
+          state: 'claimed',
+          owner_seat: 'June',
+        });
+        expect(await auditRows(team.id, 'lane.released')).toHaveLength(0);
+      });
     });
   });
 });

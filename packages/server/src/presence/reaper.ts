@@ -23,6 +23,7 @@ import {
   wakeExhaustionKey,
 } from '../store/residency.js';
 import { getPolicy, getTeamById, getTeamBySlug, listActiveTeams } from '../store/teams.js';
+import { joinerEnrollment } from '../sync/claim.js';
 
 /** Periodically remove stale presence rows and emit offline events for members who lost all presence. */
 export function startReaper(ctx: Ctx): () => void {
@@ -172,9 +173,24 @@ export function reaperTick(ctx: Ctx): () => Promise<void> {
     const prunedRings = await pruneRings(ctx.db, now);
     if (prunedRings > 0) log.info({ msg: 'reap_doorbell_rings', count: prunedRings });
 
+    // The sweeps below decide things about the WHOLE team: which seat is gone, which incident lane
+    // nobody claimed, which acceptance was abandoned. Those are the hub's decisions (ADR 361 §1,
+    // ADR 371 §2); an enrolled joiner holds only a replica of the team — partial mid-drain, stale
+    // after a sleep, blind to every seat that lives on another machine — and converges on the hub's
+    // own decisions through the pull. Making them anyway writes hub-owned lane state from that
+    // replica and sends messages AS seats bound to the hub, which the hub refuses `bound_elsewhere`
+    // for good: every later push from the machine wedges behind the first one (second-machine
+    // run, 2026-10-02). So an enrolled joiner skips them, team by team — one daemon can be a hub
+    // for one team and a joiner of another.
+    const activeTeams = await listActiveTeams(ctx.db);
+    const joinerTeams = new Set<string>();
+    for (const team of activeTeams) {
+      if (await joinerEnrollment(ctx.db, team.id, team.slug)) joinerTeams.add(team.id);
+    }
+
     // ADR 196: release in-flight lanes still owned by soft-removed seats (pre-fix ghosts + any
     // leave path that skipped the store composition).
-    const releasedClaims = await releaseDepartedSeatClaims(ctx.db, now);
+    const releasedClaims = await releaseDepartedSeatClaims(ctx.db, now, joinerTeams);
     if (releasedClaims.length > 0) {
       log.info({ msg: 'reap_departed_claims', count: releasedClaims.length });
     }
@@ -183,7 +199,8 @@ export function reaperTick(ctx: Ctx): () => Promise<void> {
     // it to the fallback role. Deliberately NOT behind `loops.sweep` — that switch arms a loop that
     // CLOSES other people's lanes, and this one only puts a name on a lane already open and visible.
     // Its own `incident.enabled` is the switch, and it defaults on because increment 1 already does.
-    for (const team of await listActiveTeams(ctx.db)) {
+    for (const team of activeTeams) {
+      if (joinerTeams.has(team.id)) continue;
       for (const { lane, owner } of await routeUnclaimedIncidents(
         ctx.db,
         team.id,
@@ -211,7 +228,8 @@ export function reaperTick(ctx: Ctx): () => Promise<void> {
     // below: this never closes a lane and never invents a verdict, it only moves an ask to a seat
     // that is actually there. Runs BEFORE the backstop so a lane gets a live reviewer offered
     // before it can be closed unreviewed on a team that armed the sweep.
-    for (const team of await listActiveTeams(ctx.db)) {
+    for (const team of activeTeams) {
+      if (joinerTeams.has(team.id)) continue;
       for (const lane of await sweepReapedAcceptances(ctx, team)) {
         log.info({ msg: 'reroute_reaped_acceptance', team: team.slug, lane });
       }
@@ -220,7 +238,8 @@ export function reaperTick(ctx: Ctx): () => Promise<void> {
     // ADR 229: the acceptance backstop. A lane past the grace in `awaiting_acceptance` has no actor
     // left to close it — the ADR 217 reasons label a close, they never cause one. Per team, and only
     // where an admin armed `loops.sweep`; every team is bit-identical to pre-229 until they do.
-    for (const team of await listActiveTeams(ctx.db)) {
+    for (const team of activeTeams) {
+      if (joinerTeams.has(team.id)) continue;
       if ((await getPolicy(ctx.db, team.id)).loops?.sweep !== true) continue;
       const swept = await sweepAbandonedAcceptance(ctx.db, team.id, team.slug, now);
       for (const lane of swept) {
