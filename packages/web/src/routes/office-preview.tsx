@@ -317,6 +317,13 @@ function OfficePreviewPage() {
     return raw ? new Set(raw.split(',').map((s) => s.trim())) : new Set(['Ivy']);
   });
 
+  // `?dream=<names>` marks members dreaming (goal dreaming): lamp low, a thought bubble over the desk.
+  // Pair it with `?light=23` to see it the way it happens, at night.
+  const [dreamSet] = useState<Set<string>>(() => {
+    const raw = previewSearch().get('dream');
+    return raw ? new Set(raw.split(',').map((s) => s.trim())) : new Set();
+  });
+
   /* `?team=<slug>` — the ambient seed's key material (E1). The room's idle life is a pure function
      of (team, wall-clock slot), so two tabs on the same team play the SAME beats at the same instants
      and two different teams play independent ones: this param is how that is checked by eye on the
@@ -385,6 +392,7 @@ function OfficePreviewPage() {
             // Why the seat is here at all — a wake, not someone opening a session. Orthogonal to
             // posture on purpose, so the preview shows the two facts side by side.
             woken: WOKEN.has(m.name) && !isOffline,
+            dreaming: dreamSet.has(m.name) && !isOffline,
             dnd: dndSet.has(m.name) && !isOffline,
             // The first offline fixture wears the amber `disconnected` glint; the rest read released.
             offline_reason: isOffline
@@ -400,7 +408,7 @@ function OfficePreviewPage() {
         ...newcomers,
       ],
     }),
-    [teamName, present, away, idle, stale, offlineSet, dndSet, newcomers],
+    [teamName, present, away, idle, stale, offlineSet, dndSet, dreamSet, newcomers],
   );
   const dataRef = useRef(buildData);
   // Synced in an effect, not during render — see OfficeScene: the mount effect subscribes once and

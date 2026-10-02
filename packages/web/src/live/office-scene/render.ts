@@ -4381,6 +4381,9 @@ function drawInteriorLight(
   /** Desk-slot ids whose lamp is actually switched on — a real sitter's desk, after dark. Built at the
    * same place the workstation decides to draw the lit fixture, so the light and the object agree. */
   litLamps: ReadonlySet<number>,
+  /** The subset of `litLamps` at a dreaming seat's desk. The lamp is turned down low, the way you'd
+   *  leave one on for someone asleep. */
+  dreamLamps: ReadonlySet<number> = new Set(),
 ): void {
   if (env.veilAlpha > 0.01) {
     ctx.save();
@@ -4410,15 +4413,17 @@ function drawInteriorLight(
   for (const slot of DESK_SLOTS) {
     if (!litLamps.has(slot.id)) continue;
     const head = lampHeadPoint(slot, fit);
+    const low = dreamLamps.has(slot.id) ? DREAM_LAMP : 1;
     // (a) The floor pool: light landing on the desk corner and the floor beside it, cast from under the
     // shade rather than from the shade itself, so it reads as spill and not as a second bulb.
-    warmPool(ctx, { x: head.x, y: head.y + (DESK_UP + 20) * fit.scale }, 74 * fit.scale, 0.6, '255, 194, 112', 0.3 * night);
+    warmPool(ctx, { x: head.x, y: head.y + (DESK_UP + 20) * fit.scale }, 74 * fit.scale * low, 0.6, '255, 194, 112', 0.3 * night * low);
     // (b) The bulb: a small, bright, unmistakably warm core right at the shade, painted additively over
     // the veil so the fixture reads as ON. Two stops — a tight near-white filament inside a warm halo —
     // because a single soft blob at this size reads as a smudge, and what has to survive the veil is the
     // sense that there is a *source* here. This is the half that was missing: the room had lamplight
     // with no visible lamps in it.
-    warmPool(ctx, head, 26 * fit.scale, 0.85, '255, 186, 96', 0.5 * night);
+    // A dreaming lamp keeps its filament at full strength and loses its halo, so it still reads as ON.
+    warmPool(ctx, head, 26 * fit.scale, 0.85, '255, 186, 96', 0.5 * night * low);
     warmPool(ctx, head, 10 * fit.scale, 0.8, '255, 238, 198', 0.72 * night);
   }
 
@@ -4897,6 +4902,7 @@ export function renderScene(
   // `drawWorkstation` uses to draw the lit shade (a node, not a bench seat, not an offline owner's kept
   // desk) so the emissive pass in `drawInteriorLight` can never light a lamp the room did not draw.
   const litLamps = new Set<number>();
+  const dreamLamps = new Set<number>();
 
   for (const [slotIndex, slot] of DESK_SLOTS.entries()) {
     const name = slotMember.get(slotIndex) ?? null;
@@ -4926,6 +4932,7 @@ export function renderScene(
       dpr: opts.dpr,
     });
     if (station.lampLit) litLamps.add(slot.id);
+    if (station.lampLit && node?.dreaming) dreamLamps.add(slot.id);
     items.push(...station.items);
   }
 
@@ -4993,11 +5000,17 @@ export function renderScene(
   if (opts.welcome?.tosses.length) drawTosses(ctx, fit, opts.welcome.tosses, heads, t);
 
   // Interior lighting: veil the room to the night level, then let occupied desks' lamps glow through.
-  drawInteriorLight(ctx, fit, env, poses, byName, litLamps);
+  drawInteriorLight(ctx, fit, env, poses, byName, litLamps, dreamLamps);
 
   // The Welcome Wagon's light-emitting bits (lane 01M3F81DD9) go over the night veil, like the lamps:
   // a monitor saying hello and an agent's status light are sources, not surfaces.
   if (opts.welcome) drawWelcomeGlows(ctx, fit, opts.welcome, placements, heads, t);
+
+  // Dream bubbles also go over the veil. A dream happens at night, and a bubble lost in the dark
+  // would leave the dreamer looking like any other late worker.
+  for (const [name, at] of heads) {
+    if (byName.get(name)?.dreaming) drawDreamBubble(ctx, fit, at, t);
+  }
 
   // Collapse any queue/nook members past the render cap into a single "+N" pill, so a very large roster
   // stays bounded. Hidden count = placed-but-not-drawn (capped members get no pose in homePoses).
@@ -5249,6 +5262,95 @@ function drawWelcomeGlows(
     if (Math.floor(age / 0.15) % 2 !== 0 || age >= 0.6) continue;
     ellipse(ctx, { x: at.x, y: at.y + 14 * s }, 2.6 * s, 2.6 * s, BOOT_LED);
   }
+}
+
+/** A dreaming seat's lamp, as a share of a working lamp's spill (goal dreaming, lane 5). */
+export const DREAM_LAMP = 0.35;
+/** One slow breath of the dream bubble, in scene seconds. */
+const DREAM_BREATH_S = 3.2;
+const DREAM_CLOUD = '244, 239, 255';
+const DREAM_MOON = '#e8c35a';
+
+/**
+ * The bubble's motion at scene time `t`, kept apart from the drawing so it can be tested. `bob` is
+ * a gentle float in scene units. `dots` are the three trail dots' alphas, which brighten one after
+ * another from the head up to the cloud, the way a thought rises.
+ */
+export function dreamBubble(t: number): { bob: number; dots: [number, number, number] } {
+  const phase = (((t / DREAM_BREATH_S) % 1) + 1) % 1;
+  const dot = (i: number): number => {
+    const d = (((phase - i / 3) % 1) + 1) % 1;
+    return 0.35 + 0.55 * Math.max(0, Math.cos(d * Math.PI * 2));
+  };
+  return { bob: Math.sin(phase * Math.PI * 2) * 1.6, dots: [dot(0), dot(1), dot(2)] };
+}
+
+/** The cloud's size against the puffs it is drawn from: big enough to read at 720p (~30 css px). */
+const DREAM_CLOUD_K = 1.5;
+/** Trail dots from the shoulder up toward the cloud: [dx, dy, r] in scene units off the plate anchor. */
+const DREAM_TRAIL: ReadonlyArray<readonly [number, number, number]> = [
+  [16, 50, 1.8],
+  [21, 45, 2.4],
+  [25, 39, 3],
+];
+/** Cloud centre off the plate anchor: right of the face, and low enough that its top clears it. */
+const DREAM_CLOUD_AT = { dx: 42, dy: 20 } as const;
+
+/**
+ * Where the dream bubble goes for a head anchor `at`, at scale `s` and float `bob`. Kept pure so a
+ * test can hold it to the two things the stage capture showed it must do: stay BELOW `at.y`, where
+ * the DOM nameplate hangs (a cloud straddling that line was drawn under the plate), and stay off the
+ * face (`headBox`).
+ */
+export function dreamBubbleLayout(
+  at: Pt,
+  s: number,
+  bob: number,
+): {
+  trail: Array<{ x: number; y: number; r: number }>;
+  cloud: { cx: number; cy: number; k: number; halfW: number };
+  box: { x0: number; y0: number; x1: number; y1: number };
+} {
+  const k = DREAM_CLOUD_K * s;
+  const trail = DREAM_TRAIL.map(([dx, dy, r]) => ({
+    x: at.x + dx * s,
+    y: at.y + (dy + bob * 0.5) * s,
+    r: r * s,
+  }));
+  const cx = at.x + DREAM_CLOUD_AT.dx * s;
+  const cy = at.y + (DREAM_CLOUD_AT.dy + bob) * s;
+  // The puffs below span x ±15 and y −11…+9 in cloud units.
+  const halfW = 15 * k;
+  const box = {
+    x0: Math.min(cx - halfW, ...trail.map((d) => d.x - d.r)),
+    y0: Math.min(cy - 11 * k, ...trail.map((d) => d.y - d.r)),
+    x1: cx + halfW,
+    y1: Math.max(cy + 9 * k, ...trail.map((d) => d.y + d.r)),
+  };
+  return { trail, cloud: { cx, cy, k, halfW }, box };
+}
+
+/**
+ * A thought bubble beside a dreaming seat: three trail dots rising from the shoulder to a small cloud
+ * holding a crescent moon. It reads as asleep and thinking, not stuck. No words in it, because the
+ * nameplate already says who this is and the digest says what they dreamed.
+ */
+function drawDreamBubble(ctx: CanvasRenderingContext2D, fit: Fit, at: Pt, t: number): void {
+  const { bob, dots } = dreamBubble(t);
+  const { trail, cloud } = dreamBubbleLayout(at, fit.scale, bob);
+  trail.forEach((d, i) => {
+    ellipse(ctx, { x: d.x, y: d.y }, d.r, d.r, `rgba(${DREAM_CLOUD}, ${dots[i]})`);
+  });
+  // The cloud: four overlapping puffs, so it looks drawn rather than generated.
+  const { cx, cy, k } = cloud;
+  const fill = `rgba(${DREAM_CLOUD}, 0.94)`;
+  ellipse(ctx, { x: cx, y: cy }, 13 * k, 9 * k, fill);
+  ellipse(ctx, { x: cx - 8 * k, y: cy + 2 * k }, 7 * k, 6 * k, fill);
+  ellipse(ctx, { x: cx + 8 * k, y: cy + 2 * k }, 7 * k, 6 * k, fill);
+  ellipse(ctx, { x: cx + 1 * k, y: cy - 5 * k }, 7 * k, 6 * k, fill);
+  // A crescent: the moon, then a cloud-coloured bite out of its upper right.
+  ellipse(ctx, { x: cx, y: cy }, 5 * k, 5 * k, DREAM_MOON);
+  ellipse(ctx, { x: cx + 2.4 * k, y: cy - 1.6 * k }, 4.4 * k, 4.4 * k, fill);
 }
 
 /**

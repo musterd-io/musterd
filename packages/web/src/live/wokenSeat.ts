@@ -24,6 +24,20 @@ export function wokenSeat(m: Pick<MemberSummary, 'presences'>): boolean {
   return livePresence(m)?.provenance === 'wake';
 }
 
+/**
+ * Whether a seat is in the room because it is DREAMING (goal dreaming, lane 01M3X2F2ZR): a nightly
+ * wake that re-reads the day while the team is out. The server stamps the dream wake's presence with
+ * provenance `'dream'` (izzo's dreaming ADR), and this reads that and nothing else. It does not guess
+ * from the time of day or from a woken seat being idle, for the same ADR 236 reason as `wokenSeat`.
+ *
+ * Compared as a string because `'dream'` joins `PROVENANCES` in lane 2's PR. Until that lands, no
+ * live row carries it and this is false everywhere except fixtures.
+ */
+export function dreamingSeat(m: Pick<MemberSummary, 'presences'>): boolean {
+  const provenance: string | null | undefined = livePresence(m)?.provenance;
+  return provenance === 'dream';
+}
+
 /** The live row the rest of the nameplate reads — online/away first, else whatever there is. */
 function livePresence(m: Pick<MemberSummary, 'presences'>): Presence | undefined {
   return (
