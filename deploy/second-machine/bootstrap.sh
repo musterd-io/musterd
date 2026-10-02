@@ -128,9 +128,11 @@ step_team() {
   wait_local
   log "team $MUSTERD_TEAM: roster root $TEAM_HOME"
   # The human's own Workspace here (ADR 447): every later admin act — enrol, key, provisioning a
-  # seat, residency — resolves its identity from this folder.
+  # seat, residency — resolves its identity from this folder. `--rotate` because `team create`
+  # already minted this human a credential here, and re-issuing it otherwise asks on the TTY —
+  # where the tee hides the question and the run hangs (second-machine run, 2026-10-02).
   if [ -z "$(human_ws)" ]; then
-    ( cd "$RUNTIME" && musterd human "$MUSTERD_HUMAN" --team "$MUSTERD_TEAM" ) 2>&1 | tee -a "$LOG"
+    ( cd "$RUNTIME" && musterd human "$MUSTERD_HUMAN" --team "$MUSTERD_TEAM" --rotate ) 2>&1 | tee -a "$LOG"
   fi
   [ -n "$(human_ws)" ] || die "no Workspace for $MUSTERD_HUMAN under $TEAM_HOME/*/ — read the output above"
   log "human Workspace: $(human_ws)"
