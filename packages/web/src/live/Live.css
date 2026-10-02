@@ -3588,6 +3588,68 @@
   max-width: 78ch;
   margin-inline: auto;
 }
+/* The morning digest pinned above the rows (goal dreaming, lane 5). Night indigo, from the lane-tone
+   family, against the daylight paper: it is what came out of the dark, read first thing. Same measure
+   as the rows, so it sits in the column instead of floating over it. */
+.lc-digest {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lc-1);
+  width: 100%;
+  max-width: 78ch;
+  margin: 0 auto var(--lc-5);
+  padding: var(--lc-4) var(--lc-5);
+  border: 1px solid var(--lc-border);
+  border-left: 3px solid var(--lc-lane);
+  border-radius: var(--lc-r-md);
+  background: var(--lc-surface);
+  color: var(--lc-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 160ms var(--lc-ease-out);
+}
+.lc-digest:hover {
+  transform: translateY(-1px);
+}
+.lc-digest:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 2px;
+}
+.lc-digest__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--lc-2);
+}
+.lc-digest__moon {
+  color: var(--lc-lane-ink);
+}
+.lc-digest__title {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--lc-type-meta);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lc-lane-ink);
+}
+.lc-digest__by {
+  margin-left: auto;
+  font-size: var(--lc-type-aside);
+  color: var(--lc-faint);
+}
+.lc-digest__line {
+  font-size: var(--lc-type-body);
+  line-height: 1.45;
+}
+.lc-digest__more {
+  font-size: var(--lc-type-aside);
+  color: var(--lc-lane-ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-digest {
+    transition: none;
+  }
+}
 /* The reveal-earlier pill at the top of the mounted window — mono, quiet, in the console's voice.
    (Deliberately NO content-visibility on rows: its placeholder sizes get corrected after our scroll
    anchoring runs and, with native overflow-anchor off, the correction drifts. The DOM window itself

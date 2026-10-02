@@ -35,6 +35,8 @@ import type { LiveConfig } from './client';
 import { streamPlacement } from './huddles';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { REVEAL_EVENT, scrollToMessage } from './reveal';
+import { morningDigest } from './digest';
+import { StreamDigestCard } from './StreamDigestCard';
 import { StreamHuddleCard } from './StreamHuddleCard';
 import {
   INITIAL_WINDOW,
@@ -73,6 +75,8 @@ export function Stream({
   // A huddle is one card, drawn where its latest row sits (`streamPlacement`). Folded over the FULL
   // timeline so a card is whole even when its root is above the mounted window.
   const { cardAt, folded } = useMemo(() => streamPlacement(envelopes), [envelopes]);
+  // This morning's digest (goal dreaming), pinned above the rows so it is the first thing read.
+  const digest = useMemo(() => morningDigest(envelopes), [envelopes]);
 
   const scrollRef = useRef<HTMLElement>(null);
   const rowsRef = useRef<HTMLDivElement>(null);
@@ -223,6 +227,7 @@ export function Stream({
         <span className="lc-stream__spacer" />
         {onCollapse && <CollapseButton side="right" label="the stream" onClick={onCollapse} />}
       </header>
+      {digest && <StreamDigestCard env={digest} />}
       <div className="lc-stream__rows" ref={rowsRef}>
         {envelopes.length === 0 && (
           <p className="lc-empty">
