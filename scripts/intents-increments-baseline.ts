@@ -150,13 +150,4 @@ export const INCREMENTS_BASELINE: ReadonlySet<string> = new Set<string>([
   'docs/superpowers/specs/2026-09-28-sponsor-hosted-agents-design.md::3. **provisions** — §4.2 table, routes, `mintsponsoredagent`',
   'docs/superpowers/specs/2026-09-28-sponsor-hosted-agents-design.md::4. **provisioner** — §4.3, `provisionseat` extraction, `must',
   'docs/superpowers/specs/2026-09-28-sponsor-hosted-agents-design.md::5. **docs** — architecture 01/03/04 trees and text, `docs/de',
-  'docs/superpowers/specs/2026-09-29-musterd-cloud-design.md::| 0 | pglite spike (two days) | pass/fail recorded; store-la',
-  'docs/superpowers/specs/2026-09-29-musterd-cloud-design.md::| 1 | app tier + postgres + cloud mode, with the test issuer',
-  'docs/superpowers/specs/2026-09-29-musterd-cloud-design.md::| 2 | accounts + console (sign-in, kms-signed console tokens',
-  'docs/superpowers/specs/2026-09-29-musterd-cloud-design.md::| 3 | import / export + backups (nightly r2 dumps of both da',
-  'docs/superpowers/specs/2026-09-29-musterd-cloud-design.md::| 4 | seat link: `musterd login`, `claim --team`, seat autho',
-  'docs/superpowers/specs/2026-09-29-musterd-cloud-design.md::| 5 | trace capture on cloud (§4.8: consent, retention job, ',
-  'docs/superpowers/specs/2026-09-29-musterd-cloud-design.md::| 6 | ops (status page, out-of-band alerts, monthly drill ca',
-  'docs/superpowers/specs/2026-09-29-musterd-cloud-design.md::| 7 | billing (adr 461) | strangers can pay |',
-  'docs/superpowers/specs/2026-09-29-musterd-cloud-design.md::| 8 | hosted agents (cloud compute) | later; adr 463 covers ',
 ]);
