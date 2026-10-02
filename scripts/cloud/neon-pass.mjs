@@ -10,6 +10,10 @@
  *   node scripts/cloud/neon-pass.mjs --repair   # … replaying the ladder when the catalog lacks a
  *                                               # column the version row claims (ADR 496)
  *   node scripts/cloud/neon-pass.mjs --per-file # each store file alone, capped (FILE_CAP_S, 240)
+ *   node scripts/cloud/neon-pass.mjs --per-file --only lanes,orientation   # just those files
+ *
+ * --per-file prints, under each failing file, its failures grouped by error message and the
+ * statement that raised it (vitest's JSON report), so one run classifies every failure.
  *
  * Reads ~/.musterd/cloud/neon.env (mode 600, refused otherwise):
  *   DATABASE_OWNER_URL='postgres://<owner login>:…@<direct host>/musterd'
@@ -20,9 +24,17 @@
  * database, `<db>_trace`, created here if missing.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { migratePostgres, migrateTracePostgres } from '../../packages/server/dist/db/pg/migrate.js';
 import { pgDriver } from '../../packages/server/dist/db/pgDriver.js';
@@ -112,13 +124,60 @@ async function migrateAndGrant(env) {
   }
 }
 
-function runVitest(label, args, { timeoutMs } = {}) {
+/**
+ * The failed tests of one vitest run, from its JSON report: name, the first line of the error, and
+ * the statement the driver appended (`in: <sql>`) — what the summary line hides, and the only way
+ * to tell a driver bug from a test-isolation tail without rerunning a file by hand.
+ */
+function failedTests(jsonPath) {
+  if (!existsSync(jsonPath)) return [];
+  const esc = String.fromCharCode(27);
+  const strip = (s) =>
+    s
+      .split(esc)
+      .map((part, i) => (i ? part.replace(/^\[[0-9;]*m/, '') : part))
+      .join('');
+  const report = JSON.parse(readFileSync(jsonPath, 'utf8'));
+  unlinkSync(jsonPath);
+  const out = [];
+  for (const file of report.testResults ?? []) {
+    for (const t of file.assertionResults ?? []) {
+      if (t.status !== 'failed') continue;
+      const text = strip(t.failureMessages?.[0] ?? '(no message)');
+      const lines = text.split('\n').map((l) => l.trim());
+      const message = lines.find((l) => l && !l.startsWith('at ')) ?? '(no message)';
+      const sql = lines.find((l) => l.startsWith('in: '))?.slice(4) ?? null;
+      out.push({ name: t.fullName ?? t.title, message, sql });
+    }
+  }
+  return out;
+}
+
+/** The failures of a file grouped by error, most frequent first, one example test per group. */
+function digest(failed, max = 6) {
+  const groups = new Map();
+  for (const f of failed) {
+    const key = `${f.message.slice(0, 160)}${f.sql ? ` ⟂ ${f.sql.slice(0, 120)}` : ''}`;
+    const g = groups.get(key) ?? { key, count: 0, example: f.name };
+    g.count++;
+    groups.set(key, g);
+  }
+  return [...groups.values()]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, max)
+    .map((g) => `   ${String(g.count).padStart(3)}× ${g.key}\n        e.g. ${g.example}`);
+}
+
+function runVitest(label, args, { timeoutMs, json } = {}) {
   const t0 = Date.now();
+  const reporters = json
+    ? ['--reporter=default', '--reporter=json', `--outputFile.json=${json}`]
+    : [];
   // ONE worker: unlike the PGlite double (one instance per worker), real Postgres is one database
   // for every worker, and a second worker's TRUNCATE wipes the first's team mid-test.
   const r = spawnSync(
     'npx',
-    ['vitest', 'run', '--maxWorkers=1', '--no-file-parallelism', ...args],
+    ['vitest', 'run', '--maxWorkers=1', '--no-file-parallelism', ...reporters, ...args],
     {
       cwd: new URL('../..', import.meta.url).pathname,
       env: { ...process.env, MUSTERD_TEST_DRIVER: 'pg', CI: '1' },
@@ -133,7 +192,8 @@ function runVitest(label, args, { timeoutMs } = {}) {
   const files = /Test Files\s+(.*)/.exec(out)?.[1] ?? '(no summary)';
   const failures = [...out.matchAll(/^ FAIL .*$/gm)].map((m) => m[0]);
   const timedOut = r.error?.code === 'ETIMEDOUT' || r.signal === 'SIGKILL';
-  return { label, status: r.status, files, tests, ms: Date.now() - t0, failures, timedOut };
+  const failed = json ? failedTests(json) : [];
+  return { label, status: r.status, files, tests, ms: Date.now() - t0, failures, timedOut, failed };
 }
 
 materializeEnvFile();
@@ -154,9 +214,14 @@ if (process.argv.includes('--per-file')) {
   const cap = Number(process.env.FILE_CAP_S ?? 240) * 1000;
   const dir = 'packages/server/src/store';
   const root = new URL('../..', import.meta.url).pathname;
+  // --only a,b,c: just the files whose name contains one of the tokens (a rerun of the failures).
+  const onlyAt = process.argv.indexOf('--only');
+  const only = onlyAt >= 0 ? (process.argv[onlyAt + 1] ?? '').split(',').filter(Boolean) : [];
   const files = readdirSync(join(root, dir))
     .filter((n) => n.endsWith('.test.ts'))
+    .filter((n) => !only.length || only.some((t) => n.includes(t)))
     .sort();
+  const json = (name) => join(tmpdir(), `neon-pass-${name}.json`);
   const tally = { pass: 0, fail: 0, timeout: 0 };
   const base = runVitest('tenancy + pg', [
     'packages/server/src/db/tenancy.test.ts',
@@ -166,13 +231,15 @@ if (process.argv.includes('--per-file')) {
   console.log(`tenancy + pg: exit ${base.status}, ${base.tests}`);
   for (const f of base.failures) console.log(`   ${f}`);
   for (const [i, name] of files.entries()) {
-    const r = runVitest(name, [`${dir}/${name}`], { timeoutMs: cap });
+    const r = runVitest(name, [`${dir}/${name}`], { timeoutMs: cap, json: json(name) });
     const verdict = r.timedOut ? 'TIMEOUT' : r.status === 0 ? 'PASS' : 'FAIL';
     tally[verdict.toLowerCase()]++;
     console.log(
       `[${i + 1}/${files.length}] ${verdict.padEnd(7)} ${name} ${Math.round(r.ms / 1000)} s — ${r.tests}`,
     );
-    for (const f of r.failures.slice(0, 5)) console.log(`   ${f}`);
+    for (const line of digest(r.failed)) console.log(line);
+    if (verdict === 'FAIL' && !r.failed.length)
+      for (const f of r.failures.slice(0, 5)) console.log(`   ${f}`);
   }
   console.log(
     `\nper-file: ${files.length} files — ${tally.pass} pass, ${tally.fail} fail, ${tally.timeout} timeout (cap ${cap / 1000} s)`,
