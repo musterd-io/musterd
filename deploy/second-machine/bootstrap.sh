@@ -124,7 +124,8 @@ step_team() {
       c.rosterHome[team] = home;
       fs.writeFileSync(p, JSON.stringify(c, null, 2) + "\n"); console.log("roster root declared");
     }' "$CONFIG" "$MUSTERD_TEAM" "$TEAM_HOME" | tee -a "$LOG"
-  musterd service restart >>"$LOG" 2>&1
+  # --force: the only session on a fresh joiner is its own wake actuator (second-machine run, 2026-10-02).
+  musterd service restart --force >>"$LOG" 2>&1
   wait_local
   log "team $MUSTERD_TEAM: roster root $TEAM_HOME"
   # The human's own Workspace here (ADR 447): every later admin act — enrol, key, provisioning a
