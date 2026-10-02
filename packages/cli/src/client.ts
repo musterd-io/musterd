@@ -766,11 +766,14 @@ export class HttpClient {
      *  `lane_review` ask. Absent when the act moved nothing, and from an older daemon. */
     lane_verdict?: { lane: string; state: 'done' | 'active' };
     lane_ack?: { lane: string };
+    /** ADR 484: the challenge-evidence rail's one line, sender-only. Absent when off. */
+    evidence_notice?: string;
   }> {
     return this.request('POST', `/teams/${slug}/messages`, { envelope }) as Promise<{
       ask_contract?: AskContract;
       lane_verdict?: { lane: string; state: 'done' | 'active' };
       lane_ack?: { lane: string };
+      evidence_notice?: string;
     }>;
   }
   inbox(

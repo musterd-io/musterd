@@ -236,6 +236,7 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
         : envelope),
       ...(ackBody?.lane_verdict ? { lane_verdict: ackBody.lane_verdict } : {}),
       ...(ackBody?.lane_ack ? { lane_ack: ackBody.lane_ack } : {}),
+      ...(ackBody?.evidence_notice ? { evidence_notice: ackBody.evidence_notice } : {}),
     };
     process.stdout.write(JSON.stringify(payload) + '\n');
     return 0;
@@ -267,5 +268,8 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
   // that the sender can tell it apart from the one that decides.
   const laneAck = ackBody?.lane_ack;
   if (laneAck) process.stdout.write(theme.dim(laneAckAck(laneAck).guidance) + '\n');
+  // ADR 484: the challenge-evidence rail, at parity with the MCP reply — sender-only, one line.
+  if (ackBody?.evidence_notice)
+    process.stdout.write(theme.warn(`⚠ ${ackBody.evidence_notice}`) + '\n');
   return 0;
 }

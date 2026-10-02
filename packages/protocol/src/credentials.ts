@@ -232,6 +232,12 @@ export const PolicySchema = z.object({
    * refuses `agent_connect: 'any_member'` unless this is also true.
    */
   invite_requires_expiry: z.boolean().default(false),
+  /**
+   * ADR 484: warn (never refuse) the sender of an `accept` that concedes a `challenge` without
+   * naming a check (`namesCheck`, ADR 481). Ships OFF; switched on only if ADR 476's five-day read
+   * shows the unverified challenge-concession share has not fallen.
+   */
+  challenge_evidence_rail: z.boolean().default(false),
 });
 export type Policy = z.infer<typeof PolicySchema>;
 

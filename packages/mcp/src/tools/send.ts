@@ -268,6 +268,9 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
         // NOT move the lane, or "acknowledged" and "accepted" stay indistinguishable from outside.
         const laneAck = ackBody?.lane_ack ? laneAckAck(ackBody.lane_ack) : undefined;
         const ackGuidance = laneAck ? ` ${laneAck.guidance}` : '';
+        // ADR 484: the challenge-evidence rail's one line — sender-only, never stored on the act.
+        const evidenceNotice = ackBody?.evidence_notice;
+        const evidenceGuidance = evidenceNotice ? ` ⚠ ${evidenceNotice}` : '';
         // Structured-first (ADR 144 inc 3): the id/thread a programmatic caller needs to keep the
         // exchange threaded (reply_to / thread on the next send), without parsing the prose.
         const text =
@@ -276,7 +279,8 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
             : `sent ${args.act} to ${toLabel} (id=${envelope.id})`) +
           handoffGuidance +
           verdictGuidance +
-          ackGuidance;
+          ackGuidance +
+          evidenceGuidance;
         return {
           content: [{ type: 'text' as const, text }],
           structuredContent: {
@@ -293,6 +297,7 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
             ...(handoffLane ? { handoff_lane: handoffLane } : {}),
             ...(laneVerdict ? { lane_verdict: laneVerdict } : {}),
             ...(laneAck ? { lane_ack: laneAck } : {}),
+            ...(evidenceNotice ? { evidence_notice: evidenceNotice } : {}),
           },
         };
       } catch (err) {

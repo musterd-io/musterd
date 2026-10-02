@@ -143,3 +143,19 @@ export function fmtShare(num: number, n: number, minN = 5): string {
   const base = `${num}/${n}`;
   return n < minN ? base : `${base} = ${((100 * num) / n).toFixed(0)}%`;
 }
+
+/**
+ * ADR 484 §1: the one line added to the sender's reply when an `accept` concedes a `challenge`
+ * without naming a check. Sender-only, never stored on the act.
+ */
+export const CHALLENGE_EVIDENCE_NOTICE =
+  "this concedes a challenge without naming what you checked — if you checked something, say what; if you didn't, say that";
+
+/** ADR 484 §1/§3: true for an `accept` answering a `challenge` whose body names no check. `decline` is never checked. */
+export function isUnverifiedChallengeAccept(
+  act: string,
+  parentAct: string | null,
+  body: string,
+): boolean {
+  return act === 'accept' && parentAct === 'challenge' && !namesCheck(body);
+}

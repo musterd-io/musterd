@@ -7410,6 +7410,69 @@ withDrivers('integration', (_o, kind) => {
      * remember a second, separate close. Measured on the live team: three reviewed lanes in one
      * evening recorded as unreviewed because the second call never came.
      */
+    /** ADR 484 — the challenge-evidence rail: warn the conceding sender, never refuse, ships OFF. */
+    describe('challenge-evidence rail (ADR 484)', () => {
+      async function send(
+        who: Auth | string,
+        from: string,
+        act: string,
+        body: string,
+        replyTo?: string,
+      ) {
+        const id = ulid();
+        const r = await post(
+          '/teams/dawn/messages',
+          {
+            envelope: {
+              id,
+              v: PROTOCOL_VERSION,
+              team: 'dawn',
+              from,
+              to: { kind: 'team' },
+              act,
+              body,
+              ...(replyTo ? { meta: { in_reply_to: replyTo } } : {}),
+              ts: Date.now(),
+            },
+          },
+          who,
+        );
+        return { id, ...r };
+      }
+
+      it('is off by default: an unverified concession is stored with no notice and no audit', async () => {
+        const { nickTok, ada } = await setup();
+        const ch = await send(nickTok, 'nick', 'challenge', 'are you sure?');
+        const a = await send(ada, 'ada', 'accept', 'fair, changing it', ch.id);
+        expect(a.status).toBe(201);
+        expect(a.json.evidence_notice).toBeUndefined();
+        expect(await auditRows(nickTok, 'challenge.accept_unverified')).toHaveLength(0);
+      });
+
+      it('when on: warns once per challenge, audits it, and leaves verified accepts and declines alone', async () => {
+        const { nickTok, ada } = await setup();
+        expect(
+          (await post('/teams/dawn/policy', { challenge_evidence_rail: true }, nickTok)).status,
+        ).toBe(200);
+        const ch = await send(nickTok, 'nick', 'challenge', 'are you sure?');
+
+        const first = await send(ada, 'ada', 'accept', 'fair, changing it', ch.id);
+        expect(first.status).toBe(201);
+        expect(first.json.evidence_notice).toMatch(/without naming what you checked/);
+        const again = await send(ada, 'ada', 'accept', 'yes, agreed', ch.id);
+        expect(again.json.evidence_notice).toBeUndefined();
+        const rows = await auditRows(nickTok, 'challenge.accept_unverified');
+        expect(rows).toHaveLength(1);
+        expect((rows[0] as any).target).toBe(ch.id);
+
+        const ch2 = await send(nickTok, 'nick', 'challenge', 'and this?');
+        const verified = await send(ada, 'ada', 'accept', 'ran `pnpm test`: 3 fail', ch2.id);
+        expect(verified.json.evidence_notice).toBeUndefined();
+        const declined = await send(ada, 'ada', 'decline', 'no, holding', ch2.id);
+        expect(declined.json.evidence_notice).toBeUndefined();
+      });
+    });
+
     describe('an acceptance verdict moves the lane (ADR 202)', () => {
       /** Post `act` as `who`, answering the acceptance ask `askId`. */
       async function verdict(who: Auth | string, from: string, askId: string, act: string) {
