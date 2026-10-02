@@ -88,8 +88,8 @@ jobs:
           echo "kinds=$kinds" >> "$GITHUB_OUTPUT"
           echo "MUSTERD_TEST_DRIVER=$kinds — $why (ADR 492)" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Tests + coverage
-        run: pnpm coverage
+      - name: Tests + coverage (2-worker A/B)
+        run: pnpm coverage --maxWorkers=2
         env:
           MUSTERD_TEST_DRIVER: ${{ steps.drivers.outputs.kinds }}
 
