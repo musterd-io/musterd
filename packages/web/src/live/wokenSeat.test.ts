@@ -1,6 +1,6 @@
 import type { MemberSummary } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { wokenBadge, wokenSeat } from './wokenSeat';
+import { dreamingSeat, wokenBadge, wokenSeat } from './wokenSeat';
 
 /**
  * A woken seat says so — the read half of "a woken agent is invisible on /live".
@@ -79,6 +79,30 @@ describe('wokenSeat — was this seat spawned by a wake?', () => {
     for (const provenance of ['asked', 'hook', 'scheduled', 'daemon']) {
       expect(wokenSeat(seat([p({ provenance })]))).toBe(false);
     }
+  });
+});
+
+describe('dreamingSeat — is this seat dreaming?', () => {
+  it('is true when the live presence was stamped by a dream wake', () => {
+    expect(dreamingSeat(seat([p({ provenance: 'dream' })]))).toBe(true);
+  });
+
+  // A seat woken at 3am for an ask is working, not dreaming. Only the stamp counts.
+  it('is false for an ordinary wake, whatever the hour', () => {
+    expect(dreamingSeat(seat([p({ provenance: 'wake' })]))).toBe(false);
+  });
+
+  it('is false when the row never said', () => {
+    expect(dreamingSeat(seat([p({})]))).toBe(false);
+    expect(dreamingSeat(seat([]))).toBe(false);
+  });
+
+  it('reads the live row, not a stale dream ahead of it', () => {
+    const m = seat([
+      p({ status: 'offline', provenance: 'dream' }),
+      p({ status: 'online', provenance: 'session' }),
+    ]);
+    expect(dreamingSeat(m)).toBe(false);
   });
 });
 

@@ -11,7 +11,7 @@ import { actToEvent, speechEventFor } from './office-scene/mapping';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { captionFor, type Caption } from './captions';
 import type { RoomEntry } from './workingOn';
-import { wokenSeat } from './wokenSeat';
+import { dreamingSeat, wokenSeat } from './wokenSeat';
 import type { OfficeRoomProps } from './officeRoom';
 import { projectWallBoard } from './office-scene/wallboard';
 
@@ -80,6 +80,7 @@ function computeData(
         // helper — a plate that took its harness from one attachment and its provenance from
         // another would be describing two sessions as one.
         woken: wokenSeat(m),
+        dreaming: dreamingSeat(m),
       };
     }),
   };

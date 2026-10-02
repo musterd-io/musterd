@@ -67,6 +67,12 @@ export interface OfficeNode {
    * eleven-second codex wake and a human at a terminal drew identically until now.
    */
   woken: boolean;
+  /**
+   * A dream wake put this seat in the room (goal dreaming; `dreamingSeat` in `wokenSeat.ts`): it is
+   * re-reading the day while the team is out. The desk dims its lamp and a thought bubble rises over
+   * it. Like `woken`, this is not a posture. Optional so hand-built preview nodes can leave it out.
+   */
+  dreaming?: boolean;
 }
 
 /**
