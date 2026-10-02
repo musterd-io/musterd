@@ -5285,33 +5285,72 @@ export function dreamBubble(t: number): { bob: number; dots: [number, number, nu
   return { bob: Math.sin(phase * Math.PI * 2) * 1.6, dots: [dot(0), dot(1), dot(2)] };
 }
 
+/** The cloud's size against the puffs it is drawn from: big enough to read at 720p (~30 css px). */
+const DREAM_CLOUD_K = 1.5;
+/** Trail dots from the shoulder up toward the cloud: [dx, dy, r] in scene units off the plate anchor. */
+const DREAM_TRAIL: ReadonlyArray<readonly [number, number, number]> = [
+  [16, 50, 1.8],
+  [21, 45, 2.4],
+  [25, 39, 3],
+];
+/** Cloud centre off the plate anchor: right of the face, and low enough that its top clears it. */
+const DREAM_CLOUD_AT = { dx: 42, dy: 20 } as const;
+
 /**
- * A thought bubble over a dreaming seat: three trail dots rising from beside the head to a small
- * cloud holding a crescent moon. It reads as asleep and thinking, not stuck. No words in it, because
- * the nameplate already says who this is and the digest says what they dreamed.
+ * Where the dream bubble goes for a head anchor `at`, at scale `s` and float `bob`. Kept pure so a
+ * test can hold it to the two things the stage capture showed it must do: stay BELOW `at.y`, where
+ * the DOM nameplate hangs (a cloud straddling that line was drawn under the plate), and stay off the
+ * face (`headBox`).
+ */
+export function dreamBubbleLayout(
+  at: Pt,
+  s: number,
+  bob: number,
+): {
+  trail: Array<{ x: number; y: number; r: number }>;
+  cloud: { cx: number; cy: number; k: number; halfW: number };
+  box: { x0: number; y0: number; x1: number; y1: number };
+} {
+  const k = DREAM_CLOUD_K * s;
+  const trail = DREAM_TRAIL.map(([dx, dy, r]) => ({
+    x: at.x + dx * s,
+    y: at.y + (dy + bob * 0.5) * s,
+    r: r * s,
+  }));
+  const cx = at.x + DREAM_CLOUD_AT.dx * s;
+  const cy = at.y + (DREAM_CLOUD_AT.dy + bob) * s;
+  // The puffs below span x ±15 and y −11…+9 in cloud units.
+  const halfW = 15 * k;
+  const box = {
+    x0: Math.min(cx - halfW, ...trail.map((d) => d.x - d.r)),
+    y0: Math.min(cy - 11 * k, ...trail.map((d) => d.y - d.r)),
+    x1: cx + halfW,
+    y1: Math.max(cy + 9 * k, ...trail.map((d) => d.y + d.r)),
+  };
+  return { trail, cloud: { cx, cy, k, halfW }, box };
+}
+
+/**
+ * A thought bubble beside a dreaming seat: three trail dots rising from the shoulder to a small cloud
+ * holding a crescent moon. It reads as asleep and thinking, not stuck. No words in it, because the
+ * nameplate already says who this is and the digest says what they dreamed.
  */
 function drawDreamBubble(ctx: CanvasRenderingContext2D, fit: Fit, at: Pt, t: number): void {
-  const s = fit.scale;
   const { bob, dots } = dreamBubble(t);
-  const trail: Array<[number, number, number]> = [
-    [12, 34, 1.8],
-    [19, 26, 2.6],
-    [27, 17, 3.4],
-  ];
-  trail.forEach(([dx, dy, r], i) => {
-    ellipse(ctx, { x: at.x + dx * s, y: at.y + (dy + bob * 0.5) * s }, r * s, r * s, `rgba(${DREAM_CLOUD}, ${dots[i]})`);
+  const { trail, cloud } = dreamBubbleLayout(at, fit.scale, bob);
+  trail.forEach((d, i) => {
+    ellipse(ctx, { x: d.x, y: d.y }, d.r, d.r, `rgba(${DREAM_CLOUD}, ${dots[i]})`);
   });
   // The cloud: four overlapping puffs, so it looks drawn rather than generated.
-  const cx = at.x + 40 * s;
-  const cy = at.y + (2 + bob) * s;
+  const { cx, cy, k } = cloud;
   const fill = `rgba(${DREAM_CLOUD}, 0.94)`;
-  ellipse(ctx, { x: cx, y: cy }, 13 * s, 9 * s, fill);
-  ellipse(ctx, { x: cx - 8 * s, y: cy + 2 * s }, 7 * s, 6 * s, fill);
-  ellipse(ctx, { x: cx + 8 * s, y: cy + 2 * s }, 7 * s, 6 * s, fill);
-  ellipse(ctx, { x: cx + 1 * s, y: cy - 5 * s }, 7 * s, 6 * s, fill);
+  ellipse(ctx, { x: cx, y: cy }, 13 * k, 9 * k, fill);
+  ellipse(ctx, { x: cx - 8 * k, y: cy + 2 * k }, 7 * k, 6 * k, fill);
+  ellipse(ctx, { x: cx + 8 * k, y: cy + 2 * k }, 7 * k, 6 * k, fill);
+  ellipse(ctx, { x: cx + 1 * k, y: cy - 5 * k }, 7 * k, 6 * k, fill);
   // A crescent: the moon, then a cloud-coloured bite out of its upper right.
-  ellipse(ctx, { x: cx, y: cy }, 5 * s, 5 * s, DREAM_MOON);
-  ellipse(ctx, { x: cx + 2.4 * s, y: cy - 1.6 * s }, 4.4 * s, 4.4 * s, fill);
+  ellipse(ctx, { x: cx, y: cy }, 5 * k, 5 * k, DREAM_MOON);
+  ellipse(ctx, { x: cx + 2.4 * k, y: cy - 1.6 * k }, 4.4 * k, 4.4 * k, fill);
 }
 
 /**
