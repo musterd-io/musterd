@@ -1,0 +1,13 @@
+# The STAGING console JWKS (cloud increment 1D, lane 01M3Z42764). Serves the public key of
+# `scripts/cloud/staging-issuer.mjs` at /jwks, so a cloud-mode server on staging has a console to
+# trust before increment 2's console exists. Public by design: a JWKS holds no secret. The private
+# key lives only in ~/.musterd/cloud/staging-issuer.jwk on the operator's machine.
+#
+#   node scripts/cloud/staging-issuer.mjs init   # writes JWKS below (once)
+#   cd workers/staging-jwks && wrangler deploy
+name = "musterd-staging-jwks"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+
+[vars]
+JWKS = '{"keys":[{"kty":"EC","x":"ax8s5z1kNP7acDQMEQY5jnRJ1lD0Ac7bW4X4HCkJK_Y","y":"b6ev3DPvAA1rRPFV2eC9Hhfq6nxBjJc96W4SiUD4hY4","crv":"P-256","kid":"staging-f3860c89-5893-4bd7-95ec-4ab406679bd0","alg":"ES256","use":"sig"}]}'
