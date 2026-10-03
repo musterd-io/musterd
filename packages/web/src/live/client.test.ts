@@ -7,7 +7,9 @@ import {
   createLane,
   fetchReport,
   fetchRoster,
+  haltSeat,
   isStaleCredential,
+  resumeSeat,
   updateLane,
 } from './client';
 import { fetchSeeds } from './seedClient';
@@ -369,5 +371,42 @@ describe('fetchRoster (forward-tolerance: one unreadable seat must not cost the 
   it('still throws when the response is not a roster at all — tolerance is per-row, not blanket', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => okJson({ members: 'nope' })));
     await expect(fetchRoster(cfg)).rejects.toThrow();
+  });
+});
+
+describe('haltSeat / resumeSeat (ADR 501)', () => {
+  const cfg = { team: 'dawn', as: 'nick', token: 'mscr_x' };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('POSTs the reason to the halt route as the web surface', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ member: 'Ada', halted: { at: 1, by: 'nick', reason: 'x' } }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await haltSeat(cfg, 'Ada', 'x');
+    expect(res.halted.by).toBe('nick');
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/teams/dawn/members/Ada/halt');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({ reason: 'x' });
+    expect((init.headers as Record<string, string>)['x-musterd-surface']).toBe('web');
+  });
+
+  it('surfaces the daemon refusal (who may halt is decided there) as a LiveFetchError', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 403,
+        text: async () =>
+          JSON.stringify({ error: { code: 'forbidden', message: 'you may halt only agents you sponsor' } }),
+      })),
+    );
+    await expect(resumeSeat(cfg, 'Ada')).rejects.toMatchObject({
+      status: 403,
+      message: 'you may halt only agents you sponsor',
+    });
   });
 });

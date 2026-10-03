@@ -488,6 +488,55 @@ export async function fetchRequests(
   return (json as { requests: Request[] }).requests;
 }
 
+/** ADR 501: one authenticated POST from the web surface; the daemon's refusal travels as a LiveFetchError. */
+async function postAsWeb<T>(cfg: LiveConfig, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${cfg.token}`,
+      'content-type': 'application/json',
+      'x-musterd-surface': 'web',
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  const text = await res.text();
+  const json = text ? JSON.parse(text) : {};
+  if (!res.ok) {
+    const err = (json as { error?: { code?: string; message?: string } }).error;
+    throw new LiveFetchError(
+      err?.message ?? `HTTP ${res.status}`,
+      err?.code ?? `http_${res.status}`,
+      res.status,
+    );
+  }
+  return json as T;
+}
+
+/**
+ * ADR 501: halt an agent seat — `POST /teams/:slug/members/:name/halt`. WHO may is decided by the
+ * daemon (human-only; admin any agent, a non-admin only the agents they sponsor); the roster's
+ * `can_halt` is that answer projected for this viewer, and the button renders from it alone.
+ */
+export function haltSeat(
+  cfg: LiveConfig,
+  seat: string,
+  reason: string,
+): Promise<{ member: string; halted: { at: number; by: string; reason: string } }> {
+  return postAsWeb(
+    cfg,
+    `/teams/${encodeURIComponent(cfg.team)}/members/${encodeURIComponent(seat)}/halt`,
+    { reason },
+  );
+}
+
+/** ADR 501: lift a halt — `POST /teams/:slug/members/:name/resume`. */
+export function resumeSeat(cfg: LiveConfig, seat: string): Promise<{ member: string; halted: null }> {
+  return postAsWeb(
+    cfg,
+    `/teams/${encodeURIComponent(cfg.team)}/members/${encodeURIComponent(seat)}/resume`,
+  );
+}
+
 /**
  * Admin approve or deny a claim request (ADR 077).
  * Returns { request_id, decision, delivered }.

@@ -11,7 +11,7 @@ import {
   rosterPrimaryChip,
 } from './format';
 import { dwellTrace, type DwellLog } from './dwell';
-import type { LiveConfig } from './client';
+import { haltSeat, resumeSeat, type LiveConfig } from './client';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { wokenBadge, wokenSeat } from './wokenSeat';
 
@@ -284,6 +284,16 @@ export function SeatDetail({
             {accountEx.label}
           </span>
         )}
+        {/* ADR 501: a human's hold on this seat. The fact, for any viewer — the daemon refuses the
+            seat everywhere with this exact sentence, so the roster says the same words. */}
+        {m.halted && (
+          <span
+            className="lc-stat lc-stat--halted"
+            title={`Halted ${new Date(m.halted.at).toLocaleString()} — a human lifts it (musterd resume ${m.name})`}
+          >
+            halted by {m.halted.by}: {m.halted.reason}
+          </span>
+        )}
         {badges.map((b) => (
           <span key={b.key} className={`lc-cap lc-cap--${b.tone}`} title={b.title}>
             {b.label}
@@ -340,7 +350,114 @@ export function SeatDetail({
       {/* ADR 445 increment 4b: the seat's recent trace, on demand. Structural events only —
         the route never selects content — and empty when this viewer may not read the seat. */}
       {cfg && <SeatTraceToggle cfg={cfg} seat={m.name} />}
+      {/* ADR 501 Decision 5: the halt button renders from the daemon's `can_halt` ALONE — never from
+          the viewer's role in this client — and only for a signed-in viewer. */}
+      {cfg && m.can_halt === true && (
+        <SeatHaltControl cfg={cfg} seat={m.name} halted={m.halted ?? null} />
+      )}
     </>
+  );
+}
+
+/**
+ * The halt / resume pair on a roster row (ADR 501). Halt asks for a reason inline — no browser
+ * dialog — because the reason is what every refusal the seat meets will carry. The daemon decides
+ * who may; a refusal is shown in place, in its own words.
+ */
+function SeatHaltControl({
+  cfg,
+  seat,
+  halted,
+}: {
+  cfg: LiveConfig;
+  seat: string;
+  halted: { at: number; by: string; reason: string } | null;
+}) {
+  const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      setAsking(false);
+      setReason('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (halted) {
+    return (
+      <span className="lc-seat__haltbox">
+        <button
+          type="button"
+          className="lc-seat__halt lc-seat__halt--resume"
+          disabled={busy}
+          title={`Lift the halt — ${seat} can claim, wake and act again`}
+          onClick={() => void run(() => resumeSeat(cfg, seat))}
+        >
+          resume
+        </button>
+        {error && <span className="lc-seat__halterr">{error}</span>}
+      </span>
+    );
+  }
+  return (
+    <span className="lc-seat__haltbox">
+      {!asking && (
+        <button
+          type="button"
+          className="lc-seat__halt"
+          disabled={busy}
+          title="Stop this seat at its next tool boundary — leases revoked, re-claim and tools refused until a human resumes it (ADR 501)"
+          onClick={() => setAsking(true)}
+        >
+          halt
+        </button>
+      )}
+      {asking && (
+        <form
+          className="lc-seat__haltform"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (reason.trim()) void run(() => haltSeat(cfg, seat, reason.trim()));
+          }}
+        >
+          <input
+            className="lc-seat__haltreason"
+            value={reason}
+            maxLength={280}
+            placeholder="why — the seat will be told"
+            aria-label={`Reason for halting ${seat}`}
+            autoFocus
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <button
+            type="submit"
+            className="lc-seat__halt lc-seat__halt--confirm"
+            disabled={busy || !reason.trim()}
+          >
+            halt {seat}
+          </button>
+          <button
+            type="button"
+            className="lc-seat__halt"
+            disabled={busy}
+            onClick={() => {
+              setAsking(false);
+              setError(null);
+            }}
+          >
+            cancel
+          </button>
+        </form>
+      )}
+      {error && <span className="lc-seat__halterr">{error}</span>}
+    </span>
   );
 }
 
