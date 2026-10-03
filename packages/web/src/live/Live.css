@@ -3499,6 +3499,12 @@
   color: var(--lc-muted);
   background: color-mix(in srgb, var(--lc-muted) 14%, transparent);
 }
+/* ADR 501: a human's hold on the seat — the one chip that says WHO to talk to. Same ink and fill
+   recipe as `danger` (4.61:1 measured), under its own name so the gate and the tests can find it. */
+.lc-stat--halted {
+  color: var(--lc-danger-ink);
+  background: color-mix(in srgb, var(--lc-danger) 16%, transparent);
+}
 /* capability badges — only deviations-from-generalist + the positive admin marker */
 .lc-cap {
   font-family: var(--font-mono, monospace);
@@ -6761,6 +6767,58 @@
 .lc-seat__trace.is-open {
   color: var(--lc-text);
   border-color: currentColor;
+}
+/* ADR 501: the halt / resume pair, in the trace button's grammar — small, bordered, uppercase. */
+.lc-seat__haltbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  flex-wrap: wrap;
+}
+.lc-seat__halt {
+  font: inherit;
+  font-size: 0.72em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lc-danger-ink);
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--lc-danger) 42%, transparent);
+  border-radius: 999px;
+  padding: 0 0.55em;
+  min-height: 24px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.lc-seat__halt:hover:not(:disabled) {
+  border-color: currentColor;
+}
+.lc-seat__halt:disabled {
+  cursor: default;
+}
+.lc-seat__halt--resume {
+  color: var(--lc-success-ink);
+  border-color: color-mix(in srgb, var(--lc-success) 42%, transparent);
+}
+.lc-seat__haltform {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  flex-wrap: wrap;
+}
+.lc-seat__haltreason {
+  font: inherit;
+  font-size: 0.78em;
+  color: var(--lc-text);
+  background: var(--lc-surface-2);
+  border: 1px solid var(--lc-border-2);
+  border-radius: 6px;
+  padding: 0.15em 0.5em;
+  min-height: 24px;
+  min-width: 14em;
+}
+.lc-seat__halterr {
+  font-size: 0.74em;
+  color: var(--lc-danger-ink);
 }
 .lc-trace {
   list-style: none;

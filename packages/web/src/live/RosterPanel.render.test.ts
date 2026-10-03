@@ -287,3 +287,48 @@ describe('the stored hue reaches the roster avatar (ADR 374)', () => {
     expect(html).toMatch(/background:hsl\(212, 68%/);
   });
 });
+
+/**
+ * ADR 501 increment 3 — a halted seat says so, and the halt/resume buttons render from the
+ * server-computed `can_halt` ALONE: never from the viewer's role in this client, and never for a
+ * viewer who has not signed in (no `cfg`). The badge is the fact; the buttons are the authority.
+ */
+describe('RosterPanel — halt as revocation (ADR 501)', () => {
+  const cfg = { team: 'dawn', as: 'nick', token: 'mscr_x' };
+  const halted = { at: 1, by: 'nick', reason: 'looping on the wrong lane' };
+  const withCfg = (roster: MemberSummary[]) =>
+    renderToStaticMarkup(createElement(RosterPanel, { roster, cfg }));
+
+  it('paints the halted badge with who and why, for any viewer', () => {
+    const html = render([seat({ presence: 'offline', posture: 'offline', halted } as never)]);
+    expect(html).toContain('lc-stat--halted');
+    expect(html).toContain('halted by nick: looping on the wrong lane');
+  });
+
+  it('shows the halt button only when the daemon says this viewer may halt', () => {
+    expect(withCfg([seat({ can_halt: true } as never)])).toContain('lc-seat__halt');
+    expect(withCfg([seat({ can_halt: false } as never)])).not.toContain('lc-seat__halt');
+    expect(withCfg([seat({} as never)])).not.toContain('lc-seat__halt');
+  });
+
+  it('offers resume instead of halt while the seat is halted', () => {
+    const html = withCfg([seat({ can_halt: true, halted } as never)]);
+    expect(html).toContain('lc-seat__halt--resume');
+    expect(html).toContain('>resume<');
+    expect(html).not.toContain('>halt<');
+  });
+
+  it('renders no button at all for a viewer who has not signed in, whatever can_halt says', () => {
+    expect(render([seat({ can_halt: true } as never)])).not.toContain('lc-seat__halt');
+  });
+});
+
+describe('.lc-stat--halted stays inside what the contrast gate can measure', () => {
+  const rule = /\.lc-stat--halted\s*\{([^}]*)\}/.exec(css)?.[1];
+  it('exists as a rule at all', () => {
+    expect(rule).toBeDefined();
+  });
+  it('declares no alpha', () => {
+    expect(rule).not.toMatch(/(^|[;\s])opacity\s*:/);
+  });
+});
