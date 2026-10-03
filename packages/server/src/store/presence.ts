@@ -521,43 +521,51 @@ export async function listPresence(
     'SELECT * FROM members WHERE team_id = ? AND left_at IS NULL AND observer = 0 ORDER BY created_at',
     [teamId],
   );
-  return Promise.all(
-    members.map(async (member) => {
-      const presences = await db.all<PresenceRow & { node_label: string | null }>(
-        `SELECT p.*, n.label AS node_label FROM presence p LEFT JOIN nodes n ON n.id = p.node WHERE p.member_id = ? AND ${LIVE_PRESENCE_SQL} ORDER BY p.last_seen_at DESC`,
-        [member.id, l, r],
-      );
-      const status: PresenceStatus =
-        presences.length === 0
-          ? 'offline'
-          : presences.some((p) => p.status === 'online')
-            ? 'online'
-            : 'away';
-      return {
-        member,
-        status,
-        presences: presences.map((p) => ({
-          surface: p.surface as Surface,
-          status: p.status,
-          last_seen_at: p.last_seen_at,
-          provenance: (p.provenance as Provenance | null) ?? null,
-          workspace: p.workspace ?? null,
-          driver: p.driver ?? null,
-          model: p.model ?? null,
-          // The tier rides only beside a model, and only when it is a tier this wire knows: a row
-          // holding a value no client of ours ever wrote is read as "unknown", not passed through.
-          model_source: p.model && isWireAttestationSource(p.model_source) ? p.model_source : null,
-          build: p.build ?? null,
-          epoch: p.epoch ?? null,
-          guidance_epoch: p.guidance_epoch ?? null,
-          wake_lease: p.wake_lease ?? null,
-          attached_at: p.created_at,
-          node: p.node ?? null,
-          node_label: p.node_label ?? null,
-        })),
-      };
-    }),
+  // Every member's live presences in ONE statement, grouped here (lane 01M3ZCTQK9): a query per
+  // member is a transaction per member on Postgres, and the roster runs this on every /live refetch.
+  // The global last_seen_at order survives the grouping, so each member's list keeps its order.
+  const live = await db.all<PresenceRow & { node_label: string | null }>(
+    `SELECT p.*, n.label AS node_label FROM presence p JOIN members m ON m.id = p.member_id LEFT JOIN nodes n ON n.id = p.node WHERE m.team_id = ? AND m.left_at IS NULL AND m.observer = 0 AND ${LIVE_PRESENCE_SQL} ORDER BY p.last_seen_at DESC`,
+    [teamId, l, r],
   );
+  const byMember = new Map<string, (PresenceRow & { node_label: string | null })[]>();
+  for (const p of live) {
+    const list = byMember.get(p.member_id);
+    if (list) list.push(p);
+    else byMember.set(p.member_id, [p]);
+  }
+  return members.map((member) => {
+    const presences = byMember.get(member.id) ?? [];
+    const status: PresenceStatus =
+      presences.length === 0
+        ? 'offline'
+        : presences.some((p) => p.status === 'online')
+          ? 'online'
+          : 'away';
+    return {
+      member,
+      status,
+      presences: presences.map((p) => ({
+        surface: p.surface as Surface,
+        status: p.status,
+        last_seen_at: p.last_seen_at,
+        provenance: (p.provenance as Provenance | null) ?? null,
+        workspace: p.workspace ?? null,
+        driver: p.driver ?? null,
+        model: p.model ?? null,
+        // The tier rides only beside a model, and only when it is a tier this wire knows: a row
+        // holding a value no client of ours ever wrote is read as "unknown", not passed through.
+        model_source: p.model && isWireAttestationSource(p.model_source) ? p.model_source : null,
+        build: p.build ?? null,
+        epoch: p.epoch ?? null,
+        guidance_epoch: p.guidance_epoch ?? null,
+        wake_lease: p.wake_lease ?? null,
+        attached_at: p.created_at,
+        node: p.node ?? null,
+        node_label: p.node_label ?? null,
+      })),
+    };
+  });
 }
 
 /**

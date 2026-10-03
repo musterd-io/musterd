@@ -271,7 +271,7 @@ import { applyMemoryClear, applyMemorySave, getMemory, memoryEnvelope } from '..
 import {
   countInbox,
   countUnread,
-  latestStatusUpdate,
+  latestStatusUpdates,
   listInbox,
   listTeamMessages,
   localNodeForTeam,
@@ -1812,6 +1812,9 @@ async function summarize(
   // from the map and reports `unknown` rather than borrowing the shape of quiet.
   const lastAction = await lastActionBySubject(ctx.db, teamId);
   const quiescenceNow = Date.now();
+  // Every member's latest status_update in one statement (lane 01M3ZCTQK9) — the roster asked once per
+  // member, and /live refetches the roster on presence frames for every viewer.
+  const statuses = await latestStatusUpdates(ctx.db, teamId);
   return Promise.all(
     (await listPresence(ctx.db, teamId, ctx.config.presenceTimeoutMs)).map(async (s) => {
       // Two-clocks rule (M2): liveness from presence, working-label from the latest status_update — plus
@@ -1825,7 +1828,7 @@ async function summarize(
       // evidence, and past it the read decays to `active` with the claim kept, aged.
       const activity = resolveActivity(
         live,
-        await latestStatusUpdate(ctx.db, s.member.id),
+        statuses.get(s.member.id) ?? null,
         steering,
         s.member.kind === 'human' ? ctx.config.presenceTimeoutMs : ctx.config.agentIdleMs,
       );
