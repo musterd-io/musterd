@@ -125,6 +125,17 @@ lane `01M3ZRQAGDDMTG6TA9T27D02N9`.
   `2004a04b` were cancelled by newer commits, and `5efab05c` was docs-only. The ≤ 15 min target
   above is judged on that run when it comes.
 
+- 2026-10-03, the target judged — the first five `main` runs after the split (#2020), all green,
+  every one with `coverage-merge` passing (wall, end to end; shards 1 / 2 / 3 / 4 incl. setup):
+  `0e416e86` 7.9 min (6.1 / 4.6 / 6.6 / 5.8); `2399baba` 8.3 (6.3 / 7.5 / 6.9 / 6.6); `3aa998df`
+  9.5 (5.9 / 7.6 / 6.6 / 6.2); `0e999ddf` 8.9 (6.3 / 8.0 / 6.4 / 6.3); `2390a83b` 8.6 (6.1 / 5.8 /
+  6.8 / 7.2). Merge 0.5 min each. Median 8.6 min against the ≤ 15 min target and 26.1 / 26.7
+  unsharded; the falsifier (> 20 min) is nowhere near. The long pole moves between shards run to
+  run (4.6–8.0 min) — runner noise now exceeds the path-hash imbalance. Not counted: seven `main`
+  runs cancelled by a newer push, and 37148973857 (`4963a28e`), which never started because the
+  Actions spending limit was reached (raised to $15 by nick, 2026-10-03 ~20:00Z). Runs
+  37145454349, 37146586355, 37150374267, 37151879331, 37152671710.
+
 ## Observability & Evaluation
 
 **Traces.** No new trace event. GitHub's run and job timings are the record:
