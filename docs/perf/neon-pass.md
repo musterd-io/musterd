@@ -39,7 +39,68 @@ Not reached: 13 files (the trace store tests, toolCalls, the store tail).
   co-located with Neon and is where it is measured honestly; batching bare reads into one
   transaction per request is the lever if it is too slow.
 
-## Falsifier
+## Falsifier (2026-09-30)
 
 Rerun `node scripts/cloud/neon-pass.mjs` against a fresh Neon branch: if the tenancy test fails, or
 a store file fails for a reason other than the four kinds above, this page is wrong.
+
+> Fired 2026-10-02: a fifth kind — see below. The four kinds still hold; the page was incomplete,
+> not wrong about them.
+
+## Second result — 2026-10-02 (cloud increment 1D)
+
+- Lane `01M3Z429Q3Y69K1A4ZNX631Q8Y` · the same `musterd-1b` project, Postgres 17.11, now run from a
+  one-shot Fly machine in `iad` next to Neon (`scripts/cloud/bench-run.mjs`, performance-2x), never
+  the shared laptop. Build `fecee783` on top of main `39cec85e`. Fifty's checkpoint 21:29–21:49Z and
+  izzo's rerun 22:04–22:25Z gave identical verdicts; the rerun captured each failure's error and
+  statement (`neon-pass --per-file` now prints them).
+- Migration: main v84 / trace v4 in 2.1 s. **Tenancy + `db/pg` + PGlite double: 35/35 pass.**
+- Per-file, 240 s cap: **all 68 store files reached** (the 13 the first pass never ran included) —
+  **47 pass, 21 fail, 0 timeout.** Co-located, the 09-30 "30 s test timeout" kind is gone: the
+  slowest files are residency (127 s, 111 tests) and quiescence (182 s — the fake-timers row below).
+
+### What the 21 failures were (168 tests)
+
+| Kind | Tests (files) | Verdict |
+| --- | --- | --- |
+| `column "follows_up_json" of relation "lanes" does not exist`, on every lane `UPDATE` | 127 captured in 12 files: lanes 40/66, orientation 25/36, residency 20/111, laneSweep 10/10, laneClose.authorization 7/7, incidents.route 7/25, insights 5/55, review 4/47, incidents 3/10, parked 3/11, stakesProvenance 2/8, staleness 1/6 — plus, almost certainly, the 27 in the seven files whose errors the log window dropped (closeReason 8/8, followsUp 10/21, delivery 5/23, auditSubject, deferralFold, goals, governed 1 each; the one surviving line is this error) | **Kind 5 — schema drift on the live database. Not a driver bug.** `musterd-1b` reports `schema_version = 84` yet its `lanes` table lacks v81's `follows_up_json` and `abandon_reason` (v82's `unfinished_todos_json` and v84's `console_token_jti` are there). The 09-30 pass migrated the project (created 16:54Z) from the 1B branch, hours before it merged (04:16Z next day), when v81 on that branch was a different step; `migratePostgres` applies "every ladder step above the version row" and never looks at the catalog, so the final v81 was skipped as done. `drift.test.ts` cannot see this — it lands baseline + ladder on a fresh database. **Production `musterd-cloud` was created 2026-10-02 20:43Z on the final ladder and is not exposed** (Neon API `created_at`). Repair for 1b: the ladder's own two `ALTER TABLE lanes ADD COLUMN IF NOT EXISTS …` statements as owner — a human step (nick), pending. Structural fix: lane `01M3ZC2DBEH5YETNKJ5QX0QJT7` — the migrate step verifies the landed schema against the catalog, not the version row. |
+| `db.onStatement is not a function` | 5 (residency) | Kind 4, test-side: the statement seam existed on `SqliteDriver` and the double only. Fixed on this branch: `PgDriver.onStatement` reports every store statement as written (never the BEGIN / SET LOCAL / set_config / COMMIT stamping), so the query-shape counts run on real Postgres too. |
+| `permission denied for schema public` on a fixture's `CREATE TABLE` / `CREATE FUNCTION` | 3 (lanes 2, store 1) | Kind 4, test-side: the double runs `exec` as the owner by construction; the pg test kind ran it as the operator, who owns nothing in the schema. Fixed: `openTestDriver`'s handle runs `exec` as owner on both engines (production handles are untouched), and both fixtures drop what they create — on Neon the database is shared, and a trigger left on `lanes` fires for every file after. |
+| Test timed out at 30 s, every test in the file | 6 (quiescence) | Kind 4, test-side, not Neon latency: the file opens its store inside `vi.useFakeTimers()`, and the pg kind's 250 ms settle in `openTestDriver` was a `setTimeout` a faked clock never fires — 6 × 30 s = the file's 182 s. Fixed: the settle uses the real timer captured at import. |
+
+### The confirming run — 2026-10-02 23:17–23:37Z
+
+After nick applied the two v81 statements (`~/.musterd/cloud/repair-1b-v81.sh`: columns before
+`none`, after `abandon_reason, follows_up_json`, version row untouched at 84), the same pass on
+build `e2240ff2` (the three harness fixes included), same machine shape, same project:
+
+| | |
+| --- | --- |
+| Migration | main v84 / trace v4 in 2.3 s, idempotent |
+| Tenancy + `db/pg` + double | **36/36 pass** (the new `onStatement` test included) |
+| Store files, per file, 240 s cap | **68/68 pass — 1,035 tests, 0 fail, 0 timeout**, 17.5 min wall, 1,049 s of file time |
+| Slowest files | residency 147 s (111), store 83 s (80), review 57 s (47), insights 53 s (55), lanes 49 s (66) |
+| quiescence | 8 s (was 182 s under the faked clock) |
+
+The seven files the first run's log window dropped (auditSubject, closeReason, deferralFold,
+delivery, followsUp, goals, governed) pass with the column present, which is the only thing that
+changed for them — the kind-5 attribution of their 27 tests stands. Every kind-4 file passes on
+Neon with its fix. The driver has no open finding.
+
+### What it changes
+
+- The 1B claims stand on real Postgres: tenancy 4/4 on every pass, and **the whole store suite —
+  68 files, 1,035 tests — passes on Neon**; the one real driver bug stays the 09-30 BIGINT parser.
+- **A version row is a claim, not evidence.** The Postgres ladder trusted `schema_version` and
+  shipped a database that could not update a lane. Any Cloud database migrated from a branch before
+  the ladder's numbers are final can carry the same hole; the migrate step has to read the catalog.
+- Co-location removes the latency kind entirely; the per-statement transaction cost moves to 1D's
+  load test (§8.1), where it belongs.
+
+### Falsifier (2026-10-02)
+
+Run `node scripts/cloud/bench-run.mjs --secrets-from ~/.musterd/cloud/neon.env -- node
+scripts/cloud/neon-pass.mjs --per-file` after the v81 repair: if any store file fails for a reason
+other than the five kinds above, or a kind-4/5 file still fails, this page is wrong. Until lane
+`01M3ZC2DBEH5YETNKJ5QX0QJT7` lands, the first thing to check on any failing Neon pass is the
+catalog, not the driver.

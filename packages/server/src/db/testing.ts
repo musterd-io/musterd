@@ -7,6 +7,11 @@ import { pgliteDriver, type PgliteDriver } from './pgliteDriver.js';
 import { sqliteDriver } from './sqliteDriver.js';
 import { openTraceDriver } from './traceDb.js';
 
+// Captured at import, before any test installs fake timers: the real-Postgres settle below must
+// wait real milliseconds even under a frozen clock (quiescence.test.ts opens its store inside
+// vi.useFakeTimers; a faked setTimeout never fires, and every test in the file hit the 30 s cap).
+const realSetTimeout = globalThis.setTimeout;
+
 /**
  * `pg` is the third kind: REAL Postgres, from `~/.musterd/cloud/neon.env` (the Neon pass,
  * `scripts/cloud/neon-pass.mjs`). Never the default and never in CI — it needs the env file; a
@@ -80,7 +85,7 @@ export async function openTestDriver(
   // (a notification's `.then`) can still be in flight. Let them settle, and retry a deadlocked
   // TRUNCATE rather than fail the next test for the last one's tail. The double needs neither.
   if (kind === 'pg') {
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => realSetTimeout(r, 250));
     for (let i = 0; ; i++) {
       try {
         await owner.exec(
@@ -89,7 +94,7 @@ export async function openTestDriver(
         break;
       } catch (e) {
         if (i >= 4 || !/deadlock/i.test(String(e))) throw e;
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((r) => realSetTimeout(r, 500));
       }
     }
   } else
@@ -97,8 +102,12 @@ export async function openTestDriver(
   // schema_meta keeps only the schema's own row; a test's marks (corpus watermarks, sync keys) go.
   await owner.exec("DELETE FROM schema_meta WHERE key <> 'schema_version'");
   const scoped = opts.team !== undefined ? d.forTeam(opts.team) : d.asOperator();
+  // `exec` is the DDL/TRUNCATE verb, and on a TEST handle it runs as the owner on both engines:
+  // the double does so by construction, and a fixture's trigger table (lanes.test, store.test)
+  // needs the schema the app and operator roles own nothing in. Production handles never do this
+  // — `pgDriver`'s exec runs as the handle's own role.
   // A test's close() must not close the pooled instance.
-  return { ...scoped, close: async () => undefined };
+  return { ...scoped, exec: (sql: string) => d.asOwner().exec(sql), close: async () => undefined };
 }
 
 // The real-Postgres kind: one driver per store from the env file, already migrated by the pass

@@ -16,6 +16,12 @@ import { ROLE, TENANT_SETTING } from './pg/tenancy.js';
 export interface PgDriver extends Driver {
   /** The owner-scoped handle — migrations only. Throws unless `ownerUrl` was given. */
   asOwner(): Driver;
+  /**
+   * Observe every statement this driver sends, as written by the store (`?` placeholders) — the
+   * SqliteDriver / PgliteDriver seam, so a query-shape count runs on real Postgres too (the Neon
+   * pass). The stamping statements (BEGIN, SET LOCAL ROLE, set_config, COMMIT) are not reported.
+   */
+  onStatement(listener: (sql: string) => void): () => void;
 }
 
 type Scope = { role: 'owner' | 'app' | 'operator'; team: string | null };
@@ -113,6 +119,7 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
     return (pools[role] = make(url!));
   };
   let closed = false;
+  const listeners = new Set<(sql: string) => void>();
 
   const stamp = async (c: Client, s: Scope) => {
     if (s.role === 'owner') return;
@@ -131,6 +138,7 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
   };
   // Postgres names the column, never the statement: the SQL rides on the error (as in the double).
   const query = async (c: Client, sql: string, params: Params): Promise<Result> => {
+    for (const l of listeners) l(sql);
     const text = toPostgres(sql);
     try {
       return await c.query(text, params as unknown[]);
@@ -207,6 +215,10 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
         if (!opts.ownerUrl)
           throw new DriverError('no owner URL: asOwner() is for migrations only', 'closed');
         return connectionHandle({ role: 'owner', team: null });
+      },
+      onStatement: (listener) => {
+        listeners.add(listener);
+        return () => void listeners.delete(listener);
       },
       close: async () => {
         closed = true;
