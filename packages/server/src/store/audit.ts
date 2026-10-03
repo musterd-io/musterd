@@ -311,6 +311,9 @@ export type AuditAction =
   // carries `rung` (`ppid` | `ended` | `stale`) and, on `stale`, the transcript `age_ms`. Apart from
   // `residency.session_ended` (the hook's clean exit) on purpose: ADR 164's eval counts rungs.
   | 'presence.session_ended'
+  // ADR 501: a human halted / resumed an agent seat — actor the human, target the seat.
+  | 'seat.halted'
+  | 'seat.resumed'
   // ADR 167 delivery rail, made observable (ADR 173; lane `01KYQ9175S`). The rail's own decision for
   // a send where it was genuinely a CANDIDATE — the act was directed at a real other member and was
   // hint-eligible — with `detail.reason` naming which leg of the predicate answered: `issued`,
@@ -643,6 +646,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'residency.session_captured': 'none',
   'residency.session_ended': 'none',
   'presence.session_ended': 'none',
+  'seat.halted': 'actor',
+  'seat.resumed': 'actor',
   'nudge.decision': 'actor',
   'residency.wake_cost': 'none',
   'residency.wake_report_rejected': 'none',

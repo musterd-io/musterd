@@ -75,6 +75,14 @@ join the reference tuple; `detail.cause` is documented on the lease and presence
 
 ## Consequences
 
+- _2026-10-03, increment 1 landed (lane `01M3TAKKMMSTV14A3NVVWFCJT8`):_ two small deviations
+  from Decision 1 and 3, both in the direction of the row answering alone. `halted_by` stores the
+  halter's **name**, not member id — every refusal path (`memberStandingRefusal`, both claim
+  handshakes, the lease-dead branch) builds "halted by <human>: <reason>" from the row with no
+  second read. An unspawned wake lease is marked `expired`, not `cancelled` — the lease status
+  set has no `cancelled` and every consumer already reads `expired` as "do not spawn"; the
+  `seat.halted` row counts them as `wake_leases_expired`. The gate's server half (Decision 4)
+  is the standing refusal on `/gate` — the hook's deny is increment 2.
 - Increments, each a lane: schema + server (this lane), gate + CLI + Figma frames
   (`01M41DRSVEHVMEVY96NG5JF08S`), /live (`01M41DRWWY4EE5CGRCJMZGDNVF`), dogfood read
   (`01M41DRZTYJ2R5X41CCCT0EXF1`).

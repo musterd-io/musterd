@@ -96,6 +96,24 @@ export const LADDER: PortableMigration[] = [
     version: 84,
     sql: 'CREATE TABLE IF NOT EXISTS console_token_jti (jti TEXT PRIMARY KEY, exp BIGINT NOT NULL)',
   },
+  {
+    // v85 — ADR 501 (halt as revocation): a human's operational hold on an agent seat. A standing,
+    // not an `account_status`: `halted_at` set ⇒ halted; who and why ride beside it; resume clears
+    // all three. Nullable, no backfill. Portable: both engines take ADD COLUMN IF NOT EXISTS.
+    version: 85,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('members')").pluck().all();
+      if (!cols.includes('halted_at')) db.exec('ALTER TABLE members ADD COLUMN halted_at INTEGER');
+      if (!cols.includes('halted_by')) db.exec('ALTER TABLE members ADD COLUMN halted_by TEXT');
+      if (!cols.includes('halted_reason'))
+        db.exec('ALTER TABLE members ADD COLUMN halted_reason TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE members ADD COLUMN IF NOT EXISTS halted_at BIGINT');
+      await d.exec('ALTER TABLE members ADD COLUMN IF NOT EXISTS halted_by TEXT');
+      await d.exec('ALTER TABLE members ADD COLUMN IF NOT EXISTS halted_reason TEXT');
+    },
+  },
 ];
 
 /** The SQLite view of a ladder: what `migrations.ts` / `traceDb.ts` append after their legacy entries. */

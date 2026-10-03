@@ -26,6 +26,7 @@ import {
   isHeld,
   markBound,
   mintAgentSeatCredential,
+  haltedSentence,
 } from '../store/members.js';
 import { memoryEnvelope } from '../store/memory.js';
 import {
@@ -476,7 +477,29 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
             });
           }
 
-          // Step 3: account_status check on target member.
+          // Step 3: account_status check on target member. ADR 501 first: a halt is the more
+          // recent fact and names the human to ask.
+          if (
+            targetMember &&
+            targetMember.halted_at !== null &&
+            targetMember.halted_at !== undefined
+          ) {
+            send(ws, {
+              type: 'refused',
+              code: 'halted',
+              message: haltedSentence(targetMember),
+              claimable: [],
+              hint: `a human lifts it: musterd resume ${targetMember.name}`,
+            });
+            await appendAudit(ctx.db, team.id, {
+              actor: null,
+              action: 'claim.refused',
+              target: targetMember.name,
+              result: 'deny',
+              detail: { code: 'halted', halted_by: targetMember.halted_by },
+            });
+            return;
+          }
           if (targetMember) {
             const status = resolveAccountStatus(targetMember);
             if (status === 'disabled' || status === 'banned') {

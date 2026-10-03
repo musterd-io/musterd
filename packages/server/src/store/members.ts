@@ -549,6 +549,10 @@ export async function authMember(
 export function memberStandingRefusal(member: MemberRow, now = Date.now()): MusterdError | null {
   if (member.left_at !== null)
     return new MusterdError('unauthorized', `seat "${member.name}" has left the team`);
+  // ADR 501: a halted seat is refused everywhere with the halter's sentence. Before account status:
+  // a halt is the more recent, more specific fact, and it names the human to talk to.
+  if (member.halted_at !== null && member.halted_at !== undefined)
+    return new MusterdError('forbidden', haltedSentence(member));
   const accountStatus = resolveAccountStatus(member);
   if (accountStatus === 'disabled' || accountStatus === 'banned' || accountStatus === 'archived')
     return new MusterdError('forbidden', `seat "${member.name}" is ${accountStatus}`);
@@ -559,6 +563,45 @@ export function memberStandingRefusal(member: MemberRow, now = Date.now()): Must
   )
     return new MusterdError('forbidden', `seat "${member.name}" — membership expired`);
   return null;
+}
+
+/** ADR 501: the one sentence every refusal of a halted seat carries. `halted_by` is stored as the
+ *  halter's member id; the standing-refusal path has no name to hand, so the halt writes the
+ *  NAME into `halted_by` as well — see {@link haltMember}, which stores the name, not the id. */
+export function haltedSentence(member: Pick<MemberRow, 'halted_by' | 'halted_reason'>): string {
+  return `halted by ${member.halted_by ?? '?'}: ${member.halted_reason ?? ''}`;
+}
+
+/**
+ * ADR 501 Decision 1: set the halt standing. `by` is the halter's NAME — the sentence is built
+ * from the row alone on every refusal path, and a name is what it needs. Returns false when the
+ * seat is already halted (the caller answers `conflict`; the first reason stands).
+ */
+export async function haltMember(
+  db: Driver,
+  memberId: string,
+  by: string,
+  reason: string,
+  now = Date.now(),
+): Promise<boolean> {
+  const r = await db.run(
+    'UPDATE members SET halted_at = ?, halted_by = ?, halted_reason = ?, updated_at = ? WHERE id = ? AND halted_at IS NULL',
+    [now, by, reason, now, memberId],
+  );
+  return r.changes === 1;
+}
+
+/** ADR 501 Decision 2: lift the halt. Returns false when the seat was not halted. */
+export async function resumeMember(
+  db: Driver,
+  memberId: string,
+  now = Date.now(),
+): Promise<boolean> {
+  const r = await db.run(
+    'UPDATE members SET halted_at = NULL, halted_by = NULL, halted_reason = NULL, updated_at = ? WHERE id = ? AND halted_at IS NOT NULL',
+    [now, memberId],
+  );
+  return r.changes === 1;
 }
 
 /** Agent HTTP proof is self-identifying and inseparable from its current Presence lease (ADR 337). */
@@ -583,6 +626,10 @@ async function authByAgentSeatCredential(
     );
   // ADR 408: the seat is proven by the credential hash; a leaseless route stops here.
   if (leaseless) return member;
+  // ADR 501: a halt revoked this seat's leases on purpose — the refusal must say so, not "dead
+  // lease". The seat is proven (credential matched), so the standing sentence is the honest answer.
+  if (member.halted_at !== null && member.halted_at !== undefined)
+    throw new MusterdError('forbidden', haltedSentence(member));
   // ADR 391: from here down the seat IS proven — the credential matched a live agent row. A lease
   // failure is still a refusal, but it must not throw the proof away with it: the interrupt line
   // needs to say which seat went deaf, and only this function ever knew.

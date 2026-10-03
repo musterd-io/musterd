@@ -1657,6 +1657,8 @@ export async function claimWakeLeases(
       for (const enrollment of enrollments) {
         const member = await getMemberById(t, enrollment.member_id);
         if (!member || member.left_at !== null) continue;
+        // ADR 501: a halted seat is never handed to a host; its enrollment stays for resume.
+        if (member.halted_at !== null && member.halted_at !== undefined) continue;
         // ADR 463 §1 (Review Focus 1): whatever else shares the host label, a key wakes only the
         // seats it may serve — a sponsored seat only from its sponsor's own key.
         if (!hostMayServe(scope, member)) continue;

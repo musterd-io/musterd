@@ -28,6 +28,14 @@ export const AvailabilitySchema = z.object({
 });
 export type Availability = z.infer<typeof AvailabilitySchema>;
 
+/** ADR 501: the halt standing as it travels — the halter's NAME (not id) and the reason. */
+export const HaltedSchema = z.object({
+  at: z.number().int(),
+  by: z.string(),
+  reason: z.string(),
+});
+export type Halted = z.infer<typeof HaltedSchema>;
+
 /** A durable identity in a Team. Never a session. Mirrors the `members` table (minus token_hash). */
 export const MemberSchema = z.object({
   id: z.string(),
@@ -57,6 +65,13 @@ export const MemberSchema = z.object({
   account_status: AccountStatusSchema.optional(),
   /** Effective capabilities (ADR 070). Optional for back-compat; the server always resolves it. */
   capabilities: CapabilitiesSchema.optional(),
+  /** ADR 501: a human's hold on this agent seat — who, why, since when. Null ⇒ not halted;
+   *  absent ⇒ an older daemon that predates halt. Lifted by a human, never by time. */
+  halted: HaltedSchema.nullish(),
+  /** ADR 501: whether the VIEWER may halt (or resume) this seat — computed server-side per
+   *  reader on roster reads (admin, or this agent's sponsor), never from the viewer's role in a
+   *  client. Absent off roster reads. */
+  can_halt: z.boolean().optional(),
   created_at: z.number().int(),
 });
 export type Member = z.infer<typeof MemberSchema>;
