@@ -61,13 +61,14 @@ if (STATIC_ONLY && CONNECTED_ONLY) {
  * Target size is a property of the CHROME plus whatever the page itself renders, and the chrome is
  * shared — so a handful of representative routes covers the nav and footer, and each extra route
  * earns its place by rendering a control the others do not. `/docs` carries the prose list links,
- * `/watch` carries the button row and the inline repo URL that is the exemption's worked example,
+ * `/watch` carries the button row (its inline repo URL, once the exemption's worked example, left
+ * when the repository went private, 2026-10-03),
  * `/blog` carries the post index. The connect screens are listed because a sign-in button is a
  * target a stranger meets before anything else.
  */
 const ROUTES = arg('routes', '')
   ? arg('routes', '').split(',')
-  : ['/', '/watch', '/docs', '/docs/getting-started', '/blog', '/board', '/live'];
+  : ['/', '/watch', '/docs', '/docs/concepts', '/blog', '/board', '/live'];
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',

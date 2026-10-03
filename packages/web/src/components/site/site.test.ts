@@ -5,15 +5,12 @@ import { hasBlog } from '../../content/generated/site-content';
 import { NAV_LINKS } from './SiteNav';
 
 describe('site nav', () => {
-  it('links every public surface and GitHub, nothing daemon-connected', () => {
+  it('links every public surface, nothing daemon-connected, and nothing on github.com (the repository is private)', () => {
     const hrefs = NAV_LINKS.map((l) => l.href);
     // /blog is conditional on there being a post — asserted as a rule below rather than pinned to
     // whichever state content/blog happens to be in.
-    expect(hrefs.filter((h) => h !== '/blog')).toEqual([
-      '/docs',
-      '/watch',
-      'https://github.com/SandRiseStudio/musterd',
-    ]);
+    expect(hrefs.filter((h) => h !== '/blog')).toEqual(['/docs', '/watch']);
+    for (const h of hrefs) expect(h).not.toContain('github.com');
     for (const h of hrefs) expect(h).not.toMatch(/live|board|audit|approvals|broadcast/);
   });
 

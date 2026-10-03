@@ -1,0 +1,56 @@
+.hiw {
+  padding: var(--section-y) var(--gutter);
+}
+
+.hiw__title {
+  margin: 0 0 18px;
+  font-size: clamp(1.2rem, 2.4vw, 1.55rem);
+  letter-spacing: -0.03em;
+}
+
+.hiw__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+  max-width: 68ch;
+}
+
+.hiw__step {
+  display: grid;
+  grid-template-columns: 2.2rem 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.hiw__n {
+  font-size: 12px;
+  line-height: 1.9;
+  letter-spacing: 0.08em;
+  color: var(--accent-ink);
+}
+
+.hiw__step-title {
+  margin: 0 0 4px;
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+}
+
+.hiw__step-body {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: var(--text-dim);
+}
+
+.hiw__note {
+  margin: 18px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}

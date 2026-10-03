@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   GRAPH_ID,
-  SITE_INSTALL_COMMAND,
   SITE_ONE_LINER,
   SITE_ORIGIN,
   SITE_TAGLINE,
@@ -174,15 +173,18 @@ describe('structured data nodes', () => {
     expect(org.parentOrganization).toEqual({
       '@type': 'Organization',
       name: 'SandRise Studio',
-      url: 'https://github.com/SandRiseStudio',
     });
   });
 
-  it('the app node states it is free and how to install it', () => {
+  // The repository is private (2026-10-03): the node may not point at an install path, a price or a
+  // github.com URL that does not resolve for the reader.
+  it('the app node claims no install path, no price and no repository', () => {
     const app = softwareApplicationNode();
     expect(app.applicationCategory).toBe('DeveloperApplication');
-    expect(app.offers).toEqual({ '@type': 'Offer', price: '0', priceCurrency: 'USD' });
-    expect(app.disambiguatingDescription).toContain(SITE_INSTALL_COMMAND);
+    expect(app.offers).toBeUndefined();
+    expect(app.installUrl).toBeUndefined();
+    expect(app.disambiguatingDescription).toBeUndefined();
+    expect(JSON.stringify([app, organizationNode()])).not.toContain('github.com');
     expect(app.publisher).toEqual({ '@id': GRAPH_ID.organization });
   });
 

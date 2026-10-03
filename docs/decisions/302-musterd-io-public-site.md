@@ -114,6 +114,13 @@ See [landed is not live](../wiki/landed-is-not-live.md) for the measured instanc
   rather than only in a commit: **a falsifier that only watches the other side cannot detect a
   precondition your own code never met.**
 
+- 2026-10-03 — **Private preview.** The repository went private, so the public site stopped pointing at
+  it: no `github.com` link in the nav, footer, JSON-LD or `llms.txt`; the install command, the "Get
+  started" section and the `/docs/getting-started` page are gone (the page is in git history —
+  `packages/web/content/docs/getting-started.md` — to restore when musterd opens up). A "How a team
+  works" section replaces the install block, and the Watch page no longer says the work is in "the open
+  repository". `/docs` keeps Concepts and the protocol spec, which are rendered on-site and need no repo.
+
 ## Observability & Evaluation
 
 **Traces.** Nothing new server-side — the site is static assets on a Worker with observability
