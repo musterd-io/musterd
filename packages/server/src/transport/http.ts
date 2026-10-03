@@ -5788,11 +5788,12 @@ export async function handleHttp(
 
       if (method === 'GET' && rest === '/report') {
         const { team, member: _member } = await authTouch(ctx, slug, req);
-        // Off the loop and shared across viewers (store/reportCache.ts, lane 01M3D4069F).
-        const report = await reportServiceFor(ctx.db, ctx.config.presenceTimeoutMs).get(
-          team.id,
-          team.slug,
-        );
+        // Shared across viewers (store/reportCache.ts, lanes 01M3D4069F, 01M3ZCTQ77). Keyed by the
+        // ROOT store — on Postgres `ctx.db` is a team handle minted per request — and derived under
+        // this request's team scope.
+        const report = await reportServiceFor(rootCtx.db, ctx.config.presenceTimeoutMs, {
+          cacheInline: ctx.config.mode === 'cloud',
+        }).get(team.id, team.slug, ctx.db);
         return sendJson(res, 200, report);
       }
 
