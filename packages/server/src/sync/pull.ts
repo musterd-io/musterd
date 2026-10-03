@@ -169,16 +169,6 @@ function reportStop(ctx: Ctx, team: string, stop: FoldStop): void {
         detail: 'a cursor names a message not yet folded here; transient — retrying each tick',
       });
       return;
-    case 'seed_unborn':
-      log.error({
-        msg: 'sync_fold_seed_unborn',
-        team,
-        relay_id: stop.relay_id,
-        hub_seq: stop.hub_seq,
-        detail:
-          'a seed-thread entry names a relay seed this daemon holds no row for; since ADR 399 the capture crosses as a `seed` event, so this closes on the tick that carries it — one relay poll OR one fold, whichever this node can do',
-      });
-      return;
     case 'unknown_seed_event':
       log.error({
         msg: 'sync_fold_unknown_seed_event',
@@ -331,6 +321,20 @@ export async function pullPage(
   if (page.events.length === 0) return none;
 
   const result = await foldBatch(ctx.db, team.id, page.events, now, page.lane_genesis);
+  // ADR 500: held, not stopped — one line per page, so a seed that never arrives stays findable.
+  // `projectHeldThreads` projects these on the seed's birth; until then they live in `audit` only.
+  if (result.held_seed_threads.length > 0) {
+    const [first] = result.held_seed_threads;
+    log.warn({
+      msg: 'sync_fold_seed_thread_held',
+      team: team.slug,
+      count: result.held_seed_threads.length,
+      relay_id: first!.relay_id,
+      hub_seq: first!.hub_seq,
+      detail:
+        'seed-thread entries for a seed this daemon holds no row for — held in audit, projected when the seed is captured here (ADR 500); a seed captured before ADR 399 never is',
+    });
+  }
   if (result.stop) {
     reportStop(ctx, team.slug, result.stop);
   } else {

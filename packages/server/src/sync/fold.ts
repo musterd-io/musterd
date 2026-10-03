@@ -79,12 +79,10 @@ export type FoldStop =
   | { kind: 'cursor_unborn'; message: string; seat: string; hub_seq: number }
   // Record events (ADR 371, residence-2 census gap 3): the sixth kind. A record projects into a
   // TABLE (unlike the ledger), so a verb this build cannot project stops — a row nothing reads is
-  // not a fact held honestly. `seed_unborn` is the seed thread's own `unborn`: the relay seed the
-  // entry names has not been ingested here yet. The relay runs on every daemon, so it is at most one
-  // poll away; blocking is the `lane_unborn` discipline — an entry with no seed to hang on would be
-  // a row nothing can find.
+  // not a fact held honestly. There is no `unborn` stop: a seed-thread entry whose seed is not here
+  // is HELD (ADR 500) — its audit row lands, and the seed's birth projects it — because an entry is
+  // an append, and a seed captured before ADR 399 has no birth in the log to wait for.
   | { kind: 'unknown_record_event'; action: string; hub_seq: number }
-  | { kind: 'seed_unborn'; relay_id: string; hub_seq: number }
   // Seed events (ADR 399): the seventh kind. A seed projects into a TABLE like a record, so an
   // unprojectable verb stops for the same reason. There is no `unborn` here — a capture depends on
   // nothing but its submitter, and an unresolved submitter is `unresolved_seat` as for every
@@ -674,6 +672,11 @@ export interface FoldResult {
    * re-scan of `messages`, which would re-fire them on every tick.
    */
   messages: string[];
+  /**
+   * Seed-thread entries this call held rather than projected, because their seed is not here (ADR
+   * 500). Not a stop: the pull logs them so a seed that never arrives is still findable.
+   */
+  held_seed_threads: { relay_id: string; hub_seq: number }[];
 }
 
 export async function readPullCursor(db: Driver, teamId: string): Promise<number> {
@@ -832,12 +835,20 @@ export async function foldBatch(
     let skipped = 0;
     let stop: FoldStop | null = null;
     const messages: string[] = [];
+    const heldSeedThreads: { relay_id: string; hub_seq: number }[] = [];
 
     // A `return finish()` inside t.transaction COMMITS what ran before it: the prefix and the
     // cursor go together. Only an unclassified throw rolls the batch back.
     const finish = async (): Promise<FoldResult> => {
       if (cursor !== startCursor) await writePullCursor(t, teamId, cursor, now);
-      return { applied, skipped, last_hub_seq: cursor, stop, messages };
+      return {
+        applied,
+        skipped,
+        last_hub_seq: cursor,
+        stop,
+        messages,
+        held_seed_threads: heldSeedThreads,
+      };
     };
 
     for (const event of events) {
@@ -986,14 +997,16 @@ export async function foldBatch(
           stop = { kind: 'unknown_record_event', action: e.action, hub_seq: event.hub_seq };
           return await finish();
         }
+        // ADR 500: an entry whose seed is not here is HELD, not a stop. Its audit row lands below
+        // like any other, and `projectHeldThreads` projects it from there on the seed's birth. A
+        // seed captured before ADR 399 has no birth in the log at all, so a stop here waited forever
+        // — Air 2 wedged at hub_seq 147,019 on 31 such seeds (2026-10-02).
         if (outcome === 'seed_unborn') {
           const relayId = e.detail?.['relay_id'];
-          stop = {
-            kind: 'seed_unborn',
+          heldSeedThreads.push({
             relay_id: typeof relayId === 'string' ? relayId : '',
             hub_seq: event.hub_seq,
-          };
-          return await finish();
+          });
         }
         await t.run(
           `INSERT INTO audit (id, team_id, ts, actor, action, target, result, detail, created_at, origin_node, origin_seq, actor_model, actor_model_source)

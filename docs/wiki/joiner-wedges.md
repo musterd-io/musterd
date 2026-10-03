@@ -54,6 +54,25 @@ pull (live within 165 s), presence replicates as transitions never snapshots (AD
 lanes carry the origin's timestamps, so any age-based sweep sees a replayed lane as ancient. Absence has
 three indistinguishable causes — not folded yet, deleted by the TTL, simply not resident.
 
+## Pull-side stops: the fold waits for something that never comes
+
+The push side above is refused by the hub; the pull side stops on its own. The fold applies the
+hub's log in order and stops at the first event it cannot resolve, retrying that page every 60 s. A
+stop is right when the missing thing will arrive; it is a wedge when it never will. Three such
+wedges were hit for real, each by a fresh joiner replaying the whole log:
+
+| Stop | Waits for | Why it never came | Fixed by |
+| --- | --- | --- | --- |
+| `lane_unborn` | the lane's `lane.opened` | lanes born before lane replication have no birth in the log | [ADR 381](../decisions/381-the-genesis-watermark.md), 2026-09-04 (pre-history lanes advance) |
+| `seed_unborn` | the seed's `seed.captured` | the 53 seeds captured before [ADR 399](../decisions/399-the-seed-kind-ideation-crosses-without-the-credential.md) were never stamped | [ADR 500](../decisions/500-a-seed-thread-entry-waits-for-nothing.md), 2026-10-02 (the entry is held, projected on the seed's birth) |
+| `unresolved_seat` | the seat's roster file | five seats existed on the hub but were never committed to the roster repo | committing them (hub roster commit `f96c054`, 2026-10-02); the joiner's `git pull` of the roster clears it |
+
+Measured on Air 2, 2026-10-02: the `unresolved_seat` stop held the cursor at 117,297 (the
+`sloane → fifty` handoff), and the `seed_unborn` stop held it at 147,018, 12,180 events behind the
+head. Each looked the same from the hub: a joiner pulling one page a minute and never catching up.
+Read the joiner's own log, not the hub's: `grep sync_fold ~/.musterd/daemon.log | tail -n 2`
+names the stop and the hub_seq, and `SELECT * FROM sync_pull_cursor` gives the cursor.
+
 ## What does not fix a wedge
 
 All read from the code on 2026-10-02, none reproduced:
