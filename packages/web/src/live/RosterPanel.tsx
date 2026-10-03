@@ -289,7 +289,7 @@ export function SeatDetail({
         {m.halted && (
           <span
             className="lc-stat lc-stat--halted"
-            title={`Halted ${new Date(m.halted.at).toLocaleString()} — a human lifts it (musterd resume ${m.name})`}
+            title={`A human lifts it: musterd resume ${m.name}`}
           >
             halted by {m.halted.by}: {m.halted.reason}
           </span>
@@ -377,18 +377,16 @@ function SeatHaltControl({
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const run = async (fn: () => Promise<unknown>) => {
+  const run = (fn: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
-    try {
-      await fn();
-      setAsking(false);
-      setReason('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
+    fn()
+      .then(() => {
+        setAsking(false);
+        setReason('');
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setBusy(false));
   };
   if (halted) {
     return (
@@ -397,8 +395,8 @@ function SeatHaltControl({
           type="button"
           className="lc-seat__halt lc-seat__halt--resume"
           disabled={busy}
-          title={`Lift the halt — ${seat} can claim, wake and act again`}
-          onClick={() => void run(() => resumeSeat(cfg, seat))}
+          title="Lift the halt"
+          onClick={() => run(() => resumeSeat(cfg, seat))}
         >
           resume
         </button>
@@ -413,7 +411,7 @@ function SeatHaltControl({
           type="button"
           className="lc-seat__halt"
           disabled={busy}
-          title="Stop this seat at its next tool boundary — leases revoked, re-claim and tools refused until a human resumes it (ADR 501)"
+          title="Stop at its next tool boundary until a human resumes it"
           onClick={() => setAsking(true)}
         >
           halt
@@ -424,14 +422,14 @@ function SeatHaltControl({
           className="lc-seat__haltform"
           onSubmit={(e) => {
             e.preventDefault();
-            if (reason.trim()) void run(() => haltSeat(cfg, seat, reason.trim()));
+            if (reason.trim()) run(() => haltSeat(cfg, seat, reason.trim()));
           }}
         >
           <input
             className="lc-seat__haltreason"
             value={reason}
             maxLength={280}
-            placeholder="why — the seat will be told"
+            placeholder="why"
             aria-label={`Reason for halting ${seat}`}
             onChange={(e) => setReason(e.target.value)}
           />

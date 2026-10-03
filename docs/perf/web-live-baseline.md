@@ -942,6 +942,34 @@ after lane 5 (main) → this branch: total JS 257.1 → 255.7 KiB (44 → 42 chu
 134.9 → 130.7 KiB (13 → 11 eager chunks, a re-chunking side effect of the smaller graph), app CSS
 7.0 → 6.0 KiB.
 
+## 2026-10-03 — `totalJsGzipBytes` 267,300 → 271,100: the /live halt control (ADR 501 increment 3, lane 01M41DRWWY4EE5CGRCJMZGDNVF)
+
+Measured with Node zlib over `packages/web/dist/client` after a build, as the gate does: main @
+`0e416e86` (halt increments 1–2 landed) **266,704 B** (260.5 KiB, 42 chunks), this branch
+**267,234 B** (261.0 KiB, 42 chunks) — **+530 B**. Main had 596 B free locally, which is inside the
+~0.7 KB CI gzip delta, so the PR's own gates read 261.2 KiB RED against 261.0 KiB before any trim.
+
+| measure                 | main      | branch    |
+| ----------------------- | --------- | --------- |
+| total JS gzip           | 260.5 KiB | 261.0 KiB |
+| initial JS gzip (/live) | 133.4 KiB | 133.4 KiB |
+| `live` CSS              | 18.3 KiB  | 18.5 KiB  |
+
+What the bytes are: the `lc-stat--halted` badge, `SeatHaltControl` (halt button → inline reason
+field → confirm/cancel, or resume while halted, a daemon refusal shown in place), and the two client
+helpers `haltSeat` / `resumeSeat`. The control rides the eager `live` chunk because `SeatDetail` does,
+and initial did not move at the KiB level. Trimmed first: three tooltips cut to one clause each, the
+badge title dropped its formatted timestamp, the placeholder shortened, the async handler folded to
+a promise chain — the trim is what took the branch from 261.2 to 261.0 KiB locally. What remains is
+the surface ADR 501 Decision 5 decided (the button renders from the daemon's `can_halt` alone), so
+there is nothing further to delete; lazy-loading cannot move total (ADR 183); no dependency to drop;
+a re-baseline would loosen. New ceiling is measured + the ~0.7 KB CI gzip delta + ~1.2%, per
+precedent.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — total must read under 264.7 KiB.
+  At or under 260.5 KiB (main's measure), the halt control has left the graph and this raise should
+  go with it.
+
 ## 2026-09-29 — /broadcast adopts the team column + ticker; the overlay reel and work stack retire (ADR 464 lane 5)
 
 No budget moves. Deletion repays: `OfficeOverlay.tsx`, `WorkStack.tsx`, `broadcastChrome.ts` and
