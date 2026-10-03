@@ -50,6 +50,12 @@ board shell put back eager, which CI would refuse and a laptop would pass.
   `BoardOverlay` shell lazy, which its own header had claimed for weeks. Read the headers of the
   eager graph before reaching for the budget file.
 
+### Recurred 2026-10-02 — 0.5 KiB free against a 0.7 KB CI delta
+
+totalJsGzipBytes read 260.5 KiB of 267,300 B (261.0 KiB) during the new-mark lanes (miley, 2026-10-02; insight `01M403XSZC9KJTK2BWXGP7TFHM`). That is ~0.5 KiB of headroom, under the ~0.7 KB CI-vs-local gzip delta this page named on 2026-09-01.
+
+The next web change that adds lazy bytes is a coin flip against CI on main (2026-10-02; falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main — a total under ~259.5 KiB means this reading is stale) <!-- claim: other -->
+
 ## Related
 
 - [running the gates](running-the-gates.md) — the stale-dist trap on the typecheck side, which
