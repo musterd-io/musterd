@@ -1,25 +1,43 @@
-import { CHIP_BG, CHIP_FG, CHIP_M_PATH, CHIP_NOTCH, CHIP_RADIUS } from './chipMark';
+import {
+  CHIP_BG,
+  CHIP_FG,
+  CHIP_GLYPH_PATH,
+  CHIP_OUTLINE_PATH,
+  CHIP_RADIUS,
+  CHIP_RING_PATH,
+  CHIP_SMALL_STROKE,
+  CHIP_VIEWBOX,
+  chipIsSmall,
+} from './chipMark';
 
 type MusterdChipProps = {
   size?: number;
   className?: string;
 };
 
-/** Compact brand chip — mustard block, reversed m, cursor notch (ADR 154). */
+/** Brand mark — the hand-drawn m in a white ring on mustard (ADR 497). Below ~24px it drops the hairline outlines and thickens the glyph. */
 export function MusterdChip({ size = 16, className }: MusterdChipProps) {
+  const small = chipIsSmall(size);
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 32 32"
+      viewBox={`0 0 ${CHIP_VIEWBOX} ${CHIP_VIEWBOX}`}
       width={size}
       height={size}
       className={className}
       aria-hidden
       role="img"
     >
-      <rect width="32" height="32" rx={CHIP_RADIUS} fill={CHIP_BG} />
-      <path fill={CHIP_FG} d={CHIP_M_PATH} />
-      <rect {...CHIP_NOTCH} fill={CHIP_FG} />
+      <rect width={CHIP_VIEWBOX} height={CHIP_VIEWBOX} rx={CHIP_RADIUS} fill={CHIP_BG} />
+      <path fill="#fff" fillRule="evenodd" d={CHIP_RING_PATH} />
+      {small ? null : <path fill={CHIP_FG} fillRule="evenodd" d={CHIP_OUTLINE_PATH} />}
+      <path
+        fill={CHIP_FG}
+        d={CHIP_GLYPH_PATH}
+        {...(small
+          ? { stroke: CHIP_FG, strokeWidth: CHIP_SMALL_STROKE, strokeLinejoin: 'round' as const }
+          : {})}
+      />
     </svg>
   );
 }
@@ -43,7 +61,7 @@ type MusterdWordProps = {
   domain?: boolean;
 };
 
-/** Topbar wordmark lockup: chip + lowercase musterd, optionally carrying the address. */
+/** Topbar wordmark lockup: mark + lowercase musterd, optionally carrying the address. */
 export function MusterdWord({
   className = 'lc__word',
   chipSize = 16,

@@ -1,7 +1,7 @@
 import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import brandCss from '../brand/brand.css?url';
-import chipIcon from '../brand/chip.svg?url';
+import chipIcon from '../brand/chip-sm.svg?url';
 import socialCard from '../brand/social-card.png?url';
 import {
   SITE_CARD_ALT,
