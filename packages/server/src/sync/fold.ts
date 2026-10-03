@@ -775,6 +775,20 @@ async function localNodeId(db: Driver, teamId: string): Promise<string | null> {
  * Across BOTH replicated kinds: one allocator serves messages and lane rows (ADR 335 §8), so a head
  * read from one table alone under-reports and trips the gap check on a legitimate sequence.
  */
+/**
+ * The audit legs of the held-set reads, exported for the plan assert in db.test.ts. `origin_seq > 0`
+ * is not a filter — the wire never carries a non-positive seq — it is what lets SQLite use
+ * `idx_audit_origin`, which is PARTIAL on exactly that predicate (v58): a query that does not prove
+ * it gets no index and SCANs every audit row, local-only rows included. Both reads ran per folded
+ * event, so a replay cost O(n²) in the replica's size: a fresh joiner's pages slowed from 1.4 s to
+ * 7+ s each between hub_seq 50k and 70k, and past the hub's 5 s keep-alive window every page after
+ * the first died on a closed socket (second-machine run, 2026-10-02).
+ */
+export const HELD_HEAD_AUDIT_SQL =
+  'SELECT MAX(origin_seq) AS high FROM audit WHERE origin_node = ? AND origin_seq > 0';
+export const HELD_PAIR_AUDIT_SQL =
+  'SELECT id FROM audit WHERE origin_node = ? AND origin_seq = ? AND origin_seq > 0';
+
 async function heldHead(db: Driver, originNode: string): Promise<number> {
   const m =
     (
@@ -783,13 +797,7 @@ async function heldHead(db: Driver, originNode: string): Promise<number> {
         [originNode],
       )
     )?.high ?? 0;
-  const a =
-    (
-      await db.get<{ high: number | null }>(
-        'SELECT MAX(origin_seq) AS high FROM audit WHERE origin_node = ?',
-        [originNode],
-      )
-    )?.high ?? 0;
+  const a = (await db.get<{ high: number | null }>(HELD_HEAD_AUDIT_SQL, [originNode]))?.high ?? 0;
   return Math.max(m, a);
 }
 
@@ -800,10 +808,7 @@ async function heldPair(db: Driver, originNode: string, originSeq: number): Prom
       'SELECT id FROM messages WHERE origin_node = ? AND origin_seq = ?',
       [originNode, originSeq],
     )) !== undefined ||
-    (await db.get<{ id: string }>('SELECT id FROM audit WHERE origin_node = ? AND origin_seq = ?', [
-      originNode,
-      originSeq,
-    ])) !== undefined
+    (await db.get<{ id: string }>(HELD_PAIR_AUDIT_SQL, [originNode, originSeq])) !== undefined
   );
 }
 

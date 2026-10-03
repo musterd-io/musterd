@@ -6,6 +6,8 @@ import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { addMember } from '../store/members.js';
 import { createTeam, getTeamBySlug } from '../store/teams.js';
+import { HELD_HEAD_AUDIT_SQL, HELD_PAIR_AUDIT_SQL } from '../sync/fold.js';
+import { UNPUSHED_AUDIT_SQL } from '../sync/push.js';
 import { MIGRATIONS, runMigrations } from './migrations.js';
 import { openDb } from './open.js';
 import { seedDawn } from './seed.js';
@@ -1060,6 +1062,28 @@ describe('v77 — the roster status lookup is served by an index, with no sort',
       .join('\n');
     expect(plan).toMatch(/idx_messages_from_act_ts \(from_member=\? AND act=\?\)/);
     expect(plan).not.toMatch(/TEMP B-TREE/);
+    await db.close();
+  });
+});
+
+/**
+ * v58's `idx_audit_origin` is PARTIAL — `WHERE origin_seq > 0`, the stamped rows only — so SQLite uses
+ * it only for a query that proves the same predicate. The fold's held-set reads did not: both scanned
+ * every audit row per folded event, so a replay cost O(n²) in the replica's size, and a fresh
+ * joiner's pages slowed from 1.4 s to 7+ s each between hub_seq 50k and 70k (second-machine run,
+ * 2026-10-02). The predicate excludes nothing a real origin can match — the wire never carries a
+ * non-positive seq. Existence of the index is not the point; the planner choosing it is.
+ */
+describe('v58 idx_audit_origin serves every (origin_node, origin_seq) read', () => {
+  it('the fold’s held head and held pair, and the push tail, all SEARCH by the index', async () => {
+    const db = openDb(':memory:');
+    const plan = (sql: string, ...args: unknown[]) =>
+      (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...args) as { detail: string }[])
+        .map((r) => r.detail)
+        .join(' | ');
+    expect(plan(HELD_HEAD_AUDIT_SQL, 'node-a')).toContain('idx_audit_origin');
+    expect(plan(HELD_PAIR_AUDIT_SQL, 'node-a', 7)).toContain('idx_audit_origin');
+    expect(plan(UNPUSHED_AUDIT_SQL, 'team-1', 'node-a', 5, 500)).toContain('idx_audit_origin');
     await db.close();
   });
 });
