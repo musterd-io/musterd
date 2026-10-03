@@ -6,6 +6,7 @@ import { routeEnvelope } from '../protocol/route.js';
 import { addMember, getMemberByName } from '../store/members.js';
 import { parseWorkingHours, type MemberRow, type TeamRow } from '../store/rows.js';
 import { getTeamById, listActiveTeams } from '../store/teams.js';
+import { joinerEnrollment } from '../sync/claim.js';
 import { postDigest } from './digest.js';
 
 /**
@@ -17,6 +18,13 @@ import { postDigest } from './digest.js';
  * Every tick asks one question per team with a schedule: is it inside a working window, and is
  * today's digest missing? `postDigest` is idempotent per (team, day) by construction, so a missed
  * 08:00 tick (the laptop was asleep) posts at the first tick after, and a second tick posts nothing.
+ *
+ * The digest is the hub's to post, team by team, like the reaper's team-wide sweeps (ADR 361 §1,
+ * ADR 371 §2). An enrolled joiner holds a replica whose receipt clock is its own sync time: on
+ * 2026-10-03 a joiner enrolled the night before posted a second digest beside the hub's, with every
+ * ask aged "16h4m" (its re-sync) and nothing learned. The once-per-day guard could not catch it —
+ * each daemon checked only its own rows. So a joiner skips the team, and gets the hub's digest by
+ * the pull.
  */
 
 /** The service seat that posts the digest (ADR 232: a ledger seat, never a lane owner). */
@@ -48,6 +56,7 @@ export async function digestTick(
   let posted = 0;
   for (const { id } of await listActiveTeams(db)) {
     const team = await getTeamById(db, id);
+    if (team && (await joinerEnrollment(db, team.id, team.slug))) continue;
     const hours = parseWorkingHours(team?.working_hours);
     if (!team || !hours) continue;
     const start = workingDayStart(hours, now);
