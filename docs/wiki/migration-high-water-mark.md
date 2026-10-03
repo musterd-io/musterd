@@ -69,7 +69,33 @@ fresh database is unaffected), plus a test that a database at 55 without the tab
   database gets in a way nobody can tell apart from the original.
 - **Whether the runner should track a set instead of a mark** is a separate decision. It would make
   this shape impossible and would change what `schema_version` means to every reader of it. Not
-  made here; named so it is not folded into a fix by accident.
+  made here; named so it is not folded into a fix by accident. (2026-10-03: for Postgres,
+  [ADR 496](../decisions/496-migrate-verifies-landed-schema.md) took neither a set nor a per-entry
+  hash. It keeps the mark and checks the outcome against the catalog after the ladder runs. The
+  SQLite runner is still a bare mark: `if (m.version <= applied) continue;` in `migrations.ts`.)
+
+## The second instance: Postgres, a renumbered body (2026-10-02)
+
+The same mark skipped a step on the Postgres ladder by a third route. A database was migrated from a branch whose step numbers later changed, so the number it holds names a body it never ran (2026-10-02; falsify: the v81 repair record in [docs/perf/neon-pass.md](../perf/neon-pass.md) lists the columns before nick's owner ALTERs. If that list had shown `follows_up_json` on `musterd-1b` at v84, the step was not skipped, and the 154 failures came from something else). <!-- claim: defect -->
+
+The 2026-09-30 Neon pass migrated `musterd-1b` from the cloud 1B branch hours before that branch
+merged. At that point v81 on the branch was a different step. Once the ladder's numbering was
+final, the database's `schema_version` already passed 81, so the final v81 (`lanes.follows_up_json`,
+`lanes.abandon_reason`) never ran. On 2026-10-02 the database sat at v84 without either column. The
+migrate step reported it current, and 154 store tests failed on `column "follows_up_json" … does
+not exist` ([docs/perf/neon-pass.md](../perf/neon-pass.md), lane `01M3Z429Q3`). nick repaired it
+by hand with the ladder's own two `ADD COLUMN IF NOT EXISTS` statements, run as owner. The columns
+went from `none` before to both after, and the version row stayed at 84. Production
+(`musterd-cloud`) was created after the numbers settled and was not exposed.
+
+The three routes so far all leave the same reading. On 2026-08-28 a body was edited below the mark
+([sync-push](sync-push.md)). On 2026-09-02 a lower number landed after a higher one (above). On
+2026-10-02 a number was reassigned to a new body after a database had passed it. Each time the
+version row read correct. The fix was not to forbid the route. [ADR 496](../decisions/496-migrate-verifies-landed-schema.md)
+has the Postgres migrate step compare the landed tables and columns against an expected set,
+refuse with `schema drift: missing …`, and repair only when asked (`--repair` /
+`MUSTERD_MIGRATE_REPAIR=1`). The habit it adds: **a database migrated from an unmerged branch is a
+scratch database.** Rebuild it, or repair it on purpose, before it serves a test pass that counts.
 
 The same cursor bit once before, from the other side: [sync-push](sync-push.md) records dolly's
 2026-08-28 note that editing an *unlanded* v50 in place leaves every scratch database already
