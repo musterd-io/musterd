@@ -951,6 +951,33 @@ export class HttpClient {
   reclaim(slug: string, member: string): Promise<{ ok: boolean; member: string }> {
     return this.request('POST', `/teams/${slug}/members/${encodeURIComponent(member)}/reclaim`);
   }
+  /** ADR 501: halt an agent seat — `POST /teams/:slug/members/:name/halt`. Human-only; the daemon
+   *  decides admin-vs-sponsor scope. */
+  haltMember(
+    slug: string,
+    member: string,
+    reason: string,
+  ): Promise<{
+    member: string;
+    halted: { at: number; by: string; reason: string };
+    effective: string;
+    presences_evicted: number;
+  }> {
+    return this.request('POST', `/teams/${slug}/members/${encodeURIComponent(member)}/halt`, {
+      reason,
+    });
+  }
+  /** ADR 501: lift a halt — `POST /teams/:slug/members/:name/resume`. */
+  resumeMember(
+    slug: string,
+    member: string,
+  ): Promise<{
+    member: string;
+    halted: null;
+    was: { by: string | null; reason: string | null; at: number | null };
+  }> {
+    return this.request('POST', `/teams/${slug}/members/${encodeURIComponent(member)}/resume`);
+  }
   /** Release the caller's own seat (ADR 058 unbind): clear bound_at + presence; seat stays declared. */
   unbind(slug: string): Promise<{ ok: boolean; member: string }> {
     return this.request('POST', `/teams/${slug}/unbind`);

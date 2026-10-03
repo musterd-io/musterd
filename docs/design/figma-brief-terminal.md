@@ -218,6 +218,30 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
     `review promises: not reported by this daemon — it predates ADR 490`; a supporting daemon with nothing
     to show prints no section at all. Sections sit below `owed by you` and above the stale-goal line.
 
+### Halt frames (ADR 501)
+
+25. `cmd/halt` — `$ musterd halt Ada --reason "looping on the wrong lane"` as nick, no color, 80
+    columns. The renderer is `packages/cli/src/commands/halt.ts` (`haltCommand`), pinned by
+    `halt.test.ts`:
+
+    ```
+    ✓ halted Ada — looping on the wrong lane
+      next: musterd resume Ada
+    effective at the seat's next tool boundary or musterd call — nothing is killed; 1 live session evicted
+    ```
+
+26. `cmd/resume` — `$ musterd resume Ada`:
+
+    ```
+    ✓ resumed Ada — was halted by nick: looping on the wrong lane
+      next: musterd status
+    its next claim mints a fresh lease; residency wakes it again
+    ```
+
+27. `cmd/status-halted` — the `cmd/status` roster with Ada halted: her row carries the warn facet
+    `halted by nick: looping on the wrong lane` right after `agent`, on whichever group she is in
+    (`renderRoster`, `rows.test.ts`).
+
 ## Page: States (empty + error)
 
 1. `state/empty-inbox` — `inbox empty — nobody's mustered anything yet` (dim). (Exact string; the CLI uses it verbatim.)

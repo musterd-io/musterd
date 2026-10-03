@@ -211,6 +211,17 @@ export function sessionReachReason(
   return SESSION_REACH_DENY;
 }
 
+/**
+ * ADR 501: the daemon's halted refusal ("halted by <human>: <reason>", a `forbidden` from member
+ * auth) becomes the PreToolUse deny reason, with the lift named. Anything else — another
+ * `forbidden`, an unreachable daemon, a non-CLI error — is null, and the gate keeps failing open.
+ */
+export function haltDenyReason(err: unknown, seat: string | undefined): string | null {
+  if (!(err instanceof CliError) || err.code !== 'forbidden') return null;
+  if (!err.message.startsWith('halted by ')) return null;
+  return `${err.message} — a human lifts it with \`musterd resume ${seat ?? '<seat>'}\``;
+}
+
 /** PostToolUse `Agent` one-shot. Always exits 0 — a ledger miss must not break the spawn. */
 async function recordSubagentCommand(): Promise<number> {
   try {
@@ -336,6 +347,7 @@ async function gateCheck(parsed: Parsed): Promise<number> {
   // enforcement decision always wins it (a deny must never be swallowed), and the ADR 239 warning is
   // flushed afterwards only if nothing was emitted. Tracked locally — this process handles one call.
   let emitted = false;
+  let seatName: string | undefined;
   // ADR 445 R1 — what the trace tap needs once the decision is made: the payload (names, ids and
   // sizes are all the tap reads of it) and how the gate ruled.
   let tapPayload: string | undefined;
@@ -387,6 +399,7 @@ async function gateCheck(parsed: Parsed): Promise<number> {
       claimSeatPerRequest: false,
     });
     if (!explicit || !identity) return; // ambient/unbound folder — no seat to gate → allow
+    seatName = identity.name;
     // ADR 163 — actor attestation, BEFORE the class table and independent of it. Deliberately not
     // awaited: nothing downstream reads the result, and an observer on the critical path would be the
     // latency tax the ADR's guard metric forbids. Fires on undeclared calls by design (ADR 150 §Gate B
@@ -415,8 +428,16 @@ async function gateCheck(parsed: Parsed): Promise<number> {
   };
   try {
     await decide();
-  } catch {
-    // Fail-open: a gate must never break the tool call it rides on (ADR 150 guard metric).
+  } catch (err) {
+    // ADR 501 Decision 4 — the ONE case where the gate stops failing open: the daemon refused this
+    // seat at auth because a human halted it. The refusal is the deny, word for word, plus the lift.
+    const halted = haltDenyReason(err, seatName);
+    if (halted && !emitted) {
+      emitDeny(halted);
+      emitted = true;
+      decision = 'deny';
+    }
+    // Otherwise fail-open: a gate must never break the tool call it rides on (ADR 150 guard metric).
   }
   // The ADR 239 advisory survives a failure above on purpose: an unreachable daemon is exactly when a
   // second session in the folder is least likely to be noticed any other way.

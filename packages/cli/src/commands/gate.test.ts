@@ -5,9 +5,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { HttpClient } from '../client.js';
 import { findBinding } from '../config.js';
+import { CliError } from '../errors.js';
 import { markSessionStart, sessionStartedAt } from '../workingTree.js';
 import {
   attest,
+  haltDenyReason,
   harnessFromEnv,
   parseEnvelopeSessionId,
   parseToolCall,
@@ -565,5 +567,27 @@ describe('harnessFromEnv (ADR 442)', () => {
 
   it('returns undefined when neither is set', () => {
     expect(harnessFromEnv({})).toBeUndefined();
+  });
+});
+
+/**
+ * ADR 501 Decision 4: the ONE case where the gate stops failing open. The daemon refuses a halted
+ * seat's `/enforcement` and `/gate` reads at auth with "halted by <human>: <reason>"; the hook turns
+ * exactly that refusal into a deny and leaves every other failure on the fail-open path.
+ */
+describe('haltDenyReason (ADR 501 — the gate denies a halted seat)', () => {
+  it("turns the daemon's halted refusal into a deny reason that names the lift", () => {
+    const err = new CliError('halted by nick: looping on the wrong lane', 7, 'forbidden');
+    expect(haltDenyReason(err, 'Ada')).toBe(
+      'halted by nick: looping on the wrong lane — a human lifts it with `musterd resume Ada`',
+    );
+  });
+
+  it('leaves every other failure on the fail-open path', () => {
+    expect(
+      haltDenyReason(new CliError('seat "Ada" is disabled', 7, 'forbidden'), 'Ada'),
+    ).toBeNull();
+    expect(haltDenyReason(new CliError('fetch failed', 1), 'Ada')).toBeNull();
+    expect(haltDenyReason(new Error('halted by nick: x'), 'Ada')).toBeNull();
   });
 });
