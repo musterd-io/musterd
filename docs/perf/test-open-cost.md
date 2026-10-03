@@ -34,9 +34,12 @@ IDENTITY`, which tests rely on, and buy ~20 ms a test — not the lever.
   every test daemon's trace store on boot), so the ladder replayed ~9,500 times a run. `open.ts` and
   `traceDb.ts` now migrate once per process and clone the serialized template; `open.test.ts` holds a
   clone to be a freshly migrated database (same `sqlite_master`, same version, same pragmas, nothing
-  shared). Expected on CI: ~9,500 × (24.5 ms × 2–3) ≈ 450–700 file-seconds less per run — most of a
-  SQLite-only run's ~370 and ~20% of a both-driver run's ~2,470. Measured on the first runs after
-  landing; recorded here when read.
+  shared). Expected on CI: ~9,500 × (24.5 ms × 2–3) ≈ 450–700 file-seconds less per run.
+  **Measured 2026-10-03 (#2012's run against #2010's, both drivers, the same three shards, back to
+  back): vitest `tests` time 2,524 → 2,295 s (−229 s, −9%); shard wall 678/425/424 → 655/366/386 s
+  (−120 s, −8%).** Below the estimate — fewer than 9,500 opens replay the ladder, since many of the
+  SQLite-leg tests open no store — and real: shards 2 and 3, the store-heavy ones, lost 14% and 9%;
+  shard 1, dominated by `integration.test.ts`'s PGlite leg, lost 3%.
 - PGlite's per-file cold start (1.1 s × every `withDrivers` file) is the next fixed cost worth a
   number: a `loadDataDir` snapshot would skip the migration, not the WASM start. Open, not promised.
 
