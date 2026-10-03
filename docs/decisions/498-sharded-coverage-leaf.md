@@ -77,8 +77,11 @@ lane `01M3ZRQAGDDMTG6TA9T27D02N9`.
 
 - Expected wall time, from the measured file-seconds: both-driver runs ~14 minutes (the
   `integration.test.ts` shard ≈ 10.5 min of tests + ~2.5 min setup, then ~1 min of merge) instead
-  of 25–27; SQLite-only pull requests ~5 minutes instead of 6–10. Confirmed or corrected on this
-  ADR's own PR run and the first push to `main` after it (see Observability).
+  of 25–27; SQLite-only pull requests are unchanged (one shard, no merge). Measured on this ADR's
+  own PR run (37089527734, attempt 2, 2026-10-03, both drivers): shards 12.3 / 8.2 / 5.8 minutes
+  wall including setup (vitest 674 / 422 / 298 s; 4,309 + 3,559 + 3,598 = 11,466 tests passed) —
+  the whole run would have closed at ~13 minutes plus the merge, against 26.1 and 26.7 on the two
+  `main` runs before it.
 - Compute rises by about two setups and one merge, ~6.5 runner-minutes, on both-driver runs only;
   SQLite-only pull requests — most of the 100–166 runs a day — pay the ~20 s `plan` job and
   nothing else. The org's Actions minutes are billed on a private repository: on 2026-10-03 GitHub
@@ -89,7 +92,7 @@ lane `01M3ZRQAGDDMTG6TA9T27D02N9`.
   without `--coverage`, or a merge run from a different root path, would make the floors pass
   vacuously — the merge step therefore refuses unless exactly three blobs are present, and the
   merged per-package percentages are compared against the last unsharded run on this PR.
-- `.vitest-reports/` is ignored by git. `MAX_WORKERS = 4` in `vitest.shared.ts` is the laptop's
+- `coverage-blobs/` (the blobs' home — vitest's default `.vitest-reports/` is a hidden path, which `upload-artifact` skips by default; the first run of this job uploaded nothing) is ignored by git. `MAX_WORKERS = 4` in `vitest.shared.ts` is the laptop's
   number; CI passes `--maxWorkers=2` explicitly, as before.
 - Follow-ups, each with its lane: split `integration.test.ts` along its depth-1 describes behind an
   `integrationHarness(kind)` factory, then raise the shard count — lane `01M3ZRPWDBJJVZTD76DVRE08WX`;

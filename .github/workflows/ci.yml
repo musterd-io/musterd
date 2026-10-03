@@ -134,10 +134,13 @@ jobs:
       # on both-driver runs (lane 01M3ZC1Z6G, #1985): 4 workers 25m50s–26m; 2 workers 18m27s and
       # 23m21s. Nick made it the default the same day. Re-measure before changing it again.
       #
-      # `--reporter=blob` writes .vitest-reports/blob-<i>-3.json; `default` keeps the log readable and
+      # `--reporter=blob` writes the shard's report; `default` keeps the log readable and
       # `github-actions` keeps failure annotations (vitest adds it only when no reporter is named).
+      # The blob goes to coverage-blobs/, not vitest's default .vitest-reports/: upload-artifact
+      # skips hidden paths by default (a security default worth keeping), and the first run of this
+      # job uploaded nothing because of it.
       - name: Tests + coverage (shard ${{ matrix.shard }} of ${{ needs.plan.outputs.shard_count }})
-        run: pnpm coverage --maxWorkers=2 --shard=${{ matrix.shard }}/${{ needs.plan.outputs.shard_count }} --reporter=default --reporter=github-actions --reporter=blob
+        run: pnpm coverage --maxWorkers=2 --shard=${{ matrix.shard }}/${{ needs.plan.outputs.shard_count }} --reporter=default --reporter=github-actions --reporter=blob --outputFile.blob=coverage-blobs/blob-${{ matrix.shard }}-${{ needs.plan.outputs.shard_count }}.json
         env:
           MUSTERD_TEST_DRIVER: ${{ needs.plan.outputs.kinds }}
           MUSTERD_COVERAGE_SHARD: ${{ needs.plan.outputs.shard_count != '1' && matrix.shard || '' }}
@@ -148,11 +151,11 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-blob-${{ matrix.shard }}
-          path: .vitest-reports/
+          path: coverage-blobs/
           if-no-files-found: error
           retention-days: 1
 
-  # The fold, on sharded runs only. Downloads the blobs into one .vitest-reports/ and runs
+  # The fold, on sharded runs only. Downloads the blobs into one coverage-blobs/ and runs
   # `vitest run --merge-reports --coverage`, which replays the test results, merges the coverage
   # maps and checks the per-package floors on the MERGED map — the one place they are checked on a
   # sharded run (vitest.config.ts). The blobs already hold source-mapped coverage, so this job
@@ -176,14 +179,14 @@ jobs:
         with:
           pattern: coverage-blob-*
           merge-multiple: true
-          path: .vitest-reports
+          path: coverage-blobs
 
       - name: Merge reports + enforce the coverage floors
         env:
           EXPECTED: ${{ needs.plan.outputs.shard_count }}
         run: |
-          ls -la .vitest-reports
-          have="$(find .vitest-reports -name 'blob-*.json' | wc -l | tr -d ' ')"
+          ls -la coverage-blobs
+          have="$(find coverage-blobs -name 'blob-*.json' | wc -l | tr -d ' ')"
           test "$have" -eq "$EXPECTED" || { echo "::error::expected $EXPECTED blobs, found $have"; exit 1; }
           pnpm coverage:merge
 

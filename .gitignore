@@ -2,7 +2,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 coverage/
-.vitest-reports/
+coverage-blobs/
 .DS_Store
 *.log
 # ADR 058: the durable seat roster (.musterd/team.toml + seats/) is committed; only the
