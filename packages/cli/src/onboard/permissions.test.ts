@@ -2,7 +2,12 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { inspectSeatPermissions, installSeatPermissions, STANDARD_FLOOR } from './permissions.js';
+import {
+  inspectSeatPermissions,
+  installSeatPermissions,
+  liftSeatPermissions,
+  STANDARD_FLOOR,
+} from './permissions.js';
 import { BUILTIN_TOOLKITS } from './toolkit.js';
 
 /**
@@ -305,5 +310,68 @@ describe('the floor is written in the dialog form (ADR 261, space-form normaliza
         );
       }
     }
+  });
+});
+
+/**
+ * ADR 261 increment 2, the reversal half (lane 01M3TAM44Q): removing a role lifts the ceiling it
+ * compiled — except an entry another held role also compiles, which is that role's ceiling.
+ */
+describe('liftSeatPermissions — a removed role takes its ceiling with it', () => {
+  const toolkit = (name: string, deny: string[], ask: string[] = []) => ({
+    toolkit: name,
+    charter: 'x',
+    tools: {
+      mcp_servers: [],
+      resource_scopes: [],
+      permissions: { allow: [], ask, deny },
+      codex_plugins: [],
+    },
+  });
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'musterd-lift-'));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  const perms = () =>
+    JSON.parse(readFileSync(join(dir, '.claude', 'settings.local.json'), 'utf8')).permissions;
+
+  it('lifts deny and ask, keeps what a still-held role also carries, never touches allow', () => {
+    const watcher = toolkit('watcher', ['Edit', 'Write', 'Bash(git push *)'], ['WebFetch']);
+    const auditor = toolkit('auditor', ['Bash(git push *)']);
+    installSeatPermissions(dir, watcher);
+    installSeatPermissions(dir, auditor);
+    const before = perms();
+    expect(before.deny).toEqual(['Edit', 'Write', 'Bash(git push *)']);
+
+    const r = liftSeatPermissions(dir, watcher, [auditor]);
+    expect(r.lifted).toEqual({ deny: ['Edit', 'Write'], ask: ['WebFetch'] });
+    expect(r.kept).toEqual({ deny: ['Bash(git push *)'], ask: [] });
+    const after = perms();
+    expect(after.deny).toEqual(['Bash(git push *)']);
+    expect(after.ask).toBeUndefined();
+    expect(after.allow).toEqual(before.allow);
+  });
+
+  it('matches the spelling family install dedupes on, and reports nothing to lift when the ceiling is already gone', () => {
+    const role = toolkit('r', ['Bash(git push *)']);
+    mkdirSync(join(dir, '.claude'), { recursive: true });
+    writeFileSync(
+      join(dir, '.claude', 'settings.local.json'),
+      JSON.stringify({ permissions: { deny: ['Bash(git push:*)'] } }),
+    );
+    expect(liftSeatPermissions(dir, role, []).lifted.deny).toEqual(['Bash(git push:*)']);
+    expect(perms().deny).toBeUndefined();
+    expect(liftSeatPermissions(dir, role, [])).toEqual({
+      lifted: { ask: [], deny: [] },
+      kept: { ask: [], deny: [] },
+    });
+  });
+
+  it('leaves an unparseable settings file alone, like install', () => {
+    mkdirSync(join(dir, '.claude'), { recursive: true });
+    writeFileSync(join(dir, '.claude', 'settings.local.json'), '{not json');
+    expect(liftSeatPermissions(dir, toolkit('r', ['Edit']), []).lifted.deny).toEqual([]);
+    expect(readFileSync(join(dir, '.claude', 'settings.local.json'), 'utf8')).toBe('{not json');
   });
 });

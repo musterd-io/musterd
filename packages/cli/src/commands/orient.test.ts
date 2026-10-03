@@ -333,6 +333,43 @@ describe('next / done commands', () => {
       for (const line of res.out.split('\n')) expect(line.length).toBeLessThanOrEqual(80);
     });
 
+    /** ADR 276 named this gap in its Consequences: `musterd next` rendered no review debt at all. */
+    it('renders review debt like team_next does — owner, wait, no-reviewer and unlanded badges', async () => {
+      const brief = NextBriefSchema.parse({
+        member: 'Ada',
+        in_flight: [],
+        shipped: [],
+        up_next: [],
+        why: null,
+        next_goal: null,
+        review_debt_total: 5,
+        incidents: [],
+        review_debt: [
+          { id: 'L1', title: 'stuck work', owner: 'June', waited_ms: 26 * 3_600_000 },
+          {
+            id: 'L2',
+            title: 'nobody asked',
+            owner: 'Lin',
+            waited_ms: 3 * 3_600_000,
+            no_candidate: true,
+            empty_pool: { kind: 'no_live_member' },
+          },
+          { id: 'L3', title: 'never landed', owner: null, waited_ms: 3_600_000, unlanded: true },
+        ],
+      });
+      const res = await capture(async () => {
+        renderNext(brief, 0);
+        return 0;
+      });
+      expect(res.out).toContain("review debt — waiting on any seat's acceptance (showing 3 of 5):");
+      expect(res.out).toContain('L1 "stuck work" — owner=June — waiting 26h');
+      expect(res.out).toContain(
+        'L2 "nobody asked" — owner=Lin — waiting 3h — NO REVIEWER WAS ASKED (no other member is live)',
+      );
+      expect(res.out).toContain('L3 "never landed" — waiting 1h — NO MERGE ATTESTATION');
+      expect(res.out).not.toContain('nothing in flight');
+    });
+
     it('absent arrays are an older daemon and say so; empty arrays are quiet', async () => {
       const base = {
         member: 'Ada',

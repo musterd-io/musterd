@@ -13,7 +13,20 @@ export async function reclaimCommand(parsed: Parsed): Promise<number> {
   const name = parsed.positionals[0];
   if (!name) throw new CliError('usage: musterd reclaim <member>', 2);
   const { team, http } = resolve(parsed.flags);
-  const res = await http.reclaim(team, name);
+  let res: Awaited<ReturnType<typeof http.reclaim>>;
+  try {
+    res = await http.reclaim(team, name);
+  } catch (err) {
+    // ADR 055 §2, the no-dead-end rule: every terminal error names a runnable next step. The
+    // daemon's "no member X" is accurate and leaves the operator nowhere — the roster is the answer.
+    if (err instanceof CliError && err.code === 'not_found')
+      throw new CliError(
+        `${err.message} — \`musterd status\` lists the roster`,
+        err.exitCode,
+        err.code,
+      );
+    throw err;
+  }
   if (parsed.flags['json']) {
     process.stdout.write(JSON.stringify(res) + '\n');
     return 0;

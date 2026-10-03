@@ -65,6 +65,10 @@ is a window reads as the whole queue.
 
 ## Consequences
 
+- Dated note (2026-10-02, lane `01M3TAM44Q5N8AV8W50WNMNA7D`): the "also not fixed here" gap is
+  closed — `musterd next` renders `review_debt` with the same copy `team_next` has carried, so a CLI
+  seat sees the ambient acceptance queue, its total, and the `no_candidate` / unlanded badges.
+
 - A seat with a lane acceptance open must now name its target when anything else is open. That is
   one extra field on the call that most needed one, and the refusal lists the ids ready to paste.
 - `NextBriefSchema` gains two fields, both defaulted (`no_candidate: false`,

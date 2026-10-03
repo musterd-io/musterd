@@ -117,6 +117,13 @@ currently omits (it assumes an already-bound identity).
 
 ## Consequences
 
+- Dated note (2026-10-02, lane `01M3TAM44Q5N8AV8W50WNMNA7D`): the "Code TTL / single-use" open
+  question is answered by the v0.3 claim handshake rather than by a claim code of its own — a seat
+  grant minted with `lifetime: once` is `single_use` and consumed on the claim that uses it
+  (`consumeGrant`), `ttl` grants expire, and `team add` hands over a seat-scoped bootstrap key shown
+  once (ADR 344). The no-dead-end rule: `claim`/`reclaim` terminal errors name a next step
+  (`musterd claim <name>` from `resolve`, the roster from `reclaim` on `not_found`); `join.ts` is gone.
+
 - A teammate can hand off a working seat in one command each way; the receiver never copies a raw token
   and never clobbers a shared identity.
 - No claim/join/reclaim error can leave an agent without a next step — removing the pressure that drove
