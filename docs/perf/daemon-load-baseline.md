@@ -411,3 +411,24 @@ at most 424 MB of 2 GB, no restart, `/health` p95 76 ms.
 **Next:** log the cause of every 500, make the roster read a constant number of statements, then
 one transaction per request (lane `01M3Z455NE`). Falsifier for the roster claim: run 4 with a
 constant-statement roster shows a similar pool-timeout count.
+
+## 2026-10-03 — Cloud run 4: a constant-cost roster triples throughput; the pool timeouts are gone (lanes 01M3Z44C56, 01M3ZCTQK9, 01M3ZPM3FE)
+
+Same shape as runs 2–3 (75/75/75, `performance-1x`, fresh team `lb-run4`), now on e088a57e: the roster
+read runs a constant number of statements (#2001) and every 5xx logs its cause (#2000).
+
+| run | build | requests | errors | p50 | p95 | roster p50 | `/report` p50 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 3 | 3fe34f3c | 12 130 (9.3/s) | 4 130 | 18 302 ms | 125 016 ms | 14 995 ms | 44 925 ms |
+| **4** | **e088a57e** | **39 696 (30.5/s)** | **113** | **2 770 ms** | **24 340 ms** | **2 472 ms** | **9 400 ms** |
+
+- **The roster was the hog.** With it constant, the server served 3.3× the requests — 15 425 roster
+  reads, 10 286 interrupt-checks — and the pool-timeout 503s went from 2 335 to none. No 500s either,
+  so the cause logging had nothing to explain this time. The 113 errors are 84 agent 401s, 24 edge 520s
+  and a handful of socket closes.
+- **Still a fail.** Writes are now the slowest: `POST /lanes` and agent `POST /messages` p50 about
+  30 s, human `/mcp send` 26 s. `/report` p50 9.4 s over 8 710 calls (8 743 lane frames). The core ran a
+  median 60 % busy (max 63 %, steal ≤ 0.4 %): still not the limit.
+- **Next lever:** one transaction per request (lane `01M3Z455NE`). Every statement still acquires its
+  own pooled connection — five round trips and a fresh place in the queue each — and a write runs many
+  statements. Falsifier: run 5 with per-request transactions shows the same write latency.
