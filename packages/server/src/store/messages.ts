@@ -804,12 +804,50 @@ export async function latestStatusUpdate(
     "SELECT body, meta, ts FROM messages WHERE from_member = ? AND act = 'status_update' ORDER BY ts DESC, id DESC LIMIT 1",
     [memberId],
   );
-  if (!row) return null;
+  return row ? statusState(row) : null;
+}
+
+/** The working label a status_update row carries: `meta.state` when set, else the body. */
+function statusState(row: {
+  body: string;
+  meta: string | null;
+  ts: number;
+}): { state: string; ts: number } | null {
   const metaState = row.meta
     ? (JSON.parse(row.meta) as Record<string, unknown>)['state']
     : undefined;
   const state = (typeof metaState === 'string' && metaState.trim() ? metaState : row.body).trim();
   return state ? { state, ts: row.ts } : null;
+}
+
+/**
+ * {@link latestStatusUpdate} for every current member of a team, in ONE statement (lane
+ * 01M3ZCTQK9): the roster asked once per member, and on Postgres each ask is its own five-round-trip
+ * transaction. The correlated pick is the same `ORDER BY ts DESC, id DESC LIMIT 1` per member, so it
+ * rides `idx_messages_from_act_ts` exactly as the single lookup does. Keyed by member id; a member
+ * with no status_update is absent.
+ */
+export async function latestStatusUpdates(
+  db: Driver,
+  teamId: string,
+): Promise<Map<string, { state: string; ts: number }>> {
+  const rows = await db.all<{ from_member: string; body: string; meta: string | null; ts: number }>(
+    `SELECT msg.from_member AS from_member, msg.body AS body, msg.meta AS meta, msg.ts AS ts
+       FROM messages msg
+      WHERE msg.id IN (
+        SELECT (SELECT x.id FROM messages x
+                 WHERE x.from_member = m.id AND x.act = 'status_update'
+                 ORDER BY x.ts DESC, x.id DESC LIMIT 1)
+          FROM members m
+         WHERE m.team_id = ? AND m.left_at IS NULL)`,
+    [teamId],
+  );
+  const out = new Map<string, { state: string; ts: number }>();
+  for (const row of rows) {
+    const status = statusState(row);
+    if (status) out.set(row.from_member, status);
+  }
+  return out;
 }
 
 /**
