@@ -94,6 +94,13 @@ join the reference tuple; `detail.cause` is documented on the lease and presence
 - Esc-into-the-harness, halting a human, auto-expiry of a halt, and a `team_halt` tool are out
   of scope; the first needs its own ADR.
 
+- _2026-10-03, increment 4 (lane `01M41DRZTYJ2R5X41CCCT0EXF1`), the first real halt:_ nick halted
+  big-body (Codex) mid-task. Socket closed 20 ms after `seat.halted`; four leases revoked in the one
+  transaction; the seat's next musterd call (56 s later) and every call after it answered 403 with
+  the halter's sentence; the seat read the eviction in musterd's words and stood down. Its LOCAL
+  tool calls were not denied: Codex wires no PreToolUse hook, so Decision 4's deny cannot run there
+  — Decision 6's limit, observed. Write-up: `docs/wiki/halt-as-revocation.md`.
+
 ## Observability & Evaluation
 
 **Traces.** No new trace event. Audit rows: `seat.halted`, `seat.resumed` (`held_ms`),

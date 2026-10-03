@@ -66,7 +66,7 @@ thread to join next time (`threadHintFor` / `threadHintText` in `@musterd/protoc
 open-answerable set an un-named verdict auto-targets, so the hint and the auto-target cannot
 disagree about what is open.
 
-Not done, deliberately: a vocabulary nudge ("use a typed act"). Typed already dominates; the ledger
+Not done, deliberately: a vocabulary nudge ("use a typed act"). Typed is already at parity (1.09 : 1); the ledger
 does not support that story.
 
 ## How to re-measure
