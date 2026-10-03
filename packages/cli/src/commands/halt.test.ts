@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
 import { HttpClient } from '../client.js';
 import { loadConfig } from '../config.js';
-import { haltCommand, resumeCommand } from './halt.js';
+import { haltCommand, resumeCommand, ungatedSurfaceNotice } from './halt.js';
 import { teamCommand } from './team.js';
 
 /**
@@ -104,5 +104,28 @@ describe('halt / resume commands (ADR 501)', () => {
     const json = JSON.parse(res.out) as { member: string; halted: { by: string } };
     expect(json.member).toBe('Ada');
     expect(json.halted.by).toBe('nick');
+  });
+});
+
+/**
+ * Lane 01M41Q39C9: the honest limit, per surface. A harness with no PreToolUse hook (Codex, ADR
+ * 442) cannot deny the seat's next local tool call, so the halt frame says so — once, naming the
+ * surface — and stays silent on gated harnesses and when nothing was evicted.
+ */
+describe('ungatedSurfaceNotice', () => {
+  it('names an ungated surface and what still stops the seat', () => {
+    expect(ungatedSurfaceNotice(['codex'])).toBe(
+      'local tools are not gated on codex — the seat stops at its next musterd call',
+    );
+  });
+
+  it('is silent for gated harnesses and for no evictions', () => {
+    expect(ungatedSurfaceNotice(['claude-code', 'cursor', 'grok', 'cli'])).toBeNull();
+    expect(ungatedSurfaceNotice([])).toBeNull();
+    expect(ungatedSurfaceNotice(undefined)).toBeNull();
+  });
+
+  it('lists several ungated surfaces once each', () => {
+    expect(ungatedSurfaceNotice(['codex', 'opencode', 'codex'])).toMatch(/on codex, opencode —/);
   });
 });

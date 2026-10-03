@@ -1,4 +1,6 @@
+import { PROTOCOL_VERSION, type WSServerFrame } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { WebSocket } from 'ws';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
@@ -218,6 +220,42 @@ withDrivers('halt-http', (_o, kind) => {
       await resume('Ada', nick);
       const some = await post('/teams/h-t/residency/wake-leases', { host: 'mbp' }, agentKey);
       expect(some.json.orders.map((o: any) => o.seat)).toEqual(['Ada']);
+    });
+  });
+
+  describe('the halt reply names the surfaces it evicted (lane 01M41Q39C9)', () => {
+    it("lists each evicted live session's surface, so the CLI can say which are ungated", async () => {
+      const grant = await post(
+        '/teams/h-t/grants',
+        { scope: 'seat', target: 'Ada', lifetime: 'standing' },
+        nick,
+      );
+      const ws = new WebSocket(base.replace('http', 'ws') + '/ws');
+      await new Promise<void>((r, rej) => (ws.on('open', () => r()), ws.on('error', rej)));
+      const occupied = new Promise<WSServerFrame>((r) =>
+        ws.on('message', (d) => {
+          const f = JSON.parse(d.toString()) as WSServerFrame;
+          if (f.type === 'occupied') r(f);
+        }),
+      );
+      ws.send(
+        JSON.stringify({
+          type: 'claim',
+          v: PROTOCOL_VERSION,
+          team: 'h-t',
+          key: agentKey,
+          target: { seat: 'Ada' },
+          grant: grant.json.token,
+          surface: 'codex',
+          workspace: 'ada@main',
+        }),
+      );
+      await occupied;
+      const r = await halt('Ada', nick);
+      expect(r.status).toBe(200);
+      expect(r.json.presences_evicted).toBe(1);
+      expect(r.json.evicted_surfaces).toEqual(['codex']);
+      ws.close();
     });
   });
 
