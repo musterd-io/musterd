@@ -60,12 +60,21 @@ export default defineConfig({
       // and the reaper/watcher units got direct in-package tests, and the untested CLI commands (lane,
       // goal, next, done, report) got behavioral tests. Floors only ratchet **up**, never lower to make
       // a change pass. See ADR 013.
-      thresholds: {
-        'packages/protocol/src/**': { lines: 95 },
-        'packages/server/src/**': { lines: 85 },
-        'packages/cli/src/**': { lines: 75 },
-        'packages/mcp/src/**': { lines: 75 },
-      },
+      //
+      // ADR 498: in CI the suite runs as shards (`--shard=i/N --reporter=blob`, MUSTERD_COVERAGE_SHARD
+      // set); a shard's coverage is partial by construction, so the floors are checked once, on the
+      // merged report (`pnpm coverage:merge`), never per shard — vitest would otherwise fail every
+      // shard on its own partial map. An unsharded `pnpm coverage` still enforces them here.
+      ...(process.env['MUSTERD_COVERAGE_SHARD']
+        ? {}
+        : {
+            thresholds: {
+              'packages/protocol/src/**': { lines: 95 },
+              'packages/server/src/**': { lines: 85 },
+              'packages/cli/src/**': { lines: 75 },
+              'packages/mcp/src/**': { lines: 75 },
+            },
+          }),
     },
   },
 });

@@ -4,6 +4,11 @@
 # never lands on the critical path. Revisit if Build grows past the longest leaf.
 name: musterd setup
 description: checkout is the caller's; this installs pnpm + Node, restores the store, installs and builds.
+inputs:
+  build:
+    description: run `pnpm build` after install ('true' | 'false'). The coverage merge (ADR 498) only needs node_modules.
+    required: false
+    default: 'true'
 runs:
   using: composite
   steps:
@@ -25,5 +30,6 @@ runs:
     # dist/ is gitignored and workspace packages resolve to ./dist, so build before anything
     # that typechecks, lints, tests, or measures the built client.
     - name: Build
+      if: inputs.build == 'true'
       shell: bash
       run: pnpm build

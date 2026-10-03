@@ -1,6 +1,6 @@
 # Running the gates locally
 
-CI's `gates` job is install → build → typecheck → lint → coverage → format:check, in that order — running a subset and calling it green is the classic red-CI cause, and grepping a gate's output instead of trusting its exit code has lied at least once.
+CI's `gates` job is install → build → typecheck → lint → coverage → format:check, in that order (since ADR 498, 2026-10-03, `coverage` is three shards plus a `coverage-merge` job that checks the floors on the merged report) — running a subset and calling it green is the classic red-CI cause, and grepping a gate's output instead of trusting its exit code has lied at least once.
 
 ## The order is load-bearing (2026-07-13, #246/#250; falsify: lint a fresh clone pre-build) <!-- claim: other -->
 
