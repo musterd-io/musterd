@@ -152,6 +152,14 @@ withDrivers('interruptCandidates', (o) => {
     await say(db, team, nick, ada, 'ask', 'plain-ask', {
       meta: { species: 'consult', tier: 'advisory' },
     });
+    // ADR 271 §4: the daemon's incident notices — shapes the wake rail admits under the team's
+    // knobs and the live rail never does. Carried back so the narrowed read stays equivalent.
+    await say(db, team, nick, ada, 'message', 'inc-routed', {
+      meta: { incident: { lane: 'L2', routed_to: 'Ada' } },
+    });
+    await say(db, team, nick, ada, 'message', 'inc-resolved', {
+      meta: { incident: { lane: 'L2', resolved_by: 'nick' } },
+    });
     return s;
   }
 

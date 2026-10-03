@@ -1,14 +1,18 @@
-import type { Lane } from '@musterd/protocol';
+import { makeEnvelope, type Lane } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
-import { announceIncidentResolved, announceIncidentRouted } from '../protocol/route.js';
+import {
+  announceIncidentResolved,
+  announceIncidentRouted,
+  routeEnvelope,
+} from '../protocol/route.js';
 import { openIncidents, recordBlockedReport, routeUnclaimedIncidents } from './incidents.js';
 import { openLane } from './lanes.js';
-import { addMember, getMemberByRole } from './members.js';
+import { addMember, getMemberByName, getMemberByRole } from './members.js';
 import { deriveNext } from './orientation.js';
 import { createTeam, setPolicy, type TeamRow } from './teams.js';
 
@@ -279,6 +283,49 @@ withDrivers('incidents.route', (o) => {
       // runs, so a voice derived from the lane would BE the recipient every time.
       await route();
       for (const m of await directed()) expect(m.from).not.toBe(m.to);
+    });
+  });
+
+  /**
+   * ADR 271 §4, built: `meta.incident` is the daemon's marker on the route/resolve notices and, under
+   * the wake knobs, a PAID wake reason — so a client copy is stripped on the way in, as `lane_review`
+   * is (ADR 225). The message still lands; it just cannot claim an incident was routed to anyone.
+   */
+  describe('meta.incident is server-controlled', async () => {
+    let db: Database;
+    let team: TeamRow;
+
+    beforeEach(async () => {
+      db = await openStore();
+      team = await createTeam(db, { slug: 'dawn' });
+      await addMember(db, team, { name: 'izzo', kind: 'agent', role: 'reviewer' });
+      await addMember(db, team, { name: 'dolly', kind: 'agent', role: 'reviewer' });
+    });
+
+    it('a client-sent message loses its incident marker; a daemon-composed one keeps it', async () => {
+      const hub = new Proxy({}, { get: () => () => undefined }) as Ctx['hub'];
+      const ctx: Ctx = { db, hub, config: resolveConfig({ db: ':memory:' }), rosterRoots: [] };
+      const izzo = (await getMemberByName(db, team.id, 'izzo'))!;
+      const forged = makeEnvelope({
+        id: 'forged',
+        team: 'dawn',
+        from: 'izzo',
+        to: { kind: 'member', name: 'dolly' },
+        act: 'message',
+        body: 'routed to you, honest',
+        meta: { incident: { lane: 'L1', routed_to: 'dolly' }, keep: true },
+      });
+      await routeEnvelope(ctx, team, izzo, forged);
+      await routeEnvelope(ctx, team, izzo, { ...forged, id: 'daemon' }, undefined, true);
+      const rows = await db.all<{ id: string; meta: string }>(
+        `SELECT id, meta FROM messages WHERE team_id = ? ORDER BY id`,
+        [team.id],
+      );
+      const metaOf = (id: string) =>
+        JSON.parse(rows.find((r) => r.id === id)!.meta) as Record<string, unknown>;
+      expect(metaOf('forged')).not.toHaveProperty('incident');
+      expect(metaOf('forged')).toMatchObject({ keep: true });
+      expect(metaOf('daemon')).toMatchObject({ incident: { lane: 'L1', routed_to: 'dolly' } });
     });
   });
 

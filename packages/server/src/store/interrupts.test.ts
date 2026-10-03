@@ -590,4 +590,84 @@ describe('a huddle OPEN convenes the seats it names (ADR 378 inc 4)', () => {
     expect(pendingInterrupts([root], 'me', { huddleOpens: false })).toEqual([]);
     expect(pendingInterrupts([root], 'me')).toEqual([]);
   });
+
+  /**
+   * ADR 271 §4, built (lane 01M3TAM0X3): the daemon's two incident notices become wake reasons only
+   * when the team's `incident.wake_on_route` / `wake_on_resolve` knobs are on. Off by default, on the
+   * paid rail only — the live interrupt line never passes these flags.
+   */
+  describe('pendingInterrupts — incident wake edges (ADR 271 §4)', () => {
+    const env = (
+      over: Partial<Envelope> & Pick<Envelope, 'id' | 'from' | 'to' | 'act'>,
+    ): Envelope => ({
+      v: PROTOCOL_VERSION,
+      team: 'dawn',
+      body: 'x',
+      thread: null,
+      meta: null,
+      ts: 1,
+      ...over,
+    });
+    const me = { kind: 'member' as const, name: 'me' };
+    const routed = env({
+      id: 'r1',
+      from: 'jo',
+      to: me,
+      act: 'message',
+      meta: { incident: { lane: 'L1', routed_to: 'me' } },
+    });
+    const resolved = env({
+      id: 'd1',
+      from: 'jo',
+      to: me,
+      act: 'message',
+      meta: { incident: { lane: 'L1', resolved_by: 'jo' } },
+    });
+
+    it('a route notice naming me wakes only under incidentRoutes; a resolve notice only under incidentResolves', () => {
+      expect(pendingInterrupts([routed, resolved], 'me')).toEqual([]);
+      expect(
+        pendingInterrupts([routed, resolved], 'me', { incidentRoutes: true }).map((m) => m.id),
+      ).toEqual(['r1']);
+      expect(
+        pendingInterrupts([routed, resolved], 'me', { incidentResolves: true }).map((m) => m.id),
+      ).toEqual(['d1']);
+      expect(
+        pendingInterrupts([routed, resolved], 'me', {
+          incidentRoutes: true,
+          incidentResolves: true,
+        })
+          .map((m) => m.id)
+          .sort(),
+      ).toEqual(['d1', 'r1']);
+    });
+
+    it('a route notice that names someone else, and the "opened" notice, never wake', () => {
+      const on = { incidentRoutes: true, incidentResolves: true };
+      const other = env({
+        id: 'r2',
+        from: 'jo',
+        to: me,
+        act: 'message',
+        meta: { incident: { lane: 'L1', routed_to: 'you' } },
+      });
+      const opened = env({
+        id: 'o1',
+        from: 'jo',
+        to: me,
+        act: 'message',
+        meta: { incident: { lane: 'L1', gate: 'ci:gates/x' } },
+      });
+      expect(pendingInterrupts([other, opened], 'me', on)).toEqual([]);
+    });
+
+    it('a resolved thread closes the notice, and my own notice never wakes me', () => {
+      const on = { incidentRoutes: true, incidentResolves: true };
+      const threaded = env({ ...routed, id: 'r3', thread: 't1' });
+      const close = env({ id: 'x', from: 'me', to: me, act: 'resolve', thread: 't1' });
+      expect(pendingInterrupts([threaded, close], 'me', on)).toEqual([]);
+      const mine = env({ ...routed, id: 'r4', from: 'me' });
+      expect(pendingInterrupts([mine], 'me', on)).toEqual([]);
+    });
+  });
 });

@@ -162,7 +162,8 @@ beneficiary.
 2. **Routing + wakes + config.** Claim window, fallback-role assignment, policy-B wakes, the
    `incident` policy block.
 3. **CI watcher** as a second detection source feeding the same incident object — gated on
-   increment 1's eval.
+   increment 1's eval. dropped — the gating eval was never run and no first-reporter burn has been
+   measured since; decided in lane `01M3TAM0X30W83R5BQSC214N02` (2026-10-02, ADR 271 Consequences).
 
 Each increment carries its own ADR at implementation time; this spec is the umbrella and its
 Decision sections are not pre-written here.

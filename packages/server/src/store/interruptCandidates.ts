@@ -15,8 +15,9 @@ import type { MessageRow } from './rows.js';
  * the seat's cursor has fallen.
  *
  * THE PREDICATE IS THE FOLD'S OWN, READ OFF IT. `pendingInterrupts` returns an act only if it is
- * `meta.urgent`, a `steer`, an obligation (`ask` carrying the daemon-set `meta.lane_review`), or a
- * turn in an open huddle this seat is in (ADR 378). It
+ * `meta.urgent`, a `steer`, an obligation (`ask` carrying the daemon-set `meta.lane_review`), a
+ * turn in an open huddle this seat is in (ADR 378), or — on the wake rail under the ADR 271 §4
+ * knobs — the daemon's incident route/resolve notice (`meta.incident.routed_to` / `resolved_by`). It
  * can SUPPRESS one only via `resolve` (which closes a thread), `accept`/`decline` (which discharge
  * by `meta.in_reply_to`), or the seat's OWN reply — by `in_reply_to` on any act, or a later turn in
  * the steer's thread (ADR 434; fetched below, since own sends never come from the window). It can
@@ -54,6 +55,8 @@ export async function listInterruptCandidates(
             OR json_extract(meta, '$.lane_review') IS NOT NULL
             OR json_extract(meta, '$.eligible') IS NOT NULL
             OR json_extract(meta, '$.huddle') IS NOT NULL
+            OR json_extract(meta, '$.incident.routed_to') IS NOT NULL
+            OR json_extract(meta, '$.incident.resolved_by') IS NOT NULL
             OR (
               thread_id IS NOT NULL
               AND EXISTS (
