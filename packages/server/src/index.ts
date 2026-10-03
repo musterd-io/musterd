@@ -212,6 +212,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     res.on('finish', () => {
       const status = res.statusCode;
       if (path === '/health' && status < 400) return;
+      const failure = requestFailure(res);
       const fields = {
         msg: 'http_request',
         method: req.method ?? 'GET',
@@ -227,10 +228,10 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
               db_query_ms: Math.round(run.timing.queryMs),
             }
           : undefined),
-        // Why a 5xx happened, when the handler said (lane 01M3ZPM3FE).
-        ...(status >= 500 ? requestFailure(res) : undefined),
+        // Why a 5xx happened, or a remote-MCP tool error carried in an HTTP 200 result.
+        ...(failure ?? undefined),
       };
-      if (status >= 500) log.error(fields);
+      if (status >= 500 || failure) log.error(fields);
       else if (status >= 400) log.warn(fields);
       else log.info(fields);
     });

@@ -3,7 +3,9 @@ import { openTestDriver, testCloudPools } from '../db/testing.js';
 import { createServer } from '../index.js';
 import { log, type LogFields } from '../log.js';
 import { addMember, mintCredential } from '../store/members.js';
+import { mintTokenPair, registerClient } from '../store/oauth.js';
 import { createTeam } from '../store/teams.js';
+import { resetMcpHandlersForTest } from '../transport/mcpHttp.js';
 import { hostRequest, stubCloudEnv } from './testing.js';
 
 /**
@@ -57,9 +59,11 @@ describe('a 500 carries its cause on the request log line (lane 01M3ZPM3FE)', ()
   it('class, SQLSTATE and a bounded message, with a credential in the message redacted', async () => {
     const errorLog = vi.spyOn(log, 'error');
     const leaked = `mscr_${'Q'.repeat(40)}`;
-    const deadlock = Object.assign(new Error(`deadlock detected while holding "${leaked}"`), {
-      code: '40P01',
-    });
+    const statement = `SELECT * FROM private_schema.members WHERE token = '${leaked}'`;
+    const deadlock = Object.assign(
+      new Error(`deadlock detected while holding "${leaked}"\n  in: ${statement}`),
+      { code: '40P01' },
+    );
     const { s, seed, url, arm } = await bootCloudWithQueryFault({
       match: /from members/i,
       error: deadlock,
@@ -73,6 +77,11 @@ describe('a 500 carries its cause on the request log line (lane 01M3ZPM3FE)', ()
         headers: { authorization: `Bearer ${token}` },
       });
       expect(r.status, r.body).toBe(500);
+      expect(JSON.parse(r.body)).toEqual({
+        error: { code: 'server_error', message: 'internal server error' },
+      });
+      expect(r.body).not.toContain('in:');
+      expect(r.body).not.toContain(statement);
       const line = await vi.waitFor(() => {
         const found = errorLog.mock.calls
           .map(([fields]) => fields)
@@ -83,10 +92,86 @@ describe('a 500 carries its cause on the request log line (lane 01M3ZPM3FE)', ()
       expect(line).toMatchObject({ err_class: 'Error', sqlstate: '40P01' });
       const err = String(line.err);
       expect(err).toContain('deadlock detected');
+      expect(err).toContain('in: SELECT * FROM private_schema.members');
       expect(err).not.toContain(leaked);
       expect(err).toContain('[redacted]');
       expect(err.length).toBeLessThanOrEqual(300);
     } finally {
+      await s.close();
+    }
+  });
+
+  it('keeps the raw query off a remote-MCP result and on its request log line', async () => {
+    resetMcpHandlersForTest();
+    const errorLog = vi.spyOn(log, 'error');
+    const statement = 'SELECT * FROM private_schema.messages WHERE team_id = ?';
+    const queryError = Object.assign(new Error(`relation lookup failed\n  in: ${statement}`), {
+      code: '42P01',
+    });
+    const { s, seed, url, arm } = await bootCloudWithQueryFault({
+      match: /from messages/i,
+      error: queryError,
+    });
+    try {
+      const team = await createTeam(seed, { slug: 'revive' });
+      const { row } = await addMember(seed, team, {
+        name: 'ada',
+        kind: 'human',
+        role: '',
+      });
+      const { client_id } = await registerClient(seed, {
+        teamId: team.id,
+        clientName: 'error-sanitization-test',
+        redirectUris: ['https://app.example/cb'],
+      });
+      const pair = await mintTokenPair(seed, {
+        teamId: team.id,
+        memberId: row.id,
+        clientId: client_id,
+      });
+      const call = (id: number, method: string, params: unknown) =>
+        hostRequest(url, '/mcp/revive', 'revive.musterd.test', {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${pair.access_token}`,
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+            'x-forwarded-proto': 'https',
+          },
+          body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+        });
+
+      const initialized = await call(1, 'initialize', {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'error-test', version: '0' },
+      });
+      expect(initialized.status, initialized.body).toBe(200);
+
+      arm();
+      const r = await call(2, 'tools/call', {
+        name: 'team_inbox_check',
+        arguments: {},
+      });
+      expect(r.status, r.body).toBe(200); // Streamable HTTP returns tool failures in the MCP result.
+      expect(r.body).toContain('internal server error');
+      expect(r.body).not.toContain('in:');
+      expect(r.body).not.toContain(statement);
+
+      const line = await vi.waitFor(() => {
+        const found = errorLog.mock.calls
+          .map(([fields]) => fields)
+          .find(
+            (f: LogFields) =>
+              f.msg === 'http_request' && f.path === '/mcp/[redacted]' && f.status === 200,
+          );
+        expect(found).toBeDefined();
+        return found!;
+      });
+      expect(line).toMatchObject({ err_class: 'Error', sqlstate: '42P01' });
+      expect(String(line.err)).toContain('in: SELECT * FROM private_schema.messages');
+    } finally {
+      resetMcpHandlersForTest();
       await s.close();
     }
   });
