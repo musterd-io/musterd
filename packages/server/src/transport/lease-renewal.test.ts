@@ -163,6 +163,25 @@ withDrivers('lease-renewal', (_o, kind) => {
       ws.close();
     });
 
+    it('a halted seat renews nothing: a heartbeat racing the halt mints no lease (ADR 501)', async () => {
+      const { ws, lease } = await claimAda();
+      // The halt's standing is set but its eviction has not yet reached this socket.
+      await server.store.run(
+        "UPDATE members SET halted_at = ?, halted_by = 'nick', halted_reason = 'stop' WHERE name = 'Ada'",
+        [Date.now()],
+      );
+      await ageLease(AGENT_SESSION_LEASE_RENEW_AHEAD_MS - 1000);
+      ws.send({ type: 'heartbeat', status: 'online' });
+      await new Promise((r) => setTimeout(r, 200));
+      expect(ws.frames.filter((f) => f.type === 'lease')).toHaveLength(0);
+      const live = await server.store.get<{ n: number }>(
+        'SELECT COUNT(*) AS n FROM session_leases WHERE revoked_at IS NULL',
+      );
+      expect(live!.n).toBe(1);
+      expect(lease).toMatch(/^msls_/);
+      ws.close();
+    });
+
     it('the renewed lease outlives the one it replaced — the five-minute death is gone', async () => {
       const { ws, lease, credential } = await claimAda();
       await ageLease(1000);

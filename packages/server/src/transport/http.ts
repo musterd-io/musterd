@@ -250,7 +250,10 @@ import {
   clearBound,
   getMemberById,
   getMemberByName,
+  haltedSentence,
+  haltMember,
   memberStandingRefusal,
+  resumeMember,
   isHeld,
   hashToken,
   leaveMember,
@@ -1484,6 +1487,38 @@ async function authAdminOrSponsorOf(
   return { team, member, sponsorScoped: true };
 }
 
+/**
+ * ADR 501 Decision 2: who may halt or resume `agentName`. A HUMAN member in good standing who is
+ * an admin, or the agent's sponsor. The kind check comes first and names itself: an agent that
+ * reaches for halt is told the rule, not "not found". Strict (no empty-admin fallback).
+ */
+async function authHalter(
+  ctx: Ctx,
+  slug: string,
+  req: IncomingMessage,
+  agentName: string,
+): Promise<{ team: TeamRow; member: MemberRow; sponsorScoped: boolean }> {
+  const { team, member } = await authMember(
+    ctx.db,
+    slug,
+    bearer(req),
+    actingSeat(req),
+    agentSessionLease(req),
+  );
+  if (member.kind !== 'human' || member.observer === 1)
+    throw new MusterdError(
+      'forbidden',
+      'halt is human-only (ADR 501) — an agent never halts a seat',
+    );
+  if (resolveCapabilities(member).is_admin) return { team, member, sponsorScoped: false };
+  const target = await getMemberByName(ctx.db, team.id, agentName);
+  if (!target || target.left_at !== null)
+    throw new MusterdError('not_found', `no member "${agentName}" in ${slug}`);
+  if (target.kind === 'agent' && target.sponsored_by !== member.id)
+    throw new MusterdError('forbidden', 'you may halt only agents you sponsor (ADR 501 / ADR 463)');
+  return { team, member, sponsorScoped: true };
+}
+
 /** ADR 463 §1: an admin, or any member who may sponsor (a sponsor host key is scoped at use). */
 async function authAdminOrSponsorCaller(
   ctx: Ctx,
@@ -1851,6 +1886,14 @@ async function summarize(
       });
       return {
         ...(seesCaps ? member : needToKnow),
+        // ADR 501 Decision 5: the halt button renders from THIS, never from the viewer's role in a
+        // client — an admin, or this agent's own sponsor, may halt or resume it.
+        can_halt:
+          s.member.kind === 'agent' &&
+          s.member.observer === 0 &&
+          viewer !== null &&
+          viewer.kind === 'human' &&
+          (viewerIsAdmin || s.member.sponsored_by === viewer.id),
         working_hours: effectiveWorkingHours,
         presence: presenceStatus,
         presences: s.presences,
@@ -4393,7 +4436,23 @@ export async function handleHttp(
           });
         }
 
-        // Step 3: account_status check.
+        // Step 3: account_status check. ADR 501 first — same order and wording as the WS frame.
+        if (targetMember.halted_at !== null && targetMember.halted_at !== undefined) {
+          await appendAudit(ctx.db, team.id, {
+            actor: null,
+            action: 'claim.refused',
+            target: targetMember.name,
+            result: 'deny',
+            detail: { code: 'halted', halted_by: targetMember.halted_by },
+          });
+          return sendJson(res, 403, {
+            type: 'refused',
+            code: 'halted',
+            message: haltedSentence(targetMember),
+            claimable: [],
+            hint: `a human lifts it: musterd resume ${targetMember.name}`,
+          });
+        }
         const acctStatus = resolveAccountStatus(targetMember);
         if (acctStatus === 'disabled' || acctStatus === 'banned') {
           return sendJson(res, 403, {
@@ -7784,6 +7843,158 @@ export async function handleHttp(
           });
         }
         return sendJson(res, 200, { member: target.name, credential });
+      }
+
+      // ── Halt as revocation (ADR 501) ─────────────────────────────────────────────────────────
+      // A human withdraws an agent seat's authority at its next boundary. Human-only; an admin
+      // halts any agent, a non-admin only the agents they sponsor (ADR 463's model) — decided
+      // HERE on the caller's kind and sponsorship, never by a client. One transaction: the
+      // standing, every live lease, every live presence, any unspawned wake lease, the audit row,
+      // and a `steer` so the halt is in the seat's inbox when it is back. Nothing is signalled or
+      // killed: the honest limit is the next tool boundary.
+      const haltMatch = rest.match(/^\/members\/([^/]+)\/(halt|resume)$/);
+      if (method === 'POST' && haltMatch) {
+        const targetName = decodeURIComponent(haltMatch[1]!);
+        const verb = haltMatch[2] as 'halt' | 'resume';
+        const {
+          team,
+          member: caller,
+          sponsorScoped,
+        } = await authHalter(ctx, slug, req, targetName);
+        const target = await getMemberByName(ctx.db, team.id, targetName);
+        if (!target || target.left_at !== null)
+          throw new MusterdError('not_found', `no member "${targetName}" in ${slug}`);
+        if (target.kind !== 'agent' || target.observer === 1)
+          throw new MusterdError(
+            'forbidden',
+            `a ${target.kind} seat is never halted — "${target.name}"`,
+          );
+        const now = Date.now();
+        if (verb === 'halt') {
+          const { reason } = parseOrBadRequest(
+            z.object({ reason: z.string().trim().min(1).max(280) }),
+            await readJson(req),
+          );
+          if (!(await haltMember(ctx.db, target.id, caller.name, reason, now)))
+            throw new MusterdError(
+              'conflict',
+              `"${target.name}" is already ${haltedSentence(target)} — resume it first`,
+            );
+          const halted = {
+            ...target,
+            halted_at: now,
+            halted_by: caller.name,
+            halted_reason: reason,
+          };
+          const sentence = haltedSentence(halted);
+          const leases = await revokeMemberSessionLeases(ctx.db, target.id, now);
+          for (const leaseId of leases)
+            await appendAudit(ctx.db, team.id, {
+              actor: caller.name,
+              action: 'agent_session_lease.revoked',
+              target: target.name,
+              result: 'allow',
+              detail: { lease_id: leaseId, reason: 'halt', cause: 'halt' },
+            });
+          const conns = ctx.hub.connsForMember(target.id);
+          for (const old of conns) {
+            old.send({ type: 'error', code: 'superseded', message: sentence });
+            old.close?.();
+            ctx.hub.remove(old.connId);
+          }
+          await clearMemberPresence(ctx.db, target.id);
+          await markSessionEnded(ctx.db, target.id);
+          if (conns.length > 0) {
+            await appendAudit(ctx.db, team.id, {
+              actor: null,
+              action: 'presence.session_ended',
+              target: target.name,
+              result: 'allow',
+              detail: { cause: 'halt', presences: conns.length, halted_by: caller.name },
+            });
+            ctx.hub.broadcastTeam(team.id, {
+              type: 'presence',
+              member: target.name,
+              status: 'offline',
+            });
+          }
+          // An unspawned wake lease is a host about to start the seat: expire it so the host's next
+          // poll finds nothing. (`cancelled` is not in the lease's status set; expired reads the same
+          // to every consumer — ADR 501 §Consequences note.)
+          const wakes = await ctx.db.run(
+            "UPDATE wake_leases SET status = 'expired' WHERE team_id = ? AND member_id = ? AND status = 'leased' AND spawned_at IS NULL",
+            [team.id, target.id],
+          );
+          await appendAudit(ctx.db, team.id, {
+            actor: caller.name,
+            action: 'seat.halted',
+            target: target.name,
+            result: 'allow',
+            detail: {
+              reason,
+              sponsor_scoped: sponsorScoped,
+              leases_revoked: leases.length,
+              presences_evicted: conns.length,
+              wake_leases_expired: wakes.changes,
+            },
+          });
+          await routeEnvelope(
+            ctx,
+            team,
+            caller,
+            makeEnvelope({
+              id: ulid(),
+              team: team.slug,
+              from: caller.name,
+              to: { kind: 'member', name: target.name },
+              act: 'steer',
+              body: `halted: ${reason}`,
+              meta: { halt: { by: caller.name, reason, at: now } },
+              ts: now,
+            }),
+            undefined,
+            true,
+          );
+          return sendJson(res, 200, {
+            member: target.name,
+            halted: { at: now, by: caller.name, reason },
+            effective: "at the seat's next tool boundary or musterd call",
+            presences_evicted: conns.length,
+          });
+        }
+        // resume
+        if (!(await resumeMember(ctx.db, target.id, now)))
+          throw new MusterdError('conflict', `"${target.name}" is not halted`);
+        await appendAudit(ctx.db, team.id, {
+          actor: caller.name,
+          action: 'seat.resumed',
+          target: target.name,
+          result: 'allow',
+          detail: {
+            halted_by: target.halted_by,
+            reason: target.halted_reason,
+            held_ms: now - (target.halted_at ?? now),
+            sponsor_scoped: sponsorScoped,
+          },
+        });
+        await routeEnvelope(
+          ctx,
+          team,
+          caller,
+          makeEnvelope({
+            id: ulid(),
+            team: team.slug,
+            from: caller.name,
+            to: { kind: 'member', name: target.name },
+            act: 'steer',
+            body: 'resumed',
+            meta: { resume: { by: caller.name, at: now, halted_by: target.halted_by } },
+            ts: now,
+          }),
+          undefined,
+          true,
+        );
+        return sendJson(res, 200, { member: target.name, halted: null });
       }
 
       // Soft-remove a member from the roster (ADR 019): set left_at so it drops off every

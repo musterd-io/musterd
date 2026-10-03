@@ -257,6 +257,7 @@ describe('claim handshake frames (ADR 078 / SPEC A.3)', () => {
       'not_found',
       'disabled',
       'banned',
+      'halted',
       'expired_grant',
     ] as const) {
       const f = RefusedFrame.parse({

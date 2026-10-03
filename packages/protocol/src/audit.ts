@@ -71,6 +71,9 @@ export const P3_AUDIT_ACTIONS = [
   'agent_session_lease.minted',
   'agent_session_lease.renewed',
   'agent_session_lease.revoked',
+  // ADR 501: a human halted / resumed an agent seat.
+  'seat.halted',
+  'seat.resumed',
   'governed.policy.change',
   'governed.launch.issue',
   'governed.launch.consume',

@@ -216,7 +216,7 @@ State machine: `connecting → authenticated(key) → claim → (occupied | refu
                                                        // seat-scoped continuity envelope (ADR 093);
                                                        // null when nothing saved. The body is NEVER
                                                        // here — fetch via GET /teams/:slug/memory.
-{ "type":"refused", "code":"claim_conflict"|"forbidden"|"not_found"|"disabled"|"banned"|"expired_grant",
+{ "type":"refused", "code":"claim_conflict"|"forbidden"|"not_found"|"disabled"|"banned"|"halted"|"expired_grant",
   "message":"…", "claimable":["…"], "hint":"musterd team add <name> --kind agent --role backend" }
 { "type":"pending", "request_id":"01J…", "message":"asked admins to authorize this claim" }
 ```
@@ -333,7 +333,7 @@ Sending an Envelope still requires the sender to **hold the occupancy** of `from
 
 ## A.8 Error / refusal codes
 
-Add `claim_conflict` (seat occupied; 409), `expired_grant` (410/403). Reuse `forbidden` (bad key / not allowed to observe / not admin), `not_found` (no such seat/role), and surface account states via `refused.code` (`disabled`/`banned`). `version_mismatch` covers an older client hitting this server. `rate_limited` (429) covers the OAuth per-IP buckets — the next move is retry, never re-authenticate.
+Add `claim_conflict` (seat occupied; 409), `expired_grant` (410/403). Reuse `forbidden` (bad key / not allowed to observe / not admin), `not_found` (no such seat/role), and surface account states via `refused.code` (`disabled`/`banned`), or a human's hold on the seat (`halted`, ADR 501 — the message names who and why). `version_mismatch` covers an older client hitting this server. `rate_limited` (429) covers the OAuth per-IP buckets — the next move is retry, never re-authenticate.
 
 ## A.9 Migration
 

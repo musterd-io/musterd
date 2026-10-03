@@ -71,6 +71,12 @@ export interface MemberRow {
   /** The human's own doorbell overrides (ADR 443), `DoorbellPrefs` JSON. May hold a personal URL,
    * so it is read back only to its owner. NULL ⇒ team defaults. Optional: pre-v70 fixtures lack it. */
   doorbell_prefs?: string | null;
+  /** ADR 501: a human's hold on an agent seat. `halted_at` set ⇒ halted; `halted_by` is the
+   * human's member id; `halted_reason` is required on halt. Resume clears all three. Optional:
+   * pre-v85 fixtures lack them. */
+  halted_at?: number | null;
+  halted_by?: string | null;
+  halted_reason?: string | null;
   left_at: number | null;
   created_at: number;
   updated_at: number;
@@ -244,6 +250,14 @@ export function toMember(row: MemberRow, teamSlug: string): Member {
     sponsored_by: row.sponsored_by ?? null,
     account_status: resolveAccountStatus(row),
     capabilities: resolveCapabilities(row),
+    // ADR 501: `by` is resolved to a NAME by the roster read (`withHaltedBy`); here it is the id.
+    halted: haltedOf(row),
     created_at: row.created_at,
   };
+}
+
+/** ADR 501: the halt standing, or null. `by` is the halter's member id until a read names it. */
+export function haltedOf(row: MemberRow): Member['halted'] {
+  if (row.halted_at === null || row.halted_at === undefined) return null;
+  return { at: row.halted_at, by: row.halted_by ?? '', reason: row.halted_reason ?? '' };
 }

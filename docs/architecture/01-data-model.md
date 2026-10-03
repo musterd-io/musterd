@@ -37,6 +37,9 @@ CREATE TABLE members (
   lifecycle   TEXT NOT NULL DEFAULT 'forever' CHECK (lifecycle IN ('forever','session','until')),
   lifecycle_until INTEGER,                   -- epoch ms; required iff lifecycle='until'; ENFORCED at auth since v73 (ADR 449)
   sponsored_by TEXT REFERENCES members(id),  -- v73 (ADR 449): the member who minted this one; null = admin/local-peer mint
+  halted_at   INTEGER,                       -- v85 (ADR 501): set = a human's hold on this agent seat; null = not halted
+  halted_by   TEXT,                          -- v85: the halter's NAME (the refusal sentence is built from the row alone)
+  halted_reason TEXT,                        -- v85: required on halt, ≤280 chars; resume clears all three
   availability TEXT,                         -- JSON schedule; STORED, NOT ENFORCED in v1 (roadmap)
   working_hours TEXT,                        -- recurring JSON schedule; STORED, NOT ENFORCED (ADR 206)
   token_hash  TEXT,                          -- sha256 of the member's join token (null until issued)
@@ -109,7 +112,7 @@ CREATE TABLE schema_meta (
 - **`memberships` is folded into `members`.** The plan mentioned a separate `memberships` table; in v1 a Member belongs to exactly one Team, so membership _is_ the member row (`team_id` FK + `left_at`). If/when a Member must span Teams, split this out via ADR. (This is a deliberate, recorded simplification — if you implement, log it as ADR 001.)
 - **Presence is ephemeral but row-backed.** Rows are created on attach, refreshed by heartbeat (`last_seen_at`), and removed/expired by the presence reaper (`03-server.md`). Querying "is X online" = "does X have a presence row with `last_seen_at` within the timeout".
 - **`agent_connect_nonces`** (v74, ADR 449 §4): `nonce_hash` (sha256, PK), `team_id`, `member_id` (the sponsored agent), `issued_by` (was `sponsor_id` until v76, ADR 456 §3: who asked for the link, per the team's `agent_connect` policy), `created_at`, `expires_at` (15 min), `used_at`. Single-use; one live row per agent (a re-issue burns the prior). In the DB rather than memory (unlike ADR 170's 60s handoff) so a link survives a daemon restart. **`oauth_codes.connected_by` / `oauth_tokens.connected_by`** (v76, ADR 456 §3): the member who connected an agent's device, carried from the nonce's `issued_by`. A chain is valid only while both the agent and its `connected_by` member are in good standing, checked at use (`verifyAccess`, both token grants). NULL means a human signed their own seat in.
-- **`availability`** is stored, not enforced (schedule enforcement is roadmap). **`lifecycle_until` IS enforced since v73** (ADR 449): `authMember` refuses a member whose `until` lifecycle has passed, on every credential kind — expiry is an ordinary per-member setting. No reaper is load-bearing; the hourly sweeper marks expired members `left_at` as cosmetic roster hygiene only (ADR 459 §4). **`sponsored_by`** (ADR 449) records which member minted this one; removing a member disables everyone their sponsorship chain reaches (`member.revoked_cascade` audit rows).
+- **`availability`** is stored, not enforced (schedule enforcement is roadmap). **`lifecycle_until` IS enforced since v73** (ADR 449): `authMember` refuses a member whose `until` lifecycle has passed, on every credential kind — expiry is an ordinary per-member setting. No reaper is load-bearing; the hourly sweeper marks expired members `left_at` as cosmetic roster hygiene only (ADR 459 §4). **`sponsored_by`** (ADR 449) records which member minted this one; removing a member disables everyone their sponsorship chain reaches (`member.revoked_cascade` audit rows). **`halted_at` / `halted_by` / `halted_reason`** (ADR 501) are a human's operational hold on an agent seat: `memberStandingRefusal` answers `forbidden` "halted by <human>: <reason>" to every call, the claim handshake refuses with code `halted`, residency hands the seat to no host, and the halt revoked its session leases and evicted its presences. Resume clears the three columns; the seat's next claim mints a fresh lease.
 - **`token_hash`** stores `sha256(token)`; the plaintext join token is shown once at `team add` time and never stored. The CLI/MCP present the token to authenticate as that Member.
 - **Messages are append-only.** No edits/deletes in v1. `accept`/`decline` reference the original via `thread_id`/`meta.in_reply_to`, they don't mutate it.
 - **Every message carries `(origin_node, origin_seq)`** (v47, ADR 331): the local `nodes` row for its team and a per-node gapless counter (`nodes.next_seq` holds the next value), both stamped inside `insertMessage`'s own transaction — server-derived, no wire field. `nodes` holds one self-minted row per (daemon, team), unenrolled (`credential_hash` NULL) until ADR 328's enrollment adopts it.
@@ -141,6 +144,10 @@ adds `team_id` to the four tables that were owned only through `members` / `seed
 `members` row in the same `INSERT … SELECT`). v84 (cloud increment 1C) adds `console_token_jti (jti TEXT PRIMARY
 KEY, exp BIGINT NOT NULL)`, portable SQL: a console token's id, redeemed once across every Cloud
 server (cloud design §4.3) — a duplicate insert is a replay; redemption refuses an expired token itself, and prunes rows only an hour past their `exp` so a prune can never reopen one.
+v85 (ADR 501, halt as revocation) adds three nullable columns to `members` — `halted_at`,
+`halted_by`, `halted_reason` — the halt standing (per-engine `ADD COLUMN`; no backfill). Not an
+`account_status`: a halt never cascades, touches no credential, and is lifted by a human
+(`POST /members/:name/resume`), never by time.
 
 **Tenancy (cloud design §12.1).** On Postgres every team-owned table carries `team_id` (`teams`:
 its `id`) and one derived row-level-security policy, `tenant`, on

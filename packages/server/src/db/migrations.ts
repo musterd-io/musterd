@@ -645,7 +645,10 @@ const LEGACY: Migration[] = [
           slack_user_id TEXT,
           hue INTEGER,
           doorbell_prefs TEXT,
-          sponsored_by TEXT
+          sponsored_by TEXT,
+          halted_at INTEGER,
+          halted_by TEXT,
+          halted_reason TEXT
         );
         INSERT INTO members_new (${colList}) SELECT ${colList} FROM members;
         DROP TABLE members;

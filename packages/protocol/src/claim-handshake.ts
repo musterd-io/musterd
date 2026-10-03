@@ -34,13 +34,15 @@ export type ClaimTarget = z.infer<typeof ClaimTargetSchema>;
 
 /** The `refused` frame's reason code (SPEC A.8). `claim_conflict` = seat occupied; `expired_grant` =
  *  the presented grant is past its lifetime; `disabled`/`banned` surface the target seat's account
- *  state; `forbidden` = bad key / not allowed to observe / not admin; `not_found` = no such seat/role. */
+ *  state; `halted` (ADR 501) a human's hold on it; `forbidden` = bad key / not allowed to observe / not admin; `not_found` = no such seat/role. */
 export const REFUSED_CODES = [
   'claim_conflict',
   'forbidden',
   'not_found',
   'disabled',
   'banned',
+  // ADR 501: the target seat is halted by a human; the message carries who and why.
+  'halted',
   'expired_grant',
 ] as const;
 export const RefusedCodeSchema = z.enum(REFUSED_CODES);

@@ -26,6 +26,7 @@ import {
   isHeld,
   markBound,
   mintAgentSeatCredential,
+  haltedSentence,
 } from '../store/members.js';
 import { memoryEnvelope } from '../store/memory.js';
 import {
@@ -476,7 +477,29 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
             });
           }
 
-          // Step 3: account_status check on target member.
+          // Step 3: account_status check on target member. ADR 501 first: a halt is the more
+          // recent fact and names the human to ask.
+          if (
+            targetMember &&
+            targetMember.halted_at !== null &&
+            targetMember.halted_at !== undefined
+          ) {
+            send(ws, {
+              type: 'refused',
+              code: 'halted',
+              message: haltedSentence(targetMember),
+              claimable: [],
+              hint: `a human lifts it: musterd resume ${targetMember.name}`,
+            });
+            await appendAudit(ctx.db, team.id, {
+              actor: null,
+              action: 'claim.refused',
+              target: targetMember.name,
+              result: 'deny',
+              detail: { code: 'halted', halted_by: targetMember.halted_by },
+            });
+            return;
+          }
           if (targetMember) {
             const status = resolveAccountStatus(targetMember);
             if (status === 'disabled' || status === 'banned') {
@@ -968,8 +991,12 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
               // and lived five minutes — after which every tool call was refused until a reconnect
               // happened to mint another (lane 01M1FC77F2, 2026-09-01). The old lease is not
               // revoked: it dies at its own expiry, so a call in flight under it still lands.
+              // ADR 501: a halted seat renews nothing — the halt revoked its leases on purpose, and
+              // a heartbeat racing the eviction must not mint a fresh one behind it.
+              const haltedNow = (await getMemberById(ctx.db, conn.memberId))?.halted_at;
               if (
                 state.lease &&
+                (haltedNow === null || haltedNow === undefined) &&
                 (await sessionLeaseDueForRenewal(
                   ctx.db,
                   state.lease.id,
