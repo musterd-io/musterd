@@ -2,7 +2,7 @@ import { isWireAttestationSource } from '@musterd/protocol';
 import { monotonicFactory } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
-import { localNodeForTeam } from './messages.js';
+import { localNodeForTeam, pendingSeq, takeSeq } from './messages.js';
 
 /**
  * Audit ids are MONOTONIC ULIDs: several rows appended in one millisecond still sort in arrival
@@ -850,10 +850,7 @@ export async function appendReplicatedEvent(
   assertAuditSubjectDeclared(entry.action);
   await db.tx(async (t) => {
     const node = await localNodeForTeam(t, teamId);
-    const seq = (await t.get<{ seq: number }>(
-      'UPDATE nodes SET next_seq = next_seq + 1 WHERE id = ? RETURNING next_seq - 1 AS seq',
-      [node.id],
-    ))!.seq;
+    const seq = pendingSeq(); // numbered at commit (ADR 504), as insertMessage does
     const now = Date.now();
     const row: AuditRow = {
       id: ulid(),
@@ -888,6 +885,10 @@ export async function appendReplicatedEvent(
         row.actor_model_source,
       ],
     );
+    t.beforeCommit(async (root) => {
+      const n = await takeSeq(root, node.id);
+      await root.run('UPDATE audit SET origin_seq = ? WHERE id = ?', [n, row.id]);
+    });
   });
 }
 

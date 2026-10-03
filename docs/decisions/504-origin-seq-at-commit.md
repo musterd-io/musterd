@@ -1,6 +1,6 @@
 # 504 — origin_seq is taken at commit, not at insert: the node counter's lock lasts one statement, not a transaction
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-10-03
 - Deciders: nick (chose this option over "no seq on Cloud" and "a Postgres sequence", 2026-10-03),
   fifty (lane `01M3Z455NEWNZMCJ5KR6EX3TG0`)
@@ -37,19 +37,22 @@ Keep both properties and stop holding the counter's lock for a whole transaction
 
 ## Decision
 
-1. **A row is written with `origin_seq = 0` and numbered at commit.** `insertMessage` and the audit
-   writer insert with `origin_seq = 0` (the sentinel ADR 331 already reserves: `next_seq` starts at
-   1, and `SyncEventSchema` refuses 0) and register the row with the transaction.
+1. **A row is written with a placeholder and numbered at commit.** `insertMessage` and
+   `appendReplicatedEvent` insert with a **unique negative** `origin_seq` (`pendingSeq()`) and
+   register the numbering with the transaction. Not 0: `idx_messages_origin (origin_node,
+   origin_seq)` is unique and not partial, so two open transactions writing `(node, 0)` would make
+   the second wait on the first's uncommitted row — the same queue again. A negative value is never
+   read: push and retention walk `origin_seq > cursor ≥ 0`, and `SyncEventSchema` refuses ≤ 0.
 2. **The driver runs a pre-commit step.** `Driver.tx` gains `beforeCommit(fn)` on a tx handle: the
    callbacks run in registration order as the last statements of the **outermost** transaction,
    immediately before `COMMIT` (a nested `tx`/SAVEPOINT hands its registrations to the outer one; a
    rollback discards them). The SQLite drivers implement the same seam, so one code path serves
    both engines.
-3. **Numbering takes one lock, for one statement.** The step does
-   `UPDATE nodes SET next_seq = next_seq + k WHERE id = ? RETURNING next_seq - k AS first` for the
-   `k` rows the transaction wrote to that node, then stamps them `first … first + k - 1` in insert
-   order (one `UPDATE … FROM (VALUES …)` per table). The lock is held from that statement to
-   `COMMIT` — one round trip — instead of from the first write to `COMMIT`.
+3. **Numbering takes the lock at the end.** Each registered row runs `takeSeq` — ADR 331's
+   `UPDATE nodes SET next_seq = next_seq + 1 … RETURNING next_seq - 1` — then stamps its row, in
+   insert order, back to back. The lock is held from the first of those statements to `COMMIT`,
+   instead of from the transaction's first write to `COMMIT`. (One bump per row, not one per
+   transaction: simpler, and the window is still the commit tail.)
 4. **Both properties still hold, by the same lock.** Gapless: the bump and the stamps commit or roll
    back together, as before. In order: the next transaction to number rows waits for this one's
    `COMMIT`, so seq order is commit order.

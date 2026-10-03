@@ -1,6 +1,13 @@
 import type { PGlite, Transaction } from '@electric-sql/pglite';
 import { toPostgres } from './dialect.js';
-import { DriverError, type Driver, type Params } from './driver.js';
+import {
+  DriverError,
+  noTx,
+  runCommitHooks,
+  type CommitHooks,
+  type Driver,
+  type Params,
+} from './driver.js';
 import { ROLE, TENANT_SETTING } from './pg/tenancy.js';
 import type { Client, PoolFactory } from './pgDriver.js';
 
@@ -110,7 +117,12 @@ export async function pgliteDriver(opts: { dataDir?: string } = {}): Promise<Pgl
   };
   // depth 0 = a connection handle (each statement is its own stamped transaction); depth ≥ 1 = a
   // handle bound to the open transaction `q`, already stamped.
-  const wrap = (q: PGlite | Transaction, depth: number, scope: Scope): PgliteDriver => {
+  const wrap = (
+    q: PGlite | Transaction,
+    depth: number,
+    scope: Scope,
+    hooks: CommitHooks | null = null,
+  ): PgliteDriver => {
     // depth 0: switch the session's scope if it differs, then the statement autocommits.
     const one = <R>(fn: (t: PGlite | Transaction) => Promise<R>): Promise<R> =>
       depth === 0
@@ -143,22 +155,34 @@ export async function pgliteDriver(opts: { dataDir?: string } = {}): Promise<Pgl
           await pg.exec(toPostgres(sql));
         });
       },
+      beforeCommit(fn: (t: Driver) => Promise<void>) {
+        if (!hooks) throw noTx();
+        hooks.push(fn);
+      },
       async tx<T>(fn: (t: Driver) => Promise<T>): Promise<T> {
         assertOpen();
         if (depth === 0)
           return lock(async () => {
             await enter(scope);
-            return pg.transaction((t) => fn(wrap(t, 1, scope)));
+            return pg.transaction(async (t) => {
+              const mine: CommitHooks = [];
+              const root = wrap(t, 1, scope, mine);
+              const r = await fn(root);
+              await runCommitHooks(mine, root);
+              return r;
+            });
           });
         const name = `sp${depth}`;
+        const mark = hooks!.length;
         await q.exec(`SAVEPOINT ${name}`);
         try {
-          const r = await fn(wrap(q, depth + 1, scope));
+          const r = await fn(wrap(q, depth + 1, scope, hooks));
           await q.exec(`RELEASE ${name}`);
           return r;
         } catch (e) {
           await q.exec(`ROLLBACK TO ${name}`);
           await q.exec(`RELEASE ${name}`);
+          hooks!.length = mark;
           throw e;
         }
       },

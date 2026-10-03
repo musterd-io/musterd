@@ -74,6 +74,44 @@ withDrivers('originStamp', (o, kind) => {
       expect((await seqsFor(db, team.id)).map((r) => r.origin_seq)).toEqual([1, 2, 3]);
     });
 
+    // ADR 504: numbered at commit — the returned row carries the committed number, an inner
+    // insert inside a caller's transaction is numbered in insert order, and a rolled-back savepoint
+    // burns nothing.
+    it('numbers at commit: returned rows carry the committed seq, in insert order', async () => {
+      const { db, team, ada } = await seed();
+      const solo = await insertMessage(db, team.id, ada.id, null, await env('m-1', 1001));
+      expect(solo.origin_seq).toBe(1);
+      const [a, b] = await db.tx(async (t) => {
+        const x = await insertMessage(t, team.id, ada.id, null, await env('m-2', 1002));
+        // Not yet numbered inside the open transaction: the placeholder is negative.
+        expect(x.origin_seq).toBeLessThan(0);
+        await t
+          .tx(async (sp) => {
+            await insertMessage(sp, team.id, ada.id, null, await env('m-rolled', 1003));
+            throw new Error('roll the savepoint back');
+          })
+          .catch(() => undefined);
+        const y = await insertMessage(t, team.id, ada.id, null, await env('m-3', 1004));
+        return [x, y];
+      });
+      expect([a!.origin_seq, b!.origin_seq]).toEqual([2, 3]);
+      expect((await seqsFor(db, team.id)).map((r) => r.origin_seq)).toEqual([1, 2, 3]);
+      const node = await db.get('SELECT next_seq FROM nodes WHERE team_id = ?', [team.id]);
+      expect(node?.next_seq).toBe(4);
+    });
+
+    it('a whole transaction rolled back after inserting burns no number', async () => {
+      const { db, team, ada } = await seed();
+      await expect(
+        db.tx(async (t) => {
+          await insertMessage(t, team.id, ada.id, null, await env('m-x', 1001));
+          throw new Error('abort');
+        }),
+      ).rejects.toThrow('abort');
+      await insertMessage(db, team.id, ada.id, null, await env('m-1', 1002));
+      expect((await seqsFor(db, team.id)).map((r) => r.origin_seq)).toEqual([1]);
+    });
+
     // Eval (iii): monotone across restart — the counter is a column, not process state.
     // A file reopened is a SQLite fact; the Postgres double is one in-process instance.
     it.runIf(kind === 'sqlite')(

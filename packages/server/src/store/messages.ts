@@ -84,12 +84,9 @@ export async function insertMessage(
 ): Promise<MessageRow> {
   return db.tx(async (t) => {
     const node = await localNodeForTeam(t, teamId);
-    // Read-then-bump under SQLite's single-writer lock: `next_seq` names the next value to assign,
-    // so the returned pre-increment value is this message's seq — monotone and gapless by construction.
-    const seq = (await t.get<{ seq: number }>(
-      'UPDATE nodes SET next_seq = next_seq + 1 WHERE id = ? RETURNING next_seq - 1 AS seq',
-      [node.id],
-    ))!.seq;
+    // ADR 504: the row goes in with a unique negative placeholder and is numbered at commit, so the
+    // node row's lock lasts from the bump to COMMIT, not from here to COMMIT.
+    const seq = pendingSeq();
     const row: MessageRow = {
       id: env.id,
       team_id: teamId,
@@ -127,8 +124,32 @@ export async function insertMessage(
         row.created_at,
       ],
     );
+    t.beforeCommit(async (root) => {
+      row.origin_seq = await takeSeq(root, node.id);
+      await root.run('UPDATE messages SET origin_seq = ? WHERE id = ?', [row.origin_seq, row.id]);
+    });
     return row;
   });
+}
+
+/**
+ * A placeholder `origin_seq` for a row not yet numbered (ADR 504): negative, so no reader that
+ * walks `origin_seq > cursor` ever sees it, and unique, so two open transactions on one node never
+ * contend on `idx_messages_origin (origin_node, origin_seq)` the way a shared 0 would.
+ */
+export const pendingSeq = (): number => -1 - Math.floor(Math.random() * 2 ** 52);
+
+/**
+ * Take the node's next number (ADR 331's read-then-bump: `next_seq` names the next value to assign,
+ * so the pre-increment value is this row's seq). Called only from a pre-commit callback, so the
+ * row lock it takes is held for the callbacks that follow and the COMMIT — monotone, gapless, and
+ * visible in seq order, because the next transaction to bump waits for this one's COMMIT.
+ */
+export async function takeSeq(db: Driver, nodeId: string): Promise<number> {
+  return (await db.get<{ seq: number }>(
+    'UPDATE nodes SET next_seq = next_seq + 1 WHERE id = ? RETURNING next_seq - 1 AS seq',
+    [nodeId],
+  ))!.seq;
 }
 
 /** The `ts` of one message by id (loop-latency lookups, ADR 082 slice 3). Null when unknown. */
