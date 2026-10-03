@@ -98,6 +98,9 @@ are not `withDrivers` blocks and keep running under every setting.
   extra setups and a merge per run); the driver scoping here remains the compute lever. What
   changed is the runner: the repo went private on 2026-10-02 and `ubuntu-latest` became 2 vCPU,
   so the leaf ran 25–27 min on every push to `main` — wall time, not compute, became the pain.
+- 2026-10-03 — [ADR 499](499-gates-run-where-inputs-changed.md): "a push to `main` always runs
+  both" holds whenever the suite runs at all; a docs-only squash runs no suite on either engine,
+  because no engine's inputs changed.
 
 ## Observability & Evaluation
 

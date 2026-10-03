@@ -1,11 +1,14 @@
-# CI — the authoritative merge gate (ADR 106). Runs the same gates agents run locally, on every PR.
-# Local runs are an optional fast smoke-test; THIS is the source of truth that branch protection
-# requires green before a squash-merge. Keep the job name `gates` stable — it's the required check.
+# CI — the authoritative merge gate (ADR 106). Runs the same gates agents run locally, on every PR
+# — each gate where its inputs changed (ADR 499): a docs-only change runs the docs leaf alone, and
+# the Chrome a11y leaves run when packages/web (or what renders it) changed. `plan` decides from the
+# diff and `gates` sanctions exactly the skips it announced; any other skip is red. Local runs are an
+# optional fast smoke-test; THIS is the source of truth that branch protection requires green before
+# a squash-merge. Keep the job name `gates` stable — it's the required check.
 #
 # Shape (ADR 106 amendment 2026-09-03): the gates run as PARALLEL leaves and `gates` is the fan-in.
 # Measured before the change, one serial job took 8m10s per PR, and 78% of it was two steps that do
 # not depend on each other — the Chrome contrast sweep (227s) and tests+coverage (157s). Every
-# gate still runs on every PR; only the wall clock changed. Each leaf does its own checkout+build
+# gate still ran on every PR then; only the wall clock changed. Each leaf does its own checkout+build
 # (.github/actions/setup) so nothing is shared through an artifact.
 #
 # Every leaf checks out FULL history (fetch-depth: 0, ~3s). The serial job had it for
@@ -44,6 +47,8 @@ jobs:
   static:
     name: static
     runs-on: ubuntu-latest
+    needs: [plan]
+    if: needs.plan.outputs.suite == 'true'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,6 +82,11 @@ jobs:
   # ADR 498: the same pick sets the shard count — three when both drivers run (the CPU-bound case),
   # one when SQLite alone does (sharding would add two setups to a ~6 min job). No install, no
   # build: a checkout and a diff, ~20 s before the shards start.
+  # ADR 499: the same diff decides WHICH leaves run. `suite` (static + coverage) is off when every
+  # changed path is under docs/ or a root *.md — nothing those gates read changed; the docs leaf
+  # still runs and is the gate that can fail such a change. `a11y` is on when the diff touches
+  # packages/web, the sweep scripts, the workflow or the lockfile. A push to main is the squash
+  # commit, so HEAD^1..HEAD is the merged change there too; with no parent to diff, everything runs.
   plan:
     name: plan
     runs-on: ubuntu-latest
@@ -84,20 +94,28 @@ jobs:
       kinds: ${{ steps.pick.outputs.kinds }}
       shards: ${{ steps.pick.outputs.shards }}
       shard_count: ${{ steps.pick.outputs.count }}
+      suite: ${{ steps.pick.outputs.suite }}
+      a11y: ${{ steps.pick.outputs.a11y }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Pick test drivers and shard count
+      - name: Pick the leaves, the test drivers and the shard count
         id: pick
         run: |
-          kinds=both; why="push to ${GITHUB_REF_NAME}"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            if git rev-parse -q --verify HEAD^2 >/dev/null; then
-              hit=$(git diff --name-only HEAD^1 HEAD | grep -m1 -E '^(packages/(server|protocol)/|pnpm-lock\.yaml$|package\.json$|vitest\.config\.ts$|\.github/)' || true)
-              if [ -n "$hit" ]; then why="the PR touches $hit"; else kinds=sqlite; why="the PR touches nothing the PGlite leg executes"; fi
+          suite=true; a11y=true; kinds=both; why="no parent to diff — everything runs"
+          if git rev-parse -q --verify HEAD^1 >/dev/null; then
+            changed=$(git diff --name-only HEAD^1 HEAD)
+            if [ -n "$changed" ] && ! echo "$changed" | grep -q -v -E '^(docs/|[^/]+\.md$)'; then
+              suite=false; a11y=false; kinds=sqlite; why="every changed path is docs/ or a root *.md — the docs leaf is the gate"
             else
-              why="no merge commit to diff"
+              if echo "$changed" | grep -q -E '^(packages/web/|scripts/a11y/|\.github/|package\.json$|pnpm-lock\.yaml$)'; then a11y=true; else a11y=false; fi
+              if [ "${{ github.event_name }}" = "pull_request" ]; then
+                hit=$(echo "$changed" | grep -m1 -E '^(packages/(server|protocol)/|pnpm-lock\.yaml$|package\.json$|vitest\.config\.ts$|\.github/)' || true)
+                if [ -n "$hit" ]; then why="the PR touches $hit"; else kinds=sqlite; why="the PR touches nothing the PGlite leg executes"; fi
+              else
+                why="push to ${GITHUB_REF_NAME}"
+              fi
             fi
           fi
           if [ "$kinds" = both ]; then count=3; shards='[1, 2, 3]'; else count=1; shards='[1]'; fi
@@ -105,8 +123,13 @@ jobs:
             echo "kinds=$kinds"
             echo "count=$count"
             echo "shards=$shards"
+            echo "suite=$suite"
+            echo "a11y=$a11y"
           } >> "$GITHUB_OUTPUT"
-          echo "MUSTERD_TEST_DRIVER=$kinds — $why (ADR 492); coverage in $count shard(s) (ADR 498)" | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo "plan: suite=$suite a11y=$a11y — $why (ADR 499)"
+            echo "MUSTERD_TEST_DRIVER=$kinds (ADR 492); coverage in $count shard(s) (ADR 498)"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
   # One third of the suite per shard when both drivers run (vitest `--shard`: files sorted by a path
   # hash, sliced into contiguous chunks, so the split is stable and the shard that holds
@@ -119,6 +142,7 @@ jobs:
     name: coverage ${{ matrix.shard }}/${{ needs.plan.outputs.shard_count }}
     runs-on: ubuntu-latest
     needs: [plan]
+    if: needs.plan.outputs.suite == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -166,7 +190,7 @@ jobs:
     name: coverage-merge
     runs-on: ubuntu-latest
     needs: [plan, coverage]
-    if: needs.plan.outputs.shard_count != '1'
+    if: needs.plan.outputs.suite == 'true' && needs.plan.outputs.shard_count != '1'
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -206,6 +230,8 @@ jobs:
   a11y-prerender:
     name: a11y-prerender
     runs-on: ubuntu-latest
+    needs: [plan]
+    if: needs.plan.outputs.a11y == 'true'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -240,6 +266,8 @@ jobs:
   a11y-connected:
     name: a11y-connected
     runs-on: ubuntu-latest
+    needs: [plan]
+    if: needs.plan.outputs.a11y == 'true'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -297,15 +325,30 @@ jobs:
     needs: [plan, static, coverage, coverage-merge, a11y-prerender, a11y-connected, docs]
     if: always()
     steps:
-      # The one sanctioned skip: `coverage-merge` on a one-shard run (ADR 498), where the single
-      # coverage job enforced the floors itself. Every other skip or cancel is red.
-      - name: Every leaf must have succeeded
+      # The sanctioned skips, and only these: `coverage-merge` on a one-shard run (ADR 498), where the
+      # single coverage job enforced the floors itself; `static`, `coverage` and `coverage-merge` when
+      # `plan` said the diff is docs-only; the two a11y leaves when `plan` said packages/web did not
+      # change (ADR 499). A leaf skipped for any other reason, or cancelled, is red: a required check
+      # with no verdict reads as an outage, and this is where it would hide.
+      - name: Every leaf must have succeeded, or been skipped by plan
         env:
           RESULTS: ${{ toJSON(needs) }}
           SHARDS: ${{ needs.plan.outputs.shard_count }}
+          SUITE: ${{ needs.plan.outputs.suite }}
+          A11Y: ${{ needs.plan.outputs.a11y }}
         run: |
           echo "$RESULTS" | jq .
-          failed="$(echo "$RESULTS" | jq -r --arg shards "$SHARDS" 'to_entries[] | select(.value.result != "success") | select((.key == "coverage-merge" and .value.result == "skipped" and $shards == "1") | not) | .key')"
+          echo "plan: suite=$SUITE a11y=$A11Y shards=$SHARDS"
+          failed="$(echo "$RESULTS" | jq -r --arg shards "$SHARDS" --arg suite "$SUITE" --arg a11y "$A11Y" '
+            to_entries[]
+            | select(.value.result != "success")
+            | select(
+                (
+                  (.key == "coverage-merge" and .value.result == "skipped" and $shards == "1")
+                  or ((.key == "static" or .key == "coverage" or .key == "coverage-merge") and .value.result == "skipped" and $suite == "false")
+                  or ((.key == "a11y-prerender" or .key == "a11y-connected") and .value.result == "skipped" and $a11y == "false")
+                ) | not)
+            | .key')"
           if [ -n "$failed" ]; then
             echo "::error::gates — leaf(s) did not succeed: $(echo "$failed" | tr '\n' ' ')"
             exit 1
