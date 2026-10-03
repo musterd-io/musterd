@@ -10,6 +10,10 @@
 //  - **Off the loop.** A file-backed daemon derives in `reportWorker` on its own read-only WAL
 //    connection. An in-memory store (tests, ephemeral daemons) cannot be shared with a worker, so it
 //    derives inline and uncached — exactly the pre-fix behavior, which its tests assert on.
+//  - **Cloud** (lane 01M3ZCTQ77) derives inline — Postgres I/O is async, so the loop stays free —
+//    behind the same cache, under the requesting team's scoped handle (`scope`), so RLS holds. The
+//    service is keyed by the server's ROOT store: Postgres mints a fresh team handle per request, and
+//    a cache keyed by that handle was a cache per request (the 2026-10-03 load run: 1 346 derivations).
 import { Worker } from 'node:worker_threads';
 import type { Report } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
@@ -20,7 +24,8 @@ import type { ReportJob, ReportReply } from './reportWorker.js';
 export const REPORT_TTL_MS = 5_000;
 export const REPORT_MAX_STALE_MS = 60_000;
 
-type Derive = (teamId: string, teamSlug: string, now: number) => Promise<Report>;
+/** `scope` is the request's team-scoped handle; only an inline derive reads it. */
+type Derive = (teamId: string, teamSlug: string, now: number, scope?: Driver) => Promise<Report>;
 
 interface Entry {
   report?: Report;
@@ -38,10 +43,15 @@ export function createReportCache(
   const clock = opts.now ?? Date.now;
   const entries = new Map<string, Entry>();
 
-  function refresh(teamId: string, teamSlug: string, entry: Entry): Promise<Report> {
+  function refresh(
+    teamId: string,
+    teamSlug: string,
+    entry: Entry,
+    scope: Driver | undefined,
+  ): Promise<Report> {
     if (entry.inflight) return entry.inflight;
     const started = clock();
-    entry.inflight = derive(teamId, teamSlug, started).then(
+    entry.inflight = derive(teamId, teamSlug, started, scope).then(
       (report) => {
         entry.report = report;
         entry.at = started;
@@ -57,7 +67,7 @@ export function createReportCache(
   }
 
   return {
-    async get(teamId: string, teamSlug: string): Promise<Report> {
+    async get(teamId: string, teamSlug: string, scope?: Driver): Promise<Report> {
       let entry = entries.get(teamId);
       if (!entry) {
         entry = { at: 0 };
@@ -67,10 +77,10 @@ export function createReportCache(
       if (entry.report && age < ttl) return Promise.resolve(entry.report);
       if (entry.report && age < maxStale) {
         // Serve stale now; a failed background refresh is retried by the next reader.
-        refresh(teamId, teamSlug, entry).catch(() => {});
+        refresh(teamId, teamSlug, entry, scope).catch(() => {});
         return Promise.resolve(entry.report);
       }
-      return refresh(teamId, teamSlug, entry);
+      return refresh(teamId, teamSlug, entry, scope);
     },
   };
 }
@@ -125,11 +135,21 @@ class ReportWorker {
 }
 
 export interface ReportService {
-  get(teamId: string, teamSlug: string): Promise<Report>;
+  /** `scope`: the request's team-scoped handle. An inline derive runs under it; the worker ignores it. */
+  get(teamId: string, teamSlug: string, scope?: Driver): Promise<Report>;
   close(): Promise<void>;
 }
 
-export function createReportService(db: Driver, presenceTimeoutMs: number): ReportService {
+export interface ReportServiceOptions {
+  /** Cache an inline derive (Cloud). Off, an inline store derives fresh on every read. */
+  cacheInline?: boolean;
+}
+
+export function createReportService(
+  db: Driver,
+  presenceTimeoutMs: number,
+  opts: ReportServiceOptions = {},
+): ReportService {
   // The worker opens the store by path, so only a file-backed SQLite store gets one; an in-memory
   // store (and any other dialect) derives inline.
   const file =
@@ -137,8 +157,16 @@ export function createReportService(db: Driver, presenceTimeoutMs: number): Repo
       ? (db as SqliteDriver).raw.name
       : null;
   if (file === null) {
+    const derive: Derive = (teamId, teamSlug, now, scope) =>
+      deriveReport(scope ?? db, teamId, teamSlug, now, presenceTimeoutMs);
+    if (!opts.cacheInline)
+      return {
+        get: (teamId, teamSlug, scope) => derive(teamId, teamSlug, Date.now(), scope),
+        close: () => Promise.resolve(),
+      };
+    const cache = createReportCache(derive);
     return {
-      get: (teamId, teamSlug) => deriveReport(db, teamId, teamSlug, Date.now(), presenceTimeoutMs),
+      get: (teamId, teamSlug, scope) => cache.get(teamId, teamSlug, scope),
       close: () => Promise.resolve(),
     };
   }
@@ -152,10 +180,14 @@ export function createReportService(db: Driver, presenceTimeoutMs: number): Repo
 // One service per store, created on first use, so callers that build a `Ctx` by hand need no wiring.
 const services = new WeakMap<Driver, ReportService>();
 
-export function reportServiceFor(db: Driver, presenceTimeoutMs: number): ReportService {
+export function reportServiceFor(
+  db: Driver,
+  presenceTimeoutMs: number,
+  opts: ReportServiceOptions = {},
+): ReportService {
   let s = services.get(db);
   if (!s) {
-    s = createReportService(db, presenceTimeoutMs);
+    s = createReportService(db, presenceTimeoutMs, opts);
     services.set(db, s);
   }
   return s;
