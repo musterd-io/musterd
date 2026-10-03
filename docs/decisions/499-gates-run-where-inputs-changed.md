@@ -77,6 +77,10 @@ read by tests in `packages/protocol` and `packages/cli`; it stays code.
 - ADR 106 and ADR 492 carry dated notes pointing here. The remaining compute lever, the PGlite
   leg's per-test cost, is lane `01M3ZRQAGDDMTG6TA9T27D02N9`.
 
+- 2026-10-03, first reading: #2012 (server code, `packages/web` untouched) ran with both a11y
+  leaves skipped by `plan` and `gates` green — the web-free shape works. The docs-only shape is
+  read on the PR that carries this note.
+
 ## Observability & Evaluation
 
 **Traces.** No new trace event. The `plan` job's step summary names the verdict per run; GitHub's

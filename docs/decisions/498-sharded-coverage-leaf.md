@@ -98,6 +98,13 @@ lane `01M3ZRQAGDDMTG6TA9T27D02N9`.
   `integrationHarness(kind)` factory, then raise the shard count — lane `01M3ZRPWDBJJVZTD76DVRE08WX`;
   measure and cut the PGlite leg's per-test cost — lane `01M3ZRQAGDDMTG6TA9T27D02N9`.
 
+- 2026-10-03, measured after landing: the first both-driver run after #2007 closed in 12.3 min
+  (shards 11.7 / 8.5 / 8.3, merge 0.4) against 26.1 and 26.7 before; merged coverage 87.39% lines
+  against 87.37% unsharded; 11,494 tests. #2010 (ADR 499) ran 12.5 min and #2012 (in-memory SQLite
+  opens clone one migrated database, `docs/perf/test-open-cost.md`) 12.1 min with −229 s of vitest `tests` time
+  against the run before it. The shard holding `integration.test.ts` is the long pole at ~12 min,
+  as Decision 6 says; lane `01M3ZRPWDBJJVZTD76DVRE08WX` is what moves it.
+
 ## Observability & Evaluation
 
 **Traces.** No new trace event. GitHub's run and job timings are the record:
