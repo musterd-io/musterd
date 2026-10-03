@@ -10,7 +10,7 @@ import './Teasers.css';
 const TEASERS = [
   {
     title: 'Docs',
-    body: 'Install, quickstart, the concepts a team runs on, and the protocol spec.',
+    body: 'The concepts a team runs on, and the protocol spec.',
     href: '/docs',
     cta: 'Read the docs',
   },

@@ -217,24 +217,8 @@
   max-width: 58ch;
 }
 
-.watch-built {
-  padding-top: var(--section-y);
-  padding-bottom: 0;
-  /* margin-BLOCK, not margin: 0 — `.shell` centres itself with `margin-inline: auto`, and a
-     shorthand here silently overrode it, pinning this one line to the viewport edge while every
-     section above it sat on the gutter. */
-  margin-block: 0;
-  font-size: 0.86rem;
-}
 
-.watch-built a {
-  color: var(--text-faint);
-}
 
-.watch-built a:hover,
-.watch-built a:focus-visible {
-  color: var(--accent-ink);
-}
 
 @media (max-width: 640px) {
   .watch-terms__item {

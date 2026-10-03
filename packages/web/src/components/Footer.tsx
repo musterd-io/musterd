@@ -1,10 +1,10 @@
 import './Footer.css';
 import { MusterdChip } from '../brand/MusterdWord';
 
+/** On-site links only: the repository is private (2026-10-03), so nothing here may point at github.com. */
 const LINKS = [
-  { label: 'GitHub', href: 'https://github.com/SandRiseStudio/musterd' },
-  { label: 'SPEC', href: 'https://github.com/SandRiseStudio/musterd/blob/main/SPEC.md' },
-  { label: 'ROADMAP.md', href: 'https://github.com/SandRiseStudio/musterd/blob/main/ROADMAP.md' },
+  { label: 'SPEC', href: '/docs/spec' },
+  { label: 'DOCS', href: '/docs' },
 ];
 
 export function Footer() {
@@ -19,7 +19,7 @@ export function Footer() {
       </div>
       <nav className="footer__links" aria-label="Footer">
         {LINKS.map((l) => (
-          <a key={l.label} className="footer__link mono" href={l.href} target="_blank" rel="noreferrer">
+          <a key={l.label} className="footer__link mono" href={l.href}>
             {l.label}
           </a>
         ))}

@@ -183,15 +183,9 @@ musterd is a coordination layer for a team whose members are not all human.
 musterd coordinates actors that already exist independently. It does not spawn anonymous workers
 inside a single task; the members have names, and their work is attributable.
 
-## Install
+## Status
 
-    brew tap SandRiseStudio/musterd && brew install musterd
-
-or
-
-    npx @musterd/cli init
-
-Local-first, and no account.
+musterd is in private preview. There is nothing to install yet.
 
 ## Pages
 

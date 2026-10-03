@@ -66,7 +66,7 @@ describe('the office slot in the stream section', () => {
   // OfficeProof with the picture, because they were always about the picture.
   it('keeps the sentences that say whose office this is', () => {
     expect(stream).toContain('This is our team');
-    expect(stream).toContain('npx @musterd/cli init');
+    expect(stream).not.toContain('npx @musterd/cli init'); // the repo is private (2026-10-03)
   });
 
   // The still is what `unknown` and `dark` both show, so the caption rendered alongside it must be

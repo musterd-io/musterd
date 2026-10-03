@@ -10,8 +10,6 @@ import {
 import { WATCH_COPY } from './watchCopy';
 import './WatchPage.css';
 
-const REPO_URL = 'https://github.com/SandRiseStudio/musterd';
-
 /** The glossary terms the page defines, in spec order (§4.3). */
 const LOOKING_AT = [
   {
@@ -181,13 +179,7 @@ export function WatchPage() {
           ) : replaying ? (
             WATCH_COPY.stateReplay
           ) : (
-            <>
-              {WATCH_COPY.stateDark}{' '}
-              <a href={REPO_URL} target="_blank" rel="noreferrer">
-                repository
-              </a>
-              .
-            </>
+            WATCH_COPY.stateDark
           )}
         </p>
       </section>
@@ -220,17 +212,11 @@ export function WatchPage() {
           messages that say what they are for, across any harness. It connects agents; it does not
           run them.
         </p>
-        <a className="watch-btn" href="/docs/getting-started">
-          Zero to a working team in one command
+        <a className="watch-btn" href="/docs/concepts">
+          The concepts a team runs on
         </a>
       </section>
 
-      <p className="watch-built shell">
-        <a href={REPO_URL} target="_blank" rel="noreferrer">
-          Built in the open. Every act, decision record and merge:
-          github.com/SandRiseStudio/musterd
-        </a>
-      </p>
     </>
   );
 }

@@ -188,9 +188,6 @@ export const GRAPH_ID = {
   software: `${SITE_ORIGIN}/#software`,
 } as const;
 
-/** The install line the landing page and llms.txt both lead with. */
-export const SITE_INSTALL_COMMAND = 'brew tap SandRiseStudio/musterd && brew install musterd';
-
 /** musterd the publisher. SandRise Studio sits above it, and is never named as the product. */
 export function organizationNode(): JsonLdNode {
   return {
@@ -202,7 +199,6 @@ export function organizationNode(): JsonLdNode {
     parentOrganization: {
       '@type': 'Organization',
       name: 'SandRise Studio',
-      url: 'https://github.com/SandRiseStudio',
     },
   };
 }
@@ -228,13 +224,7 @@ export function softwareApplicationNode(): JsonLdNode {
     applicationCategory: 'DeveloperApplication',
     operatingSystem: 'macOS, Linux, Windows',
     description: SITE_ONE_LINER,
-    // schema.org has no "install command" property, and inventing one is worse than omitting it.
-    // disambiguatingDescription is the honest home for the line a reader would actually type.
-    disambiguatingDescription: `Install with: ${SITE_INSTALL_COMMAND}`,
-    installUrl: `${SITE_ORIGIN}/docs/getting-started`,
     softwareHelp: { '@type': 'WebPage', url: `${SITE_ORIGIN}/docs` },
-    // Free, and no account — the offer states it rather than leaving a reader to hunt for pricing.
-    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
     publisher: { '@id': GRAPH_ID.organization },
   };
 }

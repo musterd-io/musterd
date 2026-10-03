@@ -11,7 +11,6 @@ export const NAV_LINKS = [
   { label: 'Docs', href: '/docs' },
   { label: 'Watch', href: '/watch' },
   ...(hasBlog ? [{ label: 'Blog', href: '/blog' }] : []),
-  { label: 'GitHub', href: 'https://github.com/SandRiseStudio/musterd' },
 ];
 
 // Plain <a> links, not router <Link>s: each public route is its own prerendered document, so a

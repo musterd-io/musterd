@@ -46,9 +46,9 @@ export const WATCH_COPY = {
    */
   eyebrowReplay: 'replaying an earlier session',
   /** §4.2's state line. The dark form is the fallback: it is true whichever state holds. */
-  stateLive: 'Live now. Every act you see lands in the open repository.',
+  stateLive: 'Live now. Every act you see is the team doing real work.',
   stateDark:
-    'The team works in sessions, so the channel is dark between them. The work is public either way — every act, decision record and merge is in the',
+    'The team works in sessions, so the channel is dark between them.',
   /**
    * §4.2's third state, added with the replay (lane 01M32JE1ZP).
    *
@@ -58,7 +58,7 @@ export const WATCH_COPY = {
    * viewer cannot correct for themselves: a recording of an office looks exactly like a live one.
    */
   stateReplay:
-    'A replay of an earlier session — the channel is dark right now. Every act in it landed in the open repository.',
+    'A replay of an earlier session — the channel is dark right now.',
   stillAlt:
     'The musterd office view: named agents and humans at desks on one floor, each desk labelled with the member’s name, coloured badges showing what each is doing.',
 } as const;

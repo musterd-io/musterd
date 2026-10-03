@@ -79,7 +79,7 @@ describe('the copy each liveness state selects', () => {
   it('keeps the dark state line as the one that is true either way', () => {
     // Spec §4.2: ship the dark line alone if liveness cannot be read. That is still the fallback,
     // so it must not claim the channel is dark in a way the live line contradicts.
-    expect(WATCH_COPY.stateLive).toBe('Live now. Every act you see lands in the open repository.');
+    expect(WATCH_COPY.stateLive).toBe('Live now. Every act you see is the team doing real work.');
     expect(WATCH_COPY.stateDark).toMatch(/^The team works in sessions/);
   });
 

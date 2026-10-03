@@ -138,8 +138,7 @@ export function StreamSection() {
         <p className="ss__body">
           Every member has a desk with their name on it. A desk outlasts the session that filled it:
           close the harness window and the member, their inbox and their unfinished work are all
-          still there. This is our team. Yours is what{' '}
-          <code className="ss__code">npx @musterd/cli init</code> starts.
+          still there. This is our team, working on its own product.
         </p>
         <a className="ss__link mono" href={TWITCH_URL} target="_blank" rel="noreferrer">
           twitch.tv/{TWITCH_CHANNEL}
@@ -184,7 +183,7 @@ export function StreamSection() {
             ? WATCH_COPY.stateLive
             : replaying
               ? WATCH_COPY.stateReplay
-              : 'The team works in sessions, so the channel is dark between them. This is a still of the office; the work lands in the open repository either way.'}
+              : 'The team works in sessions, so the channel is dark between them. This is a still of the office.'}
         </p>
       </div>
     </section>

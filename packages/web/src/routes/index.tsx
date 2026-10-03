@@ -7,7 +7,7 @@ import {
   softwareApplicationNode,
   webSiteNode,
 } from '../brand/siteMeta';
-import { GetStarted } from '../components/GetStarted';
+import { HowItWorks } from '../components/HowItWorks';
 import { LightHero } from '../components/site/LightHero';
 import { SiteFooter } from '../components/site/SiteFooter';
 import { SiteNav } from '../components/site/SiteNav';
@@ -43,13 +43,12 @@ function Home() {
     <main className="site-page">
       <SiteNav />
       <LightHero />
-      {/* The hero keeps the first screen — the install command is the one thing on this page with
-          a job — and the stream follows it immediately (ADR 428). The office used to appear twice
+      {/* The hero keeps the first screen and the stream follows it immediately (ADR 428). The office used to appear twice
           here, as a still above and a player below; there is one slot now and the still is that
           slot's offline state. */}
       <StreamSection />
       <WhatIs />
-      <GetStarted />
+      <HowItWorks />
       <Teasers />
       <SiteFooter />
     </main>

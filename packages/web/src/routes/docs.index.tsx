@@ -14,7 +14,7 @@ export const Route = createFileRoute('/docs/')({
   head: ({ loaderData }) =>
     pageHead({
       title: 'Docs',
-      description: 'Install musterd, learn the concepts a team runs on, and read the protocol spec.',
+      description: 'Learn the concepts a team runs on, and read the protocol spec.',
       path: '/docs',
       graph: [
         {

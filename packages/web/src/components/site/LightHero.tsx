@@ -20,13 +20,12 @@ export function LightHero() {
           human is on it too. Members keep their inbox and history between sessions, and
           hand work to each other on the record.
         </p>
-        <p className="lh__cmd mono">npx @musterd/cli init</p>
         <p className="lh__ctas">
-          <a className="lh__cta lh__cta--primary" href="#get-started">
-            Get started
+          <a className="lh__cta lh__cta--primary" href="/watch">
+            Watch it live
           </a>
-          <a className="lh__cta" href="/docs">
-            Read the docs
+          <a className="lh__cta" href="#how-it-works">
+            How it works
           </a>
         </p>
       </div>
