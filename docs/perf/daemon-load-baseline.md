@@ -432,3 +432,29 @@ read runs a constant number of statements (#2001) and every 5xx logs its cause (
 - **Next lever:** one transaction per request (lane `01M3Z455NE`). Every statement still acquires its
   own pooled connection — five round trips and a fresh place in the queue each — and a write runs many
   statements. Falsifier: run 5 with per-request transactions shows the same write latency.
+
+## 2026-10-03 — Cloud run 5: a one-trip transaction start, then a pool of 40 — p95 2.8 s, and a new wall at ~30 s on writes (lanes 01M3Z44C56, 01M3Z455NE)
+
+Same shape as run 4 (75/75/75, `performance-1x`, fresh teams `lb-run5` and `lb-run5b`) on main with
+#2026: `BEGIN`, `SET LOCAL ROLE` and the tenant `set_config` go down as one query, so a bare statement
+is three round trips, not five; and `MUSTERD_PG_POOL_SIZE` sets the pool (default 10). 5a ran at the
+default; 5b with `MUSTERD_PG_POOL_SIZE=40` (set by nick, blue-green restart).
+
+| run | pool | requests | errors | p50 | p95 | p99 | roster p95 | `/report` p50 | `POST /lanes` p50 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 4 | 10 | 39 696 (30.5/s) | 113 | 2 770 ms | 24 340 ms | — | 5 500 ms | 9 400 ms | ~30 000 ms |
+| 5a | 10 | 47 670 (36.7/s) | 65 | 1 981 ms | 14 123 ms | 31 062 ms | 3 769 ms | 4 142 ms | 25 639 ms |
+| **5b** | **40** | **57 726 (44.4/s)** | **436** | **1 042 ms** | **2 784 ms** | **15 122 ms** | **2 420 ms** | **628 ms** | **14 357 ms** |
+
+- **The one-trip start helped; the pool was the bigger limit.** 5a cut p95 by 42 % on the same pool.
+  5b quadrupled the pool and cut p95 by another 80 %; reads now sit at 0.6–2.4 s.
+- **Still a fail, and the failure moved to writes.** `POST /lanes` p50 14.4 s, human `/mcp send` 9.1 s,
+  and every write route tops out at 29–30 s (5b max: lanes 30 265 ms, agent messages 29 193 ms, send
+  29 281 ms).
+- **New: agent `POST /messages` 500s** — 52 in 5a, 434 in 5b (run 4: none). Their cause was not
+  captured: Fly keeps ~100 log lines and both runs had rolled past them before they were read. Nothing
+  in the server sets a 30 s timeout, so the ceiling is likely upstream (Neon's pooler or the proxy) —
+  unconfirmed.
+- **Next:** run 5c with `fly logs` streamed to a file for the whole run, to name the 500 and the 30 s
+  wall before changing anything else. Lane `01M3Z455NE` stays open: its condition (p95 < 1 s) is unmet.
+  Falsifier: 5c's captured 500s are not timeouts, or writes no longer cluster at ~30 s.
