@@ -62,6 +62,7 @@
     "obs-evals:check": "node --disable-warning=ExperimentalWarning scripts/check-obs-evals.ts --check",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
+    "coverage:merge": "vitest run --merge-reports --coverage",
     "test:scenarios": "vitest run tests/scenarios",
     "test:codex-cli-real": "vitest run tests/codex-cli.acceptance.test.ts",
     "typecheck": "pnpm dist:check && pnpm -r exec tsc --noEmit && pnpm exec tsc -p content/tsconfig.json && pnpm exec tsc -p scripts/tsconfig.json",
