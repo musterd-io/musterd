@@ -154,6 +154,22 @@ describe('renderRoster', () => {
     created_at: 0,
   };
 
+  it('a halted seat says who halted it and why, on every group (ADR 501)', () => {
+    const ada: MemberSummary = {
+      ...base,
+      id: 'ada',
+      name: 'ada',
+      kind: 'agent',
+      role: '',
+      presence: 'offline',
+      activity: 'offline',
+      presences: [],
+      halted: { at: 0, by: 'nick', reason: 'looping on the wrong lane' },
+    };
+    expect(renderRoster([ada], 0, 120)).toContain('halted by nick: looping on the wrong lane');
+    expect(renderRoster([{ ...ada, halted: null }], 0, 120)).not.toContain('halted');
+  });
+
   it('marks a seat that is in an open huddle, naming the topic', () => {
     const ada: MemberSummary = {
       ...base,

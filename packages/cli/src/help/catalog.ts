@@ -1038,4 +1038,20 @@ export const CATALOG: readonly CommandEntry[] = [
     summary: 'drop a member’s stuck/stale live session so it can rejoin',
     group: 'team',
   },
+  {
+    name: 'halt',
+    signature: '<seat> --reason "<why>"',
+    summary: 'stop an agent seat at its next boundary — leases revoked, re-claim and tools refused',
+    group: 'team',
+    detail:
+      'ADR 501. Human-only: an admin halts any agent, a non-admin only the agents they sponsor; the ' +
+      'daemon decides. Nothing is killed — the seat is reached at its next tool boundary or musterd ' +
+      'call, and stays halted until a human runs `musterd resume <seat>`.',
+  },
+  {
+    name: 'resume',
+    signature: '<seat>',
+    summary: 'lift a halt — the seat can claim, wake and act again',
+    group: 'team',
+  },
 ];

@@ -383,6 +383,9 @@ function memberFacets(
   huddle?: string,
 ): string {
   const parts: string[] = [m.kind];
+  // ADR 501: a halted seat says so first, on every group — the halt is the one fact that decides
+  // whether anything else on the row can change, and it names the human to ask.
+  if (m.halted) parts.push(theme.warn(`halted by ${m.halted.by}: ${m.halted.reason}`));
   // Every held role (ADR 227 multi-role), joined; an older daemon serves only the single label.
   const roles = m.roles?.length ? m.roles.join('+') : m.role;
   if (roles) parts.push(roles);

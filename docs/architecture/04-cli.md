@@ -240,6 +240,7 @@ src/
     unbind.ts         // release this folder's own seat — clears bound_at + presence, keeps it declared (ADR 058)
     reload.ts         // SIGHUP the service daemon to re-resolve roster roots + reconcile (ADR 058)
     reclaim.ts        // operator force-drop of a member's stuck live session (ADR 017 follow-up); a `not_found` names `musterd status` as the next step (ADR 055 no-dead-end)
+    halt.ts           // musterd halt <seat> --reason / musterd resume <seat> (ADR 501): a human withdraws an agent seat's authority at its next boundary; the daemon decides who may (admin any agent, a sponsor their own); every refusal names the next step
     notify.ts         // human-reachability nudge loop (ADR 024/035)
     role.ts           // the team's role library — list / show / create / assign (ADR 227, narrowed by 296); `assign` recompiles the seat's harness permissions (ADR 261 inc 2) and `--remove` lifts the removed role's ceiling (lane 01M3TAM44Q) instead of only warning
     toolkit.ts        // workspace equipment — list / show / create; carries no authority (ADR 296)
@@ -570,6 +571,12 @@ leaves the legacy binding intact. Rerunning replaces only the unused successor a
 ### `musterd reclaim <member>`
 
 `POST /teams/:slug/members/:name/reclaim`. Force-drops a member's live session so it can rejoin — the sanctioned escape hatch (ADR 017 follow-up) instead of editing the daemon's DB. Newest-wins self-heals a _reconnecting_ session, but an orphaned presence that never comes back needs this. Any team member may reclaim any member (localhost/v0.2; the v0.3 seat model will gate it). Output: `✓ reclaimed <member> — any live session was dropped; it can rejoin now`. Errors: unknown member → `not_found` (exit 6).
+
+### `musterd halt <seat> --reason "<why>"` / `musterd resume <seat>`
+
+`POST /teams/:slug/members/:name/halt` / `/resume` (ADR 501, halt as revocation). A **human** stops an agent seat at its next boundary: the daemon sets the halt standing (who, why, since when), revokes the seat's session leases, evicts its presences, expires any unspawned wake lease, refuses its re-claim (`halted`) and every authenticated call with `halted by <human>: <reason>`, hands it to no host, and delivers a `steer` so the halt is in the seat's inbox when it is back. Who may: the daemon decides on the caller's kind and sponsorship — an admin halts any agent, a non-admin only the agents they sponsor (ADR 463's model); an agent never halts; a human seat is never halted. Nothing is killed: a seat mid-tool is reached when that tool returns, and the output says so. Output: `✓ halted <seat> — <reason>` / `next: musterd resume <seat>` / dim `effective at the seat's next tool boundary or musterd call — nothing is killed; N live sessions evicted`. Resume: `✓ resumed <seat> — was halted by <human>: <reason>` / `next: musterd status`. `--json` prints the daemon's reply. Errors: unknown seat → `not_found` naming `musterd status`; already halted / not halted → `conflict` naming the lifting or halting command; human target or agent caller → `forbidden` (exit 7). The roster (`musterd status`) shows a halted seat with a warn facet `halted by <human>: <reason>` on every group.
+
+**The gate's one fail-closed case.** `musterd gate check` (the ADR 150 PreToolUse hook) fails open on every daemon error except this one: a `forbidden` whose message starts `halted by` becomes a PreToolUse **deny** carrying that sentence and `a human lifts it with \`musterd resume <seat>\``. A harness with no PreToolUse hook gets the revocation and the eviction, not the tool denial — the honest limit ADR 501 states.
 
 ### `musterd audit [--limit <n>] [--before <ms-epoch>] [--authorized-by <seat>] [--json]`
 

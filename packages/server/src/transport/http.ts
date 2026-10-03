@@ -7994,7 +7994,11 @@ export async function handleHttp(
           undefined,
           true,
         );
-        return sendJson(res, 200, { member: target.name, halted: null });
+        return sendJson(res, 200, {
+          member: target.name,
+          halted: null,
+          was: { by: target.halted_by, reason: target.halted_reason, at: target.halted_at },
+        });
       }
 
       // Soft-remove a member from the roster (ADR 019): set left_at so it drops off every
