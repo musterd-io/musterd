@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { redact, isGenerated } from './dataset.ts';
+import type { Item } from './dataset.ts';
 import { frame } from './questions.ts';
-import { argmax, brier, ece, fitTemperature, temper } from './score.ts';
+import type { Answer } from './run.ts';
+import {
+  argmax,
+  brier,
+  ece,
+  fitTemperature,
+  keep,
+  pickCutoff,
+  queueReport,
+  temper,
+  wilsonLow,
+} from './score.ts';
 
 describe('jev offline judge — pure halves', () => {
   it('ECE is 0 for a perfectly calibrated set and large for a confidently wrong one', () => {
@@ -40,5 +52,74 @@ describe('jev offline judge — pure halves', () => {
     expect(out).toContain('<id>');
     expect(isGenerated('[lane] claimed x', {})).toBe(true);
     expect(isGenerated('a real body that is long enough', { lane_warning: {} })).toBe(true);
+  });
+});
+
+describe('jev review queue — finding 014', () => {
+  // 10 confident-right, 10 unsure (half right) — the queue keeps the confident ten.
+  const rows = [
+    ...Array.from({ length: 10 }, (_, i) => ({ id: `c${i}`, p: { a: 0.97, b: 0.03 }, truth: 'a' })),
+    ...Array.from({ length: 10 }, (_, i) => ({
+      id: `u${i}`,
+      p: { a: 0.55, b: 0.45 },
+      truth: i % 2 ? 'a' : 'b',
+    })),
+  ];
+
+  it('keeps only answers at or above the cut-off and scores them', () => {
+    expect(keep(rows, 0.9)).toEqual({ kept: 10, correct: 10, coverage: 0.5, acc: 1 });
+    expect(keep(rows, 0.5)).toMatchObject({ kept: 20, correct: 15, coverage: 1, acc: 0.75 });
+  });
+
+  it('the framing guard drops an item whose renamed answer disagrees or is missing', () => {
+    const agree = new Map(rows.map((r) => [r.id, 'a']));
+    agree.set('c0', 'b');
+    agree.delete('c1');
+    expect(keep(rows, 0.9, agree)).toMatchObject({ kept: 8, correct: 8 });
+  });
+
+  it('picks the lowest cut-off that reaches 90% on kept items, and none when nothing does', () => {
+    expect(pickCutoff(rows)).toBe(0.6);
+    const allWrong = rows.map((r) => ({ ...r, truth: 'b' }));
+    expect(pickCutoff(allWrong)).toBeNull();
+    // too few kept to count as evidence, even at 100%
+    expect(pickCutoff(rows.slice(0, 5))).toBeNull();
+  });
+
+  it('Wilson lower bound sits below the point estimate and is 0 for no data', () => {
+    expect(wilsonLow(0, 0)).toBe(0);
+    expect(wilsonLow(10, 10)).toBeLessThan(1);
+    expect(wilsonLow(10, 10)).toBeGreaterThan(0.69);
+  });
+
+  it('queueReport chooses on tune, measures on test, and applies the pre-registered bar', () => {
+    const items: Item[] = rows.flatMap((r) =>
+      (['tune', 'test'] as const).map((split) => ({
+        id: `${split}-${r.id}`,
+        question: 'act_choice' as const,
+        text: '',
+        truth: r.truth,
+        split,
+      })),
+    );
+    const answers: Answer[] = items.flatMap((i) => {
+      const r = rows.find((x) => i.id.endsWith(`-${x.id}`))!;
+      return (['canonical', 'renamed'] as const).map((framing) => ({
+        item: i.id,
+        backend: 'test',
+        framing,
+        // the renamed framing flips every confident test answer
+        probs:
+          framing === 'renamed' && i.split === 'test' && r.id.startsWith('c')
+            ? { a: 0.1, b: 0.9 }
+            : r.p,
+        ms: 1,
+      }));
+    });
+    const plain = queueReport(items, answers, 'act_choice', 'confidence');
+    expect(plain).toMatchObject({ n: 20, cut: 0.6, kept: 10, acc: 1, verdict: 'pass' });
+    const guarded = queueReport(items, answers, 'act_choice', 'confidence+framing');
+    expect(guarded).toMatchObject({ cut: 0.6, kept: 0, verdict: 'reject' });
+    expect(queueReport(items, answers, 'owes_reply', 'confidence').verdict).toBe('no data');
   });
 });
