@@ -136,6 +136,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       ? pgDriver({
           appUrl: cloud.databaseAppUrl,
           operatorUrl: cloud.databaseOperatorUrl,
+          ...(cloud.pgPoolSize ? { poolSize: cloud.pgPoolSize } : {}),
           ...(opts.cloudPools ? { pools: opts.cloudPools.main } : {}),
         })
       : openDriver(config.dbPath);
@@ -159,6 +160,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       ? pgDriver({
           appUrl: cloud.traceDatabaseAppUrl,
           operatorUrl: cloud.traceDatabaseOperatorUrl,
+          ...(cloud.pgPoolSize ? { poolSize: cloud.pgPoolSize } : {}),
           ...(opts.cloudPools ? { pools: opts.cloudPools.trace } : {}),
         })
       : openTraceDriver(opts.db ? ':memory:' : config.traceDbPath);

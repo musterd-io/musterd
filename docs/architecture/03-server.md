@@ -388,9 +388,11 @@ Something addressed to a human rings them through surfaces musterd owns, never a
 changes nothing. It requires `MUSTERD_DATABASE_APP_URL`, `MUSTERD_DATABASE_OPERATOR_URL`, their
 `MUSTERD_TRACE_DATABASE_*` twins, `MUSTERD_CONSOLE_JWKS_URL`, `MUSTERD_CONSOLE_AUDIENCE` and
 `MUSTERD_CLOUD_HOST_SUFFIX`, and refuses to start without any of them (naming it, never its value).
+Optional `MUSTERD_PG_POOL_SIZE` sets connections per pool (one pool per role per store; default 10).
 
 1. **The store is Postgres.** Both stores are `pgDriver` over the configured URLs; no SQLite file is
-   opened. Migrations are **not** run on boot (§6): `listen()` refuses a database that is not at
+   opened. Every statement runs in a stamped transaction; `BEGIN`, `SET LOCAL ROLE` and the tenant
+   `set_config` go down as one round trip, so a bare statement costs three trips, not five. Migrations are **not** run on boot (§6): `listen()` refuses a database that is not at
    exactly this build's version — "schema newer than this build" / "schema older than this build".
    The migrate step is `scripts/cloud/migrate.mjs` (`migrateCloud`, as the owner, direct host).
 2. **No loopback trust (§5.1).** `trustsLocalPeer` is false, and `trustProxy` is forced on. Seat

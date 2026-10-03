@@ -39,6 +39,15 @@ describe('resolveCloudConfig', () => {
     });
   });
 
+  it('reads an optional MUSTERD_PG_POOL_SIZE, refusing a non-positive-integer by name', () => {
+    expect(resolveCloudConfig(FULL)?.pgPoolSize).toBeUndefined();
+    expect(resolveCloudConfig({ ...FULL, MUSTERD_PG_POOL_SIZE: '40' })?.pgPoolSize).toBe(40);
+    for (const bad of ['0', '-3', '2.5', 'many'])
+      expect(() => resolveCloudConfig({ ...FULL, MUSTERD_PG_POOL_SIZE: bad })).toThrow(
+        /MUSTERD_PG_POOL_SIZE must be a positive integer/,
+      );
+  });
+
   it('accepts a leading dot on the host suffix', () => {
     expect(
       resolveCloudConfig({ ...FULL, MUSTERD_CLOUD_HOST_SUFFIX: '.musterd.dev' })?.hostSuffix,
