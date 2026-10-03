@@ -90,6 +90,31 @@ export async function hasValidSessionLease(
   return Boolean(row);
 }
 
+/**
+ * Lane 01M3TAKT16: why {@link hasValidSessionLease} said no — read only on the refusal path, so
+ * the `interrupt.refused` row can tell the deaf-seat causes apart: a lease this daemon never
+ * minted (`unknown` — a stale token after a reset, or a forgery), one revoked on purpose
+ * (`revoked` — rotate, halt, a bounce), one past its TTL (`expired` — the renewal never reached
+ * it), or one whose Presence was released under it (`presence_released`).
+ */
+export async function diagnoseSessionLease(
+  db: Driver,
+  input: { teamId: string; memberId: string; token: string },
+  now = Date.now(),
+): Promise<'revoked' | 'expired' | 'presence_released' | 'unknown'> {
+  const row = await db.get<{ revoked_at: number | null; expires_at: number; held: number | null }>(
+    `SELECT l.revoked_at, l.expires_at, p.held_until AS held
+       FROM session_leases l
+       LEFT JOIN presence p ON p.id = l.presence_id
+       WHERE l.team_id = ? AND l.member_id = ? AND l.token_hash = ?`,
+    [input.teamId, input.memberId, hashToken(input.token)],
+  );
+  if (!row) return 'unknown';
+  if (row.revoked_at !== null) return 'revoked';
+  if (row.expires_at <= now) return 'expired';
+  return 'presence_released';
+}
+
 /** Mark outstanding leases dead before a lifecycle transition that retains their Presence rows. */
 export async function revokeMemberSessionLeases(
   db: Driver,

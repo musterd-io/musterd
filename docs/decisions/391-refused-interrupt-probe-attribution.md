@@ -74,6 +74,12 @@ the log had a name to write.
   reached its probe, the second says its probe was turned away. A seat with recent `refused` rows and
   no `raised` rows is deaf and nobody has told it.
 
+- _2026-10-03, lane 01M3TAKT16:_ the `interrupt.refused` row's `detail` gains `reason` —
+  `none_presented` (no lease header), `revoked`, `expired`, `presence_released`, or `unknown` (a
+  token this daemon never minted) — read by `diagnoseSessionLease` only on the refusal path, so the
+  deaf-seat causes can be told apart from the ledger. `pnpm delivery:measure` reads it
+  (`docs/wiki/delivery-measurement.md`).
+
 ## Observability & Evaluation
 
 - **Traces:** `interrupt_probe_refused { seat, lease, team }` at warn in the daemon log;

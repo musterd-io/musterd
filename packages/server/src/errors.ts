@@ -55,10 +55,23 @@ export class ServiceUnavailable extends MusterdError {
  * (the interrupt line). They are the seat NAME and a two-word state: never the credential, never
  * the lease token.
  */
+/** Lane 01M3TAKT16: WHY a lease was refused — the deaf-seat causes, told apart on the row. */
+export type SessionLeaseRefusalReason =
+  | 'none_presented'
+  | 'revoked'
+  | 'expired'
+  | 'presence_released'
+  | 'unknown';
+
 export class SessionLeaseRefused extends MusterdError {
   readonly seat: string;
   readonly leaseState: 'missing' | 'dead';
-  constructor(seat: string, leaseState: 'missing' | 'dead') {
+  readonly reason: SessionLeaseRefusalReason;
+  constructor(
+    seat: string,
+    leaseState: 'missing' | 'dead',
+    reason: SessionLeaseRefusalReason = leaseState === 'missing' ? 'none_presented' : 'unknown',
+  ) {
     super(
       'unauthorized',
       leaseState === 'missing'
@@ -68,6 +81,7 @@ export class SessionLeaseRefused extends MusterdError {
     this.name = 'SessionLeaseRefused';
     this.seat = seat;
     this.leaseState = leaseState;
+    this.reason = reason;
   }
 }
 

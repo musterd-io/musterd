@@ -7065,7 +7065,8 @@ export async function handleHttp(
                 action: 'interrupt.refused',
                 target: err.seat,
                 result: 'deny',
-                detail: { lease: err.leaseState },
+                // Lane 01M3TAKT16: the cause, so the deaf-seat read can tell them apart.
+                detail: { lease: err.leaseState, reason: err.reason },
               });
             }
           }

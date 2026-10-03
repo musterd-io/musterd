@@ -21,7 +21,7 @@ import { releaseInFlightClaimsForSeat } from './lanes.js';
 import { verifyAccess } from './oauth.js';
 import type { MemberRow, TeamRow } from './rows.js';
 import { parseRoles, resolveAccountStatus, resolveCapabilities } from './rows.js';
-import { hasValidSessionLease } from './session-leases.js';
+import { diagnoseSessionLease, hasValidSessionLease } from './session-leases.js';
 import { requireTeam } from './teams.js';
 
 export function hashToken(token: string): string {
@@ -638,7 +638,11 @@ async function authByAgentSeatCredential(
   if (
     !(await hasValidSessionLease(db, { teamId: team.id, memberId: member.id, token: sessionLease }))
   )
-    throw new SessionLeaseRefused(member.name, 'dead');
+    throw new SessionLeaseRefused(
+      member.name,
+      'dead',
+      await diagnoseSessionLease(db, { teamId: team.id, memberId: member.id, token: sessionLease }),
+    );
   return member;
 }
 

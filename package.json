@@ -47,6 +47,7 @@
     "radar:sweep": "node --disable-warning=ExperimentalWarning scripts/radar/sweep.ts",
     "liveness:sweep": "node --disable-warning=ExperimentalWarning scripts/research/adr-166-slot-sweep.ts",
     "wakes:repeats": "node --disable-warning=ExperimentalWarning scripts/research/adr-250-repeat-wakes.ts",
+    "delivery:measure": "node --disable-warning=ExperimentalWarning scripts/research/delivery-measurement.ts",
     "adr250:asks-per-pr": "node --disable-warning=ExperimentalWarning scripts/research/adr-250-asks-per-pr.ts",
     "adr250:capability-miss": "node --disable-warning=ExperimentalWarning scripts/research/adr-250-capability-miss.ts",
     "adr250:repeat-wakes": "node --disable-warning=ExperimentalWarning scripts/research/adr-250-repeat-wakes.ts",
