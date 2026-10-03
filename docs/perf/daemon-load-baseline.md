@@ -339,3 +339,45 @@ The levers: one transaction per request on the pg driver (lane `01M3Z455NE`), an
 
 Falsifier: a sustained 75/75/75 run against a dedicated-core Cloud machine, on a build with the
 crash fix, with all-request p95 under 1 000 ms and no process exit.
+
+## 2026-10-03 — Cloud run 2 on a dedicated core: the database pool is the limit, not the CPU (lane 01M3Z44C56)
+
+Same shape as run 1: 75/75/75 through the edge, RAMP=1000, DURATION=1300, a `performance-4x`
+driver in iad, a fresh team (`lb-run2`). Two things changed on the target. The staging machine is
+now `performance-1x` with 2 GB (nick, 2026-10-02; #1987), and it runs 6eea5446, which carries the
+crash fix (#1984).
+
+| run | target | requests | errors | all-request p50 | all-request p95 | `/health` p95 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 (2026-10-02) | `shared-cpu-1x`, throttled | 8 318 | 6 241 | 11 899 ms | 42 392 ms | 1 190 ms |
+| **2 (2026-10-03)** | `performance-1x` | 11 241 | **5 632** | 13 888 ms | **125 020 ms** | 92 ms |
+
+| route (run 2) | calls | p50 | p95 | errors |
+| --- | --- | --- | --- | --- |
+| `GET /report` (viewer) | 1 346 | 125 012 ms | 125 044 ms | 709 × 524 at the edge, 578 × 503 |
+| `GET /teams/:slug` (viewer) | 3 228 | 13 835 ms | 36 404 ms | 1 234 × 503 |
+| `GET /inbox/interrupt-check` | 3 185 | 10 428 ms | 32 828 ms | 849 × 503, 792 × 401 |
+| `POST /claim` (agent) | 433 | 25 177 ms | 75 390 ms | 147 × 503 |
+
+**The machine was not the limit.** The core ran 56–60 % busy from minute four to the end, with
+0.2–0.3 % steal: no throttle, and never saturated. `/health` answered in 92 ms at p95, so the event
+loop was free. Memory peaked at 512 MB of 2 GB. The process never exited; the #1984 paths logged
+their pool timeouts and carried on.
+
+**The database pool was.** Requests waited for one of the pool's 10 connections, and after the
+acquire timeout got 503 `database unreachable: timeout exceeded when trying to connect` — 3 465 of
+them. Neon's own load was not measured. The biggest consumer is `GET /report`. On Postgres it derives
+the whole report inline and uncached on every request (lane `01M3ZCTQ77`), and each lane act fans a
+refetch out to every viewer: 1 271 lane frames became 1 346 full derivations of a 1 200-lane board,
+every statement its own five-round-trip transaction. Almost all of them ran into the edge's timeout.
+The roster read is second (N+1, lane `01M3ZCTQK9`). The 401s are agents left without a lease after a
+refused claim.
+
+**What it changes.** Run 1's estimate that a dedicated core would be the limit did not hold: the core
+idled at 60 % while the pool queue grew. The next lever is the cache for `GET /report` on Postgres —
+single-flight per team with the 5 s TTL the SQLite worker already has, which bounds 1 271 lane
+frames to about one derivation per team every 5 s. Then run 3, and per-request transactions (lane
+`01M3Z455NE`) and the roster by what run 3 measures.
+
+Falsifier: run 3 with `GET /report` served through the cache shows a similar count of pool-timeout
+503s.
