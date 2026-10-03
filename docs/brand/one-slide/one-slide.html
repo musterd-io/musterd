@@ -81,6 +81,210 @@
     display: block;
     flex: none;
   }
+  .site {
+    font-family: var(--mono);
+    font-size: 15px;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+  }
+
+  /* Two columns: the argument, then the proof. */
+  .body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 72px;
+    align-items: center;
+    margin-top: 48px;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 58px;
+    font-weight: 700;
+    line-height: 1.06;
+    letter-spacing: -0.028em;
+  }
+  h1 em {
+    font-style: normal;
+    color: var(--accent);
+  }
+  .problem {
+    margin: 30px 0 0;
+    font-size: 21px;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+  .problem b {
+    font-weight: 700;
+  }
+  .gets {
+    margin: 20px 0 0;
+    font-size: 21px;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  /* The board: real roster shape, real acts. */
+  .board {
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .board__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 19px 26px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--hairline);
+    font-family: var(--mono);
+    font-size: 17px;
+  }
+  .board__top b {
+    color: var(--accent-deep);
+    font-weight: 700;
+  }
+  .board__top .dim {
+    color: var(--muted);
+  }
+  .board__body {
+    padding: 22px 26px 26px;
+  }
+  .label {
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.16em;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 16.5px;
+  }
+  td {
+    padding: 9px 0;
+    vertical-align: middle;
+  }
+  .dot {
+    width: 22px;
+  }
+  .dot i {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+  }
+  .on i {
+    background: var(--success);
+  }
+  .away i {
+    background: var(--accent-bright);
+  }
+  .off i {
+    background: var(--hairline);
+  }
+  .who {
+    font-weight: 700;
+    width: 108px;
+  }
+  .kind {
+    color: var(--muted);
+    width: 92px;
+  }
+  .where {
+    width: 168px;
+  }
+  .doing {
+    color: var(--muted);
+  }
+  .doing b {
+    color: var(--ink);
+    font-weight: 700;
+  }
+  .off .who,
+  .off .where {
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  .acts {
+    margin-top: 24px;
+    padding-top: 22px;
+    border-top: 1px solid var(--hairline);
+    display: grid;
+    gap: 13px;
+  }
+  .act {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-family: var(--mono);
+    font-size: 16.5px;
+    color: var(--muted);
+  }
+  .act b {
+    color: var(--ink);
+    font-weight: 700;
+  }
+  .tag {
+    flex: none;
+    width: 168px;
+    padding: 7px 0;
+    border-radius: 7px;
+    border: 1px solid;
+    text-align: center;
+    font-size: 12.5px;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+  }
+  .tag--handoff {
+    color: #7a5a06;
+    border-color: #e8d49a;
+    background: #fdf5df;
+  }
+  .tag--help {
+    color: #9c3d30;
+    border-color: #efc0b8;
+    background: #fdefec;
+  }
+  .tag--resolve {
+    color: #1f6f4a;
+    border-color: #b4dcc7;
+    background: #eaf7f0;
+  }
+  .cursor {
+    display: inline-block;
+    width: 8px;
+    height: 15px;
+    background: var(--accent-bright);
+    vertical-align: -2px;
+  }
+
+  /* The bottom line: adoption facts, in the order a reader asks them. */
+  .foot {
+    position: absolute;
+    left: 72px;
+    right: 72px;
+    bottom: 56px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding-top: 22px;
+    border-top: 1px solid var(--hairline);
+    font-size: 17px;
+    color: var(--muted);
+  }
+  .foot .sep {
+    color: var(--hairline);
+  }
+  .foot b {
+    color: var(--ink);
+    font-weight: 600;
+  }
 </style>
 
 <div class="slide">
