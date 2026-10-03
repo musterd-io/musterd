@@ -11,6 +11,8 @@ import {
   laneAckAck,
   laneVerdictAck,
   makeEnvelope,
+  threadHintFor,
+  threadHintText,
   MAX_ELIGIBLE,
   type Recipient,
 } from '@musterd/protocol';
@@ -234,6 +236,14 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
   const askTier =
     act === 'ask' && AskTierSchema.safeParse(tier).success ? AskTierSchema.parse(tier) : null;
 
+  // Lane 01M3TB3C0D: a root `message` to a member who has an open directed act waiting on the
+  // sender leaves that act open and unjoinable. One inbox read, best-effort, after the send — the
+  // hint names the thread to join next time; nothing is blocked.
+  const threadHint =
+    act === 'message' && recipientTo.kind === 'member' && !envelope.thread
+      ? threadHintFor(await openRequests(http, team, identity.name), recipientTo.name)
+      : null;
+
   if (parsed.flags['json']) {
     // Additive, id-preserving: programmatic callers still read `.id`, and now get the derived contract
     // (mirrors the MCP structured `ask_contract`) without a second round-trip to the tier table.
@@ -246,6 +256,7 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
       ...(ackBody?.lane_verdict ? { lane_verdict: ackBody.lane_verdict } : {}),
       ...(ackBody?.lane_ack ? { lane_ack: ackBody.lane_ack } : {}),
       ...(ackBody?.evidence_notice ? { evidence_notice: ackBody.evidence_notice } : {}),
+      ...(threadHint ? { thread_hint: threadHint } : {}),
     };
     process.stdout.write(JSON.stringify(payload) + '\n');
     return 0;
@@ -280,5 +291,9 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
   // ADR 484: the challenge-evidence rail, at parity with the MCP reply — sender-only, one line.
   if (ackBody?.evidence_notice)
     process.stdout.write(theme.warn(`⚠ ${ackBody.evidence_notice}`) + '\n');
+  if (threadHint && recipientTo.kind === 'member')
+    process.stdout.write(
+      theme.warn(`⚠ ${threadHintText(threadHint, recipientTo.name, CLI_REPLY_TO_STYLE)}`) + '\n',
+    );
   return 0;
 }

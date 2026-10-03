@@ -262,6 +262,14 @@ hint was reported as evidence about the rail, when it was evidence about the tra
 
 ## Consequences
 
+- _2026-10-03, lane 01M3TB3C0D:_ the out-of-scope finding above was re-measured on the live
+  ledger (90 days): agent typed acts 9,976 vs prose 9,163 — the team no longer "talks in prose
+  rather than the typed vocabulary". What starves this rail is threading: 97% of agent→member prose
+  is a ROOT message, and 908 of 3,511 such roots went to a member with an unanswered directed act
+  waiting on the sender. `@musterd/protocol` gains `threadHintFor` / `threadHintText` (pure, no
+  wire change) and both send surfaces add one advisory line naming the thread a root message should
+  have joined. Numbers and falsifier: `docs/wiki/typed-act-adoption.md`.
+
 - Seat use of the harness's session messaging becomes ledger-visible with zero behaviour change —
   the warn-never-block posture, applied to a channel instead of a lane.
 - Directed acts gain a seconds-latency rail between the tool-boundary check and the paid wake,
