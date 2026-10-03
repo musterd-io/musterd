@@ -117,6 +117,14 @@ lane `01M3ZRQAGDDMTG6TA9T27D02N9`.
   25.5 runner-minutes of shards against 23.0. The path hash still lands unevenly (shard 2's vitest
   403 s against shard 1's 243 s); a fifth shard would buy ~1.5 min for another setup.
 
+- 2026-10-03, measured on #2020's green head (run 37140146939, `2bd8d1be`, both drivers): shards
+  6.2 / 5.6 / 6.7 / 6.2 min wall including setup, merge 0.5 min, the run 7.5 min end to end —
+  against 12.3 on #2007's first three-shard run and 26.1 / 26.7 unsharded. 24.7 runner-minutes of
+  shards. The four shards are now within 1.1 min of each other; the long pole is 6.7 min. Not yet
+  measured: a full-suite `main` run on the split — the post-merge runs for `9ce68b52` and
+  `2004a04b` were cancelled by newer commits, and `5efab05c` was docs-only. The ≤ 15 min target
+  above is judged on that run when it comes.
+
 ## Observability & Evaluation
 
 **Traces.** No new trace event. GitHub's run and job timings are the record:
