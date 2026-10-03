@@ -83,7 +83,7 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
   const asked = brief.requested_reviews;
   const closed = brief.review_closures;
   if (promised === undefined)
-    w(theme.meta('\nreview promises: not reported by this daemon (predates ADR 490)') + '\n');
+    w(theme.meta('\nreview promises: not reported by this daemon — it predates ADR 490') + '\n');
   else if (promised.length > 0) {
     w(`\n${theme.accent('review promises')} — ${promised.length} you accepted, still open:\n`);
     for (const p of promised) {

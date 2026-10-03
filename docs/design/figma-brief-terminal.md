@@ -215,7 +215,7 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
     thread is the request id); `reviews you asked for` is what Ada asked and someone accepted; `review
     closed for you` is a close by someone other than the owner, shown until Ada's inbox cursor crosses
     that `resolve`. An older daemon omits all three arrays and the brief prints one dim line,
-    `review promises: not reported by this daemon (predates ADR 490)`; a supporting daemon with nothing
+    `review promises: not reported by this daemon — it predates ADR 490`; a supporting daemon with nothing
     to show prints no section at all. Sections sit below `owed by you` and above the stale-goal line.
 
 ## Page: States (empty + error)
