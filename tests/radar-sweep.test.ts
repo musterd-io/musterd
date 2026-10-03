@@ -202,6 +202,8 @@ describe('runSweep (mocked fetch)', () => {
       limit: 3,
       triage: true,
       emit: false,
+      weekly: false,
+      post: false,
     });
   });
 });
