@@ -4,8 +4,8 @@
 - Author: dolly (lane `01M3TAKKMMSTV14A3NVVWFCJT8`), from the design conversation with nick on
   2026-10-03
 - Goal: `launch`
-- Status: written design, pending nick's review; the ADR follows the review (hard rule 1: the
-  member schema changes)
+- Status: approved by nick 2026-10-03; recorded as
+  [ADR 501](../../decisions/501-halt-as-revocation.md)
 - Builds on: [`2026-09-01-human-surface.md`](../../design/2026-09-01-human-surface.md) §3 (DECIDED:
   halt is in, human-only, two builds — revoke-the-lease first), ADR 150 (the PreToolUse gate),
   ADR 337/347 (session leases), ADR 131 (residency and wake leases), ADR 463 (sponsor-scoped
