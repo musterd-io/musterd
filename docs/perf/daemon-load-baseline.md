@@ -381,3 +381,33 @@ frames to about one derivation per team every 5 s. Then run 3, and per-request t
 
 Falsifier: run 3 with `GET /report` served through the cache shows a similar count of pool-timeout
 503s.
+
+## 2026-10-03 — Cloud run 3: the `/report` cache cuts its median by two thirds; the pool still saturates (lanes 01M3Z44C56, 01M3ZCTQ77)
+
+Same shape as run 2, a fresh team (`lb-run3`), staging still on `performance-1x`, now running
+3fe34f3c: `GET /report` served from a per-team cache keyed by the root store (#1996).
+
+| run | build | requests | errors | p50 | p95 | `/report` calls | `/report` p50 | `/report` p95 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2 | 6eea5446 | 11 241 | 5 632 | 13 888 ms | 125 020 ms | 1 346 | 125 012 ms | 125 044 ms |
+| **3** | **3fe34f3c** | 12 130 | **4 130** | 18 302 ms | 125 016 ms | 2 803 | **44 925 ms** | 125 039 ms |
+
+The machine again had room: the core ran a median 55 % busy (max 59 %), steal at most 0.7 %, memory
+at most 424 MB of 2 GB, no restart, `/health` p95 76 ms.
+
+- **The cache works, and is not enough.** `/report` served twice the calls — more lane opens got
+  through, so 2 729 lane frames fanned out to the viewers — with its median down from 125 s to 45 s.
+  A reader still waits whenever the cached report is older than 60 s, and with the pool saturated a
+  single derivation takes longer than that.
+- **The pool still saturates:** 2 335 pool-timeout 503s (run 2: 3 465). The roster read is now the
+  likely largest consumer: 3 134 reads, each running one `latestStatusUpdate` per present member —
+  about 150 statements, every one its own five-round-trip transaction — through a pool of 10
+  (lane `01M3ZCTQK9`).
+- **New: 261 × 500**, mostly agent `POST /messages` answered after 19–31 s; the edge's 520s rose too
+  (480, run 2: 93). The server logs no cause for a 500 — `sendError` maps an unknown error to
+  `server_error` without recording it — so this run cannot say what they were. Writes that SQLite
+  serializes can deadlock on Postgres; that is a hypothesis, not a finding.
+
+**Next:** log the cause of every 500, make the roster read a constant number of statements, then
+one transaction per request (lane `01M3Z455NE`). Falsifier for the roster claim: run 4 with a
+constant-statement roster shows a similar pool-timeout count.
