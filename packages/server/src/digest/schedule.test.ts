@@ -1,10 +1,14 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { makeEnvelope } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { beforeEach, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
+import { saveNodeEnrollment } from '../node/state.js';
 import { addMember, getMemberByName } from '../store/members.js';
-import { insertMessage } from '../store/messages.js';
+import { insertMessage, localNodeForTeam } from '../store/messages.js';
 import { createTeam } from '../store/teams.js';
 import { DIGEST_SEAT, digestTick } from './schedule.js';
 
@@ -85,5 +89,29 @@ withDrivers('digest schedule (ADR 494 §5)', (o) => {
     const { db, team } = await seed(false);
     expect(await digestTick(db, MORNING)).toBe(0);
     expect(await getMemberByName(db, team.id, DIGEST_SEAT)).toBeUndefined();
+  });
+
+  it('an enrolled joiner posts nothing: the digest is the hub’s, and arrives by the pull', async () => {
+    // 2026-10-03: a joiner enrolled the night before posted its own digest beside the hub's, every
+    // ask aged from its re-sync ("16h4m") and nothing learned (lane 01M41G32BM).
+    const { db, team } = await seed();
+    const dir = mkdtempSync(join(tmpdir(), 'musterd-digest-joiner-'));
+    process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
+    try {
+      expect(await digestTick(db, MORNING - 60_000 * 60 * 24)).toBe(1); // a hub until enrolled
+      const { id } = await localNodeForTeam(db, team.id);
+      saveNodeEnrollment({
+        team: team.slug,
+        hub_url: 'http://hub.invalid:4849',
+        node_id: id,
+        credential: 'msnode_test',
+        enrolled_at: 1,
+      });
+      expect(await digestTick(db, MORNING)).toBe(0);
+      expect(await digests(db, team.id)).toHaveLength(1);
+    } finally {
+      delete process.env['MUSTERD_NODE_STATE'];
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -169,6 +169,12 @@ gap: whatever a dream sends, nothing rings.
     seat is cooled; tonight's count excludes leases the host reported `residency.wake_deferred`.
     Acts sent from a dream are dropped from both wake lanes, and a `dream` presence is not an
     attended session (ADR 444).
+- **2026-10-03 — the digest is the hub's to post (lane 01M41G32BM).** The first live morning
+  produced two digests for one team. A joiner enrolled the night before posted its own beside the
+  hub's, with every ask aged from its re-sync ("16h4m") and nothing learned. Each daemon's
+  once-per-day guard saw only its own rows. `digestTick` now skips any team this daemon is an
+  enrolled joiner of, as the reaper's team-wide sweeps do (ADR 361 §1, ADR 371 §2). The joiner
+  gets the hub's digest by the pull. §5 is unchanged; this records where it runs.
 
 ## Observability & Evaluation
 
