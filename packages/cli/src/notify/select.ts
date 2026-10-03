@@ -25,11 +25,14 @@ export function pendingToNotify(
   availability?: Availability | null,
   answered: Iterable<string> = [],
   discharged: Iterable<string> = [],
+  /** Lane 01M3TB3DA2: the team-ask arm — an admin's Loud set includes team asks, nobody else's. */
+  viewer: { admin?: boolean | undefined } = {},
 ): Envelope[] {
   const status = availability?.status ?? 'available';
   // away holds the Loud set too; available/dnd pass it. (dnd "holds quiet" — quiet was never a
   // candidate here, since notify only ever considers the Loud/directed set + urgent.)
-  const loud = status === 'away' ? [] : openActionNeeded(messages, me, answered, discharged);
+  const loud =
+    status === 'away' ? [] : openActionNeeded(messages, me, answered, discharged, viewer);
   const urgent = messages.filter(isUrgent); // breakthrough at every tier
   const byId = new Map<string, Envelope>();
   for (const env of [...loud, ...urgent]) byId.set(env.id, env);
@@ -85,6 +88,8 @@ export interface NotifyDeps {
     answered?: string[];
     discharged?: { id: string }[];
   }>;
+  /** Lane 01M3TB3DA2: whether `me` is an admin, for the team-ask arm. Absent ⇒ not. */
+  viewer?: (() => Promise<{ admin?: boolean | undefined }>) | undefined;
   /** Is the human reachable in-stream right now (a live `inbox --watch`/app presence)? */
   isReachable: () => Promise<boolean>;
   /** The recipient's self-declared availability, for tiering (null = implicit-available; ADR 044). */
@@ -110,6 +115,7 @@ export async function pollOnce(deps: NotifyDeps, seen: Set<string>): Promise<Not
     availability,
     box.answered ?? [],
     dischargedIds(box),
+    (await deps.viewer?.()) ?? {},
   );
   if (pending.length === 0) return [];
   // One reachability read for the whole batch — the posture is the human's, not per-message.

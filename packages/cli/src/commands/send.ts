@@ -22,7 +22,7 @@ import { CliError } from '../errors.js';
 import { dischargedIds, openActionNeeded, renderMessageRow } from '../render/rows.js';
 import { theme } from '../render/theme.js';
 import { bindThread } from '../session/continuity.js';
-import { findWorkspaceDir, kindLookup, resolve, sendOrEcho } from './helpers.js';
+import { findWorkspaceDir, kindLookup, resolve, sendOrEcho, viewerFlags } from './helpers.js';
 
 /**
  * The act `accept`/`decline` answers, when the caller didn't name one (ADR 067). Auto-targets the
@@ -32,8 +32,17 @@ import { findWorkspaceDir, kindLookup, resolve, sendOrEcho } from './helpers.js'
  */
 async function openRequests(http: HttpClient, team: string, me: string): Promise<Envelope[]> {
   try {
-    const res = await http.inbox(team, { unread: false });
-    const open = openActionNeeded(res.messages, me, res.answered ?? [], dischargedIds(res)).filter(
+    const [res, viewer] = await Promise.all([
+      http.inbox(team, { unread: false }),
+      viewerFlags(http, team, me),
+    ]);
+    const open = openActionNeeded(
+      res.messages,
+      me,
+      res.answered ?? [],
+      dischargedIds(res),
+      viewer,
+    ).filter(
       (m) =>
         m.act === 'request_help' || m.act === 'handoff' || m.act === 'challenge' || m.act === 'ask',
     );

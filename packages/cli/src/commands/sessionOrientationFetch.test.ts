@@ -69,7 +69,7 @@ describe('defaultOrientationFetcher against a stub daemon', () => {
         {
           id: '01M0X4012RJ3C84QJN9GBKAH2T',
           from: 'stanley',
-          to: 'dolly',
+          to: { kind: 'member', name: 'dolly' },
           act: 'ask',
           body: 'still mine',
           ts: Date.now(),
@@ -98,7 +98,7 @@ describe('defaultOrientationFetcher against a stub daemon', () => {
         {
           id: '01M0X4012RJ3C84QJN9GBKAH2T',
           from: 'stanley',
-          to: 'dolly',
+          to: { kind: 'member', name: 'dolly' },
           act: 'ask',
           body: 'still mine',
           ts: Date.now(),

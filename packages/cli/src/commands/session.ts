@@ -291,6 +291,9 @@ async function defaultOrientationFetcher(
     http.nextSummary(team),
     http.getMemoryEnvelope(team).catch(() => undefined), // absent memory is a normal state
   ]);
+  // Lane 01M3TB3DA2: no roster read here — the orientation's read budget is fixed (three
+  // presence-neutral reads) and a seat's own session is an agent's, never an admin human's. A
+  // team-addressed ask therefore does not count; directed and eligible-set asks do.
   const waiting = openActionNeeded(
     inboxRes.messages,
     seat,
@@ -400,6 +403,7 @@ async function defaultStatuslineFetcher(
     http.inbox(team, { unread: true, limit: STATUSLINE_INBOX_LIMIT }),
     http.nextSummary(team),
   ]);
+  // Lane 01M3TB3DA2: exactly two reads, as pinned — see the orientation fetcher's note above.
   const waiting = openActionNeeded(
     inboxRes.messages,
     seat,

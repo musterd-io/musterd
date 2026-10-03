@@ -6,6 +6,7 @@ import {
   AskTierSchema,
   askContract,
   askContractText,
+  askConcernsMe,
   chooseAutoTarget,
   ELIGIBLE_ACTS,
   eligibleSetRefusal,
@@ -99,9 +100,34 @@ const ANSWERABLE = new Set<Act>(['request_help', 'handoff', 'challenge', 'ask'])
  * (anyone can answer) or an act directed at `me`, whose thread carries no `resolve`, newest first.
  * Best-effort: a read failure → empty.
  */
-async function openAnswerable(client: MusterdClient, me: string): Promise<Envelope[]> {
+async function openAnswerable(
+  client: MusterdClient,
+  me: string,
+  /** Lane 01M3TB3DA2: `resolveCapabilities(me).is_admin`, from the last occupy (ADR 144 inc 5). */
+  admin: boolean,
+): Promise<Envelope[]> {
   try {
     const { messages, answered, discharged } = await client.fetchInbox(false);
+    return answerableFor(messages, me, admin, answered, discharged);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The pure half of {@link openAnswerable}: which inbox acts an un-named verdict from `me` may bind
+ * to. `request_help` (anyone), an act directed at `me`, or an `ask` that concerns me by the one
+ * protocol rule (`askConcernsMe`: directed, eligible-set, or team-addressed AND I am an admin) —
+ * minus resolved threads, what I already answered, and what a co-eligible seat took.
+ */
+export function answerableFor(
+  messages: Envelope[],
+  me: string,
+  admin: boolean,
+  answered?: string[] | undefined,
+  discharged?: { id: string }[] | undefined,
+): Envelope[] {
+  {
     const resolved = new Set<string>();
     for (const m of messages) if (m.act === 'resolve' && m.thread) resolved.add(m.thread);
     // An act I already replied to is not open, and only the server can tell me so: the inbox
@@ -120,7 +146,10 @@ async function openAnswerable(client: MusterdClient, me: string): Promise<Envelo
     const open = messages.filter((m) => {
       if (!ANSWERABLE.has(m.act)) return false;
       const directed =
-        m.act === 'request_help' || m.act === 'ask' || (m.to.kind === 'member' && m.to.name === me);
+        m.act === 'request_help' ||
+        (m.act === 'ask'
+          ? askConcernsMe(m, { name: me, admin })
+          : m.to.kind === 'member' && m.to.name === me);
       return (
         directed &&
         !resolved.has(m.thread ?? m.id) &&
@@ -129,8 +158,6 @@ async function openAnswerable(client: MusterdClient, me: string): Promise<Envelo
       );
     });
     return open.sort((a, b) => b.ts - a.ts);
-  } catch {
-    return [];
   }
 }
 
@@ -186,7 +213,11 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
         !args.reply_to &&
         !meta['in_reply_to']
       ) {
-        const open = await openAnswerable(client, config.member);
+        const open = await openAnswerable(
+          client,
+          config.member,
+          config.capabilities?.is_admin === true,
+        );
         // One rule, in `@musterd/protocol`, because this refusal used to be written here and again
         // in the CLI and tested in neither — and both copies asked whether the GUESS was a lane
         // acceptance instead of whether the ACT was a verdict. See `chooseAutoTarget` for the

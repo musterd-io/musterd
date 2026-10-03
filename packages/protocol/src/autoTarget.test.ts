@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { chooseAutoTarget, CLI_REPLY_TO_STYLE, type AutoTargetable } from './autoTarget.js';
+import {
+  askConcernsMe,
+  chooseAutoTarget,
+  CLI_REPLY_TO_STYLE,
+  type AutoTargetable,
+} from './autoTarget.js';
 
 /**
  * The rule that decides what an un-threaded `accept`/`decline` answers.
@@ -109,5 +114,47 @@ describe('chooseAutoTarget', () => {
       // …but the count is honest about how many there really are.
       expect(got.message).toContain('20');
     }
+  });
+});
+
+/**
+ * Lane 01M3TB3DA2 (ADR 276:75 follow-up): whose action an `ask` is. Before this, every seat
+ * treated every ask as its own — so an un-named `accept` from any agent could bind to a
+ * team-addressed to-human ask (ADR 147) and close it. An ask concerns me when it is directed to me,
+ * when its eligible set names me (ADR 254), or when it is team-addressed AND I am an admin — and
+ * agents are never admins, so the third arm is the ADR 147 admin path and nothing wider.
+ */
+describe('askConcernsMe', () => {
+  const ask = (to: { kind: string; name?: string }, meta: Record<string, unknown> | null = null) =>
+    ({ act: 'ask', to, meta }) as never;
+
+  it('a directed ask concerns its addressee and nobody else', () => {
+    expect(askConcernsMe(ask({ kind: 'member', name: 'nick' }), { name: 'nick' })).toBe(true);
+    expect(askConcernsMe(ask({ kind: 'member', name: 'nick' }), { name: 'dolly' })).toBe(false);
+    expect(
+      askConcernsMe(ask({ kind: 'member', name: 'nick' }), { name: 'dolly', admin: true }),
+    ).toBe(false);
+  });
+
+  it('an eligible-set ask concerns each named seat', () => {
+    const env = ask({ kind: 'team' }, { eligible: ['dolly', 'izzo'] });
+    expect(askConcernsMe(env, { name: 'dolly' })).toBe(true);
+    expect(askConcernsMe(env, { name: 'ryder' })).toBe(false);
+  });
+
+  it('a team-addressed ask concerns admins only — never a non-admin, never by default', () => {
+    const env = ask({ kind: 'team' });
+    expect(askConcernsMe(env, { name: 'nick', admin: true })).toBe(true);
+    expect(askConcernsMe(env, { name: 'dana', admin: false })).toBe(false);
+    expect(askConcernsMe(env, { name: 'dolly' })).toBe(false);
+  });
+
+  it('a non-ask is not its business', () => {
+    expect(
+      askConcernsMe({ act: 'request_help', to: { kind: 'team' }, meta: null } as never, {
+        name: 'x',
+        admin: true,
+      }),
+    ).toBe(false);
   });
 });
