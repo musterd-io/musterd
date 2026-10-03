@@ -53,6 +53,7 @@ smudge at favicon size.
 
 ## Observability & Evaluation
 
+n/a — a brand-asset swap, not agent-facing behavior. Correctness is pinned mechanically:
 `pnpm --filter @musterd/web test` (`chipMark.test.ts`, `MusterdWord.render.test.tsx`) and
-`pnpm --filter @musterd/mcp test` (`brand.test.ts`) pin the geometry; a visual check at 13, 16, 32 and 512px
-is the review that matters.
+`pnpm --filter @musterd/mcp test` (`brand.test.ts`) hold the geometry byte-equal across the module, the
+docs assets and the web assets. The review that matters is a visual check at 13, 16, 32 and 512px.
