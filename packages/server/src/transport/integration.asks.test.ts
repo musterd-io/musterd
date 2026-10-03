@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION } from '@musterd/protocol';
+import { GENERALIST_CAPABILITIES, PROTOCOL_VERSION } from '@musterd/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Ctx } from '../context.js';
 import { withDrivers } from '../db/testing.js';
