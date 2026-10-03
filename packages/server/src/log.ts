@@ -1,4 +1,4 @@
-import { isMusterdCredential } from '@musterd/protocol';
+import { isMusterdCredential, TOKEN_PREFIXES } from '@musterd/protocol';
 
 type Level = 'info' | 'warn' | 'error';
 
@@ -53,6 +53,58 @@ export function redactPath(path: string): string {
       return isMusterdCredential(decoded) ? REDACTED : segment;
     })
     .join('/');
+}
+
+const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** A credential-shaped run — a registered prefix where a token can start, then its base64url tail. */
+const CREDENTIAL_RUN = new RegExp(
+  `(^|[^A-Za-z0-9_-])(?:${Object.values(TOKEN_PREFIXES).map(escapeRegExp).join('|')})[A-Za-z0-9_-]*`,
+  'gi',
+);
+
+/** Free text made safe to log (hard rule 5): every credential-shaped run becomes `[redacted]`. */
+export function redactCredentialText(text: string): string {
+  return text.replace(CREDENTIAL_RUN, (_run, lead: string) => `${lead}${REDACTED}`);
+}
+
+/** How much of a failure's message a request log line keeps. */
+export const FAILURE_TEXT_MAX = 300;
+
+/**
+ * The cause of a 5xx, for that request's own log line (lane 01M3ZPM3FE): the error's class, the
+ * Postgres SQLSTATE when there is one (the pg driver nests the server's error as `cause`), and a
+ * one-line message cut to {@link FAILURE_TEXT_MAX} with credential-shaped text redacted. A pg error
+ * names the statement, never its parameters, and no request body is ever read here.
+ */
+export function requestFailureFields(err: unknown): {
+  err_class: string;
+  sqlstate?: string;
+  err: string;
+} {
+  const codeOf = (e: unknown): unknown =>
+    e !== null && typeof e === 'object' && 'code' in e ? (e as { code: unknown }).code : undefined;
+  const nested = err instanceof Error ? err.cause : undefined;
+  const code = codeOf(nested) ?? codeOf(err);
+  const sqlstate = typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) ? code : undefined;
+  const text = (err instanceof Error ? err.message : String(err)).replace(/\s+/g, ' ').trim();
+  return {
+    err_class: err instanceof Error ? err.name : typeof err,
+    ...(sqlstate ? { sqlstate } : {}),
+    err: redactCredentialText(text).slice(0, FAILURE_TEXT_MAX),
+  };
+}
+
+const requestFailures = new WeakMap<object, ReturnType<typeof requestFailureFields>>();
+
+/** Record why `res` is answering a 5xx; the request logger reads it once the response finishes. */
+export function noteRequestFailure(res: object, err: unknown): void {
+  requestFailures.set(res, requestFailureFields(err));
+}
+
+/** The failure noted for `res`, if any. */
+export function requestFailure(res: object): ReturnType<typeof requestFailureFields> | undefined {
+  return requestFailures.get(res);
 }
 
 /**

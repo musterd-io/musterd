@@ -19,7 +19,7 @@ import { sqliteDriver, type SqliteDriver } from './db/sqliteDriver.js';
 import { openTraceDriver } from './db/traceDb.js';
 import { startDigestSchedule } from './digest/schedule.js';
 import { startFootprintSampler } from './footprint/sampler.js';
-import { log, redactPath } from './log.js';
+import { log, redactPath, requestFailure } from './log.js';
 import { startReaper } from './presence/reaper.js';
 import { reconcileAll } from './projection/reconcile.js';
 import { startRosterWatcher } from './projection/watcher.js';
@@ -203,6 +203,8 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         path,
         status,
         ms: Date.now() - t0,
+        // Why a 5xx happened, when the handler said (lane 01M3ZPM3FE).
+        ...(status >= 500 ? requestFailure(res) : undefined),
       };
       if (status >= 500) log.error(fields);
       else if (status >= 400) log.warn(fields);
