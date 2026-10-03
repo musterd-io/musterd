@@ -2,12 +2,10 @@ import {
   CHIP_BG,
   CHIP_FG,
   CHIP_GLYPH_PATH,
-  CHIP_OUTLINE_PATH,
   CHIP_RADIUS,
   CHIP_RING_PATH,
   CHIP_SMALL_STROKE,
   CHIP_VIEWBOX,
-  chipIsSmall,
 } from './chipMark';
 
 type MusterdChipProps = {
@@ -15,9 +13,8 @@ type MusterdChipProps = {
   className?: string;
 };
 
-/** Brand mark — the hand-drawn m in a white ring on mustard (ADR 497). Below ~24px it drops the hairline outlines and thickens the glyph. */
+/** Brand mark — the hand-drawn m in a white ring on mustard (ADR 497). Always the small cut: in-product renders are 13–18px, where the hairline outlines vanish, so the glyph is thickened instead. */
 export function MusterdChip({ size = 16, className }: MusterdChipProps) {
-  const small = chipIsSmall(size);
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -30,13 +27,12 @@ export function MusterdChip({ size = 16, className }: MusterdChipProps) {
     >
       <rect width={CHIP_VIEWBOX} height={CHIP_VIEWBOX} rx={CHIP_RADIUS} fill={CHIP_BG} />
       <path fill="#fff" fillRule="evenodd" d={CHIP_RING_PATH} />
-      {small ? null : <path fill={CHIP_FG} fillRule="evenodd" d={CHIP_OUTLINE_PATH} />}
       <path
         fill={CHIP_FG}
         d={CHIP_GLYPH_PATH}
-        {...(small
-          ? { stroke: CHIP_FG, strokeWidth: CHIP_SMALL_STROKE, strokeLinejoin: 'round' as const }
-          : {})}
+        stroke={CHIP_FG}
+        strokeWidth={CHIP_SMALL_STROKE}
+        strokeLinejoin="round"
       />
     </svg>
   );

@@ -3,9 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CHIP_BG,
   CHIP_GLYPH_PATH,
-  CHIP_OUTLINE_PATH,
   CHIP_RING_PATH,
-  CHIP_SMALL_BELOW,
   musterdChipSvg,
 } from './chipMark';
 
@@ -27,9 +25,10 @@ describe('the mark (ADR 497)', () => {
   ])('%s carries the module geometry', (_name, rel) => {
     const svg = asset(rel);
     expect(svg).toContain(CHIP_RING_PATH);
-    expect(svg).toContain(CHIP_OUTLINE_PATH);
     expect(svg).toContain(CHIP_GLYPH_PATH);
     expect(svg).toContain('fill="#E1AD01"');
+    // The full cut is the file's: it carries the hairline outlines the code does not.
+    expect(svg.length).toBeGreaterThan(8000);
   });
 
   it.each([
@@ -39,14 +38,14 @@ describe('the mark (ADR 497)', () => {
     const svg = asset(rel);
     expect(svg).toContain(CHIP_RING_PATH);
     expect(svg).toContain(CHIP_GLYPH_PATH);
-    expect(svg).not.toContain(CHIP_OUTLINE_PATH);
+    expect(svg.length).toBeLessThan(6000);
   });
 
-  it('draws the hairline outlines only at sizes where they survive', () => {
-    expect(musterdChipSvg(CHIP_SMALL_BELOW)).toContain(CHIP_OUTLINE_PATH);
-    expect(musterdChipSvg(CHIP_SMALL_BELOW - 1)).not.toContain(CHIP_OUTLINE_PATH);
-    expect(musterdChipSvg(13)).toContain('stroke-linejoin="round"');
-    expect(musterdChipSvg(13)).toContain('aria-hidden="true"');
+  it('renders the thickened, outline-free cut, hidden from assistive tech', () => {
+    const svg = musterdChipSvg(13);
+    expect(svg).toContain(CHIP_RING_PATH);
+    expect(svg).toContain('stroke-linejoin="round"');
+    expect(svg).toContain('aria-hidden="true"');
   });
 
   it('web and docs copies of each file are byte-identical', () => {

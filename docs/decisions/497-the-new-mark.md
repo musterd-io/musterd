@@ -28,9 +28,12 @@ smudge at favicon size.
    simplified to integer coordinates on a 1024 viewBox) and split into three paths: the **ring**, the ink
    **outline**, and the **glyph**. `docs/design/assets/chip.svg` is that source; `packages/web/src/brand/chipMark.ts`
    exports the same three paths; a test pins the module, the docs asset and the web asset byte-for-byte.
-3. **Two cuts.** At or above 24px the **full** cut draws all three. Below it the **small** cut drops the
-   outline (sub-pixel there) and thickens the glyph with a 28-unit round-joined stroke
-   (`docs/design/assets/chip-sm.svg`). The favicon uses the small cut; the MCP icon and README use the full one.
+3. **Two cuts, one in code.** The **full** cut draws all three paths and is a file
+   (`docs/design/assets/chip.svg`): the README, the MCP icon, the social card and the tile use it. The
+   **small** cut drops the outline (sub-pixel under ~24px) and thickens the glyph with a 28-unit
+   round-joined stroke (`chip-sm.svg`); it is the only cut `chipMark.ts` carries, because every in-product
+   render is 13–18px and the outline path would be ~4.7 KB of eager JS that no pixel shows (ADR 151's byte
+   budget). The favicon and every `MusterdChip`/`MusterdWord` use the small cut.
 4. **The tile keeps its job.** `tile.svg` maps the full mark onto the isometric top face with one matrix;
    the front slab and glow are unchanged.
 5. **The corner radius is ≈22%** (224/1024), the old chip's 7/32, so the mark sits in the same slots.
@@ -45,8 +48,10 @@ smudge at favicon size.
 - Raster derivatives (social card, avatar, README header, the one-slide PDF, the deck's baked screenshots)
   are re-rendered from the new source in follow-up lanes under goal `new-logo`; this ADR's lane ships the
   source, the web and MCP renderers, the favicon, and the docs.
-- The mark is ~9 KB of path data in `chipMark.ts` (lazy-loaded with the office scene; inline in React
-  elsewhere), against ~0.5 KB for the old chip. The small cut is ~4.7 KB.
+- The code carries ~4.4 KB of path data (ring + glyph; ~2 KB gzip) against ~0.5 KB for the old chip. The
+  first cut of this change carried the outline too and failed `pnpm perf:check`; the full cut is now a file.
+  A surface that renders the mark at ≥24px in JS must either accept the small cut or pay for the outline
+  deliberately.
 - A traced mark is only as faithful as the trace. If a vector master arrives from design, replace the three
   paths in `chipMark.ts` and the SVG files together; the byte-equality test will say if one is missed.
 - ADR 154's `## Decision` stays frozen; it carries a dated note pointing here.
