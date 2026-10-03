@@ -24,7 +24,7 @@ describe('distFileFor', () => {
   it('puts the landing page at the dist root and nests the rest', () => {
     expect(distFileFor('/')).toBe('index.html');
     expect(distFileFor('/watch')).toBe('watch/index.html');
-    expect(distFileFor('/docs/getting-started')).toBe('docs/getting-started/index.html');
+    expect(distFileFor('/docs/concepts')).toBe('docs/concepts/index.html');
   });
 });
 

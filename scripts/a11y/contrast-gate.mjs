@@ -119,7 +119,10 @@ const ROUTES = arg('routes', '')
       // (lane 01M32QTVN). The preflight below is what makes that shape impossible rather than
       // merely fixed.
       '/docs',
-      '/docs/getting-started',
+      // No /docs/getting-started: the page was removed with the repository going private
+      // (2026-10-03, ADR 302 note). /docs/concepts is the prose representative now; the gate's
+      // dist preflight refuses a listed route that is not in the build, which is how this was found.
+      '/docs/concepts',
       // /docs/spec is NOT a redundant second prose page: it is the only route with tables, so the
       // `.prose th/td` colours ship unmeasured without it. "One representative per template" holds
       // only while every template's elements appear on the representative, and on 2026-08-24 the
