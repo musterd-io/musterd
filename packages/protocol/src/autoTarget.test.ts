@@ -157,7 +157,10 @@ describe('askConcernsMe', () => {
         admin: true,
       }),
     ).toBe(false);
+  });
+});
 
+/**
  * Lane 01M3TB3C0D: a root `message` to a member who has an open directed act waiting on the sender
  * leaves that act open and unjoinable (97% of agent→member prose is a root, measured 2026-10-03).
  * The send ack suggests the thread — warn, never block.

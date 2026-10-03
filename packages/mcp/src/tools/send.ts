@@ -308,7 +308,10 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
         // seat — say which thread it should have joined. One inbox read, after the send, advisory.
         const threadHint =
           args.act === 'message' && addressed.to.kind === 'member' && !envelope.thread
-            ? threadHintFor(await openAnswerable(client, config.member), addressed.to.name)
+            ? threadHintFor(
+                await openAnswerable(client, config.member, config.capabilities?.is_admin === true),
+                addressed.to.name,
+              )
             : null;
         const threadGuidance =
           threadHint && addressed.to.kind === 'member'
