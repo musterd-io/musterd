@@ -175,6 +175,9 @@ gap: whatever a dream sends, nothing rings.
   once-per-day guard saw only its own rows. `digestTick` now skips any team this daemon is an
   enrolled joiner of, as the reaper's team-wide sweeps do (ADR 361 §1, ADR 371 §2). The joiner
   gets the hub's digest by the pull. §5 is unchanged; this records where it runs.
+- **2026-10-03 — §5's "unanswered" is bounded by ADR 502.** The digest lists the last seven days,
+  counts older open asks in one line, and treats an ask whose named lane is `done` or `abandoned` as
+  settled.
 
 ## Observability & Evaluation
 

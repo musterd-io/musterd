@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { setSinkPostForTests } from '../notify/pinnedPost.js';
+import { openLane, updateLane } from '../store/lanes.js';
 import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { createTeam, setPolicy } from '../store/teams.js';
@@ -172,6 +173,43 @@ withDrivers('digest', (o) => {
       expect(digest.waiting).toEqual([
         { member: 'dana', threads: 1, oldest_age_ms: now - receivedAt },
       ]);
+    });
+
+    // ADR 502: the 2026-10-03 digest listed asks up to 65 days old, six of nine already settled.
+    it('lists only this week, counts older open asks, and treats a settled lane as an answer', async () => {
+      const { db, team, nick, dana } = await seed();
+      const now = 2_000_000_000_000;
+      const nightStart = now - 6 * 3_600_000;
+      const askMeta = { species: 'approve', tier: 'standard' };
+      const day = 86_400_000;
+      // Ten days old: counted, not listed — and dropped from Waiting too.
+      await send(db, team.id, nick, 'ask', 'old one', dana, askMeta, now - 10 * day);
+      // Two days old, naming a lane that is now done: settled.
+      const lane = await openLane(db, team.id, 'dawn', 'nick', { title: 'ship it' });
+      await updateLane(db, team.id, lane.id, 'dawn', { state: 'done' });
+      await send(
+        db,
+        team.id,
+        nick,
+        'ask',
+        'review?',
+        dana,
+        {
+          ...askMeta,
+          lane_review: { lane: lane.id },
+        },
+        now - 2 * day,
+      );
+      // Yesterday, still open: listed.
+      await send(db, team.id, nick, 'ask', 'live one', dana, askMeta, now - day);
+
+      const digest = await buildDigest(db, team.id, { day: '2033-05-18', nightStart, now });
+      expect(digest.unanswered.map((u) => u.age_ms)).toEqual([day]);
+      expect(digest.older_asks).toBe(1);
+      expect(digest.waiting).toEqual([{ member: 'dana', threads: 2, oldest_age_ms: 2 * day }]);
+      const { body } = renderDigestMarkdown(digest);
+      expect(body).toContain('- nick → dana (1d old)');
+      expect(body).toContain('- +1 older open ask — `musterd report delivery` lists them');
     });
 
     it('renders an empty night without empty sections', async () => {

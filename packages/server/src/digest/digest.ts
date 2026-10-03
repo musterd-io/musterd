@@ -55,6 +55,25 @@ export interface Digest {
   learned: DigestLearned[];
   waiting: WaitingOnEntry[];
   unanswered: DigestUnanswered[];
+  /** Open asks older than {@link DIGEST_WINDOW_MS}: counted, not listed (ADR 502). */
+  older_asks?: number;
+}
+
+/** The digest reads a week (ADR 502): asks and waiting threads older than this are counted in one
+ *  line, not listed — a 65-day-old ask beside last night's buried the live ones (2026-10-03). */
+export const DIGEST_WINDOW_MS = 7 * 86_400_000;
+
+/** An ask that names a lane is settled when that lane is: a `lane_review` ask, or one carrying
+ *  `meta.lane` / `meta.lane_id` (ADR 502). Six of nine asks the 2026-10-03 digest listed were
+ *  settled this way, or by a merge the server cannot see. */
+function laneSettledSql(alias: string): string {
+  return `SELECT 1 FROM lanes dl
+     WHERE dl.team_id = ${alias}.team_id
+       AND dl.state IN ('done','abandoned')
+       AND dl.id = COALESCE(
+         json_extract(${alias}.meta, '$.lane_review.lane'),
+         json_extract(${alias}.meta, '$.lane'),
+         json_extract(${alias}.meta, '$.lane_id'))`;
 }
 
 export interface BuildDigestOpts {
@@ -78,7 +97,9 @@ function headlineOf(body: string, meta: string | null): string {
  * Build the digest for one morning: insights saved since `nightStart`
  * (the night's `learned`), the current waiting-on per seat, and every ask
  * with neither an accept/decline naming it nor a resolve on its thread (the
- * same two shapes the discharge ledger uses).
+ * same two shapes the discharge ledger uses) nor a settled lane it names. Asks
+ * and waiting threads are listed for the last week only; older open asks are
+ * counted in `older_asks` (ADR 502).
  *
  * The night boundary and all ages walk the receipt clock (`created_at`), never
  * the envelope's `ts` — `ts` is the origin's clock and travels (ADR 335), so a
@@ -111,9 +132,12 @@ export async function buildDigest(
        WHERE m.team_id = ? AND m.act = 'ask'
          AND NOT EXISTS (${answeredByAnyoneSql('m')})
          AND NOT EXISTS (${resolvedThreadSql('m')})
+         AND NOT EXISTS (${laneSettledSql('m')})
        ORDER BY m.created_at ASC`,
     [teamId],
   );
+  const since = now - DIGEST_WINDOW_MS;
+  const live = unansweredRows.filter((r) => r.received_at >= since);
   return {
     day: opts.day,
     nightStart: opts.nightStart,
@@ -123,14 +147,15 @@ export async function buildDigest(
       body: r.body,
       ts: r.ts,
     })),
-    waiting: await waitingOn(db, teamId, now, { clock: 'receipt' }),
-    unanswered: unansweredRows.map((r) => ({
+    waiting: await waitingOn(db, teamId, now, { clock: 'receipt', since }),
+    unanswered: live.map((r) => ({
       id: r.id,
       from: r.from_name,
       to: r.to_name,
       thread: r.thread_id,
       age_ms: Math.max(0, now - r.received_at),
     })),
+    older_asks: unansweredRows.length - live.length,
   };
 }
 
@@ -169,7 +194,10 @@ export function renderDigestMarkdown(digest: Digest): {
     lines.push(`- …and ${waitingRest.length} more seats (${threads} threads)`);
   }
   lines.push('', '## Unanswered asks');
-  if (digest.unanswered.length === 0) lines.push('- Every ask got an answer.');
+  if (digest.unanswered.length === 0)
+    lines.push(
+      digest.older_asks ? '- No ask from this week is waiting.' : '- Every ask got an answer.',
+    );
   // One row per from→to pair — the same seat asking the same human thirty times is one
   // problem, not thirty lines — oldest pair first, so the cap keeps the longest-owed asks.
   const pairs = new Map<string, { label: string; count: number; oldest: number }>();
@@ -190,6 +218,11 @@ export function renderDigestMarkdown(digest: Digest): {
     );
   const asksRest = rows.slice(MAX_UNANSWERED_ROWS).reduce((n, r) => n + r.count, 0);
   if (asksRest > 0) lines.push(`- …and ${asksRest} more ask${asksRest === 1 ? '' : 's'}`);
+  const older = digest.older_asks ?? 0;
+  if (older > 0)
+    lines.push(
+      `- +${older} older open ask${older === 1 ? '' : 's'} — \`musterd report delivery\` lists them`,
+    );
   return { body: `${lines.join('\n')}\n`, meta: { digest: { day: digest.day } } };
 }
 

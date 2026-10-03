@@ -162,7 +162,12 @@ export async function waitingOn(
   /** Which clock ages a thread. `origin` (the default) is the envelope's `ts`, as the waiting ledger
    *  has always read it; `receipt` is `created_at`, this daemon's own clock, for a reader that
    *  promises receipt-clock ages (the morning digest — a sender's skewed stamp travels, ADR 335). */
-  opts: { clock?: 'origin' | 'receipt' } = {},
+  opts: {
+    clock?: 'origin' | 'receipt';
+    /** Only threads whose oldest open act is at or after this stamp, on the chosen clock (the
+     *  digest's week window, ADR 502). Omitted, every unresolved thread counts. */
+    since?: number;
+  } = {},
 ): Promise<WaitingOnEntry[]> {
   const stamp = opts.clock === 'receipt' ? 'm.created_at' : 'm.ts';
   const resolved = new Set(
@@ -191,6 +196,14 @@ export async function waitingOn(
     if (!threads) byMember.set(row.recipient, (threads = new Map()));
     const prev = threads.get(row.thread_key);
     if (prev === undefined || row.ts < prev) threads.set(row.thread_key, row.ts);
+  }
+
+  if (opts.since !== undefined) {
+    const since = opts.since;
+    for (const [member, threads] of byMember) {
+      for (const [key, ts] of threads) if (ts < since) threads.delete(key);
+      if (threads.size === 0) byMember.delete(member);
+    }
   }
 
   return [...byMember.entries()]
