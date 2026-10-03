@@ -377,7 +377,7 @@ src/
                   //   when unclaimed: writes a pending marker (ADR 033) + startResolutionWatcher (ADR 034)
   toolNames.ts    // TOOL_NAMES: the registered-tool name list (dependency-free so guidance:check can import it; ADR 085)
   config.ts       // env > binding.json > workspace.json, then occupancy surface follows capture unless MUSTERD_SURFACE or native musterd (ADR 275); + build (own dist stamp, ADR 135)
-  client.ts       // HTTP + background WS client; join()/leave()/close(); `joined`/`claimed`;
+  client.ts       // HTTP + background WS client; join()/leave()/close(); `joined`/`claimed`; a liveness-ladder release first POSTs its rung to `/residency/session` (`presence.session_ended`, ADR 164 inc 2 — before `leave()`, while the Presence still authenticates it);
                   //   setIdentity() (late claim); addMember() (tokenless mint); buffers live while joined;
                   //   stale-grant refuse → drop grant + one bare retry (ADR 193);
                   //   claim + heartbeat run reconcileCursorCapture then refreshAttestation (ADR 270);

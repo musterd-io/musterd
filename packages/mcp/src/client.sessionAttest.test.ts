@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MusterdClient } from './client.js';
 import { SessionAttestation } from './sessionLiveness.js';
 
@@ -17,7 +17,10 @@ import { SessionAttestation } from './sessionLiveness.js';
  * fires.
  */
 let dir: string;
-afterEach(() => rmSync(dir, { recursive: true, force: true }));
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true });
+  vi.unstubAllGlobals();
+});
 
 const DEAD_SESSION = {
   harness: 'claude-code',
@@ -102,6 +105,40 @@ describe('attestSession hands the transcript age down (lane 01M2KCG5Z8)', () => 
     // ADR 164 crash backstop must still fire.
     expect(attest(), 'no first-hand evidence — the backstop stands').toBe(true);
     expect(client.releasedByLiveness).toBe(true);
+    client.close();
+  });
+});
+
+/**
+ * ADR 164 increment 2 (lane 01M3TAKNCF): the one client→server path the ADR said did not exist. A
+ * release on rungs 2–4 tells the daemon the rung, so `presence.session_ended` can be counted by it.
+ */
+describe('a ladder release reports its rung to the daemon (ADR 164 increment 2)', () => {
+  it('POSTs a rung-bearing end before releasing, and never for a kept seat', async () => {
+    const posts: { url: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      posts.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+      return new Response(JSON.stringify({ ok: true, enrolled: true }), { status: 200 });
+    });
+    const { client, attest, transcriptFallsSilent } = adapterJudging();
+    transcriptFallsSilent();
+    client.noteActivity(Date.now() - 180_000);
+    expect(attest()).toBe(false);
+    expect(posts).toHaveLength(0);
+
+    client.noteActivity(Date.now() - 3 * 60 * 60_000);
+    expect(attest()).toBe(true);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.url).toBe('http://127.0.0.1:1/teams/dawn/residency/session');
+    expect(posts[0]!.body).toMatchObject({
+      seat: 'Ada',
+      harness: 'claude-code',
+      event: 'end',
+      rung: 'stale',
+    });
+    expect(posts[0]!.body['age_ms']).toBeGreaterThanOrEqual(2 * 60 * 60_000);
+    expect(posts[0]!.body).not.toHaveProperty('session_id');
     client.close();
   });
 });

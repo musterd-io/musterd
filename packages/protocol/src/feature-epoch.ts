@@ -123,5 +123,8 @@
 // Epoch 28 — ADR 490 (durable review promises): typed `request_help` review references, optional
 // `NextBrief` promise/closure rows, and the minimal Team audit read. Older clients still parse
 // envelopes and briefs but cannot validate or render the new projections.
-export const FEATURE_EPOCH = 28 as const;
+// Epoch 29 — ADR 164 increment 2: the session attestation `end` event may carry the liveness
+// ladder's `rung` (+ `age_ms`); the daemon records such an end as `presence.session_ended`. An
+// older adapter omits both and its goodbye is recorded as before.
+export const FEATURE_EPOCH = 29 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;

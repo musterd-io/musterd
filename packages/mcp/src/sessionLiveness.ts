@@ -112,6 +112,7 @@ function defaultStatMtime(path: string): number | undefined {
  */
 export class SessionAttestation {
   private adopted: string | null = null;
+  private adoptedHarnessLabel: string | null = null;
   private readonly bindingDir: string;
   private readonly readSession: (dir: string) => SessionCapture | undefined;
   private readonly statMtime: (path: string) => number | undefined;
@@ -138,6 +139,11 @@ export class SessionAttestation {
     return this.adopted;
   }
 
+  /** The harness class of the adopted capture — what the goodbye's `harness` field names. */
+  get adoptedHarness(): string | null {
+    return this.adoptedHarnessLabel;
+  }
+
   /** Adoption-time sanity: a capture already ended, or already quiet past the horizon, is a corpse
    *  — somebody else's session, or a workspace whose hooks never ran. Not evidence about us. */
   private looksAlive(session: SessionCapture, now: number): boolean {
@@ -160,6 +166,7 @@ export class SessionAttestation {
       if (now - this.processStart < this.settleMs) return { verdict: 'live' }; // still settling
       if (!this.looksAlive(session, now)) return { verdict: 'live' }; // never adopt a corpse
       this.adopted = session.id;
+      this.adoptedHarnessLabel = session.harness;
     }
 
     // A different session id now sits in the binding. This is NOT evidence that we are an orphan —
@@ -171,6 +178,7 @@ export class SessionAttestation {
     if (session.id !== this.adopted) {
       if (!this.looksAlive(session, now)) return { verdict: 'live', session_id: this.adopted };
       this.adopted = session.id;
+      this.adoptedHarnessLabel = session.harness;
     }
 
     // Rung 3 — the advisory SessionEnd hook fired for our own session. Dormant, not exit: the app

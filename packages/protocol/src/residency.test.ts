@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PolicySchema } from './credentials.js';
 import { resolveAttestedProvenance } from './model.js';
 import {
+  SessionAttestationBodySchema,
   LOOP_EDGES,
   LoopEdgeSchema,
   ResidencyPolicyOverrideSchema,
@@ -380,5 +381,36 @@ describe('dreamBlocker / isDreamDue (ADR 494)', () => {
       expires_at: 1,
     });
     expect(order.derivation).toBe('dream');
+  });
+});
+
+describe('SessionAttestationBodySchema — the ladder rung on a goodbye (ADR 164 increment 2)', () => {
+  const base = { seat: 'Ada', harness: 'claude-code', event: 'end' } as const;
+
+  it('accepts each rung, with age_ms on the one that measures', () => {
+    for (const rung of ['ppid', 'ended', 'stale'] as const)
+      expect(SessionAttestationBodySchema.parse({ ...base, rung })).toMatchObject({ rung });
+    expect(
+      SessionAttestationBodySchema.parse({ ...base, rung: 'stale', age_ms: 7_200_000 }),
+    ).toMatchObject({
+      rung: 'stale',
+      age_ms: 7_200_000,
+    });
+  });
+
+  it('refuses an unknown rung and a negative or fractional age', () => {
+    expect(SessionAttestationBodySchema.safeParse({ ...base, rung: 'vibes' }).success).toBe(false);
+    expect(
+      SessionAttestationBodySchema.safeParse({ ...base, rung: 'stale', age_ms: -1 }).success,
+    ).toBe(false);
+    expect(
+      SessionAttestationBodySchema.safeParse({ ...base, rung: 'stale', age_ms: 1.5 }).success,
+    ).toBe(false);
+  });
+
+  it('an older adapter omits both and still parses — the clean goodbye is unchanged', () => {
+    const parsed = SessionAttestationBodySchema.parse(base);
+    expect(parsed).not.toHaveProperty('rung');
+    expect(parsed).not.toHaveProperty('age_ms');
   });
 });

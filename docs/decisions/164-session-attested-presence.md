@@ -276,7 +276,12 @@ rung 4 carrying the load, which would make the horizon a live parameter rather t
 - Dated note (2026-10-02): increment 2 (the `presence.session_ended` audit row) was recovered by the
   nothing-vanishes triage (ADR 487 Appendix A12) and is lane `01M3TAKNCFANJBSCBWT04K11Y4`, open on
   the board; the Decision's Increments list carries a marker to it so the ADR 487 gate can see the
-  disposition without the frozen text changing.
+  disposition without the frozen text changing. Built the same day: the adapter, on a release under
+  rungs 2–4, POSTs `{event: 'end', rung, age_ms?}` to the existing `/residency/session` route before
+  it closes its socket (the only moment its Presence still authenticates it), and the daemon records
+  `presence.session_ended {harness, rung, age_ms?}` — the Eval section's dataset. The hook's clean
+  exit (rung 1) keeps its rung-less `residency.session_ended` row, so the two populations stay apart.
+  Protocol feature epoch 29. No session id crosses: `rung` and `age_ms` are the whole payload.
 
 - The roster can say a seat is offline that a human believes is open on their screen — if that
   session has written nothing for an hour. This is the intended trade: honest absence over false

@@ -225,6 +225,50 @@ withDrivers('residency-http', (_o, kind) => {
       expect(roster.json.members.find((m: any) => m.name === 'Ada').offline_reason).toBeUndefined();
     });
 
+    // ADR 164 increment 2: the adapter's ladder ends a session on a rung; the daemon records it as
+    // `presence.session_ended` with the rung — the dataset ADR 164's eval counts. The clean goodbye
+    // (no rung) keeps its `residency.session_ended` row, so the two populations never mix.
+    it('an end that names a rung is presence.session_ended, with rung and age; a rung-less end is not', async () => {
+      await enrollAda();
+      const team = (await getTeamBySlug(server.store, 'dawn'))!;
+      const stale = await post(
+        '/teams/dawn/residency/session',
+        { seat: 'Ada', harness: 'claude-code', event: 'end', rung: 'stale', age_ms: 7_200_000 },
+        adaAuth,
+      );
+      expect(stale.status).toBe(200);
+      const rows = await audits('presence.session_ended');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.target).toBe('Ada');
+      expect(JSON.parse(rows[0]!.detail as string)).toEqual({
+        harness: 'claude-code',
+        enrolled: true,
+        rung: 'stale',
+        age_ms: 7_200_000,
+      });
+      expect(await audits('residency.session_ended')).toHaveLength(0);
+      // The sticky reason and the re-route apply as on a clean goodbye: the session is gone.
+      expect((await getMemberByName(server.store, team.id, 'Ada'))!.last_offline_reason).toBe(
+        'session_ended',
+      );
+
+      await post(
+        '/teams/dawn/residency/session',
+        { seat: 'Ada', harness: 'claude-code', event: 'end' },
+        adaAuth,
+      );
+      expect(await audits('presence.session_ended')).toHaveLength(1);
+      expect(await audits('residency.session_ended')).toHaveLength(1);
+      // A rung on `start` is ignored, not recorded: only an end has a rung.
+      await post(
+        '/teams/dawn/residency/session',
+        { seat: 'Ada', harness: 'claude-code', event: 'start', rung: 'ppid' },
+        adaAuth,
+      );
+      const captured = await audits('residency.session_captured');
+      expect(JSON.parse(captured.at(-1)!.detail as string)).not.toHaveProperty('rung');
+    });
+
     // ADR 252: the identity join between a wake and the session it paid for. `wake_cost` exists only
     // on the report path, so without this token a lease that spawns a session and then expires is
     // free as far as the ledger can tell.
