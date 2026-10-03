@@ -105,6 +105,11 @@ read: one relay poll *or one fold* away, whichever the node can do.
   configuration.
 - **ADR 371 falsifier 2 becomes runnable** for the first time since it was written.
 
+- **2026-10-02** — decision 4's "the stop stays exactly as written" did not survive the historical
+  seeds: they were never stamped, so the window does not close by fold either. 64 entries from the
+  2026-09-30 triage on 31 of them wedged a fresh joiner at hub_seq 147,019. [ADR 500](500-a-seed-thread-entry-waits-for-nothing.md)
+  removes the stop: the entry is held in `audit` and projected when its seed is born locally.
+
 ## Observability & Evaluation
 
 **Traces** — after one sync tick, both daemons hold a `seed.captured` audit row for the same

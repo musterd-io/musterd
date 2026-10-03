@@ -12,6 +12,7 @@ import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
 import { appendReplicatedEvent } from './audit.js';
 import { openLane } from './lanes.js';
+import { getMemberByName } from './members.js';
 import type { MemberRow } from './rows.js';
 
 interface SeedRow {
@@ -112,6 +113,7 @@ export async function createSeedFromRelay(
     ],
   );
   const row = (await db.get<SeedRow>('SELECT * FROM seeds WHERE id = ?', [id]))!;
+  await projectHeldThreads(db, teamId, row); // ADR 500
   // ADR 399: the capture crosses to every joiner, so a seat on a second machine holds the team's
   // ideation without holding the relay's bearer token.
   const submitterName = await db.get<{ name: string }>('SELECT name FROM members WHERE id = ?', [
@@ -201,6 +203,7 @@ export async function captureRepoSeed(
         ],
       );
       const row = (await t.get<SeedRow>('SELECT * FROM seeds WHERE id = ?', [id]))!;
+      await projectHeldThreads(t, teamId, row); // ADR 500
       await stampSeedCapture(t, teamId, row, actor.name, now); // ADR 399
       return await toSeed(row, team.slug, t);
     });
@@ -362,13 +365,14 @@ export async function applySeedCapture(
   );
   if (prior) return 'held';
   const promoted = capture.linked_lane_id !== null;
+  const id = ulid(now);
   await db.run(
     `INSERT INTO seeds
        (id, team_id, relay_id, source, body, captured_at, slack_user_id, submitted_by, state,
         linked_lane_id, promotion_kind, research_skipped, promoted_at, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      ulid(now),
+      id,
       teamId,
       capture.relay_id,
       capture.source,
@@ -385,7 +389,60 @@ export async function applySeedCapture(
       now,
     ],
   );
+  await projectHeldThreads(db, teamId, { id, relay_id: capture.relay_id }); // ADR 500
   return 'applied';
+}
+
+/**
+ * Project the thread entries this daemon folded BEFORE it held their seed (ADR 500), now that it
+ * does. The fold holds such an entry in `audit` — stamp and all, so `heldPair` never offers it
+ * again — instead of stopping on it, because an entry is an append: projecting it late yields the
+ * same row as projecting it on time. This is the other half of that bargain, and it runs on every
+ * local birth: a folded capture, a relay ingest, a repo capture.
+ *
+ * Keyed on `audit.target`, which `applyThread` sets to the seed's `relay_id` (no JSON operator, so
+ * both drivers read it alike). `INSERT OR IGNORE` on the entry id makes it a no-op for every entry
+ * already projected — on a hub, that is all of them. A writer whose name no longer resolves here is
+ * left in `audit` rather than guessed at; the fold resolved it once, so this is a roster change, not
+ * a hole.
+ */
+export async function projectHeldThreads(
+  db: Driver,
+  teamId: string,
+  seed: { id: string; relay_id: string },
+): Promise<number> {
+  const held = await db.all<{ actor: string | null; ts: number; detail: string | null }>(
+    `SELECT actor, ts, detail FROM audit WHERE team_id = ? AND action = 'record.seed_thread' AND target = ?`,
+    [teamId, seed.relay_id],
+  );
+  let projected = 0;
+  for (const row of held) {
+    const d = row.detail ? (JSON.parse(row.detail) as Record<string, unknown>) : {};
+    const entryId = d['entry_id'];
+    const kind = d['kind'];
+    const body = d['body'];
+    const name = typeof d['by'] === 'string' ? d['by'] : (row.actor ?? '');
+    if (typeof entryId !== 'string' || typeof kind !== 'string' || typeof body !== 'string') {
+      continue;
+    }
+    const member = await getMemberByName(db, teamId, name);
+    if (!member) continue;
+    const { changes } = await db.run(
+      `INSERT OR IGNORE INTO seed_thread_entries (id, seed_id, team_id, kind, body, member_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        entryId,
+        seed.id,
+        teamId,
+        kind,
+        body,
+        member.id,
+        typeof d['created_at'] === 'number' ? d['created_at'] : row.ts,
+      ],
+    );
+    projected += changes;
+  }
+  return projected;
 }
 
 type ThreadKind = 'clarification' | 'answer' | 'brief' | 'conclusion';

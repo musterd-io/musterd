@@ -224,6 +224,12 @@ capture now crosses as its own hub-minted `seed` kind. Read §3's sentence as: t
 one relay poll **or one fold** away, whichever that node can do. The `seed_unborn` stop is unchanged
 and still correct — what changed is how its window closes.
 
+**Amended 2026-10-02 by [ADR 500](500-a-seed-thread-entry-waits-for-nothing.md) — the stop itself.**
+The 53 historical seeds have no `seed.captured` in the log, so an entry on one waits for a birth
+that never comes: a fresh joiner (nick's second Air) stopped for good at hub_seq 147,019 on 64 such
+entries. `seed_unborn` is gone. The fold holds the entry in `audit` and the seed's birth projects
+it; `sync_fold_seed_thread_held` is the line to watch now.
+
 ## Observability & Evaluation
 
 **Traces.** No new span. Two log lines to watch, both expected to be quiet: `sync_fold_seed_unborn`

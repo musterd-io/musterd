@@ -13,7 +13,13 @@ import { appendReplicatedEvent } from '../store/audit.js';
 import { incidentReporters, openIncidents } from '../store/incidents.js';
 import { addMember, getMemberByName } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
-import { askSeedClarification, claimSeed, createSeedFromRelay, getSeed } from '../store/seeds.js';
+import {
+  askSeedClarification,
+  claimSeed,
+  createSeedFromRelay,
+  getSeed,
+  projectHeldThreads,
+} from '../store/seeds.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { deriveToolCallMetrics, recordToolCalls } from '../store/toolCalls.js';
 import { Hub } from '../transport/hub.js';
@@ -31,7 +37,7 @@ withDrivers('record', (_o, kind) => {
    * machine was absent from the seed everywhere else, and three seats blocked on one gate across two
    * machines never reached a threshold anywhere. These are the ADR's falsifiers: a tool-call batch
    * crosses and is counted once under the origin's hour; a thread entry crosses by relay id and
-   * member NAME and blocks until the relay seed is here; the incident pool is the hub's — a joiner's
+   * member NAME and is held until the relay seed is here (ADR 500); the incident pool is the hub's — a joiner's
    * report counts when its status_update folds on the hub, the lane opens exactly once, the pool
    * mirrors back so resolve fan-out answers on the joiner, and a joiner-minted pool row is refused at
    * ingest; and the raw primitives still ship nothing.
@@ -314,51 +320,72 @@ withDrivers('record', (_o, kind) => {
       expect((await getSeed(joiner.store, jt.id, seedJ.id))!.state).toBe('needs_clarification');
     });
 
-    it('an entry for a seed this daemon holds no row for BLOCKS as seed_unborn, then applies once the seed lands', async () => {
+    it('an entry for a seed this daemon holds no row for is HELD, not a stop, and the seed’s birth projects it (ADR 500)', async () => {
       const ht = await hubTeam();
-      // ADR 399 makes the ordinary joiner→hub path unable to reach this stop: a seat can only append
-      // to a seed its daemon already folded, and the capture is ordered before the entry by
-      // `origin_seq`. So the guard is exercised DIRECTLY — a thread entry folded against a daemon
-      // holding no such relay seed — which is the case the stop actually defends: a hole, not a race.
+      // ADR 399 makes the ordinary joiner→hub path unable to reach this branch: a seat can only
+      // append to a seed its daemon already folded, and the capture is ordered before the entry by
+      // `origin_seq`. The live case is a seed captured BEFORE ADR 399 — it has no birth in the log at
+      // all (Air 2, 2026-10-02: 64 entries on 31 such seeds). So the branch is exercised DIRECTLY: a
+      // thread entry folded against a daemon holding no such relay seed, followed by a later event.
       const entryId = 'entry-orphan-1';
       // `origin_seq` starts at 1 for this synthetic node and does not skip: a hole there is an
       // `origin_gap`, a different stop, and it would mask the one under test.
-      const threadEvent = (hubSeq: number, originSeq: number) => ({
+      const threadEvent = (hubSeq: number, originSeq: number, id = entryId) => ({
         kind: 'record' as const,
         team: 'bravo',
         hub_seq: hubSeq,
         origin_node: 'node-elsewhere',
         origin_seq: originSeq,
         event: {
-          id: entryId,
+          id,
           ts: Date.now(),
           actor: 'ada',
           action: 'record.seed_thread',
           target: RELAY.id,
           result: 'allow',
           detail: {
-            entry_id: entryId,
+            entry_id: id,
             relay_id: RELAY.id,
             kind: 'clarification',
-            body: 'why?',
+            body: `why? (${id})`,
             by: 'ada',
             created_at: Date.now(),
           },
         },
       });
 
-      const orphan = await foldBatch(hub.store, ht.id, [threadEvent(999_001, 1)]);
-      expect(orphan.stop?.kind).toBe('seed_unborn');
-      expect(await count(hub.store, 'SELECT COUNT(*) AS n FROM seed_thread_entries')).toBe(0);
-
-      // Once the hub holds the seed — by its own relay ingest, or by folding a `seed` event from the
-      // hub (ADR 399) — the very same entry applies, under the hub's own daemon-private seed id.
-      const seedH = await createSeedFromRelay(hub.store, ht.id, RELAY);
-      const applied = await foldBatch(hub.store, ht.id, [threadEvent(999_002, 1)]);
-      expect(applied.stop ?? null).toBeNull();
-      expect((await getSeed(hub.store, ht.id, seedH.id))!.thread).toMatchObject([
-        { body: 'why?', by: 'ada' },
+      // Two entries in one page: before ADR 500 the first stopped the batch, so the second never
+      // folded and the cursor stayed put. Now both are held and the page completes.
+      const held = await foldBatch(hub.store, ht.id, [
+        threadEvent(999_001, 1),
+        threadEvent(999_002, 2, 'entry-orphan-2'),
       ]);
+      expect(held.stop).toBeNull();
+      expect(held.last_hub_seq).toBe(999_002);
+      expect(held.held_seed_threads).toEqual([
+        { relay_id: RELAY.id, hub_seq: 999_001 },
+        { relay_id: RELAY.id, hub_seq: 999_002 },
+      ]);
+      expect(await count(hub.store, 'SELECT COUNT(*) AS n FROM seed_thread_entries')).toBe(0);
+      expect(
+        await count(
+          hub.store,
+          "SELECT COUNT(*) AS n FROM audit WHERE action = 'record.seed_thread' AND origin_node = 'node-elsewhere'",
+        ),
+      ).toBe(2);
+
+      // Re-delivery is a replay (Rule 2), not a second hold.
+      const replay = await foldBatch(hub.store, ht.id, [threadEvent(999_001, 1)]);
+      expect(replay.skipped).toBe(1);
+      expect(replay.held_seed_threads).toEqual([]);
+
+      // Once the daemon holds the seed — here by its own relay ingest — the held entries project,
+      // under its own daemon-private seed id, each exactly once.
+      const seedH = await createSeedFromRelay(hub.store, ht.id, RELAY);
+      const thread = (await getSeed(hub.store, ht.id, seedH.id))!.thread;
+      expect(thread.map((e) => e.id).sort()).toEqual(['entry-orphan-1', 'entry-orphan-2']);
+      expect(thread[0]).toMatchObject({ kind: 'clarification', by: 'ada' });
+      expect(await projectHeldThreads(hub.store, ht.id, seedH)).toBe(0);
     });
   });
 

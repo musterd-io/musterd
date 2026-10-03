@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { makeEnvelope } from '@musterd/protocol';
+import { makeEnvelope, type SyncPullEvent } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
@@ -240,6 +240,79 @@ withDrivers('seed', (_o, kind) => {
 
       expect((await getSeed(hub.store, ht.id, onHub.id))!.state).toBe('exploring');
       expect((await seedRow(joiner.store, jt.id, RELAY.id))!.state).toBe('open');
+    });
+
+    it('a thread entry folded before its seed is held, and the folded capture projects it (ADR 500)', async () => {
+      const jt = await joinerTeam();
+      // The order a fresh joiner meets when an entry was written on a seed whose capture reached the
+      // log AFTER it — or never, for a seed captured before ADR 399. Before ADR 500 the entry stopped
+      // the batch as `seed_unborn`, so the capture behind it could never fold: a wedge.
+      const at = Date.now();
+      const ev = (seq: number, kind: 'record' | 'seed', event: Record<string, unknown>) =>
+        ({
+          kind,
+          team: 'bravo',
+          hub_seq: 990_000 + seq,
+          origin_node: 'node-elsewhere',
+          origin_seq: seq,
+          event: { ts: at, result: 'allow', target: RELAY.id, ...event },
+        }) as SyncPullEvent;
+      const entry = ev(1, 'record', {
+        id: 'entry-early',
+        actor: 'ada',
+        action: 'record.seed_thread',
+        detail: {
+          entry_id: 'entry-early',
+          relay_id: RELAY.id,
+          kind: 'brief',
+          body: 'written before the capture folded',
+          by: 'ada',
+          created_at: at,
+        },
+      });
+      const capture = ev(2, 'seed', {
+        id: 'capture-late',
+        actor: 'sam',
+        action: 'seed.captured',
+        detail: {
+          relay_id: RELAY.id,
+          source: 'slack',
+          body: 'A raw idea',
+          captured_at: at,
+          slack_user_id: null,
+          by: 'sam',
+          linked_lane_id: null,
+          promotion_kind: null,
+          created_at: at,
+        },
+      });
+
+      const result = await foldBatch(joiner.store, jt.id, [entry, capture]);
+      expect(result.stop).toBeNull();
+      expect(result.last_hub_seq).toBe(990_002);
+      expect(result.held_seed_threads).toEqual([{ relay_id: RELAY.id, hub_seq: 990_001 }]);
+      const seed = (await seedRow(joiner.store, jt.id, RELAY.id))!;
+      expect((await getSeed(joiner.store, jt.id, seed.id))!.thread).toMatchObject([
+        { id: 'entry-early', kind: 'brief', by: 'ada' },
+      ]);
+
+      // The control: an entry whose seed IS here projects at once and is not reported held.
+      const later = ev(3, 'record', {
+        id: 'entry-on-time',
+        actor: 'ada',
+        action: 'record.seed_thread',
+        detail: {
+          entry_id: 'entry-on-time',
+          relay_id: RELAY.id,
+          kind: 'conclusion',
+          body: 'written after',
+          by: 'ada',
+          created_at: at + 1,
+        },
+      });
+      const onTime = await foldBatch(joiner.store, jt.id, [later]);
+      expect(onTime.held_seed_threads).toEqual([]);
+      expect((await getSeed(joiner.store, jt.id, seed.id))!.thread).toHaveLength(2);
     });
 
     it('a joiner-minted seed event is refused at ingest, as a policy event is', async () => {
