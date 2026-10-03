@@ -489,7 +489,17 @@ export function pendingInterrupts(
    *  gated on `loops.review` + `flow:auto` (ADR 191); admitting acceptance there would route a paid
    *  wake around its own policy gate. That the same predicate cannot serve both rails is precisely
    *  ADR 225's thesis — live and offline want different instruments — appearing in the code. */
-  opts: { obligations?: boolean; huddles?: boolean; huddleOpens?: boolean } = {},
+  opts: {
+    obligations?: boolean;
+    huddles?: boolean;
+    huddleOpens?: boolean;
+    /** ADR 271 §4, built: the daemon's "this incident is now yours" notice (`meta.incident.routed_to`
+     *  naming me) is a wake reason when the team's `incident.wake_on_route` is on. Paid rail only. */
+    incidentRoutes?: boolean;
+    /** ADR 271 §4, built: the daemon's "the red you parked behind is resolved" notice
+     *  (`meta.incident.resolved_by`) is a wake reason when `incident.wake_on_resolve` is on. */
+    incidentResolves?: boolean;
+  } = {},
 ): Envelope[] {
   const resolved = new Set<string>();
   // ADR 254: an eligible-set act is discharged by the FIRST accept/decline naming it — for every
@@ -524,6 +534,21 @@ export function pendingInterrupts(
   };
   const isUrgent = (m: Envelope) =>
     (m.meta as { urgent?: unknown } | null | undefined)?.['urgent'] === true;
+  // ADR 271 §4 (spec §3), the two incident wake edges — opt-in per team, off by default, and only on
+  // the paid rail (`claimWakeLeases` passes them; the live interrupt line never does: a live seat
+  // already reads the notice from its inbox). `meta.incident` is server-controlled on the same
+  // grounds as `lane_review`: `routeEnvelope` strips a client-supplied copy, so a seat cannot mint
+  // itself a free wake by claiming an incident was routed to it. Both notices ride `message`, which
+  // nothing else here admits, so the marker is the whole test.
+  const incidentOf = (m: Envelope) =>
+    (m.meta as { incident?: { routed_to?: unknown; resolved_by?: unknown } } | null | undefined)
+      ?.incident;
+  const isIncidentRoute = (m: Envelope) =>
+    opts.incidentRoutes === true && m.act === 'message' && incidentOf(m)?.routed_to === me;
+  const isIncidentResolve = (m: Envelope) =>
+    opts.incidentResolves === true &&
+    m.act === 'message' &&
+    typeof incidentOf(m)?.resolved_by === 'string';
   // ADR 225: a routed acceptance is obligation-class. Keyed on the daemon-set `lane_review` marker,
   // never on act+tier alone — a plain directed `ask` must not raise the line.
   const isObligation = (m: Envelope) =>
@@ -638,7 +663,9 @@ export function pendingInterrupts(
           m.act === 'steer' ||
           isObligation(m) ||
           isHuddleTurn(m) ||
-          isHuddleOpen(m)) &&
+          isHuddleOpen(m) ||
+          isIncidentRoute(m) ||
+          isIncidentResolve(m)) &&
         !resolved.has(m.thread ?? m.id) &&
         // Directed obligations (no eligible set) were missing this: `discharged` only ran inside
         // the eligible-set branch of `actionNeeded`, so a self-answered `lane_review` ask kept

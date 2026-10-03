@@ -97,7 +97,8 @@ enabled` is its own switch.
 ### 4. Wakes are specified, defaulted off, and deferred behind ADR 269
 
 The spec asked for `wake_on_route` and `wake_on_resolve` defaulting `true`. They ship `false`, and
-the edge itself is not built in this increment.
+the edge itself is not built in this increment. _(Amended 2026-10-02: the edge is built; the
+defaults stay `false`. See the amendment below.)_
 
 The spec's `true` assumed wake pricing was sound. It is not, and the reason is worse than
 "unpriced": wake reports were being **rejected**. `transcript_age_ms` is
@@ -148,6 +149,19 @@ Both fields are `.optional()`, so a brief from a pre-271 daemon renders exactly 
 
 - **No wake edge** (§4), no CI watcher (increment 3), no cross-team incidents, no auto-remediation.
 - "Does anything merge past the red" stays a human ask (spec §6).
+
+## Consequences
+
+- Dated note (2026-10-02): §4's wake edge is built (lane `01M3TAM0X30W83R5BQSC214N02`, recovered by
+  the nothing-vanishes triage, ADR 487 A3) now that ADR 269 has repaired the accounting the deferral
+  waited on. The knobs keep their `false` default — an upgrade arms no spend. With `wake_on_route`
+  on, the daemon's "this incident is now yours" notice (`meta.incident.routed_to`) is an immediate
+  wake reason for the named owner; with `wake_on_resolve` on, the "resolved" notice
+  (`meta.incident.resolved_by`) is a batched wake reason for each reporter. Both ride the existing
+  `pendingInterrupts` → `claimWakeLeases` rail, on the paid side only; the live interrupt line never
+  admits them. `meta.incident` is server-controlled: `routeEnvelope` strips a client copy, as it does
+  `lane_review`. Increment 3 (the CI watcher) is dropped: it was gated on an increment 1 eval that was
+  never run, and nothing since has shown first-reporter burn worth a second detection source.
 
 ## Observability & Evaluation
 

@@ -1324,6 +1324,10 @@ async function dueCandidates(
     raisedDeferralWakes: boolean;
     /** ADR 378 inc 4: does a huddle OPEN that names this seat summon it? Effective seat policy. */
     conveneHuddles: boolean;
+    /** ADR 271 §4, built: the team's `incident.wake_on_route` — the "now yours" notice wakes. */
+    wakeOnIncidentRoute: boolean;
+    /** ADR 271 §4, built: the team's `incident.wake_on_resolve` — the "resolved" notice wakes. */
+    wakeOnIncidentResolve: boolean;
   },
   /**
    * The team's open directed ledger, computed ONCE for the whole poll — as a THUNK, so a team where
@@ -1377,10 +1381,18 @@ async function dueCandidates(
     // the seat's own effective policy, which is what makes it affordable on this side.
     for (const env of pendingInterrupts(envelopes, member.name, {
       huddleOpens: lanes.conveneHuddles,
+      incidentRoutes: lanes.wakeOnIncidentRoute,
+      incidentResolves: lanes.wakeOnIncidentResolve,
     })) {
       if (seen.has(env.id)) continue;
       seen.add(env.id);
-      const demoted = await sentFromWake(db, env.id);
+      // ADR 271 §4: a route is one wake for one named beneficiary — immediate. A resolve tells the
+      // seats parked behind the red they may move; that is batched work, not an interruption.
+      const demoted =
+        (await sentFromWake(db, env.id)) ||
+        (env.act === 'message' &&
+          typeof (env.meta as { incident?: { resolved_by?: unknown } } | null)?.incident
+            ?.resolved_by === 'string');
       const candidate: WakeCandidate = {
         act_id: env.id,
         act: env.act,
@@ -1636,6 +1648,10 @@ export async function claimWakeLeases(
         (ledgerMemo ??= await openDirectedLedger(t, teamId));
       const reviewLoopOn = teamPolicy.loops?.review === true;
       const dispatchLoopOn = teamPolicy.loops?.dispatch === true;
+      // ADR 271 §4 (built, lane 01M3TAM0X3): the incident wake knobs, read once per poll with the
+      // rest of the team policy — both default off (ADR 271's posture), so an upgrade arms nothing.
+      const wakeOnIncidentRoute = teamPolicy.incident?.wake_on_route === true;
+      const wakeOnIncidentResolve = teamPolicy.incident?.wake_on_resolve === true;
       // ADR 494 §2: the Team's schedule, read once; a Member's own schedule replaces it (ADR 206).
       const teamHours = parseWorkingHours((await getTeamById(t, teamId))?.working_hours);
       for (const enrollment of enrollments) {
@@ -1738,6 +1754,8 @@ export async function claimWakeLeases(
             batched: cooled && policy.lane !== 'interrupt',
             raisedDeferralWakes: policy.raised_deferral_wakes,
             conveneHuddles: policy.convene_huddles,
+            wakeOnIncidentRoute,
+            wakeOnIncidentResolve,
           },
           teamLedger,
         );

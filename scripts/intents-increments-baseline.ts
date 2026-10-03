@@ -118,7 +118,6 @@ export const INCREMENTS_BASELINE: ReadonlySet<string> = new Set<string>([
   'docs/superpowers/specs/2026-08-13-platform-guardian-design.md::3. **batond collector** (adr 082) replaces log-tail reads fo',
   'docs/superpowers/specs/2026-08-14-incident-convergence-design.md::1. **cluster + lane + banner + auto-reply.** protocol meta, ',
   'docs/superpowers/specs/2026-08-14-incident-convergence-design.md::2. **routing + wakes + config.** claim window, fallback-role',
-  'docs/superpowers/specs/2026-08-14-incident-convergence-design.md::3. **ci watcher** as a second detection source feeding the s',
   'docs/superpowers/specs/2026-09-02-tailscale-aperture-paved-road-design.md::- **2a — aperture policy generation (implemented under adr 4',
   'docs/superpowers/specs/2026-09-02-tailscale-aperture-paved-road-design.md::- **2b — tailscale transport generation (implemented under a',
   'docs/superpowers/specs/2026-09-02-tailscale-aperture-paved-road-design.md::- **implemented in the local handoff slice (adr 425):** type',

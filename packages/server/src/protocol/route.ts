@@ -272,6 +272,13 @@ async function routeEnvelopeInner(
     const { lane_review: _clientLaneReview, ...restMeta } = outgoingEnv.meta;
     outgoingEnv = { ...outgoingEnv, meta: restMeta };
   }
+  // ADR 271 §4 (built): `incident` is the daemon's own marker on the route/resolve notices, and
+  // under `incident.wake_on_route` / `wake_on_resolve` it is a PAID wake reason — so a client copy
+  // would be a seat minting itself a wake. Same strip, same silence: the message still lands.
+  if (!daemonComposed && outgoingEnv.meta && 'incident' in outgoingEnv.meta) {
+    const { incident: _clientIncident, ...restMeta } = outgoingEnv.meta;
+    outgoingEnv = { ...outgoingEnv, meta: restMeta };
+  }
 
   // Per-act model stamp (ADR 101): the occupancy attestation is the *source*, the stamp on each act
   // is the *dataset*. Model is **entirely server-controlled** — any client-supplied `meta.model` is

@@ -2454,4 +2454,48 @@ withDrivers('residency', (o, kind) => {
       expect(lookups).toBeLessThan(50);
     });
   });
+
+  /**
+   * ADR 271 §4, built (lane 01M3TAM0X3): the incident knobs were in the policy schema and the CLI
+   * and read by nothing. Now the daemon's route notice wakes the new owner (immediate — one wake,
+   * one named beneficiary) and the resolve notice wakes a parked reporter (batched — it may move,
+   * nobody is waiting on it). Both off by default: an upgrade arms no new spend.
+   */
+  describe('claimWakeLeases — incident wake knobs (ADR 271 §4)', async () => {
+    const routeNotice = (lane: string, to: string) => ({ incident: { lane, routed_to: to } });
+    const resolveNotice = (lane: string, by: string) => ({ incident: { lane, resolved_by: by } });
+
+    it('a route notice wakes its named owner only when wake_on_route is on, on the immediate lane', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await msg(db, team, nick, ada, 'message', 'r1', 1_000, { meta: routeNotice('L1', 'Ada') });
+      expect(await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toEqual([]);
+
+      await setPolicy(db, team.id, { incident: { wake_on_route: true } });
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders).toHaveLength(1);
+      expect(orders[0]).toMatchObject({ seat: 'Ada', act_id: 'r1', lane: 'immediate' });
+    });
+
+    it('a resolve notice wakes the parked reporter only when wake_on_resolve is on, on the batched lane', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await msg(db, team, nick, ada, 'message', 'd1', 1_000, { meta: resolveNotice('L1', 'nick') });
+      await setPolicy(db, team.id, { incident: { wake_on_route: true } });
+      expect(await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toEqual([]);
+
+      await setPolicy(db, team.id, { incident: { wake_on_resolve: true } });
+      const orders = await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      expect(orders).toHaveLength(1);
+      expect(orders[0]).toMatchObject({ seat: 'Ada', act_id: 'd1', lane: 'batched' });
+    });
+
+    it('a route notice naming another seat wakes nobody, knob or no knob', async () => {
+      const { db, team, nick, ada } = await seed();
+      await enroll(db, team, ada);
+      await setPolicy(db, team.id, { incident: { wake_on_route: true, wake_on_resolve: true } });
+      await msg(db, team, nick, ada, 'message', 'r2', 1_000, { meta: routeNotice('L1', 'bob') });
+      expect(await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS)).toEqual([]);
+    });
+  });
 });
