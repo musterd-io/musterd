@@ -185,3 +185,8 @@ the terminal around every harness.
   - *Speed.* The bench reports first paint on an idle machine once the picker lands. Falsifier: a
     median above 150 ms. If that happens, approach C (a native front end over
     `musterd seats --json`) is reconsidered.
+- **2026-10-03 — Decision 7's catalog is amended by [ADR 503](503-roster-first-launcher-catalog.md).**
+  On the second machine the folder-shaped catalog showed five of twenty-four members, and the
+  "on the team · not here" row's setup was a silent move of a seat resident elsewhere. The catalog
+  becomes roster-first with a per-row `where`/`can`; the folder scan remains as the overlay that
+  catches broken bindings.
