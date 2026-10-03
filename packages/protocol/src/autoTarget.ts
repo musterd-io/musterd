@@ -54,16 +54,20 @@ export interface ReplyToStyle {
   ref: (id: string) => string;
   /** Where a seat goes to see the queue for itself. */
   discover: string;
+  /** Render the copy-pasteable thread reference for a re-send (lane 01M3TB3C0D). */
+  thread: (id: string) => string;
 }
 
 const MCP_STYLE: ReplyToStyle = {
   ref: (id) => `reply_to:${id}`,
   discover: 'see team_inbox_check',
+  thread: (id) => `thread:${id}`,
 };
 
 export const CLI_REPLY_TO_STYLE: ReplyToStyle = {
   ref: (id) => `--reply-to ${id}`,
   discover: 'see musterd inbox --json',
+  thread: (id) => `--thread ${id}`,
 };
 
 function laneOf(m: AutoTargetable): string | undefined {
@@ -147,4 +151,45 @@ export function chooseAutoTarget(
       `${open.length} open asks — name the one you are answering, so this ${act} lands on what ` +
       `you actually reviewed:\n${lines}`,
   };
+}
+
+/** The thread a root `message` to `to` should probably have joined (lane 01M3TB3C0D). */
+export interface ThreadHint {
+  /** The open act from `to` that is waiting on the sender. */
+  id: string;
+  act: string;
+  /** What to put in `thread` on the re-send: the act's own thread root, or its id. */
+  thread: string;
+}
+
+/**
+ * Lane 01M3TB3C0D: 97% of agent→member prose is a ROOT message (3,511 of 3,616 in the 90 days to
+ * 2026-10-03), and 908 of those roots went to a member who had an unanswered directed act waiting
+ * on the sender — a prose answer that leaves the ask open and unjoinable, the ADR 167 starvation.
+ * This is the one surface fix the data supports: given the sender's open, answerable acts (the
+ * same set an un-named verdict auto-targets), the newest one FROM the recipient is the thread the
+ * message should have joined. Advisory on both surfaces — the send already happened.
+ *
+ * @param open The sender's open answerable acts, NEWEST FIRST (both callers build that order).
+ * @param to   The member the root message was just sent to.
+ */
+export function threadHintFor(
+  open: Array<{ id: string; act: string; from: string; thread?: string | null | undefined }>,
+  to: string,
+): ThreadHint | null {
+  const first = open.find((m) => m.from === to);
+  if (!first) return null;
+  return { id: first.id, act: first.act, thread: first.thread ?? first.id };
+}
+
+/** The one line both surfaces print for a {@link ThreadHint}. */
+export function threadHintText(
+  hint: ThreadHint,
+  to: string,
+  style: ReplyToStyle = MCP_STYLE,
+): string {
+  return (
+    `${to} has an open ${hint.act} waiting on you (${style.ref(hint.id)}) — this message started a ` +
+    `new thread, so that ${hint.act} stays open. Reply in its thread next time: ${style.thread(hint.thread)}.`
+  );
 }

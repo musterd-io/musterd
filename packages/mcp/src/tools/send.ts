@@ -12,6 +12,8 @@ import {
   eligibleSetRefusal,
   laneAckAck,
   laneVerdictAck,
+  threadHintFor,
+  threadHintText,
   type Envelope,
   makeEnvelope,
   MAX_ELIGIBLE,
@@ -302,6 +304,19 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
         // ADR 484: the challenge-evidence rail's one line — sender-only, never stored on the act.
         const evidenceNotice = ackBody?.evidence_notice;
         const evidenceGuidance = evidenceNotice ? ` ⚠ ${evidenceNotice}` : '';
+        // Lane 01M3TB3C0D: a root `message` to a member with an open directed act waiting on this
+        // seat — say which thread it should have joined. One inbox read, after the send, advisory.
+        const threadHint =
+          args.act === 'message' && addressed.to.kind === 'member' && !envelope.thread
+            ? threadHintFor(
+                await openAnswerable(client, config.member, config.capabilities?.is_admin === true),
+                addressed.to.name,
+              )
+            : null;
+        const threadGuidance =
+          threadHint && addressed.to.kind === 'member'
+            ? ` ⚠ ${threadHintText(threadHint, addressed.to.name)}`
+            : '';
         // Structured-first (ADR 144 inc 3): the id/thread a programmatic caller needs to keep the
         // exchange threaded (reply_to / thread on the next send), without parsing the prose.
         const text =
@@ -311,7 +326,8 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
           handoffGuidance +
           verdictGuidance +
           ackGuidance +
-          evidenceGuidance;
+          evidenceGuidance +
+          threadGuidance;
         return {
           content: [{ type: 'text' as const, text }],
           structuredContent: {
@@ -329,6 +345,7 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
             ...(laneVerdict ? { lane_verdict: laneVerdict } : {}),
             ...(laneAck ? { lane_ack: laneAck } : {}),
             ...(evidenceNotice ? { evidence_notice: evidenceNotice } : {}),
+            ...(threadHint ? { thread_hint: threadHint } : {}),
           },
         };
       } catch (err) {

@@ -3,6 +3,7 @@ import {
   askConcernsMe,
   chooseAutoTarget,
   CLI_REPLY_TO_STYLE,
+  threadHintFor,
   type AutoTargetable,
 } from './autoTarget.js';
 
@@ -156,5 +157,41 @@ describe('askConcernsMe', () => {
         admin: true,
       }),
     ).toBe(false);
+
+ * Lane 01M3TB3C0D: a root `message` to a member who has an open directed act waiting on the sender
+ * leaves that act open and unjoinable (97% of agent→member prose is a root, measured 2026-10-03).
+ * The send ack suggests the thread — warn, never block.
+ */
+describe('threadHintFor', () => {
+  const open = (over: Record<string, unknown>) =>
+    ({
+      id: 'x',
+      act: 'ask',
+      from: 'nick',
+      to: { kind: 'member', name: 'dolly' },
+      ts: 1,
+      thread: null,
+      ...over,
+    }) as never;
+
+  it('names the newest open act FROM the recipient as the thread to reply in', () => {
+    const hint = threadHintFor(
+      [open({ id: 'a2', ts: 2, act: 'request_help' }), open({ id: 'a1', ts: 1 })],
+      'nick',
+    );
+    expect(hint).toEqual({ id: 'a2', act: 'request_help', thread: 'a2' });
+  });
+
+  it("uses the act's own thread root when it is a reply", () => {
+    expect(threadHintFor([open({ id: 'a3', ts: 3, thread: 'root1' })], 'nick')).toEqual({
+      id: 'a3',
+      act: 'ask',
+      thread: 'root1',
+    });
+  });
+
+  it('is silent when nothing open is from that member', () => {
+    expect(threadHintFor([open({ from: 'izzo' })], 'nick')).toBeNull();
+    expect(threadHintFor([], 'nick')).toBeNull();
   });
 });
