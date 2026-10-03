@@ -433,7 +433,6 @@ function SeatHaltControl({
             maxLength={280}
             placeholder="why — the seat will be told"
             aria-label={`Reason for halting ${seat}`}
-            autoFocus
             onChange={(e) => setReason(e.target.value)}
           />
           <button
