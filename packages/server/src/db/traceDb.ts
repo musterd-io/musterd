@@ -117,7 +117,8 @@ export const CONTENT_CAPTURED_THROUGH_KEY = 'content_captured_through';
  * 0600 posture as {@link openDb}; `:memory:` for tests.
  */
 export function openTraceDb(path: string): Database.Database {
-  if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
+  if (path === ':memory:') return openMemoryTrace();
+  mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
@@ -127,6 +128,22 @@ export function openTraceDb(path: string): Database.Database {
       if (existsSync(path + suffix)) chmodSync(path + suffix, 0o600);
     }
   }
+  return db;
+}
+
+// The same template-and-clone as `openDb(':memory:')` (open.ts), for the trace store: every test
+// daemon opens an in-memory trace store on boot (index.ts), and the trace ladder replayed each time.
+let memoryTemplate: Buffer | undefined;
+function openMemoryTrace(): Database.Database {
+  if (!memoryTemplate) {
+    const seed = new Database(':memory:');
+    seed.pragma('foreign_keys = ON');
+    runMigrations(seed, TRACE_MIGRATIONS);
+    memoryTemplate = seed.serialize();
+    seed.close();
+  }
+  const db = new Database(memoryTemplate);
+  db.pragma('foreign_keys = ON');
   return db;
 }
 
