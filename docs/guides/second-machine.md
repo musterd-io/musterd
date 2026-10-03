@@ -39,13 +39,15 @@ the roster clone at `~/musterd/<team>`, and each seat is a worktree beneath it. 
 difference: the hub's repo group is `agents/` (its history), the joiner's will be `musterd/` (the
 remote's name) — nothing keys on the path across machines.
 
-## The seat split (revive, decided 2026-10-02)
+## The seat split (revive, decided 2026-10-02, landed 2026-10-03)
 
-Chosen so the joiner needs only two harness sign-ins:
+Chosen so the joiner needs only two harness sign-ins. The split as decided put dolly and big-body on
+the joiner; on 2026-10-03 nick kept both on the hub, moved gptbot instead, and created one seat new
+on the joiner rather than moving one. What landed:
 
-| Joiner                                                       | Hub                                                                                              |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| ryder, sloane, dolly (claude-code) · big-body, lazara (codex) | izzo, miley, stanley (claude-code) · gptbot (codex) · grokbot, wanderer (grok) · ghost (opencode) · the services; delta stays on Fly |
+| Joiner (Air 2)                                                         | Hub                                                                                                        |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| ryder, sloane, lazara (claude-code) · gptbot (codex) · dreamy (opencode, new) | izzo, miley, stanley, dolly (claude-code) · big-body (codex) · grokbot, wanderer (grok) · ghost (opencode) · the services; delta stays on Fly |
 
 ## Before the script — the person, at the joiner (~20 min)
 
@@ -152,6 +154,47 @@ per machine) — the seat starts a fresh session on the joiner, with its musterd
 The hub's worktree for the seat goes stale; leave it or `git worktree remove` it from
 `~/.musterd/runtime`.
 
+## A seat born on the joiner — the same step, plus a roster commit
+
+`bootstrap.sh seat <name> <harness>` works for a name the team has never seen: `musterd agent` adds
+the member when it is new. Skip the two hub lines it prints (there is nothing to unbind). What the
+step does **not** do is get the member to the hub: the roster is file-backed (ADR 058), so `musterd
+agent` writes `seats/<name>.toml` into the **joiner's** roster clone and nowhere else. The hub learns
+a member from a seat file in its own clone, and until that file arrives the hub has no such seat —
+`residency on` from the joiner lands on nothing and is silently lost.
+
+```sh
+# joiner — after `bootstrap.sh seat dreamy opencode`
+cd ~/musterd/<team>            # the roster clone
+git add .musterd/seats/dreamy.toml && git commit -m "add dreamy" && git push
+# hub — the daemon watches the roster dir; the seat appears on the pull
+cd ~/musterd/<team> && git pull --ff-only
+# joiner — ONLY NOW: re-run the enrolment the seat step already tried
+musterd residency on --seat dreamy --workspace <ws> --harness opencode --flow auto
+```
+
+Measured 2026-10-03: `added dreamy (agent) to revive` printed on Air 2 at 17:46Z; 40 minutes later
+the hub still had no dreamy, with every push from Air 2 accepted (`sync_pushed`) — the member was
+never in the log to push. The hub showed `○ dreamy agent` within seconds of the pull, and
+`· wakeable` only after the second `residency on`. Falsify: a joiner's `musterd agent <new>` that
+the hub roster shows without a roster commit.
+
+Two more edges of the seat step, both met on 2026-10-03:
+
+- **An uninstalled harness leaves a half-wired seat.** `seat dreamy opencode` on a machine without
+  the OpenCode binary wrote the binding and the worktree, then `residency on` refused. After
+  installing it, `musterd harness status` in the seat still read `mcp.musterd folder → needs wire`
+  — the MCP config the wake needs. `musterd wire` there, then `residency on` from the admin's
+  Workspace, then open it once. A live `musterd <seat>` session holding the folder makes the
+  actuator log `wake deferred … a live local session holds <ws>`; that is correct, and the due act
+  reaches the session's own inbox.
+- **Switching a seat's harness later** (lazara was provisioned `codex`, wanted `claude-code`):
+  `musterd harness configure --select claude-code,musterd --yes` and `musterd wire` in the seat, then
+  `residency off` + `residency on --harness claude-code` from the admin's Workspace. The script
+  pre-accepts Claude Code's folder trust only when the harness it was *given* is `claude-code`, so a
+  switch needs that by hand (cloud-seat finding 8) or the first cold wake dies on the prompt. The
+  harness id is `claude-code`; `claude` is refused.
+
 ## Starting a joiner over — `bootstrap.sh reset --yes`
 
 For a joiner whose enrolment is wedged or abandoned. There is no repair in place, and each obvious
@@ -197,6 +240,20 @@ rest: mint a new invite on the hub, `bash ~/bootstrap.sh machine` here, then `mu
    number this lane exists for. Record both readings under Findings.
 5. **Residency truth.** `musterd residency status` on the hub lists the moved seats on the
    joiner's host (ADR 393), not `mac.lan`.
+
+Read on 2026-10-03, five seats on Air 2 (ryder, sloane, gptbot, lazara, dreamy):
+
+1. **Wake** — gptbot's first act from Air 2 (an acceptance `ask`) reached a hub seat's inbox; a
+   `steer` to dreamy became `wake due: dreamy [immediate]` on Air 2's actuator within one tick.
+2. **Lane** — gptbot's lane `01M1MKYZCJ` was submitted from Air 2 and its acceptance ask routed to a
+   hub seat; the lane closed on both boards.
+3. **`/live`** — the hub roster shows each as `● <seat> … @ macbook-air-2.lan`.
+4. **Load** — hub load average 8.9 the morning of 2026-10-02 with every seat resident; 2.4–2.7 at
+   22:12 with ryder and sloane moved; 3.4 at 12:56 on 2026-10-03 with all five moved and the same
+   eight seats present. Air 2's own `uptime` is not recorded here.
+5. **Residency truth** — **cannot be read from `residency status`** on this team: the host column
+   shows `mac.lan` for the Air 2 seats because Air 2's hostname is also `mac`. Use the presence
+   line's `@ macbook-air-2.lan` (item 3), which carries the daemon's node, not its hostname.
 
 ## Known edges
 
@@ -250,3 +307,24 @@ Append; never rewrite. Dated, with what was measured and what was done about it.
   `| tee` the question is invisible and the run hangs, so the script passes `--rotate`. The
   autorefresh service seat cannot be minted on a joiner (the roster already names it) and ticks
   unattributed; cosmetic. A revoked node id can never enrol again (above).
+- **2026-10-03 (the seat moves)** — ryder and sloane moved the night before (hub→Air 2 message and a
+  reply back as the check), gptbot, lazara and the new seat dreamy on this day; the split that landed
+  is in the table above. New findings, each now in the steps above:
+  1. A seat born on the joiner reaches the hub only through a roster commit; `residency on` before
+     the hub's pull is lost (section above). Product fix: the `seat` step commits and pushes the
+     file, or refuses to enrol a seat the hub does not yet have.
+  2. The hub's `musterd residency status` prints `! drift: "<seat>" is enrolled to mac.lan but
+     missing from this machine's host registry` for every joiner seat. False positive — the seat is
+     in the joiner's registry — and the suggested remedy would re-home it. The drift check should
+     skip seats enrolled to another node.
+  3. The host label in residency is the joiner's `hostname()`, which here collides with the hub's
+     (`mac.lan` on both). ADR 393's host column cannot distinguish two Macs with the default name;
+     the presence line's node label can. Same root as the `--label` edge in node-enrollment.md.
+  4. Air 2's actuator logs `wake due … wake deferred: <seat> — seat not in this machine's host
+     registry` for **every hub seat with a due act, every tick** (ghost, wanderer, miley all day).
+     Correct (ADR 393) but it buries the one line about a seat that does live there.
+  5. A new session on the joiner reads its inbox before the hub's act is pulled (60 s cadence); the
+     act is there on the second read. Said once to each new seat: "check your inbox".
+  6. `bash ~/bootstrap.sh seat lazara codex && musterd lazara` for an already-moved seat is a
+     no-op that prints nothing, which reads as a hang. The step should say "already provisioned".
+
