@@ -118,3 +118,27 @@ one of them red; the last was found SURVIVING before its test existed, which is 
 there. What remains owed, and cheap: run a real session beside a live occupant on a build carrying
 this change and confirm one `session_captured` row appears at the first tool boundary. Until someone
 does, the live claim rests on the tests rather than on a measurement.
+
+**Post-change arm, run live — 2026-10-03 (seat ryder, musterd 0.4.2 on this machine's daemon).**
+A real headless Claude Code session (`claude -p`, MCP disabled so it could not join or displace the
+seat) was started in a scratch copy of ryder's workspace whose slot named an un-ended predecessor
+with a transcript touched seconds earlier — live-looking, so the interloper gate applied. Its single
+tool call aged that transcript past `LOCAL_SESSION_LIVE_MS`, the state the 2026-08-28 incident
+reached by elapsed time. Result:
+
+- **Gated at SessionStart.** The healed slot's `started_at` (1791048348599) equals the new
+  transcript's birthtime to the millisecond: the heal's signature, not SessionStart's `Date.now()`.
+- **Announced at the first tool boundary.** One `residency.session_captured` row for `ryder` at
+  1791048354556, six seconds after start; the slot's `attested_at` is 1791048354561, five ms later.
+- **Closed cleanly.** One matching `residency.session_ended` row (same `session_digest`) at
+  1791048355959.
+
+The scope is narrow on purpose. With a predecessor that is _actually_ still writing, the heal
+does not fire (a warm slot is never overridden) and the newcomer correctly announces nothing — the
+live-beside-live case stays with the wake guard, as above. This run confirms that the sequence the
+incident took now leaves the row it lacked.
+
+The synthetic `deadbeef0001` row disclosed on #1110 is absent from this machine's `audit` table
+(checked 2026-10-03). This table's history begins 2026-09-02, after the row was written on
+2026-08-28. If the row survives anywhere, it is on whichever daemon held the team's data then. It
+is not in the data this hub serves.
