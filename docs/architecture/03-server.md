@@ -163,7 +163,7 @@ src/
     serialize.ts      // db projection -> file structures (guard-1 round-trip + `team export`)
     watcher.ts        // debounced fs.watch over each roster root -> full reconcile (ADR 058)
   telemetry.ts        // minimal OpenTelemetry, off unless an OTLP endpoint is set (ADR 015)
-  errors.ts           // MusterdError(code,message) + toHttp()/toFrame(); ServiceUnavailable(sentence) — HTTP 503, code server_error (no protocol code for it), the stable sentence as the message; asMusterdError maps DriverError('unavailable') to it, so HTTP, WS frames and MCP tool errors all say "database unreachable"
+  errors.ts           // MusterdError(code,message) + toHttp()/toFrame(); ServiceUnavailable(sentence) — HTTP 503, code server_error (no protocol code for it), the stable sentence as the message; asMusterdHttpError maps DriverError('unavailable') to "database unreachable" and unrecognized errors to "internal server error" at the REST and remote-MCP response boundaries; the WS converter retains its existing frame detail
   log.ts              // structured logger (07-conventions format) + redactPath: the request path made safe to log or echo (hard rule 5); failureFields: a failed call's error plus the undici `.cause` that `String(error)` hides (`fetch failed` → `UND_ERR_SOCKET: other side closed`), used by the sync loops' failure lines
 ```
 

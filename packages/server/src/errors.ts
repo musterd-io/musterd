@@ -41,6 +41,8 @@ export class ServiceUnavailable extends MusterdError {
   }
 }
 
+const INTERNAL_SERVER_ERROR_SENTENCE = 'internal server error';
+
 /**
  * An `unauthorized` whose seat the server had ALREADY proved (ADR 391).
  *
@@ -95,4 +97,12 @@ export function asMusterdError(err: unknown): MusterdError {
     return new ServiceUnavailable(DATABASE_UNREACHABLE_SENTENCE);
   const message = err instanceof Error ? err.message : String(err);
   return new MusterdError('server_error', message);
+}
+
+/** Sanitize errors at the REST and remote MCP response boundaries. */
+export function asMusterdHttpError(err: unknown): MusterdError {
+  if (err instanceof MusterdError) return err;
+  if (err instanceof DriverError && err.code === 'unavailable')
+    return new ServiceUnavailable(DATABASE_UNREACHABLE_SENTENCE);
+  return new MusterdError('server_error', INTERNAL_SERVER_ERROR_SENTENCE);
 }

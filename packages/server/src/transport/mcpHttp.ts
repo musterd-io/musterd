@@ -5,7 +5,7 @@ import { ACTS, ActSchema, makeEnvelope, type Act, type Recipient } from '@muster
 import { ulid } from 'ulid';
 import { z } from 'zod';
 import { teamCtx, type Ctx } from '../context.js';
-import { asMusterdError, MusterdError } from '../errors.js';
+import { asMusterdHttpError, MusterdError } from '../errors.js';
 import { noteRequestFailure } from '../log.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { getCursor } from '../store/cursors.js';
@@ -264,7 +264,7 @@ async function buildRemoteServer(ctx: Ctx, webReq: Request): Promise<McpServer> 
                 `${minted.connect_url}`,
         );
       } catch (err) {
-        return toolError(asMusterdError(err).message);
+        return toolError(asMusterdHttpError(err).message);
       }
     },
   );
@@ -300,7 +300,7 @@ async function buildRemoteServer(ctx: Ctx, webReq: Request): Promise<McpServer> 
             `${issued.connect_url}`,
         );
       } catch (err) {
-        return toolError(asMusterdError(err).message);
+        return toolError(asMusterdHttpError(err).message);
       }
     },
   );
@@ -338,7 +338,7 @@ async function buildRemoteServer(ctx: Ctx, webReq: Request): Promise<McpServer> 
       try {
         addressed = parseRecipient(args.to, act);
       } catch (err) {
-        return toolError(err instanceof Error ? err.message : String(err));
+        return toolError(asMusterdHttpError(err).message);
       }
       const member = await getMemberByName(ctx.db, team.id, memberName);
       if (!member) return toolError('seat is gone — sign in again');
@@ -371,7 +371,7 @@ async function buildRemoteServer(ctx: Ctx, webReq: Request): Promise<McpServer> 
           }),
         );
       } catch (err) {
-        const me = asMusterdError(err);
+        const me = asMusterdHttpError(err);
         return toolError(`${me.code}: ${me.message}`);
       }
     },
@@ -545,7 +545,7 @@ export async function handleMcpRoute(
     memberName = auth.member.name;
     memberId = auth.member.id;
   } catch (err) {
-    const me = asMusterdError(err);
+    const me = asMusterdHttpError(err);
     if (me.httpStatus >= 500) noteRequestFailure(res, err);
     // RFC 6750 §3: an invalid/expired/revoked bearer 401s as invalid_token. The description
     // stays out of the header — the body already says it, and the header must not become an
@@ -577,7 +577,7 @@ export async function handleMcpRoute(
     const webRes = await (await getHandler(ctx, slug)).fetch(webReq);
     await sendWebResponse(res, webRes);
   } catch (err) {
-    const me = asMusterdError(err);
+    const me = asMusterdHttpError(err);
     if (me.httpStatus >= 500) noteRequestFailure(res, err);
     // A factory throw means the seat vanished mid-request; anything else is a 500 with no secret.
     if (!res.headersSent) {
