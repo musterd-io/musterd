@@ -105,6 +105,14 @@ lane `01M3ZRQAGDDMTG6TA9T27D02N9`.
   against the run before it. The shard holding `integration.test.ts` is the long pole at ~12 min,
   as Decision 6 says; lane `01M3ZRPWDBJJVZTD76DVRE08WX` is what moves it.
 
+- 2026-10-03, Decision 6's condition met: lane `01M3ZRPWDBJJVZTD76DVRE08WX` split
+  `integration.test.ts` into eight `transport/integration.*.test.ts` files along its depth-1
+  describes, over one shared `integration.helpers.ts` (`integrationHarness(kind)`), and `plan` now
+  picks four shards on a both-driver run. Same 322 tests. The arithmetic: the three shards summed
+  ~23 runner-minutes on `e088a57e` (12.1 / 5.8 / 5.1), ~7.5 of it setup, so four even shards are
+  ~4 min of tests + ~2.5 min setup each, at one more setup (~2.5 runner-minutes) per both-driver
+  run. The measured shard times of the first runs at four go here.
+
 ## Observability & Evaluation
 
 **Traces.** No new trace event. GitHub's run and job timings are the record:

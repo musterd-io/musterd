@@ -17,11 +17,12 @@
 # depth-1 default in the coverage leaf. History is cheap; discovering the next reader is not.
 #
 # Shape (ADR 498, 2026-10-03): a `plan` job picks the test drivers (ADR 492) AND the shard count;
-# the coverage leaf then runs as THREE SHARDS plus a merge when both drivers run, and as the one job
+# the coverage leaf then runs as FOUR SHARDS plus a merge when both drivers run (three until the
+# integration suite was split into eight files, lane 01M3ZRPWDB), and as the one job
 # it always was when SQLite alone does. The repo went private on 2026-10-02 and ubuntu-latest became
 # 2 vCPU per job; the suite is CPU-bound there, so the both-driver leaf took 25–27 min on every push
 # to main (18–23 min after #1985's two workers) while every other leaf finished in under 4. Each
-# shard runs a third of the files with `--reporter=blob`; the merge job folds the blobs and is the
+# shard runs a quarter of the files with `--reporter=blob`; the merge job folds the blobs and is the
 # ONLY place the coverage floors are checked on a sharded run (a shard's map is partial by
 # construction). ADR 492 rejected sharding for the compute it adds per run — about two setups and a
 # merge, ~6.5 runner-minutes — which is why the SQLite-only runs (most PRs) do not shard; its driver
@@ -79,7 +80,7 @@ jobs:
   # the locked deps and root test config — a PR touching none of that runs SQLite only. A push
   # to main always runs both. On pull_request the checkout is GitHub's merge commit, so
   # HEAD^1..HEAD is exactly the PR's change; no second parent means "not sure" → both.
-  # ADR 498: the same pick sets the shard count — three when both drivers run (the CPU-bound case),
+  # ADR 498: the same pick sets the shard count — four when both drivers run (the CPU-bound case),
   # one when SQLite alone does (sharding would add two setups to a ~6 min job). No install, no
   # build: a checkout and a diff, ~20 s before the shards start.
   # ADR 499: the same diff decides WHICH leaves run. `suite` (static + coverage) is off when every
@@ -118,7 +119,7 @@ jobs:
               fi
             fi
           fi
-          if [ "$kinds" = both ]; then count=3; shards='[1, 2, 3]'; else count=1; shards='[1]'; fi
+          if [ "$kinds" = both ]; then count=4; shards='[1, 2, 3, 4]'; else count=1; shards='[1]'; fi
           {
             echo "kinds=$kinds"
             echo "count=$count"
@@ -131,15 +132,18 @@ jobs:
             echo "MUSTERD_TEST_DRIVER=$kinds (ADR 492); coverage in $count shard(s) (ADR 498)"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
-  # One third of the suite per shard when both drivers run (vitest `--shard`: files sorted by a path
-  # hash, sliced into contiguous chunks, so the split is stable and the shard that holds
-  # integration.test.ts — ~10 min on both drivers by itself — is the long pole until that file is
-  # split); the whole suite in one job when SQLite alone does. `--coverage` is on so the blob carries
+  # A quarter of the suite per shard when both drivers run (vitest `--shard`: files sorted by a path
+  # hash, sliced into contiguous chunks, so the split is stable; the server's integration suite is
+  # eight transport/integration.*.test.ts files, not the one ~10 min file that made whichever shard
+  # held it the long pole); the whole suite in one job when SQLite alone does. `--coverage` is on so the blob carries
   # this shard's map; on a sharded run MUSTERD_COVERAGE_SHARD tells vitest.config.ts to leave the
   # floors to the merge, and on a one-shard run it is empty so the job enforces them itself, as it
   # always did. The blob is a 1-day artifact; `coverage-merge` below does the folding.
+  # A static name: GitHub appends the matrix value itself ("coverage (2)"), and a skipped matrix
+  # job — a docs-only run (ADR 499) — never expands an expression in its name, so the checks list
+  # used to show the expression unexpanded.
   coverage:
-    name: coverage ${{ matrix.shard }}/${{ needs.plan.outputs.shard_count }}
+    name: coverage
     runs-on: ubuntu-latest
     needs: [plan]
     if: needs.plan.outputs.suite == 'true'
