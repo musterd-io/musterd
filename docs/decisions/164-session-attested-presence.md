@@ -211,7 +211,8 @@ about somebody else's session.
 2. **The audit row** — `presence.session_ended`, which needs a client→server path that does not
    exist today. Deferred deliberately: increment 1 removes the lie, and until it has run in the
    field there is nothing to count. Until then the release is visible on stderr and, indirectly, as
-   the seat going offline.
+   the seat going offline. _(Amended 2026-10-02: this increment is lane
+   `01M3TAKNCFANJBSCBWT04K11Y4`. See the amendment below.)_
 
 ### What this does not do
 
@@ -271,6 +272,11 @@ false-positive rate in question 2 than from a split-arm trial. Revisit only if q
 rung 4 carrying the load, which would make the horizon a live parameter rather than a backstop.
 
 ## Consequences
+
+- Dated note (2026-10-02): increment 2 (the `presence.session_ended` audit row) was recovered by the
+  nothing-vanishes triage (ADR 487 Appendix A12) and is lane `01M3TAKNCFANJBSCBWT04K11Y4`, open on
+  the board; the Decision's Increments list carries a marker to it so the ADR 487 gate can see the
+  disposition without the frozen text changing.
 
 - The roster can say a seat is offline that a human believes is open on their screen — if that
   session has written nothing for an hour. This is the intended trade: honest absence over false

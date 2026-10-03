@@ -19,7 +19,6 @@ export const INCREMENTS_BASELINE: ReadonlySet<string> = new Set<string>([
   'docs/decisions/069-v0.3-governance-build-plan.md::4. **`decide` → grant lifetime binding.** `post /teams/:slug',
   'docs/decisions/069-v0.3-governance-build-plan.md::5. **adr 058 reconciliation (the a.9 drift).** `members → se',
   'docs/decisions/164-session-attested-presence.md::1. **the ladder** — `sessionattestation` (a pure judgement o',
-  'docs/decisions/164-session-attested-presence.md::2. **the audit row** — `presence.session_ended`, which needs',
   'docs/decisions/166-session-liveness-by-enumeration.md::1. **enumerate in shadow.** ship `enumeratesessions` and com',
   'docs/decisions/166-session-liveness-by-enumeration.md::2. **flip**, once increment 1 shows the disagreement rate an',
   'docs/decisions/166-session-liveness-by-enumeration.md::3. **split** the guard question from the resume question, ea',
