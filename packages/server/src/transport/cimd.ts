@@ -115,7 +115,7 @@ export function isCimdClientId(clientId: string): boolean {
 }
 
 /** A conservative global-unicast check for resolver answers. */
-function isGlobalUnicastAddress(address: string, family: 4 | 6): boolean {
+export function isGlobalUnicastAddress(address: string, family: 4 | 6): boolean {
   if (isIP(address) !== family) return false;
   return family === 4 ? isGlobalIpv4(address) : isGlobalIpv6(address);
 }

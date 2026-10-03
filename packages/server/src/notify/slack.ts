@@ -1,5 +1,6 @@
 import type { AskSpecies, AskTier, DoorbellRecord } from '@musterd/protocol';
 import { askContract, askTierHolds } from '@musterd/protocol';
+import { postJsonPinned, type SinkResult } from './pinnedPost.js';
 
 /**
  * Slack delivery for the ask stream (ADR 149) — the daemon's one outbound call. A team-policy
@@ -74,21 +75,8 @@ export function formatDoorbellSlackText(record: DoorbellRecord, askBody: string)
  * POST the text to a Slack incoming webhook. Never throws: resolves `{ ok, status? }` for the
  * `doorbell.surfaced` audit row (ADR 443 — attempt + outcome, never the URL, never the body).
  */
-export async function postSlackWebhook(
-  url: string,
-  text: string,
-): Promise<{ ok: boolean; status?: number }> {
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text }),
-      signal: AbortSignal.timeout(SLACK_POST_TIMEOUT_MS),
-      // A 3xx to a private host would walk around the PUT-time public-host check (ADR 443 §5).
-      redirect: 'manual',
-    });
-    return { ok: res.ok, status: res.status };
-  } catch {
-    return { ok: false };
-  }
+export function postSlackWebhook(url: string, text: string): Promise<SinkResult> {
+  // Resolve-and-pin, like the webhook sink: a public name resolving to a private address is refused
+  // and the connection goes only to the address that was checked (ADR 443 §5, closed 2026-10-02).
+  return postJsonPinned(url, JSON.stringify({ text }), SLACK_POST_TIMEOUT_MS);
 }

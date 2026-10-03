@@ -1,5 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { formatAskSlackText, formatDoorbellSlackText, postSlackWebhook } from './slack.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setSinkPostForTests } from './pinnedPost.js';
+import {
+  formatAskSlackText,
+  formatDoorbellSlackText,
+  postSlackWebhook,
+  SLACK_POST_TIMEOUT_MS,
+} from './slack.js';
 
 describe('formatAskSlackText (ADR 149)', () => {
   it('phrases each species at the human and spells the tier contract in words', () => {
@@ -31,26 +37,27 @@ describe('formatAskSlackText (ADR 149)', () => {
 });
 
 describe('postSlackWebhook', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => setSinkPostForTests(null));
 
-  it('resolves { ok, status } from the endpoint response', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response('ok', { status: 200 })),
-    );
+  it('POSTs {text} through the pinned transport and passes its result through', async () => {
+    const seen: { url: string; body: string; timeoutMs: number }[] = [];
+    setSinkPostForTests(async (url, body, timeoutMs) => {
+      seen.push({ url, body, timeoutMs });
+      return { ok: true, status: 200 };
+    });
     await expect(postSlackWebhook('https://hooks.example.com/x', 'hi')).resolves.toEqual({
       ok: true,
       status: 200,
     });
+    expect(seen[0]).toEqual({
+      url: 'https://hooks.example.com/x',
+      body: JSON.stringify({ text: 'hi' }),
+      timeoutMs: SLACK_POST_TIMEOUT_MS,
+    });
   });
 
-  it('never throws — a network failure resolves { ok: false }', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        throw new Error('ECONNREFUSED');
-      }),
-    );
+  it('never throws — a transport failure resolves { ok: false }', async () => {
+    setSinkPostForTests(async () => ({ ok: false }));
     await expect(postSlackWebhook('https://hooks.example.com/x', 'hi')).resolves.toEqual({
       ok: false,
     });

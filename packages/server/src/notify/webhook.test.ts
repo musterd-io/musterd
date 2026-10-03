@@ -1,6 +1,7 @@
 import type { DoorbellRecord } from '@musterd/protocol';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { postDoorbellWebhook } from './webhook.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setSinkPostForTests } from './pinnedPost.js';
+import { postDoorbellWebhook, WEBHOOK_POST_TIMEOUT_MS } from './webhook.js';
 
 const record: DoorbellRecord = {
   team: 'revive',
@@ -13,34 +14,30 @@ const record: DoorbellRecord = {
 };
 
 describe('postDoorbellWebhook (ADR 443)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => setSinkPostForTests(null));
 
-  it('POSTs the record as-is, refusing redirects', async () => {
-    const seen: { url: string; init: RequestInit }[] = [];
-    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
-      seen.push({ url, init });
-      return new Response(null, { status: 204 });
+  it('POSTs the record as-is through the pinned transport, with the sink timeout', async () => {
+    const seen: { url: string; body: string; timeoutMs: number }[] = [];
+    setSinkPostForTests(async (url, body, timeoutMs) => {
+      seen.push({ url, body, timeoutMs });
+      return { ok: true, status: 204 };
     });
     expect(await postDoorbellWebhook('https://ntfy.sh/t', record)).toEqual({
       ok: true,
       status: 204,
     });
-    expect(JSON.parse(String(seen[0]!.init.body))).toEqual(record);
-    expect(seen[0]!.init.redirect).toBe('manual');
+    expect(seen[0]!.url).toBe('https://ntfy.sh/t');
+    expect(JSON.parse(seen[0]!.body)).toEqual(record);
+    expect(seen[0]!.timeoutMs).toBe(WEBHOOK_POST_TIMEOUT_MS);
   });
 
-  it('a non-2xx is ok:false with its status', async () => {
-    vi.stubGlobal('fetch', async () => new Response(null, { status: 302 }));
+  it('passes the transport result through: a non-2xx is ok:false with its status, a failure has none', async () => {
+    setSinkPostForTests(async () => ({ ok: false, status: 302 }));
     expect(await postDoorbellWebhook('https://ntfy.sh/t', record)).toEqual({
       ok: false,
       status: 302,
     });
-  });
-
-  it('never throws: a network failure resolves ok:false with no status', async () => {
-    vi.stubGlobal('fetch', async () => {
-      throw new Error('ECONNREFUSED');
-    });
+    setSinkPostForTests(async () => ({ ok: false }));
     expect(await postDoorbellWebhook('https://ntfy.sh/t', record)).toEqual({ ok: false });
   });
 });

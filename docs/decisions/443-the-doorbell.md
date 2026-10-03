@@ -123,7 +123,8 @@ host that is loopback, link-local, or private (RFC 1918, `fc00::/7`), is rejecte
 the sink. Otherwise a non-admin human's personal URL makes the daemon POST into the local network.
 The check is on the literal host at `PUT`; it does not resolve DNS. A public name that resolves to a
 private address is not caught. That is recorded, not closed: closing it needs a resolve-and-pin at
-dispatch.
+dispatch. _(Amended 2026-10-02: closed — the send resolves, refuses private answers and pins the
+connection. See the amendment below.)_
 
 ### 6. Compatibility
 
@@ -164,6 +165,13 @@ stop a same-user process from reading the ring queue or a human's prefs with a c
 - **Answering from Slack.** Buttons need public ingress, and the daemon is loopback-bound (ADR 149).
 
 ## Consequences
+
+- Dated note (2026-10-02): §5's open gap is closed (lane `01M3T8N55Z7WGEYT49VGJXGE3R`, recovered by
+  the nothing-vanishes triage). Both off-machine sinks POST through `notify/pinnedPost.ts`: the name
+  is resolved at send time, the send is refused if any answer is not global unicast, and the TLS
+  connection is pinned to the checked address with a `node:https` `lookup` override — `fetch` cannot
+  pin, which is why the sinks left it. The `PUT`-time literal-host check stays as the early refusal.
+  A 3xx is reported as a status and never followed, as before.
 
 - A handoff or `request_help` directed to a human rings them. Before, nothing did.
 - A human sees an OS banner without running `musterd notify`.
