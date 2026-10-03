@@ -157,6 +157,65 @@ export function installSeatPermissions(dir: string, toolkit?: Toolkit): Permissi
   return added;
 }
 
+/** What `liftSeatPermissions` took out and what it left on another role's account. */
+export interface LiftedPermissions {
+  lifted: { ask: string[]; deny: string[] };
+  kept: { ask: string[]; deny: string[] };
+}
+
+/**
+ * ADR 261 increment 2, the reversal half of recompile: lift the ceiling a removed role compiled.
+ *
+ * `installSeatPermissions` is additive by construction, so removing a role used to leave its
+ * `deny`/`ask` entries in `<dir>/.claude/settings.local.json` — the ADR 261 trap inverted: a seat
+ * stayed read-only after its read-only role was gone. This takes out the removed toolkit's `deny`
+ * and `ask` entries (canonical-form match, like install), EXCEPT an entry a still-held role's
+ * toolkit also carries — that one is somebody else's ceiling and stays. `allow` is never touched:
+ * the floor is shared by every role, and a human-approved allow is state this layer must not
+ * delete (ADR 261, alternatives). Unparseable settings are left alone, as install leaves them.
+ */
+export function liftSeatPermissions(
+  dir: string,
+  removed: Toolkit,
+  stillHeld: readonly Toolkit[],
+): LiftedPermissions {
+  const out: LiftedPermissions = { lifted: { ask: [], deny: [] }, kept: { ask: [], deny: [] } };
+  const path = join(dir, '.claude', 'settings.local.json');
+  if (!existsSync(path)) return out;
+  let settings: SeatSettings;
+  try {
+    settings = JSON.parse(readFileSync(path, 'utf8')) as SeatSettings;
+  } catch {
+    return out;
+  }
+  if (!settings.permissions) return out;
+  let changed = false;
+  for (const list of ['ask', 'deny'] as const) {
+    const existing = settings.permissions[list];
+    if (!existing?.length) continue;
+    const removing = new Set(removed.tools.permissions[list].map(canonicalRuleForm));
+    const held = new Set(
+      stillHeld.flatMap((t) => t.tools.permissions[list].map(canonicalRuleForm)),
+    );
+    const remaining: string[] = [];
+    for (const entry of existing) {
+      const form = canonicalRuleForm(entry);
+      if (!removing.has(form)) remaining.push(entry);
+      else if (held.has(form)) {
+        remaining.push(entry);
+        out.kept[list].push(entry);
+      } else out.lifted[list].push(entry);
+    }
+    if (remaining.length !== existing.length) {
+      changed = true;
+      if (remaining.length > 0) settings.permissions[list] = remaining;
+      else delete settings.permissions[list];
+    }
+  }
+  if (changed) writeFileSync(path, JSON.stringify(settings, null, 2) + '\n', 'utf8');
+  return out;
+}
+
 /**
  * Does `deny` entry `rule` outrank `allow` entry `candidate`?
  *

@@ -142,6 +142,13 @@ review-path side.
 
 ## Consequences
 
+- Dated note (2026-10-02, lane `01M3TAM44Q5N8AV8W50WNMNA7D`): increment 2's "role reassignment
+  recompiles" trap is closed on the `--remove` side too — `liftSeatPermissions` takes the removed
+  role's `deny`/`ask` entries out of the seat's `settings.local.json`, keeping any entry a
+  still-held role also compiles, and never touching `allow` (the floor is shared; a human-approved
+  allow is not this layer's to delete, per the alternatives above). Before this the command only
+  warned that the ceiling stayed in force.
+
 - Provisioning gains write authority over a file humans also edit — which is why decisions 4 and 5
   are conservative: musterd owns `deny` and its own entries, and reports the rest.
 - Seats provisioned by `musterd agent` become usable non-interactively on day one; the ryder

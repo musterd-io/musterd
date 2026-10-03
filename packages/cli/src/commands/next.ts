@@ -1,5 +1,6 @@
 import {
   closeReasonCopy,
+  emptyPoolCopy,
   incidentBannerLines,
   shortDuration,
   type Lane,
@@ -72,6 +73,33 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
         `  ${theme.meta(r.lane.id)} "${r.lane.title}" — ${theme.memberName(r.from, 'agent')} has waited ${shortDuration(now - r.ts)}\n`,
       );
       w(theme.meta(`    answer: \`musterd send --act accept --reply-to ${r.ask_id} "…"\``) + '\n');
+    }
+  }
+  // value-layer design / ADR 276: ambient review debt — the oldest lanes waiting on ANY seat's
+  // acceptance (`owed by you` above is the directed slice). `team_next` has rendered this since the
+  // design landed; the CLI never did (ADR 276 Consequences named the gap, lane 01M3TAM44Q closes
+  // it). Same copy as the MCP renderer: owner stays visible, "nobody was asked" is said outright,
+  // and an attestation with no SHA is called what it is. `?? []` for an older daemon.
+  const debt = brief.review_debt ?? [];
+  if (debt.length > 0) {
+    const total = brief.review_debt_total ?? 0;
+    const more = total > debt.length ? theme.meta(` (showing ${debt.length} of ${total})`) : '';
+    w(`\n${theme.accent('review debt')} — waiting on any seat's acceptance${more}:\n`);
+    for (const r of debt) {
+      w(
+        `  ${theme.meta(r.id)} "${r.title}"${r.owner ? ` — owner=${theme.memberName(r.owner, 'agent')}` : ''} — waiting ${Math.floor(r.waited_ms / 3_600_000)}h` +
+          (r.no_candidate
+            ? theme.warn(
+                ` — NO REVIEWER WAS ASKED (${r.empty_pool ? emptyPoolCopy(r.empty_pool) : 'no eligible counterpart at submit'})`,
+              )
+            : '') +
+          (r.unlanded
+            ? theme.warn(
+                ' — NO MERGE ATTESTATION (nothing landed — waiting on its author, not you)',
+              )
+            : '') +
+          '\n',
+      );
     }
   }
   // ADR 490: review promises — accepted typed review requests, derived by the daemon from the Act
@@ -180,6 +208,7 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
 
   if (
     owed.length === 0 &&
+    debt.length === 0 &&
     (promised?.length ?? 0) === 0 &&
     (asked?.length ?? 0) === 0 &&
     (closed?.length ?? 0) === 0 &&

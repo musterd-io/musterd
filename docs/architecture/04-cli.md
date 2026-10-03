@@ -167,7 +167,7 @@ src/
     harnesses/musterd.ts // the native musterd adapter (always available, Surface musterd, zero external fragments) + the internal musterd-core guidance fragment producer
     guidance.ts       // writeGuidance/removeGuidance: skill + slash-command files per harness, content-stamped (ADR 085); always writes canonical `.musterd/skill/orient.md` (ADR 333)
     pending.ts        // client-side pending-presence markers (ADR 033)
-    permissions.ts    // ADR 261: STANDARD_FLOOR + installSeatPermissions — the harness permission layer becomes a provisioned artifact
+    permissions.ts    // ADR 261: STANDARD_FLOOR + installSeatPermissions — the harness permission layer becomes a provisioned artifact; liftSeatPermissions (inc 2 reversal, lane 01M3TAM44Q): a removed role's deny/ask entries come out unless a still-held role compiles them too; allow is never touched
     primer.ts         // renderRepositoryPrimer + idempotent upsertPrimer → Team-only AGENTS.md primer (ADR 307)
     toolkit.ts        // Toolkit = harness-agnostic provisioning template ("profile" pre-ADR-296, "role template" pre-ADR-272); resolve/apply (ADR 026/029/038); tools.codex_plugins declared for the Codex adapter (ADR 323)
     toolkits/builtins.ts // the shipped built-in toolkit seed library
@@ -228,7 +228,7 @@ src/
     lane.ts           // lane open/claim/release/park/unpark/handoff/update/resolve + the lanes board (parked lanes grouped last, ADR 466); --goal on open and update (ADR 083/084/256); counterpart resolve ignores --pr/--sha (ADR 305); submit empty_pool copy (ADR 404); --follows-up on submit/resolve and --abandon-reason on update (ADR 487)
     seats.ts          // `musterd seats [--json]`: the seat catalog + live state, the launcher's read model (ADR 491)
     seed.ts           // shared Seed tray/read/claim/clarification/brief/conclude/promote Surface (ADR 319)
-    next.ts           // the orientation brief: carrying / up-next / shipped / handoff why (ADR 049/084); the ⚠ stale-goal line (ADR 487); review promises (ADR 490): `review promises` (what you accepted, with the close command), `reviews you asked for` (who accepted, how long ago) and `review closed for you` (a non-owner close, until your inbox cursor crosses it) — absent arrays say `not reported by this daemon`, `[]` prints nothing; `renderNext(brief, now)` is the `cmd/next` frame, pinned in orient.test.ts
+    next.ts           // the orientation brief: carrying / up-next / shipped / handoff why (ADR 049/084); the ⚠ stale-goal line (ADR 487); `review debt` (ADR 276, the gap its Consequences named — same copy as team_next: owner, wait, NO REVIEWER WAS ASKED, NO MERGE ATTESTATION); review promises (ADR 490): `review promises` (what you accepted, with the close command), `reviews you asked for` (who accepted, how long ago) and `review closed for you` (a non-owner close, until your inbox cursor crosses it) — absent arrays say `not reported by this daemon`, `[]` prints nothing; `renderNext(brief, now)` is the `cmd/next` frame, pinned in orient.test.ts
     node.ts           // machine credentials (ADR 328, federation 3a): invite/join/rotate/revoke/list. `join <hub-url> <code>` does NOT call the hub — it asks THIS machine's daemon to enroll, so the process holding the nodes row also holds the credential and writes node.json. join/list use resolveRead (a fresh laptop has no bound identity; the code plus being on-machine is the authority); the admin verbs use resolve. join prints no credential — it went to disk
     done.ts           // close your work — mark the lane done (auto-targets your live lane), then show next (ADR 049/084); with --pr/--sha it is a submit and prints the shared routing report, without it says "unconfirmed"; refuses a lane already awaiting acceptance; --follows-up (ADR 487)
     dream.ts          // `musterd dream [--since <epoch-ms>]`: your own dream packet as JSON via GET /dream (audited dream.packet_read); the dreaming skill's read — no MCP tool, a once-a-night read holds no always-on slot
@@ -239,9 +239,9 @@ src/
     archaeology.ts    // musterd archaeology --start <sha> | --lane <id> [--by-lane]: wasted-work % from git, per lane by PR number (ADR 123 v1, ADR 462)
     unbind.ts         // release this folder's own seat — clears bound_at + presence, keeps it declared (ADR 058)
     reload.ts         // SIGHUP the service daemon to re-resolve roster roots + reconcile (ADR 058)
-    reclaim.ts        // operator force-drop of a member's stuck live session (ADR 017 follow-up)
+    reclaim.ts        // operator force-drop of a member's stuck live session (ADR 017 follow-up); a `not_found` names `musterd status` as the next step (ADR 055 no-dead-end)
     notify.ts         // human-reachability nudge loop (ADR 024/035)
-    role.ts           // the team's role library — list / show / create / assign (ADR 227, narrowed by 296)
+    role.ts           // the team's role library — list / show / create / assign (ADR 227, narrowed by 296); `assign` recompiles the seat's harness permissions (ADR 261 inc 2) and `--remove` lifts the removed role's ceiling (lane 01M3TAM44Q) instead of only warning
     toolkit.ts        // workspace equipment — list / show / create; carries no authority (ADR 296)
     reset.ts          // local clean-slate db + config wipe (ADR 022)
     uninstall.ts      // per-folder uninstall — unwinds what init wrote (ADR 027)

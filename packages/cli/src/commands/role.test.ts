@@ -173,19 +173,32 @@ describe('role assign (ADR 227 — roster roles, run in the roster home)', () =>
       expect(out).toMatch(/refresh-permissions/);
     });
 
-    it('warns on --remove that the old ceiling stays in force until it is reversed by hand', async () => {
+    it('--remove lifts the role ceiling it compiled, and keeps the floor and human allows', async () => {
       const m = writeRosterHome();
       writeFileSync(join(m, 'roles', 'read-only.toml'), 'summary = "watcher"\n');
       const ws = seatDir();
       await roleCommand(parsed(['assign', 'izzo', 'read-only']), { seatWorkspace: () => ws });
+      expect(readPerms(ws).deny).toEqual(expect.arrayContaining(['Edit', 'Write']));
+      // A human-approved allow beside the compiled block must survive the lift untouched.
+      const file = join(ws, '.claude', 'settings.local.json');
+      const s = JSON.parse(readFileSync(file, 'utf8'));
+      s.permissions.allow.push('Bash(cargo *)');
+      writeFileSync(file, JSON.stringify(s));
       out = '';
-      await roleCommand(parsed(['assign', 'izzo', 'read-only'], { remove: true }), {
-        seatWorkspace: () => ws,
-      });
-      // The merge is additive by construction, so it cannot lift a deny. Saying nothing here would
-      // leave a seat read-only after its read-only role was removed — the trap, inverted.
-      expect(out).toMatch(/deny|ceiling/i);
-      expect(readPerms(ws).deny).toEqual(expect.arrayContaining(['Edit']));
+      expect(
+        await roleCommand(parsed(['assign', 'izzo', 'read-only'], { remove: true }), {
+          seatWorkspace: () => ws,
+        }),
+      ).toBe(0);
+      // The lane 01M3TAM44Q trap, closed: the merge is additive, so the reversal half runs — the seat
+      // is no longer read-only once its read-only role is gone.
+      expect(out).toMatch(/lifted read-only's ceiling/);
+      const perms = readPerms(ws);
+      expect(perms.deny ?? []).not.toContain('Edit');
+      expect(perms.deny ?? []).not.toContain('Write');
+      expect(perms.allow).toContain('Read');
+      expect(perms.allow).toContain('Bash(cargo *)');
+      expect(JSON.parse(readFileSync(file, 'utf8')).hooks?.SessionStart).toBeDefined();
     });
 
     it('skips silently when the assigned roster role has no provisioning template', async () => {

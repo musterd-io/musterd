@@ -11,7 +11,7 @@ import {
 import type { Parsed } from '../args.js';
 import { loadConfig } from '../config.js';
 import { CliError } from '../errors.js';
-import { installSeatPermissions } from '../onboard/permissions.js';
+import { installSeatPermissions, liftSeatPermissions } from '../onboard/permissions.js';
 import { isBuiltin, loadToolkit, toolkitHomes, type Toolkit } from '../onboard/toolkit.js';
 import { theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
@@ -148,7 +148,7 @@ async function roleAssign(
   if (!roles) delete (body as { roles?: string[] }).roles;
   writeFileSync(seatPath, serializeSeat(body), 'utf8');
 
-  const recompile = recompileSeatPermissions(seatName, roleName, remove, seatWorkspace);
+  const recompile = recompileSeatPermissions(seatName, roleName, remove, next, seatWorkspace);
 
   if (parsed.flags['json']) {
     process.stdout.write(
@@ -180,9 +180,10 @@ async function roleAssign(
  *
  *  - **The roster home is not the seat's worktree.** The seat's folder comes from the bindings
  *    registry; a seat with no binding on this machine cannot be recompiled from here at all.
- *  - **The merge is additive, so it cannot lift a `deny`.** Removing a role therefore leaves its
- *    ceiling in force. Exact reversal is the ADR 030 manifest's job and is not wired to this path
- *    yet, so `--remove` says so instead of implying a lifted ceiling.
+ *  - **The merge is additive, so it cannot lift a `deny` by itself.** `--remove` therefore runs the
+ *    reversal half, `liftSeatPermissions`: the removed role's `deny`/`ask` entries come out, except
+ *    one a still-held role's toolkit also carries (lane 01M3TAM44Q, ADR 487 A19 — before this the
+ *    ceiling stayed in force and the command only said so).
  *
  * A roster role with no provisioning template of the same name has no toolkit to compile — the
  * common case (`platform`, `designer` are labels, not ceilings) — and is silently skipped, because
@@ -192,6 +193,8 @@ function recompileSeatPermissions(
   seatName: string,
   roleName: string,
   remove: boolean,
+  /** The roles the seat holds AFTER this change — on `--remove`, whose ceilings must survive. */
+  stillHeld: readonly string[],
   seatWorkspace: (seat: string) => string | undefined,
 ): { lines: string[]; json: string } {
   let template: Toolkit | undefined;
@@ -215,11 +218,27 @@ function recompileSeatPermissions(
     };
   }
   if (remove) {
+    const heldToolkits = stillHeld.flatMap((r) => {
+      try {
+        return [loadToolkit(process.cwd(), r)];
+      } catch {
+        return []; // a label with no toolkit compiles nothing, so it protects nothing
+      }
+    });
+    const { lifted, kept } = liftSeatPermissions(ws, template, heldToolkits);
+    const n = lifted.deny.length + lifted.ask.length;
+    const k = kept.deny.length + kept.ask.length;
+    const file = join(ws, '.claude', 'settings.local.json');
     return {
       lines: [
-        `  ${theme.meta(`${roleName}'s deny entries are still in ${join(ws, '.claude', 'settings.local.json')} — the merge is additive and cannot lift a ceiling. Remove them by hand if the seat should regain what they denied.`)}`,
+        `  ${theme.meta(n > 0 ? `lifted ${roleName}'s ceiling from ${file} (−${String(n)} deny/ask)` : `none of ${roleName}'s ceiling was in ${file}`)}`,
+        ...(k > 0
+          ? [
+              `  ${theme.meta(`${String(k)} kept — another role ${seatName} still holds compiles the same entr${k === 1 ? 'y' : 'ies'}: ${[...kept.deny, ...kept.ask].join(', ')}`)}`,
+            ]
+          : []),
       ],
-      json: 'ceiling-retained',
+      json: n > 0 ? 'ceiling-lifted' : 'already-current',
     };
   }
   const added = installSeatPermissions(ws, template);
