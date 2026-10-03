@@ -34,17 +34,22 @@ weaker gates. The last is not on the table.
 
 ## Decision
 
-1. **The `coverage` leaf is a three-way matrix.** Each shard runs
-   `pnpm coverage --maxWorkers=2 --shard=<i>/3 --reporter=default --reporter=github-actions --reporter=blob`
-   with the ADR 492 driver pick unchanged. vitest's `--shard` sorts files by a hash of their path
-   and slices contiguous chunks, so the split is stable across runs and machines.
+1. **A `plan` job picks the drivers and the shard count; the `coverage` leaf is a matrix over
+   it.** The ADR 492 pick is unchanged and moves into `plan` (a checkout and a diff, ~20 s). When
+   both drivers run — every push to `main`, PRs that touch server or protocol — there are three
+   shards, each
+   `pnpm coverage --maxWorkers=2 --shard=<i>/3 --reporter=default --reporter=github-actions --reporter=blob`;
+   when SQLite alone runs there is one shard and no merge, exactly the job it always was. vitest's
+   `--shard` sorts files by a hash of their path and slices contiguous chunks, so the split is
+   stable across runs and machines.
 2. **The floors are checked once, on the merged report.** A shard's coverage map is partial by
    construction, and vitest checks `coverage.thresholds` at the end of every run — so each shard
    would fail on its own map. `vitest.config.ts` omits `thresholds` when `MUSTERD_COVERAGE_SHARD`
-   is set (the shards set it); a new `coverage-merge` job downloads the three blobs and runs
-   `pnpm coverage:merge` (`vitest run --merge-reports --coverage`), which replays the test results,
-   merges the maps and enforces the per-package floors on the whole. `pnpm coverage` without the
-   variable still enforces them locally, unchanged.
+   is set (the shards of a sharded run set it; a one-shard run leaves it empty and enforces the
+   floors itself); a new `coverage-merge` job downloads the blobs, refuses unless every shard's is
+   present, and runs `pnpm coverage:merge` (`vitest run --merge-reports --coverage`), which replays
+   the test results, merges the maps and enforces the per-package floors on the whole.
+   `pnpm coverage` without the variable still enforces them locally, unchanged.
 3. **The merge installs but does not build.** The blobs already carry source-mapped coverage; the
    job needs `node_modules` (the coverage provider) and the same checkout path as the shards (the
    floors are glob-matched against root-relative paths). `.github/actions/setup` gains a
@@ -52,8 +57,9 @@ weaker gates. The last is not on the table.
 4. **Blobs are 1-day artifacts; the artifact actions are pinned by commit SHA**, not by tag
    (`actions/upload-artifact@043fb46d…` v7.0.1, `actions/download-artifact@3e5f45b2…` v8.0.1). A
    tag can be moved; a commit cannot. Workflow permissions stay `contents: read`.
-5. **`gates` fans in on the shards and the merge.** Its rule is unchanged: every needed job must
-   have succeeded by name; a skipped or cancelled shard is red.
+5. **`gates` fans in on `plan`, the shards and the merge.** Its rule is unchanged but for one
+   sanctioned skip: `coverage-merge` may be skipped when `plan` chose one shard; every other skipped
+   or cancelled job is red.
 6. **Three shards, not more, until `integration.test.ts` is split.** The shard that holds that file
    runs it on one worker for ~10 minutes; more shards would not shorten it and would cost a setup
    each. ADR 492's scoping stays as the compute lever.
@@ -73,9 +79,12 @@ lane `01M3ZRQAGDDMTG6TA9T27D02N9`.
   `integration.test.ts` shard ≈ 10.5 min of tests + ~2.5 min setup, then ~1 min of merge) instead
   of 25–27; SQLite-only pull requests ~5 minutes instead of 6–10. Confirmed or corrected on this
   ADR's own PR run and the first push to `main` after it (see Observability).
-- Compute per run rises by about two setups and one merge, ~6.5 runner-minutes, on 100–166 runs a
-  day. The org's Actions minutes are billed on a private repository; the bill is the thing to
-  watch, and the admin's to read (the seat token lacks the scope).
+- Compute rises by about two setups and one merge, ~6.5 runner-minutes, on both-driver runs only;
+  SQLite-only pull requests — most of the 100–166 runs a day — pay the ~20 s `plan` job and
+  nothing else. The org's Actions minutes are billed on a private repository: on 2026-10-03 GitHub
+  refused to start every job over the org's spending limit or a failed payment, which is the bill
+  making itself felt. The admin reads it (the seat token lacks the scope); the follow-up lanes below
+  are the compute levers.
 - The coverage floors are enforced exactly once per run, by `coverage-merge`. A shard that ran
   without `--coverage`, or a merge run from a different root path, would make the floors pass
   vacuously — the merge step therefore refuses unless exactly three blobs are present, and the
