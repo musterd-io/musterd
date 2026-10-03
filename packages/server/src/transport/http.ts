@@ -4117,9 +4117,18 @@ export async function handleHttp(
           // and audit rows, never a presence row.
           await rerouteDepartedAcceptances(ctx, team, target);
         }
+        // ADR 164 increment 2 (lane 01M3TAKNCF): a goodbye that names the liveness ladder's rung is the
+        // adapter releasing a seat it judged dead (rungs 2–4) — `presence.session_ended`, the row ADR
+        // 164's eval counts by rung. A rung-less `end` is the harness hook's clean exit, recorded as
+        // before. Same route, same stamp and re-route: the session is gone either way.
+        const ended = body.event !== 'start';
         await appendAudit(ctx.db, team.id, {
           actor: null,
-          action: body.event === 'start' ? 'residency.session_captured' : 'residency.session_ended',
+          action: !ended
+            ? 'residency.session_captured'
+            : body.rung
+              ? 'presence.session_ended'
+              : 'residency.session_ended',
           target: target.name,
           result: 'allow',
           // `session_digest` is the correlation handle, not the id (ADR 131 Consequences, follow-up note 2026-08-05): it makes
@@ -4136,6 +4145,8 @@ export async function handleHttp(
             enrolled,
             ...(body.session_digest ? { session_digest: body.session_digest } : {}),
             ...(body.wake_lease ? { wake_lease: body.wake_lease } : {}),
+            ...(ended && body.rung ? { rung: body.rung } : {}),
+            ...(ended && body.rung && body.age_ms !== undefined ? { age_ms: body.age_ms } : {}),
           },
         });
         return sendJson(res, 200, { ok: true, enrolled });

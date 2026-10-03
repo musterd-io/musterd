@@ -240,6 +240,14 @@ export const SessionAttestationBodySchema = z.object({
    *  defaulted token would have an unstamped session claim membership of a lease it knows nothing
    *  about. Optional on the wire — an older CLI simply omits it. */
   wake_lease: z.string().min(1).max(64).optional(),
+  /** ADR 164 increment 2: which rung of the adapter's liveness ladder ended this session — `ppid`
+   *  (re-parented, exit), `ended` (the harness's own SessionEnd hook), `stale` (the transcript went
+   *  quiet past the horizon). Only on `event: 'end'`, and only from the ladder: the clean exit the
+   *  CLI's hook reports carries no rung. The server records a rung-bearing end as
+   *  `presence.session_ended` — ADR 164's own eval dataset. Optional on the wire. */
+  rung: z.enum(['ppid', 'ended', 'stale']).optional(),
+  /** ADR 164 increment 2: the transcript's age at the verdict, when the rung measured one (`stale`). */
+  age_ms: z.number().int().nonnegative().optional(),
 });
 export type SessionAttestationBody = z.infer<typeof SessionAttestationBodySchema>;
 

@@ -1046,6 +1046,11 @@ export class MusterdClient {
     process.stderr.write(
       `musterd: session no longer live (${verdict.rung}) — releasing seat presence\n`,
     );
+    // ADR 164 increment 2 (lane 01M3TAKNCF): tell the daemon WHICH rung ended this session, before the
+    // socket closes — the Presence this request authenticates under is still live for the next few
+    // milliseconds, and after `leave()` it would not be. Fire-and-forget, never throws: the trace is
+    // for counting rungs, and a lost row must not keep a dead session's seat.
+    this.reportSessionEnded(verdict);
     this.leave();
     // Mark WHY the seat was released, after `leave()` (which clears the flag for the deliberate
     // case). ADR 164 promises "a dormant adapter comes back on its next tool call" — this flag is
@@ -1060,6 +1065,26 @@ export class MusterdClient {
     if (verdict.verdict === 'exit') this.onReplaced?.();
     else this.armDormantWatch();
     return true;
+  }
+
+  /** The ladder's verdict, as the daemon's `presence.session_ended` row (ADR 164 increment 2). */
+  private reportSessionEnded(verdict: { rung?: string; age_ms?: number }): void {
+    const seat =
+      this.config.member ??
+      (this.config.claim?.mode === 'seat' ? this.config.claim.name : undefined);
+    if (!seat || !verdict.rung) return;
+    void this.request(
+      'POST',
+      `/teams/${this.config.team}/residency/session`,
+      {
+        seat,
+        harness: this.session?.adoptedHarness ?? 'unknown',
+        event: 'end',
+        rung: verdict.rung,
+        ...(verdict.age_ms !== undefined ? { age_ms: Math.round(verdict.age_ms) } : {}),
+      },
+      { timeoutMs: 2_000 },
+    ).catch(() => undefined);
   }
 
   /**

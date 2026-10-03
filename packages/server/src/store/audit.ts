@@ -307,6 +307,10 @@ export type AuditAction =
   | 'residency.host_suspended'
   | 'residency.session_captured'
   | 'residency.session_ended'
+  // ADR 164 increment 2: the adapter's liveness ladder released a seat it judged dead — `detail`
+  // carries `rung` (`ppid` | `ended` | `stale`) and, on `stale`, the transcript `age_ms`. Apart from
+  // `residency.session_ended` (the hook's clean exit) on purpose: ADR 164's eval counts rungs.
+  | 'presence.session_ended'
   // ADR 167 delivery rail, made observable (ADR 173; lane `01KYQ9175S`). The rail's own decision for
   // a send where it was genuinely a CANDIDATE — the act was directed at a real other member and was
   // hint-eligible — with `detail.reason` naming which leg of the predicate answered: `issued`,
@@ -638,6 +642,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'host.provision_cancelled': 'none',
   'residency.session_captured': 'none',
   'residency.session_ended': 'none',
+  'presence.session_ended': 'none',
   'nudge.decision': 'actor',
   'residency.wake_cost': 'none',
   'residency.wake_report_rejected': 'none',
@@ -917,6 +922,7 @@ export const REPLICATED_LEDGER_VERBS = new Set([
   'residency.host_suspended',
   'residency.session_captured',
   'residency.session_ended',
+  'presence.session_ended',
   'residency.context_read',
   // ADR 371 §4 — a seat's attested surface weight (ADR 144), read by the report's surface block.
   'mcp.surface_rendered',
