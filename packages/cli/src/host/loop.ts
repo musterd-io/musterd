@@ -25,6 +25,7 @@ import type {
   WakeCompletion,
   WakeOutcome,
 } from './backend.js';
+import { freshenForDream } from './dreamCheckout.js';
 import { canonicalServer, loadHostRegistry, type HostRegistryEntry } from './registry.js';
 import { endWakeCapture } from './wakeCapture.js';
 
@@ -117,6 +118,8 @@ export interface HostPollDeps {
   endCapture?: typeof endWakeCapture;
   /** ADR 408 before a wake: repair the workspace; returns the one line to log, or '' when clean. */
   heal?: (workspace: string) => string;
+  /** Before a DREAM wake only: move a clean, detached workspace to origin/main (lane 01M41G80VN). */
+  freshen?: (workspace: string) => string;
   verifyWindowMs?: number;
   verifyPollMs?: number;
   /**
@@ -481,6 +484,13 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
         if (healed) deps.log(`wake self-heal: ${order.seat} — ${healed}`);
       } catch (e) {
         deps.log(`wake self-heal: ${order.seat} — skipped (${(e as Error).message})`);
+      }
+      // A dream follows a skill on disk (ADR 494), and a seat resting detached days behind main
+      // dreams without it (ghost, grokbot, wanderer, 2026-10-03). Only a dream: a reply or a work
+      // order acts on the checkout the seat left, and moving it would change what that work saw.
+      if (order.derivation === 'dream') {
+        const freshened = (deps.freshen ?? freshenForDream)(entry.workspace);
+        if (freshened) deps.log(`wake dream checkout: ${order.seat} — ${freshened}`);
       }
       // Effective bounds (increment 5 / ADR 199): reply wakes only tighten the operator
       // `--timeout` ceiling. Work-orders use the seat's `work_timeout_ms` without that clamp —
