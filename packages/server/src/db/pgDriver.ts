@@ -7,7 +7,8 @@ import { ROLE, TENANT_SETTING } from './pg/tenancy.js';
 /**
  * node-postgres behind the async Driver (ADR 486; cloud design §12.1/§12.4). One pool per database
  * role. Every statement — a bare `get` as much as a `tx` body — runs inside a transaction on one
- * pooled client, opened with `SET LOCAL ROLE <role>` and, on a team handle, `set_config(app.team_id)`,
+ * pooled client, opened — in one round trip — with `SET LOCAL ROLE <role>` and, on a team handle,
+ * `set_config(app.team_id)`,
  * so the row-level policies see exactly one tenant and a pooled connection carries nothing into
  * the next checkout (SET LOCAL dies with the transaction; ROLLBACK + release(err) on any failure).
  * The root handle is the app role with no tenant: fail-closed. `asOperator()` is the cross-tenant
@@ -121,11 +122,16 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
   let closed = false;
   const listeners = new Set<(sql: string) => void>();
 
-  const stamp = async (c: Client, s: Scope) => {
-    if (s.role === 'owner') return;
-    await c.query(`SET LOCAL ROLE ${s.role === 'app' ? ROLE.app : ROLE.operator}`);
-    if (s.team !== null)
-      await c.query(`SELECT set_config('${TENANT_SETTING}', $1, true)`, [s.team]);
+  // BEGIN and the stamp go down as ONE simple-protocol query — one round trip, not three (lane
+  // 01M3Z455NE: a bare statement was five round trips holding a pooled client). A multi-statement
+  // query cannot take bind parameters, so the tenant is a literal quoted by `pg.escapeLiteral`.
+  // Postgres runs a multi-statement simple query as one implicit unit: if any part fails, none of
+  // it holds, and the catch below rolls back and discards the client exactly as before.
+  const opening = (s: Scope): string => {
+    if (s.role === 'owner') return 'BEGIN';
+    const role = `SET LOCAL ROLE ${s.role === 'app' ? ROLE.app : ROLE.operator}`;
+    if (s.team === null) return `BEGIN; ${role}`;
+    return `BEGIN; ${role}; SELECT set_config('${TENANT_SETTING}', ${pg.escapeLiteral(s.team)}, true)`;
   };
   const acquire = async (s: Scope): Promise<Client> => {
     if (closed) throw new DriverError('driver is closed', 'closed');
@@ -151,12 +157,11 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
     }
   };
 
-  /** One transaction: BEGIN, stamp, body, COMMIT — ROLLBACK and release(err) on any failure. */
+  /** One transaction: BEGIN+stamp (one trip), body, COMMIT — ROLLBACK and release(err) on any failure. */
   const inTransaction = async <T>(s: Scope, body: (c: Client) => Promise<T>): Promise<T> => {
     const c = await acquire(s);
     try {
-      await c.query('BEGIN');
-      await stamp(c, s);
+      await c.query(opening(s));
       const r = await body(c);
       await c.query('COMMIT');
       c.release();

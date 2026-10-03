@@ -37,14 +37,12 @@ function fakePools() {
 const urls = { appUrl: 'postgres://app', operatorUrl: 'postgres://operator' };
 
 describe('pgDriver choreography (spec §12.1)', () => {
-  it('a bare statement on a team handle is BEGIN / SET LOCAL ROLE / set_config / stmt / COMMIT on one client, then released', async () => {
+  it('a bare statement on a team handle is BEGIN+SET LOCAL ROLE+set_config (one trip) / stmt / COMMIT on one client, then released', async () => {
     const f = fakePools();
     const d = pgDriver({ ...urls, pools: f.factory });
     await d.forTeam('A').get('SELECT 1 FROM teams WHERE id = ?', ['A']);
     expect(f.log).toEqual([
-      'app: BEGIN',
-      'app: SET LOCAL ROLE musterd_app',
-      'app: SELECT set_config(\'app.team_id\', $1, true) ["A"]',
+      "app: BEGIN; SET LOCAL ROLE musterd_app; SELECT set_config('app.team_id', 'A', true)",
       'app: SELECT 1 FROM teams WHERE id = $1 ["A"]',
       'app: COMMIT',
       'app: release',
@@ -58,8 +56,8 @@ describe('pgDriver choreography (spec §12.1)', () => {
     await d.all('SELECT 1');
     await d.asOperator().all('SELECT 1');
     expect(f.log.filter((l) => l.includes('set_config'))).toEqual([]);
-    expect(f.log.filter((l) => l.startsWith('app: SET LOCAL ROLE musterd_app')).length).toBe(1);
-    expect(f.log.filter((l) => l.startsWith('op: SET LOCAL ROLE musterd_operator')).length).toBe(1);
+    expect(f.log).toContain('app: BEGIN; SET LOCAL ROLE musterd_app');
+    expect(f.log).toContain('op: BEGIN; SET LOCAL ROLE musterd_operator');
   });
 
   it('a throwing body rolls back and releases the client with the error; nested = SAVEPOINT', async () => {
@@ -109,6 +107,15 @@ describe('pgDriver choreography (spec §12.1)', () => {
     await expect(leaked.run('UPDATE x SET y = 1')).rejects.toMatchObject({ code: 'tx_closed' });
     // connection() from inside keeps the scope: deferred work lands in the same tenant.
     expect(f.log.filter((l) => l.includes('set_config')).length).toBe(1);
+  });
+
+  it('the tenant literal is quoted, so a hostile team id cannot break out of set_config', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    await d.forTeam("x'; RESET ROLE; --").get('SELECT 1');
+    expect(f.log[0]).toBe(
+      "app: BEGIN; SET LOCAL ROLE musterd_app; SELECT set_config('app.team_id', 'x''; RESET ROLE; --', true)",
+    );
   });
 
   it('a connection error is DriverError("unavailable") with the stable sentence', async () => {
@@ -180,12 +187,11 @@ describe('pgDriver choreography (spec §12.1)', () => {
     let expectTeam: 'A' | 'B' = 'A';
     let n = 0;
     for (let k = 0; k < f.log.length; k++) {
-      if (f.log[k] !== 'app: BEGIN') continue;
-      expect(f.log[k + 1]).toBe('app: SET LOCAL ROLE musterd_app');
-      expect(f.log[k + 2]).toBe(
-        `app: SELECT set_config('app.team_id', $1, true) ["${expectTeam}"]`,
+      if (!f.log[k]!.startsWith('app: BEGIN')) continue;
+      expect(f.log[k]).toBe(
+        `app: BEGIN; SET LOCAL ROLE musterd_app; SELECT set_config('app.team_id', '${expectTeam}', true)`,
       );
-      let j = k + 3;
+      let j = k + 1;
       while (!/^app: (COMMIT|ROLLBACK)$/.test(f.log[j]!)) j++;
       expect(f.log[j + 1]).toMatch(/^app: release/);
       expectTeam = expectTeam === 'A' ? 'B' : 'A';

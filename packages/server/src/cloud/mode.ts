@@ -21,6 +21,11 @@ export interface CloudConfig {
   consoleAudience: string;
   /** Team hosts are `<slug>.<hostSuffix>` (§5.3); lowercase, no leading dot. */
   hostSuffix: string;
+  /**
+   * Connections per Postgres pool (one pool per role per store). Optional `MUSTERD_PG_POOL_SIZE`;
+   * the driver's default (10) when unset. A §8.1 load-run knob (lane 01M3Z455NE).
+   */
+  pgPoolSize?: number;
 }
 
 /** Every variable cloud mode reads, in the order a refusal names them. */
@@ -61,6 +66,15 @@ export function postgresUrl(env: Env, name: string): string {
   return required(env, name);
 }
 
+/** An optional positive integer; refuses a malformed value by name. */
+function optionalPositiveInt(env: Env, name: string): number | undefined {
+  const raw = env[name]?.trim();
+  if (!raw) return undefined;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`${name} must be a positive integer`);
+  return n;
+}
+
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 function jwksUrl(env: Env, name: string): string {
@@ -81,6 +95,7 @@ export function resolveCloudConfig(env: Env = process.env): CloudConfig | null {
   if (mode === '' || mode === 'self-hosted') return null;
   if (mode !== 'cloud') throw new Error('MUSTERD_MODE must be "cloud" or "self-hosted" (or unset)');
   const suffix = required(env, 'MUSTERD_CLOUD_HOST_SUFFIX').toLowerCase().replace(/^\.+/, '');
+  const poolSize = optionalPositiveInt(env, 'MUSTERD_PG_POOL_SIZE');
   return {
     databaseAppUrl: postgresUrl(env, 'MUSTERD_DATABASE_APP_URL'),
     databaseOperatorUrl: postgresUrl(env, 'MUSTERD_DATABASE_OPERATOR_URL'),
@@ -89,5 +104,6 @@ export function resolveCloudConfig(env: Env = process.env): CloudConfig | null {
     consoleJwksUrl: jwksUrl(env, 'MUSTERD_CONSOLE_JWKS_URL'),
     consoleAudience: required(env, 'MUSTERD_CONSOLE_AUDIENCE'),
     hostSuffix: suffix,
+    ...(poolSize !== undefined ? { pgPoolSize: poolSize } : {}),
   };
 }
