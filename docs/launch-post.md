@@ -16,6 +16,10 @@
 > vulnerability reports go through the repository's
 > [security advisory form](https://github.com/SandRiseStudio/musterd/security/advisories/new).
 >
+> **Private preview (2026-10-03):** the repository is private and musterd.io carries no install
+> path or GitHub link (#2004), so the post forms below carry neither. If the repo opens before
+> launch, restore them in one pass. The security advisory link above stays deliberately.
+>
 > ~~**Ship blocker:** as of 2026-08-13 musterd.io serves nothing — do not publish until it
 > resolves.~~ CLEARED 2026-08-13: **musterd.io is live** and has since gained the `/watch` page and
 > the office section on the home page. Share-unfurls use the brand social card (`og:image`).
@@ -39,7 +43,7 @@
 >
 > One human + two agents. Three surfaces. One team. Every act on the roster has a name on it, and the human is on the roster too.
 >
-> `npx @musterd/cli init` (or brew) → musterd.io
+> In private preview → musterd.io
 
 ---
 
@@ -69,7 +73,7 @@ governance, and an append-only audit log. Sessions remain dormant until explicit
 The boundary is explicit. musterd is local-first and binds to `127.0.0.1` by default. It does not
 yet sandbox agent tools, encrypt its SQLite database at rest, use mTLS, or sign its audit log.
 
-`npx @musterd/cli init` (or `brew install musterd` from the SandRiseStudio tap) gets you from zero to a working team in one command.
+musterd is in private preview: it runs today on the team that builds it.
 
 <!-- NOT YET — one sentence from someone outside the team who installed it, with their name and
      what they were doing. Source: docs/design/quotes.md, filled hand-to-hand in weeks 3-6. Ship
@@ -80,9 +84,9 @@ yet sandbox agent tools, encrypt its SQLite database at rest, use mTLS, or sign 
      number beats a large vague one. If the count is thin on launch morning, omit the line; it is
      the one claim in this post a stranger can check against nothing. -->
 
-Tech: Node/TypeScript monorepo, SQLite + WS + HTTP, MCP adapter, MIT.
+Tech: Node/TypeScript monorepo, SQLite + WS + HTTP, MCP adapter.
 
-Site: https://musterd.io · Repo: https://github.com/SandRiseStudio/musterd
+Site: https://musterd.io
 
 ---
 
@@ -162,22 +166,10 @@ access, encrypt its SQLite database at rest, use mTLS, store secrets in the OS k
 credentials automatically, sign audit records, or rate-limit claims. Those limits are documented in
 [SECURITY.md](../SECURITY.md), alongside private vulnerability reporting.
 
-**Getting started**
+**Where it stands**
 
-```bash
-npx @musterd/cli init
-```
-
-One command: starts the daemon, creates a team, detects Claude Code / Cursor, wires up the MCP adapter, and waits for your agent to join with a live spinner.
-
-Or manually:
-
-```bash
-musterd serve
-musterd team create dawn --as nick --role lead
-musterd team add Ada --kind agent --role backend
-musterd inbox --watch
-```
+musterd is in private preview. It runs today on the team that builds it; any MCP-capable harness
+joins, and it is local-first — SQLite on your disk, no account and no cloud required.
 
 **What's next**
 
@@ -190,8 +182,4 @@ act-typed log: time-to-unblock, ignored `request_help`, stalled threads, circula
 remains roadmap is **batond**, the standalone observability product built on that seam — the engine,
 not the views.
 
-MIT. Contributions welcome.
-
 → [musterd.io](https://musterd.io)
-→ [github.com/SandRiseStudio/musterd](https://github.com/SandRiseStudio/musterd)
-→ `npx @musterd/cli init`
