@@ -102,6 +102,7 @@ function deps(over: Partial<HostPollDeps> & Pick<HostPollDeps, 'backends'>): Hos
     attendedProcess: () => null,
     // Never the real heal in a unit test: it would inspect (and could write) a real folder.
     heal: () => '',
+    freshen: () => '',
     verifyWindowMs: 50,
     verifyPollMs: 5,
     ...over,
@@ -749,6 +750,33 @@ describe('pollHostOnce (ADR 131 inc 3 — lease → actuate → report)', () => 
     );
     expect(s2).toHaveLength(1); // the wake still went ahead
     expect(lines2).toContain('wake self-heal: scout — skipped (EACCES)');
+  });
+
+  it('freshens the checkout before a DREAM wake only, and logs its line (lane 01M41G80VN)', async () => {
+    const run = async (derivation: string) => {
+      const { client } = fakeClient([order({ derivation } as Partial<WakeOrder>)]);
+      const { backend, specs } = fakeBackend();
+      const seen: string[] = [];
+      const lines: string[] = [];
+      await pollHostOnce(
+        deps({
+          backends: new Map([['claude-code', backend]]),
+          loadRegistry: () => ({ entries: [entryOf()] }),
+          clientFor: () => client,
+          log: (l) => lines.push(l),
+          freshen: (workspace) => (seen.push(workspace), 'checkout freshened: aaaaaaaa → bbbbbbbb'),
+        }),
+      );
+      return { seen, lines, specs };
+    };
+    const dream = await run('dream');
+    expect(dream.seen).toEqual(['/ws/scout']);
+    expect(dream.lines).toContain(
+      'wake dream checkout: scout — checkout freshened: aaaaaaaa → bbbbbbbb',
+    );
+    expect(dream.specs).toHaveLength(1);
+    // A reply or a work order acts on the checkout the seat left — never moved.
+    for (const d of ['immediate', 'work_order']) expect((await run(d)).seen).toEqual([]);
   });
 
   it('healBeforeWake posts the audit row as the seat, forces the drift cache, and returns the line', async () => {
