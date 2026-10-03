@@ -778,7 +778,7 @@ const RAW: RawItem[] = [
     frozenBy: 56,
     // Follows-up: 01M1MMJKBYJ4DDD4S9QCF02TD9
     building:
-      'M1–M3 landed (#359/#360) and hand-run; what remains is M4–M5 — the weekly digest emit + seen.json append + notify, then the scheduled routine. ADR 056 accepted 2026-08-24 with this named as a seam, not a promise.',
+      'M1–M4 landed (#359/#360, #1049: digest emit + seen.json append). Since lane 01M3TAKHQ4 (2026-10-02) the sweep agent posts a weekly dry-sweep summary to the team — candidates waiting, last digest age. M5, the triaged emit on a schedule, stays hand-run by the 2026-08-24 call (plan §8) until a few real digests exist.',
     wave: 'later',
     title: 'Research radar (ingest)',
     plan: 'reserved',
@@ -786,7 +786,7 @@ const RAW: RawItem[] = [
     blurb:
       'A standing scan/triage of new multi-agent-coordination research, funneled into research-foundation.md — findings that change a decision graduate to an ADR.',
     detail:
-      'The ingest half of the research practice (ADR 056): keep musterd shaped by the field. **M1–M3 landed** (#359/#360): in-repo store (`docs/research/radar/`), `pnpm radar:sweep` (arXiv + HF Papers + `seen.json` dedup), and `--triage` (tier-1 Haiku filter + tier-2 Sonnet honest-score / verdict ladder). Hand-run only today — print-only, no digest file, no schedule. **Remaining M4–M5:** weekly digest emit + `seen.json` append + notify, then the cloud routine. A human still decides what graduates to `research-foundation.md` / an ADR; no auto-merge into the thesis.',
+      'The ingest half of the research practice (ADR 056): keep musterd shaped by the field. **M1–M3 landed** (#359/#360): in-repo store (`docs/research/radar/`), `pnpm radar:sweep` (arXiv + HF Papers + `seen.json` dedup), and `--triage` (tier-1 Haiku filter + tier-2 Sonnet honest-score / verdict ladder). **M4 landed** (#1049): `--emit` writes `docs/research/radar/<YYYY-WW>.md` and appends `seen.json`. **Scheduled half (lane 01M3TAKHQ4):** the ADR 166 sweep agent runs the dry sweep weekly and posts one summary to the team; the triaged emit stays hand-run (plan §8, nick 2026-08-24) until a few real digests exist — that is **M5**, still open. A human still decides what graduates to `research-foundation.md` / an ADR; no auto-merge into the thesis.',
     refs: [
       adr(56, 'ADR 056'),
       doc('docs/design/research-foundation.md', 'research-foundation.md'),

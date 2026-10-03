@@ -83,6 +83,13 @@ Model ids live in one config constant; recorded per-run. Avoid amprealize's "Opu
 
 **Deferred (2026-08-24, nick).** With Exploring Next as a read-side source there is nothing to couple to its crons, and §10 rule 1 says nothing more until the digest has run for weeks. Current cadence: hand-run `pnpm radar:sweep --triage --emit` weekly; revisit a runner (cloud routine vs local) after a few real digests. The original choice (weekly cloud routine, Monday 08:00) stands as the default when M5 is picked back up — its exact schedule/command gets confirmed with nick before creation.
 
+**Weekly tick (2026-10-02, lane `01M3TAKHQ4HRNDJX0TQGESYZJ6`).** The ADR 166 sweep LaunchAgent now
+runs `pnpm radar:sweep --weekly --post` on its tick (`scripts/radar/weekly.ts`): the dry sweep — no
+key, no write — and one `status_update` to the team as the `sweep` seat naming how many candidates
+are waiting and how old the last digest is, with the hand-run command. This closes "nothing runs"
+without touching the deferral above: the triaged emit is still the human's step, and its schedule is
+still the decision this section defers.
+
 ## 9. Guardrails
 
 - **Read-only sweep**; the radar never edits thesis docs — it only writes its own digest + `seen.json`.
