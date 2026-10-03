@@ -8,7 +8,7 @@
   Copy is derived, not invented: the one-liner is brand.md §1 verbatim; the accent line is the
   ADR 320 §5a compression (2026-09-16) — a name on every act, a human on the same roster — with
   README Principle 1 kept as its second half. Voice: brand.md §4. Palette: brand.md §2 (zinc-900
-  ground, mustard-500 accent). 1200×630. Self-contained: no network, no font files, no build step.
+  ground, mustard-500 accent). The lockup is the mark (ADR 497, ../../design/assets/chip.svg) beside the word. 1200×630. Self-contained: no network, no font files, no build step.
 -->
 <html lang="en">
 <meta charset="utf-8" />
@@ -31,13 +31,15 @@
     font-family: var(--mono); color: var(--ink);
     display: flex; flex-direction: column; justify-content: space-between;
   }
+  .lockup { display: flex; align-items: center; gap: 28px; }
+  .lockup img { width: 96px; height: 96px; display: block; }
   .word { font-size: 64px; font-weight: 700; letter-spacing: 0; line-height: 1; }
   .word b { color: var(--accent); font-weight: 700; }
   .line { font-size: 30px; line-height: 1.45; color: var(--muted); max-width: 640px; margin: 0; }
   .accent { font-size: 18px; line-height: 1.5; color: var(--accent); margin: 0; max-width: 760px; }
 </style>
 <div class="card">
-  <div class="word">muster<b>d</b></div>
+  <div class="lockup"><img src="../../design/assets/chip.svg" alt="" /><div class="word">muster<b>d</b></div></div>
   <p class="line">Named, persistent teams of<br />agents and humans —<br />across any harness,<br />with a shared protocol.</p>
   <p class="accent">every act on the roster has a name on it,<br />and a human is on the roster too.<br />humans are members, not approvers.</p>
 </div>
