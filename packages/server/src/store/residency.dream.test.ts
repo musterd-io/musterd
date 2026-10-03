@@ -1,5 +1,5 @@
 import { makeEnvelope } from '@musterd/protocol';
-import { beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { appendAudit, listAudit } from './audit.js';
@@ -17,6 +17,14 @@ let openStore: () => Promise<Driver>;
 withDrivers('residency — the dream lease (ADR 494)', (o) => {
   beforeEach(() => {
     openStore = o;
+    // The lease's `residency.wake_leased` audit row is stamped with the wall clock, while every
+    // claim below passes a simulated `now`. Left real, today's clock lands inside a simulated
+    // night, and the next-night claim found "tonight's dream" already spent once 2026-10-03
+    // ~05:30Z had passed (lane 01M41BP7JZ). Only `Date` is faked; the drivers' timers stay real.
+    vi.useFakeTimers({ toFake: ['Date'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   const HOST = 'laptop.local';
@@ -51,8 +59,10 @@ withDrivers('residency — the dream lease (ADR 494)', (o) => {
     return { db, team, nick, ada };
   }
 
-  const claim = (db: Driver, teamId: string, now: number) =>
-    claimWakeLeases(db, teamId, 'revive', HOST, PRESENCE_TIMEOUT_MS, now);
+  const claim = (db: Driver, teamId: string, now: number) => {
+    vi.setSystemTime(now);
+    return claimWakeLeases(db, teamId, 'revive', HOST, PRESENCE_TIMEOUT_MS, now);
+  };
 
   /** Settle every open lease so the next poll is not blocked by a live one. */
   const settleAll = (db: Driver) => db.run("UPDATE wake_leases SET status = 'reported'");
