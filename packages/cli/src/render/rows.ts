@@ -36,17 +36,17 @@ function nameplate(lines: string[], pad = 2): string {
 
 /**
  * The wordmark banner (brand.md §1, ADR 114). A rounded nameplate — no letter-art — holding the
- * roll-call dots (online · away · offline, the CLI's own presence glyphs), the `musterd` brand chip
- * (the word reversed out of a solid mustard block) with a trailing terminal cursor (the web-hero nod),
- * and the tagline. `muster` = take the roll; the dots show the product itself, a team present. The frame
+ * roll-call dots (online · away · offline, the CLI's own presence glyphs), the `musterd` word in
+ * bold mustard (a terminal cannot draw the mark; ADR 497 retired the reversed-out chip) with a trailing
+ * terminal cursor (the web-hero nod), and the tagline. `muster` = take the roll; the dots show the product itself, a team present. The frame
  * matches the web's rounded-corner language. 16-color-safe; degrades cleanly with color off.
  */
 export function renderBanner(): string {
   const dots = `${theme.presenceDot('online')} ${theme.presenceDot('away')} ${theme.presenceDot('offline')}`;
-  const chip = theme.brandmark(' musterd ');
+  const word = theme.brandmark('musterd');
   const cursor = theme.accent('▊');
   const tagline = theme.meta('muster your agents and humans into persistent teams');
-  return nameplate([`${dots}   ${chip} ${cursor}`, tagline]);
+  return nameplate([`${dots}   ${word} ${cursor}`, tagline]);
 }
 
 /** A recipient label for a message row: `→ Lin`, `→ @team`, `→ @broadcast`. */

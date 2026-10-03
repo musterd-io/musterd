@@ -835,11 +835,11 @@ describe('sinceLabel (a clock with a date once it is not today)', () => {
 });
 
 describe('renderBanner', () => {
-  it('is a framed nameplate: dots + musterd chip + cursor + tagline', () => {
+  it('is a framed nameplate: dots + musterd word + cursor + tagline', () => {
     const banner = renderBanner();
     expect(banner).toContain('●'); // at least one roll-call presence dot
     expect(banner).toContain('○'); // …including the offline state
-    expect(banner).toContain('musterd'); // the wordmark chip (literal word, no letter-art)
+    expect(banner).toContain('musterd'); // the wordmark (literal word, no letter-art, no chip — ADR 497)
     expect(banner).toContain('persistent teams'); // the tagline
     expect(banner).toContain('╭'); // the rounded nameplate frame
     // Top border + two content rows + bottom border.

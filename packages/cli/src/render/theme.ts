@@ -49,8 +49,11 @@ export const theme = {
   bold: (s: string) => colors.bold(s),
   /** A day-group section header in the inbox (`Today`, `Yesterday`, `Monday · Jul 7`) — quiet-bold. */
   dayHeader: (s: string) => colors.bold(colors.gray(s)),
-  /** The brand chip: text reversed out of a solid mustard block — the CLI wordmark lockup (ADR 114). */
-  brandmark: (s: string) => colors.bold(colors.inverse(colors.yellow(s))),
+  /**
+   * The CLI wordmark: the word in bold accent mustard — no block behind it (ADR 497). A terminal
+   * cannot draw the mark, and the reversed-out mustard "chip" (ADR 114) was the old mark's shape.
+   */
+  brandmark: (s: string) => colors.bold(colors.yellow(s)),
 
   /**
    * A high-salience, sticky banner for an act that needs the human *now* — `request_help` or an

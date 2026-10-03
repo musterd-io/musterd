@@ -60,6 +60,8 @@ two Figma briefs that froze the old thin-outline block carry a supersede note po
 - Fully reversible and within the existing brand: one accent, lowercase wordmark, no new glyphs beyond
   the presence dots already in use. No palette or dependency change.
 
+- 2026-10-02 — **The reversed-out mustard chip is retired by [ADR 497](497-the-new-mark.md):** the banner keeps the nameplate, the dots and the cursor, and sets the `musterd` word in bold mustard with no block behind it.
+
 ## Observability & Evaluation
 
 - **Traces:** n/a — a static wordmark string in `renderBanner`; no acts, spans, or data flow change.
