@@ -3,7 +3,7 @@ import type { Parsed } from '../args.js';
 import { osNotify, type NotifyItem } from '../notify/os.js';
 import { pollOnce, type NotifyDeps } from '../notify/select.js';
 import { theme } from '../render/theme.js';
-import { resolve } from './helpers.js';
+import { resolve, viewerFlags } from './helpers.js';
 
 /**
  * `--interval` is seconds (human-facing); clamped to a sane floor so a typo can't hammer the daemon,
@@ -47,6 +47,7 @@ export async function notifyCommand(
   const notifyDeps: NotifyDeps = {
     me: identity.name,
     inbox: () => poll.inbox(team, { unread: true }),
+    viewer: () => viewerFlags(poll, team, identity.name),
     // Reachable in-stream = a live watch/app presence (roster `presence !== 'offline'`). When the
     // human is watching, the bell/banner already reached them (ADR 024); `notify` owns only the
     // not-watching case (ADR 035 §3). No availability state is invented.

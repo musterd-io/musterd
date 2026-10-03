@@ -71,6 +71,33 @@ function laneOf(m: AutoTargetable): string | undefined {
   return typeof meta?.lane_review?.lane === 'string' ? meta.lane_review.lane : undefined;
 }
 
+/** Who is reading: the seat's name and whether it is an admin (agents are never admins). */
+export interface AskViewer {
+  name: string;
+  /** `resolveCapabilities(me).is_admin`. Absent or false ⇒ a team-addressed ask is not mine. */
+  admin?: boolean | undefined;
+}
+
+/**
+ * Whose action an `ask` is (lane 01M3TB3DA2, the ADR 276:75 follow-up). Before this every seat read
+ * every ask as its own, so an un-named `accept` from ANY agent could bind to a team-addressed
+ * to-human ask (ADR 147) and, since ADR 202, close it. An ask concerns me when it is directed to
+ * me, when its eligible set names me (ADR 254), or when it is team-addressed AND I am an admin —
+ * strictly admins, no non-admin-human fallback, and agents are never admins, so the third arm IS
+ * ADR 147's admin path and nothing wider. One rule, so the inbox banner, the notification Loud
+ * set, and both surfaces' auto-target cannot disagree.
+ */
+export function askConcernsMe(
+  env: { act: string; to: { kind: string; name?: string }; meta?: Record<string, unknown> | null },
+  viewer: AskViewer,
+): boolean {
+  if (env.act !== 'ask') return false;
+  if (env.to.kind === 'member') return env.to.name === viewer.name;
+  const eligible = env.meta?.['eligible'];
+  if (Array.isArray(eligible)) return eligible.includes(viewer.name);
+  return viewer.admin === true;
+}
+
 /**
  * Decide what an un-threaded verdict answers.
  *

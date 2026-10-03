@@ -1,4 +1,5 @@
 import {
+  askConcernsMe,
   eligibleOf,
   envelopePosition,
   huddleTopics,
@@ -509,12 +510,19 @@ function ageLabel(since: number, now: number): string {
  * `status_update`s — the recipient-side half of the notification loop (ADR 024). Pure, so the live
  * and comeback paths classify identically.
  */
-export function isActionNeeded(env: Envelope, me: string): boolean {
+export function isActionNeeded(
+  env: Envelope,
+  me: string,
+  /** Lane 01M3TB3DA2: whether `me` is an admin. Omitted ⇒ not — a team-addressed ask is not mine. */
+  viewer: { admin?: boolean | undefined } = {},
+): boolean {
   if (env.act === 'resolve') return false;
   if (env.act === 'request_help') return true;
-  // A to-human `ask` (ADR 147) is a decision waiting on a human — it flags whether it named a specific
-  // admin or went to the team by default, the recipient-side half of "escalations always reach the human".
-  if (env.act === 'ask') return true;
+  // A to-human `ask` (ADR 147) is a decision waiting on a human — but on WHICH human is one rule
+  // in the protocol (`askConcernsMe`): directed to me, eligible-set naming me, or team-addressed
+  // and I am an admin. Every seat used to read every ask as its own, which let any agent's un-named
+  // accept close a team ask meant for the admin.
+  if (env.act === 'ask') return askConcernsMe(env, { name: me, admin: viewer.admin });
   return env.to.kind === 'member' && env.to.name === me;
 }
 
@@ -550,6 +558,8 @@ export function openActionNeeded(
   me: string,
   answered: Iterable<string> = [],
   discharged: Iterable<string> = [],
+  /** Lane 01M3TB3DA2: `{ admin }` for the team-ask arm of {@link isActionNeeded}. */
+  viewer: { admin?: boolean | undefined } = {},
 ): Envelope[] {
   const resolved = new Set<string>();
   for (const m of messages) {
@@ -559,7 +569,7 @@ export function openActionNeeded(
   const stoodDown = new Set(discharged);
   return messages.filter(
     (m) =>
-      isActionNeeded(m, me) &&
+      isActionNeeded(m, me, viewer) &&
       !resolved.has(threadKey(m)) &&
       !alreadyAnswered.has(m.id) &&
       !stoodDown.has(m.id),

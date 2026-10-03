@@ -15,7 +15,7 @@ import { readHookStdin } from '../hookStdin.js';
 import { isActionNeeded, renderInbox, renderMessageRow } from '../render/rows.js';
 import { theme } from '../render/theme.js';
 import { tapHook } from '../trace/hook.js';
-import { kindLookup, resolve, resolveRead } from './helpers.js';
+import { kindLookup, resolve, resolveRead, viewerFlags } from './helpers.js';
 import { waitingCommand } from './nudge.js';
 import { attestSlotIfUnattested, refreshModelObservation } from './session.js';
 
@@ -551,6 +551,9 @@ async function watchInbox(
     }
     if (hist.messages.length > 0) process.stdout.write(theme.meta('— live —') + '\n');
   }
+  // Lane 01M3TB3DA2: read once whether this seat is an admin, so a team-addressed ask flags (and
+  // rings the bell) for the admin it is meant for and for nobody else.
+  const viewer = await viewerFlags(http, team, identity.name);
 
   return new Promise((resolveP) => {
     const session = watchClaim({
@@ -570,7 +573,7 @@ async function watchInbox(
         seen.add(env.id);
         // Surface request_help / @you-directed acts above the status_update stream so they can't be
         // missed; everything else streams plainly (piece A of the human-reachability nudge, ADR 024).
-        const flagged = isActionNeeded(env, identity.name);
+        const flagged = isActionNeeded(env, identity.name, viewer);
         if (flagged && bell) process.stdout.write('\u0007');
         const banner = flagged ? theme.actionNeeded() + '\n' : '';
         process.stdout.write(banner + renderMessageRow(env, kindOf, { me: identity.name }) + '\n');

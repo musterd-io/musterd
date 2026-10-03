@@ -25,7 +25,7 @@ import {
 } from '../session/liveness.js';
 import { tapHook } from '../trace/hook.js';
 import { tailTranscript, transcriptPathFor } from '../trace/tail.js';
-import { attestedModel, findWorkspaceDir, resolveClaimWorkspace } from './helpers.js';
+import { attestedModel, findWorkspaceDir, resolveClaimWorkspace, viewerFlags } from './helpers.js';
 import { composeSessionOrientation, type SessionOrientationInput } from './sessionOrientation.js';
 import { runSessionStartProbe, type SessionStartProbe } from './sessionProbe.js';
 import { composeSessionStatusline, type SessionStatuslineInput } from './sessionStatusline.js';
@@ -286,16 +286,18 @@ async function defaultOrientationFetcher(
   });
   // Lane 01M2GTB0RA: the summary, not the brief — this runs on every turn of every session, and
   // the brief cost the daemon 0.5–1.8 s of its single thread per call for three numbers.
-  const [inboxRes, brief, memory] = await Promise.all([
+  const [inboxRes, brief, memory, viewer] = await Promise.all([
     http.inbox(team, { unread: true }),
     http.nextSummary(team),
     http.getMemoryEnvelope(team).catch(() => undefined), // absent memory is a normal state
+    viewerFlags(http, team, seat),
   ]);
   const waiting = openActionNeeded(
     inboxRes.messages,
     seat,
     inboxRes.answered ?? [],
     dischargedIds(inboxRes),
+    viewer,
   ).map((m) => ({
     act: m.act,
     from: m.from,
@@ -396,15 +398,17 @@ async function defaultStatuslineFetcher(
     ...(model !== undefined ? { model } : {}),
   }).presenceNeutral();
   // Lane 01M2GTB0RA: the summary, not the brief — see defaultOrientationFetcher.
-  const [inboxRes, brief] = await Promise.all([
+  const [inboxRes, brief, viewer] = await Promise.all([
     http.inbox(team, { unread: true, limit: STATUSLINE_INBOX_LIMIT }),
     http.nextSummary(team),
+    viewerFlags(http, team, seat),
   ]);
   const waiting = openActionNeeded(
     inboxRes.messages,
     seat,
     inboxRes.answered ?? [],
     dischargedIds(inboxRes),
+    viewer,
   );
   return {
     seat,

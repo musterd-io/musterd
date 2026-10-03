@@ -75,7 +75,9 @@ is a window reads as the whole queue.
   `review_debt_total: 0`), so a brief from an older daemon still parses. A `0` total beside a
   non-empty `review_debt` means "this daemon does not count", not "nothing is waiting".
 - Not fixed here, and recorded so it is not mistaken for fixed: an undirected `to_kind: 'team'`
-  ask is an auto-target candidate for _every_ seat's accept. That is what made guardian's outage
+  ask is an auto-target candidate for _every_ seat's accept. _(Fixed 2026-10-03, lane
+  01M3TB3DA2: `askConcernsMe` in the protocol — directed, eligible-set, or team-addressed to an
+  admin — narrows the banner, the Loud set and both surfaces' auto-target together.)_ That is what made guardian's outage
   asks reachable at all, and narrowing it touches ADR 147's admin path, so it wants its own lane.
 - Also not fixed here: `musterd next` does not render `review_debt` at all, so a CLI seat sees none
   of this. Same shape as the incident banner's CLI gap (lane 01M017ZFMQ).

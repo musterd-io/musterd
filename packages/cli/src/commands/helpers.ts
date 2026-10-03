@@ -387,11 +387,32 @@ export function resolveRead(
  * waits. The comeback / return-path half of the human-reachability nudge (ADR 024) — it needs no
  * resident process, just a normal inbox read.
  */
+/**
+ * Lane 01M3TB3DA2: is `me` an admin? One roster read — a seat sees its own capabilities — so the
+ * team-addressed arm of `isActionNeeded` can be answered. Best-effort and FALSE on any failure or
+ * an older daemon: the safe direction is "that team ask is not mine", never the reverse. Agents are
+ * never admins, so `is_admin` alone is the ADR 147 "admin human" test.
+ */
+export async function viewerFlags(
+  http: HttpClient,
+  team: string,
+  me: string,
+): Promise<{ admin: boolean }> {
+  try {
+    const { members } = await http.roster(team);
+    const mine = members.find((m) => m.name === me);
+    return { admin: mine?.capabilities?.is_admin === true };
+  } catch {
+    return { admin: false };
+  }
+}
+
 export async function pendingActionSummary(
   http: HttpClient,
   team: string,
   me: string,
 ): Promise<{ count: number; since: number; waiting: Envelope[] } | undefined> {
+  const viewer = await viewerFlags(http, team, me);
   // Walk EVERY unread page. A pageless read is a bounded PREFIX (the daemon caps it at 200 and says
   // `truncated`, ADR 287); one page counted "acts in the oldest 200 unread" and called it the total —
   // measured 2026-09-03 as "⚑ 8 acts waiting" on an inbox holding 120, with `since` the oldest of
@@ -411,7 +432,7 @@ export async function pendingActionSummary(
       since: envelopePosition(page.messages[page.messages.length - 1]!),
     });
   }
-  const waiting = openActionNeeded(messages, me, answered, discharged);
+  const waiting = openActionNeeded(messages, me, answered, discharged, viewer);
   if (waiting.length === 0) return undefined;
   const since = waiting.reduce((min, m) => Math.min(min, m.ts), Infinity);
   return { count: waiting.length, since, waiting };

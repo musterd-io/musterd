@@ -724,6 +724,47 @@ describe('isActionNeeded (ADR 024 — recipient-side salience)', () => {
     ).toBe(false);
   });
 
+  it('flags an ask only when it concerns me: directed, eligible, or team-addressed to an admin (lane 01M3TB3DA2)', () => {
+    const teamAsk = env({
+      act: 'ask',
+      to: { kind: 'team' },
+      meta: { species: 'approve', tier: 'standard' },
+    });
+    expect(isActionNeeded(teamAsk, 'dolly')).toBe(false);
+    expect(isActionNeeded(teamAsk, 'dolly', { admin: false })).toBe(false);
+    expect(isActionNeeded(teamAsk, 'nick', { admin: true })).toBe(true);
+    expect(
+      isActionNeeded(
+        env({
+          act: 'ask',
+          to: { kind: 'member', name: 'dolly' },
+          meta: { species: 'consult', tier: 'advisory' },
+        }),
+        'dolly',
+      ),
+    ).toBe(true);
+    expect(
+      isActionNeeded(
+        env({
+          act: 'ask',
+          to: { kind: 'team' },
+          meta: { species: 'consult', tier: 'advisory', eligible: ['dolly', 'izzo'] },
+        }),
+        'dolly',
+      ),
+    ).toBe(true);
+    expect(
+      isActionNeeded(
+        env({
+          act: 'ask',
+          to: { kind: 'team' },
+          meta: { species: 'consult', tier: 'advisory', eligible: ['izzo'] },
+        }),
+        'dolly',
+      ),
+    ).toBe(false);
+  });
+
   it('never flags a resolve — a thread-close is done, not an action (ADR 025)', () => {
     expect(
       isActionNeeded(
