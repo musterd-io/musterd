@@ -991,8 +991,12 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
               // and lived five minutes — after which every tool call was refused until a reconnect
               // happened to mint another (lane 01M1FC77F2, 2026-09-01). The old lease is not
               // revoked: it dies at its own expiry, so a call in flight under it still lands.
+              // ADR 501: a halted seat renews nothing — the halt revoked its leases on purpose, and
+              // a heartbeat racing the eviction must not mint a fresh one behind it.
+              const haltedNow = (await getMemberById(ctx.db, conn.memberId))?.halted_at;
               if (
                 state.lease &&
+                (haltedNow === null || haltedNow === undefined) &&
                 (await sessionLeaseDueForRenewal(
                   ctx.db,
                   state.lease.id,
