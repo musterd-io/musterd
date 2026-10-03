@@ -380,7 +380,9 @@ describe('team_send handler', () => {
       fetchInbox: (async () => ({
         messages: [
           laneAsk('askA', 1, '01LANEA'),
-          req({ id: 'guardian1', ts: 9, act: 'ask', to: { kind: 'team' } as any }),
+          // Directed at this seat: a team-addressed ask is no longer an agent's to answer (lane
+          // 01M3TB3DA2), so the mis-binding scenario is reproduced with a directed plain ask.
+          req({ id: 'guardian1', ts: 9, act: 'ask' }),
         ],
         cursor: null,
       })) as any,
@@ -391,6 +393,24 @@ describe('team_send handler', () => {
     // …and the lane ask it should have gone to is offered by id.
     expect(text(r)).toContain('reply_to:askA');
     expect(text(r)).toContain('01LANEA');
+  });
+
+  // Lane 01M3TB3DA2: the guardian's `@team` ask was never this agent's to answer. An un-named
+  // accept no longer sees it at all, so the lone lane ask is the one candidate and binds cleanly.
+  it('a team-addressed plain ask is not a candidate for an agent — the lane ask binds alone', async () => {
+    const { client, sent } = sendClient({
+      fetchInbox: (async () => ({
+        messages: [
+          laneAsk('askA', 1, '01LANEA'),
+          req({ id: 'guardian1', ts: 9, act: 'ask', to: { kind: 'team' } as any }),
+        ],
+        cursor: null,
+      })) as any,
+    });
+    const handler = capture(registerSend, client, config);
+    await handler({ to: 'nick', act: 'accept', body: 'Lane 01LANEA accepted' });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.meta?.['in_reply_to']).toBe('askA');
   });
 
   it('still auto-targets a lone lane-review ask — one candidate is not a guess', async () => {
