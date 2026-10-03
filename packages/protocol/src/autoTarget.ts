@@ -88,7 +88,11 @@ export interface AskViewer {
  * set, and both surfaces' auto-target cannot disagree.
  */
 export function askConcernsMe(
-  env: { act: string; to: { kind: string; name?: string }; meta?: Record<string, unknown> | null },
+  env: {
+    act: string;
+    to: { kind: string; name?: string | undefined };
+    meta?: Record<string, unknown> | null | undefined;
+  },
   viewer: AskViewer,
 ): boolean {
   if (env.act !== 'ask') return false;
