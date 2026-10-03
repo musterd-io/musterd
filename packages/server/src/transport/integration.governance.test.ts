@@ -690,7 +690,8 @@ withDrivers('integration · governance', (_o, kind) => {
         const rows = await refusals();
         expect(rows).toHaveLength(1);
         expect(rows[0]!.target).toBe('Ada');
-        expect(rows[0]!.detail).toMatchObject({ lease: 'dead' });
+        // Lane 01M3TAKT16: the row says WHY the lease is dead — this fixture revoked it.
+        expect(rows[0]!.detail).toMatchObject({ lease: 'dead', reason: 'revoked' });
         // Never the credential, never the lease token — the row names a seat, not a secret.
         expect(JSON.stringify(rows[0]!.detail)).not.toMatch(/msac_|msls_/);
       });
@@ -712,12 +713,28 @@ withDrivers('integration · governance', (_o, kind) => {
         expect(await refusals()).toHaveLength(0);
       });
 
+      it('an expired lease is refused with reason expired, a presence-released one with its own', async () => {
+        const { ada, refusals, teamId } = await deafAda();
+        const adaRow = (await getMemberByName(h.db, teamId, 'Ada'))!;
+        // Un-revoke the fixture's lease and expire it instead.
+        await h.db.run(
+          'UPDATE session_leases SET revoked_at = NULL, expires_at = ? WHERE member_id = ?',
+          [Date.now() - 1000, adaRow.id],
+        );
+        expect((await get('/teams/dawn/inbox/interrupt-check', ada)).status).toBe(401);
+        expect((await refusals())[0]!.detail).toMatchObject({ lease: 'dead', reason: 'expired' });
+      });
+
       it('control: a missing lease is refused with its own reason', async () => {
         const { ada, refusals } = await deafAda();
         const noLease = { key: ada.key, seat: ada.seat }; // credential valid, no msls_ header at all
         const probe = await get('/teams/dawn/inbox/interrupt-check', noLease);
         expect(probe.status).toBe(401);
         expect(await refusals()).toHaveLength(1);
+        expect((await refusals())[0]!.detail).toMatchObject({
+          lease: 'missing',
+          reason: 'none_presented',
+        });
         expect((await refusals())[0]!.detail).toMatchObject({ lease: 'missing' });
       });
 
