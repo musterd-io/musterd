@@ -63,6 +63,8 @@ from `packages/web/src/brand/` (same shapes); MCP embeds the chip as a data URI 
   future Cursor UI support.
 - README figlet removed — replaced by chip + wordmark per this ADR.
 
+- 2026-10-02 — **The Chip and Tile faces are superseded by [ADR 497](497-the-new-mark.md)** (a new hand-drawn `m` in a white ring replaces the reversed-`m` chip; surface rules stand).
+
 ## Observability & Evaluation
 
 n/a — static brand assets and presentation chrome; no protocol, span, or agent-behavior change.

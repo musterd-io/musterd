@@ -206,7 +206,7 @@ live/
     welcomeWagon.ts             // the Welcome Wagon beat sequencer: 2 s waves, Act 1 / Act 2 / crowd scripts, mark/seat gates, backlog cap, busy-room cap — pure
     welcomeRoom.ts              // the Welcome Wagon's wiring behind ports: roster → arrivals → beats → residents, and the paint the renderer is shown (unit-tested; index.ts only plugs it in)
 components/                     // marketing surface (Hero, Roadmap, Footer, LiquidGlass, Wedge)
-brand/                          // unified marks — Chip + MusterdWord topbar lockup (ADR 154); social-card.png + siteMeta.ts (og:image on musterd.io)
+brand/                          // unified marks — the mark (full + small cuts) + MusterdWord topbar lockup (ADR 497, was the ADR 154 chip); social-card.png + siteMeta.ts (og:image on musterd.io)
 ```
 
 ## The doorbell's `live` sink (ADR 443)
