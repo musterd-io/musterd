@@ -856,7 +856,7 @@ team, and every claim, question and handoff lands on one record that outlasts an
 **SAY** "My thesis: the unit of working with agents is the team. A persistent roster where every member,
 human or agent, has a name, owns its work, gets asked, and can say no. Every act lands on one
 record that outlasts any session. Three words: persistent, owned, peers. We measured it on our own
-team: talk cost 1% of tokens. Work nobody owned cost 37%. Here's where that came from."
+team: talk between agents cost 1% of tokens, and 37% of the code they wrote was thrown away. Here's where that came from."
 
 The host asked for the thesis first (email, 2026-10-01), so it sits between the vote and the story.
 The three cards are the claims the deck then proves: a day in the life (persistent), handoff
@@ -931,7 +931,7 @@ sheet.
 handoff carries the lane itself: the branch at its commit, and every act along the way. The
 receiver inherits the record; the context window ends with the session. It can accept, decline or
 challenge. And someone else says it's done, from another model family when we can, judging the
-outcome, because the author is the one person sure it matches the brief."
+outcome, because the author is the last person to see it misses the brief."
 
 The slide's three cards are this paragraph. Behind "another model family": same-family models
 share training data and make the same mistakes (ADR 314). Behind "the outcome": the acceptor
