@@ -6,6 +6,7 @@ import { ulid } from 'ulid';
 import { z } from 'zod';
 import { teamCtx, type Ctx } from '../context.js';
 import { asMusterdError, MusterdError } from '../errors.js';
+import { noteRequestFailure } from '../log.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { getCursor } from '../store/cursors.js';
 import { rowsToEnvelopes } from '../store/hydrate.js';
@@ -543,6 +544,7 @@ export async function handleMcpRoute(
     memberId = auth.member.id;
   } catch (err) {
     const me = asMusterdError(err);
+    if (me.httpStatus >= 500) noteRequestFailure(res, err);
     // RFC 6750 §3: an invalid/expired/revoked bearer 401s as invalid_token. The description
     // stays out of the header — the body already says it, and the header must not become an
     // oracle finer than the body. Non-401s (seat mismatch 403s, etc.) ride exactly as before.
@@ -574,6 +576,7 @@ export async function handleMcpRoute(
     await sendWebResponse(res, webRes);
   } catch (err) {
     const me = asMusterdError(err);
+    if (me.httpStatus >= 500) noteRequestFailure(res, err);
     // A factory throw means the seat vanished mid-request; anything else is a 500 with no secret.
     if (!res.headersSent) {
       res.writeHead(me.httpStatus, {

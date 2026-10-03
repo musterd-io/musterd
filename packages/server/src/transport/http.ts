@@ -145,7 +145,7 @@ import {
   asMusterdError,
 } from '../errors.js';
 import { reapOrphans } from '../footprint/reap.js';
-import { log, redactPath } from '../log.js';
+import { log, noteRequestFailure, redactPath } from '../log.js';
 import { saveNodeEnrollment } from '../node/state.js';
 import { flushHeldRings } from '../notify/doorbell.js';
 import { reconcileTeam, teamSpecForSlug } from '../projection/reconcile.js';
@@ -723,6 +723,9 @@ function serveStatic(
 function sendError(res: ServerResponse, err: unknown): void {
   const me = asMusterdError(err);
   recordError(me.code);
+  // The client gets its body; the operator gets the cause, on this request's log line (lane
+  // 01M3ZPM3FE) — before it, a load run's 500s were `status: 500` and nothing else.
+  if (me.httpStatus >= 500) noteRequestFailure(res, err);
   sendJson(res, me.httpStatus, me.toBody());
 }
 
