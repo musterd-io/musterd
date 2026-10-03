@@ -86,7 +86,11 @@ is untouched; this is about *when* it learns it.
   That is the gate working: such a session did no work either.
 - Not addressed here, and still true: nothing tells either session that two of them hold one seat.
   The gate prevents slot theft, not co-tenancy — ADR 131 §5 leaves live-beside-live to the wake
-  guard, and the wake guard runs once, before spawn. That is a separate lane.
+  guard, and the wake guard runs once, before spawn. That is a separate lane. _(2026-10-03, lane
+  01M3TB3EY9: the residual is now measurable — `claim.superseded` stamps both sides' provenance and
+  the loser's last-active age, and the `superseded` message names the winner. The in-frame
+  `displaced` notice on `occupied` / the wake context is a protocol-schema change and waits on its
+  own small ADR if the ledger shows a real residual.)_
 
 ## Observability & Evaluation
 

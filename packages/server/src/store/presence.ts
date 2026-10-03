@@ -257,6 +257,45 @@ export async function heldByAttendedSession(
 }
 
 /** Drop a single presence row by id — used to evict exactly a displaced connection (ADR 068). */
+/** What a displaced session was (lane 01M3TB3EY9): its surface, provenance, workspace, and how
+ *  long before the displacement it was last seen — the facts `claim.superseded` needs so a wake
+ *  landing on a live session is measurable from the ledger alone. */
+export interface DisplacedSession {
+  presence_id: string;
+  surface: string;
+  provenance: string | null;
+  workspace: string | null;
+  last_active_ms: number;
+}
+
+/** Read {@link DisplacedSession} for a presence row BEFORE it is cleared; null when already gone. */
+export async function describeDisplaced(
+  db: Driver,
+  presenceId: string,
+  now = Date.now(),
+): Promise<DisplacedSession | null> {
+  const row = await presenceById(db, presenceId);
+  if (!row) return null;
+  return {
+    presence_id: row.id,
+    surface: row.surface,
+    provenance: row.provenance ?? null,
+    workspace: row.workspace ?? null,
+    last_active_ms: Math.max(0, now - row.last_seen_at),
+  };
+}
+
+/** The `superseded` frame's sentence, naming WHAT took the seat (lane 01M3TB3EY9): a wake, a
+ *  session, a dream, or — provenance unknown — a newer session; and on which surface. */
+export function supersededMessage(
+  name: string,
+  successor: { provenance?: string | null | undefined; surface?: string | null | undefined },
+): string {
+  const what = successor.provenance ? `a ${successor.provenance}` : 'a newer session';
+  const where = successor.surface ? ` on ${successor.surface}` : '';
+  return `your session as "${name}" was taken over by ${what}${where}`;
+}
+
 export async function clearPresenceById(db: Driver, presenceId: string): Promise<void> {
   await detachLocalRows(db, 'id = ?', [presenceId], 'displaced');
 }

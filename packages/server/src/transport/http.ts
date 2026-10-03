@@ -311,6 +311,9 @@ import {
   recordClaimAttestation,
   recordUnattestedOccupancy,
   touchAmbientPresence,
+  describeDisplaced,
+  type DisplacedSession,
+  supersededMessage,
 } from '../store/presence.js';
 import {
   lastActionBySubject,
@@ -2850,6 +2853,9 @@ export async function handleHttp(
               pendingConn?.workspace != null &&
               workspace === pendingConn.workspace;
             let displaced = 0;
+            const displacedSessions: DisplacedSession[] = [];
+            // An approved claim is stamped with no provenance (below) — the surface is what we know.
+            const successor = { provenance: null, surface: existing.surface ?? null };
             for (const old of liveConns) {
               if (sameWorkspace(old.workspace)) {
                 // ADR 489: reap later only a same-surface reload, never a second reader.
@@ -2857,10 +2863,12 @@ export async function handleHttp(
                   sameWorkspacePredecessors.push(old.connId);
                 continue;
               }
+              const was = await describeDisplaced(ctx.db, old.presenceId);
+              if (was) displacedSessions.push(was);
               old.send?.({
                 type: 'error',
                 code: 'superseded',
-                message: `your session as "${targetMember.name}" was taken over by a newer one`,
+                message: supersededMessage(targetMember.name, successor),
               });
               old.close?.();
               ctx.hub.remove(old.connId);
@@ -2874,7 +2882,14 @@ export async function handleHttp(
                 action: 'claim.superseded',
                 target: targetMember.name,
                 result: 'allow',
-                detail: { same_workspace: false, evicted, via: 'request.approve' },
+                detail: {
+                  same_workspace: false,
+                  evicted,
+                  via: 'request.approve',
+                  successor_provenance: null,
+                  successor_surface: successor.surface,
+                  displaced: displacedSessions,
+                },
               });
             }
             await clearOrphanPresence(ctx.db, targetMember.id);
@@ -4561,6 +4576,8 @@ export async function handleHttp(
             )
           )?.count;
           let displaced = 0;
+          const displacedSessions: DisplacedSession[] = [];
+          const successor = { provenance: claimProvenance, surface: body.surface };
           for (const old of liveConns) {
             // ADR 068/092: a same-workspace successor does not evict its predecessor — it is the
             // same folder reconnecting, and evicting there points two sessions at one working tree
@@ -4569,10 +4586,12 @@ export async function handleHttp(
               sparedSameWorkspace++;
               continue;
             }
+            const was = await describeDisplaced(ctx.db, old.presenceId);
+            if (was) displacedSessions.push(was);
             old.send?.({
               type: 'error',
               code: 'superseded',
-              message: `your session as "${targetMember.name}" was taken over by a newer one`,
+              message: supersededMessage(targetMember.name, successor),
             });
             old.close?.();
             ctx.hub.remove(old.connId);
@@ -4595,7 +4614,14 @@ export async function handleHttp(
               action: 'claim.superseded',
               target: targetMember.name,
               result: 'allow',
-              detail: { same_workspace: sparedSameWorkspace > 0, evicted, via: 'http' },
+              detail: {
+                same_workspace: sparedSameWorkspace > 0,
+                evicted,
+                via: 'http',
+                successor_provenance: successor.provenance,
+                successor_surface: successor.surface,
+                displaced: displacedSessions,
+              },
             });
           }
         };
