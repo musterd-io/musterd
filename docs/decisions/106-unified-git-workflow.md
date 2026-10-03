@@ -125,6 +125,12 @@ a docs/asset PR is never wedged.
 - The playbook is mirrored into `AGENTS.md` (the primer every agent reads) so it is guidance, not just an
   ADR.
 
+- 2026-10-03 — [ADR 499](499-gates-run-where-inputs-changed.md): the gates still run on every PR,
+  each where its inputs changed. A docs-only change runs the docs leaf alone and a change that leaves
+  `packages/web` alone skips the two a11y leaves; `plan` decides from the diff and `gates` sanctions
+  exactly those skips, so a leaf skipped for any other reason stays red. The repo is private and
+  billed per minute since 2026-10-02; the rule here was written when minutes were free.
+
 ## Observability & Evaluation
 
 **Traces** — every merge now leaves a first-party audit trail: the `gates` CI run and the `Cursor Bugbot`
