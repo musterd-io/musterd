@@ -803,14 +803,14 @@
 <section class="slide" data-sec="Thesis" data-title="The thesis">
   <div class="brand" aria-hidden="true"><img src="../../design/assets/chip.svg" alt=""><span>musterd</span></div>
   <p class="eyebrow a" style="--i:0">Thesis</p>
-  <h1 class="a" style="--i:1">More Agents, more breakdown</h1>
+  <h1 class="a" style="--i:1">More agents, more breakdown</h1>
   <p class="sub a" style="--i:2;max-width:52ch">A persistent roster where every member, human or agent, has a name, owns its work, gets asked, and can say no. Every act lands on one record that outlasts any session.</p>
   <div class="cards2" style="margin-top:clamp(14px,2.2vw,34px);grid-template-columns:1fr 1fr 1fr">
     <div class="card a" style="--i:3"><h3>Persistent</h3><p class="strong">A member outlasts every session it runs in.</p><p>Same name, same history, on any harness.</p></div>
     <div class="card a" style="--i:4"><h3>Owned</h3><p class="strong">Every piece of work has one owner.</p><p>Claimed before the first edit. Done takes a second signature.</p></div>
     <div class="card a" style="--i:5"><h3>Peers</h3><p class="strong">Humans sit on the same roster.</p><p>Agents ask you, with a clock. Anyone can decline.</p></div>
   </div>
-  <p class="foot a" style="--i:6;margin-top:auto">Measured on our own team: talk cost 1% of tokens. Work nobody owned cost 37%.</p>
+  <p class="foot a" style="--i:6;margin-top:auto">Measured on our own team: talk between agents cost 1% of tokens, and 37% of the code they wrote was thrown away.</p>
   <aside hidden>The host asked for the thesis first, so it comes before the story. Say it as written, then the three words: persistent, owned, peers. The footer line is the evidence in one breath; the next slide is where it came from. The three cards are the three claims the rest of the deck proves: slide 5 (persistent, a day in the life), slide 8 (owned, the handoff), slide 7 (peers, the team asks you).</aside>
 </section>
 
@@ -833,10 +833,10 @@
       <div class="bar"><i class="kept"></i><i class="lost"></i></div>
       <div class="legend"><span>reached main</span><span class="l">thrown away</span></div>
       <p class="talk">Talk between them: about 1% of tokens.</p>
-      <p class="talk">Co-Gym (Stanford/CMU): agents that coordinate with people won 86%. With notifications removed, 30%.</p>
+      <p class="talk">Co-Gym (Stanford/CMU): agents that notify people won 70% against autonomous ones. Without notifications, 30%.</p>
     </div>
   </div>
-  <aside hidden>Click through the four pains, then the number. One agent would tell me something and I would paste it into the other. I was not sure which worktree or branch a session was on. Every new session started from a prompt I wrote by hand. Then, two days of dogfooding the first version of musterd, we measured it: about 37% of the code three agents produced on one feature was thrown away. And the talk between them cost about 1% of the tokens: the expensive part was who owns what. The fix was one owner per piece of work, declared before the first keystroke. (From nick's P3 notes, 2026-06-30; the 1% is the same dogfood's token count.) The research line: Collaborative Gym, Shao et al., Stanford/CMU, arXiv 2412.15701: against fully autonomous agents, the collaborative agent won real users' preference 86% on travel planning (74% tabular, 66% related work); the ablation that removes the notification protocol drops the win rate from 70% to 30%. Being told, instead of having to watch, is the mechanism.</aside>
+  <aside hidden>Click through the four pains, then the number. One agent would tell me something and I would paste it into the other. I was not sure which worktree or branch a session was on. Every new session started from a prompt I wrote by hand. Then, a day and a half of dogfooding the first version of musterd, we measured it: about 37% of the code three agents produced on one feature was thrown away. And the talk between them cost about 1% of the tokens: the expensive part was who owns what. The fix was one owner per piece of work, declared before the first keystroke. (From nick's P3 notes, 2026-06-30; the 1% is the same dogfood's token count.) The research line: Collaborative Gym, Shao et al., Stanford/CMU, arXiv 2412.15701: against fully autonomous agents, the collaborative agent won real users' preference 86% on travel planning (74% tabular, 66% related work); the ablation that removes the notification protocol drops the win rate from 70% to 30%. Being told, instead of having to watch, is the mechanism.</aside>
 </section>
 
 <!-- 3 · what changes -->
@@ -849,7 +849,7 @@
     <div class="vcard frag"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><h3>Ownership</h3><ul><li style="--j:0">Work is claimed before the first edit</li><li style="--j:1">Overlapping claims raise a warning</li></ul></div>
     <div class="vcard frag"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg><h3>Messages reach agents mid-task</h3><ul><li style="--j:0">Delivered at the next tool call</li><li style="--j:1">Teammates reach each other directly</li></ul></div>
     <div class="vcard frag"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.5"/><path d="M12 15h.01"/></svg><h3>You get asked</h3><ul><li style="--j:0">Agents ask you clarifying questions</li><li style="--j:1">Big decisions wait for your answer, however long it takes</li><li style="--j:2">Smaller ones time out, and the agent records that it went ahead</li></ul></div>
-    <div class="vcard frag"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><h3>Done gets a second look</h3><ul><li style="--j:0">The builder submits</li><li style="--j:1">Another member checks the outcome, cross-family if available</li></ul></div>
+    <div class="vcard frag"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><h3>Done gets a second look</h3><ul><li style="--j:0">The builder submits</li><li style="--j:1">Another member checks the outcome, from another model family when one is live</li></ul></div>
   </div>
   <aside hidden>Open on the line under the title: a team is the oldest coordination technology people have. Everyone has a name and a job, every piece of work has an owner, you know who to ask and they can tell you no, someone else checks your work, and the team remembers who did what. Agents in a chat share airtime; agents on a team each have a name, a job and a record. Then one card per click. The team is the unit: a persistent roster where a member outlasts every session it has run in, with an owner for every piece of work, an inbox that survives a restart, and a record of who did what at which model. The human sits on the same roster.</aside>
 </section>
@@ -878,7 +878,7 @@
   <h2 class="a" style="--i:1">What a musterd team is made of.</h2>
   <div class="box">
     <div class="col frag"><h3 data-ico="team">Who is on it</h3>
-      <div class="tile"><b>Agent Seats</b><p>A member’s durable position. It stays while they’re away.</p></div>
+      <div class="tile"><b>Seats</b><p>A member’s durable position. It stays while they’re away.</p></div>
       <div class="tile"><b>Roles</b><p>A charter the team grants: designer, platform, security.</p></div>
       <div class="tile"><b>Humans</b><p>On the same roster, with the same acts.</p></div></div>
     <div class="col frag"><h3 data-ico="place">Where they work</h3>
@@ -942,7 +942,7 @@
   <div class="cards2" style="margin:auto 0;grid-template-columns:1fr 1fr 1fr">
     <div class="card a" style="--i:2"><h3>What moves</h3><p class="strong">The lane.<br>The branch, at its commit.<br>Every act along the way.</p><p>The receiver inherits the record. The context window ends with the session.</p></div>
     <div class="card a" style="--i:3"><h3>What the receiver can do</h3><p class="strong">Accept.<br>Decline.<br>Challenge.</p><p>Every handoff is an offer from one owner to another.</p></div>
-    <div class="card a" style="--i:4"><h3>Who says it’s done</h3><p class="strong">Someone else.<br>Another model family.<br>Judging the outcome.</p><p>The author is the one person sure it matches the brief.</p></div>
+    <div class="card a" style="--i:4"><h3>Who says it’s done</h3><p class="strong">Someone else.<br>Another model family.<br>Judging the outcome.</p><p>The author is the last person to see it misses the brief.</p></div>
   </div>
   <aside hidden>Our first answer was wrong. Early on, a handoff was prose: here is what I did, carry on. A whole class of the waste was byte-identical work. Now a handoff carries the lane itself. A lane is one row on the team's board: one owner, the brief, the files it touches, the branch it lives on, and every act tied to it from claim to sign-off. The receiver inherits the record: the branch, the brief, the note saying why, every question and answer. The sender's context window ends with its session, so if it isn't on the record, it didn't happen. Overlaps are caught at claim time, before the first edit. The receiver can decline, which makes it an offer between owners. Done: someone else accepts, from another model family when one is live, because models trained on the same data make the same mistakes and agree on the same wrong answers. They judge the landed outcome against the brief: intent, principles, does it work, does it feel right. Code can pass review and still do the wrong thing. Today a GPT seat declined my lane: the code ran, the brief said three options, I shipped four.</aside>
 </section>
@@ -988,13 +988,13 @@
         <span class="logo gk"><img src="../../../packages/web/src/live/provider-logos/x.svg" alt="">Grok</span>
         <span class="logo cu"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#0D0D0D" d="M12 1.5 2.9 6.75v10.5L12 22.5l9.1-5.25V6.75L12 1.5Zm0 2.3 7.1 4.1L12 12 4.9 7.9 12 3.8Z"/></svg><span>Cursor</span></span>
         <span class="logo oc"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" fill="#0D0D0D"/><rect x="7" y="7" width="10" height="10" fill="#FAFAFA"/><rect x="9" y="9" width="6" height="6" fill="#0D0D0D"/></svg><span>opencode</span></span>
-        <span class="logo md"><img src="../../design/assets/chip.svg" alt="">musterd harness <span class="soon">coming</span></span>
+        <span class="logo md"><img src="../../design/assets/chip.svg" alt="">musterd harness <span class="soon">not yet</span></span>
       </div>
     </div>
     <div class="handles">
       
       <div class="handle a" style="--i:3"><span class="hi" style="background:#9146FF"><svg viewBox="0 0 24 24"><path fill="#fff" d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0 1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg></span><span><b>twitch.tv/sandrise_ai</b><small>musterd, built live every day</small></span></div>
-      <div class="handle a" style="--i:4"><span class="hi" style="background:var(--acc)"><img src="../../design/assets/chip.svg" alt=""></span><span><b>musterd.io</b><small>github.com/SandRiseStudio/musterd</small></span></div>
+      <div class="handle a" style="--i:4"><span class="hi" style="background:var(--acc)"><img src="../../design/assets/chip.svg" alt=""></span><span><b>musterd.io</b><small>in private preview</small></span></div>
       <div class="handle a" style="--i:5"><span class="hi" style="background:var(--tint);color:var(--acct)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span><span><b>sandrise.io/nicksanders</b><small>Portfolio</small></span></div>
     </div>
   </div>
@@ -1060,7 +1060,7 @@
       {k:'inbox', l:'Inbox',x:595,y:300, hub:true, t:'Inbox', b:['Checked after every tool call','Surfaces anything addressed to her','Every step comes back here'], how:['PostToolUse hook']},
       {k:'mate',  l:'A teammate asks',x:860,y:300, t:'A teammate asks', b:['izzo asks Miley for help','Reaches her at her next tool call','She answers, then gets back to building'], how:['PostToolUse hook','MCP tool call']},
       {k:'admin', l:'Ask a human admin',x:862,y:80, t:'Ask a human admin', b:['A call only Nick can make','She asks with a deadline','Big decisions wait for his answer','Small ones go ahead, and that is logged'], how:['MCP tool call','/live · Slack']},
-      {k:'ready', l:'Ready for review',x:345,y:205, t:'Ready for review', b:['Opens a PR','Submits the lane for review','A cross-family member reviews, if available'], how:['MCP tool call']},
+      {k:'ready', l:'Ready for review',x:345,y:205, t:'Ready for review', b:['Opens a PR','Submits the lane for review','A member from another model family reviews, when one is live'], how:['MCP tool call']},
       {k:'review',l:'Review',x:595,y:480, t:'Review', b:['A tier 1 review request lands: izzo’s PR','She takes it without being asked twice','Approves, or sends it back with a note'], how:['MCP tool call']},
       {k:'wrap',  l:'Wrap up',x:250,y:455, t:'Wrap up', b:['Nothing left addressed to her','Saves where she left off','Next session, on any harness, picks it up'], how:['MCP tool call','SessionEnd hook']},
     ];
