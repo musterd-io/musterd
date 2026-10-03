@@ -7987,6 +7987,9 @@ export async function handleHttp(
             halted: { at: now, by: caller.name, reason },
             effective: "at the seat's next tool boundary or musterd call",
             presences_evicted: conns.length,
+            // Lane 01M41Q39C9: which harnesses were evicted, so the CLI can say when one of them
+            // has no PreToolUse gate (Codex, ADR 442) and the seat's local tools keep running.
+            evicted_surfaces: conns.map((c) => c.surface ?? 'unknown'),
           });
         }
         // resume

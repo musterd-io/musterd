@@ -230,6 +230,13 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
     effective at the seat's next tool boundary or musterd call — nothing is killed; 1 live session evicted
     ```
 
+    When an evicted session was on a harness with no PreToolUse hook (Codex, OpenCode — ADR 442),
+    one warn line follows (lane 01M41Q39C9, measured on big-body 2026-10-03):
+
+    ```
+    ⚠ local tools are not gated on codex — the seat stops at its next musterd call
+    ```
+
 26. `cmd/resume` — `$ musterd resume Ada`:
 
     ```

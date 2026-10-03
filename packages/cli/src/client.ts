@@ -962,6 +962,8 @@ export class HttpClient {
     halted: { at: number; by: string; reason: string };
     effective: string;
     presences_evicted: number;
+    /** Lane 01M41Q39C9: the surface of each evicted live session. Absent from an older daemon. */
+    evicted_surfaces?: string[];
   }> {
     return this.request('POST', `/teams/${slug}/members/${encodeURIComponent(member)}/halt`, {
       reason,

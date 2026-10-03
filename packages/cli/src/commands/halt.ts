@@ -40,7 +40,25 @@ export async function haltCommand(parsed: Parsed): Promise<number> {
         `${res.presences_evicted} live session${res.presences_evicted === 1 ? '' : 's'} evicted`,
     ) + '\n',
   );
+  const ungated = ungatedSurfaceNotice(res.evicted_surfaces);
+  if (ungated) process.stdout.write(theme.warn(`⚠ ${ungated}`) + '\n');
   return 0;
+}
+
+/**
+ * Harnesses that run local tools but wire no PreToolUse hook, so the ADR 501 Decision 4 deny
+ * cannot reach them: Codex (ADR 442, "not gateable") and OpenCode. Claude Code, Cursor and Grok
+ * wire the gate; `cli` and `web` run no local tools at all. Measured 2026-10-03 on big-body
+ * (docs/wiki/halt-as-revocation.md): a halted Codex seat kept calling local tools until its next
+ * musterd call, which is the one thing a halt stops on every harness.
+ */
+const UNGATED_HARNESSES = new Set(['codex', 'opencode']);
+
+/** Lane 01M41Q39C9: the one extra line a halt prints when an evicted session cannot be gated. */
+export function ungatedSurfaceNotice(surfaces: string[] | undefined): string | null {
+  const ungated = [...new Set((surfaces ?? []).filter((s) => UNGATED_HARNESSES.has(s)))];
+  if (ungated.length === 0) return null;
+  return `local tools are not gated on ${ungated.join(', ')} — the seat stops at its next musterd call`;
 }
 
 /** `musterd resume <seat>` — lift a halt. Any human who could have halted the seat may resume it. */
