@@ -1,30 +1,18 @@
 import type { DoorbellRecord } from '@musterd/protocol';
+import { postJsonPinned, type SinkResult } from './pinnedPost.js';
 
 /**
  * The generic `webhook` doorbell sink (ADR 443 §3) — the agnostic escape hatch: ntfy, Pushover, an
  * iOS Shortcut, anything that takes a POST. The body is the doorbell record as-is, which by schema
  * carries no message body. One attempt, 5 s abort, never throws; the caller detaches it from the
- * send path and audits `doorbell.surfaced`.
+ * send path and audits `doorbell.surfaced`. The POST resolves the name, refuses a private answer and
+ * pins the connection (`pinnedPost.ts`) — the PUT-time literal-host check alone let a public name
+ * that resolves to a private address through (ADR 443 §5, closed 2026-10-02).
  */
 
 /** How long we give the endpoint before abandoning the attempt (the send path never waits on it). */
 export const WEBHOOK_POST_TIMEOUT_MS = 5_000;
 
-export async function postDoorbellWebhook(
-  url: string,
-  record: DoorbellRecord,
-): Promise<{ ok: boolean; status?: number }> {
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(record),
-      signal: AbortSignal.timeout(WEBHOOK_POST_TIMEOUT_MS),
-      // A 3xx to a private host would walk around the PUT-time public-host check (ADR 443 §5).
-      redirect: 'manual',
-    });
-    return { ok: res.ok, status: res.status };
-  } catch {
-    return { ok: false };
-  }
+export function postDoorbellWebhook(url: string, record: DoorbellRecord): Promise<SinkResult> {
+  return postJsonPinned(url, JSON.stringify(record), WEBHOOK_POST_TIMEOUT_MS);
 }

@@ -1,8 +1,9 @@
 import { makeEnvelope } from '@musterd/protocol';
 import { ulid } from 'ulid';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
+import { setSinkPostForTests } from '../notify/pinnedPost.js';
 import { addMember } from '../store/members.js';
 import { insertMessage } from '../store/messages.js';
 import { createTeam, setPolicy } from '../store/teams.js';
@@ -298,16 +299,11 @@ withDrivers('digest', (o) => {
       const { db, team, dana } = await seed();
       // The legacy knob reads through as the team's Slack sink (doorbell §6).
       await setPolicy(db, team.id, { ask_slack_webhook: 'https://hooks.slack.test/T/B/digest' });
-      // Intercept only the Slack host; the drivers under test share the global fetch.
+      // The sink transport is replaced at its seam: the test host does not resolve.
       const calls: { url: string; text: string }[] = [];
-      const realFetch = globalThis.fetch;
-      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        if (url.startsWith('https://hooks.slack.test/')) {
-          calls.push({ url, text: (JSON.parse(String(init?.body)) as { text: string }).text });
-          return new Response('ok', { status: 200 });
-        }
-        return realFetch(input as never, init);
+      setSinkPostForTests(async (url, body) => {
+        calls.push({ url, text: (JSON.parse(body) as { text: string }).text });
+        return { ok: true, status: 200 };
       });
       try {
         const now = 2_000_000_000_000;
@@ -349,7 +345,7 @@ withDrivers('digest', (o) => {
         await new Promise((r) => setTimeout(r, 50));
         expect(calls).toHaveLength(1);
       } finally {
-        vi.unstubAllGlobals();
+        setSinkPostForTests(null);
       }
     });
 
@@ -359,14 +355,9 @@ withDrivers('digest', (o) => {
       const { db, team, dana } = await seed();
       await setPolicy(db, team.id, { ask_slack_webhook: 'https://hooks.slack.test/T/B/digest' });
       const calls: string[] = [];
-      const realFetch = globalThis.fetch;
-      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        if (url.startsWith('https://hooks.slack.test/')) {
-          calls.push(url);
-          return new Response('ok', { status: 200 });
-        }
-        return realFetch(input as never, init);
+      setSinkPostForTests(async (url) => {
+        calls.push(url);
+        return { ok: true, status: 200 };
       });
       try {
         const now = 2_000_000_000_000;
@@ -389,7 +380,7 @@ withDrivers('digest', (o) => {
         await new Promise((r) => setTimeout(r, 100));
         expect(calls).toHaveLength(1);
       } finally {
-        vi.unstubAllGlobals();
+        setSinkPostForTests(null);
       }
     });
   });

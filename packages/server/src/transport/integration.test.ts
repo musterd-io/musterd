@@ -21,6 +21,7 @@ import type { SqliteDriver } from '../db/sqliteDriver.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { flushLapsedHolds } from '../notify/doorbell.js';
+import { setSinkPostForTests } from '../notify/pinnedPost.js';
 import { appendAudit, listAudit } from '../store/audit.js';
 import { openDirectedLedger } from '../store/delivery.js';
 import {
@@ -9571,24 +9572,25 @@ withDrivers('integration', (_o, kind) => {
       };
     }
 
-    /** Intercept only the Slack webhook host; every other URL (the test server itself) passes through —
-     *  the daemon and these test helpers share the one global fetch. */
+    /** Replace the sink transport at its seam (the test hooks host does not resolve, and the real
+     *  transport resolves-and-pins); the test server's own fetch is untouched. */
     function stubSlack(handler: (body: { text: string }) => Response | Promise<Response>) {
-      const realFetch = globalThis.fetch;
       const calls: { url: string; text: string }[] = [];
-      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        if (url.startsWith('https://hooks.slack.test/')) {
-          const body = JSON.parse(String(init?.body)) as { text: string };
-          calls.push({ url, text: body.text });
-          return handler(body);
+      setSinkPostForTests(async (url, raw) => {
+        const body = JSON.parse(raw) as { text: string };
+        calls.push({ url, text: body.text });
+        // A throwing handler is the dead endpoint: the real transport maps that to ok:false.
+        try {
+          const res = await handler(body);
+          return { ok: res.ok, status: res.status };
+        } catch {
+          return { ok: false };
         }
-        return realFetch(input as never, init);
       });
       return calls;
     }
 
-    afterEach(() => vi.unstubAllGlobals());
+    afterEach(() => setSinkPostForTests(null));
 
     it('posts a raised ask to the configured webhook and audits doorbell.surfaced ok:true', async () => {
       const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
@@ -9885,23 +9887,18 @@ withDrivers('integration', (_o, kind) => {
       (await listAudit(server.store, teamId)).filter((r) => r.action === 'doorbell.surfaced');
     const tick = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-    const realFetch = globalThis.fetch;
-    /** Intercept the test hooks host only; everything else (the test server) passes through. */
+    /** Replace the sink transport at its seam; the test server's own fetch is untouched. */
     function stubHooks(onBody?: (raw: unknown) => void) {
       const calls: { url: string; text: string }[] = [];
-      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        if (url.startsWith('https://hooks.slack.test/')) {
-          const raw = JSON.parse(String(init?.body)) as { text: string };
-          onBody?.(raw);
-          calls.push({ url, text: raw.text });
-          return new Response('ok', { status: 200 });
-        }
-        return realFetch(input as never, init);
+      setSinkPostForTests(async (url, body) => {
+        const raw = JSON.parse(body) as { text: string };
+        onBody?.(raw);
+        calls.push({ url, text: raw.text });
+        return { ok: true, status: 200 };
       });
       return calls;
     }
-    afterEach(() => vi.unstubAllGlobals());
+    afterEach(() => setSinkPostForTests(null));
 
     it('rings a directed ask or handoff to a human and a team ask to the admin; never a team request_help or a handoff to an agent', async () => {
       const t = await team();
@@ -10133,13 +10130,10 @@ withDrivers('integration', (_o, kind) => {
       const gate = new Promise<void>((resolve) => {
         openGate = resolve;
       });
-      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-        if (String(input).startsWith('https://hooks.slack.test/')) {
-          attempts++;
-          await gate;
-          throw new Error('ECONNREFUSED');
-        }
-        return realFetch(input as never, init);
+      setSinkPostForTests(async () => {
+        attempts++;
+        await gate;
+        return { ok: false };
       });
       await post('/teams/dawn/availability', { status: 'off_hours' }, t.dee);
       const sent = await send(t.ada, env('Ada', toDee, 'ask', 'x1', consult));
