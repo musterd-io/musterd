@@ -192,7 +192,6 @@ const BASELINE_GENUINE: readonly string[] = [
   "docs/decisions/276-the-acceptance-queue-reports-its-own-state.md::asks reachable at all, and narrowing it touches adr 147's ad",
   'docs/decisions/336-attestation-follows-the-slot.md::guard, and the wake guard runs once, before spawn. that is a',
   'docs/wiki/federation-data-census.md::| `seeds` (lifecycle) | 2 | relay-ingested per daemon, or re',
-  "content/roadmap.data.ts::'m1–m3 landed (#359/#360) and hand-run; what remains is m4–m",
   "content/roadmap.data.ts::'the export path shipped 2026-08-19 (`pnpm dataset:export`, ",
   "content/roadmap.data.ts::'nothing is in flight — the toolkit migration (adr 272 §4, u",
 ];

@@ -20,12 +20,15 @@
  * Read-only over the fleet. Touches no seat, no daemon, no lane — which is the property that makes
  * it safe to run on a timer. Append-only JSONL so samples accumulate across runs.
  *
- * ONE PASSENGER (ADR 487 §5.4, 2026-09-30). The same tick launches `scripts/goals-audit.ts --weekly
- * --post` — the nothing-vanishes audit — because this is the one scheduled agent that runs from the
- * daemon's checkout, which is where the docs that audit reads live. The slot sweep itself stays
- * read-only; the audit is a separate process that runs at most once a week (its own stamp), posts
- * one `status_update` as the `sweep` service seat only when it finds something, and can never fail
- * this run (a child process capped at 60s, its exit status ignored, errors to the log).
+ * TWO PASSENGERS. The same tick launches `scripts/goals-audit.ts --weekly --post` — the
+ * nothing-vanishes audit (ADR 487 §5.4, 2026-09-30) — because this is the one scheduled agent that
+ * runs from the daemon's checkout, which is where the docs that audit reads live; and, since lane
+ * 01M3TAKHQ4 (2026-10-02), `scripts/radar/sweep.ts --weekly --post` — the research radar's dry
+ * sweep, which tells the team how many candidates are waiting and how old the last digest is (the
+ * triaged emit stays hand-run, research-radar-plan.md §8). The slot sweep itself stays read-only;
+ * each passenger is a separate process that runs at most once a week (its own stamp), posts as the
+ * `sweep` service seat, and can never fail this run (a child process with a timeout, its exit
+ * status ignored, errors to the log).
  *
  * SCHEDULED (ADR 166 follow-through): `musterd service install --sweep` runs this every 5 minutes.
  * The cadence is derived, not chosen by taste — a `demoted` case persists for at least
@@ -190,5 +193,19 @@ if (process.argv[1]?.endsWith('adr-166-slot-sweep.ts')) {
     );
   } catch (err) {
     process.stderr.write(`goals-audit did not run: ${(err as Error).message}\n`);
+  }
+
+  // Lane 01M3TAKHQ4: the research radar's weekly dry sweep rides the same tick, on the same terms —
+  // its own stamp, the `sweep` seat's voice, a bounded child whose failure cannot fail this run.
+  // Longer cap than the audit: it fetches arXiv and HF over the network.
+  try {
+    const radar = join(dirname(fileURLToPath(import.meta.url)), '..', 'radar', 'sweep.ts');
+    spawnSync(
+      process.execPath,
+      ['--disable-warning=ExperimentalWarning', radar, '--weekly', '--post', '--limit', '50'],
+      { stdio: 'inherit', timeout: 120_000 },
+    );
+  } catch (err) {
+    process.stderr.write(`radar sweep did not run: ${(err as Error).message}\n`);
   }
 }

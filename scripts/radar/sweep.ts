@@ -6,6 +6,10 @@
  * Print-only — never writes seen.json, digests, or thesis docs (M4).
  *
  *   pnpm radar:sweep [--json] [--since <days>] [--limit <n>] [--triage]
+ *
+ * The scheduled form (lane 01M3TAKHQ4, see ./weekly.ts): `--weekly --post` — at most once a week,
+ * the DRY sweep's summary is posted to the team as the `sweep` service seat. No key, no write; the
+ * triaged emit stays a hand-run step (research-radar-plan.md §8).
  */
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -15,6 +19,7 @@ import { sweepArxiv, sweepExn, sweepHf, type FetchFn } from './fetch.ts';
 import { requireAnthropicKey } from './llm.ts';
 import { runTriage, type CompleteFn } from './triage.ts';
 import type { RadarCandidate, SweepReport, TriageReport } from './types.ts';
+import { dueThisWeek, latestDigestWeek, markRan, readSweepToken, weeklySummary } from './weekly.ts';
 
 export interface SweepArgs {
   json: boolean;
@@ -23,6 +28,10 @@ export interface SweepArgs {
   triage: boolean;
   /** M4: write the weekly digest + append triaged ids to seen.json. Requires triage. */
   emit: boolean;
+  /** The scheduled form: run at most once per 7 days (a stamp file); otherwise exit at once. */
+  weekly: boolean;
+  /** Post the dry-sweep summary to the team as the `sweep` service seat (print-only without a token). */
+  post: boolean;
   /** Injected for tests. */
   fetchFn?: FetchFn | undefined;
   seenFile?: string;
@@ -37,11 +46,15 @@ export function parseArgs(argv: string[]): SweepArgs {
   let limit = DEFAULT_PRINT_LIMIT;
   let triage = false;
   let emit = false;
+  let weekly = false;
+  let post = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === '--json') json = true;
     else if (a === '--triage') triage = true;
     else if (a === '--emit') emit = true;
+    else if (a === '--weekly') weekly = true;
+    else if (a === '--post') post = true;
     else if (a === '--since') {
       const v = Number(argv[++i]);
       if (!Number.isFinite(v) || v < 1)
@@ -63,7 +76,7 @@ export function parseArgs(argv: string[]): SweepArgs {
   if (emit && !triage) {
     throw new Error('--emit requires --triage — a digest is a triage artifact');
   }
-  return { json, sinceDays, limit, triage, emit };
+  return { json, sinceDays, limit, triage, emit, weekly, post };
 }
 
 function printHelp(): void {
@@ -77,6 +90,8 @@ function printHelp(): void {
   --limit <n>    max new candidates to print / feed into triage (default ${DEFAULT_PRINT_LIMIT})
   --triage       run tier-1 + tier-2 LLM triage (needs ANTHROPIC_API_KEY)
   --emit         write docs/research/radar/<YYYY-WW>.md + mark triaged ids seen (requires --triage)
+  --weekly       the scheduled form: run at most once per 7 days (stamp ~/.musterd/sweep/radar-sweep.last)
+  --post         post the dry-sweep summary to the team as the sweep service seat (lane 01M3TAKHQ4)
   --dry-run      no-op (print-only without --emit)
 `);
 }
@@ -197,14 +212,62 @@ export function forbiddenWritePaths(): string[] {
   ];
 }
 
+/**
+ * The weekly post (lane 01M3TAKHQ4). Who speaks: the `sweep` service seat (ADR 232), through its
+ * token file — the same mechanics as `scripts/goals-audit.ts`. A hand-run with no token prints the
+ * summary and posts nothing: a seat must never speak as the service.
+ */
+async function postSummary(body: string): Promise<void> {
+  const token = readSweepToken();
+  if (!token) {
+    process.stdout.write(
+      'not posted — only the sweep seat posts (musterd service install --sweep)\n',
+    );
+    return;
+  }
+  const [{ HttpClient }, { loadConfig, findBinding }, { makeEnvelope }, { ulid }] =
+    await Promise.all([
+      import('../../packages/cli/dist/client.js'),
+      import('../../packages/cli/dist/config.js'),
+      import('../../packages/protocol/dist/index.js'),
+      import('ulid'),
+    ]);
+  const config = loadConfig();
+  const team =
+    process.env['MUSTERD_SERVICE_TEAM'] ?? findBinding(process.cwd())?.team ?? config.current;
+  if (!team) throw new Error('no team — set MUSTERD_SERVICE_TEAM or run from a bound folder');
+  const http = new HttpClient({ server: config.server, key: token, surface: 'cli' });
+  await http.send(
+    team,
+    makeEnvelope({
+      id: ulid(),
+      team,
+      from: 'sweep',
+      to: { kind: 'team' },
+      act: 'status_update',
+      body,
+    }),
+  );
+  process.stdout.write(`posted to ${team} as sweep\n`);
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  const now = Date.now();
+  if (args.weekly && !dueThisWeek(now)) return;
   const report = await runSweep(args);
   if (args.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } else {
     process.stdout.write(`${formatHuman(report)}\n`);
   }
+  if (args.post) {
+    const summary = weeklySummary(report, latestDigestWeek(radarDir), now);
+    process.stdout.write(`${summary}\n`);
+    await postSummary(summary);
+  }
+  // Stamped after the post, so a run that died before speaking is retried next tick.
+  if (args.weekly) markRan(now);
   if (args.emit) {
     const { emitDigest } = await import('./digest.ts');
     const out = emitDigest(report, radarDir);
