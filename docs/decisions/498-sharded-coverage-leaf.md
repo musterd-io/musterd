@@ -111,7 +111,11 @@ lane `01M3ZRQAGDDMTG6TA9T27D02N9`.
   picks four shards on a both-driver run. Same 322 tests. The arithmetic: the three shards summed
   ~23 runner-minutes on `e088a57e` (12.1 / 5.8 / 5.1), ~7.5 of it setup, so four even shards are
   ~4 min of tests + ~2.5 min setup each, at one more setup (~2.5 runner-minutes) per both-driver
-  run. The measured shard times of the first runs at four go here.
+  run. Measured on the lane's own PR run (37138677668, both drivers, 2026-10-03): shards 5.0 /
+  7.9 / 6.2 / 6.4 min wall including setup (vitest 243 / 403 / 308 / 323 s) against 12.1 / 5.8 /
+  5.1 at three on `e088a57e` — the long pole 12.1 → 7.9 min, the run 8.2 min before the merge;
+  25.5 runner-minutes of shards against 23.0. The path hash still lands unevenly (shard 2's vitest
+  403 s against shard 1's 243 s); a fifth shard would buy ~1.5 min for another setup.
 
 ## Observability & Evaluation
 
