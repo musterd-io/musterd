@@ -364,9 +364,13 @@ async function drive() {
   };
   const arrive = (i, n, fn) => timers.add(setTimeout(fn, (RAMP * i) / Math.max(1, n)));
   let seq = 0;
+  // Message ids are global on Cloud (one `messages_pkey` across every team), and a bench container
+  // starts with the same pid every run: `aud-<pid>-<seq>` repeated across runs and 500'd as
+  // duplicate keys (runs 5a–5c). A per-run random tag keeps every run's ids its own.
+  const runTag = randomBytes(4).toString('hex');
   const envelope = (from, act, meta = null) =>
     makeEnvelope({
-      id: `aud-${process.pid}-${seq++}`,
+      id: `aud-${runTag}-${process.pid}-${seq++}`,
       team: ready.team,
       from,
       to: { kind: 'team' },
