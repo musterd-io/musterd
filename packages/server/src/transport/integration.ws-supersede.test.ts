@@ -148,8 +148,35 @@ withDrivers('integration · ws-supersede', (_o, kind) => {
         await attended.open();
         attended.send(claimFrame(team.json.agent_key, grant, 'repo@main', 'session'));
         await attended.waitFor('occupied');
-        expect(await wake2.waitFor('error')).toMatchObject({ code: 'superseded' });
+        const taken = await wake2.waitFor('error');
+        expect(taken).toMatchObject({ code: 'superseded' });
+        // Lane 01M3TB3EY9: the loser is told WHAT took its seat, not only that something did.
+        expect((taken as { message: string }).message).toMatch(/by a session on claude-code/);
         expect(await refusals()).toHaveLength(0);
+
+        // Lane 01M3TB3EY9: the ledger row records both sides' provenance and how recently the
+        // loser was active, so a wake landing on a live session is measurable from audit alone.
+        const teamId = (await getTeamBySlug(h.server.store, 'dawn'))!.id;
+        const rows = (await listAudit(h.server.store, teamId))
+          .filter((r) => r.action === 'claim.superseded')
+          .map((r) => JSON.parse(String(r.detail)) as Record<string, unknown>);
+        expect(rows).toHaveLength(2);
+        const sessionOverWake = rows.find((r) => r['successor_provenance'] === 'session')!;
+        const wakeOverWake = rows.find((r) => r['successor_provenance'] === 'wake')!;
+        expect(sessionOverWake).toMatchObject({
+          via: 'ws',
+          successor_provenance: 'session',
+          successor_surface: 'claude-code',
+        });
+        expect(sessionOverWake['displaced']).toEqual([
+          expect.objectContaining({
+            provenance: 'wake',
+            surface: 'claude-code',
+            workspace: 'other@main',
+            last_active_ms: expect.any(Number),
+          }),
+        ]);
+        expect(wakeOverWake).toMatchObject({ successor_provenance: 'wake' });
         wake1.close();
         wake2.close();
         attended.close();

@@ -105,6 +105,15 @@ launches. Whoever picks this up should start from the two claim frames, not the 
   seat's key touching the seat's presence, and the layer has no session identity to filter on.
   Accepted, noted, and bounded by decisions 2/3 making the session stop believing in itself.
 
+- _2026-10-03, lane 01M3TB3EY9:_ every `claim.superseded` row now also carries
+  `successor_provenance` / `successor_surface` (what took the seat) and `displaced: [{presence_id,
+  surface, provenance, workspace, last_active_ms}]` (what it took, and how recently each was
+  active), and the `superseded` frame's message names the successor ("taken over by a wake on
+  claude-code"). A wake landing on a live session is now measurable from the ledger alone:
+  `displaced[].provenance = 'session'` with a small `last_active_ms` under a `successor_provenance`
+  of `wake`. The same-workspace reap records `successor_surface` only (its successor's provenance
+  is not on the connection).
+
 ## Observability & Evaluation
 
 **Traces.** Every displacement now lands in the audit ledger: `claim.superseded` with

@@ -42,6 +42,9 @@ import {
   reattestModel,
   reattestSurface,
   release,
+  describeDisplaced,
+  type DisplacedSession,
+  supersededMessage,
 } from '../store/presence.js';
 import { createRequest } from '../store/requests.js';
 import { getRoleCharter } from '../store/roles.js';
@@ -127,9 +130,12 @@ async function scheduleSameWorkspaceEviction(
     // reaches here (its conn is gone), so the incumbent is preserved (ADR 068's anti-flap intact).
     if (!ctx.hub.getConn(successorConnId)) return;
     let evicted = 0;
+    const displacedSessions: DisplacedSession[] = [];
     for (const connId of predecessorConnIds) {
       const old = ctx.hub.getConn(connId);
       if (!old) continue; // predecessor already left on its own
+      const was = await describeDisplaced(ctx.db, old.presenceId);
+      if (was) displacedSessions.push(was);
       old.send?.({
         type: 'error',
         code: 'superseded',
@@ -147,7 +153,12 @@ async function scheduleSameWorkspaceEviction(
         action: 'claim.superseded',
         target: memberName,
         result: 'allow',
-        detail: { same_workspace: true, evicted },
+        detail: {
+          same_workspace: true,
+          evicted,
+          successor_surface: ctx.hub.getConn(successorConnId)?.surface ?? null,
+          displaced: displacedSessions,
+        },
       });
     }
   };
@@ -767,6 +778,8 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
               )
             )?.count;
             let displaced = 0;
+            const displacedSessions: DisplacedSession[] = [];
+            const successor = { provenance: frameProvenance, surface: frame.surface };
             for (const old of ctx.hub.connsForMember(targetMember.id)) {
               if (sameWorkspace(old)) {
                 // ADR 489: only a same-surface successor is a reload of `old`. A CLI wait or watch
@@ -774,10 +787,13 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
                 if (isReloadOf(old, frame.surface)) sameWorkspacePredecessors.push(old.connId);
                 continue;
               }
+              // Lane 01M3TB3EY9: read what is being displaced BEFORE the row is cleared.
+              const was = await describeDisplaced(ctx.db, old.presenceId);
+              if (was) displacedSessions.push(was);
               old.send?.({
                 type: 'error',
                 code: 'superseded',
-                message: `your session as "${targetMember.name}" was taken over by a newer one`,
+                message: supersededMessage(targetMember.name, successor),
               });
               old.close?.();
               ctx.hub.remove(old.connId);
@@ -791,7 +807,14 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
                 action: 'claim.superseded',
                 target: targetMember.name,
                 result: 'allow',
-                detail: { same_workspace: false, evicted, via: 'ws' },
+                detail: {
+                  same_workspace: false,
+                  evicted,
+                  via: 'ws',
+                  successor_provenance: successor.provenance,
+                  successor_surface: successor.surface,
+                  displaced: displacedSessions,
+                },
               });
             }
             await clearOrphanPresence(ctx.db, targetMember.id);
