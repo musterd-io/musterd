@@ -10,11 +10,16 @@
  *
  * Use the DIRECT (unpooled) host: DDL through a transaction-mode pooler is not safe. Prints the
  * versions it reached — never a URL (hard rule 5). Runs from a built tree (`pnpm -r build`).
+ *
+ * After the ladder the live catalog is verified against what it lands (ADR 496): a table or column
+ * the version row claims and the database lacks fails this step with `schema drift: missing …`.
+ * MUSTERD_MIGRATE_REPAIR=1 replays the ladder (every entry is idempotent) and prints what came
+ * back; extras the ladder does not know are printed and left alone.
  */
 import { migrateCloud } from '../../packages/server/dist/cloud/migrate.js';
 
 try {
-  const v = await migrateCloud(process.env);
+  const v = await migrateCloud(process.env, { report: (line) => console.log(line) });
   console.log(`migrated: coordination store at schema ${v.main}, trace store at schema ${v.trace}`);
 } catch (e) {
   console.error(`migrate failed: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);

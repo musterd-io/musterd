@@ -430,6 +430,11 @@ serve). With N servers deploying in a rolling fashion that is a correctness hole
   of production.
 - Each server checks the schema version at boot and **refuses to start** if the schema is newer
   than it knows, so a rollback of the binary is always safe.
+- The version row is a claim, not evidence (ADR 496, 2026-10-02): after the ladder, the migrate
+  step compares the live catalog with what baseline + ladder land on and **refuses on a missing
+  table or column** (`schema drift`); a repair — replaying the idempotent ladder — is opted into
+  per run and reported, never silent. Boot applies the same check. Tables the ladder does not
+  know are reported and left alone.
 
 Weighed against migrate-on-boot (today; rollbacks cannot undo a schema change, and two servers
 booting race) and stop-the-world (every change is downtime for every team).
@@ -630,6 +635,8 @@ a test double, wrong for a production schema (no history, so nothing to migrate 
   drift silently; a fixture v81 applies on both.
 - §6's guard lands here: on either engine, boot refuses when `schema_meta.schema_version` is newer
   than the ladder the binary carries, with a stable sentence ("schema newer than this build").
+  Since ADR 496 the Postgres side also verifies the landed schema against the catalog: a database
+  whose version row outran its tables (musterd-1b, 2026-10-02) refuses with "schema drift".
 
 Weighed and rejected: two independent ladders (every change written twice, the diff test the only
 tie); generating Postgres from SQLite forever (no expand/contract, no guard, SQLite's 80 rebuilds
