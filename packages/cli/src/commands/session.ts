@@ -25,7 +25,7 @@ import {
 } from '../session/liveness.js';
 import { tapHook } from '../trace/hook.js';
 import { tailTranscript, transcriptPathFor } from '../trace/tail.js';
-import { attestedModel, findWorkspaceDir, resolveClaimWorkspace, viewerFlags } from './helpers.js';
+import { attestedModel, findWorkspaceDir, resolveClaimWorkspace } from './helpers.js';
 import { composeSessionOrientation, type SessionOrientationInput } from './sessionOrientation.js';
 import { runSessionStartProbe, type SessionStartProbe } from './sessionProbe.js';
 import { composeSessionStatusline, type SessionStatuslineInput } from './sessionStatusline.js';
