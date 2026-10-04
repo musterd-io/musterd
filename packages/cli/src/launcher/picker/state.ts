@@ -1,7 +1,13 @@
 import { rankSeats } from '../fuzzy.js';
 import { chooseHarness, LAUNCHABLE_HARNESSES } from '../labels.js';
 import type { Live } from '../live.js';
-import { lastUsedAt, type LauncherFile, type Seat, type TeamEntry } from '../store.js';
+import {
+  lastUsedAt,
+  type LauncherFile,
+  type MemberEntry,
+  type Seat,
+  type TeamEntry,
+} from '../store.js';
 
 /*
  * The picker as a pure state machine (ADR 491): keys and asynchronous answers in, a new state or an
@@ -26,7 +32,8 @@ export type Row =
       remote: string | null;
       star: boolean;
     }
-  | { kind: 'team-only'; team: string; project: string; member: string }
+  /** A roster member with no Workspace here (ADR 503): its where label and what ⏎ can do. */
+  | { kind: 'member'; team: string; project: string; entry: MemberEntry }
   | { kind: 'new-seat'; team: string; project: string }
   | { kind: 'hint'; text: string };
 
@@ -72,8 +79,9 @@ export interface PickerState {
   choose: { seat: Seat; mode: 'fresh' | 'resume'; options: string[]; index: number } | null;
   confirm: { seat: Seat; mode: 'fresh' | 'resume' } | null;
   help: boolean;
-  /** Each team's agent members from its roster, for "on the team · not here". */
-  agents: Record<string, string[]>;
+  /** Each team's roster-first rows (ADR 503): every member with where it lives and what this
+   *  machine can do about it. From the snapshot first, then the roster reads. */
+  members: Record<string, MemberEntry[]>;
   create: CreateDraft | null;
   now: number;
 }
@@ -86,14 +94,16 @@ export type PickerEvent =
       live: Record<string, Live>;
       status: 'ok' | 'offline';
       unknown?: string[];
-      agents?: Record<string, string[]>;
+      members?: Record<string, MemberEntry[]>;
       now: number;
     };
 
 export type PickerOutcome =
   | { kind: 'launch'; seat: Seat; mode: 'fresh' | 'resume'; harness: string | null; force: boolean }
   | { kind: 'quit'; code: number }
-  | { kind: 'create'; team: string; project: string; member: string; harnesses: string[] };
+  | { kind: 'create'; team: string; project: string; member: string; harnesses: string[] }
+  /** ⏎ on a `wake` row: ring the seat's doorbell — an ordinary steer (ADR 503 Decision 2). */
+  | { kind: 'wake'; entry: MemberEntry };
 
 type Step = { state: PickerState; outcome: PickerOutcome | null };
 
@@ -115,13 +125,24 @@ export function initialState(file: LauncherFile, query: string, now: number): Pi
     choose: null,
     confirm: null,
     help: false,
-    agents: {},
+    members: groupByTeam(file.snapshot?.members ?? []),
     create: null,
     now,
   };
 }
 
 const seatRow = (seat: Seat, showAddress: boolean): Row => ({ kind: 'seat', seat, showAddress });
+
+function groupByTeam(members: readonly MemberEntry[]): Record<string, MemberEntry[]> {
+  const out: Record<string, MemberEntry[]> = {};
+  for (const m of members) (out[m.team] ??= []).push(m);
+  return out;
+}
+
+/** The roster-first row behind a seat here, when its team's roster has answered. */
+export function entryFor(s: PickerState, seat: Seat): MemberEntry | null {
+  return s.members[seat.team]?.find((m) => m.member === seat.member) ?? null;
+}
 const byMember = (a: Seat, b: Seat) => a.member.localeCompare(b.member);
 
 /** The rows of the current level (or of the search, when there is a query). */
@@ -183,25 +204,26 @@ export function rows(s: PickerState): Row[] {
       const { team, project } = s.level;
       const here = s.seats.filter((x) => x.team === team && x.project === project).sort(byMember);
       const mine = here.some((x) => x.kind === 'human' && x.problem === null);
-      const teamOnly = (s.agents[team] ?? []).filter(
-        (name) => !here.some((x) => x.member === name),
+      // ADR 503 Decision 3: every member once — under `on this machine` when a Workspace here
+      // holds it, else under `on the team` with where it lives and what ⏎ can do from here.
+      const away = (s.members[team] ?? []).filter(
+        (m) => m.address === null && !s.seats.some((x) => x.team === team && x.member === m.member),
       );
       const out: Row[] = [
         { kind: 'heading', label: 'on this machine' },
         ...here.map((x) => seatRow(x, false)),
       ];
+      if (away.length) {
+        out.push({ kind: 'heading', label: 'on the team' });
+        out.push(...away.map((entry): Row => ({ kind: 'member', team, project, entry })));
+      }
       // A seat is set up acting as you, from your own Workspace here (ADR 491 §4.7).
       if (!mine)
         return [
           ...out,
           { kind: 'hint', text: 'set up your own seat here first: musterd human <you>' },
         ];
-      return [
-        ...out,
-        { kind: 'heading', label: 'on the team · not here' },
-        ...teamOnly.map((member): Row => ({ kind: 'team-only', team, project, member })),
-        { kind: 'new-seat', team, project },
-      ];
+      return [...out, { kind: 'new-seat', team, project }];
     }
   }
 }
@@ -223,8 +245,8 @@ const identity = (row: Row | undefined): string =>
         ? `t:${row.team}`
         : row.kind === 'project'
           ? `p:${row.team}/${row.project}`
-          : row.kind === 'team-only'
-            ? `o:${row.member}`
+          : row.kind === 'member'
+            ? `o:${row.entry.member}`
             : row.kind === 'new-seat'
               ? 'new'
               : '';
@@ -248,12 +270,18 @@ function pop(s: PickerState): PickerState {
 
 function activate(s: PickerState, mode: 'fresh' | 'resume'): Step {
   const row = selectableRows(s)[s.cursor];
-  if (mode === 'fresh' && row?.kind === 'team-only') {
-    const draft = { team: row.team, project: row.project, member: row.member };
-    return {
-      state: { ...s, create: { ...draft, naming: false, harness: 0, error: null } },
-      outcome: null,
-    };
+  if (mode === 'fresh' && row?.kind === 'member') {
+    // The `can` table (ADR 503 Decision 2): set up only a seat that lives nowhere; wake one that
+    // lives elsewhere when it is yours to wake; otherwise the row only says where it is.
+    if (row.entry.can === 'setup') {
+      const draft = { team: row.team, project: row.project, member: row.entry.member };
+      return {
+        state: { ...s, create: { ...draft, naming: false, harness: 0, error: null } },
+        outcome: null,
+      };
+    }
+    if (row.entry.can === 'wake') return { state: s, outcome: { kind: 'wake', entry: row.entry } };
+    return { state: s, outcome: null };
   }
   if (mode === 'fresh' && row?.kind === 'new-seat') {
     const draft = { team: row.team, project: row.project, member: '' };
@@ -414,7 +442,7 @@ export function reduce(s: PickerState, e: PickerEvent): Step {
         live: e.live,
         liveStatus: e.status,
         unknownLive: e.unknown ?? [],
-        agents: e.agents ?? s.agents,
+        members: e.members ?? s.members,
         now: e.now,
       },
       outcome: null,

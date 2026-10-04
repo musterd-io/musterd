@@ -68,6 +68,7 @@ src/
     live.ts           // the live layer: one unauthenticated, time-boxed roster read per (server, team) — the page carries the answering daemon's node; Presence → here/elsewhere; whereOf/canOf/teamRows derive each member's where and can from residence, presence and the viewer's sponsorship (ADR 503)
     plan.ts           // (seat, harness, fresh|resume) → { bin, args, cwd } from the adapter's interactive entry; a human seat gets a login shell
     supervise.ts      // runs the harness with the terminal handed over; ignores SIGINT/SIGQUIT, forwards SIGTERM/SIGHUP; the harness's exit code (128+n on a signal)
+    wake.ts           // the doorbell from the front door (ADR 503): `⏎` on a `wake` row (or `musterd <member>`) spawns `musterd send --act steer` in the viewer's own human Workspace here — the credential is that folder's binding (ADR 442), never a vault; viewerSeatFor picks the folder
     rows.ts           // shared row and receipt rendering for the picker and `musterd seats`
     byName.ts         // `musterd <seat>` / `musterd -`: resolve, live check, plan, record, supervise, receipt
     create.ts         // "set up here" / "+ new seat": acts from your own human Workspace in that team and project (ADR 036/442), starts the branch at the remote's default tip, then hands the new seat to the launch path
@@ -357,12 +358,25 @@ resumes, `⇥` switches harness, `esc` goes back or quits (exit 0), `⌃C` quits
 screen paints from `~/.musterd/launcher.json`'s snapshot; the catalog scan and the roster reads patch
 it. Piped or redirected, bare `musterd` prints help.
 
+The members level is roster-first ([ADR 503](../decisions/503-roster-first-launcher-catalog.md)):
+every member of the team appears once — under `on this machine` when a Workspace here holds it,
+else under `on the team` with where it lives (`on <node label>` · `cloud` · `nowhere`) and a dimmed
+verb for what `⏎` does from here. `set up` provisions a seat that lives nowhere (the ADR 491 path);
+`wake` rings a seat resident on another machine — an ordinary `steer` sent as you from your own
+human Workspace here, carrying `launch_surface=picker` in meta — offered only when you sponsor it
+or are an admin; a seat resident elsewhere that is not yours to wake gets no verb, and its footer
+names the node and the move ceremony (`musterd residency off` + `node unbind` there). A seat
+resident on another node is never offered `set up`: that would be a silent move. Decision 6's
+live-seat confirm is unchanged for `launch`.
+
 ### `musterd <seat> [-r | --resume] [--harness <id>] [--path] [--force]` · `musterd -`
 
 Launches a seat's harness in its Workspace, with musterd as the harness's parent process
 ([ADR 491](../decisions/491-seat-launcher.md)). `<seat>` is a member name unique on this machine,
 `project/member`, or `team/project/member` (`team@host/project/member` when two servers host a team
-with the same name). Commands always win over seat names. `-` is the seat launched last.
+with the same name). Commands always win over seat names. `-` is the seat launched last. A member with no Workspace
+here follows the picker's `can` rule (ADR 503): `wake` rings it, `none` says where it is and how to
+move it, `setup` points at the picker.
 
 - Fresh by default; `-r` resumes the harness's last session.
 - `--path` prints the Workspace path and launches nothing: `cd "$(musterd stanley --path)"`.

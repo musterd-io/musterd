@@ -1,9 +1,17 @@
 import { theme } from '../../render/theme.js';
 import { padEndVisible, visibleLen } from '../../render/ui.js';
 import { harnessLabel, LAUNCHABLE_HARNESSES } from '../labels.js';
-import { ago, describeLive, describeLiveLong, seatLine } from '../rows.js';
+import {
+  ago,
+  canVerb,
+  describeLive,
+  describeLiveLong,
+  describeMove,
+  describeWhere,
+  seatLine,
+} from '../rows.js';
 import { lastUsedAt } from '../store.js';
-import { rows, selectable, shownHarness, type PickerState, type Row } from './state.js';
+import { entryFor, rows, selectable, shownHarness, type PickerState, type Row } from './state.js';
 
 export interface PickerSize {
   cols: number;
@@ -59,7 +67,12 @@ function body(s: PickerState, cols: number): { line: string; selected: boolean }
     ];
   }
   const seatRows = all.filter((r): r is Extract<Row, { kind: 'seat' }> => r.kind === 'seat');
-  const nameWidth = Math.max(8, ...seatRows.map((r) => r.seat.member.length + 2));
+  const memberRows = all.filter((r): r is Extract<Row, { kind: 'member' }> => r.kind === 'member');
+  const nameWidth = Math.max(
+    8,
+    ...seatRows.map((r) => r.seat.member.length + 2),
+    ...memberRows.map((r) => r.entry.member.length + 2),
+  );
   const showAddress = cols >= 70 && seatRows.some((r) => r.showAddress);
   const addressWidth = showAddress
     ? Math.max(...seatRows.map((r) => `${r.seat.team}/${r.seat.project}`.length)) + 2
@@ -73,11 +86,13 @@ function body(s: PickerState, cols: number): { line: string; selected: boolean }
         return { line: `  ${theme.meta(row.label)}`, selected };
       case 'hint':
         return { line: `  ${theme.meta(row.text)}`, selected };
-      case 'team-only':
+      case 'member': {
+        const verb = canVerb(row.entry.can);
         return {
-          line: `${marker}${padEndVisible(row.member, nameWidth)}${theme.meta('⏎ set up here')}`,
+          line: `${marker}${padEndVisible(theme.memberName(row.entry.member, row.entry.kind), nameWidth)}${theme.meta(describeWhere(row.entry))}${verb ? `  ${theme.meta(verb)}` : ''}`,
           selected,
         };
+      }
       case 'new-seat':
         return { line: `${marker}${theme.accent('+ new seat')}`, selected };
       case 'team':
@@ -94,13 +109,19 @@ function body(s: PickerState, cols: number): { line: string; selected: boolean }
         const { seat } = row;
         const live = s.live[seat.address];
         const used = lastUsedAt(seat, s.file);
-        const tail = live
+        let tail = live
           ? describeLive(live, s.now)
           : seat.problem
             ? theme.warn('needs repair')
             : used !== null
               ? `${seat.address === s.file.last ? '★ last used · ' : ''}${ago(used, s.now)}`
               : '';
+        // ADR 503: a folder here whose seat lives elsewhere says so, with what ⏎ can do about it.
+        const entry = entryFor(s, seat);
+        if (entry && entry.can !== 'launch' && !live) {
+          const verb = canVerb(entry.can);
+          tail = `${tail ? `${tail} · ` : ''}${theme.meta(describeWhere(entry))}${verb ? `  ${theme.meta(verb)}` : ''}`;
+        }
         const harness = seat.kind === 'human' ? 'human' : (shownHarness(s, seat) ?? 'claude-code');
         return {
           line: seatLine(seat, {
@@ -177,8 +198,19 @@ function footer(s: PickerState, cols: number): string[] {
   if (s.query) return [theme.meta('  ⏎ launch · ⌃R resume · esc clear')];
   if (s.level.kind === 'recent')
     return [theme.meta('  ⏎ launch · ⌃R resume · type to search · → browse · esc quit')];
-  if (s.level.kind === 'members')
+  if (s.level.kind === 'members') {
+    const row = rows(s).filter(selectable)[s.cursor];
+    const entry =
+      row?.kind === 'member' ? row.entry : row?.kind === 'seat' ? entryFor(s, row.seat) : null;
+    // The `none` row names where the seat is and the move ceremony (ADR 503 Decision 2).
+    if (entry && entry.can === 'none' && (entry.where === 'node' || entry.where === 'cloud'))
+      return wrap(describeMove(entry), cols - 2).map((l) => `  ${theme.meta(l)}`);
+    if (row?.kind === 'member' && entry?.can === 'wake')
+      return [theme.meta('  ⏎ wake — rings its doorbell (a steer, as you) · ← back · esc back')];
+    if (row?.kind === 'member' && entry?.can === 'setup')
+      return [theme.meta('  ⏎ set up here · ← back · esc back')];
     return [theme.meta('  ⏎ launch · ⌃R resume · ⇥ harness · ← back · esc back')];
+  }
   return [theme.meta('  ⏎ open · ← back · type to search · esc back')];
 }
 

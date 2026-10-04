@@ -7,10 +7,10 @@ import { CliError } from '../errors.js';
 import { harnessAdapters } from '../onboard/harnesses/index.js';
 import { nearestCommand } from '../render/help.js';
 import { buildCatalog, type Catalog } from './catalog.js';
-import { fetchRoster, liveFor } from './live.js';
+import { fetchRoster, liveFor, viewerNameFor } from './live.js';
 import { planLaunch, type LaunchPlan } from './plan.js';
 import { resolveSeatWord } from './resolve.js';
-import { describeLiveLong, formatReceipt } from './rows.js';
+import { describeLiveLong, describeMove, formatReceipt } from './rows.js';
 import {
   launcherFilePath,
   readLauncherFile,
@@ -18,9 +18,11 @@ import {
   withLaunch,
   writeLauncherFile,
   type LauncherFile,
+  type MemberEntry,
   type Seat,
 } from './store.js';
 import { supervise, type SuperviseResult } from './supervise.js';
+import { wakeMember } from './wake.js';
 
 export interface LaunchOptions {
   mode: 'fresh' | 'resume';
@@ -48,6 +50,8 @@ export interface LaunchDeps {
   now?: () => number;
   /** The picker for an ambiguous name on a TTY (tests). */
   picker?: (opts: PickerOpenOptions) => Promise<number>;
+  /** The doorbell for a seat resident elsewhere (tests). */
+  wake?: typeof wakeMember;
 }
 
 /**
@@ -66,6 +70,11 @@ export async function launchByName(
   const res = resolveSeatWord(word, catalog.seats, file.last);
   if (res.kind === 'none') {
     if (word === '-') throw new CliError('no seat launched yet — run `musterd` to pick one', 2);
+    // ADR 503: a team member with no Workspace here follows the same `can` rule as the picker row.
+    const away = (file.snapshot?.members ?? []).filter(
+      (m) => m.address === null && m.member === word,
+    );
+    if (away.length === 1) return actOnMember(away[0]!, catalog.seats, deps);
     throw unknownCommand(word, res.nearest);
   }
   const mode =
@@ -147,6 +156,30 @@ export async function launchSeat(
   record(path, (f) => withExit(f, seat.address, now(), result.code));
   err(formatReceipt(seat.member, plan.harness, result.durationMs, result.code) + '\n');
   return result.code;
+}
+
+/** `musterd <member>` for a seat with no folder here: wake it, say where it is, or say how to set it up. */
+async function actOnMember(
+  entry: MemberEntry,
+  seats: readonly Seat[],
+  deps: LaunchDeps,
+): Promise<number> {
+  if (entry.can === 'wake')
+    return (deps.wake ?? wakeMember)(
+      entry,
+      seats,
+      viewerNameFor(entry.team, loadConfig(), seats),
+      deps.err ? { err: deps.err } : {},
+    );
+  if (entry.can === 'setup')
+    throw new CliError(
+      `${entry.member} has no Workspace here — set it up from the picker: musterd`,
+      1,
+    );
+  throw new CliError(
+    `${entry.member} is ${describeMove(entry)}${entry.can === 'none' && entry.where !== 'nowhere' ? '' : ' — nothing to do from here'}`,
+    1,
+  );
 }
 
 /** Read-modify-write, best-effort: recents are advisory and never fail a launch. */

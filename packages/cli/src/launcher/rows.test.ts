@@ -183,8 +183,8 @@ describe('roster-first rows in `musterd seats` (ADR 503)', () => {
       rosterMissing: ['dawn'],
     });
     expect(out).toContain('revive · on the team');
-    expect(out).toContain('bo  on air-2 · wake');
-    expect(out).toContain('cy  nowhere · setup');
+    expect(out).toContain('bo  on air-2  wake');
+    expect(out).toContain('cy  nowhere  set up');
     expect(out).not.toMatch(/on the team[\s\S]*ada/);
     expect(out).toContain("dawn: roster unavailable — this machine's folders only");
   });

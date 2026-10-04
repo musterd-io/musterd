@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -224,5 +224,64 @@ describe('launchByName (ADR 491 Decision 2)', () => {
     ).rejects.toThrow(/folder is gone/);
     expect(supervise).not.toHaveBeenCalled();
     expect(existsSync(join(dir, 'launcher.json'))).toBe(false);
+  });
+});
+
+describe('`musterd <member>` for a seat with no Workspace here (ADR 503 Decision 3)', () => {
+  const entry = (member: string, over: Record<string, unknown>) => ({
+    team: 'revive',
+    member,
+    kind: 'agent',
+    address: null,
+    where: 'node',
+    node: 'n-air',
+    where_label: 'air-2',
+    can: 'none',
+    ...over,
+  });
+  function snapshotWith(members: unknown[]) {
+    const launcher = {
+      version: 1,
+      last: null,
+      seats: {},
+      snapshot: { taken_at: 1, seats: [], teams: [{ team: 'revive', here: true }], members },
+    };
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'launcher.json'), JSON.stringify(launcher));
+  }
+
+  it('a wake row rings the doorbell through the same path as the picker', async () => {
+    snapshotWith([entry('bo', { can: 'wake' })]);
+    const wake = vi.fn(async () => 0);
+    const { d } = deps({ wake, catalog: catalog(seat('revive/agents/nick')) });
+    expect(await launchByName('bo', parseArgs([]), d)).toBe(0);
+    expect(wake).toHaveBeenCalledWith(
+      expect.objectContaining({ member: 'bo', can: 'wake' }),
+      expect.any(Array),
+      'nick',
+      expect.anything(),
+    );
+  });
+
+  it('a none row names where the seat is and the move ceremony — never a setup', async () => {
+    snapshotWith([entry('cy', {})]);
+    const { d } = deps({ catalog: catalog(seat('revive/agents/nick')) });
+    await expect(launchByName('cy', parseArgs([]), d)).rejects.toMatchObject({
+      exitCode: 1,
+      message: expect.stringContaining(
+        'resident on air-2 — move it: musterd residency off + node unbind there',
+      ),
+    });
+  });
+
+  it('a setup row points at the picker', async () => {
+    snapshotWith([
+      entry('slate', { where: 'nowhere', node: null, where_label: null, can: 'setup' }),
+    ]);
+    const { d } = deps({ catalog: catalog(seat('revive/agents/nick')) });
+    await expect(launchByName('slate', parseArgs([]), d)).rejects.toMatchObject({
+      exitCode: 1,
+      message: expect.stringContaining('set it up from the picker: musterd'),
+    });
   });
 });

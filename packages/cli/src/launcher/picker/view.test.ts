@@ -169,7 +169,20 @@ describe('renderPicker (spec §3.1, no color, 80 columns)', () => {
       live: {},
       status: 'ok',
       now: NOW,
-      agents: { revive: ['slate'] },
+      members: {
+        revive: [
+          {
+            team: 'revive',
+            member: 'slate',
+            kind: 'agent',
+            address: null,
+            where: 'nowhere',
+            node: null,
+            where_label: null,
+            can: 'setup',
+          },
+        ],
+      },
     }).state;
     s = {
       ...s,
@@ -205,5 +218,88 @@ describe('renderPicker (spec §3.1, no color, 80 columns)', () => {
       '  › codex',
       '  ⏎ launch · ↑↓ choose · esc back',
     ]);
+  });
+});
+
+describe('roster-first rows in the picker (ADR 503 Decision 3)', () => {
+  const entry = (member: string, over: Record<string, unknown>) => ({
+    team: 'revive',
+    member,
+    kind: 'agent' as const,
+    address: null,
+    where: 'nowhere' as const,
+    node: null,
+    where_label: null,
+    can: 'setup' as const,
+    ...over,
+  });
+  function membersLevel() {
+    let s = initialState(
+      {
+        ...FILE,
+        snapshot: {
+          taken_at: NOW,
+          seats: [seat('stanley'), seat('nick', { kind: 'human' })],
+          teams: [{ team: 'revive', here: true }],
+        },
+      },
+      '',
+      NOW,
+    );
+    s = reduce(s, {
+      type: 'live',
+      live: {},
+      status: 'ok',
+      now: NOW,
+      members: {
+        revive: [
+          entry('stanley', {
+            address: 'revive/agents/stanley',
+            where: 'node',
+            node: 'n-air',
+            where_label: 'air-2',
+            can: 'none',
+          }),
+          entry('bo', { where: 'node', node: 'n-air', where_label: 'air-2', can: 'wake' }),
+          entry('cy', { where: 'cloud', node: 'n-fly', where_label: 'fly', can: 'none' }),
+          entry('slate', {}),
+        ],
+      },
+    }).state;
+    return {
+      ...s,
+      level: { kind: 'members', team: 'revive', project: 'agents' } as const,
+      stack: [{ kind: 'recent' as const }],
+    };
+  }
+
+  it('headings read `on this machine` / `on the team`; each away row shows where and the dimmed verb', () => {
+    const lines = renderPicker(membersLevel(), { cols: 80, rows: 24 }).map((l) => l.trimEnd());
+    expect(lines).toContain('  on this machine');
+    expect(lines).toContain('  on the team');
+    expect(lines.some((l) => /bo\s+on air-2\s+wake$/.test(l))).toBe(true);
+    expect(lines.some((l) => /cy\s+cloud · fly$/.test(l))).toBe(true);
+    expect(lines.some((l) => /slate\s+nowhere\s+set up$/.test(l))).toBe(true);
+    expect(lines.join('\n')).not.toContain('not here');
+  });
+
+  it('a Workspace here whose seat lives elsewhere says so on its own row', () => {
+    const lines = renderPicker(membersLevel(), { cols: 100, rows: 24 });
+    expect(lines.some((l) => l.includes('stanley') && l.includes('on air-2'))).toBe(true);
+  });
+
+  it('the footer on a `none` row names the node and the move ceremony; on a wake row, the doorbell', () => {
+    const s = membersLevel();
+    // selectable (here sorted by member): nick, stanley, bo, cy, slate, + new seat
+    const onStanley = renderPicker({ ...s, cursor: 1 }, { cols: 120, rows: 24 }).at(-1);
+    expect(onStanley).toBe(
+      '  resident on air-2 — move it: musterd residency off + node unbind there',
+    );
+    const onBo = renderPicker({ ...s, cursor: 2 }, { cols: 120, rows: 24 }).at(-1);
+    expect(onBo).toContain('⏎ wake');
+    const onCy = renderPicker({ ...s, cursor: 3 }, { cols: 120, rows: 24 }).at(-1);
+    expect(onCy).toBe(
+      '  resident in the cloud — move it: musterd residency off + node unbind there',
+    );
   });
 });

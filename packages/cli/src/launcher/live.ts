@@ -4,6 +4,13 @@ import { canonicalServer, isLoopbackServer } from '../host/registry.js';
 import { serverHost } from './address.js';
 import type { Can, MemberEntry, Seat, TeamEntry, Where } from './store.js';
 
+/** The config fields the roster-first rows need — a structural slice so no caller loads config.ts. */
+export interface ViewerConfig {
+  server: string;
+  identities: Record<string, { name: string }>;
+  knownIdentities: readonly { team: string; name: string }[];
+}
+
 /** The time box for one roster read (ADR 491 §5.1). The local daemon answers in ~45 ms. */
 export const ROSTER_TIMEOUT_MS = 300;
 
@@ -225,4 +232,45 @@ export function teamRows(
       };
     })
     .sort((a, b) => a.member.localeCompare(b.member));
+}
+
+/** Who this machine is on `team`: its identity, else the one working human Workspace here. */
+export function viewerNameFor(
+  team: string,
+  config: Pick<ViewerConfig, 'identities' | 'knownIdentities'>,
+  seats: readonly Seat[],
+): string | null {
+  const identity =
+    config.identities[team]?.name ?? config.knownIdentities.find((i) => i.team === team)?.name;
+  if (identity) return identity;
+  const humans = seats.filter((s) => s.team === team && s.kind === 'human' && s.problem === null);
+  return humans.length === 1 ? humans[0]!.member : null;
+}
+
+/** The roster-first rows across every team that answered, and the teams that did not. */
+export function memberRowsFor(
+  catalog: { seats: readonly Seat[]; teams: readonly TeamEntry[] },
+  rosters: ReadonlyMap<string, RosterPage | null>,
+  config: ViewerConfig,
+): { members: MemberEntry[]; missing: string[] } {
+  const members: MemberEntry[] = [];
+  const missing: string[] = [];
+  for (const { server, team } of rosterTargets(catalog.seats, catalog.teams, config.server)) {
+    const page = rosters.get(rosterKey({ server, team })) ?? null;
+    if (!page) {
+      missing.push(team);
+      continue;
+    }
+    members.push(
+      ...teamRows(team, page, server, catalog.seats, viewerNameFor(team, config, catalog.seats)),
+    );
+  }
+  return { members, missing: [...new Set(missing)].sort() };
+}
+
+/** The rows grouped by team — the picker's shape. */
+export function membersByTeam(members: readonly MemberEntry[]): Record<string, MemberEntry[]> {
+  const out: Record<string, MemberEntry[]> = {};
+  for (const m of members) (out[m.team] ??= []).push(m);
+  return out;
 }
