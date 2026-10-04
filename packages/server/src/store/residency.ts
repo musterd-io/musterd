@@ -1578,11 +1578,14 @@ function composeProvisionedLine(seat: string, teamSlug: string, sponsor: string)
 /**
  * The dream wake's line (ADR 494 §1): it answers no act and works no lane, so it names neither —
  * only that this is a dream, where the packet is, and the skill that says what a dream may write.
+ * The packet carries the skill itself (lane 01M44B3C5Q): the path is only the fallback, because a
+ * seat's workspace can rest on a branch that predates it.
  */
 function composeDreamLine(seat: string, teamSlug: string): string {
   return (
     `${wakePrefix(teamSlug)} you are seat "${seat}", woken to dream: read your packet with ` +
-    '`musterd dream`, follow the dreaming skill (.agents/skills/dreaming/SKILL.md), write only ' +
+    '`musterd dream`, follow the dreaming skill its `skill` field carries (else ' +
+    '.agents/skills/dreaming/SKILL.md), write only ' +
     'insights, wiki pages and your seat note, then stop.'
   );
 }

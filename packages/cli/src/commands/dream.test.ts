@@ -1,10 +1,10 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer, openDb, type RunningServer } from '@musterd/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
-import { dreamCommand } from './dream.js';
+import { DREAMING_SKILL_PATH, dreamCommand, dreamingSkill } from './dream.js';
 import { teamCommand } from './team.js';
 
 describe('dream command (goal dreaming, lane 2)', () => {
@@ -57,8 +57,40 @@ describe('dream command (goal dreaming, lane 2)', () => {
     const built = JSON.parse(out);
     expect(built).toMatchObject({ packet: { seat: 'nick', since: 0 }, truncated: false });
     expect(built.used_bytes).toBeGreaterThan(0);
+    // Lane 01M44B3C5Q: the skill rides the packet, read from this build — not the cwd's workspace.
+    expect(built.skill?.path).toMatch(/\.agents\/skills\/dreaming\/SKILL\.md$/);
+    expect(built.skill?.path.startsWith(dir)).toBe(false);
     await expect(dreamCommand(parseArgs(['--since', 'yesterday']))).rejects.toThrow(
       /--since <epoch-ms>/,
     );
+  });
+});
+
+// Lane 01M44B3C5Q: the skill comes from the running build's checkout, never the seat's workspace.
+describe('dreamingSkill', () => {
+  let root: string;
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'musterd-dream-skill-'));
+  });
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it("finds the skill at the build's checkout root, walking up from the module", () => {
+    mkdirSync(join(root, '.agents/skills/dreaming'), { recursive: true });
+    writeFileSync(join(root, DREAMING_SKILL_PATH), '# Dreaming\n');
+    const from = join(root, 'packages/cli/dist/commands/dream.js');
+    expect(dreamingSkill(from)).toEqual({
+      path: join(root, DREAMING_SKILL_PATH),
+      text: '# Dreaming\n',
+    });
+  });
+
+  it('is null for a build that is not a checkout (a published package ships dist only)', () => {
+    expect(
+      dreamingSkill(join(root, 'node_modules/@musterd/cli/dist/commands/dream.js')),
+    ).toBeNull();
+  });
+
+  it('this repo’s own build carries it', () => {
+    expect(dreamingSkill()?.text).toContain('dream');
   });
 });
