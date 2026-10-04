@@ -115,6 +115,14 @@ well (second-machine findings, 2026-10-03).
   the catalog and `musterd seats --json`; (3) the picker's headings, labels and the `wake` action;
   (4) frames and snapshots. Each is a lane under goal `seat-continuity`; this ADR's lane is the
   decision only.
+- **2026-10-04 — increment 1 landed (lane `01M41Q4YTD`, PR #2055).** `MemberSummary.residence` is
+  derived from the seat's earliest unrevoked node binding (ADR 358 `seat_nodes` → `nodes`), **not**
+  from `residency.host`: that column is the hostname string the enrolling actuator declared, and on
+  revive five seats bound to Air 2 still read `host = mac.lan`. `kind: cloud` is set only for a seat
+  bound to the answering daemon's own node while it runs in cloud mode (ADR 475); a sponsor-hosted
+  joiner such as `delta` (ADR 463) enrolled as an ordinary node and reads `node` — marking it `cloud`
+  would need a fact the node row does not carry. An enrolled seat with no unrevoked binding reads
+  `null` (enrolled, nowhere bound), distinct from an older daemon's absence.
 
 ## Observability & Evaluation
 
