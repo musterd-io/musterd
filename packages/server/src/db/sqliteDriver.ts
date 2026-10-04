@@ -1,16 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type Database from 'better-sqlite3';
-import {
-  DriverError,
-  noTx,
-  runCommitHooks,
-  type CommitHooks,
-  type Driver,
-  type Params,
-} from './driver.js';
-
-/** One transaction's liveness and its pre-commit callbacks (ADR 504), shared by nested handles. */
-type Life = { dead: boolean; hooks: CommitHooks };
+import { DriverError, type Driver, type Params } from './driver.js';
 
 /**
  * better-sqlite3 behind the async Driver. Every statement is synchronous underneath; the Promise is
@@ -100,7 +90,7 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
   // A tx handle belongs to ONE transaction: it never waits on the queue, and once its transaction
   // has committed or rolled back it refuses, loudly, so a handle that leaked out through a closure
   // (a notification's `.then`, a cached ctx) cannot write into whatever transaction runs next.
-  const inTx = <R>(life: Life, sql: string, run: () => R): Promise<R> => {
+  const inTx = <R>(life: { dead: boolean }, sql: string, run: () => R): Promise<R> => {
     if (life.dead) return Promise.reject(txClosed());
     assertOpen();
     notify(sql);
@@ -111,7 +101,7 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
     }
   };
 
-  const make = (life: Life | null): SqliteDriver => {
+  const make = (life: { dead: boolean } | null): SqliteDriver => {
     const stmt = <R>(sql: string, run: () => R): Promise<R> =>
       life ? inTx(life, sql, run) : onQueue(sql, run);
     const handle: SqliteDriver = {
@@ -147,18 +137,12 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
           raw.exec(sql);
         });
       },
-      beforeCommit(fn: (t: Driver) => Promise<void>) {
-        if (!life) throw noTx();
-        if (life.dead) throw txClosed();
-        life.hooks.push(fn);
-      },
       async tx<T>(fn: (t: Driver) => Promise<T>): Promise<T> {
         assertOpen();
         if (life) {
           if (life.dead) throw txClosed();
           // Nested: a savepoint on the same connection, same queue slot, same handle lifetime.
           const name = `sp${++depth}`;
-          const mark = life.hooks.length;
           raw.exec(`SAVEPOINT ${name}`);
           try {
             const r = await fn(make(life));
@@ -167,7 +151,6 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
           } catch (e) {
             raw.exec(`ROLLBACK TO ${name}`);
             raw.exec(`RELEASE ${name}`);
-            life.hooks.length = mark; // what the rolled-back savepoint registered dies with it
             throw e;
           } finally {
             depth--;
@@ -181,12 +164,10 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
           await prev;
           assertOpen();
           depth = 1;
-          const mine = { dead: false, open: true, hooks: [] as CommitHooks };
+          const mine = { dead: false, open: true };
           raw.exec('BEGIN');
           try {
-            const root = make(mine);
-            const r = await inBody.run(mine, () => fn(root));
-            await inBody.run(mine, () => runCommitHooks(mine.hooks, root));
+            const r = await inBody.run(mine, () => fn(make(mine)));
             raw.exec('COMMIT');
             return r;
           } catch (e) {

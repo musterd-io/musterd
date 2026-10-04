@@ -353,7 +353,6 @@ withDrivers('integration · ws-supersede', (_o, kind) => {
           run: (sql, params) => h.run(sql, params),
           exec: (sql) => h.exec(sql),
           tx: (fn) => h.tx((t) => fn(wrap(t))),
-          beforeCommit: (fn) => h.beforeCommit((t) => fn(wrap(t))),
           connection: () => wrap(h.connection()),
           forTeam: (team) => wrap(h.forTeam(team)),
           asOperator: () => wrap(h.asOperator()),

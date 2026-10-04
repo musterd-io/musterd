@@ -392,8 +392,7 @@ Optional `MUSTERD_PG_POOL_SIZE` sets connections per pool (one pool per role per
 
 1. **The store is Postgres.** Both stores are `pgDriver` over the configured URLs; no SQLite file is
    opened. Every statement runs in a stamped transaction; `BEGIN`, `SET LOCAL ROLE` and the tenant
-   `set_config` go down as one round trip, so a bare statement costs three trips, not five. Writes that take an `origin_seq` take it at commit
-   (`Driver.beforeCommit`, ADR 504), so one team's writes do not queue behind its node row. Migrations are **not** run on boot (§6): `listen()` refuses a database that is not at
+   `set_config` go down as one round trip, so a bare statement costs three trips, not five. Migrations are **not** run on boot (§6): `listen()` refuses a database that is not at
    exactly this build's version — "schema newer than this build" / "schema older than this build".
    The migrate step is `scripts/cloud/migrate.mjs` (`migrateCloud`, as the owner, direct host).
 2. **No loopback trust (§5.1).** `trustsLocalPeer` is false, and `trustProxy` is forced on. Seat
