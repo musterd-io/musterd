@@ -107,7 +107,7 @@ async function refresh(
     let answered = catalog.seats.length === 0;
     const unknown: string[] = [];
     for (const seat of catalog.seats) {
-      const members = rosters.get(rosterKey(seat)) ?? null;
+      const members = rosters.get(rosterKey(seat))?.members ?? null;
       if (members) answered = true;
       else unknown.push(seat.address);
       if (members && !agents[seat.team]) agents[seat.team] = teamAgents(members);

@@ -62,10 +62,10 @@ src/
   launcher/           // the seat launcher (ADR 491): bare `musterd` picks a seat and starts its harness; `musterd <seat>` does it by name
     labels.ts         // short harness labels (`claude-code` → `claude`) and the registry-ordered launchable set the picker paints with
     address.ts        // seat addresses: team/project/member, host-qualified when two servers on this machine host a same-named team
-    store.ts          // ~/.musterd/launcher.json beside config.json: recents + the secret-free catalog snapshot the first screen paints from; zod-validated read and write, a corrupt file is set aside
+    store.ts          // ~/.musterd/launcher.json beside config.json: recents + the secret-free catalog snapshot the first screen paints from (seats, teams, and the ADR 503 member rows with where/can as plain strings); zod-validated read and write, a corrupt file is set aside
     catalog.ts        // the seat catalog: config.bindings ∪ a scan of ~/musterd/<team>/<project>/<member>, read through the protocol loaders, named non-secret fields only; `originRepoName` reads git's files without a subprocess
     resolve.ts        // `musterd <word>` → one seat, an ambiguity, or no match (commands are ruled out before it runs)
-    live.ts           // the live layer: one unauthenticated, time-boxed roster read per (server, team); Presence → here/elsewhere; the team's agent members
+    live.ts           // the live layer: one unauthenticated, time-boxed roster read per (server, team) — the page carries the answering daemon's node; Presence → here/elsewhere; whereOf/canOf/teamRows derive each member's where and can from residence, presence and the viewer's sponsorship (ADR 503)
     plan.ts           // (seat, harness, fresh|resume) → { bin, args, cwd } from the adapter's interactive entry; a human seat gets a login shell
     supervise.ts      // runs the harness with the terminal handed over; ignores SIGINT/SIGQUIT, forwards SIGTERM/SIGHUP; the harness's exit code (128+n on a signal)
     rows.ts           // shared row and receipt rendering for the picker and `musterd seats`
@@ -227,7 +227,7 @@ src/
     wake-context.ts   // wake-context --act/--lane — recipient-scoped, body-free orientation index; names explicit reads without loading them (ADR 209)
     claim.ts          // claim a seat by name or open role (ADR 032/034/036); the ONE occupancy verb since ADR 377 — `--team/--key/--grant` cover the fresh-folder bootstrap `join` used to, `--detach` is join's one-shot HTTP claim (Presence outlives the process); MCP twin `team_join`
     lane.ts           // lane open/claim/release/park/unpark/handoff/update/resolve + the lanes board (parked lanes grouped last, ADR 466); --goal on open and update (ADR 083/084/256); counterpart resolve ignores --pr/--sha (ADR 305); submit empty_pool copy (ADR 404); --follows-up on submit/resolve and --abandon-reason on update (ADR 487)
-    seats.ts          // `musterd seats [--json]`: the seat catalog + live state, the launcher's read model (ADR 491)
+    seats.ts          // `musterd seats [--json]`: the seat catalog + live state + every team member's where/can, the launcher's read model (ADR 491, ADR 503)
     seed.ts           // shared Seed tray/read/claim/clarification/brief/conclude/promote Surface (ADR 319)
     next.ts           // the orientation brief: carrying / up-next / shipped / handoff why (ADR 049/084); the ⚠ stale-goal line (ADR 487); `review debt` (ADR 276, the gap its Consequences named — same copy as team_next: owner, wait, NO REVIEWER WAS ASKED, NO MERGE ATTESTATION); review promises (ADR 490): `review promises` (what you accepted, with the close command), `reviews you asked for` (who accepted, how long ago) and `review closed for you` (a non-owner close, until your inbox cursor crosses it) — absent arrays say `not reported by this daemon`, `[]` prints nothing; `renderNext(brief, now)` is the `cmd/next` frame, pinned in orient.test.ts
     node.ts           // machine credentials (ADR 328, federation 3a): invite/join/rotate/revoke/list. `join <hub-url> <code>` does NOT call the hub — it asks THIS machine's daemon to enroll, so the process holding the nodes row also holds the credential and writes node.json. join/list use resolveRead (a fresh laptop has no bound identity; the code plus being on-machine is the authority); the admin verbs use resolve. join prints no credential — it went to disk
@@ -373,8 +373,14 @@ with the same name). Commands always win over seat names. `-` is the seat launch
 
 ### `musterd seats [--json]`
 
-Every seat on this machine and where it is live — the launcher's read model. `--json` carries no
-secret and no harness session id.
+The launcher's read model ([ADR 503](../decisions/503-roster-first-launcher-catalog.md)): every
+Workspace on this machine and where it is live, then — per team this machine knows — every other
+member of the roster with `where` it lives (`here` · `on <node label>` · `cloud` · `nowhere`) and
+what `can` be done about it from here (`launch` · `wake` · `setup` · `none`, the ADR's table). A seat
+resident on another node is never `setup`. When a team's roster does not answer within the time box
+the list is folder-only for that team and a line says so. `--json` adds `members` (one row per
+member: `team, member, kind, address, where, node, where_label, can`) and `roster_missing`; it
+carries no secret and no harness session id.
 
 ### `musterd init`
 

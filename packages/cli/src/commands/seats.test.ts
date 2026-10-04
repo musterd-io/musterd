@@ -53,8 +53,76 @@ describe('musterd seats (ADR 491)', () => {
     expect(containsMusterdCredential(out)).toBe(false);
   });
 
+  it('--json carries the roster-first rows with where/can when the roster answers (ADR 503)', async () => {
+    const page = {
+      node: { id: 'n-hub', label: 'mac' },
+      members: [
+        {
+          id: 'm-ada',
+          team: 'acme',
+          name: 'ada',
+          kind: 'agent',
+          created_at: 1,
+          presence: 'offline',
+          presences: [],
+          residence: { node: 'n-hub', node_label: 'mac', kind: 'node' },
+          wakeable: true,
+        },
+        {
+          id: 'm-bo',
+          team: 'acme',
+          name: 'bo',
+          kind: 'agent',
+          created_at: 1,
+          presence: 'offline',
+          presences: [],
+          residence: { node: 'n-air', node_label: 'air-2', kind: 'node' },
+          wakeable: true,
+        },
+      ],
+    };
+    const answering = (async () =>
+      new Response(JSON.stringify(page), { status: 200 })) as unknown as typeof fetch;
+    const { out } = await capture(() =>
+      seatsCommand(parseArgs(['--json']), { home, fetch: answering }),
+    );
+    const json = JSON.parse(out);
+    expect(json.members).toEqual([
+      {
+        team: 'acme',
+        member: 'ada',
+        kind: 'agent',
+        address: 'acme/proj/ada',
+        where: 'here',
+        node: 'n-hub',
+        where_label: null,
+        can: 'launch',
+      },
+      {
+        team: 'acme',
+        member: 'bo',
+        kind: 'agent',
+        address: null,
+        where: 'node',
+        node: 'n-air',
+        where_label: 'air-2',
+        can: 'none',
+      },
+    ]);
+    expect(json.roster_missing).toEqual([]);
+  });
+
+  it('names the teams whose roster did not answer — the list is folder-only for them', async () => {
+    const { out } = await capture(() =>
+      seatsCommand(parseArgs(['--json']), { home, fetch: offline }),
+    );
+    expect(JSON.parse(out)).toMatchObject({ members: [], roster_missing: ['acme'] });
+  });
+
   it('prints the grouped list', async () => {
     const { out } = await capture(() => seatsCommand(parseArgs([]), { home, fetch: offline }));
-    expect(out).toBe('seats on this machine · 1\n\nacme/proj\n  ada  claude   ○ idle\n');
+    expect(out).toBe(
+      "seats on this machine · 1\n\nacme/proj\n  ada  claude   ○ idle\n\nacme: roster unavailable — this machine's folders only\n",
+    );
   });
 });

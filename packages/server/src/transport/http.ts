@@ -2529,8 +2529,16 @@ export async function handleHttp(
             });
           }
         }
+        // ADR 503 §4: the answering daemon's own node for this team, so a launcher reading its
+        // loopback daemon can tell a `residence` on THIS machine from one elsewhere without a
+        // second request or a node credential. An id and a label — nothing secret. Additive.
+        const selfNode = await ctx.db.get<{ id: string; label: string }>(
+          'SELECT id, label FROM nodes WHERE id = ?',
+          [(await localNodeForTeam(ctx.db, team.id)).id],
+        );
         return sendJson(res, 200, {
           members,
+          node: selfNode ? { id: selfNode.id, label: selfNode.label } : null,
           // The team's role library (ADR 227 discovery): the roster answers "who can do X" only if
           // the roles themselves are visible beside the seats that hold them. Additive — an older
           // client ignores it.

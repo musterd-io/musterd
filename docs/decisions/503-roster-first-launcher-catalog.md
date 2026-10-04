@@ -123,6 +123,15 @@ well (second-machine findings, 2026-10-03).
   joiner such as `delta` (ADR 463) enrolled as an ordinary node and reads `node` — marking it `cloud`
   would need a fact the node row does not carry. An enrolled seat with no unrevoked binding reads
   `null` (enrolled, nowhere bound), distinct from an older daemon's absence.
+- **2026-10-04 — increment 2 landed (lane `01M41Q55KS`).** The roster page gained `node {id, label}`,
+  the answering daemon's own node for the team: Decision 4 said `where` is computed from
+  `MemberSummary` plus the machine's own files, but no file on a hub names the hub's node id
+  (`local_node` lives in its database), so the one permitted read carries it — no second request,
+  no credential. `here` is a residence or presence on that node read from a loopback daemon; a
+  non-loopback server is never `here`. The admin half of `wake` reads the viewer's `roles` for
+  `admin` because the roster read is anonymous and `capabilities` ride only authenticated reads.
+  The picker still draws from the folder catalog until increment 3; `musterd seats` and the
+  snapshot carry the member rows now.
 
 ## Observability & Evaluation
 
