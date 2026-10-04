@@ -180,6 +180,11 @@ gap: whatever a dream sends, nothing rings.
   dream wake the host now fast-forwards the seat's workspace to `origin/main`. It does this only for a
   detached HEAD with a clean tree, and only when the move is a fast-forward. A reply or work-order wake
   is never moved.
+- **2026-10-04 — the packet carries the skill (lane 01M44B3C5Q).** The fast-forward above never
+  moves a branch, and ghost rests on its handed-off `ghost/dreaming-digest`, so it dreamed without the
+  skill a second night. `musterd dream` now adds `skill: {path, text}`, read from the running build's
+  own checkout, which autorefresh keeps on main. The wake line points there and keeps the
+  workspace path only as a fallback.
 - **2026-10-03 — §5's "unanswered" is bounded by ADR 502.** The digest lists the last seven days,
   counts older open asks in one line, and treats an ask whose named lane is `done` or `abandoned` as
   settled.
