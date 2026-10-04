@@ -132,6 +132,14 @@ well (second-machine findings, 2026-10-03).
   `admin` because the roster read is anonymous and `capabilities` ride only authenticated reads.
   The picker still draws from the folder catalog until increment 3; `musterd seats` and the
   snapshot carry the member rows now.
+- **2026-10-04 — increment 3 landed (lane `01M41Q5KA5`).** The picker's members level reads the
+  member rows: `on this machine` / `on the team`, every member once, a dimmed `can` verb, and the
+  footer on a `none` row names the node and the move ceremony. `⏎` on a `wake` row spawns
+  `musterd send --act steer` in the viewer's own human Workspace here — the one identity source
+  ADR 442 allows from an unbound folder is none, so the doorbell runs where the viewer's binding is,
+  and without such a Workspace it refuses with the `musterd human <you>` hint. `musterd <member>`
+  for a seat with no folder here follows the same rule. The snapshot now carries the member rows,
+  so the first paint shows the team before any roster answers.
 
 ## Observability & Evaluation
 

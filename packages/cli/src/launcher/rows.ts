@@ -111,6 +111,20 @@ export function describeWhere(m: Pick<MemberEntry, 'where' | 'where_label'>): st
   }
 }
 
+/** `resident on air-2 — move it: musterd residency off + node unbind there` (the `none` row's line). */
+export function describeMove(entry: Pick<MemberEntry, 'where' | 'where_label'>): string {
+  const where =
+    entry.where === 'cloud'
+      ? 'in the cloud'
+      : `on ${entry.where_label ? plainLabel(entry.where_label) : 'another machine'}`;
+  return `resident ${where} — move it: musterd residency off + node unbind there`;
+}
+
+/** The dimmed verb beside a row (ADR 503 Decision 3): what `⏎` does, or nothing. */
+export function canVerb(can: MemberEntry['can']): string {
+  return can === 'setup' ? 'set up' : can === 'none' ? '' : can;
+}
+
 export interface SeatsListExtras {
   /** The roster-first rows (ADR 503): members with no Workspace here are listed under their team. */
   members?: readonly MemberEntry[];

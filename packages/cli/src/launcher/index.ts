@@ -36,6 +36,21 @@ export async function openPicker(
     },
   );
   if (outcome.kind === 'quit') return outcome.code;
+  if (outcome.kind === 'wake') {
+    // ADR 503: ⏎ on a seat resident elsewhere rings its doorbell as the viewer — from the viewer's
+    // own Workspace here, never a vault (ADR 442).
+    const [{ wakeMember }, { viewerNameFor }, { buildCatalog }, { loadConfig }, os] =
+      await Promise.all([
+        import('./wake.js'),
+        import('./live.js'),
+        import('./catalog.js'),
+        import('../config.js'),
+        import('node:os'),
+      ]);
+    const config = loadConfig();
+    const seats = buildCatalog({ home: opts.home ?? os.homedir(), config }).seats;
+    return wakeMember(outcome.entry, seats, viewerNameFor(outcome.entry.team, config, seats));
+  }
   if (outcome.kind === 'create') {
     process.stderr.write(
       `setting up ${outcome.member} in ${outcome.team}/${outcome.project} (fetching origin first)…\n`,
@@ -80,7 +95,8 @@ async function refresh(
       import('../config.js'),
       import('node:os'),
     ]);
-    const catalog = buildCatalog({ home: home ?? os.homedir(), config: loadConfig() });
+    const config = loadConfig();
+    const catalog = buildCatalog({ home: home ?? os.homedir(), config });
     dispatch({
       type: 'catalog',
       seats: catalog.seats,
@@ -100,28 +116,44 @@ async function refresh(
     } catch {
       // the snapshot is a cache
     }
-    const { fetchRosters, liveFor, rosterKey, teamAgents } = await import('./live.js');
-    const rosters = await fetchRosters(catalog.seats);
+    const { fetchRosters, liveFor, memberRowsFor, membersByTeam, rosterKey, rosterTargets } =
+      await import('./live.js');
+    const rosters = await fetchRosters(rosterTargets(catalog.seats, catalog.teams, config.server));
     const live: Record<string, Live> = {};
-    const agents: Record<string, string[]> = {};
     let answered = catalog.seats.length === 0;
     const unknown: string[] = [];
     for (const seat of catalog.seats) {
       const members = rosters.get(rosterKey(seat))?.members ?? null;
       if (members) answered = true;
       else unknown.push(seat.address);
-      if (members && !agents[seat.team]) agents[seat.team] = teamAgents(members);
       const l = liveFor(seat, members);
       if (l) live[seat.address] = l;
     }
+    // ADR 503 Decision 1: the roster-first rows, cached in the snapshot for the next first paint.
+    const { members } = memberRowsFor(catalog, rosters, config);
     dispatch({
       type: 'live',
       live,
       status: answered ? 'ok' : 'offline',
       unknown,
-      agents,
+      members: membersByTeam(members),
       now: Date.now(),
     });
+    if (members.length) {
+      try {
+        writeLauncherFile(
+          path,
+          withSnapshot(readLauncherFile(path), {
+            taken_at: catalog.taken_at,
+            seats: catalog.seats,
+            teams: catalog.teams,
+            members,
+          }),
+        );
+      } catch {
+        // the snapshot is a cache
+      }
+    }
   } catch {
     dispatch({ type: 'live', live: {}, status: 'offline', now: Date.now() });
   }

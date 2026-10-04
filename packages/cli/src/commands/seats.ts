@@ -1,22 +1,16 @@
 import { homedir } from 'node:os';
 import type { Parsed } from '../args.js';
-import { loadConfig, type Config } from '../config.js';
-import { buildCatalog, type Catalog } from '../launcher/catalog.js';
+import { loadConfig } from '../config.js';
+import { buildCatalog } from '../launcher/catalog.js';
 import {
   fetchRosters,
   liveFor,
+  memberRowsFor,
   rosterKey,
   rosterTargets,
-  teamRows,
-  type RosterPage,
 } from '../launcher/live.js';
 import { renderSeatsList } from '../launcher/rows.js';
-import {
-  lastUsedAt,
-  launcherFilePath,
-  type MemberEntry,
-  readLauncherFile,
-} from '../launcher/store.js';
+import { lastUsedAt, launcherFilePath, readLauncherFile } from '../launcher/store.js';
 
 /**
  * `musterd seats [--json]` (ADR 491 Decision 7, ADR 503): every member of every team this machine
@@ -41,7 +35,7 @@ export async function seatsCommand(
     live: liveFor(seat, rosters.get(rosterKey(seat))?.members ?? null),
     lastUsed: lastUsedAt(seat, file),
   }));
-  const { members, missing } = memberRows(catalog, rosters, config);
+  const { members, missing } = memberRowsFor(catalog, rosters, config);
   if (parsed.flags['json'] === true) {
     process.stdout.write(
       JSON.stringify({
@@ -61,38 +55,4 @@ export async function seatsCommand(
     }) + '\n',
   );
   return 0;
-}
-
-/** Who this machine is on `team`: its identity, else the one working human Workspace here. */
-export function viewerNameFor(
-  team: string,
-  config: Pick<Config, 'identities' | 'knownIdentities'>,
-  seats: Catalog['seats'],
-): string | null {
-  const identity =
-    config.identities[team]?.name ?? config.knownIdentities.find((i) => i.team === team)?.name;
-  if (identity) return identity;
-  const humans = seats.filter((s) => s.team === team && s.kind === 'human' && s.problem === null);
-  return humans.length === 1 ? humans[0]!.member : null;
-}
-
-/** The roster-first rows across every team that answered, and the teams that did not. */
-export function memberRows(
-  catalog: Catalog,
-  rosters: ReadonlyMap<string, RosterPage | null>,
-  config: Pick<Config, 'server' | 'identities' | 'knownIdentities'>,
-): { members: MemberEntry[]; missing: string[] } {
-  const members: MemberEntry[] = [];
-  const missing: string[] = [];
-  for (const { server, team } of rosterTargets(catalog.seats, catalog.teams, config.server)) {
-    const page = rosters.get(rosterKey({ server, team })) ?? null;
-    if (!page) {
-      missing.push(team);
-      continue;
-    }
-    members.push(
-      ...teamRows(team, page, server, catalog.seats, viewerNameFor(team, config, catalog.seats)),
-    );
-  }
-  return { members, missing: [...new Set(missing)].sort() };
 }
