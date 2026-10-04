@@ -189,7 +189,10 @@ export function renderSeatsList(
     out.push('', theme.accent(`${team} · on the team`));
     for (const m of rows) {
       const name = padEndVisible(theme.memberName(m.member, m.kind), w);
-      out.push(`  ${name}${theme.meta(describeWhere(m))} ${theme.meta('·')} ${theme.meta(m.can)}`);
+      const verb = canVerb(m.can);
+      out.push(
+        `  ${name}${theme.meta(describeWhere(m))}${verb ? `  ${theme.meta(verb)}` : ''}`.trimEnd(),
+      );
     }
   }
   for (const team of extras.rosterMissing ?? [])
