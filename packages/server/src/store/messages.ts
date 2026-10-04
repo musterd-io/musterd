@@ -30,6 +30,23 @@ async function senderProvenance(db: Driver, memberId: string): Promise<string | 
 }
 
 /**
+ * The team's own node, READ ONLY — `null` when nothing has minted one yet. For reads that must not
+ * write (an anonymous roster GET, ADR 503 §4): `localNodeForTeam` lazily mints the row, and a
+ * credential-free request must never be the thing that does so.
+ */
+export async function localNodeIfAny(
+  db: Driver,
+  teamId: string,
+): Promise<{ id: string; label: string } | null> {
+  return (
+    (await db.get<{ id: string; label: string }>(
+      `SELECT n.id, n.label FROM local_node l JOIN nodes n ON n.id = l.node_id WHERE l.team_id = ?`,
+      [teamId],
+    )) ?? null
+  );
+}
+
+/**
  * This team's local node row (ADR 331 §Decision 1) — per (daemon, team), minted by migration v47
  * and lazily here for teams created after it.
  *

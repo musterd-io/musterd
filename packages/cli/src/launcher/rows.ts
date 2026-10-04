@@ -88,15 +88,24 @@ export interface SeatEntry {
   lastUsed: number | null;
 }
 
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\x00-\x1f\x7f-\x9f]/g;
+
+/** A node label is a teammate-chosen string painted on this terminal: no control bytes reach it. */
+export function plainLabel(label: string): string {
+  return label.replace(CONTROL, '');
+}
+
 /** `on node-2` / `in the cloud` / `nowhere` — the row's `where` in words (ADR 503). */
 export function describeWhere(m: Pick<MemberEntry, 'where' | 'where_label'>): string {
+  const label = m.where_label === null ? null : plainLabel(m.where_label);
   switch (m.where) {
     case 'here':
       return 'here';
     case 'node':
-      return `on ${m.where_label ?? m.where}`;
+      return `on ${label || m.where}`;
     case 'cloud':
-      return m.where_label ? `cloud · ${m.where_label}` : 'cloud';
+      return label ? `cloud · ${label}` : 'cloud';
     case 'nowhere':
       return 'nowhere';
   }

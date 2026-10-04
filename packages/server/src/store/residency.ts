@@ -743,7 +743,7 @@ export async function seatWakeabilityFacts(
 export async function seatResidences(
   db: Driver,
   teamId: string,
-  local: { nodeId: string; cloud: boolean },
+  local: { nodeId: string | null; cloud: boolean },
 ): Promise<Map<string, Residence>> {
   const rows = await db.all<{ member_id: string; node_id: string; label: string }>(
     `SELECT r.member_id, s.node_id, n.label
@@ -760,7 +760,7 @@ export async function seatResidences(
     out.set(r.member_id, {
       node: r.node_id,
       node_label: r.label,
-      kind: local.cloud && r.node_id === local.nodeId ? 'cloud' : 'node',
+      kind: local.cloud && local.nodeId !== null && r.node_id === local.nodeId ? 'cloud' : 'node',
     });
   }
   return out;

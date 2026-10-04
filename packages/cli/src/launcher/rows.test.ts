@@ -140,6 +140,8 @@ describe('roster-first rows in `musterd seats` (ADR 503)', () => {
     expect(describeWhere({ where: 'node', where_label: 'air-2' })).toBe('on air-2');
     expect(describeWhere({ where: 'cloud', where_label: 'fly' })).toBe('cloud · fly');
     expect(describeWhere({ where: 'nowhere', where_label: null })).toBe('nowhere');
+    // A node label is painted on the terminal: control bytes in it are dropped, never written.
+    expect(describeWhere({ where: 'node', where_label: 'air\x1b[31m-2\x07' })).toBe('on air[31m-2');
   });
 
   it('lists members with no folder here under their team, with where and can', () => {
