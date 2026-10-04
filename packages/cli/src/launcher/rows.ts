@@ -2,7 +2,7 @@ import { sinceLabel, theme } from '../render/theme.js';
 import { hint, padEndVisible, sym } from '../render/ui.js';
 import { harnessLabel } from './labels.js';
 import type { Live } from './live.js';
-import type { Seat } from './store.js';
+import type { MemberEntry, Seat } from './store.js';
 
 /*
  * Row and receipt rendering shared by the picker and `musterd seats` (ADR 491). On the paint path:
@@ -88,12 +88,48 @@ export interface SeatEntry {
   lastUsed: number | null;
 }
 
-/** `musterd seats` (spec §3.6): every seat, grouped by team/project. */
-export function renderSeatsList(entries: SeatEntry[], stale: number, now: number): string {
-  if (entries.length === 0) {
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\x00-\x1f\x7f-\x9f]/g;
+
+/** A node label is a teammate-chosen string painted on this terminal: no control bytes reach it. */
+export function plainLabel(label: string): string {
+  return label.replace(CONTROL, '');
+}
+
+/** `on node-2` / `in the cloud` / `nowhere` — the row's `where` in words (ADR 503). */
+export function describeWhere(m: Pick<MemberEntry, 'where' | 'where_label'>): string {
+  const label = m.where_label === null ? null : plainLabel(m.where_label);
+  switch (m.where) {
+    case 'here':
+      return 'here';
+    case 'node':
+      return `on ${label || m.where}`;
+    case 'cloud':
+      return label ? `cloud · ${label}` : 'cloud';
+    case 'nowhere':
+      return 'nowhere';
+  }
+}
+
+export interface SeatsListExtras {
+  /** The roster-first rows (ADR 503): members with no Workspace here are listed under their team. */
+  members?: readonly MemberEntry[];
+  /** Teams whose roster did not answer — the receipt says the list is folder-only for them. */
+  rosterMissing?: readonly string[];
+}
+
+/** `musterd seats` (spec §3.6): every seat, grouped by team/project; then each team's other members. */
+export function renderSeatsList(
+  entries: SeatEntry[],
+  stale: number,
+  now: number,
+  extras: SeatsListExtras = {},
+): string {
+  const members = extras.members ?? [];
+  if (entries.length === 0 && members.length === 0) {
     return `no seats on this machine yet\n${hint('musterd init in a project checkout, or musterd agent <name>')}`;
   }
-  const nameWidth = Math.max(...entries.map((e) => e.seat.member.length)) + 2;
+  const nameWidth = Math.max(0, ...entries.map((e) => e.seat.member.length)) + 2;
   const out = [theme.bold(`seats on this machine · ${entries.length}`)];
   const groups = new Map<string, SeatEntry[]>();
   for (const e of entries) {
@@ -128,6 +164,22 @@ export function renderSeatsList(entries: SeatEntry[], stale: number, now: number
       );
     }
   }
+  // ADR 503 Decision 1: the team is the unit. Members with no folder here are rows too, each with
+  // where it lives and what this machine can do about it — never a silent `setup` of a seat that is
+  // resident elsewhere.
+  const away = members.filter((m) => m.address === null);
+  const teams = [...new Set(away.map((m) => m.team))].sort();
+  for (const team of teams) {
+    const rows = away.filter((m) => m.team === team);
+    const w = Math.max(...rows.map((m) => m.member.length)) + 2;
+    out.push('', theme.accent(`${team} · on the team`));
+    for (const m of rows) {
+      const name = padEndVisible(theme.memberName(m.member, m.kind), w);
+      out.push(`  ${name}${theme.meta(describeWhere(m))} ${theme.meta('·')} ${theme.meta(m.can)}`);
+    }
+  }
+  for (const team of extras.rosterMissing ?? [])
+    out.push('', theme.meta(`${team}: roster unavailable — this machine's folders only`));
   if (stale > 0) out.push('', theme.meta(`${stale} stale · musterd init --prune-bindings --apply`));
   return out.join('\n');
 }

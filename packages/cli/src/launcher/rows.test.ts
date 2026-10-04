@@ -4,6 +4,7 @@ import {
   ago,
   describeLive,
   describeLiveLong,
+  describeWhere,
   formatDuration,
   formatReceipt,
   renderSeatsList,
@@ -130,5 +131,61 @@ describe('launcher rows (ADR 491)', () => {
         '2 stale · musterd init --prune-bindings --apply',
       ].join('\n'),
     );
+  });
+});
+
+describe('roster-first rows in `musterd seats` (ADR 503)', () => {
+  it('describes where a member lives', () => {
+    expect(describeWhere({ where: 'here', where_label: null })).toBe('here');
+    expect(describeWhere({ where: 'node', where_label: 'air-2' })).toBe('on air-2');
+    expect(describeWhere({ where: 'cloud', where_label: 'fly' })).toBe('cloud · fly');
+    expect(describeWhere({ where: 'nowhere', where_label: null })).toBe('nowhere');
+    // A node label is painted on the terminal: control bytes in it are dropped, never written.
+    expect(describeWhere({ where: 'node', where_label: 'air\x1b[31m-2\x07' })).toBe('on air[31m-2');
+  });
+
+  it('lists members with no folder here under their team, with where and can', () => {
+    const entries = [{ seat: seat('ada'), live: null, lastUsed: null }];
+    const members = [
+      {
+        team: 'revive',
+        member: 'ada',
+        kind: 'agent',
+        address: 'revive/agents/ada',
+        where: 'here',
+        node: 'n',
+        where_label: null,
+        can: 'launch',
+      },
+      {
+        team: 'revive',
+        member: 'bo',
+        kind: 'agent',
+        address: null,
+        where: 'node',
+        node: 'n2',
+        where_label: 'air-2',
+        can: 'wake',
+      },
+      {
+        team: 'revive',
+        member: 'cy',
+        kind: 'agent',
+        address: null,
+        where: 'nowhere',
+        node: null,
+        where_label: null,
+        can: 'setup',
+      },
+    ] as const;
+    const out = renderSeatsList(entries, 0, NOW, {
+      members: [...members],
+      rosterMissing: ['dawn'],
+    });
+    expect(out).toContain('revive · on the team');
+    expect(out).toContain('bo  on air-2 · wake');
+    expect(out).toContain('cy  nowhere · setup');
+    expect(out).not.toMatch(/on the team[\s\S]*ada/);
+    expect(out).toContain("dawn: roster unavailable — this machine's folders only");
   });
 });

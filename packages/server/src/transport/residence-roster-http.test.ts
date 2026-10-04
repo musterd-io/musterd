@@ -29,9 +29,14 @@ withDrivers('residence on the roster (ADR 503 Decision 5)', (_o, kind) => {
     const text = await res.text();
     return { status: res.status, json: text ? (JSON.parse(text) as any) : null };
   }
+  let lastNode: { id: string; label: string } | null = null;
   async function roster(): Promise<Map<string, any>> {
     const res = await fetch(base + '/teams/dawn/members');
-    const json = (await res.json()) as { members: any[] };
+    const json = (await res.json()) as {
+      members: any[];
+      node: { id: string; label: string } | null;
+    };
+    lastNode = json.node;
     return new Map(json.members.map((m) => [m.name, m]));
   }
   async function enroll(seat: string, host: string): Promise<void> {
@@ -96,6 +101,8 @@ withDrivers('residence on the roster (ADR 503 Decision 5)', (_o, kind) => {
     expect(r.get('cy').wakeable).toBe(false);
     expect(r.get('cy').residence).toBeNull();
     expect(r.get('nick').residence).toBeNull();
+    // ADR 503 §4: the page names the answering daemon's own node, so a launcher can tell `here`.
+    expect(lastNode).toMatchObject({ id: hub });
   });
 
   it('reads null for an enrolled seat with no unrevoked binding — enrolled, nowhere bound', async () => {

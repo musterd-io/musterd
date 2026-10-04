@@ -278,6 +278,7 @@ import {
   listInbox,
   listTeamMessages,
   localNodeForTeam,
+  localNodeIfAny,
   pendingInterrupts,
   rowToEnvelope,
 } from '../store/messages.js';
@@ -1849,7 +1850,7 @@ async function summarize(
   // ADR 503 Decision 5: WHERE each enrolled seat lives, from its node binding — so a launcher on
   // another machine can tell `wake` from `setup` without a folder scan. One read for the roster.
   const residences = await seatResidences(ctx.db, teamId, {
-    nodeId: (await localNodeForTeam(ctx.db, teamId)).id,
+    nodeId: (await localNodeIfAny(ctx.db, teamId))?.id ?? null,
     cloud: ctx.config.mode === 'cloud',
   });
   // Steering marks you present (ADR 155 Inc 1): the humans named as `driver` on a live agent seat.
@@ -2529,8 +2530,14 @@ export async function handleHttp(
             });
           }
         }
+        // ADR 503 §4: the answering daemon's own node for this team, so a launcher reading its
+        // loopback daemon can tell a `residence` on THIS machine from one elsewhere without a
+        // second request or a node credential. An id and a label — nothing secret. Additive. A
+        // read-only lookup: an anonymous GET must never be what mints the team's node row.
+        const selfNode = await localNodeIfAny(ctx.db, team.id);
         return sendJson(res, 200, {
           members,
+          node: selfNode,
           // The team's role library (ADR 227 discovery): the roster answers "who can do X" only if
           // the roles themselves are visible beside the seats that hold them. Additive — an older
           // client ignores it.

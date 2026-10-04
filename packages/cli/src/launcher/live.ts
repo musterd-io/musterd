@@ -2,7 +2,7 @@ import { MemberSummarySchema, type MemberSummary } from '@musterd/protocol';
 import { z } from 'zod';
 import { canonicalServer, isLoopbackServer } from '../host/registry.js';
 import { serverHost } from './address.js';
-import type { Seat } from './store.js';
+import type { Can, MemberEntry, Seat, TeamEntry, Where } from './store.js';
 
 /** The time box for one roster read (ADR 491 §5.1). The local daemon answers in ~45 ms. */
 export const ROSTER_TIMEOUT_MS = 300;
@@ -16,7 +16,24 @@ export interface Live {
   since: number | null;
 }
 
-const RosterSchema = z.object({ members: z.array(MemberSummarySchema) }).passthrough();
+/** The answering daemon's own node for the team (ADR 503 §4) — what `here` is compared against. */
+export interface RosterNode {
+  id: string;
+  label: string;
+}
+
+/** One roster page: the members, and the node of the daemon that answered. */
+export interface RosterPage {
+  members: MemberSummary[];
+  node: RosterNode | null;
+}
+
+const RosterSchema = z
+  .object({
+    members: z.array(MemberSummarySchema),
+    node: z.object({ id: z.string().min(1), label: z.string() }).nullish(),
+  })
+  .passthrough();
 
 /**
  * One UNAUTHENTICATED roster read, time-boxed. Unauthenticated on purpose: an authenticated client
@@ -24,12 +41,12 @@ const RosterSchema = z.object({ members: z.array(MemberSummarySchema) }).passthr
  * route answers anonymous reads without touching anyone. Null on any failure — refused, timed out,
  * not JSON, off-schema — so a daemon that is down or wedged costs at most `timeoutMs`.
  */
-export async function fetchRoster(
+export async function fetchRosterPage(
   server: string,
   team: string,
   timeoutMs: number = ROSTER_TIMEOUT_MS,
   fetchImpl: typeof fetch = fetch,
-): Promise<MemberSummary[] | null> {
+): Promise<RosterPage | null> {
   try {
     const res = await fetchImpl(
       `${server.replace(/\/+$/, '')}/teams/${encodeURIComponent(team)}/members`,
@@ -39,28 +56,56 @@ export async function fetchRoster(
     );
     if (!res.ok) return null;
     const parsed = RosterSchema.safeParse(await res.json());
-    return parsed.success ? parsed.data.members : null;
+    return parsed.success ? { members: parsed.data.members, node: parsed.data.node ?? null } : null;
   } catch {
     return null;
   }
+}
+
+/** The members alone — what a live-seat check needs. */
+export async function fetchRoster(
+  server: string,
+  team: string,
+  timeoutMs: number = ROSTER_TIMEOUT_MS,
+  fetchImpl: typeof fetch = fetch,
+): Promise<MemberSummary[] | null> {
+  return (await fetchRosterPage(server, team, timeoutMs, fetchImpl))?.members ?? null;
 }
 
 export function rosterKey(seat: Pick<Seat, 'server' | 'team'>): string {
   return `${canonicalServer(seat.server)}|${seat.team}`;
 }
 
-/** One roster read per distinct (server, team), in parallel. */
-export async function fetchRosters(
+/**
+ * Every (server, team) the catalog should read a roster for (ADR 503 Decision 1): each seat's own
+ * server, and — for a team this machine knows only by identity, with no Workspace — the
+ * configured default server. One entry per distinct key.
+ */
+export function rosterTargets(
   seats: readonly Seat[],
-  timeoutMs: number = ROSTER_TIMEOUT_MS,
-  fetchImpl: typeof fetch = fetch,
-): Promise<Map<string, MemberSummary[] | null>> {
+  teams: readonly TeamEntry[],
+  defaultServer: string,
+): { server: string; team: string }[] {
   const wanted = new Map<string, { server: string; team: string }>();
   for (const s of seats) if (s.server) wanted.set(rosterKey(s), { server: s.server, team: s.team });
-  const out = new Map<string, MemberSummary[] | null>();
+  for (const t of teams) {
+    if (t.here || !defaultServer) continue;
+    const target = { server: defaultServer, team: t.team };
+    if (!wanted.has(rosterKey(target))) wanted.set(rosterKey(target), target);
+  }
+  return [...wanted.values()];
+}
+
+/** One roster read per distinct (server, team), in parallel. */
+export async function fetchRosters(
+  targets: readonly { server: string; team: string }[],
+  timeoutMs: number = ROSTER_TIMEOUT_MS,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Map<string, RosterPage | null>> {
+  const out = new Map<string, RosterPage | null>();
   await Promise.all(
-    [...wanted].map(async ([key, { server, team }]) => {
-      out.set(key, await fetchRoster(server, team, timeoutMs, fetchImpl));
+    targets.map(async (t) => {
+      out.set(rosterKey(t), await fetchRosterPage(t.server, t.team, timeoutMs, fetchImpl));
     }),
   );
   return out;
@@ -85,4 +130,99 @@ export function teamAgents(members: readonly MemberSummary[]): string[] {
     .filter((m) => m.kind === 'agent')
     .map((m) => m.name)
     .sort();
+}
+
+/** Where a member lives (ADR 503 Decision 2): residence first, then a live presence, else nowhere. */
+export interface Placed {
+  where: Where;
+  node: string | null;
+  label: string | null;
+}
+
+/**
+ * `here` is the answering daemon's own node — a loopback daemon's node IS this machine. A presence
+ * with no `node` on a loopback daemon is likewise here. The label is the node's, never a hostname
+ * this machine guessed (two machines named `mac` is what the second-machine run hit).
+ */
+export function whereOf(m: MemberSummary, node: RosterNode | null, server: string): Placed {
+  const local = isLoopbackServer(server);
+  const r = m.residence ?? null;
+  if (r) {
+    if (r.kind === 'cloud') return { where: 'cloud', node: r.node, label: r.node_label };
+    if (local && node && r.node === node.id) return { where: 'here', node: r.node, label: null };
+    return { where: 'node', node: r.node, label: r.node_label };
+  }
+  const p = m.presences[0];
+  if (p) {
+    if (local && (!p.node || (node && p.node === node.id)))
+      return { where: 'here', node: node?.id ?? null, label: null };
+    return { where: 'node', node: p.node ?? null, label: p.node_label ?? serverHost(server) };
+  }
+  return { where: 'nowhere', node: null, label: null };
+}
+
+export interface CanInput {
+  placed: Placed;
+  /** A Workspace for this member exists on this machine. */
+  workspace: boolean;
+  /** The viewer's roster entry on this team, when this machine holds an identity for it. */
+  viewer: MemberSummary | null;
+  /** The viewer has a working human Workspace here for this team (the `setup` precondition). */
+  viewerSeatHere: boolean;
+}
+
+/**
+ * ADR 503 Decision 2, the `can` table. Sponsorship is ADR 456 `sponsored_by`; a human is their own
+ * sponsor; an admin may wake anyone. A seat resident on another node is NEVER `setup` from here.
+ */
+export function canOf(m: MemberSummary, i: CanInput): Can {
+  const { where } = i.placed;
+  if (i.workspace && (where === 'here' || where === 'nowhere')) return 'launch';
+  if (where === 'node' || where === 'cloud') {
+    const v = i.viewer;
+    const admin = v?.roles.includes('admin') ?? false;
+    const sponsor = v !== null && (m.sponsored_by === v.id || m.id === v.id);
+    return m.wakeable === true && (admin || sponsor) ? 'wake' : 'none';
+  }
+  if (where === 'nowhere' && !i.workspace && i.viewerSeatHere) return 'setup';
+  return 'none';
+}
+
+/**
+ * The roster-first rows for one team (ADR 503 Decision 1): every member once, overlaid with the
+ * Workspaces here. `viewerName` is who this machine is on the team (its identity), or null.
+ */
+export function teamRows(
+  team: string,
+  page: RosterPage,
+  server: string,
+  seats: readonly Seat[],
+  viewerName: string | null,
+): MemberEntry[] {
+  const here = seats.filter((s) => s.team === team);
+  const viewer = viewerName ? (page.members.find((m) => m.name === viewerName) ?? null) : null;
+  const viewerSeatHere = here.some(
+    (s) => s.kind === 'human' && s.problem === null && (!viewerName || s.member === viewerName),
+  );
+  return page.members
+    .map((m): MemberEntry => {
+      const seat = here.find((s) => s.member === m.name) ?? null;
+      const placed = whereOf(m, page.node, server);
+      return {
+        team,
+        member: m.name,
+        kind: m.kind === 'human' ? 'human' : 'agent',
+        address: seat?.address ?? null,
+        where: placed.where,
+        node: placed.node,
+        where_label: placed.label,
+        can: canOf(m, {
+          placed,
+          workspace: seat !== null && seat.problem === null,
+          viewer,
+          viewerSeatHere,
+        }),
+      };
+    })
+    .sort((a, b) => a.member.localeCompare(b.member));
 }

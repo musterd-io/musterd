@@ -105,3 +105,35 @@ describe('launcher.json (ADR 491)', () => {
     expect(lastUsedAt(seat(), EMPTY_LAUNCHER_FILE)).toBeNull();
   });
 });
+
+describe('the snapshot caches the roster-first rows (ADR 503 Decision 4)', () => {
+  it('round-trips members as plain strings and reads an older snapshot without them', () => {
+    const members = [
+      {
+        team: 'revive',
+        member: 'bo',
+        kind: 'agent' as const,
+        address: null,
+        where: 'node' as const,
+        node: 'n-air',
+        where_label: 'air-2',
+        can: 'wake' as const,
+      },
+    ];
+    writeLauncherFile(
+      path,
+      withSnapshot(structuredClone(EMPTY_LAUNCHER_FILE), {
+        taken_at: 1,
+        seats: [],
+        teams: [],
+        members,
+      }),
+    );
+    expect(readLauncherFile(path).snapshot?.members).toEqual(members);
+    writeLauncherFile(
+      path,
+      withSnapshot(structuredClone(EMPTY_LAUNCHER_FILE), { taken_at: 1, seats: [], teams: [] }),
+    );
+    expect(readLauncherFile(path).snapshot?.members).toBeUndefined();
+  });
+});

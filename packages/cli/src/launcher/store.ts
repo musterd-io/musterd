@@ -54,11 +54,41 @@ export type Seat = z.infer<typeof SeatSchema>;
 export const TeamEntrySchema = z.object({ team: z.string().min(1), here: z.boolean() }).strict();
 export type TeamEntry = z.infer<typeof TeamEntrySchema>;
 
+/** Where a member lives, derived from the roster (ADR 503 Decision 2) — never stored by the server. */
+export const WhereSchema = z.enum(['here', 'node', 'cloud', 'nowhere']);
+export type Where = z.infer<typeof WhereSchema>;
+/** What `⏎` on the row does from THIS machine (ADR 503 Decision 2). */
+export const CanSchema = z.enum(['launch', 'wake', 'setup', 'none']);
+export type Can = z.infer<typeof CanSchema>;
+
+/**
+ * One member of a team this machine knows — the roster-first row (ADR 503 Decision 1). `address`
+ * names the Workspace here when one exists; null is a member with no folder on this machine.
+ * `where`/`can` are plain strings so the snapshot may cache them (Decision 4); `node` is the
+ * node's id and `where_label` its label — never a credential.
+ */
+export const MemberEntrySchema = z
+  .object({
+    team: z.string().min(1),
+    member: z.string().min(1),
+    kind: z.enum(['agent', 'human']),
+    address: z.string().nullable(),
+    where: WhereSchema,
+    node: z.string().nullable(),
+    where_label: z.string().nullable(),
+    can: CanSchema,
+  })
+  .strict();
+export type MemberEntry = z.infer<typeof MemberEntrySchema>;
+
 export const SnapshotSchema = z
   .object({
     taken_at: z.number().int(),
     seats: z.array(SeatSchema),
     teams: z.array(TeamEntrySchema),
+    /** ADR 503: the roster-first rows from the last successful roster reads. Absent on a snapshot
+     *  written before the field existed, or when no roster answered. */
+    members: z.array(MemberEntrySchema).optional(),
   })
   .strict();
 export type Snapshot = z.infer<typeof SnapshotSchema>;
