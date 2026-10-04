@@ -17,14 +17,6 @@ export interface Driver {
   exec(sql: string): Promise<void>;
   tx<T>(fn: (t: Driver) => Promise<T>): Promise<T>;
   /**
-   * Register work to run as the last statements of the OUTERMOST open transaction, immediately
-   * before its COMMIT, through that transaction's root handle (ADR 504). Callbacks run in
-   * registration order; one may register more. A nested tx hands its registrations up; a rollback —
-   * of the whole transaction or of the savepoint that registered them — discards them. Only a tx
-   * handle has a transaction to hook: on a connection handle this throws `no_tx`.
-   */
-  beforeCommit(fn: (t: Driver) => Promise<void>): void;
-  /**
    * The connection-level handle. On a tx handle this is the queue-level driver: work a body defers
    * past its own commit (a notification's `.then`) writes through it, never through the tx handle
    * that will be dead by then. On the connection handle it returns itself.
@@ -52,8 +44,7 @@ export type DriverErrorCode =
   | 'not_sqlite'
   | 'closed'
   | 'unavailable'
-  | 'no_tenant_scope'
-  | 'no_tx';
+  | 'no_tenant_scope';
 
 /**
  * The stable sentence (cloud spec §5.5 / §7) for a store that cannot be reached: what a
@@ -71,14 +62,3 @@ export class DriverError extends Error {
     this.name = 'DriverError';
   }
 }
-
-/** Pre-commit callbacks for one outermost transaction (ADR 504), shared by its nested handles. */
-export type CommitHooks = Array<(t: Driver) => Promise<void>>;
-
-/** Run every registered callback, including ones registered while running, through `root`. */
-export async function runCommitHooks(hooks: CommitHooks, root: Driver): Promise<void> {
-  for (let i = 0; i < hooks.length; i++) await hooks[i]!(root);
-}
-
-export const noTx = () =>
-  new DriverError('beforeCommit needs a transaction: call it on a tx handle', 'no_tx');

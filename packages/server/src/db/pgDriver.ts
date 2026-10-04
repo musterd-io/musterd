@@ -1,15 +1,7 @@
 import pg from 'pg';
 import { log } from '../log.js';
 import { toPostgres } from './dialect.js';
-import {
-  DATABASE_UNREACHABLE_SENTENCE,
-  DriverError,
-  noTx,
-  runCommitHooks,
-  type CommitHooks,
-  type Driver,
-  type Params,
-} from './driver.js';
+import { DATABASE_UNREACHABLE_SENTENCE, DriverError, type Driver, type Params } from './driver.js';
 import { ROLE, TENANT_SETTING } from './pg/tenancy.js';
 
 /**
@@ -214,20 +206,13 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
       },
       tx: async (fn) =>
         inTransaction(s, async (c) => {
-          const hooks: CommitHooks = [];
-          const { handle, settle } = txHandle(s, c, 0, hooks);
+          const { handle, settle } = txHandle(s, c, 0);
           try {
-            const r = await fn(handle);
-            // ADR 504: the pre-commit callbacks are the transaction's last statements.
-            await runCommitHooks(hooks, handle);
-            return r;
+            return await fn(handle);
           } finally {
             settle();
           }
         }),
-      beforeCommit: () => {
-        throw noTx();
-      },
       connection: () => h,
       forTeam: (team) => connectionHandle({ role: 'app', team }),
       asOperator: () => connectionHandle({ role: 'operator', team: null }),
@@ -252,12 +237,7 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
   // A tx handle belongs to ONE transaction: once it settles the handle refuses, loudly, so a handle
   // that leaked out through a closure cannot write into whatever transaction the client runs next
   // (same `tx_closed` contract as the SQLite driver).
-  const txHandle = (
-    s: Scope,
-    c: Client,
-    depth: number,
-    hooks: CommitHooks,
-  ): { handle: Driver; settle: () => void } => {
+  const txHandle = (s: Scope, c: Client, depth: number): { handle: Driver; settle: () => void } => {
     const life = { dead: false };
     const guard = () => {
       if (life.dead)
@@ -281,16 +261,11 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
         guard();
         await query(c, sql, []);
       },
-      beforeCommit: (fn) => {
-        guard();
-        hooks.push(fn);
-      },
       tx: async (fn) => {
         guard();
         const name = `sp${depth + 1}`;
-        const mark = hooks.length;
         await c.query(`SAVEPOINT ${name}`);
-        const inner = txHandle(s, c, depth + 1, hooks);
+        const inner = txHandle(s, c, depth + 1);
         try {
           const r = await fn(inner.handle);
           await c.query(`RELEASE ${name}`);
@@ -298,7 +273,6 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
         } catch (e) {
           await c.query(`ROLLBACK TO ${name}`);
           await c.query(`RELEASE ${name}`);
-          hooks.length = mark;
           throw e;
         } finally {
           inner.settle();

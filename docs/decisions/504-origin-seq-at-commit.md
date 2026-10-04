@@ -74,6 +74,15 @@ Keep both properties and stop holding the counter's lock for a whole transaction
   joins a sync; **a Postgres sequence** — gaps on rollback and out-of-order visibility, breaking both
   properties for every deployment.
 
+- **2026-10-04 — falsified by Cloud load run 6 and reverted.** With this decision deployed
+  (188f73e6, pool 40), p95 rose from run 5c's 2.6 s to 7.0 s; server-side `POST /lanes` p95 from
+  15.9 s to 20.9 s; agent `POST /messages` p50 from 2.1 s to 13.8 s. The node counter was not the
+  write queue: moving the bump to commit added two statements per numbered row (a lane write numbers
+  several audit rows) and removed no wait. The code was reverted; ADR 331's at-insert numbering
+  stands. The queue's real cause is to be read from Postgres lock waits sampled during run 7 (lane
+  `01M3Z455NEWNZMCJ5KR6EX3TG0`). The `Decision` above is kept as written, as the record of what was
+  tried.
+
 ## Observability & Evaluation
 
 **Traces.** n/a — no new span kinds. The request log's per-request `ms` (the line #2000 added) is

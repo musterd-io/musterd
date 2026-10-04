@@ -95,33 +95,6 @@ describe('pgDriver choreography (spec §12.1)', () => {
     expect(f.log.at(-1)).toBe('app: release');
   });
 
-  it('beforeCommit (ADR 504) runs last before COMMIT on the root handle; a rolled-back savepoint drops its own', async () => {
-    const f = fakePools();
-    const d = pgDriver({ ...urls, pools: f.factory });
-    expect(() => d.beforeCommit(async () => undefined)).toThrow(/tx handle/);
-    await d.forTeam('A').tx(async (t) => {
-      t.beforeCommit(async (root) => void (await root.run('UPDATE kept SET n = 1')));
-      await t
-        .tx(async (n) => {
-          n.beforeCommit(async (root) => void (await root.run('UPDATE dropped SET n = 1')));
-          throw new Error('inner');
-        })
-        .catch(() => undefined);
-      await t.tx(async (n) => {
-        n.beforeCommit(async (root) => void (await root.run('UPDATE nested SET n = 1')));
-      });
-      await t.run('UPDATE body SET n = 1');
-    });
-    const tail = f.log.slice(-4);
-    expect(tail).toEqual([
-      'app: UPDATE kept SET n = 1',
-      'app: UPDATE nested SET n = 1',
-      'app: COMMIT',
-      'app: release',
-    ]);
-    expect(f.log.some((l) => l.includes('dropped'))).toBe(false);
-  });
-
   it('a tx handle is dead after its transaction settles, and cannot be rescoped', async () => {
     const f = fakePools();
     const d = pgDriver({ ...urls, pools: f.factory });
