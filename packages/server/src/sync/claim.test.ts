@@ -221,6 +221,45 @@ withDrivers('claim', (_o, kind) => {
       });
     });
 
+    // Lane 01M41QG1HY (sloane on Air 2, 2026-10-03): the hub applied blocked→active for a joiner
+    // seat, yet the joiner's row stayed `blocked`, and every later arbitrated write from the joiner
+    // was refused by the hub's CAS against the stale `expect`. The falsifier: a run of state moves
+    // decided by the hub for a joiner seat converges on the joiner, and the next write is accepted.
+    it("a joiner seat's state moves decided by the hub fold back to the joiner, so its next write is not refused", async () => {
+      const laneId = await laneOnBoth();
+      const jt = await joinerTeam();
+      const move = async (state: string) => {
+        const res = await patch(
+          joinerBase,
+          `/teams/bravo/lanes/${laneId}`,
+          { state },
+          nickOnJoiner,
+        );
+        expect(res.status, JSON.stringify(res.json)).toBe(200);
+        await hubToJoiner();
+        expect((await getLane(joiner.store, jt.id, laneId, 'bravo'))!.state).toBe(state);
+      };
+      const claim = await patch(
+        joinerBase,
+        `/teams/bravo/lanes/${laneId}`,
+        { owner_seat: 'nick' },
+        nickOnJoiner,
+      );
+      expect(claim.status).toBe(200);
+      await hubToJoiner();
+      await move('active');
+      await move('blocked');
+      await move('active');
+      // The write sloane could not make: an edit that moves state, with the joiner's own row as `expect`.
+      const submit = await patch(
+        joinerBase,
+        `/teams/bravo/lanes/${laneId}`,
+        { state: 'awaiting_acceptance' },
+        nickOnJoiner,
+      );
+      expect(submit.status, JSON.stringify(submit.json)).toBe(200);
+    });
+
     it("a competing claim is refused with a distinguishable error naming the holder, and the joiner's row is untouched", async () => {
       const laneId = await laneOnBoth();
       // ada takes it on the hub first; the joiner has not yet seen that.

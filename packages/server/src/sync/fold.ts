@@ -7,6 +7,7 @@ import {
 } from '@musterd/protocol';
 import { z } from 'zod';
 import type { Driver } from '../db/driver.js';
+import { REPLICATED_LEDGER_VERBS } from '../store/audit.js';
 import { getMemberByName } from '../store/members.js';
 import { upsertForeignNode } from '../store/nodes.js';
 import {
@@ -886,7 +887,16 @@ export async function foldBatch(
       // costs nothing and blocking on it would stall the ledger behind git lag.
       if (event.kind === 'ledger') {
         const e = event.event;
-        if (e.action.startsWith('lane.') || e.action.startsWith('presence.')) {
+        // A projected verb (`lane.*`, `presence.*`) wearing the ledger tag is a smuggled transition
+        // — UNLESS the verb is declared a ledger row by name. `presence.session_ended` is one
+        // (ADR 371 §4, ADR 164's rung dataset): the first `musterd halt` (ADR 501, 2026-10-03)
+        // staged it under the ledger tag it is declared with, and this guard — written for the
+        // prefix alone — wedged every joiner at that row (lane 01M41QG1HY). The declaration set
+        // is the one `appendAudit` stages by, so the two cannot drift again.
+        if (
+          (e.action.startsWith('lane.') || e.action.startsWith('presence.')) &&
+          !REPLICATED_LEDGER_VERBS.has(e.action)
+        ) {
           stop = { kind: 'mistagged_ledger_event', action: e.action, hub_seq: event.hub_seq };
           return await finish();
         }
