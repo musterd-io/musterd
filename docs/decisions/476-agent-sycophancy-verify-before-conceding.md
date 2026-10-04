@@ -144,6 +144,14 @@ concession without lowering _wrong_ concession.
   readout counts evidence-shaped numbers only: a commit sha, a `#PR`, a `file:line`. The server-side
   projection (a `musterd report` section) needs its own ADR, because it changes the `Report` schema.
   Follows-up: lane 01M3QRD7TFZYX4HKG8QM03PV9X — deferred to the five-day read (2026-10-04)
+- **2026-10-04 — the five-day read is inconclusive** (dolly; lane 01M3QTERXJ). Since 2026-09-29:
+  `challenge` channel 0 of 1 unverified, `phrase` channel 0 of 2, decline rate 0 of 1. Both are
+  under n = 5, so per the note above they report direction only. The direction is favourable (all
+  three concessions name their check), but no seat sent a `challenge` act in the window and the
+  channel experiment has no critiques in either arm. The guidance line asking seats to send
+  `challenge` has produced none yet. Nothing is decided on this sample: the report section (lane
+  01M3QRD7TF), the per-seat readout (01M3QTEAYH) and anonymised delivery (01M3QTE4FV) all move to
+  the thirty-day read, 2026-10-29. Numbers and queries: the wiki page's "The five-day read".
 - **Increment 1 (this lane):** this ADR; the skill section "Answering a critique" in
   `packages/protocol/src/guidance.ts` (content version bumped, every seat's `SKILL.md` refreshes on
   the next `musterd init`/doctor pass); the wiki page with the baseline table, the queries, and the

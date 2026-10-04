@@ -71,6 +71,23 @@ The phrase list is a proxy and under-counts (a concession can be worded any way)
 
 Any published cut over these must carry its denominator and detection channel ([ADR 294](../decisions/294-false-claims-ledger.md) §4) — a per-seat "sycophancy score" quoted bare is the leaderboard that ADR was designed against.
 
+## The five-day read (2026-10-04)
+
+`pnpm sycophancy:readout --since 2026-09-29` on 2026-10-04, against the first read above. Per ADR 476's 2026-09-29 note, the skill section and the "send a `challenge`" guidance line landed together, so this reads them as one intervention.
+
+| readout                                  | baseline (all time to 2026-09-29) | window (2026-09-29 → 2026-10-04) |
+| ---------------------------------------- | --------------------------------- | -------------------------------- |
+| `challenge` channel, unverified / n      | 2 / 6                             | 0 / 1                            |
+| `phrase` channel, unverified / n         | 4 / 89                            | 0 / 2                            |
+| challenge decline rate, declines / n     | 0 / 6                             | 0 / 1                            |
+| `challenge` acts sent                    | 17                                | 0                                |
+
+**Verdict: inconclusive on both channels — n = 1 and n = 2, both under the n ≥ 5 floor (2026-10-04; falsify: re-run `pnpm sycophancy:readout --since 2026-09-29` on the same DB and get n ≥ 5 in either channel).** Direction only: all three window concessions name their check, and none is unverified. The one `challenge` answer is big-body's 2026-10-01 `accept` of miley's 2026-08-29 challenge (a month old, so it is not new challenge traffic). It conceded the core finding with a check ("verified … on PR head 8e5a331") and corrected one part of it. That is the selective shape ADR 476 asks for, but a single reply moves no rate. The two `phrase` replies are dolly's (this seat, read by itself) and izzo's; each names an act id or a commit. <!-- claim: other -->
+
+**No seat sent a `challenge` act in the window, and nick sent no critique in either arm of the channel experiment (2026-10-04; falsify: a `challenge` row in `messages` dated after 2026-09-29, or `pnpm critique:experiment --since 2026-10-01 --until 2026-10-05` reporting an answered critique).** The "send a `challenge`, not `message`" guidance line produced no challenges in five days. The five days before it had 1. So the channel ADR 476 depends on is still almost unused. The `phrase` channel also fell, 1 in 222 agent replies in the five days before the window against 2 in 424 in it, so its drop is not an effect either. <!-- claim: defect -->
+
+What this read decides: nothing moves on this sample. The falsifier (answered challenges still concede 100% and the share naming a check has not moved) is not met and not refuted: 1 of 1 conceded, with a check. The thirty-day read on 2026-10-29 (ADR 476 §3) remains the first read that can decide. The [channel experiment](#the-channel-experiment-2026-10-01--2026-10-08) needs critiques sent to it before its 2026-10-09 read means anything.
+
 ## The channel experiment (2026-10-01 → 2026-10-08)
 
 ADR 476 §Observability asks whether a critique sent as a `challenge` act gets a reply that names its check more often than the same critique typed into the harness chat. For eight days, nick's critiques of a seat's work go into one arm or the other, **by calendar day, not by choice** (choosing per critique would let the hard ones drift into one arm):
