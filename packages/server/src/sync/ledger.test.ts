@@ -272,6 +272,35 @@ withDrivers('ledger', (_o, kind) => {
       expect(await auditRows(hub.store, team.id, 'lane.claimed')).toHaveLength(0);
     });
 
+    // Lane 01M41QG1HY (2026-10-03): the first `musterd halt` staged `presence.session_ended` under
+    // the ledger tag it is declared with (ADR 371 §4), and the prefix guard above stopped every
+    // joiner at that row for good — Air 2's cursor sat at hub_seq 163905 with no line after the
+    // first. A declared ledger verb folds, whatever its prefix.
+    it('4b. `presence.session_ended` — a declared ledger verb named like a presence one — folds, it is not mistagged', async () => {
+      const team = await hubTeam();
+      const result = await foldBatch(hub.store, team.id, [
+        {
+          kind: 'ledger',
+          team: 'bravo',
+          hub_seq: 1,
+          origin_node: 'node-elsewhere',
+          origin_seq: 1,
+          event: {
+            id: 'a-halt',
+            ts: 1000,
+            actor: null,
+            action: 'presence.session_ended',
+            target: 'ada',
+            result: 'allow',
+            detail: { cause: 'halt', presences: 1, halted_by: 'nick' },
+          },
+        },
+      ]);
+      expect(result.stop).toBeNull();
+      expect(result.applied).toBe(1);
+      expect(await auditRows(hub.store, team.id, 'presence.session_ended')).toHaveLength(1);
+    });
+
     it('5. a joiner enrollment lands on the hub roster as wakeable; the hub is not the actuator', async () => {
       const enroll = await post(
         joinerBase,

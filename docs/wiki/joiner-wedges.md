@@ -58,7 +58,7 @@ three indistinguishable causes — not folded yet, deleted by the TTL, simply no
 
 The push side above is refused by the hub; the pull side stops on its own. The fold applies the
 hub's log in order and stops at the first event it cannot resolve, retrying that page every 60 s. A
-stop is right when the missing thing will arrive; it is a wedge when it never will. Three such
+stop is right when the missing thing will arrive; it is a wedge when it never will. Four such
 wedges were hit for real, each by a fresh joiner replaying the whole log:
 
 | Stop | Waits for | Why it never came | Fixed by |
@@ -66,6 +66,7 @@ wedges were hit for real, each by a fresh joiner replaying the whole log:
 | `lane_unborn` | the lane's `lane.opened` | lanes born before lane replication have no birth in the log | [ADR 381](../decisions/381-the-genesis-watermark.md), 2026-09-04 (pre-history lanes advance) |
 | `seed_unborn` | the seed's `seed.captured` | the 53 seeds captured before [ADR 399](../decisions/399-the-seed-kind-ideation-crosses-without-the-credential.md) were never stamped | [ADR 500](../decisions/500-a-seed-thread-entry-waits-for-nothing.md), 2026-10-02 (the entry is held, projected on the seed's birth) |
 | `unresolved_seat` | the seat's roster file | five seats existed on the hub but were never committed to the roster repo | committing them (hub roster commit `f96c054`, 2026-10-02); the joiner's `git pull` of the roster clears it |
+| `mistagged_ledger_event` | nothing — terminal by design | `presence.session_ended` is a declared ledger verb (ADR 371 §4) but the guard refused every `presence.*` under the ledger tag; the first `musterd halt` (ADR 501, 2026-10-03) was the first time it was staged, and Air 2 sat at hub_seq 163905 (lane 01M41QG1HY) | the guard consults `REPLICATED_LEDGER_VERBS` (2026-10-03); a joiner on the fixed build advances on its next tick, no reset |
 
 Measured on Air 2, 2026-10-02: the `unresolved_seat` stop held the cursor at 117,297 (the
 `sloane → fifty` handoff), and the `seed_unborn` stop held it at 147,018, 12,180 events behind the
