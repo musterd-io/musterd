@@ -119,6 +119,87 @@ describe('musterd seats (ADR 491)', () => {
     expect(JSON.parse(out)).toMatchObject({ members: [], roster_missing: ['acme'] });
   });
 
+  it('cmd/seats — the grouped list with the team block (figma-brief-terminal.md frame 18)', async () => {
+    const page = {
+      node: { id: 'n-hub', label: 'mac' },
+      members: [
+        {
+          id: 'm-ada',
+          team: 'acme',
+          name: 'ada',
+          kind: 'agent',
+          created_at: 1,
+          presence: 'offline',
+          presences: [],
+          residence: { node: 'n-hub', node_label: 'mac', kind: 'node' },
+          wakeable: true,
+        },
+        {
+          id: 'm-bo',
+          team: 'acme',
+          name: 'bo',
+          kind: 'agent',
+          created_at: 1,
+          presence: 'offline',
+          presences: [],
+          residence: { node: 'n-air', node_label: 'air-2', kind: 'node' },
+          wakeable: true,
+          sponsored_by: 'm-nick',
+        },
+        {
+          id: 'm-cy',
+          team: 'acme',
+          name: 'cy',
+          kind: 'agent',
+          created_at: 1,
+          presence: 'offline',
+          presences: [],
+          residence: { node: 'n-air', node_label: 'air-2', kind: 'node' },
+          wakeable: true,
+        },
+        {
+          id: 'm-nick',
+          team: 'acme',
+          name: 'nick',
+          kind: 'human',
+          created_at: 1,
+          presence: 'offline',
+          presences: [],
+          roles: [],
+        },
+      ],
+    };
+    const answering = (async () =>
+      new Response(JSON.stringify(page), { status: 200 })) as unknown as typeof fetch;
+    const nick = join(home, 'musterd', 'acme', 'proj', 'nick');
+    mkdirSync(join(nick, '.musterd'), { recursive: true });
+    writeFileSync(
+      join(nick, '.musterd', 'binding.json'),
+      JSON.stringify({
+        version: 2,
+        server: 'http://127.0.0.1:9',
+        team: 'acme',
+        claim: { mode: 'seat', name: 'nick' },
+        agent_key: 'mscr_SECRET',
+      }),
+    );
+    const { out } = await capture(() => seatsCommand(parseArgs([]), { home, fetch: answering }));
+    expect(out).toBe(
+      [
+        'seats on this machine · 2',
+        '',
+        'acme/proj',
+        '  ada   claude   ○ idle',
+        '  nick  human    ○ idle',
+        '',
+        'acme · on the team',
+        '  bo  on air-2  wake',
+        '  cy  on air-2',
+        '',
+      ].join('\n'),
+    );
+  });
+
   it('prints the grouped list', async () => {
     const { out } = await capture(() => seatsCommand(parseArgs([]), { home, fetch: offline }));
     expect(out).toBe(

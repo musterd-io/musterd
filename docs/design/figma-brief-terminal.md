@@ -105,7 +105,7 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
 
 ### Seat launcher frames (ADR 491)
 
-18. `cmd/seats` — `$ musterd seats` (no color, 80 columns):
+18. `cmd/seats` — `$ musterd seats` (no color, 80 columns; [ADR 503](../decisions/503-roster-first-launcher-catalog.md)):
     ```
     seats on this machine · 3
 
@@ -114,11 +114,20 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
       miley    claude   ● live  here · since 15:37
       gptbot   codex    ○ idle  needs repair
 
+    revive · on the team
+      bo  on air-2  wake
+      cy  on air-2
+
     2 stale · musterd init --prune-bindings --apply
     ```
     Columns: member (longest + 2), harness (9), state (8), then the tail. The tail is `here · since`
     or `on <node> · since` when live, `needs repair` in yellow when broken, otherwise when it was last
-    used.
+    used. Then, per team, `<team> · on the team` (accent): every roster member with no Workspace
+    here — member (longest + 2), where it lives (dim: `on <node label>` · `cloud · <label>` ·
+    `nowhere`), then the dim verb for what this machine can do (`wake` · `set up`; a seat that is
+    not yours to wake carries no verb). When a team's roster did not answer within the time box, one
+    dim line replaces its block: `revive: roster unavailable — this machine's folders only`. The
+    exact text is `seats.test.ts`'s `cmd/seats` case.
 19. `cmd/launch-receipt` — the line `musterd <seat>` prints to stderr when the harness exits:
     `✓ stanley · claude · 42m · exit 0 · musterd - to go back` (green `✓` on exit 0, red `✗`
     otherwise; the last segment dim).
@@ -145,13 +154,41 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
       miley is live here (claude-code) since 15:37. Open a second session in the
       same folder? (y/N)
     ```
-23. `cmd/launcher-create` — in `musterd › revive › agents`, below the seats: `on the team · not here`,
-    each agent member with `⏎ set up here` (dim), then `+ new seat` (accent). `⏎` on a member replaces
-    the footer with the set-up line, word-wrapped to the terminal width like frame 22:
+23. `cmd/launcher-team` — `musterd › revive › agents`, the members level
+    ([ADR 503](../decisions/503-roster-first-launcher-catalog.md) Decision 3; the exact no-color text
+    is `view.test.ts`'s `cmd/launcher-team` case):
+    ```
+    ● ● ○ musterd › revive › agents                            revive · 2 seats here
+
+      on this machine
+    › nick     human    ○ idle
+      stanley  claude   ○ idle  ★ last used · 2h
+      on the team
+      bo       on air-2  wake
+      cy       on air-2
+      slate    nowhere  set up
+      + new seat
+
+      ⏎ launch · ⌃R resume · ⇥ harness · ← back · esc back
+    ```
+    Every member of the team appears once. `on this machine` holds the Workspaces here (frame 20's
+    seat row, without the address column); `on the team` holds the rest, each with where it lives
+    (dim: `on <node label>` · `cloud · <label>` · `nowhere`) and a dim verb for what `⏎` does from
+    here: `set up` for a seat that lives nowhere, `wake` for a seat resident elsewhere that you
+    sponsor or may administer, no verb for one that is not yours to wake. A Workspace here whose
+    seat lives elsewhere carries the same where label and verb in its tail. `+ new seat` (accent)
+    closes the list. The footer follows the cursor: on a `wake` row,
+    `  ⏎ wake — rings its doorbell (a steer, as you) · ← back · esc back`; on a row with no verb,
+    the move ceremony, word-wrapped like frame 22 —
+    `  resident on air-2 — move it: musterd residency off + node unbind there`
+    (`resident in the cloud — …` for a cloud seat); on a `set up` row,
+    `  ⏎ set up here · ← back · esc back`. `⏎` on `set up` replaces the footer with the set-up line
+    of ADR 491:
     `  set up slate here → ~/musterd/revive/agents/slate · claude (⇥ to change) · ⏎ set up and launch · esc cancel`;
     `+ new seat` first asks `  new seat in revive/agents › ▏   ⏎ next · esc cancel`. With no human
-    Workspace of yours in the project, the section is one dim line:
-    `set up your own seat here first: musterd human <you>`.
+    Workspace of yours in the project, `+ new seat` gives way to one dim line:
+    `set up your own seat here first: musterd human <you>` — the team still shows. A seat resident
+    on another node is never offered `set up` (that would be a silent move); `· not here` is gone.
 24. `cmd/launcher-harness-step` — `⏎` or `⌃R` on an agent seat replaces the footer with the seat's
     configured harnesses, shown even when there is one; the one used last carries a dim `last used`:
     ```

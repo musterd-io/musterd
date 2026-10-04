@@ -303,3 +303,92 @@ describe('roster-first rows in the picker (ADR 503 Decision 3)', () => {
     );
   });
 });
+
+describe('frames (figma-brief-terminal.md, ADR 503 inc 4 — no color, 80 columns)', () => {
+  const entry = (member: string, over: Record<string, unknown>) => ({
+    team: 'revive',
+    member,
+    kind: 'agent' as const,
+    address: null,
+    where: 'nowhere' as const,
+    node: null,
+    where_label: null,
+    can: 'setup' as const,
+    ...over,
+  });
+  function teamLevel() {
+    let s = initialState(
+      {
+        ...FILE,
+        snapshot: {
+          taken_at: NOW,
+          seats: [seat('stanley'), seat('nick', { kind: 'human' })],
+          teams: [{ team: 'revive', here: true }],
+        },
+      },
+      '',
+      NOW,
+    );
+    s = reduce(s, {
+      type: 'live',
+      live: {},
+      status: 'ok',
+      now: NOW,
+      members: {
+        revive: [
+          entry('stanley', {
+            address: 'revive/agents/stanley',
+            where: 'here',
+            node: 'n-hub',
+            can: 'launch',
+          }),
+          entry('nick', {
+            kind: 'human',
+            address: 'revive/agents/nick',
+            where: 'here',
+            node: 'n-hub',
+            can: 'launch',
+          }),
+          entry('bo', { where: 'node', node: 'n-air', where_label: 'air-2', can: 'wake' }),
+          entry('cy', { where: 'node', node: 'n-air', where_label: 'air-2', can: 'none' }),
+          entry('slate', {}),
+        ],
+      },
+    }).state;
+    return {
+      ...s,
+      level: { kind: 'members', team: 'revive', project: 'agents' } as const,
+      stack: [{ kind: 'recent' as const }],
+    };
+  }
+
+  it('cmd/launcher-team — the members level, every member once under two headings', () => {
+    expect(renderPicker(teamLevel(), { cols: 80, rows: 24 })).toEqual([
+      header('● ● ○ musterd › revive › agents', 'revive · 2 seats here'),
+      '',
+      '  on this machine',
+      '› nick     human    ○ idle',
+      '  stanley  claude   ○ idle  ★ last used · 2h',
+      '  on the team',
+      '  bo       on air-2  wake',
+      '  cy       on air-2',
+      '  slate    nowhere  set up',
+      '  + new seat',
+      '',
+      '  ⏎ launch · ⌃R resume · ⇥ harness · ← back · esc back',
+    ]);
+  });
+
+  it('cmd/launcher-team-none — the footer on a seat resident elsewhere that is not yours to wake', () => {
+    // selectable: nick, stanley, bo, cy, slate, + new seat
+    expect(renderPicker({ ...teamLevel(), cursor: 3 }, { cols: 80, rows: 24 }).slice(-1)).toEqual([
+      '  resident on air-2 — move it: musterd residency off + node unbind there',
+    ]);
+  });
+
+  it('cmd/launcher-team-wake — the footer on a wake row', () => {
+    expect(renderPicker({ ...teamLevel(), cursor: 2 }, { cols: 80, rows: 24 }).slice(-1)).toEqual([
+      '  ⏎ wake — rings its doorbell (a steer, as you) · ← back · esc back',
+    ]);
+  });
+});
