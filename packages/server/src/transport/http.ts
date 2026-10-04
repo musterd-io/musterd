@@ -337,6 +337,7 @@ import {
   getResidency,
   listResidency,
   recordHostSeen,
+  seatResidences,
   seatWakeabilityFacts,
   wakeabilityInputs,
   markWakeSpawned,
@@ -1845,6 +1846,12 @@ async function summarize(
   // is not wakeable instead of labelling enrolment as reachability.
   const rosterNow = Date.now();
   const residency = await seatWakeabilityFacts(ctx.db, teamId, rosterNow);
+  // ADR 503 Decision 5: WHERE each enrolled seat lives, from its node binding — so a launcher on
+  // another machine can tell `wake` from `setup` without a folder scan. One read for the roster.
+  const residences = await seatResidences(ctx.db, teamId, {
+    nodeId: (await localNodeForTeam(ctx.db, teamId)).id,
+    cloud: ctx.config.mode === 'cloud',
+  });
   // Steering marks you present (ADR 155 Inc 1): the humans named as `driver` on a live agent seat.
   // Derived here at read time — no synthetic presence row for the steering human (ADR 155 decision 1).
   const liveDrivers = await listLiveDrivers(ctx.db, teamId, ctx.config.presenceTimeoutMs);
@@ -1908,6 +1915,7 @@ async function summarize(
         ...(offlineReason ? { offline_reason: offlineReason } : {}),
         reclaimable: isReclaimable,
         wakeable: residency.has(s.member.id),
+        residence: residency.has(s.member.id) ? (residences.get(s.member.id) ?? null) : null,
         resumable_at: residency.get(s.member.id)?.resumable_at ?? null,
         // ADR 357: the ADR 189 enum beside the boolean. `wakeable` stays "enrolled" for every
         // consumer that reads it today; `wakeability` is the honest answer to "can a directed act

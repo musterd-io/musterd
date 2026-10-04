@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MemberSchema, MemberSummarySchema, PresenceSchema } from './member.js';
+import { MemberSchema, MemberSummarySchema, PresenceSchema, ResidenceSchema } from './member.js';
 
 const base = {
   id: '01M',
@@ -42,5 +42,30 @@ describe('Presence.guidance_epoch (ADR 417)', () => {
   it('rejects a malformed stamp version', () => {
     expect(PresenceSchema.safeParse({ ...base, guidance_epoch: -1 }).success).toBe(false);
     expect(PresenceSchema.safeParse({ ...base, guidance_epoch: 1.5 }).success).toBe(false);
+  });
+});
+
+describe('MemberSummary.residence (ADR 503 Decision 5)', () => {
+  const summary = { ...base, presence: 'offline' };
+  const residence = {
+    node: '01M3ZEHWQD9PXPKEYMHGKK2YTM',
+    node_label: 'macbook-air-2.lan',
+    kind: 'node',
+  };
+
+  it('round-trips a node residence and a cloud one', () => {
+    expect(MemberSummarySchema.parse({ ...summary, residence }).residence).toEqual(residence);
+    const cloud = { ...residence, kind: 'cloud' };
+    expect(ResidenceSchema.parse(JSON.parse(JSON.stringify(cloud)))).toEqual(cloud);
+  });
+
+  it('is nullish — null is "enrolled, no node bound"; absent is an older daemon', () => {
+    expect(MemberSummarySchema.parse({ ...summary, residence: null }).residence).toBeNull();
+    expect(MemberSummarySchema.parse(summary).residence).toBeUndefined();
+  });
+
+  it('refuses an unknown kind and an empty node id', () => {
+    expect(ResidenceSchema.safeParse({ ...residence, kind: 'laptop' }).success).toBe(false);
+    expect(ResidenceSchema.safeParse({ ...residence, node: '' }).success).toBe(false);
   });
 });

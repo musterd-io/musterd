@@ -12,6 +12,7 @@ import type {
   WakeDerivation,
   WakeLane,
   WakeOrder,
+  Residence,
 } from '@musterd/protocol';
 import {
   WAKE_CONTEXT_BUDGET,
@@ -719,6 +720,47 @@ export async function seatWakeabilityFacts(
       host_reachable,
       workspace_readable,
       resumable_at,
+    });
+  }
+  return out;
+}
+
+/**
+ * ADR 503 Decision 5: where each ENROLLED seat lives, for the roster's `residence` field. The
+ * answer is the seat's node binding (ADR 358 `seat_nodes` → `nodes`), never `residency.host`: that
+ * column is the hostname string the enrolling actuator declared, and after a seat moves machines
+ * it goes stale (2026-10-04: five revive seats bound to Air 2 still read `host = mac.lan`). The
+ * earliest unrevoked binding wins — agents are one-node by rule, and a human's first-trusted
+ * machine is the one the launcher's `where` should name. An enrolled seat with no unrevoked binding
+ * is absent from the map; the roster renders that as `null` (enrolled, nowhere bound).
+ *
+ * `kind` is `cloud` only for a seat bound to THIS daemon's own node while it runs in cloud mode
+ * (ADR 475): a Cloud server is the one place a node row stands for hosted compute rather than a
+ * machine someone sits at. A sponsor-hosted seat on a rented box (ADR 463 — the `delta` shape today)
+ * enrolled as an ordinary joiner node and reads `node`; marking it `cloud` would need a fact the
+ * node row does not carry.
+ */
+export async function seatResidences(
+  db: Driver,
+  teamId: string,
+  local: { nodeId: string; cloud: boolean },
+): Promise<Map<string, Residence>> {
+  const rows = await db.all<{ member_id: string; node_id: string; label: string }>(
+    `SELECT r.member_id, s.node_id, n.label
+       FROM residency r
+       JOIN seat_nodes s ON s.member_id = r.member_id
+       JOIN nodes n ON n.id = s.node_id
+      WHERE r.team_id = ? AND n.revoked_at IS NULL
+      ORDER BY r.member_id, s.bound_at, s.node_id`,
+    [teamId],
+  );
+  const out = new Map<string, Residence>();
+  for (const r of rows) {
+    if (out.has(r.member_id)) continue;
+    out.set(r.member_id, {
+      node: r.node_id,
+      node_label: r.label,
+      kind: local.cloud && r.node_id === local.nodeId ? 'cloud' : 'node',
     });
   }
   return out;

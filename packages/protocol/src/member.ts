@@ -36,6 +36,21 @@ export const HaltedSchema = z.object({
 });
 export type Halted = z.infer<typeof HaltedSchema>;
 
+/**
+ * ADR 503 Decision 5: where an enrolled seat LIVES — the node its residency is bound to (ADR 358:
+ * `seat_nodes`, a `nodes.id` and that node's label, never a hostname string) — stated on the roster
+ * even when the seat has no live presence. `kind` is `cloud` when that node is a musterd Cloud
+ * server (ADR 475), `node` for any enrolled machine. Null ⇒ not enrolled, or enrolled with no node
+ * bound yet; absent ⇒ an older daemon that predates the field. A launcher derives `where` from it;
+ * nothing routes or authorizes on it.
+ */
+export const ResidenceSchema = z.object({
+  node: z.string().min(1),
+  node_label: z.string(),
+  kind: z.enum(['node', 'cloud']),
+});
+export type Residence = z.infer<typeof ResidenceSchema>;
+
 /** A durable identity in a Team. Never a session. Mirrors the `members` table (minus token_hash). */
 export const MemberSchema = z.object({
   id: z.string(),
@@ -239,5 +254,12 @@ export const MemberSummarySchema = MemberSchema.extend({
    * conflict — they answer different questions.
    */
   quiescence: QuiescenceSchema.optional(),
+  /**
+   * ADR 503 Decision 5 — see {@link ResidenceSchema}. Beside `wakeable` on purpose: that says the
+   * seat is enrolled, this says on WHICH machine, so a picker on another machine can tell `wake`
+   * from `setup` without a folder scan. Optional and additive; nullish because "enrolled, no node
+   * bound" is a real state the server reports as null, distinct from an older daemon's absence.
+   */
+  residence: ResidenceSchema.nullish(),
 });
 export type MemberSummary = z.infer<typeof MemberSummarySchema>;
