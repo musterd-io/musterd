@@ -422,7 +422,13 @@ import { redeemHandoff, stageHandoff } from '../store/signinHandoff.js';
 import { issueAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { revokeSponsoredDescendants } from '../store/sponsoredCascade.js';
 import { staleLaneWarnings } from '../store/staleness.js';
-import { memberStylePrefs, setStylePrefs, teamStyle } from '../store/style.js';
+import {
+  driverForSeat,
+  memberStylePrefs,
+  setStylePrefs,
+  styleEnvelopeFor,
+  teamStyle,
+} from '../store/style.js';
 import { searchInsights } from '../store/teamMemory.js';
 import {
   archiveTeam,
@@ -4988,6 +4994,8 @@ export async function handleHttp(
             charter: (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined,
             ...(await agentAuthorityFor(presence.id)),
             memory: await memoryEnvelope(ctx.db, targetMember.id),
+            // ADR 514 inc 3: the HTTP claim carries no driver, so the only-human rule applies.
+            style: await styleEnvelopeFor(ctx.db, team.id, null),
           });
         }
 
@@ -5026,6 +5034,8 @@ export async function handleHttp(
             charter: (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined,
             ...(await agentAuthorityFor(presence.id)),
             memory: await memoryEnvelope(ctx.db, targetMember.id),
+            // ADR 514 inc 3: the HTTP claim carries no driver, so the only-human rule applies.
+            style: await styleEnvelopeFor(ctx.db, team.id, null),
           });
         }
 
@@ -5071,6 +5081,8 @@ export async function handleHttp(
             charter: (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined,
             ...(await agentAuthorityFor(presence.id)),
             memory: await memoryEnvelope(ctx.db, targetMember.id),
+            // ADR 514 inc 3: the HTTP claim carries no driver, so the only-human rule applies.
+            style: await styleEnvelopeFor(ctx.db, team.id, null),
           });
         }
 
@@ -7759,6 +7771,11 @@ export async function handleHttp(
           deferred,
           answered,
           discharged: [...discharged, ...laneClosed, ...handoffSettled, ...readAlready],
+          // ADR 514 inc 3: the current style epoch for this seat's driver — the adapter compares it
+          // with the envelope it holds and fetches the new block on a mismatch (spec §4.4).
+          style_epoch: (
+            await styleEnvelopeFor(ctx.db, team.id, await driverForSeat(ctx.db, team.id, member.id))
+          ).epoch,
           ...(truncated ? { truncated: true } : {}),
           ...(unreadRemaining > 0 ? { unread_remaining: unreadRemaining } : {}),
         });
@@ -7883,6 +7900,21 @@ export async function handleHttp(
       // The doorbell (ADR 443 §4–5): a human's own sinks. Self only — the URL carries no name, so
       // a personal URL is readable by its owner and nobody else. Agents have no doorbell: they do
       // not choose where a human is rung (§7).
+      // ADR 514 inc 3: the block a seat reads — for the driver it names (query) or its own
+      // presence's driver. Any seat; the envelope carries no prose but the driver's own block.
+      if (method === 'GET' && rest === '/style-block') {
+        const { team, member } = await authMember(
+          ctx.db,
+          slug,
+          bearer(req),
+          actingSeat(req),
+          agentSessionLease(req),
+        );
+        const driver =
+          url.searchParams.get('driver') ?? (await driverForSeat(ctx.db, team.id, member.id));
+        return sendJson(res, 200, await styleEnvelopeFor(ctx.db, team.id, driver));
+      }
+
       // Agent style (ADR 514): a human's own dials and prose, self only — no URL member name, no
       // cross-member read (`team_members.style` carries the dials). Agents have no preferences.
       if ((method === 'GET' || method === 'PUT') && rest === '/members/me/style') {

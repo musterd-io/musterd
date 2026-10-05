@@ -111,6 +111,53 @@ withDrivers('style-http', (_o, kind) => {
       expect(byName['Ada']!.style).toBeNull();
     });
 
+    it('GET /style-block names the driver passed, their dials, and the team line (inc 3)', async () => {
+      const t = await team();
+      await put('/teams/dawn/members/me/style', { length: 'concise' }, t.dee);
+      const got = await get('/teams/dawn/style-block?driver=dee', t.ada);
+      expect(got.status).toBe(200);
+      expect(got.json.driver).toBe('dee');
+      expect(got.json.dials.length).toBe('concise');
+      expect(got.json.block).toContain(
+        'For dee (in chat, and in any act addressed to dee): pushback when it matters · plain · concise · prose.',
+      );
+      expect(got.json.epoch).toMatch(/^[0-9a-f]{8}$/);
+    });
+
+    it('no driver and two humans ⇒ team defaults, and the block says so (Focus 2)', async () => {
+      const t = await team();
+      const got = await get('/teams/dawn/style-block', t.ada);
+      expect(got.status).toBe(200);
+      expect(got.json.driver).toBeNull();
+      expect(got.json.block).toContain('No driver bound and this team has several humans');
+    });
+
+    it('no driver and ONE human ⇒ that human is the driver (Focus 2)', async () => {
+      const created = await post('/teams', {
+        slug: 'solo',
+        creator: { name: 'nick', kind: 'human' },
+      });
+      const nick = created.json.human_credential;
+      await post('/teams/solo/members', { name: 'Ada', kind: 'agent' }, nick);
+      const got = await get('/teams/solo/style-block', {
+        key: created.json.agent_key,
+        seat: 'Ada',
+      });
+      expect(got.status).toBe(200);
+      expect(got.json.driver).toBe('nick');
+      expect(got.json.block).toContain('For nick (in chat, and in any act addressed to nick)');
+    });
+
+    it('GET /inbox carries the current style_epoch for the seat, and it moves with policy (Focus 3)', async () => {
+      const t = await team();
+      const before = (await get('/teams/dawn/inbox?unread=1', t.ada)).json.style_epoch;
+      expect(before).toMatch(/^[0-9a-f]{8}$/);
+      await post('/teams/dawn/policy', { style: { defaults: { length: 'thorough' } } }, t.nick);
+      const after = (await get('/teams/dawn/inbox?unread=1', t.ada)).json.style_epoch;
+      expect(after).toMatch(/^[0-9a-f]{8}$/);
+      expect(after).not.toBe(before);
+    });
+
     it('a set writes an audit row naming the dials, never the prose', async () => {
       const t = await team();
       await put('/teams/dawn/members/me/style', { length: 'concise', prose: 'secretish' }, t.dee);

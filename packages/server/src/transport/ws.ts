@@ -29,6 +29,7 @@ import {
   haltedSentence,
 } from '../store/members.js';
 import { memoryEnvelope } from '../store/memory.js';
+import { styleEnvelopeFor } from '../store/style.js';
 import {
   attach,
   recordClaimAttestation,
@@ -920,6 +921,8 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
             charter: (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined,
             ...agentAuthority,
             memory: await memoryEnvelope(ctx.db, targetMember.id),
+            // ADR 514 inc 3: the block this seat reads, for the human steering it (the claim's driver).
+            style: await styleEnvelopeFor(ctx.db, team.id, frame.driver ?? null),
           });
           if (!conn.observer) emitPresence(ctx, conn, 'online', frame.surface);
           // ADR 092: now that this successor is occupied, arm the grace-gated reap of any same-workspace

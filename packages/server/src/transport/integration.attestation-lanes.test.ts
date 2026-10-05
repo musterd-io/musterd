@@ -309,6 +309,13 @@ withDrivers('integration · attestation-lanes', (_o, kind) => {
         (await h.server.store.get('SELECT style_epoch FROM presence WHERE id = ?', [presenceId]))!
           .style_epoch;
       expect(await stored()).toBe('a1b2c3d4');
+      // ADR 514 inc 3: the occupied frame hands the seat its style envelope. This claim named no
+      // driver and the team has one human (nick), so nick is the driver.
+      const style = occupied.style as { block: string; epoch: string; driver: string | null };
+      expect(style.epoch).toMatch(/^[0-9a-f]{8}$/);
+      expect(style.driver).toBe('nick');
+      expect(style.block).toContain('Style (epoch ');
+      expect(style.block).toContain('For nick (in chat, and in any act addressed to nick)');
 
       a.send({ type: 'heartbeat', style_epoch: 'ffffffff' });
       await new Promise((r) => setTimeout(r, 50));
