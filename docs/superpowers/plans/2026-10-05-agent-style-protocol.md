@@ -71,6 +71,8 @@ increment 3's first task. Task 7 records that in the spec.
 
 ---
 
+## Tasks
+
 ### Task 1: Reserve the ADR number and publish the branch
 
 **Files:**
