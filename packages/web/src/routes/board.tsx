@@ -100,7 +100,7 @@ function BoardPage() {
   // stored — defaults to the grid exactly when the team has unshipped goals. Because the resolve
   // runs per render over the live report, the default settles itself when the report arrives.
   const [storedView, setStoredView] = useState<string | null>(null);
-  const [chosenView, setChosenView] = useState<'grid' | 'columns' | null>(null);
+  const [chosenView, setChosenView] = useState<'grid' | 'columns' | 'table' | null>(null);
   const [railCollapsed, setRailCollapsed] = useState(false);
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -109,7 +109,7 @@ function BoardPage() {
   }, []);
   const unshippedGoals = report?.goals.filter((g) => g.status !== 'shipped').length ?? 0;
   const view = chosenView ?? resolveBoardView(storedView, unshippedGoals);
-  const pickView = (v: 'grid' | 'columns') => {
+  const pickView = (v: 'grid' | 'columns' | 'table') => {
     setChosenView(v);
     window.localStorage.setItem(VIEW_KEY, v);
   };
@@ -292,6 +292,16 @@ function BoardPage() {
               onClick={() => pickView('columns')}
             >
               columns
+            </button>
+            <button
+              className={`lc-board__view${view === 'table' ? ' lc-board__view--on' : ''}`}
+              aria-pressed={view === 'table'}
+              onClick={() => {
+                closeGoal();
+                pickView('table');
+              }}
+            >
+              table
             </button>
           </div>
         )}

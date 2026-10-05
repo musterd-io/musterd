@@ -25,6 +25,7 @@ import {
 } from './boardWrite';
 import { initial, kindOf, memberAvatar, hueOf} from './format';
 import { GoalGrid } from './GoalGridView';
+import { GoalTable } from './GoalTableView';
 
 /**
  * The work board (ADR 104): the team's lanes as a kanban, one column per lane state. Lane state *is*
@@ -91,7 +92,7 @@ export interface BoardProps {
   lanes: Lane[];
   warnings: LaneWarning[];
   /** Goals grid (the front door, goals-front-door design) ⇄ columns (by lane state). */
-  view: 'columns' | 'grid';
+  view: 'columns' | 'grid' | 'table';
   /** Declared Goals with derived status — the grid's mission cards. Empty = grid renders nothing. */
   goals: Goal[];
   /** `report.goal_flow` (ADR 295) — the daemon's per-goal flow, rendered on the goal cards. */
@@ -286,6 +287,21 @@ export function Board({
       />
     );
   };
+
+  if (view === 'table') {
+    return (
+      <div className="lc-board lc-board--grid">
+        <GoalTable
+          lanes={lanes.filter((l) => l.state !== 'abandoned')}
+          goals={goals}
+          warnings={warnings}
+          goalFlow={goalFlow}
+          roster={roster}
+          onOpenGoal={onOpenGoal ?? (() => undefined)}
+        />
+      </div>
+    );
+  }
 
   if (view === 'grid') {
     return (

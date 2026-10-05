@@ -304,8 +304,13 @@ export function buildGoalGrid(
  * value the swimlane era persisted) → grid; nothing stored → grid iff the team has unshipped goals,
  * else columns (a goal-less team's grid would be an empty stage).
  */
-export function resolveBoardView(stored: string | null, goalCount: number): 'grid' | 'columns' {
+export function resolveBoardView(
+  stored: string | null,
+  goalCount: number,
+): 'grid' | 'columns' | 'table' {
   if (stored === 'columns') return 'columns';
+  // Board readability inc 2: the goal table is a choice, never the default.
+  if (stored === 'table') return 'table';
   if (stored === 'grid' || stored === 'goals') return 'grid';
   return goalCount > 0 ? 'grid' : 'columns';
 }
