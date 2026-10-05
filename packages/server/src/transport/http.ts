@@ -133,6 +133,7 @@ import {
   isMergeShapedCommand,
   SetHoldBodySchema,
   type SyncHoldRequest,
+  SyncHaltRequestSchema,
   SyncHoldRequestSchema,
   CalendarEntryInputSchema,
 } from '@musterd/protocol';
@@ -233,6 +234,7 @@ import {
   revokeGrant,
   validateGrant,
 } from '../store/grants.js';
+import { applyHaltLocally, applyResumeLocally, mintHaltEvent } from '../store/halt.js';
 import { liftHold, listActiveHolds, listAllHolds, setHold } from '../store/holds.js';
 import {
   claimProvisions,
@@ -278,9 +280,7 @@ import {
   getMemberById,
   getMemberByName,
   haltedSentence,
-  haltMember,
   memberStandingRefusal,
-  resumeMember,
   isHeld,
   hashToken,
   leaveMember,
@@ -472,6 +472,7 @@ import {
   decideLanePatch,
   HubUnreachableError,
   isOwnershipOrStatePatch,
+  haltAtHub,
   holdAtHub,
   joinerEnrollment,
   policyAtHub,
@@ -1493,6 +1494,76 @@ async function authGovernance(
   if (resolveCapabilities(member).is_admin) return { team, member, viaFallback: false };
   if (!(await teamHasAdmin(ctx.db, team.id))) return { team, member, viaFallback: true };
   throw new MusterdError('forbidden', 'this operation requires an admin seat (is_admin)');
+}
+
+/**
+ * ADR 525: decide a halt or resume on THIS node — the hub, or a daemon with no hub. Applies the
+ * local effects (store/halt.ts), evicts this node's live sockets, and stamps the replicated event
+ * every joiner folds. `conflict` when there is nothing to change (already halted / not halted).
+ */
+async function decideHalt(
+  ctx: Ctx,
+  team: TeamRow,
+  by: string,
+  target: MemberRow,
+  verb: 'halt' | 'resume',
+  reason: string | undefined,
+  at: number,
+  sponsorScoped: boolean,
+): Promise<void> {
+  if (verb === 'resume') {
+    if (!(await applyResumeLocally(ctx.db, target, at)))
+      throw new MusterdError('conflict', `"${target.name}" is not halted`);
+    await mintHaltEvent(ctx.db, team.id, 'resume', {
+      by,
+      target: target.name,
+      at,
+      sponsor_scoped: sponsorScoped,
+      extra: {
+        halted_by: target.halted_by,
+        reason: target.halted_reason,
+        held_ms: at - (target.halted_at ?? at),
+      },
+    });
+    await pushTeam(ctx, team).catch(() => undefined);
+    return;
+  }
+  const applied = await applyHaltLocally(ctx.db, team.id, target, by, reason!, at);
+  if (!applied.changed)
+    throw new MusterdError(
+      'conflict',
+      `"${target.name}" is already ${haltedSentence(target)} — resume it first`,
+    );
+  const sentence = haltedSentence({ halted_by: by, halted_reason: reason! });
+  const conns = ctx.hub.connsForMember(target.id);
+  for (const old of conns) {
+    old.send({ type: 'error', code: 'superseded', message: sentence });
+    old.close?.();
+    ctx.hub.remove(old.connId);
+  }
+  if (conns.length > 0) {
+    await appendAudit(ctx.db, team.id, {
+      actor: null,
+      action: 'presence.session_ended',
+      target: target.name,
+      result: 'allow',
+      detail: { cause: 'halt', presences: conns.length, halted_by: by },
+    });
+    ctx.hub.broadcastTeam(team.id, { type: 'presence', member: target.name, status: 'offline' });
+  }
+  await mintHaltEvent(ctx.db, team.id, 'halt', {
+    by,
+    target: target.name,
+    reason: reason!,
+    at,
+    sponsor_scoped: sponsorScoped,
+    extra: {
+      leases_revoked: applied.leases_revoked,
+      presences_evicted: conns.length,
+      wake_leases_expired: applied.wake_leases_expired,
+    },
+  });
+  await pushTeam(ctx, team).catch(() => undefined);
 }
 
 /**
@@ -5569,6 +5640,61 @@ export async function handleHttp(
         return sendJson(res, 200, { hold });
       }
 
+      // ADR 525, hub side: a joiner forwards its human's halt or resume. Machine, then residence,
+      // then authority on the HUB's roster — the same rule ADR 501 §2 states for the local route:
+      // a human in good standing who is an admin or the agent's sponsor, and an agent target.
+      if (method === 'POST' && rest === '/sync/halt') {
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
+        if (!node) {
+          throw new MusterdError(
+            'unauthorized',
+            'the sync surface authenticates with a machine credential (msnode_) for this team',
+          );
+        }
+        await touchNode(ctx.db, node.id, Date.now());
+        const body = parseOrBadRequest(SyncHaltRequestSchema, await readJson(req));
+        const actor = await getMemberByName(ctx.db, team.id, body.actor);
+        if (!actor) throw new MusterdError('not_found', `no seat "${body.actor}" on this roster`);
+        try {
+          await assertSeatAlreadyResident(ctx.db, team.id, actor, node, 'halt');
+        } catch (err) {
+          if (err instanceof TrustRefusedError) return sendTrustRefusal(res, err);
+          throw err;
+        }
+        if (actor.kind !== 'human' || actor.observer === 1)
+          throw new MusterdError(
+            'forbidden',
+            'halt is human-only (ADR 501) — an agent never halts a seat',
+          );
+        const target = await getMemberByName(ctx.db, team.id, body.target);
+        if (!target || target.left_at !== null)
+          throw new MusterdError('not_found', `no member "${body.target}" in ${slug}`);
+        if (target.kind !== 'agent' || target.observer === 1)
+          throw new MusterdError(
+            'forbidden',
+            `a ${target.kind} seat is never halted — "${target.name}"`,
+          );
+        const admin = resolveCapabilities(actor).is_admin;
+        if (!admin && target.sponsored_by !== actor.id)
+          throw new MusterdError(
+            'forbidden',
+            'you may halt only agents you sponsor (ADR 501 / ADR 463)',
+          );
+        const at = Date.now();
+        await decideHalt(
+          ctx,
+          team,
+          actor.name,
+          target,
+          body.op,
+          body.op === 'halt' ? body.reason : undefined,
+          at,
+          !admin,
+        );
+        return sendJson(res, 200, { at });
+      }
+
       // ADR 358, hub side: a joiner forwards its resident human's trust act. The authenticated
       // node is the speaker and must already be in the seat's set — the check that stops a fresh
       // machine, or any admitted credential, from widening a seat it does not hold.
@@ -8333,116 +8459,37 @@ export async function handleHttp(
             `a ${target.kind} seat is never halted — "${target.name}"`,
           );
         const now = Date.now();
-        if (verb === 'halt') {
-          const { reason } = parseOrBadRequest(
-            z.object({ reason: z.string().trim().min(1).max(280) }),
-            await readJson(req),
-          );
-          if (!(await haltMember(ctx.db, target.id, caller.name, reason, now)))
-            throw new MusterdError(
-              'conflict',
-              `"${target.name}" is already ${haltedSentence(target)} — resume it first`,
-            );
-          const halted = {
-            ...target,
-            halted_at: now,
-            halted_by: caller.name,
-            halted_reason: reason,
-          };
-          const sentence = haltedSentence(halted);
-          const leases = await revokeMemberSessionLeases(ctx.db, target.id, now);
-          for (const leaseId of leases)
-            await appendAudit(ctx.db, team.id, {
-              actor: caller.name,
-              action: 'agent_session_lease.revoked',
-              target: target.name,
-              result: 'allow',
-              detail: { lease_id: leaseId, reason: 'halt', cause: 'halt' },
-            });
-          const conns = ctx.hub.connsForMember(target.id);
-          for (const old of conns) {
-            old.send({ type: 'error', code: 'superseded', message: sentence });
-            old.close?.();
-            ctx.hub.remove(old.connId);
+        const reason =
+          verb === 'halt'
+            ? parseOrBadRequest(
+                z.object({ reason: z.string().trim().min(1).max(280) }),
+                await readJson(req),
+              ).reason
+            : undefined;
+        // The surfaces this node is serving the seat on, read before anything evicts them.
+        const surfaces = ctx.hub.connsForMember(target.id).map((c) => c.surface ?? 'unknown');
+        // ADR 525: the standing is the hub's. A joiner forwards and learns it back by fold (which
+        // applies the same local effects and evicts here); a hub or a standalone daemon decides.
+        const enrollment = await joinerEnrollment(ctx.db, team.id, team.slug);
+        let at = now;
+        if (enrollment) {
+          try {
+            ({ at } = await haltAtHub(
+              enrollment,
+              team.slug,
+              verb === 'halt'
+                ? { op: 'halt', actor: caller.name, target: target.name, reason: reason! }
+                : { op: 'resume', actor: caller.name, target: target.name },
+            ));
+          } catch (err) {
+            if (err instanceof HubUnreachableError)
+              throw new MusterdError('hub_unreachable', err.message);
+            throw err;
           }
-          await clearMemberPresence(ctx.db, target.id);
-          await markSessionEnded(ctx.db, target.id);
-          if (conns.length > 0) {
-            await appendAudit(ctx.db, team.id, {
-              actor: null,
-              action: 'presence.session_ended',
-              target: target.name,
-              result: 'allow',
-              detail: { cause: 'halt', presences: conns.length, halted_by: caller.name },
-            });
-            ctx.hub.broadcastTeam(team.id, {
-              type: 'presence',
-              member: target.name,
-              status: 'offline',
-            });
-          }
-          // An unspawned wake lease is a host about to start the seat: expire it so the host's next
-          // poll finds nothing. (`cancelled` is not in the lease's status set; expired reads the same
-          // to every consumer — ADR 501 §Consequences note.)
-          const wakes = await ctx.db.run(
-            "UPDATE wake_leases SET status = 'expired' WHERE team_id = ? AND member_id = ? AND status = 'leased' AND spawned_at IS NULL",
-            [team.id, target.id],
-          );
-          await appendAudit(ctx.db, team.id, {
-            actor: caller.name,
-            action: 'seat.halted',
-            target: target.name,
-            result: 'allow',
-            detail: {
-              reason,
-              sponsor_scoped: sponsorScoped,
-              leases_revoked: leases.length,
-              presences_evicted: conns.length,
-              wake_leases_expired: wakes.changes,
-            },
-          });
-          await routeEnvelope(
-            ctx,
-            team,
-            caller,
-            makeEnvelope({
-              id: ulid(),
-              team: team.slug,
-              from: caller.name,
-              to: { kind: 'member', name: target.name },
-              act: 'steer',
-              body: `halted: ${reason}`,
-              meta: { halt: { by: caller.name, reason, at: now } },
-              ts: now,
-            }),
-            undefined,
-            true,
-          );
-          return sendJson(res, 200, {
-            member: target.name,
-            halted: { at: now, by: caller.name, reason },
-            effective: "at the seat's next tool boundary or musterd call",
-            presences_evicted: conns.length,
-            // Lane 01M41Q39C9: which harnesses were evicted, so the CLI can say when one of them
-            // has no PreToolUse gate (Codex, ADR 442) and the seat's local tools keep running.
-            evicted_surfaces: conns.map((c) => c.surface ?? 'unknown'),
-          });
+          await pullTeam(ctx, team).catch(() => undefined);
+        } else {
+          await decideHalt(ctx, team, caller.name, target, verb, reason, now, sponsorScoped);
         }
-        // resume
-        if (!(await resumeMember(ctx.db, target.id, now)))
-          throw new MusterdError('conflict', `"${target.name}" is not halted`);
-        await appendAudit(ctx.db, team.id, {
-          actor: caller.name,
-          action: 'seat.resumed',
-          target: target.name,
-          result: 'allow',
-          detail: {
-            halted_by: target.halted_by,
-            reason: target.halted_reason,
-            held_ms: now - (target.halted_at ?? now),
-            sponsor_scoped: sponsorScoped,
-          },
-        });
         await routeEnvelope(
           ctx,
           team,
@@ -8453,13 +8500,26 @@ export async function handleHttp(
             from: caller.name,
             to: { kind: 'member', name: target.name },
             act: 'steer',
-            body: 'resumed',
-            meta: { resume: { by: caller.name, at: now, halted_by: target.halted_by } },
+            body: verb === 'halt' ? `halted: ${reason}` : 'resumed',
+            meta:
+              verb === 'halt'
+                ? { halt: { by: caller.name, reason, at } }
+                : { resume: { by: caller.name, at, halted_by: target.halted_by } },
             ts: now,
           }),
           undefined,
           true,
         );
+        if (verb === 'halt')
+          return sendJson(res, 200, {
+            member: target.name,
+            halted: { at, by: caller.name, reason },
+            effective: "at the seat's next tool boundary or musterd call",
+            presences_evicted: surfaces.length,
+            // Lane 01M41Q39C9: which harnesses were evicted, so the CLI can say when one of them
+            // has no PreToolUse gate (Codex, ADR 442) and the seat's local tools keep running.
+            evicted_surfaces: surfaces,
+          });
         return sendJson(res, 200, {
           member: target.name,
           halted: null,

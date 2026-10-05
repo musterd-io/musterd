@@ -405,6 +405,22 @@ export const SyncPolicyRequestSchema = z.object({
 });
 export type SyncPolicyRequest = z.infer<typeof SyncPolicyRequestSchema>;
 
+/**
+ * The joiner→hub forward of a halt or resume (ADR 525). The hub re-authorizes `actor` against ITS
+ * roster — human, and an admin or the target's sponsor (ADR 501 §2) — applies it, and stamps a
+ * replicated `seat.halted` / `seat.resumed` every node folds.
+ */
+export const SyncHaltRequestSchema = z.discriminatedUnion('op', [
+  z.object({
+    op: z.literal('halt'),
+    actor: z.string().min(1),
+    target: z.string().min(1),
+    reason: z.string().trim().min(1).max(280),
+  }),
+  z.object({ op: z.literal('resume'), actor: z.string().min(1), target: z.string().min(1) }),
+]);
+export type SyncHaltRequest = z.infer<typeof SyncHaltRequestSchema>;
+
 export const SyncPullResponseSchema = z.object({
   events: z.array(SyncPullEventSchema).max(SYNC_PULL_MAX_BATCH),
   /** The hub's head, so a puller can compute lag (`hub_head − cursor`) without a second call. */

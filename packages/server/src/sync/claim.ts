@@ -14,6 +14,7 @@ import {
   type SyncLanePatchRequest,
   type Policy,
   type PolicyOverride,
+  type SyncHaltRequest,
   type SyncHoldRequest,
   type SyncPolicyRequest,
   type SyncTrustRequest,
@@ -746,6 +747,53 @@ export async function policyAtHub(
   }
   const parsed = body as { policy: Policy; stored: PolicyOverride };
   return { policy: parsed.policy, stored: parsed.stored };
+}
+
+/**
+ * Joiner side of a halt or resume (ADR 525): forward, write nothing, learn the standing back by fold.
+ * The hub's refusal relays with its code (`forbidden`, `not_found`, `conflict`); no answer is
+ * `HubUnreachableError` — a halt is not an act that may fork, or the seat would be stopped on one
+ * machine and free on the other, which is the defect this exists to close.
+ */
+export async function haltAtHub(
+  enrollment: { hub_url: string; credential: string },
+  slug: string,
+  req: SyncHaltRequest,
+): Promise<{ at: number }> {
+  let res: Response;
+  try {
+    res = await fetch(new URL(`/teams/${slug}/sync/halt`, enrollment.hub_url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${enrollment.credential}`,
+      },
+      body: JSON.stringify(req),
+      signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
+    });
+  } catch (err) {
+    log.warn({ msg: 'sync_halt_hub_unreachable', team: slug, err: String(err) });
+    throw new HubUnreachableError(enrollment.hub_url, String(err));
+  }
+  const body: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const b = body as { error?: { code?: string; message?: string } } | null;
+    const code = b?.error?.code;
+    if (
+      code === 'forbidden' ||
+      code === 'not_found' ||
+      code === 'conflict' ||
+      code === 'bound_elsewhere'
+    ) {
+      throw new MusterdError(
+        code === 'bound_elsewhere' ? 'forbidden' : code,
+        b?.error?.message ?? 'the hub refused the halt',
+      );
+    }
+    throw new Error(`the hub answered ${res.status} to the halt: ${JSON.stringify(body)}`);
+  }
+  const at = (body as { at?: unknown } | null)?.at;
+  return { at: typeof at === 'number' ? at : Date.now() };
 }
 
 /**

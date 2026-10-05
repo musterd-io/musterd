@@ -75,6 +75,11 @@ join the reference tuple; `detail.cause` is documented on the lease and presence
 
 ## Consequences
 
+- _Dated note (2026-10-05, ADR 525):_ the standing did not replicate — every effect in Decision 3
+  ran only on the daemon that took the request, so a seat halted on the hub kept working against a
+  joiner. [ADR 525](525-halt-replicates-hub-owned.md) makes the hub own it: joiners forward, the hub
+  stamps replicated `seat.halted` / `seat.resumed`, and every node applies the same local effects.
+
 - _2026-10-03, increment 1 landed (lane `01M3TAKKMMSTV14A3NVVWFCJT8`):_ two small deviations
   from Decision 1 and 3, both in the direction of the row answering alone. `halted_by` stores the
   halter's **name**, not member id — every refusal path (`memberStandingRefusal`, both claim
