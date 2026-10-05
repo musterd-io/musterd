@@ -1,90 +1,102 @@
 /**
- * ADR 476's two readouts — unverified concession rate and challenge decline rate — computed from
- * the acts already stored, so the thirty-day read is one command instead of a hand-run query.
+ * The dispute readout (ADR 505 §8) over the local daemon's database — the thirty-day read as one
+ * command instead of a hand-run query. Replaces ADR 476 §4's two channels (ADR 481 inc 2 shape).
  *
- * The definitions (phrase list, `namesCheck`, `classify`, `summarise`) live in `@musterd/protocol`
- * since ADR 481, shared with the report's `sycophancy` block; this file only loads rows from a
- * database file and prints. It keeps working offline against a copied database.
+ * The definitions (`disputeViaOf`, `tiebreakOf`, `namesCheck`, `summariseDisputes`) live in
+ * `@musterd/protocol`, shared with the report's `disputes` block; this file loads rows with the
+ * same SQL the server uses (the parity test holds the two to it) and adds the half only a file
+ * reader can: the claims ledger (`docs/claims/entries/`), where a concession later falsified ends up.
  *
- * WHY THIS EXISTS. ADR 476 §4 names two numbers and increment 1 recorded their baseline by hand
- * (`docs/wiki/agent-sycophancy.md`). A hand-run number drifts: the phrase list, the join, and the
- * "names a check" judgment get re-invented at every read. This file fixes all three in code so the
- * trend is comparable across reads even where the level is a proxy.
- *
- * WHAT IS A CONCESSION. An agent-authored reply that either
- *   - `challenge` channel: is an `accept` answering a `challenge` (meta.in_reply_to), or
- *   - `phrase` channel: carries one of the concession phrases the wiki baseline used.
- * One reply counts once; `challenge` wins when both apply. The phrase list under-counts (a
- * concession can be worded any way) — it is the same proxy every run, which is what the trend needs.
- *
- * WHAT IS UNVERIFIED. The body names no command, file path, number, or act id (ADR 476 §4, taken
- * literally — `namesCheck` below). That is a floor on "verified", not a judgment of quality: a body
- * that cites a number it never checked still passes. The falsifier for the heuristic is a hand read
- * that disagrees with it on the same rows.
- *
- * NO BARE RATES (ADR 294 §4). Every share printed here carries its numerator, denominator, and
- * detection channel. A per-seat share is not a score; seats with n < 5 print counts only.
- *
- * READ-ONLY over `~/.musterd/musterd.db` (or MUSTERD_DB). Touches no lane, no seat, no daemon.
- *
- *   node --disable-warning=ExperimentalWarning scripts/research/sycophancy-readout.ts \
- *     [--since YYYY-MM-DD] [--json]
+ *   pnpm disputes:readout [--since YYYY-MM-DD] [--json]     (alias: pnpm sycophancy:readout)
  */
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { fileURLToPath } from 'node:url';
 import {
-  classifyConcession,
+  DISPUTE_VIA_ORDER,
   fmtShare,
   namesCheck,
-  summariseSycophancy,
-  type Concession,
-  type ShareCell,
-  type SycophancyChannel,
-  type SycophancyReply,
-  type SycophancySeat,
+  summariseDisputes,
+  toDisputeRow,
+  type DisputeCell,
+  type DisputeReadout,
+  type DisputeRow,
+  type RawDisputeRow,
 } from '@musterd/protocol';
 
-export { fmtShare, namesCheck };
-export type Channel = SycophancyChannel;
-export type Reply = SycophancyReply;
-export type { Concession, ShareCell };
-export type SeatReadout = SycophancySeat;
+export { fmtShare, namesCheck, summariseDisputes };
+export type { DisputeCell, DisputeReadout, DisputeRow };
 
-export interface Readout {
-  concessions: { challenge: ShareCell; phrase: ShareCell };
-  challengeAnswers: { declines: number; answered: number };
-  bySeat: SeatReadout[];
-}
+const here = dirname(fileURLToPath(import.meta.url));
+const ENTRIES_DIR = join(here, '..', '..', 'docs', 'claims', 'entries');
 
-export const classify = classifyConcession;
+/** The acts the readout reads. Mirrors `deriveDisputes` (server) minus the team filter. */
+export const DISPUTE_ACTS = ['challenge', 'decline', 'accept', 'ask'] as const;
 
-/** The script's original shape over the protocol's block — kept so `--json` output is unchanged. */
-export function summarise(replies: Reply[]): Readout {
-  const b = summariseSycophancy(replies, 0);
-  return {
-    concessions: { challenge: b.challenge, phrase: b.phrase },
-    challengeAnswers: b.challenge_answers,
-    bySeat: b.by_seat,
-  };
-}
-
-function load(dbPath: string, sinceMs: number): Reply[] {
+function load(dbPath: string, sinceMs: number): DisputeRow[] {
   const db = new DatabaseSync(dbPath, { readOnly: true });
   try {
     const rows = db
       .prepare(
-        `SELECT r.id, mem.name AS seat, r.act, r.body, p.act AS parentAct
+        `SELECT r.id AS id, mem.name AS seat, mem.kind AS kind, r.act AS act, r.body AS body,
+                r.meta AS meta, r.in_reply_to AS inReplyTo, r.ts AS ts,
+                p.act AS parentAct, p.meta AS parentMeta
            FROM messages r
-           JOIN members mem ON mem.id = r.from_member AND mem.kind = 'agent'
+           JOIN members mem ON mem.id = r.from_member
            LEFT JOIN messages p ON p.id = r.in_reply_to
-          WHERE r.ts >= ?`,
+          WHERE r.ts >= ? AND r.act IN ('challenge','decline','accept','ask')
+          ORDER BY r.ts, r.id`,
       )
-      .all(sinceMs) as unknown as Reply[];
-    return rows;
+      .all(sinceMs) as unknown as RawDisputeRow[];
+    return rows.map(toDisputeRow);
   } finally {
     db.close();
   }
+}
+
+/** The ledger half (ADR 505 §7/§8): entries falsified in the window, and how many carry `passed_by`. */
+export interface LedgerReadout {
+  entries: number;
+  with_passed_by: number;
+  /** Mean days a falsified claim stood, over entries that date both ends. */
+  mean_latency_days: number | null;
+}
+
+export function readLedger(dir: string, sinceMs: number): LedgerReadout {
+  if (!existsSync(dir)) return { entries: 0, with_passed_by: 0, mean_latency_days: null };
+  let entries = 0;
+  let withPassedBy = 0;
+  const latencies: number[] = [];
+  for (const f of readdirSync(dir).filter((n) => n.endsWith('.md'))) {
+    const text = readFileSync(join(dir, f), 'utf8');
+    const fm = /^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? '';
+    const falsified = /^falsified_at:\s*(\d{4}-\d{2}-\d{2})/m.exec(fm)?.[1];
+    if (!falsified || Date.parse(falsified) < sinceMs) continue;
+    entries++;
+    if (/^passed_by:\s*\S/m.test(fm) && !/^passed_by:\s*\[\]/m.test(fm)) withPassedBy++;
+    const claimed = /^claimed_at:\s*(\d{4}-\d{2}-\d{2})/m.exec(fm)?.[1];
+    if (claimed) latencies.push((Date.parse(falsified) - Date.parse(claimed)) / 86_400_000);
+  }
+  return {
+    entries,
+    with_passed_by: withPassedBy,
+    mean_latency_days: latencies.length
+      ? Math.round((latencies.reduce((a, b) => a + b, 0) / latencies.length) * 10) / 10
+      : null,
+  };
+}
+
+function cellLine(label: string, c: DisputeCell): string {
+  const named = `named a check ${fmtShare(c.named_check, c.answered)}`;
+  const tb = c.tiebreak.settled
+    ? ` · tiebreaks ${String(c.tiebreak.settled)} settled, hold stood ${String(c.tiebreak.hold_stood)}`
+    : '';
+  return (
+    `    ${label.padEnd(11)} opened ${String(c.opened).padEnd(3)} answered ${String(c.answered).padEnd(3)} ` +
+    `conceded ${String(c.conceded).padEnd(3)} held ${String(c.held).padEnd(3)} ${named}${tb}`
+  );
 }
 
 function main(): void {
@@ -93,41 +105,39 @@ function main(): void {
   const since = args.includes('--since') && sinceArg ? Date.parse(sinceArg) : 0;
   if (Number.isNaN(since)) throw new Error(`--since: not a date: ${sinceArg}`);
   const dbPath = process.env.MUSTERD_DB ?? join(homedir(), '.musterd', 'musterd.db');
-  const r = summarise(load(dbPath, since));
+  const r = summariseDisputes(load(dbPath, since), since);
+  const ledger = readLedger(ENTRIES_DIR, since);
 
   if (args.includes('--json')) {
-    console.log(JSON.stringify({ db: dbPath, since: since || null, ...r }, null, 2));
+    console.log(JSON.stringify({ db: dbPath, ...r, since: since || null, ledger }, null, 2));
     return;
   }
-  const { challenge, phrase } = r.concessions;
   const cut = since ? `since ${new Date(since).toISOString().slice(0, 10)}` : 'all time';
-  console.log(`=== ADR 476 sycophancy readout (${cut}, agent-authored acts) ===`);
-  console.log('  unverified concessions (body names no command, file, commit, #PR, or act id):');
-  console.log(
-    `    channel challenge (accept → challenge) ... ${fmtShare(challenge.unverified, challenge.n)}`,
-  );
-  console.log(
-    `    channel phrase (concession wording) ...... ${fmtShare(phrase.unverified, phrase.n)}`,
-  );
-  const { declines, answered } = r.challengeAnswers;
-  console.log(
-    `  challenge decline rate (decline / answered challenges) ... ${fmtShare(declines, answered)}`,
-  );
-  if (r.bySeat.length) {
-    console.log(
-      '\n  by seat — unverified/concessions per channel; % only at n ≥ 5, never a score:',
-    );
-    for (const s of r.bySeat) {
+  console.log(`=== ADR 505 dispute readout (${cut}) ===`);
+  console.log('  disputes by source — a number is never a score; % only at n ≥ 5 (ADR 294 §4):');
+  for (const via of DISPUTE_VIA_ORDER) console.log(cellLine(via, r.by_via[via]));
+  console.log(cellLine('total', r.total));
+  if (r.by_seat.length) {
+    console.log('\n  by answering seat — answered · named a check · conceded · held:');
+    for (const s of r.by_seat) {
       console.log(
-        `    ${s.seat.padEnd(14)} challenge ${fmtShare(s.challenge.unverified, s.challenge.n).padEnd(14)}` +
-          ` phrase ${fmtShare(s.phrase.unverified, s.phrase.n)}`,
+        `    ${s.seat.padEnd(14)} ${String(s.answered).padEnd(3)} ${fmtShare(s.named_check, s.answered).padEnd(12)} ` +
+          `conceded ${String(s.conceded).padEnd(3)} held ${String(s.held)}`,
       );
     }
   }
   console.log(
-    '\n  Success (ADR 476 Eval): unverified share falls while the decline rate rises off zero.\n' +
-      '  Failure: concessions fall and challenge-channel ledger entries do not (stubborn, not selective).',
+    `\n  ledger (docs/claims/entries, falsified ${cut}): ${String(ledger.entries)} entr${ledger.entries === 1 ? 'y' : 'ies'}` +
+      `, ${String(ledger.with_passed_by)} with passed_by` +
+      (ledger.mean_latency_days !== null
+        ? `, mean stood ${String(ledger.mean_latency_days)} days`
+        : ''),
+  );
+  console.log(
+    '\n  Success (ADR 505 Eval): most answers name a check; holds rise above 0 AND tiebreaks side with the\n' +
+      '  owner in a meaningful share; a dependency dispute exists; ledger entries resume, carrying passed_by.\n' +
+      '  Failure: holds rise and tiebreaks mostly go against the owner (stubborn, not selective).',
   );
 }
 
-if (process.argv[1]?.endsWith('sycophancy-readout.ts')) main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

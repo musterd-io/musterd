@@ -19,7 +19,7 @@ import {
   AvailabilityStatusSchema,
   PROTOCOL_VERSION,
   FEATURE_EPOCH,
-  CHALLENGE_EVIDENCE_NOTICE,
+  DISPUTE_EVIDENCE_NOTICE,
   GENERALIST_CAPABILITIES,
   ClaimTargetSchema,
   DecideRequestSchema,
@@ -118,7 +118,7 @@ import {
   TRACE_SEAT_TIMELINE_MAX,
   TraceSeatTimelineResponseSchema,
   HuddleTraceSchema,
-  isUnverifiedChallengeAccept,
+  isUnverifiedDisputeAnswer,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
@@ -1967,11 +1967,23 @@ async function challengeEvidenceNotice(
   const parentId = (env.meta as { in_reply_to?: unknown } | null | undefined)?.in_reply_to;
   if (typeof parentId !== 'string') return undefined;
   if (!(await getPolicy(ctx.db, teamId)).challenge_evidence_rail) return undefined;
-  const parent = await ctx.db.get<{ act: string }>(
-    'SELECT act FROM messages WHERE team_id = ? AND id = ?',
+  const parent = await ctx.db.get<{ act: string; meta: string | null }>(
+    'SELECT act, meta FROM messages WHERE team_id = ? AND id = ?',
     [teamId, parentId],
   );
-  if (!isUnverifiedChallengeAccept(env.act, parent?.act ?? null, env.body)) return undefined;
+  // ADR 505 §8: the rail covers any dispute the daemon stamped (a review rejection, a dependency
+  // challenge), not only a bare `challenge` act.
+  let parentMeta: Record<string, unknown> | null = null;
+  if (parent?.meta) {
+    try {
+      const v = JSON.parse(parent.meta) as unknown;
+      parentMeta = v && typeof v === 'object' ? (v as Record<string, unknown>) : null;
+    } catch {
+      parentMeta = null;
+    }
+  }
+  if (!isUnverifiedDisputeAnswer(env.act, parent?.act ?? null, parentMeta, env.body))
+    return undefined;
   const told = await ctx.db.get<{ n: number }>(
     "SELECT COUNT(*) AS n FROM audit WHERE team_id = ? AND action = 'challenge.accept_unverified' AND actor = ? AND target = ?",
     [teamId, seat, parentId],
@@ -1984,7 +1996,7 @@ async function challengeEvidenceNotice(
     result: 'allow',
     detail: { act: env.id },
   });
-  return CHALLENGE_EVIDENCE_NOTICE;
+  return DISPUTE_EVIDENCE_NOTICE;
 }
 
 export async function handleHttp(

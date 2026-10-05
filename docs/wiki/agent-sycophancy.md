@@ -107,6 +107,10 @@ The five-day read's real finding was the denominator. Over the 30 days to 2026-1
 
 ADR 505 replaces the source-split channels on this page with one lifecycle — claim → dispute (`via` review | challenge | dependency) → conceded-with-check | held-with-evidence → tiebreak on hold — and a hard-gated ledger with traceback for claims that fall later. Its baseline, eval and falsifiers are in the ADR; the 2026-10-29 read uses its readout (increment 3, lane 01M44BV9PM6W7ZPWKV2MM5DXV8), not the two channels above.
 
+## The readout now (ADR 505 increment 3, 2026-10-05)
+
+`pnpm disputes:readout [--since YYYY-MM-DD] [--json]` (`sycophancy:readout` is an alias) replaces the two channels above. It reads the acts a dispute is made of — `challenge`, `decline`, `accept`, `ask` — classifies each by the daemon's `meta.dispute` stamp or, for acts before 2026-10-05, by the same rule the daemon stamps with, and prints one cell per `via` (review, challenge, dependency) and in total: opened, answered, conceded, held, named a check, tiebreaks settled and hold stood. The same numbers are the report's `disputes` block (`musterd report --altitude team`); a parity test holds the two to one SQL. The script alone adds the ledger half: entries falsified in the window, how many carry `passed_by`, mean days stood. The `phrase` proxy is gone, by ADR 505 §8. Numbers from the two sections above are not comparable with these: the baseline for the 2026-10-29 read is ADR 505's Observability section, not this page's "first read".
+
 ## What the literature says (read 2026-09-29)
 
 - **Flip rates are large.** Across 16 models and seven pressure types, 40–75% of initially correct answers flip under at least one form of social pressure; a bare "are you sure?" flips about 46% ([SYCON Bench](https://www.emergentmind.com/topics/sycon-bench); [multi-turn sycophancy](https://aclanthology.org/2025.findings-emnlp.121.pdf)).

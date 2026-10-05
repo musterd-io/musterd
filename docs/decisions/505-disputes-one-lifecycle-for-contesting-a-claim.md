@@ -221,6 +221,17 @@ a change that raises holds without the tiebreak siding with them.
   01M44BVFV9VWV3J0987ZW00D8A). "Do not build on it quietly" is the contrast frame `brand.md` §4
   bans; `BUILD_ON_CHECK`, the handoff ack and the guidance line (v43) now end on the instruction —
   dispute it with `challenge` — and nothing else.
+- **2026-10-05 — increment 3 landed** (dolly; lane 01M44BV9PM6W7ZPWKV2MM5DXV8). §8's readout
+  replaces the `challenge`/`phrase` channels in `packages/protocol/src/sycophancy.ts` (file kept,
+  contents are now the dispute readout), the report block (`Report.disputes`, `deriveDisputes`;
+  `Report.sycophancy` is gone — it was optional), `musterd report --altitude team`, and the research
+  script (`pnpm disputes:readout`, `sycophancy:readout` kept as an alias). One cell per `via` and
+  in total: opened, answered, conceded, held, named-a-check, tiebreaks settled / hold stood; by
+  answering seat; a percentage only at n ≥ 5. Acts that predate the inc 2 stamp are classified by
+  the same rule the daemon stamps with (`disputeViaOf`), so a read across 2026-10-05 counts one
+  thing. The ledger half of §8 (entries, `passed_by`, days stood) is read from files, so only the
+  script reports it. ADR 484's notice widens to any stamped dispute. ADR 476's report-section
+  follow-up (lane 01M3QRD7TF) is absorbed here.
 - **Increments, each a lane under Goal `disputes`:**
 
   | increment | lane | what lands | protocol? |
