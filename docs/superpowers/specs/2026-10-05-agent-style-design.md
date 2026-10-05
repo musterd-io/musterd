@@ -177,9 +177,9 @@ member, it is that human. Otherwise the block carries only the floor and team de
 Writes go through `StylePrefsSchema` / `PolicyOverrideSchema` at the boundary. Prose over five
 lines is refused with the count. The admin path rides `POST /policy`, so hub forwarding and the
 `policy.change` audit row come with it. The self path is a new self-only route on the member
-(`authMember`, target must equal the caller), the doorbell-prefs precedent; it writes locally, then
-forwards to the hub; a failed forward leaves the local block in force and the roster shows
-`pending sync`.
+(`authMember`, target must equal the caller), the doorbell-prefs precedent; it writes locally. The
+hub forward — so a dial set on one machine reaches seats on another — is lane
+`01M46RWP23N253H9M0HDWPYJNB` (deferred at increment 2; ADR 514 Consequences, 2026-10-05).
 
 ### 4.6 Failure modes
 

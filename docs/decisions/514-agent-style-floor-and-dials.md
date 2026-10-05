@@ -58,6 +58,15 @@ without adding a second home for a fact the skill already states.
 
 ## Consequences
 
+- **2026-10-05 — increment 2 landed** (lane `01M46MQPQ3JC6EWMY7WV6SY8AA`): ladder v86
+  (`members.style_prefs`, `presence.style_epoch`); the additive wire fields Decision 4 announced —
+  `style_epoch` on the claim frame, the heartbeat and the Presence, `style` (resolved dials) on
+  roster rows; `GET`/`PUT /members/me/style` (self-only, agents 403, 422 on the cap with the count,
+  audited `style.prefs_set` with dial keys and prose line count); `reattestStyleEpoch` on the
+  heartbeat, folded from peers like `guidance_epoch`. **The spec's hub forward for prefs is not
+  built:** `style_prefs` is daemon-local, the `doorbell_prefs` precedent, and lane
+  `01M46RWP23N253H9M0HDWPYJNB` carries the forward — trigger: a human on a second machine sets a
+  dial and a seat elsewhere keeps the old block.
 - Protocol gains `style.ts` (schemas, `resolveStyle`, `styleEpoch`, `renderStyleBlock`,
   `describeDials`, `styleProseProblem`) and `PolicySchema.style`. Additive optional policy key: no
   protocol-version bump (the ADR 044 precedent for additive optional fields).

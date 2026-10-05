@@ -195,7 +195,6 @@ import {
   memberDoorbellPrefs,
   setDoorbellPrefs,
 } from '../store/doorbell.js';
-import { memberStylePrefs, setStylePrefs, teamStyle } from '../store/style.js';
 import { buildDreamPacket, settleProvenance } from '../store/dream.js';
 import { latestFootprint } from '../store/footprint.js';
 import { listGoals } from '../store/goals.js';
@@ -404,6 +403,7 @@ import { redeemHandoff, stageHandoff } from '../store/signinHandoff.js';
 import { issueAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { revokeSponsoredDescendants } from '../store/sponsoredCascade.js';
 import { staleLaneWarnings } from '../store/staleness.js';
+import { memberStylePrefs, setStylePrefs, teamStyle } from '../store/style.js';
 import { searchInsights } from '../store/teamMemory.js';
 import {
   archiveTeam,
