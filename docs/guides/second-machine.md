@@ -265,6 +265,10 @@ Read on 2026-10-03, five seats on Air 2 (ryder, sloane, gptbot, lazara, dreamy):
 - **A seat is reachable only while the joiner is awake** — see "Stay awake".
 - **One hub.** The joiner cannot mint invites (ADR 376 §2). Promoting the joiner to hub is its
   own ceremony and ADR (ADR 376 §4).
+- **Files do not cross on their own.** The sync surface carries the team's record, and git carries
+  code; a dataset or artifact one machine holds and a seat on the other needs goes by the
+  **courier** role (`.agents/skills/courier/SKILL.md` — `team_members {role:'courier'}` finds the
+  holder; Taildrop is the first route). Not a gist, not a PR.
 
 ## Findings
 
