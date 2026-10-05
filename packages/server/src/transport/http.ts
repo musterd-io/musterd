@@ -196,6 +196,7 @@ import {
   listCalendarSince,
   replaceCalendarEntry,
 } from '../store/calendar.js';
+import { checkClaims } from '../store/claimCheck.js';
 import { applyCursorAdvance, getCursor } from '../store/cursors.js';
 import { deferralFold } from '../store/deferralFold.js';
 import {
@@ -8009,7 +8010,7 @@ export async function handleHttp(
       // the ADR 093 §3 delivery shape for surfaces that render the one-line pointer without occupying
       // (`musterd status`). The bare GET stays the explicit full-body read.
       if (method === 'GET' && rest === '/memory') {
-        const { member } = await authMember(
+        const { team, member } = await authMember(
           ctx.db,
           slug,
           bearer(req),
@@ -8024,7 +8025,11 @@ export async function handleHttp(
         }
         const mem = await getMemory(ctx.db, member.id);
         if (!mem) throw new MusterdError('not_found', 'no memory saved for this seat');
-        return sendJson(res, 200, mem);
+        // ADR 522: the note's claims, checked against the Team as it is now — a lane it carries that
+        // has since closed, a freeze no hold backs. Computed here so every reader gets the same
+        // verdict without one of its own tool calls.
+        const checks = await checkClaims(ctx.db, team, `${mem.headline}\n${mem.body}`);
+        return sendJson(res, 200, { ...mem, checks });
       }
 
       if (method === 'DELETE' && rest === '/memory') {

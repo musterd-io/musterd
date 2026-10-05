@@ -33,6 +33,7 @@ import {
   type AcceptedHandoffWire,
   type BuiltOn,
   type DisputeAnswerWire,
+  type ClaimCheck,
 } from '@musterd/protocol';
 import { WebSocket } from 'ws';
 import { clearGrantFromBinding } from './binding.js';
@@ -380,7 +381,7 @@ export class MusterdClient {
     path: string,
     body?: unknown,
     opts: { headers?: Record<string, string>; timeoutMs?: number } = {},
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     /** Internal: set on the single re-join + replay that follows a refused session lease. */
     afterLeaseRefusal = false,
   ): Promise<any> {
@@ -882,7 +883,13 @@ export class MusterdClient {
     };
   }
 
-  readMemory(): Promise<{ headline: string; body: string; saved_at: number }> {
+  readMemory(): Promise<{
+    headline: string;
+    body: string;
+    saved_at: number;
+    /** ADR 522: absent from an older daemon. */
+    checks?: ClaimCheck[];
+  }> {
     return this.request('GET', `/teams/${this.config.team}/memory`);
   }
 

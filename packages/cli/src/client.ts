@@ -120,6 +120,7 @@ import {
   HoldListSchema,
   HoldResponseSchema,
   type SetHoldBody,
+  type ClaimCheck,
 } from '@musterd/protocol';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
@@ -888,7 +889,9 @@ export class HttpClient {
   saveMemory(slug: string, input: { headline: string; body?: string }): Promise<void> {
     return this.request('PUT', `/teams/${slug}/memory`, input);
   }
-  getMemory(slug: string): Promise<{ headline: string; body: string; saved_at: number }> {
+  getMemory(
+    slug: string,
+  ): Promise<{ headline: string; body: string; saved_at: number; checks?: ClaimCheck[] }> {
     return this.request('GET', `/teams/${slug}/memory`);
   }
   /** Envelope only (headline + age + size, never the body) — for the status/claim one-liner. */

@@ -1,6 +1,7 @@
 import type { WakeContextContext, WakeContextFetch, WakeContextOpenItem } from '@musterd/protocol';
-import { WAKE_CONTEXT_BUDGET as B } from '@musterd/protocol';
+import { CLAIM_CHECKS_MAX, WAKE_CONTEXT_BUDGET as B } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
+import { checkClaims } from './claimCheck.js';
 import { getLane } from './lanes.js';
 import { getMemberById } from './members.js';
 import { getMemory } from './memory.js';
@@ -75,6 +76,9 @@ export async function deriveContext(
 
   // 1. memory — the seat's own note, whole when it fits (≤ 3,072 bytes)
   const memory = await getMemory(db, recipient.id);
+  // ADR 522: what gets checked — the WHOLE memory and handoff bodies, before the budget cuts them.
+  const toCheck: { source: 'memory' | 'handoff'; source_id?: string; text: string }[] = [];
+  if (memory) toCheck.push({ source: 'memory', text: `${memory.headline}\n${memory.body}` });
   if (memory) {
     const cut = truncateBytes(memory.body, B.memory);
     context.memory = { body: cut.text, truncated: cut.truncated };
@@ -104,6 +108,8 @@ export async function deriveContext(
           };
         }),
     );
+    for (const r of rows.slice(0, B.thread_acts))
+      if (r.act === 'handoff') toCheck.push({ source: 'handoff', source_id: r.id, text: r.body });
     let omitted = rows.length - acts.length;
     // Drop the OLDEST first — the newest act is why the seat is awake.
     while (acts.length > 1 && bytesOf({ acts, omitted }) > B.thread) {
@@ -196,6 +202,21 @@ export async function deriveContext(
   context.open = open;
   if (open.length < total) fetch.push('open_items');
   bytes.open = bytesOf(context.open);
+
+  // ADR 522 — the stored claims a woken seat is about to act on, checked against the Team now.
+  // Added before the cap so it is counted; at most CLAIM_CHECKS_MAX lines across every source.
+  const checks: NonNullable<WakeContextContext['checks']> = [];
+  for (const src of toCheck) {
+    for (const c of await checkClaims(db, team, src.text, now)) {
+      if (checks.length >= CLAIM_CHECKS_MAX || checks.some((x) => x.ref === c.ref)) continue;
+      checks.push({
+        source: src.source,
+        ...(src.source_id ? { source_id: src.source_id } : {}),
+        ...c,
+      });
+    }
+  }
+  if (checks.length > 0) context.checks = checks;
 
   // 5. the whole-block cap — the fill order above makes the ledger the first casualty, the lane next
   let used = bytesOf(context);

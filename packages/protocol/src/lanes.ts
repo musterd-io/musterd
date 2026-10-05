@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ClaimCheckSchema } from './claimCheck.js';
 import { GoalSchema } from './goals.js';
 import { HoldSchema } from './holds.js';
 import {
@@ -937,6 +938,8 @@ export const NextBriefSchema = z.object({
       body: z.string(),
       ts: z.number().int(),
       goal_id: z.string().nullable(),
+      /** ADR 522: the handoff's claims checked against the Team now. Absent when there are none. */
+      checks: z.array(ClaimCheckSchema).optional(),
     })
     .nullable(),
   /**

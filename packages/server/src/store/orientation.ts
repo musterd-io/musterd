@@ -12,6 +12,7 @@ import {
   ReviewPromiseReferenceSchema,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
+import { checkClaims } from './claimCheck.js';
 import { handoffNamedLaneOutOfPlay, handoffNamesNoLane } from './delivery.js';
 import { listGoals, nextGoal } from './goals.js';
 import { listActiveHolds } from './holds.js';
@@ -342,6 +343,9 @@ export async function deriveNext(
     }
   }
 
+  // ADR 522: the handoff's claims checked against the Team now — the brief quotes a handoff for
+  // as long as it is the latest, so its "carry on with X" can outlive X.
+  const whyChecks = row ? await checkClaims(db, { id: teamId }, row.body) : [];
   const why = row
     ? {
         from: row.from_name,
@@ -351,6 +355,7 @@ export async function deriveNext(
           const g = parseMeta(row.meta)['goal_id'];
           return typeof g === 'string' ? g : null;
         })(),
+        ...(whyChecks.length ? { checks: whyChecks } : {}),
       }
     : null;
 

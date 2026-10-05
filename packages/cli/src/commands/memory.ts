@@ -1,4 +1,4 @@
-import type { MemoryEnvelope } from '@musterd/protocol';
+import { type ClaimCheck, claimCheckLines, type MemoryEnvelope } from '@musterd/protocol';
 import { flagStr, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
@@ -59,7 +59,7 @@ export async function memoryCommand(parsed: Parsed): Promise<number> {
   }
 
   // The explicit body read. A seat with nothing saved is a normal state, not an error exit.
-  let mem: { headline: string; body: string; saved_at: number };
+  let mem: { headline: string; body: string; saved_at: number; checks?: ClaimCheck[] };
   try {
     mem = await http.getMemory(team);
   } catch (err) {
@@ -80,6 +80,9 @@ export async function memoryCommand(parsed: Parsed): Promise<number> {
   process.stdout.write(
     `${theme.accent('memory')} ${theme.meta(`(saved ${ago(Date.now() - mem.saved_at)} ago)`)} — ${mem.headline}\n`,
   );
+  // ADR 522: the note's claims checked against the Team now — above the body, read first.
+  for (const line of claimCheckLines(mem.checks ?? []))
+    process.stdout.write(theme.warn(line) + '\n');
   if (mem.body) process.stdout.write(mem.body + (mem.body.endsWith('\n') ? '' : '\n'));
   return 0;
 }

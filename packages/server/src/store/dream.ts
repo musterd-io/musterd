@@ -1,5 +1,6 @@
-import { nightKey, type Provenance } from '@musterd/protocol';
+import { type ClaimCheck, nightKey, type Provenance } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
+import { checkClaims } from './claimCheck.js';
 import { getMemberById } from './members.js';
 import { getMemory } from './memory.js';
 import { parseWorkingHours, type MemberRow, type MessageRow } from './rows.js';
@@ -75,6 +76,9 @@ export interface DreamInsight {
    *  miley and ghost dreamed two minutes apart across UTC midnight and dated it a day apart, so one
    *  said "counts for promotion" and the other did not (lane 01M454DC0H). */
   night: string | null;
+  /** ADR 522: the insight's claims, checked against the Team now — a dream promoting a "freeze"
+   *  insight sees that no hold backs it, and an "open" lane that has since landed. Omitted if none. */
+  checks?: ClaimCheck[];
 }
 
 export interface DreamPacket {
@@ -84,7 +88,8 @@ export interface DreamPacket {
   until: number;
   /** The night this dream runs in, by the same key as each insight's `night`. */
   night: string | null;
-  memory?: { body: string; truncated: boolean };
+  /** `saved_at` and `checks` (ADR 522): how old the note is, and what it says checked against now. */
+  memory?: { body: string; truncated: boolean; saved_at: number; checks?: ClaimCheck[] };
   lanes: DreamLane[];
   /** Insights the team saved in the window — what lane 4's digest reads as "what was learned". */
   learned: DreamInsight[];
@@ -179,7 +184,13 @@ export async function buildDreamPacket(
   const memory = await getMemory(db, seat.id);
   if (memory) {
     const cut = truncateBytes(memory.body, B.memory);
-    packet.memory = { body: cut.text, truncated: cut.truncated };
+    const checks = await checkClaims(db, team, `${memory.headline}\n${memory.body}`, until);
+    packet.memory = {
+      body: cut.text,
+      truncated: cut.truncated,
+      saved_at: memory.saved_at,
+      ...(checks.length ? { checks } : {}),
+    };
     if (cut.truncated) truncated = true;
   }
 
@@ -227,6 +238,7 @@ export async function buildDreamPacket(
         const meta = JSON.parse(r.meta ?? '{}') as { headline?: string; tags?: string[] };
         const cut = truncateChars(r.body, B.insight_body_chars);
         if (cut.truncated) truncated = true;
+        const checks = await checkClaims(db, team, `${meta.headline ?? ''}\n${r.body}`, until);
         return {
           id: r.id,
           from: await nameOf(r.from_member),
@@ -236,6 +248,7 @@ export async function buildDreamPacket(
           ts: r.ts,
           truncated: cut.truncated,
           night: nightOf(r.ts),
+          ...(checks.length ? { checks } : {}),
         };
       }),
   );
