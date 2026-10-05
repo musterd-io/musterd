@@ -89,7 +89,7 @@ style: {
     length:    'concise' | 'normal' | 'thorough',
     format:    'prose' | 'structured'
   },
-  prose: string   // team-wide addendum, ≤ 5 lines, optional
+  prose: string   // team-wide addendum, ≤ 5 lines and ≤ 800 characters, optional
 }
 ```
 
@@ -134,10 +134,11 @@ Floor (team): assess before you agree; no praise before a check; disagree once, 
   its evidence weighs.
 For nick (in chat, and in any act addressed to nick): pushback when it matters · direct · concise · prose.
 nick adds: "Lead with the result. Tell me when I'm wrong, once, then do it my way."
-Everyone else, @team and the record: team defaults (plain · normal · prose).
+Everyone else, @team and the record: team defaults (pushback when it matters · plain · normal · prose).
 ```
 
-A floor boolean an admin turned off is omitted from the Floor line. Team prose, when set, prints
+A floor boolean an admin turned off is omitted from the Floor line. Prose prints as one
+JSON-quoted line (line breaks and quotes escaped), so a multi-line prose can never shed its label. Team prose, when set, prints
 after the Floor line as `The team adds: …`. The renderer prints the floor first and labels the
 human's prose as theirs, so a seat reading "just agree with me" in prose also reads the floor above
 it and knows which wins. No prose filter.

@@ -17,27 +17,33 @@ export const STYLE_FORMAT = ['prose', 'structured'] as const;
 
 /** The prose cap, team and human alike (spec §4.1). Inclusive: five lines pass, six are refused. */
 export const STYLE_PROSE_MAX_LINES = 5;
+/** The character cap that makes the line cap a size bound: five lines of ~160 characters. */
+export const STYLE_PROSE_MAX_CHARS = 800;
 
-/** Lines in a prose addendum. A trailing newline is not a line; CRLF counts like LF. */
+/** Every line break a model would read as one: CRLF, LF, lone CR, VT, FF, NEL, LS, PS. */
+const LINE_BREAK = /\r\n|[\n\r\v\f\u0085\u2028\u2029]/g;
+
+/** Lines in a prose addendum. A trailing line break is not a line; every break form counts alike. */
 export function styleProseLineCount(text: string): number {
   if (text.length === 0) return 0;
-  return text.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n').length;
+  return text.replace(LINE_BREAK, '\n').replace(/\n$/, '').split('\n').length;
 }
 
 /** Null when the prose fits; otherwise the refusal a surface prints, naming the count and the cap. */
 export function styleProseProblem(text: string): string | null {
-  const n = styleProseLineCount(text);
-  return n > STYLE_PROSE_MAX_LINES
-    ? `prose is ${n} lines; the cap is ${STYLE_PROSE_MAX_LINES}`
-    : null;
+  const lines = styleProseLineCount(text);
+  if (lines > STYLE_PROSE_MAX_LINES)
+    return `prose is ${lines} lines; the cap is ${STYLE_PROSE_MAX_LINES}`;
+  if (text.length > STYLE_PROSE_MAX_CHARS)
+    return `prose is ${text.length} characters; the cap is ${STYLE_PROSE_MAX_CHARS}`;
+  return null;
 }
 
-const ProseSchema = z
-  .string()
-  .max(2000)
-  .refine((s) => styleProseProblem(s) === null, {
-    message: `prose is at most ${STYLE_PROSE_MAX_LINES} lines`,
-  });
+// superRefine, so the zod issue — what `parseOrBadRequest` hands the caller — carries the count.
+const ProseSchema = z.string().superRefine((s, ctx) => {
+  const problem = styleProseProblem(s);
+  if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+});
 
 /** The team floor: stance rules a preference cannot lower. An admin may turn one off (audited). */
 export const StyleFloorSchema = z.object({
@@ -89,23 +95,28 @@ export type StylePrefs = z.infer<typeof StylePrefsSchema>;
 export interface ResolvedStyle {
   floor: StyleFloor;
   dials: StyleDials;
+  /** The team defaults as resolved — what `@team` and the record get, printed in every block. */
+  team_dials: StyleDials;
   team_prose: string;
   human_prose: string;
-  /** 8 hex chars of sha256 over the other four fields — the seat attests this (ADR 417 shape). */
+  /** 8 hex chars of sha256 over the other five fields — the seat attests this (ADR 417 shape). */
   epoch: string;
 }
 
-/** The epoch of a resolved style: stable while nothing in it changes, different when anything does. */
+const dialTuple = (d: StyleDials) => [d.pushback, d.bluntness, d.length, d.format];
+
+/** The epoch of a resolved style: stable while nothing in it changes, different when anything does.
+ *  Hashes the whole block's content — the team defaults too, since the block prints them — so an
+ *  admin moving a default a human has overridden still re-sends the block. Not the addressee's name:
+ *  the epoch is the style, the driver line is who it is for. */
 export function styleEpoch(parts: Omit<ResolvedStyle, 'epoch'>): string {
   const canonical = JSON.stringify([
     parts.floor.assess_before_agreeing,
     parts.floor.disagree_once_then_commit,
     parts.floor.concession_names_check,
     parts.floor.human_critique_weighed_as_peer,
-    parts.dials.pushback,
-    parts.dials.bluntness,
-    parts.dials.length,
-    parts.dials.format,
+    ...dialTuple(parts.dials),
+    ...dialTuple(parts.team_dials),
     parts.team_prose,
     parts.human_prose,
   ]);
@@ -126,6 +137,7 @@ export function resolveStyle(policy: StylePolicy, prefs?: StylePrefs): ResolvedS
       length: prefs?.length ?? policy.defaults.length,
       format: prefs?.format ?? policy.defaults.format,
     },
+    team_dials: policy.defaults,
     team_prose: policy.prose,
     human_prose: prefs?.prose ?? '',
   };
@@ -175,13 +187,16 @@ export function renderStyleBlock(input: StyleBlockInput): string {
   const lines: string[] = [`Style (epoch ${epoch}) — how you talk here.`];
   const floor = floorLine(team.floor);
   if (floor) lines.push(floor);
-  if (team.team_prose) lines.push(`The team adds: "${team.team_prose}"`);
+  // Prose prints as a JSON string: one line, quotes and line breaks escaped, so a five-line prose
+  // or one carrying a `"` can never shed its label and read as a floor line.
+  if (team.team_prose) lines.push(`The team adds: ${JSON.stringify(team.team_prose)}`);
   const teamDials = describeDials(team.dials);
   if (driver) {
     lines.push(
       `For ${driver.name} (in chat, and in any act addressed to ${driver.name}): ${describeDials(driver.style.dials)}.`,
     );
-    if (driver.style.human_prose) lines.push(`${driver.name} adds: "${driver.style.human_prose}"`);
+    if (driver.style.human_prose)
+      lines.push(`${driver.name} adds: ${JSON.stringify(driver.style.human_prose)}`);
     lines.push(`Everyone else, @team and the record: team defaults (${teamDials}).`);
   } else {
     const why =

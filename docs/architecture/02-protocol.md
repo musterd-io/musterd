@@ -269,10 +269,12 @@ stance booleans (every one on by default; an admin may turn one off), four **def
 (`pushback` every-time | when-it-matters | only-on-risk, `bluntness` direct | plain | soft, `length`
 concise | normal | thorough, `format` prose | structured) and a team **prose** addendum. A human's
 own `StylePrefs` (`members.style_prefs`, increment 2) name the dials they set and their own prose;
-both proses are capped at five lines (`STYLE_PROSE_MAX_LINES`, `styleProseProblem`).
+both proses are capped at five lines and 800 characters (`STYLE_PROSE_MAX_LINES`,
+`STYLE_PROSE_MAX_CHARS`, `styleProseProblem`; every line-break form counts).
 
 `resolveStyle(policy, prefs?)` is pure: the floor from policy only, each dial from prefs else the
-team default, team prose then human prose, and an `epoch` (8 hex of sha256) the seat attests.
+team default, the team defaults themselves (`team_dials`), team prose then human prose, and an
+`epoch` (8 hex of sha256 over all of it) the seat attests. Prose prints JSON-quoted on one line.
 `renderStyleBlock({ team, driver?, no_driver? })` prints the block a seat reads on `team_join`
 (increment 3): floor first, team prose, the driver's line and prose labelled with their name, then
 what `@team` and the record get; with no driver it says so and names `musterd agent --driver`.

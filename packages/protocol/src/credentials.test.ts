@@ -26,6 +26,11 @@ describe('PolicySchema.style (ADR 514)', () => {
       human_critique_weighed_as_peer: true,
     });
   });
+  it('sparsifyPolicy keeps a sparse floor override sparse (review I5)', () => {
+    expect(sparsifyPolicy({ style: { floor: { assess_before_agreeing: false } } })).toEqual({
+      style: { floor: { assess_before_agreeing: false } },
+    });
+  });
   it('sparsifyPolicy drops a style block that equals the default and keeps one that differs', () => {
     expect(sparsifyPolicy({ style: StylePolicySchema.parse({}) })).toEqual({});
     expect(

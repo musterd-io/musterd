@@ -42,10 +42,13 @@ without adding a second home for a fact the skill already states.
    policy alone; prefs supply dials and prose. The shipped defaults are every floor boolean on and
    `when-it-matters · plain · normal · prose`. An admin may turn a floor boolean off; the audit row
    says who.
-3. **Prose is capped at five lines**, team and human alike, inclusive; a longer prose is refused
-   with the count (`styleProseProblem`).
-4. **The resolved style has an epoch**: eight hex characters of sha256 over the floor, the dials and
-   both proses. A seat attests the epoch it is running (increments 2–3), the ADR 417 shape.
+3. **Prose is capped at five lines and 800 characters**, team and human alike, inclusive; a longer
+   prose is refused with the count (`styleProseProblem`, surfaced through the schema issue). Every
+   line-break form counts as a line (CRLF, LF, lone CR, VT, FF, NEL, LS, PS), and the block prints
+   prose as one JSON-quoted line, so prose can never shed its label.
+4. **The resolved style has an epoch**: eight hex characters of sha256 over the floor, the human's
+   dials, the team's default dials and both proses — everything the block prints, so an admin moving
+   a default a human has overridden still re-sends the block. The addressee's name is not in it. A seat attests the epoch it is running (increments 2–3), the ADR 417 shape.
 5. **One renderer, in protocol.** `renderStyleBlock` prints the block a seat reads: floor first,
    team prose, the driver's dials and prose labelled with their name, then what `@team` and the
    record get. With no driver it says so and names the fix. Where the block is delivered is
