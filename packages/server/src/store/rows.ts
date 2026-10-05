@@ -162,10 +162,15 @@ export function resolveAccountStatus(row: MemberRow): AccountStatus {
 }
 
 /** Resolve a seat's effective capabilities (ADR 070): the reconcile-projected JSON, or the generalist
- *  default for a db-only / not-yet-reconciled seat. Parsed defensively (a bad blob ⇒ generalist). */
+ *  default for a db-only / not-yet-reconciled seat. Parsed defensively (a bad blob ⇒ generalist).
+ *  Admins are human-only (ADR 172): reconcile clamps `is_admin` where it writes, but every admin gate
+ *  reads through here, so the clamp is repeated at the read — a row projected before the write-side
+ *  clamp (or written by any other path) still carries `is_admin` in its JSON. */
 export function resolveCapabilities(row: MemberRow): Capabilities {
-  if (!row.capabilities) return GENERALIST_CAPABILITIES;
-  return CapabilitiesSchema.safeParse(JSON.parse(row.capabilities)).data ?? GENERALIST_CAPABILITIES;
+  const caps = row.capabilities
+    ? (CapabilitiesSchema.safeParse(JSON.parse(row.capabilities)).data ?? GENERALIST_CAPABILITIES)
+    : GENERALIST_CAPABILITIES;
+  return caps.is_admin && row.kind !== 'human' ? { ...caps, is_admin: false } : caps;
 }
 
 /**

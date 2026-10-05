@@ -1,4 +1,4 @@
-import { describeFamilyPosture, makeEnvelope } from '@musterd/protocol';
+import { GENERALIST_CAPABILITIES, describeFamilyPosture, makeEnvelope } from '@musterd/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
@@ -357,7 +357,12 @@ withDrivers('review', (o) => {
       await agent(db, team, 'ada', 'claude-opus-5'); // the worker
       const { row: botty } = await addMember(db, team, { kind: 'agent', name: 'botty', role: '' });
       await attach(db, botty.id, 'claude-code', 'conn-botty', { model: 'gpt-5.2-codex' });
-      await setMemberGovernance(db, botty.id, null, JSON.stringify({ is_admin: true })); // the stale shape
+      await setMemberGovernance(
+        db,
+        botty.id,
+        null,
+        JSON.stringify({ ...GENERALIST_CAPABILITIES, is_admin: true }),
+      ); // the stale shape — a full blob, or it parses to the generalist and proves nothing
       const lane = await openLane(db, team.id, 'dawn', 'ada', {
         title: 'prod deploy',
         risk: ['production'],
