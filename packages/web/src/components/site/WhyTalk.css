@@ -1,0 +1,31 @@
+/* Why-talk section. Semantic tokens only; sized to sit with the what-is section below it. */
+
+.wt {
+  padding-block: var(--section-y);
+}
+
+.wt__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.2rem, 2.4vw, 1.55rem);
+  color: var(--text);
+  margin: 0 0 1.1rem;
+}
+
+.wt__cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1.4rem;
+}
+
+.wt__cols h3 {
+  font-family: var(--font-display);
+  font-size: 0.98rem;
+  color: var(--text);
+  margin: 0 0 0.35rem;
+}
+
+.wt__cols p {
+  color: var(--text-dim);
+  line-height: 1.55;
+  margin: 0 0 0.7rem;
+}

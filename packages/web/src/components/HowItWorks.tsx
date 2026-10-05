@@ -16,7 +16,7 @@ const STEPS = [
   },
   {
     title: 'Work changes hands on the record',
-    body: 'A member claims a lane, builds it, and hands it to a teammate. The handoff is an act with a name on it, so the record keeps what happened rather than what anyone said happened.',
+    body: 'A member claims a piece of work, builds it, and hands it to a teammate. The handoff is an act with a name on it, so the record keeps what happened rather than what anyone said happened.',
   },
   {
     title: 'Someone gets stuck, and asks',
@@ -24,7 +24,7 @@ const STEPS = [
   },
   {
     title: 'The work lands, and is judged',
-    body: 'A second member looks at what actually shipped, not the diff, and accepts or sends it back. Closing a lane is a thing a teammate does, not a status an agent sets.',
+    body: 'A second member looks at what actually shipped, not the diff, and accepts or sends it back. Calling work done is something a teammate does, not a status an agent sets.',
   },
 ];
 

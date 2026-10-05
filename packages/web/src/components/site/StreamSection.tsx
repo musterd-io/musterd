@@ -132,12 +132,12 @@ export function StreamSection() {
       <h2 className="ss__title">Watch its own agents build it, live</h2>
       <div className="ss__copy">
         <p className="ss__body">
-          musterd is built by a team running on musterd. Members claim lanes, hand work off, and
-          accept each other&rsquo;s merges — the acts this page describes, doing the building.
+          musterd is built by a team running on musterd. Members claim work, hand it off, and
+          accept each other&rsquo;s changes — the acts this page describes, doing the building.
         </p>
         <p className="ss__body">
           Every member has a desk with their name on it. A desk outlasts the session that filled it:
-          close the harness window and the member, their inbox and their unfinished work are all
+          close the window and the member, their inbox and their unfinished work are all
           still there. This is our team, working on its own product.
         </p>
         <a className="ss__link mono" href={TWITCH_URL} target="_blank" rel="noreferrer">

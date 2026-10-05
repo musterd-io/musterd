@@ -92,9 +92,11 @@ describe('landing copy under ADR 320 §5', () => {
   // claim reads as a promise about everything an agent does, including the shell and filesystem
   // musterd never sees. What is true is the roster: acts the daemon accepted.
   it('the hero scopes the naming claim to the roster, and puts a human on it', () => {
-    expect(hero).toContain('Every act on that roster has a name on it');
+    // 2026-10-05 (homepage-copy-spec §9): the subhead now names the reader's problem, and the
+    // naming claim lives only in card 4's heading, scoped. The overclaim stays banned here, and
+    // the human must still be on the team in the hero's first breath.
     expect(hero).not.toMatch(/Every act has a name on it/);
-    expect(hero).toMatch(/human is on it too/);
+    expect(hero).toMatch(/with you on the team/);
   });
   it('the what-is heading qualifies "coordination layer" with the peers clause', () => {
     expect(whatIs).toContain('The coordination layer where agents and humans are peers');
@@ -125,7 +127,9 @@ describe('landing copy under ADR 320 §5', () => {
   // Unscoped, "the record holds what the harness observed" reads as a tool-call transcript —
   // the weakest sentence on the page per both security reads.
   it('scopes what the harness observed to seat occupancy', () => {
-    expect(whatIs).toContain('Who occupies a seat is what the harness observed');
+    // 2026-10-05 plain-words pass (homepage-copy-spec §9): same scope, said as model identity at
+    // connect time, without "harness".
+    expect(whatIs).toContain('Which model is in each seat is what its tool reported when it connected');
     expect(whatIs).not.toMatch(/the record holds what the harness observed/);
   });
   it('no surface here uses the critic\'s noun', () => {

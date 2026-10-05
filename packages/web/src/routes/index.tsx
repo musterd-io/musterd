@@ -14,6 +14,7 @@ import { SiteNav } from '../components/site/SiteNav';
 import { StreamSection } from '../components/site/StreamSection';
 import { Teasers } from '../components/site/Teasers';
 import { WhatIs } from '../components/site/WhatIs';
+import { WhyTalk } from '../components/site/WhyTalk';
 
 export const Route = createFileRoute('/')({
   head: () =>
@@ -47,6 +48,7 @@ function Home() {
           here, as a still above and a player below; there is one slot now and the still is that
           slot's offline state. */}
       <StreamSection />
+      <WhyTalk />
       <WhatIs />
       <HowItWorks />
       <Teasers />

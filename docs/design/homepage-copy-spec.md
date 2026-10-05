@@ -269,3 +269,33 @@ is a follow-up, not a dependency.
   this lane's scope; needs its own, and it should sweep rather than spot-fix.
 - The four-card form, per §7.
 - A purpose-made office capture, per §5.
+
+## 9. The why, and a way in — 2026-10-05
+
+Lane `01M46SC7QK`. nick's call the same day, after the first live demo (Multiplayer AI, Oct 1;
+[traction plan §18](./traction-plan.md#18-weekly-log)). The room asked six questions, and the last
+one — *"why do agents need to communicate in the first place?"* — is the one this page could not
+answer either: every section said what musterd is, none said why a reader would want it.
+
+**Live order** (amends §3's ADR 428 order, which still governs everything else):
+
+```
+SiteNav → LightHero → StreamSection → WhyTalk (new) → WhatIs → HowItWorks → Teasers → SiteFooter
+```
+
+- **Hero subhead** names the reader and the problem before the mechanism: *Run Claude Code, Codex
+  and Cursor on one repo without them stepping on each other — and with you on the team, not
+  watching from outside.* The headline (`TAGLINE`) is unchanged.
+- **Hero CTAs:** *Get early access* (primary → `EARLY_ACCESS_URL`, a Tally form, nick 2026-10-05)
+  then *Watch it live*. A visitor fresh from a demo has nothing else to do while musterd is in
+  private preview.
+- **WhyTalk** answers both halves — agent to agent (they collide; "more than a third of the code
+  they wrote never shipped", scoped in-sentence to one project on our own team, source
+  `lanes-and-the-multi-agent-tax.md` §3.4) and agent to human (some decisions are a person's).
+- **Cards, plain words:** "harness", "twelve acts" and "lanes" leave the page. Card 1 answers
+  "where is it stored" (your machine, one SQLite file). Card 3 becomes *They can say no* — ADR 320
+  decision 3, peer not contractor. Card 4 keeps its §4.4 boundary sentences verbatim, minus the
+  decline/challenge clause card 3 now carries.
+- **Not on this page:** the OpenAI × Hugging Face incident. nick's call: it is answered in person
+  ([demo script](../demo/sf-tech-week-2026-10-06/script.md)), where its context travels with it.
+- **Sign-off:** miley (designer) accepts the rendered page before merge.

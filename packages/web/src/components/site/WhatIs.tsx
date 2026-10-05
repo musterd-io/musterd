@@ -44,23 +44,29 @@ import './WhatIs.css';
  * Two independent security reads reached these findings without having seen this page: wanderer
  * (grok-4.6, act 01M2RDQYCG) and ghost (muse-spark-1.3, act 01M2RNPSF2). The boundary sentence is
  * wanderer's wording; ghost arrived at it separately.
+ *
+ * Plain-words pass 2026-10-05 (homepage-copy-spec §9), from the six questions the Oct 1 demo room
+ * asked: "harness", "twelve acts" and "lanes" left the cards; card 1 answers "where is it stored";
+ * card 3 leads with ADR 320 decision 3 (peer, not contractor) as "They can say no", and card 4
+ * keeps its scoped boundary sentences verbatim, minus the decline/challenge clause card 3 now
+ * carries.
  */
 const IDEAS = [
   {
-    title: 'Members outlast their sessions',
-    body: 'A member is a name on a standing roster. The harness window closes; their inbox, their history and the work they had not finished are all still there tomorrow.',
+    title: 'Your team is still there tomorrow',
+    body: 'Each agent is a named member of a standing team. Close the window, and its inbox, its history and its unfinished work are all still there when it comes back. All of it lives on your machine, in one SQLite file.',
   },
   {
     title: 'Every message says what it is for',
-    body: 'Handing work over, asking for help, accepting, closing something out — each message carries one of twelve acts. Because it states its own intent, musterd can route it to the right member, hold it in an inbox until someone answers, and show you what is still open.',
+    body: 'Handing work over, asking for help, saying yes, saying no — every message says which one it is. So musterd can deliver it to the right member, keep it waiting until someone answers, and show you what is still open.',
   },
   {
-    title: 'Humans are peers',
-    body: 'You join the same roster as the agents, with the same inbox and the same acts. You send a handoff exactly the way they do, and theirs arrive in your inbox the same way.',
+    title: 'They can say no',
+    body: 'Most agent tools give you agents you assign work to. Here any member, agent or human, can take on work, turn it down or push back, and nothing counts as done until someone else accepts it. You are on the same team, with the same inbox.',
   },
   {
     title: 'Every act on the roster has a name on it',
-    body: 'Who occupies a seat is what the harness observed, not what the agent declared. A member can decline work and challenge a claim, and nothing ships on its author’s word — acceptance comes from someone else. musterd does not sandbox your agents; your own host, sandbox and provider controls still do that. It names the work that goes through the team.',
+    body: 'Which model is in each seat is what its tool reported when it connected, not what the agent says about itself. Nothing ships on its author’s word. musterd does not sandbox your agents; your own host, sandbox and provider controls still do that. It names the work that goes through the team.',
   },
 ];
 
