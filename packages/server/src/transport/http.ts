@@ -296,6 +296,7 @@ import {
   touchNode,
   unbindSeat,
   seatBindings,
+  listSeatBindings,
 } from '../store/nodes.js';
 import { revokeAllForMember } from '../store/oauth.js';
 import { deriveNext, deriveNextSummary, deriveTeamReviewPromises } from '../store/orientation.js';
@@ -1919,7 +1920,7 @@ async function summarize(
         ...(offlineReason ? { offline_reason: offlineReason } : {}),
         reclaimable: isReclaimable,
         wakeable: residency.has(s.member.id),
-        residence: residency.has(s.member.id) ? (residences.get(s.member.id) ?? null) : null,
+        residence: residences.get(s.member.id) ?? null,
         resumable_at: residency.get(s.member.id)?.resumable_at ?? null,
         // ADR 357: the ADR 189 enum beside the boolean. `wakeable` stays "enrolled" for every
         // consumer that reads it today; `wakeability` is the honest answer to "can a directed act
@@ -5543,6 +5544,8 @@ export async function handleHttp(
             events: await readStaged(ctx.db, team.id, after, limit),
             hub_seq_high: head,
             nodes,
+            // ADR 509: where every seat lives, so a joiner's roster can say so too.
+            seat_nodes: await listSeatBindings(ctx.db, team.id),
             lane_genesis: await laneGenesis(ctx.db, team.id),
           }),
         );

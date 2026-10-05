@@ -10,7 +10,8 @@ import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { readNodeState } from '../node/state.js';
 import { addMember } from '../store/members.js';
-import { insertMessage } from '../store/messages.js';
+import { insertMessage, localNodeForTeam } from '../store/messages.js';
+import { bindSeatToNode } from '../store/nodes.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
 import { foldBatch } from './fold.js';
@@ -191,6 +192,37 @@ withDrivers('pull', (_o, kind) => {
       const res = await get(hubBase, '/teams/bravo/sync/pull?after=5', joinerCredential());
       expect(res.status).toBe(409);
       expect(res.json.hub_seq_high).toBe(1);
+    });
+  });
+
+  describe('seat bindings ride the pull page (ADR 509)', () => {
+    it('the hub lists every binding by member name, and a joiner replaces its table from the page', async () => {
+      await send(joiner, 'j-1'); // mints the joiner's node row, which enrollment names
+      await enrollJoiner();
+      const hubTeamRow = (await getTeamBySlug(hub.store, 'bravo'))!;
+      const hubNode = (await localNodeForTeam(hub.store, hubTeamRow.id)).id;
+      const nick = (await hub.store.get<{ id: string }>(
+        'SELECT id FROM members WHERE team_id = ? AND name = ?',
+        [hubTeamRow.id, 'nick'],
+      ))!;
+      expect((await bindSeatToNode(hub.store, hubTeamRow.id, nick.id, hubNode, 5_000)).bound).toBe(
+        true,
+      );
+
+      await send(hub, 'h-1');
+      const page = await get(hubBase, '/teams/bravo/sync/pull?after=0', joinerCredential());
+      expect(page.status).toBe(200);
+      expect(page.json.seat_nodes).toEqual([{ member: 'nick', node_id: hubNode, bound_at: 5_000 }]);
+
+      // An empty page still lands the bindings, like node liveness: a quiet team's picker must
+      // still know where its seats live.
+      await pullTeam(joinerCtx, await joinerTeam());
+      const mine = await joiner.store.all<{ member: string; node_id: string }>(
+        `SELECT m.name AS member, s.node_id FROM seat_nodes s JOIN members m ON m.id = s.member_id
+          WHERE s.team_id = ?`,
+        [(await joinerTeam()).id],
+      );
+      expect(mine).toEqual([{ member: 'nick', node_id: hubNode }]);
     });
   });
 

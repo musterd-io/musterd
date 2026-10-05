@@ -294,6 +294,57 @@ export async function trustNodeForSeat(
   return { trusted: true, already: false };
 }
 
+/** Every binding of the team by member NAME, for the pull page (ADR 509). Earliest first. */
+export async function listSeatBindings(
+  db: Driver,
+  teamId: string,
+): Promise<{ member: string; node_id: string; bound_at: number }[]> {
+  return await db.all<{ member: string; node_id: string; bound_at: number }>(
+    `SELECT m.name AS member, s.node_id, s.bound_at
+       FROM seat_nodes s JOIN members m ON m.id = s.member_id
+      WHERE s.team_id = ? ORDER BY s.bound_at, s.node_id`,
+    [teamId],
+  );
+}
+
+/**
+ * ADR 509: a joiner takes the hub's bindings as its own. Replace, not merge — the hub arbitrates
+ * every bind (`assertSeatResident` runs there for a forwarded claim), so what it holds IS the
+ * truth. A name this roster does not hold yet (git lag) is skipped, not stopped: a binding
+ * decides no act, only what a picker row says. A node id this daemon has not seen is skipped
+ * for the same reason — the page's `nodes` summary lands first and normally has it.
+ */
+export async function replaceSeatBindings(
+  db: Driver,
+  teamId: string,
+  rows: readonly { member: string; node_id: string; bound_at: number }[],
+): Promise<{ applied: number; skipped: number }> {
+  await db.run('DELETE FROM seat_nodes WHERE team_id = ?', [teamId]);
+  let applied = 0;
+  let skipped = 0;
+  for (const r of rows) {
+    const member = await db.get<{ id: string }>(
+      'SELECT id FROM members WHERE team_id = ? AND name = ? AND left_at IS NULL',
+      [teamId, r.member],
+    );
+    const node = await db.get<{ id: string }>('SELECT id FROM nodes WHERE id = ? AND team_id = ?', [
+      r.node_id,
+      teamId,
+    ]);
+    if (!member || !node) {
+      skipped++;
+      continue;
+    }
+    await db.run(
+      `INSERT INTO seat_nodes (member_id, team_id, node_id, bound_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(member_id, node_id) DO NOTHING`,
+      [member.id, teamId, r.node_id, r.bound_at],
+    );
+    applied++;
+  }
+  return { applied, skipped };
+}
+
 /** The explicit re-bind act (ADR 328 §4): drop every binding so the next node to speak may take it. */
 export async function unbindSeat(
   db: Driver,

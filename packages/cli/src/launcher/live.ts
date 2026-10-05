@@ -191,7 +191,9 @@ export function canOf(m: MemberSummary, i: CanInput): Can {
     const sponsor = v !== null && (m.sponsored_by === v.id || m.id === v.id);
     return m.wakeable === true && (admin || sponsor) ? 'wake' : 'none';
   }
-  if (where === 'nowhere' && !i.workspace && i.viewerSeatHere) return 'setup';
+  // Only an agent is set up from the front door: a service seat is provisioned by its own command,
+  // and a human seat by `musterd human <you>`.
+  if (where === 'nowhere' && !i.workspace && i.viewerSeatHere && m.kind === 'agent') return 'setup';
   return 'none';
 }
 
