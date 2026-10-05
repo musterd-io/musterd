@@ -127,19 +127,29 @@ export const opencode: Harness = {
   // recent session for this workspace gives an `observed` attestation that outranks the declared
   // `binding.model` tier — so a `muse-spark` session attests as `observed` rather than `binding`.
   // Falls back to `undefined` (honest degradation) when the DB is absent or unreadable.
-  observeModel: () => {
+  observeModel: (payload) => {
     try {
       const dbPath = join(homedir(), '.local', 'share', 'opencode', 'opencode.db');
       if (!existsSync(dbPath)) return undefined;
-      const cwd = process.cwd();
-      const out = execFileSync(
-        'sqlite3',
-        [
-          dbPath,
-          `SELECT model FROM session_v2 WHERE directory='${cwd.replace(/'/g, "''")}' ORDER BY time_updated DESC LIMIT 1;`,
-        ],
-        { encoding: 'utf8', timeout: 1000 },
-      ).trim();
+      // ADR 521: the refresh path passes the workspace it is refreshing, which is not always
+      // the process cwd (dirHint). Default stays cwd for the hook callers that pass nothing.
+      const cwd = payload.cwd ?? process.cwd();
+      const run = (sql: string): string =>
+        execFileSync('sqlite3', [dbPath, sql], { encoding: 'utf8', timeout: 1000 }).trim();
+      // The session table moved between majors: `session_v2` on 2.x, `session` on 1.18.x
+      // (measured on 1.18.34 — no session_v2 there at all). Same columns where it matters.
+      const tables = run(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('session_v2','session');`,
+      );
+      const table = tables.includes('session_v2')
+        ? 'session_v2'
+        : tables.includes('session')
+          ? 'session'
+          : undefined;
+      if (!table) return undefined;
+      const out = run(
+        `SELECT model FROM ${table} WHERE directory='${cwd.replace(/'/g, "''")}' ORDER BY time_updated DESC LIMIT 1;`,
+      );
       if (!out) return undefined;
       const parsed = JSON.parse(out) as { id?: string; modelID?: string; model?: string };
       const id = parsed.id ?? parsed.modelID ?? parsed.model;

@@ -35,15 +35,16 @@ import { isDeclined } from '../declined.js';
  * it from tool output, and the CLI keeps every gate it already has (`MUSTERD_NO_NUDGE`, explicit
  * bound seat, best-effort silence on any failure).
  *
- * Generation 3 adds the OpenCode V2 entry: V2 only loads a default export shaped `{ id, setup }`
+ * Generation 4 adds the OpenCode V2 entry: V2 only loads a default export shaped `{ id, setup }`
  * and rejects the named-export shape at load (measured v2.0.20, lane 01M44W6J2). One file serves
  * both: `setup` registers the rail on V2 domain hooks, `server` on the default export serves
- * V1.18.29+, and the named export serves older V1 — see the render comment.
+ * V1.18.29+, and the named export serves older V1 — see the render comment. (Generation 3 was the
+ * same shape without the eslint-disable the repo's own lint needs for the default export.)
  */
 
 export const OPENCODE_PLUGIN_MARKER = 'musterd-opencode-interrupt';
 /** Bump when the rendered plugin changes: the doctor names a file stamped otherwise as STALE. */
-export const OPENCODE_PLUGIN_GENERATION = 3;
+export const OPENCODE_PLUGIN_GENERATION = 4;
 export const OPENCODE_PLUGIN_SURFACE = 'opencode:plugin';
 /** Reply-mode idle bells per session before the plugin goes quiet (see module doc). */
 export const OPENCODE_IDLE_BELL_CAP = 4;
@@ -74,6 +75,7 @@ export function opencodePluginHeader(generation: number = OPENCODE_PLUGIN_GENERA
  */
 export function renderOpencodePlugin(): string {
   return `${opencodePluginHeader()}
+/* eslint-disable import/no-default-export -- OpenCode V2 requires a default export (ADR 521); this file is generated, never edited. */
 import { execFile } from "node:child_process";
 
 const PLUGIN_ID = ${JSON.stringify(OPENCODE_PLUGIN_ID)};
