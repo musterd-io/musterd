@@ -7,7 +7,9 @@ import type { Driver } from '../db/driver.js';
 import { openDriver } from '../db/open.js';
 import type { SqliteDriver } from '../db/sqliteDriver.js';
 import { withDrivers } from '../db/testing.js';
+import { saveNodeEnrollment } from '../node/state.js';
 import { appendAudit, type AuditAction } from './audit.js';
+import { localNodeForTeam } from './messages.js';
 import {
   AUDIT_CAPTURED_THROUGH_KEY,
   AUDIT_CHURN_ACTIONS,
@@ -132,6 +134,43 @@ withDrivers('retention', (o, kind) => {
         ['presence.attached', 'kimi', 48],
         ['occupancy.model_attested', 'izzo', 45],
       ]);
+    });
+
+    it('on an enrolled joiner, never prunes its own rows the hub has not acked (lane 01M3ZBT9VY)', async () => {
+      const { db, teamId, put } = await seeded();
+      const { id: node } = await localNodeForTeam(db, teamId);
+      await db.run(
+        'INSERT INTO sync_push_cursor (team_id, node_id, last_seq, updated_at) VALUES (?, ?, ?, ?)',
+        [teamId, node, 2, NOW],
+      );
+      await put('presence.attached', 9, 'kimi', [node, 1]); // acked: prunable
+      await put('presence.attached', 8, 'kimi', [node, 2]); // acked: prunable
+      await put('presence.detached', 7, 'kimi', [node, 3]); // unpushed: kept
+      await put('presence.attached', 6, 'kimi', [node, 4]); // high-water mark: kept
+      await put('presence.attached', 8, 'kimi', ['nodeOther', 1]); // someone else's: prunable
+      await put('presence.attached', 7, 'kimi', ['nodeOther', 2]); // its high-water mark: kept
+
+      const prior = process.env['MUSTERD_NODE_STATE'];
+      process.env['MUSTERD_NODE_STATE'] = join(archiveDir(), 'node.json');
+      try {
+        saveNodeEnrollment({
+          team: 'revive',
+          hub_url: 'http://hub',
+          credential: 'x',
+          node_id: node,
+          enrolled_at: NOW,
+        });
+        expect((await countPrunableAuditChurn(db, { now: NOW })).rows).toBe(3);
+        expect((await pruneAuditChurn(db, { now: NOW, archiveDir: archiveDir() })).pruned).toBe(3);
+        expect(await rows(db)).toEqual([
+          ['presence.detached', 'kimi', 7],
+          ['presence.attached', 'kimi', 7],
+          ['presence.attached', 'kimi', 6],
+        ]);
+      } finally {
+        if (prior === undefined) delete process.env['MUSTERD_NODE_STATE'];
+        else process.env['MUSTERD_NODE_STATE'] = prior;
+      }
     });
 
     it('on an archiving machine, never prunes above the corpus watermark', async () => {

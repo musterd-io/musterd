@@ -21,6 +21,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import type { Driver } from '../db/driver.js';
+import { readNodeState } from '../node/state.js';
 import type { AuditAction, AuditRow } from './audit.js';
 
 /**
@@ -99,7 +100,25 @@ const latestList = () => [...LATEST_PER_SEAT].map((a) => `'${a}'`).join(', ');
  * and SQLite work is synchronous, so the daemon answered nothing meanwhile). This form counts the
  * whole prunable set of that store in ~4 s.
  */
-function prunableSql(): string {
+/**
+ * A joiner's own rows the hub has not acked: `[node, last acked seq]` per enrolled team. The hub
+ * requires a dense `origin_seq` per node (sync/log.ts SyncGapError → 409), so pruning one of these
+ * would turn a refused or unreachable push into a permanent 409 livelock (lane 01M3ZBT9VY). A hub
+ * or a never-enrolled daemon has no enrollment, so nothing extra is kept there.
+ */
+async function unpushedFloors(db: Driver): Promise<[string, number][]> {
+  const enrolled = readNodeState().nodes;
+  const locals = await db.all<{ slug: string; node_id: string; last_seq: number | null }>(
+    `SELECT t.slug, l.node_id, c.last_seq FROM local_node l
+       JOIN teams t ON t.id = l.team_id
+       LEFT JOIN sync_push_cursor c ON c.team_id = l.team_id AND c.node_id = l.node_id`,
+  );
+  return locals
+    .filter((l) => enrolled[l.slug]?.node_id === l.node_id)
+    .map((l) => [l.node_id, l.last_seq ?? 0]);
+}
+
+function prunableSql(floors: number): string {
   return `
     WITH hwm AS (
       SELECT origin_node, MAX(origin_seq) AS seq FROM audit WHERE origin_seq > 0 GROUP BY origin_node
@@ -116,6 +135,7 @@ function prunableSql(): string {
        AND NOT EXISTS (SELECT 1 FROM hwm h
                         WHERE a.origin_seq > 0 AND h.origin_node = a.origin_node AND h.seq = a.origin_seq)
        AND a.id NOT IN (SELECT id FROM latest)
+       ${'AND NOT (a.origin_node = ? AND a.origin_seq > ?) '.repeat(floors)}
      ORDER BY a.ts, a.id`;
 }
 
@@ -124,7 +144,8 @@ function prunableSql(): string {
  *
  * Kept whatever their age (ADR 478 §1): for each `origin_node` the row holding `MAX(origin_seq)`
  * (`sync/fold.ts` reads it as the peer's high-water mark), and for the latest-per-seat actions the
- * newest row per `(team, target)`. Each batch is gzipped and appended to
+ * newest row per `(team, target)`. On an enrolled joiner, also every row of its own node above the
+ * push cursor — the hub has not acked it yet (see {@link unpushedFloors}). Each batch is gzipped and appended to
  * `<archiveDir>/audit-YYYY-MM.jsonl.gz` (one gzip member per batch — `gunzip` reads them all)
  * BEFORE the delete runs; a failed archive write throws and deletes nothing.
  */
@@ -155,7 +176,8 @@ export async function pruneAuditChurn(
   }
   const batch = opts.batch ?? AUDIT_PRUNE_BATCH;
   const maxBatches = opts.maxBatches ?? AUDIT_PRUNE_MAX_BATCHES;
-  const SELECT = `${prunableSql()} LIMIT ?`;
+  const floors = await unpushedFloors(db);
+  const SELECT = `${prunableSql(floors.length)} LIMIT ?`;
   const deleteAll = (ids: string[]) =>
     db.tx(async (t) => {
       for (const id of ids) await t.run('DELETE FROM audit WHERE id = ?', [id]);
@@ -163,7 +185,7 @@ export async function pruneAuditChurn(
   let pruned = 0;
   let archivedBytes = 0;
   for (let i = 0; i < maxBatches; i++) {
-    const rows = await db.all<AuditRow>(SELECT, [cutoff, batch]);
+    const rows = await db.all<AuditRow>(SELECT, [cutoff, ...floors.flat(), batch]);
     if (rows.length === 0) break;
     archivedBytes += archiveRows(opts.archiveDir, rows);
     await deleteAll(rows.map((r) => r.id));
@@ -277,9 +299,11 @@ export async function countPrunableAuditChurn(
   const windowCutoff = now - (opts.maxAgeMs ?? AUDIT_CHURN_MAX_AGE_MS);
   const capturedThrough = await auditCapturedThrough(db);
   const cutoff = capturedThrough === null ? windowCutoff : Math.min(windowCutoff, capturedThrough);
-  const rows = (await db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM (${prunableSql()})`, [
-    cutoff,
-  ]))!.n;
+  const floors = await unpushedFloors(db);
+  const rows = (await db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM (${prunableSql(floors.length)})`,
+    [cutoff, ...floors.flat()],
+  ))!.n;
   return { rows, cutoff, capturedThrough };
 }
 
