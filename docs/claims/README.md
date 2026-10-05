@@ -29,6 +29,16 @@ a sweep, never a patrol, never a background job (ADR 294 decision 2). The four s
 The claimant pays nothing at claim time. If you are correcting someone and cannot spare the entry,
 say so in the correction — an unminted entry someone else can backfill beats a silent one.
 
+**The gate (ADR 505 §7, `pnpm ledger:check`, in `format:check`).** The reminder above is what the
+ledger had, and it went quiet — 28 entries in August 2026, 2 in September, 0 in October, while
+corrections kept landing as wiki rewrites and ADR notes. So the three places a falsification is
+visible in a diff now refuse the change unless the same PR mints an entry: a wiki claim line
+(`<!-- claim: … -->`) struck or rewritten, an ADR `## Consequences` note that overturns a premise,
+or a supersession. The escape hatch is one explicit line in the PR body or a commit message —
+`not-a-falsification: <why>` — which a squash-merge carries onto `main`, so the waves-through can
+be counted (`git log --grep`) against the entries: a month in which they outnumber the entries is
+the gate's own falsifier.
+
 ## Entry format
 
 One file per entry: `entries/<falsified-date>-<slug>.md`. YAML frontmatter, then a short prose
@@ -51,6 +61,7 @@ overturned in place with a dated note (wiki rule 4 shape), never deleted.
 | `cost` | what the false claim consumed while it stood (qualitative is fine; name it) |
 | `status` | `falsified` \| `amended` \| `overturned` (this entry was successfully challenged) |
 | `falsifier` | **of this entry itself** — what observation would show the entry is wrong |
+| `passed_by` | optional (ADR 505 §7) — the traceback: everything that let the claim through while it stood, one row each, `<kind>: <ref>` with `kind` ∈ `acceptance` (the verdict that accepted it), `concession` (a dispute answered `accept` on its strength), `dependency` (a lane whose `depends_on` built on it) — dated where the ref is not already |
 
 ### `claim_class`
 
@@ -107,6 +118,10 @@ By process stage, in roughly increasing order of badness:
     cost: <what it consumed>
     status: falsified
     falsifier: "<what would show THIS ENTRY is wrong>"
+    passed_by:                       # optional — who let it through while it stood (ADR 505 §7)
+      - acceptance: <ask id> (<acceptor>, <date>)
+      - concession: <act id> (<seat> conceded to it, <date>)
+      - dependency: <lane id> (built on it)
     ---
 
     <2-6 sentences: what was claimed, what showed it wrong, references.>

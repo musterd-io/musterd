@@ -508,4 +508,22 @@ export const CONTROLS: Control[] = [
       'packages/mcp/src/mergeVerify.integration.test.ts',
     ],
   },
+  {
+    id: 'adr-505-falsification-mints-a-ledger-entry',
+    kind: 'gate',
+    claim:
+      'A change that strikes or rewrites a wiki claim line, adds an ADR Consequences note that overturns a premise, or supersedes an ADR cannot merge without a claims-ledger entry in the same PR — or an explicit, countable `not-a-falsification: <why>` line in the PR body or a commit message. `pnpm ledger:check` fails otherwise.',
+    where: 'scripts/check-ledger.ts, run from format:check (so every PR); the three triggers and the escape line are named in its header; entry shape incl. `passed_by` in docs/claims/README.md',
+    exercise:
+      'On a branch, delete any line carrying `<!-- claim: … -->` from a docs/wiki page and run `pnpm ledger:check` — it must exit 1 naming the page and the claim, and print the two ways to satisfy it. Restore the line. Then add `not-a-falsification: exercise` to a commit message on the branch and re-run — it must pass and quote the reason.',
+    motivatedBy:
+      '2026-10-04 (ADR 505 brainstorm): 31 entries all-time — 28 in August, 2 in September, 0 in October — while corrections kept landing as wiki rewrites and ADR notes. The ledger depended on the corrector remembering, which is the same weakness that left the ADR 476 `challenge` guidance unused (0 acts in five days).',
+    counterfactual:
+      'Yes for the wiki half: every strike-through of a `<!-- claim -->` line since the markers landed (ADR 294) would have been named. Partial for ADR notes: the overturn phrase list is a floor (hand-kept, like intents.ts) and a note worded around it passes — widen on a miss. Supersessions are exact.',
+    lastExercised: '2026-10-05',
+    everTripped: true,
+    lastTripped: '2026-10-05',
+    staleAfterDays: 90,
+    refs: ['ADR 505', 'lane 01M44BVD88Z9T12Z4RHGC4EG28', 'docs/claims/README.md', 'scripts/check-ledger.test.ts'],
+  },
 ];

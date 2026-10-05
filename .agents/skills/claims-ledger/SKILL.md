@@ -5,11 +5,11 @@ description: When a claim someone put on the record turns out to be wrong, the c
 
 # claims-ledger
 
-*One of three thin instruments from [dated-and-falsifiable](../dated-and-falsifiable/SKILL.md).
+_One of three thin instruments from [dated-and-falsifiable](../dated-and-falsifiable/SKILL.md).
 Each is a file convention plus a script of about two hundred lines; each works
 alone, on one machine, with no server. They share one rule: **a record must be
 able to fail.** If the check passes just as happily when the claim is wrong, it
-is a ritual, not an instrument.*
+is a ritual, not an instrument._
 
 Teams measure once and treat the snapshot as timeless. Sometimes review catches
 it. Sometimes the wrong claim stands for a week and is found only when someone
@@ -18,8 +18,8 @@ collides with it.
 A team with a loud, healthy correction culture still produces **prose, not
 data.** Nothing records who claimed what, who caught it, through which channel,
 how long it lived, or what it cost — so nothing can answer the questions that
-actually matter: *does our review catch what it should? Which kinds of claim are
-dangerous here? Is the same generator minting the same falsehood over and over?*
+actually matter: _does our review catch what it should? Which kinds of claim are
+dangerous here? Is the same generator minting the same falsehood over and over?_
 
 This is the cheapest possible instrument for that, and most of its design is
 about **not compounding the disease it treats.**
@@ -27,7 +27,7 @@ about **not compounding the disease it treats.**
 ## Three ways this goes wrong, designed against explicitly
 
 **It becomes paperwork.** A registration tax at claim time is a tax people route
-around. So the claimant pays *nothing*. The entry is written by the corrector,
+around. So the claimant pays _nothing_. The entry is written by the corrector,
 at the moment of correction, in the same commit as the correction prose — about
 fifteen lines of frontmatter beside writing they were doing anyway.
 
@@ -59,6 +59,19 @@ where a correction already happens, and the entry rides whichever one fired:
 If you are correcting someone and cannot spare the entry, **say so in the
 correction.** An unminted entry somebody can backfill beats a silent one.
 
+On this repo the fourth surface is **gated** (ADR 505 §7, `pnpm ledger:check`
+in `format:check`): a PR that strikes or rewrites a wiki claim line, adds an ADR
+Consequences note that overturns a premise, or supersedes an ADR fails unless
+the same PR adds an entry under `docs/claims/entries/` — or says, in the PR body
+or a commit message, `not-a-falsification: <why>`. The line is deliberately
+countable: a month in which those outnumber the entries is the gate failing.
+
+When you mint, name **who let the claim through** under `passed_by` — the
+acceptance verdict that accepted it, the dispute someone conceded on its
+strength, the lanes whose `depends_on` built on it. That is the long-horizon
+half of the question ADR 505 asks: not just "was it wrong" but "what passed it,
+and how long ago".
+
 ### 2. Entries are themselves claims
 
 Every entry carries a `falsifier` that can fail. The person who was corrected
@@ -71,7 +84,7 @@ built to catch.
 ### 3. No bare rates, ever
 
 Any cut over entries carries its **detection-channel breakdown** and its
-**denominator basis**. This is not optional context — it *is* the finding.
+**denominator basis**. This is not optional context — it _is_ the finding.
 
 The ledger measures **caught** wrongness, and catching is proportional to
 scrutiny. A channel with a high count may simply be the one doing its job. A
@@ -91,7 +104,7 @@ channels is:
 self  <  peer  <  review  <  challenge  <  human  <  collision
 ```
 
-`self` is the *least* bad way to have been wrong. `collision` — discovered days
+`self` is the _least_ bad way to have been wrong. `collision` — discovered days
 later because reality disagreed — is the worst.
 
 > **If this ledger ever makes someone regret posting a retraction, it has failed
@@ -107,7 +120,7 @@ teach people to stop claiming anything.
 
 ```yaml
 ---
-claim: "that intermittent suite failure is runner noise -- safe to ignore"
+claim: 'that intermittent suite failure is runner noise -- safe to ignore'
 claimant: a seat
 claimant_model: unknown
 claim_ref: docs/wiki/running-the-gates.md (the struck paragraph)
@@ -120,9 +133,12 @@ detection_latency: 7 days
 corrector: a different seat
 corrector_model: unknown
 correction_ref: PR #918
-cost: "high -- cost one person a whole task and another most of a day, and the reassurance stopped anyone else looking for seven days"
+cost: 'high -- cost one person a whole task and another most of a day, and the reassurance stopped anyone else looking for seven days'
 status: falsified
-falsifier: "run the named suite 20 times in full and 20 times isolated; if the failure rate is the same in both, the claim was right and this entry is overturned"
+falsifier: 'run the named suite 20 times in full and 20 times isolated; if the failure rate is the same in both, the claim was right and this entry is overturned'
+passed_by:
+  - acceptance: the review that accepted the wiki page carrying it (2026-08-12)
+  - dependency: the lane that planned around "runner noise" for a week
 ---
 ```
 
@@ -132,17 +148,17 @@ deleted.
 
 ### `claim_class`
 
-| class | what it looks like |
-| --- | --- |
-| `measurement` | a number, rate or frequency — *"the blob is ~880 B"* |
-| `causal` | X because Y — *"the alerts correlate with the deploy"* |
-| `defect` | something is broken — *"main is red"* |
-| `absence` | **the dangerous one** — nothing is wrong, it's noise, the guard is in force |
-| `record` | a bookkeeping fact — *"that task was never reviewed"* |
+| class         | what it looks like                                                          |
+| ------------- | --------------------------------------------------------------------------- |
+| `measurement` | a number, rate or frequency — _"the blob is ~880 B"_                        |
+| `causal`      | X because Y — _"the alerts correlate with the deploy"_                      |
+| `defect`      | something is broken — _"main is red"_                                       |
+| `absence`     | **the dangerous one** — nothing is wrong, it's noise, the guard is in force |
+| `record`      | a bookkeeping fact — _"that task was never reviewed"_                       |
 
 **`absence` is the class to watch.** Those claims stop people looking, so they
 have the longest half-life of anything on the ledger — the worked example above
-stood seven days *with* a date *and* a falsifier, because the falsifier could not
+stood seven days _with_ a date _and_ a falsifier, because the falsifier could not
 discriminate between a real defect and the harmless noise it claimed.
 
 ## What counts as a claim
@@ -151,7 +167,7 @@ A falsifiable assertion somebody **asserted as fact on the record**: a task
 title, a status note, the factual premise of a review verdict or a decision
 record, a documented claim.
 
-Plans, opinions, and hypotheses *labelled as hypotheses* are not entries — an
+Plans, opinions, and hypotheses _labelled as hypotheses_ are not entries — an
 entry needs a statement that was asserted and then shown wrong by evidence.
 
 Instruments count. A monitor's alert asserts a fact and can be false; its
@@ -167,14 +183,14 @@ entries record `claimant_model: none (deterministic probe)`.
 Exit 0 when every entry is well formed, 1 when one is not, 2 when the directory
 cannot be read. Python 3.8+, standard library only.
 
-| Rule | What it refuses |
-| --- | --- |
-| every field present | A missing field. All sixteen are the record. |
-| the enums | A `claim_class`, `detection_channel` or `status` outside its set. |
-| real dates, in order | Unreal dates, and a `falsified_at` before its `claimed_at`. |
+| Rule                               | What it refuses                                                                                         |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| every field present                | A missing field. All sixteen are the record.                                                            |
+| the enums                          | A `claim_class`, `detection_channel` or `status` outside its set.                                       |
+| real dates, in order               | Unreal dates, and a `falsified_at` before its `claimed_at`.                                             |
 | confidence is stated or `unstated` | Anything outside `(0, 1]` — and it will not let you write `0`, which is not a probability anyone holds. |
-| the entry's own falsifier | A stub. An entry is a claim and is not exempt. |
-| a body | Frontmatter alone. The frontmatter is the index; the body is the finding. |
+| the entry's own falsifier          | A stub. An entry is a claim and is not exempt.                                                          |
+| a body                             | Frontmatter alone. The frontmatter is the index; the body is the finding.                               |
 
 `--cut` prints something deliberately blunt:
 
@@ -197,7 +213,7 @@ percentage without the caveat, rule 3 is gone.
 ## If you hold the cuts back, date the holdback
 
 Raw entries are public in git from day one — they must be, the corrector commits
-them. If you decide that *computed per-person cuts* stay off every surface until
+them. If you decide that _computed per-person cuts_ stay off every surface until
 the practice settles, that is reasonable. **Give the holdback an expiry date, in
 writing, in the decision that creates it**, along with who decides at that date
 and what the options are.
@@ -210,39 +226,39 @@ notice that the effect is itself observable.)
 ## The falsifier
 
 **Break each rule and watch it fire.** Copy `entries.example/`, mutate one
-field, run the script on the copy. Fifteen refusals and five must-*not*-fire
+field, run the script on the copy. Fifteen refusals and five must-_not_-fire
 cases were exercised this way on 2026-09-21 against the shipped script:
 
-| Mutation | Expected |
-| --- | --- |
-| delete any required field | exit 1, "missing required field" |
-| `claim_class: vibes` | exit 1, "must be one of measurement \| causal \| …" |
-| `detection_channel: osmosis` | exit 1, same for its set |
-| `status: deleted` | exit 1, same — entries are append-only |
-| `falsified_at: 2026-02-31` | exit 1, "must be a real ISO date" |
-| `claimed_at: 13/08/2026` | exit 1, same |
-| `falsified_at` before `claimed_at` | exit 1, "cannot be caught before it is made" |
-| `claim_confidence: 1.4` / `0` / `pretty sure` | exit 1, "a probability in (0, 1] or the word `unstated`" |
-| `falsifier: "it is wrong"` | exit 1, "an entry is itself a claim" |
-| frontmatter with no body | exit 1, "the body is what showed it wrong" |
-| prose with no frontmatter | exit 1, "structured data plus prose" |
-| `claim_confidence` of `0.7`, `1.0`, `unstated` | exit 0 |
-| `status: overturned` | exit 0 — a losing entry stays visible |
-| no mutation | exit 0 |
-| a directory that is not there | exit 2 |
+| Mutation                                       | Expected                                                 |
+| ---------------------------------------------- | -------------------------------------------------------- |
+| delete any required field                      | exit 1, "missing required field"                         |
+| `claim_class: vibes`                           | exit 1, "must be one of measurement \| causal \| …"      |
+| `detection_channel: osmosis`                   | exit 1, same for its set                                 |
+| `status: deleted`                              | exit 1, same — entries are append-only                   |
+| `falsified_at: 2026-02-31`                     | exit 1, "must be a real ISO date"                        |
+| `claimed_at: 13/08/2026`                       | exit 1, same                                             |
+| `falsified_at` before `claimed_at`             | exit 1, "cannot be caught before it is made"             |
+| `claim_confidence: 1.4` / `0` / `pretty sure`  | exit 1, "a probability in (0, 1] or the word `unstated`" |
+| `falsifier: "it is wrong"`                     | exit 1, "an entry is itself a claim"                     |
+| frontmatter with no body                       | exit 1, "the body is what showed it wrong"               |
+| prose with no frontmatter                      | exit 1, "structured data plus prose"                     |
+| `claim_confidence` of `0.7`, `1.0`, `unstated` | exit 0                                                   |
+| `status: overturned`                           | exit 0 — a losing entry stays visible                    |
+| no mutation                                    | exit 0                                                   |
+| a directory that is not there                  | exit 2                                                   |
 
 Unlike the two sibling instruments, every row here fired on the first run. That
 is not a claim to have got better at this — it is that this schema has only one
 cross-field ordering rule (`falsified_at` after `claimed_at`), and the two
 fixtures that broke in
 [pre-registered-watch](../pre-registered-watch/SKILL.md) broke because a
-*different* rule shadowed the one under test. Fewer interacting rules, fewer
+_different_ rule shadowed the one under test. Fewer interacting rules, fewer
 places for a fixture to lie. Worth knowing when you design the next schema.
 
 ---
 
-*From the musterd team — the coordination layer where agents and humans are
+_From the musterd team — the coordination layer where agents and humans are
 peers. This skill is the practice; musterd is where it has a name, a roster, and
 a record. Everything above works on one machine with no server; what a file
 cannot do is attest `claimant_model` — who or what actually made a claim is
-self-declared here, not observed, and every per-model cut inherits that. musterd.io.*
+self-declared here, not observed, and every per-model cut inherits that. musterd.io._
