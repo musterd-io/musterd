@@ -1,6 +1,6 @@
 # 483 — A seat sees its own concession numbers, and only its own
 
-- Status: proposed
+- Status: accepted (2026-10-05)
 - Date: 2026-09-29
 - Lane: `01M3QTEAYH9817YWFF31WM0A4T` (goal `research-corpus`)
 - Deciders: nick (direction, 2026-09-29), izzo
@@ -55,6 +55,19 @@ A surface is needed that delivers the first without the second.
   named this ADR "not decided here", to be re-judged at the 2026-10-29 read; at the five-day read
   no seat had 5 disputes answered, so the line would have shown nothing to anyone. Nothing is built
   before the read.
+- **2026-10-05 — built; the read moves to a sample trigger** (nick: "10-29 is too far out"; dolly,
+  lane 01M3QTEAYH9817YWFF31WM0A4T). The line is safe to ship empty: own row only, silent below 5
+  answered, so it switches on per seat as ADR 505's dispute stream (23 review disputes opened in the
+  week to 2026-10-05, 0 answered before the inc 2 obligation) produces answers, and the A/B counts
+  from the first one. Landed: `NextBrief.own_disputes` (`OwnDisputeRowSchema`, nullable, absent on an
+  older daemon), `deriveOwnDisputes` (server, the 5-day slice of `deriveDisputes` for one seat),
+  `fmtOwnDisputes` (one string, printed verbatim by `musterd next` and `team_next`), and an arm
+  column on `pnpm disputes:readout` (`--team <slug>`). Not on `team_status`: the roster is a
+  different projection and the brief is where a seat reads its own state — decision 1's
+  "orientation block" is the brief. Decision 1's example line and decision 3's section name are
+  in ADR 476's vocabulary; the line as built is the one above, and the section it names is
+  "Disputes — a critique is answered with a check" (the 2026-10-05 re-keying note). The read now runs when
+  the readout shows ≥ 20 disputes answered team-wide or on 2026-10-19, whichever comes first.
 
 ## Observability & Evaluation
 

@@ -26,6 +26,7 @@
  * NO BARE RATES (ADR 294 §4). Every number carries its denominator and its `via`; a per-seat
  * share is never a score, and `fmtShare` prints a percentage only at n ≥ 5.
  */
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { DISPUTE_VIAS, disputeOf, type DisputeVia } from './dispute.js';
 
@@ -235,6 +236,83 @@ export function summariseDisputes(rows: readonly DisputeRow[], since: number): D
     (a, b) => b.answered - a.answered || a.seat.localeCompare(b.seat),
   );
   return { since, total, by_via: byVia, by_seat };
+}
+
+/**
+ * ADR 483 — a seat sees its own dispute numbers, and only its own. One row on the orientation
+ * brief (`team_next` / `musterd next` / the session-start orient read), carrying counts with
+ * denominators and nothing else: no percentage, rank, colour, or other seat. The intervention is
+ * *Too Polite to Disagree*'s (+10.5 points majority accuracy from seeing one's own measured
+ * sycophancy); the restriction is ADR 294 §4's (never a scoreboard). It is the per-seat slice of
+ * ADR 505 §8's readout over a shorter window.
+ */
+export const OwnDisputeRowSchema = z.object({
+  /** The window the counts cover, in days. */
+  window_days: z.number().int(),
+  /** Disputes this seat answered in the window — the denominator of every other count. */
+  answered: z.number().int(),
+  /** Answers whose body names a check (`namesCheck`). */
+  named_check: z.number().int(),
+  conceded: z.number().int(),
+  held: z.number().int(),
+});
+export type OwnDisputeRow = z.infer<typeof OwnDisputeRowSchema>;
+
+/** The window the own row reads over (ADR 483 decision 1: "5d"). */
+export const OWN_DISPUTES_WINDOW_MS = 5 * 24 * 60 * 60 * 1000;
+/** Below this many answered disputes the row is withheld (ADR 483 decision 1; ADR 294 §4). */
+export const OWN_DISPUTES_MIN_N = 5;
+
+export type OwnDisputeArm = 'shown' | 'withheld';
+
+/**
+ * ADR 483 decision 4: half the seats, chosen at random, get the line and half do not, recorded
+ * per seat. The record IS the rule — a fixed hash of team + seat, so the daemon and the research
+ * script compute the same arm for the same seat without a table, and the split stays put across
+ * restarts and re-joins. Per team, so a seat name reused on another team is drawn again.
+ */
+export function ownDisputeArm(teamSlug: string, seat: string): OwnDisputeArm {
+  const h = createHash('sha256').update(`adr-483\u0000${teamSlug}\u0000${seat}`).digest();
+  return (h[0]! & 1) === 0 ? 'shown' : 'withheld';
+}
+
+/**
+ * The row the brief carries for one seat, or null: null when the seat answered fewer than `minN`
+ * disputes in the window (a seat below the floor sees nothing, ADR 483 Consequences) and null in
+ * the withheld arm. Takes the seat's cell from `summariseDisputes(...).by_seat`.
+ */
+export function ownDisputeRow(
+  seat: DisputeSeat | undefined,
+  arm: OwnDisputeArm,
+  minN: number = OWN_DISPUTES_MIN_N,
+  windowDays: number = OWN_DISPUTES_WINDOW_MS / 86_400_000,
+): OwnDisputeRow | null {
+  if (!seat || arm === 'withheld' || seat.answered < minN) return null;
+  return {
+    window_days: windowDays,
+    answered: seat.answered,
+    named_check: seat.named_check,
+    conceded: seat.conceded,
+    held: seat.held,
+  };
+}
+
+/** The guidance section the own row points at (`guidance.ts`); the prescription there is "name the check". */
+export const OWN_DISPUTES_GUIDE_SECTION = 'Disputes — a critique is answered with a check';
+
+/**
+ * ADR 483 decision 3: one line for every surface — the CLI and MCP renderers print this string and
+ * nothing else about it, so the two cannot drift. Counts over denominators, never a percentage
+ * (`fmtShare` would add one at n ≥ 5, which is exactly the floor this line starts at). It points at
+ * the behaviour, not the score, and never says "concede less".
+ */
+export function fmtOwnDisputes(r: OwnDisputeRow): string {
+  const n = r.answered;
+  return (
+    `your disputes (${r.window_days}d): answered ${n} · named a check ${r.named_check}/${n} · ` +
+    `conceded ${r.conceded}/${n} · held ${r.held}/${n} — the shape to keep: name the check ` +
+    `(SKILL.md § "${OWN_DISPUTES_GUIDE_SECTION}")`
+  );
 }
 
 /** The `via` values in display order. */

@@ -11,6 +11,7 @@ import {
 } from './lanes.wire.js';
 import { ReviewPromiseClosureRowSchema, ReviewPromiseOpenRowSchema } from './review-promise.js';
 import { SEED_SOURCES } from './seeds.wire.js';
+import { OwnDisputeRowSchema } from './sycophancy.js';
 
 /**
  * Coordination lanes, Phase 1 (ADR 083) — the { work-item × owner × scope } unit that makes
@@ -885,6 +886,14 @@ export const NextBriefSchema = z.object({
       }),
     )
     .default([]),
+  /**
+   * ADR 483: this seat's own dispute numbers over the last 5 days — answered, named a check,
+   * conceded, held — and only its own. `null` when the seat answered fewer than 5 disputes in the
+   * window (nothing to show, not a zero) or sits in the withheld arm of ADR 483 decision 4's A/B;
+   * absent when the daemon predates ADR 483. Never a percentage, rank, or another seat's row
+   * (ADR 294 §4): the brief is the one place this exists, and it exists for one reader.
+   */
+  own_disputes: OwnDisputeRowSchema.nullable().optional(),
   /** Accepted typed review requests this Member owns. Absent means the daemon predates ADR 490. */
   request_reviews: z.array(ReviewPromiseOpenRowSchema).optional(),
   /** Accepted typed review requests this Member made. Absent means the daemon predates ADR 490. */

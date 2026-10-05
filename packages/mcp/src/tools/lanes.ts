@@ -5,6 +5,7 @@ import {
   closeReasonCopy,
   emptyPoolCopy,
   emptyPoolHint,
+  fmtOwnDisputes,
   incidentBannerLines,
   LaneStateSchema,
   reviewWaitMinutes,
@@ -693,6 +694,11 @@ export function fmtNext(b: NextBrief, landed: ReadonlyMap<string, Landed> = new 
       );
     }
   }
+  // ADR 483: the seat's own dispute row, one line, the protocol's string verbatim — so the CLI and
+  // this renderer cannot drift. Right after `disputed` because it is the same subject (how this seat
+  // answers critique) read backwards over 5 days. Nothing when null or absent: below the floor,
+  // the withheld arm, or an older daemon all look the same to the reader, on purpose.
+  if (b.own_disputes) lines.push(`\n${fmtOwnDisputes(b.own_disputes)}`);
   // ADR 490: review promises — accepted typed review requests, derived by the daemon from the Act
   // ledger. Kept apart from `owed by you` (a Lane verdict) on purpose, and the two absences are
   // different claims: a missing array is a daemon that predates the projection and the brief says
