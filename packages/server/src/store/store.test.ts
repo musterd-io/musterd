@@ -34,6 +34,7 @@ import {
   detach,
   heartbeat,
   reattestGuidanceEpoch,
+  reattestStyleEpoch,
   reattestModel,
   reattestSurface,
   hasActivePresence,
@@ -1164,6 +1165,40 @@ withDrivers('store', (o) => {
       const bo = await addMember(db, team, { name: 'Bo', kind: 'agent' });
       await attach(db, bo.row.id, 'claude-code', 'c2');
       expect(await guidanceOf('Bo')).toBeNull();
+    });
+
+    /** ADR 514: the style epoch rides the same rails as `guidance_epoch`, with the same two halves. */
+    it('round-trips the attested style epoch, movable on heartbeat and sticky when absent (ADR 514)', async () => {
+      const { db, team } = await freshTeam();
+      const styleOf = async (name: string) =>
+        (await listPresence(db, team.id, 45_000)).find((s) => s.member.name === name)?.presences[0]
+          ?.style_epoch;
+
+      const ada = await addMember(db, team, { name: 'Ada', kind: 'agent' });
+      const adaPresence = await attach(db, ada.row.id, 'claude-code', 'c1', {
+        style_epoch: 'a1b2c3d4',
+      });
+      expect(await styleOf('Ada')).toBe('a1b2c3d4');
+
+      expect(await reattestStyleEpoch(db, adaPresence.id, 'ffffffff')).toEqual({
+        previous: 'a1b2c3d4',
+      });
+      expect(await styleOf('Ada')).toBe('ffffffff');
+
+      expect(await reattestStyleEpoch(db, adaPresence.id, undefined)).toBeUndefined();
+      expect(await reattestStyleEpoch(db, adaPresence.id, null)).toBeUndefined();
+      expect(await reattestStyleEpoch(db, adaPresence.id, 'ffffffff')).toBeUndefined();
+      expect(await styleOf('Ada')).toBe('ffffffff');
+
+      const cy = await addMember(db, team, { name: 'Cy', kind: 'agent' });
+      await touchAmbientPresence(db, cy.row.id, 'cli', 45_000, { style_epoch: '0badf00d' });
+      expect(await styleOf('Cy')).toBe('0badf00d');
+      await touchAmbientPresence(db, cy.row.id, 'cli', 45_000, {});
+      expect(await styleOf('Cy')).toBe('0badf00d');
+
+      const bo = await addMember(db, team, { name: 'Bo', kind: 'agent' });
+      await attach(db, bo.row.id, 'claude-code', 'c2');
+      expect(await styleOf('Bo')).toBeNull();
     });
 
     /**

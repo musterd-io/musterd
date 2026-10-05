@@ -29,6 +29,7 @@ import {
   PolicyOverrideSchema,
   DoorbellPrefsSchema,
   doorbellPrefsProblem,
+  StyleEpochSchema,
   DoorbellRingsBodySchema,
   DoorbellSurfacedBodySchema,
   maskPrefs,
@@ -4282,6 +4283,8 @@ export async function handleHttp(
           // this mirror would otherwise have resolved-then-dropped — the client has been sending it
           // since #1552 and a route that omits it from the schema drops it green on both sides.
           guidance_epoch: z.number().int().nonnegative().optional(),
+          // Style epoch (ADR 514), mirroring the WS claim frame.
+          style_epoch: StyleEpochSchema.optional(),
           // ADR 131 §6, mirroring the WS claim frame — what ANIMATES this session, not who it is.
           // The 2026-09-04 workspace repair left this field behind, so the mirror still was not one:
           // every row born here read `provenance: null` while every WS-claimed and every
@@ -4565,6 +4568,7 @@ export async function handleHttp(
           build: body.build ?? null,
           epoch: body.epoch ?? null,
           guidance_epoch: body.guidance_epoch ?? null,
+          style_epoch: body.style_epoch ?? null,
         };
         // Single-active is kind-scoped (ADR 042), matching the WS path. Only an AUTHORIZED agent
         // claim may invoke newest-wins (ADR 017). Keeping the transition behind the grant/self/re-seat

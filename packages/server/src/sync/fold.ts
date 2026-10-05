@@ -599,8 +599,8 @@ async function projectPresenceEvent(
       if (await db.get('SELECT 1 FROM presence WHERE id = ?', [presenceId])) return 'applied';
       const model = str('model');
       await db.run(
-        `INSERT INTO presence (id, member_id, team_id, surface, status, conn_id, last_seen_at, held_until, provenance, workspace, driver, model, model_source, build, epoch, guidance_epoch, wake_lease, node, created_at)
-         VALUES (?, ?, ?, ?, 'online', NULL, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+        `INSERT INTO presence (id, member_id, team_id, surface, status, conn_id, last_seen_at, held_until, provenance, workspace, driver, model, model_source, build, epoch, guidance_epoch, style_epoch, wake_lease, node, created_at)
+         VALUES (?, ?, ?, ?, 'online', NULL, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
         [
           presenceId,
           member.id,
@@ -618,6 +618,7 @@ async function projectPresenceEvent(
           // workspace, and a census that silently reads null for every replicated row would report the
           // rest of the fleet as unstamped rather than as unmeasured.
           typeof d['guidance_epoch'] === 'number' ? d['guidance_epoch'] : null,
+          typeof d['style_epoch'] === 'string' ? d['style_epoch'] : null,
           originNode,
           event.ts,
         ],
@@ -632,7 +633,7 @@ async function projectPresenceEvent(
       if (surface && !STORABLE_SURFACES.has(surface)) return 'unknown';
       const model = str('model');
       const r = await db.run(
-        'UPDATE presence SET model = ?, model_source = ?, surface = COALESCE(?, surface), guidance_epoch = COALESCE(?, guidance_epoch) WHERE id = ? AND node = ?',
+        'UPDATE presence SET model = ?, model_source = ?, surface = COALESCE(?, surface), guidance_epoch = COALESCE(?, guidance_epoch), style_epoch = COALESCE(?, style_epoch) WHERE id = ? AND node = ?',
         [
           model,
           model ? str('model_source') : null,
@@ -640,6 +641,7 @@ async function projectPresenceEvent(
           // COALESCE, matching the origin's own rule: an origin that re-attested a model without
           // touching guidance sends null here, and null is "no change", not "forget what you knew".
           typeof d['guidance_epoch'] === 'number' ? d['guidance_epoch'] : null,
+          typeof d['style_epoch'] === 'string' ? d['style_epoch'] : null,
           presenceId,
           originNode,
         ],
