@@ -29,7 +29,6 @@ import {
   haltedSentence,
 } from '../store/members.js';
 import { memoryEnvelope } from '../store/memory.js';
-import { styleEnvelopeFor } from '../store/style.js';
 import {
   attach,
   recordClaimAttestation,
@@ -61,6 +60,7 @@ import {
   mintSessionLease,
   sessionLeaseDueForRenewal,
 } from '../store/session-leases.js';
+import { styleEnvelopeFor } from '../store/style.js';
 import {
   findBootstrapCredential,
   findBootstrapCredentialRecord,
