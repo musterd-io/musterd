@@ -34,14 +34,21 @@ import { isDeclined } from '../declined.js';
  * The plugin never composes text: the line is the daemon's (ADR 088), fenced so the model can tell
  * it from tool output, and the CLI keeps every gate it already has (`MUSTERD_NO_NUDGE`, explicit
  * bound seat, best-effort silence on any failure).
+ *
+ * Generation 3 adds the OpenCode V2 entry: V2 only loads a default export shaped `{ id, setup }`
+ * and rejects the named-export shape at load (measured v2.0.20, lane 01M44W6J2). One file serves
+ * both: `setup` registers the rail on V2 domain hooks, `server` on the default export serves
+ * V1.18.29+, and the named export serves older V1 — see the render comment.
  */
 
 export const OPENCODE_PLUGIN_MARKER = 'musterd-opencode-interrupt';
 /** Bump when the rendered plugin changes: the doctor names a file stamped otherwise as STALE. */
-export const OPENCODE_PLUGIN_GENERATION = 2;
+export const OPENCODE_PLUGIN_GENERATION = 3;
 export const OPENCODE_PLUGIN_SURFACE = 'opencode:plugin';
 /** Reply-mode idle bells per session before the plugin goes quiet (see module doc). */
 export const OPENCODE_IDLE_BELL_CAP = 4;
+/** The V2 plugin id in the default export (stable; shown in plugin list/diagnostics). */
+export const OPENCODE_PLUGIN_ID = 'musterd-interrupt';
 
 export function opencodePluginPath(dir: string = process.cwd()): string {
   return join(dir, '.opencode', 'plugins', 'musterd.js');
@@ -54,11 +61,22 @@ export function opencodePluginHeader(generation: number = OPENCODE_PLUGIN_GENERA
 /**
  * The plugin source. Plain ESM JavaScript on node built-ins only, so it runs under OpenCode's
  * bundled Bun without an install step AND under node for the unit that executes it.
+ *
+ * Dual entry (generation 3): OpenCode V2 only loads a default export shaped `{ id, setup }`
+ * and rejects the 1.18.x named-export shape at load ("Missing key at [\"default\"]", measured
+ * on v2.0.20 — the whole rail silently dead). V2's own migration guide blesses one default
+ * export carrying both `setup` (V2 calls it) and `server` (V1.18.29+ calls it), so this file
+ * exports exactly that, plus the original named `MusterdInterrupt` for V1 older than 1.18.29
+ * (object entrypoints need 1.18.29+). A module-level claim flag keeps pre-1.18.29 V1 — which
+ * calls every exported function — from registering the rail twice. Deliberately no
+ * `Plugin.define` import: it is a typed identity helper, and importing the plugin SDK would
+ * cost the zero-dependency property (no `bun install`) this file's tests pin.
  */
 export function renderOpencodePlugin(): string {
   return `${opencodePluginHeader()}
 import { execFile } from "node:child_process";
 
+const PLUGIN_ID = ${JSON.stringify(OPENCODE_PLUGIN_ID)};
 const PROBE_ARGS = ["inbox", "--interrupt-check"];
 const PROBE_TIMEOUT_MS = 5000;
 const TRACE_TIMEOUT_MS = 15000;
@@ -115,7 +133,15 @@ function traceTurnEnd(directory, sessionID) {
   }
 }
 
-export const MusterdInterrupt = async ({ client, directory }) => {
+function fenced(line) {
+  return OPEN + "\\n" + line + "\\n" + CLOSE;
+}
+
+// Pre-1.18.29 V1 calls every exported function, so the named export and the default export's
+// server() would each register the rail. First initializer wins; the other returns no hooks.
+let v1Claimed = false;
+
+function v1Hooks(client, directory) {
   const bells = new Map();
   return {
     "tool.execute.after": async (input, output) => {
@@ -131,8 +157,8 @@ export const MusterdInterrupt = async ({ client, directory }) => {
           : undefined,
       );
       if (!line) return;
-      const fenced = OPEN + "\\n" + line + "\\n" + CLOSE;
-      output.output = output.output ? output.output + "\\n\\n" + fenced : fenced;
+      const fencedLine = fenced(line);
+      output.output = output.output ? output.output + "\\n\\n" + fencedLine : fencedLine;
     },
     event: async ({ event }) => {
       if (!event || event.type !== "session.idle") return;
@@ -154,6 +180,72 @@ export const MusterdInterrupt = async ({ client, directory }) => {
       }
     },
   };
+}
+
+function claimV1(client, directory) {
+  if (v1Claimed) return {};
+  v1Claimed = true;
+  return v1Hooks(client, directory);
+}
+
+export const MusterdInterrupt = async ({ client, directory }) => claimV1(client, directory);
+
+export default {
+  id: PLUGIN_ID,
+  // V2 calls setup(ctx): register the same rail on the V2 domain hooks. V2 merges the old
+  // (input, output) pair into one mutable event: ids live top-level (call id is \`id\`), and
+  // the model-visible text is result.output (string) or result.content (string). Exotic
+  // result shapes get the probe (trace tap) but no fence — the falsifier on v2.0.20 watches
+  // whether the fence lands at native boundaries the way §8 measured on 1.18.29.
+  setup: async (ctx) => {
+    const directory = ctx.location.directory;
+    const bells = new Map();
+    await ctx.tool.hook("execute.after", async (event) => {
+      const line = await probe(
+        directory,
+        event && event.sessionID
+          ? {
+              session_id: event.sessionID,
+              hook_event_name: "PostToolUse",
+              tool_name: event.tool,
+              tool_use_id: event.id,
+            }
+          : undefined,
+      );
+      if (!line || !event || event.status !== "completed" || !event.result) return;
+      const fencedLine = fenced(line);
+      const res = event.result;
+      if (typeof res.output === "string") {
+        res.output = res.output ? res.output + "\\n\\n" + fencedLine : fencedLine;
+      } else if (typeof res.content === "string") {
+        res.content = res.content ? res.content + "\\n\\n" + fencedLine : fencedLine;
+      }
+    });
+    const controller = new AbortController();
+    void (async () => {
+      for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+        if (!event || event.type !== "session.idle") continue;
+        const id =
+          (event.properties && event.properties.sessionID) || event.sessionID || event.session_id;
+        if (!id) continue;
+        traceTurnEnd(directory, id);
+        const rung = bells.get(id) || 0;
+        if (rung >= IDLE_BELL_CAP) continue;
+        const line = await probe(directory);
+        if (!line) continue;
+        bells.set(id, rung + 1);
+        try {
+          await ctx.session.prompt({ sessionID: id, text: line });
+        } catch {
+          // best-effort: the bell is a courtesy to the model, not an obligation on the harness
+        }
+      }
+    })();
+    return () => controller.abort();
+  },
+  // V1.18.29+ calls server(input) on the default export; older V1 calls the named export.
+  // Same rail, same claim flag — exactly one registers (see claimV1).
+  server: async (input) => claimV1(input.client, input.directory),
 };
 `;
 }

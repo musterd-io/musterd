@@ -327,6 +327,32 @@ discipline from §6 applies to doorbell traffic, not to eval turns that
 must observe tool results.
 
 
+## 11. V2 port: default `{id, setup, server}` + named export in one file (2026-10-05, lane `01M44W6J2`)
+
+Dreamy's falsifier on OpenCode **v2.0.20** (Air 2): the generation-2 plugin never loads —
+`failed to load plugin … Plugin must export a default definition with an id and an effect or
+setup function. (SchemaError: Missing key at ["default"])`. Upstream confirms no shim:
+V1 async-function exports intentionally do not satisfy the V2 schema (anomalyco/opencode
+#39345, closed not_planned). Symptom of a dead rail: `drift.json` stale past the 10m TTL,
+zero `trace_events` rows, no `inbox --interrupt-check` spawns — MCP traffic unaffected.
+
+Generation 3 (`opencodePlugin.ts`) serves both from one zero-dependency file, following V2's
+own dual-support shape: default `{id: "musterd-interrupt", setup, server}` (V2 calls
+`setup`, V1.18.29+ calls `server`) plus the original named `MusterdInterrupt` (older V1).
+V2 field map, pinned against `@opencode/plugin@2.0.20` + `@opencode/schema@2.0.20` types:
+tool ids live top-level (`sessionID`, call id `id`), the model-visible text is
+`result.output`/`result.content` (string), idle arrives via `ctx.event.subscribe()`, the
+bell goes out as `ctx.session.prompt({sessionID, text})`, the seat folder is
+`ctx.location.directory`. No `Plugin.define` import — it is a typed identity helper, and
+the file stays install-free. A module-level claim flag keeps pre-1.18.29 V1 (which calls
+every exported function) from registering the rail twice.
+
+Falsify on v2.0.20: restart OpenCode in a seat workspace, one tool call → `drift.json`
+refreshed + a `PostToolUse` trace row; one raised line at a native boundary → fence in
+the transcript (the v1 MCP-path caveat in §2 may hold on V2 — the idle rail is the floor
+until measured). TUI render of the v2 prompt is unmeasured (same standing warning as
+#8564 in §4).
+
 ## Related
 
 - ADR 362 (plugin capture deferred; premise corrected) — the *outbound* half; this page

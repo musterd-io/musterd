@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   OPENCODE_IDLE_BELL_CAP,
   OPENCODE_PLUGIN_GENERATION,
+  OPENCODE_PLUGIN_ID,
   OPENCODE_PLUGIN_MARKER,
   OPENCODE_PLUGIN_SURFACE,
   inspectOpencodePluginDrift,
@@ -44,7 +45,19 @@ describe('OpenCode doorbell plugin install / drift / remove (ADR 392, ADR 168)',
     expect(raw).toContain('"tool.execute.after"');
     expect(raw).toContain('"session.idle"');
     expect(raw).not.toContain('experimental.');
+    expect(raw).not.toContain('@opencode');
     expect(inspectOpencodePluginDrift(dir)).toEqual([]);
+  });
+
+  it('dual entry (gen 3): a default {id, setup, server} for V2 / V1.18.29+ plus the named export for older V1', () => {
+    const dir = tmpProject();
+    installMusterdOpencodePlugin(dir);
+    const raw = readFileSync(opencodePluginPath(dir), 'utf8');
+    expect(raw).toContain('export const MusterdInterrupt');
+    expect(raw).toContain('export default {');
+    expect(raw).toContain(`id: PLUGIN_ID`);
+    expect(raw).toContain('setup: async (ctx)');
+    expect(raw).toContain('server: async (input)');
   });
 
   it('names a missing plugin as the deaf state, and a stale one as STALE with the refresh repair', () => {
@@ -119,7 +132,7 @@ describe('OpenCode doorbell plugin install / drift / remove (ADR 392, ADR 168)',
  * capped reply-mode prompt.
  */
 describe('OpenCode doorbell plugin behaviour', () => {
-  function run(dir: string, line: string, scenario: string, env: Record<string, string> = {}) {
+  function stage(dir: string) {
     const bin = join(dir, 'bin');
     mkdirSync(bin, { recursive: true });
     const fake = join(bin, 'musterd');
@@ -131,7 +144,16 @@ describe('OpenCode doorbell plugin behaviour', () => {
     chmodSync(fake, 0o755);
     const pluginFile = join(dir, 'musterd-plugin.mjs');
     writeFileSync(pluginFile, renderOpencodePlugin());
-    const script = `const { MusterdInterrupt } = await import(${JSON.stringify(pathToFileURL(pluginFile).href)});\n${scenario}`;
+    return { bin, pluginFile };
+  }
+
+  function spawn(
+    dir: string,
+    bin: string,
+    line: string,
+    script: string,
+    env: Record<string, string> = {},
+  ) {
     const res = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
       cwd: dir,
       encoding: 'utf8',
@@ -145,6 +167,18 @@ describe('OpenCode doorbell plugin behaviour', () => {
     });
     if (res.status !== 0) throw new Error(`plugin scenario failed: ${res.stderr}`);
     return JSON.parse(res.stdout.trim()) as Record<string, unknown>;
+  }
+
+  function run(dir: string, line: string, scenario: string, env: Record<string, string> = {}) {
+    const { bin, pluginFile } = stage(dir);
+    const script = `const { MusterdInterrupt } = await import(${JSON.stringify(pathToFileURL(pluginFile).href)});\n${scenario}`;
+    return spawn(dir, bin, line, script, env);
+  }
+
+  function runV2(dir: string, line: string, scenario: string, env: Record<string, string> = {}) {
+    const { bin, pluginFile } = stage(dir);
+    const script = `const mod = await import(${JSON.stringify(pathToFileURL(pluginFile).href)});\nconst def = mod.default;\n${scenario}`;
+    return spawn(dir, bin, line, script, env);
   }
 
   it('appends a raised line, fenced, to the tool output; silent when the probe prints nothing', () => {
@@ -234,6 +268,107 @@ describe('OpenCode doorbell plugin behaviour', () => {
     );
     expect(r['out']).toBe('x');
     expect(() => readFileSync(join(dir, 'calls.log'))).toThrow();
+  });
+
+  it('V2 default export carries the loader shape: {id, setup, server}', () => {
+    const dir = tmpProject();
+    const r = runV2(
+      dir,
+      '',
+      `console.log(JSON.stringify({
+         id: def.id,
+         setup: typeof def.setup,
+         server: typeof def.server,
+         named: typeof (await import(${JSON.stringify(pathToFileURL(join(dir, 'musterd-plugin.mjs')).href)})).MusterdInterrupt,
+       }));`,
+    );
+    expect(r['id']).toBe(OPENCODE_PLUGIN_ID);
+    expect(r['setup']).toBe('function');
+    expect(r['server']).toBe('function');
+    expect(r['named']).toBe('function');
+  });
+
+  it('V2 setup: completed tool results gain the fenced line; the trace tap carries v2 ids', () => {
+    const dir = tmpProject();
+    const r = runV2(
+      dir,
+      'musterd: nick steered you — run team_inbox_check',
+      `const prompts = [];
+       const hooks = {};
+       const ctx = {
+         location: { directory: ${JSON.stringify(dir)} },
+         tool: { hook: async (name, cb) => { (hooks[name] ??= []).push(cb); } },
+         event: { subscribe: () => (async function* () {})() },
+         session: { prompt: async (req) => { prompts.push(req); } },
+       };
+       await def.setup(ctx);
+       const after = hooks['execute.after'][0];
+       const completed = { tool: 'bash', sessionID: 'ses_1', agent: 'build', messageID: 'msg_1', id: 'call_9', input: {}, status: 'completed', result: { output: 'file contents' } };
+       await after(completed);
+       const failed = { tool: 'bash', sessionID: 'ses_1', agent: 'build', messageID: 'msg_2', id: 'call_10', input: {}, status: 'error', error: { message: 'boom' }, result: undefined };
+       await after(failed);
+       console.log(JSON.stringify({ out: completed.result.output }));`,
+    );
+    expect(r['out']).toBe(
+      'file contents\n\n<musterd-interrupt>\nmusterd: nick steered you — run team_inbox_check\n</musterd-interrupt>',
+    );
+    const stdin = readFileSync(join(dir, 'stdin.log'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
+    expect(stdin).toContainEqual({
+      session_id: 'ses_1',
+      hook_event_name: 'PostToolUse',
+      tool_name: 'bash',
+      tool_use_id: 'call_9',
+    });
+  });
+
+  it('V2 setup: a session.idle event rings one reply-mode prompt per raised line, capped per session', () => {
+    const dir = tmpProject();
+    const r = runV2(
+      dir,
+      'musterd: a huddle turn is yours',
+      `const prompts = [];
+       const idles = [];
+       for (let i = 0; i < ${(OPENCODE_IDLE_BELL_CAP + 3).toString()}; i++) idles.push({ type: 'session.idle', properties: { sessionID: 'ses_1' } });
+       idles.push({ type: 'session.idle', properties: { sessionID: 'ses_2' } });
+       idles.push({ type: 'session.updated', properties: { sessionID: 'ses_3' } });
+       const ctx = {
+         location: { directory: ${JSON.stringify(dir)} },
+         tool: { hook: async () => {} },
+         event: { subscribe: () => (async function* () { for (const e of idles) yield e; })() },
+         session: { prompt: async (req) => { prompts.push(req); } },
+       };
+       const cleanup = await def.setup(ctx);
+       await new Promise((r) => setTimeout(r, 800));
+       if (cleanup) await cleanup();
+       const ses1 = prompts.filter((p) => p.sessionID === 'ses_1').length;
+       console.log(JSON.stringify({ ses1, total: prompts.length, first: prompts[0] }));`,
+    );
+    expect(r['ses1']).toBe(OPENCODE_IDLE_BELL_CAP);
+    expect(r['total']).toBe(OPENCODE_IDLE_BELL_CAP + 1);
+    expect(r['first']).toEqual({ sessionID: 'ses_1', text: 'musterd: a huddle turn is yours' });
+  });
+
+  it('V2 server() and the named export register the rail exactly once between them', () => {
+    const dir = tmpProject();
+    const r = runV2(
+      dir,
+      'musterd: hello',
+      `const first = await def.server({ client: {}, directory: ${JSON.stringify(dir)} });
+       const { MusterdInterrupt } = await import(${JSON.stringify(pathToFileURL(join(dir, 'musterd-plugin.mjs')).href)});
+       const second = await MusterdInterrupt({ client: {}, directory: ${JSON.stringify(dir)} });
+       const third = await def.server({ client: {}, directory: ${JSON.stringify(dir)} });
+       console.log(JSON.stringify({
+         first: Object.keys(first).sort(),
+         second: Object.keys(second),
+         third: Object.keys(third),
+       }));`,
+    );
+    expect(r['first']).toEqual(['event', 'tool.execute.after']);
+    expect(r['second']).toEqual([]);
+    expect(r['third']).toEqual([]);
   });
 
   it('marker constant matches the header the doctor greps for', () => {
