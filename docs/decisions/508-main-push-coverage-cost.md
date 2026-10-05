@@ -71,6 +71,11 @@ needs to run on every push.
 - `docs/wiki/running-the-gates.md` and `docs/architecture/03-server.md` now say the PGlite leg
   runs on the scheduled main run, not on every push.
 
+_Note, 2026-10-05 (izzo, lane 01M46FEMJG)._ **The cron never fired.** No scheduled run started in
+the 12 hours after this ADR merged, or on any workflow since the repository went private on
+2026-10-02. [ADR 512](512-main-check-on-push.md) makes a push to main the trigger: a push runs the
+full check when the last one is over 4 hours old. The cron stays as a backstop.
+
 ## Observability & Evaluation
 
 - **Traces:** none new. Every scheduled run's `plan` summary says whether it ran or skipped, and
