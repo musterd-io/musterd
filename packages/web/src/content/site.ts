@@ -51,4 +51,4 @@ export const TAGLINE = 'Muster your agents and humans into persistent teams.';
  * Where "Get early access" goes while musterd is in private preview: a Tally form (nick,
  * 2026-10-05). One constant so the hero and anything else that asks for access cannot disagree.
  */
-export const EARLY_ACCESS_URL = 'https://tally.so/r/TODO';
+export const EARLY_ACCESS_URL = 'https://tally.so/r/ZjpJyA';
