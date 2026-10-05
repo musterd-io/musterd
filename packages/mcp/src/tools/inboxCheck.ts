@@ -1,5 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import {
+  describeDialChange,
   envelopePosition,
   isObligationAct,
   isReviewDispute,
@@ -448,6 +449,40 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
         // Combine buffered live deliveries with the authoritative inbox fetch, dedup by id.
         const buffered = client.drainBuffer();
         const fetched = await client.fetchInbox(args.unread_only ?? true, args.limit ?? 50);
+        // ADR 514 inc 3: the daemon says which style epoch it resolves for this seat now. When it
+        // differs from the envelope held since team_join, fetch the new block and lead with it —
+        // naming the dial that moved — so the next reply is written to the current style, and the
+        // next heartbeat attests the new epoch. An older daemon sends no epoch: nothing happens.
+        let styleNotice = '';
+        let styleChanged: { from: string; to: string } | null = null;
+        const held = client.style;
+        const unshown = held ? client.styleUnshown : null;
+        if (fetched.style_epoch && held && fetched.style_epoch !== held.epoch) {
+          // The daemon moved on (an admin's default, the human's dial): fetch and lead with it.
+          const from = unshown?.from ?? held;
+          const next = await client.refreshStyle();
+          if (next) {
+            const change = describeDialChange(from.dials, next.dials);
+            styleChanged = { from: from.epoch, to: next.epoch };
+            styleNotice =
+              `Style changed${change ? ` (${change})` : ''} — the block below replaces the one ` +
+              `you had.\n${next.block}\n\n`;
+            client.markStyleShown();
+          }
+        } else if (held && unshown) {
+          // Never rendered yet: most seats auto-claim and never call team_join (review I2), or a
+          // reconnect swapped the envelope under the model (review I3). Render it once.
+          if (unshown.from) {
+            const change = describeDialChange(unshown.from.dials, held.dials);
+            styleChanged = { from: unshown.from.epoch, to: held.epoch };
+            styleNotice =
+              `Style changed${change ? ` (${change})` : ''} — the block below replaces the one ` +
+              `you had.\n${held.block}\n\n`;
+          } else {
+            styleNotice = `${held.block}\n\n`;
+          }
+          client.markStyleShown();
+        }
         const byId = new Map<string, Envelope>();
         for (const e of [...buffered, ...fetched.messages]) byId.set(e.id, e);
         const ordered = [...byId.values()].sort(
@@ -514,17 +549,24 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
               : '';
           // ADR 135: inbox-check is every agent's minute-0 call (the SessionStart hook routes here),
           // so a stale adapter learns about itself immediately — even on an empty inbox.
-          return textResult(
+          const emptyText =
+            styleNotice +
             'no new messages — nothing waiting on you; check again at your next task boundary' +
-              recall +
-              (await syncWedgeWarningFor(client)) +
-              (await buildSkewWarning(client)) +
-              // ADR 408 inc 4: the same reasoning as the skew line above. A drifted workspace that
-              // only ever gets told about itself on a BUSY inbox is told least often on the seat
-              // that has the least going on — and an empty inbox is exactly the moment a seat has
-              // room to run the repair.
-              provisioningDriftLine(client.workspaceDir),
-          );
+            recall +
+            (await syncWedgeWarningFor(client)) +
+            (await buildSkewWarning(client)) +
+            // ADR 408 inc 4: the same reasoning as the skew line above. A drifted workspace that
+            // only ever gets told about itself on a BUSY inbox is told least often on the seat
+            // that has the least going on — and an empty inbox is exactly the moment a seat has
+            // room to run the repair.
+            provisioningDriftLine(client.workspaceDir);
+          // ADR 514: the epoch move rides as data on this path too (the one most seats take).
+          return styleChanged
+            ? {
+                content: [{ type: 'text' as const, text: emptyText }],
+                structuredContent: { style_changed: styleChanged },
+              }
+            : textResult(emptyText);
         }
         // ADR 378: a turn carries no huddle meta of its own, so a threaded act is the ONLY hint that
         // this slice might be a room speaking. Pay for the timeline read exactly then — an inbox
@@ -648,6 +690,7 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
           driftUnreadableOf(client.workspaceDir),
         ].filter((w): w is ToolWarning => w !== null);
         const text =
+          styleNotice +
           notice +
           messages.map(line).join('\n') +
           fold +
@@ -658,6 +701,8 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
           content: [{ type: 'text' as const, text }],
           structuredContent: {
             ...(warnings.length > 0 ? { warnings } : {}),
+            // ADR 514: the epoch move as data, so a structured reader can re-attest without parsing.
+            ...(styleChanged ? { style_changed: styleChanged } : {}),
             // Structured readers get the elision as data, not only as prose in `text`.
             elided_unread: plan.elided,
             // The rows the cursor walked over in digest form — ids only; the lines are in `text`.

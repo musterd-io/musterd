@@ -60,6 +60,7 @@ import {
   mintSessionLease,
   sessionLeaseDueForRenewal,
 } from '../store/session-leases.js';
+import { styleDriverFor, styleEnvelopeFor } from '../store/style.js';
 import {
   findBootstrapCredential,
   findBootstrapCredentialRecord,
@@ -920,6 +921,13 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
             charter: (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined,
             ...agentAuthority,
             memory: await memoryEnvelope(ctx.db, targetMember.id),
+            // ADR 514 inc 3: the block this seat reads — a human claimant's own, else the driver
+            // this claim declared (recorded, not verified), else the only-human rule.
+            style: await styleEnvelopeFor(
+              ctx.db,
+              team.id,
+              await styleDriverFor(ctx.db, team.id, targetMember, frame.driver ?? null),
+            ),
           });
           if (!conn.observer) emitPresence(ctx, conn, 'online', frame.surface);
           // ADR 092: now that this successor is occupied, arm the grace-gated reap of any same-workspace

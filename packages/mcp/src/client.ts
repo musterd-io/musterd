@@ -14,6 +14,10 @@ import {
   type LaneWarning,
   type MemberSummary,
   type MemoryEnvelope,
+  type StyleEnvelope,
+  StyleEnvelopeSchema,
+  type StylePrefs,
+  type ResolvedStyle,
   type NextBrief,
   type Report,
   type Seed,
@@ -91,6 +95,14 @@ function wsBase(server: string): string {
 /** Presence heartbeat cadence, and the window in which a tool call still counts as proof of life
  *  (ADR 164): one beat, so every check is judged against activity since the previous one. */
 export const HEARTBEAT_MS = 15_000;
+
+/** What `GET`/`PUT /members/me/style` answers (ADR 514): a human's own prefs, resolved, with the block. */
+export interface StyleSelfRead {
+  member: string;
+  prefs: StylePrefs;
+  resolved: ResolvedStyle;
+  block: string;
+}
 
 /**
  * How many proactive re-joins the dormant watch may fail before it stops (ADR 164 amendment 2). A
@@ -242,6 +254,14 @@ export class MusterdClient {
   /** The seat's memory envelope delivered on the occupied frame (ADR 093) — headline + age + size,
    * never the body. Rendered by team_join as the one-line pointer; null when nothing is saved. */
   private memoryEnvelope: MemoryEnvelope | null = null;
+  /** The style envelope the last occupy (or `refreshStyle`) delivered (ADR 514 inc 3). */
+  private styleEnvelope: StyleEnvelope | null = null;
+  /** Whether a tool has rendered the held envelope to the model yet. Most seats never call
+   *  `team_join` (auto-claim), so `team_inbox_check` renders it once when this is false. */
+  private styleShown = false;
+  /** The envelope a re-occupy replaced without the model seeing the change (a daemon bounce after a
+   *  policy move) — kept so the next render can say what moved, then cleared. */
+  private stylePendingFrom: StyleEnvelope | null = null;
   /** The Team Role charter delivered by authenticated occupancy; never sourced from Workspace files. */
   private charterText: string | null = null;
   /** Why the last join attempt failed — surfaced by the dormant tool guards so a silent autojoin
@@ -330,6 +350,106 @@ export class MusterdClient {
   /** The memory envelope the last occupy delivered (ADR 093), or null when the seat has no note. */
   get memory(): MemoryEnvelope | null {
     return this.memoryEnvelope;
+  }
+
+  /** The style block this seat runs (ADR 514): what `team_join` renders and the heartbeat attests. */
+  get style(): StyleEnvelope | null {
+    return this.styleEnvelope;
+  }
+
+  /** Non-null while the held envelope has not been rendered to the model: `{ from }` names the
+   *  envelope a re-occupy replaced (so the render can say what moved), or null for a first block. */
+  get styleUnshown(): { from: StyleEnvelope | null } | null {
+    if (!this.styleEnvelope || this.styleShown) return null;
+    return { from: this.stylePendingFrom };
+  }
+
+  /** A tool rendered the held envelope: nothing is pending until the next change. */
+  markStyleShown(): void {
+    this.styleShown = true;
+    this.stylePendingFrom = null;
+  }
+
+  /** Adopt an envelope from occupy or refresh: a first or changed one is unshown; a repeat is not. */
+  private adoptStyle(next: StyleEnvelope | null): void {
+    const prev = this.styleEnvelope;
+    if (next && prev && prev.epoch !== next.epoch) {
+      this.stylePendingFrom = this.stylePendingFrom ?? prev;
+      this.styleShown = false;
+    } else if (next && !prev) {
+      this.styleShown = false;
+    }
+    this.styleEnvelope = next;
+  }
+
+  /** The heartbeat frame, built fresh each tick so every attestation reads current state. */
+  private heartbeatFrame(): Record<string, unknown> {
+    return {
+      type: 'heartbeat',
+      // Re-affirm the attested model each heartbeat (ADR 101) so a mid-occupancy switch or an
+      // attestation the claim missed lands without a reconnect; the server no-ops when unchanged.
+      ...(this.config.model
+        ? {
+            model: this.config.model,
+            // The tier rides with the id, never alone: `model_source` describes `model` and is
+            // meaningless without it. `unknown` is not on the wire — no model, no stamp.
+            ...(isWireAttestationSource(this.config.modelSource)
+              ? { model_source: this.config.modelSource }
+              : {}),
+          }
+        : {}),
+      // Guidance re-attestation (ADR 417): self-heal fires ONCE, at session start, so a session
+      // that stays up outlives the rule it started under — measured 2026-09-17, one of nine seats
+      // current twenty minutes after v25 landed. Re-reading the stamp here is what lets the roster
+      // notice the refresh without a reconnect. Absent ⇒ no change, never a clear.
+      ...(guidanceEpochOf(this.config.workspace) !== undefined
+        ? { guidance_epoch: guidanceEpochOf(this.config.workspace) }
+        : {}),
+      // Style re-attestation (ADR 514): the envelope moves when `refreshStyle` fetches a new one.
+      ...this.styleAttestation(),
+      // Occupancy follows capture (ADR 275): refreshAttestation just updated config.surface from
+      // the slot; send it so the presence row does not keep the claim-time declaration.
+      surface: this.config.surface,
+    };
+  }
+
+  /** A human's own style read (`GET /members/me/style`, ADR 514). The daemon answers 403 for a seat. */
+  async styleRead(): Promise<StyleSelfRead> {
+    return (await this.request(
+      'GET',
+      `/teams/${this.config.team}/members/me/style`,
+    )) as StyleSelfRead;
+  }
+
+  /** A human's own style write — replaces the prefs whole (the tool merges first). */
+  async styleWrite(prefs: StylePrefs): Promise<StyleSelfRead> {
+    return (await this.request(
+      'PUT',
+      `/teams/${this.config.team}/members/me/style`,
+      prefs,
+    )) as StyleSelfRead;
+  }
+
+  /** `{ style_epoch }` when an envelope is held, else `{}` — absent is never a clear (ADR 417 rule). */
+  private styleAttestation(): { style_epoch?: string } {
+    return this.styleEnvelope ? { style_epoch: this.styleEnvelope.epoch } : {};
+  }
+
+  /**
+   * Fetch the current envelope from the daemon (ADR 514 inc 3) — called when `GET /inbox` reports an
+   * epoch other than the one held. The daemon picks the driver (this seat's attested one); the
+   * caller never names a human. Null when the daemon predates the route.
+   */
+  async refreshStyle(): Promise<StyleEnvelope | null> {
+    try {
+      const raw = await this.request('GET', `/teams/${this.config.team}/style-block`);
+      const parsed = StyleEnvelopeSchema.safeParse(raw);
+      if (!parsed.success) return null;
+      this.adoptStyle(parsed.data);
+      return parsed.data;
+    } catch {
+      return null;
+    }
   }
 
   /** The Team Role charter the last authenticated occupancy delivered, if the Member has one. */
@@ -602,6 +722,10 @@ export class MusterdClient {
     /** Unread this reply could not carry. Non-zero means the read cursor must not move past what
      *  was rendered — see `planInboxCheck`. Absent from an older daemon ⇒ nothing was cut. */
     unread_remaining?: number;
+    /** ADR 514 inc 3: the style epoch the daemon currently resolves for this seat's driver. The
+     *  inbox tool compares it with the envelope it holds and refreshes on a mismatch. Absent from
+     *  an older daemon ⇒ no comparison, no change. */
+    style_epoch?: string;
   }> {
     const p = new URLSearchParams();
     if (unreadOnly) p.set('unread', '1');
@@ -1198,6 +1322,9 @@ export class MusterdClient {
     this.wantPresence = false;
     this.joinedFlag = false;
     this.memoryEnvelope = null; // occupy-scoped: stale once the seat is released
+    this.styleEnvelope = null;
+    this.styleShown = false;
+    this.stylePendingFrom = null;
     this.charterText = null;
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.heartbeat = null;
@@ -1245,6 +1372,9 @@ export class MusterdClient {
           ...(guidanceEpochOf(this.config.workspace) !== undefined
             ? { guidance_epoch: guidanceEpochOf(this.config.workspace) }
             : {}),
+          // ADR 514: a re-claim while holding a style envelope attests the epoch it runs; a first
+          // claim holds none and says nothing.
+          ...this.styleAttestation(),
           // ADR 241: the correlation token, when a wake spawned this session. Absent otherwise —
           // never a placeholder, because the host treats a match as proof of authorship.
           ...(this.config.wakeLease ? { wake_lease: this.config.wakeLease } : {}),
@@ -1292,6 +1422,10 @@ export class MusterdClient {
         // The continuity envelope (ADR 093): headline + age, never the body — team_join renders it
         // as the one-line pointer; the body is fetched only by an explicit team_memory_read.
         this.memoryEnvelope = frame.memory ?? null;
+        // The style envelope (ADR 514 inc 3): the block team_join (or the first inbox check)
+        // renders and the epoch every heartbeat attests. A reconnect that brings a different epoch
+        // is a pending change, not a silent swap. Absent from an older daemon ⇒ nothing held.
+        this.adoptStyle(frame.style ?? null);
         // Resume token (ADR 087): the first approval delivers a reusable grant here — keep it so
         // `persistBinding` writes it into `binding.grant` and reconnects re-occupy without approval.
         if (frame.grant) this.config.grant = frame.grant;
@@ -1312,36 +1446,7 @@ export class MusterdClient {
             // Reconcile Cursor capture then re-read (ADR 270 / ADR 158 §7): hookless cursor-agent
             // never writes model_observed, so a re-read alone would keep the desktop leftover.
             this.refreshObservedModel();
-            ws.send(
-              JSON.stringify({
-                type: 'heartbeat',
-                // Re-affirm the attested model each heartbeat (ADR 101) so a mid-occupancy switch
-                // or an attestation the claim missed lands without a reconnect; the server no-ops
-                // when unchanged.
-                ...(this.config.model
-                  ? {
-                      model: this.config.model,
-                      // The tier rides with the id, never alone: `model_source` describes `model` and is
-                      // meaningless without it. `unknown` is not on the wire — no model, no stamp.
-                      ...(isWireAttestationSource(this.config.modelSource)
-                        ? { model_source: this.config.modelSource }
-                        : {}),
-                    }
-                  : {}),
-                // Guidance re-attestation (ADR 417): self-heal fires ONCE, at session start, so a
-                // session that stays up outlives the rule it started under — measured 2026-09-17,
-                // one of nine seats current twenty minutes after v25 landed. Re-reading the stamp
-                // here is what lets the roster notice the refresh without a reconnect. Absent ⇒ no
-                // change, never a clear.
-                ...(guidanceEpochOf(this.config.workspace) !== undefined
-                  ? { guidance_epoch: guidanceEpochOf(this.config.workspace) }
-                  : {}),
-                // Occupancy follows capture (ADR 275): refreshAttestation just updated
-                // config.surface from the slot; send it so the presence row does not keep the
-                // claim-time declaration. Absent on CLI/web heartbeats ⇒ no change.
-                surface: this.config.surface,
-              }),
-            );
+            ws.send(JSON.stringify(this.heartbeatFrame()));
           }
         }, HEARTBEAT_MS);
         this.heartbeat.unref?.();
@@ -1512,6 +1617,7 @@ export class MusterdClient {
     this.wantPresence = false;
     this.joinedFlag = false;
     this.memoryEnvelope = null;
+    this.styleEnvelope = null;
     this.charterText = null;
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.ws?.close();

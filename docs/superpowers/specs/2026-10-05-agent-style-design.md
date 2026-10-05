@@ -130,8 +130,8 @@ JSON. Shape:
 ```
 Style (epoch a1b2c3) — how you talk here.
 Floor (team): assess before you agree; no praise before a check; disagree once, with the reason,
-  then follow the decision; a concession names what you checked; a human's critique weighs what
-  its evidence weighs.
+  then follow the decision; a concession names what you checked; weigh a human's critique by its
+  evidence, like anyone's.
 For nick (in chat, and in any act addressed to nick): pushback when it matters · direct · concise · prose.
 nick adds: "Lead with the result. Tell me when I'm wrong, once, then do it my way."
 Everyone else, @team and the record: team defaults (pushback when it matters · plain · normal · prose).
@@ -156,10 +156,13 @@ member, it is that human. Otherwise the block carries only the floor and team de
   the reply after the memory headline. Composed server-side from the team policy, the driver's
   `style_prefs` and the presence's driver.
 - **Other humans.** `team_members` gains `style` on human rows: the resolved dials, no prose. The
-  `team_send` reply to an act addressed to a human echoes that human's dials in one line.
+  `team_send` reply does not echo them — the send path holds no roster, and a round trip per send
+  is the cost this design avoids (increment 3 ruling); a seat reads `team_members` before composing.
 - **Change mid-session.** The adapter sends `style_epoch` beside `guidance_epoch` on heartbeats.
   When the daemon's current epoch for that seat differs, the next `team_inbox_check` reply leads
-  with the new block and one line: `style changed by nick: length concise → thorough`. No restart.
+  with one line, `Style changed (length concise → thorough)`, and the new block. The line names the
+  dial that moved, from the two envelopes; it does not name who moved it — only the audit knows
+  (increment 3 ruling). No restart.
 - **Standing.** The static primer keeps one pointer line (the duplication ADR 085 allows): *the style
   block in your join reply governs how you talk; a later inbox reply may replace it.* Dolly's bullet
   leaves `guidance.ts`; `GUIDANCE_CONTENT_VERSION` bumps.

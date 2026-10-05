@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { withDrivers } from '../db/testing.js';
 import { listAudit } from '../store/audit.js';
+import { styleEnvelopeFor } from '../store/style.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { integrationHarness, type Auth } from './integration.helpers.js';
 
@@ -109,6 +110,103 @@ withDrivers('style-http', (_o, kind) => {
       expect(byName['dee']!.style).toMatchObject({ length: 'concise' });
       expect(byName['nick']!.style).toMatchObject({ length: 'normal' });
       expect(byName['Ada']!.style).toBeNull();
+    });
+
+    it('GET /style-block for a human is their own block; a seat cannot pick a driver by name (inc 3)', async () => {
+      const t = await team();
+      await put(
+        '/teams/dawn/members/me/style',
+        { length: 'concise', prose: 'Only my seats read this.' },
+        t.dee,
+      );
+      // A seat naming dee in the query gets nothing of dee's: no presence driver, two humans ⇒ team.
+      const peek = await get('/teams/dawn/style-block?driver=dee', t.ada);
+      expect(peek.json.driver).toBeNull();
+      expect(peek.json.block).not.toContain('Only my seats read this.');
+      const got = await get('/teams/dawn/style-block', t.dee);
+      expect(got.status).toBe(200);
+      expect(got.json.driver).toBe('dee');
+      expect(got.json.block).toContain('dee adds: "Only my seats read this."');
+      expect(got.json.dials.length).toBe('concise');
+      expect(got.json.block).toContain(
+        'For dee (in chat, and in any act addressed to dee): pushback when it matters · plain · concise · prose.',
+      );
+      expect(got.json.epoch).toMatch(/^[0-9a-f]{8}$/);
+    });
+
+    it('no driver and two humans ⇒ team defaults, and the block says so (Focus 2)', async () => {
+      const t = await team();
+      const got = await get('/teams/dawn/style-block', t.ada);
+      expect(got.status).toBe(200);
+      expect(got.json.driver).toBeNull();
+      expect(got.json.block).toContain('No driver bound and this team has several humans');
+    });
+
+    it('no driver and ONE human ⇒ that human is the driver (Focus 2)', async () => {
+      const created = await post('/teams', {
+        slug: 'solo',
+        creator: { name: 'nick', kind: 'human' },
+      });
+      const nick = created.json.human_credential;
+      await post('/teams/solo/members', { name: 'Ada', kind: 'agent' }, nick);
+      const got = await get('/teams/solo/style-block', {
+        key: created.json.agent_key,
+        seat: 'Ada',
+      });
+      expect(got.status).toBe(200);
+      expect(got.json.driver).toBe('nick');
+      expect(got.json.block).toContain('For nick (in chat, and in any act addressed to nick)');
+    });
+
+    it('an observer seat is not a human for the only-human rule (review I4)', async () => {
+      const created = await post('/teams', {
+        slug: 'solo',
+        creator: { name: 'nick', kind: 'human' },
+      });
+      const nick = created.json.human_credential;
+      await post('/teams/solo/members', { name: 'Ada', kind: 'agent' }, nick);
+      await post('/teams/solo/members', { name: 'wall', kind: 'human', observer: true }, nick);
+      const got = await get('/teams/solo/style-block', {
+        key: created.json.agent_key,
+        seat: 'Ada',
+      });
+      expect(got.json.driver).toBe('nick');
+    });
+
+    it('a claimed driver that is not a human member falls through to the only-human rule', async () => {
+      const created = await post('/teams', {
+        slug: 'solo',
+        creator: { name: 'nick', kind: 'human' },
+      });
+      const nick = created.json.human_credential;
+      await post('/teams/solo/members', { name: 'Ada', kind: 'agent' }, nick);
+      const teamRow = (await getTeamBySlug(h.db, 'solo'))!;
+      expect((await styleEnvelopeFor(h.db, teamRow.id, 'Ada')).driver).toBe('nick');
+      expect((await styleEnvelopeFor(h.db, teamRow.id, 'nobody')).driver).toBe('nick');
+    });
+
+    it('/inbox and /style-block agree on the epoch for the same caller, human and seat (review I5)', async () => {
+      const t = await team();
+      await put('/teams/dawn/members/me/style', { length: 'concise' }, t.dee);
+      for (const who of [t.dee, t.ada]) {
+        const inbox = (await get('/teams/dawn/inbox?unread=1', who)).json.style_epoch;
+        const block = (await get('/teams/dawn/style-block', who)).json.epoch;
+        expect(inbox).toBe(block);
+      }
+      // dee's own dials set her epoch apart from the team's, so the two callers differ.
+      expect((await get('/teams/dawn/style-block', t.dee)).json.epoch).not.toBe(
+        (await get('/teams/dawn/style-block', t.ada)).json.epoch,
+      );
+    });
+
+    it('GET /inbox carries the current style_epoch for the seat, and it moves with policy (Focus 3)', async () => {
+      const t = await team();
+      const before = (await get('/teams/dawn/inbox?unread=1', t.ada)).json.style_epoch;
+      expect(before).toMatch(/^[0-9a-f]{8}$/);
+      await post('/teams/dawn/policy', { style: { defaults: { length: 'thorough' } } }, t.nick);
+      const after = (await get('/teams/dawn/inbox?unread=1', t.ada)).json.style_epoch;
+      expect(after).toMatch(/^[0-9a-f]{8}$/);
+      expect(after).not.toBe(before);
     });
 
     it('a set writes an audit row naming the dials, never the prose', async () => {

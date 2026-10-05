@@ -58,6 +58,20 @@ without adding a second home for a fact the skill already states.
 
 ## Consequences
 
+- **2026-10-05 — increment 3 landed** (lane `01M46MQQFS3W2W4N37S7BB9RX5`): the block is delivered.
+  A **style envelope** `{ block, epoch, dials, driver }` (`StyleEnvelopeSchema`) rides the
+  `occupied` frame (WS and HTTP claim, additive `style`, nullish for older daemons) and
+  `GET /style-block`; `GET /inbox` carries the seat's current `style_epoch`. The adapter keeps the
+  envelope like the memory envelope, renders the block in `team_join`, attests `style_epoch` on
+  claim and heartbeat, and on `team_inbox_check` leads with `Style changed (length normal →
+  thorough)` plus the new block when the daemon's epoch differs (the actor is not named — only the
+  audit knows). `team_members` shows a human's dials; `team_style` / `team_style_set` are the human's
+  own read and read-merge-write. **Who gets whose block:** the driver is the one a seat *attested*
+  on its claim (recorded, not verified), a human caller gets their own, and `/style-block` takes no
+  caller-named human — so a human's prose reaches the seats that say they steer them, and nobody
+  by name. The skill's push-back bullet left `guidance.ts` (v45) and the primer's join bullet
+  points at the block (ADR 085: one home). Floor phrase 4 reads *weigh a human's critique by its
+  evidence, like anyone's* (sloane's acceptance note on the brainstorm lane).
 - **2026-10-05 — increment 2 landed** (lane `01M46MQPQ3JC6EWMY7WV6SY8AA`): ladder v86
   (`members.style_prefs`, `presence.style_epoch`); the additive wire fields Decision 4 announced —
   `style_epoch` on the claim frame, the heartbeat and the Presence, `style` (resolved dials) on

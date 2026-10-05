@@ -1,4 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
+import { describeDials } from '@musterd/protocol';
 import { z } from 'zod';
 import type { MusterdClient } from '../client.js';
 import { errorResult, formatMember, textResult } from './format.js';
@@ -62,6 +63,9 @@ export function registerMembers(server: McpServer, client: MusterdClient): void 
                 ? ` · quiet ${Math.round(q.quiet_for_ms / 60_000)}m`
                 : ` · ${q.state}`;
           }
+          // ADR 514: how to talk to this human — the dials a seat composing an act to them reads.
+          // Human rows only; an older daemon serves none and the facet stays silent.
+          if (m.kind === 'human' && m.style) line += ` · style: ${describeDials(m.style)}`;
           return line;
         });
         // A role query leads with the role's own one-line face, when the library carries one.
