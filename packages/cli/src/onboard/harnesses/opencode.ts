@@ -136,7 +136,7 @@ export const opencode: Harness = {
         'sqlite3',
         [
           dbPath,
-          `SELECT model FROM session WHERE directory='${cwd.replace(/'/g, "''")}' ORDER BY time_updated DESC LIMIT 1;`,
+          `SELECT model FROM session_v2 WHERE directory='${cwd.replace(/'/g, "''")}' ORDER BY time_updated DESC LIMIT 1;`,
         ],
         { encoding: 'utf8', timeout: 1000 },
       ).trim();
