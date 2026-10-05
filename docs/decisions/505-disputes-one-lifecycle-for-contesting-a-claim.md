@@ -217,6 +217,10 @@ a change that raises holds without the tiebreak siding with them.
   the commit — so the count §7's falsifier needs is `git log --grep 'not-a-falsification:'`
   either way. Registered as control `adr-505-falsification-mints-a-ledger-entry`; tripped on
   2026-10-05 by the exercise (a struck claim on `agent-sycophancy.md`, uncommitted, refused).
+- **2026-10-05 — §6's copy takes the positive form** (sloane's acceptance note on #2065, lane
+  01M44BVFV9VWV3J0987ZW00D8A). "Do not build on it quietly" is the contrast frame `brand.md` §4
+  bans; `BUILD_ON_CHECK`, the handoff ack and the guidance line (v43) now end on the instruction —
+  dispute it with `challenge` — and nothing else.
 - **Increments, each a lane under Goal `disputes`:**
 
   | increment | lane | what lands | protocol? |

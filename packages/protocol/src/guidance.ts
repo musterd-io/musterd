@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 42;
+export const GUIDANCE_CONTENT_VERSION = 43;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -240,7 +240,7 @@ export function renderSkillBody(opts: { team: string }): string {
     "- **Check before you build on a peer's claim.** When you claim a lane with dependencies, or accept a",
     "  handoff, you are building on someone's finding. If it carries weight for your work, re-run its check",
     "  first — the lane's outcome, PR and acceptor's note are where to start. If the check fails, dispute",
-    '  it to its owner with `challenge`; do not build on it quietly. The cost of not checking is measured',
+    '  it to its owner with `challenge`. The cost of not checking is measured',
     '  later: a claim that falls points back at every lane that built on it (ADR 505 §7).',
     '- **Push back on the human too, in chat.** When the human proposes a direction, give your own',
     '  assessment first. If you see a flaw, a cheaper path, or a risk that matters to the project, say so',

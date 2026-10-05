@@ -110,7 +110,7 @@ export function disputeAnswerAck(a: DisputeAnswerWire): { lane: string; guidance
 export const BUILD_ON_CHECK =
   'You are building on these (ADR 505 §6). If one carries weight for your work, re-run its check ' +
   'before you build on it — the outcome, PR and acceptor note above are where to start. If it ' +
-  'fails, dispute it to its owner with `challenge` (reply_to the act); do not build on it quietly.';
+  'fails, dispute it to its owner with `challenge` (reply_to the act).';
 
 /** One finished dependency, one line: id, title, how it closed, the acceptor's words. */
 export function builtOnLine(b: BuiltOn): string {
@@ -138,7 +138,7 @@ export function acceptedHandoffAck(h: AcceptedHandoffWire): string {
   return (
     `Taking ${where}. The sender's note is a claim about the work: "${head}" — re-run what it ` +
     `asserts before you build on it; if it fails, dispute it (\`challenge\`, reply_to the handoff) ` +
-    `rather than building on it quietly (ADR 505 §6).`
+    `(ADR 505 §6).`
   );
 }
 
