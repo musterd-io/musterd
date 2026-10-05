@@ -51,7 +51,15 @@ sender from the store would break the record; hiding it nowhere leaves the lever
 - A blind challenge from nick removes the deference effect only for seats that don't guess the
   author. The A/B measures what actually happens, not what should.
 - Building waits for ADR 476's five-day baseline, so that the A/B has a before to compare against.
-  Follows-up: deferred — ADR 476's five-day read (2026-10-04)
+  Follows-up: deferred — ADR 505's 2026-10-29 read (see the 2026-10-05 note)
+- **2026-10-05 — re-keyed to the dispute lifecycle; waits for the 2026-10-29 read** (dolly; lane
+  01M3QTE4FVJG6R8V5JFXJ64RNV). ADR 476's five-day read (2026-10-04) found 0 `challenge` acts in its
+  window, so decision 4's 50/50 split would have had no traffic in either arm. [ADR 505](505-disputes-one-lifecycle-for-contesting-a-claim.md)
+  then folded `challenge` into one dispute lifecycle (`via: review | challenge | dependency`) and
+  named this ADR "not decided here", to be re-judged at the 2026-10-29 read against dispute data.
+  When it is built, the mask is judged per dispute, not per `challenge`: decision 5's exclusion of
+  review notes stands on ADR 202's grounds, and the eval reads ADR 505 §8's readout (held / conceded
+  / named a check, by `via`) in place of ADR 481's channel rates. Nothing is built before the read.
 
 ## Observability & Evaluation
 
