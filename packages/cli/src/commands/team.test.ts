@@ -103,6 +103,26 @@ describe('team policy command', () => {
     ).rejects.toThrow(/--sponsored-agent-cap <1–100>/);
   });
 
+  it('--acceptance-review-window sets the lane-review wait in minutes, and the view says how long (ADR 506)', async () => {
+    expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
+      'acceptance review window: 20m',
+    );
+    const set = await capture(() =>
+      teamCommand(parseArgs(['policy', '--acceptance-review-window', '45'])),
+    );
+    expect(set.code).toBe(0);
+    expect(set.out).toContain('acceptance review window: 45m');
+    expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
+      'acceptance review window: 45m',
+    );
+    await expect(
+      teamCommand(parseArgs(['policy', '--acceptance-review-window', '0'])),
+    ).rejects.toThrow(/--acceptance-review-window <1–1440 minutes>/);
+    await expect(
+      teamCommand(parseArgs(['policy', '--acceptance-review-window', '2.5'])),
+    ).rejects.toThrow(/--acceptance-review-window <1–1440 minutes>/);
+  });
+
   it('--trace-content turns the content column on and off, and the view says which (ADR 445 §3)', async () => {
     expect((await capture(() => teamCommand(parseArgs(['policy'])))).out).toContain(
       'trace content: off',

@@ -201,6 +201,12 @@ so a seat on an unarmed team read the hint and the guidance as contradicting eac
 it on lane 01M3R8N33X). Guidance v38 and AGENTS.md now state all three rows. The Decision is
 unchanged; only its teaching was incomplete.
 
+_Note, 2026-10-04 (izzo, lane 01M44YYDQ7)._ **The "≤5m" in the no-backstop row is now the team's
+review window.** [ADR 506](506-acceptance-review-window.md) makes it the team policy
+`acceptance_review_window_ms`, with a default of 20 minutes. It moved because owners on revive
+self-closed 97 lanes before any verdict in week 40. The submit reply carries the value as
+`review.wait_ms`, and the hint prints it. The three contracts in the table are unchanged.
+
 ## Observability & Evaluation
 
 **Traces.** No new audit rows, and deliberately none: the decision changes advice, and advice is not

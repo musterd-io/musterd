@@ -2,6 +2,7 @@ import {
   emptyPoolHint,
   LaneStakesSchema,
   LaneStateSchema,
+  reviewWaitMinutes,
   type Lane,
   type LaneStakes,
   type LaneWarning,
@@ -435,7 +436,7 @@ export function renderSubmitReport(res: Awaited<ReturnType<HttpClient['updateLan
                 `${Math.round(backstop.grace_ms / 3_600_000)}h. \`musterd lane resolve\` still ` +
                 `works if you need it shut now, and records unconfirmed. ` +
                 `Acceptor judges intent/principles/usable/feel — not a code review.`
-            : `(${res.review.route}) — wait ≤5m; accept closes the lane, reject resumes it; ` +
+            : `(${res.review.route}) — wait ≤${reviewWaitMinutes(res.review.wait_ms)}m; accept closes the lane, reject resumes it; ` +
                 `on silence, \`musterd lane resolve\` yourself (recorded unconfirmed). ` +
                 `Acceptor judges intent/principles/usable/feel — not a code review.`,
         ) +

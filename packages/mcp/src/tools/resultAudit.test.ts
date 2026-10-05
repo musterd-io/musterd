@@ -189,15 +189,20 @@ describe('empty states name the next action', () => {
       expect(out).toContain('leave it with them');
       expect(out).toContain('Do NOT self-close on silence');
       expect(out).toContain('24h');
-      expect(out).not.toContain('wait ≤5m');
+      expect(out).not.toContain('wait ≤');
       // Never a wedge (ADR 145): the escape must still be named, just not recommended.
       expect(out).toContain('lane_resolve still works');
     });
 
     it('no backstop — the pre-235 advice is unchanged, because self-close is the only escape', async () => {
-      const out = await run({ reviewer: 'Lin', route: 'cross_family' });
-      expect(out).toContain('wait ≤5m');
+      const out = await run({ reviewer: 'Lin', route: 'cross_family', wait_ms: 30 * 60_000 });
+      expect(out).toContain('wait ≤30m');
       expect(out).toContain('on silence, lane_resolve yourself');
+    });
+
+    it('an older daemon reports no wait — fall back to the shipped 20-minute window (ADR 506)', async () => {
+      const out = await run({ reviewer: 'Lin', route: 'cross_family' });
+      expect(out).toContain('wait ≤20m');
     });
 
     it('no acceptor asked — sanctioned regardless, since no verdict is coming', async () => {

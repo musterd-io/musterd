@@ -5,8 +5,11 @@ import {
   ASK_TIERS,
   ASK_TIER_DEFAULTS,
   ASK_TOP_TIER,
+  ACCEPTANCE_REVIEW_WINDOW_MS,
+  acceptanceAskContract,
   askContract,
   askContractText,
+  reviewWaitMinutes,
   askTierHolds,
 } from './ask.js';
 
@@ -104,5 +107,29 @@ describe('the reachability-gated hold (ADR 153)', () => {
       expect(text).toContain('PROCEED');
       expect(text).not.toContain('STRAND');
     }
+  });
+});
+
+describe('the lane_review ask window (ADR 506)', () => {
+  it('floors a below-top tier at the team window and keeps its no-answer policy', () => {
+    expect(acceptanceAskContract('standard')).toEqual({
+      timeout_ms: ACCEPTANCE_REVIEW_WINDOW_MS,
+      no_answer: 'proceed_with_risk',
+    });
+    expect(acceptanceAskContract('standard', 45 * 60_000).timeout_ms).toBe(45 * 60_000);
+  });
+
+  it('never shortens a tier whose own timeout is longer than the window', () => {
+    expect(acceptanceAskContract('blocking', 60_000)).toEqual(askContract('blocking'));
+  });
+
+  it('the shipped default is 20 minutes, and the generic tier table is untouched', () => {
+    expect(ACCEPTANCE_REVIEW_WINDOW_MS).toBe(20 * 60_000);
+    expect(askContract('standard').timeout_ms).toBe(5 * 60_000);
+  });
+
+  it('reviewWaitMinutes reads the reported wait, or the default from an older daemon', () => {
+    expect(reviewWaitMinutes(10 * 60_000)).toBe(10);
+    expect(reviewWaitMinutes(undefined)).toBe(20);
   });
 });

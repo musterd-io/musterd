@@ -170,6 +170,7 @@ import {
   hasRecentInterruptRefusal,
   laneOwnerHistory,
   listAudit,
+  reviewRouting,
   standingAcceptance,
 } from '../store/audit.js';
 import { applyCursorAdvance, getCursor } from '../store/cursors.js';
@@ -397,6 +398,7 @@ import { staleLaneWarnings } from '../store/staleness.js';
 import { searchInsights } from '../store/teamMemory.js';
 import {
   archiveTeam,
+  acceptanceTimeoutMs,
   bootstrapCutoverReadiness,
   createTeam,
   cutoverLegacyBootstrap,
@@ -6554,6 +6556,7 @@ export async function handleHttp(
             : humanRequired && pick?.grade === 'human'
               ? 'blocking'
               : 'standard';
+          const acceptanceWaitMs = await acceptanceTimeoutMs(ctx.db, team.id, acceptanceTier);
           // A lane transition: the replicated, required form (lane-replication spec §Hole 3).
           await appendLaneEventRequired(ctx.db, team.id, {
             actor: member.name,
@@ -6651,7 +6654,7 @@ export async function handleHttp(
               ...(pick
                 ? {
                     ask_tier: acceptanceTier,
-                    ask_timeout_ms: askContract(acceptanceTier).timeout_ms,
+                    ask_timeout_ms: acceptanceWaitMs,
                   }
                 : {}),
               ...(postureForAudit
@@ -6692,6 +6695,7 @@ export async function handleHttp(
                 tier: acceptanceTier,
                 lane_review: {
                   lane: lane.id,
+                  wait_ms: acceptanceWaitMs, // ADR 506: the promise, carried where /live can read it
                   title: lane.title,
                   branch: lane.branch,
                   ...(lane.merged ? { merged: lane.merged } : {}),
@@ -6815,6 +6819,7 @@ export async function handleHttp(
             const humanRequired = lane.risk.length > 0;
             const acceptanceTier: AskTier =
               humanRequired && named.grade === 'human' ? 'blocking' : 'standard';
+            const acceptanceWaitMs = await acceptanceTimeoutMs(ctx.db, team.id, acceptanceTier);
             await appendLaneEventRequired(ctx.db, team.id, {
               actor: member.name,
               action: 'lane.review_rerouted',
@@ -6835,7 +6840,7 @@ export async function handleHttp(
                 superseded_ask: standingAsk?.id ?? null,
                 human_required: humanRequired,
                 ask_tier: acceptanceTier,
-                ask_timeout_ms: askContract(acceptanceTier).timeout_ms,
+                ask_timeout_ms: acceptanceWaitMs,
               },
             });
             if (standingAsk) {
@@ -6865,6 +6870,7 @@ export async function handleHttp(
                 tier: acceptanceTier,
                 lane_review: {
                   lane: lane.id,
+                  wait_ms: acceptanceWaitMs, // ADR 506: the promise, carried where /live can read it
                   title: lane.title,
                   branch: lane.branch,
                   ...(lane.merged ? { merged: lane.merged } : {}),
@@ -7010,10 +7016,17 @@ export async function handleHttp(
           (await getPolicy(ctx.db, team.id)).loops?.sweep
             ? { backstop: { armed: true as const, grace_ms: SWEEP_GRACE_MS } }
             : {};
+        // ADR 506: the wait the acceptor was promised, read back from the routing row rather than
+        // re-derived — a standing or re-routed report must state the promise that was recorded.
+        const promised =
+          review && typeof review['reviewer'] === 'string'
+            ? (await reviewRouting(ctx.db, team.id, lane.id)).promised_ms
+            : undefined;
+        const waitMs = promised !== undefined ? { wait_ms: promised } : {};
         return sendJson(res, 200, {
           lane,
           warnings,
-          ...(review ? { review: { ...review, ...backstop } } : {}),
+          ...(review ? { review: { ...review, ...backstop, ...waitMs } } : {}),
           // ADR 283: the recorded close verdict, so the closer's surface can name the label the
           // ledger holds instead of inferring one. Same discipline as `close_records` on the submit
           // side (ADR 234) — the ledger label is never a surprise found afterwards.

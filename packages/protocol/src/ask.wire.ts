@@ -86,6 +86,36 @@ export function askContract(tier: AskTier): AskContract {
 }
 
 /**
+ * The shipped default for team policy `acceptance_review_window_ms` (ADR 506): the floor on an
+ * outcome-acceptance (`lane_review`) ask's wait. A review is real work — the acceptor re-reads the
+ * landed outcome and exercises it — so the generic `standard` tier's 5 minutes was a borrowed number.
+ * Measured over the three weeks to 2026-10-04: 39% of answered reviews landed inside 5m, 73% inside 20m.
+ */
+export const ACCEPTANCE_REVIEW_WINDOW_MS = 20 * 60_000;
+
+/**
+ * The contract for a `lane_review` ask at a given tier (ADR 506): the tier's no-answer policy, with a
+ * wait of at least the team's review window (`acceptance_review_window_ms`, defaulting to
+ * {@link ACCEPTANCE_REVIEW_WINDOW_MS}). The ONE place the review wait is derived, so the promise the
+ * ready row records (ADR 217) and the owner's "wait ≤Nm" line cannot disagree.
+ */
+export function acceptanceAskContract(
+  tier: AskTier,
+  windowMs: number = ACCEPTANCE_REVIEW_WINDOW_MS,
+): AskContract {
+  const base = askContract(tier);
+  return { ...base, timeout_ms: Math.max(base.timeout_ms, windowMs) };
+}
+
+/**
+ * Whole minutes an owner waits on a `lane_review` ask before self-closing on silence (ADR 506) — the
+ * daemon's reported `review.wait_ms`, or the shipped default when an older daemon sends none.
+ */
+export function reviewWaitMinutes(waitMs: number | undefined): number {
+  return Math.round((waitMs ?? ACCEPTANCE_REVIEW_WINDOW_MS) / 60_000);
+}
+
+/**
  * The **agent-facing marching orders** for an ask at a given tier (ADR 147 §2/§4) — the ONE canonical
  * phrasing of "how long to wait, then what to do on silence," so every surface that hands an agent its
  * ask contract says the same thing. Shared by the MCP `send` response (the ask-raiser's guidance) and

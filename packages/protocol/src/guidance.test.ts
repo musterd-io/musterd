@@ -225,6 +225,7 @@ describe('version-bump discipline (ADR 085)', () => {
     39: 'dce7b2689034424f', // + more than one increment? declare a Goal and open every increment's lane now; follows_up / abandon_reason on close (ADR 487, lane 01M3T8N2ZP)
     40: 'e11f63074576f8a4', // the "declare a Goal" rule moves to the always-loaded primer (ADR 085: planning has no cue to open the skill); the skill keeps only the mechanics (lane 01M3TW8NNN)
     41: '2d4acfc73d33a595', // ADR 505 (lane 01M44BV3097RBY6RW2DP893Q84): "Answering a critique" becomes "Disputes" — a review rejection is a dispute the owner answers (accept with the check / decline with the evidence; a hold goes to a cross-family tiebreak); check before you build on a dependency or handoff; push back on the human in chat too (agent-style lane 01M44BNJRF); acceptor step 2 points at it
+    42: '153ea92b6eb3a9ab', // ADR 506 (lane 01M44YYDQ7): step 3's no-backstop branch waits the window the submit reply names (team policy `acceptance_review_window_ms`, default 20m), not a fixed 5m
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {

@@ -1859,8 +1859,8 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
       expect(byLane[a.json.lane.id].reason).toBe('review_cut_short');
       // ADR 217: the promise is carried on the close row, so the grading is auditable without
       // re-reading the ready edge.
-      expect(byLane[a.json.lane.id].promised_wait_ms).toBe(5 * 60_000);
-      expect(byLane[a.json.lane.id].time_in_review_ms).toBeLessThan(5 * 60_000);
+      expect(byLane[a.json.lane.id].promised_wait_ms).toBe(20 * 60_000);
+      expect(byLane[a.json.lane.id].time_in_review_ms).toBeLessThan(20 * 60_000);
       expect(byLane[b.json.lane.id].verified).toBe(false);
       expect(byLane[b.json.lane.id].reason).toBe('self_close');
     });
@@ -1934,7 +1934,24 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
       // ADR 217: the promise is recorded at the ready edge, where the tier is decided — the close edge
       // has no business re-deriving it later from a roster that has moved on.
       expect(r0.detail.ask_tier).toBe('standard');
-      expect(r0.detail.ask_timeout_ms).toBe(5 * 60_000);
+      expect(r0.detail.ask_timeout_ms).toBe(20 * 60_000);
+      // ADR 506: the owner's reply states the same promise the ready row recorded.
+      expect(ready.json.review.wait_ms).toBe(20 * 60_000);
+    });
+
+    it("a team's acceptance_review_window_ms is the promise the ready row records and the reply states (ADR 506)", async () => {
+      const { nickTok, ada } = await setup();
+      expect(
+        (await post('/teams/dawn/policy', { acceptance_review_window_ms: 45 * 60_000 }, nickTok))
+          .status,
+      ).toBe(200);
+      const lane = await post('/teams/dawn/lanes', { title: 'slow team', claim: true }, ada);
+      const ready = await patchLane(lane.json.lane.id, { state: 'ready_for_review' }, ada);
+      expect(ready.json.review.reviewer).toBeTruthy();
+      expect(ready.json.review.wait_ms).toBe(45 * 60_000);
+      const readyRows = await auditRows(nickTok, 'lane.ready_for_review');
+      const r0 = readyRows.find((r: any) => r.detail.lane === lane.json.lane.id)!;
+      expect(r0.detail.ask_timeout_ms).toBe(45 * 60_000);
     });
 
     it('an owner that WAITS the promised window derives review_unanswered, not cut_short (ADR 217)', async () => {
@@ -1946,10 +1963,10 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
       const ready = await patchLane(lane.json.lane.id, { state: 'ready_for_review' }, ada);
       expect(ready.json.review.reviewer).toBeTruthy();
 
-      // Past the `standard` window the acceptor was promised. Faked rather than waited: the point is
-      // the comparison, and a real 5-minute test is a 5-minute test.
+      // Past the review window the acceptor was promised (ADR 506: 20m by default). Faked rather than
+      // waited: the point is the comparison, and a real 20-minute test is a 20-minute test.
       vi.useFakeTimers();
-      vi.setSystemTime(new Date(Date.now() + 5 * 60_000 + 1_000));
+      vi.setSystemTime(new Date(Date.now() + 20 * 60_000 + 1_000));
       try {
         // The 5-minute proof is intentionally expired at this boundary; a real adapter reclaims to
         // mint a fresh lease before it may close the lane.
@@ -1967,8 +1984,8 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
       const rows = await auditRows(nickTok, 'lane.closed');
       const closed = rows.find((r: any) => r.detail.lane === lane.json.lane.id)!;
       expect(closed.detail.reason).toBe('review_unanswered');
-      expect(closed.detail.promised_wait_ms).toBe(5 * 60_000);
-      expect(closed.detail.time_in_review_ms).toBeGreaterThanOrEqual(5 * 60_000);
+      expect(closed.detail.promised_wait_ms).toBe(20 * 60_000);
+      expect(closed.detail.time_in_review_ms).toBeGreaterThanOrEqual(20 * 60_000);
       // Still never a wedge (ADR 145): waiting longer changes the LABEL, never the owner's ability to
       // close, and never the verified-ness the close derives.
       expect(closed.detail.verified).toBe(false);

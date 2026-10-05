@@ -703,6 +703,13 @@ export const LaneResultSchema = z.object({
       backstop: z
         .object({ armed: z.boolean(), grace_ms: z.number().int().nonnegative() })
         .optional(),
+      /**
+       * ADR 506: how long the acceptor was promised — the team's `acceptance_review_window_ms`
+       * floor applied to the ask's tier, read back from the routing row so a standing or re-routed
+       * report states the same promise. The owner's "wait ≤Nm" comes from this. Present only when
+       * an acceptor was asked; absent on older daemons, where clients fall back to the default.
+       */
+      wait_ms: z.number().int().positive().optional(),
     })
     .optional(),
   /** Advisory lines appended to this caller's result only (value-layer design: the ship nudge) —

@@ -1,5 +1,7 @@
 import {
   type AgentKeyMint,
+  type AskTier,
+  acceptanceAskContract,
   type Policy,
   type PolicyOverride,
   PolicyOverrideSchema,
@@ -740,6 +742,19 @@ async function readStored(db: Driver, teamId: string): Promise<unknown> {
 /** The team policy, parsed with defaults applied (an unset policy ⇒ all defaults). */
 export async function getPolicy(db: Driver, teamId: string): Promise<Policy> {
   return PolicySchema.parse(await readStored(db, teamId));
+}
+
+/**
+ * The wait a `lane_review` ask at `tier` promises on this team (ADR 506): the tier's own timeout,
+ * floored at the team's `acceptance_review_window_ms`. Every ready row and reroute records this.
+ */
+export async function acceptanceTimeoutMs(
+  db: Driver,
+  teamId: string,
+  tier: AskTier,
+): Promise<number> {
+  const { acceptance_review_window_ms } = await getPolicy(db, teamId);
+  return acceptanceAskContract(tier, acceptance_review_window_ms).timeout_ms;
 }
 
 /**

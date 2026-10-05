@@ -50,6 +50,19 @@ describe('deriveAsks (ADR 149)', () => {
     expect(askIsLoud(a!.state)).toBe(true);
   });
 
+  it("a review ask's deadline is the window it carries, not its tier's (ADR 506)", () => {
+    const review = (wait: unknown) =>
+      env('r1', 'ask', {
+        ts: 1000,
+        meta: { species: 'approve', tier: 'standard', lane_review: { lane: 'L-1', wait_ms: wait } },
+      });
+    expect(deriveAsks([review(45 * 60_000)])[0]!.deadline).toBe(1000 + 45 * 60_000);
+    // An older daemon stamps no wait: the tier table, never an invented number.
+    expect(deriveAsks([review(undefined)])[0]!.deadline).toBe(
+      1000 + ASK_TIER_DEFAULTS.standard.timeout_ms,
+    );
+  });
+
   it('skips a malformed ask (missing species/tier) rather than inventing a contract', () => {
     expect(deriveAsks([env('bad', 'ask', { meta: { species: 'nope' } })])).toHaveLength(0);
   });
