@@ -10,6 +10,7 @@ import type {
 } from '@musterd/protocol';
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import {
+  acceptanceWait,
   capColumn,
   centerScroll,
   handoffPatch,
@@ -368,6 +369,8 @@ function LaneCard({
   // "Waiting on a human" made ambient: a human-owned blocked card breathes softly in rose.
   const breathe = lane.state === 'blocked' && lane.owner_seat != null && ownerKind === 'human';
   const actions = laneActions(lane, me);
+  // ADR 518: who an awaiting-acceptance card waits on, when the daemon said.
+  const wait = acceptanceWait(lane);
   const [picking, setPicking] = useState(false);
   const abandonAction = actions.find((a) => a.kind === 'abandon');
   const pills = actions.filter((a) => a.kind !== 'abandon');
@@ -431,6 +434,14 @@ function LaneCard({
           </span>
         )}
         {lane.branch && <span className="lc-card__chip lc-card__chip--branch">{lane.branch}</span>}
+        {wait && (
+          <span
+            className="lc-card__chip lc-card__chip--wait"
+            title={'reviewer' in wait ? `Waiting on ${wait.reviewer} to accept` : wait.note}
+          >
+            {'reviewer' in wait ? `awaiting ${wait.reviewer}` : wait.note}
+          </span>
+        )}
       </div>
       {lane.state === 'blocked' && lane.detail && (
         <p className="lc-card__detail">{lane.detail}</p>

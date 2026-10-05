@@ -5395,6 +5395,13 @@
   border-color: color-mix(in srgb, var(--lc-info) 34%, transparent);
   background: color-mix(in srgb, var(--lc-info) 10%, transparent);
 }
+/* ADR 518: who an awaiting-acceptance card waits on — mustard, the colour of a held ask. Dark ink
+ * on a light tint, so the name stays readable at chip size. */
+.lc-card__chip--wait {
+  color: var(--lc-text);
+  border-color: color-mix(in srgb, var(--lc-accent-bright) 45%, transparent);
+  background: color-mix(in srgb, var(--lc-accent-bright) 16%, transparent);
+}
 /* ADR 169: the derived close verdict on a Done card — a quiet pair, never a shout. Confirmed gets
  * the success tint (a counterpart agreed); unverified stays in muted ink (honest, not a scolding). */
 .lc-card__chip--verified {

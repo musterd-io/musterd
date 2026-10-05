@@ -214,6 +214,12 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
       // No overlap notice when the acceptor never owned the lane — the common case must stay quiet,
       // or the warning becomes wallpaper and the one that matters is not read.
       expect(ask.body).not.toContain('you previously owned this lane');
+
+      // ADR 518: the board says who the lane waits on — the open ask's holder and the route.
+      const board = await get('/teams/dawn/lanes', nickTok);
+      const shown = board.json.lanes.find((l: { id: string }) => l.id === laneId);
+      expect(shown.acceptance_reviewer).toBe('gee');
+      expect(shown.acceptance_route).toBe('peer_selected');
     });
 
     // Lane 01M1T42SBS (ADR 225 amendment, 2026-09-06). The line headlined by RECENCY: with six

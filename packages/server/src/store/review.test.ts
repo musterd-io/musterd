@@ -1117,4 +1117,129 @@ withDrivers('review', (o) => {
       expect(await abandonedAcceptances(db, team.id, reviewer.name, TIMEOUT)).toEqual([]);
     });
   });
+
+  describe('acceptanceWaits — who an awaiting lane waits on, for the board (ADR 518)', () => {
+    let seq = 5_000;
+    async function room() {
+      const { db, team } = await seed();
+      const owner = (await addMember(db, team, { kind: 'agent', name: 'izzo', role: '' })).row;
+      const ghost = (await addMember(db, team, { kind: 'agent', name: 'ghost', role: '' })).row;
+      const dolly = (await addMember(db, team, { kind: 'agent', name: 'dolly', role: '' })).row;
+      const lane = await openLane(db, team.id, 'dawn', 'izzo', { title: 'judge me', claim: true });
+      await db.run(`UPDATE lanes SET state = 'awaiting_acceptance' WHERE id = ?`, [lane.id]);
+      return { db, team, owner, ghost, dolly, lane };
+    }
+    const ask = async (
+      db: Driver,
+      teamId: string,
+      fromId: string,
+      toId: string,
+      laneId: string,
+      id: string,
+      ts: number,
+    ) =>
+      await db.run(
+        `INSERT INTO messages (id, team_id, from_member, to_kind, to_member, act, body, meta, ts, created_at, origin_node, origin_seq)
+         VALUES (?, ?, ?, 'member', ?, 'ask', 'accept?', ?, ?, ?, 'fixture', ?)`,
+        [
+          id,
+          teamId,
+          fromId,
+          toId,
+          JSON.stringify({ lane_review: { lane: laneId } }),
+          ts,
+          ts,
+          seq++,
+        ],
+      );
+    const audit = async (
+      db: Driver,
+      teamId: string,
+      action: string,
+      laneId: string,
+      detail: object,
+      ts: number,
+    ) =>
+      await db.run(
+        `INSERT INTO audit (id, team_id, actor, action, target, result, detail, ts, created_at)
+         VALUES (?, ?, 'x', ?, ?, 'allow', ?, ?, ?)`,
+        [`a-${String(seq++)}`, teamId, action, laneId, JSON.stringify(detail), ts, ts],
+      );
+
+    it('names the seat holding the open ask, and the route the ready row recorded', async () => {
+      const { acceptanceWaits } = await import('./review.js');
+      const { db, team, owner, ghost, lane } = await room();
+      await audit(
+        db,
+        team.id,
+        'lane.ready_for_review',
+        lane.id,
+        {
+          lane: lane.id,
+          review_selection: { outcome: 'peer_selected', selected: { reviewer: 'ghost' } },
+          reviewer: 'ghost',
+        },
+        1_000,
+      );
+      await ask(db, team.id, owner.id, ghost.id, lane.id, 'ask-1', 1_000);
+      expect((await acceptanceWaits(db, team.id)).get(lane.id)).toEqual({
+        reviewer: 'ghost',
+        route: 'peer_selected',
+      });
+    });
+
+    it('follows a re-route: the superseding ask’s holder, never the first pick', async () => {
+      const { acceptanceWaits } = await import('./review.js');
+      const { db, team, owner, ghost, dolly, lane } = await room();
+      await ask(db, team.id, owner.id, ghost.id, lane.id, 'ask-old', 1_000);
+      await ask(db, team.id, owner.id, dolly.id, lane.id, 'ask-new', 2_000);
+      await audit(
+        db,
+        team.id,
+        'lane.review_rerouted',
+        lane.id,
+        {
+          reviewer: 'dolly',
+          superseded_ask: 'ask-old',
+        },
+        2_000,
+      );
+      expect((await acceptanceWaits(db, team.id)).get(lane.id)?.reviewer).toBe('dolly');
+    });
+
+    it('a superseded newest ask holds nothing, exactly as openAcceptanceAsk says', async () => {
+      const { acceptanceWaits, openAcceptanceAsk } = await import('./review.js');
+      const { db, team, owner, ghost, lane } = await room();
+      await ask(db, team.id, owner.id, ghost.id, lane.id, 'ask-1', 1_000);
+      await audit(db, team.id, 'lane.review_rerouted', lane.id, { superseded_ask: 'ask-1' }, 2_000);
+      expect(await openAcceptanceAsk(db, team.id, lane.id)).toBeNull();
+      expect((await acceptanceWaits(db, team.id)).get(lane.id)?.reviewer).toBeUndefined();
+    });
+
+    it('reads the pre-ADR 303 flat fields, and drops a route it does not know', async () => {
+      const { acceptanceWaits } = await import('./review.js');
+      const { db, team, lane } = await room();
+      await audit(db, team.id, 'lane.ready_for_review', lane.id, { no_candidate: true }, 1_000);
+      expect((await acceptanceWaits(db, team.id)).get(lane.id)).toEqual({ route: 'no_candidate' });
+      await audit(
+        db,
+        team.id,
+        'lane.ready_for_review',
+        lane.id,
+        {
+          review_selection: { outcome: 'something_newer' },
+        },
+        2_000,
+      );
+      expect((await acceptanceWaits(db, team.id)).get(lane.id)).toBeUndefined();
+    });
+
+    it('annotates only lanes still awaiting acceptance', async () => {
+      const { acceptanceWaits } = await import('./review.js');
+      const { db, team, owner, ghost, lane } = await room();
+      await ask(db, team.id, owner.id, ghost.id, lane.id, 'ask-1', 1_000);
+      await db.run(`UPDATE lanes SET state = 'done' WHERE id = ?`, [lane.id]);
+      expect(await acceptanceWaits(db, team.id)).toEqual(new Map());
+    });
+  });
 });

@@ -372,6 +372,7 @@ import {
   teamFamilyPosture,
   annotateClose,
   closeVerdicts,
+  acceptanceWaits,
 } from '../store/review.js';
 import { getRoleCharter, listRoles } from '../store/roles.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
@@ -5778,9 +5779,19 @@ export async function handleHttp(
         // ADR 169: annotate done lanes with the derived verified-ness of their close — read from the
         // lane.closed audit rows, never stored on the lane. Absent = unknown (pre-169 closes).
         const verdicts = await closeVerdicts(ctx.db, team.id);
-        const annotated = lanes.map((l) =>
-          l.state === 'done' ? annotateClose(l, verdicts.get(l.id)) : l,
-        );
+        // ADR 518: annotate awaiting lanes with who they wait on — the open ask's holder and the
+        // ready row's route. Never stored; absent = unknown.
+        const waits = await acceptanceWaits(ctx.db, team.id);
+        const annotated = lanes.map((l) => {
+          if (l.state === 'done') return annotateClose(l, verdicts.get(l.id));
+          const wait = waits.get(l.id);
+          if (wait === undefined) return l;
+          return {
+            ...l,
+            ...(wait.reviewer !== undefined ? { acceptance_reviewer: wait.reviewer } : {}),
+            ...(wait.route !== undefined ? { acceptance_route: wait.route } : {}),
+          };
+        });
         return sendJson(res, 200, { lanes: annotated, warnings });
       }
 
