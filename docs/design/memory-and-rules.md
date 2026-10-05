@@ -208,11 +208,11 @@ the first stage.
 
 ## Gaps found while writing this
 
-- **`authAdmin` checks the flag, not the human** (`packages/server/src/transport/http.ts:1466`). It
-  reads `resolveCapabilities(member).is_admin` only. Reconcile clamps new agent rows (ADR 172), but a
-  row written before the clamp can still carry `is_admin` (`store/review.test.ts:351` says as much).
-  Such a seat could change policy today. Fix: require `member.kind === 'human'` in `authAdmin` and
-  `authAdminOrSponsorOf`, and a one-off sweep of stale rows.
+- ~~**`authAdmin` checks the flag, not the human** (`packages/server/src/transport/http.ts:1466`).~~
+  **FIXED 2026-10-05** (lane `01M46QJ9GW`): `resolveCapabilities` now returns `is_admin: false` for any
+  non-human row, so every admin gate refuses a pre-clamp agent or service row (a full-blob stale row
+  got 200 on `/policy` before). No sweep needed — on revive only nick holds `is_admin`. See the
+  [ADR 172](../decisions/172-model-family-posture.md) dated note.
 - **The autorefresh hold is invisible and unauthored** — the exact shape of the incident.
 - **Insights have no retraction**, and the digest re-posts them.
 - **Team policy has no review date** — a knob set once stays forever without anyone looking again.
@@ -221,7 +221,7 @@ the first stage.
 
 ADRs first, then a Goal with these lanes:
 
-1. **Human-only admin, airtight** — the `authAdmin` fix and the stale-row sweep. Small; no ADR
+1. ~~**Human-only admin, airtight**~~ — done 2026-10-05 (lane `01M46QJ9GW`); no ADR
    beyond ADR 172.
 2. **Holds** — the rule store's hold tier, server-side; the autorefresh hold folds in; visible in
    `team_next` / `team_status` / orient / `/live`; propose-then-activate; one-act lift. Protocol

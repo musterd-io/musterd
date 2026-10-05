@@ -1,8 +1,11 @@
+import { GENERALIST_CAPABILITIES } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
+import { getMemberByName, setMemberGovernance } from '../store/members.js';
 import { getTeamBySlug } from '../store/teams.js';
+import { claimAgentHttp } from './test-auth.js';
 
 withDrivers('policy-http', (_o, kind) => {
   /**
@@ -14,6 +17,7 @@ withDrivers('policy-http', (_o, kind) => {
   let server: RunningServer;
   let base: string;
   let nickCred: string;
+  let agentKey: string;
 
   async function post(path: string, body: unknown, headers: Record<string, string> = {}) {
     const res = await fetch(base + path, {
@@ -43,6 +47,7 @@ withDrivers('policy-http', (_o, kind) => {
     base = `http://127.0.0.1:${port}`;
     const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
     nickCred = team.json.human_credential;
+    agentKey = team.json.agent_key;
   });
 
   afterEach(async () => {
@@ -111,6 +116,48 @@ withDrivers('policy-http', (_o, kind) => {
       // The old row wrote the post-parse policy here, which is why nothing could later say whether a
       // stored value had been chosen or baked in.
       expect(JSON.parse(rows[0]!.detail as string)).toEqual({ residency: { cooldown_ms: 60_000 } });
+    });
+  });
+
+  describe('admins are human-only at the read, not just at reconcile (ADR 172)', () => {
+    /** Mint `stale` of `kind`, then give its row the shape reconcile no longer writes but an older row
+     *  can still hold. Returns the headers that authenticate as it. */
+    async function staleAdmin(memberKind: 'agent' | 'service'): Promise<Record<string, string>> {
+      const minted = await post(
+        '/teams/dawn/members',
+        { name: 'stale', kind: memberKind, role: '' },
+        bearer(nickCred),
+      );
+      const team = (await getTeamBySlug(server.store, 'dawn'))!;
+      const row = (await getMemberByName(server.store, team.id, 'stale'))!;
+      await setMemberGovernance(
+        server.store,
+        row.id,
+        null,
+        JSON.stringify({ ...GENERALIST_CAPABILITIES, is_admin: true }),
+      );
+      if (memberKind === 'service') return bearer(minted.json.token as string);
+      const auth = await claimAgentHttp(base, 'dawn', agentKey, nickCred, 'stale');
+      return {
+        ...bearer(auth.key),
+        'x-musterd-session-lease': auth.sessionLease,
+        'x-musterd-seat': 'stale',
+      };
+    }
+
+    it.each(['agent', 'service'] as const)(
+      'a stale %s row whose capabilities JSON still carries is_admin cannot read or set policy',
+      async (memberKind) => {
+        const headers = await staleAdmin(memberKind);
+        expect((await get('/teams/dawn/policy', headers)).status).toBe(403);
+        const write = await post('/teams/dawn/policy', { residency: { hourly_cap: 99 } }, headers);
+        expect(write.status).toBe(403);
+        expect(await storedRow()).toBeNull();
+      },
+    );
+
+    it('the human creator stays admin', async () => {
+      expect((await get('/teams/dawn/policy', bearer(nickCred))).status).toBe(200);
     });
   });
 

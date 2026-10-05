@@ -163,6 +163,16 @@ inc 5 toward attestation coverage before reviewer spin-up.
   [ADR 314](314-correlated-models-correlated-mistakes.md), the diversity charter — ADR 056 never
   stated the thesis (its acceptance amendment records this); the Decision text is frozen, so the
   repoint lives here.
+- _Dated note (2026-10-05, lane 01M46QJ9GW):_ "admins can only be humans" held at the review
+  predicates but not at the other admin gates. `authAdmin`, `authGovernance`, policy, audit reads,
+  residency revoke, the doorbell's admin set and ~25 more sites read
+  `resolveCapabilities(row).is_admin` with no kind check, so a pre-clamp agent or service row with a
+  full capabilities blob still got 200 on `GET`/`POST /policy`. `resolveCapabilities`
+  (`packages/server/src/store/rows.ts`) now returns `is_admin: false` for any non-human row — the
+  write-side clamp repeated at the one read every gate shares (`policy-http.test.ts` pins it for
+  both kinds). The earlier pre-clamp test in `review.test.ts` seeded `{ is_admin: true }` alone,
+  which fails the schema and parses to the generalist, so it never exercised a stale admin; it now
+  seeds a full blob. Found while writing `docs/design/memory-and-rules.md`.
 - The `no_candidate` degradation stops being a shrug: it names the team's shape and who could be
   woken to change it, in the worker's own context at the moment of degradation.
 - ADR 056 analyses gain a team-level series to condition on — "these chains were scored under
