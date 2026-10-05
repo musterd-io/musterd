@@ -50,6 +50,13 @@ about one full run per 4 hours while main is moving, and none while it is not.
 - If the cron starts firing again, it adds nothing while pushes keep the check fresh. It only fills
   the quiet-period gap above.
 
+_Note, 2026-10-05 (izzo, lane 01M476TFBS)._ **The burst estimate above was low by about 3×.** After
+ADR 515 made the full check a single ~21-minute job, five pushes to main between 21:02Z and 21:21Z
+each started their own full check (runs 37373451582 to 37375338058), about 85 extra billed minutes.
+Each one saw no marker, because the marker is written only at the end. A full check now uploads a
+`full-main-check-started` artifact before it does any work. A push or scheduled run that finds a
+start marker newer than the last finish marker, and under 45 minutes old, does not start another.
+
 ## Observability & Evaluation
 
 - **Traces:** none new. `plan` prints the last full check's time, SHA and age, and its summary says
