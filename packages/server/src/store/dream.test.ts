@@ -125,6 +125,19 @@ withDrivers('dream', (o) => {
       expect(packet.learned.map((i) => i.headline)).toEqual(['after']);
     });
 
+    // 2026-10-03/04: three dreams read insights cut at 600 chars and argued over the clipped
+    // condition ("promote if seen again"). An insight is never clipped, and says so per insight.
+    it('carries every learned insight whole, flagged per insight', async () => {
+      const { db, team, izzo, ryder } = await seed();
+      const long = `${'y'.repeat(1_500)} — promote only if seen on a second date.`;
+      await say(db, team, izzo, 'insight', long, NOW - 3600_000, { headline: 'long one' });
+      const { packet, truncated } = await buildDreamPacket(db, team, ryder, { now: NOW });
+      expect(packet.learned).toEqual([
+        expect.objectContaining({ headline: 'long one', body: long, truncated: false }),
+      ]);
+      expect(truncated).toBe(false);
+    });
+
     it('fits the byte budget by dropping the oldest acts first, and keeps the note', async () => {
       const { db, team, ryder } = await seed();
       await saveMemory(db, ryder.id, { headline: 'h', body: 'note' });

@@ -185,6 +185,11 @@ gap: whatever a dream sends, nothing rings.
   skill a second night. `musterd dream` now adds `skill: {path, text}`, read from the running build's
   own checkout, which autorefresh keeps on main. The wake line points there and keeps the
   workspace path only as a fallback.
+- **2026-10-04 — a dream reads insights whole (lane 01M44Z7WYM).** The packet clipped insight bodies at
+  600 chars, the same as act bodies. That cut 16 of the 29 insights from the prior 14 days, and the dreams
+  argued over what the clipped conditions promoted (ghost's wiki page, #2048). Insight bodies now
+  arrive whole, up to the server's own 2,048-byte cap, each with its own `truncated`. The packet
+  budget rises from 24 KB to 48 KB to hold a full night of them.
 - **2026-10-03 — §5's "unanswered" is bounded by ADR 502.** The digest lists the last seven days,
   counts older open asks in one line, and treats an ask whose named lane is `done` or `abandoned` as
   settled.
