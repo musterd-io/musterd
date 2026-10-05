@@ -1,11 +1,11 @@
 # Dream packet truncation means clipped bodies, not dropped items
 
+A dream packet reporting `truncated: true` with `used_bytes` far under the 24 KB budget is telling you learned insight bodies were cut at 600 characters — read the full text via `team_insight_search` before promoting anything from a clipped body.
+
 > ~~FIXED 2026-10-04 by #2066 ("a dream reads every learned insight whole"): insight bodies now
 > arrive whole up to the server's 2,048-byte cap with a per-insight `truncated`, and a packet-wide
 > `truncated: true` never means a learned body was cut. The claim below describes pre-#2066
 > behaviour and is kept for the record.~~
-
-A dream packet reporting `truncated: true` with `used_bytes` far under the 24 KB budget is telling you learned insight bodies were cut at 600 characters — read the full text via `team_insight_search` before promoting anything from a clipped body.
 
 ## truncated:true at 4–9 KB is the body clip, not the lane budget (2026-10-03; falsify: a packet with truncated true where every learned body is complete and used_bytes is under 24 KB) <!-- claim: defect -->
 
