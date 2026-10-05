@@ -367,6 +367,9 @@ async function routeEnvelopeInner(
   // and accountability are separate axes, and only the latter was ever meant to shrink.
   let toMemberId: string | null = null;
   let recipients: string[];
+  // Names ride with the ids: live delivery needs each recipient's name, and one lookup per
+  // recipient was a team-size N+1 on every send (lane 01M4563RDY, Cloud load run 9).
+  const recipientNames = new Map<string, string>();
   if (env.to.kind === 'member') {
     const target = await getMemberByName(ctx.db, team.id, env.to.name);
     if (!target || target.left_at !== null) {
@@ -374,15 +377,16 @@ async function routeEnvelopeInner(
     }
     toMemberId = target.id;
     recipients = [target.id];
+    recipientNames.set(target.id, target.name);
   } else {
     // team or broadcast: every participant currently in the team except the sender. Observers (ADR
     // 063) aren't participants — they receive it via the firehose, not as addressed recipients.
-    recipients = (
-      await ctx.db.all<{ id: string }>(
-        'SELECT id FROM members WHERE team_id = ? AND left_at IS NULL AND observer = 0 AND id != ?',
-        [team.id, sender.id],
-      )
-    ).map((r) => r.id);
+    const rows = await ctx.db.all<{ id: string; name: string }>(
+      'SELECT id, name FROM members WHERE team_id = ? AND left_at IS NULL AND observer = 0 AND id != ?',
+      [team.id, sender.id],
+    );
+    for (const r of rows) recipientNames.set(r.id, r.name);
+    recipients = rows.map((r) => r.id);
   }
 
   outgoingEnv = await threadReviewPromiseAct(ctx, team, outgoingEnv);
@@ -503,12 +507,12 @@ async function routeEnvelopeInner(
   // recipient (live vs inboxed) is attempt history, recorded as span events (ADR 090), never rows.
   let delivered = 0;
   for (const recipientId of recipients) {
-    const recipient = await getMemberById(ctx.db, recipientId);
-    const toName = env.to.kind === 'member' && recipient ? recipient.name : null;
+    const recipientName = recipientNames.get(recipientId);
+    const toName = env.to.kind === 'member' && recipientName ? recipientName : null;
     const outgoing = rowToEnvelope(message, team.slug, sender.name, toName);
     const pushed = ctx.hub.deliver(recipientId, { type: 'deliver', envelope: outgoing });
     delivered += pushed;
-    if (recipient) recordDeliveryOutcome(recipient.name, pushed > 0);
+    if (recipientName) recordDeliveryOutcome(recipientName, pushed > 0);
   }
 
   // Fan out to firehose observers (ADR 061): every envelope on the team, for read-only watchers like
