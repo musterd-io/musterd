@@ -116,6 +116,7 @@ import {
   type TraceReport,
   TraceReportSchema,
   type Hold,
+  type HoldCheckRequest,
   HoldListSchema,
   HoldResponseSchema,
   type SetHoldBody,
@@ -1606,6 +1607,11 @@ export class HttpClient {
 
   /** Adjudicate a matched tool call (ADR 150) — `POST /teams/:slug/gate`, member-authed as the acting
    *  seat. The daemon decides + records a shapes-only `lane.gate`/`action.gate` row; returns allow/deny. */
+  /** ADR 516 increment 2: ask the daemon whether a merge-shaped command is held. */
+  async holdCheck(slug: string, body: HoldCheckRequest): Promise<GateDecision> {
+    return (await this.request('POST', `/teams/${slug}/holds/check`, body)) as GateDecision;
+  }
+
   async gateCheck(slug: string, body: GateCheckRequest): Promise<GateDecision> {
     return (await this.request('POST', `/teams/${slug}/gate`, body)) as GateDecision;
   }

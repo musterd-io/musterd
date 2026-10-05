@@ -3,6 +3,7 @@ import {
   CCD_SEND_MESSAGE_TOOL,
   extractUlid,
   type GateToolCall,
+  isMergeShapedCommand,
   isSessionReachTool,
   isWriteShaped,
   matchEnforcement,
@@ -405,6 +406,19 @@ async function gateCheck(parsed: Parsed): Promise<number> {
     // latency tax the ADR's guard metric forbids. Fires on undeclared calls by design (ADR 150 §Gate B
     // as amended) — it cannot change whether the call proceeds, so it is not mediation.
     attest(http, team, call);
+    // ADR 516 increment 2: a Team hold on merges stops a merge-shaped command before anything else,
+    // and without any class declared — a hold is the Team's rule, not a policy knob. The local match
+    // only decides whether to ask (so ordinary calls pay no round trip); the daemon re-tests the
+    // command and decides. Unreachable → the catch below fails open, the ADR 150 posture.
+    if (call.command !== undefined && isMergeShapedCommand(call.command)) {
+      const held = await http.holdCheck(team, { tool: call.tool, command: call.command });
+      if (held.decision === 'deny') {
+        emitDeny(held.reason);
+        emitted = true;
+        decision = 'deny';
+        return;
+      }
+    }
     const { enforcement } = await http.getEnforcement(team);
     const match = matchEnforcement(enforcement, call);
     if (!match) return; // undeclared call → allow, no daemon round-trip (the common case)

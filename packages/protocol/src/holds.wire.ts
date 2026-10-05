@@ -60,6 +60,28 @@ export function holdRefusal(hold: Hold): string {
   return `held by ${hold.created_by} until ${clockOf(hold.expires_at)}: ${hold.reason}`;
 }
 
+/**
+ * ADR 516 increment 2: is this shell command a merge? The two shapes that land work on `main` from a
+ * seat's shell — `gh pr merge` (including `--auto`, which arms a later merge) and a `git push` whose
+ * refspec names `main`/`master`. Checked per segment of a compound command (`&&`, `||`, `;`, `|`,
+ * newline), after leading `VAR=value` assignments and `git -C <dir>`. Deliberately narrow: a bare
+ * `git push` is not matched, because which branch it lands on is not in the text — a hold that
+ * guessed would deny ordinary branch pushes and teach seats to route around it.
+ */
+export function isMergeShapedCommand(command: string): boolean {
+  return command
+    .split(/&&|\|\||;|\||\n/)
+    .map((seg) => seg.trim().replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*/, ''))
+    .some(
+      (seg) =>
+        /^gh\s+pr\s+merge\b/.test(seg) ||
+        (/^git\s+(?:-C\s+\S+\s+)*push\b/.test(seg) &&
+          /(?:^|[\s:])(?:refs\/heads\/)?(?:main|master)(?:\s|$)/.test(
+            seg.replace(/^git\s+(?:-C\s+\S+\s+)*push\b/, ''),
+          )),
+    );
+}
+
 function clockOf(ms: number): string {
   const d = new Date(ms);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;

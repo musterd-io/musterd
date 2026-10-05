@@ -1,6 +1,6 @@
 import { HOLD_MAX_MS, makeEnvelope } from '@musterd/protocol';
 import { ulid } from 'ulid';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
@@ -154,5 +154,63 @@ withDrivers('holds-http', (_o, kind) => {
       ]),
     );
     expect(rows.every((r) => (r.origin_seq ?? 0) > 0)).toBe(true);
+  });
+
+  describe('POST /holds/check — merges_paused at the gate (ADR 516 increment 2)', () => {
+    const merge = { tool: 'Bash', command: 'gh pr merge 2099 --squash --auto' };
+    const mergesHold = { effect: 'merges_paused', reason: 'demo 14:00', for_ms: 60 * 60_000 };
+
+    it("denies an agent's merge while a merges hold is active, naming who and until when", async () => {
+      const { json } = await call('POST', '/teams/dawn/holds', nick, mergesHold);
+      const res = await call('POST', '/teams/dawn/holds/check', ada, merge);
+      expect(res.status).toBe(200);
+      expect(res.json).toMatchObject({ decision: 'deny', outcome: 'denied_held' });
+      expect(res.json.reason).toMatch(/^held by nick until \d\d:\d\d: demo 14:00/);
+      expect(res.json.reason).toContain(`musterd hold lift ${json.hold.id}`);
+      expect(res.json.reason).toContain('auto-merge armed before the hold');
+
+      const team = (await getTeamBySlug(server.store, 'dawn'))!;
+      const gate = (await listAudit(server.store, team.id)).filter(
+        (r) => r.action === 'action.gate',
+      );
+      expect(gate.map((r) => [r.actor, r.result, r.target])).toEqual([
+        ['ada', 'deny', 'hold:merges_paused'],
+      ]);
+    });
+
+    it('allows once the hold is lifted', async () => {
+      const { json } = await call('POST', '/teams/dawn/holds', nick, mergesHold);
+      await call('POST', `/teams/dawn/holds/${json.hold.id}/lift`, nick);
+      expect((await call('POST', '/teams/dawn/holds/check', ada, merge)).json.decision).toBe(
+        'allow',
+      );
+    });
+
+    it('a notice or an autorefresh hold never denies a merge — only its own effect does', async () => {
+      await call('POST', '/teams/dawn/holds', nick, { ...mergesHold, effect: 'notice' });
+      await call('POST', '/teams/dawn/holds', nick, demo);
+      expect((await call('POST', '/teams/dawn/holds/check', ada, merge)).json.decision).toBe(
+        'allow',
+      );
+    });
+
+    it('the daemon re-tests the command — a client cannot get an ordinary push denied, or a merge waved through', async () => {
+      await call('POST', '/teams/dawn/holds', nick, mergesHold);
+      const branchPush = { tool: 'Bash', command: 'git push --force-with-lease origin feat/x' };
+      expect((await call('POST', '/teams/dawn/holds/check', ada, branchPush)).json.decision).toBe(
+        'allow',
+      );
+      const toMain = { tool: 'Bash', command: 'git push origin HEAD:main' };
+      expect((await call('POST', '/teams/dawn/holds/check', ada, toMain)).json.decision).toBe(
+        'deny',
+      );
+    });
+
+    it('a human is not gated — holds are set by the operators they would stop', async () => {
+      await call('POST', '/teams/dawn/holds', nick, mergesHold);
+      expect((await call('POST', '/teams/dawn/holds/check', nick, merge)).json.decision).toBe(
+        'allow',
+      );
+    });
   });
 });

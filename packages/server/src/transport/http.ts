@@ -125,8 +125,12 @@ import {
   TraceSeatTimelineResponseSchema,
   HuddleTraceSchema,
   isUnverifiedDisputeAnswer,
+  activeHoldFor,
   describeHoldLine,
   type Hold,
+  HoldCheckRequestSchema,
+  holdRefusal,
+  isMergeShapedCommand,
   SetHoldBodySchema,
   type SyncHoldRequest,
   SyncHoldRequestSchema,
@@ -3522,6 +3526,41 @@ export async function handleHttp(
         const hold = await holdAct(ctx, team, { op: 'lift', actor: member.name, id });
         await announceHold(ctx, team, member, hold, true);
         return sendJson(res, 200, { hold });
+      }
+      // ADR 516 increment 2: the PreToolUse gate asks before a merge-shaped command runs. The daemon
+      // re-tests the command (never trusting the client's match) and decides. Humans pass — they are
+      // the operators a hold is set by, as at the ADR 513 route gate. Only a deny is audited: an
+      // allowed merge is ordinary work, and one row per merge would be noise beside the gate's own.
+      if (method === 'POST' && rest === '/holds/check') {
+        const { team, member } = await authTouch(ctx, slug, req);
+        assertSeatCanRead(member);
+        const check = parseOrBadRequest(HoldCheckRequestSchema, await readJson(req));
+        const hold =
+          member.kind !== 'human' && isMergeShapedCommand(check.command)
+            ? activeHoldFor(
+                await listActiveHolds(ctx.db, team.id, Date.now()),
+                'merges_paused',
+                Date.now(),
+              )
+            : null;
+        if (!hold) {
+          return sendJson(res, 200, { decision: 'allow', outcome: 'allowed', reason: '' });
+        }
+        await appendAudit(ctx.db, team.id, {
+          actor: member.name,
+          action: 'action.gate',
+          target: 'hold:merges_paused',
+          result: 'deny',
+          detail: { cause: 'hold', hold_id: hold.id, tool: check.tool, outcome: 'denied_held' },
+        });
+        return sendJson(res, 200, {
+          decision: 'deny',
+          outcome: 'denied_held',
+          reason:
+            `${holdRefusal(hold)} — merges are paused for the Team. Wait for it to end, or ask ` +
+            `${hold.created_by} to lift it (\`musterd hold lift ${hold.id}\`). A GitHub auto-merge ` +
+            "armed before the hold is outside musterd's reach.",
+        });
       }
       if (method === 'GET' && rest === '/holds') {
         const { team } = await authTouch(ctx, slug, req);
