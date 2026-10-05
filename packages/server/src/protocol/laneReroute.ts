@@ -2,7 +2,6 @@ import {
   ACCEPTANCE_MOVES_NOTICE,
   type AskTier,
   type Lane,
-  askContract,
   leftoverSignal,
   makeEnvelope,
 } from '@musterd/protocol';
@@ -20,7 +19,7 @@ import {
   selectReviewCounterpart,
 } from '../store/review.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
-import { getTeamBySlug } from '../store/teams.js';
+import { acceptanceTimeoutMs, getTeamBySlug } from '../store/teams.js';
 import { joinerEnrollment } from '../sync/claim.js';
 import { routeEnvelope } from './route.js';
 
@@ -230,6 +229,7 @@ export async function rerouteAcceptances(
     if (!pick || pick.reviewer === gone.name) continue;
     const humanRequired = lane.risk.length > 0;
     const acceptanceTier: AskTier = 'standard';
+    const acceptanceWaitMs = await acceptanceTimeoutMs(ctx.db, team.id, acceptanceTier);
     await appendLaneEventRequired(ctx.db, team.id, {
       actor: gone.name,
       action: 'lane.review_rerouted',
@@ -248,7 +248,7 @@ export async function rerouteAcceptances(
         superseded_ask: one.ask,
         human_required: humanRequired,
         ask_tier: acceptanceTier,
-        ask_timeout_ms: askContract(acceptanceTier).timeout_ms,
+        ask_timeout_ms: acceptanceWaitMs,
       },
     });
     await deliverLaneAskSuperseded(ctx, team, gone, gone.name, one.ask, lane, pick.reviewer);
@@ -268,6 +268,7 @@ export async function rerouteAcceptances(
         tier: acceptanceTier,
         lane_review: {
           lane: lane.id,
+          wait_ms: acceptanceWaitMs, // ADR 506: the promise, carried where /live can read it
           title: lane.title,
           branch: lane.branch,
           ...(lane.merged ? { merged: lane.merged } : {}),

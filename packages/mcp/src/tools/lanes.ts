@@ -5,6 +5,7 @@ import {
   emptyPoolHint,
   incidentBannerLines,
   LaneStateSchema,
+  reviewWaitMinutes,
   shortDuration,
   type Lane,
   type LaneWarning,
@@ -437,7 +438,7 @@ export function registerLanes(
                     `${Math.round(review.backstop.grace_ms / 3_600_000)}h anyway. lane_resolve still works ` +
                     `if you genuinely need it shut now, and records unconfirmed. Acceptor judges ` +
                     `intent/principles/usable/feel — not the diff.`
-                  : `\n\nacceptance asked of ${review.reviewer} (${review.route}) — wait ≤5m; ` +
+                  : `\n\nacceptance asked of ${review.reviewer} (${review.route}) — wait ≤${reviewWaitMinutes(review.wait_ms)}m; ` +
                     `accept closes the lane, reject resumes it; on silence, lane_resolve yourself ` +
                     `(recorded unconfirmed). Acceptor judges intent/principles/usable/feel — not the diff.`;
       return laneResult('lane submitted for acceptance', lane, warnings, hint);

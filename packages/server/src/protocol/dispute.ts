@@ -29,7 +29,6 @@ import {
   type DisputeAnswerWire,
   type Envelope,
   LANE_TERMINAL_STATES,
-  askContract,
   disputeOf,
   isAwaitingAcceptance,
   tiebreakNotice,
@@ -41,6 +40,7 @@ import { LaneConflictError, getLane, listLanes, updateLane } from '../store/lane
 import { getMemberById } from '../store/members.js';
 import { selectReviewCounterpart, supersededAcceptanceAsks } from '../store/review.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
+import { acceptanceTimeoutMs } from '../store/teams.js';
 import {
   acceptanceAskBody,
   deliverLaneAskAct,
@@ -213,6 +213,7 @@ export async function applyDisputeAnswer(
 
   await answered('held', { tiebreak: pick.reviewer });
   const acceptanceTier: AskTier = 'standard';
+  const acceptanceWaitMs = await acceptanceTimeoutMs(ctx.db, team.id, acceptanceTier);
   // The re-route row is what supersedes the first ask (`supersededAcceptanceAsks` reads it), so a
   // late verdict on it binds to nothing — the same rail the departed-reviewer path rides.
   await appendLaneEventRequired(ctx.db, team.id, {
@@ -235,7 +236,7 @@ export async function applyDisputeAnswer(
       hold: answerId,
       human_required: lane.risk.length > 0,
       ask_tier: acceptanceTier,
-      ask_timeout_ms: askContract(acceptanceTier).timeout_ms,
+      ask_timeout_ms: acceptanceWaitMs,
     },
   });
   const priorOwners = await laneOwnerHistory(ctx.db, team.id, lane.id);
@@ -254,6 +255,7 @@ export async function applyDisputeAnswer(
       tier: acceptanceTier,
       lane_review: {
         lane: lane.id,
+        wait_ms: acceptanceWaitMs, // ADR 506: the promise, carried where /live can read it
         title: lane.title,
         branch: lane.branch,
         ...(lane.merged ? { merged: lane.merged } : {}),

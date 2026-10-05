@@ -309,7 +309,7 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
  * [--ask-slack-webhook <url|off>] [--stakes-default <surface>=<low|normal|high>|off]
  * [--guardian-tier <class>=<observe|alert|auto>|off] [--trace-content on|off]
  * [--agent-connect sponsor|any_member] [--invite-requires-expiry on|off]
- * [--sponsored-agent-cap <1–100>]` — show or set the
+ * [--sponsored-agent-cap <1–100>] [--acceptance-review-window <1–1440 minutes>]` — show or set the
  * team governance policy (admin-only, audited `policy.change`). ADR 146: `--reseat-known-agents on`
  * opts the team into dogfood-mode re-seat — an already-held agent seat re-occupies without an admin
  * decision. ADR 147: `--ask-fallback-to-nonadmin on` lets an admin-unanswered ask fall back to
@@ -327,7 +327,8 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
  * any teammate issue a member-created agent's connect link (team agents); `sponsor` (the default)
  * keeps it to the sponsor or an admin; the daemon accepts `any_member` only with
  * `--invite-requires-expiry on` (ADR 463 §4.3), so both may ride one call. ADR 459 (on ADR 449 §3): `--sponsored-agent-cap <n>`
- * tunes live member-created agents per sponsor (default 3). Reads → merges the named
+ * tunes live member-created agents per sponsor (default 3). ADR 506: `--acceptance-review-window <min>`
+ * sets how long a lane-review ask waits before its owner may self-close on silence (default 20). Reads → merges the named
  * knob(s) → POSTs the policy (the residency-policy read-merge-write pattern), so setting one knob
  * never clobbers the wake-policy defaults.
  */
@@ -457,6 +458,20 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
     merged.sponsored_agent_cap = n;
     changed = true;
   }
+  // ADR 506: how long a lane-review ask waits before the owner may self-close on silence. Taken in
+  // minutes (how people say it), stored in ms (how every other clock in the protocol is kept).
+  const reviewWindow = flagStr(parsed.flags, 'acceptance-review-window');
+  if (reviewWindow !== undefined) {
+    const n = Number(reviewWindow);
+    if (!Number.isInteger(n) || n < 1 || n > 1440) {
+      throw new CliError(
+        'usage: musterd team policy --acceptance-review-window <1–1440 minutes>',
+        2,
+      );
+    }
+    merged.acceptance_review_window_ms = n * 60_000;
+    changed = true;
+  }
   // ADR 149: the ask stream's Slack delivery — a webhook URL, or `off` to clear it (delete the key so
   // the daemon's "unset = no outbound call ever" default is restored, not stored as an empty string).
   const webhook = flagStr(parsed.flags, 'ask-slack-webhook');
@@ -557,6 +572,13 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
           `sponsored agent cap: ${updated.sponsored_agent_cap} live agents per sponsor (ADR 459)`,
         ) + '\n',
       );
+    if (reviewWindow !== undefined)
+      process.stdout.write(
+        hint(
+          `acceptance review window: ${Math.round(updated.acceptance_review_window_ms / 60_000)}m ` +
+            'before an owner may self-close an unanswered review (ADR 506)',
+        ) + '\n',
+      );
     if (webhook !== undefined)
       process.stdout.write(
         hint(
@@ -647,6 +669,9 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
   );
   process.stdout.write(
     `  sponsored agent cap: ${current.sponsored_agent_cap} per sponsor${inherited(stored, 'sponsored_agent_cap')}\n`,
+  );
+  process.stdout.write(
+    `  acceptance review window: ${Math.round(current.acceptance_review_window_ms / 60_000)}m${inherited(stored, 'acceptance_review_window_ms')}\n`,
   );
   // ADR 149: the webhook URL is a secret — show only that it's set, and where it points (host).
   process.stdout.write(

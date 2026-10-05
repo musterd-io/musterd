@@ -54,8 +54,9 @@ export interface AskView {
    * predates ADR 191's agent-routed review asks; the recipient is no longer implicit.
    */
   to: string | null;
-  /** When the tier clock elapses: `ts + ASK_TIER_DEFAULTS[tier].timeout_ms` — the same protocol
-   *  constant the asking agent's clock reads, so the surface and the agent agree on the deadline. */
+  /** When the ask's clock elapses: `ts + askTimeoutMs(env, tier)` — the tier constant the asking
+   *  agent's clock reads, or a review ask's own promised window (ADR 506), so the surface and the
+   *  agent agree on the deadline. */
   deadline: number;
   state: AskState;
   /** Who closed/deferred it (accept/decline/wait sender), when someone did. */
@@ -140,6 +141,18 @@ function refs(env: Envelope, askId: string, askThread: string | null | undefined
  * ask, except that nothing reopens a human answer (`accepted`/`declined` are terminal — an agent's
  * later `risk_accepted` against an already-answered ask would be a protocol violation, not a state).
  */
+/**
+ * The wait an ask promised. A `lane_review` ask carries its own (`meta.lane_review.wait_ms`, ADR 506 —
+ * the team's review window, which the browser cannot read from policy); every other ask, and a review
+ * ask from an older daemon, reads the tier table.
+ */
+export function askTimeoutMs(env: Envelope, tier: AskTier): number {
+  const wait = (env.meta?.['lane_review'] as { wait_ms?: unknown } | undefined)?.wait_ms;
+  return typeof wait === 'number' && Number.isFinite(wait) && wait > 0
+    ? wait
+    : ASK_TIER_DEFAULTS[tier].timeout_ms;
+}
+
 export function deriveAsks(envelopes: Envelope[]): AskView[] {
   const byTs = [...envelopes].sort((a, b) => a.ts - b.ts || a.id.localeCompare(b.id));
   const asks = new Map<string, AskView>();
@@ -156,7 +169,7 @@ export function deriveAsks(envelopes: Envelope[]): AskView[] {
         species,
         tier,
         to: env.to.kind === 'member' ? env.to.name : null,
-        deadline: env.ts + ASK_TIER_DEFAULTS[tier].timeout_ms,
+        deadline: env.ts + askTimeoutMs(env, tier),
         state: 'open',
       });
       continue;

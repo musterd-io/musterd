@@ -33,7 +33,7 @@ import { currentAttestation } from '../store/presence.js';
 import { pickHumanReviewer, supersededAcceptanceAsks } from '../store/review.js';
 import type { MemberRow, MessageRow, TeamRow } from '../store/rows.js';
 import { resolveAccountStatus, resolveCapabilities } from '../store/rows.js';
-import { getTeamBySlug } from '../store/teams.js';
+import { acceptanceTimeoutMs, getTeamBySlug } from '../store/teams.js';
 import { joinerEnrollment } from '../sync/claim.js';
 import {
   recordActModel,
@@ -914,6 +914,8 @@ async function fireGatedHumanAsk(
         route: 'human_admin',
         grade: 'human',
         peer_confirmed_by: peer.name,
+        // ADR 506: the stage-two human ask's promise, on the same floor as every review ask.
+        wait_ms: await acceptanceTimeoutMs(ctx.db, team.id, 'blocking'),
       },
     },
   });

@@ -685,6 +685,9 @@ export class MusterdClient {
        *  Absent from an older daemon and from the no-acceptor branch — absent means "no backstop
        *  to rely on", which is the pre-235 advice, so the fallback is the safe one. */
       backstop?: { armed: boolean; grace_ms: number };
+      /** ADR 506: how long the acceptor was promised (the team's review window). Absent on older
+       *  daemons and when nobody was asked; `reviewWaitMinutes` falls back to the default. */
+      wait_ms?: number;
       /** ADR 404: why nobody was asked. Absent on older daemons. */
       empty_pool?: {
         kind: 'no_live_member' | 'live_ineligible';

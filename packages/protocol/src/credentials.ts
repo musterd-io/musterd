@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ACCEPTANCE_REVIEW_WINDOW_MS } from './ask.wire.js';
 import { DoorbellPolicySchema } from './doorbell.js';
 import { EnforcementPolicySchema } from './enforcement.js';
 import { GuardianTiersSchema } from './guardian.js';
@@ -238,6 +239,19 @@ export const PolicySchema = z.object({
    * shows the unverified challenge-concession share has not fallen.
    */
   challenge_evidence_rail: z.boolean().default(false),
+  /**
+   * ADR 506: how long an outcome-acceptance (`lane_review`) ask waits before the owner may self-close
+   * on silence — the promise the ready row records (ADR 217) and the "wait ≤Nm" the submit reply
+   * prints. A floor, not an override: a tier whose own timeout is longer keeps it. Default 20 minutes
+   * (`ACCEPTANCE_REVIEW_WINDOW_MS`), from the measured answer times that ADR records; 1 minute to 24
+   * hours, the upper bound being the ADR 229 sweep grace.
+   */
+  acceptance_review_window_ms: z
+    .number()
+    .int()
+    .min(60_000)
+    .max(24 * 60 * 60_000)
+    .default(ACCEPTANCE_REVIEW_WINDOW_MS),
 });
 export type Policy = z.infer<typeof PolicySchema>;
 

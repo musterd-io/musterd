@@ -18,12 +18,16 @@ export const SETTLED_MS = 6_000;
 const QUESTION_MAX = 96;
 
 /** The §6 table, plus the open states that share its words. */
-export function askStatePhrase(state: AskState, tier: AskTier): string {
+export function askStatePhrase(
+  state: AskState,
+  tier: AskTier,
+  timeoutMs: number = ASK_TIER_DEFAULTS[tier].timeout_ms,
+): string {
   switch (state) {
     case 'stranded':
       return 'nobody answered';
     case 'risk_accepted':
-      return `went ahead after ${minutes(tier)} min`;
+      return `went ahead after ${minutes(timeoutMs)} min`;
     case 'lapsed':
       return 'expired';
     case 'held':
@@ -33,7 +37,7 @@ export function askStatePhrase(state: AskState, tier: AskTier): string {
     case 'open':
       return tier === 'blocking'
         ? 'holding until answered'
-        : `goes ahead in ${minutes(tier)} min if unanswered`;
+        : `goes ahead in ${minutes(timeoutMs)} min if unanswered`;
     case 'accepted':
       return 'approved';
     case 'declined':
@@ -43,8 +47,8 @@ export function askStatePhrase(state: AskState, tier: AskTier): string {
   }
 }
 
-function minutes(tier: AskTier): number {
-  return Math.round(ASK_TIER_DEFAULTS[tier].timeout_ms / 60_000);
+function minutes(timeoutMs: number): number {
+  return Math.round(timeoutMs / 60_000);
 }
 
 export type AskBanner =
@@ -114,7 +118,7 @@ export function askBanner(asks: readonly AskView[], ctx: AudienceContext, now: n
 }
 
 function holdNow(ask: AskView, now: number): string {
-  if (ask.state !== 'open' || ask.tier === 'blocking') return askStatePhrase(ask.state, ask.tier);
+  if (ask.state !== 'open' || ask.tier === 'blocking') return askStatePhrase(ask.state, ask.tier, ask.deadline - ask.env.ts);
   const left = Math.max(0, ask.deadline - now);
   const min = Math.ceil(left / 60_000);
   return min <= 0
@@ -143,7 +147,7 @@ function outcome(ask: AskView): string {
     case 'resolved':
       return `${by} resolved it`;
     default:
-      return askStatePhrase(ask.state, ask.tier);
+      return askStatePhrase(ask.state, ask.tier, ask.deadline - ask.env.ts);
   }
 }
 

@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 41;
+export const GUIDANCE_CONTENT_VERSION = 42;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -213,7 +213,8 @@ export function renderSkillBody(opts: { team: string }): string {
     '     (as of 2026-08 acceptors had come back 20 of 20 times, and the daemon sweeps unanswered',
     '     lanes itself; if you ever see that stop being true, say so rather than resuming',
     '     self-closing);',
-    '   - acceptor asked, **no** backstop: wait ≤5m, then self-close on silence;',
+    '   - acceptor asked, **no** backstop: wait the window the reply names (team policy',
+    '     `acceptance_review_window_ms`, default 20m — ADR 506), then self-close on silence;',
     '   - **nobody** asked — no eligible acceptor, or acceptance-exempt (ADR 234): self-close now.',
     '   A self-close is `lane_resolve` / `musterd lane resolve`, recorded **unconfirmed**, never a wedge.',
     '',
