@@ -111,12 +111,21 @@ withDrivers('style-http', (_o, kind) => {
       expect(byName['Ada']!.style).toBeNull();
     });
 
-    it('GET /style-block names the driver passed, their dials, and the team line (inc 3)', async () => {
+    it('GET /style-block for a human is their own block; a seat cannot pick a driver by name (inc 3)', async () => {
       const t = await team();
-      await put('/teams/dawn/members/me/style', { length: 'concise' }, t.dee);
-      const got = await get('/teams/dawn/style-block?driver=dee', t.ada);
+      await put(
+        '/teams/dawn/members/me/style',
+        { length: 'concise', prose: 'Only my seats read this.' },
+        t.dee,
+      );
+      // A seat naming dee in the query gets nothing of dee's: no presence driver, two humans ⇒ team.
+      const peek = await get('/teams/dawn/style-block?driver=dee', t.ada);
+      expect(peek.json.driver).toBeNull();
+      expect(peek.json.block).not.toContain('Only my seats read this.');
+      const got = await get('/teams/dawn/style-block', t.dee);
       expect(got.status).toBe(200);
       expect(got.json.driver).toBe('dee');
+      expect(got.json.block).toContain('dee adds: "Only my seats read this."');
       expect(got.json.dials.length).toBe('concise');
       expect(got.json.block).toContain(
         'For dee (in chat, and in any act addressed to dee): pushback when it matters · plain · concise · prose.',

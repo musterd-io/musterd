@@ -7900,8 +7900,9 @@ export async function handleHttp(
       // The doorbell (ADR 443 §4–5): a human's own sinks. Self only — the URL carries no name, so
       // a personal URL is readable by its owner and nobody else. Agents have no doorbell: they do
       // not choose where a human is rung (§7).
-      // ADR 514 inc 3: the block a seat reads — for the driver it names (query) or its own
-      // presence's driver. Any seat; the envelope carries no prose but the driver's own block.
+      // ADR 514 inc 3: the block a seat reads. The driver is never caller-chosen — a human caller
+      // gets their own block, a seat gets the driver its live presence attested at claim, else the
+      // team's only human — so a human's prose reaches only the seats that human steers.
       if (method === 'GET' && rest === '/style-block') {
         const { team, member } = await authMember(
           ctx.db,
@@ -7911,7 +7912,7 @@ export async function handleHttp(
           agentSessionLease(req),
         );
         const driver =
-          url.searchParams.get('driver') ?? (await driverForSeat(ctx.db, team.id, member.id));
+          member.kind === 'human' ? member.name : await driverForSeat(ctx.db, team.id, member.id);
         return sendJson(res, 200, await styleEnvelopeFor(ctx.db, team.id, driver));
       }
 
