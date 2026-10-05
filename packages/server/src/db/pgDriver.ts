@@ -3,6 +3,7 @@ import { log } from '../log.js';
 import { toPostgres } from './dialect.js';
 import { DATABASE_UNREACHABLE_SENTENCE, DriverError, type Driver, type Params } from './driver.js';
 import { ROLE, TENANT_SETTING } from './pg/tenancy.js';
+import { requestTiming } from './requestTiming.js';
 
 /**
  * node-postgres behind the async Driver (ADR 486; cloud design §12.1/§12.4). One pool per database
@@ -137,7 +138,14 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
     if (closed) throw new DriverError('driver is closed', 'closed');
     const p = pool(s.role);
     try {
-      return await p.connect();
+      const t = requestTiming();
+      if (!t) return await p.connect();
+      const t0 = performance.now();
+      try {
+        return await p.connect();
+      } finally {
+        t.waitMs += performance.now() - t0;
+      }
     } catch (e) {
       throw unavailable(e);
     }
@@ -147,7 +155,14 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
     for (const l of listeners) l(sql);
     const text = toPostgres(sql);
     try {
-      return await c.query(text, params as unknown[]);
+      const t = requestTiming();
+      if (!t) return await c.query(text, params as unknown[]);
+      const t0 = performance.now();
+      try {
+        return await c.query(text, params as unknown[]);
+      } finally {
+        t.queryMs += performance.now() - t0;
+      }
     } catch (e) {
       if (isUnreachable(e)) throw unavailable(e);
       throw new Error(
@@ -160,10 +175,18 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
   /** One transaction: BEGIN+stamp (one trip), body, COMMIT — ROLLBACK and release(err) on any failure. */
   const inTransaction = async <T>(s: Scope, body: (c: Client) => Promise<T>): Promise<T> => {
     const c = await acquire(s);
+    // Request timing (requestTiming.ts): how long this client is held, BEGIN to release.
+    const timing = requestTiming();
+    const held = performance.now();
+    if (timing) timing.tx++;
+    const done = () => {
+      if (timing) timing.holdMs += performance.now() - held;
+    };
     try {
       await c.query(opening(s));
       const r = await body(c);
       await c.query('COMMIT');
+      done();
       c.release();
       return r;
     } catch (e) {
@@ -172,6 +195,7 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
       } catch {
         // the connection is gone; release(err) discards it from the pool
       }
+      done();
       c.release(e);
       throw isUnreachable(e) ? unavailable(e) : e;
     }

@@ -15,6 +15,7 @@ import { schemaVersionOf } from './db/migrations.js';
 import { openDriver } from './db/open.js';
 import { assertSchemaCurrent } from './db/pg/migrate.js';
 import { pgDriver, type PoolFactory } from './db/pgDriver.js';
+import { withRequestTiming } from './db/requestTiming.js';
 import { sqliteDriver, type SqliteDriver } from './db/sqliteDriver.js';
 import { openTraceDriver } from './db/traceDb.js';
 import { startDigestSchedule } from './digest/schedule.js';
@@ -205,6 +206,15 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         path,
         status,
         ms: Date.now() - t0,
+        // Where the store time went (lane 01M3Z455NE) — Postgres only; absent when untouched.
+        ...(run.timing.tx > 0
+          ? {
+              db_tx: run.timing.tx,
+              db_wait_ms: Math.round(run.timing.waitMs),
+              db_hold_ms: Math.round(run.timing.holdMs),
+              db_query_ms: Math.round(run.timing.queryMs),
+            }
+          : undefined),
         // Why a 5xx happened, when the handler said (lane 01M3ZPM3FE).
         ...(status >= 500 ? requestFailure(res) : undefined),
       };
@@ -212,7 +222,9 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
       else if (status >= 400) log.warn(fields);
       else log.info(fields);
     });
-    void (await handleHttp(ctx, req, res));
+    // The store records into this request's timing (db/requestTiming.ts); read at 'finish'.
+    const run = withRequestTiming(() => handleHttp(ctx, req, res));
+    void (await run.result);
   };
   const http: Server = config.tls
     ? (createHttpsServer(
