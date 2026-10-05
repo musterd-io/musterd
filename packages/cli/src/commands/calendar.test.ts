@@ -150,6 +150,10 @@ describe('calendar views', () => {
         }),
       ),
     ).toBe('Thu Oct 08  14:00–14:30  ★ demo      SF Tech Week demo · Mission Bay [going]');
+    // An entry any Member wrote cannot drive the reader's terminal: control bytes print as U+FFFD.
+    expect(renderLine(e({ title: 'Deck\u001b]0;pwned\u0007 due', place: 'a\u001b[2Jb' }))).toBe(
+      'Thu Oct 08  all day        event     Deck\ufffd]0;pwned\ufffd due · a\ufffd[2Jb',
+    );
     expect(renderLine(e({ title: 'Deck due', kind: 'deadline' }))).toBe(
       'Thu Oct 08  all day        deadline  Deck due',
     );

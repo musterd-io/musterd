@@ -281,9 +281,19 @@ export function renderLine(e: CalendarEntry): string {
     timeZone: 'UTC',
   });
   const time = e.start ? `${e.start}${e.end ? `–${e.end}` : ''}` : 'all day';
-  const place = e.place ? ` · ${e.place}` : '';
+  const place = e.place ? ` · ${printable(e.place)}` : '';
   const status = e.status ? ` [${e.status}]` : '';
-  return `${day.replace(',', '')}  ${time.padEnd(11)}  ${e.pick ? '★' : ' '} ${e.kind.padEnd(9)} ${e.title}${place}${status}`;
+  return `${day.replace(',', '')}  ${time.padEnd(11)}  ${e.pick ? '★' : ' '} ${e.kind.padEnd(9)} ${printable(e.title)}${place}${status}`;
+}
+
+/**
+ * Any Member — an agent included — writes these fields, and this prints them to a human's terminal.
+ * A C0/C1 control byte (ESC above all) would let an entry recolour, retitle or rewrite the screen,
+ * so each becomes U+FFFD before it is shown. The stored entry is untouched; `--json` stays exact.
+ */
+export function printable(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/[\u0000-\u001f\u007f-\u009f]/g, '\ufffd');
 }
 
 export function renderCalendar(entries: CalendarEntry[]): string {
