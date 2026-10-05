@@ -532,6 +532,39 @@ export async function hasLivePresence(
   return (row?.n ?? 0) > 0;
 }
 
+/** What a team read needs from each member's presence rows: live now, and its latest attested model. */
+export interface MemberOccupancy {
+  /** Any live presence (within timeout, not a release hold) — `hasLivePresence`. */
+  live: boolean;
+  /** The model of its most recent non-held presence row, or null (ADR 101/158). */
+  model: string | null;
+}
+
+/**
+ * `hasLivePresence` and the latest attested model for EVERY member of a team, in one statement
+ * (lane 01M46RPQ94): asked per member they were two transactions per member on Postgres inside each
+ * `/report` derivation. Members with no non-held presence row are absent from the map.
+ */
+export async function teamOccupancy(
+  db: Driver,
+  teamId: string,
+  timeoutMs: number,
+): Promise<Map<string, MemberOccupancy>> {
+  const [l, r] = liveCutoffs(timeoutMs);
+  const rows = await db.all<{ member_id: string; model: string | null; live: number }>(
+    `SELECT p.member_id AS member_id, p.model AS model, CASE WHEN ${LIVE_PRESENCE_SQL} THEN 1 ELSE 0 END AS live FROM presence p JOIN members m ON m.id = p.member_id LEFT JOIN nodes n ON n.id = p.node WHERE m.team_id = ? AND p.held_until IS NULL ORDER BY p.last_seen_at DESC`,
+    [l, r, teamId],
+  );
+  const out = new Map<string, MemberOccupancy>();
+  for (const row of rows) {
+    const seen = out.get(row.member_id);
+    // Rows arrive newest first, so the first row per member carries its latest model.
+    if (!seen) out.set(row.member_id, { live: Number(row.live) === 1, model: row.model });
+    else if (Number(row.live) === 1) seen.live = true;
+  }
+  return out;
+}
+
 /**
  * How many distinct members hold a *live* presence right now, across **all** teams in this db.
  * The daemon hosts every team, so this cross-team count is the honest answer to "who is connected"

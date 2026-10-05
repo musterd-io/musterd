@@ -483,3 +483,26 @@ Same shape as run 5 (75/75/75, `performance-1x`, a fresh team per run). Each run
   `01M4563RDY`: a team send is now a constant 26 statements at any team size.
 - **Next:** run 12 with the send fix at pool 150. Falsifier: writes still hold a client for
   seconds over a handful of transactions — then the cost is elsewhere in the write path.
+
+## 2026-10-05 — Cloud run 12: the send fix lands; `/report` is now the tail, and it waits on a derivation, not the database (lanes 01M3Z44C56, 01M4563RDY, 01M46RPQ94)
+
+Run 11's shape (75/75/75, `performance-1x`, pool 150) on #2086, the constant-cost send.
+
+| run | build / change | pool | p50 | p95 | what it showed |
+| --- | --- | --- | --- | --- | --- |
+| 12 | team send in constant statements (#2086) | 150 | 1.9 s | 8.7 s | writes at 15 transactions, p50 2–4 s; CPU 72–87 %; `/report` p95 20.5 s |
+
+- **The send fix held.** Agent `POST /messages` dropped from 165 transactions to 15, and the run's
+  p95 from 12.0 s to 8.7 s with the core no longer pinned.
+- **`/report` is the worst route, and its time is not in the database.** Over 9 558 calls its cache
+  worked (two foreground derivations), and a cache hit holds a client for 1.5 s at p95. Yet the
+  route's p95 is 20.5 s. Every other route spends ~5 ms outside the database; `/report` spends 19 s
+  at p95. The slow calls arrive in bursts from minute 14, which is readers queueing on an in-flight
+  refresh once the cached report has aged past `REPORT_MAX_STALE_MS` (60 s).
+- **Why a refresh took over a minute.** A derivation was 202 transactions on a 150-member team: the
+  message hydration and the family-posture snapshot each asked one question per member, and under
+  load a transaction cost ~250 ms. Lane `01M46RPQ94` makes the derivation a constant number of
+  statements at any team size (`report-statements.test.ts`, both drivers) and runs Cloud's
+  derivation in one transaction.
+- **Next:** run 13 with that fix. Falsifier: `/report` still shows a non-database gap of seconds at
+  p95 — then the refresh is slow for a reason other than its statement count.

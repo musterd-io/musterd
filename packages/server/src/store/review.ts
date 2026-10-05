@@ -16,7 +16,7 @@ import {
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { getMemberByName, listMembers } from './members.js';
-import { hasLivePresence } from './presence.js';
+import { hasLivePresence, teamOccupancy } from './presence.js';
 import {
   lastActionBySubject,
   resolveQuiescence,
@@ -279,6 +279,9 @@ export async function teamFamilyPosture(
   // not idle, it is mid-something with a stale heartbeat. Waking it is not a remedy, it is a
   // duplicate. Read once for the whole roster; the per-seat lookup below is a Map hit.
   const lastAction = await lastActionBySubject(db, teamId);
+  // Liveness and the attested model for the whole roster in one statement (lane 01M46RPQ94); asked
+  // per seat they were two transactions per member on Postgres, inside every `/report` derivation.
+  const occupancy = await teamOccupancy(db, teamId, presenceTimeoutMs);
   const now = Date.now();
   let attesting = 0;
   let unattested = 0;
@@ -290,7 +293,7 @@ export async function teamFamilyPosture(
     // rungs on the review ladder. Counting one as `unattested` would be the exact "just reuse
     // kind: agent" bug the kind exists to prevent.
     if (m.kind === 'service') continue;
-    const live = await hasLivePresence(db, m.id, presenceTimeoutMs);
+    const live = occupancy.get(m.id)?.live ?? false;
     if (m.kind === 'human') {
       if (live) humans_live += 1;
       continue;
@@ -325,7 +328,7 @@ export async function teamFamilyPosture(
       });
       continue;
     }
-    const family = modelFamily(await latestAttestedModel(db, m.id));
+    const family = modelFamily(occupancy.get(m.id)?.model ?? null);
     if (family === MODEL_UNKNOWN) {
       unattested += 1;
     } else {
