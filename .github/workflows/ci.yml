@@ -80,7 +80,10 @@ jobs:
   # because GitHub will not merge a draft, and `ready_for_review` re-runs it before anyone can.
   gates:
     name: gates
-    runs-on: ubuntu-latest
+    # ADR 517: Ubicloud's 2 vCPU runner — same size as ubuntu-latest, about a fifth of the per-minute
+    # price, a fresh VM per job, and not subject to GitHub's hosted-runner queue. To go back, set
+    # this to `ubuntu-latest`; nothing else in the job depends on where it runs.
+    runs-on: ubicloud-standard-2
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     permissions:
       contents: read
