@@ -1,8 +1,8 @@
 # 014 — Jev as a review queue: keep the confident answers, send the rest to a human
 
-> **Status:** 2026-10-03, lane 01M41QMZT1 (lazara). **Pre-registered; not yet scored.** The bar
-> below was committed before any 013 run data was read for this question. Results go in
-> §Result, in a later commit on the same lane.
+> **Status:** 2026-10-03, lane 01M41QMZT1 (lazara). Pre-registered 2026-10-03; scored
+> 2026-10-05. **Rejected: no question passes, for either backend, under either guard.** The bar
+> was committed before any 013 run data was read for this question.
 
 ## Question
 
@@ -62,5 +62,36 @@ justify a hosted model that keeps the text it is sent.
 
 ## Result
 
-_Pending. 013's run outputs live outside the repo (ADR 184) on dolly's machine. Scoring runs
-once they are reachable from this workspace._
+**Rejected.** Scored 2026-10-05 on 013's run outputs (532 answers per backend, 0 errors). No
+question reaches 0.90 accuracy on kept tune items at any cut-off, so no cut-off is chosen and
+nothing reaches the test split. The guard question is moot: framing agreement can only remove
+items, and confidence alone never gets close.
+
+Tune-split accuracy on kept items, by cut-off (kept / accuracy, canonical framing):
+
+| backend | question    | 0.5     | 0.7     | 0.8     | 0.9     | 0.95    | 0.99    |
+| ------- | ----------- | ------- | ------- | ------- | ------- | ------- | ------- |
+| Jev     | act_choice  | 48/0.56 | 35/0.66 | 33/0.70 | 21/0.71 | 15/0.73 | 8/0.75  |
+| Jev     | ask_species | 18/0.50 | 15/0.53 | 13/0.46 | 10/0.50 | 10/0.50 | 9/0.56  |
+| Jev     | owes_reply  | 26/0.73 | 19/0.68 | 14/0.64 | 9/0.67  | 4/0.75  | 0/—     |
+| Laya    | act_choice  | 53/0.23 | 50/0.24 | 47/0.26 | 46/0.26 | 44/0.27 | 42/0.26 |
+| Laya    | ask_species | 16/0.31 | 7/0.57  | 2/0.50  | 1/1.00  | 0/—     | 0/—     |
+| Laya    | owes_reply  | 26/0.46 | 22/0.41 | 17/0.41 | 8/0.63  | 1/0.00  | 0/—     |
+
+The best kept accuracy anywhere with at least 10 kept items is Jev act_choice at 0.73 (0.95
+cut-off, 15 items), well short of 0.90. Raising the cut-off buys little: Jev's confident answers
+are only a few points more accurate than its unconfident ones, and Laya's are no more accurate
+at all. MotherDuck's 0.8 routing rule would keep 33 of 55 Jev act_choice tune items at 0.70
+accuracy against 013's outcome truth.
+
+**Reading.** On musterd's coordination questions, Jev's confidence does not separate right
+answers from wrong ones well enough to run a review queue. This holds even before the
+framing-flip failure 013 found. The 2026-09-21 offline-only verdict stands, and this finding
+adds that the offline review-queue use does not clear its bar either.
+
+**Caveats.** Tune splits are small (19–55 items per question), so one cut-off step moves
+accuracy by several points. A different truth (another model's label, as in MotherDuck's check)
+would likely score higher. That is a different question, and this finding does not answer it.
+
+**Falsifier.** A re-run on a fresh 013-style item set where any question reaches kept accuracy
+≥ 0.90 with ≥ 10 kept tune items at some cut-off.
