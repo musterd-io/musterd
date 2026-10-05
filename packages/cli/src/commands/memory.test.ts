@@ -92,7 +92,25 @@ describe('memory command (ADR 093)', () => {
     await capture(() => memoryCommand(parseArgs(['save', '--headline', 'h1', 'b1'])));
     const res = await capture(() => memoryCommand(parseArgs(['show', '--json'])));
     const parsed = JSON.parse(res.out);
-    expect(parsed).toEqual({ headline: 'h1', body: 'b1', saved_at: expect.any(Number) });
+    // ADR 522: the server's checks ride along — none here, the note asserts nothing to check.
+    expect(parsed).toEqual({
+      headline: 'h1',
+      body: 'b1',
+      saved_at: expect.any(Number),
+      checks: [],
+    });
+  });
+
+  it('show prints the checks above the body (ADR 522)', async () => {
+    await setupTeam();
+    await capture(() =>
+      memoryCommand(parseArgs(['save', '--headline', 'demo', 'Nobody merges until the demo.'])),
+    );
+    const res = await capture(() => memoryCommand(parseArgs(['show'])));
+    expect(res.out).toMatch(/⚠ "Nobody merges until the demo\." — no active Team hold says this/);
+    expect(res.out.indexOf('no active Team hold')).toBeLessThan(
+      res.out.indexOf('Nobody merges until the demo.\n'),
+    );
   });
 
   it('status prints the one-line pointer (headline + age, never the body) when a note exists', async () => {
