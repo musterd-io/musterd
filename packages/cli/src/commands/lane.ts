@@ -83,6 +83,22 @@ function renderLane(l: Lane): string {
   return `${theme.meta(l.id)} ${state} "${l.title}" — ${owner} · ${l.project}${goal}${surface}${deps}${branch}${parked}`;
 }
 
+/** Drop C0/C1 control characters and any ESC-introduced sequence (CSI, OSC, …) from text that
+ *  originated with a teammate before it reaches the terminal. Keeps the visible characters only. */
+export function plainTerminalText(s: string): string {
+  /* eslint-disable no-control-regex -- the control characters ARE the subject here */
+  return (
+    s
+      // ESC + CSI/OSC/other: `ESC [ … final`, `ESC ] … BEL/ST`, `ESC <single>`
+      .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+      .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/g, '')
+      .replace(/\u001b[\x20-\x7e]/g, '')
+      // C0 (except nothing — a one-line field has no legitimate control), DEL, C1
+      .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
+  );
+  /* eslint-enable no-control-regex */
+}
+
 function renderWarnings(warnings: LaneWarning[]): void {
   for (const w of warnings) {
     // For stale_plan the `with` is the moved Goal; for the others it's the other lane.
@@ -212,7 +228,10 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
     const built = res.built_on ?? [];
     if (built.length > 0) {
       process.stdout.write(`${theme.accent('built on')}:\n`);
-      for (const b of built) process.stdout.write(`  ${builtOnLine(b)}\n`);
+      // Titles and accept notes are teammate-authored text going to a terminal: strip control
+      // characters and escape sequences so a note cannot repaint the screen or forge a line
+      // (security review, 2026-10-05).
+      for (const b of built) process.stdout.write(`  ${plainTerminalText(builtOnLine(b))}\n`);
       process.stdout.write(theme.meta(BUILD_ON_CHECK) + '\n');
     }
     // value-layer design: the daemon's advisory notices (e.g. the ship nudge) reach the closer.

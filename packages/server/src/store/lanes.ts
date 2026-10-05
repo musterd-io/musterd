@@ -1103,8 +1103,13 @@ export async function builtOn(
       }
     }
     const accept = await db.get<{ body: string }>(
+      // The routed reviewer's own accept (`r.from_member = a.to_member`), never a bystander's or
+      // the owner's: an accept is a reply anyone may send on any id, and this line is shown to a
+      // claimer as "the acceptor's words" (security review, 2026-10-05). `lane_review` itself is
+      // server-stamped, so the ask side cannot be forged.
       `SELECT r.body AS body FROM messages a
          JOIN messages r ON r.team_id = a.team_id AND r.in_reply_to = a.id AND r.act = 'accept'
+          AND r.from_member = a.to_member
         WHERE a.team_id = ? AND a.act = 'ask' AND json_extract(a.meta, '$.lane_review.lane') = ?
         ORDER BY r.created_at DESC, r.id DESC LIMIT 1`,
       [teamId, dep.id],

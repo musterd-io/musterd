@@ -137,13 +137,22 @@ export async function stampDispute(
 export async function acceptedHandoffOf(
   ctx: Ctx,
   team: TeamRow,
+  accepter: MemberRow,
   repliedToId: string,
 ): Promise<AcceptedHandoffWire | undefined> {
-  const parent = await ctx.db.get<{ act: string; body: string; meta: string | null }>(
-    'SELECT act, body, meta FROM messages WHERE team_id = ? AND id = ?',
-    [team.id, repliedToId],
-  );
-  if (!parent || parent.act !== 'handoff') return;
+  const parent = await ctx.db.get<{
+    act: string;
+    body: string;
+    meta: string | null;
+    to_member: string | null;
+  }>('SELECT act, body, meta, to_member FROM messages WHERE team_id = ? AND id = ?', [
+    team.id,
+    repliedToId,
+  ]);
+  // Only the handoff's addressee gets the note back. An accept is a reply anyone may send on any
+  // id; without this check a seat could read a directed handoff it was never sent by "accepting"
+  // it (security review, 2026-10-05).
+  if (!parent || parent.act !== 'handoff' || parent.to_member !== accepter.id) return;
   const lh = (parseMeta(parent.meta) as { lane_handoff?: { lane?: unknown; branch?: unknown } })
     .lane_handoff;
   return {

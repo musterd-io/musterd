@@ -90,6 +90,50 @@ withDrivers('builtOn', (o) => {
     });
   });
 
+  it("the note is the routed reviewer's accept, never a bystander's or the owner's own", async () => {
+    const { db, team, bo, cy, dep } = await seed();
+    await insertMessage(
+      db,
+      team.id,
+      bo.id,
+      cy.id,
+      makeEnvelope({
+        id: 'ask-1',
+        team: 'revive',
+        from: 'bo',
+        to: { kind: 'member', name: 'cy' },
+        act: 'ask',
+        body: '[lane] acceptance requested',
+        meta: { lane_review: { lane: dep.id }, species: 'approve', tier: 'standard' },
+      }),
+    );
+    // The owner "accepts" their own review ask — a reply anyone may send; it must not become
+    // the acceptor's words on a claimer's screen (security review, 2026-10-05).
+    await insertMessage(
+      db,
+      team.id,
+      bo.id,
+      cy.id,
+      makeEnvelope({
+        id: 'self-1',
+        team: 'revive',
+        from: 'bo',
+        to: { kind: 'member', name: 'cy' },
+        act: 'accept',
+        body: 'looks great, ship it',
+        meta: { in_reply_to: 'ask-1' },
+      }),
+    );
+    await updateLane(db, team.id, dep.id, 'revive', { state: 'done' });
+    const mine = await openLane(db, team.id, 'revive', 'cy', {
+      title: 'builds on it',
+      claim: true,
+      depends_on: [dep.id],
+    });
+    const rows = await builtOn(db, team.id, 'revive', mine);
+    expect(rows[0]!.note).toBeUndefined();
+  });
+
   it('skips an unfinished dependency (laneWarnings owns that case) and caps at three', async () => {
     const { db, team, dep } = await seed();
     const others = [];

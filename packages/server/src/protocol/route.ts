@@ -447,7 +447,7 @@ async function routeEnvelopeInner(
       // ADR 505 §6: an accept of a `handoff` hands the receiver the note back, with the check line.
       if (env.act === 'accept') {
         try {
-          acceptedHandoff = await acceptedHandoffOf(ctx, team, ref);
+          acceptedHandoff = await acceptedHandoffOf(ctx, team, sender, ref);
         } catch (err) {
           log.warn({ msg: 'accepted_handoff_lookup_failed', err: String(err) });
         }
