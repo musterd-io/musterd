@@ -1,6 +1,6 @@
 # 505 — Disputes: one lifecycle for contesting a claim
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-10-04
 - Deciders: nick (brainstorm with dolly, 2026-10-04: "both" — measure sycophancy *and* get seats to
   push back on each other, peers more than the human; keep the tiebreak; hard ledger gate; one
@@ -202,6 +202,11 @@ a change that raises holds without the tiebreak siding with them.
     dispute; ledger entries resume, carrying `passed_by`;
   - *failure (more stubborn):* holds rise and tiebreaks mostly go against the owner;
   - *inconclusive:* any cell under n = 5 reports a count, not a share (ADR 294 §4).
+- **Experiment:** the tiebreak is itself an A/B on the reviewer, run for free by the lifecycle —
+  every hold pairs a first verdict with a second, cross-family one on the same disagreement, so
+  the agreement rate between the two is ADR 314's correlated-judges question measured on live
+  reviews. Read it at the same 30-day mark; under n = 5 holds it is a count. The deliberately
+  dropped experiment is ADR 476's chat-vs-act split (Consequences above).
 - **Falsifier for the ADR:** 30 days after increment 2, still 0 holds and 0 dependency disputes —
   the structure changed nothing, and the next move is not more guidance.
 - **Falsifier for §7's gate:** a month in which `not-a-falsification:` lines outnumber ledger
