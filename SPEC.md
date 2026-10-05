@@ -336,7 +336,7 @@ Sending an Envelope still requires the sender to **hold the occupancy** of `from
 
 ## A.8 Error / refusal codes
 
-Add `claim_conflict` (seat occupied; 409), `expired_grant` (410/403). Reuse `forbidden` (bad key / not allowed to observe / not admin), `not_found` (no such seat/role), and surface account states via `refused.code` (`disabled`/`banned`), or a human's hold on the seat (`halted`, ADR 501 — the message names who and why). `version_mismatch` covers an older client hitting this server. `rate_limited` (429) covers the OAuth per-IP buckets — the next move is retry, never re-authenticate.
+Add `claim_conflict` (seat occupied; 409), `expired_grant` (410/403). Reuse `forbidden` (bad key / not allowed to observe / not admin), `not_found` (no such seat/role), and surface account states via `refused.code` (`disabled`/`banned`), or a human's hold on the seat (`halted`, ADR 501 — the message names who and why). `held` is a refusal by an enforced Team hold (A.15, ADR 516 — the message names the effect, the human and the end time). `version_mismatch` covers an older client hitting this server. `rate_limited` (429) covers the OAuth per-IP buckets — the next move is retry, never re-authenticate.
 
 ## A.9 Migration
 
@@ -649,3 +649,48 @@ returns `{ "review_promises": [...] }` with every open promise in that Team, ord
 reference. A supporting daemon MUST include `review_promises: []` when the Team has no open
 promises. The weekly audit abstains if this route is unsupported and treats `[]` as a supported
 empty population.
+
+## A.15 Holds (unreleased — ADR 516)
+
+A **hold** is a time-bounded Team rule that only a human admin sets or lifts. It is the one
+authoritative place a Team says "this is paused"; Members read it, they do not restate it.
+
+```jsonc
+{
+  "id": "<ULID>",
+  "effect": "autorefresh_paused", // | "merges_paused" | "notice"
+  "reason": "demo 14:00", // required, 1–280 chars; for "notice" it is the whole message
+  "created_by": "nick", // the human Member who set it
+  "created_at": 1791229200000,
+  "expires_at": 1791234600000, // required; expires_at - created_at <= 43200000 (12h)
+  "lifted_at": null,
+  "lifted_by": null,
+}
+```
+
+A hold is **active** while `lifted_at` is null and the reader's clock is before `expires_at`.
+Active is derived at read; there is no status field and no timer. `effect` is a closed set:
+`autorefresh_paused` and `merges_paused` are enforced (by the autorefresh tick and the PreToolUse
+gate respectively); `notice` is never enforced, and a renderer MUST label it as not enforced.
+An implementation MUST NOT treat an unknown `effect` as enforced.
+
+Routes (all under `/teams/:slug`):
+
+- `POST /holds {effect, reason, until?: number, for_ms?: number}` — exactly one of `until` (epoch
+  ms) or `for_ms`. Caller MUST be an admin; an admin is human (A.1, ADR 172). Over the 12h cap
+  answers `validation`. Returns `{ hold }`.
+- `POST /holds/:id/lift` — admin. Lifting an ended hold answers `not_found`. Returns `{ hold }`.
+- `GET /holds` — any authenticated Member. Returns `{ holds: [...] }`: active holds, soonest
+  `expires_at` first. `?all=1` adds ended ones, newest first.
+
+A joiner forwards both writes to its hub and answers `hub_unreachable` if it cannot reach it; it
+never records a hold locally. The hub writes the row and its replicated event (`hold.set`,
+`hold.lifted`, sync kind `hold`) in one transaction.
+
+Setting and lifting each deliver one `message` from the human to the Team carrying
+`meta.hold = {id, effect, expires_at, lifted?: true}`. `NextBrief` and `NextSummary` gain an
+optional `holds` array of active holds; a supporting daemon emits it, including `[]`, and
+omission means the daemon does not report holds.
+
+A Member's call refused by an enforced hold answers refusal code `held`, whose message names the
+effect, the human and the end time: `held by nick until 15:30: demo 14:00`.
