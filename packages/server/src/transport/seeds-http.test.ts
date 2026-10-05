@@ -1,7 +1,12 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
+import { saveNodeEnrollment } from '../node/state.js';
 import { listLanes } from '../store/lanes.js';
+import { localNodeForTeam } from '../store/messages.js';
 import { createSeedFromRelay } from '../store/seeds.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { claimAgentHttp, type AgentHttpAuth } from './test-auth.js';
@@ -123,6 +128,37 @@ withDrivers('seeds-http', (_o, kind) => {
         { kind: 'clarification', body: 'Which Surface?', by: 'Ada' },
         { kind: 'answer', body: 'CLI', by: 'nick' },
       ]);
+    });
+
+    it("refuses a repo Seed on an enrolled joiner — a seed is the hub's to mint (ADR 399)", async () => {
+      const team = (await getTeamBySlug(server.store, 'bravo'))!;
+      const { id: node_id } = await localNodeForTeam(server.store, team.id);
+      const dir = mkdtempSync(join(tmpdir(), 'musterd-seeds-repo-joiner-'));
+      const prior = process.env['MUSTERD_NODE_STATE'];
+      process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
+      try {
+        saveNodeEnrollment({
+          team: 'bravo',
+          hub_url: 'http://127.0.0.1:9',
+          credential: 'x',
+          node_id,
+          enrolled_at: 1,
+        });
+        const refused = await request(
+          'POST',
+          '/teams/bravo/seeds/repo',
+          { ref: 'a.md#b', body: 'x' },
+          adaAuth,
+        );
+        expect(refused.status).toBe(403);
+        expect(refused.json.error.message).toMatch(/hub/);
+        const seeds = await request('GET', '/teams/bravo/seeds', undefined, nickCredential);
+        expect(seeds.json.seeds.map((s: { source: string }) => s.source)).toEqual(['slack']);
+      } finally {
+        if (prior === undefined) delete process.env['MUSTERD_NODE_STATE'];
+        else process.env['MUSTERD_NODE_STATE'] = prior;
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
 
     it('captures a document-recorded intention as a repo Seed, idempotent on ref, linked when a lane is named (ADR 373 inc 2)', async () => {
