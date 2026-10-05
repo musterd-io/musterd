@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { RelaySeed } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -5,8 +8,10 @@ import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
+import { saveNodeEnrollment } from '../node/state.js';
 import { listLanes } from '../store/lanes.js';
 import { addMember } from '../store/members.js';
+import { localNodeForTeam } from '../store/messages.js';
 import { listSeeds } from '../store/seeds.js';
 import { createTeam, setPolicy } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
@@ -99,6 +104,31 @@ withDrivers('ingest', (o) => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch');
       expect(await ingestTeamSeeds(ctx, team)).toBe(0);
       expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('on an enrolled joiner does nothing — the relay is hub-only (ADR 399), no outbound call', async () => {
+      const team = await seedTeam();
+      const { id: node_id } = await localNodeForTeam(db, team.id);
+      const dir = mkdtempSync(join(tmpdir(), 'musterd-seeds-joiner-'));
+      const prior = process.env['MUSTERD_NODE_STATE'];
+      process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
+      try {
+        saveNodeEnrollment({
+          team: team.slug,
+          hub_url: 'http://hub',
+          credential: 'x',
+          node_id,
+          enrolled_at: 1,
+        });
+        const fetchSpy = vi.spyOn(globalThis, 'fetch');
+        expect(await ingestTeamSeeds(ctx, team)).toBe(0);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(await listSeeds(db, team.id)).toEqual([]);
+      } finally {
+        if (prior === undefined) delete process.env['MUSTERD_NODE_STATE'];
+        else process.env['MUSTERD_NODE_STATE'] = prior;
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
 
     it('records accepted Seed provenance without recording its body', async () => {

@@ -5,6 +5,7 @@ import { log } from '../log.js';
 import { appendAudit } from '../store/audit.js';
 import { createSeedFromRelay } from '../store/seeds.js';
 import { getPolicy, listActiveTeams } from '../store/teams.js';
+import { joinerEnrollment } from '../sync/claim.js';
 
 /**
  * Seeds ingest (ADR 248) — the daemon's half of the one-way flow. The relay Worker captured a raw
@@ -69,6 +70,10 @@ export async function ingestTeamSeeds(
   const url = policy.seeds_relay_url;
   const token = policy.seeds_relay_token;
   if (!url || !token) return 0;
+  // Hub-only (ADR 399). Policy replicates, so a joiner holds the relay credentials too, but the hub
+  // refuses its `seed.captured` (403, sync/log.ts SyncOriginError) and its own cursor would re-pull
+  // every seed the hub already took (lane 01M3ZBTDJ5).
+  if (await joinerEnrollment(ctx.db, team.id, team.slug)) return 0;
 
   const seeds = await pullSeeds(url, token, await lastSeedId(ctx, team.id));
   let created = 0;
