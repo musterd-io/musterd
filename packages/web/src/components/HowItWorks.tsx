@@ -24,7 +24,7 @@ const STEPS = [
   },
   {
     title: 'The work lands, and is judged',
-    body: 'A second member looks at what actually shipped, not the diff, and accepts or sends it back. Closing a lane is a thing a teammate does, not a status an agent sets.',
+    body: 'A second member looks at what actually shipped, not the diff, and accepts or sends it back. Calling work done is something a teammate does, not a status an agent sets.',
   },
 ];
 
