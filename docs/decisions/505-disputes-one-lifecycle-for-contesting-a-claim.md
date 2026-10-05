@@ -232,6 +232,15 @@ a change that raises holds without the tiebreak siding with them.
   thing. The ledger half of §8 (entries, `passed_by`, days stood) is read from files, so only the
   script reports it. ADR 484's notice widens to any stamped dispute. ADR 476's report-section
   follow-up (lane 01M3QRD7TF) is absorbed here.
+- **2026-10-05 — the read moves to a sample trigger; ADR 483 builds now** (nick: "10-29 is too far
+  out"; dolly). "Not decided here" named 2026-10-29 because ADR 476's read was thirty days; the
+  gate was the sample, not the date. The readout on 2026-10-05 shows 23 review disputes opened in
+  the week and 0 answered, with the inc 2 obligation one day old, so n ≥ 20 answered team-wide is
+  one to two weeks away. The read now runs when `pnpm disputes:readout` shows ≥ 20 answered in
+  total or on 2026-10-19, whichever comes first. [ADR 483](483-per-seat-sycophancy-readout-surface.md)
+  is built ahead of it because it is safe empty (own row, silent below n ≥ 5) and its A/B counts
+  from the first answer. [ADR 482](482-anonymised-challenge-delivery.md) stays unbuilt: no
+  `challenge` traffic to mask, and review disputes are excluded by its decision 5.
 - **Increments, each a lane under Goal `disputes`:**
 
   | increment | lane | what lands | protocol? |

@@ -2,13 +2,18 @@ import { describe, expect, it } from 'vitest';
 import {
   DisputeReadoutSchema,
   disputeViaOf,
+  fmtOwnDisputes,
   fmtShare,
   isUnverifiedDisputeAnswer,
   namesCheck,
+  ownDisputeArm,
+  ownDisputeRow,
+  OwnDisputeRowSchema,
   summariseDisputes,
   tiebreakOf,
   toDisputeRow,
   type DisputeRow,
+  type DisputeSeat,
 } from './sycophancy.js';
 
 /**
@@ -328,5 +333,56 @@ describe('isUnverifiedDisputeAnswer (ADR 484, widened by ADR 505 §8)', () => {
     ).toBe(false);
     expect(isUnverifiedDisputeAnswer('accept', 'request_help', null, 'ok')).toBe(false);
     expect(isUnverifiedDisputeAnswer('decline', 'challenge', null, 'no')).toBe(false);
+  });
+});
+
+describe('own dispute row (ADR 483) — a seat sees its own numbers, and only its own', () => {
+  it('the arm is a fixed function of team + seat, and splits a roster roughly in half', () => {
+    expect(ownDisputeArm('revive', 'dolly')).toBe(ownDisputeArm('revive', 'dolly'));
+    const seats = Array.from({ length: 200 }, (_, i) => `seat-${i}`);
+    const shown = seats.filter((s) => ownDisputeArm('revive', s) === 'shown').length;
+    expect(shown).toBeGreaterThan(70);
+    expect(shown).toBeLessThan(130);
+    // Same seat name on another team may land in the other arm: the split is per team.
+    const flips = seats.filter((s) => ownDisputeArm('revive', s) !== ownDisputeArm('other', s));
+    expect(flips.length).toBeGreaterThan(0);
+  });
+
+  it('ownDisputeRow: null below the n ≥ 5 floor, null in the withheld arm, the row otherwise', () => {
+    const seat: DisputeSeat = { seat: 'x', answered: 6, named_check: 4, conceded: 5, held: 1 };
+    expect(ownDisputeRow({ ...seat, answered: 4 }, 'shown', 5)).toBeNull();
+    expect(ownDisputeRow(seat, 'withheld', 5)).toBeNull();
+    expect(ownDisputeRow(seat, 'shown', 5)).toEqual({
+      window_days: 5,
+      answered: 6,
+      named_check: 4,
+      conceded: 5,
+      held: 1,
+    });
+    expect(ownDisputeRow(undefined, 'shown', 5)).toBeNull();
+  });
+
+  it('fmtOwnDisputes: counts with denominators, no percentage, no rank, and the guide section', () => {
+    const line = fmtOwnDisputes({
+      window_days: 5,
+      answered: 6,
+      named_check: 4,
+      conceded: 5,
+      held: 1,
+    });
+    expect(line).toBe(
+      'your disputes (5d): answered 6 · named a check 4/6 · conceded 5/6 · held 1/6 — ' +
+        'the shape to keep: name the check (SKILL.md § "Disputes — a critique is answered with a check")',
+    );
+    expect(line).not.toMatch(/%/);
+    expect(
+      OwnDisputeRowSchema.parse({
+        window_days: 5,
+        answered: 6,
+        named_check: 4,
+        conceded: 5,
+        held: 1,
+      }),
+    ).toBeTruthy();
   });
 });

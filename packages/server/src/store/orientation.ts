@@ -15,6 +15,7 @@ import type { Driver } from '../db/driver.js';
 import { handoffNamedLaneOutOfPlay, handoffNamesNoLane } from './delivery.js';
 import { listGoals, nextGoal } from './goals.js';
 import { incidentPolicy, openIncidents } from './incidents.js';
+import { deriveOwnDisputes } from './insights.js';
 import {
   acceptanceEnteredAt,
   emptyPoolFromSubmitAudit,
@@ -440,6 +441,11 @@ export async function deriveNext(
     promises.closures.filter((c) => c.owner === member),
   );
 
+  // ADR 483: the seat's own dispute row — its own, over 5 days, only at n ≥ 5, only in the shown
+  // arm. Here and nowhere team-wide (decision 2); the readout the report carries stays per seat
+  // only at n ≥ 5 too, and that one is for the team's reading, not the seat's.
+  const own_disputes = await deriveOwnDisputes(db, teamId, teamSlug, member, now);
+
   return {
     member,
     in_flight,
@@ -451,6 +457,7 @@ export async function deriveNext(
     up_next_seeds_total,
     owed_reviews,
     owed_disputes,
+    own_disputes,
     request_reviews,
     requested_reviews,
     review_closures,

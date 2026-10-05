@@ -9,9 +9,13 @@ import {
   type Report,
   type ReviewMetrics,
   type SteeringMetrics,
+  OWN_DISPUTES_WINDOW_MS,
+  ownDisputeArm,
+  ownDisputeRow,
   summariseDisputes,
   toDisputeRow,
   type DisputeReadout,
+  type OwnDisputeRow,
   type RawDisputeRow,
   type WaitingOnEntry,
   type WakeMetrics,
@@ -869,8 +873,9 @@ export async function deriveDisputes(
   db: Driver,
   teamId: string,
   now: number = Date.now(),
+  windowMs: number = DISPUTES_WINDOW_MS,
 ): Promise<DisputeReadout> {
-  const since = now - DISPUTES_WINDOW_MS;
+  const since = now - windowMs;
   const rows = await db.all<RawDisputeRow>(
     `SELECT r.id AS id, mem.name AS seat, mem.kind AS kind, r.act AS act, r.body AS body,
             r.meta AS meta, r.in_reply_to AS "inReplyTo", r.ts AS ts,
@@ -883,6 +888,28 @@ export async function deriveDisputes(
     [teamId, since],
   );
   return summariseDisputes(rows.map(toDisputeRow), since);
+}
+
+/**
+ * ADR 483: the brief's own-row slice of the readout above — the same definitions over a 5-day
+ * window, reduced to the one seat reading it. The arm (decision 4) is `ownDisputeArm`, a fixed
+ * function of team + seat the research script recomputes, so nothing is stored. Null below the
+ * floor or in the withheld arm; the brief says nothing rather than a zero.
+ */
+export async function deriveOwnDisputes(
+  db: Driver,
+  teamId: string,
+  teamSlug: string,
+  member: string,
+  now: number = Date.now(),
+): Promise<OwnDisputeRow | null> {
+  const arm = ownDisputeArm(teamSlug, member);
+  if (arm === 'withheld') return null;
+  const readout = await deriveDisputes(db, teamId, now, OWN_DISPUTES_WINDOW_MS);
+  return ownDisputeRow(
+    readout.by_seat.find((s) => s.seat === member),
+    arm,
+  );
 }
 
 export async function deriveReport(

@@ -1,6 +1,7 @@
 import {
   closeReasonCopy,
   emptyPoolCopy,
+  fmtOwnDisputes,
   incidentBannerLines,
   shortDuration,
   type Lane,
@@ -93,6 +94,8 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
       );
     }
   }
+  // ADR 483: the seat's own dispute row — the protocol's one string, same place as the MCP renderer.
+  if (brief.own_disputes) w(`\n${theme.meta(fmtOwnDisputes(brief.own_disputes))}\n`);
   // value-layer design / ADR 276: ambient review debt — the oldest lanes waiting on ANY seat's
   // acceptance (`owed by you` above is the directed slice). `team_next` has rendered this since the
   // design landed; the CLI never did (ADR 276 Consequences named the gap, lane 01M3TAM44Q closes

@@ -1,4 +1,4 @@
-import { makeEnvelope } from '@musterd/protocol';
+import { makeEnvelope, ownDisputeArm } from '@musterd/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
@@ -351,6 +351,158 @@ withDrivers('orientation', (o) => {
   // across an 18h window and still never answered — more awake time than the reviewers who did answer
   // (0.67h vs 0.22h). Having time was not the problem; being reminded was. The ask lands once in the
   // inbox and is never re-surfaced, and the brief a working seat actually reads had no field for it.
+  describe('own_disputes — a seat sees its own dispute numbers, and only its own (ADR 483)', async () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const T = 100 * DAY;
+    // Arms are a fixed hash of team + seat: on `revive`, ada is in the shown arm, stanley withheld.
+    // Pinned here so a change to the rule shows up as a test, not as a silently reshuffled A/B.
+    it('pins the arms this test relies on', () => {
+      expect(ownDisputeArm('revive', 'ada')).toBe('shown');
+      expect(ownDisputeArm('revive', 'stanley')).toBe('withheld');
+    });
+
+    async function answerN(
+      db: Driver,
+      teamId: string,
+      opener: { id: string; name: string },
+      answerer: { id: string; name: string },
+      n: number,
+      at: number,
+      named: boolean,
+    ) {
+      for (let i = 0; i < n; i++) {
+        const ch = `ch-${answerer.name}-${String(i)}`;
+        await insertMessage(
+          db,
+          teamId,
+          opener.id,
+          answerer.id,
+          makeEnvelope({
+            id: ch,
+            team: 'revive',
+            from: opener.name,
+            to: { kind: 'member', name: answerer.name },
+            act: 'challenge',
+            body: 'are you sure?',
+            ts: at + i * 2,
+          }),
+        );
+        await insertMessage(
+          db,
+          teamId,
+          answerer.id,
+          opener.id,
+          makeEnvelope({
+            id: `${ch}-a`,
+            team: 'revive',
+            from: answerer.name,
+            to: { kind: 'member', name: opener.name },
+            act: 'accept',
+            body: named ? 'conceded — re-ran `pnpm test`, it fails' : 'fine',
+            ts: at + i * 2 + 1,
+            meta: { in_reply_to: ch },
+          }),
+        );
+      }
+    }
+
+    it('carries the row at n ≥ 5 in the shown arm, over the 5-day window, and only to that seat', async () => {
+      const { db, team, nick } = await seed();
+      const ada = (await addMember(db, team, { name: 'ada', kind: 'agent' })).row;
+      await answerN(db, team.id, nick, ada, 4, T - 2 * DAY, true);
+      // Four answers: below the floor — nothing, not a zero.
+      expect(
+        (await deriveNext(db, team.id, 'revive', 'ada', 3, 5, { now: T })).own_disputes,
+      ).toBeNull();
+      // A fifth, unverified, inside the window; a sixth outside it does not count.
+      const ch5 = 'ch-ada-5';
+      await insertMessage(
+        db,
+        team.id,
+        nick.id,
+        ada.id,
+        makeEnvelope({
+          id: ch5,
+          team: 'revive',
+          from: 'nick',
+          to: { kind: 'member', name: 'ada' },
+          act: 'challenge',
+          body: '?',
+          ts: T - DAY,
+        }),
+      );
+      await insertMessage(
+        db,
+        team.id,
+        ada.id,
+        nick.id,
+        makeEnvelope({
+          id: `${ch5}-a`,
+          team: 'revive',
+          from: 'ada',
+          to: { kind: 'member', name: 'nick' },
+          act: 'accept',
+          body: 'ok',
+          ts: T - DAY + 1,
+          meta: { in_reply_to: ch5 },
+        }),
+      );
+      const old = 'ch-ada-old';
+      await insertMessage(
+        db,
+        team.id,
+        nick.id,
+        ada.id,
+        makeEnvelope({
+          id: old,
+          team: 'revive',
+          from: 'nick',
+          to: { kind: 'member', name: 'ada' },
+          act: 'challenge',
+          body: '?',
+          ts: T - 9 * DAY,
+        }),
+      );
+      await insertMessage(
+        db,
+        team.id,
+        ada.id,
+        nick.id,
+        makeEnvelope({
+          id: `${old}-a`,
+          team: 'revive',
+          from: 'ada',
+          to: { kind: 'member', name: 'nick' },
+          act: 'accept',
+          body: 'ok',
+          ts: T - 9 * DAY + 1,
+          meta: { in_reply_to: old },
+        }),
+      );
+
+      const brief = await deriveNext(db, team.id, 'revive', 'ada', 3, 5, { now: T });
+      expect(brief.own_disputes).toEqual({
+        window_days: 5,
+        answered: 5,
+        named_check: 4,
+        conceded: 5,
+        held: 0,
+      });
+      // The opener's brief carries nothing about ada: a row is for its own seat only.
+      expect(
+        (await deriveNext(db, team.id, 'revive', 'nick', 3, 5, { now: T })).own_disputes,
+      ).toBeNull();
+    });
+
+    it('is null in the withheld arm however many disputes the seat answered', async () => {
+      const { db, team, nick, stanley } = await seed();
+      await answerN(db, team.id, nick, stanley, 7, T - DAY, true);
+      expect(
+        (await deriveNext(db, team.id, 'revive', 'stanley', 3, 5, { now: T })).own_disputes,
+      ).toBeNull();
+    });
+  });
+
   describe('owed_disputes — rejections on MY lanes I have not answered (ADR 505)', async () => {
     async function reject(
       db: ReturnType<typeof seed>['db'],

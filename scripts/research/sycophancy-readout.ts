@@ -18,6 +18,7 @@ import {
   DISPUTE_VIA_ORDER,
   fmtShare,
   namesCheck,
+  ownDisputeArm,
   summariseDisputes,
   toDisputeRow,
   type DisputeCell,
@@ -118,11 +119,17 @@ function main(): void {
   for (const via of DISPUTE_VIA_ORDER) console.log(cellLine(via, r.by_via[via]));
   console.log(cellLine('total', r.total));
   if (r.by_seat.length) {
-    console.log('\n  by answering seat — answered · named a check · conceded · held:');
+    // ADR 483: the arm is a fixed function of team + seat (`ownDisputeArm`), so the eval reads it
+    // here rather than from any table. `--team <slug>` names the team; default `revive`.
+    const teamIx = args.indexOf('--team');
+    const teamSlug = teamIx >= 0 ? (args[teamIx + 1] ?? 'revive') : 'revive';
+    console.log(
+      '\n  by answering seat — answered · named a check · conceded · held · ADR 483 arm (own row shown?):',
+    );
     for (const s of r.by_seat) {
       console.log(
         `    ${s.seat.padEnd(14)} ${String(s.answered).padEnd(3)} ${fmtShare(s.named_check, s.answered).padEnd(12)} ` +
-          `conceded ${String(s.conceded).padEnd(3)} held ${String(s.held)}`,
+          `conceded ${String(s.conceded).padEnd(3)} held ${String(s.held).padEnd(3)} ${ownDisputeArm(teamSlug, s.seat)}`,
       );
     }
   }

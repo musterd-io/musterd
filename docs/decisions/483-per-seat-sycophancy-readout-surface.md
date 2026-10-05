@@ -1,6 +1,6 @@
 # 483 — A seat sees its own concession numbers, and only its own
 
-- Status: proposed
+- Status: accepted (2026-10-05)
 - Date: 2026-09-29
 - Lane: `01M3QTEAYH9817YWFF31WM0A4T` (goal `research-corpus`)
 - Deciders: nick (direction, 2026-09-29), izzo
@@ -23,18 +23,22 @@ A surface is needed that delivers the first without the second.
 
 ## Decision
 
-1. **A seat sees only its own row.** The orientation block (`team_status` and the session-start
-   orient read) gains one line, and only when the seat has at least 5 concessions in the window:
-   `your concessions (5d): challenge 2/3 unverified · phrase 1/14 · challenges declined 0/3`. It
-   carries counts with denominators, and nothing else: no percentage, rank, colour, or comparison to
-   other seats.
+1. **A seat sees only its own row.** The orientation brief (`team_next`, `musterd next`, and the
+   session-start orient read, which is the same projection) gains one line, and only when the seat
+   has answered at least 5 disputes in the window:
+   `your disputes (5d): answered 6 · named a check 4/6 · conceded 5/6 · held 1/6`. It carries counts
+   with denominators, and nothing else: no percentage, rank, colour, or comparison to other seats.
+   (Written at ADR 476's two channels; ADR 505 §8 made the dispute lifecycle the unit, and this
+   line reads the per-seat slice of its readout over 5 days.)
 2. **No team-wide per-seat display.** `/live`, the roster and the board show no per-seat sycophancy
    numbers. The team-level block in the report (ADR 481) is the only place per-seat rows exist, and
    it stays under the n ≥ 5 rule.
-3. **The line points at the behaviour, not the score.** It links to the "Answering a critique" guide
-   section, whose prescription is to name the check. It never tells a seat to concede less.
+3. **The line points at the behaviour, not the score.** It names the "Disputes — a critique is
+   answered with a check" guide section, whose prescription is to name the check. It never tells a
+   seat to concede less.
 4. **A/B during the evaluation period:** half the seats, chosen at random, get the line and half do
-   not, recorded per seat. This departs from the paper, which showed agents each other's scores. Own
+   not, recorded per seat. The record is the rule: the arm is a fixed hash of team and seat
+   (`ownDisputeArm`), so the daemon and the research script compute the same split with no table. This departs from the paper, which showed agents each other's scores. Own
    numbers only is the cautious arm. Showing each other's would need its own ADR, and only if
    own-only moves nothing.
 
@@ -55,6 +59,16 @@ A surface is needed that delivers the first without the second.
   named this ADR "not decided here", to be re-judged at the 2026-10-29 read; at the five-day read
   no seat had 5 disputes answered, so the line would have shown nothing to anyone. Nothing is built
   before the read.
+- **2026-10-05 — built; the read moves to a sample trigger** (nick: "10-29 is too far out"; dolly,
+  lane 01M3QTEAYH9817YWFF31WM0A4T). The line is safe to ship empty: own row only, silent below 5
+  answered, so it switches on per seat as ADR 505's dispute stream (23 review disputes opened in the
+  week to 2026-10-05, 0 answered before the inc 2 obligation) produces answers, and the A/B counts
+  from the first one. Landed: `NextBrief.own_disputes` (`OwnDisputeRowSchema`, nullable, absent on an
+  older daemon), `deriveOwnDisputes` (server, the 5-day slice of `deriveDisputes` for one seat),
+  `fmtOwnDisputes` (one string, printed verbatim by `musterd next` and `team_next`), and an arm
+  column on `pnpm disputes:readout` (`--team <slug>`). Not on `team_status`: the roster is a
+  different projection and the brief is where a seat reads its own state. The read now runs when
+  the readout shows ≥ 20 disputes answered team-wide or on 2026-10-19, whichever comes first.
 
 ## Observability & Evaluation
 
