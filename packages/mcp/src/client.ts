@@ -16,6 +16,8 @@ import {
   type MemoryEnvelope,
   type StyleEnvelope,
   StyleEnvelopeSchema,
+  type StylePrefs,
+  type ResolvedStyle,
   type NextBrief,
   type Report,
   type Seed,
@@ -92,6 +94,14 @@ function wsBase(server: string): string {
 /** Presence heartbeat cadence, and the window in which a tool call still counts as proof of life
  *  (ADR 164): one beat, so every check is judged against activity since the previous one. */
 export const HEARTBEAT_MS = 15_000;
+
+/** What `GET`/`PUT /members/me/style` answers (ADR 514): a human's own prefs, resolved, with the block. */
+export interface StyleSelfRead {
+  member: string;
+  prefs: StylePrefs;
+  resolved: ResolvedStyle;
+  block: string;
+}
 
 /**
  * How many proactive re-joins the dormant watch may fail before it stops (ADR 164 amendment 2). A
@@ -369,6 +379,23 @@ export class MusterdClient {
       // the slot; send it so the presence row does not keep the claim-time declaration.
       surface: this.config.surface,
     };
+  }
+
+  /** A human's own style read (`GET /members/me/style`, ADR 514). The daemon answers 403 for a seat. */
+  async styleRead(): Promise<StyleSelfRead> {
+    return (await this.request(
+      'GET',
+      `/teams/${this.config.team}/members/me/style`,
+    )) as StyleSelfRead;
+  }
+
+  /** A human's own style write — replaces the prefs whole (the tool merges first). */
+  async styleWrite(prefs: StylePrefs): Promise<StyleSelfRead> {
+    return (await this.request(
+      'PUT',
+      `/teams/${this.config.team}/members/me/style`,
+      prefs,
+    )) as StyleSelfRead;
   }
 
   /** `{ style_epoch }` when an envelope is held, else `{}` — absent is never a clear (ADR 417 rule). */

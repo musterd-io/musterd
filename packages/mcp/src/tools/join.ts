@@ -93,8 +93,9 @@ export function registerJoin(server: McpServer, client: MusterdClient, config: M
         const charter = charterBlock(client);
         const memory = client.memory ? `\n\n${memoryLine(client.memory)}` : '';
         const line = raised ? `\n\n${raised}` : '';
+        const style = client.style ? `\n\n${client.style.block}` : '';
         return textResult(
-          `Already joined ${config.team} as ${config.member}.${verdict}${charter}${memory}${line}`,
+          `Already joined ${config.team} as ${config.member}.${verdict}${charter}${memory}${style}${line}`,
         );
       }
 
@@ -135,10 +136,13 @@ export function registerJoin(server: McpServer, client: MusterdClient, config: M
         const charter = charterBlock(client);
         // The continuity one-liner (ADR 093 §3): at most one line — headline + age, never the body.
         const memory = client.memory ? `\n\n${memoryLine(client.memory)}` : '';
+        // The style block (ADR 514 inc 3): how this seat talks — the team floor plus its human's
+        // dials — exactly as the daemon rendered it. Absent from an older daemon ⇒ nothing said.
+        const style = client.style ? `\n\n${client.style.block}` : '';
         return textResult(
           `Joined ${config.team} as ${result.member}${role} (${config.surface}). ` +
             `You are now the live occupant of this seat — that's who you are on this team. ` +
-            `The server authenticated this occupancy.${charter}${memory}\n\n` +
+            `The server authenticated this occupancy.${charter}${memory}${style}\n\n` +
             `IMPORTANT — stay in sync: call team_inbox_check now, then again whenever you finish a ` +
             `task or a reply. Report progress with team_send {act:'status_update'}; hand work off ` +
             `with {act:'handoff'}.`,
