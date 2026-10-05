@@ -58,6 +58,13 @@ describe('OpenCode doorbell plugin install / drift / remove (ADR 392, ADR 168)',
     expect(raw).toContain(`id: PLUGIN_ID`);
     expect(raw).toContain('setup: async (ctx)');
     expect(raw).toContain('server: async (input)');
+    // The installed file is linted (`pnpm lint` runs repo-wide), and the default export is
+    // non-negotiable for the V2 loader — so the generator must emit the disable that keeps the
+    // two from colliding. `--` after the rule name: an em dash makes ESLint read the rest of the
+    // line as the rule name and fail on an unknown rule (this bit us once).
+    expect(raw).toMatch(
+      /^\/\/ eslint-disable-next-line import\/no-default-export[^\n]*\nexport default \{$/m,
+    );
   });
 
   it('names a missing plugin as the deaf state, and a stale one as STALE with the refresh repair', () => {
