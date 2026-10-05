@@ -28,10 +28,10 @@ A dream never rings the doorbell. An Act you send is never a wake reason for ano
 Read it with `musterd dream` (optional `--since <epoch-ms>`). The command prints one JSON object, `{packet, used_bytes, truncated}`, for this seat only (lane 2, PR #1958). There is no MCP tool for it: the read happens once a night and does not take a slot on every seat's tool surface. `packet` is what `buildDreamPacket(db, team, seat, {since?, now?})` returns (`packages/server/src/store/dream.ts`). Window: last Act this seat sent with provenance `dream`, else 24h. 48 KB budget; oldest lane acts drop first, then oldest insights; the seat note is never dropped. Insight bodies arrive whole: each `learned` entry carries its own `truncated`, which stays false for any insight the server accepted. A packet-wide `truncated: true` means something was cut or dropped (a lane act clipped at 600 chars, or an item over budget). It does not mean a learned body was cut.
 
 ```
-{ seat, since, until,
+{ seat, since, until, night,
   memory?: { body, truncated },
   lanes: [{ id, title, state, acts, omitted }],
-  learned: [{ id, from, headline, body, tags, ts, truncated }] }
+  learned: [{ id, from, headline, body, tags, ts, truncated, night }] }
 ```
 
 `lanes` is the day's record on **your own lanes**. `learned` is every insight the Team saved in the window — search it (and `team_insight_search`) before you re-derive.
@@ -48,7 +48,7 @@ Stop when the packet is processed or the nightly budget is spent. One promotion 
 
 ## Promotion rule
 
-**Seen twice** means two dated observations of the same claim, on two different dates. An observation is any one of:
+**Seen twice** means two dated observations of the same claim, on two different dates. **A date is a night key**, never a date you write in prose. Use the packet's `night` for tonight and each `learned` entry's `night` for that insight. A night is the team-local date its working day ended (ADR 494 §2), so two dreams minutes apart across UTC midnight share one night. For a wiki page or lane act, use the team-local date it was written, minus a day when that was before working hours started. When an insight's prose date and its `night` disagree, `night` wins. A `null` night means the team has no schedule; then fall back to team-local dates and say so in the page. An observation is any one of:
 
 - a saved insight (in the packet's `learned`, or earlier),
 - an existing wiki page that already states the claim,

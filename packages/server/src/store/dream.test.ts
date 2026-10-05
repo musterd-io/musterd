@@ -138,6 +138,39 @@ withDrivers('dream', (o) => {
       expect(truncated).toBe(false);
     });
 
+    // Lane 01M454DC0H: miley (05:30:47Z) and ghost (05:32Z) dreamed two minutes apart on 2026-10-04
+    // UTC — 22:3x on 10-03 in Los Angeles — and dated it a day apart in prose. One night, one key.
+    it("names each insight's night by the working-hours key, so a UTC midnight is not two nights", async () => {
+      const db = await openStore();
+      const team = await createTeam(db, {
+        slug: 'night',
+        workingHours: {
+          timezone: 'America/Los_Angeles',
+          days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'],
+          start: '08:00',
+          end: '22:30',
+        },
+      });
+      const miley = (await addMember(db, team, { name: 'miley', kind: 'agent' })).row;
+      const ghost = (await addMember(db, team, { name: 'ghost', kind: 'agent' })).row;
+      const a = Date.parse('2026-10-04T05:30:47Z');
+      const b = Date.parse('2026-10-04T05:32:00Z');
+      const nextNight = Date.parse('2026-10-05T05:31:00Z');
+      await say(db, team, miley, 'insight', 'clip seen', a, { headline: 'm' });
+      await say(db, team, ghost, 'insight', 'clip seen', b, { headline: 'g' });
+      await say(db, team, ghost, 'insight', 'clip seen again', nextNight, { headline: 'g2' });
+      const { packet } = await buildDreamPacket(db, team, ghost, {
+        since: a - 1,
+        now: nextNight + 60_000,
+      });
+      expect(packet.learned.map((i) => [i.headline, i.night])).toEqual([
+        ['m', '2026-10-03'],
+        ['g', '2026-10-03'],
+        ['g2', '2026-10-04'],
+      ]);
+      expect(packet.night).toBe('2026-10-04');
+    });
+
     it('fits the byte budget by dropping the oldest acts first, and keeps the note', async () => {
       const { db, team, ryder } = await seed();
       await saveMemory(db, ryder.id, { headline: 'h', body: 'note' });

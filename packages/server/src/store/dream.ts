@@ -1,8 +1,9 @@
-import type { Provenance } from '@musterd/protocol';
+import { nightKey, type Provenance } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { getMemberById } from './members.js';
 import { getMemory } from './memory.js';
-import type { MemberRow, MessageRow } from './rows.js';
+import { parseWorkingHours, type MemberRow, type MessageRow } from './rows.js';
+import { getTeamById } from './teams.js';
 import { truncateBytes, truncateChars } from './wakeContextBody.js';
 
 /**
@@ -68,6 +69,12 @@ export interface DreamInsight {
   /** True only if this body was cut — per insight, so a dream never has to guess from the
    *  packet-wide flag which bodies are whole. */
   truncated: boolean;
+  /** The night this insight belongs to — `nightKey` under the seat's effective working hours
+   *  (ADR 494 §2), the local date its working day ended. Null with no schedule. The promotion rule
+   *  counts two different nights by THIS key, never by a date a dream wrote in prose: on 2026-10-04
+   *  miley and ghost dreamed two minutes apart across UTC midnight and dated it a day apart, so one
+   *  said "counts for promotion" and the other did not (lane 01M454DC0H). */
+  night: string | null;
 }
 
 export interface DreamPacket {
@@ -75,6 +82,8 @@ export interface DreamPacket {
   /** The window the dream re-reads: `[since, until)`. */
   since: number;
   until: number;
+  /** The night this dream runs in, by the same key as each insight's `night`. */
+  night: string | null;
   memory?: { body: string; truncated: boolean };
   lanes: DreamLane[];
   /** Insights the team saved in the window — what lane 4's digest reads as "what was learned". */
@@ -153,7 +162,18 @@ export async function buildDreamPacket(
     };
   };
 
-  const packet: DreamPacket = { seat: seat.name, since, until, lanes: [], learned: [] };
+  const hours =
+    parseWorkingHours(seat.working_hours) ??
+    parseWorkingHours((await getTeamById(db, team.id))?.working_hours);
+  const nightOf = (at: number): string | null => (hours ? nightKey(hours, at) : null);
+  const packet: DreamPacket = {
+    seat: seat.name,
+    since,
+    until,
+    night: nightOf(until),
+    lanes: [],
+    learned: [],
+  };
 
   // 1. the seat's own note
   const memory = await getMemory(db, seat.id);
@@ -215,6 +235,7 @@ export async function buildDreamPacket(
           tags: meta.tags ?? [],
           ts: r.ts,
           truncated: cut.truncated,
+          night: nightOf(r.ts),
         };
       }),
   );

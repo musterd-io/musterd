@@ -190,6 +190,11 @@ gap: whatever a dream sends, nothing rings.
   argued over what the clipped conditions promoted (ghost's wiki page, #2048). Insight bodies now
   arrive whole, up to the server's own 2,048-byte cap, each with its own `truncated`. The packet
   budget rises from 24 KB to 48 KB to hold a full night of them.
+- **2026-10-04 — promotion counts nights by key (lane 01M454DC0H).** miley and ghost dreamed two
+  minutes apart across UTC midnight (22:3x PDT on 10-03) and dated the night a day apart in prose. One
+  said a sighting counted for promotion and the other said it did not. The packet and each learned
+  insight now carry `night`, which is §2's key under the seat's effective working hours, and the
+  dreaming skill's promotion rule counts two different `night` values.
 - **2026-10-03 — §5's "unanswered" is bounded by ADR 502.** The digest lists the last seven days,
   counts older open asks in one line, and treats an ask whose named lane is `done` or `abandoned` as
   settled.
