@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { ProvenanceSchema, SurfaceSchema } from './acts.js';
 import { MemberSchema } from './member.js';
 import { WIRE_ATTESTATION_SOURCES } from './model.js';
-import { StyleEpochSchema } from './style.js';
+import { StyleEnvelopeSchema, StyleEpochSchema } from './style.js';
 import { PROTOCOL_VERSION } from './version.js';
 
 /**
@@ -181,6 +181,9 @@ export const OccupiedFrame = z.object({
   // (ADR 337). Optional in the general frame because human and observer claims do not use it.
   session_lease: z.string().optional(),
   memory: MemoryEnvelopeSchema.nullable(),
+  /** The style envelope (ADR 514 inc 3): the block this seat reads, its epoch, dials and driver.
+   *  Absent from an older daemon; both absent and null read as "nothing to attest". */
+  style: StyleEnvelopeSchema.nullish(),
 });
 export type OccupiedFrame = z.infer<typeof OccupiedFrame>;
 

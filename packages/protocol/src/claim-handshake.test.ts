@@ -172,6 +172,22 @@ describe('claim handshake frames (ADR 078 / SPEC A.3)', () => {
     expect(r.success).toBe(false);
   });
 
+  it('carries the style envelope on occupied, and parses without it (older daemon) — ADR 514 inc 3', () => {
+    const style = {
+      block: 'Style (epoch a1b2c3d4) — how you talk here.',
+      epoch: 'a1b2c3d4',
+      dials: { pushback: 'when-it-matters', bluntness: 'plain', length: 'normal', format: 'prose' },
+      driver: 'nick',
+    };
+    const base = { type: 'occupied', seat, presence_id: '01J', server_time: 7, memory: null };
+    expect(OccupiedFrame.parse({ ...base, style }).style?.driver).toBe('nick');
+    expect(OccupiedFrame.parse(base).style).toBeUndefined();
+    expect(OccupiedFrame.parse({ ...base, style: null }).style).toBeNull();
+    expect(OccupiedFrame.safeParse({ ...base, style: { ...style, epoch: 'zz' } }).success).toBe(
+      false,
+    );
+  });
+
   it('accepts the fresh agent lease and one-time credential on occupied', () => {
     const f = OccupiedFrame.parse({
       type: 'occupied',

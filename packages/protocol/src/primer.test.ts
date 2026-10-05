@@ -40,6 +40,8 @@ describe('renderRepositoryPrimer', () => {
     expect(primer).toContain('musterd send --act');
     expect(primer).toContain('status_update');
     expect(primer).toContain('working');
+    // ADR 514: the one pointer line (ADR 085) at the block that now carries the stance floor.
+    expect(primer).toContain('style block');
   });
 });
 

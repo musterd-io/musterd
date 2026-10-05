@@ -23,6 +23,17 @@ export const STYLE_PROSE_MAX_CHARS = 800;
 /** The wire form of a style epoch: exactly what {@link styleEpoch} produces (ADR 514 inc 2). */
 export const StyleEpochSchema = z.string().regex(/^[0-9a-f]{8}$/);
 
+/** `length normal → thorough`, one entry per dial that moved, in dial order; '' when none did. */
+export function describeDialChange(
+  from: { pushback: string; bluntness: string; length: string; format: string },
+  to: { pushback: string; bluntness: string; length: string; format: string },
+): string {
+  return (['pushback', 'bluntness', 'length', 'format'] as const)
+    .filter((k) => from[k] !== to[k])
+    .map((k) => `${k} ${from[k]} → ${to[k]}`)
+    .join(', ');
+}
+
 /** Every line break a model would read as one: CRLF, LF, lone CR, VT, FF, NEL, LS, PS. */
 const LINE_BREAK = /\r\n|[\n\r\v\f\u0085\u2028\u2029]/g;
 
@@ -65,6 +76,19 @@ export const StyleDialsSchema = z.object({
   format: z.enum(STYLE_FORMAT).default('prose'),
 });
 export type StyleDials = z.infer<typeof StyleDialsSchema>;
+
+/**
+ * What the daemon hands a seat on `occupied` and on `GET /style-block` (ADR 514 inc 3): the block
+ * to read, the epoch to attest, the dials it resolved (so a later change can be named) and whose
+ * dials they are. `driver` is null when the block carries only the team defaults.
+ */
+export const StyleEnvelopeSchema = z.object({
+  block: z.string(),
+  epoch: StyleEpochSchema,
+  dials: StyleDialsSchema,
+  driver: z.string().nullable(),
+});
+export type StyleEnvelope = z.infer<typeof StyleEnvelopeSchema>;
 
 /** `PolicySchema.style`, dense on read: `parse({})` is the shipped default. */
 export const StylePolicySchema = z.object({
@@ -163,7 +187,7 @@ const FLOOR_PHRASES: ReadonlyArray<[keyof StyleFloor, string]> = [
   ['assess_before_agreeing', 'assess before you agree; no praise before a check'],
   ['disagree_once_then_commit', 'disagree once, with the reason, then follow the decision'],
   ['concession_names_check', 'a concession names what you checked'],
-  ['human_critique_weighed_as_peer', "a human's critique weighs what its evidence weighs"],
+  ['human_critique_weighed_as_peer', "weigh a human's critique by its evidence, like anyone's"],
 ];
 
 function floorLine(floor: StyleFloor): string | null {

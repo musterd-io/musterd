@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   STYLE_PROSE_MAX_CHARS,
   STYLE_PROSE_MAX_LINES,
+  StyleEnvelopeSchema,
   StyleEpochSchema,
+  describeDialChange,
   StylePolicyOverrideSchema,
   StylePolicySchema,
   StylePrefsSchema,
@@ -163,7 +165,7 @@ describe('describeDials', () => {
 describe('renderStyleBlock (spec §4.2–4.3)', () => {
   const team = resolveStyle(shipped);
   const fullFloor =
-    "Floor (team): assess before you agree; no praise before a check; disagree once, with the reason, then follow the decision; a concession names what you checked; a human's critique weighs what its evidence weighs.";
+    "Floor (team): assess before you agree; no praise before a check; disagree once, with the reason, then follow the decision; a concession names what you checked; weigh a human's critique by its evidence, like anyone's.";
 
   it('with a driver who set dials and prose, prints every line in order', () => {
     const nick = resolveStyle(shipped, {
@@ -204,7 +206,7 @@ describe('renderStyleBlock (spec §4.2–4.3)', () => {
     expect(out).toContain(
       'Floor (team): assess before you agree; no praise before a check; disagree once, with the reason, then follow the decision; a concession names what you checked.',
     );
-    expect(out).not.toContain("a human's critique");
+    expect(out).not.toContain("weigh a human's critique");
   });
 
   it('every floor boolean off ⇒ no Floor line at all', () => {
@@ -292,5 +294,29 @@ describe('StyleEpochSchema (wire, ADR 514 inc 2)', () => {
     expect(StyleEpochSchema.parse(epoch)).toBe(epoch);
     expect(() => StyleEpochSchema.parse('xyz')).toThrow();
     expect(() => StyleEpochSchema.parse('a1b2c3d4e')).toThrow();
+  });
+});
+
+describe('StyleEnvelopeSchema + describeDialChange (ADR 514 inc 3)', () => {
+  it('an envelope carries block, epoch, dials and the driver (or null)', () => {
+    const r = resolveStyle(shipped);
+    const env = StyleEnvelopeSchema.parse({
+      block: renderStyleBlock({ team: r }),
+      epoch: r.epoch,
+      dials: r.dials,
+      driver: null,
+    });
+    expect(env.driver).toBeNull();
+    expect(() =>
+      StyleEnvelopeSchema.parse({ block: 'x', epoch: 'nope', dials: r.dials, driver: null }),
+    ).toThrow();
+  });
+  it('describeDialChange names only the dials that moved, in dial order', () => {
+    const a = shipped.defaults;
+    expect(describeDialChange(a, { ...a, length: 'thorough' })).toBe('length normal → thorough');
+    expect(describeDialChange(a, { ...a, length: 'concise', bluntness: 'direct' })).toBe(
+      'bluntness plain → direct, length normal → concise',
+    );
+    expect(describeDialChange(a, a)).toBe('');
   });
 });
