@@ -38,6 +38,7 @@ import { TOOL_NAMES } from './toolNames.js';
 export const WRITE_TOOLS: ReadonlySet<string> = new Set<string>([
   'team_send',
   'team_memory_save',
+  'team_style_set',
   'team_goal_declare',
   'team_goal_outcome',
   'team_seed_update',

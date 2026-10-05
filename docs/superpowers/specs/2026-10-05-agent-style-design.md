@@ -156,7 +156,8 @@ member, it is that human. Otherwise the block carries only the floor and team de
   the reply after the memory headline. Composed server-side from the team policy, the driver's
   `style_prefs` and the presence's driver.
 - **Other humans.** `team_members` gains `style` on human rows: the resolved dials, no prose. The
-  `team_send` reply to an act addressed to a human echoes that human's dials in one line.
+  `team_send` reply does not echo them — the send path holds no roster, and a round trip per send
+  is the cost this design avoids (increment 3 ruling); a seat reads `team_members` before composing.
 - **Change mid-session.** The adapter sends `style_epoch` beside `guidance_epoch` on heartbeats.
   When the daemon's current epoch for that seat differs, the next `team_inbox_check` reply leads
   with one line, `Style changed (length concise → thorough)`, and the new block. The line names the

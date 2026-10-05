@@ -423,9 +423,9 @@ import { issueAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { revokeSponsoredDescendants } from '../store/sponsoredCascade.js';
 import { staleLaneWarnings } from '../store/staleness.js';
 import {
-  driverForSeat,
   memberStylePrefs,
   setStylePrefs,
+  styleDriverFor,
   styleEnvelopeFor,
   teamStyle,
 } from '../store/style.js';
@@ -3130,6 +3130,13 @@ export async function handleHttp(
             charter,
             ...agentAuthority,
             memory,
+            // ADR 514 inc 3: the fifth `occupied` site — an admin-approved claim — carries the block
+            // too, or a never-bound seat would run with none until its next reconnect (review I1).
+            style: await styleEnvelopeFor(
+              ctx.db,
+              team.id,
+              await styleDriverFor(ctx.db, team.id, targetMember, null),
+            ),
           });
 
           // Broadcast presence online for non-observers.
@@ -4994,8 +5001,13 @@ export async function handleHttp(
             charter: (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined,
             ...(await agentAuthorityFor(presence.id)),
             memory: await memoryEnvelope(ctx.db, targetMember.id),
-            // ADR 514 inc 3: the HTTP claim carries no driver, so the only-human rule applies.
-            style: await styleEnvelopeFor(ctx.db, team.id, null),
+            // ADR 514 inc 3: the HTTP claim carries no driver — a human claimant gets their own
+            // block, a seat the driver its presence attested, else the only-human rule.
+            style: await styleEnvelopeFor(
+              ctx.db,
+              team.id,
+              await styleDriverFor(ctx.db, team.id, targetMember, null),
+            ),
           });
         }
 
@@ -5034,8 +5046,13 @@ export async function handleHttp(
             charter: (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined,
             ...(await agentAuthorityFor(presence.id)),
             memory: await memoryEnvelope(ctx.db, targetMember.id),
-            // ADR 514 inc 3: the HTTP claim carries no driver, so the only-human rule applies.
-            style: await styleEnvelopeFor(ctx.db, team.id, null),
+            // ADR 514 inc 3: the HTTP claim carries no driver — a human claimant gets their own
+            // block, a seat the driver its presence attested, else the only-human rule.
+            style: await styleEnvelopeFor(
+              ctx.db,
+              team.id,
+              await styleDriverFor(ctx.db, team.id, targetMember, null),
+            ),
           });
         }
 
@@ -5081,8 +5098,13 @@ export async function handleHttp(
             charter: (await getRoleCharter(ctx.db, team.id, targetMember.role)) ?? undefined,
             ...(await agentAuthorityFor(presence.id)),
             memory: await memoryEnvelope(ctx.db, targetMember.id),
-            // ADR 514 inc 3: the HTTP claim carries no driver, so the only-human rule applies.
-            style: await styleEnvelopeFor(ctx.db, team.id, null),
+            // ADR 514 inc 3: the HTTP claim carries no driver — a human claimant gets their own
+            // block, a seat the driver its presence attested, else the only-human rule.
+            style: await styleEnvelopeFor(
+              ctx.db,
+              team.id,
+              await styleDriverFor(ctx.db, team.id, targetMember, null),
+            ),
           });
         }
 
@@ -7774,7 +7796,11 @@ export async function handleHttp(
           // ADR 514 inc 3: the current style epoch for this seat's driver — the adapter compares it
           // with the envelope it holds and fetches the new block on a mismatch (spec §4.4).
           style_epoch: (
-            await styleEnvelopeFor(ctx.db, team.id, await driverForSeat(ctx.db, team.id, member.id))
+            await styleEnvelopeFor(
+              ctx.db,
+              team.id,
+              await styleDriverFor(ctx.db, team.id, member, null),
+            )
           ).epoch,
           ...(truncated ? { truncated: true } : {}),
           ...(unreadRemaining > 0 ? { unread_remaining: unreadRemaining } : {}),
@@ -7901,8 +7927,8 @@ export async function handleHttp(
       // a personal URL is readable by its owner and nobody else. Agents have no doorbell: they do
       // not choose where a human is rung (§7).
       // ADR 514 inc 3: the block a seat reads. The driver is never caller-chosen — a human caller
-      // gets their own block, a seat gets the driver its live presence attested at claim, else the
-      // team's only human — so a human's prose reaches only the seats that human steers.
+      // gets their own block, a seat gets the driver its claim attested, else the team's only human
+      // — so a human's prose reaches the seats that say they steer them, and nobody by name.
       if (method === 'GET' && rest === '/style-block') {
         const { team, member } = await authMember(
           ctx.db,
@@ -7911,8 +7937,7 @@ export async function handleHttp(
           actingSeat(req),
           agentSessionLease(req),
         );
-        const driver =
-          member.kind === 'human' ? member.name : await driverForSeat(ctx.db, team.id, member.id);
+        const driver = await styleDriverFor(ctx.db, team.id, member, null);
         return sendJson(res, 200, await styleEnvelopeFor(ctx.db, team.id, driver));
       }
 

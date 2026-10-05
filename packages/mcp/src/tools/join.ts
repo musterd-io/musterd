@@ -94,6 +94,7 @@ export function registerJoin(server: McpServer, client: MusterdClient, config: M
         const memory = client.memory ? `\n\n${memoryLine(client.memory)}` : '';
         const line = raised ? `\n\n${raised}` : '';
         const style = client.style ? `\n\n${client.style.block}` : '';
+        if (client.style) client.markStyleShown?.();
         return textResult(
           `Already joined ${config.team} as ${config.member}.${verdict}${charter}${memory}${style}${line}`,
         );
@@ -139,6 +140,7 @@ export function registerJoin(server: McpServer, client: MusterdClient, config: M
         // The style block (ADR 514 inc 3): how this seat talks — the team floor plus its human's
         // dials — exactly as the daemon rendered it. Absent from an older daemon ⇒ nothing said.
         const style = client.style ? `\n\n${client.style.block}` : '';
+        if (client.style) client.markStyleShown?.();
         return textResult(
           `Joined ${config.team} as ${result.member}${role} (${config.surface}). ` +
             `You are now the live occupant of this seat — that's who you are on this team. ` +

@@ -456,15 +456,32 @@ export function registerInboxCheck(server: McpServer, client: MusterdClient): vo
         let styleNotice = '';
         let styleChanged: { from: string; to: string } | null = null;
         const held = client.style;
+        const unshown = held ? client.styleUnshown : null;
         if (fetched.style_epoch && held && fetched.style_epoch !== held.epoch) {
+          // The daemon moved on (an admin's default, the human's dial): fetch and lead with it.
+          const from = unshown?.from ?? held;
           const next = await client.refreshStyle();
           if (next) {
-            const change = describeDialChange(held.dials, next.dials);
-            styleChanged = { from: held.epoch, to: next.epoch };
+            const change = describeDialChange(from.dials, next.dials);
+            styleChanged = { from: from.epoch, to: next.epoch };
             styleNotice =
               `Style changed${change ? ` (${change})` : ''} — the block below replaces the one ` +
-              `from team_join.\n${next.block}\n\n`;
+              `you had.\n${next.block}\n\n`;
+            client.markStyleShown();
           }
+        } else if (held && unshown) {
+          // Never rendered yet: most seats auto-claim and never call team_join (review I2), or a
+          // reconnect swapped the envelope under the model (review I3). Render it once.
+          if (unshown.from) {
+            const change = describeDialChange(unshown.from.dials, held.dials);
+            styleChanged = { from: unshown.from.epoch, to: held.epoch };
+            styleNotice =
+              `Style changed${change ? ` (${change})` : ''} — the block below replaces the one ` +
+              `you had.\n${held.block}\n\n`;
+          } else {
+            styleNotice = `${held.block}\n\n`;
+          }
+          client.markStyleShown();
         }
         const byId = new Map<string, Envelope>();
         for (const e of [...buffered, ...fetched.messages]) byId.set(e.id, e);

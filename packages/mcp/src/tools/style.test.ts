@@ -58,7 +58,8 @@ const envelope = (epoch: string, length: 'normal' | 'thorough' | 'concise' = 'no
 });
 
 describe('team_join carries the style block (ADR 514 inc 3)', () => {
-  it('renders the block after the memory line when the client holds one', async () => {
+  it('renders the block after the memory line when the client holds one, and marks it shown', async () => {
+    const markStyleShown = vi.fn();
     const h = capture(
       registerJoin,
       {
@@ -68,12 +69,14 @@ describe('team_join carries the style block (ADR 514 inc 3)', () => {
         interruptCheck: vi.fn(async () => null),
         memory: null,
         style: envelope('a1b2c3d4'),
+        markStyleShown,
       },
       config,
     );
     const out = text(await h['team_join']!({}));
     expect(out).toContain('Style (epoch a1b2c3d4) — how you talk here.');
     expect(out).toContain('For nick');
+    expect(markStyleShown).toHaveBeenCalledOnce();
   });
   it('an older daemon: no block, no mention (Focus 1)', async () => {
     const h = capture(
@@ -99,6 +102,7 @@ describe('team_inbox_check notices a style change (ADR 514 inc 3)', () => {
       holdsSeat: true,
       member: 'Ada',
       markRead: async () => undefined,
+      markStyleShown: vi.fn(),
       drainBuffer: () => [],
       fetchInbox: async () => ({ messages: [], cursor: { last_read_ts: 0 } }),
       ...over,
@@ -137,6 +141,42 @@ describe('team_inbox_check notices a style change (ADR 514 inc 3)', () => {
     const h = capture(registerInboxCheck, client, config);
     expect(text(await h['team_inbox_check']!({}))).not.toContain('Style changed');
     expect(refreshStyle).not.toHaveBeenCalled();
+  });
+  it('an unshown envelope (auto-join never ran team_join) is rendered once, then marked shown (review I2)', async () => {
+    const markStyleShown = vi.fn();
+    const client = inboxClient({
+      style: envelope('a1b2c3d4'),
+      styleUnshown: { from: null },
+      markStyleShown,
+      fetchInbox: async () => ({
+        messages: [],
+        cursor: { last_read_ts: 0 },
+        style_epoch: 'a1b2c3d4',
+      }),
+    });
+    const h = capture(registerInboxCheck, client, config);
+    const out = text(await h['team_inbox_check']!({}));
+    expect(out).toContain('Style (epoch a1b2c3d4) — how you talk here.');
+    expect(out).not.toContain('Style changed');
+    expect(markStyleShown).toHaveBeenCalledOnce();
+  });
+  it('a re-occupy that replaced the envelope reads as a change on the next check (review I3)', async () => {
+    const markStyleShown = vi.fn();
+    const client = inboxClient({
+      style: envelope('ffffffff', 'thorough'),
+      styleUnshown: { from: envelope('a1b2c3d4') },
+      markStyleShown,
+      fetchInbox: async () => ({
+        messages: [],
+        cursor: { last_read_ts: 0 },
+        style_epoch: 'ffffffff',
+      }),
+    });
+    const h = capture(registerInboxCheck, client, config);
+    const r = await h['team_inbox_check']!({});
+    expect(text(r)).toContain('Style changed (length normal → thorough)');
+    expect(r.structuredContent?.['style_changed']).toEqual({ from: 'a1b2c3d4', to: 'ffffffff' });
+    expect(markStyleShown).toHaveBeenCalledOnce();
   });
   it('no style_epoch on the reply (older daemon) ⇒ no line, no fetch (Focus 1)', async () => {
     const refreshStyle = vi.fn(async () => envelope('ffffffff'));

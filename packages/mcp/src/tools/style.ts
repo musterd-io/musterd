@@ -19,12 +19,10 @@ import { errorResult, notReadyMessage, textResult } from './format.js';
  */
 
 const READ_DESCRIPTION =
-  'Your own agent-style preferences (humans only): the dials you set, what they resolve to against ' +
-  'the team floor and defaults, and the block your seats read. Agents have no preferences.';
+  'Humans only: how seats talk to you — your dials, the resolved result, the block your seats read.';
 
 const SET_DESCRIPTION =
-  'Set how seats talk to you (humans only): pushback, bluntness, length, format, and up to five ' +
-  'lines of prose. One dial at a time is fine — others keep their value; clear:true empties them all.';
+  'Humans only: set a dial or your prose (≤5 lines); others keep their value. clear:true empties all.';
 
 function renderRead(r: {
   member: string;
@@ -67,8 +65,8 @@ export function registerStyle(server: McpServer, client: MusterdClient): void {
         bluntness: z.enum(STYLE_BLUNTNESS).optional(),
         length: z.enum(STYLE_LENGTH).optional(),
         format: z.enum(STYLE_FORMAT).optional(),
-        prose: z.string().optional().describe('≤ 5 lines and ≤ 800 characters; "" removes it'),
-        clear: z.boolean().optional().describe('true empties every dial and the prose'),
+        prose: z.string().optional(),
+        clear: z.boolean().optional(),
       },
     },
     async (args) => {

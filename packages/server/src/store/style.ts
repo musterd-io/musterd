@@ -44,23 +44,42 @@ export async function teamStyle(db: Driver, teamId: string): Promise<StylePolicy
   return (await getPolicy(db, teamId)).style;
 }
 
-/** The driver of a seat's newest live presence, if any (driver co-presence, ADR 021/155). */
+/** The driver a seat's newest live presence attested, if any (driver co-presence, ADR 021/155).
+ *  Rows with no driver (an ambient touch, a bare `POST /presence`) are skipped, not read as none. */
 export async function driverForSeat(
   db: Driver,
   teamId: string,
   memberId: string,
 ): Promise<string | null> {
   const row = await db.get<{ driver: string | null }>(
-    'SELECT driver FROM presence WHERE team_id = ? AND member_id = ? AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1',
+    'SELECT driver FROM presence WHERE team_id = ? AND member_id = ? AND held_until IS NULL AND driver IS NOT NULL ORDER BY last_seen_at DESC LIMIT 1',
     [teamId, memberId],
   );
   return row?.driver ?? null;
 }
 
 /**
+ * Whose block a caller gets — ONE rule for every route (review I5): a human (not an observer) gets
+ * their own; a seat gets the driver it claimed with, else the one its live presence attested; a
+ * null here means "the only-human rule, else team defaults" in {@link styleEnvelopeFor}. The claimed
+ * driver is self-declared and recorded, never verified (ADR 514 Consequences, 2026-10-05).
+ */
+export async function styleDriverFor(
+  db: Driver,
+  teamId: string,
+  member: Pick<MemberRow, 'id' | 'name' | 'kind' | 'observer'>,
+  claimed: string | null,
+): Promise<string | null> {
+  if (member.kind === 'human' && member.observer !== 1) return member.name;
+  return claimed ?? (await driverForSeat(db, teamId, member.id));
+}
+
+/**
  * The envelope a seat reads (ADR 514 inc 3, spec §4.3): the named driver's dials when they are a
- * human member; with no driver, the team's only human; otherwise team defaults, and the block says
- * why (unbound, or several humans). The epoch is the chosen human's, else the team's.
+ * human member; otherwise — no driver, or a name that is not a human member — the team's only
+ * human; otherwise team defaults, and the block says why (unbound, or several humans). Observer
+ * seats (the `/live` wall, watch links) are not humans here. The epoch is the chosen human's, else
+ * the team's.
  */
 export async function styleEnvelopeFor(
   db: Driver,
@@ -70,10 +89,10 @@ export async function styleEnvelopeFor(
   const policy = await teamStyle(db, teamId);
   const team = resolveStyle(policy);
   const humans = (await listMembers(db, teamId)).filter(
-    (m) => m.kind === 'human' && m.left_at === null,
+    (m) => m.kind === 'human' && m.observer !== 1 && m.left_at === null,
   );
   const named = driver ? humans.find((m) => m.name === driver) : undefined;
-  const chosen = named ?? (!driver && humans.length === 1 ? humans[0] : undefined);
+  const chosen = named ?? (humans.length === 1 ? humans[0] : undefined);
   if (chosen) {
     const style = resolveStyle(policy, memberStylePrefs(chosen));
     return {

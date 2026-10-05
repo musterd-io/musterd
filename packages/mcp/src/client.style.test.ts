@@ -34,6 +34,8 @@ const envelope = (epoch: string, length = 'normal') => ({
 
 async function daemon(opts: { style: ReturnType<typeof envelope> | null | 'omit' }) {
   const claims: Record<string, unknown>[] = [];
+  let current = opts.style;
+  const nextStyle = (s: ReturnType<typeof envelope>) => void (current = s);
   const server = createServer((req, res) => {
     if (req.url?.startsWith('/teams/dawn/style-block')) {
       res.setHeader('content-type', 'application/json');
@@ -69,7 +71,7 @@ async function daemon(opts: { style: ReturnType<typeof envelope> | null | 'omit'
           seat_credential: 'msac_ada',
           session_lease: 'msls_live',
           memory: null,
-          ...(opts.style === 'omit' ? {} : { style: opts.style }),
+          ...(current === 'omit' ? {} : { style: current }),
         }),
       );
     });
@@ -100,7 +102,7 @@ async function daemon(opts: { style: ReturnType<typeof envelope> | null | 'omit'
     claim: { mode: 'seat', name: 'Ada' },
     bindingDir: dir,
   } as never);
-  return { client, claims };
+  return { client, claims, nextStyle };
 }
 
 type Peek = { heartbeatFrame(): Record<string, unknown> };
@@ -131,6 +133,23 @@ describe('the style envelope on the adapter (ADR 514 inc 3)', () => {
     expect(next?.dials.length).toBe('thorough');
     expect(client.style?.epoch).toBe('ffffffff');
     expect((client as unknown as Peek).heartbeatFrame()['style_epoch']).toBe('ffffffff');
+    client.close();
+  });
+
+  it('occupy marks the envelope unshown until a tool renders it; a re-occupy with a new epoch is a pending change (review I2/I3)', async () => {
+    const { client, nextStyle } = await daemon({ style: envelope('a1b2c3d4') });
+    await client.join(3000);
+    expect(client.styleUnshown).toEqual({ from: null });
+    client.markStyleShown();
+    expect(client.styleUnshown).toBeNull();
+    // The daemon's next occupied (a reconnect after a bounce) carries a different epoch: the old
+    // envelope is kept as `from` so the next inbox check can say what moved.
+    nextStyle(envelope('ffffffff', 'thorough'));
+    (client as unknown as { ws: { terminate(): void } }).ws?.terminate?.();
+    // The adapter's reconnect backs off 1s before re-claiming.
+    await new Promise((r) => setTimeout(r, 1800));
+    expect(client.style?.epoch).toBe('ffffffff');
+    expect(client.styleUnshown?.from?.epoch).toBe('a1b2c3d4');
     client.close();
   });
 

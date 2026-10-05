@@ -255,6 +255,12 @@ export class MusterdClient {
   private memoryEnvelope: MemoryEnvelope | null = null;
   /** The style envelope the last occupy (or `refreshStyle`) delivered (ADR 514 inc 3). */
   private styleEnvelope: StyleEnvelope | null = null;
+  /** Whether a tool has rendered the held envelope to the model yet. Most seats never call
+   *  `team_join` (auto-claim), so `team_inbox_check` renders it once when this is false. */
+  private styleShown = false;
+  /** The envelope a re-occupy replaced without the model seeing the change (a daemon bounce after a
+   *  policy move) — kept so the next render can say what moved, then cleared. */
+  private stylePendingFrom: StyleEnvelope | null = null;
   /** The Team Role charter delivered by authenticated occupancy; never sourced from Workspace files. */
   private charterText: string | null = null;
   /** Why the last join attempt failed — surfaced by the dormant tool guards so a silent autojoin
@@ -350,6 +356,31 @@ export class MusterdClient {
     return this.styleEnvelope;
   }
 
+  /** Non-null while the held envelope has not been rendered to the model: `{ from }` names the
+   *  envelope a re-occupy replaced (so the render can say what moved), or null for a first block. */
+  get styleUnshown(): { from: StyleEnvelope | null } | null {
+    if (!this.styleEnvelope || this.styleShown) return null;
+    return { from: this.stylePendingFrom };
+  }
+
+  /** A tool rendered the held envelope: nothing is pending until the next change. */
+  markStyleShown(): void {
+    this.styleShown = true;
+    this.stylePendingFrom = null;
+  }
+
+  /** Adopt an envelope from occupy or refresh: a first or changed one is unshown; a repeat is not. */
+  private adoptStyle(next: StyleEnvelope | null): void {
+    const prev = this.styleEnvelope;
+    if (next && prev && prev.epoch !== next.epoch) {
+      this.stylePendingFrom = this.stylePendingFrom ?? prev;
+      this.styleShown = false;
+    } else if (next && !prev) {
+      this.styleShown = false;
+    }
+    this.styleEnvelope = next;
+  }
+
   /** The heartbeat frame, built fresh each tick so every attestation reads current state. */
   private heartbeatFrame(): Record<string, unknown> {
     return {
@@ -413,7 +444,7 @@ export class MusterdClient {
       const raw = await this.request('GET', `/teams/${this.config.team}/style-block`);
       const parsed = StyleEnvelopeSchema.safeParse(raw);
       if (!parsed.success) return null;
-      this.styleEnvelope = parsed.data;
+      this.adoptStyle(parsed.data);
       return parsed.data;
     } catch {
       return null;
@@ -1285,6 +1316,8 @@ export class MusterdClient {
     this.joinedFlag = false;
     this.memoryEnvelope = null; // occupy-scoped: stale once the seat is released
     this.styleEnvelope = null;
+    this.styleShown = false;
+    this.stylePendingFrom = null;
     this.charterText = null;
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.heartbeat = null;
@@ -1382,9 +1415,10 @@ export class MusterdClient {
         // The continuity envelope (ADR 093): headline + age, never the body — team_join renders it
         // as the one-line pointer; the body is fetched only by an explicit team_memory_read.
         this.memoryEnvelope = frame.memory ?? null;
-        // The style envelope (ADR 514 inc 3): the block team_join renders and the epoch every
-        // heartbeat attests. Absent from an older daemon ⇒ nothing held, nothing attested.
-        this.styleEnvelope = frame.style ?? null;
+        // The style envelope (ADR 514 inc 3): the block team_join (or the first inbox check)
+        // renders and the epoch every heartbeat attests. A reconnect that brings a different epoch
+        // is a pending change, not a silent swap. Absent from an older daemon ⇒ nothing held.
+        this.adoptStyle(frame.style ?? null);
         // Resume token (ADR 087): the first approval delivers a reusable grant here — keep it so
         // `persistBinding` writes it into `binding.grant` and reconnects re-occupy without approval.
         if (frame.grant) this.config.grant = frame.grant;
