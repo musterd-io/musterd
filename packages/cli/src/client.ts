@@ -121,6 +121,11 @@ import {
   HoldResponseSchema,
   type SetHoldBody,
   type ClaimCheck,
+  type CalendarEntryInput,
+  type CalendarList,
+  CalendarListSchema,
+  type CalendarWriteResponse,
+  CalendarWriteResponseSchema,
 } from '@musterd/protocol';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
@@ -1018,6 +1023,38 @@ export class HttpClient {
     return HoldListSchema.parse(
       await this.request('GET', `/teams/${slug}/holds${all ? '?all=1' : ''}`),
     ).holds;
+  }
+  /** ADR 519: the Team's calendar — every entry, or with `since` the delta (writes + deleted ids). */
+  async listCalendar(slug: string, since?: number): Promise<CalendarList> {
+    return CalendarListSchema.parse(
+      await this.request(
+        'GET',
+        `/teams/${slug}/calendar${since === undefined ? '' : `?since=${since}`}`,
+      ),
+    );
+  }
+  /** ADR 519: create an entry, or — when `source_ref` names one — replace that one (the import). */
+  async createCalendarEntry(
+    slug: string,
+    body: CalendarEntryInput,
+  ): Promise<CalendarWriteResponse> {
+    return CalendarWriteResponseSchema.parse(
+      await this.request('POST', `/teams/${slug}/calendar`, body),
+    );
+  }
+  /** ADR 519: replace entry `id` whole. */
+  async replaceCalendarEntry(
+    slug: string,
+    id: string,
+    body: CalendarEntryInput,
+  ): Promise<CalendarWriteResponse> {
+    return CalendarWriteResponseSchema.parse(
+      await this.request('PUT', `/teams/${slug}/calendar/${encodeURIComponent(id)}`, body),
+    );
+  }
+  /** ADR 519: delete entry `id` (a real delete, audited). */
+  async deleteCalendarEntry(slug: string, id: string): Promise<void> {
+    await this.request('DELETE', `/teams/${slug}/calendar/${encodeURIComponent(id)}`);
   }
   /** Release the caller's own seat (ADR 058 unbind): clear bound_at + presence; seat stays declared. */
   unbind(slug: string): Promise<{ ok: boolean; member: string }> {

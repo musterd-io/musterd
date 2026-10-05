@@ -1055,6 +1055,17 @@ export const CATALOG: readonly CommandEntry[] = [
     group: 'team',
   },
   {
+    name: 'calendar',
+    signature:
+      '[list] [--all|--past] [--picks] | add "<title>" --date … --kind … | edit <id> | rm <id> | import <events.json|dir>',
+    summary: "the Team's calendar — demos, pitches, deadlines; any member reads and writes it",
+    group: 'team',
+    detail:
+      'ADR 519. Dates and times are wall-clock in the entry’s tz (default America/Los_Angeles), never ' +
+      'converted. `import` is the one-time cutover from the claude.ai artifact: each document goes up ' +
+      'with its id as source_ref, so a second run reports every entry unchanged and writes nothing.',
+  },
+  {
     name: 'hold',
     signature: 'set <effect> --for|--until … --reason "<why>" | lift <id> | list [--all]',
     summary: 'pause something team-wide, with an author and an end — every seat sees it',
