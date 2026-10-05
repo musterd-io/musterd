@@ -149,7 +149,7 @@ export function entryProblems(name: string, text: string): string[] {
   for (const key of REQUIRED_ENTRY_KEYS) {
     if (!new RegExp(`^${key}:\\s*\\S`, 'm').test(body)) out.push(`${name} — missing \`${key}\``);
   }
-  const pb = /^passed_by:\s*(.*)$/m.exec(body);
+  const pb = /^passed_by:[ \t]*(.*)$/m.exec(body); // [ \t]*, not \s*: \s would swallow the newline and read the first row as "inline"
   if (pb) {
     const inline = pb[1]!.trim();
     const after = body.slice(pb.index + pb[0].length).split('\n');

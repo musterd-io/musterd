@@ -74,6 +74,11 @@ jobs, so it pays five roundings and three setups to do about three minutes of di
 - When a self-hosted runner lands, minutes stop being billed. Then re-weigh this ADR against wall
   time. Fanning back out would be a deliberate choice, not a revert.
 
+_Note, 2026-10-05 (izzo, from miley's report)._ **Item 4 was wrong, and [ADR 523](523-drafts-run-ci.md)
+reverses it.** A skipped required check counts as passing. #2104 went draft → ready → auto-merge
+and landed on its draft run's `gates: skipped` before the `ready_for_review` run existed. Drafts run
+CI again, and `gates` carries no job-level skip.
+
 ## Observability & Evaluation
 
 - **Traces:** none new. The pick step prints and summarises the plan line, and each skipped step

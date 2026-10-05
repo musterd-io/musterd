@@ -128,6 +128,14 @@ describe('a new entry is shape-checked, including the ADR 505 traceback', () => 
       ),
     ).toEqual([]);
     expect(entryProblems('e.md', entry('passed_by: []\n'))).toEqual([]);
+    // A ONE-row list: `\s*` after `passed_by:` used to swallow the newline, read the row as an
+    // inline value, and refuse the entry as "not a list" (izzo, 2026-10-05).
+    expect(
+      entryProblems(
+        'e.md',
+        entry('passed_by:\n  - acceptance: ghost 01M (lane 01N, 2026-10-05)\n'),
+      ),
+    ).toEqual([]);
   });
 
   it('names a missing key and a malformed passed_by row', () => {

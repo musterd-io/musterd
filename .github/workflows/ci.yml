@@ -43,16 +43,16 @@
 # in the 2.5h after ADR 510/512: plan + gates + static + docs were 55% of billed minutes, the tests
 # 34%. `gates` now decides, sets up once, and runs every gate as a step — skipping steps exactly
 # where the old leaves were skipped. Coverage is no longer sharded: the both-driver suite runs
-# only on main's 4-hourly check and on `pglite`-labelled PRs, where wall time matters least. A draft
-# PR runs nothing until it is marked ready.
+# only on main's 4-hourly check and on `pglite`-labelled PRs, where wall time matters least. Draft
+# PRs run CI like any other PR (ADR 523): skipping them let a draft→ready→auto-merge land unchecked.
 name: CI
 
 on:
   pull_request:
-    # `labeled`/`unlabeled` so adding the `pglite` label re-runs CI with both drivers (ADR 510).
-    # `ready_for_review` because a draft PR does not run CI (ADR 515); `labeled`/`unlabeled` so the
-    # `pglite` label re-runs with both drivers (ADR 510).
-    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+    # `labeled`/`unlabeled` so adding the `pglite` label re-runs CI with both drivers (ADR 510). No
+    # `ready_for_review`: drafts already run CI (ADR 523), so marking one ready would re-test the
+    # same commit.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
   # ADR 508: full coverage + a11y on main, every 4 hours at :17, skipped when main has not moved.
@@ -76,15 +76,16 @@ permissions:
 jobs:
   # The ONLY required check (ADR 106 §2) and, since ADR 515, the only job that runs the gates. Each
   # former leaf is a step group below, gated on the same `pick` decision the old `plan` job made.
-  # A draft PR skips the job; a skipped required check would read as passing, which is safe only
-  # because GitHub will not merge a draft, and `ready_for_review` re-runs it before anyone can.
+  # NEVER give this job a job-level `if:` that can skip it on a PR. Branch protection counts a
+  # SKIPPED required check as passing: ADR 515 skipped drafts, and #2104 went draft → ready →
+  # auto-merge and landed with no CI before the ready_for_review run existed (ADR 523). Skip steps
+  # inside the job instead — the job itself must always end success or failure.
   gates:
     name: gates
     # ADR 517: Ubicloud's 2 vCPU runner — same size as ubuntu-latest, about a fifth of the per-minute
     # price, a fresh VM per job, and not subject to GitHub's hosted-runner queue. To go back, set
     # this to `ubuntu-latest`; nothing else in the job depends on where it runs.
     runs-on: ubicloud-standard-2
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     permissions:
       contents: read
       actions: read
