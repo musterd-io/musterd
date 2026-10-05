@@ -120,3 +120,9 @@ extractable package to `@musterd/mcp`.
   and `whiteboard_open` starts the service and serves the board page. A plain `npm install` in the
   lifted package crashes in npm 10.9's peer resolver (vitest's optional peers); `npm ci` and
   `npm install` both work once a `package-lock.json` exists, so the standalone repo commits one.
+
+- **2026-10-05, a second adapter ([ADR 524](524-whiteboard-squig-default-canvas.md)):** Squig is
+  now the default canvas wherever a built Squig checkout exists. tldraw is the fallback, and it
+  is pinned with `WHITEBOARD_PROVIDER=tldraw`. Decision 3's claim held: the new adapter needed no
+  change to the tools, the skill or the port. Squig boards live under `~/.whiteboard/squig/`,
+  per decisions 1 and 6.
