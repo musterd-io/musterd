@@ -116,9 +116,20 @@ jobs:
           full_age=999999
           if [ -n "$full_at" ] && [ "$full_at" != null ]; then full_age=$(( $(date -u +%s) - $(date -u -d "$full_at" +%s) )); fi
           echo "last full main check: ${full_at:-none} (${full_sha:-—}), ${full_age}s ago"
+          # A full check marks itself in flight when it STARTS (`full-main-check-started`, below). The
+          # finish marker alone let every push during a running 21-minute full check start its own:
+          # five full runs in twenty minutes on 2026-10-05. In flight = a start marker newer than the
+          # last finish marker and under 45 minutes old (a full check takes ~21; one that died
+          # without finishing stops blocking after that, and the next push retries it).
+          started=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=full-main-check-started&per_page=50" \
+            -q '[.artifacts[] | select(.workflow_run.head_branch == "main")][0] | .created_at' 2>/dev/null || true)
+          inflight=false
+          if [ -n "$started" ] && [ "$started" != null ] && [[ "$started" > "${full_at:-0}" ]] \
+            && [ $(( $(date -u +%s) - $(date -u -d "$started" +%s) )) -lt 2700 ]; then inflight=true; fi
+          echo "full main check in flight: $inflight (started ${started:-never})"
           if [ "$EVENT" = schedule ] || [ "$EVENT" = workflow_dispatch ]; then
-            if [ "$EVENT" = schedule ] && [ "$full_sha" = "$GITHUB_SHA" ]; then
-              suite=false; a11y=false; docs=false; kinds=sqlite; why="main has not moved since the last full check ($full_sha)"
+            if [ "$EVENT" = schedule ] && { [ "$full_sha" = "$GITHUB_SHA" ] || [ "$inflight" = true ]; }; then
+              suite=false; a11y=false; docs=false; kinds=sqlite; why="main has not moved since the last full check ($full_sha), or one is in flight"
             else
               why="$EVENT on ${GITHUB_REF_NAME} — the full main check (ADR 508)"
             fi
@@ -138,7 +149,7 @@ jobs:
           fi
           coverage=$suite
           if [ "$EVENT" = push ]; then
-            if [ "$suite" = true ] && [ "$full_age" -ge 14400 ]; then
+            if [ "$suite" = true ] && [ "$full_age" -ge 14400 ] && [ "$inflight" = false ]; then
               kinds=both; a11y=true; why="$why — last full main check ${full_age}s ago (>4h), so this push runs it (ADR 512)"
             else
               coverage=false; a11y=false; why="$why — coverage + a11y run on the next full main check (ADR 508, ADR 512)"
@@ -155,6 +166,22 @@ jobs:
             echo "plan: suite=$suite coverage=$coverage a11y=$a11y docs=$docs full=$fullcheck — $why"
             echo "MUSTERD_TEST_DRIVER=$kinds (ADR 492, ADR 510); one job (ADR 515)"
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Claim the full check BEFORE the ~20 minutes of work, so a push landing meanwhile sees it in
+      # flight and runs static + docs only (see the pick step).
+      - name: Mark the full main check in flight
+        if: steps.pick.outputs.fullcheck == 'true'
+        run: |
+          mkdir -p full-main-check-started
+          echo "${GITHUB_SHA} $(date -u +%Y-%m-%dT%H:%M:%SZ) run ${GITHUB_RUN_ID}" > full-main-check-started/marker.txt
+      - name: Upload the in-flight marker
+        if: steps.pick.outputs.fullcheck == 'true'
+        # Pinned by commit (not by tag). v7.0.1.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: full-main-check-started
+          path: full-main-check-started/
+          retention-days: 2
 
       - uses: ./.github/actions/setup
         if: steps.pick.outputs.suite == 'true' || steps.pick.outputs.docs == 'true'
