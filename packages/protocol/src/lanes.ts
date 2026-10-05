@@ -164,6 +164,19 @@ export const CloseReasonSchema = z.enum([
 export type CloseReason = z.infer<typeof CloseReasonSchema>;
 
 /**
+ * ADR 518: how a lane's acceptance was routed at submit — the `lane.ready_for_review` audit row's
+ * `review_selection.outcome` (ADR 303), surfaced on the board as `acceptance_route`. Projection-only.
+ */
+export const AcceptanceRouteSchema = z.enum([
+  'peer_selected',
+  'human_fallback',
+  'wake_queued',
+  'no_candidate',
+  'acceptance_exempt',
+]);
+export type AcceptanceRoute = z.infer<typeof AcceptanceRouteSchema>;
+
+/**
  * What to TELL a reader about an unaccepted close (ADR 283), or `null` where the reason adds
  * nothing to the word already on screen.
  *
@@ -473,6 +486,17 @@ export const LaneSchema = z.object({
    * defaults the absent case to any particular reason re-creates the defect this field fixes.
    */
   close_reason: CloseReasonSchema.optional(),
+  /**
+   * Board-projection annotation (ADR 518), never stored: for a lane awaiting acceptance, the seat
+   * holding its open `lane_review` ask — newest, unanswered, unresolved, not superseded by a
+   * re-route. Absent when nobody holds one, on other states, and on older daemons.
+   */
+  acceptance_reviewer: z.string().optional(),
+  /**
+   * Board-projection annotation (ADR 518), never stored: for a lane awaiting acceptance, how its
+   * acceptance was routed at submit. Absent means unknown — never default it.
+   */
+  acceptance_route: AcceptanceRouteSchema.optional(),
   created_by: z.string(),
   created_at: z.number().int(),
   claimed_at: z.number().int().nullable(),

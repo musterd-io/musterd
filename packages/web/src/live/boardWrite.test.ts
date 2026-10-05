@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Lane, LaneBoard, LaneResult, LaneWarning } from '@musterd/protocol';
 import {
+  acceptanceWait,
   applyLaneEcho,
   capColumn,
   centerScroll,
@@ -35,6 +36,40 @@ const lane = (over: Partial<Lane> = {}): Lane => ({
   resolved_at: null,
   updated_at: 1,
   ...over,
+});
+
+describe('acceptanceWait — who an awaiting card waits on (ADR 518)', () => {
+  const awaiting = (over: Partial<Lane> = {}) => lane({ state: 'awaiting_acceptance', ...over });
+
+  it('names the reviewer holding the ask', () => {
+    expect(acceptanceWait(awaiting({ acceptance_reviewer: 'ghost', acceptance_route: 'peer_selected' }))).toEqual({
+      reviewer: 'ghost',
+    });
+  });
+
+  it('says why nobody holds one', () => {
+    expect(acceptanceWait(awaiting({ acceptance_route: 'no_candidate' }))).toEqual({
+      note: 'no eligible reviewer',
+    });
+    expect(acceptanceWait(awaiting({ acceptance_route: 'acceptance_exempt' }))).toEqual({
+      note: 'acceptance-exempt',
+    });
+    expect(acceptanceWait(awaiting({ acceptance_route: 'wake_queued' }))).toEqual({
+      note: 'waking a reviewer',
+    });
+  });
+
+  it('says nothing it does not know — absent fields, a picked seat whose ask was answered, other states', () => {
+    expect(acceptanceWait(awaiting())).toBeNull();
+    expect(acceptanceWait(awaiting({ acceptance_route: 'peer_selected' }))).toBeNull();
+    expect(acceptanceWait(lane({ state: 'active', acceptance_reviewer: 'ghost' }))).toBeNull();
+  });
+
+  it('reads a legacy ready_for_review lane the same way', () => {
+    expect(acceptanceWait(lane({ state: 'ready_for_review', acceptance_reviewer: 'gee' }))).toEqual({
+      reviewer: 'gee',
+    });
+  });
 });
 
 describe('laneActions — the verb-legality table', () => {

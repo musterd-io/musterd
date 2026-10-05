@@ -1,4 +1,6 @@
 import {
+  type AcceptanceRoute,
+  AcceptanceRouteSchema,
   type CloseReason,
   CloseReasonSchema,
   modelFamily,
@@ -878,6 +880,132 @@ export async function openAcceptanceAsk(
   if (!row || !row.to) return null;
   const superseded = await supersededAcceptanceAsks(db, teamId, laneId);
   return superseded.has(row.id) ? null : { id: row.id, to: row.to };
+}
+
+/** ADR 518: who an awaiting lane waits on — the board's two projection fields, either may be absent. */
+export interface AcceptanceWait {
+  reviewer?: string;
+  route?: AcceptanceRoute;
+}
+
+/**
+ * Who each lane awaiting acceptance is waiting on, for `GET /lanes` (ADR 518): the seat holding its
+ * open `lane_review` ask, by {@link openAcceptanceAsk}'s rule, and the routing outcome its newest
+ * `lane.ready_for_review` row recorded. One batched read for the whole board, in the
+ * {@link openAcceptanceLoad} shape (single-pass scans joined here, never a correlated query per
+ * lane). Lanes with nothing derivable are absent, which a reader must treat as unknown.
+ */
+export async function acceptanceWaits(
+  db: Driver,
+  teamId: string,
+): Promise<Map<string, AcceptanceWait>> {
+  const awaiting = new Set(
+    (
+      await db.all<{ id: string }>(
+        `SELECT id FROM lanes WHERE team_id = ? AND state IN ('awaiting_acceptance','ready_for_review')`,
+        [teamId],
+      )
+    ).map((r) => r.id),
+  );
+  const out = new Map<string, AcceptanceWait>();
+  if (awaiting.size === 0) return out;
+
+  // The route: the newest ready row per lane. ADR 303 rows carry review_selection.outcome; older
+  // rows carry flat markers. Parsed, never cast — an outcome this build does not know is dropped.
+  const ready = await db.all<{ target: string | null; detail: string | null }>(
+    `SELECT target, detail FROM audit
+      WHERE team_id = ? AND action = 'lane.ready_for_review' ORDER BY ts, id`,
+    [teamId],
+  );
+  const routes = new Map<string, AcceptanceRoute | undefined>();
+  for (const r of ready) {
+    if (!r.target || !awaiting.has(r.target) || !r.detail) continue;
+    try {
+      const d = JSON.parse(r.detail) as {
+        review_selection?: { outcome?: unknown };
+        no_candidate?: unknown;
+        acceptance_exempt?: unknown;
+        wake_queued?: unknown;
+        reviewer?: unknown;
+      };
+      const raw =
+        d.review_selection?.outcome ??
+        (d.acceptance_exempt === true
+          ? 'acceptance_exempt'
+          : d.no_candidate === true
+            ? 'no_candidate'
+            : d.wake_queued === true
+              ? 'wake_queued'
+              : typeof d.reviewer === 'string'
+                ? 'peer_selected'
+                : undefined);
+      const parsed = AcceptanceRouteSchema.safeParse(raw);
+      routes.set(r.target, parsed.success ? parsed.data : undefined); // newest row wins
+    } catch {
+      /* a malformed row says nothing */
+    }
+  }
+
+  // The reviewer: openAcceptanceAsk's rule, batched — the newest ask per lane that no
+  // accept/decline answered and no resolve closed; held by nobody if a re-route superseded it.
+  const answered = new Set(
+    (
+      await db.all<{ ref: string | null }>(
+        `SELECT in_reply_to AS ref FROM messages
+          WHERE team_id = ? AND act IN ('accept','decline') AND meta IS NOT NULL`,
+        [teamId],
+      )
+    )
+      .map((r) => r.ref)
+      .filter((r): r is string => typeof r === 'string'),
+  );
+  const resolved = new Set(
+    (
+      await db.all<{ thread_id: string | null }>(
+        `SELECT thread_id FROM messages WHERE team_id = ? AND act = 'resolve' AND thread_id IS NOT NULL`,
+        [teamId],
+      )
+    )
+      .map((r) => r.thread_id)
+      .filter((r): r is string => typeof r === 'string'),
+  );
+  const superseded = new Set<string>();
+  for (const r of await db.all<{ detail: string | null }>(
+    `SELECT detail FROM audit WHERE team_id = ? AND action = 'lane.review_rerouted'`,
+    [teamId],
+  )) {
+    try {
+      const d = JSON.parse(r.detail ?? '') as { superseded_ask?: unknown };
+      if (typeof d.superseded_ask === 'string' && d.superseded_ask.length > 0)
+        superseded.add(d.superseded_ask);
+    } catch {
+      /* an unparseable row supersedes nothing */
+    }
+  }
+  const asks = await db.all<{ id: string; holder: string | null; lane: string | null }>(
+    `SELECT m.id AS id, mem.name AS holder, json_extract(m.meta, '$.lane_review.lane') AS lane
+         FROM messages m
+         LEFT JOIN members mem ON mem.id = m.to_member
+        WHERE m.team_id = ? AND m.act = 'ask' AND m.meta LIKE '%lane_review%'
+        ORDER BY m.ts, m.id`,
+    [teamId],
+  );
+  const newest = new Map<string, { id: string; holder: string | null }>();
+  for (const a of asks) {
+    if (!a.lane || !awaiting.has(a.lane)) continue;
+    if (answered.has(a.id) || resolved.has(a.id)) continue;
+    newest.set(a.lane, { id: a.id, holder: a.holder }); // ascending, so the last write is newest
+  }
+
+  for (const id of awaiting) {
+    const wait: AcceptanceWait = {};
+    const held = newest.get(id);
+    if (held?.holder && !superseded.has(held.id)) wait.reviewer = held.holder;
+    const route = routes.get(id);
+    if (route !== undefined) wait.route = route;
+    if (wait.reviewer !== undefined || wait.route !== undefined) out.set(id, wait);
+  }
+  return out;
 }
 
 /**

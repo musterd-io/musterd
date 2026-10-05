@@ -74,6 +74,26 @@ export function handoffPatch(seat: string): UpdateLane {
 }
 
 /**
+ * Who an awaiting-acceptance card waits on (ADR 518), from the daemon's two projection fields: the
+ * seat holding the open acceptance ask, else why nobody holds one. Null when the board was not told
+ * — absent fields mean unknown, and the card says nothing rather than guess.
+ */
+export function acceptanceWait(lane: Lane): { reviewer: string } | { note: string } | null {
+  if (!isAwaitingAcceptance(lane.state)) return null;
+  if (lane.acceptance_reviewer) return { reviewer: lane.acceptance_reviewer };
+  switch (lane.acceptance_route) {
+    case 'no_candidate':
+      return { note: 'no eligible reviewer' };
+    case 'acceptance_exempt':
+      return { note: 'acceptance-exempt' };
+    case 'wake_queued':
+      return { note: 'waking a reviewer' };
+    default:
+      return null;
+  }
+}
+
+/**
  * Fold a mutation echo into the board optimistically. The firehose deliberately skips the sender, so
  * this `{lane, warnings}` echo is the only copy the writing client sees (the AsksStrip precedent);
  * the next lane-event refetch reconciles with daemon truth. In-place replace keeps card order stable;
