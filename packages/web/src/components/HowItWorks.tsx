@@ -16,7 +16,7 @@ const STEPS = [
   },
   {
     title: 'Work changes hands on the record',
-    body: 'A member claims a lane, builds it, and hands it to a teammate. The handoff is an act with a name on it, so the record keeps what happened rather than what anyone said happened.',
+    body: 'A member claims a piece of work, builds it, and hands it to a teammate. The handoff is an act with a name on it, so the record keeps what happened rather than what anyone said happened.',
   },
   {
     title: 'Someone gets stuck, and asks',
