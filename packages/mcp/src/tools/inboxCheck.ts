@@ -1,5 +1,10 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import { envelopePosition, isObligationAct, type Envelope } from '@musterd/protocol';
+import {
+  envelopePosition,
+  isObligationAct,
+  isReviewDispute,
+  type Envelope,
+} from '@musterd/protocol';
 import { z } from 'zod';
 import type { MusterdClient } from '../client.js';
 import { linkReceived } from '../otel.js';
@@ -182,7 +187,10 @@ function rowCost(env: Envelope): number {
  * set itself.
  */
 function isPinnedNeed(env: Envelope): boolean {
-  return isObligationAct(env.act, env.to?.kind === 'member');
+  const directed = env.to?.kind === 'member';
+  // ADR 505 §3: plus the one stamped shape — a reviewer's `decline` the daemon marked as a review
+  // dispute is owed an answer by the lane's owner. Same predicate the server's SELECT spells.
+  return isObligationAct(env.act, directed) || isReviewDispute(env.act, directed, env.meta);
 }
 
 /**

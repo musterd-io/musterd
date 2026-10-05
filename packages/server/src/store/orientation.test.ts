@@ -351,6 +351,105 @@ withDrivers('orientation', (o) => {
   // across an 18h window and still never answered — more awake time than the reviewers who did answer
   // (0.67h vs 0.22h). Having time was not the problem; being reminded was. The ask lands once in the
   // inbox and is never re-surfaced, and the brief a working seat actually reads had no field for it.
+  describe('owed_disputes — rejections on MY lanes I have not answered (ADR 505)', async () => {
+    async function reject(
+      db: ReturnType<typeof seed>['db'],
+      teamId: string,
+      from: { id: string; name: string },
+      toId: string,
+      lane: string,
+      id: string,
+      ts = 1_000,
+    ) {
+      await insertMessage(
+        db,
+        teamId,
+        from.id,
+        toId,
+        makeEnvelope({
+          id,
+          team: 'revive',
+          from: from.name,
+          to: { kind: 'member', name: 'stanley' },
+          act: 'decline',
+          body: 'missing the §8.1 re-run',
+          ts,
+          // The daemon's stamp (route.ts); the brief reads it, never re-derives it.
+          meta: { in_reply_to: 'ask-1', dispute: { via: 'review', lane, ask: 'ask-1' } },
+        }),
+      );
+    }
+
+    it('names a rejection on my active lane, who sent it, the note, and the id to answer on', async () => {
+      const { db, team, nick, stanley } = await seed();
+      const lane = await openLane(db, team.id, 'revive', 'stanley', { title: 'mine', claim: true });
+      await updateLane(db, team.id, lane.id, 'revive', { state: 'active' });
+      await reject(db, team.id, nick, stanley.id, lane.id, 'rej-1', 5_000);
+
+      const brief = await deriveNext(db, team.id, 'revive', 'stanley');
+      expect(brief.owed_disputes).toHaveLength(1);
+      expect(brief.owed_disputes[0]).toMatchObject({
+        from: 'nick',
+        dispute_id: 'rej-1',
+        note: 'missing the §8.1 re-run',
+        ts: 5_000,
+      });
+      expect(brief.owed_disputes[0]!.lane.id).toBe(lane.id);
+      // Not the reviewer's to answer.
+      expect((await deriveNext(db, team.id, 'revive', 'nick')).owed_disputes).toEqual([]);
+    });
+
+    it('retires once I answer it, or once the lane leaves active', async () => {
+      const { db, team, nick, stanley } = await seed();
+      const lane = await openLane(db, team.id, 'revive', 'stanley', { title: 'mine', claim: true });
+      await updateLane(db, team.id, lane.id, 'revive', { state: 'active' });
+      await reject(db, team.id, nick, stanley.id, lane.id, 'rej-1');
+      await insertMessage(
+        db,
+        team.id,
+        stanley.id,
+        nick.id,
+        makeEnvelope({
+          id: 'ans-1',
+          team: 'revive',
+          from: 'stanley',
+          to: { kind: 'member', name: 'nick' },
+          act: 'accept',
+          body: 'conceded: re-ran it, you were right',
+          meta: { in_reply_to: 'rej-1' },
+        }),
+      );
+      expect((await deriveNext(db, team.id, 'revive', 'stanley')).owed_disputes).toEqual([]);
+
+      await reject(db, team.id, nick, stanley.id, lane.id, 'rej-2');
+      expect((await deriveNext(db, team.id, 'revive', 'stanley')).owed_disputes).toHaveLength(1);
+      await updateLane(db, team.id, lane.id, 'revive', { state: 'awaiting_acceptance' });
+      expect((await deriveNext(db, team.id, 'revive', 'stanley')).owed_disputes).toEqual([]);
+    });
+
+    it('a plain decline with no stamp is an answer, not a dispute', async () => {
+      const { db, team, nick, stanley } = await seed();
+      const lane = await openLane(db, team.id, 'revive', 'stanley', { title: 'mine', claim: true });
+      await updateLane(db, team.id, lane.id, 'revive', { state: 'active' });
+      await insertMessage(
+        db,
+        team.id,
+        nick.id,
+        stanley.id,
+        makeEnvelope({
+          id: 'no-1',
+          team: 'revive',
+          from: 'nick',
+          to: { kind: 'member', name: 'stanley' },
+          act: 'decline',
+          body: 'cannot take that handoff',
+          meta: { in_reply_to: 'h-1' },
+        }),
+      );
+      expect((await deriveNext(db, team.id, 'revive', 'stanley')).owed_disputes).toEqual([]);
+    });
+  });
+
   describe('owed_reviews — the verdicts someone is waiting on from ME (ADR 233)', async () => {
     async function askReview(
       db: ReturnType<typeof seed>['db'],

@@ -210,6 +210,13 @@ export type AuditAction =
   //   ask_timeout_ms }. `standingAcceptance` reads it as the newest routing, and the verdict edge
   // refuses an accept/decline on the `superseded_ask`.
   | 'lane.review_rerouted'
+  // ADR 505: the lane owner's answer to a review rejection (the dispute). `verdict` is `conceded`
+  // (an `accept` naming what was re-checked; the lane stays active for the fix) or `held` (a
+  // `decline` naming the evidence; the lane re-enters acceptance and a `lane.review_rerouted` row
+  // with `route: 'tiebreak'` follows when a second reviewer could be picked — absent, the hold is
+  // on the record and the lane stays active). detail: { lane, owner, verdict, dispute (the
+  // rejection's id), answer (this reply's id), reviewer (who rejected), tiebreak? }.
+  | 'lane.dispute_answered'
   // Letting go of a lane: an owned lane moved back to `open`, which the state machine's
   // open ⟺ unowned invariant turns into a release (detail: { lane, released_by, owner_before }).
   // Traceable for the same reason a claim is — "who stopped carrying this, and when".
@@ -612,6 +619,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'lane.review_peer_confirmed': 'actor',
   'lane.review_acknowledged': 'actor',
   'lane.review_rerouted': 'actor',
+  'lane.dispute_answered': 'actor',
   'lane.released': 'actor',
   'lane.claimed': 'actor',
   'lane.updated': 'actor',

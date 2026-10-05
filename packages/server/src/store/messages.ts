@@ -5,6 +5,7 @@ import {
   OBLIGATION_ACTS_ANY,
   OBLIGATION_ACTS_DIRECTED,
   PROTOCOL_VERSION,
+  REVIEW_DISPUTE_VIA,
   type DeferUntil,
   type Envelope,
 } from '@musterd/protocol';
@@ -353,11 +354,17 @@ export async function listInbox(
     // an EXISTS would resolve to the inner alias and silently match every row against itself.
     const pinnedAny = OBLIGATION_ACTS_ANY.map(() => '?').join(',');
     const pinnedDirected = OBLIGATION_ACTS_DIRECTED.map(() => '?').join(',');
+    // ADR 505 §3: the one clause outside the act lists — a reviewer's `decline` that the daemon
+    // stamped as a review dispute is owed an answer by the lane's owner, so it is pinned like any
+    // obligation. Read off the server stamp (`isReviewDispute` is the in-memory twin), never the
+    // act alone: a plain `decline` is still an answer, owed to nobody.
     const pinned = await db.all<MessageRow>(
       `SELECT * FROM messages ${where}
            AND (
              act IN (${pinnedAny})
              OR (to_kind = 'member' AND act IN (${pinnedDirected}))
+             OR (to_kind = 'member' AND act = 'decline'
+                 AND json_extract(meta, '$.dispute.via') = ?)
            )
            ${undischargedSql('messages', '?')}
          ORDER BY created_at ASC, id ASC
@@ -366,6 +373,7 @@ export async function listInbox(
         ...params,
         ...OBLIGATION_ACTS_ANY,
         ...OBLIGATION_ACTS_DIRECTED,
+        REVIEW_DISPUTE_VIA,
         member.id,
         opts.pinnedLimit ?? PINNED_DEFAULT_LIMIT,
       ],

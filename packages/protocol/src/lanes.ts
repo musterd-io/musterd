@@ -834,6 +834,29 @@ export const NextBriefSchema = z.object({
       }),
     )
     .default([]),
+  /**
+   * ADR 505 §3: review rejections on lanes I own that I have not answered. A reviewer's `decline`
+   * the daemon stamped `dispute {via:'review'}` is owed one reply — `accept` (conceded, naming
+   * the check) or `decline` (held, naming the evidence) — and like `owed_reviews` it must
+   * survive the seat being heads-down: the inbox scrolls, the brief does not. Gone the moment
+   * the owner replies on it, or the lane leaves `active`. `.default([])` for an older daemon.
+   */
+  owed_disputes: z
+    .array(
+      z.object({
+        /** The lane that was sent back — mine, and still `active`. */
+        lane: LaneSchema,
+        /** Who rejected it. */
+        from: z.string(),
+        /** The rejection to answer: pass as `reply_to` so the answer binds to this dispute. */
+        dispute_id: z.string(),
+        /** The rejection note, head only — the reason the lane came back. */
+        note: z.string(),
+        /** When it was rejected. */
+        ts: z.number().int(),
+      }),
+    )
+    .default([]),
   /** Accepted typed review requests this Member owns. Absent means the daemon predates ADR 490. */
   request_reviews: z.array(ReviewPromiseOpenRowSchema).optional(),
   /** Accepted typed review requests this Member made. Absent means the daemon predates ADR 490. */

@@ -2,6 +2,7 @@ import {
   blockedByOf,
   DeferUntilSchema,
   eligibleOf,
+  type DisputeAnswerWire,
   type Envelope,
   ACCEPTANCE_MOVES_NOTICE,
   isAwaitingAcceptance,
@@ -41,6 +42,7 @@ import {
   recordTokenUsage,
   withEnvelopeSpan,
 } from '../telemetry.js';
+import { applyDisputeAnswer, stampDispute } from './dispute.js';
 
 export interface RouteResult {
   message: MessageRow;
@@ -61,6 +63,10 @@ export interface RouteResult {
    *  for the same reason `lane_verdict` is: the sender learns what their send did, as they do it —
    *  here, that it did NOT move the lane. */
   lane_ack?: { lane: string };
+  /** ADR 505 — what the daemon did with the lane owner's answer to a review dispute: a recorded
+   *  concession, or a hold that re-routed the lane to a tiebreak reviewer (or could not). Absent
+   *  when the act answered no dispute of the sender's. Reported on the ack as `lane_verdict` is. */
+  dispute?: DisputeAnswerWire;
 }
 
 /**
@@ -105,6 +111,7 @@ async function routeEnvelopeInner(
   let handoffLane: RouteResult['handoff_lane'];
   let laneVerdict: RouteResult['lane_verdict'];
   let laneAck: RouteResult['lane_ack'];
+  let dispute: RouteResult['dispute'];
   /** ADR 243: which evidence answered — audited, never on the wire. */
   let handoffBasis: HandoffLaneBasis | undefined;
   if (env.act === 'handoff' && !(env.meta as { lane_handoff?: unknown } | null)?.lane_handoff) {
@@ -272,6 +279,13 @@ async function routeEnvelopeInner(
     const { lane_review: _clientLaneReview, ...restMeta } = outgoingEnv.meta;
     outgoingEnv = { ...outgoingEnv, meta: restMeta };
   }
+  // ADR 505: `dispute` is server-controlled on the same grounds — the stamp is what makes a
+  // reviewer's `decline` an obligation on the lane's owner (pinned, briefed), so a client copy
+  // would be a seat minting an obligation on a teammate. Stripped, then stamped below.
+  if (!daemonComposed && outgoingEnv.meta && 'dispute' in outgoingEnv.meta) {
+    const { dispute: _clientDispute, ...restMeta } = outgoingEnv.meta;
+    outgoingEnv = { ...outgoingEnv, meta: restMeta };
+  }
   // ADR 271 §4 (built): `incident` is the daemon's own marker on the route/resolve notices, and
   // under `incident.wake_on_route` / `wake_on_resolve` it is a PAID wake reason — so a client copy
   // would be a seat minting itself a wake. Same strip, same silence: the message still lands.
@@ -367,6 +381,9 @@ async function routeEnvelopeInner(
   }
 
   outgoingEnv = await threadReviewPromiseAct(ctx, team, outgoingEnv);
+  // ADR 505 §2: the act that opens a dispute carries its source. Before persist, so the stored
+  // row and every delivery derived from it agree, and so the pinned SELECT can read it.
+  outgoingEnv = await stampDispute(ctx, team, sender, outgoingEnv);
 
   // Persist (append-only log) — the urgent-downgraded envelope when applicable, so the stored meta and
   // every delivery (direct + firehose, all derived from the row) carry the corrected flags.
@@ -410,6 +427,17 @@ async function routeEnvelopeInner(
           laneVerdict = await applyAcceptanceVerdict(ctx, team, sender, ref, env.act, env.body);
       } catch (err) {
         log.warn({ msg: 'acceptance_verdict_failed', err: String(err) });
+      }
+      // ADR 505 §3–§4: the other side of the same rail — the lane OWNER answering the rejection.
+      // A reply that was a verdict cannot also be an answer, so this runs only when nothing moved
+      // above. Best-effort for the same reason the verdict is: a failure here must never fail the
+      // act that carries the owner's evidence.
+      if (!laneVerdict) {
+        try {
+          dispute = await applyDisputeAnswer(ctx, team, sender, ref, env.act, message.id);
+        } catch (err) {
+          log.warn({ msg: 'dispute_answer_failed', err: String(err) });
+        }
       }
     }
   } else if (env.act === 'wait') {
@@ -542,6 +570,7 @@ async function routeEnvelopeInner(
     ...(handoffLane ? { handoff_lane: handoffLane } : {}),
     ...(laneVerdict ? { lane_verdict: laneVerdict } : {}),
     ...(laneAck ? { lane_ack: laneAck } : {}),
+    ...(dispute ? { dispute } : {}),
   };
 }
 

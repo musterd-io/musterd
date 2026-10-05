@@ -10,6 +10,7 @@ import {
   chooseAutoTarget,
   ELIGIBLE_ACTS,
   eligibleSetRefusal,
+  disputeAnswerAck,
   laneAckAck,
   laneVerdictAck,
   threadHintFor,
@@ -301,6 +302,10 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
         // NOT move the lane, or "acknowledged" and "accepted" stay indistinguishable from outside.
         const laneAck = ackBody?.lane_ack ? laneAckAck(ackBody.lane_ack) : undefined;
         const ackGuidance = laneAck ? ` ${laneAck.guidance}` : '';
+        // ADR 505: the owner's answer to a review dispute — what the daemon did with it (recorded
+        // the concession; held and re-routed to a tiebreak, or could not), said on the spot.
+        const disputeAck = ackBody?.dispute ? disputeAnswerAck(ackBody.dispute) : undefined;
+        const disputeGuidance = disputeAck ? ` ${disputeAck.guidance}` : '';
         // ADR 484: the challenge-evidence rail's one line — sender-only, never stored on the act.
         const evidenceNotice = ackBody?.evidence_notice;
         const evidenceGuidance = evidenceNotice ? ` ⚠ ${evidenceNotice}` : '';
@@ -326,6 +331,7 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
           handoffGuidance +
           verdictGuidance +
           ackGuidance +
+          disputeGuidance +
           evidenceGuidance +
           threadGuidance;
         return {

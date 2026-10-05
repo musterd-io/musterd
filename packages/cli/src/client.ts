@@ -768,6 +768,13 @@ export class HttpClient {
      *  `lane_review` ask. Absent when the act moved nothing, and from an older daemon. */
     lane_verdict?: { lane: string; state: 'done' | 'active' };
     lane_ack?: { lane: string };
+    /** ADR 505: the owner's answer to a review dispute — conceded, or held (re-routed to a
+     *  tiebreak reviewer, or nobody could be picked). Absent when the act answered no dispute. */
+    dispute?: {
+      lane: string;
+      verdict: 'conceded' | 'held';
+      tiebreak?: { reviewer: string; grade: string } | null;
+    };
     /** ADR 484: the challenge-evidence rail's one line, sender-only. Absent when off. */
     evidence_notice?: string;
   }> {
@@ -775,6 +782,11 @@ export class HttpClient {
       ask_contract?: AskContract;
       lane_verdict?: { lane: string; state: 'done' | 'active' };
       lane_ack?: { lane: string };
+      dispute?: {
+        lane: string;
+        verdict: 'conceded' | 'held';
+        tiebreak?: { reviewer: string; grade: string } | null;
+      };
       evidence_notice?: string;
     }>;
   }

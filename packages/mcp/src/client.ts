@@ -30,6 +30,7 @@ import {
   type WSServerFrame,
   type SyncWedge,
   TRACE_POLICY_FILE,
+  type DisputeAnswerWire,
 } from '@musterd/protocol';
 import { WebSocket } from 'ws';
 import { clearGrantFromBinding } from './binding.js';
@@ -541,6 +542,8 @@ export class MusterdClient {
     handoff_lane?: HandoffLaneAck;
     lane_verdict?: LaneVerdictWire;
     lane_ack?: { lane: string };
+    /** ADR 505: the owner's answer to a review dispute — conceded, or held and re-routed. */
+    dispute?: DisputeAnswerWire;
     evidence_notice?: string;
   }> {
     return this.request('POST', `/teams/${this.config.team}/messages`, { envelope }) as Promise<{
@@ -548,6 +551,7 @@ export class MusterdClient {
       handoff_lane?: HandoffLaneAck;
       lane_verdict?: LaneVerdictWire;
       lane_ack?: { lane: string };
+      dispute?: DisputeAnswerWire;
       evidence_notice?: string;
     }>;
   }
