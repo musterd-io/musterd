@@ -44,7 +44,17 @@ A surface is needed that delivers the first without the second.
   across the team) most seats will see nothing for weeks, so the phrase channel carries the early
   signal.
 - Depends on ADR 481's projection. Building waits for both that ADR and ADR 476's five-day read.
-  Follows-up: deferred — ADR 476's five-day read (2026-10-04)
+  Follows-up: deferred — ADR 505's 2026-10-29 read (see the 2026-10-05 note)
+- **2026-10-05 — re-keyed to the dispute readout; waits for the 2026-10-29 read** (dolly; lane
+  01M3QTEAYH9817YWFF31WM0A4T). The projection this ADR reads is now ADR 505 §8's dispute readout
+  (`DisputeReadout` in `packages/protocol/src/sycophancy.ts`, landed by ADR 505 increment 3, which
+  absorbed ADR 481's lane 01M3QRD7TF). The `phrase` channel in decision 1's example line is gone as
+  a headline, so the line, when built, reads the seat's own dispute row: answered / named a check /
+  held, each with its denominator, by `via`. The n ≥ 5 floor, the own-row-only rule and the no
+  team-wide display rule stand unchanged. [ADR 505](505-disputes-one-lifecycle-for-contesting-a-claim.md)
+  named this ADR "not decided here", to be re-judged at the 2026-10-29 read; at the five-day read
+  no seat had 5 disputes answered, so the line would have shown nothing to anyone. Nothing is built
+  before the read.
 
 ## Observability & Evaluation
 
