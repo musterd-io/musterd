@@ -102,6 +102,21 @@ describe('node.json', () => {
     expect(statSync(nodeStatePath()).mode & 0o777).toBe(0o600);
   });
 
+  // Lane 01M440QFKV: the hub's node.json held `"undefined": {"0":"b","1":"r",…}` — a bare string
+  // destructured as an entry. Parsed at the boundary now: refused, and nothing is written.
+  it('refuses an entry that is not an enrollment, and writes nothing', () => {
+    expect(() => saveNodeEnrollment('bravo' as never)).toThrow();
+    expect(() =>
+      saveNodeEnrollment({ team: '', hub_url: 'h', node_id: 'n', credential: 'c', enrolled_at: 1 }),
+    ).toThrow();
+    expect(readNodeState()).toEqual({ nodes: {} });
+  });
+
+  it('never resolves to the real ~/.musterd/node.json under vitest (ADR 190)', () => {
+    expect(() => nodeStatePath({ VITEST: 'true' })).toThrow(/MUSTERD_NODE_STATE must be set/);
+    expect(nodeStatePath({})).toMatch(/\.musterd\/node\.json$/);
+  });
+
   it('reads an absent or malformed file as "no enrollments", never as an error', () => {
     expect(readNodeState().nodes).toEqual({});
     writeFileSync(nodeStatePath(), 'not json at all');

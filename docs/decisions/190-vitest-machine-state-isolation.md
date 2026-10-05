@@ -56,6 +56,14 @@ shared file a test writes is the same class.
   equivalent VITEST guard) rather than raw `homedir()` joins.
 - ADR 162's vitest `env` pin stays as a belt-and-suspenders start-of-worker pin;
   the setup file is what survives per-suite cleanup.
+- **2026-10-04 — two gaps closed (lane 01M440QFKV).** The hub's real `~/.musterd/node.json` held a
+  test's write: `"undefined": {"0":"b","1":"r","2":"a","3":"v","4":"o"}`. First,
+  `packages/server/vitest.config.ts` never listed this setup file. A package-local run inherits nothing from
+  the root, so `pnpm --filter @musterd/server test` ran unpinned once a suite deleted its own
+  `MUSTERD_NODE_STATE`. Second, `nodeStatePath` resolved with a raw `homedir()` join, the pattern
+  the bullet above warns against. The server config now loads the setup, `nodeStatePath` throws under
+  VITEST with no override, and `saveNodeEnrollment` parses its entry, so a malformed entry is refused
+  rather than written.
 
 ## Observability & Evaluation
 
