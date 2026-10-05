@@ -40,6 +40,8 @@ name: CI
 
 on:
   pull_request:
+    # `labeled`/`unlabeled` so adding the `pglite` label re-runs CI with both drivers (ADR 510).
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
   # ADR 508: full coverage + a11y on main, every 4 hours at :17, skipped when main has not moved.
@@ -90,6 +92,8 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+  # ADR 510 (2026-10-05) supersedes the PR half of what follows: a PR runs SQLite only, unless it
+  # carries the `pglite` label, and both drivers run on the 4-hourly main check (ADR 508).
   # ADR 492: the PGlite leg of the `withDrivers` blocks (ADR 479 §3) runs where it can catch
   # something. Those blocks live in packages/server and execute server + protocol source under
   # the locked deps and root test config — a PR touching none of that runs SQLite only. A push
@@ -127,6 +131,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
+          PGLITE_LABEL: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'pglite') }}
         run: |
           suite=true; a11y=true; kinds=both; docs=true; why="no parent to diff — everything runs"
           if [ "$EVENT" = schedule ] || [ "$EVENT" = workflow_dispatch ]; then
@@ -145,8 +150,13 @@ jobs:
             else
               if echo "$changed" | grep -q -E '^(packages/web/|scripts/a11y/|\.github/|package\.json$|pnpm-lock\.yaml$)'; then a11y=true; else a11y=false; fi
               if [ "${{ github.event_name }}" = "pull_request" ]; then
-                hit=$(echo "$changed" | grep -m1 -E '^(packages/(server|protocol)/|pnpm-lock\.yaml$|package\.json$|vitest\.config\.ts$|\.github/)' || true)
-                if [ -n "$hit" ]; then why="the PR touches $hit"; else kinds=sqlite; why="the PR touches nothing the PGlite leg executes"; fi
+                # ADR 510: a PR runs SQLite only. The PGlite leg (~85% of the test file-seconds) runs
+                # on the 4-hourly main check (ADR 508). A PR labelled `pglite` opts back into both.
+                if [ "$PGLITE_LABEL" = true ]; then
+                  why="the PR carries the pglite label (ADR 510)"
+                else
+                  kinds=sqlite; why="a PR runs SQLite only; PGlite runs on the 4-hourly main check (ADR 510)"
+                fi
               else
                 why="push to ${GITHUB_REF_NAME}"
               fi
@@ -170,7 +180,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           {
             echo "plan: suite=$suite coverage=$coverage a11y=$a11y docs=$docs — $why (ADR 499, ADR 508)"
-            echo "MUSTERD_TEST_DRIVER=$kinds (ADR 492); coverage in $count shard(s) (ADR 498)"
+            echo "MUSTERD_TEST_DRIVER=$kinds (ADR 492, ADR 510); coverage in $count shard(s) (ADR 498)"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
   # A quarter of the suite per shard when both drivers run (vitest `--shard`: files sorted by a path

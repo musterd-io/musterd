@@ -102,6 +102,12 @@ are not `withDrivers` blocks and keep running under every setting.
   both" holds whenever the suite runs at all; a docs-only squash runs no suite on either engine,
   because no engine's inputs changed.
 
+_Note, 2026-10-05 (izzo, lane 01M46EH1FA)._ **The PR half of the filter is replaced.**
+[ADR 510](510-pr-sqlite-only.md) makes every PR run SQLite only, unless it carries the `pglite`
+label. Both drivers now run on main's 4-hourly scheduled check ([ADR 508](508-main-push-coverage-cost.md)),
+not on every push and not on server-touching PRs. The reason is cost: after ADR 508, PR runs were
+most of what was still billed. The path list above no longer decides anything.
+
 ## Observability & Evaluation
 
 - **Traces:** the `coverage` job summary names the drivers it chose and the first path that
