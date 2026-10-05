@@ -1,9 +1,10 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import pg from 'pg';
 import { log } from '../log.js';
 import { toPostgres } from './dialect.js';
 import { DATABASE_UNREACHABLE_SENTENCE, DriverError, type Driver, type Params } from './driver.js';
 import { ROLE, TENANT_SETTING } from './pg/tenancy.js';
-import { requestTiming } from './requestTiming.js';
+import { requestEnders, requestTiming, type RequestTiming } from './requestTiming.js';
 
 /**
  * node-postgres behind the async Driver (ADR 486; cloud design §12.1/§12.4). One pool per database
@@ -110,6 +111,10 @@ export function pgPoolFactory(
   };
 }
 
+let driverSeq = 0;
+/** ADR 507: a request's lease is returned after the transaction that outlives this. */
+const LEASE_MAX_MS = 1_000;
+
 export function pgDriver(opts: PgDriverOptions): PgDriver {
   const make: PoolFactory = opts.pools ?? pgPoolFactory(opts);
   const pools: Partial<Record<Scope['role'], PoolLike>> = {};
@@ -121,6 +126,11 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
     return (pools[role] = make(url!));
   };
   let closed = false;
+  const driverId = `pg${++driverSeq}`;
+  // The pools whose leased transaction this async context is inside (ADR 507): a statement issued
+  // from inside it on the same pool — through the connection handle, say — must not queue on the
+  // lease it is already holding, so it checks a client out for itself, as before the lease.
+  const holding = new AsyncLocalStorage<Set<string>>();
   const listeners = new Set<(sql: string) => void>();
 
   // BEGIN and the stamp go down as ONE simple-protocol query — one round trip, not three (lane
@@ -172,34 +182,106 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
     }
   };
 
-  /** One transaction: BEGIN+stamp (one trip), body, COMMIT — ROLLBACK and release(err) on any failure. */
-  const inTransaction = async <T>(s: Scope, body: (c: Client) => Promise<T>): Promise<T> => {
-    const c = await acquire(s);
-    // Request timing (requestTiming.ts): how long this client is held, BEGIN to release.
+  /**
+   * One transaction on client `c`: BEGIN+stamp (one trip), body, COMMIT. On any failure, ROLLBACK
+   * and hand back `release(err)` — the caller discards the client — so a pooled connection never
+   * carries a half-open transaction into its next use.
+   */
+  const onClient = async <T>(
+    c: Client,
+    s: Scope,
+    body: (c: Client) => Promise<T>,
+  ): Promise<{ ok: true; r: T } | { ok: false; e: unknown }> => {
+    // Request timing (requestTiming.ts): how long this client is held, BEGIN to COMMIT/ROLLBACK.
     const timing = requestTiming();
     const held = performance.now();
     if (timing) timing.tx++;
-    const done = () => {
-      if (timing) timing.holdMs += performance.now() - held;
-    };
     try {
       await c.query(opening(s));
       const r = await body(c);
       await c.query('COMMIT');
-      done();
-      c.release();
-      return r;
+      return { ok: true, r };
     } catch (e) {
       try {
         await c.query('ROLLBACK');
       } catch {
         // the connection is gone; release(err) discards it from the pool
       }
-      done();
-      c.release(e);
-      throw isUnreachable(e) ? unavailable(e) : e;
+      return { ok: false, e };
+    } finally {
+      if (timing) timing.holdMs += performance.now() - held;
     }
   };
+
+  /**
+   * One transaction. Inside an HTTP request scope (ADR 507) it runs on the request's leased client
+   * for this pool — one checkout per request, not per statement — one transaction at a time;
+   * anywhere else, and re-entrantly inside a leased transaction, it checks a client out for itself.
+   */
+  const inTransaction = async <T>(s: Scope, body: (c: Client) => Promise<T>): Promise<T> => {
+    const scope = requestTiming();
+    // Keyed by this driver AND pool: the coordination and trace stores are two drivers on two
+    // databases sharing one request, and neither may run on the other's client.
+    const key = `${driverId}:${s.role}`;
+    if (scope && !scope.ended && !holding.getStore()?.has(key)) {
+      const lease = (scope.leases[key] ??= { client: null, since: 0, tail: Promise.resolve() });
+      const prev = lease.tail;
+      let free!: () => void;
+      lease.tail = new Promise<void>((r) => (free = r));
+      await prev;
+      try {
+        if (!scope.ended) {
+          if (!lease.client) {
+            lease.client = await acquire(s);
+            lease.since = performance.now();
+          }
+          const c = lease.client as Client;
+          const held = new Set(holding.getStore() ?? []).add(key);
+          const out = await holding.run(held, () => onClient(c, s, body));
+          if (!out.ok) {
+            lease.client = null;
+            c.release(out.e);
+            throw isUnreachable(out.e) ? unavailable(out.e) : out.e;
+          }
+          // A long-lived response (an MCP stream) must not pin a client: past LEASE_MAX_MS the
+          // client goes back after this transaction and the next statement leases afresh.
+          if (performance.now() - lease.since > LEASE_MAX_MS) {
+            lease.client = null;
+            c.release();
+          }
+          return out.r;
+        }
+      } finally {
+        free();
+      }
+    }
+    const c = await acquire(s);
+    const out = await onClient(c, s, body);
+    if (out.ok) {
+      c.release();
+      return out.r;
+    }
+    c.release(out.e);
+    throw isUnreachable(out.e) ? unavailable(out.e) : out.e;
+  };
+
+  /**
+   * End a request scope (ADR 507): no statement may take its leases from now on, and each leased
+   * client goes back to its pool once the work already queued on it settles.
+   */
+  const endRequest = async (scope: RequestTiming): Promise<void> => {
+    scope.ended = true;
+    await Promise.all(
+      Object.entries(scope.leases)
+        .filter(([k]) => k.startsWith(`${driverId}:`))
+        .map(async ([, lease]) => {
+          await lease!.tail;
+          lease!.client?.release();
+          lease!.client = null;
+        }),
+    );
+  };
+  requestEnders.add(endRequest);
 
   const noRescope = (what: string) =>
     new DriverError(
@@ -251,6 +333,7 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
       },
       close: async () => {
         closed = true;
+        requestEnders.delete(endRequest);
         await Promise.all(Object.values(pools).map((p) => p.end()));
       },
     };

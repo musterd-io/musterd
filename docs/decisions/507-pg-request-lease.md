@@ -1,6 +1,6 @@
 # 507 — On Postgres, a request leases one pooled client and runs every statement on it
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-10-05
 - Deciders: nick (asked for the one-per-request fix after load run 9, 2026-10-05), fifty (lane
   `01M3Z455NEWNZMCJ5KR6EX3TG0`)
@@ -53,7 +53,11 @@ without changing what a statement means.
    request defers past its response (a notification's `.then`) find no live scope and check out per
    statement as today. A deferred continuation that starts after the scope ended must not reuse a
    released client: the scope records `ended`, and an ended scope means "no lease".
-5. **A broken client ends the lease.** If a statement fails as `unavailable` (connection lost), the
+5. **A lease ages out.** Once a lease is older than 1 s, its client goes back to the pool after the
+   transaction that crossed the line, and the request's next statement leases afresh. A
+   long-lived response (an MCP stream) therefore never pins a client; run 9's median request held
+   its clients ~0.3 s, so ordinary requests never reach the cap.
+6. **A broken client ends the lease.** If a statement fails as `unavailable` (connection lost), the
    client is released with the error and the next statement in the request checks out afresh.
 
 ## Consequences
