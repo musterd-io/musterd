@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import type { Outline } from './port.js';
-import { startService, type RunningService } from './service.js';
+import { chooseProvider, startService, type RunningService } from './service.js';
 
 let dir: string;
 let service: RunningService;
@@ -163,5 +163,31 @@ describe('service', () => {
       ws.once('open', () => resolve(false));
     });
     expect(failed).toBe(true);
+  });
+});
+
+describe('chooseProvider (ADR 524)', () => {
+  const ok = () => ({
+    ok: true as const,
+    checkout: { root: '/s', entry: '/e', loader: '/l', node: '/n' },
+  });
+  const missing = () => ({ ok: false as const, reason: 'no Squig checkout at /h/.squig/src' });
+
+  it('defaults to Squig when a usable checkout exists', () => {
+    expect(chooseProvider({}, ok).name).toBe('squig');
+  });
+
+  it('falls back to tldraw without a checkout, and says why', () => {
+    expect(chooseProvider({}, missing)).toEqual({
+      name: 'tldraw',
+      fallback: 'no Squig checkout at /h/.squig/src — using tldraw',
+    });
+  });
+
+  it('WHITEBOARD_PROVIDER=tldraw pins tldraw; =squig without a checkout still falls back, loudly', () => {
+    expect(chooseProvider({ WHITEBOARD_PROVIDER: 'tldraw' }, ok)).toEqual({ name: 'tldraw' });
+    expect(chooseProvider({ WHITEBOARD_PROVIDER: 'squig' }, missing).fallback).toMatch(
+      /^WHITEBOARD_PROVIDER=squig, but no Squig checkout/,
+    );
   });
 });

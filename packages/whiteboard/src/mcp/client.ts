@@ -69,7 +69,13 @@ export class WhiteboardServiceClient {
     return data;
   }
 
-  async open(board: string): Promise<{ outline: Outline; created: boolean; url: string }> {
+  async open(board: string): Promise<{
+    outline: Outline;
+    created: boolean;
+    url: string;
+    provider?: string;
+    fallback?: string;
+  }> {
     await this.ensureService();
     return this.post(`/api/boards/${board}/open`, {});
   }

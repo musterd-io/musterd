@@ -108,10 +108,12 @@ export function buildWhiteboardMcpServer(client: WhiteboardServiceClient): McpSe
     async ({ board, seat }) => {
       try {
         actor = seatActor(seat);
-        const { outline, created, url } = await client.open(board);
+        const { outline, created, url, provider, fallback } = await client.open(board);
         const head = created ? `created board "${board}"` : `reopened board "${board}"`;
+        const canvas = provider ? ` (${provider})` : '';
+        const note = fallback ? `\n\nnote: ${fallback}` : '';
         return textResult(
-          `${head} — hand the human this URL to draw with you: ${url}\n\n${formatOutline(outline, { url })}`,
+          `${head}${canvas} — hand the human this URL to draw with you: ${url}${note}\n\n${formatOutline(outline, { url })}`,
         );
       } catch (err) {
         return errorResult(err);

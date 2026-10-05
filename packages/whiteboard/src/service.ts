@@ -15,10 +15,33 @@ import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { isEntryPoint } from './entry.js';
-import type { CreatedBy, EditOp, ItemInput } from './port.js';
+import type { CreatedBy, EditOp, ItemInput, WhiteboardProvider } from './port.js';
 import { BOARD_NAME_RE } from './port.js';
+import { probeSquigCheckout, type CheckoutProbe } from './squig/checkout.js';
+import { SquigProvider } from './squig/provider.js';
 import { RoomManager } from './sync/roomManager.js';
 import { TldrawProvider } from './tldraw/provider.js';
+
+export type ProviderName = 'squig' | 'tldraw';
+
+/**
+ * Which canvas serves the boards (ADR 524): Squig when a usable checkout exists, tldraw
+ * otherwise — and `WHITEBOARD_PROVIDER=tldraw|squig` pins it. A fallback carries its reason, so
+ * the open result can say plainly why the human is not on Squig.
+ */
+export function chooseProvider(
+  env: NodeJS.ProcessEnv = process.env,
+  probe: () => CheckoutProbe = () => probeSquigCheckout(env),
+): { name: ProviderName; probe?: CheckoutProbe; fallback?: string } {
+  const pinned = env['WHITEBOARD_PROVIDER'];
+  if (pinned === 'tldraw') return { name: 'tldraw' };
+  const p = probe();
+  if (p.ok) return { name: 'squig', probe: p };
+  return {
+    name: 'tldraw',
+    fallback: `${pinned === 'squig' ? 'WHITEBOARD_PROVIDER=squig, but ' : ''}${p.reason} — using tldraw`,
+  };
+}
 
 export const DEFAULT_PORT = 4851;
 
@@ -56,7 +79,11 @@ export async function startService(port = servicePort()): Promise<RunningService
     idleTimeoutMs: IDLE_TIMEOUT_MS,
     persistIntervalMs: PERSIST_INTERVAL_MS,
   });
-  const provider = new TldrawProvider(rooms);
+  const choice = chooseProvider();
+  const squig =
+    choice.name === 'squig' && choice.probe?.ok ? new SquigProvider(choice.probe.checkout) : null;
+  const provider: WhiteboardProvider = squig ?? new TldrawProvider(rooms);
+  if (choice.fallback) log('warn', choice.fallback);
   // Rewritten after listen() when the OS picks the port (port 0, tests).
   let boundPort = port;
 
@@ -76,6 +103,7 @@ export async function startService(port = servicePort()): Promise<RunningService
       return json(res, 200, {
         status: 'ok',
         service: 'agent-whiteboard',
+        provider: choice.name,
         rooms: rooms.activeRoomCount(),
         uptime: process.uptime(),
       });
@@ -106,7 +134,13 @@ export async function startService(port = servicePort()): Promise<RunningService
       switch (action) {
         case 'open': {
           const { outline, created } = await provider.open(name);
-          return json(res, 200, { outline, created, url: boardUrl(name, boundPort) });
+          return json(res, 200, {
+            outline,
+            created,
+            url: squig ? await squig.editorUrl(name) : boardUrl(name, boundPort),
+            provider: choice.name,
+            ...(choice.fallback ? { fallback: choice.fallback } : {}),
+          });
         }
         case 'add': {
           if (!body.actor || !Array.isArray(body.items))
@@ -177,6 +211,7 @@ export async function startService(port = servicePort()): Promise<RunningService
     port: boundPort,
     close: async () => {
       await rooms.persistAllAndClose();
+      await squig?.closeAll();
       wss.close();
       // server.close() alone waits for open connections — a browser ws or a pooled
       // keep-alive fetch keeps the process alive AFTER it stops listening, leaving a
