@@ -74,6 +74,9 @@ export const P3_AUDIT_ACTIONS = [
   // ADR 501: a human halted / resumed an agent seat.
   'seat.halted',
   'seat.resumed',
+  // ADR 516: a human admin set / lifted a Team hold.
+  'hold.set',
+  'hold.lifted',
   'governed.policy.change',
   'governed.launch.issue',
   'governed.launch.consume',

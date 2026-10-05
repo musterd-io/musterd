@@ -8,6 +8,7 @@ import {
 import { z } from 'zod';
 import type { Driver } from '../db/driver.js';
 import { REPLICATED_LEDGER_VERBS } from '../store/audit.js';
+import { projectHoldEvent } from '../store/holds.js';
 import { getMemberByName } from '../store/members.js';
 import { upsertForeignNode } from '../store/nodes.js';
 import {
@@ -266,8 +267,11 @@ async function projectLaneEvent(
   }
 }
 
-/** The `policy.*` verbs the fold can project. Anything else stops as `unknown_policy_event`. */
-const POLICY_VERBS = new Set(['policy.change']);
+/**
+ * The verbs the policy kind carries — hub-minted Team rules: the policy override and (ADR 516) the
+ * Team's holds. Anything else stops as `unknown_policy_event`.
+ */
+const POLICY_VERBS = new Set(['policy.change', 'hold.set', 'hold.lifted']);
 
 /**
  * Project a replicated policy change into this daemon's `teams.policy` (residence-2 census gap 1).
@@ -287,6 +291,9 @@ async function projectPolicyEvent(
   event: SyncPullLaneEvent['event'],
   now: number,
 ): Promise<'applied' | 'unknown'> {
+  if (event.action === 'hold.set' || event.action === 'hold.lifted') {
+    return projectHoldEvent(db, teamId, event.action, event.detail);
+  }
   if (event.action !== 'policy.change') return 'unknown';
   const stored = event.detail ?? {};
   await db.run('UPDATE teams SET policy = ?, updated_at = ? WHERE id = ?', [

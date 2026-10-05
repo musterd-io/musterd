@@ -125,6 +125,11 @@ import {
   TraceSeatTimelineResponseSchema,
   HuddleTraceSchema,
   isUnverifiedDisputeAnswer,
+  describeHoldLine,
+  type Hold,
+  SetHoldBodySchema,
+  type SyncHoldRequest,
+  SyncHoldRequestSchema,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
@@ -198,6 +203,7 @@ import {
 import { buildDreamPacket, settleProvenance } from '../store/dream.js';
 import { latestFootprint } from '../store/footprint.js';
 import { listGoals } from '../store/goals.js';
+import { liftHold, listActiveHolds, listAllHolds, setHold } from '../store/holds.js';
 import {
   authorizeGovernedRequest,
   authenticateGovernedNode,
@@ -447,6 +453,7 @@ import {
   decideLanePatch,
   HubUnreachableError,
   isOwnershipOrStatePatch,
+  holdAtHub,
   joinerEnrollment,
   policyAtHub,
   localNodeWithLabel,
@@ -1467,6 +1474,73 @@ async function authGovernance(
   if (resolveCapabilities(member).is_admin) return { team, member, viaFallback: false };
   if (!(await teamHasAdmin(ctx.db, team.id))) return { team, member, viaFallback: true };
   throw new MusterdError('forbidden', 'this operation requires an admin seat (is_admin)');
+}
+
+/**
+ * ADR 516 §4: a hold set or lift, wherever this daemon sits. A joiner forwards to the hub and pulls
+ * the answer back (the hub's row is the fact); an unreachable hub refuses with `hub_unreachable` —
+ * a Team rule is not an act that may fork. The hub (or a standalone daemon) writes and pushes.
+ */
+async function holdAct(ctx: Ctx, team: TeamRow, req: SyncHoldRequest): Promise<Hold> {
+  const enrollment = await joinerEnrollment(ctx.db, team.id, team.slug);
+  if (enrollment) {
+    let hold: Hold;
+    try {
+      hold = await holdAtHub(enrollment, team.slug, req);
+    } catch (err) {
+      if (err instanceof HubUnreachableError) throw new MusterdError('hub_unreachable', err.message);
+      throw err;
+    }
+    await pullTeam(ctx, team).catch(() => undefined);
+    return hold;
+  }
+  const hold =
+    req.op === 'set'
+      ? await setHold(ctx.db, team.id, req.actor, req.hold)
+      : await liftHold(ctx.db, team.id, req.actor, req.id);
+  await pushTeam(ctx, team).catch(() => undefined);
+  return hold;
+}
+
+/**
+ * ADR 516 §5: one Team message per set or lift, from the human, daemon-composed so its `meta.hold`
+ * survives the strip a client copy gets. This is the "one act reaches every seat" half; the brief's
+ * `holds` array is the "for as long as it lasts" half.
+ */
+async function announceHold(
+  ctx: Ctx,
+  team: TeamRow,
+  human: MemberRow,
+  hold: Hold,
+  lifted: boolean,
+): Promise<void> {
+  const now = Date.now();
+  await routeEnvelope(
+    ctx,
+    team,
+    human,
+    makeEnvelope({
+      id: ulid(),
+      team: team.slug,
+      from: human.name,
+      to: { kind: 'team' },
+      act: 'message',
+      body: lifted
+        ? `[hold] lifted: ${hold.effect.replaceAll('_', ' ')} — ${hold.reason}`
+        : `[hold] ${describeHoldLine(hold, now)}`,
+      meta: {
+        hold: {
+          id: hold.id,
+          effect: hold.effect,
+          expires_at: hold.expires_at,
+          ...(lifted ? { lifted: true } : {}),
+        },
+      },
+      ts: now,
+    }),
+    undefined,
+    true,
+  );
 }
 
 /** Authorize an **admin-only read** (e.g. the audit log). Strict `is_admin` — no empty-admin fallback,
@@ -3429,6 +3503,35 @@ export async function handleHttp(
         return sendJson(res, 200, applied);
       }
 
+      // ADR 516 — Team holds. Set and lift are human-admin acts (`authAdmin`, human by construction
+      // since #2092) and hub-authoritative like policy: a joiner forwards and refuses with
+      // `hub_unreachable` rather than recording a rule the rest of the Team cannot see. The node that
+      // took the request then announces it to the Team once, as the human, daemon-composed.
+      if (method === 'POST' && rest === '/holds') {
+        const { team, member } = await authAdmin(ctx, slug, req);
+        const body = parseOrBadRequest(SetHoldBodySchema, await readJson(req));
+        const hold = await holdAct(ctx, team, { op: 'set', actor: member.name, hold: body });
+        await announceHold(ctx, team, member, hold, false);
+        return sendJson(res, 200, { hold });
+      }
+      const liftMatch = /^\/holds\/([^/]+)\/lift$/.exec(rest);
+      if (method === 'POST' && liftMatch) {
+        const { team, member } = await authAdmin(ctx, slug, req);
+        const id = decodeURIComponent(liftMatch[1]!);
+        const hold = await holdAct(ctx, team, { op: 'lift', actor: member.name, id });
+        await announceHold(ctx, team, member, hold, true);
+        return sendJson(res, 200, { hold });
+      }
+      if (method === 'GET' && rest === '/holds') {
+        const { team } = await authTouch(ctx, slug, req);
+        const all = url.searchParams.get('all') === '1';
+        return sendJson(res, 200, {
+          holds: all
+            ? await listAllHolds(ctx.db, team.id)
+            : await listActiveHolds(ctx.db, team.id, Date.now()),
+        });
+      }
+
       // The read half of the policy verb (increment 5): `musterd residency policy` does
       // read → merge → POST, so admins can set one knob without re-stating the rest. It merges into
       // `stored` (ADR 185) — merging into `policy` is what re-densified the row on every write.
@@ -5299,6 +5402,38 @@ export async function handleHttp(
         const applied = await applyPolicyChange(ctx.db, team.id, actor.name, body.policy);
         await pushTeam(ctx, team).catch(() => undefined);
         return sendJson(res, 200, applied);
+      }
+
+      // ADR 516, hub side: a joiner forwards its admin's hold set or lift — the `/sync/policy` checks
+      // in the same order: machine, then residence, then the actor's capability on the HUB's roster.
+      if (method === 'POST' && rest === '/sync/holds') {
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
+        if (!node) {
+          throw new MusterdError(
+            'unauthorized',
+            'the sync surface authenticates with a machine credential (msnode_) for this team',
+          );
+        }
+        await touchNode(ctx.db, node.id, Date.now());
+        const body = parseOrBadRequest(SyncHoldRequestSchema, await readJson(req));
+        const actor = await getMemberByName(ctx.db, team.id, body.actor);
+        if (!actor) throw new MusterdError('not_found', `no seat "${body.actor}" on this roster`);
+        try {
+          await assertSeatAlreadyResident(ctx.db, team.id, actor, node, 'hold');
+        } catch (err) {
+          if (err instanceof TrustRefusedError) return sendTrustRefusal(res, err);
+          throw err;
+        }
+        if (!resolveCapabilities(actor).is_admin) {
+          throw new MusterdError('forbidden', `"${body.actor}" is not an admin on ${slug}`);
+        }
+        const hold =
+          body.op === 'set'
+            ? await setHold(ctx.db, team.id, actor.name, body.hold)
+            : await liftHold(ctx.db, team.id, actor.name, body.id);
+        await pushTeam(ctx, team).catch(() => undefined);
+        return sendJson(res, 200, { hold });
       }
 
       // ADR 358, hub side: a joiner forwards its resident human's trust act. The authenticated

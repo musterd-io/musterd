@@ -1,4 +1,6 @@
 import {
+  type Hold,
+  HoldResponseSchema,
   isAwaitingAcceptance,
   LANE_TERMINAL_STATES,
   type Lane,
@@ -12,6 +14,7 @@ import {
   type SyncLanePatchRequest,
   type Policy,
   type PolicyOverride,
+  type SyncHoldRequest,
   type SyncPolicyRequest,
   type SyncTrustRequest,
   type UpdateLane,
@@ -743,6 +746,52 @@ export async function policyAtHub(
   }
   const parsed = body as { policy: Policy; stored: PolicyOverride };
   return { policy: parsed.policy, stored: parsed.stored };
+}
+
+/**
+ * Joiner side of a hold set or lift (ADR 516 §4): the policy act's shape, for the same reason — a
+ * hold is a Team rule the hub owns, so the joiner forwards, writes nothing, and learns the row back
+ * by fold. The hub's refusal relays with its code; no answer is `HubUnreachableError`, never a
+ * locally recorded hold.
+ */
+export async function holdAtHub(
+  enrollment: { hub_url: string; credential: string },
+  slug: string,
+  req: SyncHoldRequest,
+): Promise<Hold> {
+  let res: Response;
+  try {
+    res = await fetch(new URL(`/teams/${slug}/sync/holds`, enrollment.hub_url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${enrollment.credential}`,
+      },
+      body: JSON.stringify(req),
+      signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
+    });
+  } catch (err) {
+    log.warn({ msg: 'sync_hold_hub_unreachable', team: slug, err: String(err) });
+    throw new HubUnreachableError(enrollment.hub_url, String(err));
+  }
+  const body: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const b = body as { error?: { code?: string; message?: string } } | null;
+    const code = b?.error?.code;
+    if (
+      code === 'forbidden' ||
+      code === 'not_found' ||
+      code === 'validation' ||
+      code === 'bound_elsewhere'
+    ) {
+      throw new MusterdError(
+        code === 'bound_elsewhere' ? 'forbidden' : code,
+        b?.error?.message ?? 'the hub refused the hold',
+      );
+    }
+    throw new Error(`the hub answered ${res.status} to the hold: ${JSON.stringify(body)}`);
+  }
+  return HoldResponseSchema.parse(body).hold;
 }
 
 /** States a lane may be parked from (ADR 466): live, not-yet-submitted work. */

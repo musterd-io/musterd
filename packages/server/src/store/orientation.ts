@@ -12,6 +12,7 @@ import {
   ReviewPromiseReferenceSchema,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
+import { listActiveHolds } from './holds.js';
 import { handoffNamedLaneOutOfPlay, handoffNamesNoLane } from './delivery.js';
 import { listGoals, nextGoal } from './goals.js';
 import { incidentPolicy, openIncidents } from './incidents.js';
@@ -152,7 +153,10 @@ export async function deriveNextSummary(
         ORDER BY m.ts ASC, m.id ASC`,
     [teamId, member, member],
   );
-  return { member, carrying, incidents, owed };
+  // ADR 516: the Team's active holds ride every per-turn surface, so a seat sees the rule — with its
+  // author and end — for exactly as long as it is in force, and never has to carry a copy of it.
+  const holds = await listActiveHolds(db, teamId, Date.now());
+  return { member, carrying, incidents, owed, holds };
 }
 
 export async function deriveNext(
@@ -467,6 +471,7 @@ export async function deriveNext(
     goals,
     ...(review_debt.length ? { review_debt } : {}),
     incidents,
+    holds: await listActiveHolds(db, teamId, Date.now()),
   };
 }
 

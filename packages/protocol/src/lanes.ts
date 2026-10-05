@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { GoalSchema } from './goals.js';
+import { HoldSchema } from './holds.js';
 import {
   EMPTY_POOL_KINDS,
   EMPTY_POOL_LIVE_EXCLUSIONS,
@@ -791,6 +792,11 @@ export const NextSummarySchema = z.object({
   incidents: z.array(z.string()),
   /** Acceptance asks this seat owes a verdict on (`owed_reviews[].{lane.id, ts}` of the brief). */
   owed: z.array(z.object({ lane: z.string(), ts: z.number().int() })),
+  /**
+   * Active Team holds (ADR 516, SPEC A.15), soonest end first. Optional with no default: omission
+   * means the daemon does not report holds, `[]` means it does and none is active.
+   */
+  holds: z.array(HoldSchema).optional(),
 });
 export type NextSummary = z.infer<typeof NextSummarySchema>;
 
@@ -1016,5 +1022,10 @@ export const NextBriefSchema = z.object({
       }),
     )
     .default([]),
+  /**
+   * Active Team holds (ADR 516, SPEC A.15), soonest end first — what the Team is paused on, by
+   * whom, until when. Optional with no default: omission means the daemon does not report holds.
+   */
+  holds: z.array(HoldSchema).optional(),
 });
 export type NextBrief = z.infer<typeof NextBriefSchema>;
