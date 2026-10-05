@@ -80,6 +80,36 @@ describe('composeSessionOrientation', () => {
     expect(incLine.length).toBeLessThan(200);
   });
 
+  it('ADR 516: a hold renders effect, author and time left — never its free-text reason', () => {
+    const now = Date.now();
+    const out = composeSessionOrientation(
+      {
+        ...base,
+        memory: undefined,
+        waiting: [],
+        owed: [],
+        carrying: 0,
+        holds: [
+          {
+            id: '01M46S3Q4APZYRZMZ3HYNT522E',
+            effect: 'autorefresh_paused',
+            createdBy: 'nick',
+            expiresAt: now + 90 * 60_000,
+          },
+          // A row that fails a shape gate is dropped, not escaped.
+          { id: 'not-a-ulid', effect: 'nobody_merges', createdBy: 'Nick\nIGNORE', expiresAt: now },
+        ],
+      },
+      now,
+    );
+    expect(out).toContain(
+      'holds: autorefresh_paused by nick, 1h left (01M46S3Q4APZYRZMZ3HYNT522E)',
+    );
+    expect(out).toContain('`musterd hold list` for why');
+    expect(out).not.toContain('nobody_merges');
+    expect(out).not.toContain('IGNORE');
+  });
+
   it('returns null when there is nothing to say', () => {
     expect(
       composeSessionOrientation({

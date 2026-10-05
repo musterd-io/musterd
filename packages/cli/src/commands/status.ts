@@ -1,4 +1,4 @@
-import { deriveHuddles, describeSyncWedge } from '@musterd/protocol';
+import { deriveHuddles, describeSyncWedge, type Hold } from '@musterd/protocol';
 import type { Parsed } from '../args.js';
 import { findBinding } from '../config.js';
 import { huddleMarks, TIMELINE_WINDOW } from '../render/huddles.js';
@@ -12,6 +12,7 @@ import { theme } from '../render/theme.js';
 import { traceDepth, tracedLine } from '../trace/hook.js';
 import { cliBuild } from '../version.js';
 import { findWorkspaceDir, pendingActionSummary, resolveRead } from './helpers.js';
+import { renderHolds } from './hold.js';
 import { renderMemoryLine } from './memory.js';
 
 export async function statusCommand(parsed: Parsed): Promise<number> {
@@ -76,6 +77,11 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
   // ADR 360 follow-on: a wedged push says so here, on the surface a human on this machine reads.
   if (res.sync?.wedged)
     process.stdout.write('\n' + theme.warn(describeSyncWedge(res.sync.wedged)) + '\n');
+  // ADR 516: the Team's active holds — what is paused, by whom, until when. Seat-authed and
+  // best-effort like `pending` above: an ambient identity or an older daemon prints nothing.
+  const holds =
+    explicit && identity ? await http.listHolds(team).catch(() => [] as Hold[]) : ([] as Hold[]);
+  if (holds.length > 0) process.stdout.write('\n' + renderHolds(holds, Date.now()) + '\n');
   // The machine cost line (ADR 242): the footprint sampler's latest tick, best-effort — an older
   // daemon, an unbound folder, or a non-darwin host all read as null and render as absence.
   const machineLine = renderMachineLine(await http.footprint(team).catch(() => null));

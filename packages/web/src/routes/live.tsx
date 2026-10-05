@@ -44,6 +44,7 @@ import {
 import { firehoseSound, roomTone } from '../live/sound';
 import { useLiveStream } from '../live/useLiveStream';
 import { HealthBanner } from '../live/HealthBanner';
+import { useTeamHolds } from '../live/useTeamHolds';
 import { useServerHealth } from '../live/serverHealth';
 import { officeRoom } from '../live/officeRoom';
 import { useWorkingOn } from '../live/useWorkingOn';
@@ -97,6 +98,11 @@ const NO_COLLAPSE: Collapsed = { office: false, team: false };
 /** The log drawer hosts today's `Stream` unchanged (ADR 464 lane 2) — fetched the first time it
  *  opens, never before: the stream column left /live's eager graph with the column itself. */
 const LazyStream = lazy(() => import('../live/Stream').then((m) => ({ default: m.Stream })));
+// ADR 516: rendered only while a hold is in force, so its formatter (in `@musterd/protocol/wire`)
+// stays out of /live's eager graph on every ordinary day.
+const HoldsBanner = lazy(() =>
+  import('../live/HoldsBanner').then((m) => ({ default: m.HoldsBanner })),
+);
 /** Below this width the team column starts folded (ADR 464): the room keeps its pixels. */
 const TEAM_FOLDS_BELOW = 1280;
 /** Below this width there is one column (spec §2's phone layout): the office is hidden and the team
@@ -209,6 +215,8 @@ function LivePage() {
 
   // Cloud spec §7: a server that cannot reach its database says so on /health; show it.
   const outage = useServerHealth();
+  // ADR 516: the Team's active holds, read from the same route every surface reads.
+  const holds = useTeamHolds(cfg);
   const stream = useLiveStream(cfg, {
     onCredentialInvalid: recoverObserver,
     onConnected: armRecovery,
@@ -522,6 +530,11 @@ function LivePage() {
   return (
     <main className="lc">
       <HealthBanner reason={outage} />
+      {holds.length > 0 && (
+        <Suspense fallback={null}>
+          <HoldsBanner holds={holds} />
+        </Suspense>
+      )}
       <header className="lc__topbar">
         {/* Operator chrome only. The team name and the connection/present signal moved into the
             office overlay, which carries them over the scene on both /live and /broadcast — repeating

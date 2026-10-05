@@ -148,6 +148,12 @@ v85 (ADR 501, halt as revocation) adds three nullable columns to `members` — `
 `halted_by`, `halted_reason` — the halt standing (per-engine `ADD COLUMN`; no backfill). Not an
 `account_status`: a halt never cascades, touches no credential, and is lifted by a human
 (`POST /members/:name/resume`), never by time.
+v87 (ADR 516, holds) adds `holds (id PK, team_id, effect, reason, created_by, created_at, expires_at,
+lifted_at, lifted_by)` plus `idx_holds_team_expires`: a time-bounded Team rule only a human admin sets
+or lifts. Active is derived (`lifted_at IS NULL AND now < expires_at`) — no status column, no timer —
+and rows are never deleted. The id is minted once on the hub and crosses the fold verbatim
+(`hold.set` / `hold.lifted` under the `policy` sync kind), so the projection is idempotent. v86 is
+ADR 514's.
 
 **Tenancy (cloud design §12.1).** On Postgres every team-owned table carries `team_id` (`teams`:
 its `id`) and one derived row-level-security policy, `tenant`, on

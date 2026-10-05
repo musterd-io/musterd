@@ -321,6 +321,12 @@ async function defaultOrientationFetcher(
     incidents: brief.incidents.map((id) => ({ id })),
     owed: brief.owed.map((r) => ({ laneId: r.lane, waitedMs: now - r.ts })),
     carrying: brief.carrying,
+    holds: (brief.holds ?? []).map((h) => ({
+      id: h.id,
+      effect: h.effect,
+      createdBy: h.created_by,
+      expiresAt: h.expires_at,
+    })),
   };
 }
 

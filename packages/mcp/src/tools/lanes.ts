@@ -3,6 +3,7 @@ import {
   BUILD_ON_CHECK,
   builtOnLine,
   closeReasonCopy,
+  describeHoldLine,
   emptyPoolCopy,
   emptyPoolHint,
   fmtOwnDisputes,
@@ -637,6 +638,9 @@ export function fmtNext(b: NextBrief, landed: ReadonlyMap<string, Landed> = new 
   // this function only — which is exactly why `musterd next` showed no banner at all for two whole
   // increments. A shared derivation with a per-surface renderer drifts the moment one copy is edited.
   for (const inc of b.incidents ?? []) lines.push(...incidentBannerLines(inc));
+  // ADR 516: the Team's active holds, under the incident banner — what is paused, by whom, until when.
+  // Read here, never restated from memory: the brief drops a hold the moment it ends.
+  for (const h of b.holds ?? []) lines.push(`⏸ ${describeHoldLine(h, Date.now())}`);
   // FIRST, above your own work, on purpose (ADR 233). This is the one item in the brief that
   // someone else is blocked on, and it is the one that loses when a seat is busy: half the
   // unverified closes had the named reviewer online for ~40 minutes and still never answering.

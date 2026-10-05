@@ -1,0 +1,60 @@
+import { z } from 'zod';
+import { HOLD_EFFECTS, type Hold } from './holds.wire.js';
+
+/**
+ * Holds (ADR 516, SPEC A.15): a time-bounded Team rule only a human admin sets or lifts. The one
+ * authoritative place a Team says "this is paused" — Members read it, they do not restate it. The
+ * pre-demo freeze of 2026-09-28 travelled seat to seat as prose and lost its end, its author and its
+ * scope on the way; a hold carries all three and ends on its own.
+ *
+ * The zod face. The effect tuple, the cap and the pure reads live in `holds.wire.ts`, so the browser
+ * can render a hold without pulling zod in.
+ */
+export {
+  HOLD_EFFECTS,
+  HOLD_MAX_MS,
+  activeHoldFor,
+  describeHoldLine,
+  holdRefusal,
+  isHoldActive,
+  isHoldEnforced,
+  type Hold,
+  type HoldEffect,
+} from './holds.wire.js';
+
+export const HoldEffectSchema = z.enum(HOLD_EFFECTS);
+
+export const HoldSchema: z.ZodType<Hold> = z.object({
+  id: z.string().min(1),
+  effect: HoldEffectSchema,
+  reason: z.string().min(1).max(280),
+  created_by: z.string().min(1),
+  created_at: z.number().int(),
+  expires_at: z.number().int(),
+  lifted_at: z.number().int().nullable(),
+  lifted_by: z.string().nullable(),
+});
+
+/** `POST /teams/:slug/holds` — exactly one of `until` (epoch ms) or `for_ms`. */
+export const SetHoldBodySchema = z
+  .object({
+    effect: HoldEffectSchema,
+    reason: z.string().trim().min(1).max(280),
+    until: z.number().int().positive().optional(),
+    for_ms: z.number().int().positive().optional(),
+  })
+  .refine((b) => (b.until === undefined) !== (b.for_ms === undefined), {
+    message: 'give exactly one of until or for_ms',
+  });
+export type SetHoldBody = z.infer<typeof SetHoldBodySchema>;
+
+export const HoldResponseSchema = z.object({ hold: HoldSchema });
+export const HoldListSchema = z.object({ holds: z.array(HoldSchema) });
+export type HoldList = z.infer<typeof HoldListSchema>;
+
+/** The joiner→hub forward of a set or a lift. The hub re-authorizes `actor` against its own roster. */
+export const SyncHoldRequestSchema = z.discriminatedUnion('op', [
+  z.object({ op: z.literal('set'), actor: z.string().min(1), hold: SetHoldBodySchema }),
+  z.object({ op: z.literal('lift'), actor: z.string().min(1), id: z.string().min(1) }),
+]);
+export type SyncHoldRequest = z.infer<typeof SyncHoldRequestSchema>;

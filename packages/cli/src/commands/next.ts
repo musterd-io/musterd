@@ -1,5 +1,6 @@
 import {
   closeReasonCopy,
+  describeHoldLine,
   emptyPoolCopy,
   fmtOwnDisputes,
   incidentBannerLines,
@@ -58,6 +59,10 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
   for (const inc of brief.incidents ?? []) {
     for (const line of incidentBannerLines(inc)) w(`${theme.warn(line)}\n`);
   }
+  // ADR 516: the Team's active holds, right under the incident banner — a rule the whole Team is
+  // under, with its author and end, read here instead of carried in anyone's memory. `?? []`: an
+  // older daemon omits the key.
+  for (const h of brief.holds ?? []) w(`${theme.warn(`⏸ ${describeHoldLine(h, now)}`)}\n`);
 
   // FIRST, above your own work, on purpose (ADR 233). This is the one item in the brief that
   // someone else is blocked on, and the one that loses when a seat is busy: half the unverified

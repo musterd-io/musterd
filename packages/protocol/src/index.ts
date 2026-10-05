@@ -15,6 +15,7 @@ export * from './workspace.js';
 export * from './enforcement.js';
 export * from './loops.js';
 export * from './incident.js';
+export * from './holds.js';
 export * from './duration.js';
 export * from './deliveryHint.js';
 export * from './credentials.js';

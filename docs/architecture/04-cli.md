@@ -144,7 +144,7 @@ src/
     guardian.ts       // `service --guardian`: the pure-code on-call tick (collect → classify → act → stamp, never throws) + the instrument-silence status line (ADR 263)
     siteGap.ts        // `service site-gap`: landed is not live (ADR 308 §Observability) — pure comparison of the build marker musterd.io serves (`/build.json`) against origin/main on `packages/web`, the one-open-ask-per-deployed-ref damping, and the ask body; the live build-publisher runs it every poll as the `live` seat
     handover.ts       // ADR 274's bounded refresh-handover record: the writer owns lifecycle; the guardian only reads a valid, current record
-    hold.ts           // pure: `service hold --auto`'s time-boxed demo hold (lane 01M3TE3VN1) — parse `--until HH:MM`/`--for 2h` (capped at 12h), read the `autorefresh/hold-until` stamp as none/held/expired, and the `until 21:30 (1h12m left)` line; the tick skips the bounce while held and clears an expired stamp itself
+    hold.ts           // pure: the hold arithmetic `service hold --auto` and `musterd hold set` share — parse `--until HH:MM`/`--for 2h` (capped at 12h), and read the pre-ADR-516 `autorefresh/hold-until` stamp as none/held/expired. Since ADR 516 `service hold --auto` sets a Team hold (`autorefresh_paused`) and the tick stands down on it, read as the service seat; the legacy stamp is honoured until it ends and never written
     logTrim.ts        // pure-ish: size-capped retention for the service logs (ADR 224) — copy-truncate to `<name>.1`, run by the auto-refresh tick; an explicit log list, never a `*.log` glob (the musterd home is a shared temp dir under test isolation)
   onboard/            // the `musterd init` interactive onboarding (@clack/prompts; ADR 005)
     init.ts           // the flow: daemon -> folder-check -> team -> intent -> where-it-runs -> configure -> primer -> wait-to-join
@@ -242,6 +242,7 @@ src/
     unbind.ts         // release this folder's own seat — clears bound_at + presence, keeps it declared (ADR 058)
     reload.ts         // SIGHUP the service daemon to re-resolve roster roots + reconcile (ADR 058)
     reclaim.ts        // operator force-drop of a member's stuck live session (ADR 017 follow-up); a `not_found` names `musterd status` as the next step (ADR 055 no-dead-end)
+    hold.ts           // musterd hold set|lift|list (ADR 516): a human admin pauses something team-wide with an author and an end (autorefresh_paused, merges_paused, notice); every line says what the effect actually enforces; renderHolds is shared with `musterd status`
     halt.ts           // musterd halt <seat> --reason / musterd resume <seat> (ADR 501): a human withdraws an agent seat's authority at its next boundary; the daemon decides who may (admin any agent, a sponsor their own); every refusal names the next step
     notify.ts         // human-reachability nudge loop (ADR 024/035)
     role.ts           // the team's role library — list / show / create / assign (ADR 227, narrowed by 296); `assign` recompiles the seat's harness permissions (ADR 261 inc 2) and `--remove` lifts the removed role's ceiling (lane 01M3TAM44Q) instead of only warning

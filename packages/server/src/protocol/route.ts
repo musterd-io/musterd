@@ -298,6 +298,13 @@ async function routeEnvelopeInner(
     const { incident: _clientIncident, ...restMeta } = outgoingEnv.meta;
     outgoingEnv = { ...outgoingEnv, meta: restMeta };
   }
+  // ADR 516: `hold` marks the daemon's own announcement that a human set or lifted a Team hold. A
+  // client copy would be a seat announcing a rule nobody set — the exact rumour holds exist to end —
+  // so it is stripped like the markers above; the message still lands, as plain prose.
+  if (!daemonComposed && outgoingEnv.meta && 'hold' in outgoingEnv.meta) {
+    const { hold: _clientHold, ...restMeta } = outgoingEnv.meta;
+    outgoingEnv = { ...outgoingEnv, meta: restMeta };
+  }
 
   // Per-act model stamp (ADR 101): the occupancy attestation is the *source*, the stamp on each act
   // is the *dataset*. Model is **entirely server-controlled** — any client-supplied `meta.model` is

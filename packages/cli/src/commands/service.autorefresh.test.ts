@@ -1,12 +1,46 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { Hold } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
 import type { AutoRefreshCtx } from '../service/autorefresh.js';
 import { AUTOREFRESH_LABEL } from '../service/launchd.js';
 import type { RunResult, Runner, ServiceCtx } from '../service/manage.js';
-import { serviceCommand, touchServicePresence } from './service.js';
+import { serviceCommand, touchServicePresence, type TeamHoldsApi } from './service.js';
+
+const T_NOW = Date.now();
+/** ADR 516: a Team hold row as the daemon would return it. */
+function teamHold(over: Partial<Hold> = {}): Hold {
+  return {
+    id: 'h1',
+    effect: 'autorefresh_paused',
+    reason: 'demo 14:00',
+    created_by: 'nick',
+    created_at: T_NOW,
+    expires_at: T_NOW + 3600_000,
+    lifted_at: null,
+    lifted_by: null,
+    ...over,
+  };
+}
+/** An in-memory Team hold store — `set` records, `active` answers, `liftAutorefresh` clears. */
+function fakeTeamHolds(initial: Hold[] = []): TeamHoldsApi {
+  let holds = [...initial];
+  return {
+    active: vi.fn(async () => holds),
+    set: vi.fn(async (until: number, reason: string) => {
+      const h = teamHold({ id: `h${holds.length + 1}`, reason, expires_at: until });
+      holds.push(h);
+      return h;
+    }),
+    liftAutorefresh: vi.fn(async () => {
+      const lifted = holds.filter((h) => h.effect === 'autorefresh_paused');
+      holds = holds.filter((h) => h.effect !== 'autorefresh_paused');
+      return lifted;
+    }),
+  };
+}
 
 /**
  * The `service refresh --auto` tick (ADR 118/130 fast-follow) — the quiet-period policy, exercised
@@ -128,6 +162,7 @@ describe('service refresh --auto (the tick)', () => {
     outageState?: { read: () => string | null; write: (s: string) => void };
     blockedState?: { read: () => string | null; write: (s: string) => void };
     holdState?: { read: () => string | null; write: (s: string) => void };
+    teamHolds?: TeamHoldsApi;
     touch?: (ok: (s: string) => void) => Promise<void>;
     refreshSharedHooks?: (dir: string) => string[];
   }) =>
@@ -151,6 +186,8 @@ describe('service refresh --auto (the tick)', () => {
         blockedState: over.blockedState ?? memState(),
         // Lane 01M3TE3VN1: the demo hold — a fresh empty store, so no test is ever held by accident.
         holdState: over.holdState ?? memState(),
+        // ADR 516: no Team hold unless a test sets one — never the dev machine's real daemon.
+        teamHolds: over.teamHolds ?? fakeTeamHolds(),
         // ADR 408 inc 5: default to a no-op so no test ever writes this machine's real shared
         // Codex hooks file — the production default reaches a path outside the temp dir.
         refreshSharedHooks: over.refreshSharedHooks ?? (() => []),
@@ -169,6 +206,46 @@ describe('service refresh --auto (the tick)', () => {
     expect(out).toMatch(/held until \d\d:\d\d .*not bouncing \(3 commits behind\)/);
     expect(calls.some((c) => c.cmd === 'pnpm')).toBe(false);
     expect(hold.write).not.toHaveBeenCalled();
+  });
+
+  // ADR 516: the Team hold — the same row on every machine, with an author and a reason.
+  it('an active Team hold skips the bounce and names who set it and why', async () => {
+    const holds = fakeTeamHolds([teamHold()]);
+    const { code, out } = await tick({
+      ctx: ctx(autoRunner({ behind: 2 })),
+      health: async () => ({ connections: 1, build: 'oldsha0' }),
+      teamHolds: holds,
+    });
+    expect(code).toBe(0);
+    expect(out).toMatch(
+      /autorefresh paused by nick until \d\d:\d\d .*demo 14:00 — not bouncing \(2 commits behind\)/,
+    );
+    expect(out).toContain('musterd hold lift h1');
+    expect(calls.some((c) => c.cmd === 'pnpm')).toBe(false);
+  });
+
+  it('a notice or a merges hold does not stop the autorefresh — only its own effect does', async () => {
+    const holds = fakeTeamHolds([
+      teamHold({ effect: 'notice' }),
+      teamHold({ id: 'h2', effect: 'merges_paused' }),
+    ]);
+    const { out } = await tick({
+      ctx: ctx(autoRunner({ behind: 1 })),
+      health: async () => ({ connections: 0, build: 'oldsha0' }),
+      teamHolds: holds,
+    });
+    expect(out).not.toContain('not bouncing');
+    expect(calls.some((c) => c.cmd === 'pnpm')).toBe(true);
+  });
+
+  it('an unreadable Team hold reads as no hold, never as a freeze', async () => {
+    const { out } = await tick({
+      ctx: ctx(autoRunner({ behind: 1 })),
+      health: async () => ({ connections: 0, build: 'oldsha0' }),
+      teamHolds: { ...fakeTeamHolds(), active: async () => Promise.reject(new Error('down')) },
+    });
+    expect(out).not.toContain('not bouncing');
+    expect(calls.some((c) => c.cmd === 'pnpm')).toBe(true);
   });
 
   it('an expired hold clears itself and the tick refreshes as normal', async () => {
@@ -1032,6 +1109,7 @@ describe('service <verb> --auto (lifecycle dispatch)', () => {
   const run = async (
     argv: string[],
     holdState: { read: () => string | null; write: (s: string) => void },
+    teamHolds: TeamHoldsApi = fakeTeamHolds(),
   ) => {
     const chunks: string[] = [];
     const spy = vi.spyOn(process.stdout, 'write').mockImplementation((c: never) => {
@@ -1044,6 +1122,7 @@ describe('service <verb> --auto (lifecycle dispatch)', () => {
         ctx: daemonCtx(),
         autoRefreshCtx: arCtx(),
         holdState,
+        teamHolds,
       });
       return { code, out: chunks.join('') };
     } finally {
@@ -1055,27 +1134,40 @@ describe('service <verb> --auto (lifecycle dispatch)', () => {
     return { read: () => cur, write: (x: string) => void (cur = x || null) };
   };
 
-  it('hold --auto --for writes the expiry; status --auto shows it; --release clears it', async () => {
-    const hold = store();
+  it('hold --auto --for sets a Team hold; status --auto shows it; --release lifts it', async () => {
+    const file = store();
+    const holds = fakeTeamHolds();
     const before = Date.now();
-    const set = await run(['hold', '--auto', '--for', '2h'], hold);
+    const set = await run(['hold', '--auto', '--for', '2h', '--reason', 'demo 14:00'], file, holds);
     expect(set.code).toBe(0);
-    expect(Number(hold.read())).toBeGreaterThanOrEqual(before + 2 * 3600_000);
-    expect(set.out).toMatch(/holding daemon refreshes until \d\d:\d\d \(2h0?m? left\)/);
+    expect(holds.set).toHaveBeenCalledWith(expect.any(Number), 'demo 14:00');
+    expect(vi.mocked(holds.set).mock.calls[0]![0]).toBeGreaterThanOrEqual(before + 2 * 3600_000);
+    expect(set.out).toMatch(
+      /holding daemon refreshes until \d\d:\d\d \(2h0?m? left\) — a Team hold/,
+    );
+    // The machine-local stamp is never written any more.
+    expect(file.read()).toBeNull();
 
-    const st = await run(['status', '--auto'], hold);
-    expect(st.out).toMatch(/hold: until \d\d:\d\d/);
+    const st = await run(['status', '--auto'], file, holds);
+    expect(st.out).toMatch(/hold: autorefresh paused by nick until \d\d:\d\d/);
 
-    const rel = await run(['hold', '--auto', '--release'], hold);
+    const rel = await run(['hold', '--auto', '--release'], file, holds);
     expect(rel.code).toBe(0);
-    expect(hold.read()).toBeNull();
+    expect(holds.liftAutorefresh).toHaveBeenCalled();
     expect(rel.out).toContain('released');
   });
 
-  it('hold --auto refuses a hold past the 12h cap and writes nothing', async () => {
-    const hold = store();
-    await expect(run(['hold', '--auto', '--for', '20h'], hold)).rejects.toThrow(/12h/);
-    expect(hold.read()).toBeNull();
+  it('--release also clears a pre-ADR-516 local stamp', async () => {
+    const file = store(String(Date.now() + 3600_000));
+    const rel = await run(['hold', '--auto', '--release'], file, fakeTeamHolds());
+    expect(rel.out).toContain('released');
+    expect(file.read()).toBeNull();
+  });
+
+  it('hold --auto refuses a hold past the 12h cap and sets nothing', async () => {
+    const holds = fakeTeamHolds();
+    await expect(run(['hold', '--auto', '--for', '20h'], store(), holds)).rejects.toThrow(/12h/);
+    expect(holds.set).not.toHaveBeenCalled();
   });
 });
 

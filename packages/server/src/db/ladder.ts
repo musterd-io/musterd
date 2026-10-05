@@ -131,7 +131,36 @@ export const LADDER: PortableMigration[] = [
       await d.exec('ALTER TABLE presence ADD COLUMN IF NOT EXISTS style_epoch TEXT');
     },
   },
+  {
+    // v87 — ADR 516 (holds): a time-bounded Team rule only a human admin sets or lifts. Active is
+    // derived (`lifted_at IS NULL AND now < expires_at`) — no status column, no timer. Rows are never
+    // deleted: the history is every rule the Team was under. The id is the hub's ULID and crosses the
+    // fold verbatim, so set/lift are idempotent on every node. (v86 is ADR 514's, PR #2095.)
+    version: 87,
+    sqlite: (db) => {
+      db.exec(HOLDS_TABLE_SQL);
+      db.exec(HOLDS_INDEX_SQL);
+    },
+    postgres: async (d) => {
+      await d.exec(HOLDS_TABLE_SQL);
+      await d.exec(HOLDS_INDEX_SQL);
+    },
+  },
 ];
+
+const HOLDS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS holds (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  effect TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  lifted_at BIGINT,
+  lifted_by TEXT
+)`;
+const HOLDS_INDEX_SQL =
+  'CREATE INDEX IF NOT EXISTS idx_holds_team_expires ON holds(team_id, expires_at)';
 
 /** The SQLite view of a ladder: what `migrations.ts` / `traceDb.ts` append after their legacy entries. */
 export function sqliteLadder(

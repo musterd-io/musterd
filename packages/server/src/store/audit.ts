@@ -321,6 +321,9 @@ export type AuditAction =
   // ADR 501: a human halted / resumed an agent seat — actor the human, target the seat.
   | 'seat.halted'
   | 'seat.resumed'
+  // ADR 516: a human admin set / lifted a Team hold. Hub-minted, replicated under the `policy` kind.
+  | 'hold.set'
+  | 'hold.lifted'
   // ADR 167 delivery rail, made observable (ADR 173; lane `01KYQ9175S`). The rail's own decision for
   // a send where it was genuinely a CANDIDATE — the act was directed at a real other member and was
   // hint-eligible — with `detail.reason` naming which leg of the predicate answered: `issued`,
@@ -659,6 +662,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'presence.session_ended': 'none',
   'seat.halted': 'actor',
   'seat.resumed': 'actor',
+  'hold.set': 'actor',
+  'hold.lifted': 'actor',
   'nudge.decision': 'actor',
   'residency.wake_cost': 'none',
   'residency.wake_report_rejected': 'none',
