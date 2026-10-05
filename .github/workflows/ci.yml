@@ -45,6 +45,8 @@ on:
   push:
     branches: [main]
   # ADR 508: full coverage + a11y on main, every 4 hours at :17, skipped when main has not moved.
+  # ADR 512: a backstop only — GitHub has not fired it since the repo went private; a push to main
+  # runs the full check when the last one is over 4 hours old.
   schedule:
     - cron: '17 */4 * * *'
   workflow_dispatch:
@@ -134,12 +136,21 @@ jobs:
           PGLITE_LABEL: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'pglite') }}
         run: |
           suite=true; a11y=true; kinds=both; docs=true; why="no parent to diff — everything runs"
+          # ADR 512: the last FULL main check (both drivers, sharded) is the newest `coverage-blob-1`
+          # artifact from a main run — only a sharded run uploads one, and since ADR 510 a PR shards
+          # only when labelled `pglite`, so filtering to head_branch main leaves exactly the full
+          # main checks. Its time and SHA drive both the push trigger and the scheduled skip.
+          full=$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=coverage-blob-1&per_page=50" \
+            -q '[.artifacts[] | select(.workflow_run.head_branch == "main")][0] | "\(.created_at) \(.workflow_run.head_sha)"' 2>/dev/null || true)
+          full_at=${full%% *}; full_sha=${full##* }
+          full_age=999999
+          if [ -n "$full_at" ] && [ "$full_at" != null ]; then full_age=$(( $(date -u +%s) - $(date -u -d "$full_at" +%s) )); fi
+          echo "last full main check: ${full_at:-none} (${full_sha:-—}), ${full_age}s ago"
           if [ "$EVENT" = schedule ] || [ "$EVENT" = workflow_dispatch ]; then
-            # ADR 508: the full main check. A scheduled run skips every leaf when the last scheduled
-            # run already tested this SHA; a manual dispatch always runs.
-            last=$(gh run list --workflow ci.yml --event schedule --status completed --limit 1 --json headSha -q '.[0].headSha' || true)
-            if [ "$EVENT" = schedule ] && [ "$last" = "$GITHUB_SHA" ]; then
-              suite=false; a11y=false; docs=false; kinds=sqlite; why="main has not moved since the last scheduled run ($last)"
+            # ADR 508: the full main check. A scheduled run skips every leaf when the last full main
+            # check already tested this SHA; a manual dispatch always runs.
+            if [ "$EVENT" = schedule ] && [ "$full_sha" = "$GITHUB_SHA" ]; then
+              suite=false; a11y=false; docs=false; kinds=sqlite; why="main has not moved since the last full check ($full_sha)"
             else
               why="$EVENT on ${GITHUB_REF_NAME} — the full main check (ADR 508)"
             fi
@@ -166,7 +177,14 @@ jobs:
           # on the same change. It keeps static + docs; the scheduled run does the rest.
           coverage=$suite
           if [ "$EVENT" = push ]; then
-            coverage=false; a11y=false; why="$why — coverage + a11y run on the 4-hourly schedule (ADR 508)"
+            # ADR 512: GitHub's cron has not fired once since the repo went private (2026-10-02), so a
+            # push is the trigger: when the last full main check is over 4 hours old, this push IS
+            # the full check. Otherwise static + docs only (ADR 508).
+            if [ "$suite" = true ] && [ "$full_age" -ge 14400 ]; then
+              kinds=both; a11y=true; why="$why — last full main check ${full_age}s ago (>4h), so this push runs it (ADR 512)"
+            else
+              coverage=false; a11y=false; why="$why — coverage + a11y run on the next full main check (ADR 508, ADR 512)"
+            fi
           fi
           if [ "$kinds" = both ]; then count=4; shards='[1, 2, 3, 4]'; else count=1; shards='[1]'; fi
           {
