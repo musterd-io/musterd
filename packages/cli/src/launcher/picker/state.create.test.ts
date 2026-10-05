@@ -174,3 +174,22 @@ describe('picker create flows (ADR 491 §3.4)', () => {
     expect(press(naming, k('escape')).state.create).toBeNull();
   });
 });
+
+describe('a Workspace here whose seat lives elsewhere (ADR 503 follow-up, lane 01M4562ZXA)', () => {
+  it('⏎ and ⌃R do nothing on it; a seat with no roster verdict launches as before', () => {
+    const resident = away('ada', {
+      address: 'acme/proj/ada',
+      where: 'node',
+      node: 'n-air',
+      where_label: 'air-2',
+      can: 'none',
+    });
+    const s = membersOf([seat('ada'), seat('nick', 'human')], [resident]);
+    // rows: ada, nick, …
+    expect(press(s, k('return')).state.choose).toBeNull();
+    expect(press(s, k('return')).outcome).toBeNull();
+    expect(press(s, k('r', { ctrl: true })).outcome).toBeNull();
+    const silent = membersOf([seat('ada'), seat('nick', 'human')], []);
+    expect(press(silent, k('return')).state.choose?.seat.member).toBe('ada');
+  });
+});

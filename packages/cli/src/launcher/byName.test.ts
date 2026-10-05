@@ -285,3 +285,41 @@ describe('`musterd <member>` for a seat with no Workspace here (ADR 503 Decision
     });
   });
 });
+
+describe('`musterd <seat>` for a folder here whose seat lives elsewhere (ADR 503 follow-up)', () => {
+  it('refuses with the move ceremony instead of launching', async () => {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, 'launcher.json'),
+      JSON.stringify({
+        version: 1,
+        last: null,
+        seats: {},
+        snapshot: {
+          taken_at: 1,
+          seats: [],
+          teams: [],
+          members: [
+            {
+              team: 'revive',
+              member: 'stanley',
+              kind: 'agent',
+              address: 'revive/agents/stanley',
+              where: 'node',
+              node: 'n-air',
+              where_label: 'air-2',
+              can: 'none',
+            },
+          ],
+        },
+      }),
+    );
+    const { d, supervise } = deps();
+    await expect(launchByName('stanley', parseArgs([]), d)).rejects.toMatchObject({
+      exitCode: 1,
+      message:
+        'revive/agents/stanley is resident on air-2 — move it: musterd residency off + node unbind there',
+    });
+    expect(supervise).not.toHaveBeenCalled();
+  });
+});

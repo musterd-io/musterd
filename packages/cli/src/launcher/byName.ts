@@ -102,6 +102,16 @@ export async function launchByName(
     (deps.out ?? ((s: string) => void process.stdout.write(s)))(`${res.seat.path}\n`);
     return 0;
   }
+  // ADR 503 Decision 2: the same rule as the picker row — a folder here whose seat is resident on
+  // another node is not launched from here; moving it is the guide's ceremony, never a side effect.
+  const resident = (file.snapshot?.members ?? []).find(
+    (m) =>
+      m.team === res.seat.team &&
+      m.member === res.seat.member &&
+      m.can === 'none' &&
+      (m.where === 'node' || m.where === 'cloud'),
+  );
+  if (resident) throw new CliError(`${res.seat.address} is ${describeMove(resident)}`, 1);
   return launchSeat(res.seat, opts, deps);
 }
 

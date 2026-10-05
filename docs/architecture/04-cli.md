@@ -366,7 +366,9 @@ verb for what `⏎` does from here. `set up` provisions a seat that lives nowher
 human Workspace here, carrying `launch_surface=picker` in meta — offered only when you sponsor it
 or are an admin; a seat resident elsewhere that is not yours to wake gets no verb, and its footer
 names the node and the move ceremony (`musterd residency off` + `node unbind` there). A seat
-resident on another node is never offered `set up`: that would be a silent move. Decision 6's
+resident on another node is never offered `set up`: that would be a silent move, and a Workspace
+here whose seat is resident elsewhere is not launched either — `⏎` does nothing and `musterd <seat>`
+refuses with the move ceremony. Decision 6's
 live-seat confirm is unchanged for `launch`.
 
 ### `musterd <seat> [-r | --resume] [--harness <id>] [--path] [--force]` · `musterd -`

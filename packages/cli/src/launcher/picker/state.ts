@@ -291,6 +291,12 @@ function activate(s: PickerState, mode: 'fresh' | 'resume'): Step {
     };
   }
   if (row?.kind === 'seat') {
+    // ADR 503 Decision 2: a folder here whose seat is RESIDENT on another node is not launchable
+    // from here — launch needs `where` here or nowhere. The footer already names the move ceremony.
+    // A roster that never answered leaves no entry and changes nothing (absence is not a verdict).
+    const entry = entryFor(s, row.seat);
+    if (entry && entry.can === 'none' && (entry.where === 'node' || entry.where === 'cloud'))
+      return { state: s, outcome: null };
     // An agent seat always goes through the harness step; a human seat gets a login shell.
     if (row.seat.kind !== 'human') {
       const configured = row.seat.harnesses.filter((h) => h !== 'musterd');
