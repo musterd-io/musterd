@@ -489,7 +489,7 @@ The one-time **db→file migration** for a team's durable roster (ADR 058 / migr
 
 ### `musterd team policy [--review-loop on|off] [--dispatch-loop on|off] [--stakes-default <surface>=<low|normal|high>|off] [--trace-content on|off] [--agent-connect sponsor|any_member] [--invite-requires-expiry on|off]`
 
-Shows or updates the Team's admin-only governance policy. `--review-loop on` arms ADR 191's review
+Shows or updates the Team's admin-only governance policy. A flag this build does not know is refused (exit 2, nothing written) and the message names the build and the fix, because the usual cause is a flag newer than the CLI — before lane 01M46ZG8NY an unknown flag fell through to the readout, so a write on a stale CLI silently became a read. `--review-loop on` arms ADR 191's review
 work-order loop; `--dispatch-loop on` arms ADR 199's dispatch work-order loop; `off` restores each
 default. `--stakes-default <surface>=<low|normal|high>` upserts an ADR 244 default-stakes rule (the
 same surface replaces in place; a new surface appends; first match still wins); `--stakes-default off`
