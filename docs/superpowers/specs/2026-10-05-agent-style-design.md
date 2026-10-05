@@ -159,7 +159,9 @@ member, it is that human. Otherwise the block carries only the floor and team de
   `team_send` reply to an act addressed to a human echoes that human's dials in one line.
 - **Change mid-session.** The adapter sends `style_epoch` beside `guidance_epoch` on heartbeats.
   When the daemon's current epoch for that seat differs, the next `team_inbox_check` reply leads
-  with the new block and one line: `style changed by nick: length concise → thorough`. No restart.
+  with one line, `Style changed (length concise → thorough)`, and the new block. The line names the
+  dial that moved, from the two envelopes; it does not name who moved it — only the audit knows
+  (increment 3 ruling). No restart.
 - **Standing.** The static primer keeps one pointer line (the duplication ADR 085 allows): *the style
   block in your join reply governs how you talk; a later inbox reply may replace it.* Dolly's bullet
   leaves `guidance.ts`; `GUIDANCE_CONTENT_VERSION` bumps.
