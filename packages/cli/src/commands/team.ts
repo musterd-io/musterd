@@ -702,9 +702,13 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
   } else {
     process.stdout.write(`  enforcement: ${theme.accent(`${classes.length} class(es)`)}\n`);
     for (const c of classes) {
-      const kind = c.kind === 'contended-surface' ? 'surface' : 'action';
+      const kind =
+        c.kind === 'contended-surface' ? 'surface' : c.kind === 'role-route' ? 'route' : 'action';
       const posture = c.posture === 'block' ? theme.accent('block') : 'warn';
-      process.stdout.write(`    · ${kind} ${c.class} [${c.match.join(', ')}] → ${posture}\n`);
+      const holders = c.role !== undefined ? ` ${c.role} only` : '';
+      process.stdout.write(
+        `    · ${kind} ${c.class} [${c.match.join(', ')}]${holders} → ${posture}\n`,
+      );
     }
   }
   if (Object.keys(stored).length === 0)
@@ -848,6 +852,30 @@ function applyEnforcementFlags(
         );
       }
       upsert({ class: name, kind: 'costly-action', match: [glob], posture });
+    }
+  }
+
+  // ADR 513: `--enforce-route '<role>:<class>=<command-glob>[;…]'` — a route only the role's holders
+  // may run. The daemon reads the role back from this stored class, never from a gate request.
+  const routes = flagStr(parsed.flags, 'enforce-route');
+  if (routes !== undefined) {
+    for (const entry of routes
+      .split(';')
+      .map((s) => s.trim())
+      .filter(Boolean)) {
+      const colon = entry.indexOf(':');
+      const eq = entry.indexOf('=');
+      const role = colon > 0 ? entry.slice(0, colon).trim() : '';
+      const name = colon > 0 && eq > colon ? entry.slice(colon + 1, eq).trim() : '';
+      const glob = eq > 0 ? entry.slice(eq + 1).trim() : '';
+      if (!role || !name || !glob) {
+        throw new CliError(
+          `usage: --enforce-route '<role>:<class>=<command-glob>' — role:class=glob (got "${entry}"), ` +
+            `e.g. 'courier:taildrop=tailscale file cp *'`,
+          2,
+        );
+      }
+      upsert({ class: name, kind: 'role-route', role, match: [glob], posture });
     }
   }
   return changed;

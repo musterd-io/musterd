@@ -240,6 +240,9 @@ count**, never a headline rate alone.
 - **Risk — over-declaration friction:** a team that blocks too many surfaces recreates the approval
   tax the whole product argues against. The default-warn posture and per-class opt-in are the guard;
   the docs must frame block as a scalpel.
+- _2026-10-05, lane 01M44T6343:_ a third class kind, `role-route`, gates a command to the holders of a
+  roster role. Unlike the two kinds here, its role and posture are read from the stored policy, not
+  from the gate request. See [ADR 513](513-role-gated-routes.md).
 
 ## Related
 

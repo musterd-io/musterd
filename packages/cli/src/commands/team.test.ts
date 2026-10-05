@@ -536,6 +536,29 @@ describe('team policy command', () => {
     });
   });
 
+  // ADR 513 — a role-gated route: role:class=glob.
+  it('declares a role-route class via role:class=glob, and lists it with its role', async () => {
+    await capture(() =>
+      teamCommand(parseArgs(['policy', '--enforce-route', 'courier:taildrop=tailscale file cp *'])),
+    );
+    const { enforcement } = await policyJson();
+    expect(enforcement.classes[0]).toEqual({
+      class: 'taildrop',
+      kind: 'role-route',
+      role: 'courier',
+      match: ['tailscale file cp *'],
+      posture: 'block',
+    });
+    const show = await capture(() => teamCommand(parseArgs(['policy'])));
+    expect(show.out).toContain('route taildrop [tailscale file cp *] courier only');
+  });
+
+  it('rejects a route entry with no role', async () => {
+    await expect(
+      teamCommand(parseArgs(['policy', '--enforce-route', 'taildrop=tailscale file cp *'])),
+    ).rejects.toThrow(/role:class=glob/);
+  });
+
   it('upserts by class name (re-declaring replaces) and merges across calls', async () => {
     await capture(() => teamCommand(parseArgs(['policy', '--enforce-surface', 'src/tariff.ts'])));
     await capture(() =>

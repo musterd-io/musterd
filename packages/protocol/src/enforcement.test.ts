@@ -33,6 +33,23 @@ describe('EnforcementPolicySchema (ADR 150) — the opt-in class table', () => {
     ).toBe(false);
   });
 
+  // ADR 513 — a role-gated route names the role whose holders may run it.
+  it('a role-route class carries its role, and is refused without one', () => {
+    const route = { class: 'taildrop', kind: 'role-route', match: ['tailscale file cp *'] };
+    expect(
+      EnforcementPolicySchema.parse({ classes: [{ ...route, role: 'courier' }] }).classes[0],
+    ).toMatchObject({ role: 'courier', posture: 'warn' });
+    expect(EnforcementPolicySchema.safeParse({ classes: [route] }).success).toBe(false);
+  });
+
+  it('a role on any other kind is refused (it would read as a gate that does nothing)', () => {
+    expect(
+      EnforcementPolicySchema.safeParse({
+        classes: [{ class: 'x', kind: 'costly-action', match: ['x*'], role: 'courier' }],
+      }).success,
+    ).toBe(false);
+  });
+
   it('team PolicySchema carries an empty enforcement table without breaking older stored policies', () => {
     // A pre-ADR-150 stored policy has no `enforcement` key — parse fills the empty default.
     const p = PolicySchema.parse({ allow_pre_issued_grants: true });

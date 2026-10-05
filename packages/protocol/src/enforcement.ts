@@ -15,8 +15,13 @@ import { SURFACES } from './acts.wire.js';
  * of scope by construction.
  */
 
-/** A class's *kind* selects which gate adjudicates a match — never how the match is computed. */
-export const ENFORCEMENT_CLASS_KINDS = ['contended-surface', 'costly-action'] as const;
+/** A class's *kind* selects which gate adjudicates a match — never how the match is computed.
+ *  ADR 513 adds `role-route`: a command only the holders of `role` may run (a route off the machine). */
+export const ENFORCEMENT_CLASS_KINDS = [
+  'contended-surface',
+  'costly-action',
+  'role-route',
+] as const;
 export type EnforcementClassKind = (typeof ENFORCEMENT_CLASS_KINDS)[number];
 
 /** Per-class posture. `warn` (the default, ADR 083) surfaces + records but never denies; `block` is the
@@ -35,12 +40,30 @@ export type EnforcementPosture = (typeof ENFORCEMENT_POSTURES)[number];
  * subcommand verb and the obvious glob works: `git merge*` matches `git -C ../main merge lane` too.
  * First class in declaration order to match wins.
  */
-export const EnforcementClassSchema = z.object({
-  class: z.string().min(1),
-  kind: z.enum(ENFORCEMENT_CLASS_KINDS),
-  match: z.array(z.string().min(1)).min(1),
-  posture: z.enum(ENFORCEMENT_POSTURES).default('warn'),
-});
+export const EnforcementClassSchema = z
+  .object({
+    class: z.string().min(1),
+    kind: z.enum(ENFORCEMENT_CLASS_KINDS),
+    match: z.array(z.string().min(1)).min(1),
+    posture: z.enum(ENFORCEMENT_POSTURES).default('warn'),
+    /** ADR 513 — `role-route` only, and required there: the roster role whose holders may run the
+     *  route. The daemon reads it from the stored policy, never from a gate request. */
+    role: z.string().min(1).optional(),
+  })
+  .superRefine((c, ctx) => {
+    if (c.kind === 'role-route' && c.role === undefined)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['role'],
+        message: 'a role-route class names its role',
+      });
+    if (c.kind !== 'role-route' && c.role !== undefined)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['role'],
+        message: 'only a role-route class takes a role',
+      });
+  });
 export type EnforcementClass = z.infer<typeof EnforcementClassSchema>;
 
 /** The `enforcement` field on `PolicySchema`. `parse({})` yields the off posture: an empty class table,

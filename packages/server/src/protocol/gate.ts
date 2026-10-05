@@ -13,8 +13,10 @@ import type { Ctx } from '../context.js';
 import { appendAudit } from '../store/audit.js';
 import { findGateAsk, gateAskHumanAnswer } from '../store/gateAsk.js';
 import { laneCoveringPath } from '../store/lanes.js';
+import { listMembers } from '../store/members.js';
 import { unblockerReachable } from '../store/reachability.js';
-import type { MemberRow, TeamRow } from '../store/rows.js';
+import { type MemberRow, type TeamRow, toMember } from '../store/rows.js';
+import { getPolicy } from '../store/teams.js';
 import { routeEnvelope } from './route.js';
 
 /**
@@ -223,7 +225,12 @@ export async function adjudicateGate(
   req: GateCheckRequest,
 ): Promise<GateDecision> {
   const ctx: GateContext = { srv, team, member, req };
-  const decision = req.kind === 'contended-surface' ? await gateA(ctx) : await gateB(ctx);
+  const route = req.kind === 'role-route' ? await gateRoute(ctx) : undefined;
+  const decision = route
+    ? route.decision
+    : req.kind === 'contended-surface'
+      ? await gateA(ctx)
+      : await gateB(ctx);
   const action = req.kind === 'contended-surface' ? 'lane.gate' : 'action.gate';
   await appendAudit(srv.db, team.id, {
     actor: member.name,
@@ -237,9 +244,74 @@ export async function adjudicateGate(
       tool: req.tool,
       outcome: decision.outcome,
       ...(decision.ask_ref ? { ask_ref: decision.ask_ref } : {}),
+      // ADR 513: which role the route needed, so the warn→redirect join can read it per role.
+      ...(route ? { kind: 'role-route', role: route.role } : {}),
     },
   });
   return decision;
+}
+
+/**
+ * ADR 513 — a role-gated route. A command only the holders of a roster role may run: the courier's
+ * Taildrop is the first (2026-10-04). The role and the posture are read from the team's STORED
+ * policy by class name, never from the request, so a client cannot widen its own grant or soften a
+ * `block` to `warn`. A class the policy no longer declares is allowed (the client matched a stale
+ * table; an undeclared call passes, ADR 150). Humans are the operators this gate serves and pass,
+ * as at the ADR 227 infra gate. A holder passes quietly. Anyone else is warned or denied by the
+ * class's posture, and the reason names the holders and the ask that reaches them.
+ */
+async function gateRoute(ctx: GateContext): Promise<{ decision: GateDecision; role: string }> {
+  const { db } = ctx.srv;
+  const cls = (await getPolicy(db, ctx.team.id)).enforcement.classes.find(
+    (c) => c.class === ctx.req.class && c.kind === 'role-route',
+  );
+  const role = cls?.role;
+  if (!cls || role === undefined)
+    return {
+      role: role ?? '',
+      decision: {
+        decision: 'allow',
+        outcome: 'allowed',
+        reason: `'${ctx.req.class}' is no longer a declared route`,
+      },
+    };
+  const slug = ctx.team.slug;
+  if (ctx.member.kind === 'human' || toMember(ctx.member, slug).roles.includes(role))
+    return {
+      role,
+      decision: { decision: 'allow', outcome: 'allowed', reason: `you hold ${role}` },
+    };
+  const holders = (await listMembers(db, ctx.team.id))
+    .filter((m) => m.left_at === null && m.observer !== 1)
+    .filter((m) => toMember(m, slug).roles.includes(role))
+    .map((m) => m.name)
+    .sort();
+  const who = holders.length
+    ? `${holders.join(', ')} ${holders.length === 1 ? 'holds' : 'hold'} ${role}`
+    : `no seat holds ${role} yet — ask a human to assign it`;
+  const ask = holders.length
+    ? ` Send request_help to ${holders.length === 1 ? holders[0] : 'one of them'} naming what, from, to and why (.agents/skills/${role}/SKILL.md).`
+    : '';
+  if (cls.posture === 'warn')
+    return {
+      role,
+      decision: {
+        decision: 'allow',
+        outcome: 'warned',
+        reason: `heads-up: '${cls.class}' is a ${role} route and you do not hold ${role}. ${who}.${ask}`,
+      },
+    };
+  return {
+    role,
+    decision: {
+      decision: 'deny',
+      outcome: 'denied',
+      reason:
+        `blocked: '${cls.class}' is a ${role} route and you do not hold ${role}. ${who}.${ask} ` +
+        `Running it another way — a different command, a copy through a public carrier — defeats the ` +
+        `reason this route is gated; hand it to the holder instead.`,
+    },
+  };
 }
 
 /**
