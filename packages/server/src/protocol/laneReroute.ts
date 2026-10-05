@@ -143,6 +143,8 @@ export async function deliverLaneAskAct(
   to: string,
   body: string,
   meta: Record<string, unknown>,
+  /** ADR 505: a tiebreak ask joins the dispute's thread; every other acceptance ask roots its own. */
+  thread?: string,
 ): Promise<boolean> {
   try {
     const env = makeEnvelope({
@@ -153,6 +155,7 @@ export async function deliverLaneAskAct(
       act: 'ask',
       body,
       meta,
+      ...(thread ? { thread } : {}),
     });
     await routeEnvelope(ctx, team, from, env, undefined, true);
     return true;

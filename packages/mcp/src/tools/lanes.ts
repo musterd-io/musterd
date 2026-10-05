@@ -665,6 +665,25 @@ export function fmtNext(b: NextBrief, landed: ReadonlyMap<string, Landed> = new 
       );
     }
   }
+  // ADR 505 §3: rejections on MY lanes I have not answered — the mirror of `owed by you`. Said
+  // right after it and before my own work for the same reason: a teammate's critique is waiting
+  // on me, and the thing owed is a check, not a verdict. `?? []` for an older daemon.
+  const disputed = b.owed_disputes ?? [];
+  if (disputed.length) {
+    const now = Date.now();
+    lines.push(
+      `\n⚡ disputed — ${disputed.length} rejection(s) on your lanes waiting on your answer:`,
+    );
+    for (const d of disputed) {
+      lines.push(
+        `  ${d.lane.id} "${d.lane.title}" — ${d.from} rejected ${shortDuration(now - d.ts)} ago: ${d.note}`,
+      );
+      lines.push(
+        `    answer (ADR 505): re-run the check, then team_send {act:'accept', to:'${d.from}', reply_to:'${d.dispute_id}', body:'<what you re-checked>'} to concede and fix, ` +
+          `or {act:'decline', …, body:'<the evidence that held>'} to hold — a hold goes to a second reviewer.`,
+      );
+    }
+  }
   // ADR 490: review promises — accepted typed review requests, derived by the daemon from the Act
   // ledger. Kept apart from `owed by you` (a Lane verdict) on purpose, and the two absences are
   // different claims: a missing array is a daemon that predates the projection and the brief says

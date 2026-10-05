@@ -99,6 +99,18 @@ withDrivers('inboxPinning', (o) => {
       expect(rows).toContain(help);
     });
 
+    it('pins a decline the daemon stamped as a review dispute — and not a plain one (ADR 505)', async () => {
+      const { db, ada, send } = await seed();
+      const rejection = await send('decline', {
+        meta: { in_reply_to: 'ask-1', dispute: { via: 'review', lane: 'L1', ask: 'ask-1' } },
+      });
+      const plain = await send('decline', { meta: { in_reply_to: 'h-1' } });
+      for (let i = 0; i < 20; i++) await send('message');
+      const rows = await bounded(db, ada);
+      expect(rows).toContain(rejection);
+      expect(rows).not.toContain(plain);
+    });
+
     it('pins the directed steering trio and a handoff', async () => {
       const { db, ada, send } = await seed();
       const owed: string[] = [];

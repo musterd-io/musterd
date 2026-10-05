@@ -176,6 +176,24 @@ a change that raises holds without the tiebreak siding with them.
 - **The ledger gate will catch corrections that are not falsifications** (a wording fix on a wiki
   claim). The `not-a-falsification:` line is the escape hatch, and it is itself countable: a PR body
   line, so a month's worth can be read back to see whether the gate is being waved through.
+- **2026-10-05 — increment 2 landed** (dolly; lane 01M44BV67M18BDF126CKF3T03B). The stamp is
+  `meta.dispute {via, lane?, ask?, on?}`, server-controlled exactly as `lane_review` is (a client
+  copy is stripped, then the daemon stamps): a reviewer's `decline` on the standing `lane_review`
+  ask of a lane still in acceptance is `via: 'review'`; a directed `challenge` is `via:
+  'challenge'`, or `via: 'dependency'` when the sender owns a live lane whose `depends_on` names
+  one the recipient owns. §3's obligation is one clause on the pinned-inbox SELECT and the MCP pin
+  predicate (`isReviewDispute`, `packages/protocol/src/dispute.ts`), plus `owed_disputes` on the
+  brief (`team_next` / `musterd next`, rendered right after `owed by you`). §4's tiebreak reuses
+  the re-route rail: the owner's `decline` moves the lane back to `awaiting_acceptance`, writes
+  `lane.dispute_answered {verdict:'held'}` and `lane.review_rerouted {route:'tiebreak',
+  superseded_ask}` (so a late verdict on the first ask binds to nothing), and delivers a
+  `lane_review` ask carrying `tiebreak {rejection, hold, first_reviewer}` to the counterpart the
+  ordinary ladder picks with the first reviewer excluded — cross-family first, in the dispute's
+  thread. No candidate: the hold is recorded and the lane stays `active`. The owner's `accept`
+  writes `lane.dispute_answered {verdict:'conceded'}` and moves nothing. Both are reported on the
+  send ack (`dispute`, `disputeAnswerAck`) at parity with `lane_verdict`. Only the lane's owner
+  answers; only a lane still `active` is moved. Increment 3 reads the stamp and these two audit
+  verbs; nothing else is new on the wire.
 - **Increments, each a lane under Goal `disputes`:**
 
   | increment | lane | what lands | protocol? |

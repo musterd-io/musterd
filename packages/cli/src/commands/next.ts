@@ -75,6 +75,24 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
       w(theme.meta(`    answer: \`musterd send --act accept --reply-to ${r.ask_id} "…"\``) + '\n');
     }
   }
+  // ADR 505 §3: rejections on MY lanes I have not answered — the mirror of `owed by you`, same
+  // copy and order as the MCP renderer. `?? []` for an older daemon.
+  const disputed = brief.owed_disputes ?? [];
+  if (disputed.length > 0) {
+    w(
+      `\n${theme.accent('disputed')} — ${disputed.length} rejection(s) on your lanes waiting on your answer:\n`,
+    );
+    for (const d of disputed) {
+      w(
+        `  ${theme.meta(d.lane.id)} "${d.lane.title}" — ${theme.memberName(d.from, 'agent')} rejected ${shortDuration(now - d.ts)} ago: ${d.note}\n`,
+      );
+      w(
+        theme.meta(
+          `    answer (ADR 505): re-run the check, then \`musterd send --act accept --reply-to ${d.dispute_id} "<what you re-checked>"\` to concede and fix, or \`--act decline\` with the evidence to hold — a hold goes to a second reviewer.`,
+        ) + '\n',
+      );
+    }
+  }
   // value-layer design / ADR 276: ambient review debt — the oldest lanes waiting on ANY seat's
   // acceptance (`owed by you` above is the directed slice). `team_next` has rendered this since the
   // design landed; the CLI never did (ADR 276 Consequences named the gap, lane 01M3TAM44Q closes

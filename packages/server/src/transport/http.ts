@@ -4961,6 +4961,8 @@ export async function handleHttp(
           ...(result.handoff_lane ? { handoff_lane: result.handoff_lane } : {}),
           ...(result.lane_verdict ? { lane_verdict: result.lane_verdict } : {}),
           ...(result.lane_ack ? { lane_ack: result.lane_ack } : {}),
+          // ADR 505: the owner's answer to a review dispute, told on the spot for the same reason.
+          ...(result.dispute ? { dispute: result.dispute } : {}),
           ...(evidenceNotice ? { evidence_notice: evidenceNotice } : {}),
         });
       }

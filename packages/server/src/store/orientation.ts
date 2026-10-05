@@ -91,6 +91,14 @@ interface OwedRow {
   lane_id: string;
 }
 
+interface DisputeRow {
+  dispute_id: string;
+  ts: number;
+  from_name: string;
+  lane_id: string | null;
+  body: string;
+}
+
 interface HandoffRow {
   from_name: string;
   body: string;
@@ -244,6 +252,47 @@ export async function deriveNext(
       }),
     )
   ).flat();
+
+  // Owed disputes (ADR 505 §3): rejections on MY lanes that I have not answered. The mirror of
+  // `owed_reviews` — there the verdict is owed on someone else's work; here the answer is owed on
+  // my own. Read off the daemon's stamp (`dispute.via = 'review'`), and "unanswered" is the one
+  // thing the stamp cannot say: no accept/decline from me replying to it. A lane that has left
+  // `active` (resubmitted, re-routed by a hold, closed) retires the row for free.
+  const owed_disputes = (
+    await db.all<DisputeRow>(
+      `SELECT m.id AS dispute_id, m.ts AS ts, mf.name AS from_name, m.body AS body,
+              json_extract(m.meta, '$.dispute.lane') AS lane_id
+         FROM messages m
+         JOIN members mf ON mf.id = m.from_member
+         JOIN members mt ON mt.id = m.to_member
+        WHERE m.team_id = ?
+          AND m.act = 'decline'
+          AND mt.name = ?
+          AND json_extract(m.meta, '$.dispute.via') = 'review'
+          AND NOT EXISTS (
+            SELECT 1 FROM messages r
+             WHERE r.team_id = m.team_id
+               AND r.in_reply_to = m.id
+               AND r.act IN ('accept', 'decline')
+               AND r.from_member = mt.id
+          )
+        ORDER BY m.ts ASC, m.id ASC`,
+      [teamId, member],
+    )
+  ).flatMap((r) => {
+    const lane = mine.find((l) => l.id === r.lane_id);
+    if (!lane || lane.state !== 'active') return [];
+    const note = r.body.trim();
+    return [
+      {
+        lane,
+        from: r.from_name,
+        dispute_id: r.dispute_id,
+        note: note.length > 200 ? `${note.slice(0, 200)}…` : note,
+        ts: r.ts,
+      },
+    ];
+  });
 
   // The why: the latest handoff addressed to me or the team (not one I sent). Enrichment, never
   // required — but it is read as a live instruction, so a handoff whose named lane has left the
@@ -401,6 +450,7 @@ export async function deriveNext(
     up_next_seeds,
     up_next_seeds_total,
     owed_reviews,
+    owed_disputes,
     request_reviews,
     requested_reviews,
     review_closures,

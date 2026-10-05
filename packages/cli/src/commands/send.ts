@@ -8,6 +8,7 @@ import {
   CLI_REPLY_TO_STYLE,
   type BlockedBy,
   type Envelope,
+  disputeAnswerAck,
   laneAckAck,
   laneVerdictAck,
   makeEnvelope,
@@ -288,6 +289,9 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
   // that the sender can tell it apart from the one that decides.
   const laneAck = ackBody?.lane_ack;
   if (laneAck) process.stdout.write(theme.dim(laneAckAck(laneAck).guidance) + '\n');
+  // ADR 505: the owner's answer to a review dispute, at the same parity — the text is protocol's.
+  if (ackBody?.dispute)
+    process.stdout.write(theme.dim(disputeAnswerAck(ackBody.dispute).guidance) + '\n');
   // ADR 484: the challenge-evidence rail, at parity with the MCP reply — sender-only, one line.
   if (ackBody?.evidence_notice)
     process.stdout.write(theme.warn(`⚠ ${ackBody.evidence_notice}`) + '\n');
