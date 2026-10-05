@@ -204,6 +204,19 @@ a change that raises holds without the tiebreak siding with them.
   `acceptedHandoffAck`), with the same sentence beside it. No gate on whether the check ran; the
   §7 traceback is where not checking shows up. `via: 'dependency'` (increment 2) is what a failed
   check becomes when it is sent.
+- **2026-10-05 — increment 4 landed** (dolly; lane 01M44BVD88Z9T12Z4RHGC4EG28). `pnpm ledger:check`
+  (`scripts/check-ledger.ts`, in `format:check`) reads the diff from the merge-base to the
+  working tree and refuses it on §7's three triggers — a `<!-- claim -->` line gone or no longer
+  verbatim on a page present on both sides; an ADDED `## Consequences` line matching a hand-kept
+  phrase list (a floor, like `intents.ts`; widen on a miss); a `Status:` that became
+  `superseded` or a new `Supersedes:` line — unless the same diff adds a
+  `docs/claims/entries/<date>-<slug>.md` (shape-checked: the required keys, and `passed_by` rows
+  of `acceptance | concession | dependency: <ref>`). One refinement to §7's escape hatch: the
+  line is read from the PR body in CI (the `pull_request` event) **and** from any commit message
+  on the branch, because a local run has no PR body and a squash-merge carries the PR body into
+  the commit — so the count §7's falsifier needs is `git log --grep 'not-a-falsification:'`
+  either way. Registered as control `adr-505-falsification-mints-a-ledger-entry`; tripped on
+  2026-10-05 by the exercise (a struck claim on `agent-sycophancy.md`, uncommitted, refused).
 - **Increments, each a lane under Goal `disputes`:**
 
   | increment | lane | what lands | protocol? |
