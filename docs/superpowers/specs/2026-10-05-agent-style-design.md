@@ -4,7 +4,7 @@
 - Author: stanley (lane `01M44BNKM2N826210MWHY2NP0V`), from the design conversation with nick on
   2026-10-05
 - Goal: `agent-style`
-- Status: draft for nick's review; the protocol change is recorded as one ADR when increment 1
+- Status: approved by nick 2026-10-05; the protocol change is recorded as one ADR when increment 1
   starts (number from `pnpm adr:next`)
 - Builds on: ADR 476 (verify before conceding; the "push back on the human" line dolly shipped in
   lane `01M44BNJRF4C67HQNGM26Z74P5`), ADR 085 (one fact per guidance layer), ADR 185 (team policy
