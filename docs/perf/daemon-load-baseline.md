@@ -506,3 +506,37 @@ Run 11's shape (75/75/75, `performance-1x`, pool 150) on #2086, the constant-cos
   derivation in one transaction.
 - **Next:** run 13 with that fix. Falsifier: `/report` still shows a non-database gap of seconds at
   p95 — then the refresh is slow for a reason other than its statement count.
+
+## 2026-10-05 — Cloud runs 13–14: `/report` is fixed; Neon's 1 CU was the next wall, then the app core (lanes 01M3Z44C56, 01M46RPQ94)
+
+Run 12's shape (75/75/75, `performance-1x`, pool 150) on 61a79f9a (#2097, the constant-statement
+`/report` derivation). Run 14 changes one thing: the Neon compute is fixed at 4 CU instead of 1.
+
+| run | build / change | Neon | p50 | p95 | req/s | what it showed |
+| --- | --- | --- | --- | --- | --- | --- |
+| 13 | `/report` in constant statements (#2097) | 1 CU | 1.9 s | 5.6 s | 34 | `/report` p95 2.6 s; writes 10–18 s at p95; Neon-bound |
+| 14 | same build | 4 CU | 1.3 s | 3.0 s | 43 | every route 2.5–4.1 s at p95; app core at 0 % idle from minute ~15 |
+
+- **The `/report` fix held.** Its p95 fell from 20.5 s to 2.6 s. The time it spends outside the
+  database at p95 is now ~2 ms, the same as every other route. Run 12's falsifier did not fire.
+- **Run 13 was bound by Neon, not by the pool or the app.** Throughput stopped rising at ~48
+  req/s from minute 10 while the ramp kept adding members. Median query time per transaction grew
+  from 3.6 ms to 95 ms with load, yet pool wait stayed at 0 until minute 16. The app machine kept
+  ~26 % CPU idle throughout. Writes were the worst routes: `claim` p95 17.9 s, `POST /lanes` 16.7 s,
+  `POST /messages` 10.6 s.
+- **Run 14 confirms it: 4 CU halves p95** (5.6 s → 3.0 s), and `claim` falls from 17.9 s to 4.1 s.
+  Query time per transaction still grows from 3.3 ms to 28 ms, but now the app machine's idle CPU
+  reaches 0 % from minute ~15. Query time measured in the app includes event-loop delay, so the app
+  core is the next wall.
+- **Where Neon's time goes (`pg_stat_statements`, run 14).**
+  - `latestStatusUpdates` (the roster's status column) is ~65 % of all database execution time:
+    785 s over 24 523 calls, a mean of 32 ms and ~14 500 buffers per call. Run by hand after the
+    run, the same statement on the same team takes 1.3 ms and 1 416 buffers. Something makes it
+    ~25× costlier under load, and that is not explained yet.
+  - `UPDATE nodes SET next_seq = next_seq + $2` is a single-row counter on the write path: a mean
+    of 19.7 ms and a max of 2.57 s over 5 414 calls. Concurrent writes serialize on that row lock.
+- **Where the app core goes.** `GET /teams/:slug` serves a 145 KB body 24 523 times in the run,
+  ~3.5 GB of JSON. It is the leading suspect for the saturated core; not yet profiled.
+- **Next:** three lanes, one for each finding: the roster statement under load, the `next_seq`
+  hotspot, and the roster body's CPU cost. Falsifier for the roster lane: the per-call buffer count
+  stays ~10× the hand-run cost after the fix.
