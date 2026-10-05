@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
 import { pgDriver, pgPoolFactory } from './pgDriver.js';
-import { requestTiming, withRequestTiming } from './requestTiming.js';
+import { endRequestTiming, requestTiming, withRequestTiming } from './requestTiming.js';
 
 /**
  * The choreography against a fake pool — what goes down the wire, in what order, on which client.
@@ -11,6 +11,7 @@ function fakePools() {
   const log: string[] = [];
   let failNext: string | null = null;
   let busy = 0;
+  let connects = 0;
   const client = (label: string) => ({
     async query(text: string, values?: unknown[]) {
       log.push(`${label}: ${text}${values?.length ? ' ' + JSON.stringify(values) : ''}`);
@@ -28,11 +29,18 @@ function fakePools() {
   const factory = (url: string) => ({
     async connect() {
       busy++;
+      connects++;
       return client(url.includes('operator') ? 'op' : url.includes('owner') ? 'own' : 'app');
     },
     async end() {},
   });
-  return { factory, log, fail: (s: string) => (failNext = s), busy: () => busy };
+  return {
+    factory,
+    log,
+    fail: (s: string) => (failNext = s),
+    busy: () => busy,
+    connects: () => connects,
+  };
 }
 
 const urls = { appUrl: 'postgres://app', operatorUrl: 'postgres://operator' };
@@ -282,5 +290,109 @@ describe('the production pool survives a dropped connection (review C1)', () => 
     } finally {
       await pool.end();
     }
+  });
+});
+
+describe('request leases (ADR 507)', () => {
+  it('a request checks one client out per pool, reuses it for every statement, and returns it at the end', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    const { timing, result } = withRequestTiming(async () => {
+      await d.forTeam('A').get('SELECT 1');
+      await d.forTeam('B').all('SELECT 2'); // another tenant, same pool: same client, own SET LOCAL
+      await d.forTeam('A').tx(async (t) => void (await t.run('UPDATE x SET y = 1')));
+      await d.asOperator().get('SELECT 3'); // the operator pool: its own lease
+    });
+    await result;
+    expect(f.connects()).toBe(2);
+    expect(f.busy()).toBe(2); // still leased until the request ends
+    await endRequestTiming(timing);
+    expect(f.busy()).toBe(0);
+    expect(timing.tx).toBe(4);
+    expect(f.log.filter((l) => l.includes('set_config')).length).toBe(3);
+  });
+
+  it('concurrent work in one request runs one transaction at a time on the lease', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    const { timing, result } = withRequestTiming(() =>
+      Promise.all([
+        d.forTeam('A').tx(async (t) => {
+          await t.run('UPDATE a SET n = 1');
+          await new Promise((r) => setTimeout(r, 5));
+          await t.run('UPDATE a SET n = 2');
+        }),
+        d.forTeam('A').get('SELECT bare'),
+      ]),
+    );
+    await result;
+    await endRequestTiming(timing);
+    const begin = f.log.findIndex((l) => l.includes('UPDATE a SET n = 1')) - 1;
+    const commit = f.log.indexOf('app: COMMIT', begin);
+    const bare = f.log.findIndex((l) => l.includes('SELECT bare'));
+    expect(bare < begin || bare > commit).toBe(true);
+    expect(f.connects()).toBe(1);
+  });
+
+  it('after the request ends, a late statement checks out for itself; a failed statement discards the lease', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    const { timing, result } = withRequestTiming(async () => {
+      f.fail('SELECT boom');
+      await expect(d.forTeam('A').get('SELECT boom')).rejects.toThrow(/boom/);
+      await d.forTeam('A').get('SELECT after'); // a fresh lease after the discard
+      await endRequestTiming(timing);
+      await d.forTeam('A').get('SELECT late'); // ended: its own checkout, released at once
+    });
+    await result;
+    expect(f.log).toContain('app: release(err)');
+    expect(f.connects()).toBe(3);
+    expect(f.busy()).toBe(0);
+  });
+
+  it('a statement issued from inside a leased transaction does not wait on its own lease', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    const { timing, result } = withRequestTiming(() =>
+      d.forTeam('A').tx(async () => {
+        await d.forTeam('A').get('SELECT reentrant'); // would deadlock on the lease
+      }),
+    );
+    await result;
+    await endRequestTiming(timing);
+    expect(f.connects()).toBe(2);
+    expect(f.busy()).toBe(0);
+  });
+
+  it('a lease idle for 250 ms returns its client, so a stalled request cannot pin one', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    const { timing, result } = withRequestTiming(async () => {
+      await d.forTeam('A').get('SELECT 1');
+      expect(f.busy()).toBe(1);
+      await new Promise((r) => setTimeout(r, 400)); // the request stalls with its response open
+      expect(f.busy()).toBe(0);
+      await d.forTeam('A').get('SELECT 2'); // leases afresh
+    });
+    await result;
+    await endRequestTiming(timing);
+    expect(f.connects()).toBe(2);
+    expect(f.busy()).toBe(0);
+  });
+
+  it('two drivers in one request never share a client, and each returns only its own', async () => {
+    const f1 = fakePools();
+    const f2 = fakePools();
+    const main = pgDriver({ ...urls, pools: f1.factory });
+    const trace = pgDriver({ ...urls, pools: f2.factory });
+    const { timing, result } = withRequestTiming(async () => {
+      await main.forTeam('A').get('SELECT 1');
+      await trace.forTeam('A').get('SELECT 2');
+    });
+    await result;
+    expect([f1.connects(), f2.connects()]).toEqual([1, 1]);
+    await endRequestTiming(timing);
+    expect([f1.busy(), f2.busy()]).toEqual([0, 0]);
+    expect(requestTiming()).toBeUndefined();
   });
 });

@@ -15,7 +15,7 @@ import { schemaVersionOf } from './db/migrations.js';
 import { openDriver } from './db/open.js';
 import { assertSchemaCurrent } from './db/pg/migrate.js';
 import { pgDriver, type PoolFactory } from './db/pgDriver.js';
-import { withRequestTiming } from './db/requestTiming.js';
+import { endRequestTiming, withRequestTiming } from './db/requestTiming.js';
 import { sqliteDriver, type SqliteDriver } from './db/sqliteDriver.js';
 import { openTraceDriver } from './db/traceDb.js';
 import { startDigestSchedule } from './digest/schedule.js';
@@ -224,6 +224,9 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     });
     // The store records into this request's timing (db/requestTiming.ts); read at 'finish'.
     const run = withRequestTiming(() => handleHttp(ctx, req, res));
+    // ADR 507: the request's leased store clients go back when the response is done ('close'
+    // fires after 'finish' and on an aborted connection alike).
+    res.once('close', () => void endRequestTiming(run.timing));
     void (await run.result);
   };
   const http: Server = config.tls

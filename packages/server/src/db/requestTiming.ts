@@ -20,13 +20,46 @@ export interface RequestTiming {
   holdMs: number;
   queryMs: number;
   tx: number;
+  /**
+   * ADR 507: the client this request leased per pool, and the queue that runs its transactions
+   * one at a time. Owned by the pg driver; empty on every other engine.
+   */
+  leases: Partial<Record<string, Lease>>;
+  /** Set when the request ends: no statement may take a lease after this. */
+  ended: boolean;
+}
+
+/** One request's client on one pool (ADR 507). `tail` settles when its queued work has. */
+export interface Lease {
+  client: { release(err?: unknown): void } | null;
+  /** When `client` was checked out (performance.now()), for the lease's age cap. */
+  since: number;
+  /** Pending idle release (LEASE_IDLE_MS); cleared when new work arrives. */
+  idle: ReturnType<typeof setTimeout> | null;
+  tail: Promise<void>;
+}
+
+/** The drivers that hold leases register how to end a request; `endRequestTiming` calls them. */
+export const requestEnders = new Set<(t: RequestTiming) => Promise<void>>();
+
+/** The request is over (response finished or closed): return every leased client (ADR 507). */
+export async function endRequestTiming(t: RequestTiming): Promise<void> {
+  t.ended = true;
+  await Promise.all([...requestEnders].map((end) => end(t)));
 }
 
 const store = new AsyncLocalStorage<RequestTiming>();
 
 /** Run `fn` with a fresh timing record; returns the record alongside `fn`'s result. */
 export function withRequestTiming<T>(fn: () => T): { timing: RequestTiming; result: T } {
-  const timing: RequestTiming = { waitMs: 0, holdMs: 0, queryMs: 0, tx: 0 };
+  const timing: RequestTiming = {
+    waitMs: 0,
+    holdMs: 0,
+    queryMs: 0,
+    tx: 0,
+    leases: {},
+    ended: false,
+  };
   return { timing, result: store.run(timing, fn) };
 }
 
