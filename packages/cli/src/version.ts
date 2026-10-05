@@ -18,7 +18,8 @@ export function cliVersion(): string {
   }
 }
 
-let memoBuild: string | undefined | null = null; // null = not yet read; undefined = read, unstamped
+let memoBuild: string | undefined;
+let memoBuildRead = false;
 
 /**
  * The git build ref this CLI dist was built from (ADR 135) — the `dist/build.json` stamp written by
@@ -27,6 +28,9 @@ let memoBuild: string | undefined | null = null; // null = not yet read; undefin
  * per process; `undefined` when unstamped (published tarball, stripped dist) — consumers stay silent.
  */
 export function cliBuild(): string | undefined {
-  if (memoBuild === null) memoBuild = readBuildStamp(import.meta.url);
+  if (!memoBuildRead) {
+    memoBuild = readBuildStamp(import.meta.url) ?? undefined;
+    memoBuildRead = true;
+  }
   return memoBuild;
 }
