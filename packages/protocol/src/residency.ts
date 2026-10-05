@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MemoryEnvelopeSchema } from './claim-handshake.js';
+import { CLAIM_CHECK_SOURCES, ClaimCheckSchema } from './claimCheck.js';
 import { WAKEABILITIES } from './model.js';
 import { type WorkingHours, isWithinWorkingHours } from './working-hours.wire.js';
 
@@ -413,6 +414,19 @@ export const WakeContextContextSchema = z
       .strict()
       .optional(),
     memory: z.object({ body: z.string(), truncated: z.boolean() }).strict().optional(),
+    /**
+     * ADR 522: the seat's memory and any handoff in the thread, checked against the Team now —
+     * an ended lane, a hold's real state, a Team rule no hold backs. Read from the WHOLE bodies,
+     * before the budget cuts them. Optional: an older daemon omits it.
+     */
+    checks: z
+      .array(
+        z
+          .object({ source: z.enum(CLAIM_CHECK_SOURCES), source_id: z.string().optional() })
+          .extend(ClaimCheckSchema.shape)
+          .strict(),
+      )
+      .optional(),
   })
   .strict();
 export type WakeContextContext = z.infer<typeof WakeContextContextSchema>;

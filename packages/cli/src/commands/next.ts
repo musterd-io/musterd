@@ -1,4 +1,5 @@
 import {
+  claimCheckLines,
   closeReasonCopy,
   describeHoldLine,
   emptyPoolCopy,
@@ -230,6 +231,8 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
       `\n${theme.accent('why')} — handoff from ${theme.memberName(brief.why.from, 'agent')}${goal} ${theme.meta(`(${when})`)}\n`,
     );
     w(`  ${brief.why.body}\n`);
+    // ADR 522: what the handoff says, checked against the Team now.
+    for (const line of claimCheckLines(brief.why.checks ?? [])) w(`  ${theme.warn(line)}\n`);
   }
 
   if (

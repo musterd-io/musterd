@@ -57,6 +57,30 @@ withDrivers('wakeContextBody', (o) => {
     openStore = o;
   });
 
+  describe('stored claims checked on read (ADR 522)', () => {
+    it("a woken seat's memory and the handoff that woke it carry their checks", async () => {
+      const { db, team, nick, ada } = await seed();
+      const done = await openLane(db, team.id, team.slug, 'Ada', { title: 'old work', claim: true });
+      await db.run("UPDATE lanes SET state = 'done' WHERE id = ?", [done.id]);
+      await saveMemory(db, ada.id, { headline: 'h', body: `carrying ${done.id}` });
+      await msg(db, team, nick, ada, 'handoff', 'hf1', 1_000, {
+        body: "Take this over. Don't merge until the demo is done.",
+      });
+      const { context } = await deriveContext(db, team, ada, { threadId: 'hf1' });
+      expect(context.checks?.map((c) => [c.source, c.kind, c.verdict])).toEqual([
+        ['memory', 'lane', 'ended'],
+        ['handoff', 'rule', 'unsourced'],
+      ]);
+      expect(context.checks?.[1]?.source_id).toBe('hf1');
+    });
+
+    it('says nothing when there is nothing to correct', async () => {
+      const { db, team, ada } = await seed();
+      await saveMemory(db, ada.id, { headline: 'h', body: 'halfway through the tests' });
+      expect((await deriveContext(db, team, ada, {})).context.checks).toBeUndefined();
+    });
+  });
+
   describe('truncation helpers (ADR 430)', () => {
     it('cuts at the limit and flags it, and leaves short text alone', () => {
       expect(truncateChars('abcdef', 4)).toEqual({ text: 'abcd', truncated: true });

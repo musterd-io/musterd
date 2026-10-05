@@ -77,7 +77,8 @@ export async function listAllHolds(db: Driver, teamId: string): Promise<Hold[]> 
   return rows.map(toHold);
 }
 
-async function getHold(db: Driver, teamId: string, id: string): Promise<Hold | null> {
+/** One hold by id, active or not — ADR 522's claim check reads its real state. */
+export async function getHoldById(db: Driver, teamId: string, id: string): Promise<Hold | null> {
   const row = await db.get<HoldRow>(`SELECT ${COLUMNS} FROM holds WHERE team_id = ? AND id = ?`, [
     teamId,
     id,
@@ -134,7 +135,7 @@ export async function liftHold(
   now: number = Date.now(),
 ): Promise<Hold> {
   return db.tx(async (t) => {
-    const current = await getHold(t, teamId, id);
+    const current = await getHoldById(t, teamId, id);
     if (!current || current.lifted_at !== null || current.expires_at <= now) {
       throw new MusterdError('not_found', `no active hold "${id}"`);
     }

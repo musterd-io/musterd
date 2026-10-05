@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import type { MemoryEnvelope } from '@musterd/protocol';
+import { claimCheckLines, type MemoryEnvelope } from '@musterd/protocol';
 import { z } from 'zod';
 import type { MusterdClient } from '../client.js';
 import { errorResult, notReadyMessage, textResult } from './format.js';
@@ -90,7 +90,12 @@ export function registerMemory(server: McpServer, client: MusterdClient): void {
       try {
         const mem = await client.readMemory();
         const header = `memory (saved ${ago(Date.now() - mem.saved_at)} ago): ${mem.headline}`;
-        return textResult(mem.body ? `${header}\n\n${mem.body}` : header);
+        // ADR 522: what the note says, checked against the Team now — above the body, so it is read
+        // before the note is acted on. The verdicts are conclusive; no further checking is needed.
+        const checks = mem.checks?.length
+          ? `\nchecked against the Team now:\n${claimCheckLines(mem.checks).join('\n')}`
+          : '';
+        return textResult(mem.body ? `${header}${checks}\n\n${mem.body}` : `${header}${checks}`);
       } catch (err) {
         if (NO_MEMORY.test(err instanceof Error ? err.message : String(err))) {
           return textResult(

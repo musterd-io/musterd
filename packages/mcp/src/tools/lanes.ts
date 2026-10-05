@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import {
   BUILD_ON_CHECK,
   builtOnLine,
+  claimCheckLines,
   closeReasonCopy,
   describeHoldLine,
   emptyPoolCopy,
@@ -840,6 +841,8 @@ export function fmtNext(b: NextBrief, landed: ReadonlyMap<string, Landed> = new 
         ` (${shortDuration(Math.max(0, Date.now() - b.why.ts))} ago):`,
     );
     lines.push('  ' + b.why.body);
+    // ADR 522: the handoff's claims, checked against the Team now — conclusive, no re-check needed.
+    for (const line of claimCheckLines(b.why.checks ?? [])) lines.push('  ' + line);
   }
   if (
     !goals.length &&

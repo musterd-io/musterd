@@ -101,7 +101,11 @@ withDrivers('dream', (o) => {
       const { packet, truncated } = await buildDreamPacket(db, team, ryder, { now: NOW });
 
       expect(packet.since).toBe(NOW - DREAM_BUDGET.default_since_ms);
-      expect(packet.memory).toEqual({ body: 'yesterday: fence half done', truncated: false });
+      expect(packet.memory).toEqual({
+        body: 'yesterday: fence half done',
+        truncated: false,
+        saved_at: expect.any(Number),
+      });
       expect(packet.lanes.map((l) => l.id)).toEqual([mine.id]);
       expect(packet.lanes[0]!.acts.map((a) => [a.from, a.body])).toEqual([
         ['ryder', `step 1 on ${mine.id}`],
@@ -169,6 +173,23 @@ withDrivers('dream', (o) => {
         ['g2', '2026-10-04'],
       ]);
       expect(packet.night).toBe('2026-10-04');
+    });
+
+    it('ADR 522: the note and each insight carry their claims checked against now', async () => {
+      const { db, team, ryder, izzo } = await seed();
+      await saveMemory(db, ryder.id, { headline: 'h', body: 'Demo tomorrow. Nobody merges until then.' });
+      await say(db, team, izzo, 'insight', 'Code freeze before the demo — hold off on refreshing.', NOW - DAY / 4, {
+        headline: 'freeze',
+      });
+      await say(db, team, izzo, 'insight', 'Ordinary finding, nothing to check.', NOW - DAY / 5, {
+        headline: 'plain',
+      });
+      const { packet } = await buildDreamPacket(db, team, ryder, { now: NOW });
+      expect(packet.memory?.saved_at).toEqual(expect.any(Number));
+      expect(packet.memory?.checks?.[0]).toMatchObject({ kind: 'rule', verdict: 'unsourced' });
+      const [freeze, plain] = packet.learned;
+      expect(freeze?.checks?.[0]).toMatchObject({ kind: 'rule', verdict: 'unsourced' });
+      expect(plain?.checks).toBeUndefined();
     });
 
     it('fits the byte budget by dropping the oldest acts first, and keeps the note', async () => {

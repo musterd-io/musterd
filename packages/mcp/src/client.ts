@@ -33,6 +33,7 @@ import {
   type AcceptedHandoffWire,
   type BuiltOn,
   type DisputeAnswerWire,
+  type ClaimCheck,
 } from '@musterd/protocol';
 import { WebSocket } from 'ws';
 import { clearGrantFromBinding } from './binding.js';
@@ -882,7 +883,13 @@ export class MusterdClient {
     };
   }
 
-  readMemory(): Promise<{ headline: string; body: string; saved_at: number }> {
+  readMemory(): Promise<{
+    headline: string;
+    body: string;
+    saved_at: number;
+    /** ADR 522: absent from an older daemon. */
+    checks?: ClaimCheck[];
+  }> {
     return this.request('GET', `/teams/${this.config.team}/memory`);
   }
 
