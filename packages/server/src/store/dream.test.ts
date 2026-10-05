@@ -177,10 +177,21 @@ withDrivers('dream', (o) => {
 
     it('ADR 522: the note and each insight carry their claims checked against now', async () => {
       const { db, team, ryder, izzo } = await seed();
-      await saveMemory(db, ryder.id, { headline: 'h', body: 'Demo tomorrow. Nobody merges until then.' });
-      await say(db, team, izzo, 'insight', 'Code freeze before the demo — hold off on refreshing.', NOW - DAY / 4, {
-        headline: 'freeze',
+      await saveMemory(db, ryder.id, {
+        headline: 'h',
+        body: 'Demo tomorrow. Nobody merges until then.',
       });
+      await say(
+        db,
+        team,
+        izzo,
+        'insight',
+        'Code freeze before the demo — hold off on refreshing.',
+        NOW - DAY / 4,
+        {
+          headline: 'freeze',
+        },
+      );
       await say(db, team, izzo, 'insight', 'Ordinary finding, nothing to check.', NOW - DAY / 5, {
         headline: 'plain',
       });

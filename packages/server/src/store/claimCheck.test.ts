@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { checkClaims } from './claimCheck.js';
 import { liftHold, setHold } from './holds.js';
-import { addMember } from './members.js';
 import { openLane, updateLane } from './lanes.js';
+import { addMember } from './members.js';
 import { createTeam } from './teams.js';
 
 withDrivers('claimCheck', (_o, kind) => {
@@ -22,7 +22,11 @@ withDrivers('claimCheck', (_o, kind) => {
 
   it('a freeze nobody set reads as unsourced — the Team is not paused', async () => {
     const { db, team } = await setup();
-    const checks = await checkClaims(db, team, 'Demo at 2pm. Nobody merges or refreshes until then.');
+    const checks = await checkClaims(
+      db,
+      team,
+      'Demo at 2pm. Nobody merges or refreshes until then.',
+    );
     expect(checks).toHaveLength(1);
     expect(checks[0]).toMatchObject({ kind: 'rule', verdict: 'unsourced' });
     expect(checks[0]!.line).toContain('the Team is not paused');
@@ -31,7 +35,11 @@ withDrivers('claimCheck', (_o, kind) => {
 
   it('a rule an active hold carries reads as backed, naming the hold', async () => {
     const { db, team } = await setup();
-    await setHold(db, team.id, 'nick', { effect: 'merges_paused', reason: 'demo', for_ms: 3600_000 });
+    await setHold(db, team.id, 'nick', {
+      effect: 'merges_paused',
+      reason: 'demo',
+      for_ms: 3600_000,
+    });
     const [c] = await checkClaims(db, team, "don't merge anything before the demo");
     expect(c).toMatchObject({ kind: 'rule', verdict: 'current' });
     expect(c!.line).toContain('backed: merges paused by nick until');
@@ -52,7 +60,11 @@ withDrivers('claimCheck', (_o, kind) => {
 
   it('a named hold reads with its real state — in force, or lifted', async () => {
     const { db, team } = await setup();
-    const h = await setHold(db, team.id, 'nick', { effect: 'notice', reason: 'deck', for_ms: 60_000 });
+    const h = await setHold(db, team.id, 'nick', {
+      effect: 'notice',
+      reason: 'deck',
+      for_ms: 60_000,
+    });
     expect((await checkClaims(db, team, `see ${h.id}`))[0]).toMatchObject({
       kind: 'hold',
       verdict: 'current',

@@ -209,7 +209,11 @@ export async function deriveContext(
   for (const src of toCheck) {
     for (const c of await checkClaims(db, team, src.text, now)) {
       if (checks.length >= CLAIM_CHECKS_MAX || checks.some((x) => x.ref === c.ref)) continue;
-      checks.push({ source: src.source, ...(src.source_id ? { source_id: src.source_id } : {}), ...c });
+      checks.push({
+        source: src.source,
+        ...(src.source_id ? { source_id: src.source_id } : {}),
+        ...c,
+      });
     }
   }
   if (checks.length > 0) context.checks = checks;

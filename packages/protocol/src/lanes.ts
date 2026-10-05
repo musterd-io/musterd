@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { GoalSchema } from './goals.js';
 import { ClaimCheckSchema } from './claimCheck.js';
+import { GoalSchema } from './goals.js';
 import { HoldSchema } from './holds.js';
 import {
   EMPTY_POOL_KINDS,

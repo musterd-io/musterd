@@ -199,7 +199,8 @@ and IDs; an action enum; bounded lane/thread metadata; ADR 093's `MemoryEnvelope
 categories; and typed continuity requirement plus intended delivery. Since v2 (ADR 430) it also
 carries a `context` block — the waking thread's last acts as `WakeContextBody` (attributed:
 `from`/`act`/`ts`, cut at 600 chars), an `open` ledger of `WakeContextOpenItem` (titles only), the
-lane's detail with the recipient's own last `status_update`, and the memory body — under a `budget`
+lane's detail with the recipient's own last `status_update`, the memory body, and (ADR 522) `checks` —
+the memory's and any waking handoff's claims checked against the Team now — under a `budget`
 of `WAKE_CONTEXT_BUDGET.limit_bytes` (12,288), and `fetch` names only what did not fit (`open_items`
 joined the enum). `version` is `1 | 2`; a v2 packet must carry both blocks, a v1 neither. The additive
 `WakeContextResponseSchema` wraps it as `{ context }` for the later authenticated

@@ -55,6 +55,42 @@ describe('team_wake_context render (ADR 430)', () => {
     );
   });
 
+  it('ADR 522: carries the checks under one heading, ⚠ for anything that changes the reading', () => {
+    const text = render({
+      version: 2,
+      wake: { kind: 'reply', act_id: 'h1' },
+      objective: { action: 'reply' },
+      state: {},
+      context: {
+        open: [],
+        memory: { body: 'carrying L1', truncated: false },
+        checks: [
+          {
+            source: 'memory',
+            kind: 'lane',
+            ref: 'L1',
+            verdict: 'ended',
+            line: 'lane L1 ("x") is done — nothing in this note about it is still to do.',
+          },
+          {
+            source: 'handoff',
+            source_id: 'h1',
+            kind: 'rule',
+            ref: "don't merge",
+            verdict: 'unsourced',
+            line: '"don\'t merge" — no active Team hold says this, so the Team is not paused.',
+          },
+        ],
+      },
+      budget: { limit_bytes: 12_288, used_bytes: 400 },
+      fetch: [],
+      delivery: { requirement: 'portable', intended: 'fresh' },
+    });
+    expect(text).toContain('checked against the Team now:');
+    expect(text).toContain('  ⚠ lane L1 ("x") is done');
+    expect(text).toContain('  ⚠ "don\'t merge" — no active Team hold says this');
+  });
+
   it('v1 renders exactly as before', () => {
     const text = render({
       version: 1,

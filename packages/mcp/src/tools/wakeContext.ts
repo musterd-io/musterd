@@ -1,5 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import { WakeContextRequestSchema, type WakeContextPacket } from '@musterd/protocol';
+import {
+  claimCheckLines,
+  WakeContextRequestSchema,
+  type WakeContextPacket,
+} from '@musterd/protocol';
 import { z } from 'zod';
 import type { MusterdClient } from '../client.js';
 import { errorResult, notReadyMessage, textResult } from './format.js';
@@ -44,7 +48,12 @@ export function render(context: WakeContextPacket): string {
     if (c.memory)
       lines.push(
         `memory:\n${c.memory.body}${c.memory.truncated ? '\n…(truncated — team_memory_read for the rest)' : ''}`,
-      );
+      ); // ADR 522: the memory's and the handoff's claims, checked against the Team now. Conclusive —
+    // a woken seat acts on these, it does not go and re-check them.
+    if (c.checks?.length) {
+      lines.push('checked against the Team now:');
+      for (const line of claimCheckLines(c.checks)) lines.push(`  ${line}`);
+    }
   }
   if (context.fetch.length > 0) {
     const followUps = context.fetch.map((fetch) => {

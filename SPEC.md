@@ -748,3 +748,29 @@ Bodies MUST parse through `CalendarEntryInputSchema`; a failure answers `bad_req
 seat may read and not write (`forbidden`). Every write that changes a row is one audit row
 (`calendar.entry_written` or `calendar.entry_deleted`, with `{id, by}`); an `unchanged` write
 records nothing, so a second import of the same export changes nothing and audits nothing.
+
+## A.17 Stored claims checked on read (unreleased — ADR 522)
+
+When a supporting daemon returns a stored note — a seat's memory, a handoff, an insight — it MAY
+attach `checks`: what the note asserts, checked against the Team's current state.
+
+```jsonc
+{
+  "kind": "rule", // lane | hold | rule
+  "ref": "Nobody merges until the demo.", // a lane id, a hold id, or the clause as written (≤160)
+  "verdict": "unsourced", // current | ended | unsourced
+  "line": "\"Nobody merges until the demo.\" — no active Team hold says this, so the Team is not paused. …",
+}
+```
+
+- A **lane** check is emitted only for a lane that is `done`, `abandoned` or `parked` (`ended`).
+- A **hold** check carries the hold's state: `current` while active (A.15), else `ended`.
+- A **rule** check is `current` when an active hold carries the matching effect and `unsourced`
+  otherwise. A rule check never denies anything.
+
+`line` is conclusive: a reader acts on it and does not re-verify. At most six checks per note.
+
+Carried on: `GET /memory` (`checks`); the wake context block (`context.checks`, each with
+`source: memory | handoff` and an optional `source_id`); `NextBrief.why.checks`; the dream packet
+(`memory.saved_at`, `memory.checks`, and `checks` on each learned insight). Every field is optional;
+omission means no check (or a daemon that does not check).

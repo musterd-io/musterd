@@ -381,7 +381,7 @@ export class MusterdClient {
     path: string,
     body?: unknown,
     opts: { headers?: Record<string, string>; timeoutMs?: number } = {},
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     /** Internal: set on the single re-join + replay that follows a refused session lease. */
     afterLeaseRefusal = false,
   ): Promise<any> {

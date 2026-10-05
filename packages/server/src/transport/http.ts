@@ -196,6 +196,7 @@ import {
   listCalendarSince,
   replaceCalendarEntry,
 } from '../store/calendar.js';
+import { checkClaims } from '../store/claimCheck.js';
 import { applyCursorAdvance, getCursor } from '../store/cursors.js';
 import { deferralFold } from '../store/deferralFold.js';
 import {
@@ -232,7 +233,6 @@ import {
   revokeGrant,
   validateGrant,
 } from '../store/grants.js';
-import { checkClaims } from '../store/claimCheck.js';
 import { liftHold, listActiveHolds, listAllHolds, setHold } from '../store/holds.js';
 import {
   claimProvisions,

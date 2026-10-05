@@ -60,7 +60,10 @@ withDrivers('wakeContextBody', (o) => {
   describe('stored claims checked on read (ADR 522)', () => {
     it("a woken seat's memory and the handoff that woke it carry their checks", async () => {
       const { db, team, nick, ada } = await seed();
-      const done = await openLane(db, team.id, team.slug, 'Ada', { title: 'old work', claim: true });
+      const done = await openLane(db, team.id, team.slug, 'Ada', {
+        title: 'old work',
+        claim: true,
+      });
       await db.run("UPDATE lanes SET state = 'done' WHERE id = ?", [done.id]);
       await saveMemory(db, ada.id, { headline: 'h', body: `carrying ${done.id}` });
       await msg(db, team, nick, ada, 'handoff', 'hf1', 1_000, {

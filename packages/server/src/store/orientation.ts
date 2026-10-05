@@ -12,9 +12,9 @@ import {
   ReviewPromiseReferenceSchema,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
+import { checkClaims } from './claimCheck.js';
 import { handoffNamedLaneOutOfPlay, handoffNamesNoLane } from './delivery.js';
 import { listGoals, nextGoal } from './goals.js';
-import { checkClaims } from './claimCheck.js';
 import { listActiveHolds } from './holds.js';
 import { incidentPolicy, openIncidents } from './incidents.js';
 import { deriveOwnDisputes } from './insights.js';
