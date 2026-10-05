@@ -5591,6 +5591,16 @@ export async function handleHttp(
         const { team, member } = await authTouch(ctx, slug, req);
         assertSeatCanRead(member);
         const body = parseOrBadRequest(CaptureRepoSeedSchema, await readJson(req));
+        // A seed is the hub's to mint (ADR 399): the hub refuses a pushed `seed` event, and that
+        // refusal stalls the joiner's whole push batch, not just this capture. Refuse here, before
+        // anything is stamped (joiner audit 2026-10-02, lane 01M3ZBTJKD).
+        if (await joinerEnrollment(ctx.db, team.id, team.slug)) {
+          throw new MusterdError(
+            'forbidden',
+            "a repo seed is the hub's to capture (ADR 399): run this from the hub machine; " +
+              'the seed reaches this one by fold',
+          );
+        }
         const before = await ctx.db.get<{ id: string }>(
           'SELECT id FROM seeds WHERE team_id = ? AND relay_id = ?',
           [team.id, `repo:${body.ref.trim()}`],

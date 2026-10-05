@@ -1,10 +1,18 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { isAwaitingAcceptance, PROTOCOL_VERSION } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { describe, expect, it, vi } from 'vitest';
+import { resolveConfig } from '../config.js';
 import { withDrivers } from '../db/testing.js';
+import { saveNodeEnrollment } from '../node/state.js';
+import { handleFoldedMessages } from '../protocol/route.js';
 import { appendAudit, listAudit } from '../store/audit.js';
+import { localNodeForTeam } from '../store/messages.js';
 import { REVIEW_LOOP_BREAKER_N } from '../store/review.js';
 import { getTeamBySlug } from '../store/teams.js';
+import { Hub } from './hub.js';
 import { integrationHarness, type Auth } from './integration.helpers.js';
 
 withDrivers('integration · two-stage-close', (_o, kind) => {
@@ -2194,6 +2202,76 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
       expect(row.detail.review_grade).toBe('human');
       expect(row.detail.peer_review).toBe('cross_family');
       expect(row.detail.human_review_missed).toBeUndefined();
+    });
+
+    it('a peer accept on an enrolled JOINER fires no human ask there; the hub fires it when the accept folds (lane 01M3ZBTJKD)', async () => {
+      const { nickTok, ada, gee } = await setup();
+      const lane = await post(
+        '/teams/dawn/lanes',
+        { title: 'drop the old table', risk: ['destructive'], claim: true },
+        ada,
+      );
+      await patchLane(lane.json.lane.id as string, { state: 'ready_for_review' }, ada);
+      const peerAsk = (await get('/teams/dawn/inbox?unread=1', gee)).json.messages.find(
+        (m: any) => m.act === 'ask' && m.meta?.lane_review,
+      );
+      const humanAsks = async () =>
+        (await get('/teams/dawn/inbox?unread=0', nickTok)).json.messages.filter(
+          (m: any) => m.act === 'ask' && m.meta?.lane_review,
+        );
+
+      const team = (await getTeamBySlug(h.server.store, 'dawn'))!;
+      const { id: node_id } = await localNodeForTeam(h.server.store, team.id);
+      const dir = mkdtempSync(join(tmpdir(), 'musterd-gated-joiner-'));
+      const prior = process.env['MUSTERD_NODE_STATE'];
+      process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
+      const acceptId = ulid();
+      try {
+        saveNodeEnrollment({
+          team: 'dawn',
+          hub_url: 'http://127.0.0.1:9',
+          credential: 'x',
+          node_id,
+          enrolled_at: 1,
+        });
+        const sent = await post(
+          '/teams/dawn/messages',
+          {
+            envelope: {
+              v: PROTOCOL_VERSION,
+              id: acceptId,
+              team: 'dawn',
+              from: 'gee',
+              to: { kind: 'member', name: 'ada' },
+              act: 'accept',
+              body: 'read it; ship it',
+              meta: { in_reply_to: peerAsk.id },
+              ts: Date.now(),
+            },
+          },
+          gee,
+        );
+        expect(sent.status).toBe(201);
+        expect(await humanAsks()).toHaveLength(0);
+        // …and the peer's accept is not a verdict here: the gate is still owed to a human.
+        const state = await h.server.store.get<{ state: string }>(
+          'SELECT state FROM lanes WHERE id = ?',
+          [lane.json.lane.id],
+        );
+        expect(isAwaitingAcceptance(state!.state as never)).toBe(true);
+      } finally {
+        if (prior === undefined) delete process.env['MUSTERD_NODE_STATE'];
+        else process.env['MUSTERD_NODE_STATE'] = prior;
+        rmSync(dir, { recursive: true, force: true });
+      }
+
+      // The same accept, folded on the hub: stage two fires there.
+      const ctx = { db: h.server.store, hub: new Hub(), config: resolveConfig(), rosterRoots: [] };
+      await handleFoldedMessages(ctx, 'dawn', [acceptId]);
+      const asks = await humanAsks();
+      expect(asks).toHaveLength(1);
+      expect(asks[0].meta.tier).toBe('blocking');
+      expect(asks[0].body).toContain('ship it');
     });
 
     it('risky with NO peer candidate: the human ask fires immediately at blocking (ADR 188)', async () => {

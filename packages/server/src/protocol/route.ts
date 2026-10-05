@@ -416,9 +416,16 @@ async function routeEnvelopeInner(
     // the peer's findings in the body — the human reviews an already-screened change. Best-effort
     // like every lane delivery: a failure here must never fail the accept itself.
     let escalatedToHuman = false;
+    // Hub-only (joiner audit 2026-10-02, lane 01M3ZBTJKD): the ask is composed FROM the lane owner,
+    // who may be bound to the hub, and a joiner pushing it wedges. A joiner's accept folds, and the
+    // hub fires the ask then (`handleFoldedMessages`).
+    // The joiner still owes the gate: a risky lane's peer accept must not close it here as a
+    // verdict, so it is treated as escalated and left for the human the hub will ask.
     if (env.act === 'accept' && typeof ref === 'string') {
       try {
-        escalatedToHuman = await fireGatedHumanAsk(ctx, team, sender, ref, env.body);
+        escalatedToHuman = (await joinerEnrollment(ctx.db, team.id, team.slug))
+          ? (await gatedLane(ctx, team, ref)) !== null
+          : await fireGatedHumanAsk(ctx, team, sender, ref, env.body);
       } catch (err) {
         log.warn({ msg: 'gated_human_ask_failed', err: String(err) });
       }
@@ -608,8 +615,9 @@ async function routeEnvelopeInner(
  * The hub's half of ADR 371 §2: run the route-time hooks a FOLDED message still owes. A joiner's
  * `status_update` carrying a `blocked_by` report was never routed here — it folded — so the pool
  * never saw it. Called from the hub's pull with the ids the fold just inserted (never from a scan
- * of `messages`, which would re-fire on every tick). Only the incident hook lives here: every other
- * route-time hook is either residence-local by design or already replicated as its own kind.
+ * of `messages`, which would re-fire on every tick). The incident hook and the ADR 188 stage-two
+ * human ask live here: every other route-time hook is either residence-local by design or already
+ * replicated as its own kind.
  */
 export async function handleFoldedMessages(
   ctx: Ctx,
@@ -623,9 +631,21 @@ export async function handleFoldedMessages(
       'SELECT * FROM messages WHERE team_id = ? AND id = ?',
       [team.id, id],
     );
-    if (!row || row.act !== 'status_update' || !row.meta) continue;
+    if (!row || !row.meta) continue;
+    if (row.act !== 'status_update' && row.act !== 'accept') continue;
     const sender = await getMemberById(ctx.db, row.from_member);
     if (!sender) continue;
+    if (row.act === 'accept') {
+      // ADR 188 stage two for a joiner's accept, which skipped it at route time (lane 01M3ZBTJKD).
+      const ref = (JSON.parse(row.meta) as { in_reply_to?: unknown }).in_reply_to;
+      if (typeof ref !== 'string') continue;
+      try {
+        await fireGatedHumanAsk(ctx, team, sender, ref, row.body);
+      } catch (err) {
+        log.warn({ msg: 'gated_human_ask_failed', message: id, err: String(err) });
+      }
+      continue;
+    }
     const to = row.to_member ? await getMemberById(ctx.db, row.to_member) : null;
     const env = rowToEnvelope(row, team.slug, sender.name, to?.name ?? null);
     if (!blockedByOf(env.meta)) continue;
@@ -864,6 +884,31 @@ async function laneVoice(ctx: Ctx, team: TeamRow, lane: Lane): Promise<MemberRow
  * The caller needs that answer: since ADR 202 an accept also closes the lane it accepts, and a risky
  * lane whose peer review just escalated must stay open for the human whose verdict was demanded.
  */
+/** The risky, awaiting-acceptance lane a peer's accept of `repliedToId` gates (ADR 188), or null. */
+async function gatedLane(
+  ctx: Ctx,
+  team: TeamRow,
+  repliedToId: string,
+): Promise<{ lane: Lane; owner: MemberRow; grade: string | null } | null> {
+  const replied = await ctx.db.get<{ meta: string | null }>(
+    'SELECT meta FROM messages WHERE team_id = ? AND id = ?',
+    [team.id, repliedToId],
+  );
+  if (!replied?.meta) return null;
+  let laneReview: { lane?: string; title?: string; grade?: string } | undefined;
+  try {
+    laneReview = (JSON.parse(replied.meta) as { lane_review?: typeof laneReview }).lane_review;
+  } catch {
+    return null;
+  }
+  if (!laneReview?.lane) return null;
+  const lane = await getLane(ctx.db, team.id, laneReview.lane, team.slug);
+  if (!lane || lane.risk.length === 0 || !isAwaitingAcceptance(lane.state)) return null;
+  const owner = lane.owner_seat ? await getMemberByName(ctx.db, team.id, lane.owner_seat) : null;
+  if (!owner) return null;
+  return { lane, owner, grade: laneReview.grade ?? null };
+}
+
 async function fireGatedHumanAsk(
   ctx: Ctx,
   team: TeamRow,
@@ -871,22 +916,9 @@ async function fireGatedHumanAsk(
   repliedToId: string,
   peerFindings: string,
 ): Promise<boolean> {
-  const replied = await ctx.db.get<{ meta: string | null }>(
-    'SELECT meta FROM messages WHERE team_id = ? AND id = ?',
-    [team.id, repliedToId],
-  );
-  if (!replied?.meta) return false;
-  let laneReview: { lane?: string; title?: string; grade?: string } | undefined;
-  try {
-    laneReview = (JSON.parse(replied.meta) as { lane_review?: typeof laneReview }).lane_review;
-  } catch {
-    return false;
-  }
-  if (!laneReview?.lane) return false;
-  const lane = await getLane(ctx.db, team.id, laneReview.lane, team.slug);
-  if (!lane || lane.risk.length === 0 || !isAwaitingAcceptance(lane.state)) return false;
-  const owner = lane.owner_seat ? await getMemberByName(ctx.db, team.id, lane.owner_seat) : null;
-  if (!owner) return false;
+  const gated = await gatedLane(ctx, team, repliedToId);
+  if (!gated) return false;
+  const { lane, owner } = gated;
 
   const human = await pickHumanReviewer(ctx.db, team.id, owner.name, ctx.config.presenceTimeoutMs);
   await appendAudit(ctx.db, team.id, {
@@ -897,7 +929,7 @@ async function fireGatedHumanAsk(
     detail: {
       lane: lane.id,
       peer: peer.name,
-      grade: laneReview.grade ?? null,
+      grade: gated.grade,
       human_ask_fired: human !== null,
     },
   });
