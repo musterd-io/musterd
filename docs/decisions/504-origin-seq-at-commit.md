@@ -83,6 +83,12 @@ Keep both properties and stop holding the counter's lock for a whole transaction
   `01M3Z455NEWNZMCJ5KR6EX3TG0`). The `Decision` above is kept as written, as the record of what was
   tried.
 
+- **2026-10-05 — the 2026-10-04 note above overstated it.** Run 7, on the revert (791793fb), was
+  slower still (p95 9.3 s), so the jump from run 5c to run 6 was not this decision: `main` moved
+  between the two. What stands is "no effect", not "made it worse". The queue, measured in run 9 with
+  per-request timing (#2063), is the pool: every statement checks a client out, ~870 000 checkouts in
+  a run; see [ADR 507](507-pg-request-lease.md).
+
 ## Observability & Evaluation
 
 **Traces.** n/a — no new span kinds. The request log's per-request `ms` (the line #2000 added) is
