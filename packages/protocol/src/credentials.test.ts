@@ -14,7 +14,9 @@ describe('PolicySchema.style (ADR 514)', () => {
     expect(PolicySchema.parse({}).style).toEqual(StylePolicySchema.parse({}));
   });
   it('a sparse floor override stays sparse on the wire and dense on read', () => {
-    const wire = PolicyOverrideSchema.parse({ style: { floor: { assess_before_agreeing: false } } });
+    const wire = PolicyOverrideSchema.parse({
+      style: { floor: { assess_before_agreeing: false } },
+    });
     expect(wire.style).toEqual({ floor: { assess_before_agreeing: false } });
     const read = PolicySchema.parse(wire);
     expect(read.style.floor).toEqual({

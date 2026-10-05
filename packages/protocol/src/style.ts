@@ -27,7 +27,9 @@ export function styleProseLineCount(text: string): number {
 /** Null when the prose fits; otherwise the refusal a surface prints, naming the count and the cap. */
 export function styleProseProblem(text: string): string | null {
   const n = styleProseLineCount(text);
-  return n > STYLE_PROSE_MAX_LINES ? `prose is ${n} lines; the cap is ${STYLE_PROSE_MAX_LINES}` : null;
+  return n > STYLE_PROSE_MAX_LINES
+    ? `prose is ${n} lines; the cap is ${STYLE_PROSE_MAX_LINES}`
+    : null;
 }
 
 const ProseSchema = z

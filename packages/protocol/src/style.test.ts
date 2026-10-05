@@ -23,7 +23,12 @@ describe('StylePolicySchema — shipped defaults (spec §4.1)', () => {
         concession_names_check: true,
         human_critique_weighed_as_peer: true,
       },
-      defaults: { pushback: 'when-it-matters', bluntness: 'plain', length: 'normal', format: 'prose' },
+      defaults: {
+        pushback: 'when-it-matters',
+        bluntness: 'plain',
+        length: 'normal',
+        format: 'prose',
+      },
       prose: '',
     });
   });
@@ -136,9 +141,16 @@ describe('styleEpoch', () => {
 
 describe('describeDials', () => {
   it('spells the pushback dial as words and keeps the others verbatim', () => {
-    expect(describeDials(shipped.defaults)).toBe('pushback when it matters · plain · normal · prose');
+    expect(describeDials(shipped.defaults)).toBe(
+      'pushback when it matters · plain · normal · prose',
+    );
     expect(
-      describeDials({ pushback: 'every-time', bluntness: 'direct', length: 'concise', format: 'structured' }),
+      describeDials({
+        pushback: 'every-time',
+        bluntness: 'direct',
+        length: 'concise',
+        format: 'structured',
+      }),
     ).toBe('pushback every time · direct · concise · structured');
     expect(describeDials({ ...shipped.defaults, pushback: 'only-on-risk' })).toContain(
       'pushback only on risk',
