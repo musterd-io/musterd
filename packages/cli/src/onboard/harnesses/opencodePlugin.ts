@@ -190,6 +190,7 @@ function claimV1(client, directory) {
 
 export const MusterdInterrupt = async ({ client, directory }) => claimV1(client, directory);
 
+// eslint-disable-next-line import/no-default-export -- opencode's V2 plugin loader requires a default export
 export default {
   id: PLUGIN_ID,
   // V2 calls setup(ctx): register the same rail on the V2 domain hooks. V2 merges the old
