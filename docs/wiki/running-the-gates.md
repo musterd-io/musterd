@@ -106,7 +106,8 @@ the whole server suite is measured on `docs/perf/neon-pass.md`.
 default, and CI pins `MUSTERD_TEST_DRIVER=both` (ADR 479 §3).~~ CHANGED 2026-10-01 by ADR 492: unset
 is now `sqlite` (a dozen seats share one laptop). CI runs `both` on a pull request that touches
 `packages/server`, `packages/protocol`, the lockfile, `package.json`, `vitest.config.ts` or
-`.github/`, and on every push to `main`; any other PR runs `sqlite`, and the `coverage` job summary
+`.github/`, ~~and on every push to `main`~~ (CHANGED 2026-10-04 by ADR 508: on the 4-hourly scheduled
+run on `main` instead; a push to `main` no longer runs coverage); any other PR runs `sqlite`, and the `coverage` job summary
 says which and why. Set `MUSTERD_TEST_DRIVER=both` locally when you change store or server SQL. PGlite boots once per vitest worker
 (~3–4 s), so a both-driver file costs a few seconds more than its SQLite half. While iterating:
 `MUSTERD_TEST_DRIVER=sqlite` is the fast loop; `MUSTERD_TEST_DRIVER=pglite` reproduces a
