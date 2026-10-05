@@ -129,3 +129,65 @@ export function resolveStyle(policy: StylePolicy, prefs?: StylePrefs): ResolvedS
   };
   return { ...parts, epoch: styleEpoch(parts) };
 }
+
+const PUSHBACK_WORDS: Record<StyleDials['pushback'], string> = {
+  'every-time': 'pushback every time',
+  'when-it-matters': 'pushback when it matters',
+  'only-on-risk': 'pushback only on risk',
+};
+
+/** The four dials as one line: `pushback when it matters · plain · normal · prose`. */
+export function describeDials(dials: StyleDials): string {
+  return [PUSHBACK_WORDS[dials.pushback], dials.bluntness, dials.length, dials.format].join(' · ');
+}
+
+/** One phrase per floor boolean, in the order the spec lists them (§4.2). */
+const FLOOR_PHRASES: ReadonlyArray<[keyof StyleFloor, string]> = [
+  ['assess_before_agreeing', 'assess before you agree; no praise before a check'],
+  ['disagree_once_then_commit', 'disagree once, with the reason, then follow the decision'],
+  ['concession_names_check', 'a concession names what you checked'],
+  ['human_critique_weighed_as_peer', "a human's critique weighs what its evidence weighs"],
+];
+
+function floorLine(floor: StyleFloor): string | null {
+  const on = FLOOR_PHRASES.filter(([key]) => floor[key]).map(([, phrase]) => phrase);
+  return on.length === 0 ? null : `Floor (team): ${on.join('; ')}.`;
+}
+
+export interface StyleBlockInput {
+  /** `resolveStyle(policy)` with no prefs — what `@team` and the record get. */
+  team: ResolvedStyle;
+  /** The human steering this Workspace (presence driver, else the team's only human), resolved. */
+  driver?: { name: string; style: ResolvedStyle };
+  /** Why there is no driver line, when there is none (spec §4.3). Ignored when `driver` is set. */
+  no_driver?: 'unbound' | 'several_humans';
+}
+
+/**
+ * The style block a seat reads on `team_join` (spec §4.2): an instruction in prose, floor first, the
+ * driver's dials and prose labelled as theirs, then what everyone else gets. No trailing newline.
+ */
+export function renderStyleBlock(input: StyleBlockInput): string {
+  const { team, driver } = input;
+  const epoch = driver?.style.epoch ?? team.epoch;
+  const lines: string[] = [`Style (epoch ${epoch}) — how you talk here.`];
+  const floor = floorLine(team.floor);
+  if (floor) lines.push(floor);
+  if (team.team_prose) lines.push(`The team adds: "${team.team_prose}"`);
+  const teamDials = describeDials(team.dials);
+  if (driver) {
+    lines.push(
+      `For ${driver.name} (in chat, and in any act addressed to ${driver.name}): ${describeDials(driver.style.dials)}.`,
+    );
+    if (driver.style.human_prose) lines.push(`${driver.name} adds: "${driver.style.human_prose}"`);
+    lines.push(`Everyone else, @team and the record: team defaults (${teamDials}).`);
+  } else {
+    const why =
+      input.no_driver === 'several_humans'
+        ? 'No driver bound and this team has several humans'
+        : 'No driver bound';
+    lines.push(`${why} — team defaults in chat (\`musterd agent --driver <you>\` binds one).`);
+    lines.push(`In chat, @team and the record: team defaults (${teamDials}).`);
+  }
+  return lines.join('\n');
+}

@@ -4,6 +4,8 @@ import {
   StylePolicyOverrideSchema,
   StylePolicySchema,
   StylePrefsSchema,
+  describeDials,
+  renderStyleBlock,
   resolveStyle,
   styleEpoch,
   styleProseLineCount,
@@ -129,5 +131,99 @@ describe('styleEpoch', () => {
   it('moves when prose moves', () => {
     const base = resolveStyle(shipped).epoch;
     expect(resolveStyle(shipped, { prose: 'x' }).epoch).not.toBe(base);
+  });
+});
+
+describe('describeDials', () => {
+  it('spells the pushback dial as words and keeps the others verbatim', () => {
+    expect(describeDials(shipped.defaults)).toBe('pushback when it matters · plain · normal · prose');
+    expect(
+      describeDials({ pushback: 'every-time', bluntness: 'direct', length: 'concise', format: 'structured' }),
+    ).toBe('pushback every time · direct · concise · structured');
+    expect(describeDials({ ...shipped.defaults, pushback: 'only-on-risk' })).toContain(
+      'pushback only on risk',
+    );
+  });
+});
+
+describe('renderStyleBlock (spec §4.2–4.3)', () => {
+  const team = resolveStyle(shipped);
+  const fullFloor =
+    "Floor (team): assess before you agree; no praise before a check; disagree once, with the reason, then follow the decision; a concession names what you checked; a human's critique weighs what its evidence weighs.";
+
+  it('with a driver who set dials and prose, prints every line in order', () => {
+    const nick = resolveStyle(shipped, {
+      bluntness: 'direct',
+      length: 'concise',
+      prose: 'Lead with the result. Tell me when I am wrong, once, then do it my way.',
+    });
+    const out = renderStyleBlock({ team, driver: { name: 'nick', style: nick } });
+    expect(out.split('\n')).toEqual([
+      `Style (epoch ${nick.epoch}) — how you talk here.`,
+      fullFloor,
+      'For nick (in chat, and in any act addressed to nick): pushback when it matters · direct · concise · prose.',
+      'nick adds: "Lead with the result. Tell me when I am wrong, once, then do it my way."',
+      'Everyone else, @team and the record: team defaults (pushback when it matters · plain · normal · prose).',
+    ]);
+  });
+
+  it('a driver with no prefs is still named, in team defaults, at the team epoch', () => {
+    const out = renderStyleBlock({ team, driver: { name: 'ana', style: resolveStyle(shipped) } });
+    expect(out).toContain(`Style (epoch ${team.epoch})`);
+    expect(out).toContain(
+      'For ana (in chat, and in any act addressed to ana): pushback when it matters · plain · normal · prose.',
+    );
+    expect(out).not.toContain('ana adds:');
+  });
+
+  it('team prose prints after the floor as "The team adds"', () => {
+    const policy = StylePolicySchema.parse({ prose: 'Say numbers with units.' });
+    const out = renderStyleBlock({ team: resolveStyle(policy) });
+    const lines = out.split('\n');
+    expect(lines[1]).toMatch(/^Floor \(team\):/);
+    expect(lines[2]).toBe('The team adds: "Say numbers with units."');
+  });
+
+  it('a floor boolean an admin turned off leaves the Floor line', () => {
+    const policy = StylePolicySchema.parse({ floor: { human_critique_weighed_as_peer: false } });
+    const out = renderStyleBlock({ team: resolveStyle(policy) });
+    expect(out).toContain(
+      'Floor (team): assess before you agree; no praise before a check; disagree once, with the reason, then follow the decision; a concession names what you checked.',
+    );
+    expect(out).not.toContain("a human's critique");
+  });
+
+  it('every floor boolean off ⇒ no Floor line at all', () => {
+    const policy = StylePolicySchema.parse({
+      floor: {
+        assess_before_agreeing: false,
+        disagree_once_then_commit: false,
+        concession_names_check: false,
+        human_critique_weighed_as_peer: false,
+      },
+    });
+    const out = renderStyleBlock({ team: resolveStyle(policy) });
+    expect(out).not.toMatch(/Floor \(team\)/);
+  });
+
+  it('no driver bound: says so, names the fix, and the record line covers chat too', () => {
+    const out = renderStyleBlock({ team, no_driver: 'unbound' });
+    expect(out.split('\n')).toEqual([
+      `Style (epoch ${team.epoch}) — how you talk here.`,
+      fullFloor,
+      'No driver bound — team defaults in chat (`musterd agent --driver <you>` binds one).',
+      'In chat, @team and the record: team defaults (pushback when it matters · plain · normal · prose).',
+    ]);
+  });
+
+  it('several humans and no driver: the reason is named', () => {
+    const out = renderStyleBlock({ team, no_driver: 'several_humans' });
+    expect(out).toContain(
+      'No driver bound and this team has several humans — team defaults in chat (`musterd agent --driver <you>` binds one).',
+    );
+  });
+
+  it('never ends with a newline', () => {
+    expect(renderStyleBlock({ team })).not.toMatch(/\n$/);
   });
 });
