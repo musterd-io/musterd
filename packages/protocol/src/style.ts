@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
 /**
@@ -81,3 +82,50 @@ export const StylePrefsSchema = z
   })
   .strict();
 export type StylePrefs = z.infer<typeof StylePrefsSchema>;
+
+/** One human's resolved style: the floor (team's), each dial (theirs, else the team's), both proses. */
+export interface ResolvedStyle {
+  floor: StyleFloor;
+  dials: StyleDials;
+  team_prose: string;
+  human_prose: string;
+  /** 8 hex chars of sha256 over the other four fields — the seat attests this (ADR 417 shape). */
+  epoch: string;
+}
+
+/** The epoch of a resolved style: stable while nothing in it changes, different when anything does. */
+export function styleEpoch(parts: Omit<ResolvedStyle, 'epoch'>): string {
+  const canonical = JSON.stringify([
+    parts.floor.assess_before_agreeing,
+    parts.floor.disagree_once_then_commit,
+    parts.floor.concession_names_check,
+    parts.floor.human_critique_weighed_as_peer,
+    parts.dials.pushback,
+    parts.dials.bluntness,
+    parts.dials.length,
+    parts.dials.format,
+    parts.team_prose,
+    parts.human_prose,
+  ]);
+  return createHash('sha256').update(canonical).digest('hex').slice(0, 8);
+}
+
+/**
+ * Resolve how seats talk to one human (spec §4.1): the floor from policy — prefs cannot touch it —
+ * each dial from prefs, else the team default; team prose then human prose. With no prefs this is
+ * the team's own style, which is what `@team` and the record get.
+ */
+export function resolveStyle(policy: StylePolicy, prefs?: StylePrefs): ResolvedStyle {
+  const parts = {
+    floor: policy.floor,
+    dials: {
+      pushback: prefs?.pushback ?? policy.defaults.pushback,
+      bluntness: prefs?.bluntness ?? policy.defaults.bluntness,
+      length: prefs?.length ?? policy.defaults.length,
+      format: prefs?.format ?? policy.defaults.format,
+    },
+    team_prose: policy.prose,
+    human_prose: prefs?.prose ?? '',
+  };
+  return { ...parts, epoch: styleEpoch(parts) };
+}
