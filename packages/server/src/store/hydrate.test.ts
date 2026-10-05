@@ -36,7 +36,7 @@ async function seed() {
 async function countMemberLookups(db: Driver, run: () => void | Promise<void>): Promise<number> {
   let n = 0;
   const off = db.onStatement((sql) => {
-    if (/FROM members WHERE id = \?/.test(sql)) n++;
+    if (/FROM members WHERE id (= \?|IN \()/.test(sql)) n++;
   });
   try {
     await run();
@@ -55,7 +55,7 @@ withDrivers('hydrate', (o, kind) => {
   describe('rowsToEnvelopes', async () => {
     // Counts statements through the SQLite driver's seam; the property itself is driver-neutral.
     it.runIf(kind === 'sqlite')(
-      'asks each distinct member for its name once, not once per row',
+      'asks for every distinct member in one statement, not once per row or per member',
       async () => {
         const { db, team, nick, ada } = await seed();
         for (let i = 0; i < 200; i++) {
@@ -86,8 +86,8 @@ withDrivers('hydrate', (o, kind) => {
         });
 
         expect(out).toHaveLength(200);
-        // Two distinct members across 200 rows.
-        expect(lookups).toBe(2);
+        // Two distinct members across 200 rows, one statement (lane 01M46RPQ94).
+        expect(lookups).toBe(1);
       },
     );
 

@@ -164,7 +164,13 @@ export function createReportService(
         get: (teamId, teamSlug, scope) => derive(teamId, teamSlug, Date.now(), scope),
         close: () => Promise.resolve(),
       };
-    const cache = createReportCache(derive);
+    // Cloud derives in ONE transaction (lane 01M46RPQ94): one pool checkout and one consistent
+    // snapshot, not a BEGIN/COMMIT per statement. Load run 12 (2026-10-05) measured a derivation at
+    // 202 transactions, ~250 ms each under load; a refresh outlasted REPORT_MAX_STALE_MS and every
+    // viewer's poll queued behind it.
+    const cache = createReportCache((teamId, teamSlug, now, scope) =>
+      (scope ?? db).tx((t) => deriveReport(t, teamId, teamSlug, now, presenceTimeoutMs)),
+    );
     return {
       get: (teamId, teamSlug, scope) => cache.get(teamId, teamSlug, scope),
       close: () => Promise.resolve(),

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Report } from '@musterd/protocol';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { openDriver } from '../db/open.js';
 import { withDrivers } from '../db/testing.js';
@@ -121,6 +121,18 @@ withDrivers('reportCache', (o, kind) => {
       const svc = createReportService(db, 120_000);
       const report = await svc.get(team.id, team.slug);
       expect(report.team).toBe('revive');
+      await svc.close();
+    });
+
+    it('the cached inline (Cloud) derivation runs in one transaction under the scoped handle', async () => {
+      const db = await openStore();
+      const team = await createTeam(db, { slug: 'revive' });
+      const scope = db.forTeam(team.id);
+      const tx = vi.spyOn(scope, 'tx');
+      const svc = createReportService(db, 120_000, { cacheInline: true });
+      const report = await svc.get(team.id, team.slug, scope);
+      expect(report.team).toBe('revive');
+      expect(tx).toHaveBeenCalledTimes(1);
       await svc.close();
     });
 
