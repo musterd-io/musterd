@@ -242,6 +242,7 @@ src/
     unbind.ts         // release this folder's own seat — clears bound_at + presence, keeps it declared (ADR 058)
     reload.ts         // SIGHUP the service daemon to re-resolve roster roots + reconcile (ADR 058)
     reclaim.ts        // operator force-drop of a member's stuck live session (ADR 017 follow-up); a `not_found` names `musterd status` as the next step (ADR 055 no-dead-end)
+    calendar.ts       // musterd calendar [list]|add|edit|rm|import (ADR 519): the Team's calendar from the terminal — upcoming/past/all, picks, kind; flags parse through CalendarEntryInputSchema before any request ("" clears a field); `import` reads the claude.ai artifact's `events` export (a dir of <id>.json, an array with ids, or an id→doc map), maps '' → null and the doc id → source_ref, and reports created/updated/unchanged — a second run is all unchanged
     hold.ts           // musterd hold set|lift|list (ADR 516): a human admin pauses something team-wide with an author and an end (autorefresh_paused, merges_paused, notice); every line says what the effect actually enforces; renderHolds is shared with `musterd status`
     halt.ts           // musterd halt <seat> --reason / musterd resume <seat> (ADR 501): a human withdraws an agent seat's authority at its next boundary; the daemon decides who may (admin any agent, a sponsor their own); every refusal names the next step
     notify.ts         // human-reachability nudge loop (ADR 024/035)
