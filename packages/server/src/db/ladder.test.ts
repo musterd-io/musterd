@@ -61,11 +61,20 @@ describe('the portable ladder (spec §12.2)', () => {
       "INSERT INTO inbox_cursors (member_id, last_read_message_id, last_read_ts, updated_at) VALUES ('M', NULL, 0, 1)",
     );
     s.exec("INSERT INTO schema_meta (key, value) VALUES ('schema_version', '80')");
-    expect(runMigrations(s)).toBe(85);
+    expect(runMigrations(s)).toBe(86);
     expect(s.prepare('SELECT team_id FROM presence WHERE id = ?').get('P')).toEqual({
       team_id: 'T',
     });
     expect(s.prepare('SELECT team_id FROM seat_memory').get()).toEqual({ team_id: 'T' });
     expect(s.prepare('SELECT team_id FROM inbox_cursors').get()).toEqual({ team_id: 'T' });
+  });
+
+  it('v86: members.style_prefs and presence.style_epoch exist (ADR 514; Postgres parity is drift.test)', () => {
+    const s = new Database(':memory:');
+    runMigrations(s);
+    const memberCols = s.prepare("SELECT name FROM pragma_table_info('members')").pluck().all();
+    const presenceCols = s.prepare("SELECT name FROM pragma_table_info('presence')").pluck().all();
+    expect(memberCols).toContain('style_prefs');
+    expect(presenceCols).toContain('style_epoch');
   });
 });
