@@ -693,9 +693,14 @@ Setting and lifting each deliver one `message` from the human to the Team carryi
 optional `holds` array of active holds; a supporting daemon emits it, including `[]`, and
 omission means the daemon does not report holds.
 
+`POST /holds/check {tool, command}` (any Member) answers a `GateDecision`. A supporting daemon
+re-tests `command` itself and denies — outcome `denied_held`, reason the `held` sentence — only when
+the caller is not human, the command is merge-shaped (`gh pr merge`, or a `git push` whose refspec
+names `main` or `master`), and a `merges_paused` hold is active. A PreToolUse gate asks only for
+merge-shaped commands and fails open when the daemon cannot answer.
+
 A Member's call refused by an enforced hold answers refusal code `held`, whose message names the
-effect, the human and the end time: `held by nick until 15:30: demo 14:00` (reserved; first used by
-`merges_paused` enforcement, ADR 516 increment 2).
+effect, the human and the end time: `held by nick until 15:30: demo 14:00`. At the gate this is the `denied_held` decision's reason.
 
 ## A.16 Calendar entries (unreleased — ADR 519)
 

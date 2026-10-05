@@ -18,6 +18,7 @@ export {
   holdRefusal,
   isHoldActive,
   isHoldEnforced,
+  isMergeShapedCommand,
   type Hold,
   type HoldEffect,
 } from './holds.wire.js';
@@ -58,3 +59,14 @@ export const SyncHoldRequestSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('lift'), actor: z.string().min(1), id: z.string().min(1) }),
 ]);
 export type SyncHoldRequest = z.infer<typeof SyncHoldRequestSchema>;
+
+/**
+ * `POST /teams/:slug/holds/check` (ADR 516 increment 2) — the PreToolUse gate asks before a
+ * merge-shaped command runs. The daemon re-tests the command itself and decides; the answer is an
+ * ordinary `GateDecision` (outcome `denied_held` when an active `merges_paused` hold stops it).
+ */
+export const HoldCheckRequestSchema = z.object({
+  tool: z.string().min(1).max(64),
+  command: z.string().max(8192),
+});
+export type HoldCheckRequest = z.infer<typeof HoldCheckRequestSchema>;

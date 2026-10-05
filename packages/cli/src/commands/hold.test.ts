@@ -118,6 +118,6 @@ describe('hold rendering', () => {
     expect(out).toContain('lifted by nick');
     expect(out).toContain('ended');
     expect(enforcementNote('notice')).toContain('enforced nowhere');
-    expect(enforcementNote('merges_paused')).toContain('increment 2');
+    expect(enforcementNote('merges_paused')).toContain('denied at the gate');
   });
 });

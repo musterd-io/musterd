@@ -9,6 +9,7 @@ import {
   holdRefusal,
   isHoldActive,
   isHoldEnforced,
+  isMergeShapedCommand,
   type Hold,
 } from './holds.js';
 import { NextBriefSchema, NextSummarySchema } from './lanes.js';
@@ -103,5 +104,34 @@ describe('holds (ADR 516)', () => {
     const briefHolds = NextBriefSchema.shape.holds;
     expect(briefHolds.parse(undefined)).toBeUndefined();
     expect(briefHolds.parse([hold()])).toHaveLength(1);
+  });
+});
+
+describe('isMergeShapedCommand (ADR 516 increment 2)', () => {
+  it.each([
+    'gh pr merge 2099 --squash --auto --delete-branch',
+    'gh pr merge',
+    'cd repo && gh pr merge 12 --squash',
+    'GH_TOKEN=x gh pr merge 3',
+    'git push origin main',
+    'git push origin HEAD:main',
+    'git -C /tmp/r push origin master',
+    'git push --force-with-lease origin refs/heads/main',
+    'pnpm lint; git push origin main',
+  ])('matches %s', (cmd) => {
+    expect(isMergeShapedCommand(cmd)).toBe(true);
+  });
+
+  it.each([
+    'git push --force-with-lease origin feat/holds',
+    'git push',
+    'git push -u origin docs/main-notes',
+    'gh pr view 2099',
+    'gh pr create --title "merge main into nothing"',
+    'git fetch origin main && git rebase origin/main',
+    'echo gh pr merge',
+    'git log main',
+  ])('does not match %s', (cmd) => {
+    expect(isMergeShapedCommand(cmd)).toBe(false);
   });
 });

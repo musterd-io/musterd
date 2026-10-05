@@ -112,6 +112,16 @@ autorefresh tick reading server holds, `musterd hold`, the `service hold --auto`
 
 ## Consequences
 
+- _Dated note (2026-10-05, increment 2, lane 01M471RXBV):_ `merges_paused` is enforced, with one
+  change of mechanism from Decision 6's wording. The hook does not read holds off `GET /enforcement`
+  and decide locally; it matches merge-shaped commands locally (`isMergeShapedCommand`: `gh pr
+  merge`, a `git push` naming `main`/`master`) only to decide whether to ask, then calls
+  `POST /holds/check`, where the daemon re-tests the command and decides. Reasons: a deny is then
+  the server's (the ADR 513 posture — a client cannot widen or soften it), it is audited
+  (`action.gate`, target `hold:merges_paused`, `detail.cause: 'hold'`, outcome `denied_held`), and
+  every other tool call keeps exactly the round trips it had. Humans are not gated, as at the ADR
+  513 route gate. A bare `git push` is not matched: which branch it lands on is not in the text, and
+  a hold that guessed would deny branch pushes. Unreachable daemon → fail open, as Decision 6 says.
 - The demo case becomes one command — `musterd hold set autorefresh_paused --for 90m --reason
   "demo 14:00"` — that every seat sees with an author and an end, that clears itself, and that
   no agent can widen into "nobody merges", because that would be a different effect nobody set.

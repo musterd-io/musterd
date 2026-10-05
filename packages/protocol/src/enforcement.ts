@@ -105,6 +105,8 @@ export const GATE_OUTCOMES = [
   'denied_awaiting',
   'denied_declined',
   'released',
+  // ADR 516 increment 2: an active `merges_paused` hold stopped a merge-shaped command.
+  'denied_held',
 ] as const;
 export type GateOutcome = (typeof GATE_OUTCOMES)[number];
 

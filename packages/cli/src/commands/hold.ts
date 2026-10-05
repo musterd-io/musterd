@@ -95,7 +95,7 @@ export function enforcementNote(effect: HoldEffect): string {
     case 'autorefresh_paused':
       return 'every machine’s autorefresh stands down until it ends; a manual `musterd service refresh` still works';
     case 'merges_paused':
-      return 'announced to every seat; gate enforcement of merges is not built yet (ADR 516 increment 2)';
+      return 'agent seats’ `gh pr merge` and pushes to main are denied at the gate until it ends; humans are not gated, and a GitHub auto-merge armed earlier still fires';
     case 'notice':
       return 'a notice — shown to every seat, enforced nowhere';
   }
