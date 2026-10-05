@@ -17,5 +17,10 @@ export default defineConfig({
     maxWorkers: MAX_WORKERS,
     pool: 'forks',
     env: { MUSTERD_SILENT: '1' },
+    // Machine-wide path isolation (ADR 162 + ADR 190), mirroring the root and cli configs. A
+    // package-local run inherits nothing from the root, so `pnpm --filter @musterd/server test` ran
+    // with no MUSTERD_NODE_STATE pin at all: once a suite's afterEach deleted its own override, the
+    // rest of that file wrote the operator's real ~/.musterd/node.json (lane 01M440QFKV).
+    setupFiles: ['../../tests/setup/isolate-machine-state.ts'],
   },
 });

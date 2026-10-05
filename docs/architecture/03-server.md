@@ -139,7 +139,7 @@ src/
     sampler.ts        // setInterval tick (60s default): scan → classify → insertFootprintTick + retention prune; any throw = one skipped tick, never a crashed daemon
     reap.ts           // reapOrphans: the daemon's only kill path — per-pid re-verification at kill time (allowlist + still orphaned), SIGTERM→grace→SIGKILL, footprint.reaped audit row
   node/
-    state.ts          // ~/.musterd/node.json (ADR 328 §2): this machine's msnode_ per enrolled team, mode 0600 and chmod'd on overwrite (writeFileSync's mode applies only at create). The DAEMON owns it — `musterd node join` asks its own daemon to enroll, so one process holds the nodes row, the credential, and the file. Keyed by team SLUG while the db keys team_id: a rename orphans the entry, and re-enrolling is the repair
+    state.ts          // ~/.musterd/node.json (ADR 328 §2): this machine's msnode_ per enrolled team; saveNodeEnrollment parses its entry at the boundary (a non-object or empty team throws, nothing written) and nodeStatePath throws under VITEST with no MUSTERD_NODE_STATE (ADR 190, lane 01M440QFKV); mode 0600 and chmod'd on overwrite (writeFileSync's mode applies only at create). The DAEMON owns it — `musterd node join` asks its own daemon to enroll, so one process holds the nodes row, the credential, and the file. Keyed by team SLUG while the db keys team_id: a rename orphans the entry, and re-enrolling is the repair
   seeds/
     ingest.ts         // setInterval poll (60s): parse Slack-only relay records, resolve human Member attribution, persist shared Seeds, and advance the cursor atomically; never opens a Lane (ADR 291/311)
   sync/

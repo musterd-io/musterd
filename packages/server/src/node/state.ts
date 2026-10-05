@@ -34,11 +34,24 @@ const NodeEnrollmentSchema = z.object({
 });
 export type NodeEnrollment = z.infer<typeof NodeEnrollmentSchema>;
 
+const NodeEnrollmentEntrySchema = NodeEnrollmentSchema.extend({ team: z.string().min(1) }).strict();
+
 const NodeStateSchema = z.object({ nodes: z.record(NodeEnrollmentSchema).default({}) });
 export type NodeState = z.infer<typeof NodeStateSchema>;
 
 export function nodeStatePath(env: NodeJS.ProcessEnv = process.env): string {
-  return env['MUSTERD_NODE_STATE'] ?? join(homedir(), '.musterd', 'node.json');
+  const override = env['MUSTERD_NODE_STATE'];
+  if (override) return override;
+  // ADR 190, as the CLI's machineStatePath already does: under vitest the real file is never the
+  // answer. On 2026-10-04 the hub's own ~/.musterd/node.json held a test's write — the server
+  // package's vitest config never loaded the isolation setup, and a suite's afterEach `delete`
+  // left the rest of its file pointed here (lane 01M440QFKV).
+  if (env['VITEST'])
+    throw new Error(
+      'MUSTERD_NODE_STATE must be set when VITEST is set (ADR 190). Clearing the override without ' +
+        'replacing it lets the suite write ~/.musterd/node.json — real node credentials.',
+    );
+  return join(homedir(), '.musterd', 'node.json');
 }
 
 /**
@@ -59,7 +72,10 @@ export function saveNodeEnrollment(
   entry: { team: string } & NodeEnrollment,
   env: NodeJS.ProcessEnv = process.env,
 ): void {
-  const { team, ...rest } = entry;
+  // Parsed at the boundary (AGENTS.md rule 4): the type says `{ team } & NodeEnrollment`, but a bare
+  // string got through on the hub and was written as `"undefined": {"0":"b","1":"r",…}` — `team`
+  // destructured to undefined and the string spread into indexed chars. Refuse, never write.
+  const { team, ...rest } = NodeEnrollmentEntrySchema.parse(entry);
   const state = readNodeState(env);
   state.nodes[team] = rest;
 
