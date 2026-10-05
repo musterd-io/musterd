@@ -523,3 +523,24 @@ count, what broke, quotes added, conversations opened, measures hit or missed. D
 - **2026-09-16** (later still) — nick's review of the visual: install counts made derivable (§6 funnel,
   input measures in §13; passive proxies baselined: npm cli 5 / mcp 16 per week, 0 stars, 7 uniques);
   skills cadence set at 3–4 days each with the sweep first (§9).
+- **2026-10-05** — first log entry since Sep 16; weeks 1–2 went unlogged. **Demos: 1** —
+  *Multiplayer AI & How We Get There* (Thu Oct 1, 425 Bush St; 82 registered, ~75 in the room),
+  part of the Multiplayer AI series nick keeps attending (Aug 18, Sep 16, Oct 1; next Oct 6).
+  Format: ~9 min — 6 on the HTML deck, 2 kicking off the audience-vote build, 1 of Q&A. Installs:
+  none recorded. §13's "demo at ≥2 events by Sep 30" missed (1).
+  **Questions asked** (the FAQ the room wrote): where agent messages and actions are stored; which
+  database; whether it works for non-coding work; whether coding was the first use case; what
+  separates musterd from competitors; why agents need to communicate at all.
+  **What broke:** (1) the QR vote was asked before the room knew what musterd is — 7 votes from ~75;
+  (2) six minutes of slides before any product, so the demo started with two minutes left and never
+  landed; (3) a misspelled argument to the go-script; (4) the value prop did not come through — the
+  last question ("why do agents need to communicate?") is the proof; (5) delivery too fast, with
+  filler words. **Changes for the next demo:** product first — open on nick's real session and
+  `/live`, used the way he uses it at home, and let the slides answer what the room asks; the vote
+  (if any) only after the room has seen one act land; no typed arguments on stage — one alias, run
+  once beforehand; the six questions above get one-line answers rehearsed before Oct 6.
+  **This week (SF Tech Week, from nick's Luma + Partiful RSVPs):** demo targets are the Tue Oct 6
+  SF Tech Week AI Demo Night and the Wed Oct 7 Startup Grind / AI Collective demo night (§5); home
+  crowd Tue Oct 6 *Croissant Maxxing — Multiplayer AI*; on-topic rooms Wed *Multi-Agent Systems and
+  Scientific Discovery* (pending) and *Multiplayer Hackathon by Party*, Thu *Steal My Workflow*;
+  pitch practice Tue *Pitch Presence* and Thu *Pitch Roast Live*.
