@@ -85,7 +85,7 @@ for obstinacy.
    primer's first line); on an epistemic act that means nick's "are you sure?" is answered exactly as
    a seat's would be. This is the guidance-level form of the anonymisation result. Delivering
    `challenge` without sender identity is a protocol change and is deferred to its own ADR (below).
-   Follows-up: deferred — the first five-day read of the eval below (2026-10-04)
+   Follows-up: 01M3QTE4FVJG6R8V5JFXJ64RNV
 
 4. **Measure the flip, not the agreement.** Two readouts, computed from the acts already stored, no
    new table:
@@ -143,7 +143,7 @@ concession without lowering _wrong_ concession.
   number", taken literally, passed 5 of the 6 baseline concessions on digits like "94 ADRs". So the
   readout counts evidence-shaped numbers only: a commit sha, a `#PR`, a `file:line`. The server-side
   projection (a `musterd report` section) needs its own ADR, because it changes the `Report` schema.
-  Follows-up: lane 01M3QRD7TFZYX4HKG8QM03PV9X — deferred to the five-day read (2026-10-04)
+  Follows-up: 01M44BV9PM6W7ZPWKV2MM5DXV8
 - **2026-10-04 — the five-day read is inconclusive** (dolly; lane 01M3QTERXJ). Since 2026-09-29:
   `challenge` channel 0 of 1 unverified, `phrase` channel 0 of 2, decline rate 0 of 1. Both are
   under n = 5, so per the note above they report direction only. The direction is favourable (all
@@ -152,6 +152,16 @@ concession without lowering _wrong_ concession.
   `challenge` has produced none yet. Nothing is decided on this sample: the report section (lane
   01M3QRD7TF), the per-seat readout (01M3QTEAYH) and anonymised delivery (01M3QTE4FV) all move to
   the thirty-day read, 2026-10-29. Numbers and queries: the wiki page's "The five-day read".
+- **2026-10-04 — amended by [ADR 505](505-disputes-one-lifecycle-for-contesting-a-claim.md)**
+  (dolly; lane 01M44BV3097RBY6RW2DP893Q84). The five-day read's real finding was that seats were
+  not disagreeing anywhere the protocol could see — 0 `challenge` acts in the window, 5 prose hits
+  in ~2,800 acts — while review (65 rejections / 30 days) carried the team's actual peer critique
+  one-way, never answered by a hold. ADR 505 replaces §4's two source-split readouts and §5's
+  `challenge` routing with one dispute lifecycle: any contest of a claim (review rejection,
+  `challenge`, failed dependency check) is owed one answer — conceded with the check or held with
+  the evidence — a hold goes to a cross-family tiebreak, and a claim that falls later traces back to
+  whoever passed it. §1–§3 stand. The channel experiment (Observability) ends "not run". The
+  `phrase` channel is dropped as a headline proxy.
 - **Increment 1 (this lane):** this ADR; the skill section "Answering a critique" in
   `packages/protocol/src/guidance.ts` (content version bumped, every seat's `SKILL.md` refreshes on
   the next `musterd init`/doctor pass); the wiki page with the baseline table, the queries, and the

@@ -224,6 +224,7 @@ describe('version-bump discipline (ADR 085)', () => {
     38: '1897b4cf15b9b634', // ADR 235 has THREE close contracts; step 3 taught two. Restores the dropped one — acceptor asked, NO backstop: wait ≤5m, then self-close — which the submit hint always gave, so a seat reading both saw a contradiction (lane 01M3SF2356, 2026-09-30)
     39: 'dce7b2689034424f', // + more than one increment? declare a Goal and open every increment's lane now; follows_up / abandon_reason on close (ADR 487, lane 01M3T8N2ZP)
     40: 'e11f63074576f8a4', // the "declare a Goal" rule moves to the always-loaded primer (ADR 085: planning has no cue to open the skill); the skill keeps only the mechanics (lane 01M3TW8NNN)
+    41: '2d4acfc73d33a595', // ADR 505 (lane 01M44BV3097RBY6RW2DP893Q84): "Answering a critique" becomes "Disputes" — a review rejection is a dispute the owner answers (accept with the check / decline with the evidence; a hold goes to a cross-family tiebreak); check before you build on a dependency or handoff; push back on the human in chat too (agent-style lane 01M44BNJRF); acceptor step 2 points at it
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {

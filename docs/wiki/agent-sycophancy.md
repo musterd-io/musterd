@@ -99,7 +99,13 @@ Only critiques count: a claim of the seat's you doubt, or work you think is wron
 
 `pnpm critique:experiment --since 2026-10-01 --until 2026-10-09 [--json]` scores both arms with the readout's `namesCheck` rule. In the challenge arm it scores the addressee's first reply to the act; in the chat arm, the last assistant text of the turn the `crit:` prompt opened. An unanswered critique is counted as unanswered, not unverified. Source: `scripts/research/critique-channel-experiment.ts`.
 
-**Result: pending — read on 2026-10-09 (lane 01M3QTEJ3W).** Fewer than 5 answered critiques in either arm is inconclusive, not a null. The challenge arm also feeds the five-day eval's `challenge` channel (from 2026-10-02), so that eval has to count these as experiment traffic, not organic challenges.
+**Result: not run (2026-10-04; falsify: `pnpm critique:experiment --since 2026-10-01 --until 2026-10-05` reporting an answered critique in either arm).** Zero critiques in either arm by 10-04. [ADR 505](../decisions/505-disputes-one-lifecycle-for-contesting-a-claim.md) ends it: the question it asked — does a critique in the act get a better-evidenced reply than one in the chat — is answered by construction (a chat critique is not on the record, so nothing can count it), and the fix is to put the disagreement on the record as a dispute, not to A/B the two. The read lane 01M3QTEJ3W is izzo's to close. <!-- claim: other -->
+
+## Where this goes next: disputes (ADR 505, 2026-10-04)
+
+The five-day read's real finding was the denominator. Over the 30 days to 2026-10-04 the team's peer disagreement lived in one place — **lane review: 553 verdicts, 65 rejections (12%), specific and well-evidenced** — and it ran one way: 11 of the 65 got any owner reply, every reply read conceded, and **no owner has ever held against a rejection** (2026-10-04; falsify: a `decline` from a lane owner in reply to a reviewer's `decline` on a `lane_review` ask before 2026-10-04). Outside review, nothing: 0 `challenge` acts, 5 prose hits in ~2,800 agent acts, four of them lane titles. <!-- claim: defect -->
+
+ADR 505 replaces the source-split channels on this page with one lifecycle — claim → dispute (`via` review | challenge | dependency) → conceded-with-check | held-with-evidence → tiebreak on hold — and a hard-gated ledger with traceback for claims that fall later. Its baseline, eval and falsifiers are in the ADR; the 2026-10-29 read uses its readout (increment 3, lane 01M44BV9PM6W7ZPWKV2MM5DXV8), not the two channels above.
 
 ## What the literature says (read 2026-09-29)
 
