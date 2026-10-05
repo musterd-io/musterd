@@ -416,6 +416,85 @@ withDrivers('gate-http', (_o, kind) => {
     });
   });
 
+  // ADR 513 — a route only a role's holders may run (the courier's Taildrop, 2026-10-04). The daemon
+  // reads the role from the TEAM'S policy, never from the request, and names the holders in the deny.
+  describe('Role-gated routes (ADR 513)', async () => {
+    const ROUTE = {
+      class: 'taildrop',
+      kind: 'role-route',
+      role: 'courier',
+      match: ['tailscale file cp *'],
+      posture: 'block',
+    };
+    const routeReq = (posture: 'warn' | 'block') => ({
+      kind: 'role-route',
+      class: 'taildrop',
+      fingerprint: 'tail01',
+      posture,
+      tool: 'Bash',
+      target: 'tailscale file cp data.jsonl laptop:',
+    });
+
+    async function withRoute(posture: 'warn' | 'block') {
+      await post(
+        '/teams/dawn/policy',
+        { enforcement: { classes: [{ ...ROUTE, posture }] } },
+        bearer(nickCred),
+      );
+      await post(
+        '/teams/dawn/members',
+        { name: 'Dolly', kind: 'agent', role: 'courier' },
+        bearer(nickCred),
+      );
+      agentAuthorities['Dolly'] = await claimAgentHttp(base, 'dawn', agentKey, nickCred, 'Dolly');
+    }
+
+    it('a seat that does not hold the role, block → DENY naming the holder and the ask', async () => {
+      await withRoute('block');
+      const r = await post('/teams/dawn/gate', routeReq('block'), seatHeaders('Ada'));
+      expect(r.json.decision).toBe('deny');
+      expect(r.json.outcome).toBe('denied');
+      expect(r.json.reason).toMatch(/taildrop/);
+      expect(r.json.reason).toMatch(/Dolly holds courier/);
+      expect(r.json.reason).toMatch(/request_help/);
+      const rows = await audits('action.gate');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.result).toBe('deny');
+      const detail = rows[0]!.detail;
+      expect(typeof detail === 'string' ? JSON.parse(detail) : detail).toMatchObject({
+        kind: 'role-route',
+        role: 'courier',
+      });
+      expect(JSON.stringify(rows)).not.toContain('data.jsonl');
+    });
+
+    it('the holder runs the route → quiet allow', async () => {
+      await withRoute('block');
+      const r = await post('/teams/dawn/gate', routeReq('block'), seatHeaders('Dolly'));
+      expect(r.json).toMatchObject({ decision: 'allow', outcome: 'allowed' });
+    });
+
+    it('warn posture → a non-holder proceeds with the holder named (ADR 227 ramp)', async () => {
+      await withRoute('warn');
+      const r = await post('/teams/dawn/gate', routeReq('warn'), seatHeaders('Ada'));
+      expect(r.json).toMatchObject({ decision: 'allow', outcome: 'warned' });
+      expect(r.json.reason).toMatch(/Dolly holds courier/);
+    });
+
+    it('the role comes from the policy: a request claiming warn on a block class is still denied', async () => {
+      await withRoute('block');
+      const r = await post('/teams/dawn/gate', routeReq('warn'), seatHeaders('Ada'));
+      expect(r.json.decision).toBe('deny');
+    });
+
+    it('no seat holds the role → the deny says so', async () => {
+      await post('/teams/dawn/policy', { enforcement: { classes: [ROUTE] } }, bearer(nickCred));
+      const r = await post('/teams/dawn/gate', routeReq('block'), seatHeaders('Ada'));
+      expect(r.json.decision).toBe('deny');
+      expect(r.json.reason).toMatch(/no seat holds courier/);
+    });
+  });
+
   /**
    * ADR 163 — actor attestation through the DB. This is not a gate: `POST /actor` returns no decision, so
    * what's asserted is the row that lands. The load-bearing case is the last one — a Bash command must NOT

@@ -78,8 +78,10 @@ compiled artifact of a role instead of a hand edit.
 - Not a daemon or a sync change. The hub/joiner sync surface (docs/guides/second-machine.md) is
   what crosses the tailnet for the team's record; the courier carries what that surface was never
   meant to.
-- Not a gate on other seats. Today a non-holder is stopped by its own harness (no rule) and by this
-  skill's instruction to ask. A musterd-side deny that names the holder is its own lane
-  (`01M44T6343VZ7ZC3YTBXAQ731A`); until it lands, Codex and OpenCode seats have only the first of
-  those two.
+- Not the gate itself. The gate is the team policy: a route declared as a `role-route` class
+  ([ADR 513](../../../docs/decisions/513-role-gated-routes.md)) denies a non-holder at the PreToolUse
+  hook and names the holder. An admin declares it, for example
+  `musterd team policy --enforce-route 'courier:taildrop=tailscale file cp *' --enforce-posture block`.
+  Codex and OpenCode have no PreToolUse rail, so there a non-holder is stopped only by its harness
+  having no allow rule, and by this skill.
 - Not an archive. The courier moves; where the material lives afterwards is the requester's lane.
