@@ -458,3 +458,28 @@ default; 5b with `MUSTERD_PG_POOL_SIZE=40` (set by nick, blue-green restart).
 - **Next:** run 5c with `fly logs` streamed to a file for the whole run, to name the 500 and the 30 s
   wall before changing anything else. Lane `01M3Z455NE` stays open: its condition (p95 < 1 s) is unmet.
   Falsifier: 5c's captured 500s are not timeouts, or writes no longer cluster at ~30 s.
+
+## 2026-10-04/05 — Cloud runs 6–11: the queue was the pool, one checkout per statement; then the send fan-out (lanes 01M3Z455NE, 01M4563RDY)
+
+Same shape as run 5 (75/75/75, `performance-1x`, a fresh team per run). Each run changed one thing.
+
+| run | build / change | pool | p50 | p95 | summed pool wait | what it showed |
+| --- | --- | --- | --- | --- | --- | --- |
+| 6 | ADR 504 (seq at commit) | 40 | 1.4 s | 7.0 s | — | no gain; reverted (#2053) |
+| 7 | revert + Postgres lock sampler | 40 | 1.5 s | 9.3 s | — | no transaction past 0.18 s; sessions mostly idle in transaction |
+| 8 | live CPU profile (distorts the run) | 40 | 3.2 s | 28.4 s | — | the main thread ~50 % idle: not CPU-bound JS |
+| 9 | per-request timing (#2063) | 40 | 2.0 s | 10.9 s | ~67 000 s | ~870 000 pool checkouts; a send = 165 transactions |
+| 10 | ADR 507: a request leases a client (#2069) | 40 | 1.6 s | 11.3 s | 47 700 s | the queue moved to leases (225 simulated users, 40 connections) |
+| 11 | `MUSTERD_PG_POOL_SIZE=150` | 150 | 2.2 s | 12.0 s | 4 456 s | pool queue gone; slow writes hold a client 22 s over 165 transactions, CPU 92–94 % |
+
+- **Run 6 was misread at the time.** Its p95 rose from 5c's 2.6 s, but run 7 on the revert was slower
+  still: `main` moved between the runs. ADR 504's Consequences records "no effect".
+- **The pool was the queue for reads, and is solved.** Run 9's per-request fields (`db_tx`,
+  `db_wait_ms`, `db_hold_ms`, `db_query_ms`) found every statement checking a client out on its own;
+  ADR 507 plus a pool of 150 took summed pool wait from ~67 000 s to 4 456 s.
+- **What is left is the cost of a write.** In run 11 the 537 writes over 5 s held their client a
+  median 22.2 s across 165 transactions (7.8 s of it in Postgres) with the one core at 92–94 %. The
+  165 is one `getMemberById` per recipient in live delivery (`protocol/route.ts`) — fixed in lane
+  `01M4563RDY`: a team send is now a constant 26 statements at any team size.
+- **Next:** run 12 with the send fix at pool 150. Falsifier: writes still hold a client for
+  seconds over a handful of transactions — then the cost is elsewhere in the write path.
