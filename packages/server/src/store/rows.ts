@@ -71,6 +71,8 @@ export interface MemberRow {
   /** The human's own doorbell overrides (ADR 443), `DoorbellPrefs` JSON. May hold a personal URL,
    * so it is read back only to its owner. NULL ⇒ team defaults. Optional: pre-v70 fixtures lack it. */
   doorbell_prefs?: string | null;
+  /** The human's own style dials and prose (ADR 514), `StylePrefs` JSON; null/absent = team defaults. */
+  style_prefs?: string | null;
   /** ADR 501: a human's hold on an agent seat. `halted_at` set ⇒ halted; `halted_by` is the
    * human's member id; `halted_reason` is required on halt. Resume clears all three. Optional:
    * pre-v85 fixtures lack them. */
@@ -119,6 +121,10 @@ export interface PresenceRow {
    *  COALESCEs it forward. Null for unstamped workspaces and older clients, and never defaulted to
    *  0: absence and "the oldest epoch there is" are different facts. */
   guidance_epoch: number | null;
+  /** The style epoch this occupancy attested (ADR 514): 8 hex chars over the resolved block it is
+   *  running. Moves inside an occupancy on heartbeat, COALESCEd forward like `guidance_epoch`. Null
+   *  for older clients and never defaulted: absence is not an assertion. */
+  style_epoch: string | null;
   /** The wake lease that spawned this occupancy (ADR 241) — the daemon-minted `lease_id` the
    *  actuator handed the child, attested back on claim. Null for every occupancy no wake caused,
    *  which is nearly all of them. The only column here that identifies rather than describes. */

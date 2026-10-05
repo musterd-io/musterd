@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   STYLE_PROSE_MAX_CHARS,
   STYLE_PROSE_MAX_LINES,
+  StyleEpochSchema,
   StylePolicyOverrideSchema,
   StylePolicySchema,
   StylePrefsSchema,
@@ -282,5 +283,14 @@ describe('review fixes — epoch and the prose cap', () => {
     expect(() => StylePrefsSchema.parse({ prose: 'x'.repeat(STYLE_PROSE_MAX_CHARS + 1) })).toThrow(
       /characters/,
     );
+  });
+});
+
+describe('StyleEpochSchema (wire, ADR 514 inc 2)', () => {
+  it('accepts what styleEpoch produces and refuses anything else', () => {
+    const epoch = resolveStyle(shipped).epoch;
+    expect(StyleEpochSchema.parse(epoch)).toBe(epoch);
+    expect(() => StyleEpochSchema.parse('xyz')).toThrow();
+    expect(() => StyleEpochSchema.parse('a1b2c3d4e')).toThrow();
   });
 });

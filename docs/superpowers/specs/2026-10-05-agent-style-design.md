@@ -177,9 +177,9 @@ member, it is that human. Otherwise the block carries only the floor and team de
 Writes go through `StylePrefsSchema` / `PolicyOverrideSchema` at the boundary. Prose over five
 lines is refused with the count. The admin path rides `POST /policy`, so hub forwarding and the
 `policy.change` audit row come with it. The self path is a new self-only route on the member
-(`authMember`, target must equal the caller), the doorbell-prefs precedent; it writes locally, then
-forwards to the hub; a failed forward leaves the local block in force and the roster shows
-`pending sync`.
+(`authMember`, target must equal the caller), the doorbell-prefs precedent; it writes locally. The
+hub forward — so a dial set on one machine reaches seats on another — is lane
+`01M46RWP23N253H9M0HDWPYJNB` (deferred at increment 2; ADR 514 Consequences, 2026-10-05).
 
 ### 4.6 Failure modes
 
@@ -232,7 +232,8 @@ Each increment has its lane (ADR 487), opened 2026-10-05, unowned until its turn
    floor renderer carries dolly's rule; the skill bullet names the coming block (v44). Lane
    `01M46MQD2FXXJ1RVTDCN6XW7WK`.
 2. **Server** — policy `style`, `members.style_prefs` + migrations, the self route, presence
-   `style_epoch`, hub forward for prefs. Lane `01M46MQPQ3JC6EWMY7WV6SY8AA`.
+   `style_epoch`. Lane `01M46MQPQ3JC6EWMY7WV6SY8AA`. The hub forward for prefs is its own lane,
+   `01M46RWP23N253H9M0HDWPYJNB` (§4.5).
 3. **MCP** — block on join and on epoch change, `team_members.style`, `team_style` /
    `team_style_set`, epoch on heartbeat, primer pointer line; dolly's bullet leaves `guidance.ts`
    here, when the block ships (plan 2026-10-05, Task 6). Lane `01M46MQQFS3W2W4N37S7BB9RX5`.

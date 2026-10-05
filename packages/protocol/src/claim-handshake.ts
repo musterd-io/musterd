@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ProvenanceSchema, SurfaceSchema } from './acts.js';
 import { MemberSchema } from './member.js';
 import { WIRE_ATTESTATION_SOURCES } from './model.js';
+import { StyleEpochSchema } from './style.js';
 import { PROTOCOL_VERSION } from './version.js';
 
 /**
@@ -133,6 +134,9 @@ export const ClaimFrame = z.object({
    * verified — the same limit `model_source` carries.
    */
   guidance_epoch: z.number().int().nonnegative().optional(),
+  /** The style epoch this seat is running (ADR 514) — the block it last read from `team_join`.
+   *  Omitted by older clients and before the first block; absent reads as unknown. */
+  style_epoch: StyleEpochSchema.optional(),
   /**
    * The wake lease that spawned this session (ADR 241), read from `MUSTERD_WAKE_LEASE`. Attested
    * like `model`/`build`; omitted by every session a wake did not cause, and by older clients.

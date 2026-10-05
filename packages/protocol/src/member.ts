@@ -11,6 +11,7 @@ import { AccountStatusSchema, CapabilitiesSchema } from './capabilities.js';
 import { WAKEABILITIES, WIRE_ATTESTATION_SOURCES } from './model.js';
 import { OfflineReasonSchema } from './offline.js';
 import { PostureSchema } from './posture.js';
+import { StyleDialsSchema, StyleEpochSchema } from './style.js';
 import { WorkingHoursSchema, type WorkingHours } from './working-hours.js';
 
 /**
@@ -130,6 +131,8 @@ export const PresenceSchema = z.object({
    *  absent is UNKNOWN rather than zero. This is the field that makes the nine-worktree census a
    *  query instead of a shell script. */
   guidance_epoch: z.number().int().nonnegative().nullish(),
+  /** The style epoch this occupancy attested (ADR 514). Null/absent = unknown, never stale. */
+  style_epoch: StyleEpochSchema.nullish(),
   /**
    * The wake lease this occupancy was spawned by (ADR 241) — the daemon-minted `lease_id` carried
    * to the child through `MUSTERD_WAKE_LEASE` and attested back on claim. This is the only field on
@@ -191,6 +194,9 @@ export type Quiescence = z.infer<typeof QuiescenceSchema>;
 
 /** A Member plus a summary of where (if anywhere) they are currently present — used by roster/status. */
 export const MemberSummarySchema = MemberSchema.extend({
+  /** ADR 514: how seats talk to this human — the resolved dials, no prose. Null on agent rows and
+   *  from an older daemon. A seat composing an act to this human reads these. */
+  style: StyleDialsSchema.nullish(),
   presence: PresenceStatusSchema,
   presences: z.array(PresenceSchema).default([]),
   /** Coarse roster activity (musterd/0.2). Optional for back-compat; the server always sets it. */

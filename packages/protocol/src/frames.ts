@@ -5,6 +5,7 @@ import { EnvelopeSchema } from './envelope.js';
 import { ErrorCodeSchema } from './errors.js';
 import { MemberSchema } from './member.js';
 import { WIRE_ATTESTATION_SOURCES } from './model.js';
+import { StyleEpochSchema } from './style.js';
 import { PROTOCOL_VERSION } from './version.js';
 
 export { ClaimFrame, OccupiedFrame, PendingFrame, RefusedFrame };
@@ -67,6 +68,9 @@ export const HeartbeatFrame = z.object({
   // reason: attestation moves forward, and `unknown` comes from never attesting rather than from
   // omitting the field on one frame.
   guidance_epoch: z.number().int().nonnegative().optional(),
+  // Style re-attestation (ADR 514, additive): the epoch of the style block this seat is running.
+  // Absent ⇒ no change, never a clear — the guidance_epoch rule, for the same reason.
+  style_epoch: StyleEpochSchema.optional(),
 });
 
 export const WSClientFrame = z.discriminatedUnion('type', [

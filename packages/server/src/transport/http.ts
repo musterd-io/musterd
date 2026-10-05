@@ -29,6 +29,12 @@ import {
   PolicyOverrideSchema,
   DoorbellPrefsSchema,
   doorbellPrefsProblem,
+  renderStyleBlock,
+  resolveStyle,
+  StyleEpochSchema,
+  StylePrefsSchema,
+  styleProseLineCount,
+  styleProseProblem,
   DoorbellRingsBodySchema,
   DoorbellSurfacedBodySchema,
   maskPrefs,
@@ -398,6 +404,7 @@ import { redeemHandoff, stageHandoff } from '../store/signinHandoff.js';
 import { issueAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { revokeSponsoredDescendants } from '../store/sponsoredCascade.js';
 import { staleLaneWarnings } from '../store/staleness.js';
+import { memberStylePrefs, setStylePrefs, teamStyle } from '../store/style.js';
 import { searchInsights } from '../store/teamMemory.js';
 import {
   archiveTeam,
@@ -1869,6 +1876,8 @@ async function summarize(
   // Every member's latest status_update in one statement (lane 01M3ZCTQK9) — the roster asked once per
   // member, and /live refetches the roster on presence frames for every viewer.
   const statuses = await latestStatusUpdates(ctx.db, teamId);
+  // ADR 514: the team's style once; each human row resolves their own dials against it below.
+  const style = await teamStyle(ctx.db, teamId);
   return Promise.all(
     (await listPresence(ctx.db, teamId, ctx.config.presenceTimeoutMs)).map(async (s) => {
       // Two-clocks rule (M2): liveness from presence, working-label from the latest status_update — plus
@@ -1911,6 +1920,9 @@ async function summarize(
           viewer.kind === 'human' &&
           (viewerIsAdmin || s.member.sponsored_by === viewer.id),
         working_hours: effectiveWorkingHours,
+        // ADR 514: how seats talk to this human — resolved dials, no prose; null on agent rows.
+        style:
+          s.member.kind === 'human' ? resolveStyle(style, memberStylePrefs(s.member)).dials : null,
         presence: presenceStatus,
         presences: s.presences,
         ...activity,
@@ -4283,6 +4295,8 @@ export async function handleHttp(
           // this mirror would otherwise have resolved-then-dropped — the client has been sending it
           // since #1552 and a route that omits it from the schema drops it green on both sides.
           guidance_epoch: z.number().int().nonnegative().optional(),
+          // Style epoch (ADR 514), mirroring the WS claim frame.
+          style_epoch: StyleEpochSchema.optional(),
           // ADR 131 §6, mirroring the WS claim frame — what ANIMATES this session, not who it is.
           // The 2026-09-04 workspace repair left this field behind, so the mirror still was not one:
           // every row born here read `provenance: null` while every WS-claimed and every
@@ -4566,6 +4580,7 @@ export async function handleHttp(
           build: body.build ?? null,
           epoch: body.epoch ?? null,
           guidance_epoch: body.guidance_epoch ?? null,
+          style_epoch: body.style_epoch ?? null,
         };
         // Single-active is kind-scoped (ADR 042), matching the WS path. Only an AUTHORIZED agent
         // claim may invoke newest-wins (ADR 017). Keeping the transition behind the grant/self/re-seat
@@ -7635,6 +7650,57 @@ export async function handleHttp(
       // The doorbell (ADR 443 §4–5): a human's own sinks. Self only — the URL carries no name, so
       // a personal URL is readable by its owner and nobody else. Agents have no doorbell: they do
       // not choose where a human is rung (§7).
+      // Agent style (ADR 514): a human's own dials and prose, self only — no URL member name, no
+      // cross-member read (`team_members.style` carries the dials). Agents have no preferences.
+      if ((method === 'GET' || method === 'PUT') && rest === '/members/me/style') {
+        const { team, member } = await authMember(
+          ctx.db,
+          slug,
+          bearer(req),
+          actingSeat(req),
+          agentSessionLease(req),
+        );
+        if (member.kind !== 'human')
+          throw new MusterdError('forbidden', 'style preferences are for human members');
+        if (method === 'PUT') {
+          const body: unknown = await readJson(req);
+          // The cap answers 422 with the count (spec §4.5); a bare schema parse would say 400.
+          const prose = (body as { prose?: unknown } | null)?.prose;
+          if (typeof prose === 'string') {
+            const problem = styleProseProblem(prose);
+            if (problem) throw new MusterdError('validation', problem);
+          }
+          const prefs = parseOrBadRequest(StylePrefsSchema, body);
+          await setStylePrefs(ctx.db, member.id, prefs);
+          await appendAudit(ctx.db, team.id, {
+            actor: member.name,
+            action: 'style.prefs_set',
+            target: null,
+            result: 'allow',
+            // Sizes and keys, never the prose: the audit log is not a copy of the note.
+            detail: {
+              dials: (['pushback', 'bluntness', 'length', 'format'] as const).filter(
+                (k) => prefs[k] !== undefined,
+              ),
+              prose_lines: styleProseLineCount(prefs.prose ?? ''),
+            },
+          });
+        }
+        const fresh = (await getMemberById(ctx.db, member.id)) ?? member;
+        const policy = await teamStyle(ctx.db, team.id);
+        const prefs = memberStylePrefs(fresh) ?? {};
+        const resolved = resolveStyle(policy, prefs);
+        return sendJson(res, 200, {
+          member: member.name,
+          prefs,
+          resolved,
+          block: renderStyleBlock({
+            team: resolveStyle(policy),
+            driver: { name: member.name, style: resolved },
+          }),
+        });
+      }
+
       if ((method === 'GET' || method === 'PUT') && rest === '/members/me/doorbell') {
         const { team, member } = await authMember(
           ctx.db,

@@ -39,6 +39,7 @@ import {
   heldByAttendedSession,
   presenceById,
   reattestGuidanceEpoch,
+  reattestStyleEpoch,
   reattestModel,
   reattestSurface,
   release,
@@ -851,6 +852,7 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
             // ceiling `epoch` says this build could write. The two disagree exactly when a seat is
             // stale, which is the whole point of carrying both.
             guidance_epoch: frame.guidance_epoch ?? null,
+            style_epoch: frame.style_epoch ?? null,
             wake_lease: frame.wake_lease ?? null,
           });
           // First occupancy stamps the durable *held* marker (ADR 058) — the claim path is the v0.3
@@ -1081,6 +1083,9 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
               // refresh rewrites its files while the socket stays open. Absent ⇒ no change. No audit
               // row by design (ADR 417 §Observability): this is occupancy state, not an event.
               await reattestGuidanceEpoch(ctx.db, conn.presenceId, frame.guidance_epoch);
+              // ADR 514: the style block a seat runs changes when an admin or the human moves a
+              // dial; the adapter re-sends the epoch it read, and the roster follows.
+              await reattestStyleEpoch(ctx.db, conn.presenceId, frame.style_epoch);
             } else {
               // The row behind this socket is gone — the reaper removed it while the socket stayed
               // open — and the session lease that joined on it is dead with it, so every hook probe

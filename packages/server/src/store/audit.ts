@@ -401,6 +401,9 @@ export type AuditAction =
   // act that rings a human, detail `{ surface, ok, status? }`. Never the URL, never a body. New rows
   // use this action; `ask.surfaced` stays in the union so rows written before ADR 443 still read.
   | 'doorbell.surfaced'
+  // ADR 514 (agent style): a human set their own style dials/prose through `PUT /members/me/style`.
+  // Detail carries the dial keys and the prose line count — sizes, never the prose.
+  | 'style.prefs_set'
   // ADR 150 (structural inducement — PreToolUse enforcement gates): one decision row per intercepted
   // tool call that matched a declared enforcement class. `lane.gate` = Gate A (lane-ownership on a
   // contended surface); `action.gate` = Gate B (policy-classed action→ask). Both are SHAPES ONLY —
@@ -670,6 +673,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'ask.stranded': 'actor',
   'ask.surfaced': 'actor',
   'doorbell.surfaced': 'actor',
+  // ADR 514: a human set their own style dials — their row.
+  'style.prefs_set': 'actor',
   'lane.gate': 'actor',
   'action.gate': 'actor',
   'actor.subagent_write': 'actor',

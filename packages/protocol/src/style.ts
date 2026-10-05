@@ -20,6 +20,9 @@ export const STYLE_PROSE_MAX_LINES = 5;
 /** The character cap that makes the line cap a size bound: five lines of ~160 characters. */
 export const STYLE_PROSE_MAX_CHARS = 800;
 
+/** The wire form of a style epoch: exactly what {@link styleEpoch} produces (ADR 514 inc 2). */
+export const StyleEpochSchema = z.string().regex(/^[0-9a-f]{8}$/);
+
 /** Every line break a model would read as one: CRLF, LF, lone CR, VT, FF, NEL, LS, PS. */
 const LINE_BREAK = /\r\n|[\n\r\v\f\u0085\u2028\u2029]/g;
 

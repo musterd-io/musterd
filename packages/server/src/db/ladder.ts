@@ -114,6 +114,23 @@ export const LADDER: PortableMigration[] = [
       await d.exec('ALTER TABLE members ADD COLUMN IF NOT EXISTS halted_reason TEXT');
     },
   },
+  {
+    // v86 — ADR 514 (agent style): a human's own style dials and prose (`members.style_prefs`,
+    // `StylePrefs` JSON; agents never carry one) and the style epoch a seat attests on attach and
+    // heartbeat (`presence.style_epoch`, 8 hex chars; null = never attested, never read as stale).
+    // Nullable, no backfill. Portable: both engines take ADD COLUMN IF NOT EXISTS.
+    version: 86,
+    sqlite: (db) => {
+      const m = db.prepare("SELECT name FROM pragma_table_info('members')").pluck().all();
+      if (!m.includes('style_prefs')) db.exec('ALTER TABLE members ADD COLUMN style_prefs TEXT');
+      const p = db.prepare("SELECT name FROM pragma_table_info('presence')").pluck().all();
+      if (!p.includes('style_epoch')) db.exec('ALTER TABLE presence ADD COLUMN style_epoch TEXT');
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE members ADD COLUMN IF NOT EXISTS style_prefs TEXT');
+      await d.exec('ALTER TABLE presence ADD COLUMN IF NOT EXISTS style_epoch TEXT');
+    },
+  },
 ];
 
 /** The SQLite view of a ladder: what `migrations.ts` / `traceDb.ts` append after their legacy entries. */
