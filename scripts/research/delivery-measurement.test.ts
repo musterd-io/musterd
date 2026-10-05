@@ -47,6 +47,15 @@ describe('the verdict can come out either way', () => {
     expect(s.verdict.hold).toBe(false);
   });
 
+  // ADR 511: a probe from a session that has not claimed yet is not a deaf seat.
+  it('a not_joined refusal does not hold the deferral, and is still counted', () => {
+    const rows = [raised(10_000, 'ada', 'a1', 'claude-code', 0)];
+    const s = summarize(rows, [refused(1, 'ada', { lease: 'dead', reason: 'not_joined' })]);
+    expect(s.refusals).toBe(1);
+    expect(s.notJoined).toBe(1);
+    expect(s.verdict.why.join(' ')).not.toMatch(/refusals are/);
+  });
+
   it('holds when refusals exceed a quarter of raises', () => {
     const rows = [raised(10_000, 'ada', 'a1', 'claude-code', 0)];
     const s = summarize(rows, [refused(1, 'ada', { lease: 'dead' })]);

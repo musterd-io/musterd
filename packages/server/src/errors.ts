@@ -61,6 +61,7 @@ export type SessionLeaseRefusalReason =
   | 'revoked'
   | 'expired'
   | 'presence_released'
+  | 'not_joined'
   | 'unknown';
 
 export class SessionLeaseRefused extends MusterdError {

@@ -13,6 +13,14 @@ deaf seats). Since lane 01M3TAKT16 (2026-10-03) the refused row also carries a `
 `expired` (the renewal never reached it), `presence_released`, or `unknown` (a token this daemon
 never minted — a stale token after a reset).
 
+Corrected 2026-10-05 ([ADR 511](../decisions/511-not-joined-is-not-deaf.md)): `unknown` was
+mostly NOT a stale token. A lease row is deleted with its Presence, so a session start presenting
+the previous session's lease found no row. All but one of the 27 refusals from 2026-10-03 to
+2026-10-05 were that. They now read `not_joined` when no unheld Presence holds the seat, and the
+verdict does not count them. `unknown` is kept for a lease the daemon cannot place while a Presence
+does hold the seat. (Measured 2026-10-05; falsify: post-merge rows where `unknown` outnumbers
+`not_joined`.)
+
 The verdict rule lives in the script, so a run reads the same way whoever runs it: **HOLD** the
 attended deferral while refusals exceed 25% of raises in the window, or any rail's p95 is over
 30 s with fewer than 80% of its acts under 30 s. Shrinking is a lane with its own number, never this

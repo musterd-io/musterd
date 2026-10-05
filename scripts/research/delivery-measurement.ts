@@ -86,6 +86,8 @@ export interface Summary {
   acts: number;
   raises: number;
   refusals: number;
+  /** ADR 511: refusals from a session whose adapter had not claimed yet — not deaf, not gated on. */
+  notJoined: number;
   rails: RailStats[];
   seats: SeatRefusals[];
   unparseable: number;
@@ -189,17 +191,29 @@ export function verdict(rails: RailStats[], raises: number, refusals: number): S
   return { hold: why.length > 0, why };
 }
 
+/** ADR 511: a refusal whose reason is `not_joined` — the probing session had not claimed yet. */
+function isNotJoined(r: RefusedRow): boolean {
+  try {
+    return (JSON.parse(r.detail ?? '{}') as { reason?: string }).reason === 'not_joined';
+  } catch {
+    return false;
+  }
+}
+
 export function summarize(raised: RaisedRow[], refused: RefusedRow[]): Summary {
   const { rails, unparseable } = latencyByRail(raised);
   const acts = rails.reduce((s, r) => s + r.acts, 0);
+  const notJoined = refused.filter(isNotJoined).length;
   return {
     acts,
     raises: raised.length,
     refusals: refused.length,
+    notJoined,
     rails,
     seats: refusalsBySeat(refused, raised),
     unparseable,
-    verdict: verdict(rails, raised.length, refused.length),
+    // ADR 511: a session that has not joined is not a deaf seat, so it does not hold the deferral.
+    verdict: verdict(rails, raised.length, refused.length - notJoined),
   };
 }
 
@@ -240,7 +254,10 @@ export function render(dbPath: string, days: number | null, s: Summary): string 
   out.push(`db ${dbPath}${days ? `  ·  last ${days}d` : '  ·  all time'}`);
   out.push(`baseline (${BASELINE.taken}): ${BASELINE.note}`);
   out.push('');
-  out.push(`${s.acts} acts first-raised · ${s.raises} raise rows · ${s.refusals} refused probes`);
+  out.push(
+    `${s.acts} acts first-raised · ${s.raises} raise rows · ${s.refusals} refused probes` +
+      (s.notJoined ? ` (${s.notJoined} not joined yet — outside the deaf ratio, ADR 511)` : ''),
+  );
   out.push('');
   out.push('1+3. send → first raise, per rail (latency to the recipient’s next boundary; the');
   out.push('     >5m buckets are the idle-at-prompt wait the deferral trades against)');
