@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
 import { pgDriver, pgPoolFactory } from './pgDriver.js';
+import { requestTiming, withRequestTiming } from './requestTiming.js';
 
 /**
  * The choreography against a fake pool — what goes down the wire, in what order, on which client.
@@ -116,6 +117,24 @@ describe('pgDriver choreography (spec §12.1)', () => {
     expect(f.log[0]).toBe(
       "app: BEGIN; SET LOCAL ROLE musterd_app; SELECT set_config('app.team_id', 'x''; RESET ROLE; --', true)",
     );
+  });
+
+  it("records a request's pool wait, hold and query time inside withRequestTiming, and nothing outside it", async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    await d.forTeam('A').get('SELECT 1'); // outside a request: no record to write into
+    expect(requestTiming()).toBeUndefined();
+    const { timing, result } = withRequestTiming(async () => {
+      await d.forTeam('A').get('SELECT 1');
+      await d.forTeam('A').tx(async (t) => {
+        await t.run('UPDATE x SET y = 1');
+        await t.run('UPDATE x SET y = 2');
+      });
+    });
+    await result;
+    expect(timing.tx).toBe(2);
+    expect(timing.holdMs).toBeGreaterThanOrEqual(timing.queryMs);
+    expect(timing.waitMs).toBeGreaterThanOrEqual(0);
   });
 
   it('a connection error is DriverError("unavailable") with the stable sentence', async () => {
