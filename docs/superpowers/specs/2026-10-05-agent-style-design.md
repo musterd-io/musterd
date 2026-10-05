@@ -232,7 +232,8 @@ Each increment has its lane (ADR 487), opened 2026-10-05, unowned until its turn
    floor renderer carries dolly's rule; the skill bullet names the coming block (v44). Lane
    `01M46MQD2FXXJ1RVTDCN6XW7WK`.
 2. **Server** — policy `style`, `members.style_prefs` + migrations, the self route, presence
-   `style_epoch`, hub forward for prefs. Lane `01M46MQPQ3JC6EWMY7WV6SY8AA`.
+   `style_epoch`. Lane `01M46MQPQ3JC6EWMY7WV6SY8AA`. The hub forward for prefs is its own lane,
+   `01M46RWP23N253H9M0HDWPYJNB` (§4.5).
 3. **MCP** — block on join and on epoch change, `team_members.style`, `team_style` /
    `team_style_set`, epoch on heartbeat, primer pointer line; dolly's bullet leaves `guidance.ts`
    here, when the block ships (plan 2026-10-05, Task 6). Lane `01M46MQQFS3W2W4N37S7BB9RX5`.

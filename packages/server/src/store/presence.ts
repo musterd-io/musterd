@@ -198,6 +198,7 @@ export async function attach(
           build: row.build,
           epoch: row.epoch,
           guidance_epoch: row.guidance_epoch,
+          style_epoch: row.style_epoch,
         },
       });
     }

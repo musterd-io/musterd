@@ -399,6 +399,37 @@ withDrivers('fold', (_o, kind) => {
   }
 
   describe('foldBatch — the presence kind', async () => {
+    it('presence.attached carries style_epoch onto the remote row, and reattested moves it (ADR 514)', async () => {
+      const { db, team } = await seed();
+      const att = foreignPresence('p-1', 1, 1, 'presence.attached', {
+        presence: 'pS',
+        surface: 'codex',
+        model: 'gpt-5',
+        model_source: 'observed',
+        workspace: '~/s',
+        driver: 'nick',
+        provenance: 'session',
+        build: null,
+        epoch: 17,
+        style_epoch: 'a1b2c3d4',
+      });
+      expect((await foldBatch(db, team.id, [att])).stop).toBeNull();
+      expect(await db.get("SELECT style_epoch FROM presence WHERE id = 'pS'")).toEqual({
+        style_epoch: 'a1b2c3d4',
+      });
+      const re = foreignPresence('p-2', 2, 2, 'presence.reattested', {
+        presence: 'pS',
+        model: 'gpt-5',
+        model_source: 'observed',
+        surface: 'codex',
+        style_epoch: 'ffffffff',
+      });
+      expect((await foldBatch(db, team.id, [re])).stop).toBeNull();
+      expect(await db.get("SELECT style_epoch FROM presence WHERE id = 'pS'")).toEqual({
+        style_epoch: 'ffffffff',
+      });
+    });
+
     it('presence.attached inserts a remote row keyed on the origin node; reattested updates it; detached deletes it', async () => {
       const { db, team } = await seed();
       const att = foreignPresence('p-1', 1, 1, 'presence.attached', {

@@ -283,6 +283,59 @@ withDrivers('integration · attestation-lanes', (_o, kind) => {
       l.close();
     });
 
+    it('the style epoch rides the WS claim, the heartbeat and the HTTP claim, and silence never clears it (ADR 514)', async () => {
+      // Review Focus 4 of the inc-2 plan, pinned at the transport: deleting any of the four wiring
+      // lines (ws claim, ws heartbeat, http claim schema, http claim ctx) must fail here, not only
+      // in the store test that calls reattestStyleEpoch directly.
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const tok = team.json.human_credential;
+      await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, tok);
+      await post('/teams/dawn/members', { name: 'Lin', kind: 'agent' }, tok);
+      const a = new TestWs();
+      await a.open();
+      a.send({
+        type: 'claim',
+        v: PROTOCOL_VERSION,
+        team: 'dawn',
+        key: team.json.agent_key,
+        target: { seat: 'Ada' },
+        grant: await standingGrant(tok, 'Ada'),
+        surface: 'claude-code',
+        style_epoch: 'a1b2c3d4',
+      });
+      const occupied = await a.waitFor('occupied');
+      const presenceId = occupied.presence_id as string;
+      const stored = async () =>
+        (await h.server.store.get('SELECT style_epoch FROM presence WHERE id = ?', [presenceId]))!
+          .style_epoch;
+      expect(await stored()).toBe('a1b2c3d4');
+
+      a.send({ type: 'heartbeat', style_epoch: 'ffffffff' });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(await stored()).toBe('ffffffff');
+
+      a.send({ type: 'heartbeat' });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(await stored()).toBe('ffffffff');
+
+      // The HTTP claim mirror carries it too (the schema that "drops it green on both sides" if not).
+      const lin = await post('/teams/dawn/claim', {
+        key: team.json.agent_key,
+        target: { seat: 'Lin' },
+        grant: await standingGrant(tok, 'Lin'),
+        surface: 'cli',
+        style_epoch: '0badf00d',
+      });
+      expect(lin.status, JSON.stringify(lin.json)).toBeLessThan(300);
+
+      const roster = await get('/teams/dawn/members');
+      const epochOf = (name: string) =>
+        roster.json.members.find((m: any) => m.name === name).presences[0].style_epoch;
+      expect(epochOf('Ada')).toBe('ffffffff');
+      expect(epochOf('Lin')).toBe('0badf00d');
+      a.close();
+    });
+
     it('the guidance epoch rides the claim AND every heartbeat, and silence never clears it (ADR 417)', async () => {
       // The other half of the seam `client.guidanceEpoch.e2e.test.ts` closes on the HTTP mirror. Self-
       // heal fires once, at session start, so a long session outlives the rule it started under: a

@@ -1179,6 +1179,13 @@ withDrivers('store', (o) => {
         style_epoch: 'a1b2c3d4',
       });
       expect(await styleOf('Ada')).toBe('a1b2c3d4');
+      // The replicated `presence.attached` event carries it, or a peer folds null for the whole
+      // occupancy (review I1 of the inc-2 plan).
+      const attached = await db.get<{ detail: string }>(
+        "SELECT detail FROM audit WHERE action = 'presence.attached' AND detail LIKE ? ORDER BY ts DESC LIMIT 1",
+        [`%${adaPresence.id}%`],
+      );
+      expect(JSON.parse(attached!.detail).style_epoch).toBe('a1b2c3d4');
 
       expect(await reattestStyleEpoch(db, adaPresence.id, 'ffffffff')).toEqual({
         previous: 'a1b2c3d4',
