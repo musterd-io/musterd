@@ -44,6 +44,7 @@ import {
 import { firehoseSound, roomTone } from '../live/sound';
 import { useLiveStream } from '../live/useLiveStream';
 import { HealthBanner } from '../live/HealthBanner';
+import { HoldsBanner, useTeamHolds } from '../live/HoldsBanner';
 import { useServerHealth } from '../live/serverHealth';
 import { officeRoom } from '../live/officeRoom';
 import { useWorkingOn } from '../live/useWorkingOn';
@@ -209,6 +210,8 @@ function LivePage() {
 
   // Cloud spec §7: a server that cannot reach its database says so on /health; show it.
   const outage = useServerHealth();
+  // ADR 516: the Team's active holds, read from the same route every surface reads.
+  const holds = useTeamHolds(cfg);
   const stream = useLiveStream(cfg, {
     onCredentialInvalid: recoverObserver,
     onConnected: armRecovery,
@@ -522,6 +525,7 @@ function LivePage() {
   return (
     <main className="lc">
       <HealthBanner reason={outage} />
+      <HoldsBanner holds={holds} />
       <header className="lc__topbar">
         {/* Operator chrome only. The team name and the connection/present signal moved into the
             office overlay, which carries them over the scene on both /live and /broadcast — repeating

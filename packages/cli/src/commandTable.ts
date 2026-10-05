@@ -26,6 +26,7 @@ export const COMMANDS: Readonly<Record<string, () => Promise<CommandFn>>> = {
   goal: async () => (await import('./commands/goal.js')).goalCommand,
   halt: async () => (await import('./commands/halt.js')).haltCommand,
   harness: async () => (await import('./commands/harness.js')).harnessCommand,
+  hold: async () => (await import('./commands/hold.js')).holdCommand,
   host: async () => (await import('./commands/host.js')).hostCommand,
   huddle: async () => (await import('./commands/huddle.js')).huddleCommand,
   human: async () => (await import('./commands/human.js')).humanCommand,

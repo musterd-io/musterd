@@ -10,7 +10,13 @@ import {
 } from 'node:fs';
 import { cpus, homedir, loadavg, platform as osPlatform } from 'node:os';
 import { dirname, join, resolve as resolvePath } from 'node:path';
-import { makeEnvelope } from '@musterd/protocol';
+import {
+  activeHoldFor,
+  describeHoldLine,
+  type Hold,
+  isHoldActive,
+  makeEnvelope,
+} from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { flagStr, type Parsed } from '../args.js';
 import { HttpClient } from '../client.js';
@@ -116,6 +122,7 @@ import {
   uninstallSweep,
   type SweepCtx,
 } from '../service/sweep.js';
+import { resolve } from './helpers.js';
 
 /** Shell out to `launchctl` synchronously, capturing output and never throwing on a non-zero exit. */
 const spawnRunner: Runner = (cmd, args): RunResult => {
@@ -1121,6 +1128,9 @@ export async function serviceCommand(
     /** Lane 01M3TE3VN1: the demo-hold stamp (`service hold --auto`), injected so tests never read
      *  the real one. Holds the expiry as epoch ms; empty means no hold. */
     holdState?: { read: () => string | null; write: (s: string) => void };
+    /** ADR 516: the Team's server-side holds — the tick reads them as the service seat, the operator
+     *  verb sets and lifts them as the human running it. Injected so tests never reach a daemon. */
+    teamHolds?: TeamHoldsApi;
     /** Sleep between post-bounce `/health` polls (injected so tests never actually wait). */
     sleep?: (ms: number) => Promise<void>;
     /** ADR 224 log trim (injected so the tick's tests never touch the real ~/.musterd logs). */
@@ -1259,6 +1269,7 @@ export async function serviceCommand(
         deps.touch,
         deps.refreshSharedHooks,
         holdState,
+        (deps.teamHolds ?? defaultTeamHolds(parsed)).active,
       );
     }
     const arCtx = deps.autoRefreshCtx ?? resolveAutoRefreshCtx(ctx.run, parsed);
@@ -1269,6 +1280,7 @@ export async function serviceCommand(
       ok,
       fail,
       deps.holdState ?? fileHoldState(),
+      deps.teamHolds ?? defaultTeamHolds(parsed),
     );
   }
 
@@ -1808,6 +1820,38 @@ function provisionAutoRefreshToken(
  * The service seat's authenticated client, or null when unprovisioned. Null is the pre-232
  * posture — every caller must degrade to silence, never to a failed tick.
  */
+/**
+ * ADR 516: the three hold moves the service verbs need. `active` reads as the service seat (the tick
+ * has no human behind it); `set` and `liftAutorefresh` act as whoever runs the command, because
+ * setting a Team hold is a human admin's act and the daemon refuses anyone else.
+ */
+export interface TeamHoldsApi {
+  active: () => Promise<Hold[] | null>;
+  set: (until: number, reason: string) => Promise<Hold>;
+  liftAutorefresh: () => Promise<Hold[]>;
+}
+
+function defaultTeamHolds(parsed: Parsed): TeamHoldsApi {
+  return {
+    active: async () => {
+      const auth = serviceSeatAuth();
+      return auth ? auth.http.listHolds(auth.team) : null;
+    },
+    set: async (until, reason) => {
+      const { http, team } = resolve(parsed.flags);
+      return http.setHold(team, { effect: 'autorefresh_paused', reason, until });
+    },
+    liftAutorefresh: async () => {
+      const { http, team } = resolve(parsed.flags);
+      const now = Date.now();
+      const mine = (await http.listHolds(team)).filter(
+        (h) => h.effect === 'autorefresh_paused' && isHoldActive(h, now),
+      );
+      return Promise.all(mine.map((h) => http.liftHold(team, h.id)));
+    },
+  };
+}
+
 function serviceSeatAuth(): { http: HttpClient; team: string } | null {
   const tokenFile = process.env['MUSTERD_SERVICE_TOKEN_FILE'] ?? serviceTokenPath();
   let token: string;
@@ -2135,6 +2179,7 @@ async function autoRefreshTick(
     read: () => null,
     write: () => {},
   },
+  teamHolds: () => Promise<Hold[] | null> = async () => null,
 ): Promise<number> {
   const dir = daemonCheckout(ctx) ?? ctx.workingDir;
   let health0: DaemonHealth;
@@ -2173,6 +2218,23 @@ async function autoRefreshTick(
   // The demo hold (lane 01M3TE3VN1): an operator froze bounces for a slot. Checked once we know the
   // daemon is behind — so the log says what the hold is costing — and before any sync or build. An
   // expired stamp clears itself here: a forgotten hold must never pin the daemon past its time.
+  // ADR 516: the Team's hold, read as the service seat — the same row on every machine, with an
+  // author and a reason. Unreadable (no service seat, daemon refusing) reads as no hold, never as a
+  // freeze, exactly like the file below.
+  const teamHold = activeHoldFor(
+    (await teamHolds().catch(() => null)) ?? [],
+    'autorefresh_paused',
+    Date.now(),
+  );
+  if (teamHold) {
+    ok(
+      `${describeHoldLine(teamHold, Date.now())} — not bouncing (${behind} commit${behind === 1 ? '' : 's'} behind). ` +
+        `\`musterd hold lift ${teamHold.id}\` ends it early.`,
+    );
+    return 0;
+  }
+  // The pre-ADR-516 machine-local stamp: still honoured until it ends (≤ 12h after the upgrade), never
+  // written any more. `service hold --auto` sets a Team hold instead.
   const hold = readHold(holdState.read(), Date.now());
   if (hold.state === 'held') {
     ok(
@@ -2721,6 +2783,7 @@ async function autoRefreshServiceCommand(
   ok: (s: string) => void,
   fail: (step: string, r: RunResult) => never,
   holdState: { read: () => string | null; write: (s: string) => void },
+  teamHolds: TeamHoldsApi,
 ): Promise<number> {
   const meta = (s: string) => process.stdout.write(theme.meta(s) + '\n');
   const mode = ctx.refreshArgs[ctx.refreshArgs.indexOf('--mode') + 1] ?? DEFAULT_AUTOREFRESH_MODE;
@@ -2769,11 +2832,17 @@ async function autoRefreshServiceCommand(
       return 0;
     }
     case 'hold': {
-      // Lane 01M3TE3VN1: freeze bounces for a demo or pitch; the tick clears an expired hold itself.
+      // ADR 516: the demo freeze is a Team hold now — authored, visible to every seat, the same on
+      // every machine, and it clears itself. Setting one is a human admin's act; the daemon decides.
       if (parsed.flags['release'] === true) {
-        const had = readHold(holdState.read(), Date.now()).state === 'held';
-        holdState.write('');
-        ok(had ? 'released the hold — the next tick refreshes as normal' : 'no hold was set');
+        const lifted = await teamHolds.liftAutorefresh();
+        const hadFile = readHold(holdState.read(), Date.now()).state === 'held';
+        if (hadFile) holdState.write('');
+        ok(
+          lifted.length > 0 || hadFile
+            ? 'released the hold — the next tick refreshes as normal'
+            : 'no hold was set',
+        );
         return 0;
       }
       const untilFlag = flagStr(parsed.flags, 'until');
@@ -2788,10 +2857,15 @@ async function autoRefreshServiceCommand(
       } catch (err) {
         throw new CliError((err as Error).message, 2);
       }
-      holdState.write(String(until));
-      ok(`holding daemon refreshes ${describeHold(until, Date.now())}`);
+      const reason = flagStr(parsed.flags, 'reason')?.trim() || 'daemon refresh hold';
+      const set = await teamHolds.set(until, reason);
+      ok(
+        `holding daemon refreshes ${describeHold(set.expires_at, Date.now())} — a Team hold every seat sees`,
+      );
       meta('  the guardian still restarts a daemon that is down; `service refresh` still works');
-      meta('  end it early: musterd service hold --auto --release');
+      meta(
+        `  end it early: musterd service hold --auto --release (or musterd hold lift ${set.id})`,
+      );
       return 0;
     }
     case 'status': {
@@ -2807,8 +2881,14 @@ async function autoRefreshServiceCommand(
       const autoDead = agentFailureNote(st, agentProgramExists(ctx.plistPath));
       if (autoDead) process.stdout.write(`  ${theme.err('✗')} ${autoDead}\n`);
       meta(`  runs:  musterd service refresh --auto --mode ${mode} every ${ctx.intervalSeconds}s`);
+      const teamHold = activeHoldFor(
+        (await teamHolds.active().catch(() => null)) ?? [],
+        'autorefresh_paused',
+        Date.now(),
+      );
       const hold = readHold(holdState.read(), Date.now());
-      if (hold.state === 'held') meta(`  hold: ${describeHold(hold.until, Date.now())}`);
+      if (teamHold) meta(`  hold: ${describeHoldLine(teamHold, Date.now())}`);
+      else if (hold.state === 'held') meta(`  hold: ${describeHold(hold.until, Date.now())}`);
       meta(`  logs:  ${ctx.logPath}`);
       return 0;
     }

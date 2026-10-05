@@ -19,10 +19,14 @@ export type SessionOrientationInput = {
   incidents: Array<{ id: string }>;
   owed: Array<{ laneId: string; waitedMs: number }>;
   carrying: number;
+  /** ADR 516: active Team holds — effect, author, end. The reason is human free text and is NOT
+   *  carried here (the ADR 088 bar); the line points at `musterd hold list` for it. */
+  holds?: Array<{ id: string; effect: string; createdBy: string; expiresAt: number }>;
 };
 
 const SLUG = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+const HOLD_EFFECT = /^(autorefresh_paused|merges_paused|notice)$/;
 const MAX_LINES = 15;
 const MAX_HEADLINE = 120;
 
@@ -51,8 +55,12 @@ export function composeSessionOrientation(
   const waiting = d.waiting.filter((w) => SLUG.test(w.from) && ULID.test(w.id) && SLUG.test(w.act));
   const incidents = d.incidents.filter((i) => ULID.test(i.id));
   const owed = d.owed.filter((o) => ULID.test(o.laneId));
+  const holds = (d.holds ?? []).filter(
+    (h) => ULID.test(h.id) && HOLD_EFFECT.test(h.effect) && SLUG.test(h.createdBy),
+  );
   const empty =
     !d.memory &&
+    holds.length === 0 &&
     d.waiting.length === 0 &&
     d.incidents.length === 0 &&
     d.owed.length === 0 &&
@@ -85,6 +93,16 @@ export function composeSessionOrientation(
           .join(', ')}`
       : 'incidents: none',
   );
+  if (holds.length > 0) {
+    lines.push(
+      `holds: ${holds
+        .slice(0, 3)
+        .map((h) => `${h.effect} by ${h.createdBy}, ${ago(h.expiresAt - now)} left (${h.id})`)
+        .join(
+          '; ',
+        )} — \`musterd hold list\` for why; a hold is the Team's rule, not yours to restate`,
+    );
+  }
   if (owed.length > 0) {
     lines.push(
       `owed reviews: ${String(owed.length)} — ${owed

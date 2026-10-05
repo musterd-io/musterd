@@ -1,8 +1,8 @@
 import { HOLD_MAX_MS } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
-import { createTeam } from './teams.js';
 import { holdExpiry, listActiveHolds, projectHoldEvent } from './holds.js';
+import { createTeam } from './teams.js';
 
 const NOW = 1_791_229_200_000;
 

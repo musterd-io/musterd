@@ -115,6 +115,10 @@ import {
   type WSServerFrame,
   type TraceReport,
   TraceReportSchema,
+  type Hold,
+  HoldListSchema,
+  HoldResponseSchema,
+  type SetHoldBody,
 } from '@musterd/protocol';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
@@ -994,6 +998,22 @@ export class HttpClient {
     was: { by: string | null; reason: string | null; at: number | null };
   }> {
     return this.request('POST', `/teams/${slug}/members/${encodeURIComponent(member)}/resume`);
+  }
+  /** ADR 516: set a Team hold (human admin) — `POST /teams/:slug/holds`. */
+  async setHold(slug: string, body: SetHoldBody): Promise<Hold> {
+    return HoldResponseSchema.parse(await this.request('POST', `/teams/${slug}/holds`, body)).hold;
+  }
+  /** ADR 516: lift an active hold early (human admin). */
+  async liftHold(slug: string, id: string): Promise<Hold> {
+    return HoldResponseSchema.parse(
+      await this.request('POST', `/teams/${slug}/holds/${encodeURIComponent(id)}/lift`),
+    ).hold;
+  }
+  /** ADR 516: active holds (`all` adds ended ones) — any member. */
+  async listHolds(slug: string, all = false): Promise<Hold[]> {
+    return HoldListSchema.parse(
+      await this.request('GET', `/teams/${slug}/holds${all ? '?all=1' : ''}`),
+    ).holds;
   }
   /** Release the caller's own seat (ADR 058 unbind): clear bound_at + presence; seat stays declared. */
   unbind(slug: string): Promise<{ ok: boolean; member: string }> {

@@ -6888,3 +6888,14 @@
   font-weight: 600;
   text-align: center;
 }
+
+/* ADR 516: the Team's active holds — a rule the team is under, set by a human, with its end. Amber
+   ink on paper, not a danger fill: a hold is a decision, not an outage. Text uses --lc-warn-ink
+   (AA on paper); --lc-warn is a fill-only token. */
+.lc-holds {
+  padding: 4px 16px;
+  border-bottom: 1px solid var(--lc-warn);
+  color: var(--lc-warn-ink);
+  font-size: var(--lc-type-body);
+  text-align: center;
+}

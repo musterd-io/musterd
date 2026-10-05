@@ -157,7 +157,7 @@ withDrivers('holds-sync', (_o, kind) => {
       expect(there).toEqual([set.json.hold]);
     });
 
-    it("a lift on the hub ends it on the joiner, and the fold is idempotent", async () => {
+    it('a lift on the hub ends it on the joiner, and the fold is idempotent', async () => {
       const { json } = await post(hubBase, '/teams/bravo/holds', demo, nickOnHub);
       await roundTrip();
       await post(hubBase, `/teams/bravo/holds/${json.hold.id}/lift`, undefined, nickOnHub);
@@ -174,9 +174,9 @@ withDrivers('holds-sync', (_o, kind) => {
       const set = await post(joinerBase, '/teams/bravo/holds', demo, nickOnJoiner);
       expect(set.status).toBe(200);
       // The hub's row is the fact; the joiner minted no hold event of its own.
-      expect((await get(hubBase, '/teams/bravo/holds', nickOnHub)).holds.map((h: any) => h.id)).toEqual(
-        [set.json.hold.id],
-      );
+      expect(
+        (await get(hubBase, '/teams/bravo/holds', nickOnHub)).holds.map((h: any) => h.id),
+      ).toEqual([set.json.hold.id]);
       expect(
         await joiner.store.get(
           `SELECT COUNT(*) AS n FROM audit WHERE action = 'hold.set'

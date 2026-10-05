@@ -9,8 +9,9 @@
 - Builds on: ADR 172 (admins are human; enforced at the read since #2092), ADR 150 (PreToolUse
   gate), ADR 501 (halt — the human-only standing this mirrors), ADR 185 / 367 / 398 (team policy:
   sparse, hub-owned, replicated), ADR 259 (truth is the log; indexes are derived)
-- Protocol change: yes (hard rule 1) — `Hold`, the `/holds` routes, `NextBrief.holds`, sync kind
-  `hold`, audit verbs `hold.set` / `hold.lifted`, refusal code `held`
+- Protocol change: yes (hard rule 1) — `Hold`, the `/holds` routes, `NextBrief.holds` /
+  `NextSummary.holds`, audit verbs `hold.set` / `hold.lifted` (carried by the `policy` sync kind),
+  refusal code `held` (increment 2)
 
 ## Context
 
@@ -59,25 +60,32 @@ at, agents re-state the rule in their own words and it outlives its author's int
 4. **The hub owns holds; joiners forward and fold, like policy.** On a joiner both routes forward
    to the hub (`/sync/holds`, node-authenticated, admin re-checked against the hub's roster), and
    an unreachable hub answers `hub_unreachable` rather than forking the rule. The hub writes the
-   row and appends a replicated event in one transaction; a new sync kind `hold` carries
-   `hold.set` / `hold.lifted`, and the fold projects them. A hold set on any machine reaches every
-   machine's autorefresh tick, which today's local file never did.
+   row and appends a replicated event in one transaction. `hold.set` / `hold.lifted` ride the
+   existing `policy` sync kind — the kind for hub-minted Team rules, already refused from any node
+   but the hub's own loopback — and the fold projects them idempotently on the hub's id. A hold set
+   on any machine reaches every machine's autorefresh tick, which today's local file never did.
 5. **One act tells every seat; the brief shows it until it ends.**
    - Setting and lifting each deliver one server-composed `message` from the human to `@team`
      with `meta.hold = {id, effect, expires_at, lifted?}` — so the change is in every seat's next
      `team_inbox_check`, once.
    - `NextBrief.holds` and `NextSummary.holds` list active holds (effect, reason, author, ends at,
      time left), so `team_next`, the orient block, `musterd next` and `musterd status` carry them
-     for as long as they are active and drop them the moment they are not.
+     for as long as they are active and drop them the moment they are not. The SessionStart orient
+     block shows effect, author and time left but not the reason — free text written by someone
+     else stays out of that block (ADR 088) — and points at `musterd hold list` for it.
+   - `meta.hold` is server-controlled: a client-supplied copy is stripped (the ADR 225 rule), so a
+     seat cannot announce a hold nobody set.
    - `GET /teams/:slug/holds` (any member) lists active holds; `?all=1` includes ended ones.
    - `/live` shows active holds as a banner from the same read.
 6. **Enforcement, and its honest limits.**
-   - `autorefresh_paused`: the tick asks its local daemon for active holds before it would
-     bounce; any active one means "held by <human> until <time>: <reason>" and no bounce. The
-     local `hold-until` file is retired: `musterd service hold --auto --for|--until` now sets a
-     server hold as the human running it (an agent seat is refused, by item 3), and `--release`
-     lifts it. A manual `musterd service refresh` still proceeds with a warning, as today; the
-     guardian still restarts a daemon that is down.
+   - `autorefresh_paused`: the tick asks its local daemon for active holds (as the service seat)
+     before it would bounce; any active one means "<effect> by <human> until <time>: <reason>" and
+     no bounce. An unreadable answer is no hold, never a freeze. The local `hold-until` file is
+     retired: `musterd service hold --auto --for|--until [--reason]` now sets a server hold as the
+     human running it (an agent seat is refused, by item 3), and `--release` lifts it. A file
+     already on disk is honoured until it ends (≤ 12h) and is never written again. A manual
+     `musterd service refresh` still proceeds with a warning, as today; the guardian still
+     restarts a daemon that is down.
    - `merges_paused` (increment 2): the gate's `GET /enforcement` response gains the active holds,
      and the client gate denies merge-shaped commands (`gh pr merge`, a push to `main`) with the
      hold's sentence. Like every ADR 150 path except halt, a gate that cannot reach the daemon
@@ -94,9 +102,9 @@ at, agents re-state the rule in their own words and it outlives its author's int
 
 Protocol: `Hold` and `HoldEffect` schemas in `@musterd/protocol`; `NextBrief.holds` and
 `NextSummary.holds` optional (omitted means the daemon does not report holds); routes in
-`02-protocol.md`; sync kind `hold`; audit verbs `hold.set` / `hold.lifted` join the replicated
-ledger; refusal code `held` for an enforced effect's deny. SPEC Appendix A.15 is the normative
-text.
+`02-protocol.md`; audit verbs `hold.set` / `hold.lifted` on the `policy` sync kind; refusal code
+`held` for an enforced effect's deny (increment 2, with the first effect that refuses a call). SPEC
+Appendix A.15 is the normative text.
 
 Increments: **1** — table, routes, replication, brief/summary/members/`/live` banner, the
 autorefresh tick reading server holds, `musterd hold`, the `service hold --auto` rewire.

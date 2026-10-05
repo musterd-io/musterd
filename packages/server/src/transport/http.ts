@@ -203,7 +203,6 @@ import {
 import { buildDreamPacket, settleProvenance } from '../store/dream.js';
 import { latestFootprint } from '../store/footprint.js';
 import { listGoals } from '../store/goals.js';
-import { liftHold, listActiveHolds, listAllHolds, setHold } from '../store/holds.js';
 import {
   authorizeGovernedRequest,
   authenticateGovernedNode,
@@ -221,6 +220,7 @@ import {
   revokeGrant,
   validateGrant,
 } from '../store/grants.js';
+import { liftHold, listActiveHolds, listAllHolds, setHold } from '../store/holds.js';
 import {
   claimProvisions,
   failProvision,
@@ -1488,7 +1488,8 @@ async function holdAct(ctx: Ctx, team: TeamRow, req: SyncHoldRequest): Promise<H
     try {
       hold = await holdAtHub(enrollment, team.slug, req);
     } catch (err) {
-      if (err instanceof HubUnreachableError) throw new MusterdError('hub_unreachable', err.message);
+      if (err instanceof HubUnreachableError)
+        throw new MusterdError('hub_unreachable', err.message);
       throw err;
     }
     await pullTeam(ctx, team).catch(() => undefined);

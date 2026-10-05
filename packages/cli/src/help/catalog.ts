@@ -1054,4 +1054,14 @@ export const CATALOG: readonly CommandEntry[] = [
     summary: 'lift a halt — the seat can claim, wake and act again',
     group: 'team',
   },
+  {
+    name: 'hold',
+    signature: 'set <effect> --for|--until … --reason "<why>" | lift <id> | list [--all]',
+    summary: 'pause something team-wide, with an author and an end — every seat sees it',
+    group: 'team',
+    detail:
+      'ADR 516. Effects: autorefresh_paused, merges_paused, notice (shown, never enforced). Human ' +
+      'admins set and lift; the daemon decides. Capped at 12h and clears itself — a longer freeze is ' +
+      'a new hold. Every seat reads active holds in `musterd next` / `musterd status` / team_next.',
+  },
 ];

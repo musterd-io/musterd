@@ -1,6 +1,6 @@
 import { HOLD_MAX_MS, makeEnvelope } from '@musterd/protocol';
 import { ulid } from 'ulid';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';

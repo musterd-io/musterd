@@ -685,7 +685,8 @@ Routes (all under `/teams/:slug`):
 
 A joiner forwards both writes to its hub and answers `hub_unreachable` if it cannot reach it; it
 never records a hold locally. The hub writes the row and its replicated event (`hold.set`,
-`hold.lifted`, sync kind `hold`) in one transaction.
+`hold.lifted`, carried by the `policy` sync kind) in one transaction. `meta.hold` is
+server-controlled: an implementation strips a client-supplied copy.
 
 Setting and lifting each deliver one `message` from the human to the Team carrying
 `meta.hold = {id, effect, expires_at, lifted?: true}`. `NextBrief` and `NextSummary` gain an
@@ -693,4 +694,5 @@ optional `holds` array of active holds; a supporting daemon emits it, including 
 omission means the daemon does not report holds.
 
 A Member's call refused by an enforced hold answers refusal code `held`, whose message names the
-effect, the human and the end time: `held by nick until 15:30: demo 14:00`.
+effect, the human and the end time: `held by nick until 15:30: demo 14:00` (reserved; first used by
+`merges_paused` enforcement, ADR 516 increment 2).
