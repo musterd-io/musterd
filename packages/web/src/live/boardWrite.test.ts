@@ -3,6 +3,7 @@ import type { Lane, LaneBoard, LaneResult, LaneWarning } from '@musterd/protocol
 import {
   acceptanceWait,
   applyLaneEcho,
+  blockedOn,
   capColumn,
   centerScroll,
   filterLanes,
@@ -315,5 +316,51 @@ describe('movedLanes', () => {
     ]);
     expect([...landed]).toEqual(['r']);
     expect([...flourished]).toEqual([]);
+  });
+});
+
+describe('blockedOn — what a blocked card says it waits on (board readability inc 1)', () => {
+  const board = (...ls: Lane[]) => new Map(ls.map((l) => [l.id, l]));
+
+  it('says nothing about a lane that is not blocked', () => {
+    const dep = lane({ id: 'D', state: 'active' });
+    expect(blockedOn(lane({ state: 'active', depends_on: ['D'] }), board(dep))).toBeNull();
+  });
+
+  it('names each unshipped dependency with its title, owner and state', () => {
+    const d1 = lane({ id: 'D1', title: 'ADR 449 inc 2', owner_seat: 'ghost', state: 'active' });
+    const d2 = lane({ id: 'D2', title: 'schema bump', owner_seat: null, state: 'open' });
+    const done = lane({ id: 'D3', state: 'done' });
+    const b = lane({ state: 'blocked', depends_on: ['D1', 'D2', 'D3'] });
+    expect(blockedOn(b, board(d1, d2, done))).toEqual({
+      kind: 'deps',
+      deps: [
+        { id: 'D1', title: 'ADR 449 inc 2', owner: 'ghost', state: 'active' },
+        { id: 'D2', title: 'schema bump', owner: null, state: 'open' },
+      ],
+    });
+  });
+
+  it('calls a block stale when every dependency has shipped', () => {
+    // dolly's 01M3QTE4FV on 2026-10-05: blocked on a lane that had already merged.
+    const b = lane({ state: 'blocked', depends_on: ['D'], detail: 'waiting on D' });
+    expect(blockedOn(b, board(lane({ id: 'D', state: 'done' })))).toEqual({ kind: 'stale' });
+  });
+
+  it('treats a dependency the board cannot see as met — the daemon’s own unmet-dependency rule', () => {
+    expect(blockedOn(lane({ state: 'blocked', depends_on: ['gone'] }), board())).toEqual({
+      kind: 'stale',
+    });
+  });
+
+  it('falls back to the detail prose, and says so when there is none', () => {
+    expect(blockedOn(lane({ state: 'blocked', detail: 'needs nick' }), board())).toEqual({
+      kind: 'prose',
+    });
+    // lazara's 01M41QMZT1 on 2026-10-05: blocked, no dependency, no reason.
+    expect(blockedOn(lane({ state: 'blocked', detail: '  ' }), board())).toEqual({
+      kind: 'unknown',
+    });
+    expect(blockedOn(lane({ state: 'blocked' }), board())).toEqual({ kind: 'unknown' });
   });
 });

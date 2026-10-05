@@ -409,6 +409,7 @@ function BoardPage() {
                 <Board
                 lanes={view === 'columns' ? goalFilter(shownLanes, goalFocus) : shownLanes}
                 warnings={board.warnings}
+                boardLanes={board.lanes}
                 view={view}
                 onOpenGoal={openGoal}
                 goals={report?.goals ?? []}

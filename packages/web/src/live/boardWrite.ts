@@ -205,3 +205,39 @@ export function movedLanes(prev: ReadonlyMap<string, LaneState>, lanes: Lane[]):
   }
   return { landed, flourished };
 }
+
+/**
+ * What a blocked card waits on — read off the lane's own `depends_on` (board readability inc 1).
+ *
+ * The question nick could not answer from the board on 2026-10-05: for every blocked lane, WHAT or
+ * WHO it waits on. `deps` names each dependency still unshipped. `stale` is a block whose
+ * dependencies have all shipped, so the block is the thing left to clear. `prose` defers to the
+ * lane's detail, and `unknown` is a block that recorded no reason at all, said out loud rather than
+ * left as an empty card.
+ *
+ * A dependency the board cannot see counts as met, mirroring the daemon's `unmet_dependency` rule
+ * (`laneWarnings`), so the card and the ⚠ flag never disagree. `board` must be the WHOLE board,
+ * not the owner/goal-filtered view, or a filter would fake a stale block.
+ */
+export type BlockedOn =
+  | {
+      kind: 'deps';
+      deps: Array<{ id: string; title: string; owner: string | null; state: LaneState }>;
+    }
+  | { kind: 'stale' }
+  | { kind: 'prose' }
+  | { kind: 'unknown' };
+
+export function blockedOn(lane: Lane, board: ReadonlyMap<string, Lane>): BlockedOn | null {
+  if (lane.state !== 'blocked') return null;
+  if (lane.depends_on.length > 0) {
+    const deps = lane.depends_on.flatMap((id) => {
+      const dep = board.get(id);
+      return dep && dep.state !== 'done'
+        ? [{ id, title: dep.title, owner: dep.owner_seat, state: dep.state }]
+        : [];
+    });
+    return deps.length > 0 ? { kind: 'deps', deps } : { kind: 'stale' };
+  }
+  return lane.detail?.trim() ? { kind: 'prose' } : { kind: 'unknown' };
+}
