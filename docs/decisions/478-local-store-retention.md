@@ -141,6 +141,13 @@ backends run the same SQL (ADR 475).
   every store loop: test the query's cost at the live table's size, not only its semantics — the
   first live pass was fast only because the over-30-day set was small.
 
+- **2026-10-05, joiner gap (lane 01M3ZBT9VY):** the keep set only spared each origin's
+  `MAX(origin_seq)`, so a joiner whose push was refused or unreachable for 5+ days pruned rows the
+  hub had never acked. The hub requires a dense `origin_seq` per node, so every later push 409s
+  forever. On an enrolled joiner the prune now also keeps every row of its own node above
+  `sync_push_cursor.last_seq`. Still open: a machine with 5+ days of standalone history that
+  enrolls afterwards. Its pre-enrollment rows were pruned while it had no hub to keep them for.
+
 ## Observability & Evaluation
 
 - **Traces:** each reaper run writes one decision-class `audit` row `store.pruned`
