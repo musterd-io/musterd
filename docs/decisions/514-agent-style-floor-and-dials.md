@@ -72,9 +72,19 @@ without adding a second home for a fact the skill already states.
 
 ## Observability & Evaluation
 
-- The block is text in a tool reply; chat stays off the record (ADR 476). What is measured, in
-  increment 6 under ADR 294: body length of acts addressed to a human by that human's `length` dial
-  and the sender's `style_epoch`; ADR 476's concession eval split by `style_epoch`; adoption
-  (humans with any dial set; seats attesting the current epoch).
-- Falsifier: thirty days after increment 3, no human has set a dial, or the `length` split shows no
-  difference. Then the block has no standing with the models and the deferred alternative is next.
+- **Traces:** no new spans in this increment. The evidence later increments add is structured:
+  `presence.style_epoch` (increments 2–3) beside `guidance_epoch`, the `policy.change` audit row
+  when an admin edits `style`, and the self route's audit row when a human sets a dial. Chat stays
+  off the record (ADR 476).
+- **Eval:** dataset = every `ask` / `message` / `handoff` addressed to a human in `messages`, with
+  the recipient's `length` dial and the sender's attested `style_epoch` at send time; baseline =
+  body-length distribution per human over the thirty days before increment 3 lands (every seat at
+  the shipped epoch, no dials set). Success = after a human sets `concise`, their inbound bodies are
+  shorter than the baseline median and than the same seats' `normal`-dial recipients; failure = no
+  difference by dial. Alongside it, ADR 476's own eval (unverified-concession share, `challenge`
+  decline rate) is read split by `style_epoch`, so an admin's floor change reads as a before/after.
+  Readout: `pnpm style:readout` (increment 6) under ADR 294 — channel and denominator on every
+  number, no per-seat leaderboard.
+- **Experiment:** thirty days after increment 3, read the eval. Falsifier for the design: no human
+  has set a dial, or the `length` split shows no difference. Then the block has no standing with the
+  models and the deferred alternative (harness-native renderers) is the next increment.
