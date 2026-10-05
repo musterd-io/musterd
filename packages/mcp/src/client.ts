@@ -30,6 +30,8 @@ import {
   type WSServerFrame,
   type SyncWedge,
   TRACE_POLICY_FILE,
+  type AcceptedHandoffWire,
+  type BuiltOn,
   type DisputeAnswerWire,
 } from '@musterd/protocol';
 import { WebSocket } from 'ws';
@@ -544,6 +546,8 @@ export class MusterdClient {
     lane_ack?: { lane: string };
     /** ADR 505: the owner's answer to a review dispute — conceded, or held and re-routed. */
     dispute?: DisputeAnswerWire;
+    /** ADR 505 §6: this accept took a handoff — the sender's note, returned with the check line. */
+    accepted_handoff?: AcceptedHandoffWire;
     evidence_notice?: string;
   }> {
     return this.request('POST', `/teams/${this.config.team}/messages`, { envelope }) as Promise<{
@@ -552,6 +556,7 @@ export class MusterdClient {
       lane_verdict?: LaneVerdictWire;
       lane_ack?: { lane: string };
       dispute?: DisputeAnswerWire;
+      accepted_handoff?: AcceptedHandoffWire;
       evidence_notice?: string;
     }>;
   }
@@ -659,6 +664,8 @@ export class MusterdClient {
     warnings: LaneWarning[];
     /** value-layer design: advisory lines for THIS caller only (e.g. the ship nudge) — never a wake. */
     notices?: string[];
+    /** ADR 505 §6: on a self-claim with finished dependencies, what the claimer builds on. */
+    built_on?: BuiltOn[];
     /** ADR 283: present when THIS patch closed the lane — what the close recorded. Absent from an
      *  older daemon and from every non-terminal patch; absence means "no verdict to report", so a
      *  reader must fall back rather than invent one. `verified: false` alone cannot separate the

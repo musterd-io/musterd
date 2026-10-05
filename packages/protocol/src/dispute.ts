@@ -13,8 +13,10 @@
  * gains exactly one clause, spelled once here for both readers, the way `OBLIGATION_ACTS_*` already
  * are: a directed `decline` whose stamp says `via: 'review'`.
  *
- * Validator-free (like `acts.wire.ts`) so the browser can read the vocabulary without zod.
+ * Validator-free (like `acts.wire.ts`) so the browser can read the vocabulary without zod — the
+ * one import below is type-only and erased.
  */
+import type { BuiltOn } from './lanes.js';
 
 /** Where a dispute came from — ADR 505 §2. `dependency` is a `challenge` whose sender owns a lane
  *  that builds on one the recipient owns (derived from `depends_on`, never declared). */
@@ -98,6 +100,46 @@ export function disputeAnswerAck(a: DisputeAnswerWire): { lane: string; guidance
       `Lane ${a.lane}: your hold is on the record, but no second reviewer could be picked ` +
       `right now — the lane stays active. Resubmit when one is live, or ask a human.`,
   };
+}
+
+/**
+ * ADR 505 §6 — the line under what a seat is about to build on. No gate on whether the check was
+ * run (a gate on prose is a gate that gets gamed, ADR 476); the cost of not checking is measured
+ * later, by the traceback (§7). One sentence, every surface.
+ */
+export const BUILD_ON_CHECK =
+  'You are building on these (ADR 505 §6). If one carries weight for your work, re-run its check ' +
+  'before you build on it — the outcome, PR and acceptor note above are where to start. If it ' +
+  'fails, dispute it to its owner with `challenge` (reply_to the act); do not build on it quietly.';
+
+/** One finished dependency, one line: id, title, how it closed, the acceptor's words. */
+export function builtOnLine(b: BuiltOn): string {
+  const pr = b.merged?.pr !== undefined ? `, PR #${String(b.merged.pr)}` : '';
+  const closed =
+    b.closed_by !== undefined
+      ? `, closed by ${b.closed_by} (${b.verified ? 'accepted' : 'unconfirmed'})`
+      : '';
+  const note = b.note ? `: "${b.note}"` : '';
+  return `${b.lane} "${b.title}" — ${b.state}${pr}${closed}${note}`;
+}
+
+/** What the daemon returns when an `accept` answered a `handoff` act (ADR 505 §6): the note the
+ *  sender rode on the transfer, so the receiver reads the claim it is taking on where it accepts. */
+export interface AcceptedHandoffWire {
+  lane?: string;
+  branch?: string | null;
+  note: string;
+}
+
+export function acceptedHandoffAck(h: AcceptedHandoffWire): string {
+  const where = h.lane ? `lane ${h.lane}${h.branch ? ` (branch ${h.branch})` : ''}` : 'the handoff';
+  const note = h.note.trim();
+  const head = note.length > 240 ? `${note.slice(0, 240)}…` : note;
+  return (
+    `Taking ${where}. The sender's note is a claim about the work: "${head}" — re-run what it ` +
+    `asserts before you build on it; if it fails, dispute it (\`challenge\`, reply_to the handoff) ` +
+    `rather than building on it quietly (ADR 505 §6).`
+  );
 }
 
 /**

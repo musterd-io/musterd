@@ -10,6 +10,7 @@ import {
   chooseAutoTarget,
   ELIGIBLE_ACTS,
   eligibleSetRefusal,
+  acceptedHandoffAck,
   disputeAnswerAck,
   laneAckAck,
   laneVerdictAck,
@@ -306,6 +307,10 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
         // the concession; held and re-routed to a tiebreak, or could not), said on the spot.
         const disputeAck = ackBody?.dispute ? disputeAnswerAck(ackBody.dispute) : undefined;
         const disputeGuidance = disputeAck ? ` ${disputeAck.guidance}` : '';
+        // ADR 505 §6: an accept that took a handoff gets the sender's note back with the check line.
+        const handoffAcceptGuidance = ackBody?.accepted_handoff
+          ? ` ${acceptedHandoffAck(ackBody.accepted_handoff)}`
+          : '';
         // ADR 484: the challenge-evidence rail's one line — sender-only, never stored on the act.
         const evidenceNotice = ackBody?.evidence_notice;
         const evidenceGuidance = evidenceNotice ? ` ⚠ ${evidenceNotice}` : '';
@@ -332,6 +337,7 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
           verdictGuidance +
           ackGuidance +
           disputeGuidance +
+          handoffAcceptGuidance +
           evidenceGuidance +
           threadGuidance;
         return {

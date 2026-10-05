@@ -265,6 +265,37 @@ withDrivers('route.dispute', (o) => {
     expect(r.dispute).toBeUndefined();
   });
 
+  it("an accept of a handoff returns the sender's note with the lane it named (ADR 505 §6)", async () => {
+    const { db, team, ada, bo, cy, lane, send } = await seed();
+    await insertMessage(
+      db,
+      team.id,
+      ada.id,
+      bo.id,
+      makeEnvelope({
+        id: 'ho-1',
+        team: 'revive',
+        from: 'ada',
+        to: { kind: 'member', name: 'bo' },
+        act: 'handoff',
+        body: `[lane] "${lane.title}" handed to you — branch feat/x\n\n7 seats remain on the old creds`,
+        meta: { lane_handoff: { lane: lane.id, branch: 'feat/x' } },
+      }),
+    );
+    const r = await send(bo, 'ada', 'accept', 'took-1', { in_reply_to: 'ho-1' }, 'taking it');
+    expect(r.accepted_handoff).toEqual({
+      lane: lane.id,
+      branch: 'feat/x',
+      note: `[lane] "${lane.title}" handed to you — branch feat/x\n\n7 seats remain on the old creds`,
+    });
+    // An accept of anything else carries no note back.
+    const plain = await send(bo, 'ada', 'accept', 'took-2', { in_reply_to: 'ask-1' }, 'ok');
+    expect(plain.accepted_handoff).toBeUndefined();
+    // And a seat the handoff was not sent to cannot read it back by accepting it.
+    const stranger = await send(cy, 'ada', 'accept', 'took-3', { in_reply_to: 'ho-1' }, 'mine now');
+    expect(stranger.accepted_handoff).toBeUndefined();
+  });
+
   it('a challenge is stamped via:challenge — or via:dependency when the sender builds on the recipient', async () => {
     const { db, team, ada, lane, send, metaOf } = await seed();
     await send(ada, 'bo', 'challenge', 'ch-1', {}, 'your p95 number does not reproduce');

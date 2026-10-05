@@ -2,6 +2,7 @@ import {
   blockedByOf,
   DeferUntilSchema,
   eligibleOf,
+  type AcceptedHandoffWire,
   type DisputeAnswerWire,
   type Envelope,
   ACCEPTANCE_MOVES_NOTICE,
@@ -42,7 +43,7 @@ import {
   recordTokenUsage,
   withEnvelopeSpan,
 } from '../telemetry.js';
-import { applyDisputeAnswer, stampDispute } from './dispute.js';
+import { acceptedHandoffOf, applyDisputeAnswer, stampDispute } from './dispute.js';
 
 export interface RouteResult {
   message: MessageRow;
@@ -67,6 +68,9 @@ export interface RouteResult {
    *  concession, or a hold that re-routed the lane to a tiebreak reviewer (or could not). Absent
    *  when the act answered no dispute of the sender's. Reported on the ack as `lane_verdict` is. */
   dispute?: DisputeAnswerWire;
+  /** ADR 505 §6 — this `accept` answered a `handoff`: the note the receiver just took on, returned
+   *  where they accepted so the "re-run it before you build on it" line sits beside it. */
+  accepted_handoff?: AcceptedHandoffWire;
 }
 
 /**
@@ -112,6 +116,7 @@ async function routeEnvelopeInner(
   let laneVerdict: RouteResult['lane_verdict'];
   let laneAck: RouteResult['lane_ack'];
   let dispute: RouteResult['dispute'];
+  let acceptedHandoff: RouteResult['accepted_handoff'];
   /** ADR 243: which evidence answered — audited, never on the wire. */
   let handoffBasis: HandoffLaneBasis | undefined;
   if (env.act === 'handoff' && !(env.meta as { lane_handoff?: unknown } | null)?.lane_handoff) {
@@ -439,6 +444,14 @@ async function routeEnvelopeInner(
           log.warn({ msg: 'dispute_answer_failed', err: String(err) });
         }
       }
+      // ADR 505 §6: an accept of a `handoff` hands the receiver the note back, with the check line.
+      if (env.act === 'accept') {
+        try {
+          acceptedHandoff = await acceptedHandoffOf(ctx, team, sender, ref);
+        } catch (err) {
+          log.warn({ msg: 'accepted_handoff_lookup_failed', err: String(err) });
+        }
+      }
     }
   } else if (env.act === 'wait') {
     // Lane 01M2P2E2H6: the acknowledge move. `wait` already means "deciding — check back" (ADR 145
@@ -571,6 +584,7 @@ async function routeEnvelopeInner(
     ...(laneVerdict ? { lane_verdict: laneVerdict } : {}),
     ...(laneAck ? { lane_ack: laneAck } : {}),
     ...(dispute ? { dispute } : {}),
+    ...(acceptedHandoff ? { accepted_handoff: acceptedHandoff } : {}),
   };
 }
 

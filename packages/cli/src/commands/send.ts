@@ -8,6 +8,7 @@ import {
   CLI_REPLY_TO_STYLE,
   type BlockedBy,
   type Envelope,
+  acceptedHandoffAck,
   disputeAnswerAck,
   laneAckAck,
   laneVerdictAck,
@@ -292,6 +293,9 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
   // ADR 505: the owner's answer to a review dispute, at the same parity — the text is protocol's.
   if (ackBody?.dispute)
     process.stdout.write(theme.dim(disputeAnswerAck(ackBody.dispute).guidance) + '\n');
+  // ADR 505 §6: an accept that took a handoff — the sender's note back, with the check line.
+  if (ackBody?.accepted_handoff)
+    process.stdout.write(theme.dim(acceptedHandoffAck(ackBody.accepted_handoff)) + '\n');
   // ADR 484: the challenge-evidence rail, at parity with the MCP reply — sender-only, one line.
   if (ackBody?.evidence_notice)
     process.stdout.write(theme.warn(`⚠ ${ackBody.evidence_notice}`) + '\n');

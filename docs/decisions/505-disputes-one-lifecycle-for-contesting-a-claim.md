@@ -194,6 +194,16 @@ a change that raises holds without the tiebreak siding with them.
   send ack (`dispute`, `disputeAnswerAck`) at parity with `lane_verdict`. Only the lane's owner
   answers; only a lane still `active` is moved. Increment 3 reads the stamp and these two audit
   verbs; nothing else is new on the wire.
+- **2026-10-05 — increment 5 landed** (dolly; lane 01M44BVFV9VWV3J0987ZW00D8A). A self-claim of a
+  lane with finished dependencies returns `built_on` on the lane result (`BuiltOnSchema`: id,
+  title, state, PR, who closed it and whether a counterpart confirmed — the ADR 169 derivation off
+  `lane.closed` — and the head of the accept that answered its review ask, capped at three), and
+  `lane_claim` / `musterd lane claim` print each as one line under the §6 check sentence
+  (`BUILD_ON_CHECK`, one string for every surface). An `accept` that answers a `handoff` act gets
+  the handoff's note back on the send ack (`accepted_handoff {lane?, branch?, note}`,
+  `acceptedHandoffAck`), with the same sentence beside it. No gate on whether the check ran; the
+  §7 traceback is where not checking shows up. `via: 'dependency'` (increment 2) is what a failed
+  check becomes when it is sent.
 - **Increments, each a lane under Goal `disputes`:**
 
   | increment | lane | what lands | protocol? |
