@@ -731,12 +731,20 @@ times are wall-clock in the entry's `tz`; an implementation MUST NOT convert the
 
 Routes (all under `/teams/:slug`, any authenticated active Member):
 
-- `GET /calendar[?since=<epoch ms>]` — `{ entries: [...] }`, by `date`, `start`, then `title`;
-  with `since`, only entries whose `updated_at` is at or after it.
-- `POST /calendar {entry without id/created_*/updated_at}` — returns `{ entry }`.
-- `PUT /calendar/:id {same}` — full replace; returns `{ entry }`; unknown id answers `not_found`.
-- `DELETE /calendar/:id` — returns `{ ok: true }`; unknown id answers `not_found`.
+- `GET /calendar[?since=<epoch ms>]` — `{ entries: [...], deleted: [...], now }`, entries by
+  `date` (all-day first), `start`, then `title`. With `since`, only entries whose `updated_at` is at
+  or after it, and in `deleted` the ids deleted at or after it (empty without `since`). `now` is the
+  server's clock at the read; a poller passes it back as its next `since`, so the client's clock
+  never enters the comparison.
+- `POST /calendar {entry without id/created_*/updated_at}` — returns `{ entry, outcome }`, `201`
+  when `outcome` is `created`. A body whose `source_ref` names an entry the Team already has
+  replaces that entry instead (`updated`, or `unchanged` when nothing differs).
+- `PUT /calendar/:id {same}` — full replace (an omitted optional field reads as its default);
+  returns `{ entry, outcome }`; unknown id answers `not_found`; a `source_ref` another entry holds
+  answers `conflict`.
+- `DELETE /calendar/:id` — a real delete; returns `{ ok: true }`; unknown id answers `not_found`.
 
-Bodies MUST parse through `CalendarEntrySchema`; a failure answers `validation`. Every write is one
-audit row (`calendar.entry_written` or `calendar.entry_deleted`, with `{id, by}`). An import MAY
-upsert on `(team, source_ref)`; a second import of the same export changes nothing.
+Bodies MUST parse through `CalendarEntryInputSchema`; a failure answers `bad_request`. An observer
+seat may read and not write (`forbidden`). Every write that changes a row is one audit row
+(`calendar.entry_written` or `calendar.entry_deleted`, with `{id, by}`); an `unchanged` write
+records nothing, so a second import of the same export changes nothing and audits nothing.

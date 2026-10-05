@@ -77,6 +77,9 @@ export const P3_AUDIT_ACTIONS = [
   // ADR 516: a human admin set / lifted a Team hold.
   'hold.set',
   'hold.lifted',
+  // ADR 519: a Member wrote / deleted a calendar entry.
+  'calendar.entry_written',
+  'calendar.entry_deleted',
   'governed.policy.change',
   'governed.launch.issue',
   'governed.launch.consume',

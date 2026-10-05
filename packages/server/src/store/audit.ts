@@ -324,6 +324,10 @@ export type AuditAction =
   // ADR 516: a human admin set / lifted a Team hold. Hub-minted, replicated under the `policy` kind.
   | 'hold.set'
   | 'hold.lifted'
+  // ADR 519: a Member wrote / deleted a calendar entry — actor the Member, target the entry id. Local
+  // to the daemon that took the write; `calendar.entry_deleted` is also what a `?since` delta reads.
+  | 'calendar.entry_written'
+  | 'calendar.entry_deleted'
   // ADR 167 delivery rail, made observable (ADR 173; lane `01KYQ9175S`). The rail's own decision for
   // a send where it was genuinely a CANDIDATE — the act was directed at a real other member and was
   // hint-eligible — with `detail.reason` naming which leg of the predicate answered: `issued`,
@@ -664,6 +668,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'seat.resumed': 'actor',
   'hold.set': 'actor',
   'hold.lifted': 'actor',
+  'calendar.entry_written': 'actor',
+  'calendar.entry_deleted': 'actor',
   'nudge.decision': 'actor',
   'residency.wake_cost': 'none',
   'residency.wake_report_rejected': 'none',

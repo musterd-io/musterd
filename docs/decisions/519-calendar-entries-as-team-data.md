@@ -90,6 +90,17 @@ stays small.
 
   2 depends on 1; 3 and 4 on 2; 5 on 3 and 4. 5 also needs the Apple Developer Program membership,
   which only nick can buy.
+- **2026-10-05, increment 2 (lane `01M4728G4F`) — what building it settled.** Within §3, not
+  against it: (a) a `?since` delta that only returned changed entries could never tell the phone
+  about a delete, so the read is `{entries, deleted, now}` — `deleted` read back from the
+  `calendar.entry_deleted` audit rows (no tombstone column), and `now` the daemon's clock the
+  poller passes back, so the phone's clock never enters the comparison. (b) The import's upsert is
+  `POST` with a `source_ref` the Team already has; every write answers `{entry, outcome}` with
+  `created` / `updated` / `unchanged`, and an `unchanged` write audits nothing — which is how the
+  second import run reads as all `unchanged`. (c) The boundary schema is `CalendarEntryInput` (the
+  daemon stamps `id`, `created_by` and the times) and a refusal is `bad_request`, as on every other
+  route. (d) The calendar is local to the daemon that took the write; it has no sync kind. SPEC A.16
+  says all four.
 
 ## Observability & Evaluation
 

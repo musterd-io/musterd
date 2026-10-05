@@ -22,6 +22,8 @@ export * from './goals.wire.js';
 export * from './guards.js';
 // ADR 516: the hold line /live's banner renders — no zod behind it.
 export * from './holds.wire.js';
+// ADR 519: the calendar's kinds, statuses and ordering — no zod behind them.
+export * from './calendar.wire.js';
 // The huddle fold (ADR 378): a pure read of the timeline, no schema — and the browser's only way to
 // read a room without pulling zod in behind it.
 export * from './huddleView.js';
