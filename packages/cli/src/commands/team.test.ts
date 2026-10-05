@@ -925,3 +925,74 @@ describe('team export — the roster lands in the team home', () => {
     expect(readConfig().teamHome ?? {}).toEqual({});
   });
 });
+
+describe('team policy refuses an unknown flag (lane 01M46ZG8NY)', () => {
+  let server: RunningServer;
+  let dir: string;
+
+  beforeEach(async () => {
+    server = createServer({ db: openDb(':memory:'), port: 0 });
+    const { port } = await server.listen();
+    process.env['MUSTERD_SERVER'] = `http://127.0.0.1:${port}`;
+    dir = mkdtempSync(join(tmpdir(), 'musterd-team-'));
+    process.env['MUSTERD_CONFIG'] = join(dir, 'config.json');
+    vi.spyOn(process, 'cwd').mockReturnValue(dir);
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    await teamCommand(parseArgs(['create', 'dawn', '--member', 'nick']));
+    spy.mockRestore();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await server.close();
+    rmSync(dir, { recursive: true, force: true });
+    delete process.env['MUSTERD_SERVER'];
+    delete process.env['MUSTERD_CONFIG'];
+  });
+
+  it('a flag this build does not know is an error (exit 2), not a silent fall-through to the readout', async () => {
+    // The shape of nick's 2026-10-05 miss: `--enforce-route` on a CLI built before #2084 printed the
+    // policy and changed nothing. A write must never quietly become a read.
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      await expect(
+        teamCommand(
+          parseArgs(['policy', '--enforce-rouet', 'courier:taildrop=tailscale file cp *']),
+        ),
+      ).rejects.toMatchObject({
+        exitCode: 2,
+        message: expect.stringMatching(/unknown flag --enforce-rouet for `musterd team policy`/),
+      });
+      // Nothing was printed: the readout did not run.
+      expect(spy.mock.calls.some((c) => String(c[0]).includes('team policy — dawn'))).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('names a newer CLI as the fix, since the usual cause is a flag that landed after this build', async () => {
+    await expect(teamCommand(parseArgs(['policy', '--some-future-knob', 'on']))).rejects.toThrow(
+      /newer than this build|rebuild/i,
+    );
+  });
+
+  it('still accepts the global flags beside a real knob', async () => {
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    try {
+      expect(
+        await teamCommand(
+          parseArgs([
+            'policy',
+            '--review-loop',
+            'on',
+            '--json',
+            '--server',
+            process.env['MUSTERD_SERVER']!,
+          ]),
+        ),
+      ).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});

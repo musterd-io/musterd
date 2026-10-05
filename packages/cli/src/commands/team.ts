@@ -47,6 +47,7 @@ import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
 import { hint, success, sym } from '../render/ui.js';
 import { readSeatFiles, readSeatHues, seatFilePath, setSeatHue, writeSeatFile } from '../roster.js';
+import { cliBuild } from '../version.js';
 import { findWorkspaceDir, inherited, rejectAs, resolve, resolveRead } from './helpers.js';
 
 export async function teamCommand(parsed: Parsed): Promise<number> {
@@ -332,7 +333,67 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
  * knob(s) → POSTs the policy (the residency-policy read-merge-write pattern), so setting one knob
  * never clobbers the wake-policy defaults.
  */
+/**
+ * Every flag `musterd team policy` reads, plus the globals any command accepts. The parser (ADR 002:
+ * no arg-parsing dependency) keeps whatever it is given, and this command only ever looked up the
+ * knobs it knew — so a flag it did not know left `changed` false and fell through to the READ
+ * branch: the policy printed, exit 0, nothing written. That is how nick's first `--enforce-route`
+ * on a CLI built before #2084 did nothing on 2026-10-05 (lane 01M46ZG8NY). A write must never
+ * quietly become a read, and the usual cause — a flag newer than this build — is worth naming.
+ */
+const POLICY_FLAGS = new Set([
+  'reseat-known-agents',
+  'ask-fallback-to-nonadmin',
+  'review-loop',
+  'dispatch-loop',
+  'sweep-loop',
+  'incident',
+  'incident-threshold',
+  'incident-claim-window',
+  'incident-fallback-role',
+  'incident-wake-on-route',
+  'incident-wake-on-resolve',
+  'trace-content',
+  'agent-connect',
+  'invite-requires-expiry',
+  'sponsored-agent-cap',
+  'acceptance-review-window',
+  'ask-slack-webhook',
+  'seeds-relay',
+  'seeds-token',
+  'guardian-tier',
+  'stakes-default',
+  'enforce-clear',
+  'enforce-posture',
+  'enforce-surface',
+  'enforce-action',
+  'enforce-route',
+  // globals: identity/transport (`gather`), output (`bin.ts`), and `--as` so `rejectAs` can say its line
+  'server',
+  'team',
+  'json',
+  'quiet',
+  'no-color',
+  'no-bell',
+  'as',
+]);
+
+function rejectUnknownPolicyFlags(flags: Record<string, string | boolean>): void {
+  const unknown = Object.keys(flags).filter((f) => !POLICY_FLAGS.has(f));
+  if (unknown.length === 0) return;
+  const build = cliBuild();
+  throw new CliError(
+    `unknown flag ${unknown.map((f) => `--${f}`).join(', ')} for \`musterd team policy\` — nothing was ` +
+      `changed. If the flag is newer than this build${build ? ` (${build.slice(0, 7)})` : ''}, rebuild: ` +
+      "`pnpm build` in the CLI workspace, or `musterd service refresh` for the daemon's; " +
+      '`musterd team policy --help` lists what this build knows.',
+    2,
+  );
+}
+
 async function teamPolicy(parsed: Parsed): Promise<number> {
+  rejectUnknownPolicyFlags(parsed.flags);
+  rejectAs(parsed.flags);
   const { team, http } = resolve(parsed.flags);
   const { policy: current, stored } = await http.getPolicy(team);
 
