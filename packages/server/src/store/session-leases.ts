@@ -96,12 +96,19 @@ export async function hasValidSessionLease(
  * minted (`unknown` — a stale token after a reset, or a forgery), one revoked on purpose
  * (`revoked` — rotate, halt, a bounce), one past its TTL (`expired` — the renewal never reached
  * it), or one whose Presence was released under it (`presence_released`).
+ *
+ * ADR 511: a lease row is deleted with its Presence (ON DELETE CASCADE), so "no row" mostly means
+ * the Presence it was bound to is gone — a session start presenting the previous session's lease
+ * from binding.json, before its own adapter's first tool call has claimed. With no unheld Presence
+ * on the seat at all, that session has not joined (`not_joined`), and it is not a deaf seat: its
+ * first inbox read delivers what waits. `unknown` is kept for a lease the daemon cannot place while
+ * some Presence DOES hold the seat — a binding that missed the live occupant's lease.
  */
 export async function diagnoseSessionLease(
   db: Driver,
   input: { teamId: string; memberId: string; token: string },
   now = Date.now(),
-): Promise<'revoked' | 'expired' | 'presence_released' | 'unknown'> {
+): Promise<'revoked' | 'expired' | 'presence_released' | 'not_joined' | 'unknown'> {
   const row = await db.get<{ revoked_at: number | null; expires_at: number; held: number | null }>(
     `SELECT l.revoked_at, l.expires_at, p.held_until AS held
        FROM session_leases l
@@ -109,7 +116,13 @@ export async function diagnoseSessionLease(
        WHERE l.team_id = ? AND l.member_id = ? AND l.token_hash = ?`,
     [input.teamId, input.memberId, hashToken(input.token)],
   );
-  if (!row) return 'unknown';
+  if (!row) {
+    const live = await db.get<{ id: string }>(
+      'SELECT id FROM presence WHERE member_id = ? AND held_until IS NULL LIMIT 1',
+      [input.memberId],
+    );
+    return live ? 'unknown' : 'not_joined';
+  }
   if (row.revoked_at !== null) return 'revoked';
   if (row.expires_at <= now) return 'expired';
   return 'presence_released';

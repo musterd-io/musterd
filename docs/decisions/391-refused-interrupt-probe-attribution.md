@@ -79,6 +79,10 @@ the log had a name to write.
   token this daemon never minted) — read by `diagnoseSessionLease` only on the refusal path, so the
   deaf-seat causes can be told apart from the ledger. `pnpm delivery:measure` reads it
   (`docs/wiki/delivery-measurement.md`).
+- _2026-10-05, lane 01M402J3M7:_ `unknown` mostly meant a session that had not joined yet, because a
+  lease row is deleted with its Presence. Such a refusal now reads `not_joined` when no unheld
+  Presence holds the seat, and the §5 verdict does not count it. See
+  [ADR 511](511-not-joined-is-not-deaf.md).
 
 ## Observability & Evaluation
 

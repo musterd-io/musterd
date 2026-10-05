@@ -725,6 +725,31 @@ withDrivers('integration · governance', (_o, kind) => {
         expect((await refusals())[0]!.detail).toMatchObject({ lease: 'dead', reason: 'expired' });
       });
 
+      // ADR 511. A session start presents the previous session's lease from binding.json, and the
+      // claim that cleared that session's Presence took the lease row with it (ON DELETE CASCADE).
+      // Until the new adapter's first tool call claims, nobody holds the seat: that is a session
+      // that has not joined, not a deaf one — measured 2026-10-05, every `unknown` row since #2036.
+      it('a lease whose Presence is gone, with nobody holding the seat, is not_joined', async () => {
+        const { ada, refusals, teamId } = await deafAda();
+        const adaRow = (await getMemberByName(h.db, teamId, 'Ada'))!;
+        await h.db.run('DELETE FROM session_leases WHERE member_id = ?', [adaRow.id]);
+        await h.db.run('DELETE FROM presence WHERE member_id = ?', [adaRow.id]);
+        expect((await get('/teams/dawn/inbox/interrupt-check', ada)).status).toBe(401);
+        expect((await refusals())[0]!.detail).toMatchObject({
+          lease: 'dead',
+          reason: 'not_joined',
+        });
+      });
+
+      it('control: an unminted lease while the seat IS held live stays unknown', async () => {
+        const { ada, refusals, teamId } = await deafAda();
+        const adaRow = (await getMemberByName(h.db, teamId, 'Ada'))!;
+        // The live Presence stays; only the lease this caller presents is unknown to the daemon.
+        await h.db.run('DELETE FROM session_leases WHERE member_id = ?', [adaRow.id]);
+        expect((await get('/teams/dawn/inbox/interrupt-check', ada)).status).toBe(401);
+        expect((await refusals())[0]!.detail).toMatchObject({ lease: 'dead', reason: 'unknown' });
+      });
+
       it('control: a missing lease is refused with its own reason', async () => {
         const { ada, refusals } = await deafAda();
         const noLease = { key: ada.key, seat: ada.seat }; // credential valid, no msls_ header at all
