@@ -154,6 +154,13 @@ or lifts. Active is derived (`lifted_at IS NULL AND now < expires_at`) — no st
 and rows are never deleted. The id is minted once on the hub and crosses the fold verbatim
 (`hold.set` / `hold.lifted` under the `policy` sync kind), so the projection is idempotent. v86 is
 ADR 514's.
+v88 (ADR 519, calendar entries) adds `calendar_entries (id PK, team_id, title, date, start_time,
+end_time, tz, kind, status, place, url, note, pick, source, source_ref, created_by, created_at,
+updated_at)` plus `idx_calendar_team_updated` and the partial unique `idx_calendar_team_source_ref`
+on `(team_id, source_ref) WHERE source_ref IS NOT NULL` — the one-time import's key. `start_time` /
+`end_time` because `end` is reserved in SQL; `pick` is 0/1 on both engines. Deletes are real; a
+`?since` delta reads them back from the `calendar.entry_deleted` audit rows, so there is no
+tombstone column. Local to the daemon that took the write — no sync kind.
 
 **Tenancy (cloud design §12.1).** On Postgres every team-owned table carries `team_id` (`teams`:
 its `id`) and one derived row-level-security policy, `tenant`, on

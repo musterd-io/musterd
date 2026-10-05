@@ -134,6 +134,7 @@ import {
   SetHoldBodySchema,
   type SyncHoldRequest,
   SyncHoldRequestSchema,
+  CalendarEntryInputSchema,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
@@ -188,6 +189,13 @@ import {
   reviewRouting,
   standingAcceptance,
 } from '../store/audit.js';
+import {
+  createCalendarEntry,
+  deleteCalendarEntry,
+  listCalendar,
+  listCalendarSince,
+  replaceCalendarEntry,
+} from '../store/calendar.js';
 import { applyCursorAdvance, getCursor } from '../store/cursors.js';
 import { deferralFold } from '../store/deferralFold.js';
 import {
@@ -3570,6 +3578,56 @@ export async function handleHttp(
             ? await listAllHolds(ctx.db, team.id)
             : await listActiveHolds(ctx.db, team.id, Date.now()),
         });
+      }
+
+      // ADR 519 — the Team's calendar. Team data like Seeds: any active Member reads it and writes
+      // it (an agent that learns of a demo adds it; a human corrects it), and the store audits each
+      // write. An observer seat watches and never writes. Bodies parse at the boundary (hard rule 4).
+      if (rest === '/calendar' || rest.startsWith('/calendar/')) {
+        const { team, member } = await authTouch(ctx, slug, req);
+        assertSeatCanRead(member);
+        if (method === 'GET' && rest === '/calendar') {
+          const sinceRaw = url.searchParams.get('since');
+          const now = Date.now();
+          if (sinceRaw === null) {
+            return sendJson(res, 200, {
+              entries: await listCalendar(ctx.db, team.id),
+              deleted: [],
+              now,
+            });
+          }
+          const since = Number(sinceRaw);
+          if (!Number.isInteger(since) || since < 0) {
+            throw new MusterdError('validation', 'since must be a non-negative integer (ms)');
+          }
+          return sendJson(res, 200, { ...(await listCalendarSince(ctx.db, team.id, since)), now });
+        }
+        if (member.observer === 1) {
+          throw new MusterdError(
+            'forbidden',
+            `observer seat "${member.name}" cannot write the calendar`,
+          );
+        }
+        if (method === 'POST' && rest === '/calendar') {
+          const body = parseOrBadRequest(CalendarEntryInputSchema, await readJson(req));
+          const written = await createCalendarEntry(ctx.db, team.id, member.name, body);
+          return sendJson(res, written.outcome === 'created' ? 201 : 200, written);
+        }
+        const idMatch = /^\/calendar\/([^/]+)$/.exec(rest);
+        if (idMatch && method === 'PUT') {
+          const id = decodeURIComponent(idMatch[1]!);
+          const body = parseOrBadRequest(CalendarEntryInputSchema, await readJson(req));
+          return sendJson(
+            res,
+            200,
+            await replaceCalendarEntry(ctx.db, team.id, member.name, id, body),
+          );
+        }
+        if (idMatch && method === 'DELETE') {
+          const id = decodeURIComponent(idMatch[1]!);
+          await deleteCalendarEntry(ctx.db, team.id, member.name, id);
+          return sendJson(res, 200, { ok: true });
+        }
       }
 
       // The read half of the policy verb (increment 5): `musterd residency policy` does

@@ -146,6 +146,47 @@ export const LADDER: PortableMigration[] = [
       await d.exec(HOLDS_INDEX_SQL);
     },
   },
+  {
+    // v88 — ADR 519 (calendar entries as team data): the Team's calendar, read and written by any
+    // active Member. `start_time`/`end_time` because `end` is reserved in SQL; `pick` is 0/1 on both
+    // engines. Deletes are real deletes, recorded in audit (`calendar.entry_deleted`), which is also
+    // what a `?since` delta reads them back from — no tombstone column. The partial unique index is
+    // the one-time import's idempotency key (§5); an entry made in musterd has no `source_ref`.
+    version: 88,
+    sqlite: (db) => {
+      db.exec(CALENDAR_TABLE_SQL);
+      for (const sql of CALENDAR_INDEX_SQL) db.exec(sql);
+    },
+    postgres: async (d) => {
+      await d.exec(CALENDAR_TABLE_SQL);
+      for (const sql of CALENDAR_INDEX_SQL) await d.exec(sql);
+    },
+  },
+];
+
+const CALENDAR_TABLE_SQL = `CREATE TABLE IF NOT EXISTS calendar_entries (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL REFERENCES teams(id),
+  title TEXT NOT NULL,
+  date TEXT NOT NULL,
+  start_time TEXT,
+  end_time TEXT,
+  tz TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  status TEXT,
+  place TEXT NOT NULL,
+  url TEXT,
+  note TEXT NOT NULL,
+  pick INTEGER NOT NULL,
+  source TEXT NOT NULL,
+  source_ref TEXT,
+  created_by TEXT NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+)`;
+const CALENDAR_INDEX_SQL = [
+  'CREATE INDEX IF NOT EXISTS idx_calendar_team_updated ON calendar_entries(team_id, updated_at)',
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_calendar_team_source_ref ON calendar_entries(team_id, source_ref) WHERE source_ref IS NOT NULL',
 ];
 
 const HOLDS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS holds (
