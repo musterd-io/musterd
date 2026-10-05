@@ -67,6 +67,10 @@ jobs, so it pays five roundings and three setups to do about three minutes of di
   exists yet. That costs one both-driver run.
 - `package.json`'s `coverage:merge` script and `vitest.config.ts`'s `MUSTERD_COVERAGE_SHARD` branch
   are now unused by CI. They are left in place, harmless, for a future runner where sharding is free.
+- **A flaky step now costs a re-run of the whole job, not of one leaf.** The first known flake is
+  fixed in this change. The connected `/board` tap-target sweep measured the nav shell before the
+  goal grid mounted, which happened twice on 2026-10-05. `target-size-sweep.mjs` now keeps polling
+  until a required surface is present, up to its existing 20 s cap.
 - When a self-hosted runner lands, minutes stop being billed. Then re-weigh this ADR against wall
   time. Fanning back out would be a deliberate choice, not a revert.
 

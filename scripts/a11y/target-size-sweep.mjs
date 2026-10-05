@@ -180,6 +180,17 @@ const settled = await (async () => {
      * a slower machine that found it. Keep polling to the cap; a page that has genuinely nothing
      * is still refused below, just after waiting for it rather than on the first quiet frame. */
     const count = Number(sig.split('|')[1] ?? 0);
+    /* A REQUIRED SURFACE THAT HAS NOT MOUNTED IS NOT SETTLED EITHER. Connected /board renders its
+     * nav shell first and the goal grid (`.gg-stage`) only once the team's goals arrive; the shell
+     * alone is a non-empty, stable signature, so the loop above called it settled and the REQUIRE
+     * check below refused the route as "DID NOT MEASURE". Caught twice on CI 2026-10-05 (runs
+     * 37346442624 and 37362406652); a re-run passed both times. Keep polling to the cap; a page that
+     * never renders the surface is still refused below, after waiting for it. */
+    if (REQUIRE && !(await evalIn(`document.querySelector(${JSON.stringify(REQUIRE)}) !== null`))) {
+      last = null;
+      await new Promise((r) => setTimeout(r, SETTLE_STEP));
+      continue;
+    }
     if (count > 0 && last !== null && sig === last && sig.startsWith('complete')) return true;
     last = sig;
     await new Promise((r) => setTimeout(r, SETTLE_STEP));
