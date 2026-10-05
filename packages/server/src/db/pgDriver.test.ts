@@ -364,6 +364,22 @@ describe('request leases (ADR 507)', () => {
     expect(f.busy()).toBe(0);
   });
 
+  it('a lease idle for 250 ms returns its client, so a stalled request cannot pin one', async () => {
+    const f = fakePools();
+    const d = pgDriver({ ...urls, pools: f.factory });
+    const { timing, result } = withRequestTiming(async () => {
+      await d.forTeam('A').get('SELECT 1');
+      expect(f.busy()).toBe(1);
+      await new Promise((r) => setTimeout(r, 400)); // the request stalls with its response open
+      expect(f.busy()).toBe(0);
+      await d.forTeam('A').get('SELECT 2'); // leases afresh
+    });
+    await result;
+    await endRequestTiming(timing);
+    expect(f.connects()).toBe(2);
+    expect(f.busy()).toBe(0);
+  });
+
   it('two drivers in one request never share a client, and each returns only its own', async () => {
     const f1 = fakePools();
     const f2 = fakePools();

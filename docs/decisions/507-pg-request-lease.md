@@ -53,7 +53,9 @@ without changing what a statement means.
    request defers past its response (a notification's `.then`) find no live scope and check out per
    statement as today. A deferred continuation that starts after the scope ended must not reuse a
    released client: the scope records `ended`, and an ended scope means "no lease".
-5. **A lease ages out.** Once a lease is older than 1 s, its client goes back to the pool after the
+5. **A lease idles out and ages out.** A lease that runs no work for 250 ms gives its client back,
+   so a request that leased and then stalled — a slow client, a stream waiting on nothing — holds a
+   client for at most that long, and open-but-idle requests cannot drain the pool. Separately, once a lease is older than 1 s, its client goes back to the pool after the
    transaction that crossed the line, and the request's next statement leases afresh. A
    long-lived response (an MCP stream) therefore never pins a client; run 9's median request held
    its clients ~0.3 s, so ordinary requests never reach the cap.

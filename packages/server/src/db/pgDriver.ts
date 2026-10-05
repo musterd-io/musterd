@@ -4,7 +4,7 @@ import { log } from '../log.js';
 import { toPostgres } from './dialect.js';
 import { DATABASE_UNREACHABLE_SENTENCE, DriverError, type Driver, type Params } from './driver.js';
 import { ROLE, TENANT_SETTING } from './pg/tenancy.js';
-import { requestEnders, requestTiming, type RequestTiming } from './requestTiming.js';
+import { requestEnders, requestTiming, type Lease, type RequestTiming } from './requestTiming.js';
 
 /**
  * node-postgres behind the async Driver (ADR 486; cloud design §12.1/§12.4). One pool per database
@@ -114,6 +114,8 @@ export function pgPoolFactory(
 let driverSeq = 0;
 /** ADR 507: a request's lease is returned after the transaction that outlives this. */
 const LEASE_MAX_MS = 1_000;
+/** ADR 507: a lease idle this long returns its client, so a stalled request cannot pin one. */
+const LEASE_IDLE_MS = 250;
 
 export function pgDriver(opts: PgDriverOptions): PgDriver {
   const make: PoolFactory = opts.pools ?? pgPoolFactory(opts);
@@ -224,7 +226,14 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
     // databases sharing one request, and neither may run on the other's client.
     const key = `${driverId}:${s.role}`;
     if (scope && !scope.ended && !holding.getStore()?.has(key)) {
-      const lease = (scope.leases[key] ??= { client: null, since: 0, tail: Promise.resolve() });
+      const lease = (scope.leases[key] ??= {
+        client: null,
+        since: 0,
+        idle: null,
+        tail: Promise.resolve(),
+      });
+      if (lease.idle) clearTimeout(lease.idle);
+      lease.idle = null;
       const prev = lease.tail;
       let free!: () => void;
       lease.tail = new Promise<void>((r) => (free = r));
@@ -253,6 +262,7 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
         }
       } finally {
         free();
+        armIdle(lease);
       }
     }
     const c = await acquire(s);
@@ -266,6 +276,25 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
   };
 
   /**
+   * A lease that runs nothing for LEASE_IDLE_MS gives its client back (ADR 507 §5): a request that
+   * leased and then stalls — a slow client, a stream waiting on nothing — holds a client for at
+   * most that long, so open-but-idle requests cannot drain the pool. The next statement leases
+   * afresh. The release queues behind any work already on the lease.
+   */
+  const armIdle = (lease: Lease): void => {
+    if (!lease.client || lease.idle) return;
+    lease.idle = setTimeout(() => {
+      lease.idle = null;
+      void lease.tail.then(() => {
+        if (lease.idle) return; // new work arrived and re-armed it
+        lease.client?.release();
+        lease.client = null;
+      });
+    }, LEASE_IDLE_MS);
+    lease.idle.unref?.();
+  };
+
+  /**
    * End a request scope (ADR 507): no statement may take its leases from now on, and each leased
    * client goes back to its pool once the work already queued on it settles.
    */
@@ -275,6 +304,8 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
       Object.entries(scope.leases)
         .filter(([k]) => k.startsWith(`${driverId}:`))
         .map(async ([, lease]) => {
+          if (lease!.idle) clearTimeout(lease!.idle);
+          lease!.idle = null;
           await lease!.tail;
           lease!.client?.release();
           lease!.client = null;

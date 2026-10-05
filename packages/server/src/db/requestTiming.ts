@@ -34,6 +34,8 @@ export interface Lease {
   client: { release(err?: unknown): void } | null;
   /** When `client` was checked out (performance.now()), for the lease's age cap. */
   since: number;
+  /** Pending idle release (LEASE_IDLE_MS); cleared when new work arrives. */
+  idle: ReturnType<typeof setTimeout> | null;
   tail: Promise<void>;
 }
 
