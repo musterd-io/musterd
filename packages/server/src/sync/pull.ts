@@ -7,6 +7,7 @@ import type { Ctx } from '../context.js';
 import { failureFields, log } from '../log.js';
 import { readNodeState } from '../node/state.js';
 import { handleFoldedMessages } from '../protocol/route.js';
+import { replaceSeatBindings } from '../store/nodes.js';
 import { listActiveTeams } from '../store/teams.js';
 import { foldBatch, foldNodeLiveness, readPullCursor, type FoldStop } from './fold.js';
 import { hasEnrolledJoiners, laneGenesis, readStaged } from './log.js';
@@ -308,16 +309,23 @@ export async function pullPage(
   const cursor = await readPullCursor(ctx.db, team.id);
   // The hub sends its watermark; folding our own staged log (the loopback arm) reads it from the
   // same table the events came from — either way it describes the log being folded, not this daemon.
-  const page: Pick<SyncPullResponse, 'events' | 'nodes' | 'lane_genesis'> = enrollment
-    ? await fetchPage(enrollment.hub_url, enrollment.credential, team.slug, cursor)
-    : {
-        events: await readStaged(ctx.db, team.id, cursor, SYNC_PULL_MAX_BATCH),
-        nodes: [],
-        lane_genesis: await laneGenesis(ctx.db, team.id),
-      };
+  const page: Pick<SyncPullResponse, 'events' | 'nodes' | 'seat_nodes' | 'lane_genesis'> =
+    enrollment
+      ? await fetchPage(enrollment.hub_url, enrollment.credential, team.slug, cursor)
+      : {
+          events: await readStaged(ctx.db, team.id, cursor, SYNC_PULL_MAX_BATCH),
+          nodes: [],
+          seat_nodes: [],
+          lane_genesis: await laneGenesis(ctx.db, team.id),
+        };
   // Node liveness lands even when the page is empty: a quiet team still needs to know its
   // machines are alive (presence replication §3). The hub reads its own table and folds none.
   if (page.nodes.length > 0) await foldNodeLiveness(ctx.db, team.id, page.nodes);
+  // ADR 509: so does where every seat lives — a joiner's roster then names the hub's seats'
+  // machine instead of reading them as `nowhere`. Only a joiner takes the page's bindings; the
+  // hub's own table is the source. An older hub sends none and this daemon keeps what it holds.
+  if (enrollment && page.seat_nodes.length > 0)
+    await replaceSeatBindings(ctx.db, team.id, page.seat_nodes);
   if (page.events.length === 0) return none;
 
   const result = await foldBatch(ctx.db, team.id, page.events, now, page.lane_genesis);

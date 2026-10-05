@@ -425,6 +425,23 @@ export const SyncPullResponseSchema = z.object({
     )
     .default([]),
   /**
+   * ADR 509: where every seat of the team lives — the hub's `seat_nodes` bindings (ADR 358), by
+   * member NAME (ids are not shared across machines; names are), with the node id and when it was
+   * bound. A joiner replaces its own table from this on every page, so its roster's `residence`
+   * (ADR 503 §5) agrees with the hub's for seats it has never seen claim. The hub is the arbiter of
+   * bindings, so a replace is a projection, never a merge. Defaults to empty so an older hub's page
+   * still parses — a joiner then keeps whatever it already holds.
+   */
+  seat_nodes: z
+    .array(
+      z.object({
+        member: z.string().min(1),
+        node_id: z.string().min(1),
+        bound_at: z.number().int(),
+      }),
+    )
+    .default([]),
+  /**
    * The smallest lane id this log holds a `lane.opened` for — where its lane history begins. A
    * puller uses it to tell a transition for a lane that predates replication (skippable: no birth
    * exists anywhere) from one whose birth is merely missing (a hole, which must still block).

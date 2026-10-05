@@ -273,6 +273,18 @@ describe('where / can (ADR 503 Decision 2)', () => {
     ).toBe('wake');
   });
 
+  it('a service seat is never set up from the front door (ADR 509)', () => {
+    const svc = { ...member('digest', 'agent'), kind: 'service', presences: [] } as never;
+    expect(
+      canOf(svc, {
+        placed: placed('nowhere'),
+        workspace: false,
+        viewer: nick,
+        viewerSeatHere: true,
+      }),
+    ).toBe('none');
+  });
+
   it('setup only for a seat that lives nowhere, has no folder here, and a viewer with a seat here', () => {
     expect(
       canOf(m({}), {

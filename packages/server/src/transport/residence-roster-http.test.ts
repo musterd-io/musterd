@@ -118,4 +118,16 @@ withDrivers('residence on the roster (ADR 503 Decision 5)', (_o, kind) => {
     await revokeNode(server.store, team.id, 'node-gone', Date.now());
     expect((await roster()).get('ada').residence).toBeNull();
   });
+
+  it('a bound seat that is not wake-enrolled still lives somewhere (ADR 509)', async () => {
+    await joinNode('node-air2', 'macbook-air-2.lan');
+    await bind('cy', 'node-air2');
+    const r = await roster();
+    expect(r.get('cy').wakeable).toBe(false);
+    expect(r.get('cy').residence).toEqual({
+      node: 'node-air2',
+      node_label: 'macbook-air-2.lan',
+      kind: 'node',
+    });
+  });
 });

@@ -140,6 +140,12 @@ well (second-machine findings, 2026-10-03).
   and without such a Workspace it refuses with the `musterd human <you>` hint. `musterd <member>`
   for a seat with no folder here follows the same rule. The snapshot now carries the member rows,
   so the first paint shows the team before any roster answers.
+- **2026-10-05 — the experiment ran, and found the falsifier.** On Air 2, `big-body`, `grokbot`
+  and `compo` (all hub-resident) read `nowhere · set up`: `seat_nodes` never reaches a joiner, and
+  increment 1 had also gated `residence` on wake enrollment. [ADR 509](509-seat-bindings-ride-the-pull-page.md)
+  amends Decision 5: residence is the binding alone, and the hub's bindings ride the pull page so a
+  joiner's roster agrees. The hub side read correctly; `⏎` on a stale hub folder of an Air 2 seat
+  still launched, fixed the same day (lane `01M4562ZXA`, #2073).
 
 ## Observability & Evaluation
 
