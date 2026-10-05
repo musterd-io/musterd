@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BindingSchema, type Binding } from '@musterd/protocol';
@@ -1456,6 +1464,139 @@ describe('musterd session (capture)', () => {
    * So the boundary that always happens is the one that reconciles: an un-ended slot the daemon has
    * not been told about gets attested there, exactly once.
    */
+  describe('transcriptless refresh — opencode asks its own store (ADR 521)', () => {
+    // The opencode probe shells `sqlite3` against ~/.local/share/opencode/opencode.db, so the
+    // rig fakes HOME (with the db path merely present) and puts a stub sqlite3 on PATH that
+    // prints whatever MUSTERD_SQLITE_ROW says and logs its invocations.
+    let home = '';
+    let bin = '';
+    const savedHome = process.env['HOME'];
+    const savedPath = process.env['PATH'];
+
+    const stubSqlite = (row: string, tables = 'session_v2'): void => {
+      home = mkdtempSync(join(tmpdir(), 'musterd-home-'));
+      mkdirSync(join(home, '.local', 'share', 'opencode'), { recursive: true });
+      writeFileSync(join(home, '.local', 'share', 'opencode', 'opencode.db'), '');
+      bin = mkdtempSync(join(tmpdir(), 'musterd-bin-'));
+      writeFileSync(
+        join(bin, 'sqlite3'),
+        `#!/bin/sh\necho "$@" >> "${join(bin, 'calls.log')}"\ncase "$*" in *sqlite_master*) printf '%s\\n' "$MUSTERD_SQLITE_TABLES";; *) printf '%s\\n' "$MUSTERD_SQLITE_ROW";; esac\n`,
+      );
+      chmodSync(join(bin, 'sqlite3'), 0o755);
+      vi.stubEnv('HOME', home);
+      vi.stubEnv('PATH', `${bin}:${savedPath ?? ''}`);
+      vi.stubEnv('MUSTERD_SQLITE_ROW', row);
+      vi.stubEnv('MUSTERD_SQLITE_TABLES', tables);
+    };
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      if (savedHome !== undefined) process.env['HOME'] = savedHome;
+      if (savedPath !== undefined) process.env['PATH'] = savedPath;
+      delete process.env['MUSTERD_SQLITE_ROW'];
+      delete process.env['MUSTERD_SQLITE_TABLES'];
+      if (home) rmSync(home, { recursive: true, force: true });
+      if (bin) rmSync(bin, { recursive: true, force: true });
+      home = '';
+      bin = '';
+    });
+
+    const markOpencode = (ws: string): void => {
+      mkdirSync(join(ws, '.opencode'), { recursive: true });
+      writeFileSync(join(ws, '.opencode', 'opencode.json'), JSON.stringify({ mcp: {} }));
+    };
+
+    it('observes an opencode workspace with no session slot at all', () => {
+      stubSqlite('{"id":"opencode-model-live"}');
+      markOpencode(wsA);
+      writeBinding(wsA, bindingOf()); // no session — the normal opencode state
+      expect(refreshModelObservation(wsA)).toBe('opencode-model-live');
+      expect(readBinding(wsA).model_observed).toMatchObject({
+        model: 'opencode-model-live',
+        harness: 'opencode',
+      });
+    });
+
+    it('is a no-op without the opencode marker — and never spawns sqlite3 there', () => {
+      stubSqlite('{"id":"opencode-model-live"}');
+      writeBinding(wsA, bindingOf());
+      expect(refreshModelObservation(wsA)).toBeUndefined();
+      expect(readBinding(wsA).model_observed).toBeUndefined();
+      expect(() => readFileSync(join(bin, 'calls.log'), 'utf8')).toThrow();
+    });
+
+    it('throttles a current opencode observation like the transcript path', () => {
+      stubSqlite('{"id":"opencode-model-live"}');
+      markOpencode(wsA);
+      const observedAt = Date.now() - 1_000;
+      writeBinding(
+        wsA,
+        bindingOf({
+          model_observed: {
+            model: 'opencode-model-live',
+            harness: 'opencode',
+            observed_at: observedAt,
+          },
+        }),
+      );
+      expect(refreshModelObservation(wsA)).toBeUndefined();
+      expect(readBinding(wsA).model_observed?.observed_at).toBe(observedAt); // untouched
+    });
+
+    it('re-probes immediately when the prior observation is another harness', () => {
+      stubSqlite('{"id":"opencode-model-live"}');
+      markOpencode(wsA);
+      writeBinding(
+        wsA,
+        bindingOf({
+          model_observed: {
+            model: 'claude-opus-5',
+            harness: 'claude-code',
+            observed_at: Date.now(),
+          },
+        }),
+      );
+      expect(refreshModelObservation(wsA)).toBe('opencode-model-live');
+      expect(readBinding(wsA).model_observed?.model).toBe('opencode-model-live');
+    });
+
+    it('never erases: an unreadable store keeps the prior observation', () => {
+      stubSqlite(''); // sqlite prints nothing — no live row
+      markOpencode(wsA);
+      const observedAt = Date.now() - OBSERVATION_REFRESH_MS - 1_000;
+      writeBinding(
+        wsA,
+        bindingOf({
+          model_observed: {
+            model: 'opencode-model-old',
+            harness: 'opencode',
+            observed_at: observedAt,
+          },
+        }),
+      );
+      expect(refreshModelObservation(wsA)).toBeUndefined();
+      expect(readBinding(wsA).model_observed?.model).toBe('opencode-model-old');
+    });
+
+    it('reads the v1 `session` table where there is no `session_v2` (measured on 1.18.34)', () => {
+      stubSqlite('{"model":"opencode-model-v1"}', 'session');
+      markOpencode(wsA);
+      writeBinding(wsA, bindingOf()); // no session — the normal opencode state
+      expect(refreshModelObservation(wsA)).toBe('opencode-model-v1');
+      expect(readBinding(wsA).model_observed).toMatchObject({
+        model: 'opencode-model-v1',
+        harness: 'opencode',
+      });
+    });
+
+    it('observes nothing when neither session table exists', () => {
+      stubSqlite('{"id":"opencode-model-live"}', '');
+      markOpencode(wsA);
+      writeBinding(wsA, bindingOf());
+      expect(refreshModelObservation(wsA)).toBeUndefined();
+      expect(readBinding(wsA).model_observed).toBeUndefined();
+    });
+  });
+
   describe('the tool boundary attests a slot SessionStart never did', () => {
     const transcript = (ws: string, name: string): string => {
       const p = join(ws, name);

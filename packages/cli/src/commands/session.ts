@@ -1,4 +1,4 @@
-import { readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   bindingSeat,
@@ -1051,6 +1051,44 @@ export const OBSERVATION_REFRESH_MS = 5 * 60_000;
  * erases — same hook contract as capture. Returns the newly written model, or `undefined` for "no
  * change", which is the overwhelmingly common path.
  */
+/**
+ * ADR 521: the transcript-less refresh. Opencode keeps sessions in `opencode.db`, so a binding
+ * with no `transcript_path` is the normal state, not a missing capture — and the old bail retired
+ * model observation for the seat's whole life. The opencode probe reads the live `session_v2` row
+ * for the workspace directory itself, so it needs no slot and no hook: ask it directly.
+ *
+ * Same contract as the transcript path: throttled (`OBSERVATION_REFRESH_MS`), never throws,
+ * never erases (an unreadable store keeps the prior observation). Gated on the opencode
+ * workspace marker, so every other transcript-less caller pays one file check, not a subprocess.
+ * A prior observation from another harness is re-probed immediately — a seat that changed
+ * harness must not keep attesting the old one's model.
+ */
+export function refreshTranscriptlessObservation(
+  dir: string,
+  binding: Binding,
+  now: number = Date.now(),
+): string | undefined {
+  try {
+    if (!existsSync(join(dir, '.opencode', 'opencode.json'))) return undefined;
+    const prior = binding.model_observed;
+    if (
+      prior !== undefined &&
+      prior.harness === 'opencode' &&
+      now - prior.observed_at < OBSERVATION_REFRESH_MS
+    )
+      return undefined;
+    const observed = observeModelFor('opencode', { cwd: dir });
+    if (!observed) return undefined;
+    saveBinding(dir, {
+      ...binding,
+      model_observed: { model: observed, harness: 'opencode', observed_at: now },
+    });
+    return observed;
+  } catch {
+    return undefined;
+  }
+}
+
 export function refreshModelObservation(
   dirHint?: string,
   // Injected for tests, mirroring `localSessionLiveness` — the enumerator reads the real
@@ -1061,8 +1099,11 @@ export function refreshModelObservation(
     const dir = dirHint ?? findWorkspaceDir();
     if (!dir) return undefined;
     const binding = findBinding(dir, {});
+    if (!binding) return undefined;
     const session = binding?.session;
-    if (!binding || !session?.transcript_path) return undefined;
+    // ADR 521: no transcript to re-read (opencode keeps sessions in opencode.db, not a file).
+    // Ask the harness that owns the workspace directly instead of retiring observation for life.
+    if (!session?.transcript_path) return refreshTranscriptlessObservation(dir, binding);
 
     // Only a live captured session has a transcript worth re-reading — but "ended" is a claim by the
     // SLOT, and ADR 166 already established that the slot is the weaker witness: enumerated session
