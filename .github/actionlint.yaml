@@ -1,0 +1,5 @@
+# Runner labels actionlint cannot know about: Ubicloud's runners (ADR 517).
+self-hosted-runner:
+  labels:
+    - ubicloud-standard-2
+    - ubicloud-standard-4
