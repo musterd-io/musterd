@@ -45,9 +45,13 @@ someone adds the guard):
 | route an incident nobody claimed (and tell the new owner AS a reporter) | `store/incidents.ts`, `protocol/route.ts` | guarded, #1978 |
 | the ADR 229 backstop that closes abandoned acceptances | `store/laneSweep.ts` | guarded, #1978 |
 | release a lane a departed seat still owns | `store/lanes.ts` | guarded, #1978 |
-| poll the seeds relay and stamp `seed.captured` | `seeds/ingest.ts` | **open**, lane `01M3ZBTDJ5` |
-| prune stamped churn the hub has not acked | `store/retention.ts` | **open**, lane `01M3ZBT9VY` |
-| roster-removal release as `musterd`, ambient touch adopting a folded remote row, a gated human ask composed on a joiner | `store/members.ts`, `store/presence.ts`, `protocol/route.ts` | **open**, lane `01M3ZBTJKD` |
+| poll the seeds relay and stamp `seed.captured` | `seeds/ingest.ts` | guarded, #2101 |
+| prune stamped churn the hub has not acked | `store/retention.ts` | kept above the push cursor, #2100 |
+| capture a repo seed (`POST /seeds/repo`) | `transport/http.ts` | refused on a joiner, #2103 |
+| fire the ADR 188 stage-two human ask (composed as the lane owner) | `protocol/route.ts` | hub-only, fired when the accept folds, #2103 |
+| roster-removal release as `musterd` | `projection/reconcile.ts`, `store/members.ts` | guarded, lane `01M3ZBTJKD` |
+| ambient touch adopting a folded remote row | `store/presence.ts`, `transport/http.ts` | local rows only; no-op under a live remote row, lane `01M3ZBTJKD` |
+| hold a trace batch whose seat cannot bind while the main push is refused | `sync/tracePush.ts` | **open**: needs an ADR against ADR 453 §3 |
 
 Why "this seat looks gone" means nothing on a joiner: a hub seat's liveness there is the node's last
 pull (live within 165 s), presence replicates as transitions never snapshots (ADR 384), and folded
