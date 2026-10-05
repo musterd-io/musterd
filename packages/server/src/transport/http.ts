@@ -1254,7 +1254,7 @@ async function authTouch(
   // which made the one case that mattered invisible — a touch carrying NO model that attaches a
   // brand-new row is exactly the born-unattested occupancy, and there was nothing to compare it to.
   const before = await ctx.db.get<{ id: string; model: string | null }>(
-    'SELECT id, model FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1',
+    'SELECT id, model FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL AND node IS NULL ORDER BY last_seen_at DESC LIMIT 1',
     [auth.member.id],
   );
   const flipped = await touchAmbientPresence(
@@ -1271,7 +1271,7 @@ async function authTouch(
     },
   );
   const after = await ctx.db.get<{ id: string; model: string | null }>(
-    'SELECT id, model FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1',
+    'SELECT id, model FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL AND node IS NULL ORDER BY last_seen_at DESC LIMIT 1',
     [auth.member.id],
   );
   // ADR 246: a touch that attached a NEW row attesting nothing is a de-attestation, and it is the

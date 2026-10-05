@@ -20,6 +20,7 @@ import {
 import { deleteRoles, listRoleNames, roleDefaultsMap, upsertRole } from '../store/roles.js';
 import { resolveCapabilities } from '../store/rows.js';
 import { createTeam, getTeamBySlug, updateTeam } from '../store/teams.js';
+import { joinerEnrollment } from '../sync/claim.js';
 import { type LoadedSeat, loadTeamSpec, type TeamSpec } from './load.js';
 
 /**
@@ -223,11 +224,12 @@ export async function reconcileTeam(db: Driver, spec: TeamSpec): Promise<Reconci
 
   // REMOVE — a live member with no file is soft-tombstoned (never hard-deleted: the message log FK
   // and the audit history require the row to persist; auth already excludes left_at rows).
+  const releaseClaims = !(await joinerEnrollment(db, team.id, team.slug));
   for (const m of await listMembers(db, team.id)) {
     // Observer seats (ADR 063) are runtime watchers, not seat files — never tombstone them for being
     // absent from the roster files.
     if (!desired.has(m.name) && m.observer !== 1) {
-      await leaveMember(db, m.id);
+      await leaveMember(db, m.id, { releaseClaims });
       result.removed.push(m.name);
     }
   }

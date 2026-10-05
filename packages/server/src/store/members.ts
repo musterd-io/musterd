@@ -949,7 +949,17 @@ export async function setAvailability(
   ]);
 }
 
-export async function leaveMember(db: Driver, memberId: string): Promise<void> {
+/**
+ * `releaseClaims: false` on an enrolled joiner (joiner audit 2026-10-02, lane 01M3ZBTJKD): releasing
+ * a lane is a hub-owned ownership edge (ADR 361 §1), and a joiner reconciling the same roster would
+ * write a second `lane.released` as `musterd`. The hub's own reconcile releases them, and the
+ * reaper's `releaseDepartedSeatClaims` already skips joiner teams for the same reason.
+ */
+export async function leaveMember(
+  db: Driver,
+  memberId: string,
+  opts: { releaseClaims?: boolean } = {},
+): Promise<void> {
   const member = await getMemberById(db, memberId);
   const now = Date.now();
   await db.run(
@@ -958,7 +968,7 @@ export async function leaveMember(db: Driver, memberId: string): Promise<void> {
   );
   // ADR 196: soft-remove must free in-flight WIP — otherwise the board asserts ownership for a
   // name every roster filter already drops. awaiting_acceptance keeps the owner (verified-ness).
-  if (member && member.left_at === null) {
+  if (member && member.left_at === null && opts.releaseClaims !== false) {
     await releaseInFlightClaimsForSeat(db, member.team_id, member.name, now);
   }
 }

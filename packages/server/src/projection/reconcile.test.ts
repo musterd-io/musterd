@@ -6,6 +6,8 @@ import type { Database } from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
+import { saveNodeEnrollment } from '../node/state.js';
+import { getLane, openLane } from '../store/lanes.js';
 import {
   addMember,
   getMemberByName,
@@ -15,6 +17,7 @@ import {
   markBound,
   setMemberGovernance,
 } from '../store/members.js';
+import { localNodeForTeam } from '../store/messages.js';
 import { listRoleNames, roleSummariesMap } from '../store/roles.js';
 import { toMember } from '../store/rows.js';
 import { getTeamBySlug } from '../store/teams.js';
@@ -168,6 +171,42 @@ end = "12:00"
       expect((await listMembers(db, team.id)).map((m) => m.name)).toEqual(['david']);
       expect((await getMemberByName(db, team.id, 'olive'))!.id).toBe(oliveId);
       expect((await getMemberByName(db, team.id, 'olive'))!.left_at).not.toBeNull();
+    });
+
+    it("on an enrolled joiner, a REMOVE leaves the seat's lanes to the hub — no lane.released as musterd (lane 01M3ZBTJKD)", async () => {
+      await writeRoster('slug = "alpha"\n', {
+        olive: 'kind = "agent"\nrole = "reviewer"\n',
+        david: 'kind = "human"\nrole = "lead"\n',
+      });
+      await reconcile();
+      const team = (await getTeamBySlug(db, 'alpha'))!;
+      const lane = await openLane(db, team.id, 'alpha', 'olive', { title: 'held', claim: true });
+      const { id: node_id } = await localNodeForTeam(db, team.id);
+      const stateDir = mkdtempSync(join(tmpdir(), 'musterd-reconcile-joiner-'));
+      const prior = process.env['MUSTERD_NODE_STATE'];
+      process.env['MUSTERD_NODE_STATE'] = join(stateDir, 'node.json');
+      try {
+        saveNodeEnrollment({
+          team: 'alpha',
+          hub_url: 'http://hub',
+          credential: 'x',
+          node_id,
+          enrolled_at: 1,
+        });
+        rmSync(join(dir, '.musterd', 'seats', 'olive.toml'));
+        expect((await reconcile()).removed).toEqual(['olive']);
+      } finally {
+        if (prior === undefined) delete process.env['MUSTERD_NODE_STATE'];
+        else process.env['MUSTERD_NODE_STATE'] = prior;
+        rmSync(stateDir, { recursive: true, force: true });
+      }
+      const after = await getLane(db, team.id, lane.id, 'alpha');
+      expect(after).toMatchObject({ owner_seat: 'olive', state: 'claimed' });
+      const released = await db.all(
+        "SELECT id FROM audit WHERE action = 'lane.released' AND target = ?",
+        [lane.id],
+      );
+      expect(released).toEqual([]);
     });
 
     it('REVIVEs a re-added seat with the same id but a fresh token (deletion = revocation)', async () => {

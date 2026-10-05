@@ -1585,6 +1585,38 @@ withDrivers('store', (o) => {
       expect(await presenceRows(db, ada.row.id)).toHaveLength(1);
     });
 
+    it('never writes over a live REMOTE row, and adds no local one beside it (lane 01M3ZBTJKD)', async () => {
+      const { db, team } = await freshTeam();
+      const ada = await addMember(db, team, { name: 'Ada', kind: 'agent' });
+      const now = Date.now();
+      await db.run(
+        'INSERT INTO nodes (id, team_id, label, next_seq, last_seen_at) VALUES (?, ?, ?, 1, ?)',
+        ['nB', team.id, 'laptop-b', now],
+      );
+      await db.run(
+        "INSERT INTO presence (id, member_id, team_id, surface, status, conn_id, last_seen_at, created_at, node, driver, workspace) VALUES ('rB', ?, ?, 'codex', 'online', NULL, ?, ?, 'nB', 'nick', '~/b')",
+        [ada.row.id, team.id, now, now],
+      );
+
+      expect(await touchAmbientPresence(db, ada.row.id, 'cli', 45_000, { driver: 'x' })).toBe(
+        false,
+      );
+      expect(await presenceRows(db, ada.row.id)).toEqual([
+        expect.objectContaining({ id: 'rB', surface: 'codex' }),
+      ]);
+
+      // Once the remote node goes quiet, a touch here is an ordinary local attach — the remote row
+      // is still never the one rewritten.
+      await db.run('UPDATE nodes SET last_seen_at = ? WHERE id = ?', [
+        now - REMOTE_PRESENCE_TTL_MS - 1,
+        'nB',
+      ]);
+      expect(await touchAmbientPresence(db, ada.row.id, 'cli', 45_000)).toBe(true);
+      const rows = await presenceRows(db, ada.row.id);
+      expect(rows).toHaveLength(2);
+      expect(rows.find((r) => r.id === 'rB')?.surface).toBe('codex');
+    });
+
     it('is a no-op when a resident (connected) session already owns liveness', async () => {
       const { db, team } = await freshTeam();
       const ada = await addMember(db, team, { name: 'Ada', kind: 'agent' });

@@ -443,6 +443,17 @@ export async function touchAmbientPresence(
 ): Promise<boolean> {
   // A live resident session (real socket) already owns liveness — don't add a competing row.
   if (await hasActivePresence(db, memberId)) return false;
+  // Nor under a live REMOTE row (joiner audit 2026-10-02, lane 01M3ZBTJKD): the member is present
+  // on the machine its seat lives on. Writing a local row here would push a presence event the hub
+  // refuses for a seat bound elsewhere (ADR 360), and the old pick below, which did not filter on
+  // `node`, overwrote the folded remote row's surface/driver/workspace instead.
+  const remote = await db.get<{ n: number }>(
+    // Live by its NODE's heartbeat, the rule every remote-row reader uses (presence replication §3).
+    `SELECT COUNT(*) AS n FROM presence p JOIN nodes n ON n.id = p.node
+      WHERE p.member_id = ? AND p.held_until IS NULL AND n.last_seen_at > ?`,
+    [memberId, Date.now() - REMOTE_PRESENCE_TTL_MS],
+  );
+  if ((remote?.n ?? 0) > 0) return false;
   const wasLive = await hasLivePresence(db, memberId, timeoutMs);
   // SPEC.md §"Attach context": provenance is a fact known only to the attaching client, and the
   // server MUST NOT guess it. This used to default to `session`, which made an unstated provenance
@@ -450,7 +461,7 @@ export async function touchAmbientPresence(
   // reads the header for agent seats only (ADR 121). Absence is not an assertion (ADR 236).
   const provenance: Provenance | null = ctx.provenance ?? null;
   const existing = await db.get<{ id: string }>(
-    'SELECT id FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL ORDER BY last_seen_at DESC LIMIT 1',
+    'SELECT id FROM presence WHERE member_id = ? AND conn_id IS NULL AND held_until IS NULL AND node IS NULL ORDER BY last_seen_at DESC LIMIT 1',
     [memberId],
   );
   if (existing) {
