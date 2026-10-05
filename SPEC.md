@@ -311,13 +311,13 @@ Delivery is unchanged (at-least-once, cursor-based); **notification tiering** is
 | `POST`                | `/agent-bootstrap-migrations`                     | exchange a legacy Team key plus independent agent-seat credential for one shown-once seat-scoped successor                                                                                                                                                                                                                                                                                                 |
 | `GET`                 | `/teams/:slug/agent-bootstrap-cutover`            | admin; readiness from held seats, residency hosts, and observed scoped use                                                                                                                                                                                                                                                                                                                                 |
 | `POST`                | `/teams/:slug/agent-bootstrap-cutover`            | admin; `{ force?: boolean }`; transactionally retire legacy bootstrap authority                                                                                                                                                                                                                                                                                                                            |
-| `POST`                | `/teams/:slug/policy`                             | admin; e.g. `{ allow_pre_issued_grants: bool }`, `{ agent_connect: 'sponsor' \| 'any_member' }` (ADR 456); `{ style: { floor, defaults, prose } }` — the agent-style floor, default dials and team prose, sparse (ADR 514; additive optional key, no version bump)                                                                                                                                                                                                                                                                                                  |
+| `POST`                | `/teams/:slug/policy`                             | admin; e.g. `{ allow_pre_issued_grants: bool }`, `{ agent_connect: 'sponsor' \| 'any_member' }` (ADR 456); `{ style: { floor, defaults, prose } }` — the agent-style floor, default dials and team prose, sparse (ADR 514; additive optional key, no version bump)                                                                                                                                         |
 | `GET`                 | `/teams/:slug/requests`                           | admin; pending claim/teammate requests                                                                                                                                                                                                                                                                                                                                                                     |
 | `POST`                | `/teams/:slug/requests/:id/decide`                | admin; `{ decision:'approve', lifetime:'once'\|'ttl'\|'standing', ttl_hours? }` \| `{ decision:'deny' }` — approve issues a grant of the admin-chosen lifetime                                                                                                                                                                                                                                             |
 | `POST`                | `/teams/:slug/claim`                              | stateless claim mirror of WS `claim` — carries `workspace` + `workspace_key` (ADR 014/368) and `provenance` (ADR 131 §6), so a stateless claim is scoped by workspace and reads its animation source exactly as a WS one does. The server records `provenance` on **agent** seats only (the ADR 121 gate the ambient-touch path applies): a human shell must not be able to label its own occupancy `wake` |
 | `GET`                 | `/teams/:slug/members`                            | roster **projected by viewer**: seats with role, account/availability/activity + `watching` list; non-admins never see credentials/grants/audit/policy/other charters                                                                                                                                                                                                                                      |
 | `POST`                | `/teams/:slug/availability`                       | set the caller's seat availability (`available\|away\|dnd\|away_until`)                                                                                                                                                                                                                                                                                                                                    |
-| `GET`/`PUT`           | `/teams/:slug/members/me/style`                   | a human's own style dials and prose, resolved against the team floor and defaults (ADR 514)                                                                                                                                                                                                                                                                                                              |
+| `GET`/`PUT`           | `/teams/:slug/members/me/style`                   | a human's own style dials and prose, resolved against the team floor and defaults (ADR 514)                                                                                                                                                                                                                                                                                                                |
 | `GET`/`PUT`           | `/teams/:slug/members/me/doorbell`                | a human's own doorbell sinks (ADR 443); personal URLs are readable by their owner only; every sink URL must be `https` to a public host                                                                                                                                                                                                                                                                    |
 | `GET`                 | `/teams/:slug/members/:name/doorbell`             | admin; a teammate's doorbell, masked — `{on, personal}` per sink, never a URL (ADR 443)                                                                                                                                                                                                                                                                                                                    |
 | `GET`                 | `/teams/:slug/audit`                              | admin; audit records                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -696,3 +696,42 @@ omission means the daemon does not report holds.
 A Member's call refused by an enforced hold answers refusal code `held`, whose message names the
 effect, the human and the end time: `held by nick until 15:30: demo 14:00` (reserved; first used by
 `merges_paused` enforcement, ADR 516 increment 2).
+
+## A.16 Calendar entries (unreleased — ADR 519)
+
+A **calendar entry** is Team data: one dated item any active Member may read or write. Dates and
+times are wall-clock in the entry's `tz`; an implementation MUST NOT convert them to UTC.
+
+```jsonc
+{
+  "id": "<ULID>",
+  "title": "Demo at Foundry Live", // 1–160
+  "date": "2026-10-16", // YYYY-MM-DD in tz
+  "start": "18:30", // HH:MM in tz, or null
+  "end": null, // HH:MM in tz, or null
+  "tz": "America/Los_Angeles", // IANA name
+  "kind": "demo", // demo | topic | pitch | people | prep | deadline | milestone | event
+  "status": "going", // going | pending | list | invited | waitlist | done | null
+  "place": "SF", // ≤120
+  "url": "https://…", // https only, or null
+  "note": "", // ≤2000
+  "pick": true, // shown in the Picks view
+  "source": "", // ≤120, free text: where the entry came from
+  "source_ref": null, // import identity (the artifact document id), or null
+  "created_by": "nick",
+  "created_at": 1791229200000,
+  "updated_at": 1791229200000,
+}
+```
+
+Routes (all under `/teams/:slug`, any authenticated active Member):
+
+- `GET /calendar[?since=<epoch ms>]` — `{ entries: [...] }`, by `date`, `start`, then `title`;
+  with `since`, only entries whose `updated_at` is at or after it.
+- `POST /calendar {entry without id/created_*/updated_at}` — returns `{ entry }`.
+- `PUT /calendar/:id {same}` — full replace; returns `{ entry }`; unknown id answers `not_found`.
+- `DELETE /calendar/:id` — returns `{ ok: true }`; unknown id answers `not_found`.
+
+Bodies MUST parse through `CalendarEntrySchema`; a failure answers `validation`. Every write is one
+audit row (`calendar.entry_written` or `calendar.entry_deleted`, with `{id, by}`). An import MAY
+upsert on `(team, source_ref)`; a second import of the same export changes nothing.
