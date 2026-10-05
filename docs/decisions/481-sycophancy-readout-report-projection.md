@@ -47,7 +47,14 @@ across reads: if the script and the server each keep their own copy of the phras
   [ADR 483](483-per-seat-sycophancy-readout-surface.md)'s decision.
 - The known false positive stays: a question answered with `accept` counts in the challenge channel
   (nick → tinybot, 2026-07-09). Fixing it would change the definition mid-trend, so it waits for the
-  five-day read. Follows-up: deferred — ADR 476's five-day read (2026-10-04)
+  five-day read. Follows-up: 01M44BV9PM6W7ZPWKV2MM5DXV8
+- **2026-10-05 — the two channels are replaced by [ADR 505](505-disputes-one-lifecycle-for-contesting-a-claim.md) §8's
+  dispute readout** (dolly; lane 01M44BV9PM6W7ZPWKV2MM5DXV8). The projection shape this ADR decided
+  stands — one definition in `@musterd/protocol`, a report block, a research script held to the same
+  SQL by a parity test — with the dispute lifecycle as its content: `Report.disputes` replaces
+  `Report.sycophancy`, `deriveDisputes` replaces `deriveSycophancy`, `pnpm disputes:readout` is the
+  script (`sycophancy:readout` aliased). The `phrase` channel is dropped and the false positive above
+  is moot: a `challenge` still opens a dispute, and what is graded is the answer, not the concession.
 - Building waits for that read to show the numbers are worth a surface. Follows-up: deferred —
   ADR 476's five-day read (2026-10-04)
 

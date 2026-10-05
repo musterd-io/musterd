@@ -41,6 +41,11 @@ it looks verified.
 
 ## Consequences
 
+- **2026-10-05 — widened to every dispute by [ADR 505](505-disputes-one-lifecycle-for-contesting-a-claim.md) §8**
+  (dolly; lane 01M44BV9PM6W7ZPWKV2MM5DXV8). The rail now fires on an evidence-free `accept` of any
+  act the daemon stamped as a dispute — a review rejection, a dependency challenge — not only a bare
+  `challenge` (`isUnverifiedDisputeAnswer`, `DISPUTE_EVIDENCE_NOTICE`). The audit verb stays
+  `challenge.accept_unverified`; the once-per-target rule is unchanged.
 - The warning has to be answered in the next act: a seat that concedes again after the warning has
   been told once. There is no second warning on the same thread.
 - `namesCheck` is a floor on "verified", not a judgment. A body can pass by citing a file it never

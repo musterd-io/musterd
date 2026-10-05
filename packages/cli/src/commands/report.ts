@@ -1,4 +1,5 @@
 import {
+  DISPUTE_VIA_ORDER,
   fmtShare,
   type ActDelivery,
   type FlowMetrics,
@@ -213,9 +214,9 @@ function render(r: Report, altitude: Altitude, liveness?: SweepFinding): void {
     w(`\n${theme.accent('wake')}:\n`);
     renderWake(r.wake, w);
   }
-  if (r.sycophancy) {
-    w(`\n${theme.accent('sycophancy')}:\n`);
-    renderSycophancy(r.sycophancy, w);
+  if (r.disputes) {
+    w(`\n${theme.accent('disputes')}:\n`);
+    renderDisputes(r.disputes, w);
   }
   w(`\n${theme.accent('waiting on')}:\n`);
   renderWaitingOn(r, w);
@@ -226,24 +227,37 @@ function render(r: Report, altitude: Altitude, liveness?: SweepFinding): void {
 }
 
 /**
- * ADR 476's two readouts (ADR 481 §3). No bare rates (ADR 294 §4): every number carries its
- * numerator, denominator and channel, and a percentage appears only at n ≥ 5 (`fmtShare`).
- * Team altitude only — `ic` and `exec` never show it.
+ * ADR 505 §8's dispute readout (replacing ADR 481 §3's two channels). No bare rates (ADR 294 §4):
+ * every number carries its denominator and its `via`, and a percentage appears only at n ≥ 5
+ * (`fmtShare`). Team altitude only — `ic` and `exec` never show it. Same copy as the research
+ * script's text form.
  */
-export function renderSycophancy(
-  s: NonNullable<Report['sycophancy']>,
-  w: (s: string) => void,
-): void {
-  const cut = theme.meta(`(since ${new Date(s.since).toISOString().slice(0, 10)}, agent acts)`);
-  w(`  unverified concessions ${cut}
-`);
-  w(`    challenge ${fmtShare(s.challenge.unverified, s.challenge.n)} ${theme.meta('accept → challenge')}
-`);
-  w(`    phrase    ${fmtShare(s.phrase.unverified, s.phrase.n)} ${theme.meta('concession wording')}
-`);
-  const a = s.challenge_answers;
-  w(`  challenge declines ${fmtShare(a.declines, a.answered)} ${theme.meta('of answered challenges')}
-`);
+export function renderDisputes(d: NonNullable<Report['disputes']>, w: (s: string) => void): void {
+  const cut = theme.meta(`(since ${new Date(d.since).toISOString().slice(0, 10)}, by source)`);
+  w(`  disputes ${cut}\n`);
+  const line = (label: string, c: (typeof d)['total']) => {
+    const tb = c.tiebreak.settled
+      ? ` · tiebreaks ${String(c.tiebreak.settled)} settled, hold stood ${String(c.tiebreak.hold_stood)}`
+      : '';
+    w(
+      `    ${label.padEnd(11)} opened ${String(c.opened).padEnd(3)} answered ${String(c.answered).padEnd(3)} ` +
+        `conceded ${String(c.conceded).padEnd(3)} held ${String(c.held).padEnd(3)} ` +
+        `named a check ${fmtShare(c.named_check, c.answered)}${theme.meta(tb)}\n`,
+    );
+  };
+  for (const via of DISPUTE_VIA_ORDER) line(via, d.by_via[via]);
+  line('total', d.total);
+  if (d.by_seat.length) {
+    w(
+      `  ${theme.meta('by answering seat — answered · named a check · conceded · held; never a score')}\n`,
+    );
+    for (const s of d.by_seat) {
+      w(
+        `    ${theme.memberName(s.seat, 'agent')} ${String(s.answered)} · ${fmtShare(s.named_check, s.answered)} · ` +
+          `conceded ${String(s.conceded)} · held ${String(s.held)}\n`,
+      );
+    }
+  }
 }
 
 /** Wake metrics (ADR 131 inc 5) — the always-on claim's instrument panel. */

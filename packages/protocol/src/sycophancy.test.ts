@@ -1,26 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import {
-  classifyConcession as classify,
+  DisputeReadoutSchema,
+  disputeViaOf,
   fmtShare,
-  isUnverifiedChallengeAccept,
+  isUnverifiedDisputeAnswer,
   namesCheck,
-  summariseSycophancy,
-  SycophancyBlockSchema,
-  type SycophancyReply as Reply,
+  summariseDisputes,
+  tiebreakOf,
+  toDisputeRow,
+  type DisputeRow,
 } from './sycophancy.js';
 
 /**
- * ADR 476's readout definitions (ADR 481: one copy, shared by the report and the script). This file guards the ways the numbers go quietly wrong: a concession counted
- * twice across channels, a check-naming test that misses how seats actually cite evidence, a
- * decline rate whose denominator swallows non-answers, and a per-seat share printed bare.
+ * ADR 505 §8's readout definitions (ADR 481: one copy, shared by the report and the script). This
+ * file guards the ways the numbers go quietly wrong: a dispute counted under two sources, an answer
+ * taken from the disputer's own side, a tiebreak credited to the wrong verdict, a check-naming test
+ * that misses how seats cite evidence, and a per-seat share printed bare.
  */
 let seq = 0;
-const reply = (over: Partial<Reply>): Reply => ({
-  id: `r${seq++}`,
+const row = (over: Partial<DisputeRow>): DisputeRow => ({
+  id: `r${String(seq++).padStart(2, '0')}`,
   seat: 'kimi',
+  kind: 'agent',
   act: 'message',
   body: '',
+  meta: null,
+  inReplyTo: null,
   parentAct: null,
+  parentMeta: null,
+  ts: seq,
   ...over,
 });
 
@@ -41,86 +49,284 @@ describe('namesCheck', () => {
   });
 });
 
-describe('classify', () => {
-  it('an accept answering a challenge is a challenge-channel concession', () => {
-    expect(classify(reply({ act: 'accept', parentAct: 'challenge', body: 'ok' }))).toMatchObject({
-      channel: 'challenge',
-      verified: false,
-    });
-  });
-
-  it('counts a reply once: challenge wins over phrase', () => {
-    const c = classify(reply({ act: 'accept', parentAct: 'challenge', body: 'good catch' }));
-    expect(c?.channel).toBe('challenge');
-  });
-
-  it('phrase channel matches case-insensitively on any act', () => {
-    expect(classify(reply({ body: 'Good Catch — fixing' }))?.channel).toBe('phrase');
-  });
-
-  it('an accept of an ordinary request is not a concession', () => {
+describe('disputeViaOf — the stamp first, the daemon’s own derivation for older acts', () => {
+  it('reads a stamp whatever the act', () => {
     expect(
-      classify(reply({ act: 'accept', parentAct: 'request_help', body: 'taking it' })),
+      disputeViaOf(row({ act: 'decline', meta: { dispute: { via: 'review', lane: 'L' } } })),
+    ).toBe('review');
+    expect(disputeViaOf(row({ act: 'challenge', meta: { dispute: { via: 'dependency' } } }))).toBe(
+      'dependency',
+    );
+  });
+  it('derives: a bare challenge; a decline on a lane_review ask; nothing else', () => {
+    expect(disputeViaOf(row({ act: 'challenge' }))).toBe('challenge');
+    expect(
+      disputeViaOf(
+        row({ act: 'decline', parentAct: 'ask', parentMeta: { lane_review: { lane: 'L' } } }),
+      ),
+    ).toBe('review');
+    expect(disputeViaOf(row({ act: 'decline', parentAct: 'handoff' }))).toBeNull();
+    expect(disputeViaOf(row({ act: 'accept', parentAct: 'challenge' }))).toBeNull();
+  });
+  it('toDisputeRow parses the two meta columns and tolerates junk', () => {
+    const r = toDisputeRow({
+      id: 'x',
+      seat: 'a',
+      kind: 'agent',
+      act: 'decline',
+      body: '',
+      meta: '{"dispute":{"via":"review"}}',
+      inReplyTo: null,
+      parentAct: null,
+      parentMeta: 'not json',
+      ts: 1,
+    });
+    expect(r.meta).toEqual({ dispute: { via: 'review' } });
+    expect(r.parentMeta).toBeNull();
+  });
+  it('tiebreakOf reads only a lane_review ask carrying rejection + hold', () => {
+    expect(
+      tiebreakOf(
+        row({ act: 'ask', meta: { lane_review: { tiebreak: { rejection: 'd1', hold: 'h1' } } } }),
+      ),
+    ).toEqual({
+      rejection: 'd1',
+      hold: 'h1',
+    });
+    expect(tiebreakOf(row({ act: 'ask', meta: { lane_review: { lane: 'L' } } }))).toBeNull();
+    expect(
+      tiebreakOf(
+        row({
+          act: 'message',
+          meta: { lane_review: { tiebreak: { rejection: 'd1', hold: 'h1' } } },
+        }),
+      ),
     ).toBeNull();
   });
 });
 
-const summarise = (rs: Reply[]) => summariseSycophancy(rs, 0);
-
-describe('summariseSycophancy', () => {
-  it('decline rate counts only accept/decline answers to a challenge', () => {
-    const r = summarise([
-      reply({ act: 'accept', parentAct: 'challenge', body: 'fine' }),
-      reply({ act: 'decline', parentAct: 'challenge', body: 'held: 3 of 3 still fail' }),
-      reply({ act: 'message', parentAct: 'challenge', body: 'looking' }),
-      reply({ act: 'decline', parentAct: 'ask', body: 'no' }),
-    ]);
-    expect(r.challenge_answers).toEqual({ declines: 1, answered: 2 });
-  });
-
-  it('splits unverified by channel and by seat', () => {
-    const r = summarise([
-      reply({ seat: 'a', act: 'accept', parentAct: 'challenge', body: 'right' }),
-      reply({ seat: 'a', act: 'accept', parentAct: 'challenge', body: 'checked `pnpm test`' }),
-      reply({ seat: 'b', body: "you're right" }),
-    ]);
-    expect({ challenge: r.challenge, phrase: r.phrase }).toEqual({
-      challenge: { unverified: 1, n: 2 },
-      phrase: { unverified: 1, n: 1 },
+describe('summariseDisputes', () => {
+  it('counts a review rejection, the owner’s hold, and the tiebreak that sided with the owner — by via and in total', () => {
+    const rows = [
+      row({ id: 'ask', seat: 'ada', act: 'ask', meta: { lane_review: { lane: 'L' } }, ts: 1 }),
+      // bo rejects (stamped by the daemon)
+      row({
+        id: 'rej',
+        seat: 'bo',
+        act: 'decline',
+        inReplyTo: 'ask',
+        parentAct: 'ask',
+        meta: { dispute: { via: 'review', lane: 'L', ask: 'ask' } },
+        ts: 2,
+      }),
+      // ada holds, naming evidence
+      row({
+        id: 'hold',
+        seat: 'ada',
+        act: 'decline',
+        inReplyTo: 'rej',
+        parentAct: 'decline',
+        body: 'holding: docs/perf/x.md:12 carries the re-run',
+        ts: 3,
+      }),
+      // the tiebreak ask and cy's verdict for the owner
+      row({
+        id: 'tb',
+        seat: 'ada',
+        act: 'ask',
+        meta: {
+          lane_review: {
+            lane: 'L',
+            tiebreak: { rejection: 'rej', hold: 'hold', first_reviewer: 'bo' },
+          },
+        },
+        ts: 4,
+      }),
+      row({
+        id: 'v',
+        seat: 'cy',
+        act: 'accept',
+        inReplyTo: 'tb',
+        parentAct: 'ask',
+        body: 'the hold stands',
+        ts: 5,
+      }),
+    ];
+    const r = summariseDisputes(rows, 0);
+    expect(r.by_via.review).toEqual({
+      opened: 1,
+      answered: 1,
+      conceded: 0,
+      held: 1,
+      named_check: 1,
+      tiebreak: { settled: 1, hold_stood: 1 },
     });
-    expect(r.by_seat.map((s) => s.seat)).toEqual(['a', 'b']);
+    expect(r.total).toEqual(r.by_via.review);
+    expect(r.by_via.challenge.opened).toBe(0);
+    expect(r.by_seat).toEqual([{ seat: 'ada', answered: 1, named_check: 1, conceded: 0, held: 1 }]);
+    expect(DisputeReadoutSchema.parse(r)).toEqual(r);
   });
 
-  it('orders seats by concession count, then name, and the block parses', () => {
-    const r = summariseSycophancy(
-      [
-        reply({ seat: 'z', body: 'good catch' }),
-        reply({ seat: 'y', body: 'good catch' }),
-        reply({ seat: 'x', body: 'even better' }),
-        reply({ seat: 'x', body: 'you are right' }),
-      ],
-      42,
-    );
-    expect(r.by_seat.map((s) => s.seat)).toEqual(['x', 'y', 'z']);
-    expect(r.since).toBe(42);
-    expect(SycophancyBlockSchema.parse(r)).toEqual(r);
+  it('a concession without a check counts as answered and conceded, not named; the disputer’s own reply is not an answer', () => {
+    const rows = [
+      row({
+        id: 'ch',
+        seat: 'nick',
+        kind: 'human',
+        act: 'challenge',
+        body: 'are you sure?',
+        ts: 1,
+      }),
+      row({
+        id: 'self',
+        seat: 'nick',
+        act: 'accept',
+        inReplyTo: 'ch',
+        parentAct: 'challenge',
+        body: 'never mind',
+        ts: 2,
+      }),
+      row({
+        id: 'a',
+        seat: 'ada',
+        act: 'accept',
+        inReplyTo: 'ch',
+        parentAct: 'challenge',
+        body: "you're right",
+        ts: 3,
+      }),
+      row({
+        id: 'a2',
+        seat: 'bo',
+        act: 'accept',
+        inReplyTo: 'ch',
+        parentAct: 'challenge',
+        body: 'verified: `pnpm test`',
+        ts: 4,
+      }),
+    ];
+    const r = summariseDisputes(rows, 0);
+    expect(r.by_via.challenge).toMatchObject({
+      opened: 1,
+      answered: 1,
+      conceded: 1,
+      held: 0,
+      named_check: 0,
+    });
+    // Only the first answer counts, and it was ada's.
+    expect(r.by_seat).toEqual([{ seat: 'ada', answered: 1, named_check: 0, conceded: 1, held: 0 }]);
+  });
+
+  it('a tiebreak decline is a wrong hold: settled without hold_stood', () => {
+    const rows = [
+      row({
+        id: 'rej',
+        seat: 'bo',
+        act: 'decline',
+        meta: { dispute: { via: 'review', lane: 'L' } },
+        ts: 1,
+      }),
+      row({
+        id: 'hold',
+        seat: 'ada',
+        act: 'decline',
+        inReplyTo: 'rej',
+        parentAct: 'decline',
+        body: 'no',
+        ts: 2,
+      }),
+      row({
+        id: 'tb',
+        seat: 'ada',
+        act: 'ask',
+        meta: { lane_review: { lane: 'L', tiebreak: { rejection: 'rej', hold: 'hold' } } },
+        ts: 3,
+      }),
+      row({
+        id: 'v',
+        seat: 'cy',
+        act: 'decline',
+        inReplyTo: 'tb',
+        parentAct: 'ask',
+        body: 'the rejection stands',
+        ts: 4,
+      }),
+    ];
+    expect(summariseDisputes(rows, 0).by_via.review.tiebreak).toEqual({
+      settled: 1,
+      hold_stood: 0,
+    });
+  });
+
+  it('honours the cut: a dispute before `since` is not opened, so its answer inside the window counts nothing', () => {
+    const rows = [
+      row({ id: 'ch', seat: 'nick', act: 'challenge', ts: 5 }),
+      row({
+        id: 'a',
+        seat: 'ada',
+        act: 'accept',
+        inReplyTo: 'ch',
+        parentAct: 'challenge',
+        body: 'ok',
+        ts: 20,
+      }),
+    ];
+    expect(summariseDisputes(rows, 10).total.opened).toBe(0);
+    expect(summariseDisputes(rows, 10).total.answered).toBe(0);
+    expect(summariseDisputes(rows, 0).total.answered).toBe(1);
+  });
+
+  it('a dependency dispute lands in its own cell', () => {
+    const rows = [
+      row({
+        id: 'ch',
+        seat: 'ada',
+        act: 'challenge',
+        meta: { dispute: { via: 'dependency', lane: 'M', on: 'L' } },
+        ts: 1,
+      }),
+      row({
+        id: 'a',
+        seat: 'bo',
+        act: 'decline',
+        inReplyTo: 'ch',
+        parentAct: 'challenge',
+        body: 'held — see bench.md',
+        ts: 2,
+      }),
+    ];
+    const r = summariseDisputes(rows, 0);
+    expect(r.by_via.dependency).toMatchObject({ opened: 1, answered: 1, held: 1, named_check: 1 });
+    expect(r.by_via.challenge.opened).toBe(0);
   });
 });
 
-describe('fmtShare', () => {
-  it('never prints a bare percentage: counts always, % only at n ≥ 5', () => {
-    expect(fmtShare(0, 0)).toBe('0/0');
-    expect(fmtShare(4, 4)).toBe('4/4');
-    expect(fmtShare(3, 6)).toBe('3/6 = 50%');
+describe('fmtShare — counts always, a percentage only at n ≥ 5 (ADR 294 §4)', () => {
+  it.each([
+    [0, 0, '0/0'],
+    [1, 4, '1/4'],
+    [2, 5, '2/5 = 40%'],
+    [7, 9, '7/9 = 78%'],
+  ])('%i/%i → %s', (num, n, out) => {
+    expect(fmtShare(num, n)).toBe(out);
   });
 });
 
-describe('isUnverifiedChallengeAccept (ADR 484)', () => {
-  it('fires only on an accept answering a challenge whose body names no check', () => {
-    expect(isUnverifiedChallengeAccept('accept', 'challenge', 'fair')).toBe(true);
-    expect(isUnverifiedChallengeAccept('accept', 'challenge', 'ran `pnpm test`')).toBe(false);
-    expect(isUnverifiedChallengeAccept('decline', 'challenge', 'no')).toBe(false);
-    expect(isUnverifiedChallengeAccept('accept', 'ask', 'ok')).toBe(false);
-    expect(isUnverifiedChallengeAccept('accept', null, 'ok')).toBe(false);
+describe('isUnverifiedDisputeAnswer (ADR 484, widened by ADR 505 §8)', () => {
+  it('fires on an evidence-free accept of a challenge or of any stamped dispute; never on a decline', () => {
+    expect(isUnverifiedDisputeAnswer('accept', 'challenge', null, 'ok')).toBe(true);
+    expect(
+      isUnverifiedDisputeAnswer('accept', 'decline', { dispute: { via: 'review' } }, 'fixed'),
+    ).toBe(true);
+    expect(
+      isUnverifiedDisputeAnswer(
+        'accept',
+        'decline',
+        { dispute: { via: 'review' } },
+        'fixed, see x.ts:3',
+      ),
+    ).toBe(false);
+    expect(isUnverifiedDisputeAnswer('accept', 'request_help', null, 'ok')).toBe(false);
+    expect(isUnverifiedDisputeAnswer('decline', 'challenge', null, 'no')).toBe(false);
   });
 });

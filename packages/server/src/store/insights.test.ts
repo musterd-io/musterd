@@ -1,8 +1,9 @@
 import {
   makeEnvelope,
-  summariseSycophancy,
+  summariseDisputes,
+  toDisputeRow,
+  type RawDisputeRow,
   type Act,
-  type SycophancyReply,
 } from '@musterd/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
@@ -14,7 +15,7 @@ import {
   deriveReport,
   peerDemand,
   deriveSteeringMetrics,
-  deriveSycophancy,
+  deriveDisputes,
   deriveWakeMetrics,
   flowMetrics,
   goalFlowMetrics,
@@ -1664,12 +1665,13 @@ withDrivers('insights', (o) => {
       expect(c.total).toBe(8);
     });
   });
-  describe('deriveSycophancy (ADR 481 — the readout as a report block)', async () => {
+  describe('deriveDisputes (ADR 505 §8 — the readout as a report block, replacing ADR 481)', async () => {
     const DAY = 24 * 60 * 60 * 1000;
     const T = 100 * DAY;
 
-    it('selects agent replies on this team in the 30-day cut — and counts exactly what the shared definitions count', async () => {
+    it('selects the four dispute acts on this team in the 30-day cut — and counts exactly what the shared definitions count', async () => {
       const { db, team, nick, ada } = await seed();
+      const bo = (await addMember(db, team, { name: 'bo', kind: 'agent' })).row;
       const other = await createTeam(db, { slug: 'other' });
       const ghost = (await addMember(db, other, { name: 'ghost', kind: 'agent' })).row;
       const put = async (
@@ -1679,7 +1681,7 @@ withDrivers('insights', (o) => {
         act: Act,
         body: string,
         ts: number,
-        inReplyTo?: string,
+        meta?: Record<string, unknown>,
       ) =>
         insertMessage(
           db,
@@ -1694,44 +1696,81 @@ withDrivers('insights', (o) => {
             act,
             body,
             ts,
-            ...(inReplyTo ? { meta: { in_reply_to: inReplyTo } } : {}),
+            ...(meta ? { meta } : {}),
           }),
         );
+      // A bare challenge (pre-stamp shape) conceded without a check; a stamped review rejection
+      // held with evidence, then a tiebreak that sided with the owner.
       await put(team, nick, 'ch1', 'challenge', 'are you sure?', T - 3 * DAY);
-      await put(team, nick, 'ch2', 'challenge', 'prove it', T - 2 * DAY);
-      await put(team, ada, 'a1', 'accept', 'fine', T - 3 * DAY + 1, 'ch1');
+      await put(team, ada, 'a1', 'accept', 'fine', T - 3 * DAY + 1, { in_reply_to: 'ch1' });
+      await put(team, ada, 'ask1', 'ask', '[lane] acceptance requested', T - 2 * DAY, {
+        lane_review: { lane: 'L1' },
+        species: 'approve',
+        tier: 'standard',
+      });
+      await put(team, bo, 'rej1', 'decline', 'missing the re-run', T - 2 * DAY + 1, {
+        in_reply_to: 'ask1',
+        dispute: { via: 'review', lane: 'L1', ask: 'ask1' },
+      });
+      await put(team, ada, 'hold1', 'decline', 'holding: perf/x.md:12 has it', T - 2 * DAY + 2, {
+        in_reply_to: 'rej1',
+      });
       await put(
         team,
         ada,
-        'a2',
-        'decline',
-        'held: `pnpm test` still fails',
-        T - 2 * DAY + 1,
-        'ch2',
+        'tb1',
+        'ask',
+        '[lane] acceptance requested — TIEBREAK',
+        T - 2 * DAY + 3,
+        {
+          lane_review: {
+            lane: 'L1',
+            tiebreak: { rejection: 'rej1', hold: 'hold1', first_reviewer: 'bo' },
+          },
+          species: 'approve',
+          tier: 'standard',
+        },
       );
-      await put(team, ada, 'p1', 'message', 'good catch, fixing', T - DAY);
-      // excluded: a human's concession, an agent on another team, and one outside the window
-      await put(team, nick, 'h1', 'message', "you're right", T - DAY);
-      await put(other, ghost, 'o1', 'message', 'good catch', T - DAY);
-      await put(team, ada, 'old', 'message', 'good catch', T - 40 * DAY);
+      await put(team, nick, 'v1', 'accept', 'the hold stands', T - 2 * DAY + 4, {
+        in_reply_to: 'tb1',
+      });
+      // excluded: another team, and one outside the window
+      await put(other, ghost, 'o1', 'challenge', 'prove it', T - DAY);
+      await put(team, nick, 'old', 'challenge', 'old', T - 40 * DAY);
 
       const since = T - 30 * DAY;
-      const oracle: SycophancyReply[] = [
-        { id: 'a1', seat: 'ada', act: 'accept', body: 'fine', parentAct: 'challenge' },
-        {
-          id: 'a2',
-          seat: 'ada',
-          act: 'decline',
-          body: 'held: `pnpm test` still fails',
-          parentAct: 'challenge',
-        },
-        { id: 'p1', seat: 'ada', act: 'message', body: 'good catch, fixing', parentAct: null },
-      ];
-      const block = await deriveSycophancy(db, team.id, T);
-      expect(block).toEqual(summariseSycophancy(oracle, since));
-      expect(block.challenge).toEqual({ unverified: 1, n: 1 });
-      expect(block.phrase).toEqual({ unverified: 1, n: 1 });
-      expect(block.challenge_answers).toEqual({ declines: 1, answered: 2 });
+      const block = await deriveDisputes(db, team.id, T);
+      expect(block.by_via.challenge).toMatchObject({
+        opened: 1,
+        answered: 1,
+        conceded: 1,
+        named_check: 0,
+      });
+      expect(block.by_via.review).toEqual({
+        opened: 1,
+        answered: 1,
+        conceded: 0,
+        held: 1,
+        named_check: 1,
+        tiebreak: { settled: 1, hold_stood: 1 },
+      });
+      expect(block.by_via.dependency.opened).toBe(0);
+      expect(block.total.opened).toBe(2);
+      expect(block.by_seat).toEqual([
+        { seat: 'ada', answered: 2, named_check: 1, conceded: 1, held: 1 },
+      ]);
+      // Parity: the block IS the shared definition over the rows the SQL selected.
+      const raw = await db.all<RawDisputeRow>(
+        `SELECT r.id AS id, mem.name AS seat, mem.kind AS kind, r.act AS act, r.body AS body,
+                r.meta AS meta, r.in_reply_to AS "inReplyTo", r.ts AS ts,
+                p.act AS "parentAct", p.meta AS "parentMeta"
+           FROM messages r JOIN members mem ON mem.id = r.from_member
+           LEFT JOIN messages p ON p.id = r.in_reply_to
+          WHERE r.team_id = ? AND r.ts >= ? AND r.act IN ('challenge','decline','accept','ask')
+          ORDER BY r.ts, r.id`,
+        [team.id, since],
+      );
+      expect(block).toEqual(summariseDisputes(raw.map(toDisputeRow), since));
     });
   });
 });
