@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 43;
+export const GUIDANCE_CONTENT_VERSION = 44;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -248,6 +248,8 @@ export function renderSkillBody(opts: { team: string }): string {
     '  refusing. Do not open by praising the proposal: "you\'re right" comes after a check, never before',
     '  one. Not for taste, a decision already made and confirmed, or an objection they have already heard.',
     "  A human's critique carries the weight of its evidence, no more, and is answered like a peer's.",
+    '  This is the team floor; how each human wants it delivered (how readily, how bluntly, how long)',
+    '  arrives as a style block on `team_join` once the daemon serves it (ADR 514).',
     "- **Commit before you ask.** When you want a peer's view on your finding, send the question and the",
     '  evidence, not your conclusion (`request_help` / `message` with an eligible set), and post your own',
     '  conclusion with its falsifier in a `status_update` first. If you then change your mind, it is a',

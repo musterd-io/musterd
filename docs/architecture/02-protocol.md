@@ -262,6 +262,23 @@ The governed successor to `hello` — **additive schemas, not yet wired into `WS
 - `SyncTraceRowSchema` / `SyncTracePushRequestSchema` / `SyncTracePushResponseSchema` (`traceSync.ts`, ADR 453 §2) — the structural-only trace row on the joiner → hub wire, typed so prose cannot fit: ULID `id`, seat/harness patterns, closed `kind`/`outcome`, 24-hex id digests (`TraceIdDigestSchema`), counts, and a per-kind closed `detail` (`traceStructuralDetailSchema(kind)`, from `TRACE_DETAIL_KEYS_BY_KIND`: count / flag / enum / model-id types, the producer allowlists `TRACE_HOOKS`, `TRACE_REASONS`, `TRACE_PARSERS`, `TRACE_UNKNOWN_TYPES`, …). `tool_name` is bounded to the harness namespace (`TRACE_TOOL_NAMESPACES` + `TRACE_MCP_TOOL_RE`) or the sentinel `TRACE_OTHER`; `structuralToolName` / `normalizeTraceDetail` are the normalizers the pusher and local ingest run (never reject), `isStructuralToolName` the check the hub runs (reject). `TRACE_STRUCTURAL_DETAIL_KEYS` is the union `dataset:export` allowlists — one definition of "structural" for the dataset and the channel. The credential scrub runs on every string field at the wire.
 - `scrubCredentials` / `scrubToText` / `redactionMarker` (`traceScrub.ts`, ADR 445 §3) — the credential scrub, run at the hook and again at ingest: every `TOKEN_PREFIXES` token (registry-driven, no start boundary), PEM private keys, `Authorization` values, bare `Bearer` tokens, `sk-`, GitHub, AWS, Slack, and 32+-char values assigned to a token/key/secret/password name; each becomes `<redacted:kind>` and is counted. The start boundary accepts JSON (`\n`, `\uXXXX`) and URL (`%XX`) escapes. `scrubToText` scrubs a structured value's string leaves before stringifying it. Idempotent. Credentials only — not a PII scrubber (ADR 184 §2).
 
+## Agent style (ADR 514)
+
+`style.ts` says how a seat talks to humans. `PolicySchema.style` is the team's: a **floor** of four
+stance booleans (every one on by default; an admin may turn one off), four **default dials**
+(`pushback` every-time | when-it-matters | only-on-risk, `bluntness` direct | plain | soft, `length`
+concise | normal | thorough, `format` prose | structured) and a team **prose** addendum. A human's
+own `StylePrefs` (`members.style_prefs`, increment 2) name the dials they set and their own prose;
+both proses are capped at five lines and 800 characters (`STYLE_PROSE_MAX_LINES`,
+`STYLE_PROSE_MAX_CHARS`, `styleProseProblem`; every line-break form counts).
+
+`resolveStyle(policy, prefs?)` is pure: the floor from policy only, each dial from prefs else the
+team default, the team defaults themselves (`team_dials`), team prose then human prose, and an
+`epoch` (8 hex of sha256 over all of it) the seat attests. Prose prints JSON-quoted on one line.
+`renderStyleBlock({ team, driver?, no_driver? })` prints the block a seat reads on `team_join`
+(increment 3): floor first, team prose, the driver's line and prose labelled with their name, then
+what `@team` and the record get; with no driver it says so and names `musterd agent --driver`.
+
 ## `@musterd/protocol` exports (the executable contract)
 
 ```ts

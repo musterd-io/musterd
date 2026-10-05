@@ -7,6 +7,7 @@ import { IncidentPolicySchema } from './incident.js';
 import { StakesDefaultSchema } from './lanes.js';
 import { LoopsPolicySchema } from './loops.js';
 import { ResidencyPolicyOverrideSchema, ResidencyPolicySchema } from './residency.js';
+import { StylePolicyOverrideSchema, StylePolicySchema } from './style.js';
 import { TracePolicySchema } from './trace.js';
 
 /**
@@ -252,6 +253,12 @@ export const PolicySchema = z.object({
     .min(60_000)
     .max(24 * 60 * 60_000)
     .default(ACCEPTANCE_REVIEW_WINDOW_MS),
+  /**
+   * ADR 514: agent style — the stance floor human admins own, the team's default dials, and a team
+   * prose addendum. A human's own dials (`members.style_prefs`) sit on top and can never lower the
+   * floor. Dense here (read); sparse on the wire and in the row (`PolicyOverrideSchema`, ADR 185).
+   */
+  style: StylePolicySchema.default({}),
 });
 export type Policy = z.infer<typeof PolicySchema>;
 
@@ -274,6 +281,7 @@ export const PolicyOverrideSchema = PolicySchema.partial().extend({
   doorbell: DoorbellPolicySchema.partial().optional(),
   trace: TracePolicySchema.partial().optional(),
   agent_host: AgentHostPolicySchema.partial().optional(),
+  style: StylePolicyOverrideSchema.optional(),
 });
 export type PolicyOverride = z.infer<typeof PolicyOverrideSchema>;
 
@@ -295,6 +303,7 @@ const POLICY_SUB_SCHEMAS = {
   doorbell: DoorbellPolicySchema,
   trace: TracePolicySchema,
   agent_host: AgentHostPolicySchema,
+  style: StylePolicySchema,
 } as const;
 
 /** Strip the keys of one sub-object that equal their current schema default; undefined if none survive. */

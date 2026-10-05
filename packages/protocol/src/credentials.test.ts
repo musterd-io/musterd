@@ -7,6 +7,37 @@ import {
   PolicySchema,
   sparsifyPolicy,
 } from './credentials.js';
+import { StylePolicySchema } from './style.js';
+
+describe('PolicySchema.style (ADR 514)', () => {
+  it('a team that never set style reads the shipped default', () => {
+    expect(PolicySchema.parse({}).style).toEqual(StylePolicySchema.parse({}));
+  });
+  it('a sparse floor override stays sparse on the wire and dense on read', () => {
+    const wire = PolicyOverrideSchema.parse({
+      style: { floor: { assess_before_agreeing: false } },
+    });
+    expect(wire.style).toEqual({ floor: { assess_before_agreeing: false } });
+    const read = PolicySchema.parse(wire);
+    expect(read.style.floor).toEqual({
+      assess_before_agreeing: false,
+      disagree_once_then_commit: true,
+      concession_names_check: true,
+      human_critique_weighed_as_peer: true,
+    });
+  });
+  it('sparsifyPolicy keeps a sparse floor override sparse (review I5)', () => {
+    expect(sparsifyPolicy({ style: { floor: { assess_before_agreeing: false } } })).toEqual({
+      style: { floor: { assess_before_agreeing: false } },
+    });
+  });
+  it('sparsifyPolicy drops a style block that equals the default and keeps one that differs', () => {
+    expect(sparsifyPolicy({ style: StylePolicySchema.parse({}) })).toEqual({});
+    expect(
+      sparsifyPolicy({ style: { ...StylePolicySchema.parse({}), prose: 'Units on numbers.' } }),
+    ).toEqual({ style: { prose: 'Units on numbers.' } });
+  });
+});
 
 describe('bootstrap retirement credentials (ADR 350)', () => {
   it('accepts only a strict legacy-key plus agent-seat proof', () => {

@@ -20,6 +20,7 @@ export * from './deliveryHint.js';
 export * from './credentials.js';
 export * from './oauth.js';
 export * from './doorbell.js';
+export * from './style.js';
 export * from './nodes.js';
 export * from './sync.js';
 export * from './guardian.js';
