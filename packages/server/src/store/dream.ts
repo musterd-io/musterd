@@ -20,10 +20,18 @@ import { truncateBytes, truncateChars } from './wakeContextBody.js';
  */
 
 export const DREAM_BUDGET = {
-  /** The whole packet, UTF-8 bytes of its JSON. Twice the wake packet's: a dream reads, it doesn't answer. */
-  limit_bytes: 24_576,
+  /** The whole packet, UTF-8 bytes of its JSON. A dream reads, it doesn't answer, and the learned
+   *  insights it reads are whole (below), so this holds a full night: 30 insights averaged ~750
+   *  chars in the 14 days to 2026-10-04 (max 1,970). Was 24 KB while insights were clipped. */
+  limit_bytes: 49_152,
   memory: 3_072,
   act_body_chars: 600,
+  /** An insight is the dream's raw material, so it is never clipped: the server already refuses an
+   *  insight body over 2,048 bytes (ADR 494 skill, step 2), and no char count can exceed that.
+   *  Clipping at `act_body_chars` cut 16 of 29 insights mid-sentence and hid the conditions their
+   *  last sentences carried — the dreams then argued over what the clipped text promoted
+   *  (lane 01M44Z7WYM, 2026-10-03/04, ghost’s wiki page in #2048). */
+  insight_body_chars: 2_048,
   /** Newest-first cap per lane before the byte fit drops the oldest. */
   lane_acts: 40,
   lanes: 12,
@@ -57,6 +65,9 @@ export interface DreamInsight {
   body: string;
   tags: string[];
   ts: number;
+  /** True only if this body was cut — per insight, so a dream never has to guess from the
+   *  packet-wide flag which bodies are whole. */
+  truncated: boolean;
 }
 
 export interface DreamPacket {
@@ -194,7 +205,7 @@ export async function buildDreamPacket(
       .reverse()
       .map(async (r) => {
         const meta = JSON.parse(r.meta ?? '{}') as { headline?: string; tags?: string[] };
-        const cut = truncateChars(r.body, B.act_body_chars);
+        const cut = truncateChars(r.body, B.insight_body_chars);
         if (cut.truncated) truncated = true;
         return {
           id: r.id,
@@ -203,6 +214,7 @@ export async function buildDreamPacket(
           body: cut.text,
           tags: meta.tags ?? [],
           ts: r.ts,
+          truncated: cut.truncated,
         };
       }),
   );

@@ -25,13 +25,13 @@ A dream never rings the doorbell. An Act you send is never a wake reason for ano
 
 ## The packet you read
 
-Read it with `musterd dream` (optional `--since <epoch-ms>`). The command prints one JSON object, `{packet, used_bytes, truncated}`, for this seat only (lane 2, PR #1958). There is no MCP tool for it: the read happens once a night and does not take a slot on every seat's tool surface. `packet` is what `buildDreamPacket(db, team, seat, {since?, now?})` returns (`packages/server/src/store/dream.ts`). Window: last Act this seat sent with provenance `dream`, else 24h. 24 KB budget; oldest lane acts drop first; the seat note is never dropped.
+Read it with `musterd dream` (optional `--since <epoch-ms>`). The command prints one JSON object, `{packet, used_bytes, truncated}`, for this seat only (lane 2, PR #1958). There is no MCP tool for it: the read happens once a night and does not take a slot on every seat's tool surface. `packet` is what `buildDreamPacket(db, team, seat, {since?, now?})` returns (`packages/server/src/store/dream.ts`). Window: last Act this seat sent with provenance `dream`, else 24h. 48 KB budget; oldest lane acts drop first, then oldest insights; the seat note is never dropped. Insight bodies arrive whole: each `learned` entry carries its own `truncated`, which stays false for any insight the server accepted. A packet-wide `truncated: true` means something was cut or dropped (a lane act clipped at 600 chars, or an item over budget). It does not mean a learned body was cut.
 
 ```
 { seat, since, until,
   memory?: { body, truncated },
   lanes: [{ id, title, state, acts, omitted }],
-  learned: [{ id, from, headline, body, tags, ts }] }
+  learned: [{ id, from, headline, body, tags, ts, truncated }] }
 ```
 
 `lanes` is the day's record on **your own lanes**. `learned` is every insight the Team saved in the window — search it (and `team_insight_search`) before you re-derive.
