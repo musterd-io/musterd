@@ -5498,6 +5498,27 @@
 }
 
 /* blocked cards surface their note ("NOT BEFORE …") — two lines, then quiet */
+/* Board readability inc 1: what a blocked card waits on. One line per unshipped dependency; a stale
+   block and a reasonless one say so in the same slot, so no blocked card is ever silent. */
+.lc-card__waits {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--lc-dim);
+  overflow-wrap: anywhere;
+}
+.lc-card__waits b {
+  font-weight: 600;
+}
+.lc-card__waits--stale {
+  font-style: italic;
+  color: var(--lc-text);
+}
+.lc-card__waits--none {
+  font-style: italic;
+  color: var(--lc-muted);
+}
+
 .lc-card__detail {
   margin: 0;
   font-size: 11px;

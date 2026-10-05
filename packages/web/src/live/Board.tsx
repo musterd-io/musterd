@@ -11,6 +11,7 @@ import type {
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import {
   acceptanceWait,
+  blockedOn,
   capColumn,
   centerScroll,
   handoffPatch,
@@ -18,6 +19,7 @@ import {
   laneStates,
   movedLanes,
   NO_MOVES,
+  type BlockedOn,
   type LaneAction,
   type MovedLanes,
 } from './boardWrite';
@@ -114,6 +116,12 @@ export interface BoardProps {
    * pinned past its column's cap, ringed, and scrolled to. Null/absent = the ordinary board.
    */
   focusLane?: string | null;
+  /**
+   * The WHOLE board, unfiltered — what a blocked card's dependencies are looked up in. `lanes` is the
+   * owner/goal-filtered view, and a dependency filtered out of it would read as shipped. Absent =
+   * `lanes`.
+   */
+  boardLanes?: Lane[];
 }
 
 export function Board({
@@ -131,9 +139,19 @@ export function Board({
   onCreate,
   onPatch,
   focusLane = null,
+  boardLanes,
 }: BoardProps) {
   // Lanes carrying a live warning (unmet dependency / surface overlap) — advisory, warn-never-block.
-  const warned = useMemo(() => new Map(warnings.map((w) => [w.subject, w.detail])), [warnings]);
+  // Every warning a lane carries, one per line: a Map keyed on subject kept only the last.
+  const warned = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const w of warnings) {
+      const prev = m.get(w.subject);
+      m.set(w.subject, prev ? `${prev}\n${w.detail}` : w.detail);
+    }
+    return m;
+  }, [warnings]);
+  const byId = useMemo(() => new Map((boardLanes ?? lanes).map((l) => [l.id, l])), [boardLanes, lanes]);
   const rosterIdx = useMemo(() => new Map(roster.map((m) => [m.name, m])), [roster]);
   const byState = useMemo(() => {
     const m = new Map<LaneState, Lane[]>(COLUMNS.map((c) => [c.key, []]));
@@ -255,6 +273,7 @@ export function Board({
         key={lane.id}
         lane={lane}
         warnDetail={warned.get(lane.id) ?? null}
+        waits={blockedOn(lane, byId)}
         rosterIdx={rosterIdx}
         me={me}
         busy={busyId === lane.id}
@@ -339,6 +358,7 @@ export function Board({
 function LaneCard({
   lane,
   warnDetail,
+  waits,
   rosterIdx,
   me,
   busy,
@@ -351,6 +371,8 @@ function LaneCard({
 }: {
   lane: Lane;
   warnDetail: string | null;
+  /** What a blocked card waits on (null when not blocked). */
+  waits: BlockedOn | null;
   rosterIdx: Map<string, MemberSummary>;
   me: string | null;
   busy: boolean;
@@ -443,6 +465,20 @@ function LaneCard({
           </span>
         )}
       </div>
+      {waits?.kind === 'deps' &&
+        waits.deps.map((d) => (
+          <p key={d.id} className="lc-card__waits">
+            waiting on <b>{d.title}</b> · {d.owner ?? 'unowned'} · {d.state}
+          </p>
+        ))}
+      {waits?.kind === 'stale' && (
+        <p className="lc-card__waits lc-card__waits--stale">
+          everything it waited on has shipped — still blocked?
+        </p>
+      )}
+      {waits?.kind === 'unknown' && (
+        <p className="lc-card__waits lc-card__waits--none">no reason recorded</p>
+      )}
       {lane.state === 'blocked' && lane.detail && (
         <p className="lc-card__detail">{lane.detail}</p>
       )}
