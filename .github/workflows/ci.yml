@@ -28,17 +28,32 @@
 # merge, ~6.5 runner-minutes — which is why the SQLite-only runs (most PRs) do not shard; its driver
 # scoping stays as the compute lever, this is the wall-clock one. Minutes are billed on a private
 # repo: on 2026-10-03 GitHub refused to start jobs over the org's spending limit.
+#
+# Cost shape (ADR 508, 2026-10-04): a push to main runs static + docs only. The PR that produced
+# the squash commit already ran coverage and the a11y leaves on the same change, and the main run
+# was 44% of billed minutes for a second verdict on it. Full coverage and both a11y leaves run on
+# main every 4 hours instead (`schedule`), and only when main moved since the last scheduled run.
+# A red scheduled run opens or updates one `ci: main is red` issue, because nobody would see it
+# otherwise. Main runs no longer cancel each other: a cancelled main run bills the minutes it used
+# and leaves its commit with no verdict.
 name: CI
 
 on:
   pull_request:
   push:
     branches: [main]
+  # ADR 508: full coverage + a11y on main, every 4 hours at :17, skipped when main has not moved.
+  schedule:
+    - cron: '17 */4 * * *'
+  workflow_dispatch:
 
-# One in-flight run per ref; a new push cancels the stale one (saves minutes on rapid agent pushes).
+# A PR keeps one in-flight run per ref, so a new push cancels the stale one. Main does not cancel
+# (ADR 508): each push and each scheduled run gets its own group, keyed by event and SHA. A
+# cancelled main run still bills the minutes it used (148 billed minutes on 2026-10-04) and leaves
+# its commit unverified.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || format('{0}-{1}', github.event_name, github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -96,16 +111,34 @@ jobs:
       shards: ${{ steps.pick.outputs.shards }}
       shard_count: ${{ steps.pick.outputs.count }}
       suite: ${{ steps.pick.outputs.suite }}
+      coverage: ${{ steps.pick.outputs.coverage }}
       a11y: ${{ steps.pick.outputs.a11y }}
+      docs: ${{ steps.pick.outputs.docs }}
+    # ADR 508: the scheduled run reads its own previous scheduled run to decide whether main moved.
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Pick the leaves, the test drivers and the shard count
         id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
         run: |
-          suite=true; a11y=true; kinds=both; why="no parent to diff — everything runs"
-          if git rev-parse -q --verify HEAD^1 >/dev/null; then
+          suite=true; a11y=true; kinds=both; docs=true; why="no parent to diff — everything runs"
+          if [ "$EVENT" = schedule ] || [ "$EVENT" = workflow_dispatch ]; then
+            # ADR 508: the full main check. A scheduled run skips every leaf when the last scheduled
+            # run already tested this SHA; a manual dispatch always runs.
+            last=$(gh run list --workflow ci.yml --event schedule --status completed --limit 1 --json headSha -q '.[0].headSha' || true)
+            if [ "$EVENT" = schedule ] && [ "$last" = "$GITHUB_SHA" ]; then
+              suite=false; a11y=false; docs=false; kinds=sqlite; why="main has not moved since the last scheduled run ($last)"
+            else
+              why="$EVENT on ${GITHUB_REF_NAME} — the full main check (ADR 508)"
+            fi
+          elif git rev-parse -q --verify HEAD^1 >/dev/null; then
             changed=$(git diff --name-only HEAD^1 HEAD)
             if [ -n "$changed" ] && ! echo "$changed" | grep -q -v -E '^(docs/|[^/]+\.md$)'; then
               suite=false; a11y=false; kinds=sqlite; why="every changed path is docs/ or a root *.md — the docs leaf is the gate"
@@ -119,16 +152,24 @@ jobs:
               fi
             fi
           fi
+          # ADR 508: a push to main is the squash commit of a PR that already ran coverage and a11y
+          # on the same change. It keeps static + docs; the scheduled run does the rest.
+          coverage=$suite
+          if [ "$EVENT" = push ]; then
+            coverage=false; a11y=false; why="$why — coverage + a11y run on the 4-hourly schedule (ADR 508)"
+          fi
           if [ "$kinds" = both ]; then count=4; shards='[1, 2, 3, 4]'; else count=1; shards='[1]'; fi
           {
             echo "kinds=$kinds"
             echo "count=$count"
             echo "shards=$shards"
             echo "suite=$suite"
+            echo "coverage=$coverage"
             echo "a11y=$a11y"
+            echo "docs=$docs"
           } >> "$GITHUB_OUTPUT"
           {
-            echo "plan: suite=$suite a11y=$a11y — $why (ADR 499)"
+            echo "plan: suite=$suite coverage=$coverage a11y=$a11y docs=$docs — $why (ADR 499, ADR 508)"
             echo "MUSTERD_TEST_DRIVER=$kinds (ADR 492); coverage in $count shard(s) (ADR 498)"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
@@ -146,7 +187,7 @@ jobs:
     name: coverage
     runs-on: ubuntu-latest
     needs: [plan]
-    if: needs.plan.outputs.suite == 'true'
+    if: needs.plan.outputs.coverage == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -194,7 +235,7 @@ jobs:
     name: coverage-merge
     runs-on: ubuntu-latest
     needs: [plan, coverage]
-    if: needs.plan.outputs.suite == 'true' && needs.plan.outputs.shard_count != '1'
+    if: needs.plan.outputs.coverage == 'true' && needs.plan.outputs.shard_count != '1'
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -300,6 +341,8 @@ jobs:
   docs:
     name: docs
     runs-on: ubuntu-latest
+    needs: [plan]
+    if: needs.plan.outputs.docs == 'true'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -332,24 +375,29 @@ jobs:
       # The sanctioned skips, and only these: `coverage-merge` on a one-shard run (ADR 498), where the
       # single coverage job enforced the floors itself; `static`, `coverage` and `coverage-merge` when
       # `plan` said the diff is docs-only; the two a11y leaves when `plan` said packages/web did not
-      # change (ADR 499). A leaf skipped for any other reason, or cancelled, is red: a required check
+      # change (ADR 499); `coverage`, `coverage-merge` and the a11y leaves on a push to main, and
+      # every leaf on a scheduled run that found main unmoved (ADR 508). A leaf skipped for any other reason, or cancelled, is red: a required check
       # with no verdict reads as an outage, and this is where it would hide.
       - name: Every leaf must have succeeded, or been skipped by plan
         env:
           RESULTS: ${{ toJSON(needs) }}
           SHARDS: ${{ needs.plan.outputs.shard_count }}
           SUITE: ${{ needs.plan.outputs.suite }}
+          COVERAGE: ${{ needs.plan.outputs.coverage }}
           A11Y: ${{ needs.plan.outputs.a11y }}
+          DOCS: ${{ needs.plan.outputs.docs }}
         run: |
           echo "$RESULTS" | jq .
-          echo "plan: suite=$SUITE a11y=$A11Y shards=$SHARDS"
-          failed="$(echo "$RESULTS" | jq -r --arg shards "$SHARDS" --arg suite "$SUITE" --arg a11y "$A11Y" '
+          echo "plan: suite=$SUITE coverage=$COVERAGE a11y=$A11Y docs=$DOCS shards=$SHARDS"
+          failed="$(echo "$RESULTS" | jq -r --arg shards "$SHARDS" --arg suite "$SUITE" --arg coverage "$COVERAGE" --arg a11y "$A11Y" --arg docs "$DOCS" '
             to_entries[]
             | select(.value.result != "success")
             | select(
                 (
                   (.key == "coverage-merge" and .value.result == "skipped" and $shards == "1")
                   or ((.key == "static" or .key == "coverage" or .key == "coverage-merge") and .value.result == "skipped" and $suite == "false")
+                  or ((.key == "coverage" or .key == "coverage-merge") and .value.result == "skipped" and $coverage == "false")
+                  or (.key == "docs" and .value.result == "skipped" and $docs == "false")
                   or ((.key == "a11y-prerender" or .key == "a11y-connected") and .value.result == "skipped" and $a11y == "false")
                 ) | not)
             | .key')"
@@ -358,3 +406,23 @@ jobs:
             exit 1
           fi
           echo "gates — all $(echo "$RESULTS" | jq 'length') leaves succeeded"
+
+  # ADR 508: a scheduled run is the only full check main gets, and no PR waits on it, so a red one
+  # would go unseen. Open one `ci: main is red` issue, or comment on the open one, naming the run.
+  main-red:
+    name: main-red
+    runs-on: ubuntu-latest
+    needs: [gates]
+    if: always() && needs.gates.result == 'failure' && github.event_name == 'schedule'
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the main-is-red issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          body="Scheduled CI on main failed at ${GITHUB_SHA} — ${RUN_URL}. The 4-hourly run is main's only full coverage + a11y check (ADR 508); fix forward, then close this issue."
+          n=$(gh issue list --state open --search 'in:title "ci: main is red"' --json number -q '.[0].number')
+          if [ -n "$n" ]; then gh issue comment "$n" --body "$body"; else gh issue create --title 'ci: main is red' --body "$body"; fi
