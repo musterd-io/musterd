@@ -1,5 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import {
+  BUILD_ON_CHECK,
+  builtOnLine,
   closeReasonCopy,
   emptyPoolCopy,
   emptyPoolHint,
@@ -171,11 +173,17 @@ export function registerLanes(
     async (args) => {
       try {
         if (!client.member) return textResult('claim a seat first (team_join)');
-        const { lane, warnings } = await client.updateLane(args.id, {
+        const { lane, warnings, built_on } = await client.updateLane(args.id, {
           owner_seat: client.member,
           ...(args.goal_id ? { goal_id: args.goal_id } : {}),
         });
-        return laneResult('lane claimed', lane, warnings);
+        // ADR 505 §6: what this lane builds on, shown at the one moment the check matters — the
+        // claim. `?? []` for an older daemon; an older one still warns on an UNFINISHED dependency.
+        const built = built_on ?? [];
+        const hint = built.length
+          ? `\n\nbuilt on:\n${built.map((b) => `  ${builtOnLine(b)}`).join('\n')}\n${BUILD_ON_CHECK}`
+          : undefined;
+        return laneResult('lane claimed', lane, warnings, hint);
       } catch (err) {
         return errorResult(err);
       }

@@ -775,6 +775,8 @@ export class HttpClient {
       verdict: 'conceded' | 'held';
       tiebreak?: { reviewer: string; grade: string } | null;
     };
+    /** ADR 505 §6: this accept took a handoff — the sender's note, returned with the check line. */
+    accepted_handoff?: { lane?: string; branch?: string | null; note: string };
     /** ADR 484: the challenge-evidence rail's one line, sender-only. Absent when off. */
     evidence_notice?: string;
   }> {
@@ -787,6 +789,7 @@ export class HttpClient {
         verdict: 'conceded' | 'held';
         tiebreak?: { reviewer: string; grade: string } | null;
       };
+      accepted_handoff?: { lane?: string; branch?: string | null; note: string };
       evidence_notice?: string;
     }>;
   }

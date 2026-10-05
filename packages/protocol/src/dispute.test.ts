@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  acceptedHandoffAck,
+  builtOnLine,
   disputeAnswerAck,
   disputeOf,
   isReviewDispute,
@@ -48,6 +50,31 @@ describe('the owner answer ack — one text for every surface', () => {
     const stranded = disputeAnswerAck({ lane: 'L1', verdict: 'held', tiebreak: null });
     expect(stranded.guidance).toContain('no second reviewer');
     expect(stranded.guidance).toContain('stays active');
+  });
+
+  it('a built-on line names the dependency, how it closed and the acceptor note; the handoff ack quotes the note (ADR 505 §6)', () => {
+    expect(
+      builtOnLine({
+        lane: 'L1',
+        title: 'bo measured p95',
+        state: 'done',
+        merged: { pr: 42 },
+        closed_by: 'cy',
+        verified: true,
+        note: 'p95 holds at 180ms',
+      }),
+    ).toBe('L1 "bo measured p95" — done, PR #42, closed by cy (accepted): "p95 holds at 180ms"');
+    expect(
+      builtOnLine({ lane: 'L2', title: 't', state: 'done', closed_by: 'bo', verified: false }),
+    ).toBe('L2 "t" — done, closed by bo (unconfirmed)');
+    const ack = acceptedHandoffAck({
+      lane: 'L3',
+      branch: 'feat/x',
+      note: '7 seats remain on the old creds',
+    });
+    expect(ack).toContain('lane L3 (branch feat/x)');
+    expect(ack).toContain('"7 seats remain on the old creds"');
+    expect(ack).toContain('`challenge`');
   });
 
   it('the tiebreak notice tells the second reviewer what they are judging and which verb is which', () => {

@@ -229,6 +229,7 @@ import {
 import { type LaneCloseVerdict, recordLaneClose } from '../store/laneClose.js';
 import {
   boardWarnings,
+  builtOn,
   deriveGoalStatus,
   getLane,
   LaneConflictError,
@@ -4963,8 +4964,10 @@ export async function handleHttp(
           ...(result.handoff_lane ? { handoff_lane: result.handoff_lane } : {}),
           ...(result.lane_verdict ? { lane_verdict: result.lane_verdict } : {}),
           ...(result.lane_ack ? { lane_ack: result.lane_ack } : {}),
-          // ADR 505: the owner's answer to a review dispute, told on the spot for the same reason.
+          // ADR 505: the owner's answer to a review dispute, told on the spot for the same reason;
+          // and the note an accepted handoff carried, returned where it was accepted (§6).
           ...(result.dispute ? { dispute: result.dispute } : {}),
+          ...(result.accepted_handoff ? { accepted_handoff: result.accepted_handoff } : {}),
           ...(evidenceNotice ? { evidence_notice: evidenceNotice } : {}),
         });
       }
@@ -7026,6 +7029,11 @@ export async function handleHttp(
         return sendJson(res, 200, {
           lane,
           warnings,
+          // ADR 505 §6: on a self-claim, what the claimer is building on — each finished
+          // dependency's outcome, PR and acceptor note — so the check happens here, not after.
+          ...(claimingForSelf && lane.depends_on.length > 0
+            ? { built_on: await builtOn(ctx.db, team.id, team.slug, lane) }
+            : {}),
           ...(review ? { review: { ...review, ...backstop, ...waitMs } } : {}),
           // ADR 283: the recorded close verdict, so the closer's surface can name the label the
           // ledger holds instead of inferring one. Same discipline as `close_records` on the submit

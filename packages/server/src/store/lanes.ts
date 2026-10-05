@@ -9,6 +9,7 @@ import {
   LANE_TERMINAL_STATES,
   resolveStakesDefault,
   type EmptyPool,
+  type BuiltOn,
   type Goal,
   type Lane,
   type LaneState,
@@ -1064,6 +1065,69 @@ export async function staleAcceptanceWarning(
     owner: null,
     detail: `waiting ${hours}h for acceptance — team_next surfaces it; any seat may answer per the acceptance ask`,
   };
+}
+
+/**
+ * ADR 505 §6 — what a claimer is building on: each FINISHED dependency with how it closed and the
+ * acceptor's own words, capped at three. `laneWarnings` names an unfinished dependency; a finished
+ * one was silent, so its outcome, PR and note were invisible at the one moment someone started
+ * building on them. Read-only; the note is the head of the `accept` that answered the lane's
+ * standing review ask, and `closed_by`/`verified` come off the `lane.closed` row (ADR 169).
+ */
+export async function builtOn(
+  db: Driver,
+  teamId: string,
+  teamSlug: string,
+  lane: Lane,
+  cap = 3,
+): Promise<BuiltOn[]> {
+  const out: BuiltOn[] = [];
+  for (const depId of lane.depends_on) {
+    if (out.length >= cap) break;
+    const dep = await getLane(db, teamId, depId, teamSlug);
+    if (!dep || dep.state !== 'done') continue;
+    const closed = await db.get<{ detail: string | null }>(
+      `SELECT detail FROM audit WHERE team_id = ? AND action = 'lane.closed' AND target = ?
+        ORDER BY ts DESC, id DESC LIMIT 1`,
+      [teamId, dep.id],
+    );
+    let closedBy: string | undefined;
+    let verified: boolean | undefined;
+    if (closed?.detail) {
+      try {
+        const d = JSON.parse(closed.detail) as { closed_by?: unknown; verified?: unknown };
+        if (typeof d.closed_by === 'string') closedBy = d.closed_by;
+        if (typeof d.verified === 'boolean') verified = d.verified;
+      } catch {
+        /* an unreadable row names nothing — the line still says done */
+      }
+    }
+    const accept = await db.get<{ body: string }>(
+      `SELECT r.body AS body FROM messages a
+         JOIN messages r ON r.team_id = a.team_id AND r.in_reply_to = a.id AND r.act = 'accept'
+        WHERE a.team_id = ? AND a.act = 'ask' AND json_extract(a.meta, '$.lane_review.lane') = ?
+        ORDER BY r.created_at DESC, r.id DESC LIMIT 1`,
+      [teamId, dep.id],
+    );
+    const note = accept?.body.trim();
+    out.push({
+      lane: dep.id,
+      title: dep.title,
+      state: dep.state,
+      ...(dep.merged && (dep.merged.pr !== undefined || dep.merged.sha !== undefined)
+        ? {
+            merged: {
+              ...(dep.merged.pr !== undefined ? { pr: dep.merged.pr } : {}),
+              ...(dep.merged.sha !== undefined ? { sha: dep.merged.sha } : {}),
+            },
+          }
+        : {}),
+      ...(closedBy !== undefined ? { closed_by: closedBy } : {}),
+      ...(verified !== undefined ? { verified } : {}),
+      ...(note ? { note: note.length > 200 ? `${note.slice(0, 200)}…` : note } : {}),
+    });
+  }
+  return out;
 }
 
 export async function laneWarnings(

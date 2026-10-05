@@ -1,4 +1,6 @@
 import {
+  BUILD_ON_CHECK,
+  builtOnLine,
   emptyPoolHint,
   LaneStakesSchema,
   LaneStateSchema,
@@ -205,6 +207,14 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
     const label = sub === 'claim' ? 'claimed' : submit ? 'submitted for acceptance' : 'done';
     process.stdout.write(`${theme.ok('✓')} lane ${label}\n${renderLane(res.lane)}\n`);
     renderWarnings(res.warnings);
+    // ADR 505 §6: on a claim, what this lane builds on — same lines as the MCP reply. `?? []` for
+    // an older daemon.
+    const built = res.built_on ?? [];
+    if (built.length > 0) {
+      process.stdout.write(`${theme.accent('built on')}:\n`);
+      for (const b of built) process.stdout.write(`  ${builtOnLine(b)}\n`);
+      process.stdout.write(theme.meta(BUILD_ON_CHECK) + '\n');
+    }
     // value-layer design: the daemon's advisory notices (e.g. the ship nudge) reach the closer.
     for (const n of res.notices ?? []) process.stdout.write(`${theme.warn('▸')} ${n}\n`);
     if (submit) renderSubmitReport(res);

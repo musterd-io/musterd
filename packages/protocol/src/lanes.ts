@@ -715,8 +715,29 @@ export const LaneResultSchema = z.object({
   /** Advisory lines appended to this caller's result only (value-layer design: the ship nudge) —
    *  rendered to the actor, never a wake, never stored. */
   notices: z.array(z.string()).optional(),
+  /** ADR 505 §6: present when THIS patch was a self-claim of a lane with finished dependencies —
+   *  what the claimer is building on (title, outcome, PR, acceptor's note), so the check happens
+   *  at the moment it matters. Absent from an older daemon and from every other patch. */
+  built_on: z.array(z.lazy(() => BuiltOnSchema)).optional(),
 });
 export type LaneResult = z.infer<typeof LaneResultSchema>;
+
+/**
+ * One finished dependency as the claimer sees it (ADR 505 §6). `note` is the head of the accept
+ * that closed it — the acceptor's own words, the first thing to re-check. `verified` is the
+ * ADR 169 derivation off the `lane.closed` row (a counterpart confirmed it) — `false` means an
+ * unconfirmed close, which is a reason to check harder, not a reason to skip.
+ */
+export const BuiltOnSchema = z.object({
+  lane: z.string(),
+  title: z.string(),
+  state: LaneStateSchema,
+  merged: z.object({ pr: z.number().int().optional(), sha: z.string().optional() }).optional(),
+  closed_by: z.string().optional(),
+  verified: z.boolean().optional(),
+  note: z.string().optional(),
+});
+export type BuiltOn = z.infer<typeof BuiltOnSchema>;
 
 /** `GET /teams/:slug/lanes` — the board: lanes (optionally filtered) with live warnings annotated. */
 export const LaneBoardSchema = z.object({
