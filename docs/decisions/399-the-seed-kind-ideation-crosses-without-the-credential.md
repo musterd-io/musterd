@@ -110,6 +110,12 @@ read: one relay poll *or one fold* away, whichever the node can do.
   2026-09-30 triage on 31 of them wedged a fresh joiner at hub_seq 147,019. [ADR 500](500-a-seed-thread-entry-waits-for-nothing.md)
   removes the stop: the entry is held in `audit` and projected when its seed is born locally.
 
+- **2026-10-05, the loop itself is now hub-only (lane 01M3ZBTDJ5):** ingest was hub-only by rule
+  at the hub's door, but nothing stopped the loop. Policy replicates, so an enrolled joiner holds the
+  relay credentials too. It would poll the relay with its own empty cursor and stamp
+  `seed.captured` events the hub refuses with a 403. `ingestTeamSeeds` now returns before any fetch
+  on an enrolled joiner.
+
 ## Observability & Evaluation
 
 **Traces** — after one sync tick, both daemons hold a `seed.captured` audit row for the same
