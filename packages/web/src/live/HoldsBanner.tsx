@@ -1,40 +1,11 @@
-import { describeHoldLine, type Hold, type HoldList } from '@musterd/protocol';
-import { useEffect, useState } from 'react';
-import { apiGet, type LiveConfig } from './client';
-
-/** How often the banner re-reads the Team's holds. A hold ends by its clock, not by an event, so a
- *  poll is the honest shape; 30s is well inside the shortest sensible hold. */
-const HOLDS_POLL_MS = 30_000;
+import type { Hold } from '@musterd/protocol';
+import { describeHoldLine } from '@musterd/protocol/wire';
 
 /**
- * ADR 516: the Team's active holds — what is paused, by whom, until when — above the room, from the
- * same `GET /holds` every other surface reads. Nothing is shown when nothing is in force, and a
- * failed read shows nothing rather than a guess: a banner that invents a freeze is the rumour this
- * exists to end.
+ * ADR 516: the Team's active holds above the room. Loaded lazily by `/live` and only once a hold is
+ * in force — the line formatter lives in `@musterd/protocol/wire`, and keeping that chunk out of the
+ * eager graph is what keeps /live inside its initial-JS budget on the (usual) day nothing is paused.
  */
-export function useTeamHolds(cfg: LiveConfig | null): Hold[] {
-  const [holds, setHolds] = useState<Hold[]>([]);
-  useEffect(() => {
-    if (!cfg) return;
-    let alive = true;
-    const tick = async () => {
-      try {
-        const res = await apiGet<HoldList>(cfg, `/teams/${encodeURIComponent(cfg.team)}/holds`);
-        if (alive) setHolds(res.holds);
-      } catch {
-        if (alive) setHolds([]);
-      }
-    };
-    void tick();
-    const timer = setInterval(() => void tick(), HOLDS_POLL_MS);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [cfg]);
-  return holds;
-}
-
 export function HoldsBanner({ holds, now = Date.now() }: { holds: Hold[]; now?: number }) {
   const live = holds.filter((h) => h.lifted_at === null && h.expires_at > now);
   if (live.length === 0) return null;
