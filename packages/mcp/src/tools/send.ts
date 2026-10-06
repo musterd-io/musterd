@@ -13,6 +13,7 @@ import {
   acceptedHandoffAck,
   disputeAnswerAck,
   laneAckAck,
+  laneEscalationAck,
   laneVerdictAck,
   threadHintFor,
   threadHintText,
@@ -303,6 +304,12 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
         // NOT move the lane, or "acknowledged" and "accepted" stay indistinguishable from outside.
         const laneAck = ackBody?.lane_ack ? laneAckAck(ackBody.lane_ack) : undefined;
         const ackGuidance = laneAck ? ` ${laneAck.guidance}` : '';
+        // ADR 539: an accept that was the PEER stage on a risky lane closed nothing — say so, and
+        // say who holds the verdict now, on the spot.
+        const laneEscalation = ackBody?.lane_escalation
+          ? laneEscalationAck(ackBody.lane_escalation)
+          : undefined;
+        const escalationGuidance = laneEscalation ? ` ${laneEscalation.guidance}` : '';
         // ADR 505: the owner's answer to a review dispute — what the daemon did with it (recorded
         // the concession; held and re-routed to a tiebreak, or could not), said on the spot.
         const disputeAck = ackBody?.dispute ? disputeAnswerAck(ackBody.dispute) : undefined;
@@ -335,6 +342,7 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
             : `sent ${args.act} to ${toLabel} (id=${envelope.id})`) +
           handoffGuidance +
           verdictGuidance +
+          escalationGuidance +
           ackGuidance +
           disputeGuidance +
           handoffAcceptGuidance +
@@ -355,6 +363,7 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
               : {}),
             ...(handoffLane ? { handoff_lane: handoffLane } : {}),
             ...(laneVerdict ? { lane_verdict: laneVerdict } : {}),
+            ...(laneEscalation ? { lane_escalation: laneEscalation } : {}),
             ...(laneAck ? { lane_ack: laneAck } : {}),
             ...(evidenceNotice ? { evidence_notice: evidenceNotice } : {}),
             ...(threadHint ? { thread_hint: threadHint } : {}),

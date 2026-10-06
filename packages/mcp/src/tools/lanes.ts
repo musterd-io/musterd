@@ -799,6 +799,10 @@ export function fmtNext(b: NextBrief, landed: ReadonlyMap<string, Landed> = new 
           // is on the author's merge button, and holding for it wastes an acceptor's cycle.
           (r.unlanded
             ? ' — NO MERGE ATTESTATION (nothing landed — waiting on its author, not you)'
+            : '') +
+          // ADR 539: the peer stage is done; the wait is on a human coming live, not on a reviewer.
+          (r.pending_human
+            ? ` — PEER-CONFIRMED${r.peer_confirmed_by ? ` by ${r.peer_confirmed_by}` : ''}, waiting for a human (none was live to ask; asked when one comes live)`
             : ''),
       );
   }

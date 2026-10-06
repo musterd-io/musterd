@@ -52,8 +52,11 @@ export {
   emptyPoolFromCandidates,
   isAwaitingAcceptance,
   laneAckAck,
+  laneEscalationAck,
   laneVerdictAck,
   type EmptyPool,
+  type LaneEscalationAck,
+  type LaneEscalationWire,
   type EmptyPoolKind,
   type EmptyPoolLiveExclusion,
   type EmptyPoolLiveSeat,
@@ -1046,6 +1049,16 @@ export const NextBriefSchema = z.object({
          * refused unlanded. `.default(false)` keeps older-daemon briefs parseable.
          */
         unlanded: z.boolean().default(false),
+        /**
+         * ADR 539: the peer stage is done and the human stage has not been asked — a risky lane
+         * whose newest `lane.review_peer_confirmed` row fired no human ask and that no
+         * `lane.review_human_asked` row followed. The wait is on a human coming live, not on a
+         * reviewer being slow, and the two want different responses. `.default(false)` keeps an
+         * older daemon's brief parseable.
+         */
+        pending_human: z.boolean().default(false),
+        /** ADR 539: who gave the peer confirmation, when `pending_human` is true. */
+        peer_confirmed_by: z.string().optional(),
       }),
     )
     .optional(),

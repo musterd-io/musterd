@@ -198,6 +198,9 @@ export type AuditAction =
   | 'lane.closed'
   | 'lane.review_sent_back'
   | 'lane.review_peer_confirmed'
+  // ADR 539: the stage-two HUMAN ask fired — at the peer's accept, or later by the reaper's retry
+  // once a human came live (`detail.retried`). Replicated on the lane kind like its sibling.
+  | 'lane.review_human_asked'
   // The acknowledge, which decides nothing (lane 01M2P2E2H6): a `wait` replying to a `lane_review`
   // ask — "I have this, I have not judged it yet". Carries no state and does NOT discharge the ask;
   // the verdict is still owed. detail: { lane, ask, acceptor }.
@@ -641,6 +644,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'lane.closed': 'actor',
   'lane.review_sent_back': 'actor',
   'lane.review_peer_confirmed': 'actor',
+  'lane.review_human_asked': 'none',
   'lane.review_acknowledged': 'actor',
   'lane.review_rerouted': 'actor',
   'lane.dispute_answered': 'actor',

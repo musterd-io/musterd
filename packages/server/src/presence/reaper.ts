@@ -2,7 +2,7 @@ import type { Ctx } from '../context.js';
 import { log } from '../log.js';
 import { flushLapsedHolds } from '../notify/doorbell.js';
 import { sweepReapedAcceptances } from '../protocol/laneReroute.js';
-import { announceIncidentRouted } from '../protocol/route.js';
+import { announceIncidentRouted, retryPendingHumanAsks } from '../protocol/route.js';
 import { appendAudit } from '../store/audit.js';
 import { pruneRings } from '../store/doorbell.js';
 import { routeUnclaimedIncidents } from '../store/incidents.js';
@@ -236,6 +236,22 @@ export function reaperTick(ctx: Ctx): () => Promise<void> {
       if (joinerTeams.has(team.id)) continue;
       for (const lane of await sweepReapedAcceptances(ctx, team)) {
         log.info({ msg: 'reroute_reaped_acceptance', team: team.slug, lane });
+      }
+    }
+
+    // ADR 539: a risky lane whose peer confirmed while no human was live is owed a human ask the
+    // moment one comes live. Hub only (the ask is composed FROM the lane owner, who may be bound to
+    // the hub); never closes anything. Runs before the backstop for the same reason the reroute does.
+    for (const team of activeTeams) {
+      if (joinerTeams.has(team.id)) continue;
+      const teamRow = await getTeamBySlug(ctx.db, team.slug);
+      if (!teamRow) continue;
+      try {
+        for (const { lane, human } of await retryPendingHumanAsks(ctx, teamRow)) {
+          log.info({ msg: 'retry_human_stage_ask', team: team.slug, lane, human });
+        }
+      } catch (err) {
+        log.warn({ msg: 'retry_human_stage_ask_failed', team: team.slug, err: String(err) });
       }
     }
 

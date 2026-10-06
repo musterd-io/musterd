@@ -27,7 +27,12 @@ import {
   readyForReviewHadNoCandidate,
 } from './lanes.js';
 import { getMemberByName, getMemberByRole } from './members.js';
-import { annotateClose, closeVerdicts, supersededAcceptanceAsks } from './review.js';
+import {
+  annotateClose,
+  closeVerdicts,
+  peerConfirmedPending,
+  supersededAcceptanceAsks,
+} from './review.js';
 import { parseRoles } from './rows.js';
 import { openSeedsForBrief } from './seeds.js';
 
@@ -571,11 +576,16 @@ export async function deriveNext(
     waiting.slice(0, 3).map(async ({ lane, entered }) => {
       const no_candidate = await readyForReviewHadNoCandidate(db, teamId, lane.id);
       const empty_pool = no_candidate ? await emptyPoolFromSubmitAudit(db, teamId, lane.id) : null;
+      // ADR 539: the peer stage is done and no human was ever asked — the wait is on a human coming
+      // live, which a reader should be able to tell from a reviewer being slow.
+      const pending = lane.risk.length > 0 ? await peerConfirmedPending(db, teamId, lane.id) : null;
       return {
         id: lane.id,
         title: lane.title,
         owner: lane.owner_seat,
         waited_ms: Math.max(0, now - entered),
+        pending_human: pending !== null,
+        ...(pending ? { peer_confirmed_by: pending.peer } : {}),
         // Whether ANYONE was asked. `pickReviewCounterpart` returns null on a same-model monoculture —
         // ADR 188/253 refuse `same_model` and ungradeable seats on purpose — and the submit records
         // `no_candidate: true` and then says nothing more. The lane sits in this list looking exactly
