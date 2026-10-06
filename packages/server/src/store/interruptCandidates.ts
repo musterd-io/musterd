@@ -34,7 +34,17 @@ import type { MessageRow } from './rows.js';
  * just stops carrying it back. That is the whole win, and it is why the cost is now a function of the
  * window's size in SQLite rather than of its size in V8.
  *
- * Keep this in step with `pendingInterrupts`. A new shape admitted there and forgotten here would
+ * THE TEXT GUARD IN FRONT. On Postgres each `json_extract` is a `meta::jsonb` parse, per row, per
+ * predicate — a seat whose cursor never moves re-parsed the team's whole history at every tool
+ * boundary (staging 2026-10-06: 48 ms mean under load, 0 rows ever; lane 01M49C6CHW). The first
+ * block is a necessary condition, never a sufficient one: a key cannot be present unless its quoted
+ * name is in the stored JSON text (`JSON.stringify` writes these ASCII keys literally), and `LIKE`'s
+ * `_` wildcard and SQLite's case-folding only widen it. So it drops rows cheaply and the exact block
+ * below still decides. The huddle-root lookup is pinned to the team for the same reason: inside an
+ * OR, Postgres turned the EXISTS into a hashed subplan over every tenant's messages.
+ *
+ * Keep this in step with `pendingInterrupts`, in BOTH blocks — a new meta key goes in the text guard
+ * as well as the exact predicates. A new shape admitted there and forgotten here would
  * narrow the fold's input below what it reads, and the answer would silently change.
  */
 export async function listInterruptCandidates(
@@ -51,6 +61,15 @@ export async function listInterruptCandidates(
           AND created_at > ?
           AND (
             act IN ('steer','resolve','accept','decline')
+            OR thread_id IS NOT NULL
+            OR meta LIKE '%"urgent"%'
+            OR meta LIKE '%"lane_review"%'
+            OR meta LIKE '%"eligible"%'
+            OR meta LIKE '%"huddle"%'
+            OR meta LIKE '%"incident"%'
+          )
+          AND (
+            act IN ('steer','resolve','accept','decline')
             OR json_extract(meta, '$.urgent') = 1
             OR json_extract(meta, '$.lane_review') IS NOT NULL
             OR json_extract(meta, '$.eligible') IS NOT NULL
@@ -61,13 +80,15 @@ export async function listInterruptCandidates(
               thread_id IS NOT NULL
               AND EXISTS (
                 SELECT 1 FROM messages root
-                 WHERE root.id = messages.thread_id
+                 WHERE root.team_id = ?
+                   AND root.id = messages.thread_id
+                   AND root.meta LIKE '%"huddle"%'
                    AND json_extract(root.meta, '$.huddle') IS NOT NULL
               )
             )
           )
         ORDER BY created_at ASC, id ASC`,
-    [member.team_id, member.id, member.id, opts.cursorTs ?? 0],
+    [member.team_id, member.id, member.id, opts.cursorTs ?? 0, member.team_id],
   );
 
   // Doorbell contract clause 7 (docs/design/daemon-doorbell-contract.md): six clauses governed
