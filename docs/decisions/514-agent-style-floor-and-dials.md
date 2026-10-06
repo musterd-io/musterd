@@ -58,6 +58,12 @@ without adding a second home for a fact the skill already states.
 
 ## Consequences
 
+- **2026-10-05 — `policy style` moved under `team policy`** (lane `01M47A4WRRWVD3SN6D7DSZ9V3J`,
+  nick's call on stanley's flag): the spelling is `musterd team policy style …`, the one positional
+  area of `team policy`; the top-level `policy` word from increment 4 is gone. One home per team
+  knob — the doorbell precedent hangs its admin knobs under the feature word, and nothing else in
+  the CLI gives one policy area its own top-level word. Spec §4.5 reads the same now.
+
 - **2026-10-05 — increment 4 landed** (lane `01M46MQR8F6E6G9BRX0JMY8CMH`): the CLI. `musterd style`
   / `style set` / `style clear` (a human's own, over the self route; a seat sees the block it reads
   and is refused a set) and `musterd policy style` / `set` / `clear` (the admin's floor, defaults
@@ -69,8 +75,8 @@ without adding a second home for a fact the skill already states.
   presence's attested epoch differs from it. Terminal frames 28–30 in `figma-brief-terminal.md`,
   pinned by `style.test.ts` and `rows.test.ts`. `FEATURE_EPOCH` 30 names increments 1–4 together
   (the bump deferred from increment 3). Spec §4.5 wrote `musterd policy style` beside the existing
-  `musterd team policy`; the command is a new top-level `policy` word whose only area is `style`,
-  and a bare `musterd policy` points at `team policy` — one home per knob, not two.
+  `musterd team policy`; increment 4 shipped it as a new top-level `policy` word with `style` as its
+  only area; renamed under `team policy` the same day, note above.
 
 - **2026-10-05 — increment 3 landed** (lane `01M46MQQFS3W2W4N37S7BB9RX5`): the block is delivered.
   A **style envelope** `{ block, epoch, dials, driver }` (`StyleEnvelopeSchema`) rides the
@@ -103,7 +109,7 @@ without adding a second home for a fact the skill already states.
   homes.
 - Server (`members.style_prefs`, the self route, `presence.style_epoch`), MCP (the block on
   `team_join` and on epoch change, `team_members.style`, `team_style`/`team_style_set`), CLI
-  (`musterd style`, `musterd policy style`), web and the readout are increments 2–6, each a lane
+  (`musterd style`, `musterd team policy style`), web and the readout are increments 2–6, each a lane
   under `agent-style`: `01M46MQPQ3JC6EWMY7WV6SY8AA`, `01M46MQQFS3W2W4N37S7BB9RX5`,
   `01M46MQR8F6E6G9BRX0JMY8CMH`, `01M46MQSMJFBNGS0QE4PHVTXWT`, `01M46MQW7GV4BD3SV9HDKDRETV`.
 - Harness-native renderers (writing a harness's own format knob from the dials) are deferred with a

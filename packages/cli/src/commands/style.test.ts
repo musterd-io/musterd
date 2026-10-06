@@ -7,14 +7,14 @@ import { parseArgs } from '../args.js';
 import { HttpClient } from '../client.js';
 import { loadConfig, saveBinding } from '../config.js';
 import { claimAgentHttp } from '../test-auth.js';
-import { policyCommand, styleSetBy } from './policy.js';
+import { styleSetBy } from './policy.js';
 import { parseDialPairs, styleCommand } from './style.js';
 import { teamCommand } from './team.js';
 
 /**
- * ADR 514 increment 4 — `musterd style` (a human's own dials) and `musterd policy style` (the
+ * ADR 514 increment 4 — `musterd style` (a human's own dials) and `musterd team policy style` (the
  * team's floor and defaults), against a real daemon. The exact no-color frames are pinned in
- * `docs/design/figma-brief-terminal.md` (`cmd/style`, `cmd/policy-style`; hard rule 2): a
+ * `docs/design/figma-brief-terminal.md` (`cmd/style`, `cmd/team-policy-style`; hard rule 2): a
  * divergence fails here instead of drifting.
  */
 describe('style / policy style commands (ADR 514 inc 4)', () => {
@@ -63,7 +63,8 @@ describe('style / policy style commands (ADR 514 inc 4)', () => {
     }
   }
   const style = (args: string[]) => capture(() => styleCommand(parseArgs(args)));
-  const policy = (args: string[]) => capture(() => policyCommand(parseArgs(['style', ...args])));
+  const policy = (args: string[]) =>
+    capture(() => teamCommand(parseArgs(['policy', 'style', ...args])));
 
   describe('musterd style', () => {
     it('bare: every dial labelled team default, no prose, and the block a seat steered by you reads', async () => {
@@ -185,8 +186,8 @@ describe('style / policy style commands (ADR 514 inc 4)', () => {
     });
   });
 
-  describe('musterd policy style', () => {
-    it('bare: the shipped floor and defaults, every knob labelled default (cmd/policy-style frame)', async () => {
+  describe('musterd team policy style', () => {
+    it('bare: the shipped floor and defaults, every knob labelled default (cmd/team-policy-style frame)', async () => {
       const res = await policy([]);
       expect(res.code).toBe(0);
       const epoch = /team epoch ([0-9a-f]{8})/.exec(res.out)![1];
@@ -209,7 +210,7 @@ describe('style / policy style commands (ADR 514 inc 4)', () => {
     it('set: a floor rule off and a default dial, labelled set by the admin; the rest stay default', async () => {
       const set = await policy(['set', 'concession_names_check=off', 'length=thorough']);
       expect(set.code).toBe(0);
-      expect(set.out).toContain('✓ policy style set\n  next: musterd policy style\n');
+      expect(set.out).toContain('✓ policy style set\n  next: musterd team policy style\n');
       expect(set.out).toContain('    concession_names_check           off set by nick\n');
       expect(set.out).toContain(
         '    length                           thorough         set by nick\n',
@@ -237,14 +238,12 @@ describe('style / policy style commands (ADR 514 inc 4)', () => {
       expect((await nick.getPolicy('dawn')).stored.style).toBeUndefined();
     });
 
-    it('a floor value that is not on/off, six-line prose, and a bare `policy` are refused', async () => {
+    it('a floor value that is not on/off, six-line prose, and an unknown sub-word are refused', async () => {
       await expect(policy(['set', 'assess_before_agreeing=maybe'])).rejects.toThrow(
         /assess_before_agreeing: on or off/,
       );
       await expect(policy(['set', '--prose', '1\n2\n3\n4\n5\n6'])).rejects.toThrow(/6 lines/);
-      await expect(capture(() => policyCommand(parseArgs([])))).rejects.toThrow(
-        /usage: musterd policy style/,
-      );
+      await expect(policy(['frobnicate'])).rejects.toThrow(/usage: musterd team policy style/);
       expect((await nick.getPolicy('dawn')).stored.style).toBeUndefined();
     });
   });

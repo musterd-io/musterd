@@ -321,8 +321,10 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
     5 with `style preferences are for human members — a seat reads the block it is given (musterd
     style)`.
 
-29. `cmd/policy-style` — `$ musterd policy style` as nick (admin), on a team at the shipped style.
-    The renderer is `packages/cli/src/commands/policy.ts` (`policyCommand`), pinned exactly by
+29. `cmd/team-policy-style` — `$ musterd team policy style` as nick (admin), on a team at the
+    shipped style — the one positional area of `team policy` (lane 01M47A4WRRWVD3SN6D7DSZ9V3J moved
+    it under `team` from a top-level `policy` word: one home per knob). The renderer is
+    `packages/cli/src/commands/policy.ts` (`teamPolicyStyle`), pinned exactly by
     `style.test.ts`. Every knob carries `default` or `set by <who>` — the latter read from the
     `policy.change` audit rows, the newest one in which the knob took its current value; a reader
     the audit log refuses sees `set`:
@@ -342,8 +344,8 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
       prose                              none
     ```
 
-    After `musterd policy style set concession_names_check=off length=thorough`, the success
-    line `✓ policy style set` + `  next: musterd policy style` precedes the same table with
+    After `musterd team policy style set concession_names_check=off length=thorough`, the success
+    line `✓ policy style set` + `  next: musterd team policy style` precedes the same table with
     `concession_names_check           off set by nick` and `length … thorough         set by nick`.
 
 30. `cmd/status-style-stale` — the `cmd/status` roster with Ada attesting a style epoch: her row
