@@ -197,6 +197,12 @@ export const MemberSummarySchema = MemberSchema.extend({
   /** ADR 514: how seats talk to this human — the resolved dials, no prose. Null on agent rows and
    *  from an older daemon. A seat composing an act to this human reads these. */
   style: StyleDialsSchema.nullish(),
+  /** ADR 514 inc 4: the CURRENT style epoch for this row — on a human row, their resolved style;
+   *  on an agent row, the epoch its seat should be running (the driver its newest live presence
+   *  attested, else the team's only human, else team defaults — the `/style-block` rule). A client
+   *  compares a presence's attested `style_epoch` to this to say `style stale`. Null/absent from
+   *  an older daemon: absence is unknown, never stale. */
+  style_epoch: StyleEpochSchema.nullish(),
   presence: PresenceStatusSchema,
   presences: z.array(PresenceSchema).default([]),
   /** Coarse roster activity (musterd/0.2). Optional for back-compat; the server always sets it. */

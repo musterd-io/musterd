@@ -424,10 +424,12 @@ import { issueAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { revokeSponsoredDescendants } from '../store/sponsoredCascade.js';
 import { staleLaneWarnings } from '../store/staleness.js';
 import {
+  currentStyleEpochFor,
   memberStylePrefs,
   setStylePrefs,
   styleDriverFor,
   styleEnvelopeFor,
+  styleHumans,
   teamStyle,
 } from '../store/style.js';
 import { searchInsights } from '../store/teamMemory.js';
@@ -1970,8 +1972,10 @@ async function summarize(
   // Every member's latest status_update in one statement (lane 01M3ZCTQK9) — the roster asked once per
   // member, and /live refetches the roster on presence frames for every viewer.
   const statuses = await latestStatusUpdates(ctx.db, teamId);
-  // ADR 514: the team's style once; each human row resolves their own dials against it below.
+  // ADR 514: the team's style once; each human row resolves their own dials against it below, and
+  // every row stamps the CURRENT epoch its seat should attest (inc 4: the roster's `style stale`).
   const style = await teamStyle(ctx.db, teamId);
+  const styleHumansOnTeam = await styleHumans(ctx.db, teamId);
   return Promise.all(
     (await listPresence(ctx.db, teamId, ctx.config.presenceTimeoutMs)).map(async (s) => {
       // Two-clocks rule (M2): liveness from presence, working-label from the latest status_update — plus
@@ -2017,6 +2021,13 @@ async function summarize(
         // ADR 514: how seats talk to this human — resolved dials, no prose; null on agent rows.
         style:
           s.member.kind === 'human' ? resolveStyle(style, memberStylePrefs(s.member)).dials : null,
+        style_epoch: currentStyleEpochFor(
+          style,
+          styleHumansOnTeam,
+          s.member,
+          // The driver the newest live presence attested, the `driverForSeat` read without a query.
+          s.presences.find((p) => p.driver)?.driver ?? null,
+        ),
         presence: presenceStatus,
         presences: s.presences,
         ...activity,

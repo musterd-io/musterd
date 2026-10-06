@@ -58,6 +58,13 @@ import {
   HuddleTraceSchema,
   type HuddleTrace,
   WakeLeasesResponseSchema,
+  StyleDialsSchema,
+  type StyleEnvelope,
+  StyleEnvelopeSchema,
+  StyleEpochSchema,
+  StyleFloorSchema,
+  type StylePrefs,
+  StylePrefsSchema,
   DoorbellRingsResponseSchema,
   type DoorbellRingsResponse,
   type DoorbellPrefs,
@@ -295,6 +302,29 @@ const DoorbellViewSchema = z.object({
   route: z.array(DoorbellSinkSchema),
 });
 export type DoorbellView = z.infer<typeof DoorbellViewSchema>;
+
+/** `GET`/`PUT /members/me/style` (ADR 514): a human's own prefs, the resolved result and the block a
+ *  seat steered by them reads. Parsed at the boundary like the doorbell view. */
+const StyleSelfReadSchema = z.object({
+  member: z.string(),
+  prefs: StylePrefsSchema,
+  resolved: z.object({
+    floor: StyleFloorSchema,
+    dials: StyleDialsSchema,
+    team_dials: StyleDialsSchema,
+    team_prose: z.string(),
+    human_prose: z.string(),
+    epoch: StyleEpochSchema,
+  }),
+  block: z.string(),
+});
+export type StyleSelfRead = z.infer<typeof StyleSelfReadSchema>;
+
+function parseStyleSelfRead(json: unknown): StyleSelfRead {
+  const parsed = StyleSelfReadSchema.safeParse(json);
+  if (!parsed.success) throw new CliError('style response did not match the protocol schema', 1);
+  return parsed.data;
+}
 
 function parseDoorbellView(json: unknown): DoorbellView {
   const parsed = DoorbellViewSchema.safeParse(json);
@@ -1458,6 +1488,29 @@ export class HttpClient {
     return parseDoorbellView(
       await this.request('PUT', `/teams/${slug}/members/me/doorbell`, prefs),
     );
+  }
+
+  /** Your own style (ADR 514) — `GET /teams/:slug/members/me/style`, humans only (a seat is 403). */
+  async getStyle(slug: string): Promise<StyleSelfRead> {
+    return parseStyleSelfRead(await this.request('GET', `/teams/${slug}/members/me/style`));
+  }
+
+  /** Replace your own style prefs whole — `PUT /teams/:slug/members/me/style`. The daemon answers
+   *  422 with the count for prose over the cap; the command merges before it writes. */
+  async putStyle(slug: string, prefs: StylePrefs): Promise<StyleSelfRead> {
+    return parseStyleSelfRead(await this.request('PUT', `/teams/${slug}/members/me/style`, prefs));
+  }
+
+  /** The style envelope this caller reads — `GET /teams/:slug/style-block` (ADR 514 inc 3): a
+   *  human's own, a seat's driver's. What `musterd style` prints from an agent seat. */
+  async getStyleBlock(slug: string): Promise<StyleEnvelope> {
+    const parsed = StyleEnvelopeSchema.safeParse(
+      await this.request('GET', `/teams/${slug}/style-block`),
+    );
+    if (!parsed.success) {
+      throw new CliError('style-block response did not match the protocol schema', 1);
+    }
+    return parsed.data;
   }
 
   /**

@@ -233,6 +233,40 @@ describe('renderRoster', () => {
     expect(renderRoster([withBuild('Ada', sha('a'))], 0, 120, undefined)).not.toContain('build');
   });
 
+  // ADR 514 inc 4: the style epoch a live seat attested, and `style stale` when the daemon's current
+  // epoch for that seat differs. Absent is unknown, never stale; an `out` seat is silent.
+  it("shows a live seat's attested style epoch, `style stale` when the current one differs, silence when unknown", () => {
+    const withStyle = (
+      attested: string | undefined,
+      current: string | undefined,
+      presence: 'online' | 'offline' = 'online',
+    ): MemberSummary => ({
+      ...base,
+      id: 'ada',
+      name: 'Ada',
+      kind: 'agent',
+      role: '',
+      presence,
+      activity: presence === 'online' ? 'active' : 'offline',
+      presences:
+        presence === 'online'
+          ? [{ surface: 'claude-code', status: 'online', last_seen_at: 0, style_epoch: attested }]
+          : [],
+      style_epoch: current,
+    });
+    expect(renderRoster([withStyle('41122c7c', '41122c7c')], 0, 120)).toContain('style 41122c7c');
+    expect(renderRoster([withStyle('41122c7c', '41122c7c')], 0, 120)).not.toContain('stale');
+    expect(renderRoster([withStyle('41122c7c', '9a0b1c2d')], 0, 120)).toContain('style stale');
+    // The daemon not saying what is current (older daemon) is unknown: the epoch shows, no verdict.
+    expect(renderRoster([withStyle('41122c7c', undefined)], 0, 120)).toContain('style 41122c7c');
+    expect(renderRoster([withStyle('41122c7c', undefined)], 0, 120)).not.toContain('stale');
+    // Attesting nothing is silence — an older adapter, not a stale one.
+    expect(renderRoster([withStyle(undefined, '41122c7c')], 0, 120)).not.toContain('style');
+    expect(renderRoster([withStyle('41122c7c', '9a0b1c2d', 'offline')], 0, 120)).not.toContain(
+      'style',
+    );
+  });
+
   // A live agent seat attesting no model is a hole in the ADR 056/158/188 evidence, and it used to
   // look identical to a healthy row: an absent model was silence. Measured 2026-08-01 — miley worked
   // and shipped all day attesting nothing, and the only way to see it was reading the presence table.

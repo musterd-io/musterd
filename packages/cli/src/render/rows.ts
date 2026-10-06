@@ -409,6 +409,17 @@ function memberFacets(
   if (build && daemonBuild && build !== daemonBuild) {
     parts.push(theme.warn(`build ${build.slice(0, 7)}`));
   }
+  // ADR 514 inc 4 (spec §4.4): the style epoch a live seat attested, and `style stale` when the
+  // daemon's current epoch for that seat (its driver's) differs — the guidance-drift treatment.
+  // Absent is unknown, never stale (ADR 135); a seat on an older adapter stays silent here.
+  const attestedStyle = m.presences[0]?.style_epoch;
+  if (attestedStyle && group !== 'out') {
+    parts.push(
+      m.style_epoch && attestedStyle !== m.style_epoch
+        ? theme.warn('style stale')
+        : `style ${attestedStyle}`,
+    );
+  }
   if (group !== 'out' && m.presences[0]?.surface) {
     const p = m.presences[0];
     // A seat on another machine says so (presence replication, ADR 356): `codex @ laptop-b`. A
