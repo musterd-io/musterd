@@ -1,6 +1,13 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type Database from 'better-sqlite3';
-import { DriverError, type Driver, type Params } from './driver.js';
+import {
+  bodyThenCommitQueue,
+  type CommitQueue,
+  DriverError,
+  noTransaction,
+  type Driver,
+  type Params,
+} from './driver.js';
 
 /**
  * better-sqlite3 behind the async Driver. Every statement is synchronous underneath; the Promise is
@@ -101,7 +108,8 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
     }
   };
 
-  const make = (life: { dead: boolean } | null): SqliteDriver => {
+  // `queue` is the open transaction's (or savepoint's) beforeCommit queue; null on the outer handle.
+  const make = (life: { dead: boolean } | null, queue: CommitQueue | null): SqliteDriver => {
     const stmt = <R>(sql: string, run: () => R): Promise<R> =>
       life ? inTx(life, sql, run) : onQueue(sql, run);
     const handle: SqliteDriver = {
@@ -110,6 +118,11 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
       onStatement(listener: (sql: string) => void) {
         listeners.add(listener);
         return () => void listeners.delete(listener);
+      },
+      beforeCommit(fn) {
+        if (!life || !queue) noTransaction();
+        if (life.dead) throw txClosed();
+        queue.push(fn);
       },
       connection() {
         return outer;
@@ -144,9 +157,11 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
           // Nested: a savepoint on the same connection, same queue slot, same handle lifetime.
           const name = `sp${++depth}`;
           raw.exec(`SAVEPOINT ${name}`);
+          const mine: CommitQueue = [];
           try {
-            const r = await fn(make(life));
+            const r = await fn(make(life, mine));
             raw.exec(`RELEASE ${name}`);
+            queue!.push(...mine);
             return r;
           } catch (e) {
             raw.exec(`ROLLBACK TO ${name}`);
@@ -167,7 +182,8 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
           const mine = { dead: false, open: true };
           raw.exec('BEGIN');
           try {
-            const r = await inBody.run(mine, () => fn(make(mine)));
+            const root: CommitQueue = [];
+            const r = await inBody.run(mine, () => bodyThenCommitQueue(make(mine, root), root, fn));
             raw.exec('COMMIT');
             return r;
           } catch (e) {
@@ -194,6 +210,6 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
     };
     return handle;
   };
-  const outer = make(null);
+  const outer = make(null, null);
   return outer;
 }

@@ -17,6 +17,13 @@ export interface Driver {
   exec(sql: string): Promise<void>;
   tx<T>(fn: (t: Driver) => Promise<T>): Promise<T>;
   /**
+   * Queue `fn` to run on the outermost open transaction after its body succeeds, just before COMMIT
+   * (ADR 531). Callbacks run in registration order. One registered inside a savepoint that rolls
+   * back is dropped with it. A throw rolls the whole transaction back. Only a transaction handle
+   * has a commit to run before; the connection handle refuses with `no_transaction`.
+   */
+  beforeCommit(fn: (t: Driver) => Promise<void>): void;
+  /**
    * The connection-level handle. On a tx handle this is the queue-level driver: work a body defers
    * past its own commit (a notification's `.then`) writes through it, never through the tx handle
    * that will be dead by then. On the connection handle it returns itself.
@@ -41,6 +48,7 @@ export interface Driver {
 export type DriverErrorCode =
   | 'outer_handle_in_tx'
   | 'tx_closed'
+  | 'no_transaction'
   | 'not_sqlite'
   | 'closed'
   | 'unavailable'
@@ -61,4 +69,29 @@ export class DriverError extends Error {
     super(message);
     this.name = 'DriverError';
   }
+}
+
+/** One transaction's — or one savepoint's — queued `beforeCommit` callbacks (ADR 531). */
+export type CommitQueue = Array<(t: Driver) => Promise<void>>;
+
+/** The connection handle's `beforeCommit`: there is no transaction to run before. */
+export function noTransaction(): never {
+  throw new DriverError(
+    'beforeCommit needs a transaction handle; call it inside tx()',
+    'no_transaction',
+  );
+}
+
+/**
+ * The outermost transaction's body, then its queue, both on `t`, before the caller COMMITs. A
+ * callback may queue another (the loop drains it). A throw anywhere leaves the caller to roll back.
+ */
+export async function bodyThenCommitQueue<T>(
+  t: Driver,
+  queue: CommitQueue,
+  fn: (t: Driver) => Promise<T>,
+): Promise<T> {
+  const r = await fn(t);
+  for (let next = queue.shift(); next; next = queue.shift()) await next(t);
+  return r;
 }

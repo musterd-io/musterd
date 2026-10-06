@@ -50,6 +50,19 @@ describe('migratePostgres (spec §12.2)', () => {
     await d.close();
   });
 
+  it('v90: idx_messages_origin is unique and partial on origin_seq > 0 (ADR 531)', async () => {
+    const d = await pgliteDriver();
+    const owner = d.asOwner();
+    await migratePostgres(owner);
+    const row = await owner.get<{ indexdef: string }>(
+      "SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_messages_origin'",
+    );
+    expect(row?.indexdef).toMatch(
+      /^CREATE UNIQUE INDEX .*\(origin_node, origin_seq\) WHERE \(origin_seq > 0\)$/,
+    );
+    await d.close();
+  });
+
   it('every team-owned table has RLS enabled, forced, and a tenant policy; globals have none', async () => {
     const d = await pgliteDriver();
     const owner = d.asOwner();

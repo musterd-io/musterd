@@ -271,6 +271,13 @@ derivation with an origin would assert that the derivation is itself an event.
   hub storage engine (all increment 3), and origin stamps on lanes, goals, and the audit log
   (their own slices, per §Decision 5).
 
+- **2026-10-06 — where the counter is bumped moved to commit ([ADR 531](531-origin-seq-stamped-at-commit.md)).**
+  §Decision 2's "read, increment and insert are one atomic unit" still holds. On Postgres, though, the
+  `UPDATE nodes` row lock taken at insert was held until the *outer* request committed, and on
+  Cloud (one node per team) every replicated write queued behind it: 123 ms mean in load run 15.
+  Rows now go in with `origin_seq = 0` and are numbered just before COMMIT, in the same transaction,
+  so the gapless and commit-ordered properties are unchanged.
+
 ## Observability & Evaluation
 
 - **Traces:** the pair is itself the trace ADR 325 promised — "lag is `hub_head − daemon_cursor`

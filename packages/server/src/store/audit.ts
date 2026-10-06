@@ -2,7 +2,7 @@ import { isWireAttestationSource } from '@musterd/protocol';
 import { monotonicFactory } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { log } from '../log.js';
-import { localNodeForTeam } from './messages.js';
+import { localNodeForTeam, stampOriginAtCommit } from './messages.js';
 
 /**
  * Audit ids are MONOTONIC ULIDs: several rows appended in one millisecond still sort in arrival
@@ -866,7 +866,8 @@ async function stampFor(
  * plus `(origin_node, origin_seq)` drawn from the same `nodes.next_seq` allocator `insertMessage`
  * uses — one allocator for every replicated kind (ADR 335 §8), so a node's sequence is dense across
  * messages, lane transitions and presence transitions alike. Opens its own transaction (a
- * SAVEPOINT inside the caller's), so the number and the row are one unit: a throw burns no seq.
+ * SAVEPOINT inside the caller's); the number is assigned at that transaction's commit (ADR 531), so
+ * the number and the row are one unit: a throw burns no seq.
  *
  * Every `lane.*` and `presence.*` writer goes through here. A row written through the plain append
  * would be a transition the origin holds and no peer ever sees — exactly the hole this closes.
@@ -879,10 +880,6 @@ export async function appendReplicatedEvent(
   assertAuditSubjectDeclared(entry.action);
   await db.tx(async (t) => {
     const node = await localNodeForTeam(t, teamId);
-    const seq = (await t.get<{ seq: number }>(
-      'UPDATE nodes SET next_seq = next_seq + 1 WHERE id = ? RETURNING next_seq - 1 AS seq',
-      [node.id],
-    ))!.seq;
     const now = Date.now();
     const row: AuditRow = {
       id: ulid(),
@@ -895,7 +892,7 @@ export async function appendReplicatedEvent(
       detail: entry.detail ? JSON.stringify(entry.detail) : null,
       created_at: now,
       origin_node: node.id,
-      origin_seq: seq,
+      origin_seq: 0, // numbered at commit (ADR 531)
       ...(await stampFor(t, teamId, entry)),
     };
     await t.run(
@@ -917,6 +914,7 @@ export async function appendReplicatedEvent(
         row.actor_model_source,
       ],
     );
+    stampOriginAtCommit(t, 'audit', row);
   });
 }
 

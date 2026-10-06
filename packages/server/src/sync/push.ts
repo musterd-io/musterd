@@ -192,7 +192,7 @@ async function unpushed(
          FROM messages m
          JOIN members f ON f.id = m.from_member
          LEFT JOIN members t ON t.id = m.to_member
-        WHERE m.team_id = ? AND m.origin_node = ? AND m.origin_seq > ?
+        WHERE m.team_id = ? AND m.origin_node = ? AND m.origin_seq > ? AND m.origin_seq > 0
         ORDER BY m.origin_seq
         LIMIT ?`,
       [teamId, nodeId, after, SYNC_PUSH_MAX_BATCH],

@@ -1,6 +1,13 @@
 import type { PGlite, Transaction } from '@electric-sql/pglite';
 import { toPostgres } from './dialect.js';
-import { DriverError, type Driver, type Params } from './driver.js';
+import {
+  bodyThenCommitQueue,
+  type CommitQueue,
+  DriverError,
+  noTransaction,
+  type Driver,
+  type Params,
+} from './driver.js';
 import { ROLE, TENANT_SETTING } from './pg/tenancy.js';
 import type { Client, PoolFactory } from './pgDriver.js';
 
@@ -105,12 +112,18 @@ export async function pgliteDriver(opts: { dataDir?: string } = {}): Promise<Pgl
   const connection = (scope: Scope): PgliteDriver => {
     const key = `${scope.role}:${scope.team ?? ''}`;
     let h = scoped.get(key);
-    if (!h) scoped.set(key, (h = wrap(pg, 0, scope)));
+    if (!h) scoped.set(key, (h = wrap(pg, 0, scope, [])));
     return h;
   };
   // depth 0 = a connection handle (each statement is its own stamped transaction); depth ≥ 1 = a
   // handle bound to the open transaction `q`, already stamped.
-  const wrap = (q: PGlite | Transaction, depth: number, scope: Scope): PgliteDriver => {
+  // `queue` is the open transaction's (or savepoint's) beforeCommit queue; unused at depth 0.
+  const wrap = (
+    q: PGlite | Transaction,
+    depth: number,
+    scope: Scope,
+    queue: CommitQueue,
+  ): PgliteDriver => {
     // depth 0: switch the session's scope if it differs, then the statement autocommits.
     const one = <R>(fn: (t: PGlite | Transaction) => Promise<R>): Promise<R> =>
       depth === 0
@@ -148,19 +161,28 @@ export async function pgliteDriver(opts: { dataDir?: string } = {}): Promise<Pgl
         if (depth === 0)
           return lock(async () => {
             await enter(scope);
-            return pg.transaction((t) => fn(wrap(t, 1, scope)));
+            return pg.transaction((t) => {
+              const root: CommitQueue = [];
+              return bodyThenCommitQueue(wrap(t, 1, scope, root), root, fn);
+            });
           });
         const name = `sp${depth}`;
         await q.exec(`SAVEPOINT ${name}`);
+        const mine: CommitQueue = [];
         try {
-          const r = await fn(wrap(q, depth + 1, scope));
+          const r = await fn(wrap(q, depth + 1, scope, mine));
           await q.exec(`RELEASE ${name}`);
+          queue.push(...mine);
           return r;
         } catch (e) {
           await q.exec(`ROLLBACK TO ${name}`);
           await q.exec(`RELEASE ${name}`);
           throw e;
         }
+      },
+      beforeCommit(fn) {
+        if (depth === 0) noTransaction();
+        queue.push(fn);
       },
       onStatement(listener: (sql: string) => void) {
         listeners.add(listener);

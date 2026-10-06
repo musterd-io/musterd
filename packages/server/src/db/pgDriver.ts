@@ -2,7 +2,15 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import pg from 'pg';
 import { log } from '../log.js';
 import { toPostgres } from './dialect.js';
-import { DATABASE_UNREACHABLE_SENTENCE, DriverError, type Driver, type Params } from './driver.js';
+import {
+  bodyThenCommitQueue,
+  type CommitQueue,
+  DATABASE_UNREACHABLE_SENTENCE,
+  DriverError,
+  noTransaction,
+  type Driver,
+  type Params,
+} from './driver.js';
 import { ROLE, TENANT_SETTING } from './pg/tenancy.js';
 import { requestEnders, requestTiming, type Lease, type RequestTiming } from './requestTiming.js';
 
@@ -343,13 +351,15 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
       },
       tx: async (fn) =>
         inTransaction(s, async (c) => {
-          const { handle, settle } = txHandle(s, c, 0);
+          const queue: CommitQueue = [];
+          const { handle, settle } = txHandle(s, c, 0, queue);
           try {
-            return await fn(handle);
+            return await bodyThenCommitQueue(handle, queue, fn);
           } finally {
             settle();
           }
         }),
+      beforeCommit: noTransaction,
       connection: () => h,
       forTeam: (team) => connectionHandle({ role: 'app', team }),
       asOperator: () => connectionHandle({ role: 'operator', team: null }),
@@ -375,7 +385,12 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
   // A tx handle belongs to ONE transaction: once it settles the handle refuses, loudly, so a handle
   // that leaked out through a closure cannot write into whatever transaction the client runs next
   // (same `tx_closed` contract as the SQLite driver).
-  const txHandle = (s: Scope, c: Client, depth: number): { handle: Driver; settle: () => void } => {
+  const txHandle = (
+    s: Scope,
+    c: Client,
+    depth: number,
+    queue: CommitQueue,
+  ): { handle: Driver; settle: () => void } => {
     const life = { dead: false };
     const guard = () => {
       if (life.dead)
@@ -403,10 +418,13 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
         guard();
         const name = `sp${depth + 1}`;
         await c.query(`SAVEPOINT ${name}`);
-        const inner = txHandle(s, c, depth + 1);
+        // The savepoint's own queue: it joins the parent's only if the savepoint survives.
+        const mine: CommitQueue = [];
+        const inner = txHandle(s, c, depth + 1, mine);
         try {
           const r = await fn(inner.handle);
           await c.query(`RELEASE ${name}`);
+          queue.push(...mine);
           return r;
         } catch (e) {
           await c.query(`ROLLBACK TO ${name}`);
@@ -415,6 +433,10 @@ export function pgDriver(opts: PgDriverOptions): PgDriver {
         } finally {
           inner.settle();
         }
+      },
+      beforeCommit: (fn) => {
+        guard();
+        queue.push(fn);
       },
       // Same scope: work a body defers past its own commit lands in the same tenant.
       connection: () => connectionHandle(s),
