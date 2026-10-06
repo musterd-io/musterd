@@ -76,6 +76,11 @@ the 12 hours after this ADR merged, or on any workflow since the repository went
 2026-10-02. [ADR 512](512-main-check-on-push.md) makes a push to main the trigger: a push runs the
 full check when the last one is over 4 hours old. The cron stays as a backstop.
 
+_Note, 2026-10-06 (izzo, lane 01M497C168)._ **The cron fires again, but GitHub drops runs.** Three
+of six never started between 2026-10-05 17:10Z and 2026-10-06 11:18Z. [ADR 535](535-hourly-schedule-probe.md)
+makes the cron hourly (`17 * * * *`). A probe runs the full check only when the last one is at
+least 4 hours old and code changed since it, so full runs stay at most one per 4 hours.
+
 ## Observability & Evaluation
 
 - **Traces:** none new. Every scheduled run's `plan` summary says whether it ran or skipped, and

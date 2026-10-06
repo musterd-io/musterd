@@ -107,8 +107,9 @@ default, and CI pins `MUSTERD_TEST_DRIVER=both` (ADR 479 §3).~~ CHANGED 2026-10
 is now `sqlite` (a dozen seats share one laptop). ~~CI runs `both` on a pull request that touches
 `packages/server`, `packages/protocol`, the lockfile, `package.json`, `vitest.config.ts` or
 `.github/`~~ (CHANGED 2026-10-05 by ADR 510: a pull request runs `sqlite` unless it carries the
-`pglite` label, which runs `both`), ~~and on every push to `main`~~ (CHANGED 2026-10-04 by ADR 508: on the 4-hourly scheduled
-run on `main` instead; a push to `main` no longer runs coverage); any other PR runs `sqlite`, and the `coverage` job summary
+`pglite` label, which runs `both`), ~~and on every push to `main`~~ (CHANGED 2026-10-04 by ADR 508: ~~on the 4-hourly scheduled
+run on `main` instead~~; a push to `main` no longer runs coverage) (CHANGED 2026-10-06 by ADR 512 and ADR 535: on `main`'s full
+check, at most once per 4 hours — started by the first code push 4 hours after the last one, or by an hourly scheduled probe); any other PR runs `sqlite`, and the `coverage` job summary
 says which and why. Set `MUSTERD_TEST_DRIVER=both` locally when you change store or server SQL. PGlite boots once per vitest worker
 (~3–4 s), so a both-driver file costs a few seconds more than its SQLite half. While iterating:
 `MUSTERD_TEST_DRIVER=sqlite` is the fast loop; `MUSTERD_TEST_DRIVER=pglite` reproduces a
