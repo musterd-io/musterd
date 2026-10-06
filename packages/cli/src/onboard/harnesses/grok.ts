@@ -495,8 +495,8 @@ export const grok: Harness = {
     ],
   },
 
-  async provision(plan: ProvisionPlan) {
-    const path = projectConfigPath();
+  async provision(plan: ProvisionPlan, _scope?: 'local' | 'shared', cwd?: string) {
+    const path = projectConfigPath(cwd);
     let toml = readText(path) ?? '';
     const servers: string[] = [];
     for (const s of plan.servers) {
@@ -513,8 +513,8 @@ export const grok: Harness = {
     };
   },
 
-  async unprovision(plan: UnprovisionPlan) {
-    const path = projectConfigPath();
+  async unprovision(plan: UnprovisionPlan, _scope?: 'local' | 'shared', cwd?: string) {
+    const path = projectConfigPath(cwd);
     const toml = readText(path);
     if (toml === null) return;
     const next = removeServers(toml, plan.servers);

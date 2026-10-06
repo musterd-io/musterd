@@ -46,6 +46,7 @@ import { inspectSeatPermissions } from './permissions.js';
 import { classifyPrimerTarget } from './primer.js';
 import { defaultHarnessContext } from './reconcile/context.js';
 import { inspectHarnesses, type FragmentInspection } from './reconcile/engine.js';
+import { describeMirror, mirrorRepoServers, type MirrorResult } from './repoServers.js';
 import {
   defaultSelfHealDeps,
   selfHealWorkspace,
@@ -1428,6 +1429,7 @@ export function inspectArtifactDrift(cwd: string): {
  * naming counts and only the repairs actually needed, never one line per file however many drifted.
  */
 export async function runSessionProbe(deps?: {
+  mirror?: (cwd: string) => Promise<MirrorResult>;
   cliRef?: string | undefined;
   daemonBuild?: () => Promise<string | undefined>;
   cwd?: string;
@@ -1478,6 +1480,10 @@ export async function runSessionProbe(deps?: {
       await post(out.report).catch(() => undefined);
     }
     if (out.line) process.stdout.write(`${out.line}\n`);
+    // ADR 529: the repo's MCP servers into this folder's other harnesses. A Claude Code session
+    // reads .mcp.json itself, but its folder may also be provisioned for Codex or OpenCode.
+    const mirrored = describeMirror(await (deps?.mirror ?? mirrorRepoServers)(cwd));
+    if (mirrored) process.stdout.write(`${mirrored}\n`);
   } catch {
     // A health probe never fails a session start, and never invents drift from a folder it cannot read.
   } finally {

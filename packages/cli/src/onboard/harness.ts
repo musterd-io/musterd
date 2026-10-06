@@ -257,14 +257,20 @@ export interface Harness {
    * per-user/local (ADR 027). MCP servers register with per-server idempotency (remove+re-add only
    * that name, never the user's others); permission defaults merge into the harness's own
    * allow/ask/deny without clamping. Optional: a harness without a renderer degrades to
-   * charter-only. `scope` is `local` in Phase 1 (a `shared` opt-in is a fast-follow).
+   * charter-only. `scope` is `local` in Phase 1 (a `shared` opt-in is a fast-follow). `cwd` is the
+   * folder whose project config is written — the process's own by default; the repo-server mirror
+   * (ADR 529) names a seat's folder from the launcher or the host, which run elsewhere.
    */
-  provision?: (plan: ProvisionPlan, scope?: 'local' | 'shared') => Promise<ProvisionResult>;
+  provision?: (
+    plan: ProvisionPlan,
+    scope?: 'local' | 'shared',
+    cwd?: string,
+  ) => Promise<ProvisionResult>;
   /**
    * Reverse a provision (ADR 027 reversibility): remove exactly the named MCP servers and the
    * listed permission entries this harness added. Best-effort — a missing entry is a no-op.
    */
-  unprovision?: (plan: UnprovisionPlan, scope?: 'local' | 'shared') => Promise<void>;
+  unprovision?: (plan: UnprovisionPlan, scope?: 'local' | 'shared', cwd?: string) => Promise<void>;
   /**
    * Rewrite **only** this harness's musterd hooks in a folder already provisioned for it — no
    * prompts, no member mint, no binding write, no MCP re-registration (ADR 168, sibling to

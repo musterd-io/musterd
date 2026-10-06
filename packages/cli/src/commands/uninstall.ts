@@ -17,6 +17,7 @@ import { classifyPrimerTarget, removePrimer } from '../onboard/primer.js';
 import { defaultHarnessContext, type HarnessContext } from '../onboard/reconcile/context.js';
 import { reconcileHarnesses } from '../onboard/reconcile/engine.js';
 import type { HarnessAdapter } from '../onboard/reconcile/fragments.js';
+import { REPO_SERVERS_KEY } from '../onboard/repoServers.js';
 import { theme } from '../render/theme.js';
 import { hint, success, sym } from '../render/ui.js';
 
@@ -73,10 +74,14 @@ export async function uninstallCommand(parsed: Parsed, deps?: UninstallDeps): Pr
     // Role MCP servers are not fragment-modeled yet: init records them under the `role-tools`
     // pseudo-key (`role-server <harnessId> <name>`), and this is where they are unwound — via the
     // legacy per-harness unprovision, exactly by name.
-    const roleServers = v2.value.contributions['role-tools'] ?? [];
+    // The repo-server mirror (ADR 529) records under `repo-servers` in the same shape.
+    const roleServers = [
+      ...(v2.value.contributions['role-tools'] ?? []),
+      ...(v2.value.contributions[REPO_SERVERS_KEY] ?? []),
+    ];
     const byHarness = new Map<string, string[]>();
     for (const entry of roleServers) {
-      const m = /^role-server (\S+) (.+)$/.exec(entry);
+      const m = /^(?:role|repo)-server (\S+) (.+)$/.exec(entry);
       if (m) byHarness.set(m[1]!, [...(byHarness.get(m[1]!) ?? []), m[2]!]);
     }
     for (const [harnessId, servers] of byHarness) {
@@ -96,7 +101,9 @@ export async function uninstallCommand(parsed: Parsed, deps?: UninstallDeps): Pr
     const released =
       report.ok &&
       after.kind === 'valid' &&
-      Object.keys(after.value.contributions).filter((k) => k !== 'role-tools').length === 0;
+      Object.keys(after.value.contributions).filter(
+        (k) => k !== 'role-tools' && k !== REPO_SERVERS_KEY,
+      ).length === 0;
     if (!released) {
       for (const r of report.results) {
         if (r.result !== 'applied' && r.result !== 'unchanged') {

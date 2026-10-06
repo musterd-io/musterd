@@ -235,8 +235,8 @@ export const opencode: Harness = {
   // (ADR 027 — never clobber the user's other `mcp.*` entries or any of their other settings).
   // `${ENV}` secrets are written as references, never resolved/baked here. OpenCode has no
   // per-tool allowlist model, so permissions degrade to declared intent (none added).
-  async provision(plan: ProvisionPlan) {
-    const path = projectConfigPath();
+  async provision(plan: ProvisionPlan, _scope?: 'local' | 'shared', cwd?: string) {
+    const path = projectConfigPath(cwd);
     const cfg = readConfig(path) ?? {};
     cfg.mcp = cfg.mcp ?? {};
     const servers: string[] = [];
@@ -254,8 +254,8 @@ export const opencode: Harness = {
   },
 
   // Reverse a provision (ADR 027): remove exactly the named `mcp.*` entries.
-  async unprovision(plan: UnprovisionPlan) {
-    const path = projectConfigPath();
+  async unprovision(plan: UnprovisionPlan, _scope?: 'local' | 'shared', cwd?: string) {
+    const path = projectConfigPath(cwd);
     const cfg = readConfig(path);
     if (!cfg?.mcp) return;
     let changed = false;

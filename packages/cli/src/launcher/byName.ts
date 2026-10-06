@@ -5,6 +5,7 @@ import { flagStr, type Parsed } from '../args.js';
 import { loadBinding, loadConfig } from '../config.js';
 import { CliError } from '../errors.js';
 import { harnessAdapters } from '../onboard/harnesses/index.js';
+import { describeMirror, mirrorRepoServers } from '../onboard/repoServers.js';
 import { nearestCommand } from '../render/help.js';
 import { buildCatalog, type Catalog } from './catalog.js';
 import { fetchRoster, liveFor, viewerNameFor } from './live.js';
@@ -52,6 +53,8 @@ export interface LaunchDeps {
   picker?: (opts: PickerOpenOptions) => Promise<number>;
   /** The doorbell for a seat resident elsewhere (tests). */
   wake?: typeof wakeMember;
+  /** The repo-server mirror run before a launch (ADR 529; tests). */
+  mirror?: typeof mirrorRepoServers;
 }
 
 /**
@@ -161,6 +164,16 @@ export async function launchSeat(
     registry: seat.kind === 'human' ? [] : harnessAdapters(),
     env,
   });
+  // The repo's own MCP servers (the whiteboard) reach this harness too (ADR 529). Best-effort:
+  // a mirror hiccup never blocks a launch.
+  if (seat.kind !== 'human') {
+    try {
+      const line = describeMirror(await (deps.mirror ?? mirrorRepoServers)(seat.path));
+      if (line) err(`${line}\n`);
+    } catch {
+      /* the next launch retries */
+    }
+  }
   record(path, (f) => withLaunch(f, seat, plan.harness, opts.mode, now()));
   const result = await (deps.supervise ?? supervise)(plan);
   record(path, (f) => withExit(f, seat.address, now(), result.code));
