@@ -561,3 +561,30 @@ Run 13's shape (Neon 1 CU) on bab4d429 (#2127, schema v89: `messages` re-analyze
   and 1 086 buffers; and the roster statement 17 %.
 - **Next:** the `next_seq` lane (`01M477RVRV`) is now the clearest single target. The inbox read and
   the audit fold are new candidates.
+
+## 2026-10-06 — Cloud run 16: the counter lock is off the write path; 13 unexplained edge errors (lanes 01M3Z44C56, 01M477RVRV)
+
+Run 15's shape (Neon 1 CU) on 0dcd8201 (#2141, ADR 531 + schema v90: `origin_seq` stamped at commit).
+
+| run | build / change | Neon | p50 | p95 | req/s | what it showed |
+| --- | --- | --- | --- | --- | --- | --- |
+| 16 | `origin_seq` stamped at commit (#2141) | 1 CU | 1.4 s | 3.0 s | 39 | counter `UPDATE` mean 123 → 12 ms; `claim` p95 7.7 → 5.3 s; 13 errors |
+
+- **ADR 531 held, mostly as predicted.** These are `pg_stat_statements` deltas over the run. The counter
+  `UPDATE` made 5 473 calls at a **12.2 ms** mean, down from 123 ms. The prediction was single-digit ms
+  and the falsifier was > 20 ms, so the change landed between them: the lock no longer spans the
+  request, but the stamp still waits on the busy 1 CU compute. The max was 5.1 s.
+- **Write routes, p95:** `claim` 7.7 → 5.3 s, `POST /lanes` 7.1 → 4.3 s, agent `POST /messages`
+  4.7 → 3.1 s. Overall p95 went from 3.7 s to 3.0 s.
+- **Where Neon's time goes now:** the `/report` audit fold made 20 898 calls at a 42 ms mean, the inbox
+  read 14 201 at 48 ms, and the roster statement 20 764 at 32 ms (2.1k buffers a call, so the plan is
+  still right). With the counter off the critical path, these three reads share the 1 CU compute.
+- **13 errors, the first since run 12:** 11 viewer WebSockets closed with 1006 and 2 `GET /teams/:slug`
+  network errors, out of 50 368 requests. The server logged no warning or error during the run, and its
+  only health-check failure was the deploy's own boot, 5 minutes before the seed. So the drops happened
+  outside the app, at Fly's proxy or Cloudflare. Unexplained; the falsifier is that they recur at a
+  higher count on the next run.
+- **Idle load:** between runs 15 and 16, with no traffic, `SELECT * FROM lanes WHERE team_id = $1`
+  ran ~130 000 times (~11 min of database time). Only 3 763 of those calls fell inside run 16 itself,
+  so the source was something periodic between runs. It is not yet traced.
+- **Next:** the three read hotspots above, and tracing the idle `lanes` reader.
