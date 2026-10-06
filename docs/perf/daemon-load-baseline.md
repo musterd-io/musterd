@@ -588,3 +588,39 @@ Run 15's shape (Neon 1 CU) on 0dcd8201 (#2141, ADR 531 + schema v90: `origin_seq
   ran ~130 000 times (~11 min of database time). Only 3 763 of those calls fell inside run 16 itself,
   so the source was something periodic between runs. It is not yet traced.
 - **Next:** the three read hotspots above, and tracing the idle `lanes` reader.
+
+## 2026-10-06 — Cloud run 17: the database does half the read work, but p95 rises to 4.2 s (lane 01M3Z44C56)
+
+Run 16's shape (Neon 1 CU, one `performance-1x` app machine) on c4df5b9a. Since run 16, three
+read fixes have landed: #2159 (the reaper's lanes reads), #2163 (interrupt-check) and #2165 (observer
+reaping).
+
+| run | build / change | Neon | p50 | p95 | req/s | what it showed |
+| --- | --- | --- | --- | --- | --- | --- |
+| 17 | three read fixes (#2159, #2163, #2165) | 1 CU | 2.0 s | 4.2 s | 37 | read DB time about halved; write p95 up about 1.5 s; 6 errors |
+
+- **The reads got cheaper.** These are `pg_stat_statements` deltas over the run:
+
+  | statement | run 16 | run 17 |
+  | --- | --- | --- |
+  | interrupt-check window | 14 201 calls × 48 ms (682 s) | 12 655 × 27.6 ms (349 s) |
+  | `/report` audit fold | 20 898 × 42 ms (878 s) | 19 544 × 30.1 ms (587 s) |
+  | roster statement | 20 764 × 32 ms (664 s) | 19 401 × 23.2 ms (450 s) |
+
+  The idle `SELECT * FROM lanes WHERE team_id = $1` reader and the old observer-reap statements made
+  0 calls. Their replacements return 0 rows.
+- **The writes got slower.** Write p95: `claim` 5.3 → 7.3 s, `POST /lanes` 4.3 → 6.9 s, agent
+  `POST /messages` 3.1 → 4.7 s. The counter `UPDATE` went from a 12.2 ms mean to 32.1 ms (5 388 calls,
+  max 5.1 s). `UPDATE members SET last_offline_reason` averaged 20 ms, with a max of 2.8 s.
+- **Reading.** Database time fell, yet every route's latency rose, so the database is no longer the
+  first bottleneck. The leading suspect is the single app vCPU. `GET /teams/:slug` alone serialized
+  19 339 bodies of up to 148 KB, about 2 MB/s of JSON. That suspicion is unproven: app CPU was not
+  measured this run. Six server commits that are not perf work also landed between the two builds
+  (ADR 533, 534 and 536, holds increment 4, #2158).
+- **Errors:** 6 of 47 884 requests: 3 viewer WebSockets closed with 1006, and 3 network errors. That
+  is down from 13. The server logged no warning during the run. Its `musterd_operator` login failures
+  at 20:29Z came from the planned password rotation before the deploy, and ended with it.
+- **Falsifier:** if app CPU is the bottleneck, a `performance-2x` app machine on the same build and
+  database should bring p95 down. If p95 does not move, the cause is on the write path, and the next
+  step is a bisect across those six commits.
+- **Next:** measure app CPU during a run (lane 01M477S003, `GET /teams` CPU), then try the 2x machine.
