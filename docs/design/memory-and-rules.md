@@ -144,9 +144,10 @@ choice** — musterd cannot see it and should not try to own it. The default bou
 - **It never holds team facts or rules.** They cannot be dated, retracted or checked there. Team
   knowledge goes to the wiki, insights or the rule store; a seat's continuity goes to seat memory.
 
-musterd states this in its managed guidance. ADR 259 planned to migrate the harness corpus to the
-wiki and named the last step — an edit to nick's user-level `CLAUDE.md` — as one only nick can make;
-as far as this survey found, it has not happened yet.
+musterd states this in its managed guidance (guidance v46, 2026-10-05). ADR 259 migrated the harness
+corpus to the wiki on 2026-08-13 ([archive.md](../wiki/archive.md)); _(corrected 2026-10-05 — an
+earlier draft of this doc said the migration had not happened)_. The last step it named — an edit to
+nick's user-level `CLAUDE.md` — is nick's alone, and could not be confirmed from a seat.
 
 ## Retrieval
 

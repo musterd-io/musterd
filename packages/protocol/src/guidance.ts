@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 45;
+export const GUIDANCE_CONTENT_VERSION = 46;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -301,6 +301,19 @@ export function renderSkillBody(opts: { team: string }): string {
     're-derive**: `team_insight_search` / `musterd insight search "<keywords>"` may surface a finding a',
     'teammate already recorded. When an insight proves durable, promote it into docs/wiki/ — the insight is',
     'the fast capture; the wiki page is the governed home. Never put secrets in either.',
+    '',
+    "## Your harness's own memory (ADR 259)",
+    '',
+    "Your harness may keep a memory of its own (Claude Code's `MEMORY.md`, Cursor rules, and the like).",
+    "That is the human's choice and stays theirs — musterd cannot see it, date it, or correct it. So keep",
+    'it to **facts about the human**: their preferences and how they like to work. Never put team facts or',
+    'Team rules there:',
+    '',
+    '- a finding the team should know → `team_insight_save` (and docs/wiki/ once it proves durable);',
+    '- where you left off → seat memory (`team_memory_save`);',
+    '- "the Team is paused", "nobody merges until …" → that is a **hold**, and only a human sets one',
+    '  (`musterd hold`; `musterd hold propose` if you think one is needed). A rule no hold carries is not a',
+    "  rule — don't write it down and don't repeat it (ADR 516).",
     '',
     '## Waiting without polling',
     '',

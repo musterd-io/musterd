@@ -229,6 +229,7 @@ describe('version-bump discipline (ADR 085)', () => {
     43: 'd566afe04a81995e', // ADR 505 §6 copy (sloane's acceptance note on #2065, lane 01M44BVFV9): the build-on check line drops its contrast frame ("do not build on it quietly") for the positive form, per brand.md §4
     44: 'b00114dc9d56316b', // ADR 514 (lane 01M46MQD2F): the push-back bullet names the style block that will carry each human's dials from team_join; the bullet itself leaves in agent-style inc 3
     45: '51712f8b3f289f85', // ADR 514 inc 3 (lane 01M46MQQFS): the push-back bullet leaves — the style block on team_join carries the floor and each human's dials; the primer points at it
+    46: 'd1324abe1740c3da', // lane 01M46S44K8 (ADR 259/516): the skill says harness memory holds facts about the human, never team facts or rules — a rule no hold carries is not a rule
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {
