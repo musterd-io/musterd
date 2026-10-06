@@ -367,6 +367,7 @@ const POLICY_FLAGS = new Set([
   'seeds-token',
   'guardian-tier',
   'stakes-default',
+  'review-by',
   'enforce-clear',
   'enforce-posture',
   'enforce-surface',
@@ -381,6 +382,18 @@ const POLICY_FLAGS = new Set([
   'no-bell',
   'as',
 ]);
+
+/** ADR 533: `--review-by 2027-01-15` or `--review-by +90d` → epoch ms. The daemon caps it at 365d. */
+function parseReviewBy(raw: string): number {
+  if (raw.startsWith('+')) return Date.now() + parseDurationMs(raw.slice(1), '--review-by');
+  const t = Date.parse(raw);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || Number.isNaN(t))
+    throw new CliError(
+      'usage: musterd team policy --review-by <YYYY-MM-DD | +<duration, e.g. 90d>>',
+      2,
+    );
+  return t;
+}
 
 function rejectUnknownPolicyFlags(flags: Record<string, string | boolean>): void {
   const unknown = Object.keys(flags).filter((f) => !POLICY_FLAGS.has(f));
@@ -583,6 +596,18 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
   if (applyGuardianTierFlag(merged, parsed)) changed = true;
   if (stakesDefaultChanged) changed = true;
 
+  // ADR 533: the doc's review date. `--review-by <YYYY-MM-DD | +<duration>>` names one; any other
+  // write DROPS the stored date so the daemon re-stamps the default window from now — an admin who
+  // just read the whole readout and changed a knob has reviewed the doc, and carrying the old date
+  // through the read-merge-write would let a reviewed doc fall due anyway.
+  const reviewBy = flagStr(parsed.flags, 'review-by');
+  if (reviewBy !== undefined) {
+    merged.review_by = parseReviewBy(reviewBy);
+    changed = true;
+  } else if (changed) {
+    delete merged.review_by;
+  }
+
   if (changed) {
     const { policy: updated } = await http.setPolicy(team, merged);
     process.stdout.write(
@@ -780,6 +805,17 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
     process.stdout.write(
       theme.meta('  every value is inherited — this team tracks the shipped defaults') + '\n',
     );
+  // ADR 533: when the admins are next asked to look at this doc; overdue once the sweep has asked.
+  if (stored.review_by !== undefined) {
+    const left = stored.review_by - Date.now();
+    process.stdout.write(
+      `  review by: ${new Date(stored.review_by).toISOString().slice(0, 10)}${
+        left > 0
+          ? theme.meta(`  ·  in ${Math.ceil(left / 86_400_000)}d`)
+          : theme.accent('  ·  overdue — answer the policy ask, or set --review-by')
+      }\n`,
+    );
+  }
   process.stdout.write(theme.meta('  set: musterd team policy --reseat-known-agents on') + '\n');
   process.stdout.write(theme.meta('       musterd team policy --review-loop on') + '\n');
   process.stdout.write(theme.meta('       musterd team policy --dispatch-loop on') + '\n');

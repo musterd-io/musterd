@@ -273,7 +273,23 @@ export type Policy = z.infer<typeof PolicySchema>;
  * — `ResidencyPolicyOverrideSchema` has always been the sparse shape for per-seat overrides; team
  * policy was the odd one out.
  */
+/**
+ * ADR 533: how long a stored policy doc stands before its admins are asked to look again. A write
+ * that names no `review_by` gets `now + POLICY_REVIEW_DEFAULT_MS`; none may be set further out than
+ * `POLICY_REVIEW_MAX_MS`. A review is a date on the DOC (the sparse set of chosen knobs), not per
+ * knob: the doc is what one `POST /policy` replaces, so it is the unit an admin confirms or drops.
+ */
+export const POLICY_REVIEW_DEFAULT_MS = 90 * 24 * 3600_000;
+export const POLICY_REVIEW_MAX_MS = 365 * 24 * 3600_000;
+
 export const PolicyOverrideSchema = PolicySchema.partial().extend({
+  /**
+   * ADR 533: epoch ms after which the daemon asks the human admins to re-confirm or drop this doc.
+   * Stamped by the server on every write that stores at least one knob (absent ⇒ the default
+   * window from now); absent on an empty doc, since defaults need no review. Not a knob: an
+   * effective-policy read (`PolicySchema`) never carries it.
+   */
+  review_by: z.number().int().positive().optional(),
   residency: ResidencyPolicyOverrideSchema.optional(),
   enforcement: EnforcementPolicySchema.partial().optional(),
   loops: LoopsPolicySchema.partial().optional(),

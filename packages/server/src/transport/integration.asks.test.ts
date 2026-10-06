@@ -935,7 +935,7 @@ withDrivers('integration · asks', (_o, kind) => {
       expect(got.json.team_urls).toEqual({ slack: true, webhook: false });
       expect(JSON.stringify(got.json)).not.toContain('hooks.slack.test');
       const stored = await get('/teams/dawn/policy', t.nick);
-      expect(stored.json.stored).toEqual(slackPolicy);
+      expect(stored.json.stored).toEqual({ ...slackPolicy, review_by: expect.any(Number) });
     });
 
     // ── the `os` sink: the host claims and raises (ADR 443 §3) ──

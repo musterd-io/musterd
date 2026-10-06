@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createServer as createHttpServer, type Server } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
+import type { Envelope } from '@musterd/protocol';
 import type { Database } from 'better-sqlite3';
 import { loopsFor } from './cloud/loops.js';
 import {
@@ -24,15 +25,19 @@ import { log, redactPath, requestFailure } from './log.js';
 import { startReaper } from './presence/reaper.js';
 import { reconcileAll } from './projection/reconcile.js';
 import { startRosterWatcher } from './projection/watcher.js';
+import { routeEnvelope } from './protocol/route.js';
 import { startSeedsIngest } from './seeds/ingest.js';
 import { appendAudit } from './store/audit.js';
 import { countDiversityFlagsByTeam } from './store/mast.js';
 import { startExpiredMemberSweep } from './store/members.js';
 import { countOpenLoopsByTeam } from './store/messages.js';
 import { activePresenceBySurface, slowestInboxLagMs } from './store/metrics.js';
+import { policyReviewTick, startPolicyReviewSweep } from './store/policyReview.js';
 import { closeReportService } from './store/reportCache.js';
 import { defaultArchiveDir, startAuditRetention } from './store/retention.js';
+import type { MemberRow } from './store/rows.js';
 import { revokeExpiredMember } from './store/sponsoredCascade.js';
+import { getTeamBySlug } from './store/teams.js';
 import { startTraceContentPrune } from './store/trace.js';
 import { startTraceCoverageSweep } from './store/traceCoverage.js';
 import { startSyncPull } from './sync/pull.js';
@@ -94,6 +99,8 @@ export interface RunningServer {
   readonly traceStore: Driver;
   /** One provision sweep pass now (ADR 463 §2) — the 60 s loop's body, for tests. */
   runProvisionSweep: (now?: number) => Promise<number>;
+  /** One policy review pass now (ADR 533) — the hourly loop's body, with its real send, for tests. */
+  runPolicyReviewSweep: (now?: number) => Promise<number>;
   /** The bound port, available after listen() resolves. */
   readonly port: number;
   /** The resolved database path this daemon serves (diagnostics — which db is live). */
@@ -184,6 +191,11 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   // operator. On SQLite these are the same handles.
   const opCtx = operatorCtx(ctx);
   const opDb = opCtx.db;
+  // ADR 533: how the policy review ask is stored and delivered — the daemon's route, daemon-composed.
+  const policyReviewSend = async (from: MemberRow, env: Envelope) => {
+    const team = (await getTeamBySlug(opDb, env.team))!;
+    return (await routeEnvelope(opCtx, team, from, env, undefined, true)).message;
+  };
   const opTraceDb = opCtx.traceDb;
   const loops = loopsFor(config.mode);
 
@@ -247,6 +259,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   let stopTracePrune: (() => void) | null = null;
   let stopAuditRetention: (() => void) | null = null;
   let stopTraceCoverage: (() => void) | null = null;
+  let stopPolicyReview: (() => void) | null = null;
   let stopExpiredSweep: (() => void) | null = null;
   let stopProvisionSweep: (() => void) | null = null;
   let stopTracePush: (() => void) | null = null;
@@ -282,6 +295,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     store: opDb,
     traceStore: opTraceDb,
     runProvisionSweep: (now?: number) => sweepProvisionsPass(opCtx, now),
+    runPolicyReviewSweep: (now?: number) => policyReviewTick(opDb, now, policyReviewSend),
     get port() {
       return boundPort;
     },
@@ -380,6 +394,12 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
                 }
               },
               (err) => log.warn({ msg: 'audit_prune_failed', err: String(err) }),
+            );
+          // ADR 533: a stored policy doc past its review_by asks the human admins once, as the
+          // `policy` service seat; hub only, since policy is hub-authoritative.
+          if (loops.has('policy_review'))
+            stopPolicyReview = startPolicyReviewSweep(opDb, policyReviewSend, (err) =>
+              log.warn({ msg: 'policy_review_sweep_failed', err: String(err) }),
             );
           // ADR 445 §Observability: a quiet session below 0.98 tool coverage is audited, once.
           if (loops.has('trace_coverage'))
@@ -483,6 +503,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         stopTracePrune?.();
         stopAuditRetention?.();
         stopTraceCoverage?.();
+        stopPolicyReview?.();
         stopExpiredSweep?.();
         stopProvisionSweep?.();
         stopTracePush?.();

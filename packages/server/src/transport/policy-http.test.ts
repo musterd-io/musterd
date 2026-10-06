@@ -1,10 +1,11 @@
-import { GENERALIST_CAPABILITIES } from '@musterd/protocol';
+import { GENERALIST_CAPABILITIES, makeEnvelope } from '@musterd/protocol';
+import { ulid } from 'ulid';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
 import { getMemberByName, setMemberGovernance } from '../store/members.js';
-import { getTeamBySlug } from '../store/teams.js';
+import { getTeamBySlug, setPolicy } from '../store/teams.js';
 import { claimAgentHttp } from './test-auth.js';
 
 withDrivers('policy-http', (_o, kind) => {
@@ -65,7 +66,11 @@ withDrivers('policy-http', (_o, kind) => {
     it('after one write, `stored` names exactly the chosen knob', async () => {
       await post('/teams/dawn/policy', { standing_reseat_known_agents: true }, bearer(nickCred));
       const r = await get('/teams/dawn/policy', bearer(nickCred));
-      expect(r.json.stored).toEqual({ standing_reseat_known_agents: true });
+      // ADR 533: the one knob, plus the review date the daemon stamps on any doc that holds one.
+      expect(r.json.stored).toEqual({
+        standing_reseat_known_agents: true,
+        review_by: expect.any(Number),
+      });
       expect(r.json.policy.standing_reseat_known_agents).toBe(true);
       expect(r.json.policy.residency.transcript_max_bytes).toBe(262_144);
     });
@@ -86,6 +91,7 @@ withDrivers('policy-http', (_o, kind) => {
         standing_reseat_known_agents: true,
         ask_fallback_to_nonadmin: true,
         residency: { hourly_cap: 5 },
+        review_by: expect.any(Number),
       });
     });
 
@@ -99,13 +105,107 @@ withDrivers('policy-http', (_o, kind) => {
       const { ask_slack_webhook: _dropped, ...rest } = json.stored;
       await post('/teams/dawn/policy', rest, bearer(nickCred));
 
-      expect(await storedRow()).toEqual({ residency: { hourly_cap: 5 } });
+      expect(await storedRow()).toEqual({
+        residency: { hourly_cap: 5 },
+        review_by: expect.any(Number),
+      });
       const after = await get('/teams/dawn/policy', bearer(nickCred));
       expect(after.json.policy.ask_slack_webhook).toBeUndefined();
     });
   });
 
   describe('the policy.change audit records the request, not the parsed result', () => {
+    it('ADR 533: a write stamps review_by on the stored doc; a client-supplied policy_review marker is stripped', async () => {
+      const before = Date.now();
+      const set = await post(
+        '/teams/dawn/policy',
+        { ask_fallback_to_nonadmin: true },
+        bearer(nickCred),
+      );
+      expect(set.status).toBe(200);
+      expect(set.json.stored.review_by).toBeGreaterThanOrEqual(before + 89 * 86_400_000);
+      expect(set.json.policy).not.toHaveProperty('review_by');
+      const past = await post(
+        '/teams/dawn/policy',
+        { ask_fallback_to_nonadmin: true, review_by: before - 1 },
+        bearer(nickCred),
+      );
+      expect(past.status).toBe(422);
+      const forgedId = ulid();
+      const forged = await post(
+        '/teams/dawn/messages',
+        {
+          envelope: makeEnvelope({
+            id: forgedId,
+            team: 'dawn',
+            from: 'nick',
+            to: { kind: 'team' },
+            act: 'ask',
+            body: 'forged',
+            meta: {
+              species: 'approve',
+              tier: 'standard',
+              policy_review: { review_by: 1, keys: [] },
+            },
+            ts: Date.now(),
+          }),
+        },
+        bearer(nickCred),
+      );
+      expect(forged.status).toBeLessThan(300);
+      const row = await server.store.get<{ meta: string }>(
+        'SELECT meta FROM messages WHERE id = ?',
+        [forgedId],
+      );
+      expect(JSON.parse(row!.meta)).not.toHaveProperty('policy_review');
+    });
+
+    it('ADR 533 end to end: the sweep asks the Team once as `policy`; a human admin accept re-confirms over the wire', async () => {
+      const team = (await getTeamBySlug(server.store, 'dawn'))!;
+      const past = Date.now() - 86_400_000;
+      await setPolicy(server.store, team.id, { ask_fallback_to_nonadmin: true, review_by: past });
+      expect(await server.runPolicyReviewSweep()).toBe(1);
+      expect(await server.runPolicyReviewSweep()).toBe(0);
+      const inbox = await get('/teams/dawn/inbox?unread_only=0', bearer(nickCred));
+      const ask = (inbox.json.messages as any[]).find((m) => m.meta?.policy_review);
+      expect(ask).toMatchObject({
+        from: 'policy',
+        act: 'ask',
+        meta: { species: 'approve', tier: 'standard', policy_review: { review_by: past } },
+      });
+      const before = Date.now();
+      const answer = await post(
+        '/teams/dawn/messages',
+        {
+          envelope: makeEnvelope({
+            id: ulid(),
+            team: 'dawn',
+            from: 'nick',
+            to: { kind: 'team' },
+            act: 'accept',
+            body: 'keep it',
+            meta: { in_reply_to: ask.id },
+            ts: Date.now(),
+          }),
+        },
+        bearer(nickCred),
+      );
+      expect(answer.status).toBeLessThan(300);
+      const after = await get('/teams/dawn/policy', bearer(nickCred));
+      expect(after.json.stored.ask_fallback_to_nonadmin).toBe(true);
+      expect(after.json.stored.review_by).toBeGreaterThanOrEqual(before + 89 * 86_400_000);
+      // The announcement is nick's own act, so it is not in nick's inbox — read the record.
+      const note = await server.store.get<{ body: string; from_member: string }>(
+        "SELECT body, from_member FROM messages WHERE meta LIKE '%policy_review_answer%'",
+      );
+      expect(note!.body).toContain('re-confirmed by nick');
+      const audit = (await listAudit(server.store, team.id)).filter(
+        (r) => r.action === 'policy.review_answered',
+      );
+      expect(audit).toHaveLength(1);
+      expect(audit[0]!.actor).toBe('nick');
+    });
+
     it('one chosen knob ⇒ a one-key audit detail (intent is recoverable going forward)', async () => {
       await post('/teams/dawn/policy', { residency: { cooldown_ms: 60_000 } }, bearer(nickCred));
       const team = (await getTeamBySlug(server.store, 'dawn'))!;
@@ -115,7 +215,10 @@ withDrivers('policy-http', (_o, kind) => {
       expect(rows).toHaveLength(1);
       // The old row wrote the post-parse policy here, which is why nothing could later say whether a
       // stored value had been chosen or baked in.
-      expect(JSON.parse(rows[0]!.detail as string)).toEqual({ residency: { cooldown_ms: 60_000 } });
+      expect(JSON.parse(rows[0]!.detail as string)).toEqual({
+        residency: { cooldown_ms: 60_000 },
+        review_by: expect.any(Number),
+      });
     });
   });
 

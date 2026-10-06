@@ -33,6 +33,7 @@ import {
 } from '../store/lanes.js';
 import { getMemberByName, getMemberById } from '../store/members.js';
 import { getMessageTs, insertMessage, rowToEnvelope } from '../store/messages.js';
+import { answerPolicyReview } from '../store/policyReview.js';
 import { currentAttestation } from '../store/presence.js';
 import { pickHumanReviewer, supersededAcceptanceAsks } from '../store/review.js';
 import type { MemberRow, MessageRow, TeamRow } from '../store/rows.js';
@@ -123,6 +124,38 @@ async function activateHoldProposal(
       act: 'message',
       body: `[hold] ${describeHoldLine(hold, now)}${proposer ? ` — proposed by ${proposer}` : ''}`,
       meta: { hold: { id: hold.id, effect: hold.effect, expires_at: hold.expires_at } },
+      ts: now,
+    }),
+    undefined,
+    true,
+  );
+}
+
+async function answerPolicyReviewAct(
+  ctx: Ctx,
+  team: TeamRow,
+  decider: MemberRow,
+  askId: string,
+  act: 'accept' | 'decline',
+): Promise<void> {
+  const answer = await answerPolicyReview(ctx.db, team, decider, askId, act);
+  if (!answer) return;
+  const now = Date.now();
+  await routeEnvelope(
+    ctx,
+    team,
+    decider,
+    makeEnvelope({
+      id: ulid(),
+      team: team.slug,
+      from: decider.name,
+      to: { kind: 'team' },
+      act: 'message',
+      body:
+        answer.verdict === 'confirmed'
+          ? `[policy] re-confirmed by ${decider.name} — next review ${new Date(answer.review_by!).toISOString().slice(0, 10)}`
+          : `[policy] dropped by ${decider.name} — every knob is back at its default`,
+      meta: { policy_review_answer: { ask: askId, verdict: answer.verdict } },
       ts: now,
     }),
     undefined,
@@ -375,6 +408,12 @@ async function routeEnvelopeInner(
     const { hold: _clientHold, ...restMeta } = outgoingEnv.meta;
     outgoingEnv = { ...outgoingEnv, meta: restMeta };
   }
+  // ADR 533: `policy_review` marks the daemon's own ask that the policy doc is due a look. A client
+  // copy would let a seat forge an ask whose `accept` rewrites team policy, so it is stripped too.
+  if (!daemonComposed && outgoingEnv.meta && 'policy_review' in outgoingEnv.meta) {
+    const { policy_review: _clientReview, ...restMeta } = outgoingEnv.meta;
+    outgoingEnv = { ...outgoingEnv, meta: restMeta };
+  }
 
   // Per-act model stamp (ADR 101): the occupancy attestation is the *source*, the stamp on each act
   // is the *dataset*. Model is **entirely server-controlled** — any client-supplied `meta.model` is
@@ -544,6 +583,15 @@ async function routeEnvelopeInner(
           await activateHoldProposal(ctx, team, sender, ref);
         } catch (err) {
           log.warn({ msg: 'hold_proposal_activation_failed', err: String(err) });
+        }
+      }
+      // ADR 533: a human admin's accept / decline of a policy review ask IS the answer — accept keeps
+      // the doc for another window, decline drops it to the defaults. Announced once, as the human.
+      if (env.act === 'accept' || env.act === 'decline') {
+        try {
+          await answerPolicyReviewAct(ctx, team, sender, ref, env.act);
+        } catch (err) {
+          log.warn({ msg: 'policy_review_answer_failed', err: String(err) });
         }
       }
     }

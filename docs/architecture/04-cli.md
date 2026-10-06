@@ -492,7 +492,15 @@ Admin lifecycle for least-privilege harness bootstrap credentials. `mint` requir
 
 The one-time **db→file migration** for a team's durable roster (ADR 058 / migration-bootstrap.md). Run in the folder that should own the roster: reads the live roster, writes canonical `.musterd/team.toml` + one `seats/<name>.toml` per member (identity only — **no token touches a file**), runs the format-layer parity self-check, and records `rosterHome[slug]` in the global config (the per-team cutover signal — the daemon then treats this team as file-backed). Token-preserving by construction: the next reconcile is a match-by-name no-op, so live sessions keep their tokens. Refuses if `team.toml` already exists, and refuses while the team still holds sponsored agents (a seat file cannot carry `sponsored_by`; remove them first — ADR 463 §4.2). Output: `✓ exported "<slug>" roster → .musterd/ (N seats)`.
 
-### `musterd team policy [--review-loop on|off] [--dispatch-loop on|off] [--stakes-default <surface>=<low|normal|high>|off] [--trace-content on|off] [--agent-connect sponsor|any_member] [--invite-requires-expiry on|off]`
+### `musterd team policy [--review-loop on|off] [--dispatch-loop on|off] [--stakes-default <surface>=<low|normal|high>|off] [--trace-content on|off] [--agent-connect sponsor|any_member] [--invite-requires-expiry on|off] [--review-by <YYYY-MM-DD|+<duration>>]`
+
+`--review-by` (ADR 533) names the date the daemon will ask the human admins to look at the stored
+doc again — the one flag that is not a knob. Any knob write without it drops the stored date so the
+daemon re-stamps the default 90 days from now (changing a knob after reading the readout IS a
+review). The readout's `review by:` line shows the date and `in Nd`, or `overdue — answer the policy
+ask, or set --review-by` once the `policy` service seat has asked; the answer is an ordinary
+`musterd send --act accept|decline --reply-to <ask>` from a human admin — accept keeps every knob
+for another window, decline drops the doc to the defaults.
 
 Shows or updates the Team's admin-only governance policy. A flag this build does not know is refused (exit 2, nothing written) and the message names the build and the fix, because the usual cause is a flag newer than the CLI — before lane 01M46ZG8NY an unknown flag fell through to the readout, so a write on a stale CLI silently became a read. `--review-loop on` arms ADR 191's review
 work-order loop; `--dispatch-loop on` arms ADR 199's dispatch work-order loop; `off` restores each

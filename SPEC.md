@@ -800,3 +800,20 @@ A hidden insight MUST NOT be returned by `GET /memory/search` unless `all=1`, re
 packet, or listed in a digest's learned section. Search hits MAY carry
 `status: {retracted?: {by, at, reason}, superseded_by?: [{id, from, headline, hides}]}`; a dream
 packet's insight MAY carry `superseded_by` (from other Members only — a hidden one is absent).
+
+## A.19 Policy review dates (unreleased — ADR 533)
+
+The stored team policy doc (the sparse set of chosen knobs, ADR 185) carries `review_by` (epoch
+ms): the date after which its admins are asked to look at it again. It is a property of the doc, not
+a knob: the effective policy a reader consumes never carries it.
+
+- A server MUST stamp `review_by` on every `POST /policy` that stores at least one knob: absent ⇒
+  `now + 90 days`; named ⇒ kept if in the future and at most 365 days out, else `validation`. An
+  empty doc carries none. The stamp travels in the doc's `policy.change`.
+- Past `review_by`, a server MUST raise at most ONE `ask` per date (species `approve`, tier
+  `standard`) to the Team from a service Member, carrying `meta.policy_review = {review_by, keys}`.
+  `policy_review` is server-controlled: a client-supplied copy is stripped.
+- A human admin's `accept` naming that ask in `meta.in_reply_to` re-confirms the doc (`review_by`
+  moves to the default window from now); a `decline` replaces it with `{}`. Any other reply, or a
+  second answer, changes nothing. Silence changes nothing: a review is a question, never a timer
+  that unsets a rule.

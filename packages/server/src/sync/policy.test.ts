@@ -187,6 +187,7 @@ withDrivers('policy', (_o, kind) => {
       expect((await getPolicy(joiner.store, (await joinerTeam()).id)).loops.dispatch).toBe(true);
       expect(await getStoredPolicy(joiner.store, (await joinerTeam()).id)).toEqual({
         loops: { dispatch: true, review: true, sweep: true },
+        review_by: expect.any(Number),
       });
     });
 
@@ -216,6 +217,7 @@ withDrivers('policy', (_o, kind) => {
       // default here for every other knob — the #530 failure, replicated.
       expect(await getStoredPolicy(joiner.store, (await joinerTeam()).id)).toEqual({
         residency: { hourly_cap: 1 },
+        review_by: expect.any(Number),
       });
     });
 
