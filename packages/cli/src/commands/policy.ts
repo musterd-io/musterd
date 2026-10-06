@@ -14,14 +14,16 @@ import { rejectAs, resolve } from './helpers.js';
 import { DIAL_VALUES, parseDialPairs } from './style.js';
 
 /**
- * `musterd policy style` — the team's floor, default dials and prose (ADR 514, spec §4.5). Admin
- * only, like every policy write; the read-merge-write `POST /policy` the doorbell's team knobs
- * use, so the hub forward and the `policy.change` audit row come with it.
+ * `musterd team policy style` — the team's floor, default dials and prose (ADR 514, spec §4.5):
+ * the one area of `team policy` with positional sub-words, because it holds eleven knobs and a
+ * prose. Admin only, like every policy write; the read-merge-write `POST /policy` the doorbell's
+ * team knobs use, so the hub forward and the `policy.change` audit row come with it. Lane
+ * 01M47A4WRRWVD3SN6D7DSZ9V3J moved it here from a top-level `policy` word (one home per knob).
  *
- *   musterd policy style                                   each knob: its value, and default / set by whom
- *   musterd policy style set assess_before_agreeing=off length=thorough [--prose "<≤5 lines>"]
- *   musterd policy style set --prose ""                    drop the team prose
- *   musterd policy style clear                             back to the shipped style
+ *   musterd team policy style                              each knob: its value, and default / set by whom
+ *   musterd team policy style set assess_before_agreeing=off length=thorough [--prose "<≤5 lines>"]
+ *   musterd team policy style set --prose ""               drop the team prose
+ *   musterd team policy style clear                        back to the shipped style
  *
  * "set by whom" is read from the audit log (`policy.change` rows carry the stored doc): the newest
  * row where that knob took its current value. A reader the log refuses sees `set` instead.
@@ -35,7 +37,8 @@ const FLOOR_KEYS = [
 ] as const satisfies readonly (keyof StyleFloor)[];
 const DIAL_KEYS = ['pushback', 'bluntness', 'length', 'format'] as const;
 
-export async function policyCommand(parsed: Parsed): Promise<number> {
+/** `parsed.positionals` here start at `style` — `teamCommand` has already consumed `policy`. */
+export async function teamPolicyStyle(parsed: Parsed): Promise<number> {
   const [area, sub] = parsed.positionals;
   if (area !== 'style') throw usage();
   rejectAs(parsed.flags);
@@ -87,7 +90,7 @@ export async function policyCommand(parsed: Parsed): Promise<number> {
   if (changed) {
     process.stdout.write(
       success(sub === 'clear' ? 'policy style cleared — shipped style' : 'policy style set', {
-        next: 'musterd policy style',
+        next: 'musterd team policy style',
       }) + '\n',
     );
   }
@@ -170,11 +173,11 @@ async function styleSetByFromAudit(
 
 function usage(): CliError {
   return new CliError(
-    'usage: musterd policy style [set <knob>=<value> … [--prose <text>] | clear]  — floor: ' +
+    'usage: musterd team policy style [set <knob>=<value> … [--prose <text>] | clear]  — floor: ' +
       FLOOR_KEYS.map((k) => `${k}=on|off`).join(' ') +
       '; defaults: ' +
       DIAL_KEYS.map((k) => `${k}=${DIAL_VALUES[k].join('|')}`).join(' ') +
-      '  (other knobs: musterd team policy)',
+      '  (other knobs: musterd team policy --<knob>)',
     2,
   );
 }

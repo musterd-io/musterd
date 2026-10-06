@@ -49,6 +49,7 @@ import { hint, success, sym } from '../render/ui.js';
 import { readSeatFiles, readSeatHues, seatFilePath, setSeatHue, writeSeatFile } from '../roster.js';
 import { cliBuild } from '../version.js';
 import { findWorkspaceDir, inherited, rejectAs, resolve, resolveRead } from './helpers.js';
+import { teamPolicyStyle } from './policy.js';
 
 export async function teamCommand(parsed: Parsed): Promise<number> {
   const sub = parsed.positionals[0];
@@ -62,6 +63,9 @@ export async function teamCommand(parsed: Parsed): Promise<number> {
   if (sub === 'remove') return teamRemove(parsed);
   if (sub === 'archive') return teamArchive(parsed);
   if (sub === 'export') return teamExport(parsed);
+  // ADR 514: `team policy style …` is the one positional area; every other knob is a flag.
+  if (sub === 'policy' && parsed.positionals[1] === 'style')
+    return teamPolicyStyle({ ...parsed, positionals: parsed.positionals.slice(1) });
   if (sub === 'policy') return teamPolicy(parsed);
   if (sub === 'hue') return teamHue(parsed);
   throw new CliError(

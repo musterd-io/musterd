@@ -42,7 +42,6 @@ export const COMMANDS: Readonly<Record<string, () => Promise<CommandFn>>> = {
   next: async () => (await import('./commands/next.js')).nextCommand,
   node: async () => (await import('./commands/node.js')).nodeCommand,
   notify: async () => (await import('./commands/notify.js')).notifyCommand,
-  policy: async () => (await import('./commands/policy.js')).policyCommand,
   nudge: async () => (await import('./commands/nudge.js')).nudgeCommand,
   reap: async () => (await import('./commands/reap.js')).reapCommand,
   reclaim: async () => (await import('./commands/reclaim.js')).reclaimCommand,

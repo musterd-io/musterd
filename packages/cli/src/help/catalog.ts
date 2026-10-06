@@ -375,7 +375,7 @@ export const CATALOG: readonly CommandEntry[] = [
   // ── Team & seats ───────────────────────────────────────────────────────────────────────────
   {
     name: 'team',
-    signature: '<create|add|credential|agent-key|bootstrap|invite|remove|archive|export> …',
+    signature: '<create|add|credential|agent-key|bootstrap|invite|remove|archive|export|policy> …',
     summary:
       'create a team, add/remove members, manage scoped bootstrap credentials and invites, archive a team, export the roster to git',
     group: 'team',
@@ -407,7 +407,14 @@ export const CATALOG: readonly CommandEntry[] = [
       '  remove <name>                soft-remove a member (history is kept)\n' +
       '  archive <slug>  soft-archive a whole team — off status/rosters, history kept (admin; run from your Workspace)\n' +
       '  export <slug> [--to <dir>]   move the roster onto git-tracked .musterd/ files (ADR 058);\n' +
-      '                               defaults into the team home when the team has one (ADR 176)',
+      '                               defaults into the team home when the team has one (ADR 176)\n' +
+      '  policy [--<knob> …]          governance knobs, each a flag (`team policy --help` lists them)\n' +
+      '  policy style [set <knob>=<value> … [--prose <text>] | clear]\n' +
+      '                               agent style (ADR 514): the floor (assess_before_agreeing,\n' +
+      '                               disagree_once_then_commit, concession_names_check,\n' +
+      '                               human_critique_weighed_as_peer — on|off), the four default dials\n' +
+      '                               and ≤5 lines of team prose; each knob labelled default / set by whom\n' +
+      '                               (from the audit log). Read-merge-write POST /policy, audited (admin)',
     examples: [
       'musterd team create acme --member nick',
       'musterd team add lin --kind human --role reviewer',
@@ -415,28 +422,7 @@ export const CATALOG: readonly CommandEntry[] = [
       'musterd team bootstrap cutover',
       'musterd team invite create --expires 3h --member-until 2d',
       'musterd team agent-key            # `musterd agent` says no team agent key? start here',
-    ],
-  },
-  {
-    name: 'policy',
-    signature: 'style [set <knob>=<value> … [--prose <text>] | clear]',
-    summary:
-      'the team’s agent-style floor, default dials and prose — each labelled default or set by whom (admin)',
-    group: 'team',
-    primary: false,
-    detail:
-      'Agent style, the team half (ADR 514): four floor rules no preference can lower ' +
-      '(assess_before_agreeing, disagree_once_then_commit, concession_names_check, ' +
-      'human_critique_weighed_as_peer — on|off), the four default dials every human starts from, and ' +
-      'up to five lines of team prose. Bare `policy style` prints each knob with its value and whether ' +
-      'it is the shipped default or who set it (from the audit log). `set` is read-merge-write on ' +
-      '`POST /policy` — audited `policy.change`, forwarded to the hub like every policy write; `clear` ' +
-      'returns the team to the shipped style. Every other policy knob stays on `musterd team policy`.',
-    examples: [
-      'musterd policy style',
-      'musterd policy style set length=thorough',
-      'musterd policy style set concession_names_check=off',
-      'musterd policy style set --prose "Name the ADR you are acting under."',
+      'musterd team policy style set length=thorough concession_names_check=off',
     ],
   },
   {
@@ -934,7 +920,7 @@ export const CATALOG: readonly CommandEntry[] = [
       'steered by you reads; `set` changes the named dials and keeps the rest; `clear` returns you to ' +
       'team defaults. A preference reaches the seats whose driver you are: the chat with you and any ' +
       'act addressed to you. From an agent seat, bare `style` prints the block that seat reads; ' +
-      '`set` is refused — agents have no preferences. The team floor is `musterd policy style`.',
+      '`set` is refused — agents have no preferences. The team floor is `musterd team policy style`.',
     examples: [
       'musterd style',
       'musterd style set length=concise pushback=every-time',

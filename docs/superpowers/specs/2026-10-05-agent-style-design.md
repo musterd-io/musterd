@@ -175,7 +175,7 @@ member, it is that human. Otherwise the block carries only the floor and team de
 | Who | CLI | MCP | Web (`/board`) |
 | --- | --- | --- | --- |
 | Any human, self only | `musterd style` (the block as a seat receives it) · `musterd style set length=concise pushback=every-time` · `musterd style set --prose "…"` · `musterd style clear` | `team_style` (read) · `team_style_set` from a human-interactive chat folder; refused for a seat | "how agents talk to me" card on the human's own row |
-| Admins | `musterd policy style` (each knob labelled default / set by whom) · `musterd policy style set assess_before_agreeing=false` · `--prose` | none — admins are humans | team policy card, admin-only |
+| Admins | `musterd team policy style` (each knob labelled default / set by whom) · `musterd team policy style set assess_before_agreeing=off` · `--prose` — the one positional area of `team policy` (renamed from `musterd policy style` 2026-10-05, lane `01M47A4WRRWVD3SN6D7DSZ9V3J`) | none — admins are humans | team policy card, admin-only |
 
 Writes go through `StylePrefsSchema` / `PolicyOverrideSchema` at the boundary. Prose over five
 lines is refused with the count. The admin path rides `POST /policy`, so hub forwarding and the
@@ -224,7 +224,7 @@ Tests: protocol — `resolveStyle` and `renderStyleBlock` unit cases above. Serv
 with `style`, the self route, admin / self-only auth, migration round-trip on SQLite and pg, epoch
 on presence. MCP — join reply carries the block; inbox reply carries the change line on epoch
 mismatch; `team_members.style` on human rows; `team_style_set` refused for a seat. CLI — snapshot
-tests for `musterd style` and `musterd policy style` against terminal frames. Package coverage
+tests for `musterd style` and `musterd team policy style` against terminal frames. Package coverage
 floors as usual.
 
 ## 7. Increments (each a lane under `agent-style`)
@@ -240,7 +240,7 @@ Each increment has its lane (ADR 487), opened 2026-10-05, unowned until its turn
 3. **MCP** — block on join and on epoch change, `team_members.style`, `team_style` /
    `team_style_set`, epoch on heartbeat, primer pointer line; dolly's bullet leaves `guidance.ts`
    here, when the block ships (plan 2026-10-05, Task 6). Lane `01M46MQQFS3W2W4N37S7BB9RX5`.
-4. **CLI** — `musterd style`, `musterd policy style`, roster `style stale`, terminal frames in
+4. **CLI** — `musterd style`, `musterd team policy style`, roster `style stale`, terminal frames in
    `figma-brief-terminal.md`. Lane `01M46MQR8F6E6G9BRX0JMY8CMH`.
 5. **Web** — the human's dials card and the admin floor card (handoff to miley, API in place).
    Lane `01M46MQSMJFBNGS0QE4PHVTXWT`.
