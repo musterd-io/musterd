@@ -39,8 +39,9 @@ correct it — a later, contradicting insight — leaves the original in every r
 4. **Hidden findings leave the three re-broadcasting readers.** Search drops them (`?all=1` keeps
    them, marked); the dream packet does not re-read them; the digest does not re-announce them.
    An insight superseded by another seat stays in all three with the pointer beside it.
-5. **Surfaces.** `team_insight_save` gains `supersedes`; its description says how to retract
-   (`team_send {act:'resolve', thread:<id>}`) — no new MCP tool. The CLI gains
+5. **Surfaces.** `team_insight_save` gains an undescribed `supersedes` (the per-turn tool list's
+   budget, ADR 487's precedent) — no new MCP tool; an agent retracts with the `team_send`
+   `resolve` it already has, taught by the dreaming skill and the CLI help. The CLI gains
    `musterd insight save --supersedes`, `musterd insight retract <id> --reason`. The dreaming skill
    tells a dream to supersede a contradicted insight and never promote a superseded one.
 

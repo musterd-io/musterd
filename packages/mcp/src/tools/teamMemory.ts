@@ -18,8 +18,7 @@ import { errorResult, notReadyMessage, textResult } from './format.js';
 
 const SAVE_DESCRIPTION =
   'Save a reusable finding for the WHOLE team (team_memory_save is seat-private): a trap fixed, a ' +
-  'measured number, how something works. Findable via team_insight_search; promote durable ones into docs/wiki/. ' +
-  'Replacing an older finding? Pass supersedes:[its id]. Withdrawing your own: team_send {act:"resolve", thread:<its id>, body:<why>}.';
+  'measured number, how something works. Findable via team_insight_search; promote durable ones into docs/wiki/.';
 
 const SEARCH_DESCRIPTION =
   "Search the team's saved insights by keyword — before re-deriving what a teammate may have recorded.";
@@ -38,12 +37,9 @@ export function registerTeamMemory(
         body: z.string().max(2048).describe('the finding (≤2048 bytes)'),
         tags: z.array(z.string()).max(8).optional().describe('up to 8 short tags'),
         repo: z.string().optional().describe('repo slug, when bound to one'),
-        supersedes: z
-          .array(z.string().min(1))
-          .min(1)
-          .max(8)
-          .optional()
-          .describe('ids of earlier insights this one replaces (ADR 526)'),
+        // ADR 526: ids this finding replaces. Undescribed to keep the per-turn tool list inside its
+        // budget; the server's refusal teaches the shape (1..8 ids), as ADR 487's fields do.
+        supersedes: z.array(z.string()).optional(),
       },
     },
     async (args) => {
