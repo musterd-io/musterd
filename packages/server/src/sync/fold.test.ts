@@ -268,13 +268,14 @@ withDrivers('fold', (_o, kind) => {
     hubSeq: number,
     action: string,
     detail: Record<string, unknown>,
+    ts = 3000 + seq,
   ): SyncPullEvent {
     return {
       kind: 'lane',
       team: 'revive',
       event: {
         id,
-        ts: 3000 + seq,
+        ts,
         actor: 'nick',
         action,
         target: (detail['lane'] as string) ?? null,
@@ -363,6 +364,56 @@ withDrivers('fold', (_o, kind) => {
       ).toEqual({ n: 0 });
       expect(await db.get('SELECT COUNT(*) AS n FROM lanes WHERE id = ?', ['GHOST'])).toEqual({
         n: 0,
+      });
+      await db.close();
+    });
+
+    it('a submit that arrives after the close never reopens the lane (2026-10-05: three lanes stuck awaiting_acceptance)', async () => {
+      // The joiner wrote `lane.ready_for_review` at 1000; the close at 2000 reached this daemon first
+      // and the submit row folded afterwards. Applied blindly it put state back to
+      // awaiting_acceptance while resolved_at stayed set.
+      const { db, team } = await seed();
+      const res = await foldBatch(db, team.id, [
+        foreignLane('e-1', 1, 1, 'lane.opened', { lane: 'L1', title: 't' }, 500),
+        foreignLane('e-2', 2, 2, 'lane.claimed', { lane: 'L1', owner: 'nick', kind: 'claim' }, 600),
+        foreignLane('e-3', 3, 3, 'lane.closed', { lane: 'L1', state: 'done' }, 2000),
+        foreignLane('e-4', 4, 4, 'lane.ready_for_review', { lane: 'L1', owner: 'nick' }, 1000),
+        foreignLane(
+          'e-5',
+          5,
+          5,
+          'lane.state_changed',
+          { lane: 'L1', from: 'active', to: 'awaiting_acceptance' },
+          999,
+        ),
+      ]);
+      expect(res).toMatchObject({ applied: 5, stop: null });
+      expect(
+        await db.get('SELECT state, resolved_at, updated_at FROM lanes WHERE id = ?', ['L1']),
+      ).toEqual({ state: 'done', resolved_at: 2000, updated_at: 2000 });
+      // The rows are still held in audit: history keeps them, only the projection ignores them.
+      expect(
+        await db.get('SELECT COUNT(*) AS n FROM audit WHERE origin_node = ?', [FOREIGN]),
+      ).toEqual({ n: 5 });
+      await db.close();
+    });
+
+    it('a reopen made after the close still applies', async () => {
+      const { db, team } = await seed();
+      await foldBatch(db, team.id, [
+        foreignLane('e-1', 1, 1, 'lane.opened', { lane: 'L1', title: 't' }, 500),
+        foreignLane('e-2', 2, 2, 'lane.closed', { lane: 'L1', state: 'done' }, 2000),
+        foreignLane(
+          'e-3',
+          3,
+          3,
+          'lane.state_changed',
+          { lane: 'L1', from: 'done', to: 'active' },
+          3000,
+        ),
+      ]);
+      expect(await db.get('SELECT state FROM lanes WHERE id = ?', ['L1'])).toEqual({
+        state: 'active',
       });
       await db.close();
     });
