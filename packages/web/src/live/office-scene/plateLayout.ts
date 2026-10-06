@@ -13,9 +13,23 @@ import type { Pt } from './iso';
  * OTHER member's head. A plate off its home spot is `displaced`, and the scene draws a hairline leader
  * back to its head so ownership stays unambiguous.
  *
- * Stable on purpose: a plate goes home the moment home is free, and otherwise keeps the slot it had
- * while that slot still works — so a walker drifting a pixel past a seated row does not make its
- * plates hop. Pure and DOM-free: the scene measures plates and applies the result.
+ * CALM ON PURPOSE (nick, 2026-10-06: the repositioning was "very distracting for the viewer").
+ * Measured on the live stream that day: 126 plate jumps in 90 seconds, ~120 of them in one 10-second
+ * burst, most 90–190px, some plates flipping home↔away every half second. The first cut re-solved
+ * every frame with no memory beyond "keep the slot while it works", jumped sideways ~95px to beside
+ * the head, sent a plate home the instant home was free, and placed walkers like anyone else — so
+ * one person walking down a row shoved every seated plate out and back. Five rules now, together:
+ *
+ *  1. Walkers yield. A seated plate never moves for someone passing; the walker's own plate stays
+ *     over its head and may overlap for the moment it takes to pass.
+ *  2. Hold before moving: a plate leaves its spot only once that spot has been blocked for
+ *     `MOVE_HOLD_MS`, and goes home only once home has been free for `HOME_HOLD_MS`.
+ *  3. Vertical only. The beside-the-head slots are gone; a plate steps straight up.
+ *  4. A sliver is not a collision. A plate already settled stays put through an overlap up to
+ *     `SLACK` of its own area. A fresh placement still looks for a fully clear spot first.
+ *  5. (In the scene, not here) the step is a glide, not a snap — see `.lc-gl-label`'s `translate`.
+ *
+ * Pure and DOM-free: the scene measures plates, passes the clock, and applies the result.
  */
 
 /** A plate to place: its member, the anchor above the head (render.ts `heads`), and its size in px. */
@@ -24,6 +38,18 @@ export interface PlateBox {
   anchor: Pt;
   w: number;
   h: number;
+  /** On the move (walking, not seated). A walker's plate yields: it stays over its own head, may
+   *  overlap for the moment it takes to pass, and never shoves a seated member's plate. */
+  moving?: boolean;
+}
+
+/** What a plate remembers between frames — its hysteresis. */
+export interface PlateMemo {
+  slot: number;
+  /** When the plate's current spot first stopped being tolerable; null while it is fine. */
+  blockedAt: number | null;
+  /** When a displaced plate's home first came free; null while home is taken (or it is home). */
+  homeFreeAt: number | null;
 }
 
 /** Where a plate lands: its bottom-centre (the scene's `translate(-50%, -100%)` point). */
@@ -83,8 +109,15 @@ export function leaderFrom(
 
 /** Breathing room between two things that must not touch, px. */
 const MARGIN = 2;
-/** Vertical gap between stacked plates, px. */
-const GAP = 3;
+/** Vertical gap between stacked plates, px — wider than 2×MARGIN, or a plate one step up from another
+ *  counts as touching it and every vertical step reads as blocked. */
+const GAP = 5;
+/** How long a settled plate's spot must stay blocked before it moves. */
+export const MOVE_HOLD_MS = 500;
+/** How long a displaced plate's home must stay free before it goes back. */
+export const HOME_HOLD_MS = 1500;
+/** The overlap a settled plate tolerates before it counts as blocked — a share of its own area. */
+const SLACK = 0.12;
 
 function overlapArea(a: Rect, b: Rect, m = 0): number {
   const w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) + 2 * m;
@@ -92,86 +125,94 @@ function overlapArea(a: Rect, b: Rect, m = 0): number {
   return w > 0 && h > 0 ? w * h : 0;
 }
 
-/** The candidate spots around a head, in order of preference. Slot 0 is home. */
-function slotAt(i: number, p: PlateBox, scale: number): PlatePlacement {
-  const { x, y } = p.anchor;
-  const up = p.h + GAP;
-  const side = p.w / 2 + 16 * scale; // clear of the head's width
-  switch (i) {
-    case 0:
-      return { x, y, displaced: false };
-    case 1:
-      return { x, y: y - up, displaced: true };
-    case 2:
-      return { x: x - side, y: y + p.h + 8 * scale, displaced: true }; // beside the crown, left
-    case 3:
-      return { x: x + side, y: y + p.h + 8 * scale, displaced: true }; // …right
-    case 4:
-      return { x, y: y - 2 * up, displaced: true };
-    case 5:
-      return { x: x - side, y, displaced: true };
-    case 6:
-      return { x: x + side, y, displaced: true };
-    default:
-      return { x, y: y - 3 * up, displaced: true };
-  }
+/** Straight above the head, `i` steps up. Slot 0 is home. */
+function slotAt(i: number, p: PlateBox): PlatePlacement {
+  return { x: p.anchor.x, y: p.anchor.y - i * (p.h + GAP), displaced: i > 0 };
 }
-const SLOTS = 8;
+/** Home plus five steps up. The meeting table's four seats stack clear by step four. */
+const SLOTS = 6;
 
 export function layoutPlates(
   plates: readonly PlateBox[],
   heads: ReadonlyMap<string, Pt>,
-  prev: ReadonlyMap<string, number>,
-  opts: { scale: number },
-): { placements: Map<string, PlatePlacement>; slots: Map<string, number> } {
+  prev: ReadonlyMap<string, PlateMemo>,
+  opts: { scale: number; now?: number },
+): { placements: Map<string, PlatePlacement>; memo: Map<string, PlateMemo> } {
+  const now = opts.now ?? 0;
   const placements = new Map<string, PlatePlacement>();
-  const slots = new Map<string, number>();
+  const memo = new Map<string, PlateMemo>();
   const placed: Rect[] = [];
+  // A walker's head is no obstacle either: a seated plate does not move for someone passing by.
+  const moving = new Set(plates.filter((p) => p.moving).map((p) => p.name));
   // Every head's box, built once per frame rather than once per plate — this runs on every frame.
   const headNames: string[] = [];
   const headRects: Rect[] = [];
   for (const [name, at] of heads) {
+    if (moving.has(name)) continue;
     headNames.push(name);
     headRects.push(headBox(at, opts.scale));
   }
-  const order = [...plates].sort((a, b) => b.anchor.y - a.anchor.y || a.name.localeCompare(b.name));
+  // Seated plates first, front to back (nearest the viewer is read first); walkers after, and they
+  // only ever go home.
+  const order = [...plates].sort(
+    (a, b) =>
+      Number(!!a.moving) - Number(!!b.moving) ||
+      b.anchor.y - a.anchor.y ||
+      a.name.localeCompare(b.name),
+  );
   for (const p of order) {
+    if (p.moving) {
+      const at = slotAt(0, p);
+      placements.set(p.name, at);
+      memo.set(p.name, { slot: 0, blockedAt: null, homeFreeAt: null });
+      continue;
+    }
     const cost = (i: number): number => {
-      const r = plateRect(slotAt(i, p, opts.scale), p.w, p.h);
+      const r = plateRect(slotAt(i, p), p.w, p.h);
       let c = 0;
       for (const o of placed) c += overlapArea(r, o, MARGIN);
       for (let k = 0; k < headRects.length; k++)
         if (headNames[k] !== p.name) c += overlapArea(r, headRects[k]!, MARGIN);
       return c;
     };
-    // Home if home is free; else the slot it already had, if that still works; else the first free.
-    let pick = -1;
-    if (cost(0) === 0) pick = 0;
-    else {
-      const had = prev.get(p.name);
-      if (had !== undefined && had > 0 && had < SLOTS && cost(had) === 0) pick = had;
-      else {
-        let best = 0;
-        let bestCost = Infinity;
-        for (let i = 1; i < SLOTS; i++) {
-          const c = cost(i);
-          if (c === 0) {
-            best = i;
-            bestCost = 0;
-            break;
-          }
-          if (c < bestCost) {
-            best = i;
-            bestCost = c;
-          }
+    const slack = SLACK * p.w * p.h;
+    /** The first fully clear slot, else the one that overlaps least. */
+    const best = (): number => {
+      let pick = 0;
+      let low = Infinity;
+      for (let i = 0; i < SLOTS; i++) {
+        const c = cost(i);
+        if (c === 0) return i;
+        if (c < low) {
+          pick = i;
+          low = c;
         }
-        pick = best;
+      }
+      return pick;
+    };
+    const had = prev.get(p.name);
+    let next: PlateMemo;
+    if (!had || had.slot >= SLOTS) {
+      // New to the room (or a slot this layout no longer has): place it, no hold.
+      next = { slot: best(), blockedAt: null, homeFreeAt: null };
+    } else {
+      const s = had.slot;
+      const homeFree = s > 0 && cost(0) === 0;
+      const homeFreeAt = homeFree ? (had.homeFreeAt ?? now) : null;
+      const blocked = cost(s) > slack;
+      const blockedAt = blocked ? (had.blockedAt ?? now) : null;
+      if (homeFreeAt !== null && now - homeFreeAt >= HOME_HOLD_MS) {
+        next = { slot: 0, blockedAt: null, homeFreeAt: null };
+      } else if (blockedAt !== null && now - blockedAt >= MOVE_HOLD_MS) {
+        next = { slot: best(), blockedAt: null, homeFreeAt: null };
+      } else {
+        next = { slot: s, blockedAt, homeFreeAt };
       }
     }
-    const at = slotAt(pick, p, opts.scale);
+    const at = slotAt(next.slot, p);
     placements.set(p.name, at);
-    slots.set(p.name, pick);
+    memo.set(p.name, next);
     placed.push(plateRect(at, p.w, p.h));
   }
-  return { placements, slots };
+  return { placements, memo };
 }

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { headBox, layoutPlates, leaderFrom, plateRect, type PlateBox } from './plateLayout';
+import {
+  HOME_HOLD_MS,
+  MOVE_HOLD_MS,
+  headBox,
+  layoutPlates,
+  leaderFrom,
+  plateRect,
+  type PlateBox,
+  type PlateMemo,
+} from './plateLayout';
 
 /**
  * Nameplates stacked over a neighbour (lane 01M3GPH5KB): the four seats at the meeting table read as
@@ -18,9 +27,9 @@ const plate = (name: string, x: number, y: number, w = W): PlateBox => ({
 const overlaps = (a: ReturnType<typeof plateRect>, b: ReturnType<typeof plateRect>) =>
   a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
-function run(plates: PlateBox[], prev = new Map<string, number>()) {
+function run(plates: PlateBox[], prev = new Map<string, PlateMemo>(), now = 0) {
   const heads = new Map(plates.map((p) => [p.name, p.anchor]));
-  return layoutPlates(plates, heads, prev, { scale: 1 });
+  return layoutPlates(plates, heads, prev, { scale: 1, now });
 }
 
 describe('layoutPlates', () => {
@@ -72,17 +81,71 @@ describe('layoutPlates', () => {
 
   it('keeps a displaced plate where it is while that spot still works — no flicker as people walk', () => {
     const first = run([plate('back', 100, 100), plate('front', 160, 104)]);
-    const slot = first.slots.get('back')!;
+    const slot = first.memo.get('back')!.slot;
     // The front member drifts a couple of pixels: the back plate must not hop to a different slot.
-    const second = run([plate('back', 100, 100), plate('front', 161, 105)], first.slots);
-    expect(second.slots.get('back')).toBe(slot);
+    const second = run([plate('back', 100, 100), plate('front', 161, 105)], first.memo);
+    expect(second.memo.get('back')!.slot).toBe(slot);
   });
 
-  it('returns a plate home once its own spot is clear again', () => {
+  it('returns a plate home only once home has stayed clear for HOME_HOLD_MS', () => {
     const first = run([plate('back', 100, 100), plate('front', 160, 104)]);
     expect(first.placements.get('back')!.displaced).toBe(true);
-    const alone = run([plate('back', 100, 100), plate('front', 400, 104)], first.slots);
-    expect(alone.placements.get('back')).toEqual({ x: 100, y: 100, displaced: false });
+    const apart = [plate('back', 100, 100), plate('front', 400, 104)];
+    // Home just came free: the plate waits rather than flipping back the same frame.
+    const waiting = run(apart, first.memo, 1000);
+    expect(waiting.placements.get('back')!.displaced).toBe(true);
+    const still = run(apart, waiting.memo, 1000 + HOME_HOLD_MS - 1);
+    expect(still.placements.get('back')!.displaced).toBe(true);
+    const home = run(apart, still.memo, 1000 + HOME_HOLD_MS);
+    expect(home.placements.get('back')).toEqual({ x: 100, y: 100, displaced: false });
+  });
+
+  it('a settled plate moves only after its spot has been blocked for MOVE_HOLD_MS', () => {
+    const alone = run([plate('back', 100, 100)]);
+    const crowd = [plate('back', 100, 100), plate('front', 160, 104)];
+    const t0 = run(crowd, alone.memo, 5000);
+    expect(t0.placements.get('back')!.displaced).toBe(false);
+    const held = run(crowd, t0.memo, 5000 + MOVE_HOLD_MS - 1);
+    expect(held.placements.get('back')!.displaced).toBe(false);
+    const moved = run(crowd, held.memo, 5000 + MOVE_HOLD_MS);
+    expect(moved.placements.get('back')!.displaced).toBe(true);
+  });
+
+  it('a block that clears inside the hold never moves the plate — the ping-pong is gone', () => {
+    const alone = run([plate('back', 100, 100)]);
+    const blip = run([plate('back', 100, 100), plate('front', 160, 104)], alone.memo, 0);
+    const clear = run([plate('back', 100, 100), plate('front', 400, 104)], blip.memo, 200);
+    const later = run([plate('back', 100, 100), plate('front', 160, 104)], clear.memo, 400);
+    const after = run([plate('back', 100, 100), plate('front', 160, 104)], later.memo, 800);
+    // Blocked at 0, clear at 200 (the timer resets), blocked again at 400: 800 is only 400ms in.
+    expect(after.placements.get('back')!.displaced).toBe(false);
+  });
+
+  it('walkers yield: someone passing never moves a seated plate, and keeps their own over their head', () => {
+    const out = run([plate('seated', 100, 100), { ...plate('walker', 160, 104), moving: true }]);
+    expect(out.placements.get('seated')).toEqual({ x: 100, y: 100, displaced: false });
+    expect(out.placements.get('walker')).toEqual({ x: 160, y: 104, displaced: false });
+  });
+
+  it('plates only step straight up — never sideways across a desk', () => {
+    const plates = [
+      plate('autorefresh', 400, 300, 118),
+      plate('sloane', 440, 305),
+      plate('miley', 425, 322),
+      plate('dolly', 430, 350),
+    ];
+    const out = run(plates);
+    for (const p of plates) expect(out.placements.get(p.name)!.x).toBe(p.anchor.x);
+  });
+
+  it('a settled plate rides out a sliver of overlap instead of jumping', () => {
+    const first = run([plate('back', 100, 100), plate('front', 190, 104)]);
+    expect(first.memo.get('back')!.slot).toBe(0);
+    // Front drifts left until its plate's edge touches back's — a couple of px, not a collision.
+    const creep = [plate('back', 100, 100), plate('front', 178, 104)];
+    const later = run(creep, first.memo, 10_000);
+    const muchLater = run(creep, later.memo, 10_000 + MOVE_HOLD_MS * 4);
+    expect(muchLater.memo.get('back')!.slot).toBe(0);
   });
 
   it('when nowhere is free, a plate takes the spot that overlaps least, never disappears', () => {
