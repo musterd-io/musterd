@@ -660,6 +660,8 @@ export interface LaneFilter {
    * state edge — `GET /lanes?state=claimed&state=active`, `lane_board {state: [...]}`.
    */
   states?: LaneState[];
+  /** Only lanes of this kind (`incident` — the daemon-opened shared-blocker lane). */
+  kind?: NonNullable<Lane['kind']>;
 }
 
 export async function listLanes(
@@ -668,13 +670,30 @@ export async function listLanes(
   teamSlug: string,
   filter: LaneFilter = {},
 ): Promise<Lane[]> {
-  const rows = await db.all<LaneRow>('SELECT * FROM lanes WHERE team_id = ? ORDER BY created_at', [
-    teamId,
-  ]);
-  return filterLanes(
-    rows.map((r) => rowToLane(r, teamSlug)),
-    filter,
+  // The filter is the WHERE, not a pass over every row: the reaper's per-team reads shipped a
+  // 1,376-lane team's whole board every 15 s to keep the few in one state (lane 01M497KVXS).
+  if (filter.states?.length === 0) return [];
+  const where = ['team_id = ?'];
+  const params: unknown[] = [teamId];
+  const eq = (column: string, value: string | undefined) => {
+    if (!value) return;
+    where.push(`${column} = ?`);
+    params.push(value);
+  };
+  eq('project', filter.project);
+  eq('owner_seat', filter.owner);
+  eq('state', filter.openOnly ? 'open' : undefined);
+  eq('goal_id', filter.goalId);
+  eq('kind', filter.kind);
+  if (filter.states) {
+    where.push(`state IN (${filter.states.map(() => '?').join(',')})`);
+    params.push(...filter.states);
+  }
+  const rows = await db.all<LaneRow>(
+    `SELECT * FROM lanes WHERE ${where.join(' AND ')} ORDER BY created_at`,
+    params,
   );
+  return rows.map((r) => rowToLane(r, teamSlug));
 }
 
 /**
@@ -688,7 +707,8 @@ export function filterLanes(lanes: Lane[], filter: LaneFilter = {}): Lane[] {
     .filter((l) => (filter.owner ? l.owner_seat === filter.owner : true))
     .filter((l) => (filter.openOnly ? l.state === 'open' : true))
     .filter((l) => (filter.goalId ? l.goal_id === filter.goalId : true))
-    .filter((l) => (filter.states ? filter.states.includes(l.state) : true));
+    .filter((l) => (filter.states ? filter.states.includes(l.state) : true))
+    .filter((l) => (filter.kind ? l.kind === filter.kind : true));
 }
 
 /**

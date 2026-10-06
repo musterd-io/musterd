@@ -327,8 +327,9 @@ export async function sweepReapedAcceptances(ctx: Ctx, ref: TeamRef): Promise<st
   if (await joinerEnrollment(ctx.db, team.id, team.slug)) return [];
   const out: string[] = [];
   const holders = new Set<string>();
-  for (const lane of await listLanes(ctx.db, team.id, team.slug)) {
-    if (lane.state !== 'awaiting_acceptance') continue;
+  for (const lane of await listLanes(ctx.db, team.id, team.slug, {
+    states: ['awaiting_acceptance'],
+  })) {
     const open = await openAcceptanceAsk(ctx.db, team.id, lane.id);
     if (open) holders.add(open.to);
   }
