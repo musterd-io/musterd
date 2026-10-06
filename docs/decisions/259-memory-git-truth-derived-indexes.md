@@ -89,6 +89,15 @@ below — if grep demonstrably fails, evaluate; not before.
 
 ## Consequences
 
+- _Dated note (2026-10-05, lane 01M46S44K8):_ where the three stores stand. **Claude Code file memory:**
+  increment 2 ran 2026-08-13 (#787 onward) — the 88-file corpus is in the wiki and
+  [archive.md](../wiki/archive.md) dispositions the rest. The rollout item named for nick — his
+  user-level CLAUDE.md pointing durable knowledge at the wiki — cannot be confirmed by a seat: the
+  workspace machine has no `~/.claude/CLAUDE.md` and empty harness memory dirs, and the corpus lived on
+  the hub machine. Raised to nick. Meanwhile the managed skill (guidance v46) states the boundary
+  every seat reads: harness memory holds facts about the human, never team facts or Team rules (a
+  finding → an insight; working state → seat memory; a pause → a hold, ADR 516).
+
 - Increment 1 (this PR): `docs/wiki/` with conventions + four seed pages, the derived index,
   `wiki:check` chained from `format:check`, this ADR.
 - Increment 2: the ~85-file migration — separate lane, mechanical, reviewable in chunks.
