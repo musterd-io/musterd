@@ -132,6 +132,26 @@ describe('TeamColumn', () => {
     expect(html).not.toContain('newer than this page');
   });
 
+  it('still: seats between tasks are names in one strip, not cards quoting their status', () => {
+    const html = render({
+      roster: [m('ryder'), m('ghost', { state: 'dreaming about lanes' }), m('izzo')],
+      board,
+      goals: [{ id: 'launch', title: 'Launch' }],
+      still: true,
+    });
+    expect(html.match(/lc-team-card /g)).toHaveLength(1); // ryder, working
+    expect(html).toContain('lc-team__idle');
+    expect(html).toMatch(/between tasks <span class="lc-team__idle-count">2<\/span>/);
+    expect(html).toContain('ghost');
+    expect(html).not.toContain('dreaming about lanes');
+  });
+
+  it('/live (not still) keeps a card for every present seat', () => {
+    const html = render({ roster: [m('ryder'), m('ghost')], board });
+    expect(html.match(/lc-team-card /g)).toHaveLength(2);
+    expect(html).not.toContain('lc-team__idle');
+  });
+
   it('says when this page cannot read every seat', () => {
     expect(render({ roster: [m('a')], unreadable: 1 })).toContain('reload to meet');
   });

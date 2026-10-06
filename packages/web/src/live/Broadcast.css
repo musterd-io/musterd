@@ -43,9 +43,14 @@
    in every one. 21% of 1920 is 403 → the 400 cap; of 1280 it is 269 → the 280 floor, which keeps a
    lane title on two lines at the 720 rung.
    Widened 2026-10-01 (nick): 24% / 460 cap and the column's type 12% up, a step toward how the 720
-   rung reads without giving the room away — the room gives 60px at 1080 and keeps the door. */
+   rung reads without giving the room away — the room gives 60px at 1080 and keeps the door.
+   Narrowed 2026-10-06 (nick: "taking up a little too much real estate") to 20% / 380, KEEPING the
+   12% type step — legibility was never the complaint. What paid for it is `.lc-team__idle` below:
+   between-tasks seats stopped being cards, so the column shed height, and a narrower one no longer
+   wraps a working card's lane title to a third line. The 720 rung is unchanged (20% of 1280 is 256,
+   under the 280 floor). */
 .bc__canvas {
-  --col-team: clamp(280px, 24%, 460px);
+  --col-team: clamp(280px, 20%, 380px);
   animation: none;
 }
 /* The ticker floats over the room's foot instead of taking a 40px row of the frame (nick, 2026-10-01).
@@ -56,7 +61,7 @@
 .bc__stage > .lc-ticker {
   position: absolute;
   left: 0;
-  right: clamp(280px, 24%, 460px);
+  right: clamp(280px, 20%, 380px);
   bottom: 0;
   z-index: var(--lc-z-overlay);
   background: none;
@@ -94,7 +99,7 @@
   .bc .lc__canvas,
   .bc .lc__canvas.is-team-collapsed {
     --col-office: minmax(0, 1fr);
-    --col-team: clamp(280px, 24%, 460px);
+    --col-team: clamp(280px, 20%, 380px);
     grid-template-columns: var(--col-office) var(--col-team);
   }
   .bc .lc-office {
@@ -125,6 +130,60 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The idle seats (TeamColumn `IdleStrip`, stream only): names, not cards. A seat between tasks has
+   nothing for a viewer to follow, so it costs one chip in a wrapping strip rather than a full card
+   quoting its last status line — eight of ten cards on 2026-10-06's frame. Sits under the working
+   cards on the column's own ground, with a hairline above it so it reads as a second, quieter list. */
+.lc-team__idle {
+  margin: 0 var(--lc-5);
+  padding: var(--lc-4) var(--lc-5) var(--lc-5);
+  border-top: 1px solid var(--lc-border);
+}
+.lc-team__idle-head {
+  margin: 0 0 var(--lc-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lc-muted);
+}
+.lc-team__idle-count {
+  margin-left: 4px;
+  font-weight: 400;
+}
+.lc-team__idle-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.lc-team__idle-seat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--lc-text);
+  white-space: nowrap;
+}
+.lc-team__idle-seat.is-away {
+  opacity: 0.6;
+}
+.lc-team__idle-avatar {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 /* Operator diagnostics only — the two states with no office to look at. */

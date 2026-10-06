@@ -8,7 +8,7 @@ import { modelBadge } from './modelBadge';
 import { providerIconHtml } from './modelProviderIcon';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { TeamCard } from './TeamCard';
-import { teamCards } from './teamCards';
+import { teamCards, type TeamCard as TeamCardModel } from './teamCards';
 
 /**
  * The narrator's own colour, from the same roster the floor is drawn from — so the caption pill's
@@ -133,7 +133,7 @@ export function TeamColumn({
       </header>
       <CaptionPill caption={caption} color={captionColor} className="lc-team__caption" />
       <ul className="lc-team__cards">
-        {cards.map((c) => (
+        {(still ? cards.filter((c) => !IDLE.has(c.state)) : cards).map((c) => (
           <TeamCard
             key={c.name}
             card={c}
@@ -147,9 +147,49 @@ export function TeamColumn({
           />
         ))}
       </ul>
+      {still && <IdleStrip cards={cards.filter((c) => IDLE.has(c.state))} />}
       {offline > 0 && <p className="lc-team__offline">+ {offline} offline</p>}
       {!still && <TeamColumnNotes roster={roster} unreadable={unreadable} stale={stale} />}
     </aside>
+  );
+}
+
+/** States with nothing in hand — on a stream they are names, not cards. */
+const IDLE: ReadonlySet<TeamCardModel['state']> = new Set(['between', 'away']);
+
+/**
+ * The stream's idle seats, as one strip of avatars with names (nick, 2026-10-06: the column "is
+ * taking up a little too much real estate"). Measured on the live frame that day: ten cards, two
+ * working, and eight full cards of "between tasks" each quoting a stale status line — most of a
+ * full-height column spent on the seats with nothing to watch. A viewer needs to know they are
+ * here, not what they last said. /live keeps the cards: there an operator can open one.
+ */
+function IdleStrip({ cards }: { cards: TeamCardModel[] }) {
+  if (cards.length === 0) return null;
+  return (
+    <section className="lc-team__idle" aria-label="Between tasks">
+      <p className="lc-team__idle-head">
+        between tasks <span className="lc-team__idle-count">{cards.length}</span>
+      </p>
+      <ul className="lc-team__idle-list">
+        {cards.map((c) => (
+          <li
+            key={c.name}
+            className={`lc-team__idle-seat${c.state === 'away' ? ' is-away' : ''}`}
+            title={`${c.name} · ${c.stateLabel}`}
+          >
+            <span
+              className="lc-team__idle-avatar"
+              aria-hidden="true"
+              style={{ background: memberAvatar(c.name, c.kind, c.member.hue) }}
+            >
+              {initial(c.name)}
+            </span>
+            {c.name}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
