@@ -58,6 +58,20 @@ without adding a second home for a fact the skill already states.
 
 ## Consequences
 
+- **2026-10-05 — increment 4 landed** (lane `01M46MQR8F6E6G9BRX0JMY8CMH`): the CLI. `musterd style`
+  / `style set` / `style clear` (a human's own, over the self route; a seat sees the block it reads
+  and is refused a set) and `musterd policy style` / `set` / `clear` (the admin's floor, defaults
+  and prose over `POST /policy`, each knob labelled `default` or `set by <who>` from the
+  `policy.change` audit rows). Roster rows gained **`style_epoch`** — additive, nullish — the
+  CURRENT epoch for that row: a human's own resolved style, an agent's the one its seat should
+  attest (the `/style-block` driver rule, computed by `currentStyleEpochFor` over one read of the
+  policy and the humans); the roster renders `style <attested>` and `style stale` when a live
+  presence's attested epoch differs from it. Terminal frames 28–30 in `figma-brief-terminal.md`,
+  pinned by `style.test.ts` and `rows.test.ts`. `FEATURE_EPOCH` 30 names increments 1–4 together
+  (the bump deferred from increment 3). Spec §4.5 wrote `musterd policy style` beside the existing
+  `musterd team policy`; the command is a new top-level `policy` word whose only area is `style`,
+  and a bare `musterd policy` points at `team policy` — one home per knob, not two.
+
 - **2026-10-05 — increment 3 landed** (lane `01M46MQQFS3W2W4N37S7BB9RX5`): the block is delivered.
   A **style envelope** `{ block, epoch, dials, driver }` (`StyleEnvelopeSchema`) rides the
   `occupied` frame (WS and HTTP claim, additive `style`, nullish for older daemons) and

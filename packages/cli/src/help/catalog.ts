@@ -418,6 +418,28 @@ export const CATALOG: readonly CommandEntry[] = [
     ],
   },
   {
+    name: 'policy',
+    signature: 'style [set <knob>=<value> … [--prose <text>] | clear]',
+    summary:
+      'the team’s agent-style floor, default dials and prose — each labelled default or set by whom (admin)',
+    group: 'team',
+    primary: false,
+    detail:
+      'Agent style, the team half (ADR 514): four floor rules no preference can lower ' +
+      '(assess_before_agreeing, disagree_once_then_commit, concession_names_check, ' +
+      'human_critique_weighed_as_peer — on|off), the four default dials every human starts from, and ' +
+      'up to five lines of team prose. Bare `policy style` prints each knob with its value and whether ' +
+      'it is the shipped default or who set it (from the audit log). `set` is read-merge-write on ' +
+      '`POST /policy` — audited `policy.change`, forwarded to the hub like every policy write; `clear` ' +
+      'returns the team to the shipped style. Every other policy knob stays on `musterd team policy`.',
+    examples: [
+      'musterd policy style',
+      'musterd policy style set length=thorough',
+      'musterd policy style set concession_names_check=off',
+      'musterd policy style set --prose "Name the ADR you are acting under."',
+    ],
+  },
+  {
     name: 'agent',
     signature:
       // The live flag is still `--profile` (rename is ADR 296 tier 3) — the signature must match it. <!-- vocab:ok -->
@@ -892,6 +914,30 @@ export const CATALOG: readonly CommandEntry[] = [
       'musterd doorbell os on',
       'musterd doorbell webhook on --url https://ntfy.sh/my-topic --tiers blocking',
       'musterd doorbell team --allow live,os,slack --defaults live,os',
+    ],
+  },
+
+  {
+    name: 'style',
+    signature: '[set <dial>=<value> … [--prose <text>] | clear]',
+    summary:
+      'how seats talk to you — your dials and the block your seats read (humans only) — MCP: team_style',
+    group: 'waiting',
+    primary: false,
+    detail:
+      'Agent style (ADR 514): the team sets a stance floor and default dials; you tune the dials for ' +
+      'yourself — pushback (every-time|when-it-matters|only-on-risk), bluntness (direct|plain|soft), ' +
+      'length (concise|normal|thorough), format (prose|structured) — plus up to five lines of your ' +
+      'own prose. Bare `style` shows each dial labelled yours or team default and the block a seat ' +
+      'steered by you reads; `set` changes the named dials and keeps the rest; `clear` returns you to ' +
+      'team defaults. A preference reaches the seats whose driver you are: the chat with you and any ' +
+      'act addressed to you. From an agent seat, bare `style` prints the block that seat reads; ' +
+      '`set` is refused — agents have no preferences. The team floor is `musterd policy style`.',
+    examples: [
+      'musterd style',
+      'musterd style set length=concise pushback=every-time',
+      'musterd style set --prose "Lead with the result. Name what you checked."',
+      'musterd style clear',
     ],
   },
 

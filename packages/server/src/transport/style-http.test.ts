@@ -112,6 +112,47 @@ withDrivers('style-http', (_o, kind) => {
       expect(byName['Ada']!.style).toBeNull();
     });
 
+    it("the roster stamps every row with the current style epoch — a human their own, a seat its driver's (inc 4)", async () => {
+      const t = await team();
+      await put('/teams/dawn/members/me/style', { length: 'concise' }, t.dee);
+      // Ada attaches with dee as driver; her row's current epoch is then dee's, not the team's.
+      const attached = await post(
+        '/teams/dawn/presence',
+        { surface: 'claude-code', driver: 'dee' },
+        t.ada,
+      );
+      // What her adapter attested (claim/heartbeat) — written as the heartbeat does, to the row.
+      await h.server.store.run('UPDATE presence SET style_epoch = ? WHERE id = ?', [
+        'deadbeef',
+        attached.json.presence.id,
+      ]);
+      const roster = await get('/teams/dawn/members', t.nick);
+      const byName = Object.fromEntries(
+        (
+          roster.json.members as {
+            name: string;
+            style_epoch: string;
+            presences: { style_epoch: string | null }[];
+          }[]
+        ).map((m) => [m.name, m]),
+      );
+      const dee = (await get('/teams/dawn/members/me/style', t.dee)).json.resolved.epoch;
+      const nick = (await get('/teams/dawn/members/me/style', t.nick)).json.resolved.epoch;
+      expect(byName['dee']!.style_epoch).toBe(dee);
+      expect(byName['nick']!.style_epoch).toBe(nick);
+      expect(byName['Ada']!.style_epoch).toBe(dee);
+      expect(byName['Ada']!.style_epoch).not.toBe(nick);
+      // What Ada ATTESTED stays on the presence — the roster says current, the presence says held.
+      expect(byName['Ada']!.presences[0]!.style_epoch).toBe('deadbeef');
+      // An admin moving a default moves every row's current epoch at once.
+      await post('/teams/dawn/policy', { style: { defaults: { bluntness: 'direct' } } }, t.nick);
+      const after = await get('/teams/dawn/members', t.nick);
+      const ada = (after.json.members as { name: string; style_epoch: string }[]).find(
+        (m) => m.name === 'Ada',
+      )!;
+      expect(ada.style_epoch).not.toBe(dee);
+    });
+
     it('GET /style-block for a human is their own block; a seat cannot pick a driver by name (inc 3)', async () => {
       const t = await team();
       await put(

@@ -126,5 +126,10 @@
 // Epoch 29 — ADR 164 increment 2: the session attestation `end` event may carry the liveness
 // ladder's `rung` (+ `age_ms`); the daemon records such an end as `presence.session_ended`. An
 // older adapter omits both and its goodbye is recorded as before.
-export const FEATURE_EPOCH = 29 as const;
+// Epoch 30 — ADR 514 (agent style, increments 1–4): `PolicySchema.style`, `members.style_prefs`,
+// the style envelope on `occupied` and `GET /style-block`, `style_epoch` on claim/heartbeat/presence
+// and `GET /inbox`, and the roster row's current `style_epoch` (inc 4) that `style stale` is read
+// from. A daemon behind this epoch drops the `style` policy key, has no `/members/me/style` route
+// and stamps no epoch on roster rows; an adapter behind it reads no block and attests no epoch.
+export const FEATURE_EPOCH = 30 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;

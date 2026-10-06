@@ -86,11 +86,26 @@ export async function styleEnvelopeFor(
   teamId: string,
   driver: string | null,
 ): Promise<StyleEnvelope> {
-  const policy = await teamStyle(db, teamId);
-  const team = resolveStyle(policy);
-  const humans = (await listMembers(db, teamId)).filter(
+  return styleEnvelopeFrom(await teamStyle(db, teamId), await styleHumans(db, teamId), driver);
+}
+
+/** The humans the only-human rule counts: on the team, not observers (review I4). */
+export async function styleHumans(db: Driver, teamId: string): Promise<MemberRow[]> {
+  return (await listMembers(db, teamId)).filter(
     (m) => m.kind === 'human' && m.observer !== 1 && m.left_at === null,
   );
+}
+
+/**
+ * The pure core of {@link styleEnvelopeFor}: the same rule over an already-loaded policy and human
+ * list, so the roster (ADR 514 inc 4) can stamp every row's current epoch from one read of each.
+ */
+export function styleEnvelopeFrom(
+  policy: StylePolicy,
+  humans: MemberRow[],
+  driver: string | null,
+): StyleEnvelope {
+  const team = resolveStyle(policy);
   const named = driver ? humans.find((m) => m.name === driver) : undefined;
   const chosen = named ?? (humans.length === 1 ? humans[0] : undefined);
   if (chosen) {
@@ -109,4 +124,23 @@ export async function styleEnvelopeFor(
     dials: team.dials,
     driver: null,
   };
+}
+
+/**
+ * The current style epoch a roster row should show (ADR 514 inc 4, spec §4.4 "Attestation"): a
+ * human's own resolved style; an agent's is what its seat should attest — the driver its newest
+ * live presence named, else the only-human rule, else team defaults — the `/style-block` rule, so
+ * the roster's `style stale` and the adapter's change line can never disagree.
+ */
+export function currentStyleEpochFor(
+  policy: StylePolicy,
+  humans: MemberRow[],
+  member: Pick<MemberRow, 'name' | 'kind' | 'observer'>,
+  presenceDriver: string | null,
+): string {
+  if (member.kind === 'human' && member.observer !== 1) {
+    const self = humans.find((m) => m.name === member.name);
+    return resolveStyle(policy, self ? memberStylePrefs(self) : undefined).epoch;
+  }
+  return styleEnvelopeFrom(policy, humans, presenceDriver).epoch;
 }

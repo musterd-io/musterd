@@ -286,6 +286,74 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
     `halted by nick: looping on the wrong lane` right after `agent`, on whichever group she is in
     (`renderRoster`, `rows.test.ts`).
 
+### Agent style frames (ADR 514, increment 4)
+
+28. `cmd/style` — `$ musterd style` as nick, no color, 80 columns, after
+    `musterd style set length=concise pushback=every-time --prose "Lead with the result."`. The
+    renderer is `packages/cli/src/commands/style.ts` (`styleCommand`), pinned exactly by
+    `style.test.ts`. Each dial reads `yours` or `team default`; the prose prints JSON-quoted so a
+    multi-line note can never shed its label; the block below is the one a seat steered by nick
+    reads — byte-identical to its `team_join` reply (`renderStyleBlock`, one renderer). The epoch
+    is eight hex characters of the resolved style, so the value below is a sample; the test pins
+    the shape:
+
+    ```
+    style — nick (epoch 41122c7c)
+      pushback   every-time       yours
+      bluntness  plain            team default
+      length     concise          yours
+      format     prose            team default
+      prose      "Lead with the result." yours
+    the block a seat steered by you reads:
+      Style (epoch 41122c7c) — how you talk here.
+      Floor (team): assess before you agree; no praise before a check; disagree once, with the reason, then follow the decision; a concession names what you checked; weigh a human's critique by its evidence, like anyone's.
+      For nick (in chat, and in any act addressed to nick): pushback every time · plain · concise · prose.
+      nick adds: "Lead with the result."
+      Everyone else, @team and the record: team defaults (pushback when it matters · plain · normal · prose).
+    musterd style set length=concise · musterd style set --prose "…" · musterd style clear
+    ```
+
+    The `set` line that preceded it: `✓ style set — pushback every-time, length concise`, then
+    `  next: musterd style`, then dim `your seats now read: pushback every time · plain · concise ·
+    prose`. `clear` prints `✓ style cleared — team defaults` with the same two lines. From an agent
+    seat, bare `style` prints `style — the block this seat reads (driver nick)`, the block, and
+    `a seat has no preferences — a human sets theirs with: musterd style set`; `set`/`clear` exit
+    5 with `style preferences are for human members — a seat reads the block it is given (musterd
+    style)`.
+
+29. `cmd/policy-style` — `$ musterd policy style` as nick (admin), on a team at the shipped style.
+    The renderer is `packages/cli/src/commands/policy.ts` (`policyCommand`), pinned exactly by
+    `style.test.ts`. Every knob carries `default` or `set by <who>` — the latter read from the
+    `policy.change` audit rows, the newest one in which the knob took its current value; a reader
+    the audit log refuses sees `set`:
+
+    ```
+    policy style — dawn (team epoch 7f3a2b1c)
+      floor
+        assess_before_agreeing           on  default
+        disagree_once_then_commit        on  default
+        concession_names_check           on  default
+        human_critique_weighed_as_peer   on  default
+      defaults
+        pushback                         when-it-matters  default
+        bluntness                        plain            default
+        length                           normal           default
+        format                           prose            default
+      prose                              none
+    ```
+
+    After `musterd policy style set concession_names_check=off length=thorough`, the success
+    line `✓ policy style set` + `  next: musterd policy style` precedes the same table with
+    `concession_names_check           off set by nick` and `length … thorough         set by nick`.
+
+30. `cmd/status-style-stale` — the `cmd/status` roster with Ada attesting a style epoch: her row
+    carries `style 41122c7c` after the model (and `build …` when that differs), on every live group
+    (`renderRoster`, `rows.test.ts`). When the daemon's current epoch for her seat differs — an admin
+    moved a default, or her driver set a dial, since she last heard — the facet is the warn
+    `style stale` instead, the guidance-drift treatment; it clears on her next heartbeat after the
+    adapter re-reads the block. A seat attesting nothing shows neither (an older adapter, not a stale
+    one); an `out` seat is silent.
+
 ## Page: States (empty + error)
 
 1. `state/empty-inbox` — `inbox empty — nobody's mustered anything yet` (dim). (Exact string; the CLI uses it verbatim.)
