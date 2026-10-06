@@ -85,7 +85,7 @@ One store, three tiers. Hard rules stay where they are — in the repo, enforced
 
 | Tier       | Scope                     | End                           | Set by                     | Today                                   |
 | ---------- | ------------------------- | ----------------------------- | -------------------------- | --------------------------------------- |
-| **Policy** | team                      | review date (new)             | human admin                | `POST /policy`; no review date          |
+| **Policy** | team                      | review date (ADR 533)         | human admin                | `POST /policy`; `review_by` on the doc  |
 | **Hold**   | team, lane, seat, surface | required expiry (new)         | human admin; agent proposes | the autorefresh hold, local and unauthored |
 | **Halt**   | one seat                  | until a human resumes         | human admin or sponsor     | ADR 501, shipped                        |
 
@@ -216,7 +216,10 @@ the first stage.
   [ADR 172](../decisions/172-model-family-posture.md) dated note.
 - **The autorefresh hold is invisible and unauthored** — the exact shape of the incident.
 - **Insights have no retraction**, and the digest re-posts them.
-- **Team policy has no review date** — a knob set once stays forever without anyone looking again.
+- ~~**Team policy has no review date** — a knob set once stays forever without anyone looking again.~~
+  **FIXED 2026-10-06** ([ADR 533](../decisions/533-policy-review-dates.md), lane `01M46S472Z`): the
+  stored doc carries `review_by` (default +90d); past it, one `approve` ask to the admins; accept
+  re-confirms, decline drops to the defaults.
 
 ## Proposed sequence
 
@@ -231,7 +234,7 @@ ADRs first, then a Goal with these lanes:
    `saved_at`.
 4. **Retract / supersede for findings** — the act, plus filtering in the index, dreams and the digest.
 5. **Harness-memory boundary** — guidance text; nick's `CLAUDE.md` edit named as his.
-6. **Policy review dates** — later.
+6. ~~**Policy review dates**~~ — done 2026-10-06 ([ADR 533](../decisions/533-policy-review-dates.md)).
 7. **Retrieval stage 2** (embeddings) — only when search measurably fails.
 
 Lanes 1–3 together fix the incident.

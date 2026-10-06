@@ -2,6 +2,8 @@ import {
   type AgentKeyMint,
   type AskTier,
   acceptanceAskContract,
+  POLICY_REVIEW_DEFAULT_MS,
+  POLICY_REVIEW_MAX_MS,
   type Policy,
   type PolicyOverride,
   PolicyOverrideSchema,
@@ -625,7 +627,7 @@ export async function applyPolicyChange(
   opts: { enforce?: boolean } = {},
 ): Promise<{ policy: Policy; stored: PolicyOverride }> {
   return db.tx(async (t) => {
-    const stored = PolicyOverrideSchema.parse(policy);
+    const stored = stampReviewBy(PolicyOverrideSchema.parse(policy), Date.now());
     if (opts.enforce !== false) {
       const refusal = await policyPairRefusal(t, teamId, PolicySchema.parse(stored));
       if (refusal) throw refusal;
@@ -640,6 +642,23 @@ export async function applyPolicyChange(
     });
     return { policy: effective, stored };
   });
+}
+
+/**
+ * ADR 533: every stored doc that holds a knob carries the date its admins are asked to look again.
+ * A write that names none gets the default window from now; one past `POLICY_REVIEW_MAX_MS` out, or
+ * already behind us, is refused — a review date in the past would raise its ask on the next sweep,
+ * which is never what a write meant. An empty doc (`{}`) carries none: defaults need no review, and
+ * dropping every knob is exactly how a review ends with "drop".
+ */
+export function stampReviewBy(stored: PolicyOverride, now: number): PolicyOverride {
+  const { review_by, ...knobs } = stored;
+  if (Object.keys(knobs).length === 0) return knobs;
+  if (review_by === undefined) return { ...knobs, review_by: now + POLICY_REVIEW_DEFAULT_MS };
+  if (review_by <= now) throw new MusterdError('validation', 'review_by must be in the future');
+  if (review_by > now + POLICY_REVIEW_MAX_MS)
+    throw new MusterdError('validation', 'review_by may be at most 365 days out');
+  return stored;
 }
 
 /**

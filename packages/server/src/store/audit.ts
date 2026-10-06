@@ -324,6 +324,11 @@ export type AuditAction =
   // ADR 516: a human admin set / lifted a Team hold. Hub-minted, replicated under the `policy` kind.
   | 'hold.set'
   | 'hold.lifted'
+  // ADR 533: the stored policy doc passed its review_by — one ask raised to the human admins (actor
+  // none, detail {review_by, ask}); and a human admin answered it (actor the human, detail
+  // {ask, verdict}). Local rows: the answer's `policy.change` is what replicates.
+  | 'policy.review_due'
+  | 'policy.review_answered'
   // ADR 519: a Member wrote / deleted a calendar entry — actor the Member, target the entry id. Local
   // to the daemon that took the write; `calendar.entry_deleted` is also what a `?since` delta reads.
   | 'calendar.entry_written'
@@ -672,6 +677,8 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'seat.resumed': 'actor',
   'hold.set': 'actor',
   'hold.lifted': 'actor',
+  'policy.review_due': 'none',
+  'policy.review_answered': 'actor',
   'calendar.entry_written': 'actor',
   'calendar.entry_deleted': 'actor',
   'nudge.decision': 'actor',

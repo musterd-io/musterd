@@ -15,6 +15,7 @@ describe('which background loops a server runs (1C task 8)', () => {
         'expired_member_sweep',
         'provision_sweep',
         'digest',
+        'policy_review',
       ].sort(),
     );
   });
