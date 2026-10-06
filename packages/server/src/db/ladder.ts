@@ -162,6 +162,21 @@ export const LADDER: PortableMigration[] = [
       for (const sql of CALENDAR_INDEX_SQL) await d.exec(sql);
     },
   },
+  {
+    // v89 — lane 01M477RQGV (Cloud run 14): `messages` re-analyzes after ~1 % churn, not the
+    // default 10 %. Under the tenant policy the roster's latest-status pick plans on `team_id`
+    // statistics, and a team newer than the last ANALYZE is absent from them: the planner scans
+    // every status_update of the team per member (32 ms, ~25k buffers a roster read) instead of a
+    // per-member index (3.8 ms). Neon resets the counters autovacuum triggers on at every compute
+    // restart, so the default threshold is rarely reached. SQLite has no autovacuum — a no-op there.
+    version: 89,
+    sqlite: () => {},
+    postgres: async (d) => {
+      await d.exec(
+        'ALTER TABLE messages SET (autovacuum_analyze_scale_factor = 0.01, autovacuum_analyze_threshold = 500)',
+      );
+    },
+  },
 ];
 
 const CALENDAR_TABLE_SQL = `CREATE TABLE IF NOT EXISTS calendar_entries (
