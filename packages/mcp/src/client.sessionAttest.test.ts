@@ -58,14 +58,17 @@ function adapterJudging() {
   // corpse, so a binding born stale is never judged at all and the test passed for the wrong
   // reason. The real session was adopted while alive at 17:13Z and only crossed the staleness
   // horizon at 20:06Z, three hours later — that is the shape reproduced here.
-  let transcriptAgeMs = 0;
+  // Phase 2 pins the mtime once rather than recomputing it from Date.now() on every stat: the
+  // ladder captures its own `now` before it stats, so a recomputed mtime that lands a millisecond
+  // later reported age_ms 7199997 against the 2h bound (CI run 37411265975).
+  let silentSince: number | undefined;
   // Injected rather than left to the real world: the ladder adopts nothing for the first
   // ADOPT_SETTLE_MS of PROCESS life, and a test runner's uptime is not something to gamble a
   // regression test on. processStart 0 means settled; the stat is controlled.
   (client as unknown as { session: SessionAttestation }).session = new SessionAttestation({
     bindingDir: dir,
     readSession: () => DEAD_SESSION,
-    statMtime: () => Date.now() - transcriptAgeMs,
+    statMtime: () => silentSince ?? Date.now(),
     ppid: () => 4242,
     processStart: 0,
   });
@@ -80,7 +83,7 @@ function adapterJudging() {
     /** Phase 2: the harness moved on, nothing rewrote `binding.session`, and the adopted
      *  transcript falls silent past the one-hour horizon. */
     transcriptFallsSilent: () => {
-      transcriptAgeMs = 2 * 60 * 60_000;
+      silentSince = Date.now() - 2 * 60 * 60_000;
     },
   };
 }
