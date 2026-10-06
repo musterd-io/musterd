@@ -88,6 +88,20 @@ Apple account holder's. Every later run is non-interactive. A build appears in T
 processes it (10–15 minutes); add yourself as an internal tester once in App Store Connect, and each
 later build arrives on the phone by itself.
 
+**Skipping EAS Submit's queue.** On Expo's free plan, `--auto-submit` waits in a shared queue. Build
+3 sat there more than 40 minutes on 2026-10-06. The faster path is to build without
+`--auto-submit` and upload the finished `.ipa` with fastlane:
+
+```bash
+npx eas-cli@latest build --platform ios --profile production --non-interactive
+packages/mobile/scripts/upload-testflight.sh        # latest finished build; or pass a build id
+```
+
+The script needs an App Store Connect API key config at `~/.appstoreconnect/fastlane-musterd.json`
+(`key_id`, `issuer_id`, and `key`, the `.p8` contents). fastlane refuses a `key_filepath` in that
+file. It stays on the account holder's machine, so the upload is a command the human runs, not a
+seat.
+
 Then on the phone: Tailscale on, open musterd, **Connection**, then enter the laptop's address, the
 Team slug, and your `mscr_` credential.
 

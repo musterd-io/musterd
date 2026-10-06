@@ -11,6 +11,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -209,6 +210,11 @@ export default function EntryScreen() {
         keyboardType: 'url',
         autoCorrect: false,
       })}
+      {existing?.url ? (
+        <Pressable onPress={() => void Linking.openURL(existing.url!)} hitSlop={8}>
+          <Text style={[styles.openLink, { color: p.accentText }]}>Open link ↗</Text>
+        </Pressable>
+      ) : null}
       {field('Note', 'note', {
         multiline: true,
         style: [
@@ -247,6 +253,7 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   time: { width: 80 },
   hint: { fontSize: 12 },
+  openLink: { fontSize: 15, fontWeight: '600' },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   pickRow: {
     flexDirection: 'row',

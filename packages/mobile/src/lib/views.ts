@@ -230,3 +230,20 @@ export function zoneNote(entry: CalendarEntry, deviceTz: string): string | null 
   const city = entry.tz.split('/').pop()?.replace(/_/g, ' ') ?? entry.tz;
   return `${city} time`;
 }
+
+/**
+ * What a list row says under the title: the kind and status, then the place — or, when there is
+ * none, the note's first line. 61 of the 112 imported entries carry no place, and a prep entry's
+ * note is the whole point of it ("Notifications off. tally.so/… on your phone."), so a row that
+ * showed only kind · status hid what the entry was for (nick, build 3, 2026-10-06).
+ */
+export function rowLines(entry: CalendarEntry): { meta: string; detail: string | null } {
+  const meta = [entry.kind, entry.status].filter(Boolean).join(' · ');
+  const note =
+    entry.note
+      .split('\n')
+      .find((l) => l.trim() !== '')
+      ?.trim() ?? '';
+  const detail = entry.place.trim() || note;
+  return { meta, detail: detail === '' ? null : detail };
+}

@@ -7,6 +7,7 @@ import {
   isOver,
   monthGrid,
   pastSections,
+  rowLines,
   shiftMonth,
   timeLabel,
   upcomingSections,
@@ -145,5 +146,19 @@ describe('labels', () => {
     expect(zoneNote(entry({ tz: 'America/New_York' }), 'America/Los_Angeles')).toBe(
       'New York time',
     );
+  });
+});
+
+describe('rowLines', () => {
+  it('shows the place, or the note when there is none', () => {
+    expect(rowLines(entry({ kind: 'demo', status: 'going', place: 'TERRA' }))).toEqual({
+      meta: 'demo · going',
+      detail: 'TERRA',
+    });
+    expect(rowLines(entry({ kind: 'prep', note: '\n Notifications off.\nsecond line' }))).toEqual({
+      meta: 'prep',
+      detail: 'Notifications off.',
+    });
+    expect(rowLines(entry({ kind: 'event' }))).toEqual({ meta: 'event', detail: null });
   });
 });
