@@ -70,6 +70,14 @@ without adding a second home for a fact the skill already states.
   deferred: nothing is planned for it, and the trigger that would reopen it is a human working
   from two machines who finds their Slack or webhook sink missing on the second.
 
+- **2026-10-05 — increment 6 landed** (lane `01M46MQW7GV4BD3SV9HDKDRETV`): `pnpm style:readout`
+  (`scripts/research/style-readout.ts`) prints the three cuts the Observability section names and
+  the Experiment's verdict line; [the wiki page](../wiki/agent-style.md) holds the baseline (216
+  directed acts to one human, median 381 chars, no dial set, 5 of 10 live seats attesting the
+  shipped epoch) and the 2026-11-04 read. Two limits the readout states rather than hides: a
+  sender's epoch at send time is not on the act, so the stance split keys on the team's epoch
+  timeline from `policy.change` rows; and `style.prefs_set` records dial keys, not values, so the
+  length split keys on the set time and reads the value from `members.style_prefs` now.
 - **2026-10-05 — `policy style` moved under `team policy`** (lane `01M47A4WRRWVD3SN6D7DSZ9V3J`,
   nick's call on stanley's flag): the spelling is `musterd team policy style …`, the one positional
   area of `team policy`; the top-level `policy` word from increment 4 is gone. One home per team
