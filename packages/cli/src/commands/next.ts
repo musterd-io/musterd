@@ -20,6 +20,31 @@ import { resolve } from './helpers.js';
  * latest handoff *why*. The projection is computed server-side (`GET /next`); this only renders it.
  */
 
+/**
+ * ADR 536 §4.5 — the `up next` count: the same words as `team_next`'s render (each surface keeps
+ * its own copy, as every brief section does — ADR 084 shares the derivation, not the string).
+ * Empty when the daemon reports no total (an epoch-30 daemon), so nothing is zero-filled.
+ */
+function upNextCount(brief: NextBrief): string {
+  const copy = upNextCountCopy(brief);
+  return copy ? theme.meta(` (${copy})`) : '';
+}
+
+/** The words inside the parenthesis. Exported for the render test. */
+export function upNextCountCopy(brief: {
+  up_next: readonly unknown[];
+  up_next_total?: number;
+  up_next_blocked_total?: number;
+}): string {
+  const total = brief.up_next_total ?? 0;
+  const blocked = brief.up_next_blocked_total ?? 0;
+  if (total === 0 && blocked === 0) return '';
+  const shown = brief.up_next.length;
+  const window = shown < total ? `${shown} of ${total} claimable` : `all ${total} claimable`;
+  const wait = blocked > 0 ? ` · ${blocked} more wait on a dependency` : '';
+  return `${window}${wait}`;
+}
+
 function laneLine(l: Lane): string {
   const goal = l.goal_id ? theme.meta(` ◆ ${l.goal_id}`) : '';
   const branch = l.branch ? theme.meta(` ⎇ ${l.branch}`) : '';
@@ -198,7 +223,9 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
     }
   }
   if (brief.up_next.length > 0) {
-    w(`\n${theme.accent('up next')} — open lanes you could pick up:\n`);
+    // ADR 536: the window says how much it is a window on. Absent on an older daemon (both counts
+    // default to 0) → no parenthetical, not a zero-filled one.
+    w(`\n${theme.accent('up next')} — open lanes you could pick up${upNextCount(brief)}:\n`);
     for (const l of brief.up_next) w(laneLine(l) + '\n');
   }
   if ((brief.parked_total ?? 0) > 0)

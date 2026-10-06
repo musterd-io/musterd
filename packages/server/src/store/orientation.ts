@@ -13,7 +13,7 @@ import {
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { checkClaims } from './claimCheck.js';
-import { handoffNamedLaneOutOfPlay, handoffNamesNoLane } from './delivery.js';
+import { handoffNamedLaneIds, handoffNamedLaneOutOfPlay, handoffNamesNoLane } from './delivery.js';
 import { listGoals, nextGoal } from './goals.js';
 import { listActiveHolds } from './holds.js';
 import { incidentPolicy, openIncidents } from './incidents.js';
@@ -21,11 +21,13 @@ import { deriveOwnDisputes } from './insights.js';
 import {
   acceptanceEnteredAt,
   emptyPoolFromSubmitAudit,
+  globsOverlap,
   listLanes,
   readyForReviewHadNoCandidate,
 } from './lanes.js';
-import { getMemberByRole } from './members.js';
+import { getMemberByName, getMemberByRole } from './members.js';
 import { annotateClose, closeVerdicts, supersededAcceptanceAsks } from './review.js';
+import { parseRoles } from './rows.js';
 import { openSeedsForBrief } from './seeds.js';
 
 /**
@@ -75,6 +77,94 @@ const WHY_SCAN_DEPTH = 20;
  * brief is not abstention, it is misdirection, and it is read every session by every seat.
  */
 export const WHY_BARE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
+/**
+ * ADR 536 tier 4: how far back a seat's own shipped lanes count as "near what you shipped". Thirty
+ * days keeps an old speciality from pinning a seat to one corner of the repo forever; the spec
+ * (docs/superpowers/specs/2026-10-06-up-next-relevance-design.md §4.3) fixes the window and
+ * increment 3's readout is what would move it.
+ */
+export const FAMILIARITY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** What `rankUpNext` ranks against — every input a declared fact, none inferred (ADR 536 §2). */
+export interface UpNextContext {
+  /** The asking member's `roles[]` (ADR 227). Empty for the roleless generalist. */
+  roles: readonly string[];
+  /** The live `why` handoff's lanes and goal — a human pointed here (tier 1). */
+  pointer: { lanes: ReadonlySet<string>; goal: string | null };
+  /** Derived goal status by goal id (ADR 258); a goal not in the map is unknown and ranks as planned. */
+  goalStatus: ReadonlyMap<string, string>;
+  /** The lane each `stale_goals` row names — the oldest untouched lane of a stalled goal. */
+  staleLanes: ReadonlySet<string>;
+  /** `scope` globs of lanes this member shipped inside {@link FAMILIARITY_WINDOW_MS}. */
+  shippedScopes: readonly string[];
+}
+
+/**
+ * ADR 536 §4.3 — the tier a claimable lane lands in for one member. Lower is offered first.
+ *
+ * Lexicographic, not weighted: a lane in a higher tier outranks every lane in a lower one, and the
+ * reason it was offered is a tier name a seat can argue with (increment 2 renders it). Fractions
+ * are the within-tier sub-order the spec names — a stalled goal's lane ahead of a merely in-flight
+ * one.
+ *
+ * Two cases the table does not spell out, resolved here:
+ * - A human pointer wins even over a role mismatch. Tier 1's rationale (the handoff is the
+ *   human-authored why, ADR 049) outranks the mismatch rank-down, which is a derived signal.
+ * - A `role` the member does NOT hold ranks the lane last — never out. Roles are aptitude, not
+ *   permission (ADR 227), and a lane whose role nobody live holds must still reach somebody.
+ */
+export function upNextTier(l: Lane, ctx: UpNextContext): number {
+  if (ctx.pointer.lanes.has(l.id) || (ctx.pointer.goal !== null && l.goal_id === ctx.pointer.goal))
+    return 1;
+  if (l.role !== null && !ctx.roles.includes(l.role)) return 5;
+  if (l.role !== null) return 2;
+  if (ctx.staleLanes.has(l.id)) return 3;
+  if (l.goal_id !== null && ctx.goalStatus.get(l.goal_id) === 'in-flight') return 3.5;
+  if (l.scope.some((g) => ctx.shippedScopes.some((s) => globsOverlap(g, s)))) return 4;
+  return 5;
+}
+
+/**
+ * ADR 536 §4.2–4.3 — the `up_next` window and its two totals, from the whole board.
+ *
+ * The pool is every `open` lane minus those with an unmet `depends_on` — a lane whose dependency is
+ * not `done` cannot be picked up, and the field has always been documented as "lanes you could pick
+ * up". A dependency that names no lane on the board does not block (the same rule the contention
+ * warnings apply: a deleted dependency is not a standing one). Within the pool the order is
+ * `upNextTier`, then ADR 256's goal-attached-first (kept as the within-tier rule, so the
+ * link-it nudge still has teeth on a team whose lanes are not all attached), then `created_at`
+ * ascending so an unloved lane still surfaces inside its tier. Pure: every caller-side read happens
+ * in `deriveNext`, so the tiers are unit-testable in isolation.
+ */
+export function rankUpNext(
+  all: readonly Lane[],
+  ctx: UpNextContext,
+  limit: number,
+): Pick<NextBrief, 'up_next' | 'up_next_total' | 'up_next_blocked_total'> {
+  const byId = new Map(all.map((l) => [l.id, l]));
+  const open = all.filter((l) => l.state === 'open');
+  const claimable = open.filter((l) =>
+    l.depends_on.every((d) => {
+      const dep = byId.get(d);
+      return !dep || dep.state === 'done';
+    }),
+  );
+  const ranked = claimable
+    .map((l) => ({ l, tier: upNextTier(l, ctx) }))
+    .sort(
+      (a, b) =>
+        a.tier - b.tier ||
+        Number(b.l.goal_id !== null) - Number(a.l.goal_id !== null) ||
+        a.l.created_at - b.l.created_at,
+    )
+    .map(({ l }) => l);
+  return {
+    up_next: ranked.slice(0, limit),
+    up_next_total: claimable.length,
+    up_next_blocked_total: open.length - claimable.length,
+  };
+}
 
 function parseMeta(meta: string | null): Record<string, unknown> {
   if (meta === null) return {};
@@ -196,14 +286,9 @@ export async function deriveNext(
     .sort((a, b) => (b.resolved_at ?? b.updated_at) - (a.resolved_at ?? a.updated_at))
     .slice(0, shippedLimit)
     .map((l) => annotateClose(l, verdicts.get(l.id)));
-  const up_next: Lane[] = all
-    .filter((l) => l.state === 'open')
-    .sort((a, b) => a.created_at - b.created_at)
-    // goals-front-door design: goal-attached lanes served first (stable within each group).
-    .sort((a, b) => Number(b.goal_id !== null) - Number(a.goal_id !== null))
-    .slice(0, upNextLimit);
-  // ADR 466: parked lanes are kept, not offered — `up_next` already takes only `open`, so the brief
-  // carries their count and nothing a reader could mistake for an invitation.
+  // `up_next` is derived below, once the `why` handoff and the goals it ranks against are known
+  // (ADR 536). ADR 466: parked lanes are kept, not offered — `up_next` takes only `open`, so the
+  // brief carries their count and nothing a reader could mistake for an invitation.
   const parked_total = all.filter((l) => l.state === 'parked').length;
 
   // ADR 373 increment 4: recorded intentions nobody started, above the open lanes. Fewer than the
@@ -370,6 +455,32 @@ export async function deriveNext(
   const goals = allGoals.filter((g) => g.status !== 'shipped').sort(compareGoals);
   const stale_goals = staleGoals(goals, all, now);
 
+  // ADR 536 — `up_next`, ranked for THIS member over the TEAM's pool. The pool is every open lane,
+  // the same for everyone, so nothing is hidden from the board; the order is the seat's, so two
+  // seats orienting in the same minute are not handed the same five. What ranks is declared only
+  // (ADR 530's posture): the `why` handoff's lanes and goal, `Lane.role` against `Member.roles`,
+  // goal status, `scope` against what this seat shipped. Nothing reads a title, a diff or a model.
+  const me = await getMemberByName(db, teamId, member);
+  const pointerLanes = row
+    ? new Set(await handoffNamedLaneIds(db, teamId, row.meta, row.body))
+    : new Set<string>();
+  const { up_next, up_next_total, up_next_blocked_total } = rankUpNext(
+    all,
+    {
+      roles: me ? parseRoles(me) : [],
+      pointer: { lanes: pointerLanes, goal: why?.goal_id ?? null },
+      goalStatus: new Map(allGoals.map((g) => [g.id, g.status])),
+      staleLanes: new Set(stale_goals.map((s) => s.lane)),
+      shippedScopes: mine
+        .filter(
+          (l) =>
+            l.state === 'done' && (l.resolved_at ?? l.updated_at) >= now - FAMILIARITY_WINDOW_MS,
+        )
+        .flatMap((l) => l.scope),
+    },
+    upNextLimit,
+  );
+
   // value-layer design: the team's oldest lanes waiting on acceptance — review debt as ambient
   // candidate work for ANY seat (owed_reviews stays the directed slice). Cap 3, oldest first.
   // A seat's own lane is never its candidate review work: ADR 192 grades a same-seat close as
@@ -460,6 +571,8 @@ export async function deriveNext(
     in_flight,
     shipped,
     up_next,
+    up_next_total,
+    up_next_blocked_total,
     parked_total,
     stale_goals,
     up_next_seeds,

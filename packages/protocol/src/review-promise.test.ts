@@ -194,3 +194,31 @@ describe('review-promise projection schemas', () => {
     expect(ReviewPromisesResponseSchema.safeParse({}).success).toBe(false);
   });
 });
+
+/** ADR 536 — the up-next counts default, so an epoch-30 daemon's brief still parses. */
+describe('NextBrief up_next counts (ADR 536)', () => {
+  const base = {
+    member: 'Ada',
+    in_flight: [],
+    shipped: [],
+    up_next: [],
+    why: null,
+    next_goal: null,
+  };
+  it('default to 0 when absent and round-trip when present', () => {
+    const absent = NextBriefSchema.parse(base);
+    expect(absent.up_next_total).toBe(0);
+    expect(absent.up_next_blocked_total).toBe(0);
+    const present = NextBriefSchema.parse({
+      ...base,
+      up_next_total: 30,
+      up_next_blocked_total: 44,
+    });
+    expect(present.up_next_total).toBe(30);
+    expect(present.up_next_blocked_total).toBe(44);
+  });
+  it('refuse a negative or fractional count', () => {
+    expect(NextBriefSchema.safeParse({ ...base, up_next_total: -1 }).success).toBe(false);
+    expect(NextBriefSchema.safeParse({ ...base, up_next_blocked_total: 1.5 }).success).toBe(false);
+  });
+});

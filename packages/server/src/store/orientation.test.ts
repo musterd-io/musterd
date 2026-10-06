@@ -1,4 +1,4 @@
-import { makeEnvelope, ownDisputeArm } from '@musterd/protocol';
+import { GENERALIST_CAPABILITIES, type Lane, makeEnvelope, ownDisputeArm } from '@musterd/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
@@ -6,13 +6,16 @@ import { appendAudit } from './audit.js';
 import { setCursor } from './cursors.js';
 import { recordBlockedReport } from './incidents.js';
 import { openLane, updateLane } from './lanes.js';
-import { addMember, getMemberByName } from './members.js';
+import { addMember, getMemberByName, setMemberGovernance } from './members.js';
 import { insertMessage } from './messages.js';
 import {
+  FAMILIARITY_WINDOW_MS,
   WHY_BARE_MAX_AGE_MS,
   deriveNext,
   deriveNextSummary,
   deriveTeamReviewPromises,
+  rankUpNext,
+  upNextTier,
 } from './orientation.js';
 import { captureRepoSeed, createSeedFromRelay } from './seeds.js';
 import { createTeam } from './teams.js';
@@ -1394,6 +1397,198 @@ withDrivers('orientation', (o) => {
       expect((await deriveNext(db, team.id, 'revive', 'stanley')).review_closures).toHaveLength(1);
       await setCursor(db, stanley.id, 'z-after');
       expect((await deriveNext(db, team.id, 'revive', 'stanley')).review_closures).toEqual([]);
+    });
+  });
+
+  /**
+   * ADR 536 — `up_next` is ranked for the asking seat over the team's pool, withholds what cannot be
+   * picked up, and says how much it hid. Spec: docs/superpowers/specs/2026-10-06-up-next-relevance-design.md §4.
+   *
+   * Measured on revive 2026-10-06: 74 open lanes, 44 with an unmet dependency, 3 with a role, all 74
+   * on a goal — the oldest-first window served the five oldest launch dogfood lanes to every seat
+   * and hid three no-dependency bug lanes in the asking seat's own recent scope behind them.
+   */
+  describe('up_next is ranked per member and honest about the pool (ADR 536)', async () => {
+    const laneAt = (over: Partial<Lane> & { id: string }): Lane => ({
+      team: 'revive',
+      project: 'runtime',
+      title: over.id,
+      detail: null,
+      kind: null,
+      owner_seat: null,
+      role: null,
+      scope: [],
+      depends_on: [],
+      branch: null,
+      goal_id: null,
+      risk: [],
+      stakes: 'normal',
+      stakes_provenance: 'declared',
+      merged: null,
+      state: 'open',
+      created_by: 'nick',
+      created_at: 1,
+      claimed_at: null,
+      resolved_at: null,
+      updated_at: 1,
+      ...over,
+    });
+    const ctx = {
+      roles: ['platform'],
+      pointer: { lanes: new Set(['L-pointed']), goal: 'g-pointed' },
+      goalStatus: new Map([
+        ['g-pointed', 'planned'],
+        ['g-flight', 'in-flight'],
+        ['g-planned', 'planned'],
+      ]),
+      staleLanes: new Set(['L-stale']),
+      shippedScopes: ['packages/server/src/sync/**'],
+    };
+
+    it('tiers: pointer › role held › stalled goal › in-flight goal › familiar scope › rest; a role not held ranks last', () => {
+      expect(upNextTier(laneAt({ id: 'L-pointed' }), ctx)).toBe(1);
+      expect(upNextTier(laneAt({ id: 'x', goal_id: 'g-pointed' }), ctx)).toBe(1);
+      expect(upNextTier(laneAt({ id: 'x', role: 'platform' }), ctx)).toBe(2);
+      expect(upNextTier(laneAt({ id: 'L-stale', goal_id: 'g-flight' }), ctx)).toBe(3);
+      expect(upNextTier(laneAt({ id: 'x', goal_id: 'g-flight' }), ctx)).toBe(3.5);
+      expect(
+        upNextTier(
+          laneAt({ id: 'x', goal_id: 'g-planned', scope: ['packages/server/src/**'] }),
+          ctx,
+        ),
+      ).toBe(4);
+      expect(upNextTier(laneAt({ id: 'x', goal_id: 'g-planned' }), ctx)).toBe(5);
+      // A role the seat does not hold ranks LAST — never out (ADR 227: aptitude, not permission)…
+      expect(upNextTier(laneAt({ id: 'x', role: 'designer', goal_id: 'g-flight' }), ctx)).toBe(5);
+      // …except under a human pointer, which outranks every derived signal.
+      expect(upNextTier(laneAt({ id: 'L-pointed', role: 'designer' }), ctx)).toBe(1);
+      // A seat-name-as-role (the board's messy values) matches nothing and falls through.
+      expect(upNextTier(laneAt({ id: 'x', role: 'izzo' }), ctx)).toBe(5);
+    });
+
+    it('rankUpNext: withholds unmet-dependency lanes, counts both, keeps goal-attached-first then oldest-first inside a tier', () => {
+      const done = laneAt({ id: 'D', state: 'done' });
+      const open = laneAt({ id: 'O', state: 'open' });
+      const lanes = [
+        done,
+        open,
+        laneAt({ id: 'blocked', depends_on: ['O'], created_at: 1 }),
+        laneAt({ id: 'ready', depends_on: ['D'], created_at: 2 }),
+        laneAt({ id: 'gone-dep', depends_on: ['never-existed'], created_at: 3 }),
+        laneAt({ id: 'young-attached', goal_id: 'g-planned', created_at: 9 }),
+        laneAt({ id: 'old-loose', created_at: 4 }),
+        laneAt({ id: 'role', role: 'platform', created_at: 8 }),
+      ];
+      const r = rankUpNext(lanes, ctx, 5);
+      // O (open, no deps) is claimable too; `blocked` depends on it and is withheld.
+      expect(r.up_next.map((l) => l.id)).toEqual([
+        'role', // tier 2
+        'young-attached', // tier 5, goal-attached beats goal-less (ADR 256 kept inside the tier)
+        'O', // tier 5, oldest loose
+        'ready',
+        'gone-dep', // a dependency that names no lane does not block (the contention rule)
+      ]);
+      expect(r.up_next_total).toBe(6);
+      expect(r.up_next_blocked_total).toBe(1);
+      // The window is a window: `old-loose` is claimable but did not fit.
+      expect(rankUpNext(lanes, ctx, 10).up_next.map((l) => l.id)).toContain('old-loose');
+    });
+
+    it('deriveNext: a role the seat holds ranks its lane ahead of an older one, and the counts ride along', async () => {
+      const { db, team, stanley } = await seed();
+      await setMemberGovernance(db, stanley.id, null, JSON.stringify(GENERALIST_CAPABILITIES), [
+        'platform',
+      ]);
+      const older = await openLane(db, team.id, 'revive', 'nick', { title: 'older generalist' });
+      const mine = await openLane(db, team.id, 'revive', 'nick', {
+        title: 'platform duty',
+        role: 'platform',
+      });
+      const theirs = await openLane(db, team.id, 'revive', 'nick', {
+        title: 'design duty',
+        role: 'designer',
+      });
+      const brief = await deriveNext(db, team.id, 'revive', 'stanley');
+      expect(brief.up_next.map((l) => l.id)).toEqual([mine.id, older.id, theirs.id]);
+      expect(brief.up_next_total).toBe(3);
+      expect(brief.up_next_blocked_total).toBe(0);
+      // Another seat, no roles: the same pool in a different order — nothing hidden, nothing shared.
+      const other = await deriveNext(db, team.id, 'revive', 'nick');
+      expect(other.up_next.map((l) => l.id)).toEqual([older.id, mine.id, theirs.id]);
+    });
+
+    it('deriveNext: the live handoff to me ranks its named lane and its goal first (tier 1)', async () => {
+      const { db, team, nick } = await seed();
+      const first = await openLane(db, team.id, 'revive', 'nick', { title: 'oldest' });
+      const named = await openLane(db, team.id, 'revive', 'nick', { title: 'named in handoff' });
+      const onGoal = await openLane(db, team.id, 'revive', 'nick', {
+        title: 'under the pointed goal',
+        goal_id: 'spine',
+      });
+      await insertMessage(
+        db,
+        team.id,
+        nick.id,
+        null,
+        makeEnvelope({
+          id: 'h-point',
+          team: 'revive',
+          from: 'nick',
+          to: { kind: 'team' },
+          act: 'handoff',
+          body: `carry on with ${named.id} and the spine`,
+          ts: 1_000,
+          meta: { goal_id: 'spine' },
+        }),
+      );
+      const brief = await deriveNext(db, team.id, 'revive', 'stanley', 3, 5, { now: 1_000 });
+      expect(brief.why?.goal_id).toBe('spine');
+      // Both tier 1 — goal-attached first inside the tier (ADR 256), then the named one; the
+      // merely-oldest lane comes after both.
+      expect(brief.up_next.map((l) => l.id)).toEqual([onGoal.id, named.id, first.id]);
+    });
+
+    it('deriveNext: a lane in the scope of what I shipped inside the window ranks ahead; outside the window it does not', async () => {
+      const { db, team } = await seed();
+      // The store stamps real time on the close, so the window is measured from a real clock —
+      // taken AFTER the close below, with a minute of slack on the far side, or a slow CI runner
+      // puts the close a few ms after `now` and inside the "later" window (run 37514082642).
+      const shipped = await openLane(db, team.id, 'revive', 'stanley', {
+        title: 'sync fix',
+        scope: ['packages/server/src/sync/**'],
+        claim: true,
+      });
+      await updateLane(db, team.id, shipped.id, 'revive', { state: 'done' });
+      const plain = await openLane(db, team.id, 'revive', 'nick', { title: 'elsewhere' });
+      const now = Date.now();
+      const near = await openLane(db, team.id, 'revive', 'nick', {
+        title: 'sync follow-up',
+        scope: ['packages/server/src/sync/log.ts'],
+      });
+      const fresh = await deriveNext(db, team.id, 'revive', 'stanley', 3, 5, { now });
+      expect(fresh.up_next.map((l) => l.id)).toEqual([near.id, plain.id]);
+      const later = await deriveNext(db, team.id, 'revive', 'stanley', 3, 5, {
+        now: now + FAMILIARITY_WINDOW_MS + 60_000,
+      });
+      expect(later.up_next.map((l) => l.id)).toEqual([plain.id, near.id]);
+    });
+
+    it('deriveNext: an unmet dependency withholds the lane and is counted, a met one does not', async () => {
+      const { db, team } = await seed();
+      const base = await openLane(db, team.id, 'revive', 'stanley', { title: 'base', claim: true });
+      const dependent = await openLane(db, team.id, 'revive', 'nick', {
+        title: 'needs base',
+        depends_on: [base.id],
+      });
+      let brief = await deriveNext(db, team.id, 'revive', 'nick');
+      expect(brief.up_next.map((l) => l.id)).toEqual([]);
+      expect(brief.up_next_total).toBe(0);
+      expect(brief.up_next_blocked_total).toBe(1);
+      await updateLane(db, team.id, base.id, 'revive', { state: 'done' });
+      brief = await deriveNext(db, team.id, 'revive', 'nick');
+      expect(brief.up_next.map((l) => l.id)).toEqual([dependent.id]);
+      expect(brief.up_next_total).toBe(1);
+      expect(brief.up_next_blocked_total).toBe(0);
     });
   });
 });

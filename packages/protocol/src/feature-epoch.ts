@@ -131,5 +131,9 @@
 // and `GET /inbox`, and the roster row's current `style_epoch` (inc 4) that `style stale` is read
 // from. A daemon behind this epoch drops the `style` policy key, has no `/members/me/style` route
 // and stamps no epoch on roster rows; an adapter behind it reads no block and attests no epoch.
-export const FEATURE_EPOCH = 30 as const;
+// Epoch 31 — ADR 536 (up-next relevance, increment 1): `NextBrief.up_next` is ranked per member and
+// excludes unmet-dependency lanes; `up_next_total` and `up_next_blocked_total` ride beside it. A
+// daemon behind this epoch serves the old oldest-first window and neither count; a renderer behind
+// it prints the list as before and omits the "N of M claimable" line (both counts default to 0).
+export const FEATURE_EPOCH = 31 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;

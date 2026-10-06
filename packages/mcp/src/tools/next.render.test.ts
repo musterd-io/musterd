@@ -369,3 +369,45 @@ describe('fmtNext — review promises (ADR 490)', () => {
     expect(empty).toContain('nothing in flight');
   });
 });
+
+/** ADR 536 §4.5 — the up-next window says how much it is a window on, in `musterd next`'s words. */
+describe('fmtNext — up next says how many were claimable and how many wait (ADR 536)', () => {
+  const open = (id: string): Lane =>
+    ({
+      id,
+      state: 'open',
+      title: id,
+      owner_seat: null,
+      project: 'runtime',
+      scope: [],
+      depends_on: [],
+      branch: null,
+      goal_id: null,
+      merged: null,
+    }) as unknown as Lane;
+
+  it('a window on a deeper pool: "N of M claimable · K more wait on a dependency"', () => {
+    const b = brief(null);
+    b.up_next = [open('L1'), open('L2')];
+    b.up_next_total = 30;
+    b.up_next_blocked_total = 44;
+    expect(fmtNext(b)).toContain(
+      'up next — open lanes you could pick up (2 of 30 claimable · 44 more wait on a dependency):',
+    );
+  });
+
+  it('the whole pool shown, nothing blocked: "all N claimable" and no dependency clause', () => {
+    const b = brief(null);
+    b.up_next = [open('L1'), open('L2')];
+    b.up_next_total = 2;
+    b.up_next_blocked_total = 0;
+    expect(fmtNext(b)).toContain('up next — open lanes you could pick up (all 2 claimable):');
+  });
+
+  it('an older daemon reports no counts (both 0): the line is as it always was, not zero-filled', () => {
+    const b = brief(null);
+    b.up_next = [open('L1')];
+    expect(fmtNext(b)).toContain('up next — open lanes you could pick up:');
+    expect(fmtNext(b)).not.toContain('claimable');
+  });
+});
