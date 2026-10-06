@@ -132,6 +132,31 @@ export function resolveStakesDefault(
 export const LaneStateSchema = z.enum(LANE_STATES);
 
 /**
+ * Scopes that render for a human. A lane that touches one of these and is opened with no explicit
+ * `risk` gets `risk: []` from the schema default — which silently skips the ADR 188 two-stage
+ * human gate, even when the lane's axis 4 (Feel — a human's read of a rendered surface) is the
+ * whole acceptance question. A lane whose scope is one of these must declare its risk, or declare
+ * the lack of one; it must not inherit a default it never chose.
+ *
+ * Matched by prefix, like StakesDefault: a scope path starts with one of these roots. The author
+ * still declares the tag — this only says *a declaration is required*.
+ */
+export const HUMAN_VISIBLE_SCOPE_ROOTS: readonly string[] = ['packages/web/', 'packages/mobile/'];
+
+/** Would opening this scope owe the human gate? Used to decide whether a lane must declare risk. */
+export function scopeIsHumanVisible(scope: readonly string[] | undefined): boolean {
+  if (!scope) return false;
+  return scope.some((glob) =>
+    HUMAN_VISIBLE_SCOPE_ROOTS.some((root) => {
+      const norm = root.replace(/\/+$/, '');
+      // A bare `--surface packages/web` is still the web surface; prefix-match only at a path
+      // boundary so `packages/webhooks` is not caught by the `packages/web` root.
+      return glob === norm || glob.startsWith(`${norm}/`);
+    }),
+  );
+}
+
+/**
  * Why a lane's close landed the way it did (ADR 283) — the vocabulary the `lane.closed` audit row
  * has recorded since ADR 217/229/234, lifted onto the wire so a reader can act on it.
  *
