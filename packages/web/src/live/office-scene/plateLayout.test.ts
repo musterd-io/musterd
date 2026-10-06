@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   HOME_HOLD_MS,
+  MAX_STEPS,
   MOVE_HOLD_MS,
   headBox,
   layoutPlates,
@@ -57,8 +58,10 @@ describe('layoutPlates', () => {
     expect(overlaps(plateRect(f, W, H), headBox({ x: 200, y: 150 }, 1))).toBe(false);
   });
 
-  it('the meeting-table cluster: no plate overlaps another plate or a neighbour’s head', () => {
-    // Four seats round a table, heads 20–40 px apart — the screenshot that opened this lane.
+  it('the meeting-table cluster: nobody floats off, and no two names cover each other', () => {
+    // Four seats round a table, heads 20–40 px apart — the screenshot that opened lane 01M3GPH5KB.
+    // Vertical-only plates cannot all clear four heads this close, so this pins what matters: every
+    // plate stays within MAX_STEPS of its head, and plates overlap each other by no more than a sliver.
     const plates = [
       plate('autorefresh', 400, 300, 118),
       plate('sloane', 440, 305),
@@ -66,17 +69,20 @@ describe('layoutPlates', () => {
       plate('dolly', 430, 350),
     ];
     const out = run(plates);
+    const area = (a: ReturnType<typeof plateRect>, b: ReturnType<typeof plateRect>) => {
+      const w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+      const h = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+      return w > 0 && h > 0 ? w * h : 0;
+    };
+    for (const p of plates) expect(out.memo.get(p.name)!.slot).toBeLessThanOrEqual(MAX_STEPS);
     const rects = plates.map((p) => ({
       name: p.name,
       r: plateRect(out.placements.get(p.name)!, p.w, H),
     }));
     for (const a of rects)
       for (const b of rects)
-        if (a.name !== b.name) expect(overlaps(a.r, b.r), `${a.name} × ${b.name}`).toBe(false);
-    for (const a of rects)
-      for (const p of plates)
-        if (p.name !== a.name)
-          expect(overlaps(a.r, headBox(p.anchor, 1)), `${a.name} on ${p.name}'s head`).toBe(false);
+        if (a.name < b.name)
+          expect(area(a.r, b.r), `${a.name} × ${b.name}`).toBeLessThanOrEqual(0.15 * W * H);
   });
 
   it('keeps a displaced plate where it is while that spot still works — no flicker as people walk', () => {
@@ -119,6 +125,26 @@ describe('layoutPlates', () => {
     const after = run([plate('back', 100, 100), plate('front', 160, 104)], later.memo, 800);
     // Blocked at 0, clear at 200 (the timer resets), blocked again at 400: 800 is only 400ms in.
     expect(after.placements.get('back')!.displaced).toBe(false);
+  });
+
+  it('never more than MAX_STEPS up, however crowded', () => {
+    const crowd = Array.from({ length: 9 }, (_, i) =>
+      plate(`m${i}`, 300 + (i % 3) * 6, 300 + Math.floor(i / 3) * 6),
+    );
+    const out = run(crowd);
+    for (const p of crowd) expect(out.memo.get(p.name)!.slot).toBeLessThanOrEqual(MAX_STEPS);
+  });
+
+  it('a raised plate steps down to a lower step once it frees — not only all the way home', () => {
+    // Home stays taken by front's plate; one step up is clear. A plate parked two steps up comes down.
+    const plates = [plate('back', 100, 100), plate('front', 160, 104)];
+    const high = new Map<string, PlateMemo>([
+      ['back', { slot: 2, blockedAt: null, lowerFreeAt: null }],
+    ]);
+    const t0 = run(plates, high, 0);
+    expect(t0.memo.get('back')!.slot).toBe(2);
+    const down = run(plates, t0.memo, HOME_HOLD_MS);
+    expect(down.memo.get('back')!.slot).toBe(1);
   });
 
   it('walkers yield: someone passing never moves a seated plate, and keeps their own over their head', () => {
@@ -189,9 +215,9 @@ describe('leaderFrom — the hairline back to a displaced plate’s head', () =>
   });
 });
 
-describe('the head box covers the shoulders too', () => {
-  it('reaches far enough down that a plate beside a neighbour’s head cannot clip their torso', () => {
+describe('the head box is the head', () => {
+  it('stops at the chin — clearing a neighbour’s shoulders is what sent plates five steps up', () => {
     const b = headBox({ x: 0, y: 0 }, 1);
-    expect(b.y1).toBeGreaterThanOrEqual(50);
+    expect(b.y1).toBeLessThanOrEqual(34);
   });
 });

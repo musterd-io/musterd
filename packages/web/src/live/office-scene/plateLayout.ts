@@ -23,11 +23,21 @@ import type { Pt } from './iso';
  *  1. Walkers yield. A seated plate never moves for someone passing; the walker's own plate stays
  *     over its head and may overlap for the moment it takes to pass.
  *  2. Hold before moving: a plate leaves its spot only once that spot has been blocked for
- *     `MOVE_HOLD_MS`, and goes home only once home has been free for `HOME_HOLD_MS`.
- *  3. Vertical only. The beside-the-head slots are gone; a plate steps straight up.
+ *     `MOVE_HOLD_MS`, and steps back down only once a lower spot has been free for `HOME_HOLD_MS`.
+ *  3. Vertical only, and not far: at most `MAX_STEPS` up. The beside-the-head slots are gone.
  *  4. A sliver is not a collision. A plate already settled stays put through an overlap up to
  *     `SLACK` of its own area. A fresh placement still looks for a fully clear spot first.
  *  5. (In the scene, not here) the step is a glide, not a snap — see `.lc-gl-label`'s `translate`.
+ *
+ * NOT TOO HIGH (nick, same evening, on the build that shipped the rules above: "some of the
+ * nameplates are too high above the member avatars"). Measured on the stream: in the lounge, dolly's
+ * plate sat five steps (138px) up and miley's four (110px), each on a long leader. Three causes, each
+ * fixed: up to five steps were allowed; a head's box ran down to the shoulders, so a plate over a
+ * front seat had to clear the whole upper body of the seat behind it; and a raised plate only ever
+ * went HOME, never down to a lower step that had come free. Now: two steps at most, a head is the
+ * head (a plate may cross a neighbour's shoulders — it is a label over a body, not over a face), a
+ * plate settles on the lowest spot it can, and when nothing is clear within two steps it takes the
+ * least-covered one — a slightly overlapped plate next to its member reads; one floating off does not.
  *
  * Pure and DOM-free: the scene measures plates, passes the clock, and applies the result.
  */
@@ -48,8 +58,9 @@ export interface PlateMemo {
   slot: number;
   /** When the plate's current spot first stopped being tolerable; null while it is fine. */
   blockedAt: number | null;
-  /** When a displaced plate's home first came free; null while home is taken (or it is home). */
-  homeFreeAt: number | null;
+  /** When a lower spot (home, or a smaller step) first came free for a displaced plate; null while
+   *  none has, or it is home. */
+  lowerFreeAt: number | null;
 }
 
 /** Where a plate lands: its bottom-centre (the scene's `translate(-50%, -100%)` point). */
@@ -72,17 +83,17 @@ export function plateRect(p: { x: number; y: number }, w: number, h: number): Re
 }
 
 /**
- * The part of a member a plate must never cover: their head and shoulders, just under the plate
- * anchor (render.ts lifts the anchor clear of the crown and the firefly over it). Down to the
- * shoulders, because a plate stepped beside one head at crown height otherwise lands on the next
- * member's torso — seen on the meeting table in the preview.
+ * The part of a member a plate must not cover: their head, just under the plate anchor (render.ts
+ * lifts the anchor clear of the crown and the firefly over it). It used to run down to the shoulders,
+ * for plates stepped BESIDE a head; plates only step up now, and clearing a neighbour's whole upper
+ * body is what pushed them five steps into the air (see the header).
  */
 export function headBox(anchor: Pt, scale: number): Rect {
   return {
     x0: anchor.x - 14 * scale,
     y0: anchor.y + 4 * scale,
     x1: anchor.x + 14 * scale,
-    y1: anchor.y + 52 * scale,
+    y1: anchor.y + 32 * scale,
   };
 }
 
@@ -129,8 +140,9 @@ function overlapArea(a: Rect, b: Rect, m = 0): number {
 function slotAt(i: number, p: PlateBox): PlatePlacement {
   return { x: p.anchor.x, y: p.anchor.y - i * (p.h + GAP), displaced: i > 0 };
 }
-/** Home plus five steps up. The meeting table's four seats stack clear by step four. */
-const SLOTS = 6;
+/** How far up a plate may step. Past two it stops reading as the member's own. */
+export const MAX_STEPS = 2;
+const SLOTS = MAX_STEPS + 1;
 
 export function layoutPlates(
   plates: readonly PlateBox[],
@@ -164,7 +176,7 @@ export function layoutPlates(
     if (p.moving) {
       const at = slotAt(0, p);
       placements.set(p.name, at);
-      memo.set(p.name, { slot: 0, blockedAt: null, homeFreeAt: null });
+      memo.set(p.name, { slot: 0, blockedAt: null, lowerFreeAt: null });
       continue;
     }
     const cost = (i: number): number => {
@@ -176,37 +188,46 @@ export function layoutPlates(
       return c;
     };
     const slack = SLACK * p.w * p.h;
-    /** The first fully clear slot, else the one that overlaps least. */
+    /** The lowest fully clear slot; else the lowest within slack; else the least covered. */
     const best = (): number => {
+      let tolerable = -1;
       let pick = 0;
       let low = Infinity;
       for (let i = 0; i < SLOTS; i++) {
         const c = cost(i);
         if (c === 0) return i;
+        if (tolerable < 0 && c <= slack) tolerable = i;
         if (c < low) {
           pick = i;
           low = c;
         }
       }
-      return pick;
+      return tolerable >= 0 ? tolerable : pick;
+    };
+    /** The lowest spot below `s` that is clear, or -1. */
+    const lowerClear = (s: number): number => {
+      for (let i = 0; i < s; i++) if (cost(i) === 0) return i;
+      return -1;
     };
     const had = prev.get(p.name);
     let next: PlateMemo;
     if (!had || had.slot >= SLOTS) {
       // New to the room (or a slot this layout no longer has): place it, no hold.
-      next = { slot: best(), blockedAt: null, homeFreeAt: null };
+      next = { slot: best(), blockedAt: null, lowerFreeAt: null };
     } else {
       const s = had.slot;
-      const homeFree = s > 0 && cost(0) === 0;
-      const homeFreeAt = homeFree ? (had.homeFreeAt ?? now) : null;
+      const lower = s > 0 ? lowerClear(s) : -1;
+      const lowerFreeAt = lower >= 0 ? (had.lowerFreeAt ?? now) : null;
       const blocked = cost(s) > slack;
       const blockedAt = blocked ? (had.blockedAt ?? now) : null;
-      if (homeFreeAt !== null && now - homeFreeAt >= HOME_HOLD_MS) {
-        next = { slot: 0, blockedAt: null, homeFreeAt: null };
+      if (lowerFreeAt !== null && now - lowerFreeAt >= HOME_HOLD_MS) {
+        next = { slot: lower, blockedAt: null, lowerFreeAt: null };
       } else if (blockedAt !== null && now - blockedAt >= MOVE_HOLD_MS) {
-        next = { slot: best(), blockedAt: null, homeFreeAt: null };
+        const to = best();
+        // Nowhere better to go: stay, and stop re-checking every frame for nothing.
+        next = { slot: cost(to) < cost(s) ? to : s, blockedAt: null, lowerFreeAt: null };
       } else {
-        next = { slot: s, blockedAt, homeFreeAt };
+        next = { slot: s, blockedAt, lowerFreeAt };
       }
     }
     const at = slotAt(next.slot, p);
