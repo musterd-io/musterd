@@ -60,8 +60,9 @@ what lets musterd carry no TLS of its own in this topology.
 
 The ADR 040 upgrade gate accepts a WebSocket only when its `Host` header is loopback, the bound host,
 or listed in `MUSTERD_ALLOWED_HOSTS`. A member dialling `http://daemon-box.tailnet.ts.net:4849` sends
-**that name** as its `Host` — so unless you allow-list it, every member's upgrade is `403`-ed while
-plain HTTP keeps working. Bake it into the daemon's LaunchAgent:
+**that name** as its `Host` — so unless you allow-list it, every member's upgrade is `403`-ed, and so
+is every plain HTTP request, `/health` included (`request Host or Origin is not allowed`; corrected
+2026-10-05 — this line used to say plain HTTP kept working). Bake it into the daemon's LaunchAgent:
 
 ```bash
 musterd service install --allowed-hosts "$DAEMON_ADDR,daemon-box.tailnet.ts.net"

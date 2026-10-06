@@ -1,0 +1,10 @@
+{
+  // The repo's strictness first, then Expo's module and JSX settings (ADR 520 Consequences).
+  "extends": ["../../tsconfig.base.json", "expo/tsconfig.base"],
+  "compilerOptions": {
+    "declaration": false,
+    "sourceMap": false,
+    "types": ["react"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "expo-env.d.ts"]
+}

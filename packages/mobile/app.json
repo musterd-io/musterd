@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "musterd",
+    "slug": "musterd",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "musterd",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "io.musterd.app",
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true,
+          "NSExceptionDomains": {
+            "ts.net": {
+              "NSIncludesSubdomains": true,
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            }
+          }
+        }
+      }
+    },
+    "android": {
+      "package": "io.musterd.app"
+    },
+    "plugins": ["expo-router", "expo-sqlite", "expo-secure-store"]
+  }
+}

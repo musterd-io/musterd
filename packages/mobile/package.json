@@ -1,0 +1,31 @@
+{
+  "name": "@musterd/mobile",
+  "version": "0.0.0",
+  "private": true,
+  "description": "musterd on the phone — for now, the Team's calendar (ADR 519, ADR 520). Expo on React Native's New Architecture; talks to the daemon over the wire.",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@expo/log-box": "~57.0.4",
+    "@expo/metro-runtime": "~57.0.16",
+    "@musterd/protocol": "workspace:*",
+    "expo": "~57.0.26",
+    "expo-constants": "~57.0.20",
+    "expo-linking": "~57.0.11",
+    "expo-router": "~57.0.24",
+    "expo-secure-store": "~57.0.4",
+    "expo-sqlite": "~57.0.3",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2"
+  }
+}
