@@ -19,6 +19,7 @@ import type { CreatedBy, EditOp, ItemInput, WhiteboardProvider } from './port.js
 import { BOARD_NAME_RE } from './port.js';
 import { probeSquigCheckout, type CheckoutProbe } from './squig/checkout.js';
 import { SquigProvider } from './squig/provider.js';
+import { SQUIG_TOOLS, type SquigToolName } from './squig/session.js';
 import { RoomManager } from './sync/roomManager.js';
 import { TldrawProvider } from './tldraw/provider.js';
 
@@ -111,6 +112,35 @@ export async function startService(port = servicePort()): Promise<RunningService
 
     if (req.method === 'GET' && path === '/api/boards') {
       return json(res, 200, { boards: await provider.list() });
+    }
+
+    // Squig's own tools on a board, and binding a board to a workspace file (ADR 527).
+    const sq = path.match(/^\/api\/boards\/([^/]+)\/(squig\/([a-z_]+)|link)$/);
+    if (sq && req.method === 'POST') {
+      const [, name, , tool] = sq as unknown as [string, string, string, string | undefined];
+      if (!BOARD_NAME_RE.test(name))
+        return json(res, 400, { error: `invalid board name ${JSON.stringify(name)}` });
+      if (!squig)
+        return json(res, 409, {
+          error: `Squig's tools need the Squig canvas; this service runs tldraw${choice.fallback ? ` (${choice.fallback})` : ''}`,
+        });
+      const body = (await readBody(req)) as {
+        file?: string;
+        actor?: CreatedBy;
+        args?: Record<string, unknown>;
+      };
+      if (tool === undefined) {
+        if (typeof body.file !== 'string') return json(res, 400, { error: 'file required' });
+        squig.link(name, body.file);
+        return json(res, 200, { linked: name, file: body.file });
+      }
+      if (!(SQUIG_TOOLS as readonly string[]).includes(tool))
+        return json(res, 404, { error: `unknown Squig tool ${JSON.stringify(tool)}` });
+      return json(
+        res,
+        200,
+        await squig.squigTool(name, tool as SquigToolName, body.args ?? {}, body.actor),
+      );
     }
 
     const api = path.match(/^\/api\/boards\/([^/]+)\/(open|add|outline|edit|close)$/);

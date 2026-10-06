@@ -101,6 +101,10 @@ workspace would put its build into every install for a feature most machines wil
   checkout exists.
 - One more idle local process per open board, until `whiteboard_close` or service shutdown.
 
+- **2026-10-05, folded into one server ([ADR 527](527-one-whiteboard-mcp.md)):** the team
+  companion this ADR left alone (`scripts/squig-mcp.mjs`) is retired. Its file is now the
+  whiteboard's linked board `team`, and Squig's tools reach every board through `whiteboard_*`.
+
 ## Observability & Evaluation
 
 - **Traces:** the service logs which provider it chose, and why it fell back, at start. The

@@ -2,11 +2,10 @@
   "mcpServers": {
     "whiteboard": {
       "command": "node",
-      "args": ["packages/whiteboard/dist/mcp/index.js"]
-    },
-    "squig": {
-      "command": "node",
-      "args": ["scripts/squig-mcp.mjs"]
+      "args": ["packages/whiteboard/dist/mcp/index.js"],
+      "env": {
+        "WHITEBOARD_LINKED_BOARDS": "team=docs/wireframes/team.squig.json"
+      }
     }
   }
 }

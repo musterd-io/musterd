@@ -7,7 +7,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import type {
   CreatedBy,
   EditOp,
@@ -33,7 +33,13 @@ import {
   type BoardMeta,
   type MetaEntry,
 } from './model.js';
-import { SquigSession, type SquigConnection, type SquigDocument, type SquigOp } from './session.js';
+import {
+  SquigSession,
+  type SquigConnection,
+  type SquigDocument,
+  type SquigOp,
+  type SquigToolName,
+} from './session.js';
 
 export function squigDir(): string {
   return join(dataDir(), 'squig');
@@ -89,6 +95,8 @@ export class SquigProvider implements WhiteboardProvider {
   private boards = new Map<string, Promise<Board>>();
   private queues = new Map<string, Promise<unknown>>();
   private connect: Connect;
+  /** Linked boards (ADR 527): a board name bound to a file the workspace chose, e.g. a repo. */
+  private links = new Map<string, string>();
 
   constructor(checkout: SquigCheckout, connect?: Connect) {
     this.connect = connect ?? ((file) => SquigSession.start(checkout, file));
@@ -97,6 +105,68 @@ export class SquigProvider implements WhiteboardProvider {
   /** The editor URL for an open board — handed to the human (it carries the access token). */
   async editorUrl(board: string): Promise<string> {
     return (await this.board(board)).conn.editorUrl;
+  }
+
+  /**
+   * Bind a board name to an existing `.squig.json` outside the data dir (ADR 527) — the team
+   * canvas in the repo, say. Opt-in by the workspace that names it; re-linking to the same file
+   * is a no-op, and a board cannot be re-pointed while it is open.
+   */
+  link(board: string, file: string): void {
+    assertBoardName(board);
+    if (!isAbsolute(file) || !file.endsWith('.squig.json'))
+      throw new Error(
+        `a linked board needs an absolute path to a .squig.json file, got ${JSON.stringify(file)}`,
+      );
+    const current = this.links.get(board);
+    if (current === file) return;
+    if (current !== undefined && this.boards.has(board))
+      throw new Error(
+        `board "${board}" is open on ${current} — close it before linking it elsewhere`,
+      );
+    this.links.set(board, file);
+  }
+
+  private fileFor(board: string): string {
+    return this.links.get(board) ?? boardFile(board);
+  }
+
+  /**
+   * One of Squig's own tools on a board (ADR 527), verbatim, so nothing Squig can do is lost by
+   * going through the whiteboard. Shapes an attributed caller creates with `edit_document` are
+   * stamped in the sidecar like any `whiteboard_add`; a ledger sync follows every call so the
+   * next `since` read sees the change.
+   */
+  async squigTool(
+    board: string,
+    name: SquigToolName,
+    args: Record<string, unknown>,
+    actor?: CreatedBy,
+  ): Promise<Record<string, unknown>> {
+    return this.serial(board, async () => {
+      const b = await this.board(board);
+      await this.sync(board, b);
+      const result = await b.conn.tool(name, args);
+      if (name === 'edit_document' && actor && Array.isArray(result['createdIds'])) {
+        const { document } = await b.conn.read();
+        for (const id of result['createdIds'] as string[]) {
+          const node = document.nodes[id];
+          if (!node || b.meta.items[id]) continue;
+          const role =
+            node.type === 'arrow'
+              ? 'link'
+              : node.type === 'text'
+                ? node.boxed
+                  ? 'note'
+                  : 'label'
+                : null;
+          if (role) b.meta.items[id] = { role, createdBy: actor };
+        }
+      }
+      await this.sync(board, b);
+      await saveMeta(board, b.meta);
+      return result;
+    });
   }
 
   /** One call at a time per board: every call is read-diff-write against the live file. */
@@ -113,8 +183,9 @@ export class SquigProvider implements WhiteboardProvider {
     let pending = this.boards.get(board);
     if (!pending) {
       pending = (async () => {
-        const file = boardFile(board);
+        const file = this.fileFor(board);
         await mkdir(squigDir(), { recursive: true });
+        await mkdir(dirname(file), { recursive: true });
         try {
           await stat(file);
         } catch {
@@ -141,7 +212,7 @@ export class SquigProvider implements WhiteboardProvider {
     assertBoardName(board);
     let created = false;
     try {
-      await stat(boardFile(board));
+      await stat(this.fileFor(board));
     } catch {
       created = true;
     }
@@ -525,6 +596,14 @@ export class SquigProvider implements WhiteboardProvider {
       if (!entry.endsWith('.squig.json')) continue;
       const s = await stat(join(squigDir(), entry));
       boards.push({ name: entry.slice(0, -'.squig.json'.length), updatedAt: s.mtimeMs });
+    }
+    for (const [name, file] of this.links) {
+      if (boards.some((b) => b.name === name)) continue;
+      try {
+        boards.push({ name, updatedAt: (await stat(file)).mtimeMs });
+      } catch {
+        /* linked but not created yet */
+      }
     }
     return boards.sort((a, b) => b.updatedAt - a.updatedAt);
   }

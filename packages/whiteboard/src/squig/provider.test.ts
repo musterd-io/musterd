@@ -48,6 +48,16 @@ class FakeSquig implements SquigConnection {
   async close() {
     this.closed = true;
   }
+  calls: Array<[string, Record<string, unknown>]> = [];
+  async tool(name: string, args: Record<string, unknown>) {
+    this.calls.push([name, args]);
+    if (name === 'edit_document') {
+      const before = new Set(Object.keys(this.doc.nodes));
+      await this.edit(args['operations'] as SquigOp[]);
+      return { createdIds: Object.keys(this.doc.nodes).filter((id) => !before.has(id)) };
+    }
+    return { ok: true };
+  }
 }
 
 const CHECKOUT = { root: '/x', entry: '/x/e', loader: '/x/l', node: '/x/node' };
@@ -233,6 +243,53 @@ describe('SquigProvider', () => {
     const item = (await again.read('b')).items[0]!;
     expect(item).toMatchObject({ text: 'kept', detail: 'why', createdBy: ADA });
     expect((await again.list()).map((b) => b.name)).toEqual(['b']);
+  });
+});
+
+describe("Squig's own tools through the provider (ADR 527)", () => {
+  it('passes a tool through verbatim and attributes what an edit_document creates', async () => {
+    await provider.open('b');
+    const res = await provider.squigTool(
+      'b',
+      'edit_document',
+      {
+        revision: 1,
+        operations: [
+          {
+            op: 'add',
+            nodes: [
+              { id: 'r1', type: 'text', text: 'raw note', boxed: true },
+              { id: 'r2', type: 'shape', shape: 'rect' },
+            ],
+          },
+        ],
+      },
+      ADA,
+    );
+    expect(res['createdIds']).toEqual(['r1', 'r2']);
+    const items = (await provider.read('b')).items;
+    expect(items.find((i) => i.id === 'r1')).toMatchObject({ kind: 'note', createdBy: ADA });
+    // A plain shape is not a brainstorm item; it is honest about that rather than mislabelled.
+    expect(items.find((i) => i.id === 'r2')).toMatchObject({ kind: 'other', createdBy: HUMAN });
+    expect(await provider.squigTool('b', 'render_document', { format: 'png' })).toEqual({
+      ok: true,
+    });
+    expect(squig.calls.at(-1)).toEqual(['render_document', { format: 'png' }]);
+  });
+
+  it('a linked board opens its own file, lists beside the rest, and refuses a relative path', async () => {
+    const files: string[] = [];
+    const p = new SquigProvider(CHECKOUT, async (file) => {
+      files.push(file);
+      return squig;
+    });
+    const team = join(dir, 'repo', 'docs', 'team.squig.json');
+    p.link('team', team);
+    await p.open('team');
+    expect(files).toEqual([team]);
+    expect((await p.list()).map((b) => b.name)).toContain('team');
+    expect(() => p.link('other', 'docs/x.squig.json')).toThrow(/absolute/);
+    expect(() => p.link('team', join(dir, 'elsewhere.squig.json'))).toThrow(/close it/);
   });
 });
 

@@ -16,8 +16,8 @@ this outside a musterd team.
 
 ## Tools
 
-Six `whiteboard_*` tools from the agent-whiteboard MCP server (it starts the board service
-itself when needed):
+The agent-whiteboard MCP server (it starts the board service itself when needed). Six
+brainstorm tools:
 
 - `whiteboard_open {board, seat}` — open/reopen a named board. **Call first**: `seat` is what
   attributes your shapes. Hand the human the returned URL.
@@ -31,6 +31,15 @@ itself when needed):
 - `whiteboard_close {board}` — persist, unload, get the final outline.
 - `whiteboard_list` — boards on disk (they survive across sessions — a brainstorm that spans
   days is ONE board).
+
+On a Squig board the same server also carries Squig's own tools, each taking `board` and
+`args` (Squig's arguments, passed through): `whiteboard_document`, `whiteboard_draw`,
+`whiteboard_replace`, `whiteboard_render` (a PNG comes back as an image — look at the board),
+`whiteboard_export`, `whiteboard_measure_text`, `whiteboard_catalog`, `whiteboard_comment`,
+`whiteboard_resolve_comment`, `whiteboard_history`, `whiteboard_restore`. Reach for them when a
+brainstorm turns into a wireframe; the brainstorm tools above stay the way to run the
+session. A workspace can link a board name to its own file — in musterd, `team` is the repo's
+`docs/wireframes/team.squig.json` (the `squig` skill covers wireframing on it).
 
 ## Session flow
 

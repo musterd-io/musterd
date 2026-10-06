@@ -40,8 +40,29 @@ export interface SquigConnection {
   read(): Promise<{ revision: number; document: SquigDocument }>;
   /** Apply ops against the latest revision, retrying once on a stale-revision 409. */
   edit(ops: SquigOp[]): Promise<void>;
+  /** Any of Squig's own local tools, verbatim (ADR 527). The document id is filled in. */
+  tool(name: SquigToolName, args: Record<string, unknown>): Promise<Record<string, unknown>>;
   close(): Promise<void>;
 }
+
+/**
+ * Squig's local tools the whiteboard re-exposes (ADR 527), by Squig's own names. `documents`
+ * is left out: a board IS one document, and whiteboard_list already lists boards.
+ */
+export const SQUIG_TOOLS = [
+  'get_document',
+  'edit_document',
+  'replace_document',
+  'render_document',
+  'export_document',
+  'measure_text',
+  'catalog',
+  'comment',
+  'resolve_comment',
+  'history',
+  'restore',
+] as const;
+export type SquigToolName = (typeof SQUIG_TOOLS)[number];
 
 const START_TIMEOUT_MS = 20_000;
 const EDITOR_LINE = /Open canvas: (http:\/\/127\.0\.0\.1:\d+)\/\?local=1#token=(\S+)/;
@@ -142,11 +163,20 @@ export class SquigSession implements SquigConnection {
     return new SquigSession(child, origin, token, documentId);
   }
 
-  private async call<T>(name: string, body: Record<string, unknown>): Promise<T> {
+  async tool(name: SquigToolName, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+    // `catalog` is the one tool that names no document.
+    return this.call(name, args, name !== 'catalog');
+  }
+
+  private async call<T>(
+    name: string,
+    body: Record<string, unknown>,
+    withDocument = true,
+  ): Promise<T> {
     const res = await fetch(`${this.origin}/api/v1/tools/${name}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ documentId: this.documentId, ...body }),
+      body: JSON.stringify(withDocument ? { ...body, documentId: this.documentId } : body),
     });
     const data = (await res.json()) as T & { error?: string };
     if (!res.ok) {
