@@ -7,7 +7,6 @@
  * falls back to the vendored copy.
  */
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -33,7 +32,6 @@ export function nodeSupportsSquig(version: string): boolean {
 
 export function probeSquigCheckout(
   env: NodeJS.ProcessEnv = process.env,
-  _home: string = homedir(),
   exists: (path: string) => boolean = existsSync,
   node: { execPath: string; version: string } = {
     execPath: process.execPath,

@@ -8,6 +8,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
+import { dataDir } from '../data-dir.js';
 import type {
   CreatedBy,
   EditOp,
@@ -17,7 +18,6 @@ import type {
   WhiteboardProvider,
 } from '../port.js';
 import { assertBoardName, NOTE_TEXT_MAX } from '../port.js';
-import { dataDir } from '../data-dir.js';
 import type { SquigCheckout } from './checkout.js';
 import {
   CLUSTER_PAD,

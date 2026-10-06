@@ -11,7 +11,7 @@ const has = (files: Set<string>) => (f: string) => files.has(f);
 
 describe('probeSquigCheckout (ADR 537)', () => {
   it('uses the vendored companion when nothing overrides it, with no loader', () => {
-    expect(probeSquigCheckout({}, '/h', has(vendoredFiles), NODE, VENDOR)).toEqual({
+    expect(probeSquigCheckout({}, has(vendoredFiles), NODE, VENDOR)).toEqual({
       ok: true,
       checkout: {
         kind: 'vendored',
@@ -29,8 +29,9 @@ describe('probeSquigCheckout (ADR 537)', () => {
       seen.push(f);
       return vendoredFiles.has(f);
     };
-    probeSquigCheckout({}, '/h', exists, NODE, VENDOR);
-    expect(seen.filter((f) => f.startsWith('/h/'))).toEqual([]);
+    probeSquigCheckout({}, exists, NODE, VENDOR);
+    expect(seen.filter((f) => f.includes('.squig/src'))).toEqual([]);
+    expect(seen.every((f) => f.startsWith(VENDOR))).toBe(true);
   });
 
   it('SQUIG_CHECKOUT wins over the vendored copy and runs through the loader', () => {
@@ -40,7 +41,7 @@ describe('probeSquigCheckout (ADR 537)', () => {
       '/c/scripts/register-loader.mjs',
       '/c/out/.squig-local-editor.json',
     ]);
-    expect(probeSquigCheckout({ SQUIG_CHECKOUT: '/c' }, '/h', has(files), NODE, VENDOR)).toEqual({
+    expect(probeSquigCheckout({ SQUIG_CHECKOUT: '/c' }, has(files), NODE, VENDOR)).toEqual({
       ok: true,
       checkout: {
         kind: 'checkout',
@@ -53,13 +54,7 @@ describe('probeSquigCheckout (ADR 537)', () => {
   });
 
   it('a SQUIG_CHECKOUT that is not a checkout fails and names it — no silent vendored fallback', () => {
-    const p = probeSquigCheckout(
-      { SQUIG_CHECKOUT: '/missing' },
-      '/h',
-      has(vendoredFiles),
-      NODE,
-      VENDOR,
-    );
+    const p = probeSquigCheckout({ SQUIG_CHECKOUT: '/missing' }, has(vendoredFiles), NODE, VENDOR);
     expect(p).toEqual({ ok: false, reason: expect.stringContaining('/missing') });
   });
 
@@ -70,12 +65,12 @@ describe('probeSquigCheckout (ADR 537)', () => {
       '/c/out/.squig-local-editor.json',
     ]);
     const old = { execPath: '/bin/node', version: '22.3.0' };
-    const p = probeSquigCheckout({ SQUIG_CHECKOUT: '/c' }, '/h', has(files), old, VENDOR);
+    const p = probeSquigCheckout({ SQUIG_CHECKOUT: '/c' }, has(files), old, VENDOR);
     expect(p).toEqual({ ok: false, reason: expect.stringContaining('22.6') });
   });
 
   it('a package without its vendored copy says so', () => {
-    const p = probeSquigCheckout({}, '/h', () => false, NODE, VENDOR);
+    const p = probeSquigCheckout({}, () => false, NODE, VENDOR);
     expect(p).toEqual({ ok: false, reason: expect.stringContaining(VENDOR) });
   });
 });
