@@ -153,6 +153,33 @@ const NOT_RUNNING =
   'the whiteboard service is not running on this machine — start it by opening any board ' +
   'from an agent (`whiteboard_open`), then run this again';
 
+/** The whiteboard's board-name rule (its BOARD_NAME_RE), restated: the CLI imports nothing from it. */
+const BOARD_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
+
+/**
+ * The editor URL goes to the OS opener (`open`, `xdg-open`, `cmd /c start`), and whoever answers
+ * on the whiteboard port chose it. So accept only Squig's shape: plain http on loopback, in
+ * characters no opener or shell treats specially — never a file:, an app scheme, a `&` that cmd
+ * would run, or a `%` it would expand as a variable. Squig's token is base64url, so the real URL
+ * never needs either.
+ */
+export function assertEditorUrl(raw: string): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new CliError(`the whiteboard returned an editor URL that is not a URL: ${raw}`, 4);
+  }
+  const loopback = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+  if (url.protocol !== 'http:' || !loopback || !/^[A-Za-z0-9._~:/?#=-]+$/.test(url.href)) {
+    throw new CliError(
+      `refusing to open ${raw}: a Squig editor URL is plain http on this machine (127.0.0.1 or localhost)`,
+      4,
+    );
+  }
+  return url.href;
+}
+
 /**
  * Open a huddle's board and return Squig's editor URL (ADR 537). The URL carries the companion's
  * token, so it comes only from the service's token-gated API — this command reads the service
@@ -160,6 +187,7 @@ const NOT_RUNNING =
  * the human asked for, so it is an error, not a quiet false.
  */
 export async function openRoomBoard(board: string): Promise<string> {
+  if (!BOARD_NAME.test(board)) throw new CliError(`${board} is not a board name`, 2);
   const base = whiteboardBase();
   try {
     const health = await fetch(`${base}/healthz`, { signal: AbortSignal.timeout(ROOM_PROBE_MS) });
@@ -181,7 +209,7 @@ export async function openRoomBoard(board: string): Promise<string> {
       4,
     );
   }
-  return body.url;
+  return assertEditorUrl(body.url);
 }
 
 /** Mirror a turn onto the board's Turns cluster, best-effort (same bounds as `layoutRoom`). */
