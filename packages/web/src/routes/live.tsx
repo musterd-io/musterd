@@ -216,7 +216,7 @@ function LivePage() {
   // Cloud spec §7: a server that cannot reach its database says so on /health; show it.
   const outage = useServerHealth();
   // ADR 516: the Team's active holds, read from the same route every surface reads.
-  const holds = useTeamHolds(cfg);
+  const { holds, canSet: canSetHold, refresh: refreshHolds } = useTeamHolds(cfg);
   const stream = useLiveStream(cfg, {
     onCredentialInvalid: recoverObserver,
     onConnected: armRecovery,
@@ -530,9 +530,10 @@ function LivePage() {
   return (
     <main className="lc">
       <HealthBanner reason={outage} />
-      {holds.length > 0 && (
+      {/* ADR 516: the chunk loads only when a hold is in force or this viewer may set one (inc 4). */}
+      {(holds.length > 0 || canSetHold) && (
         <Suspense fallback={null}>
-          <HoldsBanner holds={holds} />
+          <HoldsBanner holds={holds} cfg={cfg} canSet={canSetHold} onChanged={refreshHolds} />
         </Suspense>
       )}
       <header className="lc__topbar">

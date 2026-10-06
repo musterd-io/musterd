@@ -106,6 +106,13 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   keep the whole-room fit). A height-bound panel grows ~12%; a width-bound one never crops the door or
   the board. At ≥1600px `/live`'s team column steps to 24vw / 460px with its type 12% up — the step
   `/broadcast` takes at its 1080 rung. The overlay reel and the floating work stack it replaced are gone.
+- **Holds banner** (`live/HoldsBanner.tsx`, read by `live/useTeamHolds.ts`) — above the room, the
+  Team's active holds (ADR 516): `⏸ merges paused by nick until 15:30 (42m left): demo 14:00`, one
+  line per hold from `describeHoldLine` in `@musterd/protocol/wire`, a 30s poll of `GET /holds`, and
+  nothing when nothing is in force. A lazy chunk — it loads only once a hold is in force or the viewer
+  may set one. Increment 4: `lift` on each hold and a `pause…` form (effect, reason, duration preset)
+  render from the read's `can_set` alone — the daemon's per-reader answer, never the viewer's role in
+  the client — and a refusal shows in place in the daemon's words.
 - **Ask banner** (`live/AsksStrip.tsx`, words from `live/askPhrase.ts`) — the top of the office
   (ADR 464 §6): "✋ ryder is asking nick: *question* · holding until answered · 4:12", Approve / Deny
   inline for an answerer, "+N more waiting" opens the sheet, a settled outcome for ~6s

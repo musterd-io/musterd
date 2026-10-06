@@ -69,6 +69,11 @@ withDrivers('holds-http', (_o, kind) => {
     expect(read.json.holds.map((h: any) => h.id)).toEqual([set.json.hold.id]);
   });
 
+  it('the read says whether THIS reader may set — a human admin yes, an agent no (increment 4)', async () => {
+    expect((await call('GET', '/teams/dawn/holds', nick)).json.can_set).toBe(true);
+    expect((await call('GET', '/teams/dawn/holds', ada)).json.can_set).toBe(false);
+  });
+
   it('an agent cannot set or lift a hold — it can only read one', async () => {
     expect((await call('POST', '/teams/dawn/holds', ada, demo)).status).toBe(403);
     const { json } = await call('POST', '/teams/dawn/holds', nick, demo);

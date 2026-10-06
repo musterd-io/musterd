@@ -3692,12 +3692,16 @@ export async function handleHttp(
         });
       }
       if (method === 'GET' && rest === '/holds') {
-        const { team } = await authTouch(ctx, slug, req);
+        const { team, member } = await authTouch(ctx, slug, req);
         const all = url.searchParams.get('all') === '1';
         return sendJson(res, 200, {
           holds: all
             ? await listAllHolds(ctx.db, team.id)
             : await listActiveHolds(ctx.db, team.id, Date.now()),
+          // ADR 516 increment 4: whether THIS reader may set or lift — the same test `authAdmin`
+          // applies on the write, projected per reader so /live renders controls from the daemon's
+          // answer alone (ADR 501 Decision 5's shape). The write still decides.
+          can_set: member.kind === 'human' && resolveCapabilities(member).is_admin,
         });
       }
 

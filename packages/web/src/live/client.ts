@@ -9,6 +9,8 @@
 import type {
   AuditEntry,
   Envelope,
+  Hold,
+  HoldEffect,
   LaneBoard,
   LaneResult,
   MemberSummary,
@@ -526,6 +528,26 @@ export function haltSeat(
     cfg,
     `/teams/${encodeURIComponent(cfg.team)}/members/${encodeURIComponent(seat)}/halt`,
     { reason },
+  );
+}
+
+/**
+ * ADR 516 increment 4: set a Team hold — `POST /teams/:slug/holds`. WHO may is the daemon's
+ * (`authAdmin`, human by construction); the holds read's `can_set` is that answer projected for this
+ * viewer, and the control renders from it alone.
+ */
+export function setHold(
+  cfg: LiveConfig,
+  body: { effect: HoldEffect; reason: string; for_ms: number },
+): Promise<{ hold: Hold }> {
+  return postAsWeb(cfg, `/teams/${encodeURIComponent(cfg.team)}/holds`, body);
+}
+
+/** ADR 516 increment 4: lift a hold early — `POST /teams/:slug/holds/:id/lift`. */
+export function liftHold(cfg: LiveConfig, id: string): Promise<{ hold: Hold }> {
+  return postAsWeb(
+    cfg,
+    `/teams/${encodeURIComponent(cfg.team)}/holds/${encodeURIComponent(id)}/lift`,
   );
 }
 

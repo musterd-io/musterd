@@ -112,6 +112,15 @@ autorefresh tick reading server holds, `musterd hold`, the `service hold --auto`
 
 ## Consequences
 
+- _Dated note (2026-10-06, increment 4, lane 01M473YCC1):_ set and lift from `/live`. The holds
+  banner gains a `lift` on each active hold and a `pause…` control (effect from the fixed list, a
+  reason, 15m / 1h / 2h / 12h) — rendered only when `GET /holds` answers `can_set: true` for this
+  viewer, a per-reader flag the daemon computes with the write's own test (human admin), the ADR 501
+  Decision 5 shape: the control renders from the daemon's answer alone, never from the viewer's role
+  in a client, and the write still decides. One optional field on the list response (`HoldListSchema`,
+  SPEC A.15); an older daemon omits it and the client reads `false`. The banner's chunk stays lazy and
+  now also loads for a viewer who may set, so the "pause…" control exists on a quiet day. Decision 7
+  stands: no MCP tool sets or lifts a hold.
 - _Dated note (2026-10-05, increment 3, lane 01M473Y826):_ Decision 8 is built. A seat proposes with
   an `ask` (species `approve`) carrying `meta.hold_proposal` `{effect, reason, until | for_ms}`; the
   daemon checks it when it is SENT (shape, effect list, 12h cap), so a proposal that could never
