@@ -1,21 +1,29 @@
 /**
- * Where Squig lives on this machine (ADR 524). Squig publishes no npm package: it runs from a
- * local checkout — `SQUIG_CHECKOUT`, else `~/.squig/src` — built with `pnpm build:local`, which
- * writes the local editor bundle the companion serves. No checkout, no build, or a Node too old
- * for `--experimental-strip-types` means the service falls back to tldraw and says why.
+ * Where Squig comes from (ADR 537). The package carries a vendored companion — Squig built at a
+ * pinned commit and bundled by `scripts/vendor-squig.mjs` into `vendor/squig/` — so a machine
+ * needs no Squig clone. `SQUIG_CHECKOUT` points at a local clone instead, for trying a newer
+ * upstream; a clone runs Squig's TypeScript under `--experimental-strip-types` with its own
+ * loader, which needs Node 22.6 or newer. A wrong override fails and names the path: it never
+ * falls back to the vendored copy.
  */
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export interface SquigCheckout {
+  kind: 'vendored' | 'checkout';
   root: string;
   entry: string;
-  loader: string;
+  /** The ESM loader a clone needs; the vendored companion is plain JavaScript and has none. */
+  loader: string | null;
   node: string;
 }
 
 export type CheckoutProbe = { ok: true; checkout: SquigCheckout } | { ok: false; reason: string };
+
+/** This package's vendored Squig, resolved from this module, so any install location works. */
+export const VENDORED_ROOT = fileURLToPath(new URL('../../vendor/squig', import.meta.url));
 
 /** Squig's scripts run under `--experimental-strip-types`, which needs Node 22.6 or newer. */
 export function nodeSupportsSquig(version: string): boolean {
@@ -25,19 +33,22 @@ export function nodeSupportsSquig(version: string): boolean {
 
 export function probeSquigCheckout(
   env: NodeJS.ProcessEnv = process.env,
-  home: string = homedir(),
+  _home: string = homedir(),
   exists: (path: string) => boolean = existsSync,
   node: { execPath: string; version: string } = {
     execPath: process.execPath,
     version: process.versions.node,
   },
+  vendoredRoot: string = VENDORED_ROOT,
 ): CheckoutProbe {
-  const dirs = env['SQUIG_CHECKOUT'] ? [env['SQUIG_CHECKOUT']] : [join(home, '.squig', 'src')];
-  for (const dir of dirs) {
-    const root = resolve(dir);
+  const override = env['SQUIG_CHECKOUT'];
+  if (override) {
+    const root = resolve(override);
     const entry = join(root, 'scripts', 'squig.ts');
     const loader = join(root, 'scripts', 'register-loader.mjs');
-    if (!exists(entry) || !exists(loader)) continue;
+    if (!exists(entry) || !exists(loader)) {
+      return { ok: false, reason: `SQUIG_CHECKOUT=${root} is not a Squig checkout` };
+    }
     if (!exists(join(root, 'out', '.squig-local-editor.json'))) {
       return {
         ok: false,
@@ -47,13 +58,20 @@ export function probeSquigCheckout(
     if (!nodeSupportsSquig(node.version)) {
       return {
         ok: false,
-        reason: `Squig needs Node 22.6 or newer; the whiteboard service runs Node ${node.version}`,
+        reason: `a Squig checkout needs Node 22.6 or newer; the whiteboard service runs Node ${node.version}`,
       };
     }
-    return { ok: true, checkout: { root, entry, loader, node: node.execPath } };
+    return { ok: true, checkout: { kind: 'checkout', root, entry, loader, node: node.execPath } };
+  }
+  const entry = join(vendoredRoot, 'lib', 'agent', 'companion.mjs');
+  if (!exists(entry) || !exists(join(vendoredRoot, 'out', '.squig-local-editor.json'))) {
+    return {
+      ok: false,
+      reason: `this package's vendored Squig is missing at ${vendoredRoot} — reinstall @musterd/whiteboard`,
+    };
   }
   return {
-    ok: false,
-    reason: `no Squig checkout at ${dirs.map((d) => resolve(d)).join(' or ')} (set SQUIG_CHECKOUT, or clone Squig into ~/.squig/src and run \`pnpm build:local\`)`,
+    ok: true,
+    checkout: { kind: 'vendored', root: vendoredRoot, entry, loader: null, node: node.execPath },
   };
 }

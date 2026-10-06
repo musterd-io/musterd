@@ -184,7 +184,7 @@ describe('service', () => {
 describe('chooseProvider (ADR 524)', () => {
   const ok = () => ({
     ok: true as const,
-    checkout: { root: '/s', entry: '/e', loader: '/l', node: '/n' },
+    checkout: { kind: 'checkout' as const, root: '/s', entry: '/e', loader: '/l', node: '/n' },
   });
   const missing = () => ({ ok: false as const, reason: 'no Squig checkout at /h/.squig/src' });
 
