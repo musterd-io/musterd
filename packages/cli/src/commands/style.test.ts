@@ -184,6 +184,14 @@ describe('style / policy style commands (ADR 514 inc 4)', () => {
       );
       await expect(style(['clear'])).rejects.toThrow(/for human members/);
     });
+
+    it('`team policy style` with a bad word says usage before the daemon can refuse a non-admin', async () => {
+      await asAda();
+      await expect(policy(['frobnicate'])).rejects.toThrow(/usage: musterd team policy style/);
+      await expect(policy(['set'])).rejects.toThrow(/usage: musterd team policy style/);
+      await expect(policy(['set', 'volume=11'])).rejects.toThrow(/unknown dial "volume"/);
+      await expect(policy(['set', '--prose', '1\n2\n3\n4\n5\n6'])).rejects.toThrow(/6 lines/);
+    });
   });
 
   describe('musterd team policy style', () => {

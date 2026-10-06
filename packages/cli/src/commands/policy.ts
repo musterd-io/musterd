@@ -42,6 +42,25 @@ export async function teamPolicyStyle(parsed: Parsed): Promise<number> {
   const [area, sub] = parsed.positionals;
   if (area !== 'style') throw usage();
   rejectAs(parsed.flags);
+  if (sub !== undefined && sub !== 'set' && sub !== 'clear') throw usage();
+  // Every word is checked before the first round trip, so a mistyped command gets its usage line
+  // rather than whatever the daemon says first (an admin refusal, for a seat that is not one).
+  const words = parsed.positionals.slice(2);
+  const floorWords = words.filter((w) =>
+    (FLOOR_KEYS as readonly string[]).includes(w.split('=')[0]!),
+  );
+  const floor = sub === 'set' ? parseFloorPairs(floorWords) : {};
+  const defaults =
+    sub === 'set' ? parseDialPairs(words.filter((w) => !floorWords.includes(w))) : {};
+  const prose = flagStr(parsed.flags, 'prose');
+  if (sub === 'set') {
+    if (!Object.keys(floor).length && !Object.keys(defaults).length && prose === undefined)
+      throw usage();
+    if (prose) {
+      const problem = styleProseProblem(prose);
+      if (problem) throw new CliError(problem, 3, 'validation');
+    }
+  }
   const { team, http } = resolve(parsed.flags);
   const { stored } = await http.getPolicy(team);
 
@@ -51,20 +70,6 @@ export async function teamPolicyStyle(parsed: Parsed): Promise<number> {
     delete next.style;
     changed = true;
   } else if (sub === 'set') {
-    const words = parsed.positionals.slice(2);
-    const floorWords = words.filter((w) =>
-      (FLOOR_KEYS as readonly string[]).includes(w.split('=')[0]!),
-    );
-    const dialWords = words.filter((w) => !floorWords.includes(w));
-    const floor = parseFloorPairs(floorWords);
-    const defaults = parseDialPairs(dialWords);
-    const prose = flagStr(parsed.flags, 'prose');
-    if (!Object.keys(floor).length && !Object.keys(defaults).length && prose === undefined)
-      throw usage();
-    if (prose) {
-      const problem = styleProseProblem(prose);
-      if (problem) throw new CliError(problem, 3, 'validation');
-    }
     const style: StylePolicyOverride = { ...stored.style };
     if (Object.keys(floor).length) style.floor = { ...style.floor, ...floor };
     if (Object.keys(defaults).length) style.defaults = { ...style.defaults, ...defaults };
@@ -72,8 +77,6 @@ export async function teamPolicyStyle(parsed: Parsed): Promise<number> {
     else if (prose !== undefined) style.prose = prose;
     next.style = style;
     changed = true;
-  } else if (sub !== undefined) {
-    throw usage();
   }
 
   const result = changed ? await http.setPolicy(team, next) : { policy: null, stored };
