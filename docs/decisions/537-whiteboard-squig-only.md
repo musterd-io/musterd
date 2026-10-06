@@ -60,8 +60,8 @@ needs a clone that a stranger does not have.
 
 ## Consequences
 
-- The package grows by about 9 MB: the editor build (7.1 MB), the fonts (1.0 MB, OFL) and the
-  companion. `sharp` with libvips adds about 18 MB when installed on macOS arm64.
+- The package grows by 14 MB, measured on 2026-10-06: the editor build (7.1 MB), the companion
+  (5.9 MB, left unminified so its stack traces stay readable) and the fonts (1.0 MB, OFL). `sharp` with libvips adds about 18 MB when installed on macOS arm64.
 - The live Squig test runs everywhere, CI included, because the companion is in the repository.
 - Pablo Stanley's MIT notice ships in `vendor/squig/LICENSE`. The package README credits Squig.
 - nick's tldraw boards are archived, and the one real board is converted through the port, before

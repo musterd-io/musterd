@@ -204,8 +204,8 @@ counts of notes, clusters and links as the source.
 
 ## 10. Risks
 
-- **Package size.** The package gains about 7 MB for the editor, 1 MB for the fonts and about 1 MB
-  for the companion. The native packages add their own install size: `sharp` with its libvips
+- **Package size.** The package gains 14 MB: 7.1 MB for the editor, 5.9 MB for the unminified
+  companion and 1.0 MB for the fonts (measured when vendored, 2026-10-06). The native packages add their own install size: `sharp` with its libvips
   binary is about 18 MB on macOS arm64 (measured in Squig's install on 2026-10-06). This is acceptable for a tool installed once. Falsifier: if the first external
   installs complain about install time, revisit making `sharp` optional (it only normalizes WebP).
 - **Squig changes upstream.** Our copy is pinned, so upstream changes reach us only through a

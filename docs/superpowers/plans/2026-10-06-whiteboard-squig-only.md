@@ -276,7 +276,7 @@ pnpm --filter @musterd/whiteboard vendor:squig
 du -sh packages/whiteboard/vendor/squig
 ```
 
-Expected: the line `vendored Squig 85f92ab → …`, and roughly 9–10 MB.
+Expected: the line `vendored Squig 85f92ab → …`, and about 14 MB (measured 2026-10-06).
 
 - [ ] **Step 4: Commit.**
 

@@ -11,7 +11,15 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/dist-web/**', '**/node_modules/**', '**/coverage/**', 'npm-reserve/**', 'docs/**'],
+    ignores: [
+      '**/dist/**',
+      '**/dist-web/**',
+      '**/node_modules/**',
+      '**/coverage/**',
+      'npm-reserve/**',
+      'docs/**',
+      'packages/whiteboard/vendor/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
