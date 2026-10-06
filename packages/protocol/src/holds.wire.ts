@@ -64,22 +64,51 @@ export function holdRefusal(hold: Hold): string {
  * ADR 516 increment 2: is this shell command a merge? The two shapes that land work on `main` from a
  * seat's shell — `gh pr merge` (including `--auto`, which arms a later merge) and a `git push` whose
  * refspec names `main`/`master`. Checked per segment of a compound command (`&&`, `||`, `;`, `|`,
- * newline), after leading `VAR=value` assignments and `git -C <dir>`. Deliberately narrow: a bare
+ * `&`, newline), after leading `VAR=value` assignments, `command`/`exec`/`env`-style prefixes, a
+ * `bash -c "…"` wrapper, shell quotes and a force `+` on the refspec (`normalizeSegment`), and
+ * `git -C <dir>`. Deliberately narrow: a bare
  * `git push` is not matched, because which branch it lands on is not in the text — a hold that
  * guessed would deny ordinary branch pushes and teach seats to route around it.
  */
 export function isMergeShapedCommand(command: string): boolean {
-  return command
-    .split(/&&|\|\||;|\||\n/)
-    .map((seg) => seg.trim().replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*/, ''))
-    .some(
-      (seg) =>
-        /^gh\s+pr\s+merge\b/.test(seg) ||
-        (/^git\s+(?:-C\s+\S+\s+)*push\b/.test(seg) &&
-          /(?:^|[\s:])(?:refs\/heads\/)?(?:main|master)(?:\s|$)/.test(
-            seg.replace(/^git\s+(?:-C\s+\S+\s+)*push\b/, ''),
-          )),
-    );
+  return (
+    command
+      // `&` (background) splits like the other separators — `git push origin main&` is a push.
+      .split(/&&|\|\||;|\||\n|&/)
+      .map(normalizeSegment)
+      .some(
+        (seg) =>
+          /^gh\s+pr\s+merge\b/.test(seg) ||
+          (/^git\s+(?:-C\s+\S+\s+)*push\b/.test(seg) &&
+            /(?:^|[\s:])(?:refs\/heads\/)?(?:main|master)(?:\s|$)/.test(
+              seg.replace(/^git\s+(?:-C\s+\S+\s+)*push\b/, ''),
+            )),
+      )
+  );
+}
+
+/**
+ * One segment, as the shell would run it: leading `VAR=value` assignments dropped; a `command`,
+ * `exec`, `env`, `sudo`, `time` or `nice` prefix looked through; a `bash -c "…"` / `sh -c '…'`
+ * wrapper unwrapped (the inner string is the command, and it is normalised again); quotes around
+ * words removed, so `"main"` reads as `main`; and a refspec's leading `+` (force) dropped, so
+ * `+main` reads as `main`. Each of these is a spelling of the same command, not a different one —
+ * the gaps stanley found probing the built matcher (holds inc 2 acceptance, 2026-10-06).
+ */
+function normalizeSegment(raw: string): string {
+  // Assignments and prefixes interleave (`env GH_TOKEN=x gh …`), so strip until nothing moves.
+  let seg = raw.trim();
+  for (let prev = ''; prev !== seg; ) {
+    prev = seg;
+    seg = seg
+      .replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+/, '')
+      .replace(/^(?:command|exec|time|nice|env|sudo)\s+(?:-\S+\s+)*/, '');
+  }
+  const wrapped = /^(?:bash|sh|zsh)\s+(?:-\S+\s+)*-c\s+(["'])([\s\S]*?)\1/.exec(seg);
+  if (wrapped) return normalizeSegment(wrapped[2]!);
+  return seg
+    .replace(/["']/g, '')
+    .replace(/(^|\s|:)\+(?=(?:refs\/heads\/)?(?:main|master)(?:\s|$))/g, '$1');
 }
 
 function clockOf(ms: number): string {

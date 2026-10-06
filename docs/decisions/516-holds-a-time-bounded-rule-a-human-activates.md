@@ -129,6 +129,15 @@ autorefresh tick reading server holds, `musterd hold`, the `service hold --auto`
   `proposed_by`; one proposal yields one hold (a second accept is a no-op, deduped on the hub). An
   agent's accept, a decline, or silence activates nothing. CLI: `musterd hold propose`; MCP seats use
   `team_send {act:'ask', meta:{species:'approve', tier, hold_proposal}}` — still no tool sets a hold.
+- _Dated note (2026-10-06, lane 01M49CCKQ2):_ stanley's acceptance of increment 2 probed the built
+  matcher and found spellings it missed: `git push origin +main` (force refspec), `"main"` (quoted),
+  `main&` (backgrounded), `bash -c "gh pr merge 3"` and `command gh pr merge`. `isMergeShapedCommand`
+  now normalises each segment first (`normalizeSegment`: `&` splits like `;`, `command`/`exec`/`env`/
+  `sudo`/`time`/`nice` prefixes and `VAR=` assignments are stripped until stable, a `bash|sh|zsh -c
+  "…"` wrapper is unwrapped and re-normalised, quotes are removed, a refspec's leading `+` is dropped).
+  Still deliberately narrow — a bare `git push` is not matched — and still a convenience in front of
+  GitHub's branch protection, not a boundary: a seat that wants around it can get around it, and the
+  daemon's deny is audited precisely so that an evasion is visible, not prevented.
 - _Dated note (2026-10-05, increment 2, lane 01M471RXBV):_ `merges_paused` is enforced, with one
   change of mechanism from Decision 6's wording. The hook does not read holds off `GET /enforcement`
   and decide locally; it matches merge-shaped commands locally (`isMergeShapedCommand`: `gh pr
