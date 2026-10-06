@@ -102,6 +102,16 @@ building the routing ADR 272 deferred, and in a way that can be shown wrong.
   tier-5 lane, and a lane whose `role` the member lacks, carry no strings (no signal fired). Both
   renders append ` · r1 · r2` to the lane line; nothing on an epoch-30 daemon (`.default([])`). No
   epoch bump: epoch 31 already names increments 1–2 together, as the spec said.
+- _Note, 2026-10-06 (lazara, increment 3 landed)._ `deriveNext` writes one `next.offer` audit row
+  per brief read (actor = the member; churn class, ADR 478): `{offered: [{lane, tier}], baseline:
+  [lane ids], total, blocked_total}`, where `baseline` is the window the pre-ADR-536 rule would have
+  served from the same board (`baselineUpNext`) — stored, so the readout never reconstructs the
+  board at offer time. Two departures from spec §6.1–6.2, both the smaller change: there is **no
+  `next.pickup` row** — the existing `lane.claimed` row with `kind: 'claim'` is the pickup, and
+  `pnpm next:readout` (`scripts/research/next-readout.ts`) joins it to the actor's newest offer in
+  the hour before; and the baseline rides in the offer row rather than being rebuilt. The readout
+  reads the live store plus the ADR 478 archive. Baseline page: `docs/wiki/up-next-relevance.md`;
+  the read is due 2026-10-20.
 - **Falsifier (spec §6.3).** Fourteen days after this lands on revive, if the ranked order's pickup
   hit rate is not above the oldest-first baseline recomputed on the same rows, decision 3 is
   reverted and decisions 2 and 4 are kept — they are honesty, not relevance. The reading is

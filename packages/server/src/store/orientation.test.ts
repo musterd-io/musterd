@@ -1630,6 +1630,48 @@ withDrivers('orientation', (o) => {
       expect(later.up_next.map((l) => l.id)).toEqual([plain.id, near.id]);
     });
 
+    it('deriveNext (increment 3): every brief read writes one next.offer row — the ranked window with tiers, the oldest-first baseline, both counts', async () => {
+      const { db, team, stanley } = await seed();
+      await setMemberGovernance(db, stanley.id, null, JSON.stringify(GENERALIST_CAPABILITIES), [
+        'platform',
+      ]);
+      const base = await openLane(db, team.id, 'revive', 'stanley', { title: 'base', claim: true });
+      const oldest = await openLane(db, team.id, 'revive', 'nick', { title: 'oldest plain' });
+      const role = await openLane(db, team.id, 'revive', 'nick', {
+        title: 'duty',
+        role: 'platform',
+      });
+      const blocked = await openLane(db, team.id, 'revive', 'nick', {
+        title: 'needs base',
+        depends_on: [base.id],
+      });
+      await deriveNext(db, team.id, 'revive', 'stanley');
+      const rows = await db.all<{ actor: string; target: string | null; detail: string }>(
+        `SELECT actor, target, detail FROM audit WHERE team_id = ? AND action = 'next.offer'`,
+        [team.id],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.actor).toBe('stanley');
+      expect(rows[0]!.target).toBeNull();
+      expect(JSON.parse(rows[0]!.detail)).toEqual({
+        // The ranked window: role fit first, then the plain lane; the blocked one withheld.
+        offered: [
+          { lane: role.id, tier: 2 },
+          { lane: oldest.id, tier: 5 },
+        ],
+        // The pre-ADR-536 window: every open lane, oldest first, goal-attached first, NO exclusion.
+        baseline: [oldest.id, role.id, blocked.id],
+        total: 2,
+        blocked_total: 1,
+      });
+      // A second read is a second row — the readout joins a claim to the newest one.
+      await deriveNext(db, team.id, 'revive', 'stanley');
+      expect(
+        (await db.all(`SELECT 1 FROM audit WHERE team_id = ? AND action = 'next.offer'`, [team.id]))
+          .length,
+      ).toBe(2);
+    });
+
     it('deriveNext: an unmet dependency withholds the lane and is counted, a met one does not', async () => {
       const { db, team } = await seed();
       const base = await openLane(db, team.id, 'revive', 'stanley', { title: 'base', claim: true });
