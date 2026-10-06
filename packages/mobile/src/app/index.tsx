@@ -17,6 +17,7 @@ import {
   dayHeading,
   deviceTimeZone,
   entriesOn,
+  isOver,
   pastSections,
   shiftMonth,
   timeLabel,
@@ -180,7 +181,13 @@ export default function CalendarScreen() {
           </Text>
         ) : null}
         {dayEntries.map((e) => (
-          <EntryRow key={e.id} entry={e} deviceTz={deviceTz} onPress={() => open(e.id)} />
+          <EntryRow
+            key={e.id}
+            entry={e}
+            deviceTz={deviceTz}
+            over={isOver(e, now)}
+            onPress={() => open(e.id)}
+          />
         ))}
         {selected && dayEntries.length === 0 ? (
           <Text style={[styles.empty, { color: p.muted }]}>Nothing on this day.</Text>
@@ -211,7 +218,12 @@ export default function CalendarScreen() {
         </Text>
       )}
       renderItem={({ item }) => (
-        <EntryRow entry={item} deviceTz={deviceTz} onPress={() => open(item.id)} />
+        <EntryRow
+          entry={item}
+          deviceTz={deviceTz}
+          over={view === 'upcoming' && isOver(item, now)}
+          onPress={() => open(item.id)}
+        />
       )}
       ListEmptyComponent={
         <Text style={[styles.empty, { color: p.muted }]}>

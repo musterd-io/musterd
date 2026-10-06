@@ -51,6 +51,29 @@ export function normalizeServerUrl(raw: string): string {
   return s;
 }
 
+/**
+ * What is wrong with a Connection before anything is sent, or null. Every field is required: an
+ * empty Team once reached the daemon as `GET /teams//calendar`. iOS App Transport Security refuses
+ * plain `http` to an IP address (the app's exception covers `*.ts.net` names and the local network
+ * only), so an `http://100.x…` server is refused here with the fix, not by a bare fetch error.
+ */
+export function connectionProblem(conn: Connection): string | null {
+  if (conn.server.trim() === '') return 'Server is required.';
+  let server: string;
+  try {
+    server = normalizeServerUrl(conn.server);
+  } catch (err) {
+    return (err as Error).message;
+  }
+  const { protocol, hostname } = new URL(server);
+  if (protocol === 'http:' && /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) {
+    return 'iOS blocks plain http to an IP address. Use the laptop’s Tailscale name instead, like http://your-laptop.your-tailnet.ts.net:4849.';
+  }
+  if (conn.team.trim() === '') return 'Team is required — the team’s name, like revive.';
+  if (conn.credential.trim() === '') return 'Credential is required — your mscr_… key.';
+  return null;
+}
+
 export interface CalendarApi {
   list(since?: number): Promise<CalendarList>;
   create(body: CalendarEntryInput): Promise<CalendarWriteResponse>;

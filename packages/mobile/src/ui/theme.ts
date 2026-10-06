@@ -13,6 +13,8 @@ const light = {
   border: '#E4E4E7',
   text: '#18181B',
   muted: '#71717A',
+  /** Hint text in an empty field — dimmer than typed text so a hint never reads as a value. */
+  placeholder: '#A1A1AA',
   accent: '#E1AD01',
   accentText: '#7A5A06',
   onAccent: '#18181B',
@@ -27,6 +29,7 @@ const dark: typeof light = {
   border: '#3F3F46',
   text: '#FAFAFA',
   muted: '#A1A1AA',
+  placeholder: '#71717A',
   accent: '#E1AD01',
   accentText: '#EFC94C',
   onAccent: '#18181B',

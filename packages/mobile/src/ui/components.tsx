@@ -66,7 +66,13 @@ export function KindDot({ kind, size = 8 }: { kind: CalendarKind; size?: number 
   );
 }
 
-export function EntryRow(props: { entry: CalendarEntry; deviceTz: string; onPress(): void }) {
+export function EntryRow(props: {
+  entry: CalendarEntry;
+  deviceTz: string;
+  /** Already over — drawn dimmed, so today still reads as a whole day without competing with what's next. */
+  over?: boolean;
+  onPress(): void;
+}) {
   const p = usePalette();
   const e = props.entry;
   const zone = zoneNote(e, props.deviceTz);
@@ -75,8 +81,10 @@ export function EntryRow(props: { entry: CalendarEntry; deviceTz: string; onPres
     <Pressable
       onPress={props.onPress}
       accessibilityRole="button"
+      accessibilityHint={props.over ? 'Already over' : undefined}
       style={({ pressed }) => [
         styles.row,
+        props.over && styles.over,
         { backgroundColor: pressed ? p.raised : p.surface, borderColor: p.border },
       ]}
     >
@@ -163,6 +171,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  over: { opacity: 0.45 },
   rowTime: { width: 84 },
   rowTimeText: { fontSize: 13, fontVariant: ['tabular-nums'] },
   rowZone: { fontSize: 11, marginTop: 2 },

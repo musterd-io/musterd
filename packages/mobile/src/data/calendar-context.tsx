@@ -10,7 +10,12 @@ import {
   type ReactNode,
 } from 'react';
 import { AppState } from 'react-native';
-import { createCalendarApi, normalizeServerUrl, type Connection } from '../lib/api';
+import {
+  connectionProblem,
+  createCalendarApi,
+  normalizeServerUrl,
+  type Connection,
+} from '../lib/api';
 import { LocalCalendar, type SyncReport } from '../lib/sync';
 import { clearConnection, loadConnection, saveConnection } from './settings';
 import { openSqliteStore } from './sqlite-store';
@@ -126,6 +131,8 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         void syncWith(connection);
       },
       async connect(raw) {
+        const problem = connectionProblem(raw);
+        if (problem) throw new Error(problem);
         const conn = { ...raw, server: normalizeServerUrl(raw.server), team: raw.team.trim() };
         await createCalendarApi(conn).list(); // refuses a wrong URL, Team or credential before we keep it
         if (connection && (connection.server !== conn.server || connection.team !== conn.team)) {
