@@ -43,6 +43,8 @@ export const AUDIT_CHURN_ACTIONS: ReadonlySet<AuditAction> = new Set<AuditAction
   'mcp.surface_rendered',
   'continuity.cursor_advanced',
   'record.tool_calls',
+  // ADR 536 inc 3: one row per brief read; `pnpm next:readout` reads live rows + the archive.
+  'next.offer',
 ]);
 
 /** Churn actions a daemon query reads as "newest row per seat, unbounded" — that row is kept. */

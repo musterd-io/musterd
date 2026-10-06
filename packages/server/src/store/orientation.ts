@@ -12,6 +12,7 @@ import {
   ReviewPromiseReferenceSchema,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
+import { appendAudit } from './audit.js';
 import { checkClaims } from './claimCheck.js';
 import { handoffNamedLaneIds, handoffNamedLaneOutOfPlay, handoffNamesNoLane } from './delivery.js';
 import { listGoals, nextGoal } from './goals.js';
@@ -201,6 +202,22 @@ export function rankUpNext(
       reasons: upNextReasons(l, ctx),
     })),
   };
+}
+
+/**
+ * ADR 536 increment 3 — the window the PRE-ADR-536 rule would have served from the same board:
+ * every `open` lane, oldest first, goal-attached first, no dependency exclusion. Written into each
+ * `next.offer` row beside the ranked window so `pnpm next:readout` scores the same pickups against
+ * both without reconstructing the board at offer time (the spec's "rows carry enough to rebuild
+ * it", made literal). Pure, like `rankUpNext`.
+ */
+export function baselineUpNext(all: readonly Lane[], limit: number): string[] {
+  return all
+    .filter((l) => l.state === 'open')
+    .sort((a, b) => a.created_at - b.created_at)
+    .sort((a, b) => Number(b.goal_id !== null) - Number(a.goal_id !== null))
+    .slice(0, limit)
+    .map((l) => l.id);
 }
 
 function parseMeta(meta: string | null): Record<string, unknown> {
@@ -521,6 +538,22 @@ export async function deriveNext(
     },
     upNextLimit,
   );
+  // ADR 536 increment 3: record what was offered, so the ranking can be shown wrong. One row per
+  // brief read, churn class (ADR 478). A pickup is the existing `lane.claimed` row (kind `claim`);
+  // the readout joins the two by actor within an hour. `appendAudit` swallows storage failures —
+  // observability never breaks the brief.
+  await appendAudit(db, teamId, {
+    actor: member,
+    action: 'next.offer',
+    target: null,
+    result: 'allow',
+    detail: {
+      offered: up_next_why.map((w) => ({ lane: w.lane, tier: w.tier })),
+      baseline: baselineUpNext(all, upNextLimit),
+      total: up_next_total,
+      blocked_total: up_next_blocked_total,
+    },
+  });
 
   // value-layer design: the team's oldest lanes waiting on acceptance — review debt as ambient
   // candidate work for ANY seat (owed_reviews stays the directed slice). Cap 3, oldest first.

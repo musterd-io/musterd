@@ -226,6 +226,11 @@ export type AuditAction =
   // assumed this row existed — it did not, and its absence is why a 2026-08-01 double-claim left
   // nothing in the audit log but the release that undid it.
   | 'lane.claimed'
+  // ADR 536 increment 3: one row per orientation brief read — the up_next window offered to a seat,
+  // with each lane's tier, the pre-ADR-536 (oldest-first) window it would have been served, and the
+  // two pool counts. Churn class (ADR 478): the densest row a seat writes, read only by
+  // `pnpm next:readout`.
+  | 'next.offer'
   // ADR 325 prereq: the transitions the four rows above do NOT cover, so a lane's whole history
   // folds back out of the log. `lane.updated` is any field edit (detail: { lane, fields,
   // changes: { field: { from, to } } } — values since the lane-replication slice, names alone
@@ -641,6 +646,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'lane.dispute_answered': 'actor',
   'lane.released': 'actor',
   'lane.claimed': 'actor',
+  'next.offer': 'actor',
   'lane.updated': 'actor',
   'lane.state_changed': 'actor',
   'lane.opened': 'actor',
