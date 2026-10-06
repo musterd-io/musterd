@@ -11,7 +11,7 @@ import { platesOpenMode, stillMode } from '../stillMode';
 import { surfaceGlyph } from '../surfaceGlyph';
 import { createActors, type Actors } from './actors';
 import { solidHit, walkable } from './nav';
-import { layoutPlates, leaderFrom, type PlateBox } from './plateLayout';
+import { layoutPlates, leaderFrom, type PlateBox, type PlateMemo } from './plateLayout';
 import { helpWalks } from './mapping';
 import {
   ambientFrameBudgetMs,
@@ -829,8 +829,8 @@ export function mountOffice(
    * size here and the plates re-flow around it.
    */
   const plateSize = new Map<string, { w: number; h: number }>();
-  /** Each plate's slot from the last layout — its hysteresis (plateLayout.ts). */
-  let plateSlots = new Map<string, number>();
+  /** Each plate's slot and hold timers from the last layout — its hysteresis (plateLayout.ts). */
+  let plateMemo = new Map<string, PlateMemo>();
   let lastHeads: Map<string, Pt> | null = null;
   const plateRO =
     typeof ResizeObserver === 'undefined'
@@ -1214,14 +1214,27 @@ export function mountOffice(
     lastHeads = headMap;
     syncWalkTags();
     const boxes: PlateBox[] = [];
+    // Mid-stride this frame — a sitter, a stander at the cooler or a lounge seat is not "moving".
+    const poses = actors.poses();
     for (const name of labels.keys()) {
       const head = headMap.get(name);
       if (!head) continue;
       const size = plateSize.get(name);
-      boxes.push({ name, anchor: head, w: size?.w ?? 60, h: size?.h ?? 14 });
+      boxes.push({
+        name,
+        anchor: head,
+        w: size?.w ?? 60,
+        h: size?.h ?? 14,
+        moving: poses.get(name)?.moving === true,
+      });
     }
-    const laid = layoutPlates(boxes, headMap, plateSlots, { scale: fit.scale });
-    plateSlots = laid.slots;
+    // The holds run on the wall clock. The room keeps drawing for AFTERGLOW_MS (2.6s) past the last
+    // motion, longer than either hold, so a plate waiting out its hold settles before the loop parks.
+    const laid = layoutPlates(boxes, headMap, plateMemo, {
+      scale: fit.scale,
+      now: performance.now(),
+    });
+    plateMemo = laid.memo;
     for (const [name, el] of labels) {
       const laidAt = laid.placements.get(name);
       const head = headMap.get(name);
@@ -1235,7 +1248,12 @@ export function mountOffice(
         width > size.w + 4
           ? { ...laidAt, x: Math.min(Math.max(laidAt.x, half), width - half) }
           : laidAt;
-      el.style.transform = `translate(-50%, -100%) translate(${at.x}px, ${at.y}px)`;
+      // The plate's HOME rides the transform, every frame, with no transition — it must track a
+      // walking head exactly. The step off home rides `translate`, which `.lc-gl-label` transitions:
+      // a plate that has to move glides there instead of snapping (nick, 2026-10-06).
+      const homeX = width > size.w + 4 ? Math.min(Math.max(head.x, half), width - half) : head.x;
+      el.style.transform = `translate(-50%, -100%) translate(${homeX}px, ${head.y}px)`;
+      el.style.translate = `${(at.x - homeX).toFixed(1)}px ${(at.y - head.y).toFixed(1)}px`;
       el.classList.toggle('is-displaced', at.displaced);
       if (at.displaced) {
         // From the plate's nearest edge to just above the crown it belongs to, in the label's own

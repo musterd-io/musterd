@@ -1477,7 +1477,17 @@
   align-items: center;
   gap: 3px;
   white-space: nowrap;
-  transition: opacity var(--lc-dur-2) var(--lc-ease-out);
+  /* `translate` is the plate's step off its own head (plateLayout.ts); `transform` is the head itself
+     and is set every frame with no transition, so a walker's plate never lags its walker. The step
+     glides rather than snaps (nick, 2026-10-06: the repositioning was "very distracting"). */
+  transition:
+    opacity var(--lc-dur-2) var(--lc-ease-out),
+    translate var(--lc-dur-3) var(--lc-ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-gl-label {
+    transition: opacity var(--lc-dur-2) var(--lc-ease-out);
+  }
 }
 /* A plate the layout moved off its own head (plateLayout.ts, lane 01M3GPH5KB) keeps a hairline back
    to it, in the member's own colour: where seats crowd — the meeting table, a pod row — a plate that
