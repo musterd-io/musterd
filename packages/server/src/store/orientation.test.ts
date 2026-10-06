@@ -1550,8 +1550,9 @@ withDrivers('orientation', (o) => {
 
     it('deriveNext: a lane in the scope of what I shipped inside the window ranks ahead; outside the window it does not', async () => {
       const { db, team } = await seed();
-      // The store stamps real time on the close, so the window is measured from a real clock.
-      const now = Date.now();
+      // The store stamps real time on the close, so the window is measured from a real clock —
+      // taken AFTER the close below, with a minute of slack on the far side, or a slow CI runner
+      // puts the close a few ms after `now` and inside the "later" window (run 37514082642).
       const shipped = await openLane(db, team.id, 'revive', 'stanley', {
         title: 'sync fix',
         scope: ['packages/server/src/sync/**'],
@@ -1559,6 +1560,7 @@ withDrivers('orientation', (o) => {
       });
       await updateLane(db, team.id, shipped.id, 'revive', { state: 'done' });
       const plain = await openLane(db, team.id, 'revive', 'nick', { title: 'elsewhere' });
+      const now = Date.now();
       const near = await openLane(db, team.id, 'revive', 'nick', {
         title: 'sync follow-up',
         scope: ['packages/server/src/sync/log.ts'],
@@ -1566,7 +1568,7 @@ withDrivers('orientation', (o) => {
       const fresh = await deriveNext(db, team.id, 'revive', 'stanley', 3, 5, { now });
       expect(fresh.up_next.map((l) => l.id)).toEqual([near.id, plain.id]);
       const later = await deriveNext(db, team.id, 'revive', 'stanley', 3, 5, {
-        now: now + FAMILIARITY_WINDOW_MS + 1,
+        now: now + FAMILIARITY_WINDOW_MS + 60_000,
       });
       expect(later.up_next.map((l) => l.id)).toEqual([plain.id, near.id]);
     });
