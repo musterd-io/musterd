@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_LAUNCHER_FILE, type LauncherFile, type Seat } from '../store.js';
-import { initialState, reduce, rows, selectableRows, type Key, type PickerState } from './state.js';
+import {
+  initialState,
+  RECENT_LIMIT,
+  reduce,
+  rows,
+  selectableRows,
+  type Key,
+  type PickerState,
+} from './state.js';
 
 const seat = (address: string, over: Partial<Seat> = {}): Seat => {
   const [team, project, member] = address.split('/') as [string, string, string];
@@ -69,11 +77,55 @@ function press(s: PickerState, ...keys: Key[]) {
 describe('picker state (spec §3)', () => {
   const s0 = initialState(FILE, '', 1_000);
 
-  it('opens on recent seats, newest first, from the snapshot', () => {
+  it('opens on recent seats, newest first, then every team (ADR 540)', () => {
     expect(rows(s0)[0]).toEqual({ kind: 'heading', label: 'recent' });
-    expect(selectableRows(s0).map((r) => (r.kind === 'seat' ? r.seat.member : ''))).toEqual([
-      'stanley',
-      'miley',
+    expect(
+      selectableRows(s0).map((r) =>
+        r.kind === 'seat' ? r.seat.member : r.kind === 'team' ? `t:${r.team}` : '',
+      ),
+    ).toEqual(['stanley', 'miley', 't:dawn', 't:revive']);
+    // The teams section is the teams level's rows: acme has no Workspace here, so it is listed but
+    // not selectable; revive carries the ★ of the seat used last.
+    const teams = rows(s0).filter((r) => r.kind === 'team');
+    expect(teams).toEqual([
+      { kind: 'team', team: 'acme', here: false, count: 0, star: false },
+      { kind: 'team', team: 'dawn', here: true, count: 1, star: false },
+      { kind: 'team', team: 'revive', here: true, count: 2, star: true },
+    ]);
+  });
+
+  it('⏎ on a team row of the first screen opens its projects; ← comes back to the first screen', () => {
+    let { state } = press(s0, k('down'), k('down'), k('down'), k('return'));
+    expect(state.level).toEqual({ kind: 'projects', team: 'revive' });
+    state = press(state, k('left')).state;
+    expect(state.level).toEqual({ kind: 'recent' });
+  });
+
+  it('the first screen shows at most RECENT_LIMIT recents; the rest are reachable through their team', () => {
+    const many = Array.from({ length: 8 }, (_, i) => seat(`revive/agents/s${i}`));
+    const file: LauncherFile = {
+      ...FILE,
+      seats: Object.fromEntries(
+        many.map((x, i) => [
+          x.address,
+          {
+            path: x.path,
+            harness: 'claude-code',
+            mode: 'fresh' as const,
+            launched_at: 100 + i,
+            ended_at: null,
+            exit: null,
+          },
+        ]),
+      ),
+      snapshot: { taken_at: 1, seats: many, teams: [{ team: 'revive', here: true }] },
+    };
+    const s = initialState(file, '', 1_000);
+    const seats = rows(s).filter((r) => r.kind === 'seat');
+    expect(seats).toHaveLength(RECENT_LIMIT);
+    expect(seats[0]).toMatchObject({ seat: { member: 's7' } });
+    expect(rows(s).filter((r) => r.kind === 'team')).toEqual([
+      { kind: 'team', team: 'revive', here: true, count: 8, star: false },
     ]);
   });
 

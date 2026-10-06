@@ -145,41 +145,56 @@ export function entryFor(s: PickerState, seat: Seat): MemberEntry | null {
 }
 const byMember = (a: Seat, b: Seat) => a.member.localeCompare(b.member);
 
+/** How many recents the first screen shows before the teams section (ADR 540). */
+export const RECENT_LIMIT = 5;
+
+const lastTeamOf = (s: PickerState): Seat | undefined =>
+  s.seats.find((x) => x.address === s.file.last);
+
+/** One row per team the snapshot knows: here or not, how many seats, ★ on the one used last. */
+function teamRows(s: PickerState): Row[] {
+  const lastTeam = lastTeamOf(s);
+  return s.teams.map(
+    (t): Row => ({
+      kind: 'team',
+      team: t.team,
+      here: t.here,
+      count: s.seats.filter((x) => x.team === t.team).length,
+      star: lastTeam?.team === t.team,
+    }),
+  );
+}
+
 /** The rows of the current level (or of the search, when there is a query). */
 export function rows(s: PickerState): Row[] {
+  const lastTeam = lastTeamOf(s);
   if (s.query.trim()) {
     const ranked = rankSeats(s.query, s.seats, (seat) => lastUsedAt(seat, s.file));
     return ranked.length
       ? [{ kind: 'heading', label: 'on this machine' }, ...ranked.map((x) => seatRow(x, true))]
       : [];
   }
-  const lastTeam = s.seats.find((x) => x.address === s.file.last);
   switch (s.level.kind) {
     case 'recent': {
+      // ADR 540: the first screen is the recents, capped, then every team — so the shape of the
+      // machine is on screen and a team is one ⏎ away without knowing a key.
       const used = s.seats
         .filter((x) => lastUsedAt(x, s.file) !== null)
         .sort((a, b) => (lastUsedAt(b, s.file) ?? 0) - (lastUsedAt(a, s.file) ?? 0));
-      const list = used.length ? used : [...s.seats];
+      const list = (used.length ? used : [...s.seats]).slice(0, RECENT_LIMIT);
+      const teams = s.teams.length
+        ? [{ kind: 'heading', label: 'teams' } as Row, ...teamRows(s)]
+        : [];
       return list.length
         ? [
             { kind: 'heading', label: used.length ? 'recent' : 'seats' },
             ...list.map((x) => seatRow(x, true)),
+            ...teams,
           ]
-        : [];
+        : teams;
     }
     case 'teams':
-      return [
-        { kind: 'heading', label: 'teams' },
-        ...s.teams.map(
-          (t): Row => ({
-            kind: 'team',
-            team: t.team,
-            here: t.here,
-            count: s.seats.filter((x) => x.team === t.team).length,
-            star: lastTeam?.team === t.team,
-          }),
-        ),
-      ];
+      return [{ kind: 'heading', label: 'teams' }, ...teamRows(s)];
     case 'projects': {
       const team = s.level.team;
       const projects = [
@@ -407,7 +422,7 @@ function onKey(s: PickerState, key: Key): Step {
     case 'tab':
       return none(cycleHarness(s));
     case 'right': {
-      // → browses; it never launches.
+      // → browses; it never launches. From the first screen it opens the teams level (ADR 540).
       if (!s.query && s.level.kind === 'recent') return push(s, { kind: 'teams' });
       const row = selectableRows(s)[s.cursor];
       return row?.kind === 'seat' ? none(s) : activate(s, 'fresh');

@@ -358,8 +358,11 @@ specified by `figma-brief-terminal.md`.
 ### `musterd` (bare)
 
 On a terminal, opens the seat picker ([ADR 491](../decisions/491-seat-launcher.md)): recent seats
-first, letters search every seat, `→` browses teams → projects → members, `⏎` launches fresh, `⌃R`
-resumes, `⇥` switches harness, `esc` goes back or quits (exit 0), `⌃C` quits (exit 130). The first
+first (at most five), then every team on this machine
+([ADR 540](../decisions/540-picker-teams-on-first-screen.md)) — `⏎` on a team opens its projects;
+letters search every seat, `→` opens the teams level and drills teams → projects → members, `⏎`
+launches a seat fresh, `⌃R` resumes, `⇥` switches harness, `esc` goes back or quits (exit 0), `⌃C`
+quits (exit 130). The first
 screen paints from `~/.musterd/launcher.json`'s snapshot; the catalog scan and the roster reads patch
 it. Piped or redirected, bare `musterd` prints help.
 

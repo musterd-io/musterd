@@ -145,6 +145,8 @@ the terminal around every harness.
   warning.
 - Lazy command loading changes how every command is imported, so every command starts faster, and
   the CLI end-to-end suite has to stay green across that change.
+- 2026-10-06: the first screen now lists the teams under the (capped) recents, and `→` is
+  labelled `→ teams` — ADR 540 amends Decision 1's first screen; the drill-down is unchanged.
 - The picker shows a project by its folder name, with the remote's name dimmed when different.
   Making the project a team-level fact with one name and a repo URL would let the launcher set up a
   project with no checkout here; that needs a decision of its own and is not taken here.

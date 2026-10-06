@@ -5,6 +5,7 @@ import { initialState, reduce } from './state.js';
 import { renderPicker } from './view.js';
 
 const NOW = Date.UTC(2026, 9, 1, 18, 0, 0);
+const key = (name: string) => ({ type: 'key' as const, key: { name } });
 const H = 3_600_000;
 const seat = (member: string, over: Partial<Seat> = {}): Seat => ({
   address: `revive/agents/${member}`,
@@ -78,9 +79,19 @@ describe('renderPicker (spec §3.1, no color, 80 columns)', () => {
       '› stanley  revive/agents  claude   ○ idle  ★ last used · 2h',
       `  miley    revive/agents  claude   ● live  here · since ${sinceLabel(NOW - H, NOW)}`,
       '  gptbot   revive/agents  codex    ○ idle  1d',
+      '  teams',
+      '  revive   ● here  3 seats  ★',
       '',
-      '  ⏎ launch · ⌃R resume · type to search · → browse · esc quit',
+      '  ⏎ launch · ⌃R resume · type to search · → teams · esc quit',
     ]);
+    // On the team row the footer says what ⏎ does there (ADR 540).
+    const onTeam = reduce(
+      reduce(reduce(s, key('down')).state, key('down')).state,
+      key('down'),
+    ).state;
+    const lines = renderPicker(onTeam, { cols: 80, rows: 24 });
+    expect(lines[lines.length - 1]).toBe('  ⏎ open · type to search · → teams · esc quit');
+    expect(lines).toContain('› revive   ● here  3 seats  ★');
   });
 
   it('says it is still checking before the roster answers, and offline when it cannot', () => {
