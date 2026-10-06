@@ -29,7 +29,7 @@ Bound the default response without breaking the callers that do want history. Th
 | --------------------------------------- | -------------------------------------------------------- |
 | web `useWorkingOn` (/board, /live, /broadcast) | the 10 newest done (Done column), per-goal recent shipped |
 | `musterd lanes`                         | prints everything today                                  |
-| MCP `lane_board`                        | prints everything when unfiltered                        |
+| MCP `lane_board`                        | prints everything when unfiltered; agents read it for live work |
 | `musterd archaeology --by-lane`         | yes — joins on `lane.merged.pr`, all of history          |
 | MCP `team_inbox_check` (`?mine=1`)      | only a lane that just closed, to unfold its broadcast    |
 | `musterd done`, todos snapshot          | no — live lanes only                                     |
@@ -42,9 +42,11 @@ Bound the default response without breaking the callers that do want history. Th
 2. `?history=all` returns the full board, as before. Any other `history` value is a 400 naming it.
 3. The window applies after the other filters (`project`, `mine`, `open`, `goal`, `state`), and
    only to the response: contention and staleness still read the whole board.
-4. The callers that want history opt in: `musterd lanes --history`, `lane_board {history: true}`,
-   and `archaeology --by-lane` always. The web board, the inbox fold, `done` and the todos snapshot
-   keep the default.
+4. The callers that want history opt in: `musterd lanes --history`, and `archaeology --by-lane`
+   always. The web board, MCP `lane_board`, the inbox fold, `done` and the todos snapshot keep the
+   default. `lane_board` gets no `history` parameter: it cost 83 B of every session's standing tool
+   list (over the `context:check` budget), for a read an agent makes about live work — an agent that
+   needs old closed lanes runs `musterd lanes --history`.
 
 ## Consequences
 
