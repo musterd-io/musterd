@@ -849,8 +849,10 @@ function statusState(row: {
  * {@link latestStatusUpdate} for every current member of a team, in ONE statement (lane
  * 01M3ZCTQK9): the roster asked once per member, and on Postgres each ask is its own five-round-trip
  * transaction. The correlated pick is the same `ORDER BY ts DESC, id DESC LIMIT 1` per member, so it
- * rides `idx_messages_from_act_ts` exactly as the single lookup does. Keyed by member id; a member
- * with no status_update is absent.
+ * rides a per-member index exactly as the single lookup does — on Postgres only while `messages`
+ * statistics know the team (schema v89 keeps them fresh; stale, the tenant policy's `team_id` qual
+ * plans a per-team scan, 32 ms vs 3.8 ms in Cloud run 14). Keyed by member id; a member with no
+ * status_update is absent.
  */
 export async function latestStatusUpdates(
   db: Driver,

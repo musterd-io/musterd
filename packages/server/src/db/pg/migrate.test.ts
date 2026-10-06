@@ -34,6 +34,22 @@ describe('migratePostgres (spec §12.2)', () => {
     await d.close();
   });
 
+  it('v89: messages re-analyzes after ~1 % churn, so a new team reaches the planner statistics (lane 01M477RQGV)', async () => {
+    const d = await pgliteDriver();
+    const owner = d.asOwner();
+    await migratePostgres(owner);
+    const row = await owner.get<{ reloptions: string[] | null }>(
+      "SELECT reloptions FROM pg_class WHERE relname = 'messages' AND relkind = 'r'",
+    );
+    expect(row?.reloptions).toEqual(
+      expect.arrayContaining([
+        'autovacuum_analyze_scale_factor=0.01',
+        'autovacuum_analyze_threshold=500',
+      ]),
+    );
+    await d.close();
+  });
+
   it('every team-owned table has RLS enabled, forced, and a tenant policy; globals have none', async () => {
     const d = await pgliteDriver();
     const owner = d.asOwner();

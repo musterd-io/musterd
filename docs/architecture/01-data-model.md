@@ -161,6 +161,11 @@ on `(team_id, source_ref) WHERE source_ref IS NOT NULL` — the one-time import'
 `end_time` because `end` is reserved in SQL; `pick` is 0/1 on both engines. Deletes are real; a
 `?since` delta reads them back from the `calendar.entry_deleted` audit rows, so there is no
 tombstone column. Local to the daemon that took the write — no sync kind.
+v89 (lane 01M477RQGV) is Postgres-only, with a SQLite no-op: `messages` gets
+`autovacuum_analyze_scale_factor = 0.01` and `autovacuum_analyze_threshold = 500`, so it re-analyzes
+after ~1 % churn. Under the tenant policy the roster's latest-status pick plans on `team_id`
+statistics, and a team newer than the last ANALYZE plans a per-team scan instead of a per-member one.
+Cloud run 14 measured 32 ms per roster read with the stale plan and 3.8 ms after an ANALYZE.
 
 **Tenancy (cloud design §12.1).** On Postgres every team-owned table carries `team_id` (`teams`:
 its `id`) and one derived row-level-security policy, `tenant`, on
