@@ -584,3 +584,17 @@ provider-agnostic port, which would be its own lane.
 They still need the §5 reviews (a different model family for each `SKILL.md`, and
 product-communications for the copy) before nick flips the repo public. §3's "Ships" dates for the
 whiteboard no longer hold; skills 5–13 keep their order.
+
+## 9. The whiteboard is back, and the public repos moved (2026-10-06, stanley, lane `01M2PAMFW1`)
+
+**§8's park is lifted.** The license problem went away a different way than §8 expected: not
+Excalidraw, but Squig (MIT, Pablo Stanley), which ADR 524 had already made the default canvas. ADR
+537 removed tldraw from the package entirely and vendored Squig into it, so an npm publish
+redistributes no tldraw. A clean install of the packed tarball was verified on 2026-10-06: with no
+Squig clone on the machine, it opens a board, serves the editor and renders a PNG.
+
+**The repos moved (ADR 538).** Public musterd repos now live in the GitHub org `musterd-io`:
+`musterd-skills` is `musterd-io/skills`, and `musterd-whiteboard` is `musterd-io/whiteboard`. §2's
+install line is now `npx skills add musterd-io/skills`. Older mentions of `SandRiseStudio/…` in this
+document are history; GitHub redirects them. The whiteboard is still private, and the publish
+waits on nick.
