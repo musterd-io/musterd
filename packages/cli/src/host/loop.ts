@@ -10,6 +10,7 @@ import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { HttpClient } from '../client.js';
 import { findBinding } from '../config.js';
 import { refreshWorkspaceDrift } from '../onboard/doctor.js';
+import { describeMirror, mirrorRepoServers, type MirrorResult } from '../onboard/repoServers.js';
 import {
   defaultSelfHealDeps,
   selfHealWorkspace,
@@ -118,6 +119,8 @@ export interface HostPollDeps {
   endCapture?: typeof endWakeCapture;
   /** ADR 408 before a wake: repair the workspace; returns the one line to log, or '' when clean. */
   heal?: (workspace: string) => string;
+  /** The repo-server mirror run before a spawn (ADR 529; tests). */
+  mirror?: (workspace: string) => Promise<MirrorResult>;
   /** Before a DREAM wake only: move a clean, detached workspace to origin/main (lane 01M41G80VN). */
   freshen?: (workspace: string) => string;
   verifyWindowMs?: number;
@@ -482,6 +485,12 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
       try {
         const healed = (deps.heal ?? healBeforeWake)(entry.workspace);
         if (healed) deps.log(`wake self-heal: ${order.seat} — ${healed}`);
+        // A woken seat gets the repo's MCP servers in its harness too (ADR 529), before the
+        // harness starts and reads its config. A failure is logged with the heal's, never a gate.
+        const mirrored = describeMirror(
+          await (deps.mirror ?? mirrorRepoServers)(entry.workspace),
+        ).replace(/^musterd: /, '');
+        if (mirrored) deps.log(`wake mirror: ${order.seat} — ${mirrored}`);
       } catch (e) {
         deps.log(`wake self-heal: ${order.seat} — skipped (${(e as Error).message})`);
       }

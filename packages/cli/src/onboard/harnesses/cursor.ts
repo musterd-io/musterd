@@ -399,8 +399,8 @@ export const cursor: Harness = {
   // Cursor expands them at launch (it is never resolved/baked here). Cursor has no managed
   // allow/ask/deny permission model, so permissions are *not* provisioned — they degrade to the
   // role's declared intent (charter); `provision` reports none added.
-  async provision(plan: ProvisionPlan) {
-    const path = projectConfigPath();
+  async provision(plan: ProvisionPlan, _scope?: 'local' | 'shared', cwd?: string) {
+    const path = projectConfigPath(cwd);
     const cfg = readConfig(path) ?? {};
     cfg.mcpServers = cfg.mcpServers ?? {};
     const servers: string[] = [];
@@ -418,8 +418,8 @@ export const cursor: Harness = {
   },
 
   // Reverse a provision (ADR 027): remove exactly the named servers from `.cursor/mcp.json`.
-  async unprovision(plan: UnprovisionPlan) {
-    const path = projectConfigPath();
+  async unprovision(plan: UnprovisionPlan, _scope?: 'local' | 'shared', cwd?: string) {
+    const path = projectConfigPath(cwd);
     const cfg = readConfig(path);
     if (!cfg?.mcpServers) return;
     let changed = false;

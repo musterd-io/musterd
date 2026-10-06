@@ -190,8 +190,8 @@ export const codex: Harness = {
   // is Codex's concern — musterd writes the template's reference string, never a real secret.
   // Role servers get no tool approvals here, so permissions degrade to declared intent (none added);
   // only the musterd entry approves its own tools (ADR 495).
-  async provision(plan: ProvisionPlan) {
-    const path = projectConfigPath();
+  async provision(plan: ProvisionPlan, _scope?: 'local' | 'shared', cwd?: string) {
+    const path = projectConfigPath(cwd);
     let toml = readToml(path);
     const servers: string[] = [];
     for (const s of plan.servers) {
@@ -208,13 +208,13 @@ export const codex: Harness = {
   },
 
   // Reverse a provision (ADR 027): remove exactly the named `[mcp_servers.*]` tables.
-  async unprovision(plan: UnprovisionPlan) {
-    const path = projectConfigPath();
+  async unprovision(plan: UnprovisionPlan, _scope?: 'local' | 'shared', cwd?: string) {
+    const path = projectConfigPath(cwd);
     const toml = readToml(path);
     if (toml.length === 0) return;
     const next = removeServers(toml, plan.servers);
     if (next !== toml) writeToml(path, next);
-    if (!hasServer(next, 'musterd')) removeCodexHooks(process.cwd());
+    if (!hasServer(next, 'musterd')) removeCodexHooks(cwd ?? process.cwd());
   },
 };
 
