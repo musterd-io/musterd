@@ -91,6 +91,14 @@ tell a knob nick chose last week from one he chose in July and forgot.
 
 ## Consequences
 
+- _Dated note (2026-10-06):_ nick set revive's first date the hour the build landed (`--review-by
+  +90d` → 2027-01-04), then asked whether 90 days was right. Assessment: 90 was a prior by analogy
+  (the controls registry's 90–120 days), not a measurement; revive's knobs were set during specific
+  arcs (dispatch loop for ADR 199, trace content for ADR 445) that end faster than a quarter, and one
+  approve ask per cycle costs seconds, while a stale enforced rule costs weeks. Decision: the default
+  stays 90 for teams in general; revive runs at 30 (`--review-by +30d` → 2026-11-05) as the
+  experiment this ADR's eval names — if the first ask surprises nick, 30 was right; if two reviews in
+  a row are boring, stretch it. The counter-risk is ask fatigue turning the review into a reflex.
 - revive's stored doc gains a `review_by` on its next policy write; until then it carries none and
   is never asked (a doc with no date is not overdue — the stamp is the server's, on write). A
   one-time `musterd team policy --review-by +90d` gives it one without changing a knob.
