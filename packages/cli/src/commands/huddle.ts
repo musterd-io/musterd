@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { withTraceContext } from '@musterd/mcp';
 import {
   deriveHuddles,
@@ -46,9 +49,30 @@ const TURN_ACTS: ReadonlySet<Act> = new Set(['message', 'challenge', 'steer', 'i
 export const DEFAULT_WHITEBOARD_PORT = 4851;
 const ROOM_PROBE_MS = 500;
 
+function whiteboardPort(): number {
+  return Number(process.env['WHITEBOARD_PORT'] ?? DEFAULT_WHITEBOARD_PORT);
+}
+
 function whiteboardBase(): string {
-  const port = Number(process.env['WHITEBOARD_PORT'] ?? DEFAULT_WHITEBOARD_PORT);
-  return `http://127.0.0.1:${port}`;
+  return `http://127.0.0.1:${whiteboardPort()}`;
+}
+
+/**
+ * The whiteboard service's API token: a 0600 file it writes at start under its data dir (lane
+ * 01M47FADGV). Read here, not imported — the CLI talks to the whiteboard over the wire only.
+ */
+function whiteboardHeaders(): Record<string, string> {
+  const dir = process.env['WHITEBOARD_DATA_DIR'] ?? join(homedir(), '.whiteboard');
+  let token = '';
+  try {
+    token = readFileSync(join(dir, `service-${whiteboardPort()}.token`), 'utf8').trim();
+  } catch {
+    /* no token: the service is not ours, or not up — the call fails and the room is skipped */
+  }
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 }
 
 export function parseTopic(raw: string | undefined): HuddleMeta['topic'] {
@@ -89,7 +113,7 @@ export async function layoutRoom(
     const post = async (path: string, body: unknown): Promise<Response> =>
       fetch(`${base}${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: whiteboardHeaders(),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(ROOM_PROBE_MS * 4),
       });
@@ -127,7 +151,7 @@ export async function mirrorTurn(board: string, actor: string, body: string): Pr
     if (!health.ok) return false;
     const res = await fetch(`${base}/api/boards/${board}/add`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: whiteboardHeaders(),
       body: JSON.stringify({
         actor: `seat:${actor}`,
         items: [

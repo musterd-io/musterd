@@ -185,7 +185,9 @@ export class SquigProvider implements WhiteboardProvider {
       pending = (async () => {
         const file = this.fileFor(board);
         await mkdir(squigDir(), { recursive: true });
-        await mkdir(dirname(file), { recursive: true });
+        // A linked board writes only where its folder already exists — the link route never
+        // creates directories (lane 01M47FADGV).
+        if (!this.links.has(board)) await mkdir(dirname(file), { recursive: true });
         try {
           await stat(file);
         } catch {

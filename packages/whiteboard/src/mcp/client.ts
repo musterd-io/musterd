@@ -4,6 +4,7 @@
  */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { readServiceToken } from '../auth.js';
 import type { EditOp, EditRefusal, ItemInput, Outline } from '../port.js';
 
 const SERVICE_ENTRY = fileURLToPath(new URL('../service.js', import.meta.url));
@@ -15,6 +16,15 @@ export class WhiteboardServiceClient {
 
   private base(): string {
     return `http://127.0.0.1:${this.port}`;
+  }
+
+  /** The service's API token (auth.ts), read fresh each call: a respawned service mints a new one. */
+  private headers(json = false): Record<string, string> {
+    const token = readServiceToken(this.port);
+    return {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(json ? { 'Content-Type': 'application/json' } : {}),
+    };
   }
 
   async isUp(): Promise<boolean> {
@@ -61,7 +71,7 @@ export class WhiteboardServiceClient {
   private async post<T>(path: string, body: unknown): Promise<T> {
     const res = await fetch(`${this.base()}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.headers(true),
       body: JSON.stringify(body),
     });
     const data = (await res.json()) as T & { error?: string };
@@ -90,7 +100,9 @@ export class WhiteboardServiceClient {
 
   async read(board: string, since?: number): Promise<Outline> {
     const query = since === undefined ? '' : `?since=${since}`;
-    const res = await fetch(`${this.base()}/api/boards/${board}/outline${query}`);
+    const res = await fetch(`${this.base()}/api/boards/${board}/outline${query}`, {
+      headers: this.headers(),
+    });
     const data = (await res.json()) as Outline & { error?: string };
     if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
     return data;
@@ -127,7 +139,7 @@ export class WhiteboardServiceClient {
 
   async list(): Promise<{ boards: Array<{ name: string; updatedAt: number }> }> {
     await this.ensureService();
-    const res = await fetch(`${this.base()}/api/boards`);
+    const res = await fetch(`${this.base()}/api/boards`, { headers: this.headers() });
     return (await res.json()) as { boards: Array<{ name: string; updatedAt: number }> };
   }
 }

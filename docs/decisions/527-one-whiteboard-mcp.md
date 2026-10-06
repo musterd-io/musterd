@@ -89,6 +89,20 @@ service never writes into a repository.
   Squig release that renames an argument surfaces as Squig's own validation error, not a
   whiteboard one.
 
+- **2026-10-05, the service is guarded (lane `01M47FADGV`; miley's flag):** as first landed,
+  every `/api` route took unauthenticated requests. The link route also took a file path
+  straight from the request body. Binding to 127.0.0.1 does not stop a web page in the user's
+  browser: a cross-site `text/plain` POST, or a DNS-rebound one, could link a board to any
+  `*.squig.json` path, create its folder and write to it.
+
+  The service now guards three ways:
+  - a random token in `<data dir>/service-<port>.token` (mode 0600) is required on every `/api`
+    call; the MCP client and `musterd huddle` read it from disk;
+  - the `Host` must be `localhost` or `127.0.0.1` at the service's port;
+  - a websocket from a foreign `Origin` is refused.
+
+  A linked board no longer creates folders.
+
 ## Observability & Evaluation
 
 - **Traces:** the service logs its provider choice at start. Squig tool calls go through

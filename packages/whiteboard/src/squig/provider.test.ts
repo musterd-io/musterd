@@ -5,7 +5,7 @@
  * included — and the edit policy refuses rather than skips. A real-Squig round trip lives in
  * squig.integration.test.ts and runs where a checkout exists.
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -285,6 +285,9 @@ describe("Squig's own tools through the provider (ADR 527)", () => {
     });
     const team = join(dir, 'repo', 'docs', 'team.squig.json');
     p.link('team', team);
+    // A linked board never creates folders (lane 01M47FADGV): the open fails until it exists.
+    await expect(p.open('team')).rejects.toThrow();
+    mkdirSync(join(dir, 'repo', 'docs'), { recursive: true });
     await p.open('team');
     expect(files).toEqual([team]);
     expect((await p.list()).map((b) => b.name)).toContain('team');
