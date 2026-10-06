@@ -596,5 +596,6 @@ Squig clone on the machine, it opens a board, serves the editor and renders a PN
 **The repos moved (ADR 538).** Public musterd repos now live in the GitHub org `musterd-io`:
 `musterd-skills` is `musterd-io/skills`, and `musterd-whiteboard` is `musterd-io/whiteboard`. §2's
 install line is now `npx skills add musterd-io/skills`. Older mentions of `SandRiseStudio/…` in this
-document are history; GitHub redirects them. The whiteboard is still private, and the publish
-waits on nick.
+document are history; GitHub redirects them. `musterd-io/whiteboard` went public and
+`@musterd/whiteboard@0.1.0` was published to npm the same day (ADR 330 Consequences). The
+monorepo now runs it from npm.

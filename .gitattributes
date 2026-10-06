@@ -4,6 +4,3 @@
 # file as binary and hid its diffs from review. This keeps such files reviewable regardless.)
 *.ts diff
 
-# Squig, vendored as built by packages/whiteboard/scripts/vendor-squig.mjs (ADR 537): collapsed
-# in PR diffs; review the script and VENDORED.json instead.
-packages/whiteboard/vendor/** linguist-generated=true
