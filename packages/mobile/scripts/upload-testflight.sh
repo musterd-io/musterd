@@ -10,12 +10,27 @@ cd "$(dirname "$0")/.."
 key="${ASC_API_KEY_JSON:-$HOME/.appstoreconnect/fastlane-musterd.json}"
 [ -f "$key" ] || { echo "no API key config at $key (see 09-mobile.md)" >&2; exit 1; }
 if [ $# -ge 1 ]; then
-  view=$(npx -y eas-cli@latest build:view "$1" --json)
+  json=$(npx -y eas-cli@latest build:view "$1" --json)
 else
-  view=$(npx -y eas-cli@latest build:list --platform ios --status finished --limit 1 --json --non-interactive | python3 -c 'import json,sys;print(json.dumps(json.load(sys.stdin)[0]))')
+  json=$(npx -y eas-cli@latest build:list --platform ios --status finished --limit 1 --json --non-interactive)
 fi
-read -r url build < <(python3 -c 'import json,sys;b=json.loads(sys.argv[1]);print(b["artifacts"]["buildUrl"],b["appBuildVersion"])' "$view")
+# Two plain lines (url, build number), parsed by python — bash 3.2's `read < <(…)` left both
+# unset on nick's first run (2026-10-06).
+fields=$(printf '%s' "$json" | python3 -c '
+import json, sys
+raw = sys.stdin.read()
+try:
+    b = json.loads(raw[raw.index("{") if raw.lstrip().startswith("{") else raw.index("["):])
+except Exception as e:
+    sys.exit("could not read the build from eas-cli: %s" % e)
+b = b[0] if isinstance(b, list) else b
+print(b["artifacts"]["buildUrl"]); print(b["appBuildVersion"])
+')
+url=$(printf '%s\n' "$fields" | sed -n 1p)
+build=$(printf '%s\n' "$fields" | sed -n 2p)
+[ -n "$url" ] && [ -n "$build" ] || { echo "no finished build found" >&2; exit 1; }
 ipa="$(mktemp -d)/musterd-$build.ipa"
-echo "downloading build $build…"
+echo "downloading build ${build}..."
 curl -sSL -o "$ipa" "$url"
+if [ -n "${DRY_RUN:-}" ]; then echo "dry run: would upload $ipa ($(du -h "$ipa" | cut -f1))"; exit 0; fi
 FASTLANE_SKIP_UPDATE_CHECK=1 fastlane run upload_to_testflight api_key_path:"$key" ipa:"$ipa" skip_waiting_for_build_processing:true
