@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "whiteboard": {
-      "command": "node",
-      "args": ["packages/whiteboard/dist/mcp/index.js"],
+      "command": "npx",
+      "args": ["-y", "@musterd/whiteboard@0.1.0"],
       "env": {
         "WHITEBOARD_LINKED_BOARDS": "team=docs/wireframes/team.squig.json"
       }

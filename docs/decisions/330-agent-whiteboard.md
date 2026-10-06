@@ -137,3 +137,12 @@ extractable package to `@musterd/mcp`.
   removed, and Squig is vendored into the package, so the package can be published without
   tldraw's license. Decision 3's port stays, with one adapter. Extraction (lane `01M2PAMFW1`)
   follows once tldraw is gone.
+
+- **2026-10-06, the package left the monorepo (lane `01M2PAMFW1`):** `@musterd/whiteboard@0.1.0`
+  is published on npm from `musterd-io/whiteboard` ([ADR 538](538-public-repos-in-musterd-io.md)),
+  which is now the source of truth. This repo deleted `packages/whiteboard`, and `.mcp.json` runs
+  `npx -y @musterd/whiteboard@0.1.0`, pinned so a release reaches the team only when the pin is
+  bumped. Verified from the registry with an empty `HOME`: `npx` lists the 17 tools and
+  `whiteboard_open` creates a Squig board from the vendored copy. The CLI's huddle commands talk to
+  the service over HTTP only, so nothing else here depended on the package's code. This is
+  decision 1's extraction test passing for real.

@@ -115,7 +115,7 @@ And one for the daemon: the line names one act. When an acceptance ask is pendin
 | the bell (live) and the convene wake (offline, named) | `packages/server/src/store/messages.ts` (`pendingInterrupts` — `huddles` vs `huddleOpens`), `interrupts.test.ts` |
 | the convene switch and its rail | `packages/protocol/src/residency.ts` (`convene_huddles`), `packages/server/src/store/residency.ts`, `residency.test.ts` |
 | setting the switch (`--convene-huddles`) | `packages/cli/src/commands/residency.ts` (`collectPolicyFlags`, `renderPolicy`), `residency.test.ts` |
-| the whiteboard accepts that payload | `packages/whiteboard/src/service.test.ts` ("accepts a huddle layout") |
+| the whiteboard accepts that payload | `src/service.test.ts` in `musterd-io/whiteboard` ("accepts a huddle layout"); the package left this repo on 2026-10-06 (ADR 330 Consequences) |
 
 ### And on `/live` and `/broadcast` (2026-09-04, increment 2)
 

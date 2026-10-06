@@ -21,7 +21,7 @@ Every Squig tool takes `board` plus `args`, which pass through to Squig verbatim
 
 The companion runs on `127.0.0.1`. A member on another machine does not see this live tab. They share the drawing by committing the `.squig.json`. A remote agent cannot reach the loopback server.
 
-Squig is vendored into `@musterd/whiteboard` (ADR 537), so no clone is needed. If `whiteboard_open` fails because Squig cannot start, the error names the cause. The usual cause is a missing native package (`sharp` or `@resvg/resvg-js`); reinstall the workspace (`pnpm install`). To try a newer upstream Squig, point `SQUIG_CHECKOUT` at a built clone, then reload MCP. Upgrade the vendored copy with `pnpm --filter @musterd/whiteboard vendor:squig <commit>`, never by hand. Do not assume `npx squig` exists.
+The whiteboard runs from the published npm package (`npx -y @musterd/whiteboard@<version>` in `.mcp.json`), and Squig is vendored inside it (ADR 537), so no clone is needed. If `whiteboard_open` fails because Squig cannot start, the error names the cause. The usual cause is a missing native package (`sharp` or `@resvg/resvg-js`); delete the npx cache (`~/.npm/_npx`) and reload MCP. To try a newer upstream Squig, point `SQUIG_CHECKOUT` at a built clone, then reload MCP. The package's source, and the vendored copy's upgrade (`npm run vendor:squig -- <commit>`, never by hand), live in `musterd-io/whiteboard`; a new release reaches this repo by bumping the version in `.mcp.json`. Do not assume `npx squig` exists.
 
 ## An already-open browser tab
 

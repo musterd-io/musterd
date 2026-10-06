@@ -18,7 +18,6 @@ export default tseslint.config(
       '**/coverage/**',
       'npm-reserve/**',
       'docs/**',
-      'packages/whiteboard/vendor/**',
     ],
   },
   js.configs.recommended,
@@ -121,7 +120,7 @@ export default tseslint.config(
     //
     // `react-hooks` rides along because the same files carry the office's rAF loops and subscription
     // effects, where a missing dep is a stale-closure bug that no test here would catch.
-    files: ['packages/web/**/*.{ts,tsx}', 'packages/whiteboard/web/**/*.{ts,tsx}'],
+    files: ['packages/web/**/*.{ts,tsx}'],
     plugins: { 'jsx-a11y': jsxA11y, 'react-hooks': reactHooks },
     languageOptions: {
       globals: { ...globals.browser },
