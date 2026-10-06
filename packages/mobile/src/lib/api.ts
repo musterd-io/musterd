@@ -83,13 +83,24 @@ export interface CalendarApi {
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
-export function createCalendarApi(conn: Connection, fetchImpl: Fetch = fetch): CalendarApi {
+/** How long a request may take before the daemon counts as unreachable. A sleeping laptop behind
+ *  MagicDNS otherwise holds a connect for about 75 s, and every other sync waits behind it. */
+export const REQUEST_TIMEOUT_MS = 10_000;
+
+export function createCalendarApi(
+  conn: Connection,
+  fetchImpl: Fetch = fetch,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): CalendarApi {
   const base = `${normalizeServerUrl(conn.server)}/teams/${encodeURIComponent(conn.team)}/calendar`;
 
   async function request(method: string, path: string, body?: unknown): Promise<unknown> {
     let res: Response;
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), timeoutMs);
     try {
       res = await fetchImpl(`${base}${path}`, {
+        signal: abort.signal,
         method,
         headers: {
           authorization: `Bearer ${conn.credential}`,
@@ -98,11 +109,14 @@ export function createCalendarApi(conn: Connection, fetchImpl: Fetch = fetch): C
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
     } catch (err) {
-      throw new CalendarApiError(
-        `could not reach ${conn.server} (${err instanceof Error ? err.message : String(err)})`,
-        0,
-        null,
-      );
+      const why = abort.signal.aborted
+        ? `no answer in ${timeoutMs / 1000}s`
+        : err instanceof Error
+          ? err.message
+          : String(err);
+      throw new CalendarApiError(`could not reach ${conn.server} (${why})`, 0, null);
+    } finally {
+      clearTimeout(timer);
     }
     const text = await res.text();
     let json: unknown = undefined;

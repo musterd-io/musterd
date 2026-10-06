@@ -85,15 +85,19 @@ export class LocalCalendar {
     now = Date.now(),
   ): Promise<CalendarEntry> {
     if (existing === null) {
+      const id = localId(now);
+      // The local id rides as source_ref, the daemon's idempotency key (ADR 519 §5): if a POST
+      // commits but its answer is lost, the replay replaces that entry instead of adding a second.
+      const body: CalendarEntryInput = { ...input, source_ref: input.source_ref ?? id };
       const entry: CalendarEntry = {
-        ...input,
-        id: localId(now),
+        ...body,
+        id,
         created_by: this.me,
         created_at: now,
         updated_at: now,
       };
       await this.store.putEntries([entry]);
-      await this.store.addPending({ op: 'create', id: entry.id, body: input, base: null });
+      await this.store.addPending({ op: 'create', id, body, base: null });
       return entry;
     }
     const entry: CalendarEntry = { ...existing, ...input };

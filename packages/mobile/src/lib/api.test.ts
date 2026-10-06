@@ -78,6 +78,18 @@ describe('createCalendarApi', () => {
     expect(err.unreachable).toBe(true);
   });
 
+  it('gives up on a hung request and reports it as offline', async () => {
+    const hang = (_url: string, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) =>
+        init?.signal?.addEventListener('abort', () => reject(new Error('aborted'))),
+      );
+    const err = (await createCalendarApi(conn, hang, 20)
+      .list()
+      .catch((e: unknown) => e)) as CalendarApiError;
+    expect(err.unreachable).toBe(true);
+    expect(err.message).toMatch(/no answer in 0.02s/);
+  });
+
   it('refuses an answer that is not the protocol shape', async () => {
     const api = createCalendarApi(conn, fakeFetch(200, { entries: 'nope' }));
     await expect(api.list()).rejects.toThrow();
