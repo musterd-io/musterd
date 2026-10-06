@@ -361,32 +361,93 @@ export async function unpushedTraceRows(
   after: number,
   limit: number,
 ): Promise<{ rows: SyncTraceRow[]; last: number; normalized: number }> {
-  const key = await syncTraceIdKey(traceDb);
-  const raw = await traceDb.all<{
-    row_seq: number;
-    id: string;
-    seat: string;
-    session_digest: string;
-    seq: number;
-    ts: number;
-    received_at: number;
-    harness: string;
-    kind: SyncTraceRow['kind'];
-    tool_name: string | null;
-    tool_use_id: string | null;
-    agent_id: string | null;
-    parent_agent_id: string | null;
-    duration_ms: number | null;
-    outcome: SyncTraceRow['outcome'];
-    detail: string | null;
-  }>(
-    `SELECT row_seq, id, seat, session_digest, seq, ts, received_at, harness, kind, tool_name,
-              tool_use_id, agent_id, parent_agent_id, duration_ms, outcome, detail
+  const raw = await traceDb.all<RawTraceRow>(
+    `SELECT ${RAW_COLUMNS}
          FROM trace_events
         WHERE team_id = ? AND row_seq > ? AND origin_node IS NULL
         ORDER BY row_seq LIMIT ?`,
     [teamId, after, limit],
   );
+  const { rows, normalized } = await shapeRows(traceDb, raw);
+  return { rows, last: raw.length > 0 ? raw[raw.length - 1]!.row_seq : after, normalized };
+}
+
+/** The structural columns the pusher reads — by name, so a content column is never selected. */
+const RAW_COLUMNS = `row_seq, id, seat, session_digest, seq, ts, received_at, harness, kind, tool_name,
+              tool_use_id, agent_id, parent_agent_id, duration_ms, outcome, detail`;
+
+interface RawTraceRow {
+  row_seq: number;
+  id: string;
+  seat: string;
+  session_digest: string;
+  seq: number;
+  ts: number;
+  received_at: number;
+  harness: string;
+  kind: SyncTraceRow['kind'];
+  tool_name: string | null;
+  tool_use_id: string | null;
+  agent_id: string | null;
+  parent_agent_id: string | null;
+  duration_ms: number | null;
+  outcome: SyncTraceRow['outcome'];
+  detail: string | null;
+}
+
+/**
+ * ADR 532: rows the hub held last time (a seat it could not attribute yet), re-read by id in the
+ * same wire shape, so the pusher re-offers them ahead of new rows. A held id whose row is gone is
+ * simply not returned.
+ */
+export async function heldTraceRows(
+  traceDb: Driver,
+  teamId: string,
+  ids: readonly string[],
+): Promise<{ rows: SyncTraceRow[]; normalized: number }> {
+  if (ids.length === 0) return { rows: [], normalized: 0 };
+  const raw = await traceDb.all<RawTraceRow>(
+    `SELECT ${RAW_COLUMNS}
+         FROM trace_events
+        WHERE team_id = ? AND origin_node IS NULL AND id IN (${ids.map(() => '?').join(', ')})
+        ORDER BY row_seq`,
+    [teamId, ...ids],
+  );
+  return shapeRows(traceDb, raw);
+}
+
+/** The most held ids a team keeps (ADR 532): past it, the oldest are dropped and say so in the log. */
+export const SYNC_TRACE_HELD_MAX = 5000;
+
+function syncTraceHeldKey(teamId: string): string {
+  return `sync_trace_held:${teamId}`;
+}
+
+export async function readSyncTraceHeld(traceDb: Driver, teamId: string): Promise<string[]> {
+  try {
+    const v = JSON.parse((await readMeta(traceDb, syncTraceHeldKey(teamId))) ?? '[]') as unknown;
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Replace the held set; returns how many oldest ids the cap dropped. */
+export async function writeSyncTraceHeld(
+  traceDb: Driver,
+  teamId: string,
+  ids: readonly string[],
+): Promise<number> {
+  const kept = ids.slice(-SYNC_TRACE_HELD_MAX);
+  await writeMeta(traceDb, syncTraceHeldKey(teamId), JSON.stringify(kept));
+  return ids.length - kept.length;
+}
+
+async function shapeRows(
+  traceDb: Driver,
+  raw: RawTraceRow[],
+): Promise<{ rows: SyncTraceRow[]; normalized: number }> {
+  const key = await syncTraceIdKey(traceDb);
   let normalized = 0;
   const rows: SyncTraceRow[] = raw.map((r) => {
     const tool = structuralToolName(r.harness, r.tool_name);
@@ -416,7 +477,7 @@ export async function unpushedTraceRows(
       detail: det.detail,
     };
   });
-  return { rows, last: raw.length > 0 ? raw[raw.length - 1]!.row_seq : after, normalized };
+  return { rows, normalized };
 }
 
 /**

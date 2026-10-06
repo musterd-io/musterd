@@ -51,7 +51,7 @@ someone adds the guard):
 | fire the ADR 188 stage-two human ask (composed as the lane owner) | `protocol/route.ts` | hub-only, fired when the accept folds, #2103 |
 | roster-removal release as `musterd` | `projection/reconcile.ts`, `store/members.ts` | guarded, lane `01M3ZBTJKD` |
 | ambient touch adopting a folded remote row | `store/presence.ts`, `transport/http.ts` | local rows only; no-op under a live remote row, lane `01M3ZBTJKD` |
-| hold a trace batch whose seat cannot bind while the main push is refused | `sync/tracePush.ts` | **open**: needs an ADR against ADR 453 §3 |
+| hold a trace batch whose seat cannot bind while the main push is refused | `sync/tracePush.ts`, `transport/http.ts` | held per row, re-offered until bound (ADR 532) |
 
 Why "this seat looks gone" means nothing on a joiner: a hub seat's liveness there is the node's last
 pull (live within 165 s), presence replicates as transitions never snapshots (ADR 384), and folded

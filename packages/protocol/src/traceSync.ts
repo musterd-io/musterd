@@ -492,10 +492,22 @@ export type SyncTraceRow = z.infer<typeof SyncTraceRowSchema>;
 
 export const SYNC_TRACE_MAX_BATCH = 1000;
 
+/** The transient residence cases (ADR 453 §3): a seat the roster has not caught up to, and a seat
+ *  no node has claimed yet. Batch-holding (409) for a pusher that does not ask otherwise; per row,
+ *  in the reply's `held`, for one that sends `hold_per_row` (ADR 532). */
+export const SYNC_TRACE_HOLD_REASONS = ['unresolved_seat', 'unbound_seat'] as const;
+export type SyncTraceHoldReason = (typeof SYNC_TRACE_HOLD_REASONS)[number];
+
 /** `POST /teams/:slug/sync/trace` — the joiner's `msnode_` is the caller; rows name their seats. */
 export const SyncTracePushRequestSchema = z
   .object({
     rows: z.array(SyncTraceRowSchema).min(1).max(SYNC_TRACE_MAX_BATCH),
+    /**
+     * ADR 532: hold a row the hub cannot attribute YET on its own (listed in `held`, not written)
+     * instead of holding the whole batch with a 409. Opt-in, so a pusher that predates it — and
+     * would advance its cursor past rows it never learned were held — keeps the 409.
+     */
+    hold_per_row: z.literal(true).optional(),
   })
   .strict();
 export type SyncTracePushRequest = z.infer<typeof SyncTracePushRequestSchema>;
@@ -513,9 +525,10 @@ export const SyncTracePushResponseSchema = z.object({
   collided: z.number().int().min(0),
   /** Rows refused one by one; the batch went on and the cursor advances past them. */
   refused: z.array(z.object({ id: TraceRowIdSchema, code: z.enum(SYNC_TRACE_REFUSAL_CODES) })),
+  /** ADR 532, for a `hold_per_row` push: rows not written YET (transient); the pusher re-offers
+   *  them on a later tick while the rest of the batch landed. Absent from an older hub. */
+  held: z
+    .array(z.object({ id: TraceRowIdSchema, code: z.enum(SYNC_TRACE_HOLD_REASONS) }))
+    .optional(),
 });
 export type SyncTracePushResponse = z.infer<typeof SyncTracePushResponseSchema>;
-
-/** The batch-holding refusals (409): transient, the pusher retries the same batch next tick. */
-export const SYNC_TRACE_HOLD_REASONS = ['unresolved_seat', 'unbound_seat'] as const;
-export type SyncTraceHoldReason = (typeof SYNC_TRACE_HOLD_REASONS)[number];

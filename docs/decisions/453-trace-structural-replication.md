@@ -331,6 +331,14 @@ machines.
   `origin_node`-stamped rows on the hub, `sync_log` grows by nothing trace-shaped, and the hub's
   `trace_push_held` / `trace_rows_refused` lines stay silent for a bound seat.
 
+- **2026-10-05, the transient holds are per row for a pusher that asks
+  ([ADR 532](532-held-trace-rows-and-wedge-kinds.md), lane `01M46Z04Z3`):** §3's whole-batch `409` for
+  `unresolved_seat` and `unbound_seat` let one seat that could not bind stall every other seat's
+  rows on that node. The stall compounds when the main push is refused, because then no seat ever
+  binds. A pusher that sends `hold_per_row` now gets those rows back in `held` while the rest land,
+  and it re-offers them each tick until the seat binds or resolves. A pusher that does not ask
+  still gets the `409`.
+
 ## Observability & Evaluation
 
 - **Traces:** a `musterd.trace.replicated` counter on the hub, by origin node and outcome

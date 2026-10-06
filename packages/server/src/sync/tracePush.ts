@@ -3,7 +3,14 @@ import type { Ctx } from '../context.js';
 import { failureFields, log } from '../log.js';
 import { readNodeState } from '../node/state.js';
 import { listActiveTeams } from '../store/teams.js';
-import { advanceSyncTraceCursor, readSyncTraceCursor, unpushedTraceRows } from '../store/trace.js';
+import {
+  advanceSyncTraceCursor,
+  heldTraceRows,
+  readSyncTraceCursor,
+  readSyncTraceHeld,
+  unpushedTraceRows,
+  writeSyncTraceHeld,
+} from '../store/trace.js';
 
 /**
  * The joiner's trace pusher (ADR 453 §4): this daemon's own structural trace rows, `trace.db` to
@@ -41,6 +48,8 @@ export interface TracePushOutcome {
   ignored: number;
   collided: number;
   refused: number;
+  /** Rows the hub held this time (ADR 532): re-offered on the next tick. */
+  held: number;
   /** Fields the pusher normalized on the way out (legacy or odd rows) — a non-zero rate names a tap. */
   normalized: number;
 }
@@ -60,13 +69,24 @@ export async function pushTraceTeam(
   if (!enrollment) return null;
 
   const cursor = await readSyncTraceCursor(ctx.traceDb, team.id);
-  const { rows, last, normalized } = await unpushedTraceRows(
-    ctx.traceDb,
-    team.id,
-    cursor,
-    SYNC_TRACE_MAX_BATCH,
-  );
-  if (rows.length === 0) return null;
+  // ADR 532: rows the hub held last time ride first, then new rows after the cursor, together one
+  // batch at most. The cursor only ever moves past NEW rows; a held row stays in the held set until
+  // the hub takes it (or refuses it for good).
+  const heldIds = await readSyncTraceHeld(ctx.traceDb, team.id);
+  const held = await heldTraceRows(ctx.traceDb, team.id, heldIds);
+  const room = SYNC_TRACE_MAX_BATCH - held.rows.length;
+  const fresh =
+    room > 0
+      ? await unpushedTraceRows(ctx.traceDb, team.id, cursor, room)
+      : { rows: [], last: cursor, normalized: 0 };
+  const rows = [...held.rows, ...fresh.rows];
+  const last = fresh.last;
+  const normalized = held.normalized + fresh.normalized;
+  if (rows.length === 0) {
+    // Held ids whose rows are gone have nothing left to offer.
+    if (heldIds.length > 0) await writeSyncTraceHeld(ctx.traceDb, team.id, []);
+    return null;
+  }
 
   const res = await fetch(new URL(`/teams/${team.slug}/sync/trace`, enrollment.hub_url), {
     method: 'POST',
@@ -74,13 +94,14 @@ export async function pushTraceTeam(
       'content-type': 'application/json',
       authorization: `Bearer ${enrollment.credential}`,
     },
-    body: JSON.stringify({ rows }),
+    body: JSON.stringify({ rows, hold_per_row: true }),
     signal: AbortSignal.timeout(TRACE_PUSH_TIMEOUT_MS),
   });
 
   if (res.status === 409) {
-    // A batch-holding refusal (ADR 453 §3): unresolved or unbound seat — transient. The cursor
-    // stays and the same batch goes next tick. Say which, so the log names the seat to bind.
+    // A batch-holding refusal (ADR 453 §3) — only from a hub that predates ADR 532's per-row
+    // holds, which this pusher asks for. Transient: the cursor stays and the same batch goes next
+    // tick. Say which, so the log names the seat to bind.
     const body = (await res.json().catch(() => null)) as {
       error?: { message?: string };
       reason?: string;
@@ -93,7 +114,7 @@ export async function pushTraceTeam(
       seat: body?.seat ?? null,
       cursor,
     });
-    return { pushed: 0, ignored: 0, collided: 0, refused: 0, normalized };
+    return { pushed: 0, ignored: 0, collided: 0, refused: 0, held: 0, normalized };
   }
   if (!res.ok) throw new Error(`hub responded ${res.status}`);
 
@@ -101,6 +122,21 @@ export async function pushTraceTeam(
   // Only past what the hub answered 200 to — refused rows included (§3: they are not written on
   // the hub, they stay here, and they never block the rows behind them).
   await advanceSyncTraceCursor(ctx.traceDb, team.id, last);
+  // The held set is exactly what the hub held THIS time: a re-offered row it took is out of it.
+  const dropped = await writeSyncTraceHeld(
+    ctx.traceDb,
+    team.id,
+    (ack.held ?? []).map((h) => h.id),
+  );
+  if ((ack.held ?? []).length > 0) {
+    log.warn({
+      msg: 'trace_rows_held',
+      team: team.slug,
+      held: ack.held!.length,
+      reasons: [...new Set(ack.held!.map((h) => h.code))],
+      ...(dropped > 0 ? { dropped_oldest: dropped } : {}),
+    });
+  }
   if (ack.refused.length > 0) {
     const seats = new Set(
       rows.filter((r) => ack.refused.some((f) => f.id === r.id)).map((r) => r.seat),
@@ -117,6 +153,7 @@ export async function pushTraceTeam(
     ignored: ack.ignored,
     collided: ack.collided,
     refused: ack.refused.length,
+    held: ack.held?.length ?? 0,
     normalized,
   };
 }
@@ -131,7 +168,14 @@ export function startTracePush(ctx: Ctx): () => void {
       for (const team of await listActiveTeams(ctx.db)) {
         try {
           const out = await pushTraceTeam(ctx, team);
-          if (out && (out.pushed > 0 || out.refused > 0 || out.collided > 0 || out.normalized > 0))
+          if (
+            out &&
+            (out.pushed > 0 ||
+              out.refused > 0 ||
+              out.collided > 0 ||
+              out.held > 0 ||
+              out.normalized > 0)
+          )
             log.info({ msg: 'trace_pushed', team: team.slug, ...out });
         } catch (error) {
           log.warn({

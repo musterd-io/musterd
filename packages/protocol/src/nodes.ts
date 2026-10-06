@@ -69,6 +69,18 @@ export type NodeSummary = z.infer<typeof NodeSummarySchema>;
  * stuck behind it, and the seat named is the one who can clear it. Local to the refused machine
  * (ADR 325 residence 3) — it describes THIS daemon's conversation with its hub.
  */
+export const SYNC_WEDGE_KINDS = [
+  'message',
+  'lane',
+  'presence',
+  'ledger',
+  'policy',
+  'continuity',
+  'record',
+  'seed',
+] as const;
+export type SyncWedgeKind = (typeof SYNC_WEDGE_KINDS)[number];
+
 export const SyncWedgeSchema = z.object({
   /** The seat the refused event spoke as. */
   seat: z.string(),
@@ -77,7 +89,9 @@ export const SyncWedgeSchema = z.object({
   bound_node_id: z.string(),
   /** This machine's node id — what a `musterd node trust` from `bound_to` must name. */
   node_id: z.string(),
-  kind: z.enum(['message', 'lane', 'presence']),
+  /** The refused event's kind — every replicated kind the hub's residence check names (ADR 532;
+   *  it was message/lane/presence only, and everything else was recorded as `presence`). */
+  kind: z.enum(SYNC_WEDGE_KINDS),
   /** When the hub first refused this seat, ms epoch. */
   since: z.number().int(),
 });

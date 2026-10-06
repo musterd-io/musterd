@@ -119,6 +119,7 @@ import {
   WIRE_ATTESTATION_SOURCES,
   SyncTracePushRequestSchema,
   SyncTracePushResponseSchema,
+  type SyncTraceHoldReason,
   TRACE_REPORT_DEFAULT_DAYS,
   TRACE_REPORT_MAX_DAYS,
   TraceReportSchema,
@@ -5880,6 +5881,11 @@ export async function handleHttp(
         // ONLY its row: listed in the reply, not written, and the batch goes on. No audit row for
         // any of these — the claim path's `seat.bound_elsewhere` deny row would put a row in
         // musterd.db every tick a batch stayed refused, which is the growth §5 rules out.
+        // ADR 532: a pusher that sends `hold_per_row` gets the two transient cases per row, in
+        // `held`, and the rest of its batch lands — one unbound seat no longer stalls every other
+        // seat's rows on that node. A pusher that does not ask keeps the whole-batch 409.
+        const perRow = body.hold_per_row === true;
+        const held: { id: string; code: SyncTraceHoldReason }[] = [];
         const admitted = [];
         const refused: { id: string; code: 'bound_elsewhere' }[] = [];
         const memberCache = new Map<string, { id: string; kind: string } | null>();
@@ -5889,6 +5895,10 @@ export async function handleHttp(
             const m = await getMemberByName(ctx.db, team.id, row.seat);
             member = m ? { id: m.id, kind: m.kind } : null;
             memberCache.set(row.seat, member);
+          }
+          if (member === null && perRow) {
+            held.push({ id: row.id, code: 'unresolved_seat' });
+            continue;
           }
           if (member === null) {
             return sendJson(res, 409, {
@@ -5904,6 +5914,10 @@ export async function handleHttp(
             continue;
           }
           const holders = await seatBindings(ctx.db, member.id);
+          if (holders.length === 0 && perRow) {
+            held.push({ id: row.id, code: 'unbound_seat' });
+            continue;
+          }
           if (holders.length === 0) {
             return sendJson(res, 409, {
               error: {
@@ -5925,7 +5939,11 @@ export async function handleHttp(
         recordTraceReplicated(node.id, 'ignored', counts.ignored);
         recordTraceReplicated(node.id, 'collided', counts.collided);
         recordTraceReplicated(node.id, 'refused', refused.length);
-        return sendJson(res, 200, SyncTracePushResponseSchema.parse({ ...counts, refused }));
+        return sendJson(
+          res,
+          200,
+          SyncTracePushResponseSchema.parse({ ...counts, refused, ...(perRow ? { held } : {}) }),
+        );
       }
 
       if (method === 'POST' && rest === '/sync/push') {

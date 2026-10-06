@@ -2,7 +2,9 @@ import {
   SYNC_PUSH_MAX_BATCH,
   SyncPushResponseSchema,
   type SyncEvent,
+  SYNC_WEDGE_KINDS,
   type SyncWedge,
+  type SyncWedgeKind,
   SyncWedgeSchema,
 } from '@musterd/protocol';
 import type { Ctx } from '../context.js';
@@ -119,6 +121,17 @@ export async function recordPushRefusal(
        ON CONFLICT(team_id, node_id) DO UPDATE SET refused_json = excluded.refused_json`,
     [teamId, nodeId, await readCursor(ctx, teamId, nodeId), now, JSON.stringify(wedge)],
   );
+}
+
+/**
+ * The refused event's kind as the hub named it (ADR 532 — it used to collapse everything but
+ * message and lane into `presence`). An unknown kind, from a newer hub, is still a wedge; it is
+ * recorded as `presence`, the closest shape.
+ */
+export function wedgeKind(raw: unknown): SyncWedgeKind {
+  return (SYNC_WEDGE_KINDS as readonly unknown[]).includes(raw)
+    ? (raw as SyncWedgeKind)
+    : 'presence';
 }
 
 /** This daemon's standing wedge for the team, or null — read by the roster and `node list`. */
@@ -397,7 +410,7 @@ export async function pushTeam(
       kind?: unknown;
     } | null;
     if (typeof body?.seat === 'string' && typeof body?.node_id === 'string') {
-      const kind = body.kind === 'lane' || body.kind === 'message' ? body.kind : 'presence';
+      const kind = wedgeKind(body.kind);
       await recordPushRefusal(
         ctx,
         team.id,
