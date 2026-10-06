@@ -4,8 +4,7 @@
 - Author: stanley (lane `01M49DRSSQXBH58SEWEMK2QP5M`), from the design conversation with nick on
   2026-10-06
 - Goal: `launch` (unblocks lane `01M2PAMFW1`, the whiteboard leaving the monorepo)
-- Status: design approved by nick 2026-10-06; the decision is recorded as one ADR in increment 1
-  (number from `pnpm adr:next`)
+- Status: design approved by nick 2026-10-06; the decision is [ADR 537](../../decisions/537-whiteboard-squig-only.md)
 - Builds on: ADR 330 (the whiteboard is its own package, behind a provider port, extractable at any
   time), ADR 524 (Squig adapter, Squig default, tldraw fallback), ADR 527 (one whiteboard MCP;
   Squig's tools on any board)
@@ -75,14 +74,19 @@ Squig source is patched.
 
 ## 5. Design
 
-### 5.1 The vendor script: `scripts/vendor-squig.mjs`
+### 5.1 The vendor script: `packages/whiteboard/scripts/vendor-squig.mjs`
 
-The script takes a pinned upstream commit and does these steps:
+The script lives in the package, not at the repo root. It needs Vite, which only the package can
+resolve under pnpm, and it leaves the monorepo with the package. The script takes a pinned upstream commit and does these steps:
 
 1. Make a shallow clone of `github.com/pablostanley/squig` at that commit into a temporary
    directory.
 2. Run `pnpm install --frozen-lockfile`, then `pnpm build:local`. This produces `out/`.
-3. Bundle `scripts/squig.ts` into one ESM file:
+3. Bundle `scripts/agent/local.ts` into one ESM file. The entry is `local.ts`, not `squig.ts`:
+   `local.ts` runs itself when `argv[1]` equals its own module URL. In a one-file bundle that check
+   is true for every module, so bundling `squig.ts` would start `local.ts` a second time. With
+   `local.ts` as the entry, `companion.mjs mcp <file>` takes the same arguments as `squig.ts mcp
+   <file>`. The bundle:
    - The `@/` alias and extensionless imports resolve the same way as in Squig's
      `loader-hooks.mjs`.
    - The pure-JavaScript packages are compiled into the file.
@@ -172,7 +176,7 @@ The conversion is a one-time script in the scratchpad, not in the repo. It reads
 `TldrawProvider.read()` and writes it with `SquigProvider.add()`, using the port both adapters
 already implement. It makes one `add` call per original author, so each item keeps its
 attribution. This keeps notes, clusters, membership, links and their labels. The one free
-`text` item becomes a note. The script must run before increment 3 merges, because increment 3
+`text` item becomes a `label`, the port's kind for free text. The script must run before increment 3 merges, because increment 3
 deletes the tldraw adapter it reads with. Verification: the Squig board's `read()` has the same
 counts of notes, clusters and links as the source.
 
@@ -193,7 +197,7 @@ counts of notes, clusters and links as the source.
 
 | # | Lane | What lands | Done means |
 | - | ---- | ---------- | ---------- |
-| 1 | `01M49DRSSQXBH58SEWEMK2QP5M` | This spec; the ADR; `scripts/vendor-squig.mjs`; the committed `vendor/squig/`; the adapter prefers the vendored companion; native deps added | With `HOME` empty, the integration test opens, draws on and renders a Squig board. tldraw is still present. |
+| 1 | `01M49DRSSQXBH58SEWEMK2QP5M` | This spec; the ADR; `packages/whiteboard/scripts/vendor-squig.mjs`; the committed `vendor/squig/`; the adapter prefers the vendored companion; native deps added | With `HOME` empty, the integration test opens, draws on and renders a Squig board. tldraw is still present. |
 | 2 | `01M49DW741NDGNR1NCNYBWZJ5C` | `musterd-user-agent-flow` is converted, and all three boards are archived (local only, no PR) | The Squig board's `read()` counts match the source. |
 | 3 | `01M49DWAA4DB6FJBPB1G98V0SP` | tldraw removed (§5.4); SKILL.md and roadmap updated | The pack check shows no tldraw anywhere; the gates pass. |
 | — | `01M2PAMFW1` | Extraction to its own repo, and the npm publish | Its own lane; its dependency moves to increment 3. |

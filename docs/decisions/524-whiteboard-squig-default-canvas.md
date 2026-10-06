@@ -105,6 +105,11 @@ workspace would put its build into every install for a feature most machines wil
   companion this ADR left alone (`scripts/squig-mcp.mjs`) is retired. Its file is now the
   whiteboard's linked board `team`, and Squig's tools reach every board through `whiteboard_*`.
 
+- **2026-10-06, the fallback is withdrawn ([ADR 537](537-whiteboard-squig-only.md)):** decision 2's
+  tldraw fallback is superseded. tldraw leaves the package, so that it can be published, and Squig
+  is vendored into it at a pinned commit. A stranger's machine therefore runs Squig with no clone.
+  The adapter, the sidecar and the rest of this ADR stand.
+
 ## Observability & Evaluation
 
 - **Traces:** the service logs which provider it chose, and why it fell back, at start. The

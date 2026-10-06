@@ -132,3 +132,8 @@ extractable package to `@musterd/mcp`.
   any Squig board. It also amends decision 6: a workspace may link a board name to its own file
   (the repo's team canvas). The service still writes only where it was pointed. The separate
   `squig` MCP server is retired.
+
+- **2026-10-06, Squig only ([ADR 537](537-whiteboard-squig-only.md)):** the tldraw adapter is
+  removed, and Squig is vendored into the package, so the package can be published without
+  tldraw's license. Decision 3's port stays, with one adapter. Extraction (lane `01M2PAMFW1`)
+  follows once tldraw is gone.
