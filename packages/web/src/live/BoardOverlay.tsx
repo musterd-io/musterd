@@ -60,7 +60,7 @@ export function BoardOverlay({
   const [composing, setComposing] = useState(false);
   // Same default rule as /board (no stored preference in the overlay): grid iff goals exist.
   const unshipped = goals.filter((g) => g.status !== 'shipped').length;
-  const [chosenView, setChosenView] = useState<'grid' | 'columns' | null>(null);
+  const [chosenView, setChosenView] = useState<'grid' | 'columns' | 'table' | null>(null);
   const view = chosenView ?? resolveBoardView(null, unshipped);
   // Drill-in inside the overlay: a card click filters the columns to that goal's lanes.
   const [goalFocus, setGoalFocus] = useState<string | null | undefined>(undefined);
@@ -160,6 +160,16 @@ export function BoardOverlay({
             >
               columns
             </button>
+            <button
+              className={`lc-board__view${view === 'table' ? ' lc-board__view--on' : ''}`}
+              aria-pressed={view === 'table'}
+              onClick={() => {
+                setGoalFocus(undefined);
+                setChosenView('table');
+              }}
+            >
+              table
+            </button>
           </div>
           <span
             className={`lc-board__note${note ? ` lc-board__note--${note.tone}` : ''} lc-boardoverlay__note`}
@@ -195,6 +205,9 @@ export function BoardOverlay({
               <LazyBoard
                 lanes={view === 'columns' ? goalFilter(board.lanes, goalFocus) : board.lanes}
                 warnings={board.warnings}
+                // The whole board, so a blocked card's dependencies resolve even when the columns
+                // are filtered to one goal (parity with /board, board readability inc 1a/2).
+                boardLanes={board.lanes}
                 view={view}
                 goals={goals}
                 onOpenGoal={(id) => {
