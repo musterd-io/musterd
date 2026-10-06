@@ -126,3 +126,9 @@ extractable package to `@musterd/mcp`.
   is pinned with `WHITEBOARD_PROVIDER=tldraw`. Decision 3's claim held: the new adapter needed no
   change to the tools, the skill or the port. Squig boards live under `~/.whiteboard/squig/`,
   per decisions 1 and 6.
+
+- **2026-10-05, one server ([ADR 527](527-one-whiteboard-mcp.md)):** amends decision 2. The six
+  brainstorm tools stand, and Squig's own tools are added as eleven more `whiteboard_*` tools on
+  any Squig board. It also amends decision 6: a workspace may link a board name to its own file
+  (the repo's team canvas). The service still writes only where it was pointed. The separate
+  `squig` MCP server is retired.

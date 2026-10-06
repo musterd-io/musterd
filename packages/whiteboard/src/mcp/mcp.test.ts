@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { startService, type RunningService } from '../service.js';
 import { WhiteboardServiceClient } from './client.js';
 import { WHITEBOARD_TOOL_NAMES } from './toolNames.js';
-import { buildWhiteboardMcpServer } from './index.js';
+import { buildWhiteboardMcpServer, parseLinkedBoards } from './index.js';
 
 type Handler = (args: Record<string, unknown>) => Promise<{
   content: Array<{ type: string; text: string }>;
@@ -89,5 +89,27 @@ describe('whiteboard MCP server', () => {
 
     const list = await handler(server, 'whiteboard_list')({});
     expect(list.content[0]!.text).toContain('- session');
+  });
+
+  it("Squig's tools on a tldraw service say why, and mutating ones still need a seat (ADR 527)", async () => {
+    const server = buildWhiteboardMcpServer(new WhiteboardServiceClient(service.port));
+    const draw = await handler(server, 'whiteboard_draw')({ board: 'x', args: {} });
+    expect(draw.isError).toBe(true);
+    expect(draw.content[0]!.text).toContain('whiteboard_open first');
+    const render = await handler(server, 'whiteboard_render')({ board: 'x', args: {} });
+    expect(render.isError).toBe(true);
+    expect(render.content[0]!.text).toContain('need the Squig canvas');
+  });
+});
+
+describe('parseLinkedBoards (ADR 527)', () => {
+  it('reads name=path pairs, resolving paths against the workspace', () => {
+    expect([
+      ...parseLinkedBoards('team=docs/wireframes/team.squig.json; x=/abs/x.squig.json;bad', '/w'),
+    ]).toEqual([
+      ['team', '/w/docs/wireframes/team.squig.json'],
+      ['x', '/abs/x.squig.json'],
+    ]);
+    expect(parseLinkedBoards(undefined, '/w').size).toBe(0);
   });
 });

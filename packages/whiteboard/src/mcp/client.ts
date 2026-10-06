@@ -108,6 +108,23 @@ export class WhiteboardServiceClient {
     return this.post(`/api/boards/${board}/close`, {});
   }
 
+  /** Bind a board name to a workspace file — the team canvas, say (ADR 527). */
+  async link(board: string, file: string): Promise<void> {
+    await this.ensureService();
+    await this.post(`/api/boards/${board}/link`, { file });
+  }
+
+  /** One of Squig's own tools on a board, verbatim (ADR 527). */
+  async squig(
+    board: string,
+    tool: string,
+    args: Record<string, unknown>,
+    actor?: string,
+  ): Promise<Record<string, unknown>> {
+    await this.ensureService();
+    return this.post(`/api/boards/${board}/squig/${tool}`, { args, ...(actor ? { actor } : {}) });
+  }
+
   async list(): Promise<{ boards: Array<{ name: string; updatedAt: number }> }> {
     await this.ensureService();
     const res = await fetch(`${this.base()}/api/boards`);

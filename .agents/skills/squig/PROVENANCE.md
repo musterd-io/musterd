@@ -6,4 +6,4 @@
 - Pinned commit: `85f92ab132f5e621754b19de24ff95e67e474602` (`Invite agents to the existing autosaved browser canvas (#99)`)
 - License: MIT, Pablo Stanley, 2026. Text in `LICENSES/squig.LICENSE`.
 
-The musterd-specific parts are the shared file `docs/wireframes/team.squig.json` and the one-companion launcher `scripts/squig-mcp.mjs`. Those are not upstream.
+The musterd-specific parts are the shared file `docs/wireframes/team.squig.json` and how a session reaches it: the whiteboard MCP's linked board `team` (ADR 527), which replaced the one-companion launcher `scripts/squig-mcp.mjs`. Those are not upstream.
