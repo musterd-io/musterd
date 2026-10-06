@@ -942,6 +942,27 @@ after lane 5 (main) → this branch: total JS 257.1 → 255.7 KiB (44 → 42 chu
 134.9 → 130.7 KiB (13 → 11 eager chunks, a re-chunking side effect of the smaller graph), app CSS
 7.0 → 6.0 KiB.
 
+## 2026-10-05 — `totalJsGzipBytes` 271,100 → 275,200: the dense /board goal table (board readability inc 2, lane 01M472ETXPJX92917BTQP9W56R)
+
+Measured with Node zlib over `packages/web/dist/client` after a build, as the gate does: main @
+`a7797a86` **270,585 B** (264.2 KiB), this branch **271,183 B** (264.8 KiB) — **+598 B**. Main had
+515 B free locally, inside the ~0.7 KB CI gzip delta, so any web change is already a coin flip on CI.
+
+What the bytes are: nick's critique of the first table (#2121) — "cut off… I shouldn't have to scroll
+horizontally… not very visually rich… I need to see more without scrolling" — and his follow-up ask
+for one line of description per goal. The dense pass adds a per-goal stacked stage bar, owner and
+reviewer avatar stacks, count pills, a stats strip with a legend, the one-line blurb, a container-query
+reflow for narrow widths, and folds goals with nothing live into one closing line. Trimmed first: a
+duplicate tooltip on the waiting cell dropped, and the table's own relative-age helper replaced by
+the grid's (`ago`, now exported from GoalGridView) — the trim took the branch from 271,195 to 271,183 B.
+What remains is the surface nick asked for; lazy-loading cannot move total (ADR 183); no dependency
+to drop; a re-baseline would loosen. New ceiling is measured + the ~0.7 KB CI gzip delta + ~1.2%,
+per precedent.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — total must read under 268.8 KiB.
+  At or under 264.2 KiB (main's measure), the dense table has left the graph and this raise should go
+  with it.
+
 ## 2026-10-03 — `totalJsGzipBytes` 267,300 → 271,100: the /live halt control (ADR 501 increment 3, lane 01M41DRWWY4EE5CGRCJMZGDNVF)
 
 Measured with Node zlib over `packages/web/dist/client` after a build, as the gate does: main @
