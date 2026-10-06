@@ -101,10 +101,15 @@ building the routing ADR 272 deferred, and in a way that can be shown wrong.
 
 ## Observability & Evaluation
 
-- **Signal:** `next.offer` rows (increment 3) — `{member, offered: [{lane, tier}], total,
-  blocked_total}` per brief read — and `next.pickup` rows with the offered rank of each claim.
-- **Read:** `pnpm next:readout` — hit rate by rank against the oldest-first baseline; tier yield
-  (which tier placed the lanes that were picked up); share of reads with `up_next_total > 5`.
-- **Pass:** ranked hit rate above baseline at 14 days. **Fail:** revert decision 3 as above.
-- Until increment 3 lands, the only observable is the brief itself: `musterd next` on two seats with
-  different roles or shipped scopes shows different first lines and the same `up_next_total`.
+- **Traces:** none in this increment. Increment 3 (lane `01M4978ADCQ5PXD8S5KBXKDPFA`) adds the
+  `next.offer` audit row — `{member, offered: [{lane, tier}], total, blocked_total}` per brief
+  read — and `next.pickup` with the offered rank of each claim. Until then the observable is the
+  brief itself: `musterd next` on two seats with different roles or shipped scopes shows different
+  first lines and the same `up_next_total`.
+- **Eval:** `pnpm next:readout` (increment 3) — pickup hit rate by rank against the oldest-first
+  baseline recomputed on the same rows; tier yield (which tier placed the lanes that were picked
+  up); share of brief reads with `up_next_total > 5`. Pass: ranked hit rate above baseline at 14
+  days after this lands on revive.
+- **Experiment:** the baseline comparison above is the experiment — same pickups scored against the
+  pre-change order. Falsifier: ranked hit rate at or below baseline at 14 days reverts decision 3
+  (the tiers) and keeps decisions 2 and 4 (exclusion and counts), recorded here as a dated note.
