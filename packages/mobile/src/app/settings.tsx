@@ -44,7 +44,7 @@ export default function SettingsScreen() {
         onChangeText={onChange}
         autoCapitalize="none"
         autoCorrect={false}
-        placeholderTextColor={p.muted}
+        placeholderTextColor={p.placeholder}
         style={[styles.input, { color: p.text, backgroundColor: p.surface, borderColor: p.border }]}
         {...extra}
       />
@@ -58,16 +58,16 @@ export default function SettingsScreen() {
       style={{ backgroundColor: p.bg }}
     >
       {input('Server', server, setServer, {
-        placeholder: 'http://your-laptop.tailnet.ts.net:4849',
+        placeholder: 'e.g. http://my-laptop.tail1234.ts.net:4849',
         keyboardType: 'url',
       })}
       <Text style={[styles.hint, { color: p.muted }]}>
-        Your laptop’s Tailscale name and the daemon’s port. The daemon must list that name in
-        MUSTERD_ALLOWED_HOSTS.
+        Your laptop’s Tailscale name (it ends in .ts.net) and port 4849 — not its 100.x IP, which
+        iOS refuses over http. The daemon must list that name in MUSTERD_ALLOWED_HOSTS.
       </Text>
-      {input('Team', team, setTeam, { placeholder: 'revive' })}
+      {input('Team', team, setTeam, { placeholder: 'e.g. revive' })}
       {input('Credential', credential, setCredential, {
-        placeholder: 'mscr_…',
+        placeholder: 'Paste your mscr_… key',
         secureTextEntry: true,
       })}
       <Text style={[styles.hint, { color: p.muted }]}>

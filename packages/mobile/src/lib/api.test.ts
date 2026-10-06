@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CalendarApiError, createCalendarApi, normalizeServerUrl } from './api';
+import { CalendarApiError, connectionProblem, createCalendarApi, normalizeServerUrl } from './api';
 
 const conn = { server: 'http://laptop.tail.ts.net:4849/', team: 'revive', credential: 'mscr_x' };
 
@@ -18,6 +18,24 @@ describe('normalizeServerUrl', () => {
     );
     expect(() => normalizeServerUrl('laptop:4849')).toThrow(/http\(s\)/);
     expect(() => normalizeServerUrl('http://laptop:4849/live')).toThrow();
+  });
+});
+
+describe('connectionProblem', () => {
+  const ok = { server: 'http://laptop.tail.ts.net:4849', team: 'revive', credential: 'mscr_x' };
+  it('passes a complete connection', () => {
+    expect(connectionProblem(ok)).toBeNull();
+  });
+  it('requires every field — an empty team once reached the daemon as /teams//calendar', () => {
+    expect(connectionProblem({ ...ok, server: ' ' })).toMatch(/Server is required/);
+    expect(connectionProblem({ ...ok, team: '' })).toMatch(/Team is required/);
+    expect(connectionProblem({ ...ok, credential: '  ' })).toMatch(/Credential is required/);
+  });
+  it('refuses plain http to an IP before iOS does, and names the fix', () => {
+    expect(connectionProblem({ ...ok, server: 'http://100.100.246.14:4849' })).toMatch(
+      /Tailscale name/,
+    );
+    expect(connectionProblem({ ...ok, server: 'https://100.100.246.14' })).toBeNull();
   });
 });
 

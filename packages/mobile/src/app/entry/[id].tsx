@@ -124,7 +124,7 @@ export default function EntryScreen() {
       <TextInput
         value={d[key]}
         onChangeText={(v) => set(key, v)}
-        placeholderTextColor={p.muted}
+        placeholderTextColor={p.placeholder}
         style={[styles.input, { color: p.text, backgroundColor: p.surface, borderColor: p.border }]}
         {...props}
       />

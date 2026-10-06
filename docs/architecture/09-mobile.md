@@ -26,7 +26,9 @@ validates with `CalendarEntryInputSchema` itself, so the phone refuses exactly w
   address on port 4849 — the MagicDNS name (`http://<laptop>.<tailnet>.ts.net:4849`), or the laptop's
   `100.x` Tailscale IP where MagicDNS does not resolve. Tailscale encrypts the link, so plain `http` is
   correct here; `app.json` carries an App Transport Security exception for `ts.net` and local
-  networking, and nothing else. Whichever address the phone uses must be in the daemon's
+  networking, and nothing else. iOS refuses plain `http` to an IP address even over Tailscale (build
+  2, 2026-10-06: `http://100.x…:4849` failed with an App Transport Security error), so the
+  Connection screen refuses that shape itself and names the `.ts.net` fix. Whichever address the phone uses must be in the daemon's
   `MUSTERD_ALLOWED_HOSTS` (`musterd service install --allowed-hosts …`,
   `docs/guides/cross-network-overlay.md` §2b): the ADR 040 gate checks the `Host` of plain HTTP
   requests too, not only WebSocket upgrades, and answers
