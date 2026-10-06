@@ -11,6 +11,7 @@ import {
   huddleCommand,
   layoutRoom,
   mirrorTurn,
+  openRoomBoard,
   parseTopic,
   parseUntil,
   renderHuddle,
@@ -210,6 +211,16 @@ describe('musterd huddle', () => {
         items: { text: string }[];
       };
       expect(turn.items[0]?.text).toBe('lin: a turn');
+    });
+
+    it('huddle room opens the board through the service and hands back the editor URL (ADR 537)', async () => {
+      expect(await openRoomBoard('huddle-x')).toBe('x');
+      expect(calls.map((c) => c.path)).toEqual(['/healthz', '/api/boards/huddle-x/open']);
+    });
+
+    it('huddle room says so when the whiteboard service is not running', async () => {
+      process.env['WHITEBOARD_PORT'] = '1';
+      await expect(openRoomBoard('huddle-x')).rejects.toThrow(/whiteboard service is not running/);
     });
 
     it('a service that is not the whiteboard, or not up, is a quiet false', async () => {

@@ -1,7 +1,8 @@
 /**
- * The whiteboard service: one process serving two surfaces on one localhost port —
+ * The whiteboard service: one process serving three surfaces on one localhost port —
  *   GET  /healthz                       liveness (also answers "is it already running")
  *   /api/boards...                      the provider port over HTTP (the MCP server's transport)
+ *   GET  /b/:name                       a board link's help page — opens nothing, no token
  * The human draws in Squig's own editor, served by the companion each open board runs; the open
  * result carries its URL (ADR 524, ADR 537).
  *
@@ -176,6 +177,20 @@ export async function startService(
       }
     }
 
+    // The board link (ADR 537): huddles post `<service>/b/<board>` to the team (ADR 378 §7). It is
+    // a help page only — it opens nothing and carries no token. Squig's editor URL holds the
+    // companion's token, so it is handed out only to a caller holding the service token (the
+    // MCP client, or `musterd huddle room`), never to an unauthenticated GET.
+    const link = path.match(/^\/b\/([^/]+)$/);
+    if (link && req.method === 'GET') {
+      const [, name] = link as unknown as [string, string];
+      if (!BOARD_NAME_RE.test(name))
+        return json(res, 400, { error: `invalid board name ${JSON.stringify(name)}` });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(boardLinkPage(name));
+      return;
+    }
+
     return json(res, 404, { error: 'not found' });
   }
 
@@ -202,6 +217,25 @@ export async function startService(
       await new Promise<void>((resolve) => server.close(() => resolve()));
     },
   };
+}
+
+/** The help page behind a board link. `name` has passed BOARD_NAME_RE, so it needs no escaping. */
+function boardLinkPage(name: string): string {
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Board ${name}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="font: 16px/1.5 system-ui, sans-serif; max-width: 36rem; margin: 3rem auto; padding: 0 1rem">
+<h1 style="font-size: 1.25rem">Board <code>${name}</code></h1>
+<p>This board is drawn in Squig. Its editor link is private to this machine, so this page cannot open it for you.</p>
+${
+  name.startsWith('huddle-')
+    ? `<p>It is a musterd huddle's room. To open it, run this in a terminal on this machine:</p>
+<pre><code>musterd huddle room ${name}</code></pre>
+<p>Or ask`
+    : '<p>To open it, ask'
+} your agent to call <code>whiteboard_open</code> with the board <code>${name}</code>.</p>
+</body></html>
+`;
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {

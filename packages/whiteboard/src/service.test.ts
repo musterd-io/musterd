@@ -176,6 +176,32 @@ describe('no fallback (ADR 537)', () => {
   });
 });
 
+describe('the board link /b/<name> (ADR 537)', () => {
+  it('answers with a help page that opens nothing and carries no token', async () => {
+    const res = await fetch(`${base}/b/huddle-01abc`, { redirect: 'manual' });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/^text\/html/);
+    const page = await res.text();
+    expect(page).toContain('huddle-01abc');
+    expect(page).toContain('musterd huddle room huddle-01abc');
+    expect(page).not.toContain('token');
+    const list = (await (await authFetch(`${base}/api/boards`)).json()) as {
+      boards: Array<{ name: string }>;
+    };
+    expect(list.boards).toEqual([]);
+  });
+
+  it('names the musterd command only for a huddle board', async () => {
+    const page = await (await fetch(`${base}/b/sketch`)).text();
+    expect(page).toContain('whiteboard_open');
+    expect(page).not.toContain('musterd');
+  });
+
+  it('refuses an invalid board name', async () => {
+    expect((await fetch(`${base}/b/..%2Fescape`)).status).toBe(400);
+  });
+});
+
 describe('the guard (lane 01M47FADGV)', () => {
   it('writes a 0600 token, refuses /api without it, and removes it on close', async () => {
     expect(statSync(serviceTokenPath(service.port)).mode & 0o777).toBe(0o600);
