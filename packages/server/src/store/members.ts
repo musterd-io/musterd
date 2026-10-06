@@ -38,6 +38,11 @@ export async function touchSeen(db: Driver, memberId: string): Promise<void> {
  * `idleCutoffTs` and that have no live presence (last seen after `liveCutoffTs`). Skips any observer
  * still referenced by a message (no `to_member` cascade) — left for manual cleanup rather than an FK
  * failure. Presence + cursor rows cascade. Returns the reaped members for logging.
+ *
+ * The message checks are correlated `NOT EXISTS`, not `NOT IN (SELECT … FROM messages)`: the IN
+ * form hashed every tenant's messages on every reaper tick, so the cost grew with the platform
+ * (staging 2026-10-06: 15.9 ms vs 0.47 ms; lane 01M49CXMZ5). Same rows — `from_member` is NOT NULL
+ * and the old `to_member` subquery already excluded NULL, so NOT IN's NULL trap never applied.
  */
 export async function reapStaleObservers(
   db: Driver,
@@ -49,8 +54,8 @@ export async function reapStaleObservers(
        WHERE observer = 1
          AND updated_at < ?
          AND id NOT IN (SELECT member_id FROM presence WHERE held_until IS NULL AND last_seen_at > ?)
-         AND id NOT IN (SELECT from_member FROM messages)
-         AND id NOT IN (SELECT to_member FROM messages WHERE to_member IS NOT NULL)`,
+         AND NOT EXISTS (SELECT 1 FROM messages WHERE from_member = members.id)
+         AND NOT EXISTS (SELECT 1 FROM messages WHERE to_member = members.id)`,
     [idleCutoffTs, liveCutoffTs],
   );
   if (stale.length > 0) {
@@ -78,8 +83,8 @@ export async function reapExcessIdleObservers(
        WHERE observer = 1
          AND left_at IS NULL
          AND id NOT IN (SELECT member_id FROM presence WHERE held_until IS NULL AND last_seen_at > ?)
-         AND id NOT IN (SELECT from_member FROM messages)
-         AND id NOT IN (SELECT to_member FROM messages WHERE to_member IS NOT NULL)
+         AND NOT EXISTS (SELECT 1 FROM messages WHERE from_member = members.id)
+         AND NOT EXISTS (SELECT 1 FROM messages WHERE to_member = members.id)
        ORDER BY team_id, updated_at DESC`,
     [liveCutoffTs],
   );
