@@ -49,7 +49,8 @@ export function flowLine(f: FlowMetrics): string[] {
 }
 
 /** Compact relative age (`3m`, `2h`, `4d`) from a ms-epoch ts. */
-function ago(now: number, ts: number): string {
+/** Shared with the table view (GoalTableView), so the two read ages the same way. */
+export function ago(now: number, ts: number): string {
   const s = Math.max(0, Math.round((now - ts) / 1000));
   if (s < 60) return `${s}s`;
   const m = Math.round(s / 60);

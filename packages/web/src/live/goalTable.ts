@@ -18,7 +18,13 @@ export interface GoalRow {
   /** null = the goal-less pool. */
   id: string | null;
   title: string;
+  /** The title up to its first " — ", the short name a one-line row can carry; `title` rides in the tooltip. */
+  name: string;
+  /** One line under the name: the goal's story, else the rest of its title after the dash, else null. */
+  blurb: string | null;
   chip: string;
+  /** Live lanes by stage, for the row's stacked bar. */
+  mix: { open: number; working: number; blocked: number; review: number };
   /** Lanes still in play: not done, abandoned or parked. */
   live: number;
   /** Seats owning live lanes, most first (ties by name). */
@@ -53,7 +59,9 @@ export function buildGoalTable(
     if (list) list.push(l);
     else byGoal.set(key, [l]);
   }
+  const goalById = new Map(goals.map((g) => [g.id, g]));
   return buildGoalGrid(lanes, goals, now, warnings, goalFlow).cards.map((card) => {
+    const [name, ...rest] = card.title.split(' — ');
     const live = byGoal.get(card.id) ?? [];
     const owned = new Map<string, number>();
     for (const l of live) if (l.owner_seat) owned.set(l.owner_seat, (owned.get(l.owner_seat) ?? 0) + 1);
@@ -65,7 +73,17 @@ export function buildGoalTable(
     return {
       id: card.id,
       title: card.title,
+      name: name!.trim(),
+      blurb:
+        (card.id !== null ? goalById.get(card.id)?.story : undefined) ??
+        (rest.length > 0 ? rest.join(' — ').trim() : null),
       chip: card.chip,
+      mix: {
+        open: live.filter((l) => l.state === 'open').length,
+        working: live.filter((l) => l.state === 'claimed' || l.state === 'active').length,
+        blocked: live.filter((l) => l.state === 'blocked').length,
+        review: awaiting.length,
+      },
       live: live.length,
       owners: [...owned]
         .map(([seat, n]) => ({ seat, n }))

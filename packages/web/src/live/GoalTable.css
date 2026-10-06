@@ -1,17 +1,109 @@
-/* The board's table view (board readability inc 2). Sits on the goal grid's stage and uses its
- * measured ink set (--gg-ink-*, GoalGrid.css) — no new browns. Rows are paper cards in a ledger:
- * the same #fffdf8 the grid's cards paint, so every ink here was already measured on it. */
+/* The board's table view (board readability inc 2, dense pass 2026-10-05). Sits on the goal grid's
+ * stage and uses its measured ink set (--gg-ink-*, GoalGrid.css) for every text colour — no new
+ * browns. The segment colours are FILLS ONLY (bars, dots), the runway's own dot palette, never text.
+ * Never scrolls sideways: a fixed layout fills its container, and below 760px of container it
+ * reflows each row into two lines. */
 
-.gt-scroll {
-  overflow-x: auto;
+.gt-wrap {
+  container-type: inline-size;
+  padding: 10px 14px;
 }
+
+.gt-hdr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-bottom: 4px;
+}
+.gt-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gt-stat {
+  font-size: 11px;
+  color: var(--gg-ink-quiet);
+  background: #fffdf8;
+  border: 1px solid rgba(120, 90, 50, 0.14);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.gt-stat b {
+  color: #4a3a26;
+  font-weight: 800;
+}
+.gt-stat--hot b {
+  color: var(--gg-ink-accent);
+}
+.gt-stat--blocked {
+  box-shadow: inset 3px 0 0 #cd6f6f;
+}
+.gt-stat--review {
+  box-shadow: inset 3px 0 0 #e8a33d;
+}
+.gt-legend {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--gg-ink-quiet);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.gt-legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  margin-left: 6px;
+}
+
+/* Segment fills — the runway dot palette (GoalGrid.css .gg-dot--*). */
+.gt-seg--open {
+  background: #d9ccb4;
+}
+.gt-seg--working {
+  background: #8c84d9;
+}
+.gt-seg--blocked {
+  background: #cd6f6f;
+}
+.gt-seg--review {
+  background: #e8a33d;
+}
+
 .gt {
   width: 100%;
-  min-width: 860px;
+  table-layout: fixed;
   border-collapse: separate;
-  border-spacing: 0 6px;
+  border-spacing: 0 2px;
   font-size: 12px;
   color: #4a3a26;
+}
+.gt-c-goal {
+  width: 27%;
+}
+.gt-c-lanes {
+  width: 11%;
+}
+.gt-c-owners {
+  width: 13%;
+}
+.gt-c-unowned {
+  width: 8%;
+}
+.gt-c-quiet {
+  width: 6%;
+}
+.gt-c-wait {
+  width: 15%;
+}
+.gt-c-last {
+  width: 20%;
 }
 .gt thead th {
   text-align: left;
@@ -20,23 +112,33 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--gg-ink-quiet);
-  padding: 0 12px 2px;
+  padding: 0 10px 1px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .gt-row > th,
 .gt-row > td {
   background: #fffdf8;
-  padding: 10px 12px;
-  vertical-align: top;
-  border-block: 1px solid rgba(120, 90, 50, 0.12);
+  padding: 1px 10px;
+  height: 41px;
+  box-sizing: border-box;
+  vertical-align: middle;
+  border-block: 1px solid rgba(120, 90, 50, 0.1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .gt-row > :first-child {
-  border-left: 1px solid rgba(120, 90, 50, 0.12);
-  border-radius: 12px 0 0 12px;
+  border-left: 1px solid rgba(120, 90, 50, 0.1);
+  border-radius: 10px 0 0 10px;
 }
 .gt-row > :last-child {
-  border-right: 1px solid rgba(120, 90, 50, 0.12);
-  border-radius: 0 12px 12px 0;
+  border-right: 1px solid rgba(120, 90, 50, 0.1);
+  border-radius: 0 10px 10px 0;
+}
+.gt-row:hover > * {
+  background: #fff8ea;
 }
 .gt-row--loose > th,
 .gt-row--loose > td {
@@ -46,20 +148,23 @@
 
 .gt-goal {
   text-align: left;
-  width: 26%;
 }
 .gt-goal__btn {
   display: block;
+  max-width: 100%;
   min-height: 24px;
+  line-height: 24px;
   padding: 0;
   border: 0;
   background: none;
   font: inherit;
-  font-weight: 700;
+  font-weight: 750;
   font-size: 12.5px;
-  line-height: 1.3;
   color: #4a3a26;
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
 }
 .gt-goal__btn:hover,
@@ -68,71 +173,229 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.gt-goal__meta {
+.gt-goal__blurb {
   display: block;
-  margin-top: 2px;
   font-size: 10.5px;
+  line-height: 1.2;
   color: var(--gg-ink-quiet);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gt-goal__line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gt-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #efe6d6;
+  gap: 1px;
+}
+.gt-bar i {
+  display: block;
+  min-width: 3px;
+}
+.gt-goal__n {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--gg-ink-quiet);
+  font-variant-numeric: tabular-nums;
 }
 
-.gt-owners {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.gt-owner {
+.gt-avs {
   display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
+  vertical-align: middle;
 }
-.gt-owner__av {
+.gt-av {
   display: inline-grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   font-size: 10px;
   font-weight: 700;
   color: #fff;
+  border: 2px solid #fffdf8;
+  flex: none;
 }
-.gt-owner__n {
-  font-weight: 700;
-  color: var(--gg-ink-accent);
+.gt-av + .gt-av {
+  margin-left: -6px;
+}
+.gt-av--more,
+.gt-av--none {
+  background: #efe6d6;
+  color: var(--gg-ink-quiet);
+  font-size: 9px;
+}
+.gt-owners__lead {
+  margin-left: 5px;
+  vertical-align: middle;
+}
+.gt-quiet,
+.gt-none {
+  color: var(--gg-ink-quiet);
 }
 
 .gt-num {
   text-align: right;
   font-variant-numeric: tabular-nums;
-  width: 7%;
 }
-.gt-num--hot {
+.gt-pill {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
   font-weight: 800;
-  color: var(--gg-ink-accent);
+  text-align: center;
 }
-.gt-none {
+.gt-pill--hot {
+  color: var(--gg-ink-accent);
+  background: #fdeeda;
+}
+.gt-pill--quiet {
   color: var(--gg-ink-quiet);
+  background: #f2ece1;
 }
-.gt-wait {
-  display: grid;
-  gap: 2px;
+.gt-pill--blocked {
+  color: #8a2f2f;
+  background: #f9e1dc;
 }
-.gt-wait__blocked {
-  font-weight: 700;
+.gt-pill--review {
   color: var(--gg-ink-accent);
+  background: #fdeeda;
+}
+.gt-wait > * + * {
+  margin-left: 6px;
+}
+.gt-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  vertical-align: middle;
+}
+.gt-review__arrow {
+  color: var(--gg-ink-accent);
+  font-weight: 800;
+}
+
+.gt-last > .gt-avs,
+.gt-last > .gt-av {
+  margin-right: 6px;
 }
 .gt-last__title {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  vertical-align: middle;
 }
-.gt-last__meta {
-  display: block;
-  margin-top: 2px;
+.gt-last__age {
+  margin-left: 6px;
   font-size: 10.5px;
   color: var(--gg-ink-quiet);
+  vertical-align: middle;
+}
+
+.gt-idle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 6px 2px 0;
+  font-size: 11px;
+}
+.gt-idle__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gg-ink-quiet);
+}
+.gt-idle__goal {
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px dashed rgba(120, 90, 50, 0.25);
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  color: var(--gg-ink-quiet);
+  cursor: pointer;
+}
+.gt-idle__goal:hover,
+.gt-idle__goal:focus-visible {
+  color: var(--gg-ink-accent);
+  border-style: solid;
+}
+
+.gt-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Narrow container (the phone, a slim overlay): each row becomes a two-line card, never a
+ * sideways scroll. */
+@container (max-width: 760px) {
+  .gt-legend {
+    margin-left: 0;
+  }
+  .gt thead {
+    display: none;
+  }
+  .gt,
+  .gt tbody {
+    display: block;
+  }
+  .gt colgroup {
+    display: none;
+  }
+  .gt-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'goal unowned quiet'
+      'lanes lanes lanes'
+      'owners wait wait'
+      'last last last';
+    margin-bottom: 6px;
+    border: 1px solid rgba(120, 90, 50, 0.1);
+    border-radius: 10px;
+    background: #fffdf8;
+  }
+  .gt-row > th,
+  .gt-row > td {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: none;
+    padding: 4px 10px;
+  }
+  .gt-goal {
+    grid-area: goal;
+  }
+  .gt-row > :nth-child(2) {
+    grid-area: lanes;
+  }
+  .gt-row > :nth-child(3) {
+    grid-area: owners;
+  }
+  .gt-row > :nth-child(4) {
+    grid-area: unowned;
+  }
+  .gt-row > :nth-child(5) {
+    grid-area: wait;
+    text-align: right;
+  }
+  .gt-row > :nth-child(6) {
+    grid-area: quiet;
+  }
+  .gt-row > :nth-child(7) {
+    grid-area: last;
+  }
+  .gt-row > th,
+  .gt-row > td {
+    height: auto;
+  }
 }

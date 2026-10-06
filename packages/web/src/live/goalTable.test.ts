@@ -129,4 +129,28 @@ describe('buildGoalTable — nick’s board questions as one table (board readab
     expect(rows.map((r) => r.id)).toEqual(['g2', 'ghost-goal', null]);
     expect(rows.at(-1)).toMatchObject({ title: 'Not on a goal yet', owners: [{ seat: 'nick', n: 1 }] });
   });
+
+  it('gives each row its state mix for the bar, and a short name cut at the dash', () => {
+    const [row] = buildGoalTable(
+      [
+        lane({ id: 'a', goal_id: 'g1', state: 'open' }),
+        lane({ id: 'b', goal_id: 'g1', state: 'claimed', owner_seat: 'x' }),
+        lane({ id: 'c', goal_id: 'g1', state: 'active', owner_seat: 'x' }),
+        lane({ id: 'd', goal_id: 'g1', state: 'blocked', owner_seat: 'x' }),
+        lane({ id: 'e', goal_id: 'g1', state: 'awaiting_acceptance', owner_seat: 'x' }),
+      ],
+      [goal({ title: 'musterd Cloud — hosted teams: sign up, get a team' })],
+      NOW,
+    );
+    expect(row!.mix).toEqual({ open: 1, working: 2, blocked: 1, review: 1 });
+    expect(row!.name).toBe('musterd Cloud');
+    expect(row!.title).toBe('musterd Cloud — hosted teams: sign up, get a team');
+    expect(row!.blurb).toBe('hosted teams: sign up, get a team');
+    const [withStory] = buildGoalTable(
+      [lane({ id: 'z', goal_id: 'g1' })],
+      [goal({ title: 'Cloud — x', story: 'Join from anywhere.' })],
+      NOW,
+    );
+    expect(withStory!.blurb).toBe('Join from anywhere.');
+  });
 });
