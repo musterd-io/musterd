@@ -10,9 +10,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { HUMAN, seatActor } from '../port.js';
-import { probeSquigCheckout } from './checkout.js';
 import { SquigProvider } from './provider.js';
-import type { SquigConnection, SquigDocument, SquigNode, SquigOp } from './session.js';
+import {
+  companionArgs,
+  type SquigConnection,
+  type SquigDocument,
+  type SquigNode,
+  type SquigOp,
+} from './session.js';
 
 /** Squig's local store, as far as the adapter can see it: one document, ops applied in order. */
 class FakeSquig implements SquigConnection {
@@ -60,7 +65,13 @@ class FakeSquig implements SquigConnection {
   }
 }
 
-const CHECKOUT = { root: '/x', entry: '/x/e', loader: '/x/l', node: '/x/node' };
+const CHECKOUT = {
+  kind: 'vendored' as const,
+  root: '/x',
+  entry: '/x/e',
+  loader: null,
+  node: '/x/node',
+};
 const ADA = seatActor('ada');
 
 let dir: string;
@@ -296,31 +307,41 @@ describe("Squig's own tools through the provider (ADR 527)", () => {
   });
 });
 
-describe('probeSquigCheckout', () => {
-  const has = (paths: string[]) => (p: string) => paths.some((x) => p.endsWith(x));
-  const node = { execPath: '/n', version: '22.23.3' };
-  it('finds a built checkout', () => {
-    const p = probeSquigCheckout(
-      {},
-      '/h',
-      has(['squig.ts', 'register-loader.mjs', '.squig-local-editor.json']),
-      node,
-    );
-    expect(p.ok).toBe(true);
+describe('companionArgs (ADR 537)', () => {
+  it('runs the vendored companion as plain JavaScript', () => {
+    expect(
+      companionArgs(
+        {
+          kind: 'vendored',
+          root: '/v',
+          entry: '/v/lib/agent/companion.mjs',
+          loader: null,
+          node: '/n',
+        },
+        '/b.squig.json',
+      ),
+    ).toEqual(['/v/lib/agent/companion.mjs', 'mcp', '/b.squig.json']);
   });
-  it('names the missing build, the missing checkout, and an old Node', () => {
+  it('runs a checkout through strip-types and its loader', () => {
     expect(
-      probeSquigCheckout({}, '/h', has(['squig.ts', 'register-loader.mjs']), node),
-    ).toMatchObject({
-      ok: false,
-      reason: expect.stringMatching(/build:local/),
-    });
-    expect(probeSquigCheckout({}, '/h', () => false, node)).toMatchObject({
-      ok: false,
-      reason: expect.stringMatching(/no Squig checkout/),
-    });
-    expect(
-      probeSquigCheckout({}, '/h', () => true, { execPath: '/n', version: '20.11.0' }),
-    ).toMatchObject({ ok: false, reason: expect.stringMatching(/22\.6/) });
+      companionArgs(
+        {
+          kind: 'checkout',
+          root: '/c',
+          entry: '/c/scripts/squig.ts',
+          loader: '/c/scripts/register-loader.mjs',
+          node: '/n',
+        },
+        '/b.squig.json',
+      ),
+    ).toEqual([
+      '--experimental-strip-types',
+      '--disable-warning=MODULE_TYPELESS_PACKAGE_JSON',
+      '--import',
+      '/c/scripts/register-loader.mjs',
+      '/c/scripts/squig.ts',
+      'mcp',
+      '/b.squig.json',
+    ]);
   });
 });

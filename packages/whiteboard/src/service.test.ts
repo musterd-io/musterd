@@ -30,6 +30,9 @@ const authFetch = (url: string, init: RequestInit = {}): Promise<Response> =>
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'whiteboard-service-test-'));
   process.env['WHITEBOARD_DATA_DIR'] = dir;
+  // These tests exercise the tldraw provider. The repo-root vitest run ignores this package's
+  // env pin, and the vendored Squig is always present (ADR 537), so pin tldraw here.
+  process.env['WHITEBOARD_PROVIDER'] = 'tldraw';
   service = await startService(0);
   base = `http://127.0.0.1:${service.port}`;
 });
@@ -184,7 +187,7 @@ describe('service', () => {
 describe('chooseProvider (ADR 524)', () => {
   const ok = () => ({
     ok: true as const,
-    checkout: { root: '/s', entry: '/e', loader: '/l', node: '/n' },
+    checkout: { kind: 'checkout' as const, root: '/s', entry: '/e', loader: '/l', node: '/n' },
   });
   const missing = () => ({ ok: false as const, reason: 'no Squig checkout at /h/.squig/src' });
 

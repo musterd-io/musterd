@@ -123,6 +123,8 @@ export async function startService(port = servicePort()): Promise<RunningService
         status: 'ok',
         service: 'agent-whiteboard',
         provider: choice.name,
+        // Where Squig runs from (ADR 537): the package's vendored copy, or a SQUIG_CHECKOUT clone.
+        squig: choice.probe?.ok ? choice.probe.checkout.kind : null,
         rooms: rooms.activeRoomCount(),
         uptime: process.uptime(),
       });

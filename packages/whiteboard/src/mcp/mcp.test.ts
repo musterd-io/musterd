@@ -29,6 +29,9 @@ let service: RunningService;
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'whiteboard-mcp-test-'));
   process.env['WHITEBOARD_DATA_DIR'] = dir;
+  // These tests exercise the tldraw provider. The repo-root vitest run ignores this package's
+  // env pin, and the vendored Squig is always present (ADR 537), so pin tldraw here.
+  process.env['WHITEBOARD_PROVIDER'] = 'tldraw';
   service = await startService(0);
 });
 

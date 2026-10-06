@@ -99,6 +99,24 @@ export function clearStaleLock(file: string): void {
   }
 }
 
+/**
+ * How to start the companion on one file (ADR 537). The vendored companion is plain JavaScript;
+ * a `SQUIG_CHECKOUT` clone runs Squig's TypeScript through strip-types and Squig's own loader.
+ */
+export function companionArgs(checkout: SquigCheckout, file: string): string[] {
+  if (checkout.kind === 'vendored' || checkout.loader === null)
+    return [checkout.entry, 'mcp', file];
+  return [
+    '--experimental-strip-types',
+    '--disable-warning=MODULE_TYPELESS_PACKAGE_JSON',
+    '--import',
+    checkout.loader,
+    checkout.entry,
+    'mcp',
+    file,
+  ];
+}
+
 export class SquigSession implements SquigConnection {
   private constructor(
     private child: ChildProcess,
@@ -115,15 +133,7 @@ export class SquigSession implements SquigConnection {
     clearStaleLock(file);
     const child = spawn(
       checkout.node,
-      [
-        '--experimental-strip-types',
-        '--disable-warning=MODULE_TYPELESS_PACKAGE_JSON',
-        '--import',
-        checkout.loader,
-        checkout.entry,
-        'mcp',
-        file,
-      ],
+      companionArgs(checkout, file),
       // stdin stays an open pipe: the companion exits when its stdio MCP input ends.
       { cwd: checkout.root, stdio: ['pipe', 'ignore', 'pipe'] },
     );

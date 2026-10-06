@@ -1,6 +1,8 @@
 dist
 node_modules
 pnpm-lock.yaml
+# Squig, vendored and committed as built (ADR 537) — not ours to format.
+packages/whiteboard/vendor/
 docs/design/assets
 docs/assets
 *.gif
