@@ -118,6 +118,16 @@ describe('isMergeShapedCommand (ADR 516 increment 2)', () => {
     'git -C /tmp/r push origin master',
     'git push --force-with-lease origin refs/heads/main',
     'pnpm lint; git push origin main',
+    // stanley's gaps from probing the built matcher (holds inc 2 acceptance, 2026-10-06)
+    'git push origin +main',
+    'git push origin "main"',
+    "git push origin 'HEAD:main'",
+    'git push origin main&',
+    'bash -c "gh pr merge 3 --squash"',
+    "sh -c 'cd repo && git push origin main'",
+    'command gh pr merge 3',
+    'exec gh pr merge 3',
+    'env GH_TOKEN=x gh pr merge 3',
   ])('matches %s', (cmd) => {
     expect(isMergeShapedCommand(cmd)).toBe(true);
   });
@@ -131,6 +141,10 @@ describe('isMergeShapedCommand (ADR 516 increment 2)', () => {
     'git fetch origin main && git rebase origin/main',
     'echo gh pr merge',
     'git log main',
+    'git push origin +feat/holds',
+    'bash -c "pnpm test"',
+    'bash -c "echo gh pr merge"',
+    'git push origin "feat/main-notes"',
   ])('does not match %s', (cmd) => {
     expect(isMergeShapedCommand(cmd)).toBe(false);
   });
