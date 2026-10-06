@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * The whiteboard service: one process serving three surfaces on one localhost port —
  *   GET  /healthz                       liveness (also answers "is it already running")
