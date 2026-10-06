@@ -1,7 +1,9 @@
 /**
- * The adapter against a real Squig companion (ADR 524). Runs only where a built checkout exists
- * (`~/.squig/src` or SQUIG_CHECKOUT) — CI has none, so it skips there and the in-memory suite in
- * provider.test.ts is the gate. On a dev machine it proves the op shapes Squig actually accepts.
+ * The adapter against a real Squig companion: the one vendored into this package (ADR 537).
+ * It runs everywhere, CI included, with HOME pointed at an empty directory and the working
+ * directory somewhere foreign — so it proves a machine needs no ~/.squig/src clone, and that the
+ * companion finds its editor build and fonts from its own location, the way an npx install
+ * starts it. The in-memory suite in provider.test.ts covers the op shapes in depth.
  */
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,23 +13,43 @@ import { seatActor } from '../port.js';
 import { probeSquigCheckout } from './checkout.js';
 import { SquigProvider } from './provider.js';
 
-const probe = probeSquigCheckout();
 const ADA = seatActor('ada');
 
-describe.skipIf(!probe.ok)('SquigProvider on a real Squig checkout', () => {
+describe('SquigProvider on the vendored companion', () => {
   let dir: string;
   let provider: SquigProvider;
+  const realHome = process.env['HOME'];
+  const realCwd = process.cwd();
+  const realOverride = process.env['SQUIG_CHECKOUT'];
 
   beforeAll(() => {
     dir = mkdtempSync(join(tmpdir(), 'wb-squig-live-'));
     process.env['WHITEBOARD_DATA_DIR'] = dir;
-    if (probe.ok) provider = new SquigProvider(probe.checkout);
+    process.env['HOME'] = mkdtempSync(join(tmpdir(), 'wb-empty-home-'));
+    delete process.env['SQUIG_CHECKOUT'];
+    process.chdir(mkdtempSync(join(tmpdir(), 'wb-foreign-cwd-')));
+    const probe = probeSquigCheckout();
+    if (!probe.ok || probe.checkout.kind !== 'vendored') {
+      throw new Error(`expected the vendored companion, got ${JSON.stringify(probe)}`);
+    }
+    provider = new SquigProvider(probe.checkout);
   });
 
   afterAll(async () => {
     await provider?.closeAll();
+    process.chdir(realCwd);
+    process.env['HOME'] = realHome;
+    if (realOverride !== undefined) process.env['SQUIG_CHECKOUT'] = realOverride;
     delete process.env['WHITEBOARD_DATA_DIR'];
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('serves the editor page from the vendored build', async () => {
+    await provider.open('page');
+    const res = await fetch((await provider.editorUrl('page')).split('#')[0]!);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('<html');
+    await provider.close('page');
   });
 
   it('opens, places, reads back, edits and closes through the live companion', async () => {

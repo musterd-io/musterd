@@ -2,7 +2,7 @@
   "name": "@musterd/whiteboard",
   "version": "0.1.0",
   "private": true,
-  "description": "Standalone shared whiteboard for human+agent brainstorming: provider-agnostic port, Squig adapter (default, ADR 524) and tldraw adapter (fallback), sync service, and its own whiteboard_* MCP server (ADR 330). Deliberately imports nothing from @musterd/* — extractable to its own repository at any time.",
+  "description": "Standalone shared whiteboard for human+agent brainstorming: provider-agnostic port, Squig adapter (vendored, ADR 537) and tldraw adapter (fallback), sync service, and its own whiteboard_* MCP server (ADR 330). Deliberately imports nothing from @musterd/* — extractable to its own repository at any time.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
