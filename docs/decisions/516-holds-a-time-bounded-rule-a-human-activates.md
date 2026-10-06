@@ -112,6 +112,14 @@ autorefresh tick reading server holds, `musterd hold`, the `service hold --auto`
 
 ## Consequences
 
+- _Dated note (2026-10-05, increment 3, lane 01M473Y826):_ Decision 8 is built. A seat proposes with
+  an `ask` (species `approve`) carrying `meta.hold_proposal` `{effect, reason, until | for_ms}`; the
+  daemon checks it when it is SENT (shape, effect list, 12h cap), so a proposal that could never
+  activate is refused at once. A HUMAN ADMIN's `accept` naming it (`meta.in_reply_to`) activates the
+  hold — `created_by` is that human; `hold.set`'s audit detail carries `proposal_ask` and
+  `proposed_by`; one proposal yields one hold (a second accept is a no-op, deduped on the hub). An
+  agent's accept, a decline, or silence activates nothing. CLI: `musterd hold propose`; MCP seats use
+  `team_send {act:'ask', meta:{species:'approve', tier, hold_proposal}}` — still no tool sets a hold.
 - _Dated note (2026-10-05, increment 2, lane 01M471RXBV):_ `merges_paused` is enforced, with one
   change of mechanism from Decision 6's wording. The hook does not read holds off `GET /enforcement`
   and decide locally; it matches merge-shaped commands locally (`isMergeShapedCommand`: `gh pr

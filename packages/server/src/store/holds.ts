@@ -9,7 +9,13 @@
  * in one transaction, and joiners learn by fold (`projectHoldEvent`). The hold id is minted once, on
  * the hub, and crosses verbatim, which is what makes the fold idempotent on every node.
  */
-import { HOLD_MAX_MS, HoldSchema, type Hold, type SetHoldBody } from '@musterd/protocol';
+import {
+  HOLD_MAX_MS,
+  HoldSchema,
+  type Hold,
+  type HoldProvenance,
+  type SetHoldBody,
+} from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
 import { MusterdError } from '../errors.js';
@@ -58,6 +64,20 @@ export function holdExpiry(body: SetHoldBody, now: number): number {
   return expires;
 }
 
+/** The hold an accepted proposal already activated, if any (its `hold.set` audit row). */
+export async function holdForProposal(
+  db: Driver,
+  teamId: string,
+  askId: string,
+): Promise<string | null> {
+  const row = await db.get<{ target: string }>(
+    `SELECT target FROM audit WHERE team_id = ? AND action = 'hold.set'
+       AND json_extract(detail, '$.proposal_ask') = ? LIMIT 1`,
+    [teamId, askId],
+  );
+  return row?.target ?? null;
+}
+
 /** Active holds, soonest end first. */
 export async function listActiveHolds(db: Driver, teamId: string, now: number): Promise<Hold[]> {
   const rows = await db.all<HoldRow>(
@@ -97,7 +117,15 @@ export async function setHold(
   actor: string,
   body: SetHoldBody,
   now: number = Date.now(),
+  /** Increment 3: the accepted proposal this hold comes from. One proposal yields one hold. */
+  provenance?: HoldProvenance,
 ): Promise<Hold> {
+  if (provenance && (await holdForProposal(db, teamId, provenance.proposal_ask))) {
+    throw new MusterdError(
+      'conflict',
+      `proposal ${provenance.proposal_ask} already activated a hold`,
+    );
+  }
   const expires_at = holdExpiry(body, now);
   const hold: Hold = {
     id: ulid(now),
@@ -116,7 +144,7 @@ export async function setHold(
       action: 'hold.set',
       target: hold.id,
       result: 'allow',
-      detail: { hold },
+      detail: { hold, ...(provenance ?? {}) },
     });
   });
   return hold;

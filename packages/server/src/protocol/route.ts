@@ -11,6 +11,8 @@ import {
   makeEnvelope,
   modelFamily,
   confidentialAskSubject,
+  describeHoldLine,
+  SetHoldBodySchema,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Ctx } from '../context.js';
@@ -19,6 +21,7 @@ import { log } from '../log.js';
 import { ringDoorbell } from '../notify/doorbell.js';
 import { appendAudit } from '../store/audit.js';
 import { dreamMayWrite, isDreaming } from '../store/dream.js';
+import { holdExpiry, holdForProposal, setHold } from '../store/holds.js';
 import { incidentReporters, recordBlockedReport } from '../store/incidents.js';
 import { recordLaneClose } from '../store/laneClose.js';
 import {
@@ -35,7 +38,7 @@ import { pickHumanReviewer, supersededAcceptanceAsks } from '../store/review.js'
 import type { MemberRow, MessageRow, TeamRow } from '../store/rows.js';
 import { resolveAccountStatus, resolveCapabilities } from '../store/rows.js';
 import { acceptanceTimeoutMs, getTeamBySlug } from '../store/teams.js';
-import { joinerEnrollment } from '../sync/claim.js';
+import { holdAtHub, joinerEnrollment } from '../sync/claim.js';
 import {
   recordActModel,
   recordDeliveryOutcome,
@@ -71,6 +74,60 @@ export interface RouteResult {
   /** ADR 505 §6 — this `accept` answered a `handoff`: the note the receiver just took on, returned
    *  where they accepted so the "re-run it before you build on it" line sits beside it. */
   accepted_handoff?: AcceptedHandoffWire;
+}
+
+/**
+ * ADR 516 increment 3: turn an accepted hold proposal into a hold. Only a HUMAN ADMIN's accept counts
+ * (the human-only gate-ask rule, plus ADR 516's admin requirement — never `applyAcceptanceVerdict`'s
+ * any-sender read); an agent's accept, a decline, or silence activates nothing. The hold is the
+ * accepting human's (`created_by`), the proposer is recorded beside it, one proposal yields one hold,
+ * and the Team hears about it once — the same announcement a hold set directly gets.
+ */
+async function activateHoldProposal(
+  ctx: Ctx,
+  team: TeamRow,
+  decider: MemberRow,
+  askId: string,
+): Promise<void> {
+  if (decider.kind !== 'human' || !resolveCapabilities(decider).is_admin) return;
+  const ask = await ctx.db.get<MessageRow>(
+    "SELECT * FROM messages WHERE team_id = ? AND id = ? AND act = 'ask'",
+    [team.id, askId],
+  );
+  if (!ask) return;
+  const meta = JSON.parse(ask.meta ?? '{}') as { hold_proposal?: unknown };
+  const proposal = SetHoldBodySchema.safeParse(meta.hold_proposal);
+  if (!proposal.success) return;
+  if (await holdForProposal(ctx.db, team.id, askId)) return;
+  const proposer = (await getMemberById(ctx.db, ask.from_member))?.name ?? null;
+  const provenance = { proposal_ask: askId, proposed_by: proposer };
+  const enrollment = await joinerEnrollment(ctx.db, team.id, team.slug);
+  const hold = enrollment
+    ? await holdAtHub(enrollment, team.slug, {
+        op: 'set',
+        actor: decider.name,
+        hold: proposal.data,
+        provenance,
+      })
+    : await setHold(ctx.db, team.id, decider.name, proposal.data, Date.now(), provenance);
+  const now = Date.now();
+  await routeEnvelope(
+    ctx,
+    team,
+    decider,
+    makeEnvelope({
+      id: ulid(),
+      team: team.slug,
+      from: decider.name,
+      to: { kind: 'team' },
+      act: 'message',
+      body: `[hold] ${describeHoldLine(hold, now)}${proposer ? ` — proposed by ${proposer}` : ''}`,
+      meta: { hold: { id: hold.id, effect: hold.effect, expires_at: hold.expires_at } },
+      ts: now,
+    }),
+    undefined,
+    true,
+  );
 }
 
 /**
@@ -170,6 +227,19 @@ async function routeEnvelopeInner(
   // sees only {act, thread, meta}, never the body.
   if (env.act === 'insight' && Buffer.byteLength(env.body, 'utf8') > 2048) {
     throw new MusterdError('validation', 'act "insight" body is limited to 2048 bytes');
+  }
+  // ADR 516 increment 3: a hold proposal is checked when it is SENT, so the proposer learns now that
+  // a 20h freeze or an effect outside the list will never activate — not when a human accepts it.
+  if (env.meta && 'hold_proposal' in env.meta) {
+    if (env.act !== 'ask')
+      throw new MusterdError('validation', 'meta.hold_proposal rides an `ask` (species approve)');
+    const proposal = SetHoldBodySchema.safeParse(env.meta['hold_proposal']);
+    if (!proposal.success)
+      throw new MusterdError(
+        'validation',
+        'meta.hold_proposal must be {effect: autorefresh_paused|merges_paused|notice, reason, until | for_ms}',
+      );
+    holdExpiry(proposal.data, Date.now());
   }
   // Observer seats (ADR 063) are read-only — they watch the firehose but cannot speak.
   if (sender.observer) {
@@ -468,6 +538,12 @@ async function routeEnvelopeInner(
           acceptedHandoff = await acceptedHandoffOf(ctx, team, sender, ref);
         } catch (err) {
           log.warn({ msg: 'accepted_handoff_lookup_failed', err: String(err) });
+        }
+        // ADR 516 increment 3: a human admin's accept of a hold proposal IS the activation.
+        try {
+          await activateHoldProposal(ctx, team, sender, ref);
+        } catch (err) {
+          log.warn({ msg: 'hold_proposal_activation_failed', err: String(err) });
         }
       }
     }

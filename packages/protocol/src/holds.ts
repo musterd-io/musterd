@@ -53,9 +53,25 @@ export const HoldResponseSchema = z.object({ hold: HoldSchema });
 export const HoldListSchema = z.object({ holds: z.array(HoldSchema) });
 export type HoldList = z.infer<typeof HoldListSchema>;
 
+/**
+ * ADR 516 increment 3: where a hold came from when an agent proposed it. `proposal_ask` is the
+ * `ask` carrying `meta.hold_proposal` that a human admin accepted; one proposal yields one hold.
+ */
+export const HoldProvenanceSchema = z.object({
+  proposal_ask: z.string().min(1),
+  proposed_by: z.string().min(1).nullable(),
+});
+export type HoldProvenance = z.infer<typeof HoldProvenanceSchema>;
+
 /** The joiner→hub forward of a set or a lift. The hub re-authorizes `actor` against its own roster. */
 export const SyncHoldRequestSchema = z.discriminatedUnion('op', [
-  z.object({ op: z.literal('set'), actor: z.string().min(1), hold: SetHoldBodySchema }),
+  z.object({
+    op: z.literal('set'),
+    actor: z.string().min(1),
+    hold: SetHoldBodySchema,
+    /** Increment 3: the proposal ask a human accepted, and who proposed it — recorded, deduped. */
+    provenance: HoldProvenanceSchema.optional(),
+  }),
   z.object({ op: z.literal('lift'), actor: z.string().min(1), id: z.string().min(1) }),
 ]);
 export type SyncHoldRequest = z.infer<typeof SyncHoldRequestSchema>;

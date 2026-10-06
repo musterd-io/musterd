@@ -5645,7 +5645,7 @@ export async function handleHttp(
         }
         const hold =
           body.op === 'set'
-            ? await setHold(ctx.db, team.id, actor.name, body.hold)
+            ? await setHold(ctx.db, team.id, actor.name, body.hold, Date.now(), body.provenance)
             : await liftHold(ctx.db, team.id, actor.name, body.id);
         await pushTeam(ctx, team).catch(() => undefined);
         return sendJson(res, 200, { hold });

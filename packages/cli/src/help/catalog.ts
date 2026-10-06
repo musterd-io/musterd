@@ -1101,12 +1101,13 @@ export const CATALOG: readonly CommandEntry[] = [
   },
   {
     name: 'hold',
-    signature: 'set <effect> --for|--until … --reason "<why>" | lift <id> | list [--all]',
+    signature: 'set|propose <effect> --for|--until … --reason "<why>" | lift <id> | list [--all]',
     summary: 'pause something team-wide, with an author and an end — every seat sees it',
     group: 'team',
     detail:
       'ADR 516. Effects: autorefresh_paused, merges_paused, notice (shown, never enforced). Human ' +
       'admins set and lift; the daemon decides. Capped at 12h and clears itself — a longer freeze is ' +
-      'a new hold. Every seat reads active holds in `musterd next` / `musterd status` / team_next.',
+      'a new hold. Every seat reads active holds in `musterd next` / `musterd status` / team_next. ' +
+      '`propose` (any seat) sends an approve-ask; a human admin accepting it activates the hold.',
   },
 ];

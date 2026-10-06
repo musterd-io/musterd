@@ -830,6 +830,7 @@ export async function holdAtHub(
       code === 'forbidden' ||
       code === 'not_found' ||
       code === 'validation' ||
+      code === 'conflict' ||
       code === 'bound_elsewhere'
     ) {
       throw new MusterdError(
