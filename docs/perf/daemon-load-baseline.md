@@ -540,3 +540,24 @@ Run 12's shape (75/75/75, `performance-1x`, pool 150) on 61a79f9a (#2097, the co
 - **Next:** three lanes, one for each finding: the roster statement under load, the `next_seq`
   hotspot, and the roster body's CPU cost. Falsifier for the roster lane: the per-call buffer count
   stays ~10× the hand-run cost after the fix.
+
+## 2026-10-06 — Cloud run 15: v89 fixes the roster statement; `next_seq` and the inbox read lead now (lanes 01M3Z44C56, 01M477RQGV)
+
+Run 13's shape (Neon 1 CU) on bab4d429 (#2127, schema v89: `messages` re-analyzes after ~1 % churn).
+
+| run | build / change | Neon | p50 | p95 | req/s | what it showed |
+| --- | --- | --- | --- | --- | --- | --- |
+| 15 | `messages` analyze threshold 1 % (#2127) | 1 CU | 1.6 s | 3.7 s | 40 | roster statement 14.5k → 1.9k buffers per call; `claim` p95 7.7 s |
+
+- **The roster fix held.** `latestStatusUpdates` went from ~14 500 to 1 927 buffers per call,
+  within 1.4× of the hand-run cost, so the lane's falsifier did not fire. Its share of database time
+  fell from ~65 % to 17 %. `messages` auto-analyzed twice during the run.
+- **Same 1 CU as run 13, p95 5.6 s → 3.7 s.** `claim` fell from 17.9 s to 7.7 s, and `POST /lanes`
+  from 16.7 s to 7.1 s.
+- **Where Neon's time goes now (`pg_stat_statements`, run 15).** Four statements take ~90 % of it:
+  the `/report` audit fold (`SELECT CASE WHEN a.action IN …`) 25 %, 31 ms mean;
+  `UPDATE nodes SET next_seq` 24 %, a **123 ms** mean over 5 417 calls (lock wait, at 14 buffers);
+  the inbox read (`SELECT * FROM messages WHERE team_id = $1 AND (to_member = $2 OR …`) 23 %, 49 ms
+  and 1 086 buffers; and the roster statement 17 %.
+- **Next:** the `next_seq` lane (`01M477RVRV`) is now the clearest single target. The inbox read and
+  the audit fold are new candidates.
