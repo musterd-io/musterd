@@ -128,6 +128,55 @@ describe('lane commands', () => {
     expect(res.out).toContain('g1');
   });
 
+  it('open refuses a human-visible scope with no explicit risk, and accepts --risk none', async () => {
+    // A scope that reaches a rendered surface must declare its acceptance risk — the empty default
+    // would silently skip the ADR 188 human gate even when Feel is the whole question.
+    await expect(
+      capture(() =>
+        laneCommand(parseArgs(['open', 'board polish', '--surface', 'packages/web/src/live'])),
+      ),
+    ).rejects.toThrow(/[Dd]eclare its acceptance risk/);
+
+    const ok = await capture(() =>
+      laneCommand(
+        parseArgs(['open', 'board polish', '--surface', 'packages/web/src/live', '--risk', 'none']),
+      ),
+    );
+    expect(ok.code).toBe(0);
+    const board = await capture(() => lanesCommand(parseArgs(['--json'])));
+    const { lanes } = JSON.parse(board.out) as { lanes: { title: string; risk: string[] }[] };
+    expect(lanes.find((l) => l.title === 'board polish')?.risk).toEqual([]);
+  });
+
+  it('open with a human-visible scope and --risk tags records them', async () => {
+    const ok = await capture(() =>
+      laneCommand(
+        parseArgs([
+          'open',
+          'launch page',
+          '--surface',
+          'packages/web/**',
+          '--risk',
+          'user-facing,cost',
+        ]),
+      ),
+    );
+    expect(ok.code).toBe(0);
+    const board = await capture(() => lanesCommand(parseArgs(['--json'])));
+    const { lanes } = JSON.parse(board.out) as { lanes: { title: string; risk: string[] }[] };
+    expect(lanes.find((l) => l.title === 'launch page')?.risk).toEqual(['user-facing', 'cost']);
+  });
+
+  it('open with no human-visible surface does not prompt for risk', async () => {
+    const ok = await capture(() =>
+      laneCommand(parseArgs(['open', 'schema work', '--surface', 'packages/server/src/store'])),
+    );
+    expect(ok.code).toBe(0);
+    const board = await capture(() => lanesCommand(parseArgs(['--json'])));
+    const { lanes } = JSON.parse(board.out) as { lanes: { title: string; risk: string[] }[] };
+    expect(lanes.find((l) => l.title === 'schema work')?.risk).toEqual([]);
+  });
+
   it('claim --goal links the lane in the same call (value-layer design)', async () => {
     const id = await openLane(['linkable']);
     const claimed = await capture(() => laneCommand(parseArgs(['claim', id, '--goal', 'g1'])));

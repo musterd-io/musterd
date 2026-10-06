@@ -5,6 +5,7 @@ import {
   LaneStakesSchema,
   LaneStateSchema,
   reviewWaitMinutes,
+  scopeIsHumanVisible,
   type Lane,
   type LaneStakes,
   type LaneWarning,
@@ -24,7 +25,7 @@ import { resolve } from './helpers.js';
 
 const USAGE =
   'usage:\n' +
-  '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--claim]\n' +
+  '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--claim]\n' +
   '  musterd lane claim <id> [--goal <id>]\n' +
   '  musterd lane release <id>\n' +
   '  musterd lane park <id> --reason "<why not now>" [--until <date>]   (humans only, ADR 466)\n' +
@@ -51,6 +52,29 @@ function parseStakes(raw: string): LaneStakes {
     );
   }
   return parsed.data;
+}
+
+/**
+ * Parse `--risk`. Mirrors parseStakes: a typo must fail, and `none` is a declaration, not the
+ * default. `--risk none` means "this lane's acceptance needs no human judgement", which for a
+ * human-visible-scope lane is exactly the declaration the open path is asking for. `--risk none`
+ * may not be padded with other tags — that reads as under-deciding, and the whole point is that
+ * the author picked one posture.
+ */
+function parseRisks(raw: string): string[] {
+  const tags = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (tags.length === 1 && tags[0] === 'none') return [];
+  if (tags.includes('none')) {
+    throw new CliError(
+      `--risk none stands alone — it records "no human-judgement risk", not "none plus other tags"`,
+      2,
+    );
+  }
+  if (tags.length === 0) throw new CliError(`--risk needs at least one tag, or none`, 2);
+  return tags;
 }
 
 /** Split a comma-separated repeatable flag; undefined when the flag is absent. */
@@ -136,6 +160,20 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
   if (sub === 'open') {
     const title = parsed.positionals[1];
     if (!title) throw new CliError(USAGE, 2);
+    const scope = list(parsed.flags, 'surface');
+    const riskRaw = flagStr(parsed.flags, 'risk');
+    // A lane whose scope reaches a human-visible surface owes the author a risk declaration, not a
+    // silent default (`risk: []` skips the ADR 188 human gate). Ask explicitly; `none` is an
+    // explicit answer and is accepted. A scope that touches no rendered surface needs no answer.
+    if (scopeIsHumanVisible(scope) && riskRaw === undefined) {
+      throw new CliError(
+        `open "${title}": scope reaches a human-visible surface (${scope?.join(', ')}). ` +
+          `Declare its acceptance risk with --risk <tags> (e.g. --risk user-facing,production), ` +
+          `or --risk none to record that there is none. The lane cannot open with the default if it ` +
+          `would otherwise skip the human review gate.`,
+        2,
+      );
+    }
     const res = await http.openLane(team, {
       title,
       ...(flagStr(parsed.flags, 'detail') !== undefined
@@ -156,6 +194,7 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       ...(list(parsed.flags, 'surface') !== undefined
         ? { scope: list(parsed.flags, 'surface')! }
         : {}),
+      ...(riskRaw !== undefined ? { risk: parseRisks(riskRaw) } : {}),
       ...(list(parsed.flags, 'depends') !== undefined
         ? { depends_on: list(parsed.flags, 'depends')! }
         : {}),

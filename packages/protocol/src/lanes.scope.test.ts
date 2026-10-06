@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { LaneSchema, OpenLaneSchema, UpdateLaneSchema } from './lanes.js';
+import { LaneSchema, OpenLaneSchema, scopeIsHumanVisible, UpdateLaneSchema } from './lanes.js';
+
+describe('scopeIsHumanVisible', () => {
+  it('flags scopes that reach a rendered surface', () => {
+    expect(scopeIsHumanVisible(['packages/web/src/live/**'])).toBe(true);
+    expect(scopeIsHumanVisible(['packages/web'])).toBe(true);
+    expect(scopeIsHumanVisible(['packages/mobile/**'])).toBe(true);
+  });
+  it('does not flag server/protocol-only scopes, empty, or missing', () => {
+    expect(scopeIsHumanVisible(['packages/server/src/store/**'])).toBe(false);
+    expect(scopeIsHumanVisible(['packages/protocol/src/**'])).toBe(false);
+    // a sibling package whose name merely shares a prefix is not the web surface
+    expect(scopeIsHumanVisible(['packages/webhooks/**'])).toBe(false);
+    expect(scopeIsHumanVisible([])).toBe(false);
+    expect(scopeIsHumanVisible(undefined)).toBe(false);
+  });
+});
 
 const base = {
   id: '01X',

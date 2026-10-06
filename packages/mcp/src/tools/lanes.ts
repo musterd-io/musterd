@@ -11,6 +11,7 @@ import {
   incidentBannerLines,
   LaneStateSchema,
   reviewWaitMinutes,
+  scopeIsHumanVisible,
   shortDuration,
   type Lane,
   type LaneWarning,
@@ -145,10 +146,27 @@ export function registerLanes(
               'from the files; a low lane may be exempted from acceptance (ADR 234)',
           ),
         claim: z.boolean().optional().describe('own it yourself now (recommended at task start)'),
+        risk: z
+          .array(z.string())
+          .optional()
+          .describe('risk tags (ADR 169) — any tag routes the acceptance human-first; [] = none.'),
       },
     },
     async (args) => {
       try {
+        // A lane whose scope reaches a human-visible surface owes the author a risk declaration, not a
+        // silent default (risk: [] skips the ADR 188 human gate). `risk: []` passed explicitly IS a
+        // declaration and is accepted; omitting the field on such a scope is refused.
+        if (scopeIsHumanVisible(args.scope) && args.risk === undefined) {
+          return errorResult(
+            new Error(
+              `lane_open: this lane's scope reaches a human-visible surface` +
+                `${args.scope ? ` (${args.scope.join(', ')})` : ''}. Pass risk explicitly — as your` +
+                ` tags (e.g. ["user-facing"]), or [] to record there is none. A route whose acceptance` +
+                ` is a human's judgement of a rendered surface cannot borrow risk: []`,
+            ),
+          );
+        }
         // Derived here, not in the store: the daemon's cwd is the daemon's, so only this adapter —
         // running in the seat's own workspace — knows which repo the lane belongs to.
         const { lane, warnings } = await client.openLane({
