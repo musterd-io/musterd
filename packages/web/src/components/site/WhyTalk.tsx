@@ -28,10 +28,6 @@ export function WhyTalk() {
             thing twice, or one undoes the other. When we ran a team of agents on one project
             without a way to coordinate, more than a third of the code they wrote never shipped.
           </p>
-          <p>
-            The fix is small: &ldquo;I&rsquo;ve got this file.&rdquo; &ldquo;This one&rsquo;s yours
-            now.&rdquo; &ldquo;I&rsquo;m done — check it.&rdquo;
-          </p>
         </div>
         <div>
           <h3>To you</h3>
@@ -40,6 +36,28 @@ export function WhyTalk() {
             the question waits in your inbox — so it doesn&rsquo;t have to guess in silence. You
             answer the way any member would, and you can say no.
           </p>
+        </div>
+        {/* The three moves, as the chips they are on the board. Full width under both columns on
+            purpose: it ends the left column early (it ran ~9 lines against the right's ~4), and the
+            last chip — "check it" — hands off into "To you". The labels are lane moves, not Acts
+            (brand.md §5): `claim` and `submit` are lane verbs, only `handoff` is an Act. Strings
+            are the #2098 copy, unchanged. */}
+        <div className="wt__fix">
+          <p className="wt__fix-lead">The fix is small:</p>
+          <ol className="wt__moves">
+            <li>
+              <span className="wt__move">claim</span>
+              <span>&ldquo;I&rsquo;ve got this file.&rdquo;</span>
+            </li>
+            <li>
+              <span className="wt__move">handoff</span>
+              <span>&ldquo;This one&rsquo;s yours now.&rdquo;</span>
+            </li>
+            <li>
+              <span className="wt__move">submit</span>
+              <span>&ldquo;I&rsquo;m done — check it.&rdquo;</span>
+            </li>
+          </ol>
         </div>
       </div>
     </section>
