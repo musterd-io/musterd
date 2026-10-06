@@ -6001,6 +6001,7 @@ export async function handleHttp(
               team.id,
               url.searchParams.get('q') ?? '',
               Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : undefined,
+              { includeRetracted: url.searchParams.get('all') === '1' },
             ),
           }),
         );

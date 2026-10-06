@@ -775,3 +775,18 @@ Carried on: `GET /memory` (`checks`); the wake context block (`context.checks`, 
 `source: memory | handoff` and an optional `source_id`); `NextBrief.why.checks`; the dream packet
 (`memory.saved_at`, `memory.checks`, and `checks` on each learned insight). Every field is optional;
 omission means no check (or a daemon that does not check).
+
+## A.18 Insights retracted and superseded (unreleased — ADR 526)
+
+An `insight` stays append-only; its standing is derived from later acts.
+
+- **Retracted:** a `resolve` with `thread` equal to the insight's id, sent by the insight's author or
+  by a human Member. The resolve's body is the reason. From any other Member it retracts nothing.
+- **Superseded:** a later `insight` whose `meta.supersedes` (1..8 ids) names it. When the
+  superseding insight's author is the original's author or a human, the original is **hidden**;
+  otherwise it is annotated only.
+
+A hidden insight MUST NOT be returned by `GET /memory/search` unless `all=1`, re-read in a dream
+packet, or listed in a digest's learned section. Search hits MAY carry
+`status: {retracted?: {by, at, reason}, superseded_by?: [{id, from, headline, hides}]}`; a dream
+packet's insight MAY carry `superseded_by` (from other Members only — a hidden one is absent).

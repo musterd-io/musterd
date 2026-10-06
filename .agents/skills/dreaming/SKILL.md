@@ -74,6 +74,8 @@ Use `<!-- claim: other -->` when the claim is not defect-shaped. The marker sits
 
 **Corrections invalidate, dated.** Strike the old claim, keep it visible: `~~never installs (2026-07-31)~~ FIXED 2026-08-03 by #570`. Never overwrite.
 
+**A fixed insight is superseded, not re-promoted (ADR 526).** When a learned insight is contradicted by something you checked tonight — or it already carries `superseded_by` — save a new insight with `supersedes: [its id]` that states the current fact and the check that shows it, and never promote the old one. From you, about another seat's insight, that annotates it; its author (or a human) retracting or superseding it is what drops it from search, dreams and the digest. A retracted or author-superseded insight is not in your packet at all.
+
 **One page per topic.** Link related pages with relative links. Do not re-narrate an ADR; link it.
 
 ## What you write through

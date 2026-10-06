@@ -319,6 +319,23 @@ export function actMetaRules(
         });
       }
     }
+    // ADR 526: this finding replaces earlier ones — 1..8 insight ids. Whether the old ones are
+    // hidden (author or human superseding) or only annotated (anyone else) is the server's read.
+    if (meta['supersedes'] !== undefined) {
+      const ids = meta['supersedes'];
+      const ok =
+        Array.isArray(ids) &&
+        ids.length >= 1 &&
+        ids.length <= 8 &&
+        ids.every((t) => typeof t === 'string' && t.trim().length > 0 && t.length <= 64);
+      if (!ok) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['meta', 'supersedes'],
+          message: 'meta.supersedes must be 1..8 insight ids',
+        });
+      }
+    }
   }
   // ADR 254: the eligible set. **Shape only.** `actMetaRules` receives `{act, thread, meta}` — no
   // `from`, no roster handle — so "these seats exist, none has left, none is an observer, and none is

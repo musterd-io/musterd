@@ -6,6 +6,7 @@ import { postSlackWebhook } from '../notify/slack.js';
 import { answeredByAnyoneSql, resolvedThreadSql } from '../store/discharge.js';
 import { getDoorbellPolicy } from '../store/doorbell.js';
 import { waitingOn } from '../store/insights.js';
+import { insightVerdicts } from '../store/insightStatus.js';
 import { insertMessage } from '../store/messages.js';
 import type { MessageRow } from '../store/rows.js';
 
@@ -112,12 +113,22 @@ export async function buildDigest(
   opts: BuildDigestOpts,
 ): Promise<Digest> {
   const now = opts.now ?? Date.now();
-  const learnedRows = await db.all<{ id: string; body: string; meta: string | null; ts: number }>(
-    `SELECT id, body, meta, ts FROM messages
+  const nightRows = await db.all<{
+    id: string;
+    from_member: string;
+    body: string;
+    meta: string | null;
+    ts: number;
+  }>(
+    `SELECT id, from_member, body, meta, ts FROM messages
       WHERE team_id = ? AND act = 'insight' AND created_at >= ?
       ORDER BY ts ASC`,
     [teamId, opts.nightStart],
   );
+  // ADR 526: the morning post does not re-announce a finding its author (or a human) has already
+  // withdrawn or replaced — the replacement, saved later, is what the team should read.
+  const verdicts = await insightVerdicts(db, teamId, nightRows);
+  const learnedRows = nightRows.filter((r) => !verdicts.get(r.id)?.hidden);
   const unansweredRows = await db.all<{
     id: string;
     from_name: string;
