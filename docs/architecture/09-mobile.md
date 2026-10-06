@@ -55,7 +55,10 @@ is dropped and the sync line names it (`"Demo day" — changed on the daemon whi
 edit was dropped`). A write the daemon refuses (`400`, `404`) is dropped and named the same way; an
 unreachable daemon or a `5xx` stops the replay with the queue intact. The queue holds one write per
 entry: a second edit folds into the first and keeps its base, and deleting an entry that never left
-the phone cancels its create.
+the phone cancels its create. A create carries its local id as `source_ref`, the daemon's idempotency key, so
+when a POST commits but its answer is lost, the replay replaces that entry rather than adding a
+second. Every request gives up after 10 s and counts as offline, so a sleeping laptop cannot hold
+a sync, and every sync queued behind it, for the ~75 s a MagicDNS connect can hang.
 
 ## Screens
 

@@ -79,6 +79,15 @@ class FakeDaemon implements CalendarApi {
   async create(body: CalendarEntryInput): Promise<CalendarWriteResponse> {
     this.gate();
     if (this.refuse) throw new CalendarApiError(this.refuse, 400, 'bad_request');
+    // SPEC A.16: a POST naming a source_ref the Team already has replaces that entry.
+    const same = [...this.rows.values()].find(
+      (e) => body.source_ref !== null && e.source_ref === body.source_ref,
+    );
+    if (same) {
+      const entry = { ...same, ...body, updated_at: this.tick() };
+      this.rows.set(same.id, entry);
+      return this.answer({ entry, outcome: 'updated' });
+    }
     const t = this.tick();
     const entry: CalendarEntry = {
       ...body,
@@ -88,7 +97,16 @@ class FakeDaemon implements CalendarApi {
       updated_at: t,
     };
     this.rows.set(entry.id, entry);
-    return { entry, outcome: 'created' };
+    return this.answer({ entry, outcome: 'created' });
+  }
+  /** Set to drop the next write's answer after it commits — a Tailscale drop mid-response. */
+  loseNextAnswer = false;
+  private answer(r: CalendarWriteResponse): CalendarWriteResponse {
+    if (this.loseNextAnswer) {
+      this.loseNextAnswer = false;
+      throw new CalendarApiError('could not reach', 0, null);
+    }
+    return r;
   }
   async replace(id: string, body: CalendarEntryInput): Promise<CalendarWriteResponse> {
     this.gate();
@@ -247,6 +265,20 @@ describe('the daemon wins a conflict, and the phone says so', () => {
     await cal.sync(daemon);
     expect(daemon.rows.get(a.id)?.title).toBe('a-mine');
     expect(await titles()).toEqual(['a-mine', 'b']);
+  });
+});
+
+describe('a lost answer', () => {
+  it('a create the daemon committed but never answered is not duplicated by the replay', async () => {
+    const local = await cal.save(input({ title: 'demo day' }), null);
+    expect(local.source_ref).toBe(local.id);
+    daemon.loseNextAnswer = true;
+    expect((await cal.sync(daemon)).offline).toBe(true);
+    expect(daemon.rows.size).toBe(1); // it did land
+    await cal.sync(daemon);
+    expect(daemon.rows.size).toBe(1);
+    expect((await cal.entries()).map((e) => e.title)).toEqual(['demo day']);
+    expect(await store.pending()).toEqual([]);
   });
 });
 
