@@ -7,6 +7,7 @@ import type { Ctx } from '../context.js';
 import { failureFields, log } from '../log.js';
 import { readNodeState } from '../node/state.js';
 import { handleFoldedMessages } from '../protocol/route.js';
+import { getMemberById, haltedSentence } from '../store/members.js';
 import { replaceSeatBindings } from '../store/nodes.js';
 import { listActiveTeams } from '../store/teams.js';
 import { foldBatch, foldNodeLiveness, readPullCursor, type FoldStop } from './fold.js';
@@ -360,10 +361,29 @@ export async function pullPage(
       log.warn({ msg: 'incident_hook_failed', team: team.slug, err: String(err) });
     }
   }
+  // ADR 525: a halt decided on the hub reached this node. The fold set the standing and revoked the
+  // leases; a live socket here is closed now with the halt's own sentence, as the deciding node does.
+  for (const memberId of result.halted ?? []) await evictHalted(ctx, team.id, memberId);
   return {
     applied: result.applied,
     full: page.events.length === SYNC_PULL_MAX_BATCH && result.stop === null,
   };
+}
+
+/** Close every live socket a halted seat holds on this node, and tell the room it went offline. */
+async function evictHalted(ctx: Ctx, teamId: string, memberId: string): Promise<void> {
+  const conns = ctx.hub.connsForMember(memberId);
+  if (conns.length === 0) return;
+  const seat = await getMemberById(ctx.db, memberId);
+  const sentence = seat ? haltedSentence(seat) : 'halted by a human (ADR 501)';
+  for (const c of conns) {
+    c.send({ type: 'error', code: 'superseded', message: sentence });
+    c.close?.();
+    ctx.hub.remove(c.connId);
+  }
+  const name = conns[0]?.memberName;
+  if (conns.length > 0 && name)
+    ctx.hub.broadcastTeam(teamId, { type: 'presence', member: name, status: 'offline' });
 }
 
 /** Start the pull loop. Returns a stop function (same contract as startSyncPush). */

@@ -203,7 +203,10 @@ function toSyncEvent(pending: Pending, slug: string): SyncEvent {
         ? 'ledger'
         : row.action.startsWith('presence.')
           ? 'presence'
-          : row.action.startsWith('policy.') || row.action.startsWith('hold.')
+          : row.action.startsWith('policy.') ||
+              row.action.startsWith('hold.') ||
+              row.action === 'seat.halted' ||
+              row.action === 'seat.resumed'
             ? 'policy'
             : row.action.startsWith('continuity.')
               ? 'continuity'

@@ -8,6 +8,7 @@ import {
 import { z } from 'zod';
 import type { Driver } from '../db/driver.js';
 import { REPLICATED_LEDGER_VERBS } from '../store/audit.js';
+import { applyHaltLocally, applyResumeLocally } from '../store/halt.js';
 import { projectHoldEvent } from '../store/holds.js';
 import { getMemberByName } from '../store/members.js';
 import { upsertForeignNode } from '../store/nodes.js';
@@ -271,7 +272,14 @@ async function projectLaneEvent(
  * The verbs the policy kind carries — hub-minted Team rules: the policy override and (ADR 516) the
  * Team's holds. Anything else stops as `unknown_policy_event`.
  */
-const POLICY_VERBS = new Set(['policy.change', 'hold.set', 'hold.lifted']);
+const POLICY_VERBS = new Set([
+  'policy.change',
+  'hold.set',
+  'hold.lifted',
+  // ADR 525: a human's halt/resume, decided on the hub.
+  'seat.halted',
+  'seat.resumed',
+]);
 
 /**
  * Project a replicated policy change into this daemon's `teams.policy` (residence-2 census gap 1).
@@ -290,7 +298,25 @@ async function projectPolicyEvent(
   teamId: string,
   event: SyncPullLaneEvent['event'],
   now: number,
+  halted: string[] = [],
 ): Promise<'applied' | 'unknown'> {
+  if (event.action === 'seat.halted' || event.action === 'seat.resumed') {
+    // ADR 525: apply the hub's decision with the hub's stamp. A seat this node does not know has
+    // nothing here to stop — applied, not a stop: the fold must not wedge on a roster difference.
+    const at = event.detail?.['at'];
+    const by = event.actor;
+    if (typeof at !== 'number' || !by) return 'unknown';
+    const seat = await getMemberByName(db, teamId, event.target ?? '');
+    if (!seat || seat.kind !== 'agent') return 'applied';
+    if (event.action === 'seat.resumed') {
+      await applyResumeLocally(db, seat, at);
+      return 'applied';
+    }
+    const reason = event.detail?.['reason'];
+    if (typeof reason !== 'string' || !reason) return 'unknown';
+    if ((await applyHaltLocally(db, teamId, seat, by, reason, at)).changed) halted.push(seat.id);
+    return 'applied';
+  }
   if (event.action === 'hold.set' || event.action === 'hold.lifted') {
     return projectHoldEvent(db, teamId, event.action, event.detail);
   }
@@ -687,6 +713,11 @@ export interface FoldResult {
    * 500). Not a stop: the pull logs them so a seed that never arrives is still findable.
    */
   held_seed_threads: { relay_id: string; hub_seq: number }[];
+  /**
+   * ADR 525: member ids this call HALTED. The fold sets the standing and revokes leases inside its
+   * transaction; evicting a live WebSocket needs the connection hub, so the pull does that after.
+   */
+  halted: string[];
 }
 
 export async function readPullCursor(db: Driver, teamId: string): Promise<number> {
@@ -849,6 +880,7 @@ export async function foldBatch(
 
     // A `return finish()` inside t.transaction COMMITS what ran before it: the prefix and the
     // cursor go together. Only an unclassified throw rolls the batch back.
+    const halted: string[] = [];
     const finish = async (): Promise<FoldResult> => {
       if (cursor !== startCursor) await writePullCursor(t, teamId, cursor, now);
       return {
@@ -858,6 +890,7 @@ export async function foldBatch(
         stop,
         messages,
         held_seed_threads: heldSeedThreads,
+        halted,
       };
     };
 
@@ -951,7 +984,7 @@ export async function foldBatch(
           stop = { kind: 'unknown_policy_event', action: e.action, hub_seq: event.hub_seq };
           return await finish();
         }
-        if ((await projectPolicyEvent(t, teamId, e, now)) === 'unknown') {
+        if ((await projectPolicyEvent(t, teamId, e, now, halted)) === 'unknown') {
           stop = { kind: 'unknown_policy_event', action: e.action, hub_seq: event.hub_seq };
           return await finish();
         }
