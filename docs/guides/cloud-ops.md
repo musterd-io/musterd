@@ -47,7 +47,14 @@ node scripts/cloud/provision-neon.mjs
 
 It finds or creates the Neon project, the two databases and the two login users, then stages the
 URLs as Fly secrets on both apps. It prints names, never values. **Rerunning it rotates both login
-passwords** and stages the new URLs. The next deploy picks them up.
+passwords** and stages the new URLs. The next deploy picks them up. Deploy straight after a rerun:
+the running app still holds the old passwords and cannot open new connections until it rolls.
+
+The migrate app's owner URLs log in as the Neon project's database owner, `neondb_owner`. The
+script reads that name and its password back from Neon at run time, so the name appears nowhere in
+this repo. **If you reset `neondb_owner`'s password, rerun this script and then deploy.** Until you
+do, every deploy stops at the migrate step with `password authentication failed for user
+'neondb_owner'`, and nothing is rolled (staging, 2026-10-06).
 
 ## Create a team on staging
 
