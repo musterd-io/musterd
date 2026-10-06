@@ -3,6 +3,7 @@ import { AuditEntrySchema } from './audit.js';
 import { PolicyOverrideSchema } from './credentials.js';
 import { EnvelopeSchema } from './envelope.js';
 import { UpdateLaneSchema } from './lanes.js';
+import { StylePrefsSchema } from './style.js';
 
 /**
  * The daemon↔hub sync surface (ADR 325), increment 3b-i of the federation build.
@@ -404,6 +405,19 @@ export const SyncPolicyRequestSchema = z.object({
   policy: PolicyOverrideSchema,
 });
 export type SyncPolicyRequest = z.infer<typeof SyncPolicyRequestSchema>;
+
+/**
+ * The joiner→hub forward of a human's own style prefs (ADR 514, lane 01M46RWP23): the prefs whole
+ * (replace semantics, as `PUT /members/me/style` has them) and the human who set them. The hub
+ * re-authorizes `actor` against ITS roster — a human, resident on the forwarding machine — writes
+ * `members.style_prefs` there and stamps a replicated `style.prefs` every node folds, so a seat on
+ * any machine reads the new block on its next epoch check.
+ */
+export const SyncStyleRequestSchema = z.object({
+  actor: z.string().min(1),
+  prefs: StylePrefsSchema,
+});
+export type SyncStyleRequest = z.infer<typeof SyncStyleRequestSchema>;
 
 /**
  * The joiner→hub forward of a halt or resume (ADR 525). The hub re-authorizes `actor` against ITS

@@ -17,6 +17,7 @@ import {
   type SyncHaltRequest,
   type SyncHoldRequest,
   type SyncPolicyRequest,
+  type SyncStyleRequest,
   type SyncTrustRequest,
   type UpdateLane,
 } from '@musterd/protocol';
@@ -840,6 +841,51 @@ export async function holdAtHub(
     throw new Error(`the hub answered ${res.status} to the hold: ${JSON.stringify(body)}`);
   }
   return HoldResponseSchema.parse(body).hold;
+}
+
+/**
+ * The joiner→hub forward of a human's own style prefs (ADR 514, lane 01M46RWP23) — the policy
+ * shape: the hub decides, stamps the replicated row, and answers with what `PUT /members/me/style`
+ * would have; the joiner records nothing of its own and learns the row back through the fold.
+ */
+export async function styleAtHub(
+  enrollment: { hub_url: string; credential: string },
+  slug: string,
+  req: SyncStyleRequest,
+): Promise<unknown> {
+  let res: Response;
+  try {
+    res = await fetch(new URL(`/teams/${slug}/sync/style`, enrollment.hub_url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${enrollment.credential}`,
+      },
+      body: JSON.stringify(req),
+      signal: AbortSignal.timeout(CLAIM_TIMEOUT_MS),
+    });
+  } catch (err) {
+    log.warn({ msg: 'sync_style_hub_unreachable', team: slug, err: String(err) });
+    throw new HubUnreachableError(enrollment.hub_url, String(err));
+  }
+  const body: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const b = body as { error?: { code?: string; message?: string } } | null;
+    const code = b?.error?.code;
+    if (
+      code === 'forbidden' ||
+      code === 'not_found' ||
+      code === 'validation' ||
+      code === 'bound_elsewhere'
+    ) {
+      throw new MusterdError(
+        code === 'bound_elsewhere' ? 'forbidden' : code,
+        b?.error?.message ?? 'the hub refused the style change',
+      );
+    }
+    throw new Error(`the hub answered ${res.status} to the style change: ${JSON.stringify(body)}`);
+  }
+  return body;
 }
 
 /** States a lane may be parked from (ADR 466): live, not-yet-submitted work. */

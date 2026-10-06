@@ -58,6 +58,18 @@ without adding a second home for a fact the skill already states.
 
 ## Consequences
 
+- **2026-10-05 — the prefs hub forward landed** (lane `01M46RWP23N253H9M0HDWPYJNB`, deferred at
+  increment 2): `members.style_prefs` is hub-authoritative like policy. An enrolled joiner's
+  `PUT /members/me/style` forwards to `POST /sync/style` `{ actor, prefs }`; the hub re-authorizes
+  the actor against its own roster (resident on that machine, a non-observer human, the prose cap),
+  writes the row and stamps a replicated **`style.prefs`** `{ prefs }` on the policy sync kind that
+  every node folds; the joiner answers `hub_unreachable` rather than forking. The local
+  `style.prefs_set` row stays keys-only — the replicated row is the transport, the audit row the
+  record. **Doorbell prefs stay daemon-local, decided here:** the `os` sink names a host label, a
+  per-machine fact, so replicating `doorbell_prefs` whole would ring the wrong machine. Not
+  deferred: nothing is planned for it, and the trigger that would reopen it is a human working
+  from two machines who finds their Slack or webhook sink missing on the second.
+
 - **2026-10-05 — `policy style` moved under `team policy`** (lane `01M47A4WRRWVD3SN6D7DSZ9V3J`,
   nick's call on stanley's flag): the spelling is `musterd team policy style …`, the one positional
   area of `team policy`; the top-level `policy` word from increment 4 is gone. One home per team

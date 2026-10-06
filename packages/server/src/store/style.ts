@@ -7,6 +7,8 @@ import {
   resolveStyle,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
+import { log } from '../log.js';
+import { appendReplicatedEvent } from './audit.js';
 import { listMembers } from './members.js';
 import type { MemberRow } from './rows.js';
 import { getPolicy } from './teams.js';
@@ -37,6 +39,36 @@ export async function setStylePrefs(
     Date.now(),
     memberId,
   ]);
+}
+
+/**
+ * The hub-side write (ADR 514, lane 01M46RWP23): the prefs row and, in the same transaction, the
+ * replicated `style.prefs` event every node folds into its own `members.style_prefs`. Replace
+ * semantics all the way through, as the route has them. A daemon with no local node for the team
+ * (never enrolled, never messaged) cannot allocate a seq; its row still lands, unreplicated —
+ * the `appendAudit` fallback, and the state every single-machine team is in.
+ */
+export async function applyStylePrefs(
+  db: Driver,
+  teamId: string,
+  member: Pick<MemberRow, 'id' | 'name'>,
+  prefs: StylePrefs,
+): Promise<void> {
+  try {
+    await db.tx(async (t) => {
+      await setStylePrefs(t, member.id, prefs);
+      await appendReplicatedEvent(t, teamId, {
+        actor: member.name,
+        action: 'style.prefs',
+        target: null,
+        result: 'allow',
+        detail: { prefs },
+      });
+    });
+  } catch (err) {
+    log.warn({ msg: 'style_prefs_stamp_failed', actor: member.name, err: String(err) });
+    await setStylePrefs(db, member.id, prefs);
+  }
 }
 
 /** The team's effective style policy — floor, default dials, team prose (dense, ADR 185 read side). */

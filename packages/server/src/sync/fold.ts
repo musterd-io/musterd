@@ -4,6 +4,7 @@ import {
   type SyncPullEvent,
   type SyncPullLaneEvent,
   isWireAttestationSource,
+  StylePrefsSchema,
 } from '@musterd/protocol';
 import { z } from 'zod';
 import type { Driver } from '../db/driver.js';
@@ -19,6 +20,7 @@ import {
 } from '../store/residency.js';
 import type { MessageRow } from '../store/rows.js';
 import { applySeedCapture } from '../store/seeds.js';
+import { setStylePrefs } from '../store/style.js';
 import { recordToolCalls } from '../store/toolCalls.js';
 
 /**
@@ -279,6 +281,8 @@ const POLICY_VERBS = new Set([
   // ADR 525: a human's halt/resume, decided on the hub.
   'seat.halted',
   'seat.resumed',
+  // ADR 514 (lane 01M46RWP23): a human's own style prefs, written on the hub.
+  'style.prefs',
 ]);
 
 /**
@@ -319,6 +323,17 @@ async function projectPolicyEvent(
   }
   if (event.action === 'hold.set' || event.action === 'hold.lifted') {
     return projectHoldEvent(db, teamId, event.action, event.detail);
+  }
+  if (event.action === 'style.prefs') {
+    // ADR 514: the hub's copy of a human's prefs, whole. A human this node does not know has no
+    // row to carry them — applied, not a stop, like a halt for an unknown seat. A shape the schema
+    // refuses is a stop: a wrong prefs blob would silently rewrite how every seat here talks.
+    const prefs = StylePrefsSchema.safeParse(event.detail?.['prefs']);
+    if (!prefs.success || !event.actor) return 'unknown';
+    const human = await getMemberByName(db, teamId, event.actor);
+    if (!human || human.kind !== 'human') return 'applied';
+    await setStylePrefs(db, human.id, prefs.data);
+    return 'applied';
   }
   if (event.action !== 'policy.change') return 'unknown';
   const stored = event.detail ?? {};

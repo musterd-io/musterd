@@ -180,9 +180,10 @@ member, it is that human. Otherwise the block carries only the floor and team de
 Writes go through `StylePrefsSchema` / `PolicyOverrideSchema` at the boundary. Prose over five
 lines is refused with the count. The admin path rides `POST /policy`, so hub forwarding and the
 `policy.change` audit row come with it. The self path is a new self-only route on the member
-(`authMember`, target must equal the caller), the doorbell-prefs precedent; it writes locally. The
-hub forward — so a dial set on one machine reaches seats on another — is lane
-`01M46RWP23N253H9M0HDWPYJNB` (deferred at increment 2; ADR 514 Consequences, 2026-10-05).
+(`authMember`, target must equal the caller), the doorbell-prefs precedent for the row. Since lane
+`01M46RWP23N253H9M0HDWPYJNB` (2026-10-05) it is hub-authoritative like policy: an enrolled joiner
+forwards to `/sync/style`, the hub writes and stamps a replicated `style.prefs` every node folds, and
+an unreachable hub refuses rather than forking — so a dial set on one machine reaches seats on another.
 
 ### 4.6 Failure modes
 
