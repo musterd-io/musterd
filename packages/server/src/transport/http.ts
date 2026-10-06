@@ -305,7 +305,6 @@ import { applyMemoryClear, applyMemorySave, getMemory, memoryEnvelope } from '..
 import {
   countInbox,
   countUnread,
-  latestStatusUpdates,
   listInbox,
   listTeamMessages,
   localNodeForTeam,
@@ -349,7 +348,6 @@ import {
   supersededMessage,
 } from '../store/presence.js';
 import {
-  lastActionBySubject,
   quietestBusyMs,
   resolveQuiescence,
   QUIESCENCE_DEFAULT_QUIET_AFTER_MS,
@@ -404,6 +402,7 @@ import {
   acceptanceWaits,
 } from '../store/review.js';
 import { getRoleCharter, listRoles } from '../store/roles.js';
+import { rosterSharedReads } from '../store/rosterCache.js';
 import type { MemberRow, TeamRow } from '../store/rows.js';
 import {
   messageVisibilityOf,
@@ -2043,11 +2042,11 @@ async function summarize(
   // Quiescence (ADR 219): the decision-grade busy read, beside — never folded into — the
   // display fields below. One audit read for the whole roster; a seat with no evidence is absent
   // from the map and reports `unknown` rather than borrowing the shape of quiet.
-  const lastAction = await lastActionBySubject(ctx.db, teamId);
-  const quiescenceNow = Date.now();
   // Every member's latest status_update in one statement (lane 01M3ZCTQK9) — the roster asked once per
-  // member, and /live refetches the roster on presence frames for every viewer.
-  const statuses = await latestStatusUpdates(ctx.db, teamId);
+  // member, and /live refetches the roster on presence frames for every viewer. Both reads are the
+  // same for every viewer, so in cloud one load per team serves them all for 1 s (ADR 541).
+  const { lastAction, statuses } = await rosterSharedReads(ctx, teamId);
+  const quiescenceNow = Date.now();
   // ADR 514: the team's style once; each human row resolves their own dials against it below, and
   // every row stamps the CURRENT epoch its seat should attest (inc 4: the roster's `style stale`).
   const style = await teamStyle(ctx.db, teamId);
