@@ -8,7 +8,8 @@
     "start": "expo start",
     "ios": "expo run:ios",
     "android": "expo run:android",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "eas-build-post-install": "pnpm --filter @musterd/protocol build"
   },
   "dependencies": {
     "@expo/log-box": "~57.0.4",

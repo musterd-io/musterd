@@ -81,6 +81,11 @@ Which toolchain, and what does it cost the monorepo and its CI? Four were weighe
   surface doc is `docs/architecture/09-mobile.md`, not `08-mobile.md`: 08 was already the web doc.
   (e) `app.json` carries one App Transport Security exception, plain `http` to `*.ts.net` plus local
   networking, because Tailscale is the transport's encryption (ADR 519 §4).
+- **2026-10-05, increment 5 (lane `01M46YWG8YHE`): no local Xcode.** nick asked that Xcode not run
+  on the laptop that hosts the seats, because it slows that machine down. The phone therefore gets
+  the app through TestFlight from the start, built by EAS Build in the cloud and uploaded by EAS
+  Submit; the development-build step above is skipped. Expo Go covers JavaScript-only iteration. The
+  Expo project is `@nas4146/musterd`; `eas.json` pins Node and pnpm to the repo's.
 
 ## Observability & Evaluation
 

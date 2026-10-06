@@ -26,6 +26,13 @@
     "android": {
       "package": "io.musterd.app"
     },
-    "plugins": ["expo-router", "expo-sqlite", "expo-secure-store"]
+    "plugins": ["expo-router", "expo-sqlite", "expo-secure-store"],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "78a9a6c8-5f2f-4a82-9d18-e5dc5ee8763e"
+      }
+    },
+    "owner": "nas4146"
   }
 }
