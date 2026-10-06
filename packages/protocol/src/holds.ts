@@ -50,7 +50,16 @@ export const SetHoldBodySchema = z
 export type SetHoldBody = z.infer<typeof SetHoldBodySchema>;
 
 export const HoldResponseSchema = z.object({ hold: HoldSchema });
-export const HoldListSchema = z.object({ holds: z.array(HoldSchema) });
+/**
+ * `GET /teams/:slug/holds`. `can_set` (ADR 516 increment 4) is whether THIS reader may set or lift a
+ * hold — a human admin — computed by the daemon per reader, the ADR 501 `can_halt` shape: /live
+ * renders its controls from this alone, never from the viewer's role in a client. Absent on an older
+ * daemon, which a client reads as `false`.
+ */
+export const HoldListSchema = z.object({
+  holds: z.array(HoldSchema),
+  can_set: z.boolean().optional(),
+});
 export type HoldList = z.infer<typeof HoldListSchema>;
 
 /**

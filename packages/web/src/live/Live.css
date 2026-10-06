@@ -6899,3 +6899,53 @@
   font-size: var(--lc-type-body);
   text-align: center;
 }
+/* ADR 516 inc 4: the admin's lift / pause… controls on the banner — the halt control's shape. */
+.lc-holds__row,
+.lc-holds__box,
+.lc-holds__form {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45em;
+  flex-wrap: wrap;
+}
+.lc-holds__row {
+  display: flex;
+}
+.lc-holds__btn {
+  font: inherit;
+  font-size: 0.72em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lc-warn-ink);
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--lc-warn) 42%, transparent);
+  border-radius: 999px;
+  padding: 0.1em 0.7em;
+  min-height: 24px;
+  cursor: pointer;
+}
+.lc-holds__btn:hover:not(:disabled) {
+  border-color: currentColor;
+}
+.lc-holds__btn:disabled {
+  cursor: default;
+}
+.lc-holds__btn--lift {
+  color: var(--lc-success-ink);
+  border-color: color-mix(in srgb, var(--lc-success) 42%, transparent);
+}
+.lc-holds__field {
+  font: inherit;
+  font-size: 0.78em;
+  color: var(--lc-text);
+  background: var(--lc-surface-2);
+  border: 1px solid var(--lc-border-2);
+  border-radius: 6px;
+  padding: 0.15em 0.5em;
+  min-height: 24px;
+}
+.lc-holds__err {
+  font-size: 0.74em;
+  color: var(--lc-danger-ink);
+}

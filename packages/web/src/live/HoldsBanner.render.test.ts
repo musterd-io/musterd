@@ -32,4 +32,27 @@ describe('HoldsBanner', () => {
     expect(html([{ ...hold, lifted_at: now, lifted_by: 'nick' }])).toBe('');
     expect(html([{ ...hold, expires_at: now }])).toBe('');
   });
+
+  // ADR 516 increment 4: the controls render from the daemon's `can_set` alone.
+  const cfg = { team: 'dawn', as: 'nick', token: 'mscr_x' };
+  const withCfg = (holds: Hold[], canSet: boolean) =>
+    renderToStaticMarkup(createElement(HoldsBanner, { holds, now, cfg, canSet }));
+
+  it('a viewer the daemon says may set sees lift on each hold and a pause… control', () => {
+    const out = withCfg([hold], true);
+    expect(out).toContain('>lift<');
+    expect(out).toContain('pause…');
+    // and with nothing in force, the pause… control alone
+    const empty = withCfg([], true);
+    expect(empty).toContain('pause…');
+    expect(empty).not.toContain('>lift<');
+  });
+
+  it('a viewer who may not set sees the banner and no controls — even signed in', () => {
+    const out = withCfg([hold], false);
+    expect(out).toContain('autorefresh paused by nick');
+    expect(out).not.toContain('>lift<');
+    expect(out).not.toContain('pause…');
+    expect(withCfg([], false)).toBe('');
+  });
 });

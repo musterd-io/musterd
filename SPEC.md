@@ -681,8 +681,11 @@ Routes (all under `/teams/:slug`):
   ms) or `for_ms`. Caller MUST be an admin; an admin is human (A.1, ADR 172). Over the 12h cap
   answers `validation`. Returns `{ hold }`.
 - `POST /holds/:id/lift` — admin. Lifting an ended hold answers `not_found`. Returns `{ hold }`.
-- `GET /holds` — any authenticated Member. Returns `{ holds: [...] }`: active holds, soonest
-  `expires_at` first. `?all=1` adds ended ones, newest first.
+- `GET /holds` — any authenticated Member. Returns `{ holds: [...], can_set?: boolean }`: active
+  holds, soonest `expires_at` first. `?all=1` adds ended ones, newest first. `can_set` is whether the
+  CALLER may set or lift (a human admin), computed by the server per reader; a client renders set and
+  lift controls from it alone and never from a role it reads elsewhere. Omitted means the server
+  predates it; a client reads that as `false`. The write routes decide regardless.
 
 A joiner forwards both writes to its hub and answers `hub_unreachable` if it cannot reach it; it
 never records a hold locally. The hub writes the row and its replicated event (`hold.set`,
