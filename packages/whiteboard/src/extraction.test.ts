@@ -96,4 +96,12 @@ describe('extraction guarantee', () => {
       }
     }
   });
+
+  it('every command the package declares runs under node — a bin without a shebang is a shell script', async () => {
+    const pkg = (await manifest()) as unknown as { bin: Record<string, string> };
+    for (const [name, target] of Object.entries(pkg.bin)) {
+      const src = join(PKG_ROOT, target.replace(/^\.\/dist\//, 'src/').replace(/\.js$/, '.ts'));
+      expect((await readFile(src, 'utf8')).split('\n')[0], name).toBe('#!/usr/bin/env node');
+    }
+  });
 });

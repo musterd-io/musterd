@@ -20,10 +20,16 @@ const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.ur
 };
 
 describe('the vendored Squig (ADR 537)', () => {
-  it("declares exactly the bundle's externals, at the vendored versions", () => {
+  it("declares exactly the bundle's externals, at the vendored version or a later patch", () => {
     expect(Object.keys(vendored.externals).sort()).toEqual(['@resvg/resvg-js', 'sharp']);
-    for (const [name, version] of Object.entries(vendored.externals)) {
-      expect(pkg.dependencies[name], name).toBe(version);
+    // A patch bump (a security fix, say) keeps the API Squig was built against; a minor bump of a
+    // 0.x package does not, so it needs a re-vendor.
+    for (const [name, built] of Object.entries(vendored.externals)) {
+      const declared = pkg.dependencies[name] ?? '';
+      const [bMaj, bMin, bPatch] = built.split('.').map(Number);
+      const [dMaj, dMin, dPatch] = declared.split('.').map(Number);
+      expect([dMaj, dMin], `${name} ${declared} vs built ${built}`).toEqual([bMaj, bMin]);
+      expect(dPatch!, `${name} ${declared} vs built ${built}`).toBeGreaterThanOrEqual(bPatch!);
     }
   });
 
