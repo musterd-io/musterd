@@ -142,6 +142,36 @@ export function laneVerdictAck(verdict: {
   return { lane: verdict.lane, state: verdict.state, guidance };
 }
 
+/** ADR 539: an accept that was taken as the PEER confirmation on a risky lane, on the wire. */
+export interface LaneEscalationWire {
+  lane: string;
+  /** The human the stage-two ask went to; null when none was live (the daemon will ask the first
+   *  who comes live) or when this daemon is a joiner and the hub decides on fold. */
+  human: string | null;
+}
+export interface LaneEscalationAck extends LaneEscalationWire {
+  guidance: string;
+}
+
+/**
+ * ADR 539: the ack for an accept that did NOT close a risky lane because it was the peer stage
+ * (ADR 188 §4). Before this the sender got a bare message with no verdict and nothing said why —
+ * ryder's accept on the nameplates lane, 2026-10-06, looked identical to one that had closed it.
+ */
+export function laneEscalationAck(e: LaneEscalationWire): LaneEscalationAck {
+  const tail =
+    e.human === null
+      ? `No human is live to ask right now: the lane shows as peer-confirmed, waiting for a human, ` +
+        `and the daemon asks the first human who comes live. Nothing more is owed by you.`
+      : `${e.human} has been asked for the human verdict (blocking tier), and that verdict closes it.`;
+  return {
+    ...e,
+    guidance:
+      `Lane ${e.lane}: your accept was recorded as the PEER confirmation on a risky lane (ADR 188) ` +
+      `— it did not close the lane. ${tail}`,
+  };
+}
+
 /**
  * Why an acceptance submit asked nobody (ADR 404). The historical sentence "no eligible acceptor
  * is live" named both an empty room and a room full of busy / same-model / human-only seats.

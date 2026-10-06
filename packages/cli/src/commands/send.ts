@@ -11,6 +11,7 @@ import {
   acceptedHandoffAck,
   disputeAnswerAck,
   laneAckAck,
+  laneEscalationAck,
   laneVerdictAck,
   makeEnvelope,
   threadHintFor,
@@ -290,6 +291,9 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
   // that the sender can tell it apart from the one that decides.
   const laneAck = ackBody?.lane_ack;
   if (laneAck) process.stdout.write(theme.dim(laneAckAck(laneAck).guidance) + '\n');
+  // ADR 539: the peer stage on a risky lane, at the same parity — closed nothing, and who holds it.
+  if (ackBody?.lane_escalation)
+    process.stdout.write(theme.dim(laneEscalationAck(ackBody.lane_escalation).guidance) + '\n');
   // ADR 505: the owner's answer to a review dispute, at the same parity — the text is protocol's.
   if (ackBody?.dispute)
     process.stdout.write(theme.dim(disputeAnswerAck(ackBody.dispute).guidance) + '\n');

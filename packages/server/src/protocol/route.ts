@@ -19,7 +19,7 @@ import type { Ctx } from '../context.js';
 import { MusterdError } from '../errors.js';
 import { log } from '../log.js';
 import { ringDoorbell } from '../notify/doorbell.js';
-import { appendAudit } from '../store/audit.js';
+import { appendAudit, appendReplicatedEvent } from '../store/audit.js';
 import { dreamMayWrite, isDreaming } from '../store/dream.js';
 import { holdExpiry, holdForProposal, setHold } from '../store/holds.js';
 import { incidentReporters, recordBlockedReport } from '../store/incidents.js';
@@ -35,7 +35,11 @@ import { getMemberByName, getMemberById } from '../store/members.js';
 import { getMessageTs, insertMessage, rowToEnvelope } from '../store/messages.js';
 import { answerPolicyReview } from '../store/policyReview.js';
 import { currentAttestation } from '../store/presence.js';
-import { pickHumanReviewer, supersededAcceptanceAsks } from '../store/review.js';
+import {
+  pendingHumanReviews,
+  pickHumanReviewer,
+  supersededAcceptanceAsks,
+} from '../store/review.js';
 import type { MemberRow, MessageRow, TeamRow } from '../store/rows.js';
 import { resolveAccountStatus, resolveCapabilities } from '../store/rows.js';
 import { acceptanceTimeoutMs, getTeamBySlug } from '../store/teams.js';
@@ -63,6 +67,12 @@ export interface RouteResult {
    *  they gave a verdict at the moment they gave it (lane 01M2GQFJXG, 2026-09-14: a reviewer sent
    *  `accept` as "taking this review" and found out afterwards that the lane was already closed). */
   lane_verdict?: { lane: string; state: 'done' | 'active' };
+  /** ADR 539 — this accept was the PEER confirmation on a risky lane (ADR 188 §4) and moved nothing:
+   *  `human` is who was asked for the human verdict, null when nobody live could be (the reaper
+   *  retries when a human comes live) or when this daemon is a joiner and the hub decides on fold.
+   *  Reported on the ack for the same reason `lane_verdict` is — the acceptor must learn on the
+   *  spot that their accept did not close the lane and why (nameplates lane, 2026-10-06). */
+  lane_escalation?: { lane: string; human: string | null };
   /** Lane 01M2P2E2H6 — the acceptance ask this `wait` TOOK without deciding. Absent for every other
    *  act, and for a `wait` that answered anything but a live `lane_review` ask. Reported on the ack
    *  for the same reason `lane_verdict` is: the sender learns what their send did, as they do it —
@@ -204,6 +214,7 @@ async function routeEnvelopeInner(
   // HTTP and every client above them get it from one implementation. Explicit meta always wins.
   let handoffLane: RouteResult['handoff_lane'];
   let laneVerdict: RouteResult['lane_verdict'];
+  let laneEscalation: RouteResult['lane_escalation'];
   let laneAck: RouteResult['lane_ack'];
   let dispute: RouteResult['dispute'];
   let acceptedHandoff: RouteResult['accepted_handoff'];
@@ -537,11 +548,26 @@ async function routeEnvelopeInner(
     // hub fires the ask then (`handleFoldedMessages`).
     // The joiner still owes the gate: a risky lane's peer accept must not close it here as a
     // verdict, so it is treated as escalated and left for the human the hub will ask.
-    if (env.act === 'accept' && typeof ref === 'string') {
+    // ADR 539: either way the sender is told, on the ack, that this was the peer stage and who (if
+    // anyone) now holds the verdict — `human: null` on a joiner means "the hub decides on fold".
+    // ADR 539: a HUMAN's accept is never the peer stage — on a risky lane it IS the human verdict
+    // ADR 188 §4 was waiting for. Gating it would ask the human to confirm their own confirmation
+    // (found writing the retry test: boss's accept on the stage-two ask re-escalated to boss).
+    if (env.act === 'accept' && typeof ref === 'string' && sender.kind !== 'human') {
       try {
-        escalatedToHuman = (await joinerEnrollment(ctx.db, team.id, team.slug))
-          ? (await gatedLane(ctx, team, ref)) !== null
-          : await fireGatedHumanAsk(ctx, team, sender, ref, env.body);
+        if (await joinerEnrollment(ctx.db, team.id, team.slug)) {
+          const gated = await gatedLane(ctx, team, ref);
+          if (gated) {
+            escalatedToHuman = true;
+            laneEscalation = { lane: gated.lane.id, human: null };
+          }
+        } else {
+          const fired = await fireGatedHumanAsk(ctx, team, sender, ref, env.body, message.id);
+          if (fired) {
+            escalatedToHuman = true;
+            laneEscalation = { lane: fired.lane, human: fired.human };
+          }
+        }
       } catch (err) {
         log.warn({ msg: 'gated_human_ask_failed', err: String(err) });
       }
@@ -724,6 +750,7 @@ async function routeEnvelopeInner(
     delivered,
     ...(handoffLane ? { handoff_lane: handoffLane } : {}),
     ...(laneVerdict ? { lane_verdict: laneVerdict } : {}),
+    ...(laneEscalation ? { lane_escalation: laneEscalation } : {}),
     ...(laneAck ? { lane_ack: laneAck } : {}),
     ...(dispute ? { dispute } : {}),
     ...(acceptedHandoff ? { accepted_handoff: acceptedHandoff } : {}),
@@ -768,10 +795,12 @@ export async function handleFoldedMessages(
     if (!sender) continue;
     if (row.act === 'accept') {
       // ADR 188 stage two for a joiner's accept, which skipped it at route time (lane 01M3ZBTJKD).
+      // ADR 539: a human's accept is the verdict, not a peer stage — nothing to fire.
+      if (sender.kind === 'human') continue;
       const ref = (JSON.parse(row.meta) as { in_reply_to?: unknown }).in_reply_to;
       if (typeof ref !== 'string') continue;
       try {
-        await fireGatedHumanAsk(ctx, team, sender, ref, row.body);
+        await fireGatedHumanAsk(ctx, team, sender, ref, row.body, row.id);
       } catch (err) {
         log.warn({ msg: 'gated_human_ask_failed', message: id, err: String(err) });
       }
@@ -1046,13 +1075,17 @@ async function fireGatedHumanAsk(
   peer: MemberRow,
   repliedToId: string,
   peerFindings: string,
-): Promise<boolean> {
+  /** The peer's accept message — kept on the ledger row so a later retry can carry its findings. */
+  peerAcceptId: string | null = null,
+): Promise<{ lane: string; human: string | null } | null> {
   const gated = await gatedLane(ctx, team, repliedToId);
-  if (!gated) return false;
+  if (!gated) return null;
   const { lane, owner } = gated;
 
   const human = await pickHumanReviewer(ctx.db, team.id, owner.name, ctx.config.presenceTimeoutMs);
-  await appendAudit(ctx.db, team.id, {
+  // ADR 539: replicated (it always sat in the fold's LANE_VERBS, but was written local-only), so a
+  // joiner's brief can say "peer-confirmed, waiting for a human" about a hub-side confirmation.
+  await appendReplicatedEvent(ctx.db, team.id, {
     actor: peer.name,
     action: 'lane.review_peer_confirmed',
     target: lane.id,
@@ -1062,10 +1095,25 @@ async function fireGatedHumanAsk(
       peer: peer.name,
       grade: gated.grade,
       human_ask_fired: human !== null,
+      ...(peerAcceptId ? { peer_accept: peerAcceptId } : {}),
     },
   });
-  if (!human) return false;
+  if (!human) return { lane: lane.id, human: null };
+  await sendHumanStageAsk(ctx, team, lane, owner, peer.name, peerFindings, human.reviewer, false);
+  return { lane: lane.id, human: human.reviewer };
+}
 
+/** The stage-two ask itself (ADR 188 §4), composed FROM the lane owner, carrying the peer's findings. */
+async function sendHumanStageAsk(
+  ctx: Ctx,
+  team: TeamRow,
+  lane: Lane,
+  owner: MemberRow,
+  peerName: string,
+  peerFindings: string,
+  human: string,
+  retried: boolean,
+): Promise<void> {
   const findings = peerFindings.length > 500 ? `${peerFindings.slice(0, 500)}…` : peerFindings;
   const checklist =
     'Judge the LANDED OUTCOME (not a code review): ' +
@@ -1079,10 +1127,10 @@ async function fireGatedHumanAsk(
     id: ulid(),
     team: team.slug,
     from: owner.name,
-    to: { kind: 'member', name: human.reviewer },
+    to: { kind: 'member', name: human },
     act: 'ask',
     body:
-      `[lane] human acceptance required: "${lane.title}" — peer ${peer.name} accepted with: ` +
+      `[lane] human acceptance required: "${lane.title}" — peer ${peerName} accepted with: ` +
       `"${findings}". ${checklist}`,
     meta: {
       species: 'approve',
@@ -1094,7 +1142,7 @@ async function fireGatedHumanAsk(
         ...(lane.merged ? { merged: lane.merged } : {}),
         route: 'human_admin',
         grade: 'human',
-        peer_confirmed_by: peer.name,
+        peer_confirmed_by: peerName,
         // ADR 506: the stage-two human ask's promise, on the same floor as every review ask.
         wait_ms: await acceptanceTimeoutMs(ctx.db, team.id, 'blocking'),
       },
@@ -1102,7 +1150,61 @@ async function fireGatedHumanAsk(
   });
   // daemonComposed: the daemon authored this ask, so its `lane_review` is authentic (ADR 225).
   await routeEnvelope(ctx, team, owner, ask, undefined, true);
-  return true;
+  // ADR 539: the receipt that the human stage was asked — what turns "peer-confirmed, pending" off.
+  await appendReplicatedEvent(ctx.db, team.id, {
+    actor: null,
+    action: 'lane.review_human_asked',
+    target: lane.id,
+    result: 'allow',
+    detail: { lane: lane.id, human, ask: ask.id, peer: peerName, retried },
+  });
+}
+
+/**
+ * ADR 539: the retry. A risky lane whose peer confirmed while no human was live sat forever in
+ * `awaiting_acceptance` with nobody asked (nameplates lane, 2026-10-06 — the hub found no live
+ * human at fold time and `human_ask_fired: false` was the last word). The reaper calls this on the
+ * hub each tick: for every peer-confirmed-pending lane, if a human is live now, fire the stage-two
+ * ask with the peer's original findings (read back from the peer's accept message) and record
+ * `retried: true`. Never closes a lane, never invents a verdict — it only asks the human the lane
+ * was always owed. Returns the lanes it asked for.
+ */
+export async function retryPendingHumanAsks(
+  ctx: Ctx,
+  team: TeamRow,
+): Promise<Array<{ lane: string; human: string }>> {
+  const asked: Array<{ lane: string; human: string }> = [];
+  for (const pending of await pendingHumanReviews(ctx.db, team.id)) {
+    const lane = await getLane(ctx.db, team.id, pending.lane, team.slug);
+    if (!lane || !isAwaitingAcceptance(lane.state) || lane.risk.length === 0) continue;
+    const owner = lane.owner_seat ? await getMemberByName(ctx.db, team.id, lane.owner_seat) : null;
+    if (!owner) continue;
+    const human = await pickHumanReviewer(
+      ctx.db,
+      team.id,
+      owner.name,
+      ctx.config.presenceTimeoutMs,
+    );
+    if (!human) continue;
+    const accept = pending.peer_accept
+      ? await ctx.db.get<{ body: string }>(
+          'SELECT body FROM messages WHERE team_id = ? AND id = ?',
+          [team.id, pending.peer_accept],
+        )
+      : null;
+    await sendHumanStageAsk(
+      ctx,
+      team,
+      lane,
+      owner,
+      pending.peer,
+      accept?.body ?? '(peer findings not on this node)',
+      human.reviewer,
+      true,
+    );
+    asked.push({ lane: lane.id, human: human.reviewer });
+  }
+  return asked;
 }
 
 /**

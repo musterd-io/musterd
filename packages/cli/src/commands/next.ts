@@ -160,6 +160,12 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
                 ' — NO MERGE ATTESTATION (nothing landed — waiting on its author, not you)',
               )
             : '') +
+          // ADR 539: the peer stage is done; the wait is on a human coming live, not on a reviewer.
+          (r.pending_human
+            ? theme.warn(
+                ` — PEER-CONFIRMED${r.peer_confirmed_by ? ` by ${r.peer_confirmed_by}` : ''}, waiting for a human (none was live to ask; asked when one comes live)`,
+              )
+            : '') +
           '\n',
       );
     }

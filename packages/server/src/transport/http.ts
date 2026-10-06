@@ -5340,6 +5340,9 @@ export async function handleHttp(
           ack,
           ...(result.handoff_lane ? { handoff_lane: result.handoff_lane } : {}),
           ...(result.lane_verdict ? { lane_verdict: result.lane_verdict } : {}),
+          // ADR 539: an accept taken as the PEER confirmation on a risky lane — told on the spot
+          // that it closed nothing and who now holds the verdict.
+          ...(result.lane_escalation ? { lane_escalation: result.lane_escalation } : {}),
           ...(result.lane_ack ? { lane_ack: result.lane_ack } : {}),
           // ADR 505: the owner's answer to a review dispute, told on the spot for the same reason;
           // and the note an accepted handoff carried, returned where it was accepted (§6).

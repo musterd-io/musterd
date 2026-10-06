@@ -1124,3 +1124,62 @@ export async function abandonedAcceptances(
   if (await hasLivePresence(db, member.id, presenceTimeoutMs)) return [];
   return await heldAcceptances(db, teamId, seat);
 }
+
+/**
+ * ADR 539: a risky lane whose PEER stage is done and whose HUMAN stage was never asked — the newest
+ * `lane.review_peer_confirmed` row fired no human ask (`human_ask_fired: false`, the ADR 173
+ * degradation) and no `lane.review_human_asked` row followed. Derived from the ledger, never stored:
+ * the lane row says only `awaiting_acceptance`, and this is what separates "waiting on a slow human"
+ * from "no human was ever asked". Null when the lane is not in that state.
+ */
+export async function peerConfirmedPending(
+  db: Driver,
+  teamId: string,
+  laneId: string,
+): Promise<{ peer: string; peer_accept: string | null; grade: string | null } | null> {
+  const confirmed = await db.get<{ detail: string | null }>(
+    `SELECT detail FROM audit
+        WHERE team_id = ? AND action = 'lane.review_peer_confirmed' AND target = ?
+      ORDER BY ts DESC, id DESC LIMIT 1`,
+    [teamId, laneId],
+  );
+  if (!confirmed?.detail) return null;
+  let d: { peer?: unknown; human_ask_fired?: unknown; peer_accept?: unknown; grade?: unknown };
+  try {
+    d = JSON.parse(confirmed.detail) as typeof d;
+  } catch {
+    return null;
+  }
+  if (d.human_ask_fired !== false || typeof d.peer !== 'string') return null;
+  const asked = await db.get<{ id: string }>(
+    `SELECT id FROM audit WHERE team_id = ? AND action = 'lane.review_human_asked' AND target = ? LIMIT 1`,
+    [teamId, laneId],
+  );
+  if (asked) return null;
+  return {
+    peer: d.peer,
+    peer_accept: typeof d.peer_accept === 'string' ? d.peer_accept : null,
+    grade: typeof d.grade === 'string' ? d.grade : null,
+  };
+}
+
+/** ADR 539: every lane of a team in the peer-confirmed-pending-human state, oldest confirmation first. */
+export async function pendingHumanReviews(
+  db: Driver,
+  teamId: string,
+): Promise<Array<{ lane: string; peer: string; peer_accept: string | null }>> {
+  const rows = await db.all<{ target: string }>(
+    `SELECT DISTINCT a.target FROM audit a
+        JOIN lanes l ON l.team_id = a.team_id AND l.id = a.target
+       WHERE a.team_id = ? AND a.action = 'lane.review_peer_confirmed'
+         AND l.state IN ('awaiting_acceptance', 'ready_for_review')
+       ORDER BY a.ts ASC`,
+    [teamId],
+  );
+  const out: Array<{ lane: string; peer: string; peer_accept: string | null }> = [];
+  for (const r of rows) {
+    const pending = await peerConfirmedPending(db, teamId, r.target);
+    if (pending) out.push({ lane: r.target, peer: pending.peer, peer_accept: pending.peer_accept });
+  }
+  return out;
+}

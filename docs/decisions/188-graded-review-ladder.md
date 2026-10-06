@@ -133,6 +133,14 @@ human_ask_fired }`. The 17-row baseline table stays queryable and is the before-
   measured cause of the same concentration — a wake pool with exactly one `flow: auto` seat — is
   not a picker fact and is left to enrollment (see the wiki's acceptance-routing page).
 
+- **2026-10-06 — the stage-two ask is retried, and a human's accept is the verdict.**
+  [ADR 539](539-peer-confirmed-pending-human.md): §4's human ask fires when the peer accepts, but
+  with no human live it fired never — the lane sat peer-confirmed with nobody asked (the nameplates
+  lane, the first day ADR 530 made every UI lane risky). The reaper now retries on the hub when a
+  human comes live, the brief and the acceptor's ack name the pending state, both receipts
+  replicate, and a human's own `accept` on the stage-two ask closes the lane rather than
+  re-escalating to them. §4's text stays frozen; this is how it is kept.
+
 - **Honesty limit (ADR 200):** the ladder grades what was **recorded**, and no rung can detect a seat
   presenting a human credential ([ADR 200](200-credential-custody-and-the-real-use-gate.md)).
   Accepted for dogfood; forbidden in any build promoted for real use.

@@ -801,6 +801,25 @@ packet, or listed in a digest's learned section. Search hits MAY carry
 `status: {retracted?: {by, at, reason}, superseded_by?: [{id, from, headline, hides}]}`; a dream
 packet's insight MAY carry `superseded_by` (from other Members only — a hidden one is absent).
 
+## A.20 Peer-confirmed acceptance pending a human (unreleased — ADR 539)
+
+On a Lane with a declared `risk` tag, an agent's `accept` on the `lane_review` ask is the peer stage
+(ADR 188 §4), never the verdict. A supporting server:
+
+- MUST answer that accept's ack with `lane_escalation {lane, human}` — `human` the Member the
+  blocking human ask went to, or `null` when no human was live or when the answering node is a
+  joiner (the hub decides on fold). It MUST NOT answer `lane_verdict` for it.
+- MUST record `lane.review_peer_confirmed {lane, peer, grade, human_ask_fired, peer_accept}` and,
+  when the human ask fires (then or later), `lane.review_human_asked {lane, human, ask, peer,
+  retried}`; both replicate on the lane kind.
+- MUST, on the hub, ask the first human who comes live while the Lane is still awaiting acceptance
+  and no `lane.review_human_asked` exists, carrying the peer's findings; it MUST NOT close the Lane
+  or substitute an agent for the human (ADR 172).
+- MUST treat a HUMAN's `accept` on a review ask of a risky Lane as the verdict (ADR 202), never as a
+  peer stage.
+- MAY mark `NextBrief.review_debt[]` rows `pending_human: true` with `peer_confirmed_by` while the
+  state holds; omission means the server does not derive it.
+
 ## A.19 Policy review dates (unreleased — ADR 533)
 
 The stored team policy doc (the sparse set of chosen knobs, ADR 185) carries `review_by` (epoch
