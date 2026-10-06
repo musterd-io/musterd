@@ -1,7 +1,7 @@
 import type { CalendarEntry, CalendarKind } from '@musterd/protocol/calendar';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { SyncReport } from '../lib/sync';
-import { timeLabel, zoneNote } from '../lib/views';
+import { rowLines, timeLabel, zoneNote } from '../lib/views';
 import { KIND_COLORS, radius, space, usePalette } from './theme';
 
 /** A row of mutually exclusive options — Upcoming / Month / Past, Picks / Everything. */
@@ -76,7 +76,7 @@ export function EntryRow(props: {
   const p = usePalette();
   const e = props.entry;
   const zone = zoneNote(e, props.deviceTz);
-  const meta = [e.kind, e.status, e.place].filter(Boolean).join(' · ');
+  const { meta, detail } = rowLines(e);
   return (
     <Pressable
       onPress={props.onPress}
@@ -100,9 +100,13 @@ export function EntryRow(props: {
           </Text>
           {e.pick ? <Text style={{ color: p.accent }}>★</Text> : null}
         </View>
-        {meta ? (
-          <Text style={[styles.rowMeta, { color: p.muted }]} numberOfLines={1}>
-            {meta}
+        <Text style={[styles.rowMeta, { color: p.muted }]} numberOfLines={1}>
+          {meta}
+          {e.url ? '  ↗' : ''}
+        </Text>
+        {detail ? (
+          <Text style={[styles.rowMeta, { color: p.muted }]} numberOfLines={2}>
+            {detail}
           </Text>
         ) : null}
       </View>
