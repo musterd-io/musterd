@@ -196,8 +196,17 @@ function footer(s: PickerState, cols: number): string[] {
   }
   if (s.help) return [theme.meta('  any key to go back')];
   if (s.query) return [theme.meta('  ⏎ launch · ⌃R resume · esc clear')];
-  if (s.level.kind === 'recent')
-    return [theme.meta('  ⏎ launch · ⌃R resume · type to search · → browse · esc quit')];
+  if (s.level.kind === 'recent') {
+    // ADR 540: a team row on the first screen opens; a seat row launches.
+    const onTeam = rows(s).filter(selectable)[s.cursor]?.kind === 'team';
+    return [
+      theme.meta(
+        onTeam
+          ? '  ⏎ open · type to search · → teams · esc quit'
+          : '  ⏎ launch · ⌃R resume · type to search · → teams · esc quit',
+      ),
+    ];
+  }
   if (s.level.kind === 'members') {
     const row = rows(s).filter(selectable)[s.cursor];
     const entry =
@@ -234,7 +243,7 @@ function helpLines(): string[] {
     '  ⏎              launch fresh · open a team or project',
     '  ⌃R             resume the last session',
     '  ⇥              next harness, when the seat has several',
-    '  → ←            into a level · back out',
+    '  → ←            into the teams, a team, a project · back out',
     '  letters        search every seat',
     '  esc            clear · back · quit',
     '  ⌃C             quit',
