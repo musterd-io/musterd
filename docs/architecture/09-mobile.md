@@ -66,21 +66,31 @@ the phone cancels its create.
 Times are wall-clock in the entry's `tz` (ADR 519 §1). When that is not the phone's zone, the row and
 the edit sheet say whose clock the times are on.
 
-## Running it on a phone (development build)
+## Running it on a phone (TestFlight)
 
-Increment 4 runs as an Expo **development build** (ADR 520 Consequences): no App Store, no paid Apple
-account — a free Apple ID signs it from Xcode.
+The app reaches the phone through **TestFlight**, built in Expo's cloud (EAS Build) and uploaded by EAS
+Submit, so no Xcode runs on the laptop that hosts the seats (nick, 2026-10-05: local Xcode builds bog
+the shared laptop down). It needs the Apple Developer Program membership. `eas.json` holds one
+`production` profile: Node and pnpm pinned to the repo's, the build number kept by EAS
+(`appVersionSource: remote`, `autoIncrement`), and an `eas-build-post-install` hook that builds
+`@musterd/protocol` so Metro can read its `dist`. The Expo project is `@nas4146/musterd`.
 
 ```bash
-pnpm install
-pnpm --filter @musterd/protocol build      # Metro reads the protocol's dist, like every other surface
 cd packages/mobile
-npx expo run:ios --device                   # builds with Xcode, installs on the plugged-in iPhone
+npx eas-cli@latest build --platform ios --profile production --auto-submit
 ```
 
-Then on the phone: Tailscale on, open musterd, **Connection** → the laptop's address, the Team slug, and
-your `mscr_` credential. `npx expo start` serves later JavaScript changes to the installed build without
-rebuilding. TestFlight and the App Store are increment 5.
+The first run asks for the Apple ID, with 2FA, and creates the signing certificate, the provisioning
+profile and the App Store Connect app. A human has to run it, because those credentials are the
+Apple account holder's. Every later run is non-interactive. A build appears in TestFlight after Apple
+processes it (10–15 minutes); add yourself as an internal tester once in App Store Connect, and each
+later build arrives on the phone by itself.
+
+Then on the phone: Tailscale on, open musterd, **Connection**, then enter the laptop's address, the
+Team slug, and your `mscr_` credential.
+
+For JavaScript-only iteration without a store build, `npx expo start` and the Expo Go app run the same
+code against the same daemon. Expo Go on iOS supports only the current SDK.
 
 ## Gates
 
