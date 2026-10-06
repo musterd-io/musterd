@@ -271,6 +271,7 @@ import {
   emptyPoolFromSubmitAudit,
   openLane,
   updateLane,
+  withinHistoryWindow,
 } from '../store/lanes.js';
 import { SWEEP_GRACE_MS } from '../store/laneSweep.js';
 import {
@@ -6263,11 +6264,21 @@ export async function handleHttp(
           }
           states.push(parsed.data);
         }
+        // ADR 534: closed lanes older than the history window are left out unless asked for.
+        const history = url.searchParams.get('history');
+        if (history !== null && history !== 'all') {
+          return sendJson(res, 400, {
+            error: {
+              code: 'bad_request',
+              message: `unknown history ${JSON.stringify(history)} — want history=all, or omit it for the last 14 days`,
+            },
+          });
+        }
         // One board read per request (lane 01M3ANEQVR): the filtered view, the contention pass and
         // the staleness pass all derive from it. It used to be read 16 times here — 116 ms of the
         // endpoint's 267 ms on the live copy.
         const board = await listLanes(ctx.db, team.id, team.slug);
-        const lanes = filterLanes(board, {
+        const filtered = filterLanes(board, {
           ...(url.searchParams.get('project') !== null
             ? { project: url.searchParams.get('project')! }
             : {}),
@@ -6278,6 +6289,8 @@ export async function handleHttp(
             : {}),
           ...(states.length > 0 ? { states } : {}),
         });
+        // Contention and staleness still read the whole board; only the response is windowed.
+        const lanes = history === 'all' ? filtered : withinHistoryWindow(filtered, Date.now());
         // Contention warnings (ADR 083) + staleness warnings (ADR 111 §5), one board read. Staleness is
         // team-wide (a Goal's epoch is a team fact); intersect it with the lanes this filtered view shows
         // so `?mine=1` / `?goal=` scopes carry only their own stale flags.

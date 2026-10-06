@@ -246,6 +246,7 @@ export function registerLanes(
         // against LaneStateSchema at the boundary and its 400 names the valid values, so a typo
         // still gets a useful answer — validation lives in one place, not two.
         state: z.array(z.string()).optional().describe('only these states'),
+        history: z.boolean().optional().describe('include lanes closed over 14 days ago'),
       },
     },
     async (args) => {

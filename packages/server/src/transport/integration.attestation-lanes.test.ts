@@ -1442,6 +1442,22 @@ withDrivers('integration · attestation-lanes', (_o, kind) => {
       expect(bad.status).toBe(400);
       expect(bad.json.error.message).toMatch(/bogus/);
     });
+
+    it('board ?history= accepts only `all`; a just-closed lane is inside the default window (ADR 534)', async () => {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const ada = { key: team.json.agent_key, seat: 'Ada' };
+      await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, team.json.human_credential);
+      const closed = await post('/teams/dawn/lanes', { title: 'just shipped', claim: true }, ada);
+      await req('PATCH', `/teams/dawn/lanes/${closed.json.lane.id}`, { state: 'done' }, ada);
+
+      const windowed = await get('/teams/dawn/lanes', ada);
+      expect(windowed.json.lanes.map((l: { id: string }) => l.id)).toEqual([closed.json.lane.id]);
+      const all = await get('/teams/dawn/lanes?history=all', ada);
+      expect(all.json.lanes.map((l: { id: string }) => l.id)).toEqual([closed.json.lane.id]);
+      const bad = await get('/teams/dawn/lanes?history=forever', ada);
+      expect(bad.status).toBe(400);
+      expect(bad.json.error.message).toMatch(/forever/);
+    });
   });
 
   describe('releasing a lane — open ⟺ unowned', () => {

@@ -20,6 +20,7 @@ import {
   releaseInFlightClaimsForSeat,
   staleAcceptanceWarning,
   updateLane,
+  withinHistoryWindow,
 } from './lanes.js';
 import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
@@ -460,6 +461,55 @@ withDrivers('lanes', (o) => {
       const shipped = [lane('done'), lane('done')];
       expect(deriveGoalStatus(shipped)).toBe('shipped');
       expect(deriveGoalStatus([...shipped, lane('open')])).toBe('in-flight');
+    });
+  });
+
+  describe('withinHistoryWindow (ADR 534)', () => {
+    const DAY = 24 * 60 * 60_000;
+    const now = 100 * DAY;
+    const lane = (id: string, state: string, resolved_at: number | null, updated_at = 0): Lane =>
+      ({ id, state, resolved_at, updated_at }) as unknown as Lane;
+
+    it('keeps every live lane however old, and closed lanes inside 14 days', () => {
+      const kept = withinHistoryWindow(
+        [
+          lane('ancient-open', 'open', null, 1),
+          lane('ancient-parked', 'parked', null, 1),
+          lane('recent-done', 'done', now - 13 * DAY),
+          lane('edge-done', 'done', now - 14 * DAY),
+          lane('recent-abandoned', 'abandoned', now - DAY),
+        ],
+        now,
+      );
+      expect(kept.map((l) => l.id)).toEqual([
+        'ancient-open',
+        'ancient-parked',
+        'recent-done',
+        'edge-done',
+        'recent-abandoned',
+      ]);
+    });
+
+    it('drops done and abandoned lanes that closed before the window', () => {
+      const kept = withinHistoryWindow(
+        [
+          lane('old-done', 'done', now - 15 * DAY),
+          lane('old-abandoned', 'abandoned', now - 30 * DAY),
+        ],
+        now,
+      );
+      expect(kept).toEqual([]);
+    });
+
+    it('ages a closed lane with no resolved_at by updated_at', () => {
+      const kept = withinHistoryWindow(
+        [
+          lane('unstamped-old', 'done', null, now - 20 * DAY),
+          lane('unstamped-new', 'done', null, now - DAY),
+        ],
+        now,
+      );
+      expect(kept.map((l) => l.id)).toEqual(['unstamped-new']);
     });
   });
 

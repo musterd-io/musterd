@@ -844,6 +844,7 @@ export class MusterdClient {
       open?: boolean | undefined;
       goal?: string | undefined;
       state?: string[] | undefined;
+      history?: boolean | undefined;
     } = {},
   ): Promise<{ lanes: Lane[]; warnings: LaneWarning[] }> {
     const params = new URLSearchParams();
@@ -852,6 +853,8 @@ export class MusterdClient {
     if (q.open) params.set('open', '1');
     if (q.goal) params.set('goal', q.goal);
     for (const s of q.state ?? []) params.append('state', s);
+    // ADR 534: without it, closed lanes older than 14 days are left out.
+    if (q.history) params.set('history', 'all');
     const qs = params.toString();
     return this.request('GET', `/teams/${this.config.team}/lanes${qs ? `?${qs}` : ''}`);
   }

@@ -122,7 +122,8 @@ export async function archaeologyCommand(
   let lane: Lane | undefined;
   if (byLane) {
     const { team, http } = resolve(parsed.flags);
-    lanes = (await http.laneBoard(team, {})).lanes;
+    // Merged history is the whole point here, so it asks past the 14-day window (ADR 534).
+    lanes = (await http.laneBoard(team, { history: true })).lanes;
     if (laneId !== undefined) {
       lane = lanes.find((l) => l.id === laneId || l.id.startsWith(laneId));
       if (!lane) throw new CliError(`no lane ${laneId} on ${team}`, 1);

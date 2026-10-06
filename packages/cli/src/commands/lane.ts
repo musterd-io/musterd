@@ -35,7 +35,7 @@ const USAGE =
   '  musterd lane submit <id> [--to <seat>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>]\n' +
   '                          [--branch b]\n' +
   '  musterd lane resolve <id> [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>]\n' +
-  '  musterd lanes [--project p] [--mine] [--open] [--json]';
+  '  musterd lanes [--project p] [--mine] [--open] [--history] [--json]';
 
 /**
  * Parse `--stakes` (ADR 234). A typo must FAIL rather than silently fall back to the default: the
@@ -414,6 +414,7 @@ export async function lanesCommand(parsed: Parsed): Promise<number> {
       : {}),
     ...(parsed.flags['mine'] === true ? { mine: true } : {}),
     ...(parsed.flags['open'] === true ? { open: true } : {}),
+    ...(parsed.flags['history'] === true ? { history: true } : {}),
   });
   if (parsed.flags['json']) {
     process.stdout.write(JSON.stringify(board) + '\n');

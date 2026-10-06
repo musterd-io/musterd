@@ -189,7 +189,8 @@ function GoalCard({
   onOpen: () => void;
 }) {
   const counts: string[] = [`${card.counts.total} lane${card.counts.total === 1 ? '' : 's'}`];
-  if (card.counts.done > 0) counts.push(`${card.counts.done} shipped`);
+  // The board carries 14 days of closed lanes (ADR 534), so the shipped count is that window's.
+  if (card.counts.done > 0) counts.push(`${card.counts.done} shipped in 14d`);
   if (card.counts.review > 0) counts.push(`${card.counts.review} in review`);
   const debt =
     card.counts.stale > 0
