@@ -411,3 +411,44 @@ describe('fmtNext — up next says how many were claimable and how many wait (AD
     expect(fmtNext(b)).not.toContain('claimable');
   });
 });
+
+/** ADR 536 increment 2 — the shortlist explains itself, one tag per offered lane. */
+describe('fmtNext — up next carries the why tag (ADR 536 increment 2)', () => {
+  const open = (id: string): Lane =>
+    ({
+      id,
+      state: 'open',
+      title: id,
+      owner_seat: null,
+      project: 'runtime',
+      scope: [],
+      depends_on: [],
+      branch: null,
+      goal_id: null,
+      merged: null,
+    }) as unknown as Lane;
+
+  it('joins the server reasons with · after the lane line; a tier-5 lane carries no tag', () => {
+    const b = brief(null);
+    b.up_next = [open('L1'), open('L2')];
+    b.up_next_why = [
+      { lane: 'L1', tier: 2, reasons: ['role: platform', 'near what you shipped'] },
+      { lane: 'L2', tier: 5, reasons: [] },
+    ];
+    const out = fmtNext(b);
+    const l1 = out.split('\n').find((l) => l.includes('L1 [open]'))!;
+    const l2 = out.split('\n').find((l) => l.includes('L2 [open]'))!;
+    expect(l1).toMatch(/ · role: platform · near what you shipped$/);
+    expect(l2).not.toContain(' · ');
+  });
+
+  it('an older daemon sends no up_next_why: the line is as it always was', () => {
+    const b = brief(null);
+    b.up_next = [open('L1')];
+    expect(
+      fmtNext(b)
+        .split('\n')
+        .find((l) => l.includes('L1 [open]')),
+    ).not.toContain(' · ');
+  });
+});

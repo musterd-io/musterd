@@ -835,5 +835,9 @@ Team's pool, ordered for the reading Member. The pool is the same for every Memb
 - `NextBrief` carries `up_next_total` (claimable `open` Lanes) and `up_next_blocked_total`
   (withheld for a dependency). Both default to 0: a brief from a server behind this appendix parses,
   and a renderer prints no count when both are 0.
+- `NextBrief` carries `up_next_why`: one `{lane, tier, reasons}` row per `up_next` entry, in the
+  same order. `tier` is the integer tier (1–5) that placed the Lane; `reasons` are fixed strings the
+  server composes for every tier whose signal fired, in tier order — never text from a Lane or an
+  Act — and empty for tier 5. Defaults to `[]`.
 - This orders a read. It delivers no Act and selects no holder; role routing stays as ADR 272 §5
   left it.

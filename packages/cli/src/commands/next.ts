@@ -45,10 +45,20 @@ export function upNextCountCopy(brief: {
   return `${window}${wait}`;
 }
 
-function laneLine(l: Lane): string {
+function laneLine(l: Lane, tail = ''): string {
   const goal = l.goal_id ? theme.meta(` ◆ ${l.goal_id}`) : '';
   const branch = l.branch ? theme.meta(` ⎇ ${l.branch}`) : '';
-  return `  ${theme.meta(l.id)} ${l.state} "${l.title}"${goal}${branch}`;
+  return `  ${theme.meta(l.id)} ${l.state} "${l.title}"${goal}${branch}${tail}`;
+}
+
+/**
+ * ADR 536 increment 2 — why an offered lane is where it is, as a trailing tag: ` · role: platform ·
+ * near what you shipped`. The server composes the strings (fixed, never a lane body); this joins
+ * them. Nothing for tier 5, and nothing on an epoch-30 daemon (no `up_next_why`).
+ */
+function whyTag(brief: NextBrief, laneId: string): string {
+  const reasons = (brief.up_next_why ?? []).find((w) => w.lane === laneId)?.reasons ?? [];
+  return reasons.length ? theme.meta(` · ${reasons.join(' · ')}`) : '';
 }
 
 /** ADR 490: the artifact a review promise names, one short token — never a credential. */
@@ -226,7 +236,7 @@ export function renderNext(brief: NextBrief, now = Date.now()): void {
     // ADR 536: the window says how much it is a window on. Absent on an older daemon (both counts
     // default to 0) → no parenthetical, not a zero-filled one.
     w(`\n${theme.accent('up next')} — open lanes you could pick up${upNextCount(brief)}:\n`);
-    for (const l of brief.up_next) w(laneLine(l) + '\n');
+    for (const l of brief.up_next) w(laneLine(l, whyTag(brief, l.id)) + '\n');
   }
   if ((brief.parked_total ?? 0) > 0)
     w(theme.meta(`\nparked: ${brief.parked_total} — kept, not offered (\`musterd lanes\`)`) + '\n');

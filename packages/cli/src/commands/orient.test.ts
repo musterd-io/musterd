@@ -396,6 +396,19 @@ describe('next / done commands', () => {
       const old = await render({ ...base, up_next: [open('L1')] });
       expect(old).toContain('up next — open lanes you could pick up:');
       expect(old).not.toContain('claimable');
+      // ADR 536 increment 2: the why tag trails the lane line; a tier-5 lane carries none.
+      const why = await render({
+        ...base,
+        up_next: [open('L1'), open('L2')],
+        up_next_why: [
+          { lane: 'L1', tier: 1, reasons: ['nick pointed here', 'goal in flight'] },
+          { lane: 'L2', tier: 5, reasons: [] },
+        ],
+      });
+      expect(why.split('\n').find((l) => l.includes('L1 open'))).toMatch(
+        / · nick pointed here · goal in flight$/,
+      );
+      expect(why.split('\n').find((l) => l.includes('L2 open'))).not.toContain(' · ');
     });
 
     /** ADR 276 named this gap in its Consequences: `musterd next` rendered no review debt at all. */

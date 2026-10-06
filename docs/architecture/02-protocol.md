@@ -235,7 +235,10 @@ means it supports the projection and found no rows. `NextBrief.up_next_total` an
 `up_next_blocked_total` (ADR 536, epoch 31) take the other posture — `.default(0)` — because a
 renderer prints no count on 0 and a count of 0 claimable lanes with 0 withheld is indistinguishable
 from an older daemon by design: both mean "nothing to say about the pool". `up_next` itself is
-ranked per member on an epoch-31 daemon (see `03-server.md`); its element shape is unchanged. `ReviewPromisesQuerySchema` accepts only
+ranked per member on an epoch-31 daemon (see `03-server.md`); its element shape is unchanged.
+`NextBrief.up_next_why` (ADR 536 increment 2, same epoch) is one `{lane, tier, reasons}` row per
+`up_next` entry in the same order, `.default([])`; `tier` is an integer 1–5 and `reasons` are the
+server's fixed strings, never lane prose. `ReviewPromisesQuerySchema` accepts only
 `open=1`. The Team route returns a required `review_promises` array of strict
 `ReviewPromiseAuditRowSchema` entries (`request_id`, `requester`, `owner`, `accepted_at`) and omits
 request prose and artifact references.
