@@ -694,6 +694,13 @@ Setting and lifting each deliver one `message` from the human to the Team carryi
 optional `holds` array of active holds; a supporting daemon emits it, including `[]`, and
 omission means the daemon does not report holds.
 
+**Proposals (increment 3).** Any Member MAY propose a hold with an `ask` (species `approve`)
+carrying `meta.hold_proposal` `{effect, reason, until | for_ms}`; a supporting daemon MUST refuse
+such an ask at send if the proposal is malformed, names an effect outside the set, or exceeds the
+cap. An `accept` naming that ask in `meta.in_reply_to` activates the hold only when its sender is a
+human admin; the hold's `created_by` is that human, and one proposal yields at most one hold. Any
+other accept, a decline, or no answer activates nothing.
+
 `POST /holds/check {tool, command}` (any Member) answers a `GateDecision`. A supporting daemon
 re-tests `command` itself and denies — outcome `denied_held`, reason the `held` sentence — only when
 the caller is not human, the command is merge-shaped (`gh pr merge`, or a `git push` whose refspec

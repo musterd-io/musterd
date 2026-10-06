@@ -4,7 +4,9 @@ import {
   type HoldEffect,
   HoldEffectSchema,
   isHoldActive,
+  makeEnvelope,
 } from '@musterd/protocol';
+import { ulid } from 'ulid';
 import { flagStr, type Parsed } from '../args.js';
 import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
@@ -14,6 +16,7 @@ import { resolve } from './helpers.js';
 
 const USAGE =
   'usage: musterd hold set <autorefresh_paused|merges_paused|notice> --for <2h|90m> | --until <HH:MM> --reason "<why>"\n' +
+  '       musterd hold propose <effect> --for <2h|90m> | --until <HH:MM> --reason "<why>"\n' +
   '       musterd hold lift <id>\n' +
   '       musterd hold list [--all]';
 
@@ -25,7 +28,7 @@ const USAGE =
  */
 export async function holdCommand(parsed: Parsed): Promise<number> {
   const sub = parsed.positionals[0];
-  const { team, http } = resolve(parsed.flags);
+  const { team, http, identity } = resolve(parsed.flags);
   const json = parsed.flags['json'] === true;
 
   if (sub === 'set') {
@@ -52,6 +55,53 @@ export async function holdCommand(parsed: Parsed): Promise<number> {
       success(describeHoldLine(hold, Date.now()), { next: `musterd hold lift ${hold.id}` }) + '\n',
     );
     process.stdout.write(theme.meta(enforcementNote(hold.effect)) + '\n');
+    return 0;
+  }
+
+  // ADR 516 increment 3: any seat may PROPOSE a hold — an approve-ask a human admin activates by
+  // accepting it. Nothing is paused until then; the daemon checks the proposal when it is sent.
+  if (sub === 'propose') {
+    const effect = HoldEffectSchema.safeParse(parsed.positionals[1]);
+    const reason = flagStr(parsed.flags, 'reason')?.trim();
+    if (!effect.success || !reason) throw new CliError(USAGE, 2);
+    let until: number;
+    try {
+      until = resolveHoldUntil({
+        ...(flagStr(parsed.flags, 'until') !== undefined
+          ? { until: flagStr(parsed.flags, 'until')! }
+          : {}),
+        ...(flagStr(parsed.flags, 'for') !== undefined
+          ? { for: flagStr(parsed.flags, 'for')! }
+          : {}),
+        now: new Date(),
+      });
+    } catch (err) {
+      throw new CliError(`${(err as Error).message}\n${USAGE}`, 2);
+    }
+    if (!identity) throw new CliError('no identity — run: musterd claim <name> --team <slug>', 4);
+    const id = ulid();
+    await http.send(
+      team,
+      makeEnvelope({
+        id,
+        team,
+        from: identity.name,
+        to: { kind: 'team' },
+        act: 'ask',
+        body: `Proposed hold: ${effect.data.replaceAll('_', ' ')} until ${new Date(until).toTimeString().slice(0, 5)} — ${reason}. Accept to activate it.`,
+        meta: {
+          species: 'approve',
+          tier: 'standard',
+          hold_proposal: { effect: effect.data, reason, until },
+        },
+      }),
+    );
+    if (json) return printJson({ proposed: id });
+    process.stdout.write(
+      success(`proposed — nothing is paused until a human admin accepts ${id}`, {
+        next: 'musterd hold list',
+      }) + '\n',
+    );
     return 0;
   }
 

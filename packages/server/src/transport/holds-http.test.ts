@@ -213,4 +213,89 @@ withDrivers('holds-http', (_o, kind) => {
       );
     });
   });
+
+  describe('hold proposals (ADR 516 increment 3)', () => {
+    const propose = (auth: string | AgentHttpAuth, from: string, proposal: unknown) =>
+      call('POST', '/teams/dawn/messages', auth, {
+        envelope: makeEnvelope({
+          id: ulid(),
+          team: 'dawn',
+          from,
+          to: { kind: 'team' },
+          act: 'ask',
+          body: 'Pause the autorefresh for the demo?',
+          meta: { species: 'approve', tier: 'standard', hold_proposal: proposal },
+          ts: Date.now(),
+        }),
+      });
+    const answer = (
+      auth: string | AgentHttpAuth,
+      from: string,
+      act: 'accept' | 'decline',
+      askId: string,
+    ) =>
+      call('POST', '/teams/dawn/messages', auth, {
+        envelope: makeEnvelope({
+          id: ulid(),
+          team: 'dawn',
+          from,
+          to: { kind: 'team' },
+          act,
+          body: act === 'accept' ? 'yes' : 'no',
+          meta: { in_reply_to: askId },
+          ts: Date.now(),
+        }),
+      });
+    const lastAskId = async () =>
+      (await server.store.get<{ id: string }>(
+        "SELECT id FROM messages WHERE act = 'ask' ORDER BY ts DESC LIMIT 1",
+      ))!.id;
+
+    it("an agent's proposal + a human admin's accept → an active hold authored by the human", async () => {
+      expect((await propose(ada, 'ada', demo)).status).toBeLessThan(300);
+      const askId = await lastAskId();
+      expect((await call('GET', '/teams/dawn/holds', ada)).json.holds).toEqual([]);
+      expect((await answer(nick, 'nick', 'accept', askId)).status).toBeLessThan(300);
+      const [hold] = (await call('GET', '/teams/dawn/holds', ada)).json.holds;
+      expect(hold).toMatchObject({
+        effect: 'autorefresh_paused',
+        created_by: 'nick',
+        reason: 'demo 14:00',
+      });
+      const team = (await getTeamBySlug(server.store, 'dawn'))!;
+      const set = (await listAudit(server.store, team.id)).find((r) => r.action === 'hold.set')!;
+      expect(JSON.parse(set.detail as string)).toMatchObject({
+        proposal_ask: askId,
+        proposed_by: 'ada',
+      });
+      const inbox = await call('GET', '/teams/dawn/inbox?unread_only=0', ada);
+      const note = (inbox.json.messages as any[]).find((m) => m.meta?.hold && m.from === 'nick');
+      expect(note.body).toContain('proposed by ada');
+    });
+
+    it("an agent's accept, a decline, or a second accept activates nothing more", async () => {
+      await call('POST', '/teams/dawn/members', nick, { name: 'bo', kind: 'agent' });
+      await propose(ada, 'ada', demo);
+      const askId = await lastAskId();
+      await answer(nick, 'nick', 'decline', askId);
+      expect((await call('GET', '/teams/dawn/holds', ada)).json.holds).toEqual([]);
+      await answer(nick, 'nick', 'accept', askId);
+      await answer(nick, 'nick', 'accept', askId);
+      expect((await call('GET', '/teams/dawn/holds', ada)).json.holds).toHaveLength(1);
+    });
+
+    it("an agent accepting another agent's proposal activates nothing", async () => {
+      await propose(nick, 'nick', demo); // proposed by a human, accepted by an agent
+      const askId = await lastAskId();
+      await answer(ada, 'ada', 'accept', askId);
+      expect((await call('GET', '/teams/dawn/holds', ada)).json.holds).toEqual([]);
+    });
+
+    it('a proposal that could never activate is refused when it is sent', async () => {
+      const tooLong = await propose(ada, 'ada', { ...demo, for_ms: HOLD_MAX_MS + 60_000 });
+      expect(tooLong.status).toBe(422);
+      const widened = await propose(ada, 'ada', { ...demo, effect: 'nobody_merges' });
+      expect(widened.status).toBe(422);
+    });
+  });
 });

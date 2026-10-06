@@ -71,6 +71,25 @@ describe('hold command (ADR 516)', () => {
     );
   });
 
+  it('propose sends an approve-ask carrying the proposal and pauses nothing (increment 3)', async () => {
+    const out = await capture(() =>
+      holdCommand(
+        parseArgs(['propose', 'merges_paused', '--for', '30m', '--reason', 'release cut']),
+      ),
+    );
+    expect(out.out).toContain('nothing is paused until a human admin accepts');
+    const ask = await server.store.get<{ meta: string }>(
+      "SELECT meta FROM messages WHERE act = 'ask' ORDER BY ts DESC LIMIT 1",
+    );
+    expect(JSON.parse(ask!.meta)).toMatchObject({
+      species: 'approve',
+      hold_proposal: { effect: 'merges_paused', reason: 'release cut' },
+    });
+    expect((await capture(() => holdCommand(parseArgs(['list'])))).out).toContain(
+      'no holds in force',
+    );
+  });
+
   it('a lift of nothing names the next step', async () => {
     await expect(capture(() => holdCommand(parseArgs(['lift', 'nope'])))).rejects.toThrow(
       /musterd hold list/,
