@@ -3,7 +3,7 @@
  * (`~/.squig/src` or SQUIG_CHECKOUT) — CI has none, so it skips there and the in-memory suite in
  * provider.test.ts is the gate. On a dev machine it proves the op shapes Squig actually accepts.
  */
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -75,6 +75,7 @@ describe.skipIf(!probe.ok)('SquigProvider on a real Squig checkout', () => {
 
   it("runs Squig's own tools on a linked board: draw attributed, render a PNG, read history (ADR 527)", async () => {
     const file = join(dir, 'repo', 'team.squig.json');
+    mkdirSync(join(dir, 'repo'), { recursive: true });
     provider.link('team', file);
     await provider.open('team');
     const doc = await provider.squigTool('team', 'get_document', {});

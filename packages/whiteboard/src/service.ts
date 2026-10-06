@@ -14,6 +14,14 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
+import {
+  bearerMatches,
+  loopbackHost,
+  publishServiceToken,
+  removeServiceToken,
+  sameOrigin,
+  serviceTokenPath,
+} from './auth.js';
 import { isEntryPoint } from './entry.js';
 import type { CreatedBy, EditOp, ItemInput, WhiteboardProvider } from './port.js';
 import { BOARD_NAME_RE } from './port.js';
@@ -87,6 +95,8 @@ export async function startService(port = servicePort()): Promise<RunningService
   if (choice.fallback) log('warn', choice.fallback);
   // Rewritten after listen() when the OS picks the port (port 0, tests).
   let boundPort = port;
+  // Minted after listen(), once the port is known; no request is routed before then.
+  let token = '';
 
   const server = createServer((req, res) => {
     void route(req, res).catch((err) => {
@@ -99,6 +109,14 @@ export async function startService(port = servicePort()): Promise<RunningService
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', `http://localhost:${port}`);
     const path = url.pathname;
+
+    // The guard (auth.ts): a rebound or cross-site request never reaches a route.
+    if (!loopbackHost(req.headers.host, boundPort))
+      return json(res, 403, { error: 'the whiteboard service answers only localhost' });
+    if (path.startsWith('/api/') && !bearerMatches(req.headers.authorization, token))
+      return json(res, 401, {
+        error: `missing or wrong service token — the MCP client reads it from ${serviceTokenPath(boundPort)}`,
+      });
 
     if (req.method === 'GET' && path === '/healthz') {
       return json(res, 200, {
@@ -212,6 +230,11 @@ export async function startService(port = servicePort()): Promise<RunningService
   const wss = new WebSocketServer({ noServer: true });
 
   server.on('upgrade', (req, socket, head) => {
+    if (!loopbackHost(req.headers.host, boundPort) || !sameOrigin(req.headers.origin, boundPort)) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
     const match = req.url?.match(/^\/ws\/([^/?]+)/);
     const name = match?.[1];
     if (!name || !BOARD_NAME_RE.test(name)) {
@@ -235,6 +258,7 @@ export async function startService(port = servicePort()): Promise<RunningService
   // port 0 asks the OS for a free one (tests) — report the port actually bound.
   const address = server.address();
   boundPort = typeof address === 'object' && address ? address.port : port;
+  token = publishServiceToken(boundPort);
   log('info', `agent-whiteboard service listening on 127.0.0.1:${boundPort}`);
 
   return {
@@ -242,6 +266,7 @@ export async function startService(port = servicePort()): Promise<RunningService
     close: async () => {
       await rooms.persistAllAndClose();
       await squig?.closeAll();
+      removeServiceToken(boundPort);
       wss.close();
       // server.close() alone waits for open connections — a browser ws or a pooled
       // keep-alive fetch keeps the process alive AFTER it stops listening, leaving a
