@@ -17,7 +17,7 @@ import type {
   WhiteboardProvider,
 } from '../port.js';
 import { assertBoardName, NOTE_TEXT_MAX } from '../port.js';
-import { dataDir } from '../sync/persistence.js';
+import { dataDir } from '../data-dir.js';
 import type { SquigCheckout } from './checkout.js';
 import {
   CLUSTER_PAD,

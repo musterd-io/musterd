@@ -1,54 +1,51 @@
 /**
- * The whiteboard service: one process serving three surfaces on one localhost port —
+ * The whiteboard service: one process serving two surfaces on one localhost port —
  *   GET  /healthz                       liveness (also answers "is it already running")
  *   /api/boards...                      the provider port over HTTP (the MCP server's transport)
- *   GET  /b/:name (+ static assets)     the browser page a human draws on
- *   WS   /ws/:name                      tldraw sync for that page
+ * The human draws in Squig's own editor, served by the companion each open board runs; the open
+ * result carries its URL (ADR 524, ADR 537).
  *
  * Binds 127.0.0.1 only: this is a local pairing surface, not a network service. The service
  * holds no repo-writing authority of any kind (ADR 330 decision 6).
  */
-import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { extname, join, normalize, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { WebSocketServer, type WebSocket } from 'ws';
 import {
   bearerMatches,
   loopbackHost,
   publishServiceToken,
   removeServiceToken,
-  sameOrigin,
   serviceTokenPath,
 } from './auth.js';
 import { isEntryPoint } from './entry.js';
-import type { CreatedBy, EditOp, ItemInput, WhiteboardProvider } from './port.js';
+import type { CreatedBy, EditOp, ItemInput } from './port.js';
 import { BOARD_NAME_RE } from './port.js';
-import { probeSquigCheckout, type CheckoutProbe } from './squig/checkout.js';
+import { probeSquigCheckout, type SquigCheckout } from './squig/checkout.js';
 import { SquigProvider } from './squig/provider.js';
 import { SQUIG_TOOLS, type SquigToolName } from './squig/session.js';
-import { RoomManager } from './sync/roomManager.js';
-import { TldrawProvider } from './tldraw/provider.js';
 
-export type ProviderName = 'squig' | 'tldraw';
+/** Stands in when Squig cannot start: every board open fails with the probe's reason. */
+const UNAVAILABLE: SquigCheckout = {
+  kind: 'vendored',
+  root: '',
+  entry: '',
+  loader: null,
+  node: process.execPath,
+};
 
 /**
- * Which canvas serves the boards (ADR 524): Squig when a usable checkout exists, tldraw
- * otherwise — and `WHITEBOARD_PROVIDER=tldraw|squig` pins it. A fallback carries its reason, so
- * the open result can say plainly why the human is not on Squig.
+ * The service's one canvas (ADR 537): Squig, from this package's vendored copy or a
+ * SQUIG_CHECKOUT clone. There is no fallback — when Squig cannot start, opening a board fails
+ * with the reason, and the service stays up so `whiteboard_list` still answers.
  */
-export function chooseProvider(
-  env: NodeJS.ProcessEnv = process.env,
-  probe: () => CheckoutProbe = () => probeSquigCheckout(env),
-): { name: ProviderName; probe?: CheckoutProbe; fallback?: string } {
-  const pinned = env['WHITEBOARD_PROVIDER'];
-  if (pinned === 'tldraw') return { name: 'tldraw' };
-  const p = probe();
-  if (p.ok) return { name: 'squig', probe: p };
+export function squigProvider(): { squig: SquigProvider; source: SquigCheckout['kind'] | null } {
+  const probe = probeSquigCheckout();
+  if (probe.ok) return { squig: new SquigProvider(probe.checkout), source: probe.checkout.kind };
+  log('warn', probe.reason);
   return {
-    name: 'tldraw',
-    fallback: `${pinned === 'squig' ? 'WHITEBOARD_PROVIDER=squig, but ' : ''}${p.reason} — using tldraw`,
+    squig: new SquigProvider(UNAVAILABLE, async () => {
+      throw new Error(probe.reason);
+    }),
+    source: null,
   };
 }
 
@@ -58,41 +55,18 @@ export function servicePort(): number {
   return parseInt(process.env['WHITEBOARD_PORT'] ?? String(DEFAULT_PORT), 10);
 }
 
-export function boardUrl(name: string, port = servicePort()): string {
-  return `http://localhost:${port}/b/${name}`;
-}
-
-const IDLE_TIMEOUT_MS = 5 * 60_000;
-const PERSIST_INTERVAL_MS = 30_000;
 const MAX_BODY_BYTES = 1_048_576;
-
-const WEB_DIST = fileURLToPath(new URL('../dist-web', import.meta.url));
-
-const MIME: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.woff2': 'font/woff2',
-  '.json': 'application/json; charset=utf-8',
-};
 
 export interface RunningService {
   port: number;
   close(): Promise<void>;
 }
 
-export async function startService(port = servicePort()): Promise<RunningService> {
-  const rooms = new RoomManager({
-    idleTimeoutMs: IDLE_TIMEOUT_MS,
-    persistIntervalMs: PERSIST_INTERVAL_MS,
-  });
-  const choice = chooseProvider();
-  const squig =
-    choice.name === 'squig' && choice.probe?.ok ? new SquigProvider(choice.probe.checkout) : null;
-  const provider: WhiteboardProvider = squig ?? new TldrawProvider(rooms);
-  if (choice.fallback) log('warn', choice.fallback);
+export async function startService(
+  port = servicePort(),
+  deps: { squig?: SquigProvider } = {},
+): Promise<RunningService> {
+  const { squig, source } = deps.squig ? { squig: deps.squig, source: null } : squigProvider();
   // Rewritten after listen() when the OS picks the port (port 0, tests).
   let boundPort = port;
   // Minted after listen(), once the port is known; no request is routed before then.
@@ -122,16 +96,15 @@ export async function startService(port = servicePort()): Promise<RunningService
       return json(res, 200, {
         status: 'ok',
         service: 'agent-whiteboard',
-        provider: choice.name,
+        provider: 'squig',
         // Where Squig runs from (ADR 537): the package's vendored copy, or a SQUIG_CHECKOUT clone.
-        squig: choice.probe?.ok ? choice.probe.checkout.kind : null,
-        rooms: rooms.activeRoomCount(),
+        squig: source,
         uptime: process.uptime(),
       });
     }
 
     if (req.method === 'GET' && path === '/api/boards') {
-      return json(res, 200, { boards: await provider.list() });
+      return json(res, 200, { boards: await squig.list() });
     }
 
     // Squig's own tools on a board, and binding a board to a workspace file (ADR 527).
@@ -140,10 +113,6 @@ export async function startService(port = servicePort()): Promise<RunningService
       const [, name, , tool] = sq as unknown as [string, string, string, string | undefined];
       if (!BOARD_NAME_RE.test(name))
         return json(res, 400, { error: `invalid board name ${JSON.stringify(name)}` });
-      if (!squig)
-        return json(res, 409, {
-          error: `Squig's tools need the Squig canvas; this service runs tldraw${choice.fallback ? ` (${choice.fallback})` : ''}`,
-        });
       const body = (await readBody(req)) as {
         file?: string;
         actor?: CreatedBy;
@@ -172,7 +141,7 @@ export async function startService(port = servicePort()): Promise<RunningService
       if (action === 'outline' && req.method === 'GET') {
         const sinceRaw = url.searchParams.get('since');
         const since = sinceRaw === null ? undefined : Number(sinceRaw);
-        return json(res, 200, await provider.read(name, since));
+        return json(res, 200, await squig.read(name, since));
       }
       if (req.method !== 'POST') return json(res, 405, { error: 'POST required' });
       const body = (await readBody(req)) as {
@@ -183,75 +152,32 @@ export async function startService(port = servicePort()): Promise<RunningService
 
       switch (action) {
         case 'open': {
-          const { outline, created } = await provider.open(name);
+          const { outline, created } = await squig.open(name);
           return json(res, 200, {
             outline,
             created,
-            url: squig ? await squig.editorUrl(name) : boardUrl(name, boundPort),
-            provider: choice.name,
-            ...(choice.fallback ? { fallback: choice.fallback } : {}),
+            url: await squig.editorUrl(name),
+            provider: 'squig',
           });
         }
         case 'add': {
           if (!body.actor || !Array.isArray(body.items))
             return json(res, 400, { error: 'actor and items[] required' });
-          return json(res, 200, await provider.add(name, body.actor, body.items));
+          return json(res, 200, await squig.add(name, body.actor, body.items));
         }
         case 'edit': {
           if (!body.actor || !Array.isArray(body.ops))
             return json(res, 400, { error: 'actor and ops[] required' });
-          return json(res, 200, await provider.edit(name, body.actor, body.ops));
+          return json(res, 200, await squig.edit(name, body.actor, body.ops));
         }
         case 'close': {
-          return json(res, 200, { outline: await provider.close(name) });
+          return json(res, 200, { outline: await squig.close(name) });
         }
-      }
-    }
-
-    // Browser page: /b/<name> serves the SPA shell; anything else under / is a static asset.
-    if (req.method === 'GET') {
-      const isBoardPage = /^\/b\/[^/]+$/.test(path) || path === '/';
-      const assetPath = isBoardPage ? '/index.html' : path;
-      const file = normalize(join(WEB_DIST, assetPath));
-      // Trailing separator so a sibling like `dist-web-other` can never pass the prefix
-      // check (#1084 review, non-blocking b) — unreachable today, real tomorrow.
-      if (!file.startsWith(WEB_DIST + sep)) return json(res, 404, { error: 'not found' });
-      try {
-        const content = await readFile(file);
-        res.writeHead(200, { 'Content-Type': MIME[extname(file)] ?? 'application/octet-stream' });
-        res.end(content);
-        return;
-      } catch {
-        return json(res, 404, { error: 'not found' });
       }
     }
 
     return json(res, 404, { error: 'not found' });
   }
-
-  const wss = new WebSocketServer({ noServer: true });
-
-  server.on('upgrade', (req, socket, head) => {
-    if (!loopbackHost(req.headers.host, boundPort) || !sameOrigin(req.headers.origin, boundPort)) {
-      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
-      socket.destroy();
-      return;
-    }
-    const match = req.url?.match(/^\/ws\/([^/?]+)/);
-    const name = match?.[1];
-    if (!name || !BOARD_NAME_RE.test(name)) {
-      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
-      socket.destroy();
-      return;
-    }
-    wss.handleUpgrade(req, socket, head, (ws: WebSocket) => {
-      // Per-connection session id: two tabs are two sessions, never a collision.
-      void rooms.handleConnection(name, randomUUID(), ws).catch((err) => {
-        log('error', `ws connection failed for board=${name}`, err);
-        ws.close(4002, 'Board initialization failed');
-      });
-    });
-  });
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -266,15 +192,12 @@ export async function startService(port = servicePort()): Promise<RunningService
   return {
     port: boundPort,
     close: async () => {
-      await rooms.persistAllAndClose();
-      await squig?.closeAll();
+      await squig.closeAll();
       removeServiceToken(boundPort);
-      wss.close();
-      // server.close() alone waits for open connections — a browser ws or a pooled
-      // keep-alive fetch keeps the process alive AFTER it stops listening, leaving a
-      // half-dead server still answering old connections while a new process owns the
-      // port. That split brain ate real board work; sever everything.
-      for (const client of wss.clients) client.terminate();
+      // server.close() alone waits for open connections — a pooled keep-alive fetch keeps the
+      // process alive AFTER it stops listening, leaving a half-dead server still answering old
+      // connections while a new process owns the port. That split brain ate real board work;
+      // sever everything.
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     },
