@@ -1,17 +1,28 @@
 /**
- * Service tests: the real HTTP surface on an OS-assigned port, plus a raw ws upgrade smoke —
- * the same transports the MCP client and the browser page use.
+ * Service tests: the real HTTP surface on an OS-assigned port — the transport the MCP client
+ * uses — over an in-memory Squig, so they need no companion (ADR 537).
  */
 import { statSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { WebSocket } from 'ws';
 import { readServiceToken, serviceTokenPath } from './auth.js';
 import type { Outline } from './port.js';
-import { chooseProvider, startService, type RunningService } from './service.js';
+import { startService, type RunningService } from './service.js';
+import type { SquigCheckout } from './squig/checkout.js';
+import { FakeSquig } from './squig/fake.js';
+import { SquigProvider } from './squig/provider.js';
+
+const FAKE_CHECKOUT: SquigCheckout = {
+  kind: 'vendored',
+  root: '/v',
+  entry: '/v/c.mjs',
+  loader: null,
+  node: process.execPath,
+};
+const fakeSquig = () => new SquigProvider(FAKE_CHECKOUT, async () => new FakeSquig());
 
 let dir: string;
 let service: RunningService;
@@ -30,10 +41,7 @@ const authFetch = (url: string, init: RequestInit = {}): Promise<Response> =>
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'whiteboard-service-test-'));
   process.env['WHITEBOARD_DATA_DIR'] = dir;
-  // These tests exercise the tldraw provider. The repo-root vitest run ignores this package's
-  // env pin, and the vendored Squig is always present (ADR 537), so pin tldraw here.
-  process.env['WHITEBOARD_PROVIDER'] = 'tldraw';
-  service = await startService(0);
+  service = await startService(0, { squig: fakeSquig() });
   base = `http://127.0.0.1:${service.port}`;
 });
 
@@ -54,7 +62,7 @@ describe('service', () => {
     const open = await authFetch(`${base}/api/boards/flow/open`, { method: 'POST' });
     const opened = (await open.json()) as { created: boolean; url: string };
     expect(opened.created).toBe(true);
-    expect(opened.url).toContain(`/b/flow`);
+    expect(opened.url).toBe(new FakeSquig().editorUrl);
 
     const add = await authFetch(`${base}/api/boards/flow/add`, {
       method: 'POST',
@@ -141,72 +149,56 @@ describe('service', () => {
     const res = await authFetch(`${base}/api/boards/..%2Fescape/open`, { method: 'POST' });
     expect(res.status).toBe(400);
   });
+});
 
-  it('completes the sync handshake over a real ws — a browser could join this room', async () => {
-    await authFetch(`${base}/api/boards/wsboard/open`, { method: 'POST' });
-    const ws = new WebSocket(`ws://127.0.0.1:${service.port}/ws/wsboard`);
-    await new Promise<void>((resolve, reject) => {
-      ws.once('open', () => resolve());
-      ws.once('error', reject);
-    });
-    // The sync protocol is client-initiated: send the connect request a tldraw client would.
-    const { getTlsyncProtocolVersion } = await import('@tldraw/sync-core');
-    const { TLDRAW_SCHEMA } = await import('./tldraw/records.js');
-    ws.send(
-      JSON.stringify({
-        type: 'connect',
-        connectRequestId: 'test',
-        schema: TLDRAW_SCHEMA,
-        protocolVersion: getTlsyncProtocolVersion(),
-        lastServerClock: 0,
+describe('no fallback (ADR 537)', () => {
+  it('opening a board when Squig cannot start fails with the reason; listing still works', async () => {
+    await service.close();
+    service = await startService(0, {
+      squig: new SquigProvider(FAKE_CHECKOUT, async () => {
+        throw new Error('vendored Squig is missing at /v');
       }),
-    );
-    const reply = await new Promise<Record<string, unknown>>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('no connect reply within 3s')), 3000);
-      ws.once('message', (data) => {
-        clearTimeout(timer);
-        resolve(JSON.parse(String(data)) as Record<string, unknown>);
-      });
-      ws.once('error', reject);
     });
-    expect(reply['type']).toBe('connect');
-    expect(reply['connectRequestId']).toBe('test');
-    ws.close();
+    base = `http://127.0.0.1:${service.port}`;
+    const open = await authFetch(`${base}/api/boards/x/open`, { method: 'POST' });
+    expect(open.status).toBe(500);
+    expect(await open.text()).toContain('vendored Squig is missing at /v');
+    expect((await authFetch(`${base}/api/boards`)).status).toBe(200);
   });
 
-  it('refuses a ws upgrade for a bad board name', async () => {
-    const ws = new WebSocket(`ws://127.0.0.1:${service.port}/ws/..%2Fnope`);
-    const failed = await new Promise<boolean>((resolve) => {
-      ws.once('error', () => resolve(true));
-      ws.once('open', () => resolve(false));
-    });
-    expect(failed).toBe(true);
+  it('a board name with only an old tldraw file opens as a new Squig board and leaves the file alone', async () => {
+    const legacy = join(dir, 'boards', 'legacy.json');
+    await mkdir(join(dir, 'boards'), { recursive: true });
+    await writeFile(legacy, '{"records":[]}');
+    const open = await authFetch(`${base}/api/boards/legacy/open`, { method: 'POST' });
+    expect(((await open.json()) as { created: boolean }).created).toBe(true);
+    expect(await readFile(legacy, 'utf8')).toBe('{"records":[]}');
   });
 });
 
-describe('chooseProvider (ADR 524)', () => {
-  const ok = () => ({
-    ok: true as const,
-    checkout: { kind: 'checkout' as const, root: '/s', entry: '/e', loader: '/l', node: '/n' },
-  });
-  const missing = () => ({ ok: false as const, reason: 'no Squig checkout at /h/.squig/src' });
-
-  it('defaults to Squig when a usable checkout exists', () => {
-    expect(chooseProvider({}, ok).name).toBe('squig');
-  });
-
-  it('falls back to tldraw without a checkout, and says why', () => {
-    expect(chooseProvider({}, missing)).toEqual({
-      name: 'tldraw',
-      fallback: 'no Squig checkout at /h/.squig/src — using tldraw',
-    });
+describe('the board link /b/<name> (ADR 537)', () => {
+  it('answers with a help page that opens nothing and carries no token', async () => {
+    const res = await fetch(`${base}/b/huddle-01abc`, { redirect: 'manual' });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/^text\/html/);
+    const page = await res.text();
+    expect(page).toContain('huddle-01abc');
+    expect(page).toContain('musterd huddle room huddle-01abc');
+    expect(page).not.toContain('token');
+    const list = (await (await authFetch(`${base}/api/boards`)).json()) as {
+      boards: Array<{ name: string }>;
+    };
+    expect(list.boards).toEqual([]);
   });
 
-  it('WHITEBOARD_PROVIDER=tldraw pins tldraw; =squig without a checkout still falls back, loudly', () => {
-    expect(chooseProvider({ WHITEBOARD_PROVIDER: 'tldraw' }, ok)).toEqual({ name: 'tldraw' });
-    expect(chooseProvider({ WHITEBOARD_PROVIDER: 'squig' }, missing).fallback).toMatch(
-      /^WHITEBOARD_PROVIDER=squig, but no Squig checkout/,
-    );
+  it('names the musterd command only for a huddle board', async () => {
+    const page = await (await fetch(`${base}/b/sketch`)).text();
+    expect(page).toContain('whiteboard_open');
+    expect(page).not.toContain('musterd');
+  });
+
+  it('refuses an invalid board name', async () => {
+    expect((await fetch(`${base}/b/..%2Fescape`)).status).toBe(400);
   });
 });
 
@@ -238,21 +230,5 @@ describe('the guard (lane 01M47FADGV)', () => {
       req.end();
     });
     expect(res).toBe(403);
-  });
-
-  it('refuses a websocket from a foreign Origin, and accepts its own page', async () => {
-    await authFetch(`${base}/api/boards/wsg/open`, { method: 'POST' });
-    const outcome = (origin: string) =>
-      new Promise<string>((resolve) => {
-        const ws = new WebSocket(`ws://127.0.0.1:${service.port}/ws/wsg`, { origin });
-        ws.on('open', () => {
-          ws.close();
-          resolve('open');
-        });
-        ws.on('unexpected-response', (_req, r) => resolve(String(r.statusCode)));
-        ws.on('error', () => resolve('error'));
-      });
-    expect(await outcome('https://evil.example')).toBe('403');
-    expect(await outcome(`http://localhost:${service.port}`)).toBe('open');
   });
 });

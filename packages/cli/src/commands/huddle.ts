@@ -1,5 +1,6 @@
+import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, platform as osPlatform } from 'node:os';
 import { join } from 'node:path';
 import { withTraceContext } from '@musterd/mcp';
 import {
@@ -20,6 +21,7 @@ import { renderHuddleTrace } from '../render/huddleTrace.js';
 import { renderMessageRow } from '../render/rows.js';
 import { theme } from '../render/theme.js';
 import { bindThread } from '../session/continuity.js';
+import { buildOpenCommand } from './board.js';
 import { findWorkspaceDir, kindLookup, resolve, sendOrEcho } from './helpers.js';
 import { parseRecipients } from './send.js';
 
@@ -40,6 +42,7 @@ const USAGE =
   'usage:\n' +
   '  musterd huddle list [--all]\n' +
   '  musterd huddle show <huddle-id> [--trace]\n' +
+  '  musterd huddle room <huddle-id|board> [--print]\n' +
   '  musterd huddle open --topic <goal|lane|design>:<id> --anchor <path|pr|lane> [--to a,b|@team] [--turns N] [--until <ms|ISO>] [--room <url>] "<why we are huddling>"\n' +
   '  musterd huddle say <huddle-id> [--act message|challenge|steer|insight] [--to <seat>] "<turn>"\n' +
   '  musterd huddle close <huddle-id> --anchor-ref <ref|none> "<what landed, or why nothing did>"';
@@ -141,6 +144,72 @@ export async function layoutRoom(
   } catch {
     return false;
   }
+}
+
+/** Opening a board starts its Squig companion, which takes a few seconds. */
+const ROOM_OPEN_MS = 30_000;
+
+const NOT_RUNNING =
+  'the whiteboard service is not running on this machine — start it by opening any board ' +
+  'from an agent (`whiteboard_open`), then run this again';
+
+/** The whiteboard's board-name rule (its BOARD_NAME_RE), restated: the CLI imports nothing from it. */
+const BOARD_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
+
+/**
+ * The editor URL goes to the OS opener (`open`, `xdg-open`, `cmd /c start`), and whoever answers
+ * on the whiteboard port chose it. So accept only Squig's shape: plain http on loopback, in
+ * characters no opener or shell treats specially — never a file:, an app scheme, a `&` that cmd
+ * would run, or a `%` it would expand as a variable. Squig's token is base64url, so the real URL
+ * never needs either.
+ */
+export function assertEditorUrl(raw: string): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new CliError(`the whiteboard returned an editor URL that is not a URL: ${raw}`, 4);
+  }
+  const loopback = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+  if (url.protocol !== 'http:' || !loopback || !/^[A-Za-z0-9._~:/?#=-]+$/.test(url.href)) {
+    throw new CliError(
+      `refusing to open ${raw}: a Squig editor URL is plain http on this machine (127.0.0.1 or localhost)`,
+      4,
+    );
+  }
+  return url.href;
+}
+
+/**
+ * Open a huddle's board and return Squig's editor URL (ADR 537). The URL carries the companion's
+ * token, so it comes only from the service's token-gated API — this command reads the service
+ * token from disk, as the MCP client does. Unlike the room layout, a failure here is the answer
+ * the human asked for, so it is an error, not a quiet false.
+ */
+export async function openRoomBoard(board: string): Promise<string> {
+  if (!BOARD_NAME.test(board)) throw new CliError(`${board} is not a board name`, 2);
+  const base = whiteboardBase();
+  try {
+    const health = await fetch(`${base}/healthz`, { signal: AbortSignal.timeout(ROOM_PROBE_MS) });
+    const h = (await health.json()) as { service?: string };
+    if (!health.ok || h.service !== 'agent-whiteboard') throw new Error('not the whiteboard');
+  } catch {
+    throw new CliError(NOT_RUNNING, 4);
+  }
+  const res = await fetch(`${base}/api/boards/${board}/open`, {
+    method: 'POST',
+    headers: whiteboardHeaders(),
+    body: '{}',
+    signal: AbortSignal.timeout(ROOM_OPEN_MS),
+  });
+  const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+  if (!res.ok || typeof body.url !== 'string') {
+    throw new CliError(
+      `the whiteboard could not open ${board}: ${body.error ?? `HTTP ${res.status}`}`,
+      4,
+    );
+  }
+  return assertEditorUrl(body.url);
 }
 
 /** Mirror a turn onto the board's Turns cluster, best-effort (same bounds as `layoutRoom`). */
@@ -263,7 +332,14 @@ function wrapTurn(body: string): string[] {
 
 export async function huddleCommand(parsed: Parsed): Promise<number> {
   const sub = parsed.positionals[0];
-  if (sub !== 'open' && sub !== 'say' && sub !== 'close' && sub !== 'show' && sub !== 'list')
+  if (
+    sub !== 'open' &&
+    sub !== 'say' &&
+    sub !== 'close' &&
+    sub !== 'show' &&
+    sub !== 'list' &&
+    sub !== 'room'
+  )
     throw new CliError(USAGE, 2);
   const { team, identity, http } = resolve(parsed.flags);
   // Echo rows coloured by kind; the roster is best-effort for colour only.
@@ -275,6 +351,30 @@ export async function huddleCommand(parsed: Parsed): Promise<number> {
     // colour only
   }
   const json = parsed.flags['json'] === true;
+
+  // The room's board, opened in this machine's browser (ADR 537). The board link a huddle posts is
+  // a token-free help page; the editor URL comes only from the service's token-gated API.
+  if (sub === 'room') {
+    const named = parsed.positionals[1];
+    if (!named) throw new CliError(`name the huddle id or its board\n${USAGE}`, 2);
+    const board = named.startsWith('huddle-')
+      ? named
+      : huddleBoardName(await resolveRoom(http, team, identity.name, named));
+    const url = await openRoomBoard(board);
+    const command = parsed.flags['print'] ? null : buildOpenCommand(osPlatform(), url);
+    if (!command) {
+      process.stdout.write(`${url}\n`);
+      process.stdout.write(
+        theme.meta("  private to this machine — it carries the board's token\n"),
+      );
+      return 0;
+    }
+    execFile(command.cmd, command.args, () => {
+      // Best-effort, as in `musterd board`: the board is open; the human can use --print.
+    });
+    process.stdout.write(`${theme.accent('opening the room')} ${board} in Squig\n`);
+    return 0;
+  }
 
   // The room as a VIEW over the log, not a second message system: a huddle is a thread, so the
   // transcript is rows the timeline already holds (ADR 378). Nothing is fetched per-huddle and

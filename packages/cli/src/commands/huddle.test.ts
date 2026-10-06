@@ -11,6 +11,8 @@ import {
   huddleCommand,
   layoutRoom,
   mirrorTurn,
+  openRoomBoard,
+  assertEditorUrl,
   parseTopic,
   parseUntil,
   renderHuddle,
@@ -161,6 +163,7 @@ describe('musterd huddle', () => {
   });
 
   describe('room layout over the whiteboard HTTP port', () => {
+    const EDITOR_URL = 'http://127.0.0.1:61234/?local=1#token=t';
     let stub: Server;
     let calls: { path: string; body: unknown }[];
 
@@ -175,7 +178,8 @@ describe('musterd huddle', () => {
           res.setHeader('Content-Type', 'application/json');
           if (path === '/healthz')
             return res.end(JSON.stringify({ status: 'ok', service: 'agent-whiteboard' }));
-          if (path.endsWith('/open')) return res.end(JSON.stringify({ created: true, url: 'x' }));
+          if (path.endsWith('/open'))
+            return res.end(JSON.stringify({ created: true, url: EDITOR_URL }));
           if (path.endsWith('/add')) return res.end(JSON.stringify({ ids: ['a'], version: 1 }));
           res.statusCode = 404;
           res.end('{}');
@@ -210,6 +214,39 @@ describe('musterd huddle', () => {
         items: { text: string }[];
       };
       expect(turn.items[0]?.text).toBe('lin: a turn');
+    });
+
+    it('huddle room opens the board through the service and hands back the editor URL (ADR 537)', async () => {
+      expect(await openRoomBoard('huddle-x')).toBe(EDITOR_URL);
+      expect(calls.map((c) => c.path)).toEqual(['/healthz', '/api/boards/huddle-x/open']);
+    });
+
+    it('huddle room hands the OS opener only a loopback http URL (ADR 537)', () => {
+      expect(assertEditorUrl('http://127.0.0.1:61234/?local=1#token=abc')).toBe(
+        'http://127.0.0.1:61234/?local=1#token=abc',
+      );
+      expect(assertEditorUrl('http://localhost:9/?local=1')).toBe('http://localhost:9/?local=1');
+      for (const bad of [
+        'file:///etc/passwd',
+        'https://evil.example/?local=1',
+        'http://127.0.0.1.evil.example/',
+        'javascript:alert(1)',
+        'http://127.0.0.1:1/" & calc & "',
+        'http://127.0.0.1:1/?local=1#token=%PATH%',
+        'http://127.0.0.1:1/%41',
+        'x',
+      ]) {
+        expect(() => assertEditorUrl(bad), bad).toThrow(CliError);
+      }
+    });
+
+    it('huddle room refuses a board name the service would never accept', async () => {
+      await expect(openRoomBoard('huddle-../etc')).rejects.toThrow(/not a board name/);
+    });
+
+    it('huddle room says so when the whiteboard service is not running', async () => {
+      process.env['WHITEBOARD_PORT'] = '1';
+      await expect(openRoomBoard('huddle-x')).rejects.toThrow(/whiteboard service is not running/);
     });
 
     it('a service that is not the whiteboard, or not up, is a quiet false', async () => {

@@ -46,7 +46,7 @@ const itemSchema = z.discriminatedUnion('kind', [
       .string()
       .optional()
       .describe('the full thought. Stays OFF the canvas; returned on every read'),
-    color: z.string().optional().describe('tldraw color name, default yellow'),
+    color: z.string().optional().describe('color name, default yellow'),
     cluster: z.string().optional().describe('cluster id to place the note inside'),
     x: z.number().optional(),
     y: z.number().optional(),
@@ -243,12 +243,11 @@ export function buildWhiteboardMcpServer(
       try {
         actor = seatActor(seat);
         await prep(board);
-        const { outline, created, url, provider, fallback } = await client.open(board);
+        const { outline, created, url, provider } = await client.open(board);
         const head = created ? `created board "${board}"` : `reopened board "${board}"`;
         const canvas = provider ? ` (${provider})` : '';
-        const note = fallback ? `\n\nnote: ${fallback}` : '';
         return textResult(
-          `${head}${canvas} — hand the human this URL to draw with you: ${url}${note}\n\n${formatOutline(outline, { url })}`,
+          `${head}${canvas} — hand the human this URL to draw with you: ${url}\n\n${formatOutline(outline, { url })}`,
         );
       } catch (err) {
         return errorResult(err);

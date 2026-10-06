@@ -84,7 +84,6 @@ export class WhiteboardServiceClient {
     created: boolean;
     url: string;
     provider?: string;
-    fallback?: string;
   }> {
     await this.ensureService();
     return this.post(`/api/boards/${board}/open`, {});

@@ -67,6 +67,17 @@ needs a clone that a stranger does not have.
 - nick's tldraw boards are archived, and the one real board is converted through the port, before
   the tldraw adapter is deleted (spec §7).
 
+- **2026-10-06, a huddle's room link (increment 3, nick):** `musterd huddle open` records the
+  room as `<whiteboard>/b/<board>` in the opening act (ADR 378 §7), and `/live` links to it. The
+  tldraw page that answered it is gone. Squig's editor URL cannot replace it, because it carries
+  the companion's token and the act is team-visible and replicated. A first attempt redirected
+  `/b/<name>` to the editor, refusing other websites' requests by `Sec-Fetch-Site`. A security
+  review rejected it before it was pushed: an unauthenticated route that returns the token
+  bypasses the service token for any local caller, the header check failed open for browsers
+  that do not send it, and `/live`'s own click is cross-site anyway. So `GET /b/<name>` is now a
+  help page that opens nothing and carries no token, and `musterd huddle room <id|board>` opens
+  the board through the token-gated API and launches the editor in the local browser.
+
 ## Observability & Evaluation
 
 - **Traces:** `/healthz` reports the provider and whether the companion is vendored or comes from

@@ -30,7 +30,7 @@ export default tseslint.config(
     // `window`/`document`, and TanStack owns its import shape), so `globals.node`, `import/order`'s
     // builtin-first grouping and `no-default-export` are the wrong rules there. It keeps the
     // universal baselines above (js + typescript-eslint recommended) and gains its own block below.
-    ignores: ['packages/web/**', 'packages/whiteboard/web/**'],
+    ignores: ['packages/web/**'],
     languageOptions: {
       globals: { ...globals.node },
     },

@@ -14,7 +14,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { dataDir } from './sync/persistence.js';
+import { dataDir } from './data-dir.js';
 
 export function serviceTokenPath(port: number): string {
   return join(dataDir(), `service-${port}.token`);
@@ -45,15 +45,6 @@ export function readServiceToken(port: number): string | null {
 
 export function loopbackHost(host: string | undefined, port: number): boolean {
   return host === `localhost:${port}` || host === `127.0.0.1:${port}`;
-}
-
-/** An Origin header is acceptable when absent (a non-browser client) or this service's own. */
-export function sameOrigin(origin: string | undefined, port: number): boolean {
-  return (
-    origin === undefined ||
-    origin === `http://localhost:${port}` ||
-    origin === `http://127.0.0.1:${port}`
-  );
 }
 
 export function bearerMatches(header: string | undefined, token: string): boolean {

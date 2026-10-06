@@ -1,6 +1,6 @@
 ---
 name: whiteboard-brainstorm
-description: Facilitate a live brainstorm on a shared whiteboard the human draws on with you. Use when someone wants to brainstorm, ideate, explore options, think spatially, or cluster many ideas — and a canvas would carry it better than chat alone. Opens a board (Squig where a Squig checkout exists, tldraw otherwise) via the whiteboard_* MCP tools; both parties draw; you facilitate.
+description: Facilitate a live brainstorm on a shared whiteboard the human draws on with you. Use when someone wants to brainstorm, ideate, explore options, think spatially, or cluster many ideas — and a canvas would carry it better than chat alone. Opens a Squig board via the whiteboard_* MCP tools; both parties draw; you facilitate.
 ---
 
 # Whiteboard brainstorm

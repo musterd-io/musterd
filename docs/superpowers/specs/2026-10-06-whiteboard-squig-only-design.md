@@ -135,7 +135,9 @@ These go:
 
 - `src/tldraw/`, `src/sync/` (the tldraw sync room manager), `web/`, `vite.config.*` and
   `dist-web/`.
-- The `/ws/:name` route, the static page, and `serveStatic()` in `src/service.ts`.
+- The `/ws/:name` route, the static page, and `serveStatic()` in `src/service.ts`. `GET /b/:name`
+  stays as a token-free help page, and `musterd huddle room` opens a huddle's board (ADR 537
+  Consequences, 2026-10-06).
 - `ProviderName`, the provider choice with its fallback reason, and `WHITEBOARD_PROVIDER`.
 - The `TldrawProvider` and `RoomManager` exports in `src/index.ts`.
 

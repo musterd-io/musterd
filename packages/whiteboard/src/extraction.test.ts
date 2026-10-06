@@ -13,12 +13,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const PKG_ROOT = fileURLToPath(new URL('..', import.meta.url));
-/** Each config file with how deep its paths resolve from: vite.config.ts sets `root: 'web'`, so its
- *  `../dist-web` is still inside the package. */
+/** Each config file with how deep its paths resolve from. */
 const CONFIG_DEPTH: Record<string, number> = {
   'tsconfig.json': 0,
-  'web/tsconfig.json': 1,
-  'vite.config.ts': 1,
   'vitest.config.ts': 0,
 };
 const CONFIG_FILES = Object.keys(CONFIG_DEPTH);
@@ -36,7 +33,6 @@ async function sourceFiles(dir: string): Promise<string[]> {
 async function allCode(): Promise<string[]> {
   return [
     ...(await sourceFiles(join(PKG_ROOT, 'src'))),
-    ...(await sourceFiles(join(PKG_ROOT, 'web', 'src'))),
     ...CONFIG_FILES.filter((f) => f.endsWith('.ts')).map((f) => join(PKG_ROOT, f)),
   ];
 }

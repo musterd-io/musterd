@@ -557,7 +557,7 @@ export const CATALOG: readonly CommandEntry[] = [
   {
     name: 'huddle',
     signature:
-      'list [--all]  |  show <id>  |  open --topic <goal|lane|design>:<id> --anchor <path|pr|lane> [--to a,b|@team] [--turns N] [--until <ms|ISO>] "<why>"  |  say <id> [--act <act>] "<turn>"  |  close <id> --anchor-ref <ref|none> "<what landed>"',
+      'list [--all]  |  show <id>  |  room <id> [--print]  |  open --topic <goal|lane|design>:<id> --anchor <path|pr|lane> [--to a,b|@team] [--turns N] [--until <ms|ISO>] "<why>"  |  say <id> [--act <act>] "<turn>"  |  close <id> --anchor-ref <ref|none> "<what landed>"',
     summary:
       'a bounded burst of collaboration on one topic, leaving one artifact — a thread with a room',
     group: 'messaging',
@@ -571,10 +571,13 @@ export const CATALOG: readonly CommandEntry[] = [
       'ordinary act in the thread (message, challenge, steer, insight, wait). `close` is the resolve, naming ' +
       'in --anchor-ref where the artifact landed, or "none" with the reason. A question to a human inside a ' +
       'huddle is `musterd send --act ask --thread <id>` with a tier, not a turn. The daemon stores no clock ' +
-      'and enforces no budget; the participants own both.',
+      "and enforces no budget; the participants own both. `room` opens the huddle's board in Squig in this " +
+      "machine's browser (ADR 537) — the room link in the act is only a help page, because the editor URL " +
+      'carries a token; --print prints that private URL instead of opening it.',
     examples: [
       'musterd huddle list',
       'musterd huddle show 01M1…',
+      'musterd huddle room 01M1…',
       'musterd huddle open --topic lane:01M1N7Q2K5 --anchor docs/design/asks-rail.md --to miley,sloane --turns 12 "the asks rail arc — ring or bar?"',
       'musterd huddle say 01M1… --act challenge "why a ring at all when the strip already has the tier?"',
       'musterd huddle close 01M1… --anchor-ref docs/design/asks-rail.md@9ab435f0 "ring, drawn from the stored hue"',
