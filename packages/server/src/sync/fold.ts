@@ -4,6 +4,8 @@ import {
   type SyncPullEvent,
   type SyncPullLaneEvent,
   isWireAttestationSource,
+  LANE_TERMINAL_STATES,
+  type LaneState,
   StylePrefsSchema,
 } from '@musterd/protocol';
 import { z } from 'zod';
@@ -124,10 +126,19 @@ async function projectLaneEvent(
   const d = (event.detail ?? {}) as Record<string, unknown>;
   const laneId = (typeof d['lane'] === 'string' ? d['lane'] : event.target) ?? '';
   const ts = event.ts;
-  const held = await db.get<{ id: string }>('SELECT id FROM lanes WHERE team_id = ? AND id = ?', [
-    teamId,
-    laneId,
-  ]);
+  const held = await db.get<{ id: string; state: string; resolved_at: number | null }>(
+    'SELECT id, state, resolved_at FROM lanes WHERE team_id = ? AND id = ?',
+    [teamId, laneId],
+  );
+  // A transition written BEFORE the lane's close can reach this daemon AFTER it: a joiner's
+  // `lane.ready_for_review` pushed a minute late put three closed lanes back to awaiting_acceptance
+  // on 2026-10-05. Origin order is per node, not across them, so a non-terminal move older than the
+  // close is history only — held in audit, never projected. A reopen made after the close applies.
+  const staleAgainstClose =
+    held !== undefined &&
+    LANE_TERMINAL_STATES.has(held.state as LaneState) &&
+    held.resolved_at !== null &&
+    ts < held.resolved_at;
 
   if (event.action === 'lane.opened') {
     // The birth carries the whole declaration (Finding 4). A replay past the idempotence check
@@ -179,6 +190,7 @@ async function projectLaneEvent(
       return 'applied';
     }
     case 'lane.released':
+      if (staleAgainstClose) return 'applied';
       await db.run(
         `UPDATE lanes SET owner_seat = NULL, state = 'open', claimed_at = NULL, updated_at = ?
           WHERE team_id = ? AND id = ?`,
@@ -188,6 +200,8 @@ async function projectLaneEvent(
     case 'lane.state_changed': {
       const to = typeof d['to'] === 'string' ? d['to'] : null;
       if (to === null) return 'applied';
+      const terminal = LANE_TERMINAL_STATES.has(to as LaneState);
+      if (staleAgainstClose && !terminal) return 'applied';
       // ADR 466: parking releases the owner (the origin store's release invariant); the park
       // record itself follows in the same write's `lane.updated` row (`parked` field).
       if (to === 'parked')
@@ -196,16 +210,23 @@ async function projectLaneEvent(
             WHERE team_id = ? AND id = ?`,
           [to, ts, teamId, laneId],
         );
-      else
+      else if (terminal)
         await db.run('UPDATE lanes SET state = ?, updated_at = ? WHERE team_id = ? AND id = ?', [
           to,
           ts,
           teamId,
           laneId,
         ]);
+      // Leaving a terminal state clears resolved_at, as the origin store does (`updateLaneInTx`).
+      else
+        await db.run(
+          'UPDATE lanes SET state = ?, resolved_at = NULL, updated_at = ? WHERE team_id = ? AND id = ?',
+          [to, ts, teamId, laneId],
+        );
       return 'applied';
     }
     case 'lane.ready_for_review':
+      if (staleAgainstClose) return 'applied';
       await db.run(
         "UPDATE lanes SET state = 'awaiting_acceptance', updated_at = ? WHERE team_id = ? AND id = ?",
         [ts, teamId, laneId],
