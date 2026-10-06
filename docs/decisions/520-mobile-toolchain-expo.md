@@ -64,11 +64,23 @@ Which toolchain, and what does it cost the monorepo and its CI? Four were weighe
   `pnpm install --frozen-lockfile` in CI, which costs install time on every `gates` run; if that
   cost is visible in the CI cost readout (ADR 515), the package gets its own install step gated on
   `packages/mobile/**` changes.
-- `docs/architecture/08-mobile.md` is the new surface doc, with the drift-checked file tree.
+- `docs/architecture/09-mobile.md` is the new surface doc, with the drift-checked file tree.
 - The Apple Developer Program membership and App Store Connect are nick's to buy and sign up for;
   EAS Build needs them for a TestFlight build. Until then increment 4 runs as an Expo development
   build on nick's phone, which needs only a free Apple ID.
 - Android is one more EAS build target when wanted; nothing in this ADR has to change.
+- **2026-10-05, increment 4 (lane `01M472A1T4`) — what building it settled.** Within §1–§5, not
+  against them: (a) the SDK at the start was **Expo SDK 57** (React Native 0.86, React 19.2.3), on
+  pnpm's default isolated installs, which SDK 54+ supports — no `nodeLinker: hoisted`. (b) **Modules
+  beyond §3's list, each because Expo Router requires it as a non-optional peer:** `expo-constants`,
+  `expo-linking`, `@expo/log-box`, `@expo/metro-runtime`, `react-native-screens`,
+  `react-native-safe-area-context`. None changes what the app sends the daemon. `zod` is not a direct
+  dependency after all: the app reaches it only through `@musterd/protocol`. (c) The phone imports the
+  protocol through two new subpath exports, `@musterd/protocol/calendar` and
+  `@musterd/protocol/errors`, because the barrel pulls Node built-ins; this adds no schema. (d) The
+  surface doc is `docs/architecture/09-mobile.md`, not `08-mobile.md`: 08 was already the web doc.
+  (e) `app.json` carries one App Transport Security exception, plain `http` to `*.ts.net` plus local
+  networking, because Tailscale is the transport's encryption (ADR 519 §4).
 
 ## Observability & Evaluation
 

@@ -51,6 +51,14 @@
     "./wire": {
       "types": "./dist/wire.d.ts",
       "default": "./dist/wire.js"
+    },
+    "./calendar": {
+      "types": "./dist/calendar.d.ts",
+      "default": "./dist/calendar.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "default": "./dist/errors.js"
     }
   },
   "files": [

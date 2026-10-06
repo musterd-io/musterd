@@ -60,6 +60,11 @@ export default tseslint.config(
     rules: { 'import/no-default-export': 'off' },
   },
   {
+    // Expo Router reads each route file's default export as its screen (ADR 520).
+    files: ['packages/mobile/src/app/**/*.tsx'],
+    rules: { 'import/no-default-export': 'off' },
+  },
+  {
     // AGENTS.md hard rule 5 / 00-overview: the CLI and MCP adapter talk to the server **over the
     // wire**. Only `@musterd/protocol` crosses a package boundary. Importing `@musterd/server`
     // links the daemon into a client process — it compiles and the tests pass, so nothing else
