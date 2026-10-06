@@ -411,6 +411,10 @@ export type AuditAction =
   // ADR 514 (agent style): a human set their own style dials/prose through `PUT /members/me/style`.
   // Detail carries the dial keys and the prose line count — sizes, never the prose.
   | 'style.prefs_set'
+  // ADR 514 (lane 01M46RWP23): the hub-minted, replicated copy of a human's style prefs — detail
+  // `{ prefs }` whole, prose included, because this row IS the transport; `style.prefs_set` above
+  // stays the local, keys-only observability row. Rides the `policy` sync kind.
+  | 'style.prefs'
   // ADR 150 (structural inducement — PreToolUse enforcement gates): one decision row per intercepted
   // tool call that matched a declared enforcement class. `lane.gate` = Gate A (lane-ownership on a
   // contended surface); `action.gate` = Gate B (policy-classed action→ask). Both are SHAPES ONLY —
@@ -686,6 +690,7 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'doorbell.surfaced': 'actor',
   // ADR 514: a human set their own style dials — their row.
   'style.prefs_set': 'actor',
+  'style.prefs': 'actor',
   'lane.gate': 'actor',
   'action.gate': 'actor',
   'actor.subagent_write': 'actor',

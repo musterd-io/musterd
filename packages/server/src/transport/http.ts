@@ -32,6 +32,7 @@ import {
   renderStyleBlock,
   resolveStyle,
   StyleEpochSchema,
+  type StylePrefs,
   StylePrefsSchema,
   styleProseLineCount,
   styleProseProblem,
@@ -103,6 +104,7 @@ import {
   SyncClaimRequestSchema,
   SyncLanePatchRequestSchema,
   SyncPolicyRequestSchema,
+  SyncStyleRequestSchema,
   SyncTrustRequestSchema,
   SyncPushRequestSchema,
   SyncPushResponseSchema,
@@ -424,9 +426,9 @@ import { issueAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { revokeSponsoredDescendants } from '../store/sponsoredCascade.js';
 import { staleLaneWarnings } from '../store/staleness.js';
 import {
+  applyStylePrefs,
   currentStyleEpochFor,
   memberStylePrefs,
-  setStylePrefs,
   styleDriverFor,
   styleEnvelopeFor,
   styleHumans,
@@ -478,6 +480,7 @@ import {
   holdAtHub,
   joinerEnrollment,
   policyAtHub,
+  styleAtHub,
   localNodeWithLabel,
   patchAtHub,
   SeatBoundElsewhereError,
@@ -2140,6 +2143,27 @@ async function summarize(
 }
 
 /** Dispatch an HTTP request. Returns true if it handled the request (always, except non-matching upgrade). */
+
+/** The local, keys-only `style.prefs_set` row (ADR 514): sizes and dial keys, never the prose. */
+async function auditStylePrefsSet(
+  db: Driver,
+  teamId: string,
+  actor: string,
+  prefs: StylePrefs,
+): Promise<void> {
+  await appendAudit(db, teamId, {
+    actor,
+    action: 'style.prefs_set',
+    target: null,
+    result: 'allow',
+    detail: {
+      dials: (['pushback', 'bluntness', 'length', 'format'] as const).filter(
+        (k) => prefs[k] !== undefined,
+      ),
+      prose_lines: styleProseLineCount(prefs.prose ?? ''),
+    },
+  });
+}
 
 /**
  * ADR 484: the challenge-evidence rail. When the team switched it on and an `accept` concedes a
@@ -5619,6 +5643,51 @@ export async function handleHttp(
         return sendJson(res, 200, applied);
       }
 
+      // ADR 514 (lane 01M46RWP23), hub side: a joiner forwards a human's own style prefs. The same
+      // order as `/sync/policy`: machine, then residence, then who the actor is on the HUB's roster —
+      // a human, not an observer; the capability is self-ownership, not admin. The hub writes the
+      // row, stamps the replicated `style.prefs`, and answers what the self route would have.
+      if (method === 'POST' && rest === '/sync/style') {
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
+        if (!node) {
+          throw new MusterdError(
+            'unauthorized',
+            'the sync surface authenticates with a machine credential (msnode_) for this team',
+          );
+        }
+        await touchNode(ctx.db, node.id, Date.now());
+        const body = parseOrBadRequest(SyncStyleRequestSchema, await readJson(req));
+        const actor = await getMemberByName(ctx.db, team.id, body.actor);
+        if (!actor) throw new MusterdError('not_found', `no seat "${body.actor}" on this roster`);
+        try {
+          await assertSeatAlreadyResident(ctx.db, team.id, actor, node, 'style change');
+        } catch (err) {
+          if (err instanceof TrustRefusedError) return sendTrustRefusal(res, err);
+          throw err;
+        }
+        if (actor.kind !== 'human' || actor.observer === 1)
+          throw new MusterdError('forbidden', 'style preferences are for human members');
+        if (body.prefs.prose !== undefined) {
+          const problem = styleProseProblem(body.prefs.prose);
+          if (problem) throw new MusterdError('validation', problem);
+        }
+        await applyStylePrefs(ctx.db, team.id, actor, body.prefs);
+        await auditStylePrefsSet(ctx.db, team.id, actor.name, body.prefs);
+        await pushTeam(ctx, team).catch(() => undefined);
+        const policy = await teamStyle(ctx.db, team.id);
+        const resolved = resolveStyle(policy, body.prefs);
+        return sendJson(res, 200, {
+          member: actor.name,
+          prefs: body.prefs,
+          resolved,
+          block: renderStyleBlock({
+            team: resolveStyle(policy),
+            driver: { name: actor.name, style: resolved },
+          }),
+        });
+      }
+
       // ADR 516, hub side: a joiner forwards its admin's hold set or lift — the `/sync/policy` checks
       // in the same order: machine, then residence, then the actor's capability on the HUB's roster.
       if (method === 'POST' && rest === '/sync/holds') {
@@ -8101,20 +8170,27 @@ export async function handleHttp(
             if (problem) throw new MusterdError('validation', problem);
           }
           const prefs = parseOrBadRequest(StylePrefsSchema, body);
-          await setStylePrefs(ctx.db, member.id, prefs);
-          await appendAudit(ctx.db, team.id, {
-            actor: member.name,
-            action: 'style.prefs_set',
-            target: null,
-            result: 'allow',
-            // Sizes and keys, never the prose: the audit log is not a copy of the note.
-            detail: {
-              dials: (['pushback', 'bluntness', 'length', 'format'] as const).filter(
-                (k) => prefs[k] !== undefined,
-              ),
-              prose_lines: styleProseLineCount(prefs.prose ?? ''),
-            },
-          });
+          // Lane 01M46RWP23: prefs are hub-authoritative like policy, so a seat on any machine
+          // reads the same block. An enrolled joiner forwards (`/sync/style`), the hub writes and
+          // stamps the replicated row, and the joiner learns it back through the fold. An
+          // unreachable hub REFUSES rather than forking: a dial that held on one machine and not
+          // another is the inconsistency the forward exists to prevent.
+          const enrollment = await joinerEnrollment(ctx.db, team.id, team.slug);
+          if (enrollment) {
+            let answer: unknown;
+            try {
+              answer = await styleAtHub(enrollment, team.slug, { actor: member.name, prefs });
+            } catch (err) {
+              if (err instanceof HubUnreachableError)
+                throw new MusterdError('hub_unreachable', err.message);
+              throw err;
+            }
+            await pullTeam(ctx, team).catch(() => undefined);
+            return sendJson(res, 200, answer);
+          }
+          await applyStylePrefs(ctx.db, team.id, member, prefs);
+          await auditStylePrefsSet(ctx.db, team.id, member.name, prefs);
+          await pushTeam(ctx, team).catch(() => undefined);
         }
         const fresh = (await getMemberById(ctx.db, member.id)) ?? member;
         const policy = await teamStyle(ctx.db, team.id);
