@@ -13,8 +13,10 @@ import {
 import { useCalendar } from '../data/calendar-context';
 import {
   applyFilter,
+  clock12,
   countByDate,
   dayHeading,
+  happeningNow,
   deviceTimeZone,
   entriesOn,
   isOver,
@@ -73,6 +75,7 @@ export default function CalendarScreen() {
     [cal.entries, scope, kinds],
   );
   const next = useMemo(() => upNext(shown, now), [shown, now]);
+  const running = useMemo(() => happeningNow(shown, now), [shown, now]);
   const toggleKind = (k: CalendarKind) =>
     setKinds((ks) => (ks.includes(k) ? ks.filter((x) => x !== k) : [...ks, k]));
   const open = (id: string) => router.push({ pathname: '/entry/[id]', params: { id } });
@@ -107,6 +110,14 @@ export default function CalendarScreen() {
         >
           Connect to your musterd daemon to load the calendar →
         </Link>
+      ) : null}
+      {running.length > 0 ? (
+        <Text style={[styles.nowLine, { color: p.muted }]} numberOfLines={2}>
+          <Text style={{ color: p.accentText, fontWeight: '700' }}>NOW </Text>
+          {running
+            .map((e) => `${e.title}${e.end ? ` · until ${clock12(e.end)}` : ''}`)
+            .join('   ·   ')}
+        </Text>
       ) : null}
       {next ? (
         <Pressable
@@ -243,6 +254,7 @@ const styles = StyleSheet.create({
   plus: { fontSize: 28, fontWeight: '400', paddingHorizontal: space.xs },
   banner: { padding: space.md, borderRadius: radius.md, overflow: 'hidden' },
   upNext: { padding: space.lg, borderRadius: radius.md, borderLeftWidth: 4, gap: space.xs },
+  nowLine: { fontSize: 13 },
   upNextLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
   upNextTitle: { fontSize: 18, fontWeight: '600' },
   chips: { gap: space.sm },
