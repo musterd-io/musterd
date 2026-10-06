@@ -4,6 +4,7 @@ import {
   applyFilter,
   clock12,
   dayHeading,
+  happeningNow,
   isOver,
   monthGrid,
   pastSections,
@@ -150,15 +151,41 @@ describe('labels', () => {
 });
 
 describe('rowLines', () => {
-  it('shows the place, or the note when there is none', () => {
-    expect(rowLines(entry({ kind: 'demo', status: 'going', place: 'TERRA' }))).toEqual({
+  it('shows the place, the note and the link together', () => {
+    expect(
+      rowLines(
+        entry({
+          kind: 'demo',
+          status: 'going',
+          place: 'TERRA',
+          note: ' bring QR ',
+          url: 'https://www.lu.ma/x',
+        }),
+      ),
+    ).toEqual({
       meta: 'demo · going',
-      detail: 'TERRA',
+      place: 'TERRA',
+      note: 'bring QR',
+      link: { label: 'lu.ma', url: 'https://www.lu.ma/x' },
     });
-    expect(rowLines(entry({ kind: 'prep', note: '\n Notifications off.\nsecond line' }))).toEqual({
-      meta: 'prep',
-      detail: 'Notifications off.',
+    expect(rowLines(entry({ kind: 'event' }))).toEqual({
+      meta: 'event',
+      place: null,
+      note: null,
+      link: null,
     });
-    expect(rowLines(entry({ kind: 'event' }))).toEqual({ meta: 'event', detail: null });
+  });
+});
+
+describe('up next and now', () => {
+  // noonLA is 12:00 in Los Angeles.
+  const conf = entry({ title: 'conf', start: '11:00', end: '19:00' });
+  const prep = entry({ title: 'prep', kind: 'prep', start: '12:30' });
+  const talk = entry({ title: 'talk', start: '13:00' });
+  it('Up next is the next event to start, never a running one or a prep', () => {
+    expect(upNext([conf, prep, talk], noonLA)?.title).toBe('talk');
+  });
+  it('Now lists timed events already running', () => {
+    expect(happeningNow([conf, prep, talk], noonLA).map((e) => e.title)).toEqual(['conf']);
   });
 });

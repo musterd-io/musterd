@@ -1,5 +1,5 @@
 import type { CalendarEntry, CalendarKind } from '@musterd/protocol/calendar';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { SyncReport } from '../lib/sync';
 import { rowLines, timeLabel, zoneNote } from '../lib/views';
 import { KIND_COLORS, radius, space, usePalette } from './theme';
@@ -76,7 +76,7 @@ export function EntryRow(props: {
   const p = usePalette();
   const e = props.entry;
   const zone = zoneNote(e, props.deviceTz);
-  const { meta, detail } = rowLines(e);
+  const { meta, place, note, link } = rowLines(e);
   return (
     <Pressable
       onPress={props.onPress}
@@ -95,19 +95,35 @@ export function EntryRow(props: {
       <View style={styles.rowBody}>
         <View style={styles.rowTitleLine}>
           <KindDot kind={e.kind} />
-          <Text style={[styles.rowTitle, { color: p.text }]} numberOfLines={2}>
+          <Text style={[styles.rowTitle, { color: p.text }]} numberOfLines={3}>
             {e.title}
           </Text>
           {e.pick ? <Text style={{ color: p.accent }}>★</Text> : null}
         </View>
         <Text style={[styles.rowMeta, { color: p.muted }]} numberOfLines={1}>
           {meta}
-          {e.url ? '  ↗' : ''}
         </Text>
-        {detail ? (
-          <Text style={[styles.rowMeta, { color: p.muted }]} numberOfLines={2}>
-            {detail}
+        {place ? (
+          <Text style={[styles.rowPlace, { color: p.text }]} numberOfLines={2}>
+            📍 {place}
           </Text>
+        ) : null}
+        {note ? (
+          <Text style={[styles.rowMeta, { color: p.muted }]} numberOfLines={3}>
+            {note}
+          </Text>
+        ) : null}
+        {link ? (
+          <Pressable
+            onPress={() => void Linking.openURL(link.url)}
+            hitSlop={6}
+            accessibilityRole="link"
+            accessibilityLabel={`Open ${link.label}`}
+          >
+            <Text style={[styles.rowLink, { color: p.accentText }]} numberOfLines={1}>
+              {link.label} ↗
+            </Text>
+          </Pressable>
         ) : null}
       </View>
     </Pressable>
@@ -183,6 +199,8 @@ const styles = StyleSheet.create({
   rowTitleLine: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   rowTitle: { flex: 1, fontSize: 16, fontWeight: '500' },
   rowMeta: { fontSize: 13 },
+  rowPlace: { fontSize: 14 },
+  rowLink: { fontSize: 13, fontWeight: '600', paddingVertical: 2 },
   syncBox: { gap: 2 },
   syncText: { fontSize: 12 },
 });

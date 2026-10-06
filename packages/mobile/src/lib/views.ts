@@ -105,11 +105,40 @@ export function applyFilter(entries: readonly CalendarEntry[], filter: Filter): 
 }
 
 /** The next thing that is not over and not done — the line at the top of the screen. */
+/** Kinds that are reminders about an event rather than an event — never the Up next headline. */
+const NOT_EVENTS: readonly CalendarKind[] = ['prep', 'deadline', 'milestone'];
+
+/** Whether an entry has begun, in its own zone. An all-day entry begins with its day. */
+export function hasStarted(entry: CalendarEntry, now: Date): boolean {
+  const wc = wallClock(entry.tz, now);
+  if (entry.date !== wc.date) return entry.date < wc.date;
+  return entry.start === null || minutes(entry.start) <= minutes(wc.time);
+}
+
+/**
+ * The next event to start — not one already running, and not a prep, deadline or milestone. At
+ * 3:05 a 12–7pm conference used to hold the card while the 3:30 sessions waited (build 5).
+ */
 export function upNext(entries: readonly CalendarEntry[], now: Date): CalendarEntry | null {
   return (
-    entries.filter((e) => e.status !== 'done' && !isOver(e, now)).sort(compareCalendarEntries)[0] ??
-    null
+    entries
+      .filter((e) => e.status !== 'done' && !NOT_EVENTS.includes(e.kind) && !hasStarted(e, now))
+      .sort(compareCalendarEntries)[0] ?? null
   );
+}
+
+/** Timed events running right now, in calendar order — the "Now" line above Up next. */
+export function happeningNow(entries: readonly CalendarEntry[], now: Date): CalendarEntry[] {
+  return entries
+    .filter(
+      (e) =>
+        e.start !== null &&
+        e.status !== 'done' &&
+        !NOT_EVENTS.includes(e.kind) &&
+        hasStarted(e, now) &&
+        !isOver(e, now),
+    )
+    .sort(compareCalendarEntries);
 }
 
 function sections(entries: CalendarEntry[]): DaySection[] {
@@ -232,18 +261,32 @@ export function zoneNote(entry: CalendarEntry, deviceTz: string): string | null 
 }
 
 /**
- * What a list row says under the title: the kind and status, then the place — or, when there is
- * none, the note's first line. 61 of the 112 imported entries carry no place, and a prep entry's
- * note is the whole point of it ("Notifications off. tally.so/… on your phone."), so a row that
- * showed only kind · status hid what the entry was for (nick, build 3, 2026-10-06).
+ * Everything a list row shows under the title: kind · status, the place, the note (where prep
+ * entries keep their checklist), and the link as a tappable label. nick, build 5 (2026-10-06): "I
+ * need the calendar to show all the events (names, locations, links, times) as well as prep
+ * notes" — a row showing the place *or* the note dropped one of them.
  */
-export function rowLines(entry: CalendarEntry): { meta: string; detail: string | null } {
-  const meta = [entry.kind, entry.status].filter(Boolean).join(' · ');
-  const note =
-    entry.note
-      .split('\n')
-      .find((l) => l.trim() !== '')
-      ?.trim() ?? '';
-  const detail = entry.place.trim() || note;
-  return { meta, detail: detail === '' ? null : detail };
+export function rowLines(entry: CalendarEntry): {
+  meta: string;
+  place: string | null;
+  note: string | null;
+  link: { label: string; url: string } | null;
+} {
+  const place = entry.place.trim();
+  const note = entry.note.trim();
+  return {
+    meta: [entry.kind, entry.status].filter(Boolean).join(' · '),
+    place: place === '' ? null : place,
+    note: note === '' ? null : note,
+    link: entry.url === null ? null : { label: linkLabel(entry.url), url: entry.url },
+  };
+}
+
+/** `https://lu.ma/abc` → `lu.ma`; anything unparseable shows as itself. */
+export function linkLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
 }
