@@ -94,6 +94,14 @@ building the routing ADR 272 deferred, and in a way that can be shown wrong.
 - Increment 2 (lane `01M49783GY1S72PYQKGAQ7C1X6`) adds `up_next_why` — one fixed reason per offered
   lane — under this ADR and epoch; increment 3 (lane `01M4978ADCQ5PXD8S5KBXKDPFA`) writes
   `next.offer` / `next.pickup` audit rows and ships `pnpm next:readout`.
+- _Note, 2026-10-06 (lazara, increment 2 landed)._ `NextBriefSchema.up_next_why` — one row per
+  `up_next` entry, same order: `{lane, tier (1–5, integer; the 3.5 sub-order stays a sort detail),
+  reasons[]}`. `upNextReasons` (`store/orientation.ts`) composes every signal that fired, in tier
+  order, from the spec §5 table: `<sender> pointed here` (`a human pointed here` with no live
+  handoff), `role: <role>`, `goal stalled <N>d` / `goal in flight`, `near what you shipped`. A
+  tier-5 lane, and a lane whose `role` the member lacks, carry no strings (no signal fired). Both
+  renders append ` · r1 · r2` to the lane line; nothing on an epoch-30 daemon (`.default([])`). No
+  epoch bump: epoch 31 already names increments 1–2 together, as the spec said.
 - **Falsifier (spec §6.3).** Fourteen days after this lands on revive, if the ranked order's pickup
   hit rate is not above the oldest-first baseline recomputed on the same rows, decision 3 is
   reverted and decisions 2 and 4 are kept — they are honesty, not relevance. The reading is

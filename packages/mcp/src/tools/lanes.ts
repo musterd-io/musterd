@@ -827,7 +827,10 @@ export function fmtNext(b: NextBrief, landed: ReadonlyMap<string, Landed> = new 
         : ` (${b.up_next.length < total ? `${b.up_next.length} of ${total} claimable` : `all ${total} claimable`}${blocked > 0 ? ` · ${blocked} more wait on a dependency` : ''})`;
     lines.push(`\nup next — open lanes you could pick up${count}:`);
     for (const l of b.up_next) {
-      lines.push('  ' + fmtLane(l));
+      // ADR 536 increment 2: why it is here, as the server's fixed strings — same tag as `musterd
+      // next`. Nothing for tier 5, nothing on an older daemon.
+      const reasons = (b.up_next_why ?? []).find((w) => w.lane === l.id)?.reasons ?? [];
+      lines.push('  ' + fmtLane(l) + (reasons.length ? ` · ${reasons.join(' · ')}` : ''));
       if ((b.goals ?? []).length > 0 && l.goal_id === null)
         lines.push('    (on no goal — link it: lane_update {goal_id})');
     }

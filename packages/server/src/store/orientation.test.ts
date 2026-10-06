@@ -15,6 +15,7 @@ import {
   deriveNextSummary,
   deriveTeamReviewPromises,
   rankUpNext,
+  upNextReasons,
   upNextTier,
 } from './orientation.js';
 import { captureRepoSeed, createSeedFromRelay } from './seeds.js';
@@ -1435,13 +1436,13 @@ withDrivers('orientation', (o) => {
     });
     const ctx = {
       roles: ['platform'],
-      pointer: { lanes: new Set(['L-pointed']), goal: 'g-pointed' },
+      pointer: { lanes: new Set(['L-pointed']), goal: 'g-pointed', from: 'nick' },
       goalStatus: new Map([
         ['g-pointed', 'planned'],
         ['g-flight', 'in-flight'],
         ['g-planned', 'planned'],
       ]),
-      staleLanes: new Set(['L-stale']),
+      staleLanes: new Map([['L-stale', 9 * 86_400_000 + 1]]),
       shippedScopes: ['packages/server/src/sync/**'],
     };
 
@@ -1464,6 +1465,62 @@ withDrivers('orientation', (o) => {
       expect(upNextTier(laneAt({ id: 'L-pointed', role: 'designer' }), ctx)).toBe(1);
       // A seat-name-as-role (the board's messy values) matches nothing and falls through.
       expect(upNextTier(laneAt({ id: 'x', role: 'izzo' }), ctx)).toBe(5);
+    });
+
+    it('reasons (increment 2): every signal that fired, in tier order, as fixed strings; none for tier 5 or a role not held', () => {
+      expect(upNextReasons(laneAt({ id: 'L-pointed' }), ctx)).toEqual(['nick pointed here']);
+      expect(upNextReasons(laneAt({ id: 'x', role: 'platform' }), ctx)).toEqual(['role: platform']);
+      expect(upNextReasons(laneAt({ id: 'L-stale', goal_id: 'g-flight' }), ctx)).toEqual([
+        'goal stalled 9d',
+      ]);
+      expect(upNextReasons(laneAt({ id: 'x', goal_id: 'g-flight' }), ctx)).toEqual([
+        'goal in flight',
+      ]);
+      expect(
+        upNextReasons(
+          laneAt({ id: 'x', goal_id: 'g-planned', scope: ['packages/server/src/**'] }),
+          ctx,
+        ),
+      ).toEqual(['near what you shipped']);
+      // The whole case, not only the placing signal.
+      expect(
+        upNextReasons(
+          laneAt({
+            id: 'L-pointed',
+            role: 'platform',
+            goal_id: 'g-flight',
+            scope: ['packages/server/src/**'],
+          }),
+          ctx,
+        ),
+      ).toEqual(['nick pointed here', 'role: platform', 'goal in flight', 'near what you shipped']);
+      expect(upNextReasons(laneAt({ id: 'x', goal_id: 'g-planned' }), ctx)).toEqual([]);
+      // A role not held is the ABSENCE of a reason, not a reason.
+      expect(
+        upNextReasons(laneAt({ id: 'x', role: 'designer', goal_id: 'g-flight' }), ctx),
+      ).toEqual(['goal in flight']);
+      // No live handoff → no sender to name; the string still says a human did.
+      expect(
+        upNextReasons(laneAt({ id: 'L-pointed' }), {
+          ...ctx,
+          pointer: { lanes: ctx.pointer.lanes, goal: ctx.pointer.goal },
+        }),
+      ).toEqual(['a human pointed here']);
+    });
+
+    it('rankUpNext (increment 2): up_next_why rides in up_next order with the integer tier and the reasons', () => {
+      const lanes = [
+        laneAt({ id: 'flight', goal_id: 'g-flight', created_at: 2 }),
+        laneAt({ id: 'role', role: 'platform', created_at: 3 }),
+        laneAt({ id: 'plain', created_at: 1 }),
+      ];
+      const r = rankUpNext(lanes, ctx, 5);
+      expect(r.up_next.map((l) => l.id)).toEqual(['role', 'flight', 'plain']);
+      expect(r.up_next_why).toEqual([
+        { lane: 'role', tier: 2, reasons: ['role: platform'] },
+        { lane: 'flight', tier: 3, reasons: ['goal in flight'] }, // 3.5 on the sort, 3 on the wire
+        { lane: 'plain', tier: 5, reasons: [] },
+      ]);
     });
 
     it('rankUpNext: withholds unmet-dependency lanes, counts both, keeps goal-attached-first then oldest-first inside a tier', () => {

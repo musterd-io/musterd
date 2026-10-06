@@ -856,6 +856,22 @@ export const NextBriefSchema = z.object({
    */
   up_next_blocked_total: z.number().int().nonnegative().default(0),
   /**
+   * Why each offered lane is where it is (ADR 536 increment 2) — one row per `up_next` entry, same
+   * order. `tier` is the highest tier that placed it (1–5, §4.3); `reasons` are the fixed strings
+   * the server composed for every signal that fired, in tier order, and empty for tier 5. A ranking
+   * that cannot be argued with cannot be corrected, so the reason rides with the rank. Never free
+   * text from a lane body. `.default([])` keeps an epoch-30 brief parseable.
+   */
+  up_next_why: z
+    .array(
+      z.object({
+        lane: z.string(),
+        tier: z.number().int().min(1).max(5),
+        reasons: z.array(z.string()),
+      }),
+    )
+    .default([]),
+  /**
    * How many lanes are parked (ADR 466). A count, not the lanes: a parked lane is kept, not
    * offered, so the brief says it exists and where to look (`lane_board`) without inviting pickup.
    */

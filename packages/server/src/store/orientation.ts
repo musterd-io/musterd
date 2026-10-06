@@ -90,12 +90,18 @@ export const FAMILIARITY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 export interface UpNextContext {
   /** The asking member's `roles[]` (ADR 227). Empty for the roleless generalist. */
   roles: readonly string[];
-  /** The live `why` handoff's lanes and goal — a human pointed here (tier 1). */
-  pointer: { lanes: ReadonlySet<string>; goal: string | null };
+  /**
+   * The live `why` handoff's lanes and goal — a human pointed here (tier 1) — and who sent it, for
+   * the reason string (increment 2; `undefined` when there is no live handoff).
+   */
+  pointer: { lanes: ReadonlySet<string>; goal: string | null; from?: string };
   /** Derived goal status by goal id (ADR 258); a goal not in the map is unknown and ranks as planned. */
   goalStatus: ReadonlyMap<string, string>;
-  /** The lane each `stale_goals` row names — the oldest untouched lane of a stalled goal. */
-  staleLanes: ReadonlySet<string>;
+  /**
+   * The lane each `stale_goals` row names — the oldest untouched lane of a stalled goal — with its
+   * `idle_ms`, for the reason string.
+   */
+  staleLanes: ReadonlyMap<string, number>;
   /** `scope` globs of lanes this member shipped inside {@link FAMILIARITY_WINDOW_MS}. */
   shippedScopes: readonly string[];
 }
@@ -126,6 +132,30 @@ export function upNextTier(l: Lane, ctx: UpNextContext): number {
 }
 
 /**
+ * ADR 536 increment 2 (spec §5) — every signal that fired for a lane, as the fixed strings the
+ * renders print, in tier order. `upNextTier` says where the lane lands; this says why, including
+ * the signals below the one that placed it, so a seat reading "role: platform · near what you
+ * shipped" sees the whole case. Empty when nothing fired (tier 5), and empty for a role the member
+ * does not hold: the rank-down is the absence of a reason, not a reason.
+ *
+ * Fixed strings on purpose — never a lane's title or a handoff's body. The spec's table is the
+ * contract; a renderer appends these verbatim.
+ */
+export function upNextReasons(l: Lane, ctx: UpNextContext): string[] {
+  const out: string[] = [];
+  if (ctx.pointer.lanes.has(l.id) || (ctx.pointer.goal !== null && l.goal_id === ctx.pointer.goal))
+    out.push(`${ctx.pointer.from ?? 'a human'} pointed here`);
+  if (l.role !== null && ctx.roles.includes(l.role)) out.push(`role: ${l.role}`);
+  const idle = ctx.staleLanes.get(l.id);
+  if (idle !== undefined) out.push(`goal stalled ${Math.floor(idle / 86_400_000)}d`);
+  else if (l.goal_id !== null && ctx.goalStatus.get(l.goal_id) === 'in-flight')
+    out.push('goal in flight');
+  if (l.scope.some((g) => ctx.shippedScopes.some((s) => globsOverlap(g, s))))
+    out.push('near what you shipped');
+  return out;
+}
+
+/**
  * ADR 536 §4.2–4.3 — the `up_next` window and its two totals, from the whole board.
  *
  * The pool is every `open` lane minus those with an unmet `depends_on` — a lane whose dependency is
@@ -141,7 +171,7 @@ export function rankUpNext(
   all: readonly Lane[],
   ctx: UpNextContext,
   limit: number,
-): Pick<NextBrief, 'up_next' | 'up_next_total' | 'up_next_blocked_total'> {
+): Pick<NextBrief, 'up_next' | 'up_next_total' | 'up_next_blocked_total' | 'up_next_why'> {
   const byId = new Map(all.map((l) => [l.id, l]));
   const open = all.filter((l) => l.state === 'open');
   const claimable = open.filter((l) =>
@@ -157,12 +187,19 @@ export function rankUpNext(
         a.tier - b.tier ||
         Number(b.l.goal_id !== null) - Number(a.l.goal_id !== null) ||
         a.l.created_at - b.l.created_at,
-    )
-    .map(({ l }) => l);
+    );
+  const window = ranked.slice(0, limit);
   return {
-    up_next: ranked.slice(0, limit),
+    up_next: window.map(({ l }) => l),
     up_next_total: claimable.length,
     up_next_blocked_total: open.length - claimable.length,
+    // Increment 2: the wire tier is the integer the spec names (the 3.5 sub-order is an ordering
+    // detail, not a tier a seat argues with), plus every reason that fired.
+    up_next_why: window.map(({ l, tier }) => ({
+      lane: l.id,
+      tier: Math.floor(tier),
+      reasons: upNextReasons(l, ctx),
+    })),
   };
 }
 
@@ -464,13 +501,17 @@ export async function deriveNext(
   const pointerLanes = row
     ? new Set(await handoffNamedLaneIds(db, teamId, row.meta, row.body))
     : new Set<string>();
-  const { up_next, up_next_total, up_next_blocked_total } = rankUpNext(
+  const { up_next, up_next_total, up_next_blocked_total, up_next_why } = rankUpNext(
     all,
     {
       roles: me ? parseRoles(me) : [],
-      pointer: { lanes: pointerLanes, goal: why?.goal_id ?? null },
+      pointer: {
+        lanes: pointerLanes,
+        goal: why?.goal_id ?? null,
+        ...(why ? { from: why.from } : {}),
+      },
       goalStatus: new Map(allGoals.map((g) => [g.id, g.status])),
-      staleLanes: new Set(stale_goals.map((s) => s.lane)),
+      staleLanes: new Map(stale_goals.map((s) => [s.lane, s.idle_ms])),
       shippedScopes: mine
         .filter(
           (l) =>
@@ -573,6 +614,7 @@ export async function deriveNext(
     up_next,
     up_next_total,
     up_next_blocked_total,
+    up_next_why,
     parked_total,
     stale_goals,
     up_next_seeds,

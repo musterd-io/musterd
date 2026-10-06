@@ -222,3 +222,27 @@ describe('NextBrief up_next counts (ADR 536)', () => {
     expect(NextBriefSchema.safeParse({ ...base, up_next_blocked_total: 1.5 }).success).toBe(false);
   });
 });
+
+/** ADR 536 increment 2 — `up_next_why` rows default and bound their tier. */
+describe('NextBrief up_next_why (ADR 536 increment 2)', () => {
+  const base = {
+    member: 'Ada',
+    in_flight: [],
+    shipped: [],
+    up_next: [],
+    why: null,
+    next_goal: null,
+  };
+  it('defaults to [] and round-trips a row', () => {
+    expect(NextBriefSchema.parse(base).up_next_why).toEqual([]);
+    const row = { lane: 'L1', tier: 2, reasons: ['role: platform'] };
+    expect(NextBriefSchema.parse({ ...base, up_next_why: [row] }).up_next_why).toEqual([row]);
+  });
+  it('refuses a tier outside 1–5 or a fractional one', () => {
+    for (const tier of [0, 6, 3.5])
+      expect(
+        NextBriefSchema.safeParse({ ...base, up_next_why: [{ lane: 'L1', tier, reasons: [] }] })
+          .success,
+      ).toBe(false);
+  });
+});
