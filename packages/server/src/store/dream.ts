@@ -1,6 +1,7 @@
-import { type ClaimCheck, nightKey, type Provenance } from '@musterd/protocol';
+import { type ClaimCheck, type InsightStatus, nightKey, type Provenance } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { checkClaims } from './claimCheck.js';
+import { insightVerdicts } from './insightStatus.js';
 import { getMemberById } from './members.js';
 import { getMemory } from './memory.js';
 import { parseWorkingHours, type MemberRow, type MessageRow } from './rows.js';
@@ -79,6 +80,9 @@ export interface DreamInsight {
   /** ADR 522: the insight's claims, checked against the Team now — a dream promoting a "freeze"
    *  insight sees that no hold backs it, and an "open" lane that has since landed. Omitted if none. */
   checks?: ClaimCheck[];
+  /** ADR 526: later insights from OTHER seats that name this one in `meta.supersedes`. (One the
+   *  author or a human superseded, or any retracted one, is not in the packet at all.) */
+  superseded_by?: NonNullable<InsightStatus['superseded_by']>;
 }
 
 export interface DreamPacket {
@@ -224,11 +228,16 @@ export async function buildDreamPacket(
   }
 
   // 3. what the team learned in the window — every seat's insights, not just its own
-  const insights = await db.all<MessageRow>(
+  // ADR 526: a retracted finding, or one its author (or a human) superseded, is not re-read — a dream
+  // promoting it would re-teach the team something it already unlearned. One superseded by someone
+  // else stays, with the pointer beside it, for the dream to weigh.
+  const windowInsights = await db.all<MessageRow>(
     `SELECT * FROM messages WHERE team_id = ? AND act = 'insight' AND ts >= ? AND ts < ?
       ORDER BY ts DESC`,
     [team.id, since, until],
   );
+  const verdicts = await insightVerdicts(db, team.id, windowInsights);
+  const insights = windowInsights.filter((r) => !verdicts.get(r.id)?.hidden);
   if (insights.length > B.learned) truncated = true;
   packet.learned = await Promise.all(
     insights
@@ -239,6 +248,7 @@ export async function buildDreamPacket(
         const cut = truncateChars(r.body, B.insight_body_chars);
         if (cut.truncated) truncated = true;
         const checks = await checkClaims(db, team, `${meta.headline ?? ''}\n${r.body}`, until);
+        const supersededBy = verdicts.get(r.id)?.status?.superseded_by;
         return {
           id: r.id,
           from: await nameOf(r.from_member),
@@ -249,6 +259,7 @@ export async function buildDreamPacket(
           truncated: cut.truncated,
           night: nightOf(r.ts),
           ...(checks.length ? { checks } : {}),
+          ...(supersededBy ? { superseded_by: supersededBy } : {}),
         };
       }),
   );

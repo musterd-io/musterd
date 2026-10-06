@@ -476,6 +476,33 @@ describe('insight act meta rules (ADR 327)', () => {
   });
 });
 
+describe('insight meta.supersedes (ADR 526)', () => {
+  const insight = (meta: Record<string, unknown>) =>
+    EnvelopeSchema.safeParse({
+      ...base,
+      v: PROTOCOL_VERSION,
+      act: 'insight',
+      to: { kind: 'team' },
+      body: 'fixed by #2066',
+      meta: { headline: 'clip fixed', ...meta },
+    });
+  it('takes 1..8 ids', () => {
+    expect(insight({ supersedes: ['01M42P9CRRVMTH56MX6PGPER4W'] }).success).toBe(true);
+    expect(insight({ supersedes: Array.from({ length: 8 }, (_, i) => `id${i}`) }).success).toBe(
+      true,
+    );
+  });
+  it('refuses an empty list, more than 8, a non-array and an empty id — and only on supersedes', () => {
+    expect(insight({}).success).toBe(true);
+    expect(insight({ supersedes: [] }).success).toBe(false);
+    expect(insight({ supersedes: Array.from({ length: 9 }, (_, i) => `id${i}`) }).success).toBe(
+      false,
+    );
+    expect(insight({ supersedes: 'id1' }).success).toBe(false);
+    expect(insight({ supersedes: [' '] }).success).toBe(false);
+  });
+});
+
 // ADR 407 §3: the one confidential act. A to-human `ask` MAY name a seat as its subject with
 // `meta.about`; the server then hides it from every seat but sender, addressee, admins and full
 // observers. The shape rules live here because the hiding is only as good as the shape: an `about`

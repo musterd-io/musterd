@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import { makeEnvelope } from '@musterd/protocol';
+import { type InsightStatus, makeEnvelope } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { z } from 'zod';
 import type { MusterdClient } from '../client.js';
@@ -37,6 +37,9 @@ export function registerTeamMemory(
         body: z.string().max(2048).describe('the finding (≤2048 bytes)'),
         tags: z.array(z.string()).max(8).optional().describe('up to 8 short tags'),
         repo: z.string().optional().describe('repo slug, when bound to one'),
+        // ADR 526: ids this finding replaces. Undescribed to keep the per-turn tool list inside its
+        // budget; the server's refusal teaches the shape (1..8 ids), as ADR 487's fields do.
+        supersedes: z.array(z.string()).optional(),
       },
     },
     async (args) => {
@@ -55,6 +58,7 @@ export function registerTeamMemory(
             headline: args.headline,
             ...(args.tags ? { tags: args.tags } : {}),
             ...(args.repo ? { repo: args.repo } : {}),
+            ...(args.supersedes ? { supersedes: args.supersedes } : {}),
           },
         });
         await client.sendEnvelope(envelope);
@@ -87,7 +91,8 @@ export function registerTeamMemory(
       const rendered = results
         .map(
           (r) =>
-            `[${r.id}] ${r.headline}\n  by ${r.from} · ${new Date(r.ts).toISOString()}\n  ${r.body}`,
+            `[${r.id}] ${r.headline}\n  by ${r.from} · ${new Date(r.ts).toISOString()}\n  ${r.body}` +
+            insightStatusLines(r.status),
         )
         .join('\n\n');
       return textResult(`${results.length} insight(s):\n\n${rendered}`);
@@ -104,4 +109,18 @@ export function registerTeamMemory(
     },
     searchHandler,
   );
+}
+
+/**
+ * ADR 526: where a finding stands, under it. Only another seat's supersession reaches a search
+ * (a retracted or author-superseded insight is not returned), so the line says who replaced it.
+ */
+export function insightStatusLines(status: InsightStatus | undefined): string {
+  if (!status) return '';
+  const lines: string[] = [];
+  if (status.retracted)
+    lines.push(`  ⚠ retracted by ${status.retracted.by}: ${status.retracted.reason}`);
+  for (const s of status.superseded_by ?? [])
+    lines.push(`  ⚠ superseded by ${s.from}'s [${s.id}] ${s.headline}`);
+  return lines.length ? `\n${lines.join('\n')}` : '';
 }

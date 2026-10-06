@@ -860,14 +860,16 @@ export const CATALOG: readonly CommandEntry[] = [
   {
     name: 'insight',
     signature:
-      'save --headline "<subject>" [body…] [--tags a,b] [--repo slug] | search "<keywords>"',
+      'save --headline "<subject>" [body…] [--tags a,b] [--repo slug] [--supersedes id,id] | search "<keywords>" | retract <id> --reason "<why>"',
     summary: 'save a finding for the whole team; search what teammates already saved',
     group: 'remembering',
     primary: false,
     detail:
       'Team memory (ADR 327): `save` writes an insight act — team-visible, attributed, dated — for traps, ' +
       'measured numbers, and how-things-actually-work; `search` retrieves them pull-only via a derived index. ' +
-      'The fast tier under docs/wiki/: promote a durable finding there once it proves out.',
+      'The fast tier under docs/wiki/: promote a durable finding there once it proves out. ADR 526: ' +
+      '`--supersedes` names findings this one replaces, `retract` withdraws one — honoured from its ' +
+      'author or a human, after which search, dreams and the digest stop carrying it.',
   },
   {
     name: 'dream',

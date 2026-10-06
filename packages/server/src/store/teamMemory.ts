@@ -1,5 +1,6 @@
 import type { InsightHit } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
+import { insightVerdicts } from './insightStatus.js';
 
 /**
  * Team memory retrieval (ADR 327) — the daemon's fold over the `insight` acts in the message log.
@@ -28,6 +29,7 @@ export function ftsQuery(input: string): string {
 
 interface SearchRow {
   id: string;
+  from_member: string;
   name: string;
   headline: string | null;
   body: string;
@@ -41,6 +43,8 @@ export async function searchInsights(
   teamId: string,
   query: string,
   limit: number = INSIGHT_SEARCH_LIMIT,
+  /** ADR 526: include retracted and author-superseded findings (marked), e.g. for an audit read. */
+  opts: { includeRetracted?: boolean } = {},
 ): Promise<InsightHit[]> {
   const match = ftsQuery(query);
   if (!match) return [];
@@ -53,9 +57,12 @@ export async function searchInsights(
        ORDER BY rank, m.ts DESC`
       : `WHERE f.tsv @@ plainto_tsquery('english', ?) AND f.team_id = ?
        ORDER BY ts_rank(f.tsv, plainto_tsquery('english', ?)) DESC, m.ts DESC`;
-  const params = db.dialect === 'sqlite' ? [match, teamId, capped] : [query, teamId, query, capped];
+  // ADR 526: read past the limit so hidden findings dropping out still leave a full page.
+  const fetchN = opts.includeRetracted ? capped : Math.min(capped * 3, MAX_LIMIT * 3);
+  const params = db.dialect === 'sqlite' ? [match, teamId, fetchN] : [query, teamId, query, fetchN];
   const rows = await db.all<SearchRow>(
     `SELECT m.id,
+            m.from_member AS from_member,
             mem.name    AS name,
             json_extract(m.meta, '$.headline') AS headline,
             m.body      AS body,
@@ -68,14 +75,22 @@ export async function searchInsights(
        LIMIT ?`,
     params,
   );
-  return rows.map((r) => ({
-    id: r.id,
-    from: r.name,
-    headline: r.headline ?? '',
-    body: r.body,
-    tags: r.tags ? (JSON.parse(r.tags) as string[]) : [],
-    ts: r.ts,
-  }));
+  const verdicts = await insightVerdicts(db, teamId, rows);
+  return rows
+    .filter((r) => opts.includeRetracted || !verdicts.get(r.id)?.hidden)
+    .slice(0, capped)
+    .map((r) => {
+      const status = verdicts.get(r.id)?.status;
+      return {
+        id: r.id,
+        from: r.name,
+        headline: r.headline ?? '',
+        body: r.body,
+        tags: r.tags ? (JSON.parse(r.tags) as string[]) : [],
+        ts: r.ts,
+        ...(status ? { status } : {}),
+      };
+    });
 }
 
 /** Recreate the fold from the log alone — the property that makes it a cache, not a store. */

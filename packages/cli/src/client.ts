@@ -133,6 +133,7 @@ import {
   CalendarListSchema,
   type CalendarWriteResponse,
   CalendarWriteResponseSchema,
+  type InsightStatus,
 } from '@musterd/protocol';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
@@ -950,6 +951,8 @@ export class HttpClient {
       body: string;
       tags: string[];
       ts: number;
+      /** ADR 526: absent unless the finding was retracted or superseded. */
+      status?: InsightStatus;
     }>;
   }> {
     const params = new URLSearchParams({ q });
