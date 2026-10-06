@@ -13,7 +13,13 @@ import { addMember } from '../store/members.js';
 import { insertMessage, localNodeForTeam } from '../store/messages.js';
 import { bindSeatToNode } from '../store/nodes.js';
 import { getTeamBySlug } from '../store/teams.js';
-import { ingestTraceEvents, listSessionTrace, readSyncTraceCursor } from '../store/trace.js';
+import {
+  ingestTraceEvents,
+  listSessionTrace,
+  readSyncTraceCursor,
+  readSyncTraceHeld,
+  unpushedTraceRows,
+} from '../store/trace.js';
 import { Hub } from '../transport/hub.js';
 import { pushTeam } from './push.js';
 import { pushTraceTeam } from './tracePush.js';
@@ -280,22 +286,39 @@ withDrivers('tracePush', (_o, kind) => {
       ).toHaveLength(1);
     });
 
-    it('an unresolved or unbound seat holds the whole batch (409) and the cursor stays', async () => {
+    it('an unresolved or unbound seat is held PER ROW (ADR 532): batch-mates land, the held rows land once bound', async () => {
       await send('m-0'); // mints the local node row enrollment needs; NOT pushed, so nick stays unbound
       await enrollJoiner();
-      // nick exists on the hub but no node has claimed her yet: unbound
-      await trace('nick', [ev()]);
-      expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toMatchObject({ pushed: 0 });
-      expect(await readSyncTraceCursor(joiner.traceStore, (await joinerTeam()).id)).toBe(0);
-      expect(await hubRows()).toHaveLength(0);
-      // a seat the hub's roster has not caught up to: unresolved
+      for (const store of [joiner.store, hub.store]) {
+        const team = store === hub.store ? await hubTeam() : await joinerTeam();
+        await addMember(store, team, { name: 'autorefresh', kind: 'service' });
+      }
       await addMember(joiner.store, await joinerTeam(), { name: 'zed', kind: 'agent' });
-      await trace('zed', [ev()]);
-      expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toMatchObject({ pushed: 0 });
-      expect(await readSyncTraceCursor(joiner.traceStore, (await joinerTeam()).id)).toBe(0);
-      // the trace surface never minted a binding for either
+      // nick: on the hub, bound to no node (unbound). zed: not on the hub's roster (unresolved).
+      // autorefresh: a service seat, admitted from any node — the batch-mate that must not wait.
+      await trace('nick', [ev({ session_digest: 'aaaaaaaaaaaa' })]);
+      await trace('zed', [ev({ session_digest: 'bbbbbbbbbbbb' })]);
+      await trace('autorefresh', [ev({ session_digest: 'cccccccccccc' })]);
+      const team = (await joinerTeam()).id;
+
+      expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toMatchObject({
+        pushed: 1,
+        held: 2,
+      });
+      expect((await hubRows()).map((r) => r.seat)).toEqual(['autorefresh']);
+      // The cursor moved past the whole batch; the two held rows wait in the held set instead.
+      expect(await readSyncTraceCursor(joiner.traceStore, team)).toBe(3);
+      expect(await readSyncTraceHeld(joiner.traceStore, team)).toHaveLength(2);
+      // The trace surface never minted a binding for either.
       expect((await hub.store.get('SELECT COUNT(*) AS n FROM seat_nodes'))!.n).toBe(0);
-      // once nick binds the ordinary way, the same batch lands next tick
+
+      // Still unbound next tick: held again, nothing lost, nothing duplicated.
+      expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toMatchObject({
+        pushed: 0,
+        held: 2,
+      });
+
+      // nick binds the ordinary way and zed reaches the roster: the held rows land.
       await pushTeam(joinerCtx, await joinerTeam());
       await addMember(hub.store, await hubTeam(), { name: 'zed', kind: 'agent' });
       await bindSeatToNode(
@@ -304,7 +327,28 @@ withDrivers('tracePush', (_o, kind) => {
         await memberId(hub, 'zed'),
         readNodeState().nodes['bravo']!.node_id,
       );
-      expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toMatchObject({ pushed: 2 });
+      expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toMatchObject({
+        pushed: 2,
+        held: 0,
+      });
+      expect((await hubRows()).map((r) => r.seat).sort()).toEqual(['autorefresh', 'nick', 'zed']);
+      expect(await readSyncTraceHeld(joiner.traceStore, team)).toEqual([]);
+      expect(await pushTraceTeam(joinerCtx, await joinerTeam())).toBeNull();
+    });
+
+    it('a pusher that does not ask for per-row holds still gets the whole-batch 409', async () => {
+      await send('m-0');
+      await enrollJoiner();
+      await trace('nick', [ev()]);
+      const { rows } = await unpushedTraceRows(joiner.traceStore, (await joinerTeam()).id, 0, 10);
+      const r = await post(
+        hubBase,
+        '/teams/bravo/sync/trace',
+        { rows },
+        readNodeState().nodes['bravo']!.credential,
+      );
+      expect(r.status).toBe(409);
+      expect(r.json.reason).toBe('unbound_seat');
     });
 
     it('a service seat (ADR 232) is resident everywhere: its rows are admitted from any node', async () => {

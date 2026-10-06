@@ -15,7 +15,7 @@ import { bindSeatToNode, seatBinding } from '../store/nodes.js';
 import { attach } from '../store/presence.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
-import { pushTeam, readPushRefusal } from './push.js';
+import { pushTeam, readPushRefusal, wedgeKind } from './push.js';
 
 withDrivers('push', (_o, kind) => {
   /**
@@ -730,5 +730,23 @@ withDrivers('push', (_o, kind) => {
         lines.some((l) => l['msg'] === 'sync_push_refused_residence' && l['seat'] === 'nick'),
       ).toBe(true);
     });
+  });
+});
+
+describe('wedgeKind (ADR 532)', () => {
+  it('records every kind the hub names, and an unknown one as presence', () => {
+    for (const k of [
+      'message',
+      'lane',
+      'presence',
+      'ledger',
+      'policy',
+      'continuity',
+      'record',
+      'seed',
+    ])
+      expect(wedgeKind(k)).toBe(k);
+    expect(wedgeKind('something-new')).toBe('presence');
+    expect(wedgeKind(undefined)).toBe('presence');
   });
 });
