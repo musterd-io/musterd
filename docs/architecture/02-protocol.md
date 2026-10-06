@@ -231,7 +231,11 @@ carries the request and resolve ids, closer, and `resolved_at`.
 
 `NextBrief.request_reviews`, `requested_reviews`, and `review_closures` are optional and have no
 defaults. A missing field means the daemon does not report that projection; a present empty array
-means it supports the projection and found no rows. `ReviewPromisesQuerySchema` accepts only
+means it supports the projection and found no rows. `NextBrief.up_next_total` and
+`up_next_blocked_total` (ADR 536, epoch 31) take the other posture — `.default(0)` — because a
+renderer prints no count on 0 and a count of 0 claimable lanes with 0 withheld is indistinguishable
+from an older daemon by design: both mean "nothing to say about the pool". `up_next` itself is
+ranked per member on an epoch-31 daemon (see `03-server.md`); its element shape is unchanged. `ReviewPromisesQuerySchema` accepts only
 `open=1`. The Team route returns a required `review_promises` array of strict
 `ReviewPromiseAuditRowSchema` entries (`request_id`, `requester`, `owner`, `accepted_at`) and omits
 request prose and artifact references.

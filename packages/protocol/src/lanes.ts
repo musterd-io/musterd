@@ -833,8 +833,28 @@ export const NextBriefSchema = z.object({
   in_flight: z.array(LaneSchema),
   /** Your most recently shipped lanes (done), newest first — what just landed. */
   shipped: z.array(LaneSchema),
-  /** Unowned lanes you could pick up, oldest first — what to start next. Never parked ones. */
+  /**
+   * Unowned lanes you could pick up — what to start next. Never parked ones, and never a lane whose
+   * `depends_on` is unmet (ADR 536: "could pick up" is literal). Ranked PER MEMBER over the team's
+   * pool, in lexicographic tiers (ADR 536 §4.3): the lane a live handoff to you names or the goal it
+   * carries › a `role` you hold › the oldest lane of a stalled goal, then any in-flight goal › a
+   * `scope` overlapping what you shipped in the last 30 days › the rest; oldest first within a
+   * tier. A `role` you do not hold ranks last, never out. A window of at most five —
+   * `up_next_total` says how many were claimable.
+   */
   up_next: z.array(LaneSchema),
+  /**
+   * How many open lanes were claimable (no unmet dependency) — `up_next` is a window on them
+   * (ADR 536). Same reason `up_next_seeds_total` exists: a window with no total reads as the whole
+   * pool. `.default(0)` keeps an older daemon's brief parseable; a renderer prints no count on 0.
+   */
+  up_next_total: z.number().int().nonnegative().default(0),
+  /**
+   * How many open lanes were withheld from `up_next` for an unmet `depends_on` (ADR 536). Reported,
+   * never hidden: the board still lists them, and a seat deciding what to do should know the
+   * backlog is deeper than what it may start.
+   */
+  up_next_blocked_total: z.number().int().nonnegative().default(0),
   /**
    * How many lanes are parked (ADR 466). A count, not the lanes: a parked lane is kept, not
    * offered, so the brief says it exists and where to look (`lane_board`) without inviting pickup.

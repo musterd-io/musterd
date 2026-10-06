@@ -817,3 +817,23 @@ a knob: the effective policy a reader consumes never carries it.
   moves to the default window from now); a `decline` replaces it with `{}`. Any other reply, or a
   second answer, changes nothing. Silence changes nothing: a review is a question, never a timer
   that unsets a rule.
+
+## A.20 Up-next ranked per member (unreleased — ADR 536)
+
+`NextBrief.up_next` — the open Lanes a Member could pick up — is a window of at most five on the
+Team's pool, ordered for the reading Member. The pool is the same for every Member; the order is not.
+
+- A server MUST withhold from `up_next` any `open` Lane whose `depends_on` names a Lane on the board
+  that is not `done`. A dependency naming no Lane does not withhold. Parked Lanes are never offered.
+- A server MUST order the remainder in lexicographic tiers from declared fields only: (1) a Lane the
+  Member's live `why` handoff names, or any Lane under that handoff's `meta.goal_id`; (2) a Lane
+  whose `role` the Member holds; (3) the oldest untouched Lane of a stalled in-flight Goal, then any
+  Lane under an in-flight Goal; (4) a Lane whose `scope` overlaps the `scope` of a Lane the Member
+  closed `done` within the last 30 days; (5) the rest. A `role` the Member does not hold places the
+  Lane in tier 5 and never withholds it. Inside a tier: Goal-attached first, then oldest first.
+- A server MUST NOT rank on anything inferred — a title, a diff, a model, a harness.
+- `NextBrief` carries `up_next_total` (claimable `open` Lanes) and `up_next_blocked_total`
+  (withheld for a dependency). Both default to 0: a brief from a server behind this appendix parses,
+  and a renderer prints no count when both are 0.
+- This orders a read. It delivers no Act and selects no holder; role routing stays as ADR 272 §5
+  left it.

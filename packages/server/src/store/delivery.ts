@@ -222,19 +222,49 @@ async function bodyNamedLaneStates(
   teamId: string,
   body?: string | null,
 ): Promise<string[]> {
+  return (await bodyNamedLanes(db, teamId, body)).map((l) => l.state);
+}
+
+async function bodyNamedLanes(
+  db: Driver,
+  teamId: string,
+  body?: string | null,
+): Promise<{ id: string; state: string }[]> {
   if (!body) return [];
   const prefixes = [...new Set(body.match(LANE_ID_IN_PROSE) ?? [])];
-  const states: string[] = [];
+  const lanes: { id: string; state: string }[] = [];
   for (const prefix of prefixes) {
     // LIMIT 2 is enough to tell "exactly one" from "more than one" without scanning the rest.
-    const matches = await db.all<{ state: string }>(
-      "SELECT state FROM lanes WHERE team_id = ? AND id LIKE ? || '%' LIMIT 2",
+    const matches = await db.all<{ id: string; state: string }>(
+      "SELECT id, state FROM lanes WHERE team_id = ? AND id LIKE ? || '%' LIMIT 2",
       [teamId, prefix],
     );
     if (matches.length !== 1) continue;
-    states.push(matches[0]!.state);
+    lanes.push(matches[0]!);
   }
-  return states;
+  return lanes;
+}
+
+/**
+ * Every lane a handoff names and this team resolves — the structured `meta.lane_handoff.lane` and
+ * each prose id that picks out exactly one row — deduplicated, in no particular order.
+ *
+ * ADR 536 tier 1: the orientation brief's `up_next` ranks these (and the lanes under the handoff's
+ * `meta.goal_id`) above every derived signal, because the handoff is the human-authored why
+ * (ADR 049). Same resolution rules as the out-of-play test above, so the lane the brief ranks first
+ * is the lane the `why` slot is talking about — an ambiguous prefix names nothing here either.
+ */
+export async function handoffNamedLaneIds(
+  db: Driver,
+  teamId: string,
+  meta: string | null,
+  body?: string | null,
+): Promise<string[]> {
+  const ids = new Set<string>();
+  const structured = await namedHandoffLane(db, teamId, meta);
+  if (structured) ids.add(structured.id);
+  for (const l of await bodyNamedLanes(db, teamId, body)) ids.add(l.id);
+  return [...ids];
 }
 
 /**

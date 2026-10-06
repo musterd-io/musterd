@@ -333,6 +333,71 @@ describe('next / done commands', () => {
       for (const line of res.out.split('\n')) expect(line.length).toBeLessThanOrEqual(80);
     });
 
+    /** ADR 536 §4.5 — the up-next window says how much it is a window on; same words as team_next. */
+    it('says how many open lanes were claimable and how many wait on a dependency', async () => {
+      const open = (id: string) => ({
+        id,
+        team: 'dawn',
+        project: 'runtime',
+        title: id,
+        detail: null,
+        kind: null,
+        owner_seat: null,
+        role: null,
+        scope: [],
+        depends_on: [],
+        branch: null,
+        goal_id: null,
+        risk: [],
+        stakes: 'normal',
+        stakes_provenance: 'declared',
+        merged: null,
+        state: 'open',
+        created_by: 'nick',
+        created_at: 1,
+        claimed_at: null,
+        resolved_at: null,
+        updated_at: 1,
+      });
+      const base = {
+        member: 'Ada',
+        in_flight: [],
+        shipped: [],
+        why: null,
+        next_goal: null,
+        incidents: [],
+      };
+      const render = async (brief: unknown) =>
+        (
+          await capture(async () => {
+            renderNext(NextBriefSchema.parse(brief), 0);
+            return 0;
+          })
+        ).out;
+      expect(
+        await render({
+          ...base,
+          up_next: [open('L1'), open('L2')],
+          up_next_total: 30,
+          up_next_blocked_total: 44,
+        }),
+      ).toContain(
+        'up next — open lanes you could pick up (2 of 30 claimable · 44 more wait on a dependency):',
+      );
+      expect(
+        await render({
+          ...base,
+          up_next: [open('L1')],
+          up_next_total: 1,
+          up_next_blocked_total: 0,
+        }),
+      ).toContain('up next — open lanes you could pick up (all 1 claimable):');
+      // An older daemon sends neither count: the line is as it always was, not zero-filled.
+      const old = await render({ ...base, up_next: [open('L1')] });
+      expect(old).toContain('up next — open lanes you could pick up:');
+      expect(old).not.toContain('claimable');
+    });
+
     /** ADR 276 named this gap in its Consequences: `musterd next` rendered no review debt at all. */
     it('renders review debt like team_next does — owner, wait, no-reviewer and unlanded badges', async () => {
       const brief = NextBriefSchema.parse({

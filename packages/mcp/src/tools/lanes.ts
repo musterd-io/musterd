@@ -817,7 +817,15 @@ export function fmtNext(b: NextBrief, landed: ReadonlyMap<string, Landed> = new 
     }
   }
   if (b.up_next.length) {
-    lines.push('\nup next — open lanes you could pick up:');
+    // ADR 536 §4.5: how much the window hid, same copy as `musterd next`. No counts (an epoch-30
+    // daemon) → no parenthetical.
+    const total = b.up_next_total ?? 0;
+    const blocked = b.up_next_blocked_total ?? 0;
+    const count =
+      total === 0 && blocked === 0
+        ? ''
+        : ` (${b.up_next.length < total ? `${b.up_next.length} of ${total} claimable` : `all ${total} claimable`}${blocked > 0 ? ` · ${blocked} more wait on a dependency` : ''})`;
+    lines.push(`\nup next — open lanes you could pick up${count}:`);
     for (const l of b.up_next) {
       lines.push('  ' + fmtLane(l));
       if ((b.goals ?? []).length > 0 && l.goal_id === null)
