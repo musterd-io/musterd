@@ -149,12 +149,7 @@ export function registerLanes(
         risk: z
           .array(z.string())
           .optional()
-          .describe(
-            'acceptance risk tags, e.g. ["user-facing","production","cost"]. ANY tag routes the ' +
-              'acceptance ask human-first (ADR 188). Declared, not inferred. Pass `[]` to record ' +
-              'there is no human-judgement risk — for a scope that reaches a human-visible ' +
-              'surface (packages/web/**, packages/mobile/**) you must pass this explicitly.',
-          ),
+          .describe('risk tags (ADR 169) — any tag routes the acceptance human-first; [] = none.'),
       },
     },
     async (args) => {
