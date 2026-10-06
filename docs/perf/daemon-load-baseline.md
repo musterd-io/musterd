@@ -624,3 +624,27 @@ reaping).
   database should bring p95 down. If p95 does not move, the cause is on the write path, and the next
   step is a bisect across those six commits.
 - **Next:** measure app CPU during a run (lane 01M477S003, `GET /teams` CPU), then try the 2x machine.
+
+## 2026-10-06 — Cloud run 18: a 2-vCPU app machine brings p95 to 3.3 s; the 1 CU database is still saturated (lane 01M3Z44C56)
+
+This is run 17 again, on the same build (c4df5b9a) and the same Neon 1 CU, with one change: the app
+machine is `performance-2x` (2 vCPU, 4 GB) instead of `performance-1x`. It tests run 17's falsifier.
+
+| run | build / change | Neon | p50 | p95 | req/s | what it showed |
+| --- | --- | --- | --- | --- | --- | --- |
+| 18 | run 17 on a `performance-2x` app machine | 1 CU | 1.5 s | 3.3 s | 41 | app CPU was part of it; still 3× the budget; 2 errors |
+
+- **App CPU was part of it, not all of it.** p95 fell 4.2 → 3.3 s and p50 2.0 → 1.5 s, while
+  throughput rose 36.8 → 41.3 req/s. Write p95: `claim` 7.3 → 5.4 s, `POST /lanes` 6.9 → 5.2 s,
+  agent `POST /messages` 4.7 → 3.4 s. Errors fell to 2, both viewer WebSockets closing with 1006.
+- **The database did not get faster per call.** Means over the run: roster 29.1 ms, `/report` fold
+  30.6 ms, interrupt-check 31.1 ms, counter `UPDATE` 11.3 ms (32.1 ms in run 17). Summed execution
+  time for the top statements was about 1 960 s in a 1 300 s run. Run 17's was about 1 630 s. On a
+  1 CU compute that means queries wait for CPU, so the database is still saturated.
+- **Reading.** Run 17's regression was mostly the app machine: the counter's 32 ms mean came back to
+  11 ms once the app stopped queueing its own transactions. Neither machine size gets near the 1 s
+  budget while three reads (roster, `/report` fold, interrupt-check) take about 1.8k s of 1 CU's
+  time.
+- **Next:** either take those three reads down, or measure Neon at 2 CU to price the alternative.
+  Keep the app machine at `performance-2x` as a separate decision; staging returns to `performance-1x`
+  until `fly.toml` says otherwise.
