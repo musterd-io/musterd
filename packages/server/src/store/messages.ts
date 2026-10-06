@@ -78,13 +78,36 @@ export async function localNodeForTeam(db: Driver, teamId: string): Promise<{ id
 }
 
 /**
+ * Number a replicated row just before its transaction commits (ADR 531). The row goes in with
+ * `origin_seq = 0`; this bumps the node's counter and writes the number onto it — and onto `row`,
+ * so a caller reading it after `tx()` resolves sees the real value. The counter-row lock is taken
+ * here, at commit, instead of at insert, so on Postgres it no longer spans the caller's request.
+ * Still one transaction: a rollback burns no number, and the lock released by COMMIT keeps the
+ * numbers in commit order (ADR 331's gapless, commit-ordered sequence).
+ */
+export function stampOriginAtCommit(
+  t: Driver,
+  table: 'messages' | 'audit',
+  row: { id: string; origin_node: string; origin_seq: number },
+): void {
+  t.beforeCommit(async (c) => {
+    // `next_seq` names the next value to assign, so the pre-increment value is this row's seq.
+    const seq = (await c.get<{ seq: number }>(
+      'UPDATE nodes SET next_seq = next_seq + 1 WHERE id = ? RETURNING next_seq - 1 AS seq',
+      [row.origin_node],
+    ))!.seq;
+    await c.run(`UPDATE ${table} SET origin_seq = ? WHERE id = ?`, [seq, row.id]);
+    row.origin_seq = seq;
+  });
+}
+
+/**
  * Insert an envelope into the append-only log. `toMemberId` set iff to.kind==='member'.
  *
  * Stamps `(origin_node, origin_seq)` (ADR 331): SERVER-derived like `from_provenance` — there is no
- * wire field, so a caller cannot supply an origin. Opens its own transaction (a SAVEPOINT when the
- * caller already holds one): the seq allocation and the insert are one atomic unit, so a throw
- * between them — a replayed envelope id's UNIQUE violation is the realistic one — burns no number
- * and leaves no hole.
+ * wire field, so a caller cannot supply an origin. The seq is assigned at commit (ADR 531,
+ * {@link stampOriginAtCommit}), in the same transaction as the insert, so a throw — a replayed
+ * envelope id's UNIQUE violation is the realistic one — burns no number and leaves no hole.
  */
 export async function insertMessage(
   db: Driver,
@@ -102,12 +125,6 @@ export async function insertMessage(
 ): Promise<MessageRow> {
   return db.tx(async (t) => {
     const node = await localNodeForTeam(t, teamId);
-    // Read-then-bump under SQLite's single-writer lock: `next_seq` names the next value to assign,
-    // so the returned pre-increment value is this message's seq — monotone and gapless by construction.
-    const seq = (await t.get<{ seq: number }>(
-      'UPDATE nodes SET next_seq = next_seq + 1 WHERE id = ? RETURNING next_seq - 1 AS seq',
-      [node.id],
-    ))!.seq;
     const row: MessageRow = {
       id: env.id,
       team_id: teamId,
@@ -120,7 +137,7 @@ export async function insertMessage(
       meta: env.meta ? JSON.stringify(env.meta) : null,
       from_provenance: await senderProvenance(t, fromMemberId),
       origin_node: node.id,
-      origin_seq: seq,
+      origin_seq: 0, // numbered at commit (ADR 531)
       ts: env.ts,
       created_at: opts.now ?? Date.now(),
     };
@@ -145,6 +162,7 @@ export async function insertMessage(
         row.created_at,
       ],
     );
+    stampOriginAtCommit(t, 'messages', row);
     return row;
   });
 }

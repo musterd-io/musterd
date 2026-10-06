@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { openDriver } from '../db/open.js';
 import { withDrivers } from '../db/testing.js';
+import { appendReplicatedEvent } from './audit.js';
 import { addMember } from './members.js';
 import { insertMessage } from './messages.js';
 import { createTeam } from './teams.js';
@@ -113,6 +114,81 @@ withDrivers('originStamp', (o, kind) => {
       expect(row.origin_node).not.toBe('evil');
       const node = await db.get('SELECT id FROM nodes WHERE team_id = ?', [team.id]);
       expect(row.origin_node).toBe(node?.id);
+    });
+
+    // ADR 531: the number is assigned at commit. Inside the transaction the row reads 0; once the
+    // transaction resolves, the returned row and the stored row carry the same number.
+    it('numbers a row at commit: 0 inside the transaction, its seq once tx() resolves', async () => {
+      const { db, team, ada } = await seed();
+      const row = await db.tx(async (t) => {
+        const r = await insertMessage(t, team.id, ada.id, null, await env('m-1', 1001));
+        const inside = await t.get<{ origin_seq: number }>(
+          'SELECT origin_seq FROM messages WHERE id = ?',
+          ['m-1'],
+        );
+        expect(Number(inside?.origin_seq)).toBe(0);
+        expect(r.origin_seq).toBe(0);
+        return r;
+      });
+      expect(Number(row.origin_seq)).toBe(1);
+      expect((await seqsFor(db, team.id)).map((r) => Number(r.origin_seq))).toEqual([1]);
+    });
+
+    // ADR 531 eval: interleaved transactions mixing messages and replicated audit rows, some
+    // savepoints rolled back and one whole transaction rolled back. The committed numbers are a
+    // gapless 1..N shared by both kinds, each transaction's rows are consecutive in insertion
+    // order, and the counter ends at N + 1.
+    it('stays gapless and per-transaction consecutive across concurrent transactions with rollbacks', async () => {
+      const { db, team, ada } = await seed();
+      const lane = (id: string) => ({
+        actor: 'ada',
+        action: 'lane.opened' as const,
+        target: id,
+        result: 'allow' as const,
+        detail: { lane: id },
+      });
+      const work = Array.from({ length: 6 }, (_, k) =>
+        db
+          .tx(async (t) => {
+            await insertMessage(t, team.id, ada.id, null, await env(`t${k}-a`, 2000 + k));
+            await appendReplicatedEvent(t, team.id, lane(`t${k}-l`));
+            // A savepoint that writes and then fails: its row and its stamp both go.
+            await t
+              .tx(async (s) => {
+                await insertMessage(s, team.id, ada.id, null, await env(`t${k}-x`, 3000 + k));
+                throw new Error('undo this savepoint');
+              })
+              .catch(() => undefined);
+            await insertMessage(t, team.id, ada.id, null, await env(`t${k}-b`, 4000 + k));
+            if (k === 3) throw new Error('roll the whole transaction back');
+          })
+          .catch(() => undefined),
+      );
+      await Promise.all(work);
+      const stamped = [
+        ...(await db.all<{ id: string; origin_seq: number }>(
+          'SELECT id, origin_seq FROM messages WHERE team_id = ? AND origin_seq > 0',
+          [team.id],
+        )),
+        ...(await db.all<{ id: string; origin_seq: number }>(
+          'SELECT target AS id, origin_seq FROM audit WHERE team_id = ? AND origin_seq > 0',
+          [team.id],
+        )),
+      ]
+        .map((r) => ({ id: r.id, seq: Number(r.origin_seq) }))
+        .sort((a, b) => a.seq - b.seq);
+      // 5 committed transactions × 3 surviving rows; nothing from the rolled-back savepoints or t3.
+      expect(stamped.map((r) => r.seq)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
+      expect(stamped.some((r) => r.id.endsWith('-x') || r.id.startsWith('t3-'))).toBe(false);
+      for (let i = 0; i < stamped.length; i += 3) {
+        const k = stamped[i]!.id.slice(0, 2);
+        expect(stamped.slice(i, i + 3).map((r) => r.id)).toEqual([`${k}-a`, `${k}-l`, `${k}-b`]);
+      }
+      const node = await db.get<{ next_seq: number }>(
+        'SELECT next_seq FROM nodes WHERE team_id = ?',
+        [team.id],
+      );
+      expect(Number(node?.next_seq)).toBe(16);
     });
 
     // Two teams on one daemon are two node identities with two independent streams (§Decision 1).

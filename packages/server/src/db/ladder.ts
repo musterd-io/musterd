@@ -177,7 +177,26 @@ export const LADDER: PortableMigration[] = [
       );
     },
   },
+  {
+    // v90 — ADR 531 (origin_seq stamped at commit): a message is inserted with `origin_seq = 0` and
+    // numbered just before its transaction commits, so two unstamped rows of one node can coexist
+    // inside a transaction. The origin index becomes partial on `origin_seq > 0`, the shape
+    // `idx_audit_origin` has had since v58. Every committed replicated row is stamped, so it still
+    // enforces exactly what the full index did. Its readers say `origin_seq > 0` so it applies.
+    version: 90,
+    sqlite: (db) => {
+      db.exec('DROP INDEX IF EXISTS idx_messages_origin');
+      db.exec(MESSAGES_ORIGIN_INDEX_SQL);
+    },
+    postgres: async (d) => {
+      await d.exec('DROP INDEX IF EXISTS idx_messages_origin');
+      await d.exec(MESSAGES_ORIGIN_INDEX_SQL);
+    },
+  },
 ];
+
+const MESSAGES_ORIGIN_INDEX_SQL =
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_origin ON messages(origin_node, origin_seq) WHERE origin_seq > 0';
 
 const CALENDAR_TABLE_SQL = `CREATE TABLE IF NOT EXISTS calendar_entries (
   id TEXT PRIMARY KEY,

@@ -852,7 +852,7 @@ async function heldHead(db: Driver, originNode: string): Promise<number> {
   const m =
     (
       await db.get<{ high: number | null }>(
-        'SELECT MAX(origin_seq) AS high FROM messages WHERE origin_node = ?',
+        'SELECT MAX(origin_seq) AS high FROM messages WHERE origin_node = ? AND origin_seq > 0',
         [originNode],
       )
     )?.high ?? 0;
@@ -864,7 +864,7 @@ async function heldHead(db: Driver, originNode: string): Promise<number> {
 async function heldPair(db: Driver, originNode: string, originSeq: number): Promise<boolean> {
   return (
     (await db.get<{ id: string }>(
-      'SELECT id FROM messages WHERE origin_node = ? AND origin_seq = ?',
+      'SELECT id FROM messages WHERE origin_node = ? AND origin_seq = ? AND origin_seq > 0',
       [originNode, originSeq],
     )) !== undefined ||
     (await db.get<{ id: string }>(HELD_PAIR_AUDIT_SQL, [originNode, originSeq])) !== undefined

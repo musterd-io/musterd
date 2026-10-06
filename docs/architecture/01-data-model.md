@@ -166,6 +166,11 @@ v89 (lane 01M477RQGV) is Postgres-only, with a SQLite no-op: `messages` gets
 after ~1 % churn. Under the tenant policy the roster's latest-status pick plans on `team_id`
 statistics, and a team newer than the last ANALYZE plans a per-team scan instead of a per-member one.
 Cloud run 14 measured 32 ms per roster read with the stale plan and 3.8 ms after an ANALYZE.
+v90 ([ADR 531](../decisions/531-origin-seq-stamped-at-commit.md)) makes `idx_messages_origin` partial,
+`WHERE origin_seq > 0`, the shape `idx_audit_origin` has had since v58. A replicated row is now
+inserted with `origin_seq = 0` and numbered just before its transaction commits, so two unstamped
+rows of one node can coexist inside a transaction. Every committed replicated row is stamped, and
+the readers say `origin_seq > 0` so the index applies.
 
 **Tenancy (cloud design §12.1).** On Postgres every team-owned table carries `team_id` (`teams`:
 its `id`) and one derived row-level-security policy, `tenant`, on
