@@ -1,5 +1,6 @@
 import {
   IncidentPolicySchema,
+  LANE_STATES,
   LANE_TERMINAL_STATES,
   type BlockedBy,
   type IncidentPolicy,
@@ -95,11 +96,11 @@ function detailLine(
   return `${seat}: ${r.sig ?? '(no sig)'}${r.ref ? ` [${r.ref}]` : ''}`;
 }
 
-/** Open (non-terminal) incident lanes for a team, oldest first. */
+const LIVE_STATES = LANE_STATES.filter((s) => !LANE_TERMINAL_STATES.has(s));
+
+/** Open (non-terminal) incident lanes for a team, oldest first (`listLanes` orders by created_at). */
 export async function openIncidents(db: Driver, teamId: string, teamSlug: string): Promise<Lane[]> {
-  return (await listLanes(db, teamId, teamSlug))
-    .filter((l) => l.kind === 'incident' && !LANE_TERMINAL_STATES.has(l.state))
-    .sort((a, b) => a.created_at - b.created_at);
+  return listLanes(db, teamId, teamSlug, { kind: 'incident', states: LIVE_STATES });
 }
 
 async function findOpenIncident(

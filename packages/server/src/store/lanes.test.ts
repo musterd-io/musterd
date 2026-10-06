@@ -1,6 +1,6 @@
 import { ACCEPTANCE_STALE_MS, makeEnvelope, type Lane } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Driver } from '../db/driver.js';
+import type { Driver, Params } from '../db/driver.js';
 import { openDb } from '../db/open.js';
 import { withDrivers } from '../db/testing.js';
 import { appendAudit } from './audit.js';
@@ -187,6 +187,37 @@ withDrivers('lanes', (o) => {
         states: ['claimed', 'active', 'blocked', 'awaiting_acceptance', 'ready_for_review'],
       });
       expect(filtered.map((l) => l.id)).toEqual([live.id]);
+    });
+
+    it('the filter runs in SQL — the store reads only matching rows (lane 01M497KVXS)', async () => {
+      // Staging, 2026-10-06: the reaper's two per-team reads shipped every lane on a 1,376-lane
+      // team every 15 s (203M rows) to keep the handful in one state. Count what the driver returns.
+      const { db, team } = await seed();
+      const live = await openLane(db, team.id, 'bravo', 'June', { title: 'live', claim: true });
+      await updateLane(db, team.id, live.id, 'bravo', { state: 'awaiting_acceptance' });
+      await openLane(db, team.id, 'bravo', 'June', { title: 'claimed', claim: true });
+      await openLane(db, team.id, 'bravo', 'Riley', { title: 'open', goal_id: 'g1' });
+      let returned = 0;
+      const counting: Driver = Object.create(db) as Driver;
+      counting.all = async <R>(sql: string, params?: Params) => {
+        const rows = await db.all<R>(sql, params);
+        returned += rows.length;
+        return rows;
+      };
+      const read = async (filter: Parameters<typeof listLanes>[3]) => {
+        returned = 0;
+        const lanes = await listLanes(counting, team.id, 'bravo', filter);
+        return { ids: lanes.map((l) => l.id), returned };
+      };
+      expect(await read({ states: ['awaiting_acceptance'] })).toEqual({
+        ids: [live.id],
+        returned: 1,
+      });
+      expect((await read({ owner: 'June' })).returned).toBe(2);
+      expect((await read({ goalId: 'g1' })).returned).toBe(1);
+      expect((await read({ openOnly: true })).returned).toBe(1);
+      expect((await read({ states: [] })).returned).toBe(0);
+      expect((await read({})).returned).toBe(3);
     });
 
     it('scenario 3 — the clean independent lane stays silent', async () => {
