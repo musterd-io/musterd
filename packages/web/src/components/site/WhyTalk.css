@@ -13,8 +13,16 @@
 
 .wt__cols {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  /* Two explicit tracks, not auto-fit: the full-width .wt__fix band would otherwise keep a third
+     auto-fit track alive and squeeze both columns to a third of the rail. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.4rem;
+}
+
+@media (max-width: 720px) {
+  .wt__cols {
+    grid-template-columns: 1fr;
+  }
 }
 
 .wt__cols h3 {
@@ -28,4 +36,83 @@
   color: var(--text-dim);
   line-height: 1.55;
   margin: 0 0 0.7rem;
+}
+
+/* "The fix is small" — the three lane moves as chips, one band under both columns. Each chip is the
+   move's name in mono (how the CLI and the board spell it) beside the sentence a teammate would
+   say. The arrow between them reads the sequence: claim, hand off, submit. */
+.wt__fix {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.9rem;
+}
+
+.wt__cols .wt__fix-lead {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.wt__moves {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wt__moves li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.3rem 0.85rem 0.3rem 0.3rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  background: var(--surface-solid);
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.3;
+}
+
+.wt__moves li + li {
+  position: relative;
+  margin-left: 1.1rem;
+}
+
+/* The arrow sits in the gap before each pill, outside its border. Alt text '' keeps it unread. */
+.wt__moves li + li::before {
+  content: '→' / '';
+  position: absolute;
+  left: -1.25rem;
+  color: var(--text-faint);
+}
+
+.wt__move {
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  background: var(--glow-mustard-soft);
+  color: var(--accent-ink);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.01em;
+}
+
+/* Narrow: the lead and the moves stack, and the arrows would point at nothing — drop them. */
+@media (max-width: 560px) {
+  .wt__fix,
+  .wt__moves {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .wt__moves li + li {
+    margin-left: 0;
+  }
+
+  .wt__moves li + li::before {
+    content: none;
+  }
 }
