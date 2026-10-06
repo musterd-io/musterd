@@ -712,6 +712,29 @@ export function filterLanes(lanes: Lane[], filter: LaneFilter = {}): Lane[] {
 }
 
 /**
+ * How far back `GET /lanes` reaches into closed work by default (ADR 534). The board grew one
+ * done row per merged lane forever; 14 days covers the web board's Done column (10 newest), a
+ * goal's recent shipped chips and a seat's just-closed lane, and `?history=all` restores the rest.
+ */
+export const LANE_HISTORY_WINDOW_MS = 14 * 24 * 60 * 60_000;
+
+/**
+ * Drop done/abandoned lanes that closed before the history window (ADR 534). A live lane is never
+ * dropped, however old; a closed lane's age runs from `resolved_at`, falling back to `updated_at`
+ * for a row closed before resolved_at was stamped.
+ */
+export function withinHistoryWindow(
+  lanes: Lane[],
+  now: number,
+  windowMs = LANE_HISTORY_WINDOW_MS,
+): Lane[] {
+  const cutoff = now - windowMs;
+  return lanes.filter(
+    (l) => !LANE_TERMINAL_STATES.has(l.state) || (l.resolved_at ?? l.updated_at) >= cutoff,
+  );
+}
+
+/**
  * What a lane-less `handoff` should carry (ADR 231).
  *
  * `attach` — the sender holds exactly one live lane, so there is nothing to choose between and the

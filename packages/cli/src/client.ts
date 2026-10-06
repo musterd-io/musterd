@@ -1160,13 +1160,15 @@ export class HttpClient {
 
   async laneBoard(
     slug: string,
-    q: { project?: string; mine?: boolean; open?: boolean; goal?: string } = {},
+    q: { project?: string; mine?: boolean; open?: boolean; goal?: string; history?: boolean } = {},
   ): Promise<LaneBoard> {
     const params = new URLSearchParams();
     if (q.project) params.set('project', q.project);
     if (q.mine) params.set('mine', '1');
     if (q.open) params.set('open', '1');
     if (q.goal) params.set('goal', q.goal);
+    // ADR 534: without it, closed lanes older than 14 days are left out.
+    if (q.history) params.set('history', 'all');
     const qs = params.toString();
     const json = await this.request('GET', `/teams/${slug}/lanes${qs ? `?${qs}` : ''}`);
     const parsed = LaneBoardSchema.safeParse(json);
