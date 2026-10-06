@@ -57,6 +57,12 @@ Each one saw no marker, because the marker is written only at the end. A full ch
 `full-main-check-started` artifact before it does any work. A push or scheduled run that finds a
 start marker newer than the last finish marker, and under 45 minutes old, does not start another.
 
+_Note, 2026-10-06 (izzo, lane 01M497C168)._ **The quiet-period gap above was real, and the cron
+did not fill it.** The cron fires again but dropped three of six runs in 18 hours, so code pushed
+04:19Z waited until 11:18Z. [ADR 535](535-hourly-schedule-probe.md) makes the cron an hourly probe:
+it runs the full check only when the last one is at least 4 hours old and code changed since, and
+skips otherwise. A docs-only change no longer starts a scheduled full check.
+
 ## Observability & Evaluation
 
 - **Traces:** none new. `plan` prints the last full check's time, SHA and age, and its summary says

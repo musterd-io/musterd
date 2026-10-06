@@ -55,11 +55,12 @@ on:
     types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
-  # ADR 508: full coverage + a11y on main, every 4 hours at :17, skipped when main has not moved.
-  # ADR 512: a backstop only — GitHub has not fired it since the repo went private; a push to main
-  # runs the full check when the last one is over 4 hours old.
+  # ADR 508: full coverage + a11y on main every 4 hours. ADR 512: a push to main runs the full check
+  # when the last one is over 4 hours old. ADR 535: the cron probes HOURLY, because GitHub drops
+  # scheduled runs (3 of 6 never started on 2026-10-05/06); a probe runs the full check only when
+  # the last one is over 4 hours old and code moved since, so a dropped run costs an hour, not four.
   schedule:
-    - cron: '17 */4 * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 # A PR keeps one in-flight run per ref, so a new push cancels the stale one. Main does not cancel
@@ -99,7 +100,8 @@ jobs:
       # old `plan` job, now a step: docs-only diffs run the docs gates alone; a11y runs when
       # packages/web, the sweep scripts, the workflow or deps changed; a PR runs SQLite unless
       # labelled `pglite`; a push to main runs static + docs unless the last full main check is over
-      # 4 hours old; a scheduled run skips everything when the last full check already tested HEAD.
+      # 4 hours old; a scheduled run (hourly, ADR 535) runs the full check only when the last one is
+      # over 4 hours old and code changed since it, and skips everything otherwise.
       - name: Pick the gates and the test drivers
         id: pick
         env:
@@ -128,8 +130,14 @@ jobs:
             && [ $(( $(date -u +%s) - $(date -u -d "$started" +%s) )) -lt 2700 ]; then inflight=true; fi
           echo "full main check in flight: $inflight (started ${started:-never})"
           if [ "$EVENT" = schedule ] || [ "$EVENT" = workflow_dispatch ]; then
-            if [ "$EVENT" = schedule ] && { [ "$full_sha" = "$GITHUB_SHA" ] || [ "$inflight" = true ]; }; then
-              suite=false; a11y=false; docs=false; kinds=sqlite; why="main has not moved since the last full check ($full_sha), or one is in flight"
+            # ADR 535: an hourly probe. "Code moved" = any path outside docs/ and root *.md changed
+            # since the last full check's SHA; an unknown or unreachable SHA counts as moved.
+            moved=true
+            if [ -n "$full_sha" ] && [ "$full_sha" != null ] && changed=$(git diff --name-only "$full_sha" HEAD 2>/dev/null) \
+              && { [ -z "$changed" ] || ! echo "$changed" | grep -q -v -E '^(docs/|[^/]+\.md$)'; }; then moved=false; fi
+            if [ "$EVENT" = schedule ] && { [ "$moved" = false ] || [ "$full_age" -lt 14400 ] || [ "$inflight" = true ]; }; then
+              suite=false; a11y=false; docs=false; kinds=sqlite
+              why="probe: no code moved since the last full check ($full_sha), it is under 4h old (${full_age}s), or one is in flight (ADR 535)"
             else
               why="$EVENT on ${GITHUB_REF_NAME} — the full main check (ADR 508)"
             fi
