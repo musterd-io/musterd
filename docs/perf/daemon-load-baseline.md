@@ -668,8 +668,8 @@ Cloud, the roster's status clock and quiescence fold are loaded once per team an
   compute is no longer saturated.
 - **Latency improved, but not enough.** On the same 1-vCPU app machine as run 17, p95 went from
   4.2 to 3.25 s and throughput from 36.8 to 42.2 req/s. This matches run 18, which needed twice the
-  app CPU. `claim` p95 was 4.9 s and `GET /teams/:slug` 3.2 s. There were 0 errors, the first clean
-  run since run 11.
+  app CPU. `claim` p95 was 4.9 s and `GET /teams/:slug` 3.2 s. There were 0 errors, down from 13, 6 and 2
+  in runs 16 to 18.
 - **Reading.** With the database mostly idle, the remaining queueing is in the app process. Run 18
   showed that doubling its CPU buys about 20%. The leading suspects are per-request CPU work:
   `GET /teams/:slug` builds and serializes up to 149 KB for each of about 18 reads a second, and the
