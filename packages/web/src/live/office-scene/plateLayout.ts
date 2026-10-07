@@ -119,10 +119,10 @@ export function leaderFrom(
 }
 
 /** Breathing room between two things that must not touch, px. */
-const MARGIN = 2;
+const MARGIN = 1;
 /** Vertical gap between stacked plates, px — wider than 2×MARGIN, or a plate one step up from another
  *  counts as touching it and every vertical step reads as blocked. */
-const GAP = 5;
+const GAP = 3;
 /** How long a settled plate's spot must stay blocked before it moves. */
 export const MOVE_HOLD_MS = 500;
 /** How long a displaced plate's home must stay free before it goes back. */
