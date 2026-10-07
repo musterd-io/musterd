@@ -56,7 +56,9 @@ the `y/N` question unchanged.
 1. **Find the wake.** The launcher reads `.musterd/wake-lease.json` in the seat's folder (ADR 354).
    It names the wake's process (`spawner_pid`) and lease, and gains one field, `session_id`: the
    conversation id the host passed the harness (`--session-id`). The host already chooses that id,
-   so it only writes it down. If the file is missing or expired, or its lease does not match the
+   so it only writes it down. _Correction (2026-10-07, while planning): today only the Codex
+   backend writes this file; Claude Code wakes pass the lease through the environment alone. The
+   Claude Code backend gains the same write._ If the file is missing or expired, or its lease does not match the
    roster's `wake_lease`, the launcher shows ADR 543's question instead and touches nothing.
 2. **Ask it to stop at a tool boundary.** The launcher writes a yield marker,
    `.musterd/wake-yield.json` `{lease_id, by, at}`, in the seat's folder. A wake's `PreToolUse` hook
@@ -67,9 +69,10 @@ the `y/N` question unchanged.
 3. **Hard stop.** If the wake process is still alive 10 s after the marker is written, the launcher
    sends SIGTERM to its process group, and SIGKILL 5 s later, the same escalation the host uses for
    its own timeouts (`host/backends/claudeCode.ts`).
-4. **Settle the lease as `yielded`.** The host sees its child exit, finds the yield marker for that
-   lease, and reports the wake with outcome `yielded`. The marker is then removed. A `yielded` wake
-   does not count as a failed wake in the wake metrics. It does not re-derive a wake for the same
+4. **Record the run as `yielded`.** The host sees its child exit, finds the yield marker for that
+   lease, removes it, and sends `yielded: true` on the supplementary wake report it already sends at
+   run exit (recorded on `residency.wake_cost`). The primary report landed at verification, long
+   before any take-over, so a `yielded` wake never counts as a failed wake. It does not re-derive a wake for the same
    lane while the person's session is attached, because the attended-session deferral already
    covers that.
 5. **Open the wake's conversation.** The launcher runs the harness with `--resume <session_id>` in
@@ -96,9 +99,10 @@ watching dolly · wake · carry on with lane 01M46YWG8Y · started 09:24 · $1.6
 - It opens with the last 10 events, then follows new ones.
 - All text passes through `scrubCredentials` before it is printed.
 - **⏎** runs §1. **esc** exits and leaves the wake running.
-- **The wake exits while watched:** with exit 0, the view says `wake finished — opening its
-  conversation` and resumes it. With a non-zero exit or a timeout, it says so and asks `⏎ open its
-  conversation · esc quit`.
+- **The wake exits while watched:** the launcher is not its parent and cannot read an exit code,
+  so it reads the transcript. If the last assistant record stopped on `end_turn`, the view says
+  `wake finished — opening its conversation` and resumes it. Otherwise it says `wake ended before
+  finishing` and asks `⏎ open its conversation · esc quit`.
 - Watch is read-only. It writes nothing to the folder or the daemon.
 
 ## 3. Edges
@@ -118,7 +122,7 @@ watching dolly · wake · carry on with lane 01M46YWG8Y · started 09:24 · $1.6
 One ADR covers:
 
 - `session_id` on `WakeLeaseFileSchema` (optional, so older hosts still parse),
-- `yielded` as a wake-report outcome,
+- `yielded` on the (supplementary) wake report,
 - the take over / watch prompt replacing `y/N` for a local wake. This amends ADR 491 Decision 6
   and ADR 543.
 
