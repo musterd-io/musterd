@@ -1,0 +1,86 @@
+# Whiteboard pin follower (lane 01M4BKDVPD). The whiteboard left the monorepo (ADR 538); .mcp.json
+# runs it as `npx -y @musterd/whiteboard@<exact version>`. Dependabot and Renovate can't see a version
+# inside an npx arg, so a new release would otherwise wait for someone to remember the bump. This job
+# reads npm once a day and, when a newer version is published, opens ONE PR that changes only the pin.
+#
+# The pin stays exact — never @latest — so every seat runs the same whiteboard until that PR merges.
+# The PR is not auto-merged: merging it is the moment seats move to the new version, and a person (or
+# seat) should choose it. It is opened with STEWARD_TOKEN, not GITHUB_TOKEN, so it triggers the
+# required `gates` check (a GITHUB_TOKEN-authored PR doesn't — see steward.yml).
+#
+# Cost: one ~20 s job a day on a private repo's billed minutes; workflow_dispatch runs it on demand
+# right after a release.
+name: whiteboard-pin
+
+on:
+  schedule:
+    - cron: '17 9 * * *' # daily 09:17 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: whiteboard-pin
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  follow:
+    name: follow
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.STEWARD_TOKEN }} # so the pushed branch + PR are PAT-authored → trigger `gates`
+
+      - name: Compare the pin with npm
+        id: cmp
+        run: |
+          current=$(node -e '
+            const args = require("./.mcp.json").mcpServers.whiteboard.args;
+            const m = args.join(" ").match(/@musterd\/whiteboard@(\d+\.\d+\.\d+)/);
+            if (!m) { console.error("no exact @musterd/whiteboard pin in .mcp.json"); process.exit(1); }
+            process.stdout.write(m[1]);')
+          latest=$(npm view @musterd/whiteboard dist-tags.latest)
+          if ! [[ "$latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "npm latest '$latest' is not an exact x.y.z version — refusing to pin it"
+            exit 1
+          fi
+          newer=$(node -e '
+            const [a, b] = process.argv.slice(1).map((v) => v.split(".").map(Number));
+            const d = b.map((n, i) => n - a[i]).find((n) => n !== 0) ?? 0;
+            process.stdout.write(d > 0 ? "yes" : "no");' "$current" "$latest")
+          echo "pinned $current, npm latest $latest, newer: $newer" | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo "current=$current"
+            echo "latest=$latest"
+            echo "newer=$newer"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open the bump PR
+        if: steps.cmp.outputs.newer == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.STEWARD_TOKEN }}
+          CURRENT: ${{ steps.cmp.outputs.current }}
+          LATEST: ${{ steps.cmp.outputs.latest }}
+        run: |
+          branch="chore/whiteboard-$LATEST"
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "branch $branch already exists — its PR is open or was closed on purpose; nothing to do"
+            exit 0
+          fi
+          sed -i "s|@musterd/whiteboard@$CURRENT|@musterd/whiteboard@$LATEST|" .mcp.json
+          git diff --stat
+          git config user.name 'whiteboard-pin'
+          git config user.email 'whiteboard-pin@musterd'
+          git checkout -b "$branch"
+          git commit -am "chore(whiteboard): pin @musterd/whiteboard@$LATEST (was $CURRENT)"
+          git push origin "$branch"
+          gh pr create --head "$branch" \
+            --title "chore(whiteboard): pin @musterd/whiteboard@$LATEST" \
+            --body "@musterd/whiteboard $LATEST is on npm; .mcp.json pins $CURRENT. This changes only the pin.
+
+          Release notes: https://github.com/musterd-io/whiteboard/releases/tag/v$LATEST
+
+          Merging this moves every seat to $LATEST on its next session start. Opened by .github/workflows/whiteboard-pin.yml."
