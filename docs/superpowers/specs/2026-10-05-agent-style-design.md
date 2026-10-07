@@ -174,8 +174,8 @@ member, it is that human. Otherwise the block carries only the floor and team de
 
 | Who | CLI | MCP | Web (`/board`) |
 | --- | --- | --- | --- |
-| Any human, self only | `musterd style` (the block as a seat receives it) · `musterd style set length=concise pushback=every-time` · `musterd style set --prose "…"` · `musterd style clear` | `team_style` (read) · `team_style_set` from a human-interactive chat folder; refused for a seat | "how agents talk to me" card on the human's own row |
-| Admins | `musterd team policy style` (each knob labelled default / set by whom) · `musterd team policy style set assess_before_agreeing=off` · `--prose` — the one positional area of `team policy` (renamed from `musterd policy style` 2026-10-05, lane `01M47A4WRRWVD3SN6D7DSZ9V3J`) | none — admins are humans | team policy card, admin-only |
+| Any human, self only | `musterd style` (the block as a seat receives it) · `musterd style set length=concise pushback=every-time` · `musterd style set --prose "…"` · `musterd style clear` | `team_style` (read) · `team_style_set` from a human-interactive chat folder; refused for a seat | "how agents talk to me" card on the human's own row — built as a sheet off the viewer's own topbar chip, since /board has no per-human row (2026-10-07, lane `01M46MQSMJ`) |
+| Admins | `musterd team policy style` (each knob labelled default / set by whom) · `musterd team policy style set assess_before_agreeing=off` · `--prose` — the one positional area of `team policy` (renamed from `musterd policy style` 2026-10-05, lane `01M47A4WRRWVD3SN6D7DSZ9V3J`) | none — admins are humans | team policy card, admin-only — the same sheet's second section; knobs say `default` / `set for the team`, who-and-when stays with the CLI |
 
 Writes go through `StylePrefsSchema` / `PolicyOverrideSchema` at the boundary. Prose over five
 lines is refused with the count. The admin path rides `POST /policy`, so hub forwarding and the

@@ -32,5 +32,7 @@ export * from './model.js';
 export * from './offline.wire.js';
 export * from './posture.wire.js';
 export * from './seeds.wire.js';
+// ADR 514: the dial vocabularies and prose cap /board's style sheet picks from — no zod behind them.
+export * from './style.wire.js';
 export * from './version.js';
 export * from './working-hours.wire.js';
