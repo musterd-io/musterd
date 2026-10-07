@@ -1100,7 +1100,7 @@ export function mountOffice(
   /**
    * Place every plate for this frame (lane 01M3GPH5KB): front-to-back into the first free slot near its
    * own head, clear of other plates and other members' heads (plateLayout.ts). A plate off its home
-   * spot draws a hairline leader back to its head, in the member's colour, so it is never read as
+   * spot draws a thin leader back to its head, in the member's colour, so it is never read as
    * someone else's. Cheap enough per frame: ~25 plates, compared pairwise, sizes from the observer.
    */
   /**
