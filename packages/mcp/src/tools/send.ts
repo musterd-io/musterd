@@ -14,6 +14,7 @@ import {
   disputeAnswerAck,
   laneAckAck,
   laneEscalationAck,
+  laneSupersededAck,
   laneVerdictAck,
   threadHintFor,
   threadHintText,
@@ -310,6 +311,12 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
           ? laneEscalationAck(ackBody.lane_escalation)
           : undefined;
         const escalationGuidance = laneEscalation ? ` ${laneEscalation.guidance}` : '';
+        // ADR 545: a reply on an ask a re-route had already closed — moved nothing, and the ask
+        // that binds now, so the one seat that holds it answers on the right id.
+        const laneSuperseded = ackBody?.lane_superseded
+          ? laneSupersededAck(ackBody.lane_superseded)
+          : undefined;
+        const supersededGuidance = laneSuperseded ? ` ${laneSuperseded.guidance}` : '';
         // ADR 505: the owner's answer to a review dispute — what the daemon did with it (recorded
         // the concession; held and re-routed to a tiebreak, or could not), said on the spot.
         const disputeAck = ackBody?.dispute ? disputeAnswerAck(ackBody.dispute) : undefined;
@@ -343,6 +350,7 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
           handoffGuidance +
           verdictGuidance +
           escalationGuidance +
+          supersededGuidance +
           ackGuidance +
           disputeGuidance +
           handoffAcceptGuidance +
@@ -365,6 +373,7 @@ export function registerSend(server: McpServer, client: MusterdClient, config: M
             ...(laneVerdict ? { lane_verdict: laneVerdict } : {}),
             ...(laneEscalation ? { lane_escalation: laneEscalation } : {}),
             ...(laneAck ? { lane_ack: laneAck } : {}),
+            ...(laneSuperseded ? { lane_superseded: laneSuperseded } : {}),
             ...(evidenceNotice ? { evidence_notice: evidenceNotice } : {}),
             ...(threadHint ? { thread_hint: threadHint } : {}),
           },

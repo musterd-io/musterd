@@ -172,6 +172,38 @@ export function laneEscalationAck(e: LaneEscalationWire): LaneEscalationAck {
   };
 }
 
+/** ADR 545: a reply to an acceptance ask a re-route had already superseded, on the wire. */
+export interface LaneSupersededWire {
+  lane: string;
+  /** The superseded ask the reply answered. */
+  ask: string;
+  /** The ask the lane waits on now and who holds it; null when no acceptance ask is open. */
+  current: { ask: string; reviewer: string } | null;
+}
+export interface LaneSupersededAck extends LaneSupersededWire {
+  guidance: string;
+}
+
+/**
+ * ADR 545: the ack for an accept / decline / wait that answered an acceptance ask a re-route had
+ * already closed. It moved nothing, as before (lane 01M1QYHJFY) — but it used to say nothing either,
+ * so miley's accept on lane 01M49JNJG3, 2026-10-07, read to her like a verdict that had landed.
+ * Names the ask that binds now, so the one seat that may hold it can answer on the right id.
+ */
+export function laneSupersededAck(s: LaneSupersededWire): LaneSupersededAck {
+  const tail =
+    s.current === null
+      ? `No acceptance ask is open on the lane now.`
+      : `It now waits on ${s.current.reviewer} (ask ${s.current.ask}) — if that is you, reply on ` +
+        `that id; otherwise nothing is owed.`;
+  return {
+    ...s,
+    guidance:
+      `Lane ${s.lane}: the acceptance ask you answered (${s.ask}) had been re-routed — your reply ` +
+      `moved nothing. ${tail}`,
+  };
+}
+
 /**
  * Why an acceptance submit asked nobody (ADR 404). The historical sentence "no eligible acceptor
  * is live" named both an empty room and a room full of busy / same-model / human-only seats.

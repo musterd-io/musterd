@@ -1618,7 +1618,15 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
         expect(await auditRows(nickTok, 'lane.ready_for_review')).toHaveLength(1);
 
         // A late verdict from gee on the superseded ask binds to nothing: the lane stays awaiting.
-        expect((await verdict(gee, 'gee', oldAsk.id as string, 'accept')).status).toBe(201);
+        // ADR 545: and gee is TOLD so on the ack — which ask holds the lane now, and whose it is.
+        const late = await verdict(gee, 'gee', oldAsk.id as string, 'accept');
+        expect(late.status).toBe(201);
+        expect(late.json.lane_verdict).toBeUndefined();
+        expect(late.json.lane_superseded).toEqual({
+          lane: laneId,
+          ask: oldAsk.id,
+          current: { ask: ask.id, reviewer: 'hal' },
+        });
         const lanesMid = await get('/teams/dawn/lanes', nickTok);
         expect(
           (lanesMid.json.lanes as { id: string; state: string }[]).find((l) => l.id === laneId)!
@@ -1638,6 +1646,62 @@ withDrivers('integration · two-stage-close', (_o, kind) => {
         expect(rows[0].detail.closed_by).toBe('hal');
         expect(rows[0].detail.verified).toBe(true);
         expect(rows[0].detail.reason).toBe('counterpart_confirm');
+      });
+
+      it('a peer accept on a SUPERSEDED risky-lane ask fires no human ask and says where the ask went (ADR 545)', async () => {
+        // Before ADR 545 the escalation hook never asked whether the ask was still live: a peer
+        // answering an ask the reaper had already moved woke the human for a review nobody held.
+        const { nickTok, ada, gee, agentKey } = await setup();
+        await post('/teams/dawn/members', { name: 'hal', kind: 'agent' }, nickTok);
+        const hal = (await resolveAuth('/teams/dawn/inbox', { key: agentKey, seat: 'hal' }))!;
+        await reattestAgentModel('dawn', hal, 'gemini-3-pro');
+        const lane = await post(
+          '/teams/dawn/lanes',
+          { title: 'risky reroute', risk: ['destructive'], claim: true },
+          ada,
+        );
+        const laneId = lane.json.lane.id as string;
+        await patchLane(laneId, { state: 'ready_for_review', acceptor: 'gee' }, ada);
+        const oldAsk = (await get('/teams/dawn/inbox?unread=1', gee)).json.messages.find(
+          (m: any) => m.act === 'ask' && m.meta?.lane_review?.lane === laneId,
+        );
+        await patchLane(laneId, { state: 'awaiting_acceptance', acceptor: 'hal' }, ada);
+        const newAsk = (await get('/teams/dawn/inbox?unread=1', hal)).json.messages.find(
+          (m: any) => m.act === 'ask' && m.meta?.lane_review?.lane === laneId,
+        );
+
+        const late = await verdict(gee, 'gee', oldAsk.id as string, 'accept');
+        expect(late.status).toBe(201);
+        expect(late.json.lane_escalation).toBeUndefined();
+        expect(late.json.lane_superseded).toEqual({
+          lane: laneId,
+          ask: oldAsk.id,
+          current: { ask: newAsk.id, reviewer: 'hal' },
+        });
+        expect(await auditRows(nickTok, 'lane.review_peer_confirmed')).toHaveLength(0);
+        const nickInbox = await get('/teams/dawn/inbox?unread=1', nickTok);
+        expect(
+          nickInbox.json.messages.filter((m: any) => m.act === 'ask' && m.meta?.lane_review),
+        ).toHaveLength(0);
+      });
+
+      it('a `wait` on a superseded ask is acked as superseded, not as taking the review (ADR 545)', async () => {
+        const { nickTok, ada, gee, agentKey } = await setup();
+        await post('/teams/dawn/members', { name: 'hal', kind: 'agent' }, nickTok);
+        const hal = (await resolveAuth('/teams/dawn/inbox', { key: agentKey, seat: 'hal' }))!;
+        await reattestAgentModel('dawn', hal, 'gemini-3-pro');
+        const lane = await post('/teams/dawn/lanes', { title: 'wait late', claim: true }, ada);
+        const laneId = lane.json.lane.id as string;
+        await patchLane(laneId, { state: 'ready_for_review', acceptor: 'gee' }, ada);
+        const oldAsk = (await get('/teams/dawn/inbox?unread=1', gee)).json.messages.find(
+          (m: any) => m.act === 'ask' && m.meta?.lane_review?.lane === laneId,
+        );
+        await patchLane(laneId, { state: 'awaiting_acceptance', acceptor: 'hal' }, ada);
+
+        const late = await verdict(gee, 'gee', oldAsk.id as string, 'wait');
+        expect(late.status).toBe(201);
+        expect(late.json.lane_ack).toBeUndefined();
+        expect(late.json.lane_superseded?.current?.reviewer).toBe('hal');
       });
 
       it('re-routing to the seat that already holds the ask mints nothing and reports it standing', async () => {

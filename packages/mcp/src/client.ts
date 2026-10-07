@@ -83,6 +83,12 @@ export interface LaneVerdictWire {
 }
 /** ADR 539: the daemon's raw escalation field — `laneEscalationAck()` renders the sentence. */
 export type LaneEscalationWire = { lane: string; human: string | null };
+/** ADR 545: a reply on a superseded acceptance ask — `laneSupersededAck()` renders the sentence. */
+export type LaneSupersededWire = {
+  lane: string;
+  ask: string;
+  current: { ask: string; reviewer: string } | null;
+};
 
 /** A refuse whose cause is a bad *grant*, not a bad seat — drop the grant and retry bare (ADR 193). */
 function isStaleGrantRefusal(frame: { code: string; message: string }): boolean {
@@ -669,6 +675,8 @@ export class MusterdClient {
     /** ADR 539: this accept was the peer confirmation on a risky lane; who (if anyone) was asked. */
     lane_escalation?: LaneEscalationWire;
     lane_ack?: { lane: string };
+    /** ADR 545: this reply answered an acceptance ask a re-route had closed; which binds now. */
+    lane_superseded?: LaneSupersededWire;
     /** ADR 505: the owner's answer to a review dispute — conceded, or held and re-routed. */
     dispute?: DisputeAnswerWire;
     /** ADR 505 §6: this accept took a handoff — the sender's note, returned with the check line. */
@@ -681,6 +689,7 @@ export class MusterdClient {
       lane_verdict?: LaneVerdictWire;
       lane_escalation?: LaneEscalationWire;
       lane_ack?: { lane: string };
+      lane_superseded?: LaneSupersededWire;
       dispute?: DisputeAnswerWire;
       accepted_handoff?: AcceptedHandoffWire;
       evidence_notice?: string;

@@ -801,6 +801,17 @@ packet, or listed in a digest's learned section. Search hits MAY carry
 `status: {retracted?: {by, at, reason}, superseded_by?: [{id, from, headline, hides}]}`; a dream
 packet's insight MAY carry `superseded_by` (from other Members only — a hidden one is absent).
 
+## A.21 A reply on a superseded acceptance ask (unreleased — ADR 545)
+
+A `lane_review` ask is superseded once a re-route (`lane.review_rerouted`, named, departed or reaped)
+names it as `superseded_ask`. While its Lane is still awaiting acceptance, a supporting server:
+
+- MUST NOT let an `accept`, `decline` or `wait` that answers a superseded ask move the Lane, record a
+  peer confirmation, or fire a human ask (ADR 188 §4) — the acceptance is the current holder's.
+- MUST answer that act's ack with `lane_superseded {lane, ask, current}` — `ask` the superseded ask
+  answered, `current` `{ask, reviewer}` for the acceptance ask open on the Lane now, or `null` when
+  none is — and MUST NOT answer `lane_verdict`, `lane_escalation` or `lane_ack` for it.
+
 ## A.20 Peer-confirmed acceptance pending a human (unreleased — ADR 539)
 
 On a Lane with a declared `risk` tag, an agent's `accept` on the `lane_review` ask is the peer stage

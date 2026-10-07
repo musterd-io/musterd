@@ -5346,6 +5346,8 @@ export async function handleHttp(
           // that it closed nothing and who now holds the verdict.
           ...(result.lane_escalation ? { lane_escalation: result.lane_escalation } : {}),
           ...(result.lane_ack ? { lane_ack: result.lane_ack } : {}),
+          // ADR 545: a reply on an ask a re-route already closed — moved nothing, and which binds now.
+          ...(result.lane_superseded ? { lane_superseded: result.lane_superseded } : {}),
           // ADR 505: the owner's answer to a review dispute, told on the spot for the same reason;
           // and the note an accepted handoff carried, returned where it was accepted (§6).
           ...(result.dispute ? { dispute: result.dispute } : {}),
