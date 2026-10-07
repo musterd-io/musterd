@@ -94,6 +94,15 @@ seat and the acceptances, so the two triggers differ only in how the departure b
   whose reviewer is live and simply not answering.
 - A silently-departed seat that returns finds its acceptance gone and a `resolve` on the old ask
   saying where it went. That is the same experience ADR 412 gives a seat that said goodbye.
+- **2026-10-07 — "terminates by construction" did not hold across a host suspend** (lane
+  01M4BJX7JJ). The sweep read `hasLivePresence` on the first tick after every sleep, when the
+  holder's row was stale by the clock alone and whichever seat's heartbeat landed first looked live.
+  Lane 01M49JNJG3's acceptance moved 37 times overnight on 2026-10-06/07, every move within 5 s of a
+  `residency.host_suspended` row, and nobody held it long enough to judge it. "Gone" is still
+  `hasLivePresence`, unchanged; what changed is *when* the sweep may ask: only once the reaper has
+  listened for a full presence timeout, the same window `reapStale` has waited on since lane
+  01M1HNY302 (after boot, and after any gap as long as the timeout). Three tests on the real tick
+  cover the boot, the suspend, and a holder that stays silent past the window.
 
 ## Observability & Evaluation
 

@@ -231,10 +231,11 @@ export function reaperTick(ctx: Ctx): () => Promise<void> {
     // ADR 412 to hear, so the reaper notices on its behalf. Ungated, unlike the ADR 229 backstop
     // below: this never closes a lane and never invents a verdict, it only moves an ask to a seat
     // that is actually there. Runs BEFORE the backstop so a lane gets a live reviewer offered
-    // before it can be closed unreviewed on a team that armed the sweep.
+    // before it can be closed unreviewed on a team that armed the sweep. Gated on the same listening
+    // window as `reapStale` below (lane 01M4BJX7JJ): "the holder is gone" is a judgement of silence.
     for (const team of activeTeams) {
       if (joinerTeams.has(team.id)) continue;
-      for (const lane of await sweepReapedAcceptances(ctx, team)) {
+      for (const lane of await sweepReapedAcceptances(ctx, team, presenceWatchedSince, now)) {
         log.info({ msg: 'reroute_reaped_acceptance', team: team.slug, lane });
       }
     }
