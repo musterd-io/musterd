@@ -21,7 +21,16 @@ export interface Live {
   label: string;
   surface: string;
   since: number | null;
+  /**
+   * Present only when the live Presence is a wake (`provenance: 'wake'`, ADR 543): why musterd
+   * started it, from the roster's `wake_for` — null when the daemon could not say (an older daemon,
+   * or a lease minted on another node). Absent for every session a person opened.
+   */
+  wake?: WakeFor | null;
 }
+
+/** Why a wake happened, as the roster carries it (ADR 543). */
+export type WakeFor = NonNullable<MemberSummary['presences'][number]['wake_for']>;
 
 /** The answering daemon's own node for the team (ADR 503 §4) — what `here` is compared against. */
 export interface RosterNode {
@@ -128,6 +137,7 @@ export function liveFor(seat: Seat, members: readonly MemberSummary[] | null): L
     label: here ? 'here' : (p.node_label ?? serverHost(seat.server)),
     surface: p.surface,
     since: p.attached_at ?? null,
+    ...(p.provenance === 'wake' ? { wake: p.wake_for ?? null } : {}),
   };
 }
 

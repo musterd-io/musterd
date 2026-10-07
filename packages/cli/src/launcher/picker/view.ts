@@ -5,9 +5,9 @@ import {
   ago,
   canVerb,
   describeLive,
-  describeLiveLong,
   describeMove,
   describeWhere,
+  liveQuestion,
   seatLine,
 } from '../rows.js';
 import { lastUsedAt } from '../store.js';
@@ -187,10 +187,12 @@ function footer(s: PickerState, cols: number): string[] {
   }
   if (s.confirm) {
     const live = s.live[s.confirm.seat.address];
-    const where = live ? describeLiveLong(live, s.now) : 'elsewhere';
+    const member = s.confirm.seat.member;
     // Wrapped, never clipped: a question whose `(y/N)` is cut off cannot be answered.
     return wrap(
-      `${s.confirm.seat.member} is live ${where}. Open a second session in the same folder? (y/N)`,
+      live
+        ? liveQuestion(member, live, s.now)
+        : `${member} is live elsewhere. Open a second session in the same folder? (y/N)`,
       cols - 2,
     ).map((l) => `  ${l}`);
   }

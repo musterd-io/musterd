@@ -146,6 +146,25 @@ export const PresenceSchema = z.object({
    */
   wake_lease: z.string().nullish(),
   /**
+   * Why the wake behind `wake_lease` happened (ADR 543) — the lease's own record, joined at read
+   * time: the board `edge` that derived it (null for an inbox wake), the `lane_id` it was for, and
+   * the `act_id` it delivered with that act's kind and sender. Ids and names only — never a body or
+   * a lane title, because the roster answers anonymous reads and the lane board does not. Lets a
+   * surface say "a wake for lane X" instead of a bare "live", so a person about to open a second
+   * session knows they would be replacing work musterd started. Null/absent when `wake_lease` is,
+   * when the lease row is gone, and from older daemons — absence is never read as "not a wake";
+   * `provenance: 'wake'` stays the wake signal.
+   */
+  wake_for: z
+    .object({
+      edge: z.string().nullable(),
+      lane_id: z.string().nullable(),
+      act_id: z.string().nullable(),
+      act: z.string().nullable(),
+      from: z.string().nullable(),
+    })
+    .nullish(),
+  /**
    * When this attachment was created (ADR 379) — the server's `presence.created_at`, distinct from
    * `last_seen_at`, which every heartbeat advances. A wake actuator that spawned into a workspace at
    * time T and finds, at the verify deadline, a fresh row in that same workspace created after T

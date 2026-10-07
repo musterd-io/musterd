@@ -11,7 +11,7 @@ import { buildCatalog, type Catalog } from './catalog.js';
 import { fetchRoster, liveFor, viewerNameFor } from './live.js';
 import { planLaunch, type LaunchPlan } from './plan.js';
 import { resolveSeatWord } from './resolve.js';
-import { describeLiveLong, describeMove, formatReceipt } from './rows.js';
+import { describeMove, formatReceipt, liveQuestion, liveSummary } from './rows.js';
 import {
   launcherFilePath,
   readLauncherFile,
@@ -138,16 +138,13 @@ export async function launchSeat(
   if (!opts.force) {
     const live = liveFor(seat, await (deps.roster ?? fetchRoster)(seat.server, seat.team));
     if (live) {
-      const where = describeLiveLong(live, now());
       const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
       if (!isTTY)
         throw new CliError(
-          `${seat.member} is live ${where} — pass --force to open a second session`,
+          `${seat.member} is live ${liveSummary(live, now())} — pass --force to open a second session`,
           1,
         );
-      const ok = await (deps.confirm ?? confirmOnTTY)(
-        `${seat.member} is live ${where}. Open a second session in the same folder? (y/N) `,
-      );
+      const ok = await (deps.confirm ?? confirmOnTTY)(`${liveQuestion(seat.member, live, now())} `);
       if (!ok) return 0;
     }
   }
