@@ -103,6 +103,7 @@ import {
   SyncPullResponseSchema,
   SyncClaimRequestSchema,
   SyncLanePatchRequestSchema,
+  SyncLanesResponseSchema,
   SyncPolicyRequestSchema,
   SyncStyleRequestSchema,
   SyncTrustRequestSchema,
@@ -260,6 +261,7 @@ import { type LaneCloseVerdict, recordLaneClose } from '../store/laneClose.js';
 import {
   boardWarnings,
   builtOn,
+  countLanesBefore,
   deriveGoalStatus,
   getLane,
   LaneConflictError,
@@ -268,6 +270,7 @@ import {
   noGoalWarning,
   filterLanes,
   listLanes,
+  listLanesBefore,
   emptyPoolFromSubmitAudit,
   openLane,
   updateLane,
@@ -6052,6 +6055,7 @@ export async function handleHttp(
         const nodes = (await listNodeLiveness(ctx.db, team.id)).map((n) =>
           n.id === self ? { ...n, last_seen_at: now } : n,
         );
+        const genesis = await laneGenesis(ctx.db, team.id);
         return sendJson(
           res,
           200,
@@ -6061,7 +6065,34 @@ export async function handleHttp(
             nodes,
             // ADR 509: where every seat lives, so a joiner's roster can say so too.
             seat_nodes: await listSeatBindings(ctx.db, team.id),
-            lane_genesis: await laneGenesis(ctx.db, team.id),
+            lane_genesis: genesis,
+            // ADR 544: how many lanes predate this log — a joiner holding fewer asks /sync/lanes.
+            pre_genesis_lanes: genesis ? await countLanesBefore(ctx.db, team.id, genesis) : 0,
+          }),
+        );
+      }
+
+      // ADR 544 — the hub's pre-genesis lanes, whole and current, for a joiner that cannot learn
+      // them from the log: no `lane.opened` exists for anything older than `lane_genesis`, so a
+      // transition on one folds `lane_unborn` forever and an acceptance ask or handoff naming it
+      // never discharges (101 such acts on one joiner, 2026-10-07). Machine credential, like /sync/pull.
+      if (method === 'GET' && rest === '/sync/lanes') {
+        const team = await requireTeam(ctx.db, slug);
+        const node = await authenticateNode(ctx.db, team.id, bearer(req));
+        if (!node) {
+          throw new MusterdError(
+            'unauthorized',
+            'the sync surface authenticates with a machine credential (msnode_) for this team',
+          );
+        }
+        await touchNode(ctx.db, node.id, Date.now());
+        const genesis = await laneGenesis(ctx.db, team.id);
+        return sendJson(
+          res,
+          200,
+          SyncLanesResponseSchema.parse({
+            lane_genesis: genesis,
+            lanes: genesis ? await listLanesBefore(ctx.db, team.id, team.slug, genesis) : [],
           }),
         );
       }

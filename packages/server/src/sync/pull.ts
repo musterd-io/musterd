@@ -1,5 +1,6 @@
 import {
   SYNC_PULL_MAX_BATCH,
+  SyncLanesResponseSchema,
   SyncPullResponseSchema,
   type SyncPullResponse,
 } from '@musterd/protocol';
@@ -7,6 +8,7 @@ import type { Ctx } from '../context.js';
 import { failureFields, log } from '../log.js';
 import { readNodeState } from '../node/state.js';
 import { handleFoldedMessages } from '../protocol/route.js';
+import { countLanesBefore, insertLaneSnapshot } from '../store/lanes.js';
 import { getMemberById, haltedSentence } from '../store/members.js';
 import { replaceSeatBindings } from '../store/nodes.js';
 import { listActiveTeams } from '../store/teams.js';
@@ -291,6 +293,47 @@ export async function drainTeam(
 }
 
 /** One page of one team's pull: fetch past the cursor, fold, report any stop. */
+/**
+ * ADR 544: the hub's lanes older than its replicated history, fetched whole. Only a joiner calls
+ * this, and only when a pull page said the hub holds more pre-genesis lanes than this daemon does.
+ */
+async function fetchPreGenesisLanes(hubUrl: string, credential: string, slug: string) {
+  const res = await withSocketRetry(() =>
+    fetch(new URL(`/teams/${slug}/sync/lanes`, hubUrl), {
+      headers: { authorization: `Bearer ${credential}` },
+      signal: AbortSignal.timeout(PULL_TIMEOUT_MS),
+    }),
+  );
+  if (!res.ok) throw new Error(`hub responded ${res.status} to /sync/lanes`);
+  return SyncLanesResponseSchema.parse(await res.json());
+}
+
+/**
+ * ADR 544: adopt the hub's pre-genesis lanes this daemon lacks. A lane born before the hub's log
+ * began has no `lane.opened` anywhere, so its transitions fold `lane_unborn` forever and every
+ * acceptance ask or handoff naming it stays owed (101 acts on one joiner, 2026-10-07). The page's
+ * `pre_genesis_lanes` count against this daemon's own says whether there is anything to fetch;
+ * rows are inserted only where absent, never updated — a row already here converges through the
+ * fold. Self-healing and stateless: the next page re-compares. Returns how many rows were adopted.
+ */
+export async function adoptPreGenesisLanes(
+  ctx: Ctx,
+  team: { id: string; slug: string },
+  enrollment: { hub_url: string; credential: string },
+  page: Pick<SyncPullResponse, 'lane_genesis' | 'pre_genesis_lanes'>,
+): Promise<number> {
+  if (page.lane_genesis === null || page.pre_genesis_lanes === 0) return 0;
+  const held = await countLanesBefore(ctx.db, team.id, page.lane_genesis);
+  if (held >= page.pre_genesis_lanes) return 0;
+  const snapshot = await fetchPreGenesisLanes(enrollment.hub_url, enrollment.credential, team.slug);
+  let adopted = 0;
+  for (const lane of snapshot.lanes) {
+    if (await insertLaneSnapshot(ctx.db, team.id, lane)) adopted++;
+  }
+  if (adopted > 0) log.info({ msg: 'sync_pre_genesis_lanes_adopted', team: team.slug, adopted });
+  return adopted;
+}
+
 export async function pullPage(
   ctx: Ctx,
   team: { id: string; slug: string },
@@ -310,15 +353,27 @@ export async function pullPage(
   const cursor = await readPullCursor(ctx.db, team.id);
   // The hub sends its watermark; folding our own staged log (the loopback arm) reads it from the
   // same table the events came from — either way it describes the log being folded, not this daemon.
-  const page: Pick<SyncPullResponse, 'events' | 'nodes' | 'seat_nodes' | 'lane_genesis'> =
-    enrollment
-      ? await fetchPage(enrollment.hub_url, enrollment.credential, team.slug, cursor)
-      : {
-          events: await readStaged(ctx.db, team.id, cursor, SYNC_PULL_MAX_BATCH),
-          nodes: [],
-          seat_nodes: [],
-          lane_genesis: await laneGenesis(ctx.db, team.id),
-        };
+  const page: Pick<
+    SyncPullResponse,
+    'events' | 'nodes' | 'seat_nodes' | 'lane_genesis' | 'pre_genesis_lanes'
+  > = enrollment
+    ? await fetchPage(enrollment.hub_url, enrollment.credential, team.slug, cursor)
+    : {
+        events: await readStaged(ctx.db, team.id, cursor, SYNC_PULL_MAX_BATCH),
+        nodes: [],
+        seat_nodes: [],
+        lane_genesis: await laneGenesis(ctx.db, team.id),
+        pre_genesis_lanes: 0,
+      };
+  // ADR 544: a joiner adopts the lanes the log can never carry. Best-effort — a failed snapshot
+  // must not stop the page from folding; the next page re-compares and asks again.
+  if (enrollment) {
+    try {
+      await adoptPreGenesisLanes(ctx, team, enrollment, page);
+    } catch (err) {
+      log.warn({ msg: 'sync_pre_genesis_lanes_failed', team: team.slug, err: String(err) });
+    }
+  }
   // Node liveness lands even when the page is empty: a quiet team still needs to know its
   // machines are alive (presence replication §3). The hub reads its own table and folds none.
   if (page.nodes.length > 0) await foldNodeLiveness(ctx.db, team.id, page.nodes);

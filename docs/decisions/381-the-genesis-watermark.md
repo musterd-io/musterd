@@ -80,6 +80,13 @@ yet** — without loosening the discipline that makes the fold trustworthy.
 
 ## Consequences
 
+- _Dated note (2026-10-07):_ §4's pre-registered fix is decided by
+  [ADR 544](544-pre-genesis-lanes.md), and not as snapshot-at-enrollment: the pull page carries
+  the hub's pre-genesis lane COUNT, and a joiner holding fewer fetches the rows once over
+  `GET /sync/lanes` (insert where absent, never update). The gap it closes was measured on
+  2026-10-07: 106 unanswered acceptance asks and handoffs on one joiner named a lane that had no
+  row there, so they pinned forever.
+
 - A joiner catches up on a team with pre-replication lanes. That is the whole point, and until it
   landed there was no second machine on this team at all.
 - Those lanes do not exist on the joiner, and their transitions are visible only in `audit`. This

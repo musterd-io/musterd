@@ -697,6 +697,79 @@ export async function listLanes(
 }
 
 /**
+ * ADR 544: the hub's lanes older than its replicated history (`id < beforeId`; ULIDs sort by birth),
+ * in their current state — what a joiner can never learn from the log. Ordered by id so a page is
+ * stable; the count beside it is what a pull page carries so a joiner knows whether to ask.
+ */
+export async function listLanesBefore(
+  db: Driver,
+  teamId: string,
+  teamSlug: string,
+  beforeId: string,
+): Promise<Lane[]> {
+  const rows = await db.all<LaneRow>(
+    'SELECT * FROM lanes WHERE team_id = ? AND id < ? ORDER BY id',
+    [teamId, beforeId],
+  );
+  return rows.map((r) => rowToLane(r, teamSlug));
+}
+
+export async function countLanesBefore(
+  db: Driver,
+  teamId: string,
+  beforeId: string,
+): Promise<number> {
+  const row = await db.get<{ n: number }>(
+    'SELECT COUNT(*) AS n FROM lanes WHERE team_id = ? AND id < ?',
+    [teamId, beforeId],
+  );
+  return Number(row?.n ?? 0);
+}
+
+/**
+ * ADR 544: a joiner adopts one of the hub's pre-genesis lanes — the whole row as the hub holds it
+ * now, inserted only if this daemon has no row for the id. Never an update: a row this daemon holds
+ * is already converging through the fold, and a snapshot must not race it. Returns whether a row
+ * was written.
+ */
+export async function insertLaneSnapshot(db: Driver, teamId: string, lane: Lane): Promise<boolean> {
+  const r = await db.run(
+    `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, parked_json, follows_up_json, abandon_reason, unfinished_todos_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO NOTHING`,
+    [
+      lane.id,
+      teamId,
+      lane.project,
+      lane.title,
+      lane.detail,
+      lane.kind ?? null,
+      lane.owner_seat,
+      lane.role,
+      JSON.stringify(lane.scope),
+      JSON.stringify(lane.depends_on),
+      lane.branch,
+      lane.goal_id,
+      lane.risk.length > 0 ? JSON.stringify(lane.risk) : null,
+      lane.stakes === 'normal' ? null : lane.stakes,
+      lane.stakes_provenance === 'defaulted' ? 'defaulted' : null,
+      lane.merged ? JSON.stringify(lane.merged) : null,
+      lane.parked ? JSON.stringify(lane.parked) : null,
+      lane.follows_up !== undefined ? JSON.stringify(lane.follows_up) : null,
+      lane.abandon_reason ?? null,
+      lane.unfinished_todos ? JSON.stringify(lane.unfinished_todos) : null,
+      lane.state,
+      lane.created_by,
+      lane.created_at,
+      lane.claimed_at,
+      lane.resolved_at,
+      lane.updated_at,
+    ],
+  );
+  return (r.changes ?? 0) > 0;
+}
+
+/**
  * The in-memory half of `listLanes`, so a caller that already holds the board (one read per
  * request — lane 01M3ANEQVR: `GET /lanes` used to read the 1218-row table 16 times, 116 ms of its
  * 267 ms) can derive a filtered view without going back to SQLite.
