@@ -565,7 +565,7 @@ withDrivers('residency-http', (_o, kind) => {
 
   describe('wake_for — the roster says why a woken Presence exists (ADR 543)', () => {
     it("joins the lease's act and sender onto the row; a lease with no row here reads null", async () => {
-      await claimAda();
+      // Enrolled and offline, so the urgent act derives a wake; Ada claims only once it is leased.
       await enrollAda();
       await post(
         '/teams/dawn/messages',
@@ -588,6 +588,7 @@ withDrivers('residency-http', (_o, kind) => {
         agentKey,
       );
       const order = leases.json.orders[0] as { lease_id: string; act_id: string };
+      await claimAda();
       const touch = async (lease: string) => {
         const res = await fetch(base + '/teams/dawn/inbox?seat=Ada', {
           headers: {
