@@ -87,7 +87,7 @@ were written first and failed before the change:
 
 `lanes.superseded.test.ts` pins the sentence for both `current` shapes.
 
-**Falsifier.** In the month after this lands, look for a `lane.review_peer_confirmed` or
+**Experiment.** In the month after this lands, look for a `lane.review_peer_confirmed` or
 `lane.closed` row whose triggering accept answered an ask named as `superseded_ask` by an earlier
 `lane.review_rerouted`. Any such row means the check is bypassed on a path these tests don't drive.
 The joiner fold path is guarded by the same call but has no test of its own here.
