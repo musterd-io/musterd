@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AuditEntrySchema } from './audit.js';
 import { PolicyOverrideSchema } from './credentials.js';
 import { EnvelopeSchema } from './envelope.js';
-import { UpdateLaneSchema } from './lanes.js';
+import { LaneSchema, UpdateLaneSchema } from './lanes.js';
 import { StylePrefsSchema } from './style.js';
 
 /**
@@ -479,5 +479,23 @@ export const SyncPullResponseSchema = z.object({
    * as it did before this field existed.
    */
   lane_genesis: z.string().nullable().default(null),
+  /**
+   * ADR 544: how many lanes the hub holds that are OLDER than `lane_genesis` — lanes born before
+   * its replicated history began, which no `lane.opened` will ever carry to a joiner. A joiner
+   * holding fewer fetches them once over `GET /sync/lanes`. Defaults to 0 so an older hub's page
+   * still parses; a joiner then fetches nothing.
+   */
+  pre_genesis_lanes: z.number().int().nonnegative().default(0),
 });
 export type SyncPullResponse = z.infer<typeof SyncPullResponseSchema>;
+
+/**
+ * ADR 544 — `GET /teams/:slug/sync/lanes` (machine credential): the hub's lanes older than its
+ * `lane_genesis`, in their CURRENT state. A joiner inserts the rows it lacks and never overwrites
+ * one it holds; later transitions then project onto the row instead of folding `lane_unborn`.
+ */
+export const SyncLanesResponseSchema = z.object({
+  lane_genesis: z.string().nullable(),
+  lanes: z.array(LaneSchema),
+});
+export type SyncLanesResponse = z.infer<typeof SyncLanesResponseSchema>;

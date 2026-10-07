@@ -114,6 +114,11 @@ behind seat pays, and the resume bound (increment 1, ADR 427) are all untouched.
 
 ## Consequences
 
+- _Dated note (2026-10-07):_ the "unknown lane keeps ringing" rule is kept, and its largest false
+  positive is removed at the source by [ADR 544](544-pre-genesis-lanes.md): a joiner now adopts its
+  hub's pre-genesis lanes, so the 106 acts on ryder's joiner whose lane had no row (every lane born
+  before the hub's log) stop being unknown and discharge as `lane_closed`.
+
 - A caught-up seat is unaffected: nothing is pinned, and the reply is the "no new messages" line.
 - A behind seat pays for its obligations and not for its backlog's answers. Measured on the laptop
   daemon's own database, pinned rows returned for a bounded read, before → after:
