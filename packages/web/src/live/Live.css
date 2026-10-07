@@ -1492,16 +1492,18 @@
 /* A plate the layout moved off its own head (plateLayout.ts, lane 01M3GPH5KB) keeps a hairline back
    to it, in the member's own colour: where seats crowd — the meeting table, a pod row — a plate that
    has to step aside must never be read as the neighbour's. It leaves from the plate's edge nearest
-   the head (never through the name); start, length and angle are set per frame. */
+   the head (never through the name); start, length and angle are set per frame. A touch heavier
+   than a hairline since 2026-10-07 (nick: at 1px/0.75 the leader read as faint on the paper floor). */
 .lc-gl-label.is-displaced::after {
   content: '';
   position: absolute;
   left: var(--lead-x);
-  top: var(--lead-y);
+  top: calc(var(--lead-y) - 0.25px);
   width: var(--lead-len);
-  height: 1px;
+  height: 1.5px;
+  border-radius: 1px;
   background: var(--lc-plate-hue);
-  opacity: 0.75;
+  opacity: 0.9;
   transform-origin: 0 50%;
   transform: rotate(var(--lead-angle));
   pointer-events: none;

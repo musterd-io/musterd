@@ -10,7 +10,7 @@ import type { Pt } from './iso';
  * So plates are placed front-to-back (nearest the viewer first — it is the one in front, and the one
  * a viewer reads first), each into the first free slot near its own head: straight above, a step
  * higher, beside the head, higher still. Free means clear of every plate already placed and of every
- * OTHER member's head. A plate off its home spot is `displaced`, and the scene draws a hairline leader
+ * OTHER member's head. A plate off its home spot is `displaced`, and the scene draws a thin leader
  * back to its head so ownership stays unambiguous.
  *
  * CALM ON PURPOSE (nick, 2026-10-06: the repositioning was "very distracting for the viewer").
