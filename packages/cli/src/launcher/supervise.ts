@@ -31,14 +31,14 @@ export function supervise(plan: LaunchPlan, deps: SuperviseDeps = {}): Promise<S
   const now = deps.now ?? Date.now;
   const started = now();
   return new Promise((resolve, reject) => {
-    const child = spawnFn(plan.bin, plan.args, {
-      cwd: plan.cwd,
-      env: deps.env ?? process.env,
-      stdio: 'inherit',
-    });
+    // Handlers go in BEFORE the spawn: spawn returns only after the child has exec'd, so a ⌃C can
+    // reach this process group while the lines after it have not run yet — and an unhandled
+    // SIGINT kills musterd (exit code null), not the harness. A handler only fires from the event
+    // loop, after spawn has returned, so `child` is always set when one runs.
+    let child: ReturnType<typeof nodeSpawn> | undefined;
     const ignore = (): void => {};
-    const term = (): void => void child.kill('SIGTERM');
-    const hup = (): void => void child.kill('SIGHUP');
+    const term = (): void => void child?.kill('SIGTERM');
+    const hup = (): void => void child?.kill('SIGHUP');
     signals.on('SIGINT', ignore);
     signals.on('SIGQUIT', ignore);
     signals.on('SIGTERM', term);
@@ -49,6 +49,17 @@ export function supervise(plan: LaunchPlan, deps: SuperviseDeps = {}): Promise<S
       signals.off('SIGTERM', term);
       signals.off('SIGHUP', hup);
     };
+    try {
+      child = spawnFn(plan.bin, plan.args, {
+        cwd: plan.cwd,
+        env: deps.env ?? process.env,
+        stdio: 'inherit',
+      });
+    } catch (err) {
+      release();
+      reject(new CliError(`couldn't start ${plan.bin}: ${(err as Error).message}`, 1));
+      return;
+    }
     child.once('error', (err: Error) => {
       release();
       reject(new CliError(`couldn't start ${plan.bin}: ${err.message}`, 1));
