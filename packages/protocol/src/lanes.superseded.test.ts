@@ -8,7 +8,11 @@ describe('laneSupersededAck (ADR 545)', () => {
       ask: 'A-old',
       current: { ask: 'A-new', reviewer: 'hal' },
     });
-    expect(ack).toMatchObject({ lane: 'L1', ask: 'A-old', current: { ask: 'A-new', reviewer: 'hal' } });
+    expect(ack).toMatchObject({
+      lane: 'L1',
+      ask: 'A-old',
+      current: { ask: 'A-new', reviewer: 'hal' },
+    });
     expect(ack.guidance).toContain('Lane L1');
     expect(ack.guidance).toContain('moved nothing');
     expect(ack.guidance).toContain('hal (ask A-new)');
