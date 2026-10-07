@@ -365,7 +365,9 @@ async function buildRemoteServer(ctx: Ctx, webReq: Request): Promise<McpServer> 
             sent: envelope.id,
             ...(result.handoff_lane ? { handoff_lane: result.handoff_lane } : {}),
             ...(result.lane_verdict ? { lane_verdict: result.lane_verdict } : {}),
+            ...(result.lane_escalation ? { lane_escalation: result.lane_escalation } : {}),
             ...(result.lane_ack ? { lane_ack: result.lane_ack } : {}),
+            ...(result.lane_superseded ? { lane_superseded: result.lane_superseded } : {}),
           }),
         );
       } catch (err) {

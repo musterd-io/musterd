@@ -12,6 +12,7 @@ import {
   disputeAnswerAck,
   laneAckAck,
   laneEscalationAck,
+  laneSupersededAck,
   laneVerdictAck,
   makeEnvelope,
   threadHintFor,
@@ -258,6 +259,7 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
         : envelope),
       ...(ackBody?.lane_verdict ? { lane_verdict: ackBody.lane_verdict } : {}),
       ...(ackBody?.lane_ack ? { lane_ack: ackBody.lane_ack } : {}),
+      ...(ackBody?.lane_superseded ? { lane_superseded: ackBody.lane_superseded } : {}),
       ...(ackBody?.evidence_notice ? { evidence_notice: ackBody.evidence_notice } : {}),
       ...(threadHint ? { thread_hint: threadHint } : {}),
     };
@@ -294,6 +296,10 @@ export async function sendCommand(parsed: Parsed): Promise<number> {
   // ADR 539: the peer stage on a risky lane, at the same parity — closed nothing, and who holds it.
   if (ackBody?.lane_escalation)
     process.stdout.write(theme.dim(laneEscalationAck(ackBody.lane_escalation).guidance) + '\n');
+  // ADR 545: a reply on an ask a re-route had closed, at the same parity — moved nothing, and which
+  // ask binds now.
+  if (ackBody?.lane_superseded)
+    process.stdout.write(theme.dim(laneSupersededAck(ackBody.lane_superseded).guidance) + '\n');
   // ADR 505: the owner's answer to a review dispute, at the same parity — the text is protocol's.
   if (ackBody?.dispute)
     process.stdout.write(theme.dim(disputeAnswerAck(ackBody.dispute).guidance) + '\n');

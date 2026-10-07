@@ -812,6 +812,12 @@ export class HttpClient {
     /** ADR 539: this accept was the peer confirmation on a risky lane; who (if anyone) was asked. */
     lane_escalation?: { lane: string; human: string | null };
     lane_ack?: { lane: string };
+    /** ADR 545: this reply answered an acceptance ask a re-route had closed; which binds now. */
+    lane_superseded?: {
+      lane: string;
+      ask: string;
+      current: { ask: string; reviewer: string } | null;
+    };
     /** ADR 505: the owner's answer to a review dispute — conceded, or held (re-routed to a
      *  tiebreak reviewer, or nobody could be picked). Absent when the act answered no dispute. */
     dispute?: {
@@ -829,6 +835,11 @@ export class HttpClient {
       lane_verdict?: { lane: string; state: 'done' | 'active' };
       lane_escalation?: { lane: string; human: string | null };
       lane_ack?: { lane: string };
+      lane_superseded?: {
+        lane: string;
+        ask: string;
+        current: { ask: string; reviewer: string } | null;
+      };
       dispute?: {
         lane: string;
         verdict: 'conceded' | 'held';

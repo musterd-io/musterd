@@ -8,6 +8,7 @@ import {
   ACCEPTANCE_MOVES_NOTICE,
   isAwaitingAcceptance,
   type Lane,
+  type LaneSupersededWire,
   makeEnvelope,
   modelFamily,
   confidentialAskSubject,
@@ -36,6 +37,7 @@ import { getMessageTs, insertMessage, rowToEnvelope } from '../store/messages.js
 import { answerPolicyReview } from '../store/policyReview.js';
 import { currentAttestation } from '../store/presence.js';
 import {
+  openAcceptanceAsk,
   pendingHumanReviews,
   pickHumanReviewer,
   supersededAcceptanceAsks,
@@ -78,6 +80,9 @@ export interface RouteResult {
    *  for the same reason `lane_verdict` is: the sender learns what their send did, as they do it —
    *  here, that it did NOT move the lane. */
   lane_ack?: { lane: string };
+  /** ADR 545 — this accept/decline/wait answered an acceptance ask a re-route had already closed:
+   *  it moved nothing, escalated nothing, and the ack says which ask (and whose) binds now. */
+  lane_superseded?: LaneSupersededWire;
   /** ADR 505 — what the daemon did with the lane owner's answer to a review dispute: a recorded
    *  concession, or a hold that re-routed the lane to a tiebreak reviewer (or could not). Absent
    *  when the act answered no dispute of the sender's. Reported on the ack as `lane_verdict` is. */
@@ -216,6 +221,7 @@ async function routeEnvelopeInner(
   let laneVerdict: RouteResult['lane_verdict'];
   let laneEscalation: RouteResult['lane_escalation'];
   let laneAck: RouteResult['lane_ack'];
+  let laneSuperseded: RouteResult['lane_superseded'];
   let dispute: RouteResult['dispute'];
   let acceptedHandoff: RouteResult['accepted_handoff'];
   /** ADR 243: which evidence answered — audited, never on the wire. */
@@ -543,6 +549,16 @@ async function routeEnvelopeInner(
     // the peer's findings in the body — the human reviews an already-screened change. Best-effort
     // like every lane delivery: a failure here must never fail the accept itself.
     let escalatedToHuman = false;
+    // ADR 545: an answer to an ask a re-route already closed binds to nothing — no verdict AND no
+    // stage-two escalation (the escalation hook never asked, so a peer answering a moved ask woke
+    // the human for a review nobody held). Checked once, first; the sender is told on the ack.
+    if (typeof ref === 'string') {
+      try {
+        laneSuperseded = await supersededLaneReview(ctx, team, ref);
+      } catch (err) {
+        log.warn({ msg: 'superseded_check_failed', err: String(err) });
+      }
+    }
     // Hub-only (joiner audit 2026-10-02, lane 01M3ZBTJKD): the ask is composed FROM the lane owner,
     // who may be bound to the hub, and a joiner pushing it wedges. A joiner's accept folds, and the
     // hub fires the ask then (`handleFoldedMessages`).
@@ -553,7 +569,12 @@ async function routeEnvelopeInner(
     // ADR 539: a HUMAN's accept is never the peer stage — on a risky lane it IS the human verdict
     // ADR 188 §4 was waiting for. Gating it would ask the human to confirm their own confirmation
     // (found writing the retry test: boss's accept on the stage-two ask re-escalated to boss).
-    if (env.act === 'accept' && typeof ref === 'string' && sender.kind !== 'human') {
+    if (
+      env.act === 'accept' &&
+      typeof ref === 'string' &&
+      sender.kind !== 'human' &&
+      !laneSuperseded
+    ) {
       try {
         if (await joinerEnrollment(ctx.db, team.id, team.slug)) {
           const gated = await gatedLane(ctx, team, ref);
@@ -581,7 +602,7 @@ async function routeEnvelopeInner(
     // demanded, and that human's verdict is the one that closes.
     if ((env.act === 'accept' || env.act === 'decline') && typeof ref === 'string') {
       try {
-        if (!escalatedToHuman)
+        if (!escalatedToHuman && !laneSuperseded)
           laneVerdict = await applyAcceptanceVerdict(ctx, team, sender, ref, env.act, env.body);
       } catch (err) {
         log.warn({ msg: 'acceptance_verdict_failed', err: String(err) });
@@ -590,7 +611,7 @@ async function routeEnvelopeInner(
       // A reply that was a verdict cannot also be an answer, so this runs only when nothing moved
       // above. Best-effort for the same reason the verdict is: a failure here must never fail the
       // act that carries the owner's evidence.
-      if (!laneVerdict) {
+      if (!laneVerdict && !laneSuperseded) {
         try {
           dispute = await applyDisputeAnswer(ctx, team, sender, ref, env.act, message.id);
         } catch (err) {
@@ -629,7 +650,8 @@ async function routeEnvelopeInner(
     const ref = env.meta?.['in_reply_to'];
     if (typeof ref === 'string') {
       try {
-        laneAck = await applyAcceptanceAck(ctx, team, sender, ref);
+        laneSuperseded = await supersededLaneReview(ctx, team, ref);
+        if (!laneSuperseded) laneAck = await applyAcceptanceAck(ctx, team, sender, ref);
       } catch (err) {
         log.warn({ msg: 'acceptance_ack_failed', err: String(err) });
       }
@@ -752,6 +774,7 @@ async function routeEnvelopeInner(
     ...(laneVerdict ? { lane_verdict: laneVerdict } : {}),
     ...(laneEscalation ? { lane_escalation: laneEscalation } : {}),
     ...(laneAck ? { lane_ack: laneAck } : {}),
+    ...(laneSuperseded ? { lane_superseded: laneSuperseded } : {}),
     ...(dispute ? { dispute } : {}),
     ...(acceptedHandoff ? { accepted_handoff: acceptedHandoff } : {}),
   };
@@ -800,6 +823,8 @@ export async function handleFoldedMessages(
       const ref = (JSON.parse(row.meta) as { in_reply_to?: unknown }).in_reply_to;
       if (typeof ref !== 'string') continue;
       try {
+        // ADR 545: an accept on an ask a re-route already closed escalates nothing, on fold too.
+        if (await supersededLaneReview(ctx, team, ref)) continue;
         await fireGatedHumanAsk(ctx, team, sender, ref, row.body, row.id);
       } catch (err) {
         log.warn({ msg: 'gated_human_ask_failed', message: id, err: String(err) });
@@ -1254,6 +1279,40 @@ async function applyAcceptanceAck(
     detail: { lane: lane.id, ask: repliedToId, acceptor: acceptor.name },
   });
   return { lane: lane.id };
+}
+
+/**
+ * ADR 545 — the reply answered a `lane_review` ask that a re-route (named, departed or reaped)
+ * already superseded, on a lane still awaiting acceptance: what it answered and which ask binds now.
+ * `undefined` for anything else, including a live ask — the verdict path handles those.
+ */
+async function supersededLaneReview(
+  ctx: Ctx,
+  team: TeamRow,
+  repliedToId: string,
+): Promise<RouteResult['lane_superseded']> {
+  const replied = await ctx.db.get<{ meta: string | null }>(
+    'SELECT meta FROM messages WHERE team_id = ? AND id = ?',
+    [team.id, repliedToId],
+  );
+  if (!replied?.meta) return;
+  let laneId: string | undefined;
+  try {
+    laneId = (JSON.parse(replied.meta) as { lane_review?: { lane?: string } }).lane_review?.lane;
+  } catch {
+    return;
+  }
+  if (!laneId) return;
+  const lane = await getLane(ctx.db, team.id, laneId, team.slug);
+  if (!lane || !isAwaitingAcceptance(lane.state)) return;
+  if (!(await supersededAcceptanceAsks(ctx.db, team.id, laneId)).has(repliedToId)) return;
+  const current = await openAcceptanceAsk(ctx.db, team.id, laneId);
+  log.info({ msg: 'acceptance_reply_on_superseded_ask', lane: laneId, ask: repliedToId });
+  return {
+    lane: laneId,
+    ask: repliedToId,
+    current: current ? { ask: current.id, reviewer: current.to } : null,
+  };
 }
 
 /**
