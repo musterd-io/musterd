@@ -1169,11 +1169,14 @@ export async function pendingHumanReviews(
   teamId: string,
 ): Promise<Array<{ lane: string; peer: string; peer_accept: string | null }>> {
   const rows = await db.all<{ target: string }>(
-    `SELECT DISTINCT a.target FROM audit a
+    // GROUP BY + MIN(ts), not SELECT DISTINCT … ORDER BY a.ts: Postgres refuses an ORDER BY
+    // outside a DISTINCT select list (42P10), which SQLite allows — main's PGlite leg went red.
+    `SELECT a.target FROM audit a
         JOIN lanes l ON l.team_id = a.team_id AND l.id = a.target
        WHERE a.team_id = ? AND a.action = 'lane.review_peer_confirmed'
          AND l.state IN ('awaiting_acceptance', 'ready_for_review')
-       ORDER BY a.ts ASC`,
+       GROUP BY a.target
+       ORDER BY MIN(a.ts) ASC`,
     [teamId],
   );
   const out: Array<{ lane: string; peer: string; peer_accept: string | null }> = [];
