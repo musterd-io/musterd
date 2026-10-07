@@ -648,3 +648,32 @@ machine is `performance-2x` (2 vCPU, 4 GB) instead of `performance-1x`. It tests
 - **Next:** either take those three reads down, or measure Neon at 2 CU to price the alternative.
   Keep the app machine at `performance-2x` as a separate decision; staging returns to `performance-1x`
   until `fly.toml` says otherwise.
+
+## 2026-10-07 — Cloud run 19: ADR 541 cuts the database's work about fivefold; p95 3.25 s on one vCPU (lane 01M3Z44C56)
+
+Run 17's shape (Neon 1 CU, one `performance-1x` app machine) on 721716df, which adds ADR 541: in
+Cloud, the roster's status clock and quiescence fold are loaded once per team and shared for 1 s.
+
+| run | build / change | Neon | p50 | p95 | req/s | what it showed |
+| --- | --- | --- | --- | --- | --- | --- |
+| 19 | ADR 541 roster sharing (#2185) | 1 CU | 1.7 s | 3.25 s | 42 | the database is no longer the limit; 0 errors |
+
+- **ADR 541 did what it predicted.** These are `pg_stat_statements` deltas over the run. The status
+  clock made 753 calls (0.6 a second), where run 18 made 22 985, and the quiescence fold made 905,
+  where run 18 made 23 126. Together they took about 20 s of database time, down from about 1 380 s.
+  `GET /teams/:slug` served 23 990 reads, so one load served about 30 of them.
+- **The rest of the database work fell too, once it stopped queueing:** interrupt-check 18.4 ms mean
+  (31.1 ms in run 18), the counter `UPDATE` 9.7 ms, and the presence join 1.7 ms. The top
+  statements summed about 400 s in a 1 300 s run, against about 1 960 s in run 18, so the 1 CU
+  compute is no longer saturated.
+- **Latency improved, but not enough.** On the same 1-vCPU app machine as run 17, p95 went from
+  4.2 to 3.25 s and throughput from 36.8 to 42.2 req/s. This matches run 18, which needed twice the
+  app CPU. `claim` p95 was 4.9 s and `GET /teams/:slug` 3.2 s. There were 0 errors, the first clean
+  run since run 11.
+- **Reading.** With the database mostly idle, the remaining queueing is in the app process. Run 18
+  showed that doubling its CPU buys about 20%. The leading suspects are per-request CPU work:
+  `GET /teams/:slug` builds and serializes up to 149 KB for each of about 18 reads a second, and the
+  presence join still runs once per roster read (24 027 calls). This is unmeasured: there was no
+  app CPU profile this run.
+- **Next:** profile the app under load (lane 01M477S003, `GET /teams` CPU) before changing anything
+  else.
