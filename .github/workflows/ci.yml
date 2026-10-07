@@ -59,9 +59,16 @@ on:
   # when the last one is over 4 hours old. ADR 535: the cron probes HOURLY, because GitHub drops
   # scheduled runs (3 of 6 never started on 2026-10-05/06); a probe runs the full check only when
   # the last one is over 4 hours old and code moved since, so a dropped run costs an hour, not four.
+  # ADR 542: GitHub then fired 3 of 22 hourly slots, so the daemon host also dispatches the same
+  # probe hourly (`probe: true`). A dispatch without `probe` still forces the full check.
   schedule:
     - cron: '17 * * * *'
   workflow_dispatch:
+    inputs:
+      probe:
+        description: 'Run as the hourly probe (ADR 542): full check only if due, else skip'
+        type: boolean
+        default: false
 
 # A PR keeps one in-flight run per ref, so a new push cancels the stale one. Main does not cancel
 # (ADR 508): each push and each scheduled run gets its own group, keyed by event and SHA. A
@@ -100,13 +107,15 @@ jobs:
       # old `plan` job, now a step: docs-only diffs run the docs gates alone; a11y runs when
       # packages/web, the sweep scripts, the workflow or deps changed; a PR runs SQLite unless
       # labelled `pglite`; a push to main runs static + docs unless the last full main check is over
-      # 4 hours old; a scheduled run (hourly, ADR 535) runs the full check only when the last one is
-      # over 4 hours old and code changed since it, and skips everything otherwise.
+      # 4 hours old; a probe (the hourly cron, ADR 535, or a `probe: true` dispatch, ADR 542) runs
+      # the full check only when the last one is over 4 hours old and code changed since it, and
+      # skips everything otherwise.
       - name: Pick the gates and the test drivers
         id: pick
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
+          PROBE: ${{ github.event_name == 'schedule' || inputs.probe == true }}
           PGLITE_LABEL: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'pglite') }}
         run: |
           suite=true; a11y=true; kinds=both; docs=true; why="no parent to diff — everything runs"
@@ -135,7 +144,7 @@ jobs:
             moved=true
             if [ -n "$full_sha" ] && [ "$full_sha" != null ] && changed=$(git diff --name-only "$full_sha" HEAD 2>/dev/null) \
               && { [ -z "$changed" ] || ! echo "$changed" | grep -q -v -E '^(docs/|[^/]+\.md$)'; }; then moved=false; fi
-            if [ "$EVENT" = schedule ] && { [ "$moved" = false ] || [ "$full_age" -lt 14400 ] || [ "$inflight" = true ]; }; then
+            if [ "$PROBE" = true ] && { [ "$moved" = false ] || [ "$full_age" -lt 14400 ] || [ "$inflight" = true ]; }; then
               suite=false; a11y=false; docs=false; kinds=sqlite
               why="probe: no code moved since the last full check ($full_sha), it is under 4h old (${full_age}s), or one is in flight (ADR 535)"
             else
@@ -283,12 +292,13 @@ jobs:
           retention-days: 2
 
   # ADR 508: a scheduled run is main's only full check that no PR waits on, so a red one would go
-  # unseen. Open one `ci: main is red` issue, or comment on the open one, naming the run.
+  # unseen. Open one `ci: main is red` issue, or comment on the open one, naming the run. ADR 542:
+  # a dispatched probe is the same check, so it reports the same way.
   main-red:
     name: main-red
     runs-on: ubuntu-latest
     needs: [gates]
-    if: always() && needs.gates.result == 'failure' && github.event_name == 'schedule'
+    if: always() && needs.gates.result == 'failure' && (github.event_name == 'schedule' || inputs.probe == true)
     permissions:
       issues: write
     steps:
