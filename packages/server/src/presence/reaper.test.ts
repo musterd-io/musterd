@@ -443,19 +443,21 @@ withDrivers('reaper', (o) => {
       db.close();
     });
 
-    async function laneHeldByADepartedSeat() {
+    async function laneHeldByADepartedSeat({ holderStale = true } = {}) {
       const team = await createTeam(db, { slug: 'dawn' });
       const worker = (await addMember(db, team, { name: 'Kim', kind: 'agent' })).row;
       const gone = (await addMember(db, team, { name: 'delta', kind: 'agent' })).row;
       const live = (await addMember(db, team, { name: 'Lin', kind: 'agent' })).row;
       // Lin is here and says what she is running; the picker routes on the live occupancy (ADR 101).
-      await attach(db, live.id, 'cli', 'conn-lin', { model: 'gpt-5.6-sol' });
+      const lin = await attach(db, live.id, 'cli', 'conn-lin', { model: 'gpt-5.6-sol' });
       // delta held a presence and it went stale — the reap, not a goodbye.
-      const stale = await attach(db, gone.id, 'cli', 'conn-delta', { model: 'claude-opus-5' });
-      await db.run('UPDATE presence SET last_seen_at = ? WHERE id = ?', [
-        Date.now() - config.presenceTimeoutMs - 1,
-        stale.id,
-      ]);
+      const holder = await attach(db, gone.id, 'cli', 'conn-delta', { model: 'claude-opus-5' });
+      if (holderStale) {
+        await db.run('UPDATE presence SET last_seen_at = ? WHERE id = ?', [
+          Date.now() - config.presenceTimeoutMs - 1,
+          holder.id,
+        ]);
+      }
       const lane = await openLane(db, team.id, team.slug, 'Kim', {
         title: 'kim lane',
         claim: true,
@@ -477,18 +479,30 @@ withDrivers('reaper', (o) => {
           ts: 1_000,
         }),
       );
-      return { team, lane };
+      return { team, lane, linPresence: lin.id, holderPresence: holder.id };
+    }
+
+    const heartbeat = async (presenceId: string) =>
+      await db.run('UPDATE presence SET last_seen_at = ? WHERE id = ?', [Date.now(), presenceId]);
+
+    /** Let `ms` pass a tick at a time with these rows heartbeating, as live sockets would. */
+    async function liveFor(ms: number, ...presenceIds: string[]) {
+      for (let t = 0; t < ms; t += config.reaperIntervalMs) {
+        for (const id of presenceIds) await heartbeat(id);
+        await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
+      }
     }
 
     const rerouted = async (teamId: string) =>
       (await listAudit(db, teamId)).filter((r) => r.action === 'lane.review_rerouted');
 
     it('re-routes the acceptance to a live seat once the holder has been reaped', async () => {
-      const { team, lane } = await laneHeldByADepartedSeat();
+      const { team, lane, linPresence } = await laneHeldByADepartedSeat();
 
       stop = startReaper(ctx);
-      // The loop judges nobody until it has listened for a full timeout window (lane 01M1HNY302).
-      await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs * 2);
+      // The loop judges nobody until it has listened for a full timeout window (lane 01M1HNY302) —
+      // the acceptance sweep included (lane 01M4BJX7JJ), so Lin has to stay live across it.
+      await liveFor(config.presenceTimeoutMs + config.reaperIntervalMs * 2, linPresence);
 
       const rows = await rerouted(team.id);
       expect(rows).toHaveLength(1);
@@ -501,11 +515,58 @@ withDrivers('reaper', (o) => {
     });
 
     it('re-routes a lane at most once, however many ticks pass', async () => {
+      const { team, linPresence } = await laneHeldByADepartedSeat();
+
+      stop = startReaper(ctx);
+      await liveFor(config.presenceTimeoutMs + config.reaperIntervalMs * 20, linPresence);
+
+      expect(await rerouted(team.id)).toHaveLength(1);
+    });
+
+    it('a freshly booted loop moves no acceptance before it has listened a full window', async () => {
       const { team } = await laneHeldByADepartedSeat();
 
       stop = startReaper(ctx);
-      await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs * 20);
+      await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
 
+      expect(await rerouted(team.id)).toHaveLength(0);
+    });
+
+    it('a host suspend moves no acceptance: overnight, every sleep re-routed the same ask (lane 01M4BJX7JJ)', async () => {
+      // Measured 2026-10-06/07: lane 01M49JNJG3's acceptance moved 37 times, every row within 5 s
+      // of a `residency.host_suspended` row. On wake the holder's heartbeat is stale by the clock
+      // alone, while whichever seat's heartbeat landed first looks live — so the sweep moved the
+      // ask to it, and the next sleep moved it again.
+      stop = startReaper(ctx);
+      await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs);
+      const { team, linPresence, holderPresence } = await laneHeldByADepartedSeat({
+        holderStale: false,
+      });
+      await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
+      expect(await rerouted(team.id)).toHaveLength(0);
+
+      // The laptop sleeps. On resume Lin's heartbeat arrives before the tick; delta's has not yet.
+      vi.setSystemTime(Date.now() + HOST_SUSPEND_GAP_MS * 10);
+      await heartbeat(linPresence);
+      await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
+      expect(await rerouted(team.id)).toHaveLength(0);
+
+      // delta reconnects inside the window, as a live adapter does: still nothing to move.
+      await liveFor(config.presenceTimeoutMs * 2, linPresence, holderPresence);
+      expect(await rerouted(team.id)).toHaveLength(0);
+    });
+
+    it('after a suspend, a holder that stays silent a full window is re-routed once', async () => {
+      stop = startReaper(ctx);
+      await vi.advanceTimersByTimeAsync(config.presenceTimeoutMs + config.reaperIntervalMs);
+      const { team, linPresence } = await laneHeldByADepartedSeat({ holderStale: false });
+
+      vi.setSystemTime(Date.now() + HOST_SUSPEND_GAP_MS * 10);
+      await heartbeat(linPresence);
+      await vi.advanceTimersByTimeAsync(config.reaperIntervalMs);
+      expect(await rerouted(team.id)).toHaveLength(0);
+
+      await liveFor(config.presenceTimeoutMs * 3, linPresence);
       expect(await rerouted(team.id)).toHaveLength(1);
     });
 

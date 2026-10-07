@@ -313,8 +313,21 @@ export async function rerouteDepartedAcceptances(
  * It terminates on its own rather than by a counter: once re-routed, the lane's open ask belongs to
  * a LIVE seat, so the next tick's `abandonedAcceptances` no longer names it. A lane only comes back
  * if its new reviewer also vanishes, which is the case where trying again is the right answer.
+ *
+ * `watchedSince` / `now` are {@link reapStale}'s listening window, and for its reason: a heartbeat
+ * is only evidence over time something was listening. Without it this sweep judged silence on the
+ * first tick after every host suspend — the holder's row stale by the clock alone, while whichever
+ * seat's heartbeat landed first looked live and got the ask. Lane 01M49JNJG3's acceptance moved 37
+ * times overnight on 2026-10-06/07, every move within 5 s of a `residency.host_suspended` row, and
+ * no seat ever held it long enough to judge it (lane 01M4BJX7JJ).
  */
-export async function sweepReapedAcceptances(ctx: Ctx, ref: TeamRef): Promise<string[]> {
+export async function sweepReapedAcceptances(
+  ctx: Ctx,
+  ref: TeamRef,
+  watchedSince = 0,
+  now = Date.now(),
+): Promise<string[]> {
+  if (now - watchedSince < ctx.config.presenceTimeoutMs) return [];
   // `routeEnvelope` needs the full roster row; the reaper only has id+slug, so resolve once here
   // rather than making every caller carry a row it does not have.
   const team = await getTeamBySlug(ctx.db, ref.slug);
