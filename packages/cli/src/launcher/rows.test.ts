@@ -7,8 +7,11 @@ import {
   describeWhere,
   formatDuration,
   formatReceipt,
+  liveQuestion,
+  liveSummary,
   renderSeatsList,
   seatLine,
+  wakeReason,
 } from './rows.js';
 import type { Seat } from './store.js';
 
@@ -59,6 +62,62 @@ describe('launcher rows (ADR 491)', () => {
     expect(describeLiveLong({ ...here, where: 'elsewhere', label: 'mini-2' }, NOW)).toBe(
       `on mini-2 (claude-code) since ${sinceLabel(NOW - H, NOW)}`,
     );
+  });
+
+  describe('the live-seat question names a wake (ADR 543)', () => {
+    const here = { where: 'here' as const, label: 'here', surface: 'claude-code', since: NOW - H };
+    const since = sinceLabel(NOW - H, NOW);
+    const why = (over: Partial<NonNullable<Parameters<typeof wakeReason>[0]>>) => ({
+      edge: null,
+      lane_id: null,
+      act_id: null,
+      act: null,
+      from: null,
+      ...over,
+    });
+
+    it('a session a person opened keeps the plain question', () => {
+      expect(liveQuestion('dolly', here, NOW)).toBe(
+        `dolly is live here (claude-code) since ${since}. Open a second session in the same folder? (y/N)`,
+      );
+      expect(liveSummary(here, NOW)).toBe(`here (claude-code) since ${since}`);
+    });
+
+    it('a wake says so, why, that it is expected, and what a second session does to it', () => {
+      const live = {
+        ...here,
+        wake: why({ edge: 'dispatch_continuation', lane_id: '01M46YWG8YHEV2SKW9F1N0W8FG' }),
+      };
+      expect(liveQuestion('dolly', live, NOW)).toBe(
+        `dolly is live here (claude-code) since ${since} — a wake: musterd started it headless to carry on with lane 01M46YWG8Y. ` +
+          `That's expected; it exits when the work is done. ` +
+          `A second session replaces it within seconds and cuts that work off. Open one anyway? (y/N)`,
+      );
+      expect(liveSummary(live, NOW)).toBe(
+        `here (claude-code) since ${since} — a wake to carry on with lane 01M46YWG8Y`,
+      );
+    });
+
+    it('a wake the daemon cannot explain still says it is a wake', () => {
+      expect(liveQuestion('dolly', { ...here, wake: null }, NOW)).toMatch(
+        /— a wake: musterd started it headless\. That's expected;/,
+      );
+    });
+
+    it('each reason reads as prose', () => {
+      const lane = '01M49MEFFRNKSZ0KAYXVY96BTR';
+      expect(wakeReason(why({ edge: 'review', lane_id: lane, act: 'ask', from: 'ghost' }))).toBe(
+        ' to judge lane 01M49MEFFR for acceptance',
+      );
+      expect(wakeReason(why({ edge: 'dispatch_handoff', lane_id: lane, from: 'stanley' }))).toBe(
+        ' for lane 01M49MEFFR, handed over from stanley',
+      );
+      expect(wakeReason(why({ lane_id: lane }))).toBe(' for lane 01M49MEFFR');
+      expect(wakeReason(why({ act: 'ask', from: 'ghost' }))).toBe(' to answer an ask from ghost');
+      expect(wakeReason(why({ act: 'request_help' }))).toBe(' to answer a help request');
+      expect(wakeReason(why({}))).toBe('');
+      expect(wakeReason(null)).toBe('');
+    });
   });
 
   it('a seat line, with and without the address and harness columns', () => {

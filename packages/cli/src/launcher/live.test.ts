@@ -127,6 +127,36 @@ describe('liveFor', () => {
     });
   });
 
+  it('a woken Presence carries why; one a person opened carries no wake at all (ADR 543)', () => {
+    const wake_for = {
+      edge: 'review',
+      lane_id: '01M49MEFFRNKSZ0KAYXVY96BTR',
+      act_id: 'a1',
+      act: 'ask',
+      from: 'ghost',
+    };
+    const woken = [
+      member('ada', 'agent', [
+        {
+          surface: 'claude-code',
+          status: 'online',
+          last_seen_at: 1,
+          attached_at: 5_000,
+          provenance: 'wake',
+          wake_for,
+        },
+      ]),
+    ];
+    expect(liveFor(seat(), woken as never)?.wake).toEqual(wake_for);
+    const unexplained = [
+      member('ada', 'agent', [
+        { surface: 'claude-code', status: 'online', last_seen_at: 1, provenance: 'wake' },
+      ]),
+    ];
+    expect(liveFor(seat(), unexplained as never)?.wake).toBeNull();
+    expect(liveFor(seat(), roster.members as never)).not.toHaveProperty('wake');
+  });
+
   it('no Presence, no roster, or no member is not live', () => {
     expect(liveFor(seat({ member: 'cy' }), roster.members as never)).toBeNull();
     expect(liveFor(seat(), null)).toBeNull();

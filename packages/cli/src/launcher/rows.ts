@@ -1,7 +1,7 @@
 import { sinceLabel, theme } from '../render/theme.js';
 import { hint, padEndVisible, sym } from '../render/ui.js';
 import { harnessLabel } from './labels.js';
-import type { Live } from './live.js';
+import type { Live, WakeFor } from './live.js';
 import type { MemberEntry, Seat } from './store.js';
 
 /*
@@ -199,4 +199,48 @@ export function renderSeatsList(
     out.push('', theme.meta(`${team}: roster unavailable — this machine's folders only`));
   if (stale > 0) out.push('', theme.meta(`${stale} stale · musterd init --prune-bindings --apply`));
   return out.join('\n');
+}
+
+/** An act kind as prose, with its article: `an ask`, `a handoff`, `a help request`. */
+function actPhrase(act: string): string {
+  const words = act === 'request_help' ? 'help request' : act.replace(/_/g, ' ');
+  return `${/^[aeiou]/.test(words) ? 'an' : 'a'} ${words}`;
+}
+
+/**
+ * Why a wake happened, as a clause that follows "musterd started it headless" (ADR 543) — empty
+ * when the roster could not say. A lane is named by its 10-character prefix, as the board does.
+ */
+export function wakeReason(w: WakeFor | null | undefined): string {
+  if (!w) return '';
+  const lane = w.lane_id ? `lane ${w.lane_id.slice(0, 10)}` : null;
+  const from = w.from ? ` from ${w.from}` : '';
+  if (lane && w.edge === 'review') return ` to judge ${lane} for acceptance`;
+  if (lane && w.edge === 'dispatch_continuation') return ` to carry on with ${lane}`;
+  if (lane && w.edge === 'dispatch_handoff') return ` for ${lane}, handed over${from}`;
+  if (lane) return ` for ${lane}`;
+  if (w.act) return ` to answer ${actPhrase(w.act)}${from}`;
+  return '';
+}
+
+/**
+ * The live-seat question, shared by \`musterd <seat>\` and the picker (ADR 491 Decision 6). A wake
+ * says so and why, says it is expected, and says what a second session does to it (ADR 543): a
+ * same-folder successor replaces it once it has held for the ADR 092 grace.
+ */
+export function liveQuestion(member: string, live: Live, now: number): string {
+  const where = describeLiveLong(live, now);
+  if (live.wake === undefined)
+    return `${member} is live ${where}. Open a second session in the same folder? (y/N)`;
+  return (
+    `${member} is live ${where} — a wake: musterd started it headless${wakeReason(live.wake)}. ` +
+    `That's expected; it exits when the work is done. ` +
+    `A second session replaces it within seconds and cuts that work off. Open one anyway? (y/N)`
+  );
+}
+
+/** The one-line form for a refusal without a TTY: where it is live, and whether it is a wake. */
+export function liveSummary(live: Live, now: number): string {
+  const where = describeLiveLong(live, now);
+  return live.wake === undefined ? where : `${where} — a wake${wakeReason(live.wake)}`;
 }

@@ -194,6 +194,51 @@ describe('launchByName (ADR 491 Decision 2)', () => {
     expect(existsSync(join(dir, 'launcher.json'))).toBe(false);
   });
 
+  it('a live seat that is a wake says so and why, on a TTY and off one (ADR 543)', async () => {
+    const woken = async () =>
+      [
+        {
+          id: 'm',
+          team: 'revive',
+          name: 'stanley',
+          kind: 'agent',
+          created_at: 1,
+          presence: 'online',
+          roles: [],
+          role: '',
+          lifecycle: 'forever',
+          presences: [
+            {
+              surface: 'claude-code',
+              status: 'online',
+              last_seen_at: 1,
+              attached_at: 1,
+              provenance: 'wake',
+              wake_for: {
+                edge: 'dispatch_continuation',
+                lane_id: '01M46YWG8YHEV2SKW9F1N0W8FG',
+                act_id: null,
+                act: null,
+                from: null,
+              },
+            },
+          ],
+        },
+      ] as never;
+    const confirm = vi.fn(async () => false);
+    const cat = catalog(seat('revive/agents/stanley', { server: 'http://127.0.0.1:4849' }));
+    const { d } = deps({ roster: woken, isTTY: true, confirm, catalog: cat });
+    expect(await launchByName('stanley', parseArgs([]), d)).toBe(0);
+    expect(confirm.mock.calls[0]?.[0]).toMatch(
+      /^stanley is live here \(claude-code\).* — a wake: musterd started it headless to carry on with lane 01M46YWG8Y\. That's expected; .* replaces it within seconds .* Open one anyway\? \(y\/N\) $/,
+    );
+    const off = deps({ roster: woken, isTTY: false, catalog: cat });
+    await expect(launchByName('stanley', parseArgs([]), off.d)).rejects.toMatchObject({
+      exitCode: 1,
+      message: expect.stringMatching(/a wake to carry on with lane 01M46YWG8Y — pass --force/),
+    });
+  });
+
   it('an ambiguous name with --path refuses instead of opening the picker (review)', async () => {
     const picker = vi.fn(async () => 0);
     const { d } = deps({ isTTY: true, picker });

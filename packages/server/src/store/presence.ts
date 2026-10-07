@@ -26,6 +26,14 @@ export interface PresenceSummary {
     guidance_epoch: number | null;
     style_epoch: string | null;
     wake_lease: string | null;
+    /** Why the wake behind `wake_lease` happened (ADR 543); null when not a wake or no lease row. */
+    wake_for: {
+      edge: string | null;
+      lane_id: string | null;
+      act_id: string | null;
+      act: string | null;
+      from: string | null;
+    } | null;
     /** The machine this row lives on (presence replication, 2026-09-02); null = this daemon. */
     node: string | null;
     node_label: string | null;
@@ -602,6 +610,17 @@ export async function listLiveDrivers(
   return new Set(rows.map((r) => r.driver));
 }
 
+/** One live presence row as the roster reads it: the row, its node's label, and its wake's why. */
+type LivePresenceRow = PresenceRow & {
+  node_label: string | null;
+  wake_id: string | null;
+  wake_edge: string | null;
+  wake_lane_id: string | null;
+  wake_act_id: string | null;
+  wake_act: string | null;
+  wake_from: string | null;
+};
+
 /** Roster presence summary for a team. A member is online if any fresh presence; else offline. */
 export async function listPresence(
   db: Driver,
@@ -616,11 +635,14 @@ export async function listPresence(
   // Every member's live presences in ONE statement, grouped here (lane 01M3ZCTQK9): a query per
   // member is a transaction per member on Postgres, and the roster runs this on every /live refetch.
   // The global last_seen_at order survives the grouping, so each member's list keeps its order.
-  const live = await db.all<PresenceRow & { node_label: string | null }>(
-    `SELECT p.*, n.label AS node_label FROM presence p JOIN members m ON m.id = p.member_id LEFT JOIN nodes n ON n.id = p.node WHERE m.team_id = ? AND m.left_at IS NULL AND m.observer = 0 AND ${LIVE_PRESENCE_SQL} ORDER BY p.last_seen_at DESC`,
+  // A woken row also carries why (ADR 543): its lease's edge/lane/act, and that act's kind and
+  // sender. Ids and names only — the roster answers anonymous reads. A lease minted on another node
+  // has no row here, so a replicated presence reads `wake_for: null`, never a guess.
+  const live = await db.all<LivePresenceRow>(
+    `SELECT p.*, n.label AS node_label, w.id AS wake_id, w.edge AS wake_edge, w.lane_id AS wake_lane_id, w.act_id AS wake_act_id, wm.act AS wake_act, wf.name AS wake_from FROM presence p JOIN members m ON m.id = p.member_id LEFT JOIN nodes n ON n.id = p.node LEFT JOIN wake_leases w ON w.id = p.wake_lease AND w.team_id = m.team_id LEFT JOIN messages wm ON wm.id = w.act_id AND wm.team_id = m.team_id LEFT JOIN members wf ON wf.id = wm.from_member WHERE m.team_id = ? AND m.left_at IS NULL AND m.observer = 0 AND ${LIVE_PRESENCE_SQL} ORDER BY p.last_seen_at DESC`,
     [teamId, l, r],
   );
-  const byMember = new Map<string, (PresenceRow & { node_label: string | null })[]>();
+  const byMember = new Map<string, LivePresenceRow[]>();
   for (const p of live) {
     const list = byMember.get(p.member_id);
     if (list) list.push(p);
@@ -653,6 +675,15 @@ export async function listPresence(
         guidance_epoch: p.guidance_epoch ?? null,
         style_epoch: p.style_epoch ?? null,
         wake_lease: p.wake_lease ?? null,
+        wake_for: p.wake_id
+          ? {
+              edge: p.wake_edge,
+              lane_id: p.wake_lane_id,
+              act_id: p.wake_act_id,
+              act: p.wake_act,
+              from: p.wake_from,
+            }
+          : null,
         attached_at: p.created_at,
         node: p.node ?? null,
         node_label: p.node_label ?? null,

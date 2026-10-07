@@ -390,7 +390,11 @@ move it, `setup` points at the picker.
 
 - Fresh by default; `-r` resumes the harness's last session.
 - `--path` prints the Workspace path and launches nothing: `cd "$(musterd stanley --path)"`.
-- A live seat asks `(y/N)` on a TTY and is refused without one unless `--force`.
+- A live seat asks `(y/N)` on a TTY and is refused without one unless `--force`. When the live
+  Presence is a wake, the question says so and why — `a wake: musterd started it headless to carry on
+  with lane 01M46YWG8Y` — that this is expected, and that a second session replaces it within
+  seconds (ADR 092) and cuts that work off ([ADR 543](../decisions/543-launcher-names-a-wake.md)).
+  The picker asks the same question.
 - When the harness exits: one receipt line on stderr, and the harness's exit code (128 + n on signal n).
 - Exit codes: 2 for no match or an ambiguous name (the candidates are listed); 1 for a seat that needs
   repair, a live seat without `--force`, or a harness that is not installed.
