@@ -20,6 +20,7 @@ import type {
   UpdateLane,
   WorkingHours,
 } from '@musterd/protocol';
+import type { StyleDialsWire, StyleFloorWire, StylePrefsWire } from '@musterd/protocol/wire';
 // The read path takes the validator-free door (ADR 148; `protocol/guards.ts`): the browser reads
 // this daemon over its own origin and the daemon parses everything on ingest, so re-deriving the
 // schemas here bought a strict page-level reject and ~20 KB of zod. The guards keep the one check
@@ -491,9 +492,19 @@ export async function fetchRequests(
 }
 
 /** ADR 501: one authenticated POST from the web surface; the daemon's refusal travels as a LiveFetchError. */
-async function postAsWeb<T>(cfg: LiveConfig, path: string, body?: unknown): Promise<T> {
+function postAsWeb<T>(cfg: LiveConfig, path: string, body?: unknown): Promise<T> {
+  return sendAsWeb(cfg, 'POST', path, body);
+}
+
+/** One authenticated write from the web surface, any method; the refusal travels as a LiveFetchError. */
+async function sendAsWeb<T>(
+  cfg: LiveConfig,
+  method: 'POST' | 'PUT',
+  path: string,
+  body?: unknown,
+): Promise<T> {
   const res = await fetch(path, {
-    method: 'POST',
+    method,
     headers: {
       authorization: `Bearer ${cfg.token}`,
       'content-type': 'application/json',
@@ -549,6 +560,61 @@ export function liftHold(cfg: LiveConfig, id: string): Promise<{ hold: Hold }> {
     cfg,
     `/teams/${encodeURIComponent(cfg.team)}/holds/${encodeURIComponent(id)}/lift`,
   );
+}
+
+/** ADR 514: a human's own style — what `GET`/`PUT /members/me/style` answer (self only). */
+export interface MyStyle {
+  member: string;
+  prefs: StylePrefsWire;
+  resolved: {
+    floor: StyleFloorWire;
+    dials: StyleDialsWire;
+    team_dials: StyleDialsWire;
+    team_prose: string;
+    human_prose: string;
+    epoch: string;
+  };
+  /** The block a seat steered by this human reads, verbatim. */
+  block: string;
+}
+
+/** ADR 514: read this viewer's own dials and prose. A seat is refused (403): agents have no style. */
+export function getMyStyle(cfg: LiveConfig): Promise<MyStyle> {
+  return apiGet(cfg, `/teams/${encodeURIComponent(cfg.team)}/members/me/style`);
+}
+
+/** ADR 514: replace this viewer's prefs whole — the route stores exactly what it is sent. */
+export function putMyStyle(cfg: LiveConfig, prefs: StylePrefsWire): Promise<MyStyle> {
+  return sendAsWeb(cfg, 'PUT', `/teams/${encodeURIComponent(cfg.team)}/members/me/style`, prefs);
+}
+
+/** The style slice of a sparse policy override (ADR 185): only what an admin chose. */
+export interface StylePolicyStored {
+  floor?: Partial<StyleFloorWire>;
+  defaults?: Partial<StyleDialsWire>;
+  prose?: string;
+}
+
+/** `GET /policy` (admin only): the dense effective policy and the sparse stored doc beside it. */
+export interface TeamPolicyRead {
+  policy: { style: { floor: StyleFloorWire; defaults: StyleDialsWire; prose: string } };
+  stored: { style?: StylePolicyStored } & Record<string, unknown>;
+}
+
+/** ADR 514: the team's policy, admin only — the daemon refuses anyone else (403). */
+export function getTeamPolicy(cfg: LiveConfig): Promise<TeamPolicyRead> {
+  return apiGet(cfg, `/teams/${encodeURIComponent(cfg.team)}/policy`);
+}
+
+/**
+ * ADR 185 replace semantics: `stored` is the WHOLE sparse doc, so a caller merges into what it read
+ * (every other key included) and sends it back — dropping a key here would reset it to its default.
+ */
+export function setTeamPolicy(
+  cfg: LiveConfig,
+  stored: TeamPolicyRead['stored'],
+): Promise<TeamPolicyRead> {
+  return postAsWeb(cfg, `/teams/${encodeURIComponent(cfg.team)}/policy`, stored);
 }
 
 /** ADR 501: lift a halt — `POST /teams/:slug/members/:name/resume`. */

@@ -21,8 +21,9 @@ import {
 import { filterLanes, UNOWNED } from '../live/boardWrite';
 import { goalFilter, resolveBoardView } from '../live/goalGrid';
 import { useBoardData } from '../live/useBoardData';
-import { initial, kindOf, memberColor, memberAvatar, hueOf} from '../live/format';
+import { initial, kindOf, memberColor, memberAvatar, hueOf } from '../live/format';
 import { InsightRail } from '../live/InsightRail';
+import { StyleSheet } from '../live/StyleSheet';
 import { useLiveStream } from '../live/useLiveStream';
 import { useReport } from '../live/useReport';
 import { useWorkingOn } from '../live/useWorkingOn';
@@ -61,11 +62,13 @@ function BoardPage() {
   const [provisioning, setProvisioning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
+  const [styleOpen, setStyleOpen] = useState(false);
 
   const disconnect = useCallback((message?: string) => {
     setCfg(null);
     setIsMember(false);
     setComposing(false);
+    setStyleOpen(false);
     if (message) setError(message);
   }, []);
 
@@ -94,6 +97,11 @@ function BoardPage() {
   // The board's data half — optimistic writes, the write gate, the status line — shared with the
   // office overlay on /live (which supplies its own `base`).
   const { board, me, busyId, note, doCreate, doPatch } = useBoardData(cfg, roster, base);
+
+  // ADR 514 inc 5: the viewer's own chip opens "how agents talk to me" — humans only, since agents
+  // have no style preferences (the daemon refuses a seat; the chip doesn't offer what it'd refuse).
+  const meRow = me ? roster.find((m) => m.name === me) : undefined;
+  const closeStyle = useCallback(() => setStyleOpen(false), [setStyleOpen]);
 
   // View + rail preferences — sticky per browser, read once on mount (client-only).
   // `stored` may be the legacy 'goals' value; `resolveBoardView` maps it, and — when nothing is
@@ -307,21 +315,33 @@ function BoardPage() {
         )}
         {me && (
           <>
-            <span className="lc__identity" title="You're in the room.">
-              <span
-                className="lc-card__avatar"
-                style={{
-                  background: memberAvatar(
-                    me,
-                    kindOf(me, new Map(roster.map((m) => [m.name, m]))),
-                    hueOf(me, new Map(roster.map((m) => [m.name, m]))),
-                  ),
-                }}
-                aria-hidden="true"
-              >
-                {initial(me)}
-              </span>
-              {me}
+            <span className="lc-style__anchor">
+              {meRow?.kind === 'human' && cfg ? (
+                <button
+                  type="button"
+                  className="lc__identity lc__identity--btn"
+                  aria-expanded={styleOpen}
+                  aria-haspopup="dialog"
+                  title="How agents talk to you"
+                  onClick={() => setStyleOpen((o) => !o)}
+                >
+                  <IdentityFace me={me} roster={roster} />
+                  <span className="lc__identity-caret" aria-hidden="true">
+                    ▾
+                  </span>
+                </button>
+              ) : (
+                <span className="lc__identity" title="You're in the room.">
+                  <IdentityFace me={me} roster={roster} />
+                </span>
+              )}
+              {styleOpen && cfg && (
+                <StyleSheet
+                  cfg={cfg}
+                  isAdmin={meRow?.capabilities?.is_admin === true}
+                  onClose={closeStyle}
+                />
+              )}
             </span>
             <button className="lc__identity-out" onClick={signOut}>
               sign out
@@ -445,6 +465,23 @@ function BoardPage() {
         </div>
       )}
     </main>
+  );
+}
+
+/** The viewer's avatar and name, as the topbar has always drawn them. */
+function IdentityFace({ me, roster }: { me: string; roster: MemberSummary[] }) {
+  const idx = new Map(roster.map((m) => [m.name, m]));
+  return (
+    <>
+      <span
+        className="lc-card__avatar"
+        style={{ background: memberAvatar(me, kindOf(me, idx), hueOf(me, idx)) }}
+        aria-hidden="true"
+      >
+        {initial(me)}
+      </span>
+      {me}
+    </>
   );
 }
 

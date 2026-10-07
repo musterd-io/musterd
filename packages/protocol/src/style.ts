@@ -1,5 +1,14 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import {
+  STYLE_BLUNTNESS,
+  STYLE_FLOOR_PHRASES,
+  STYLE_FORMAT,
+  STYLE_LENGTH,
+  STYLE_PUSHBACK,
+  describeDials,
+  styleProseProblem,
+} from './style.wire.js';
 
 /**
  * Agent style (ADR 514; spec docs/superpowers/specs/2026-10-05-agent-style-design.md) — how a seat
@@ -10,48 +19,25 @@ import { z } from 'zod';
  * the block a seat reads on `team_join`.
  */
 
-export const STYLE_PUSHBACK = ['every-time', 'when-it-matters', 'only-on-risk'] as const;
-export const STYLE_BLUNTNESS = ['direct', 'plain', 'soft'] as const;
-export const STYLE_LENGTH = ['concise', 'normal', 'thorough'] as const;
-export const STYLE_FORMAT = ['prose', 'structured'] as const;
-
-/** The prose cap, team and human alike (spec §4.1). Inclusive: five lines pass, six are refused. */
-export const STYLE_PROSE_MAX_LINES = 5;
-/** The character cap that makes the line cap a size bound: five lines of ~160 characters. */
-export const STYLE_PROSE_MAX_CHARS = 800;
+export {
+  STYLE_BLUNTNESS,
+  STYLE_DIAL_KEYS,
+  STYLE_DIAL_VALUES,
+  STYLE_FLOOR_PHRASES,
+  STYLE_FORMAT,
+  STYLE_LENGTH,
+  STYLE_PROSE_MAX_CHARS,
+  STYLE_PROSE_MAX_LINES,
+  STYLE_PUSHBACK,
+  describeDialChange,
+  describeDials,
+  styleProseLineCount,
+  styleProseProblem,
+  type StyleDialKey,
+} from './style.wire.js';
 
 /** The wire form of a style epoch: exactly what {@link styleEpoch} produces (ADR 514 inc 2). */
 export const StyleEpochSchema = z.string().regex(/^[0-9a-f]{8}$/);
-
-/** `length normal → thorough`, one entry per dial that moved, in dial order; '' when none did. */
-export function describeDialChange(
-  from: { pushback: string; bluntness: string; length: string; format: string },
-  to: { pushback: string; bluntness: string; length: string; format: string },
-): string {
-  return (['pushback', 'bluntness', 'length', 'format'] as const)
-    .filter((k) => from[k] !== to[k])
-    .map((k) => `${k} ${from[k]} → ${to[k]}`)
-    .join(', ');
-}
-
-/** Every line break a model would read as one: CRLF, LF, lone CR, VT, FF, NEL, LS, PS. */
-const LINE_BREAK = /\r\n|[\n\r\v\f\u0085\u2028\u2029]/g;
-
-/** Lines in a prose addendum. A trailing line break is not a line; every break form counts alike. */
-export function styleProseLineCount(text: string): number {
-  if (text.length === 0) return 0;
-  return text.replace(LINE_BREAK, '\n').replace(/\n$/, '').split('\n').length;
-}
-
-/** Null when the prose fits; otherwise the refusal a surface prints, naming the count and the cap. */
-export function styleProseProblem(text: string): string | null {
-  const lines = styleProseLineCount(text);
-  if (lines > STYLE_PROSE_MAX_LINES)
-    return `prose is ${lines} lines; the cap is ${STYLE_PROSE_MAX_LINES}`;
-  if (text.length > STYLE_PROSE_MAX_CHARS)
-    return `prose is ${text.length} characters; the cap is ${STYLE_PROSE_MAX_CHARS}`;
-  return null;
-}
 
 // superRefine, so the zod issue — what `parseOrBadRequest` hands the caller — carries the count.
 const ProseSchema = z.string().superRefine((s, ctx) => {
@@ -171,27 +157,8 @@ export function resolveStyle(policy: StylePolicy, prefs?: StylePrefs): ResolvedS
   return { ...parts, epoch: styleEpoch(parts) };
 }
 
-const PUSHBACK_WORDS: Record<StyleDials['pushback'], string> = {
-  'every-time': 'pushback every time',
-  'when-it-matters': 'pushback when it matters',
-  'only-on-risk': 'pushback only on risk',
-};
-
-/** The four dials as one line: `pushback when it matters · plain · normal · prose`. */
-export function describeDials(dials: StyleDials): string {
-  return [PUSHBACK_WORDS[dials.pushback], dials.bluntness, dials.length, dials.format].join(' · ');
-}
-
-/** One phrase per floor boolean, in the order the spec lists them (§4.2). */
-const FLOOR_PHRASES: ReadonlyArray<[keyof StyleFloor, string]> = [
-  ['assess_before_agreeing', 'assess before you agree; no praise before a check'],
-  ['disagree_once_then_commit', 'disagree once, with the reason, then follow the decision'],
-  ['concession_names_check', 'a concession names what you checked'],
-  ['human_critique_weighed_as_peer', "weigh a human's critique by its evidence, like anyone's"],
-];
-
 function floorLine(floor: StyleFloor): string | null {
-  const on = FLOOR_PHRASES.filter(([key]) => floor[key]).map(([, phrase]) => phrase);
+  const on = STYLE_FLOOR_PHRASES.filter(([key]) => floor[key]).map(([, phrase]) => phrase);
   return on.length === 0 ? null : `Floor (team): ${on.join('; ')}.`;
 }
 

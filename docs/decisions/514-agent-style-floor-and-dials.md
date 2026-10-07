@@ -135,6 +135,15 @@ without adding a second home for a fact the skill already states.
 - Harness-native renderers (writing a harness's own format knob from the dials) are deferred with a
   dated trigger: the first readout, thirty days after increment 3, showing the `length` dial not
   moving what reaches the human.
+- **2026-10-07, increment 5 (web, lane `01M46MQSMJ`).** The spec put the human's card "on the
+  human's own row", but `/board` has no row per human. The card is a sheet that opens from the
+  viewer's own topbar identity chip, and the admin card is the same sheet's second section (nick's
+  call). On the web, each team knob reads `default` or `set for the team`, taken from the sparse
+  stored doc. Who set a knob, and when, stays with `musterd team policy style`, because the only
+  source for that is an unfiltered `GET /audit` read. So the browser needs no zod, the dial tuples, the prose cap and
+  the pure reads moved to `style.wire.ts` and are exported through `@musterd/protocol/wire` (the
+  `holds.wire.ts` pattern). `style.ts` re-exports them unchanged. No schema changed and nothing on
+  the wire moved.
 
 ## Observability & Evaluation
 

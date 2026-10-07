@@ -298,6 +298,12 @@ team default, the team defaults themselves (`team_dials`), team prose then human
 (increment 3): floor first, team prose, the driver's line and prose labelled with their name, then
 what `@team` and the record get; with no driver it says so and names `musterd agent --driver`.
 
+The vocabularies have no validator behind them: `style.wire.ts` defines the dial tuples
+(`STYLE_DIAL_KEYS`, `STYLE_DIAL_VALUES`), the prose caps and line count, `describeDials`,
+`describeDialChange` and `STYLE_FLOOR_PHRASES` (the floor's own words), and `style.ts` builds the
+zod enums from those tuples and re-exports them. The browser reads them through
+`@musterd/protocol/wire`, so `/board`'s style sheet pulls in neither zod nor the epoch's `node:crypto` (increment 5).
+
 ## `@musterd/protocol` exports (the executable contract)
 
 ```ts

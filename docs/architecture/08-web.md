@@ -113,6 +113,16 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   may set one. Increment 4: `lift` on each hold and a `pause…` form (effect, reason, duration preset)
   render from the read's `can_set` alone — the daemon's per-reader answer, never the viewer's role in
   the client — and a refusal shows in place in the daemon's words.
+- **How agents talk to me** (`live/StyleSheet.tsx`, merges in `live/styleEdit.ts`; ADR 514
+  increment 5) — on `/board`, a signed-in human's own identity chip opens a sheet. /board has no
+  per-human row, so the chip is that row (2026-10-07). It shows the viewer's four dials, each
+  `yours` (with a way back to the team's) or `team default`, the team's value marked under its option,
+  their prose with a live `n / 5 lines` count, the floor read-only, and the block a seat steered by
+  them reads. All of it goes over `GET`/`PUT /members/me/style`. For a viewer the roster calls admin, a second section edits the
+  floor toggles, default dials and team prose over `GET`/`POST /policy`, read-merge-write on the
+  sparse stored doc (ADR 185). Each knob there is labelled `default` or `set for the team`; who set it,
+  and when, stays with `musterd team policy style`, which reads the audit. A `POST /policy` refusal
+  hides that section. Agents get no chip: they have no preferences.
 - **Ask banner** (`live/AsksStrip.tsx`, words from `live/askPhrase.ts`) — the top of the office
   (ADR 464 §6): "✋ ryder is asking nick: *question* · holding until answered · 4:12", Approve / Deny
   inline for an answerer, "+N more waiting" opens the sheet, a settled outcome for ~6s
