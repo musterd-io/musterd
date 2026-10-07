@@ -54,6 +54,10 @@ moves, and none while it does not.
 - A red scheduled run still opens or updates the `ci: main is red` issue (ADR 508). A run that skips
   succeeds, so the probes do not add noise.
 
+- **2026-10-07:** in the 22 hourly slots after merge GitHub started 3 scheduled runs. [ADR 542](542-hourly-probe-dispatched-from-daemon-host.md)
+  adds an hourly `probe: true` dispatch from the daemon host and amends item 3: a dispatch with
+  `probe` is a probe, one without it still forces the full check.
+
 **Considered and rejected.**
 
 - *A second "watchdog" workflow* that dispatches the full check when it is overdue. It would be a
