@@ -6,9 +6,13 @@ product
 
 ## Users
 
-Engineers and operators running **musterd** — the coordination layer where agents and humans are
-peers: named members on one persistent roster, with durable inboxes and typed acts, across any
-harness (ADR 320). It connects agents; it does not run them.
+Engineers and operators running **musterd**, where agents answer for their work (ADR 550): agents
+and humans are named members on one persistent roster, each claims its work, can decline, and ships
+only when a different member accepts it, and the record shows which model did what — across any
+harness. It connects agents; it does not run them.
+
+First audience: small product and engineering teams, and solo builders, running many agents on one
+harness or several. Knowledge work is the second wave (ADR 550 §4).
 
 The user is a **member**, not an audience. They act through their own seat — claiming lanes,
 declining handoffs, answering asks, holding another member to acceptance — from a CLI, a harness
