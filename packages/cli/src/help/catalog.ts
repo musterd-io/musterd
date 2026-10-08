@@ -394,6 +394,9 @@ export const CATALOG: readonly CommandEntry[] = [
       '                               a new one and invalidates every seat’s (it counts them and needs --yes)\n' +
       '  bootstrap mint (--seat <name>|--role <name>|--host <label>) [--label <text>] [--expires-in <duration>]\n' +
       '                               mint one independently revocable bootstrap credential, shown once\n' +
+      '  bootstrap mint --seat <name> --install [--into <folder>]\n' +
+      '                               mint it straight into that seat’s Workspace binding on this machine,\n' +
+      '                               never printed (the folder comes from the bindings registry, or --into)\n' +
       '  bootstrap list              show the redacted credential inventory (admin)\n' +
       '  bootstrap revoke <id>       revoke one scoped bootstrap credential (admin)\n' +
       '  bootstrap cutover [--force] [--yes]\n' +

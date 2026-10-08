@@ -1,9 +1,11 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { Binding } from '@musterd/protocol';
 import { createServer, openDb, type RunningServer } from '@musterd/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
+import { saveBinding } from '../config.js';
 import { teamCommand } from './team.js';
 
 /**
@@ -301,6 +303,113 @@ describe('team policy command', () => {
     await expect(
       teamCommand(parseArgs(['invite', 'create', '--fail-budget', '5000'])),
     ).rejects.toThrow(/fail_budget/);
+  });
+
+  describe('bootstrap mint --install (lane 01M4E4MGCZ)', () => {
+    /** A seat Workspace on this machine: saveBinding also records it in the bindings registry. */
+    function seatFolder(seat: string, extra: Partial<Binding> = {}): string {
+      const ws = mkdtempSync(join(dir, `ws-${seat}-`));
+      saveBinding(ws, {
+        version: 2,
+        server: serverUrl,
+        team: 'dawn',
+        agent_key: 'mskey_revoked_old',
+        claim: { mode: 'seat', name: seat },
+        seat_credential: 'msac_keep_me',
+        ...extra,
+      });
+      return ws;
+    }
+    const bindingAt = (ws: string): Binding =>
+      JSON.parse(readFileSync(join(ws, '.musterd', 'binding.json'), 'utf8')) as Binding;
+
+    it('writes the minted key into the seat’s registered Workspace and never prints it', async () => {
+      await capture(() => teamCommand(parseArgs(['add', 'Ada', '--kind', 'agent'])));
+      const ws = seatFolder('Ada');
+
+      const res = await capture(() =>
+        teamCommand(parseArgs(['bootstrap', 'mint', '--seat', 'Ada', '--install'])),
+      );
+
+      expect(res.code).toBe(0);
+      const written = bindingAt(ws);
+      expect(written.agent_key).toMatch(/^mskey_/);
+      expect(written.agent_key).not.toBe('mskey_revoked_old');
+      expect(written.seat_credential).toBe('msac_keep_me');
+      expect(res.out).not.toContain(written.agent_key!);
+      expect(res.out).toContain(ws);
+      expect(res.out).toContain('not printed');
+      expect(statSync(join(ws, '.musterd', 'binding.json')).mode & 0o777).toBe(0o600);
+    });
+
+    it('--into names the Workspace explicitly; --json carries the credential, never the key', async () => {
+      await capture(() => teamCommand(parseArgs(['add', 'Ada', '--kind', 'agent'])));
+      seatFolder('Ada');
+      const second = seatFolder('Ada');
+
+      const res = await capture(() =>
+        teamCommand(
+          parseArgs([
+            'bootstrap',
+            'mint',
+            '--seat',
+            'Ada',
+            '--install',
+            '--into',
+            second,
+            '--json',
+          ]),
+        ),
+      );
+
+      const body = JSON.parse(res.out);
+      expect(body).not.toHaveProperty('agent_key');
+      expect(body.installed).toBe(join(second, '.musterd', 'binding.json'));
+      expect(body.credential).toMatchObject({ use: 'claim_seat', target: 'Ada' });
+      expect(bindingAt(second).agent_key).toMatch(/^mskey_/);
+    });
+
+    it('refuses before minting when the seat has no Workspace here, or several', async () => {
+      await capture(() => teamCommand(parseArgs(['add', 'Ada', '--kind', 'agent'])));
+      const credentialCount = async (): Promise<number> =>
+        JSON.parse(
+          (await capture(() => teamCommand(parseArgs(['bootstrap', 'list', '--json'])))).out,
+        ).credentials.length;
+      const before = await credentialCount();
+
+      await expect(
+        teamCommand(parseArgs(['bootstrap', 'mint', '--seat', 'Ada', '--install'])),
+      ).rejects.toThrow(/no Workspace bound to Ada.*--into/s);
+
+      seatFolder('Ada');
+      seatFolder('Ada');
+      await expect(
+        teamCommand(parseArgs(['bootstrap', 'mint', '--seat', 'Ada', '--install'])),
+      ).rejects.toThrow(/2 Workspaces are bound to Ada.*--into/s);
+
+      // The refused installs minted nothing.
+      expect(await credentialCount()).toBe(before);
+    });
+
+    it('refuses a --into folder bound to another seat, and --install without --seat', async () => {
+      await capture(() => teamCommand(parseArgs(['add', 'Ada', '--kind', 'agent'])));
+      const lin = seatFolder('Lin');
+      await expect(
+        teamCommand(parseArgs(['bootstrap', 'mint', '--seat', 'Ada', '--install', '--into', lin])),
+      ).rejects.toThrow(/bound to Lin on dawn, not Ada/);
+      expect(bindingAt(lin).agent_key).toBe('mskey_revoked_old');
+
+      await expect(
+        teamCommand(parseArgs(['bootstrap', 'mint', '--role', 'builder', '--install'])),
+      ).rejects.toThrow(/--install needs --seat/);
+    });
+  });
+
+  it('a plain mint names --install instead of "store it in the intended harness"', async () => {
+    await capture(() => teamCommand(parseArgs(['add', 'Ada', '--kind', 'agent'])));
+    const res = await capture(() => teamCommand(parseArgs(['bootstrap', 'mint', '--seat', 'Ada'])));
+    expect(res.out).not.toContain('intended harness');
+    expect(res.out).toContain('musterd team bootstrap mint --seat Ada --install');
   });
 
   it('requires exactly one bootstrap mint scope', async () => {

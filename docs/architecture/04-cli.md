@@ -485,7 +485,7 @@ consume a launch, bind Tailscale/Aperture, or activate `required` enforcement.
 
 ### `musterd team bootstrap <mint|list|revoke>` (ADR 344)
 
-Admin lifecycle for least-privilege harness bootstrap credentials. `mint` requires exactly one of `--seat <name>`, `--role <name>`, or `--host <label>` and optionally accepts `--label` plus `--expires-in <45s|15m|2h>`; it prints the new `mskey_` once. `list` returns redacted inventory metadata only. `revoke <credential-id>` immediately invalidates one scoped credential without disturbing any successor credential, enabling overlap-first rotation: mint, distribute and verify, then revoke.
+Admin lifecycle for least-privilege harness bootstrap credentials. `mint` requires exactly one of `--seat <name>`, `--role <name>`, or `--host <label>` and optionally accepts `--label` plus `--expires-in <45s|15m|2h>`; it prints the new `mskey_` once. `mint --seat <name> --install [--into <folder>]` instead writes the key straight into that seat's Workspace binding as `agent_key` and never prints it (`--json` carries `{credential, installed}`, no key). The folder is `--into` (its binding must name that seat on this team) or the one folder the ADR 020 bindings registry records for the seat; zero or several is a refusal **before** the mint, so a refusal leaves no live credential. A failed write revokes the new credential. `--install` without `--seat` is refused. `list` returns redacted inventory metadata only. `revoke <credential-id>` immediately invalidates one scoped credential without disturbing any successor credential, enabling overlap-first rotation: mint, distribute and verify, then revoke.
 
 ### `musterd team remove <name>`
 
