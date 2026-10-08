@@ -126,11 +126,23 @@ export const SyncPullStopSchema = z.object({
 });
 export type SyncPullStop = z.infer<typeof SyncPullStopSchema>;
 
+/**
+ * A stop's subject is whatever the hub's event named, and for an unreadable act that is an
+ * arbitrary string from a peer. It reaches a terminal and text an agent reads, so it is cut down to
+ * plain name characters and 64 of them — no control or escape bytes, no line breaks, no room for a
+ * sentence of instructions. Applied where the daemon records the stop AND where the sentence is built,
+ * so neither an older daemon nor a hand-built value can bypass it.
+ */
+export function sanitizeStopSubject(subject: string | null): string | null {
+  if (subject === null) return null;
+  return subject.replace(/[^\p{L}\p{N}._:@/-]/gu, '?').slice(0, 64);
+}
+
 /** One wording for every surface that shows a stopped pull — the roster, `status`, the inbox. */
 export function describeSyncPullStop(s: SyncPullStop, now: number = Date.now()): string {
   const mins = Math.max(0, Math.round((now - s.since) / 60_000));
   const ago = mins < 1 ? 'just now' : mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`;
-  const subject = s.subject ?? 'something';
+  const subject = sanitizeStopSubject(s.subject) ?? 'something';
   let cause: string;
   let fix: string;
   switch (s.kind) {

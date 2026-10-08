@@ -45,7 +45,12 @@ A wedged *push* has said so on the roster since ADR 360; a stopped *pull* never 
    (`describeSyncPullStop`), one sentence per cause with the remedy: for `unresolved_seat`, `git pull`
    the team roster repo (and check the seat file was pushed); for an unreadable event, upgrade; for an
    invariant break, an operator.
-4. **Surfaces.** `musterd status` prints it beside a wedged push; the MCP `team_status` and inbox
+4. **The subject is peer text, so it is cleaned twice.** For an unreadable act the subject is a string
+   the hub's event carried. `sanitizeStopSubject` (protocol) keeps letters, digits and `._:@/-`, turns
+   everything else to `?`, and cuts at 64 characters. The daemon applies it when it records the stop and
+   `describeSyncPullStop` applies it again when it builds the sentence, so neither a control or escape
+   byte reaches a terminal nor a line of instructions reaches an agent through this field.
+5. **Surfaces.** `musterd status` prints it beside a wedged push; the MCP `team_status` and inbox
    warning (`syncWedgeWarning`) append it. The structured inbox warning fact is left for a follow-up.
 
 Not decided here: whether one unresolvable seat should stop replication at all. ADR 393 chose to stop

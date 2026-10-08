@@ -1,6 +1,7 @@
 import {
   SYNC_PULL_MAX_BATCH,
   SyncLanesResponseSchema,
+  sanitizeStopSubject,
   SyncPullResponseSchema,
   type SyncPullResponse,
   type SyncPullStop,
@@ -85,7 +86,7 @@ function stopSubject(stop: FoldStop): string | null {
 function notePullStop(ctx: Ctx, teamId: string, stop: FoldStop, now: number): void {
   let teams = pullStopsByDb.get(ctx.db);
   if (!teams) pullStopsByDb.set(ctx.db, (teams = new Map()));
-  const subject = stopSubject(stop);
+  const subject = sanitizeStopSubject(stopSubject(stop));
   const prior = teams.get(teamId);
   const same = prior?.kind === stop.kind && prior.subject === subject;
   teams.set(teamId, {
