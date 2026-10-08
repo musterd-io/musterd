@@ -19,7 +19,8 @@ rather than skips (ADR 393), so everything behind 191206 waited, including acts 
 
 1. Commit and push the seat file from the machine that added the seat, then `git pull` the roster repo on the stuck machine.
    The next tick drains the backlog (the hub log shows a burst of pulls a couple of seconds apart).
-2. Since ADR 547, `musterd status` and the MCP status/inbox warning say `sync is stopped` with the seat and event, after a 5-minute grace.
+2. `musterd team add` now prints the same warning at the source when the seat file is uncommitted or unpushed (lane `01M4EAQ115`), so the push happens before the seat's first event, not after.
+3. Since ADR 547, `musterd status` and the MCP status/inbox warning say `sync is stopped` with the seat and event, after a 5-minute grace.
 
 ## Related
 

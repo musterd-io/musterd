@@ -1,8 +1,15 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { buildSeat, seatFileExists, seatFilePath, writeSeatFile } from './roster.js';
+import {
+  buildSeat,
+  seatFileExists,
+  seatFilePath,
+  seatFileUnpublished,
+  writeSeatFile,
+} from './roster.js';
 
 describe('roster seat-file writer (ADR 058 §5)', () => {
   it('buildSeat drops lifecycle/until when forever (minimal shape)', () => {
@@ -56,5 +63,64 @@ describe('roster seat-file writer (ADR 058 §5)', () => {
       const hue = Number(/hue = (\d+)/.exec(readFileSync(p, 'utf8'))![1]);
       expect(hue).not.toBe(200);
     });
+  });
+});
+
+describe('seatFileUnpublished — a seat other machines cannot resolve yet (ADR 547)', () => {
+  let root: string;
+  let home: string;
+  let remote: string;
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'musterd-seatpub-'));
+    remote = join(root, 'remote.git');
+    home = join(root, 'home');
+    execFileSync('git', ['init', '--quiet', '--bare', remote]);
+    execFileSync('git', ['init', '--quiet', '-b', 'main', home]);
+    git(home, 'config', 'user.email', 't@t');
+    git(home, 'config', 'user.name', 't');
+    git(home, 'remote', 'add', 'origin', remote);
+  });
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('is null outside a git repo — nothing to publish through', () => {
+    const plain = mkdtempSync(join(tmpdir(), 'musterd-nogit-'));
+    try {
+      writeSeatFile(plain, 'alfie', { kind: 'agent' });
+      expect(seatFileUnpublished(plain, 'alfie')).toBeNull();
+    } finally {
+      rmSync(plain, { recursive: true, force: true });
+    }
+  });
+
+  it('says uncommitted for a seat file git has never seen', () => {
+    writeSeatFile(home, 'alfie', { kind: 'agent' });
+    expect(seatFileUnpublished(home, 'alfie')).toBe('uncommitted');
+  });
+
+  it('says unpushed once committed but on no remote branch', () => {
+    writeSeatFile(home, 'alfie', { kind: 'agent' });
+    git(home, 'add', '.');
+    git(home, 'commit', '-q', '-m', 'add alfie');
+    expect(seatFileUnpublished(home, 'alfie')).toBe('unpushed');
+  });
+
+  it('is null once the commit is on a remote branch, and when the file is edited later', () => {
+    writeSeatFile(home, 'alfie', { kind: 'agent' });
+    git(home, 'add', '.');
+    git(home, 'commit', '-q', '-m', 'add alfie');
+    git(home, 'push', '-q', '-u', 'origin', 'main');
+    expect(seatFileUnpublished(home, 'alfie')).toBeNull();
+    // A local edit to an already-published seat is not "other machines cannot resolve it".
+    writeSeatFile(home, 'alfie', { kind: 'agent', role: 'changed' });
+    expect(seatFileUnpublished(home, 'alfie')).toBeNull();
+  });
+
+  it('treats a gitignored seat file as unpublished — it will never reach a peer', () => {
+    writeSeatFile(home, 'alfie', { kind: 'agent' });
+    writeFileSync(join(home, '.gitignore'), '.musterd/seats/\n');
+    expect(seatFileUnpublished(home, 'alfie')).toBe('uncommitted');
   });
 });

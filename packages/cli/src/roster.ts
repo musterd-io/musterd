@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -65,6 +66,47 @@ export function writeSeatFile(home: string, name: string, fields: SeatFields): s
   const hue = fields.hue ?? assignHue(defaultHue(name), Object.values(readSeatHues(home, name)));
   writeFileSync(p, serializeSeat(buildSeat({ ...fields, hue })), 'utf8');
   return p;
+}
+
+/**
+ * Whether a seat file written under `home` can reach another machine yet (ADR 547). A seat replicates
+ * over sync but its roster entry travels by git, so a joiner whose copy of the roster repo lacks the
+ * file stops at the first event naming the seat (Air 2, 2026-10-08: alfie never pushed, 15 hours).
+ *
+ *  - `'uncommitted'` — git has no commit for the file: never added, only staged, or ignored.
+ *  - `'unpushed'` — committed, but the commit is on no remote-tracking branch.
+ *  - `null` — published, or there is nothing to say: `home` is not a git repo, or git itself failed.
+ *    Silence is the safe answer to "could not tell"; a warning that is sometimes wrong is not read.
+ *
+ * "Published" asks about the last commit that touched the file, so a later local edit to a seat that
+ * already reached the remote does not warn: peers can resolve the seat, they just hold an older role.
+ */
+export type SeatFilePublication = 'uncommitted' | 'unpushed';
+
+export function seatFileUnpublished(home: string, name: string): SeatFilePublication | null {
+  const rel = join('.musterd', 'seats', `${name}.toml`);
+  const git = (...args: string[]): string =>
+    execFileSync('git', ['-C', home, ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  try {
+    if (git('rev-parse', '--is-inside-work-tree') !== 'true') return null;
+  } catch {
+    return null;
+  }
+  try {
+    git('ls-files', '--error-unmatch', '--', rel);
+  } catch {
+    return 'uncommitted'; // untracked or ignored
+  }
+  try {
+    const sha = git('log', '-1', '--format=%H', '--', rel);
+    if (sha === '') return 'uncommitted'; // staged, not committed
+    return git('branch', '-r', '--contains', sha) === '' ? 'unpushed' : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Every seat file under a roster home, parsed, keyed by seat name. */

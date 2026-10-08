@@ -65,9 +65,9 @@ visible and their frequency is known.
 - The warning is per daemon and says nothing about the hub: the hub folds its own log and a stop
   there is reported the same way.
 - A stop that clears and returns restarts its clock only if it is a different stop (kind or subject).
-- Follow-up (not in this change): `team add` should warn that a new seat is invisible to other
-  machines until its seat file is pushed. That is the cause of this incident and the change is
-  small, but it is a different surface.
+- Follow-up 2026-10-08, lane `01M4EAQ1150XE8AB2CZ6DX2H69`: `team add` now says when the new seat file is
+  uncommitted or unpushed, which is the cause of this incident (`seatFileUnpublished` in `roster.ts`).
+  CLI-side only; no protocol change.
 
 ## Observability & Evaluation
 

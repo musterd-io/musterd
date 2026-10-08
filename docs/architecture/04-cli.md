@@ -32,7 +32,7 @@ src/
   opencodeBin.ts      // PATH-robust `opencode` binary resolution plus the read-only residency preflight (run --format json + --session advertised); an unresolved or incompatible install stays non-wakeable (ADR 321)
   cursorAgentBin.ts   // PATH-robust `cursor-agent` resolution for the launcher — that name only, never the bare `agent`, which Grok also installs (ADR 491)
   grokBin.ts          // PATH-robust `grok` binary resolution plus the read-only residency preflight (`-p` / `-r` advertised); an unresolved or incompatible install stays non-wakeable (ADR 352)
-  roster.ts           // durable seat-file writer: buildSeat + writeSeatFile (ADR 058 §5, file = single writer)
+  roster.ts           // durable seat-file writer: buildSeat + writeSeatFile (ADR 058 §5, file = single writer); seatFileUnpublished — whether a seat file has reached a remote branch (ADR 547)
   roster-roles/
     templates.ts      // built-in role templates `role create --from` instantiates into roles/<name>.toml — seeds with structural capabilities only, no promotion machinery (ADR 298)
   infra-gate.ts       // warn-only infra-touch check: asks the daemon whether the acting seat holds `platform`; every failure mode is silence, never a block (ADR 227 inc 2)
@@ -491,7 +491,7 @@ consume a launch, bind Tailscale/Aperture, or activate `required` enforcement.
 
 ### `musterd team add <name> --kind <agent|human> [--role <role>] [--lifecycle forever|session|until --until <iso>]`
 
-`POST /teams/:slug/members`, then for an agent `POST /teams/:slug/agent-bootstrap-credentials`. Prints `✓ added <name> (<kind>, <role>)` and a ready-to-paste connect hint. An agent receives a shown-once `mskey_` constrained to that seat (ADR 344), never the legacy Team-wide key; a human receives their shown-once `mscr_` credential. Output: `cmd/team-add`.
+`POST /teams/:slug/members`, then for an agent `POST /teams/:slug/agent-bootstrap-credentials`. Prints `✓ added <name> (<kind>, <role>)` and a ready-to-paste connect hint. An agent receives a shown-once `mskey_` constrained to that seat (ADR 344), never the legacy Team-wide key; a human receives their shown-once `mscr_` credential. Output: `cmd/team-add`. On a file-backed team whose roster home is a git repo, it also checks (`seatFileUnpublished`) whether the new seat file is committed and on a remote branch, and if not prints that **other machines cannot resolve the seat until it is** — their sync stops at the first event naming it (ADR 547, Air 2 2026-10-08) — with the `git` commands; `--json` carries `seat_file_unpublished: {path, state}`. Silent on a db-only team, outside a git repo, or when git cannot tell.
 
 ### `musterd team bootstrap <mint|list|revoke>` (ADR 344)
 
