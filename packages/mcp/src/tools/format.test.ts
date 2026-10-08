@@ -1,6 +1,12 @@
 import type { MemberSummary } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { buildSkewOf, formatMember, formatRoster, notReadyMessage } from './format.js';
+import {
+  buildSkewOf,
+  formatMember,
+  formatRoster,
+  notReadyMessage,
+  syncWedgeWarning,
+} from './format.js';
 
 const base = { team: 'dawn', lifecycle: 'forever' as const, created_at: 0, role: '' };
 
@@ -155,5 +161,25 @@ describe('buildSkewOf — the remedy matches what is on disk', () => {
     expect(w?.text).toContain('pnpm -C /x/runtime build');
     expect(w?.text).toContain('/mcp reload');
     expect(w?.text).not.toContain('this worktree');
+  });
+});
+
+describe('syncWedgeWarning — a stopped pull reads where a wedged push does (ADR 547)', () => {
+  const stop = { kind: 'unresolved_seat', subject: 'alfie', hub_seq: 191206, since: 1_000 };
+
+  it('says the sync is stopped, naming the seat and the event', () => {
+    const text = syncWedgeWarning(
+      { sync: { wedged: null, pull_stopped: stop } },
+      1_000 + 3_600_000,
+    );
+    expect(text).toContain('sync is stopped');
+    expect(text).toContain('seat "alfie"');
+    expect(text).toContain('191206');
+  });
+
+  it('is silent when the fold is moving, and on a daemon that predates the field', () => {
+    expect(syncWedgeWarning({ sync: { wedged: null, pull_stopped: null } })).toBe('');
+    expect(syncWedgeWarning({ sync: { wedged: null } })).toBe('');
+    expect(syncWedgeWarning(undefined)).toBe('');
   });
 });

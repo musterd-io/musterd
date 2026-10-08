@@ -15,7 +15,14 @@ import { bindSeatToNode } from '../store/nodes.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
 import { foldBatch } from './fold.js';
-import { drainTeam, isStaleSocket, pullTeam, withSocketRetry } from './pull.js';
+import {
+  drainTeam,
+  isStaleSocket,
+  pullTeam,
+  readPullStop,
+  SYNC_STOP_WARN_AFTER_MS,
+  withSocketRetry,
+} from './pull.js';
 import { pushTeam } from './push.js';
 
 withDrivers('pull', (_o, kind) => {
@@ -330,6 +337,59 @@ withDrivers('pull', (_o, kind) => {
 
       await addSeat(hub, 'late');
       expect(await pullTeam(hubCtx(), await hubTeam())).toBe(1);
+    });
+
+    it('a stop that holds the cursor is readable as a standing warning after a grace, and clears when the fold moves (ADR 547)', async () => {
+      await send(joiner, 'j-0');
+      await enrollJoiner();
+      const late = await addSeat(joiner, 'late');
+      await insertMessage(
+        joiner.store,
+        (await joinerTeam()).id,
+        late.id,
+        null,
+        makeEnvelope({
+          id: 'l-1',
+          team: 'bravo',
+          from: 'late',
+          to: { kind: 'team' },
+          act: 'message',
+          body: 'hi',
+          ts: 1,
+        }),
+      );
+      await pushTeam(joinerCtx, await joinerTeam());
+      const t0 = 1_000_000_000_000;
+      const team = await hubTeam();
+
+      // Nothing has stopped yet.
+      expect(await readPullStop(hub.store, team.id, t0)).toBeNull();
+
+      await pullTeam(hubCtx(), team, t0);
+      // A stop of one tick is routine (the roster is usually a pull away): quiet inside the grace.
+      expect(await readPullStop(hub.store, team.id, t0 + 60_000)).toBeNull();
+
+      // Still stopped on the next tick, which must not restart the clock.
+      await pullTeam(hubCtx(), team, t0 + 60_000);
+      const stop = await readPullStop(hub.store, team.id, t0 + SYNC_STOP_WARN_AFTER_MS);
+      expect(stop).toMatchObject({ kind: 'unresolved_seat', subject: 'late', since: t0 });
+      expect(stop!.hub_seq).toBeGreaterThan(0);
+
+      // The roster every seat session reads carries it (the route reads the real clock, long past
+      // this test's t0 + grace).
+      const held = await get(hubBase, '/teams/bravo/members', nickCredential);
+      expect(held.json.sync.pull_stopped).toMatchObject({
+        kind: 'unresolved_seat',
+        subject: 'late',
+        since: t0,
+      });
+
+      // The roster catches up; the next pull folds past it and the warning goes.
+      await addSeat(hub, 'late');
+      await pullTeam(hubCtx(), team, t0 + 2 * SYNC_STOP_WARN_AFTER_MS);
+      expect(await readPullStop(hub.store, team.id, t0 + 2 * SYNC_STOP_WARN_AFTER_MS)).toBeNull();
+      const cleared = await get(hubBase, '/teams/bravo/members', nickCredential);
+      expect(cleared.json.sync.pull_stopped).toBeNull();
     });
 
     /**

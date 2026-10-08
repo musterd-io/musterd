@@ -110,6 +110,84 @@ export function describeSyncWedge(w: SyncWedge, now: number = Date.now()): strin
   );
 }
 
+/**
+ * A joiner whose pull fold cannot advance (ADR 547): the hub's event `hub_seq` names something this
+ * machine cannot yet resolve, so the cursor holds there and every later event — including acts
+ * addressed to this machine's seats — waits behind it. Local to this daemon like a wedge. `kind`
+ * is the fold's stop kind, left an open string so an older client still reads a newer daemon's;
+ * `subject` is the thing it names (a seat, an act, a lane), when it names one.
+ */
+export const SyncPullStopSchema = z.object({
+  kind: z.string(),
+  subject: z.string().nullable(),
+  hub_seq: z.number().int(),
+  /** When this stop first held the cursor, ms epoch. */
+  since: z.number().int(),
+});
+export type SyncPullStop = z.infer<typeof SyncPullStopSchema>;
+
+/**
+ * A stop's subject is whatever the hub's event named, and for an unreadable act that is an
+ * arbitrary string from a peer. It reaches a terminal and text an agent reads, so it is cut down to
+ * plain name characters and 64 of them — no control or escape bytes, no line breaks, no room for a
+ * sentence of instructions. Applied where the daemon records the stop AND where the sentence is built,
+ * so neither an older daemon nor a hand-built value can bypass it.
+ */
+export function sanitizeStopSubject(subject: string | null): string | null {
+  if (subject === null) return null;
+  return subject.replace(/[^\p{L}\p{N}._:@/-]/gu, '?').slice(0, 64);
+}
+
+/** One wording for every surface that shows a stopped pull — the roster, `status`, the inbox. */
+export function describeSyncPullStop(s: SyncPullStop, now: number = Date.now()): string {
+  const mins = Math.max(0, Math.round((now - s.since) / 60_000));
+  const ago = mins < 1 ? 'just now' : mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`;
+  const subject = sanitizeStopSubject(s.subject) ?? 'something';
+  let cause: string;
+  let fix: string;
+  switch (s.kind) {
+    case 'unresolved_seat':
+      cause = `it names seat "${subject}", which this machine's roster does not hold`;
+      fix =
+        'The seat file arrives by git, not by sync: `git pull` the team roster repo on this machine ' +
+        '(and if the seat was only just added, check it was pushed from the machine that added it).';
+      break;
+    case 'unknown_act':
+    case 'unknown_lane_event':
+    case 'unknown_presence_event':
+    case 'unknown_policy_event':
+    case 'unknown_continuity_event':
+    case 'unknown_record_event':
+    case 'unknown_seed_event':
+      cause = `it is an event this build cannot read ("${subject}")`;
+      fix = 'A peer runs a newer build: upgrade this daemon (`musterd service refresh`).';
+      break;
+    case 'id_collision':
+    case 'origin_gap':
+    case 'mistagged_ledger_event':
+      cause = `it broke an invariant of the log ("${subject}")`;
+      fix = 'This will not clear by itself: it needs an operator.';
+      break;
+    default:
+      cause = s.subject
+        ? `it names "${subject}", which this machine cannot resolve yet`
+        : 'this machine cannot resolve it yet';
+      fix =
+        'It is retried every minute; if it holds, ask an operator to read the daemon log for `sync_fold_`.';
+  }
+  return (
+    `⚠ this machine's sync is stopped: it cannot apply the hub's event ${s.hub_seq} (${cause}), ` +
+    `since ${ago}. Nothing newer reaches this machine until it clears — acts for its seats wait on ` +
+    `the hub. ${fix}`
+  );
+}
+
+/** The roster's `sync` object as a client reads it. `pull_stopped` is absent from an older daemon. */
+export interface RosterSyncState {
+  wedged: SyncWedge | null;
+  pull_stopped?: SyncPullStop | null;
+}
+
 export const NodeListSchema = z.object({
   nodes: z.array(NodeSummarySchema),
   /** Present on a joiner whose push is refused; absent or null otherwise. Additive. */

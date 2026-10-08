@@ -502,7 +502,7 @@ import {
   SyncOriginError,
   SyncResidenceError,
 } from '../sync/log.js';
-import { pullTeam } from '../sync/pull.js';
+import { pullTeam, readPullStop } from '../sync/pull.js';
 import { readPushRefusal, pushTeam } from '../sync/push.js';
 import {
   recordError,
@@ -2778,7 +2778,12 @@ export async function handleHttp(
           // ADR 360 follow-on: a joiner whose push the hub refuses says so on the roster — the one
           // payload every seat session on this machine reads — naming the seat and the remedy.
           // Null on a machine whose sync is fine (or that has no hub). Additive.
-          sync: { wedged: await readPushRefusal(ctx.db, team.id) },
+          // ADR 547: and a pull whose fold has been stopped for minutes says so the same way — the
+          // seat file that never arrived, the build that cannot read an event. Null when moving.
+          sync: {
+            wedged: await readPushRefusal(ctx.db, team.id),
+            pull_stopped: await readPullStop(ctx.db, team.id),
+          },
         });
       }
 
