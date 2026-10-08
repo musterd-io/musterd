@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -27,6 +27,18 @@ describe('yieldDenyReason (ADR 546)', () => {
     writeFileSync(join(d, '.musterd', 'wake-yield.json'), '{not json');
     expect(yieldDenyReason(d, { MUSTERD_WAKE_LEASE: 'L1' })).toBeNull();
     expect(readYieldFile(d)).toBeNull();
+  });
+});
+
+describe('writeYieldFile (ADR 546)', () => {
+  it('replaces a symlink at the marker path instead of writing through it', () => {
+    const d = ws();
+    const target = join(d, 'victim');
+    symlinkSync(target, join(d, '.musterd', 'wake-yield.json'));
+    writeYieldFile(d, { lease_id: 'L1', by: 'nick', at: 1 });
+    expect(existsSync(target)).toBe(false);
+    expect(lstatSync(join(d, '.musterd', 'wake-yield.json')).isSymbolicLink()).toBe(false);
+    expect(readYieldFile(d)).toEqual({ lease_id: 'L1', by: 'nick', at: 1 });
   });
 });
 

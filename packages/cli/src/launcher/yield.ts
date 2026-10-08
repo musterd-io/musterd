@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   BINDING_DIR,
@@ -7,12 +7,16 @@ import {
   type WakeYieldFile,
 } from '@musterd/protocol';
 
-/** The yield marker (ADR 546): a person asks the wake holding `lease_id` in this folder to stop. */
+/**
+ * The yield marker (ADR 546): a person asks the wake holding `lease_id` in this folder to stop.
+ * Removed first and created exclusively (`wx`), so a symlink planted at the marker's path is
+ * replaced, never written through to wherever it points.
+ */
 export function writeYieldFile(workspace: string, y: WakeYieldFile): void {
   mkdirSync(join(workspace, BINDING_DIR), { recursive: true });
-  writeFileSync(join(workspace, BINDING_DIR, WAKE_YIELD_FILE), JSON.stringify(y) + '\n', {
-    mode: 0o600,
-  });
+  const path = join(workspace, BINDING_DIR, WAKE_YIELD_FILE);
+  rmSync(path, { force: true });
+  writeFileSync(path, JSON.stringify(y) + '\n', { mode: 0o600, flag: 'wx' });
 }
 
 export function readYieldFile(workspace: string): WakeYieldFile | null {
