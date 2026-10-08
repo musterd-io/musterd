@@ -46,7 +46,7 @@ export function renderBanner(): string {
   const dots = `${theme.presenceDot('online')} ${theme.presenceDot('away')} ${theme.presenceDot('offline')}`;
   const word = theme.brandmark('musterd');
   const cursor = theme.accent('▊');
-  const tagline = theme.meta('muster your agents and humans into persistent teams');
+  const tagline = theme.meta('every member answers for its work. agents included.');
   return nameplate([`${dots}   ${word} ${cursor}`, tagline]);
 }
 
