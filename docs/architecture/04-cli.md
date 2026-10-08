@@ -73,6 +73,7 @@ src/
       events.ts       // the ONLY way a reader makes an event: `textEvent` / `toolEvent` apply what watch may show (words and tool calls, never results; credential scrub; control characters dropped), so a new harness cannot forget it; `formatWatchLine` is one row cut to the width
       reader.ts       // `WatchReader`: per harness, find the wake's transcript from the lease's session id → `{ events, endedCleanly }`; null = nothing to read yet
       readers.ts      // the registry, harness id → reader; adding a harness is one reader file and one line here
+      codex.ts        // the Codex reader: finds `~/.codex/sessions/Y/M/D/rollout-*-<thread>.jsonl` by the lease's thread id, shows its words (`AgentMessage`) and tools (`CommandExecution`, `McpToolCall`, `FileChange`) from the completed `item_completed` records — never an output or MCP result; `task_complete` is the clean end
       claude.ts       // the Claude Code reader: `~/.claude/projects/*/<id>.jsonl`; `endedCleanly` reads the last `stop_reason` (`end_turn`)
       lines.ts        // `readCompleteLines`: a jsonl file's whole lines, a half-written last line left for the next poll
       index.ts        // `watchWake`: the backlog (last 10), then a 500 ms poll printing only new events; ⏎ take over, esc leave; when the wake's pid is gone — finished opens its conversation, anything else asks first; `ttyKeys` is the raw-mode keyboard
