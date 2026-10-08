@@ -380,7 +380,7 @@ here whose seat is resident elsewhere is not launched either — `⏎` does noth
 refuses with the move ceremony. Decision 6's
 live-seat confirm is unchanged for `launch`.
 
-### `musterd <seat> [-r | --resume] [--harness <id>] [--path] [--force]` · `musterd -`
+### `musterd <seat> [-r | --resume] [--harness <id>] [--path] [--force] [--take-over | --watch]` · `musterd -`
 
 Launches a seat's harness in its Workspace, with musterd as the harness's parent process
 ([ADR 491](../decisions/491-seat-launcher.md)). `<seat>` is a member name unique on this machine,
@@ -396,6 +396,15 @@ move it, `setup` points at the picker.
   with lane 01M46YWG8Y` — that this is expected, and that a second session replaces it within
   seconds (ADR 092) and cuts that work off ([ADR 543](../decisions/543-launcher-names-a-wake.md)).
   The picker asks the same question.
+- A wake on **this machine** — the roster says a wake is live here, and its `wake-lease.json` is
+  unexpired, parses, and names a live pid ([ADR 546](../decisions/546-wake-take-over.md)) — gets
+  `⏎ take over · w watch · esc` instead. **Take over** writes the yield marker (`musterd gate` denies
+  the wake's next tool call), waits 10 s, then stops its process group if it is still there, and
+  resumes the wake's own conversation (`--resume <session_id>` from the lease file) with
+  `MUSTERD_TOOK_OVER` set so the session opens by saying whose conversation it is. **Watch** follows
+  the wake read-only; `⏎` there takes over. `--take-over` and `--watch` pick without a prompt, and
+  `--force` on a wake means take over. A lease file with no `session_id` (an older host), a stale
+  one, or a wake on another machine falls back to the plain question above.
 - When the harness exits: one receipt line on stderr, and the harness's exit code (128 + n on signal n).
 - Exit codes: 2 for no match or an ambiguous name (the candidates are listed); 1 for a seat that needs
   repair, a live seat without `--force`, or a harness that is not installed.

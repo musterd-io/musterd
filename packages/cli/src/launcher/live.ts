@@ -1,8 +1,17 @@
-import { MemberSummarySchema, type MemberSummary } from '@musterd/protocol';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  BINDING_DIR,
+  MemberSummarySchema,
+  WAKE_LEASE_FILE,
+  WakeLeaseFileSchema,
+  type MemberSummary,
+} from '@musterd/protocol';
 import { z } from 'zod';
 import { canonicalServer, isLoopbackServer } from '../host/registry.js';
 import { serverHost } from './address.js';
 import type { Can, MemberEntry, Seat, TeamEntry, Where } from './store.js';
+import { pidAlive } from './yield.js';
 
 /** The config fields the roster-first rows need — a structural slice so no caller loads config.ts. */
 export interface ViewerConfig {
@@ -139,6 +148,51 @@ export function liveFor(seat: Seat, members: readonly MemberSummary[] | null): L
     since: p.attached_at ?? null,
     ...(p.provenance === 'wake' ? { wake: p.wake_for ?? null } : {}),
   };
+}
+
+/** A wake running on this machine that a person could take over (ADR 546). */
+export interface LocalWake {
+  lease_id: string;
+  pid: number;
+  /** The wake's conversation. Null when an older host wrote none — take over cannot resume then. */
+  session_id: string | null;
+  harness: string;
+  started_at: number;
+  workspace: string;
+}
+
+/**
+ * The wake that holds this seat's folder on this machine, found through the lease file the host
+ * writes beside `binding.json` (ADR 354/546). Null — "no wake here" — unless EVERY check holds: the
+ * roster says a wake is live here, the file parses, it has not expired, and the pid it names is
+ * alive. A crashed host's leftover file, an expired lease or a reused pid must never read as a wake,
+ * because the answer decides whom the launcher signals.
+ */
+export function localWake(
+  seat: Seat,
+  live: Live | null,
+  deps: { alive?: (pid: number) => boolean; now?: () => number } = {},
+): LocalWake | null {
+  if (!live || live.where !== 'here' || live.wake === undefined) return null;
+  try {
+    const parsed = WakeLeaseFileSchema.safeParse(
+      JSON.parse(readFileSync(join(seat.path, BINDING_DIR, WAKE_LEASE_FILE), 'utf8')),
+    );
+    if (!parsed.success) return null;
+    const f = parsed.data;
+    if ((deps.now ?? Date.now)() >= f.expires_at) return null;
+    if (!(deps.alive ?? pidAlive)(f.spawner_pid)) return null;
+    return {
+      lease_id: f.lease_id,
+      pid: f.spawner_pid,
+      session_id: f.session_id ?? null,
+      harness: f.harness,
+      started_at: f.started_at,
+      workspace: seat.path,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** The team's agent members, sorted — what "on the team · not here" draws from (increment 4). */

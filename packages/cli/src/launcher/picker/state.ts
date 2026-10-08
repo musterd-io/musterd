@@ -77,7 +77,9 @@ export interface PickerState {
    * launched only on an explicit pick (nick, 2026-10-01).
    */
   choose: { seat: Seat; mode: 'fresh' | 'resume'; options: string[]; index: number } | null;
-  confirm: { seat: Seat; mode: 'fresh' | 'resume' } | null;
+  /** `wake`: the live Presence is a wake on this machine, so the question is take over / watch
+   *  (ADR 546) instead of "open a second session?". */
+  confirm: { seat: Seat; mode: 'fresh' | 'resume'; wake: boolean } | null;
   help: boolean;
   /** Each team's roster-first rows (ADR 503): every member with where it lives and what this
    *  machine can do about it. From the snapshot first, then the roster reads. */
@@ -100,6 +102,9 @@ export type PickerEvent =
 
 export type PickerOutcome =
   | { kind: 'launch'; seat: Seat; mode: 'fresh' | 'resume'; harness: string | null; force: boolean }
+  /** ⏎ / `w` on the wake menu (ADR 546): `launchSeat` verifies the wake and does the rest. */
+  | { kind: 'take-over'; seat: Seat; mode: 'fresh' | 'resume'; harness: string | null }
+  | { kind: 'watch'; seat: Seat; mode: 'fresh' | 'resume'; harness: string | null }
   | { kind: 'quit'; code: number }
   | { kind: 'create'; team: string; project: string; member: string; harnesses: string[] }
   /** ⏎ on a `wake` row: ring the seat's doorbell — an ordinary steer (ADR 503 Decision 2). */
@@ -331,7 +336,11 @@ function activate(s: PickerState, mode: 'fresh' | 'resume'): Step {
 
 /** Launch a picked seat, or ask first when it is already live. */
 function launchOrConfirm(s: PickerState, seat: Seat, mode: 'fresh' | 'resume'): Step {
-  if (s.live[seat.address]) return { state: { ...s, confirm: { seat, mode } }, outcome: null };
+  const live = s.live[seat.address];
+  if (live) {
+    const wake = live.where === 'here' && live.wake !== undefined;
+    return { state: { ...s, confirm: { seat, mode, wake } }, outcome: null };
+  }
   return {
     state: s,
     outcome: {
@@ -391,6 +400,19 @@ function onKey(s: PickerState, key: Key): Step {
   if (key.ctrl && key.name === 'c') return { state: s, outcome: { kind: 'quit', code: 130 } };
   if (s.create) return onCreateKey(s, s.create, key);
   if (s.choose) return onChooseKey(s, s.choose, key);
+  if (s.confirm?.wake) {
+    const { seat, mode } = s.confirm;
+    const harness = shownHarness(s, seat);
+    if (key.name === 'return')
+      return {
+        state: { ...s, confirm: null },
+        outcome: { kind: 'take-over', seat, mode, harness },
+      };
+    if (key.name === 'w' || key.sequence === 'W')
+      return { state: { ...s, confirm: null }, outcome: { kind: 'watch', seat, mode, harness } };
+    if (key.name === 'escape') return none({ ...s, confirm: null });
+    return none(s); // anything else is not an answer to this question
+  }
   if (s.confirm) {
     if (key.name === 'y' || key.sequence === 'Y') {
       const { seat, mode } = s.confirm;

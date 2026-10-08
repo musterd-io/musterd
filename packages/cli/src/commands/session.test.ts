@@ -25,6 +25,7 @@ import {
   refreshModelObservation,
   resolveWakeHarness,
   sessionCommand,
+  tookOverLine,
 } from './session.js';
 
 /**
@@ -1771,5 +1772,17 @@ describe('musterd session (capture)', () => {
       await attestSlotIfUnattested(wsA);
       expect(attest).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('tookOverLine (ADR 546)', () => {
+  it('tells a taken-over session whose conversation it is and why the wake existed', () => {
+    expect(tookOverLine({ MUSTERD_TOOK_OVER: 'to carry on with lane 01M46YWG8Y' })).toBe(
+      'You took over a wake that was running to carry on with lane 01M46YWG8Y — its conversation is above; continue from where it stopped.',
+    );
+  });
+  it('says nothing for an ordinary session', () => {
+    expect(tookOverLine({})).toBeNull();
+    expect(tookOverLine({ MUSTERD_TOOK_OVER: '  ' })).toBeNull();
   });
 });

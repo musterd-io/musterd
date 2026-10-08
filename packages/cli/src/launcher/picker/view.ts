@@ -8,6 +8,7 @@ import {
   describeMove,
   describeWhere,
   liveQuestion,
+  wakeMenu,
   seatLine,
 } from '../rows.js';
 import { lastUsedAt } from '../store.js';
@@ -189,6 +190,11 @@ function footer(s: PickerState, cols: number): string[] {
     const live = s.live[s.confirm.seat.address];
     const member = s.confirm.seat.member;
     // Wrapped, never clipped: a question whose `(y/N)` is cut off cannot be answered.
+    if (s.confirm.wake && live)
+      // A line that fits keeps its own indent (the keys line up); only a long one is re-wrapped.
+      return wakeMenu(member, live, s.now).flatMap((l) =>
+        [...l].length <= cols - 2 ? [`  ${l}`] : wrap(l, cols - 2).map((w) => `  ${w}`),
+      );
     return wrap(
       live
         ? liveQuestion(member, live, s.now)

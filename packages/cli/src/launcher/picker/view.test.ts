@@ -145,6 +145,40 @@ describe('renderPicker (spec §3.1, no color, 80 columns)', () => {
     for (const l of lines) expect([...l].length).toBeLessThanOrEqual(80);
   });
 
+  it('a live wake shows the take over / watch menu in the footer (ADR 546)', () => {
+    let s = initialState(FILE, '', NOW);
+    s = reduce(s, {
+      type: 'live',
+      live: {
+        'revive/agents/stanley': {
+          where: 'here',
+          label: 'here',
+          surface: 'claude-code',
+          since: NOW - H,
+          wake: {
+            edge: 'dispatch_continuation',
+            lane_id: '01M46YWG8YHEV2SKW9F1N0W8FG',
+            act_id: null,
+            act: null,
+            from: null,
+          },
+        },
+      },
+      status: 'ok',
+      now: NOW,
+    }).state;
+    s = reduce(s, key('return')).state;
+    s = reduce(s, key('return')).state;
+    const lines = renderPicker(s, { cols: 80, rows: 24 });
+    expect(lines.slice(-4)).toEqual([
+      `  stanley is busy — a wake started ${sinceLabel(NOW - H, NOW)} to carry on with lane 01M46YWG8Y.`,
+      '    ⏎  take over   stop the wake, continue its conversation here',
+      '    w  watch       follow it live; ⏎ takes over at any point',
+      '    esc cancel',
+    ]);
+    for (const l of lines) expect([...l].length).toBeLessThanOrEqual(80);
+  });
+
   it('never prints a line wider than the terminal, and fits the height', () => {
     const many = Array.from({ length: 60 }, (_, i) => seat(`member-with-a-long-name-${i}`));
     const s = initialState(

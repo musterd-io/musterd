@@ -79,7 +79,11 @@ export async function openPicker(
   return launchSeat(outcome.seat, {
     mode: d?.mode === 'resume' ? 'resume' : outcome.mode,
     harness: d?.harness ?? outcome.harness,
-    force: outcome.force || (d?.force ?? false),
+    // A take-over / watch outcome leaves the live check to `launchSeat` (ADR 546): it finds the
+    // wake, and if it cannot, falls back to the plain question rather than guessing.
+    force: 'force' in outcome ? outcome.force || (d?.force ?? false) : false,
+    ...(outcome.kind === 'take-over' ? { takeOver: true } : {}),
+    ...(outcome.kind === 'watch' ? { watch: true } : {}),
   });
 }
 
