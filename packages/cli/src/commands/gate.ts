@@ -16,6 +16,7 @@ import type { HttpClient } from '../client.js';
 import { findBinding } from '../config.js';
 import { CliError } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
+import { yieldDenyReason } from '../launcher/yield.js';
 import { inferPayloadHarness, tapHook } from '../trace/hook.js';
 import {
   isStageShaped,
@@ -359,6 +360,15 @@ async function gateCheck(parsed: Parsed): Promise<number> {
     tapPayload = stdin;
     const raw = parseToolCall(stdin);
     if (!raw) return; // nothing to match on → allow
+    // ADR 546 — a person took this wake over: stop at this tool boundary. Before the wall and any
+    // daemon round trip, so nothing can delay it; purely local.
+    const yielded = yieldDenyReason(process.cwd(), process.env);
+    if (yielded) {
+      emitDeny(yielded);
+      emitted = true;
+      decision = 'deny';
+      return;
+    }
     // Normalize the target path to repo-relative BEFORE matching, so class + lane globs compare cleanly.
     const call: GateToolCall = raw.path ? { ...raw, path: repoRelativePath(raw.path) } : raw;
     // ADR 442 — the wall is decided here, before the working-tree check and before any daemon
