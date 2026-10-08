@@ -7,8 +7,9 @@ import {
   type DriftCache,
   type Envelope,
   type MemberSummary,
+  describeSyncPullStop,
   describeSyncWedge,
-  type SyncWedge,
+  type RosterSyncState,
 } from '@musterd/protocol';
 import { readBuildStamp } from '@musterd/protocol/build-stamp';
 
@@ -516,7 +517,7 @@ function plural(n: number, one: string, many: string): string {
 
 /** The wedge as a fact beside its sentence — same source, same wording, same silence. */
 export function syncWedgeOf(
-  roster: { sync?: { wedged: SyncWedge | null } } | undefined,
+  roster: { sync?: RosterSyncState } | undefined,
   now: number = Date.now(),
 ): SyncWedgeWarningFact | null {
   const w = roster?.sync?.wedged;
@@ -533,7 +534,7 @@ export function syncWedgeOf(
 
 /** The wedge fact for a client — best-effort, like its prose twin: any failure reads as silence. */
 export async function syncWedgeOfClient(client: {
-  roster?: () => Promise<{ sync?: { wedged: SyncWedge | null } }>;
+  roster?: () => Promise<{ sync?: RosterSyncState }>;
 }): Promise<SyncWedgeWarningFact | null> {
   try {
     if (typeof client.roster !== 'function') return null;
@@ -633,16 +634,20 @@ function adapterOnDisk(): { build: string | undefined; checkout: string } {
  * predates the field or the sync is fine.
  */
 export function syncWedgeWarning(
-  roster: { sync?: { wedged: SyncWedge | null } } | undefined,
+  roster: { sync?: RosterSyncState } | undefined,
   now: number = Date.now(),
 ): string {
   const w = roster?.sync?.wedged;
-  return w ? `\n${describeSyncWedge(w, now)}` : '';
+  const stopped = roster?.sync?.pull_stopped;
+  return (
+    (w ? `\n${describeSyncWedge(w, now)}` : '') +
+    (stopped ? `\n${describeSyncPullStop(stopped, now)}` : '')
+  );
 }
 
 /** The wedge line for a client — best-effort: an older daemon, a stub, or a failed read all read as silence. */
 export async function syncWedgeWarningFor(client: {
-  roster?: () => Promise<{ sync?: { wedged: SyncWedge | null } }>;
+  roster?: () => Promise<{ sync?: RosterSyncState }>;
 }): Promise<string> {
   try {
     if (typeof client.roster !== 'function') return '';

@@ -1,4 +1,9 @@
-import { deriveHuddles, describeSyncWedge, type Hold } from '@musterd/protocol';
+import {
+  deriveHuddles,
+  describeSyncPullStop,
+  describeSyncWedge,
+  type Hold,
+} from '@musterd/protocol';
 import type { Parsed } from '../args.js';
 import { findBinding } from '../config.js';
 import { huddleMarks, TIMELINE_WINDOW } from '../render/huddles.js';
@@ -77,6 +82,9 @@ export async function statusCommand(parsed: Parsed): Promise<number> {
   // ADR 360 follow-on: a wedged push says so here, on the surface a human on this machine reads.
   if (res.sync?.wedged)
     process.stdout.write('\n' + theme.warn(describeSyncWedge(res.sync.wedged)) + '\n');
+  // ADR 547: and a pull whose fold has sat stopped for minutes — the other half of "my sync is stuck".
+  if (res.sync?.pull_stopped)
+    process.stdout.write('\n' + theme.warn(describeSyncPullStop(res.sync.pull_stopped)) + '\n');
   // ADR 516: the Team's active holds — what is paused, by whom, until when. Seat-authed and
   // best-effort like `pending` above: an ambient identity or an older daemon prints nothing.
   const holds =

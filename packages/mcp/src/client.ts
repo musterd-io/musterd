@@ -32,7 +32,7 @@ import {
   WakeContextRequestSchema,
   WakeContextResponseSchema,
   type WSServerFrame,
-  type SyncWedge,
+  type RosterSyncState,
   TRACE_POLICY_FILE,
   type AcceptedHandoffWire,
   type BuiltOn,
@@ -702,7 +702,7 @@ export class MusterdClient {
      *  daemon — every consumer degrades to members-only. */
     roles?: Array<{ name: string; summary: string | null }>;
     /** ADR 360 follow-on: this machine's standing push refusal, if any. Absent from an older daemon. */
-    sync?: { wedged: SyncWedge | null };
+    sync?: RosterSyncState;
   }> {
     // ADR 227 close-out: the role filter rides the wire so the daemon can see (and audit) the
     // discovery query. An older daemon ignores the param and returns the unfiltered roster —

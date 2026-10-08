@@ -13,7 +13,7 @@ import {
   NodeListSchema,
   type SeatNodeTrusted,
   SeatNodeTrustedSchema,
-  type SyncWedge,
+  type RosterSyncState,
   type NodeInviteMint,
   type NodeList,
   GoalSchema,
@@ -799,7 +799,7 @@ export class HttpClient {
       capabilities?: unknown;
     }>;
     /** ADR 360 follow-on: this machine's standing push refusal. Absent from an older daemon. */
-    sync?: { wedged: SyncWedge | null };
+    sync?: RosterSyncState;
   }> {
     return this.request('GET', `/teams/${slug}/members`);
   }

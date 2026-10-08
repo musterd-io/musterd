@@ -3,6 +3,7 @@ import {
   SyncLanesResponseSchema,
   SyncPullResponseSchema,
   type SyncPullResponse,
+  type SyncPullStop,
 } from '@musterd/protocol';
 import type { Ctx } from '../context.js';
 import { failureFields, log } from '../log.js';
@@ -52,6 +53,64 @@ function reportedFor(ctx: Ctx): Set<string> {
     reportedByDb.set(ctx.db, set);
   }
   return set;
+}
+
+/**
+ * ADR 547: how long a stop must hold the cursor before the roster calls it a warning. One tick is
+ * routine — the seat file is usually a `git pull` away — so a stop is quiet for the first five
+ * minutes and loud after. It was three days quiet on 2026-10-08 (alfie, hub_seq 191206).
+ */
+export const SYNC_STOP_WARN_AFTER_MS = 5 * 60_000;
+
+/**
+ * The stop currently holding each team's pull cursor, per daemon. In memory on purpose: the fold
+ * recomputes the same stop every tick (it is retried, never skipped), so a restart re-derives it
+ * within one `SYNC_PULL_INTERVAL_MS` and nothing here needs a migration. `since` is the first tick
+ * that saw THIS stop; the same stop on the next tick keeps it, a different one restarts it.
+ */
+const pullStopsByDb = new WeakMap<Ctx['db'], Map<string, SyncPullStop>>();
+
+/** The thing a stop names — a seat, an act, a lane — for the sentence the roster prints. */
+function stopSubject(stop: FoldStop): string | null {
+  if ('seat' in stop) return stop.seat;
+  if ('lane' in stop) return stop.lane;
+  if ('act' in stop) return stop.act;
+  if ('presence' in stop) return stop.presence;
+  if ('action' in stop) return stop.action;
+  if ('id' in stop) return stop.id;
+  if ('origin' in stop) return stop.origin;
+  return null;
+}
+
+function notePullStop(ctx: Ctx, teamId: string, stop: FoldStop, now: number): void {
+  let teams = pullStopsByDb.get(ctx.db);
+  if (!teams) pullStopsByDb.set(ctx.db, (teams = new Map()));
+  const subject = stopSubject(stop);
+  const prior = teams.get(teamId);
+  const same = prior?.kind === stop.kind && prior.subject === subject;
+  teams.set(teamId, {
+    kind: stop.kind,
+    subject,
+    hub_seq: stop.hub_seq,
+    since: same ? prior.since : now,
+  });
+}
+
+function clearPullStop(ctx: Ctx, teamId: string): void {
+  pullStopsByDb.get(ctx.db)?.delete(teamId);
+}
+
+/**
+ * This daemon's standing pull stop for the team, or null — read by the roster. Null inside the
+ * grace, and null on a machine whose fold is moving (or that has no hub).
+ */
+export async function readPullStop(
+  db: Ctx['db'],
+  teamId: string,
+  now: number = Date.now(),
+): Promise<SyncPullStop | null> {
+  const stop = pullStopsByDb.get(db)?.get(teamId);
+  return stop && now - stop.since >= SYNC_STOP_WARN_AFTER_MS ? stop : null;
 }
 
 async function localNodeId(ctx: Ctx, teamId: string): Promise<string | null> {
@@ -382,7 +441,11 @@ export async function pullPage(
   // hub's own table is the source. An older hub sends none and this daemon keeps what it holds.
   if (enrollment && page.seat_nodes.length > 0)
     await replaceSeatBindings(ctx.db, team.id, page.seat_nodes);
-  if (page.events.length === 0) return none;
+  if (page.events.length === 0) {
+    // Nothing past the cursor: whatever stopped it before has been folded or is gone.
+    clearPullStop(ctx, team.id);
+    return none;
+  }
 
   const result = await foldBatch(ctx.db, team.id, page.events, now, page.lane_genesis);
   // ADR 500: held, not stopped — one line per page, so a seed that never arrives stays findable.
@@ -401,7 +464,9 @@ export async function pullPage(
   }
   if (result.stop) {
     reportStop(ctx, team.slug, result.stop);
+    notePullStop(ctx, team.id, result.stop, now);
   } else {
+    clearPullStop(ctx, team.id);
     const reported = reportedFor(ctx);
     for (const key of reported) if (key.startsWith(`${team.slug}:`)) reported.delete(key);
   }
