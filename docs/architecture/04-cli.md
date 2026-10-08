@@ -69,6 +69,7 @@ src/
     plan.ts           // (seat, harness, fresh|resume) → { bin, args, cwd } from the adapter's interactive entry; a human seat gets a login shell
     supervise.ts      // runs the harness with the terminal handed over; ignores SIGINT/SIGQUIT, forwards SIGTERM/SIGHUP; the harness's exit code (128+n on a signal)
     wake.ts           // the doorbell from the front door (ADR 503): `⏎` on a `wake` row (or `musterd <member>`) spawns `musterd send --act steer` in the viewer's own human Workspace here — the credential is that folder's binding (ADR 442), never a vault; viewerSeatFor picks the folder
+    yield.ts          // asking a wake to stop so a person can take over (ADR 546): the `wake-yield.json` marker, `yieldDenyReason` (what `musterd gate` denies the wake's next tool call with — keyed on its own `MUSTERD_WAKE_LEASE`), and `stopWake` (marker, 10 s grace, then SIGTERM→SIGKILL to the wake's process group)
     rows.ts           // shared row and receipt rendering for the picker and `musterd seats`
     byName.ts         // `musterd <seat>` / `musterd -`: resolve, live check, plan, record, supervise, receipt
     create.ts         // "set up here" / "+ new seat": acts from your own human Workspace in that team and project (ADR 036/442), starts the branch at the remote's default tip, then hands the new seat to the launch path
