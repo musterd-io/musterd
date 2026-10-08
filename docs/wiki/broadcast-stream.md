@@ -10,6 +10,24 @@ The stream rents one Fly machine per stream (its lifetime IS the stream's) reach
 
 The verbs record intent in `~/.musterd/stream/state.json`: `start` says live (before launching), `stop` says stopped with **who and why** (`--reason`, shown by `stream status`) — so a machine gone while the file says live is a crash by definition. `musterd service install --stream` installs a 60s LaunchAgent running `stream ensure`: crash → relaunch (≤3 per 30min, then it stands down and asks the team as the `streamwatch` service seat until a human `stream start` re-arms). Consequences to know: killing the machine any way other than `stream stop` now gets healed within ~60s, and `stream start --once` is the opt-out for deliberately unsupervised (e.g. `--duration`) runs. The 2026-08-18 Chrome death ("Chrome DevTools socket closed", dead until a human noticed) is the incident this closes; ADR 292 keeps the restarted page's bundle current from there.
 
+## A merge to `main` dropped the Twitch ingest, and the restart it ran bought nothing (2026-10-08; falsify: with a hosted stream live on the new image, merge any commit and read `fly logs -a musterd-broadcast` — a `relaunching the stream` line inside the rebuild window falsifies this) <!-- claim: defect -->
+
+nick saw the channel go "offline" and come back. The box log had two matching events 21 minutes apart
+(17:54Z and 18:15Z): `daemon rebuilt (…) — restarting the stream on the new code`, ffmpeg ending,
+`◉ live` again 3–4 s later. ADR 159 §4 restarted a stream on every daemon rebuild, and the ADR 152
+auto-refresher rebuilds the daemon for every merge, so the RTMP connection dropped about every 20
+minutes on a working day.
+
+The restart's stated reason was that a page reload leaves the capture pipeline stale. On the hosted
+box that is empty: the node process runs from `/app/packages/cli/dist` baked into the image (`COPY . .`
+in `hosted.Dockerfile`), so a restart reran the same code, and the only thing it refreshed was the web
+bundle — which ADR 292's build-sync already reloads onto the served build with ffmpeg untouched.
+Fixed by ADR 548: the build poll and its restart are gone.
+
+**Not measured:** how long Twitch shows "offline" after a drop. The gap on the box was 3–4 s; what
+viewers saw was longer, and the player does not always recover on its own. Failure restarts (Chrome
+socket loss, frozen picture) still drop the ingest — lane `01M4EC5X8M`, inc 2.
+
 ## Two claims the evidence killed (measured 2026-07-29; falsify: read entrypoint.sh + re-measure bitrate)
 
 1. ~~"The hosted stream runs 1080p30 and delivers 10 fps"~~ — wrong: `scripts/broadcast/entrypoint.sh` pins 720p25; the 1080p30 row in docs/perf/broadcast-baseline.md is the REJECTED arm. Read the entrypoint, not just the bench. ~~720p25 (2026-07-29)~~ SUPERSEDED 2026-09-15: the entrypoint now pins **1080p20**, measured at speed 0.998x on the same box (1080p15 sustains a clean 1.00x and is the fallback rung) — 1080p30 stays rejected, but 1080p was never the problem at a lower frame rate and nobody had checked. SUPERSEDED 2026-09-30: the entrypoint pins **1080p15**. 20 was never delivered: the office draws 9-11 frames/s on the box, so half of each 20 fps second was repeats (docs/perf/broadcast-baseline.md, dated note).

@@ -16,7 +16,6 @@ import {
   broadcastUrl,
   screencastEveryNthFrame,
   clearRunState,
-  daemonRebuilt,
   RESTART_EXIT_CODE,
   RESTARTABLE_AFTER_MS,
   socketLossExitCode,
@@ -773,32 +772,6 @@ describe('ffmpeg terminates when the video pipe does', () => {
       target: 'rtmps://example/app/key',
     });
     expect(args).toContain('-shortest');
-  });
-});
-
-describe('daemonRebuilt (staying current with main)', () => {
-  it('restarts once the daemon has moved to a different commit', () => {
-    expect(daemonRebuilt('aaa111', 'bbb222')).toBe(true);
-  });
-
-  it('sits still while the daemon has not moved', () => {
-    expect(daemonRebuilt('aaa111', 'aaa111')).toBe(false);
-  });
-
-  it('compares the daemon against itself, so a branch build does not restart forever', () => {
-    // The trap this shape avoids: comparing *our* stamp to the daemon's. A dev streaming their own
-    // work-in-progress never matches the daemon and never will, so that comparison would tear the
-    // stream down every single poll. The baseline is the daemon's build as we found it.
-    const branchBuildRunningAgainstAStableDaemon = daemonRebuilt('daemon-sha', 'daemon-sha');
-    expect(branchBuildRunningAgainstAStableDaemon).toBe(false);
-  });
-
-  it('stays silent when either side is unstamped — never restart on a guess', () => {
-    // ADR 135: a published tarball or stripped dist has no build.json, and reading "unknown" as
-    // "changed" is how you build a restart loop.
-    expect(daemonRebuilt(undefined, 'bbb222')).toBe(false);
-    expect(daemonRebuilt('aaa111', undefined)).toBe(false);
-    expect(daemonRebuilt(undefined, undefined)).toBe(false);
   });
 });
 

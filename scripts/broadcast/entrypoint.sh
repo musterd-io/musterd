@@ -139,19 +139,18 @@ timeout 15 "$CHROME_BIN" --headless=new --no-sandbox --disable-dev-shm-usage \
 
 # This loop is the whole reason the entrypoint no longer `exec`s the stream.
 #
-# ADR 159 keeps a long-lived stream current: when the daemon is rebuilt underneath it, the stream
-# restarts on the new code. On a laptop it does that by spawning a DETACHED replacement and exiting,
-# so the shell prompt returns. Under `exec` here, that same move killed the machine — this process
-# is the VM's main process, so its exit made Fly's init tear the box down one second after the
-# replacement started streaming. Both hosted runs on 2026-07-27 died that way (4 min and 6 min; the
-# second was ended by a docs-only merge, since the ADR 152 auto-refresher bounces the daemon for any
-# commit at all).
+# A stream that cannot continue (a lost DevTools socket, a frozen picture) exits RESTART_EXIT_CODE
+# and wants running again. On a laptop that is a DETACHED replacement and an exit, so the shell
+# prompt returns. Under `exec` here, that same move killed the machine — this process is the VM's
+# main process, so its exit made Fly's init tear the box down one second after the replacement
+# started streaming. Both hosted runs on 2026-07-27 died that way (4 and 6 min).
 #
 # So the container supervises instead: MUSTERD_BROADCAST_SUPERVISED tells the stream not to fork but
 # to exit RESTART_EXIT_CODE (75), and we run it again. Bash stays the main process throughout, so the
-# machine's lifetime is the LOOP's lifetime, not one stream generation's — and the replacement is a
-# genuinely fresh `node` on the rebuilt dist, which is what ADR 159 §4 decided (a full restart, not a
-# page reload).
+# machine's lifetime is the LOOP's lifetime, not one stream generation's.
+#
+# A daemon rebuild is NOT a reason to land here (ADR 548): it used to be (ADR 159 §4), and every merge
+# to main dropped the Twitch ingest. The page converges on its own (ADR 292); the stream stays up.
 #
 # Any other exit code still ends the machine, so `stream stop`, --duration, the stall watchdog and a
 # real failure all keep tearing the box down exactly as before — billing still tracks streamed hours.
