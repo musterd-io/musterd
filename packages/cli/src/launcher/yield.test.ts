@@ -2,7 +2,13 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { readYieldFile, stopWake, writeYieldFile, yieldDenyReason } from './yield.js';
+import {
+  leaseStillHeld,
+  readYieldFile,
+  stopWake,
+  writeYieldFile,
+  yieldDenyReason,
+} from './yield.js';
 
 const ws = () => {
   const d = mkdtempSync(join(tmpdir(), 'y-'));
@@ -75,6 +81,7 @@ describe('stopWake (ADR 546)', () => {
     const r = await stopWake({ workspace: d, lease_id: 'L1', pid: 77 }, 'nick', {
       ...c,
       alive: () => true,
+      holds: () => true,
       kill: (p, s) => kills.push(`${p}:${s}`),
     });
     expect(r).toBe('killed');
@@ -88,9 +95,44 @@ describe('stopWake (ADR 546)', () => {
     const r = await stopWake({ workspace: d, lease_id: 'L1', pid: 77 }, 'nick', {
       ...c,
       alive: () => kills.length === 0,
+      holds: () => true,
       kill: (p, s) => kills.push(`${p}:${s}`),
     });
     expect(r).toBe('killed');
     expect(kills).toEqual(['-77:SIGTERM']);
+  });
+
+  it('signals nothing once the lease no longer names the pid — it may be a stranger now', async () => {
+    const d = ws();
+    const c = fakeClock();
+    const kills: string[] = [];
+    const r = await stopWake({ workspace: d, lease_id: 'L1', pid: 77 }, 'nick', {
+      ...c,
+      alive: () => true,
+      holds: () => false,
+      kill: (p, s) => kills.push(`${p}:${s}`),
+    });
+    expect(r).toBe('yielded');
+    expect(kills).toEqual([]);
+  });
+});
+
+describe('leaseStillHeld (ADR 546)', () => {
+  const lease = (over: object = {}) => ({
+    lease_id: 'L1',
+    provenance: 'wake',
+    harness: 'claude-code',
+    spawner_pid: 77,
+    started_at: 1,
+    expires_at: 2,
+    ...over,
+  });
+  it('holds only for the same lease and the same pid', () => {
+    const d = ws();
+    writeFileSync(join(d, '.musterd', 'wake-lease.json'), JSON.stringify(lease()));
+    expect(leaseStillHeld(d, 'L1', 77)).toBe(true);
+    expect(leaseStillHeld(d, 'L2', 77)).toBe(false);
+    expect(leaseStillHeld(d, 'L1', 78)).toBe(false);
+    expect(leaseStillHeld(ws(), 'L1', 77)).toBe(false); // no file: the host cleared it
   });
 });

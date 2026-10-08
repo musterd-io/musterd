@@ -2,7 +2,9 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   BINDING_DIR,
+  WAKE_LEASE_FILE,
   WAKE_YIELD_FILE,
+  WakeLeaseFileSchema,
   WakeYieldFileSchema,
   type WakeYieldFile,
 } from '@musterd/protocol';
@@ -43,7 +45,25 @@ export function yieldDenyReason(workspace: string, env: NodeJS.ProcessEnv): stri
   return `${y.by} has taken over this seat — end your turn now; do not retry this or any other tool.`;
 }
 
+/**
+ * True while the wake-lease file in `workspace` still names this lease AND this pid. The host clears
+ * it when the run settles, so a missing or different file means the wake is over and its pid may
+ * already belong to something else — the one fact that keeps `stopWake` from signalling a stranger.
+ */
+export function leaseStillHeld(workspace: string, lease_id: string, pid: number): boolean {
+  try {
+    const parsed = WakeLeaseFileSchema.safeParse(
+      JSON.parse(readFileSync(join(workspace, BINDING_DIR, WAKE_LEASE_FILE), 'utf8')),
+    );
+    return parsed.success && parsed.data.lease_id === lease_id && parsed.data.spawner_pid === pid;
+  } catch {
+    return false;
+  }
+}
+
 export interface StopDeps {
+  /** Injectable re-check before each signal (default: {@link leaseStillHeld}). */
+  holds?: (wake: { workspace: string; lease_id: string; pid: number }) => boolean;
   alive?: (pid: number) => boolean;
   kill?: (pid: number, sig: NodeJS.Signals) => void;
   sleep?: (ms: number) => Promise<void>;
@@ -76,6 +96,7 @@ export async function stopWake(
   const kill = deps.kill ?? ((p: number, s: NodeJS.Signals) => void process.kill(p, s));
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const now = deps.now ?? Date.now;
+  const holds = deps.holds ?? ((w) => leaseStillHeld(w.workspace, w.lease_id, w.pid));
   writeYieldFile(wake.workspace, { lease_id: wake.lease_id, by, at: now() });
   const waitGone = async (ms: number): Promise<boolean> => {
     const deadline = now() + ms;
@@ -86,12 +107,16 @@ export async function stopWake(
     return !alive(wake.pid);
   };
   if (await waitGone(deps.graceMs ?? 10_000)) return 'yielded';
+  // The pid was checked a moment ago, not now: if the lease no longer names it, the wake settled
+  // on its own and the pid may be someone else's. Never signal on a guess.
+  if (!holds(wake)) return 'yielded';
   try {
     kill(-wake.pid, 'SIGTERM');
   } catch {
     /* already gone */
   }
   if (await waitGone(deps.killGraceMs ?? 5_000)) return 'killed';
+  if (!holds(wake)) return 'killed';
   try {
     kill(-wake.pid, 'SIGKILL');
   } catch {
