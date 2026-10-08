@@ -164,6 +164,17 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
         w  watch       follow it live; ⏎ takes over at any point
         esc cancel
     ```
+    `w` opens the watch view (`cmd/launcher-watch`): the header, the wake's last ten words and tool
+    calls, then new ones as they land — one row each, `HH:MM`, cut to the width, credentials
+    redacted. `⏎` takes over, `esc` leaves; when the wake's process is gone it prints
+    `wake finished — opening its conversation` (it ended on `end_turn`) or `wake ended before
+    finishing` and asks `⏎ open its conversation · esc quit`:
+    ```
+    watching stanley's wake — ⏎ take over · esc leave
+    09:24  “Checking whether the umbrella's three PRs reached main.”
+    09:24  ▸ Bash  git log --oneline origin/main -5
+    09:25  ▸ lane_submit  01M46YWG8YHEV2SKW9F1N0W8FG
+    ```
     The reason clause follows [ADR 543](../decisions/543-launcher-names-a-wake.md) and is dropped when
     the daemon cannot say why. Without a TTY: `stanley is live here — a wake … — pass --take-over to
     continue its conversation, --watch to follow it, or --force`.

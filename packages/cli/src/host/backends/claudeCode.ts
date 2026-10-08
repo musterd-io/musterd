@@ -157,22 +157,31 @@ export interface ClaudeCodeDeps {
 
 /** Claude Code writes `~/.claude/projects/<workspace slug>/<session id>.jsonl`. The slug is lossy,
  *  so look in every project folder for the one file named by the id rather than re-deriving it. */
-export function findClaudeTranscript(
-  sessionId: string,
-  home = homedir(),
-): { bytes: number; mtimeMs: number } | undefined {
+export function claudeTranscriptPath(sessionId: string, home = homedir()): string | undefined {
   const root = join(home, '.claude', 'projects');
   try {
     for (const dir of readdirSync(root)) {
       const p = join(root, dir, `${sessionId}.jsonl`);
-      if (!existsSync(p)) continue;
-      const st = statSync(p);
-      return { bytes: st.size, mtimeMs: st.mtimeMs };
+      if (existsSync(p)) return p;
     }
   } catch {
     // No projects tree, or unreadable: say nothing rather than guess.
   }
   return undefined;
+}
+
+export function findClaudeTranscript(
+  sessionId: string,
+  home = homedir(),
+): { bytes: number; mtimeMs: number } | undefined {
+  const p = claudeTranscriptPath(sessionId, home);
+  if (!p) return undefined;
+  try {
+    const st = statSync(p);
+    return { bytes: st.size, mtimeMs: st.mtimeMs };
+  } catch {
+    return undefined;
+  }
 }
 
 /**
