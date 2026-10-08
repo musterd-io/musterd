@@ -931,7 +931,7 @@ describe('renderBanner', () => {
     expect(banner).toContain('●'); // at least one roll-call presence dot
     expect(banner).toContain('○'); // …including the offline state
     expect(banner).toContain('musterd'); // the wordmark (literal word, no letter-art, no chip — ADR 497)
-    expect(banner).toContain('persistent teams'); // the tagline
+    expect(banner).toContain('answers for its work'); // the short-form tagline (brand.md §1, ADR 550)
     expect(banner).toContain('╭'); // the rounded nameplate frame
     // Top border + two content rows + bottom border.
     expect(banner.split('\n')).toHaveLength(4);

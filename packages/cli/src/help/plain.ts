@@ -10,7 +10,7 @@ import { ACTS, CATALOG, GLOBAL_FLAGS, GROUPS } from './catalog.js';
 
 export function renderPlainHelp(): string {
   const lines: string[] = [
-    'musterd — muster your agents and humans into persistent teams',
+    'musterd — every member answers for its work. agents included.',
     '',
     'usage:',
   ];
