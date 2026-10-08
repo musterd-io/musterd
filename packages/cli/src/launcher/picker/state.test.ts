@@ -187,6 +187,55 @@ describe('picker state (spec §3)', () => {
     expect(press(state, k('return'), k('return')).outcome).toMatchObject({ harness: 'codex' });
   });
 
+  describe('a live wake on this machine (ADR 546)', () => {
+    const woken = reduce(s0, {
+      type: 'live',
+      live: {
+        'revive/agents/stanley': {
+          where: 'here',
+          label: 'here',
+          surface: 'claude-code',
+          since: 5,
+          wake: null,
+        },
+      },
+      status: 'ok',
+      now: 2_000,
+    }).state;
+    const asking = press(woken, k('return'), k('return')).state;
+
+    it('asks take over / watch instead of "open a second session?"', () => {
+      expect(asking.confirm).toMatchObject({ seat: SEATS[0], wake: true });
+    });
+    it('⏎ takes over, w watches, esc cancels, anything else waits', () => {
+      expect(press(asking, k('return')).outcome).toMatchObject({
+        kind: 'take-over',
+        seat: SEATS[0],
+        mode: 'fresh',
+      });
+      expect(press(asking, k('w')).outcome).toMatchObject({ kind: 'watch', seat: SEATS[0] });
+      expect(press(asking, k('escape')).state.confirm).toBeNull();
+      expect(press(asking, k('y')).outcome).toBeNull(); // not an answer to this question
+      expect(press(asking, k('y')).state.confirm).not.toBeNull();
+    });
+    it("a person's own live session keeps the y/N question", () => {
+      const person = reduce(s0, {
+        type: 'live',
+        live: {
+          'revive/agents/stanley': {
+            where: 'here',
+            label: 'here',
+            surface: 'claude-code',
+            since: 5,
+          },
+        },
+        status: 'ok',
+        now: 2_000,
+      }).state;
+      expect(press(person, k('return'), k('return')).state.confirm).toMatchObject({ wake: false });
+    });
+  });
+
   it('a live seat asks first; y launches with force, anything else cancels', () => {
     const live = reduce(s0, {
       type: 'live',

@@ -154,6 +154,19 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
       miley is live here (claude-code) since 15:37. Open a second session in the
       same folder? (y/N)
     ```
+22a. `cmd/launcher-wake-menu` — `⏎` on a seat whose live session is a wake on this machine
+    ([ADR 546](../decisions/546-wake-take-over.md)) asks take over / watch instead of the question
+    above; `musterd <seat>` prints the same lines. Each key is one keypress; `esc` leaves the wake
+    alone. A line that fits keeps its indent in the picker footer; a long one is word-wrapped:
+    ```
+      stanley is busy — a wake started 09:24 to carry on with lane 01M46YWG8Y.
+        ⏎  take over   stop the wake, continue its conversation here
+        w  watch       follow it live; ⏎ takes over at any point
+        esc cancel
+    ```
+    The reason clause follows [ADR 543](../decisions/543-launcher-names-a-wake.md) and is dropped when
+    the daemon cannot say why. Without a TTY: `stanley is live here — a wake … — pass --take-over to
+    continue its conversation, --watch to follow it, or --force`.
 23. `cmd/launcher-team` — `musterd › revive › agents`, the members level
     ([ADR 503](../decisions/503-roster-first-launcher-catalog.md) Decision 3; the exact no-color text
     is `view.test.ts`'s `cmd/launcher-team` case):

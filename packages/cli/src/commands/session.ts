@@ -244,9 +244,23 @@ async function capture(
     // The orientation resolves from the SAME anchored dir capture writes to — never bare
     // process.cwd() (miley's #1072 review: the ADR 018 clobber shape, read edition — a mis-cwd'd
     // hook must not emit another seat's inbox and memory headline into this session's context).
+    const tookOver = tookOverLine(process.env);
+    if (tookOver) process.stdout.write(tookOver + '\n');
     const orientation = await emitSessionOrientation(captureDir);
     if (orientation) process.stdout.write(orientation + '\n');
   }
+}
+
+/**
+ * The line a person's session opens with after `musterd <seat>` took a wake over (ADR 546): the
+ * conversation above it is the wake's, and the wake was stopped mid-errand. The launcher sets
+ * `MUSTERD_TOOK_OVER` to why the wake existed. A person's session is not a wake
+ * (`MUSTERD_PROVENANCE` is unset), so the wake suppression of the orientation does not touch it.
+ */
+export function tookOverLine(env: NodeJS.ProcessEnv): string | null {
+  const why = env['MUSTERD_TOOK_OVER']?.trim();
+  if (!why) return null;
+  return `You took over a wake that was running ${why} — its conversation is above; continue from where it stopped.`;
 }
 
 /** The one derivation of "which workspace does this hook payload belong to": explicit
