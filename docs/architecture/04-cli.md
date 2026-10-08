@@ -70,8 +70,12 @@ src/
     supervise.ts      // runs the harness with the terminal handed over; ignores SIGINT/SIGQUIT, forwards SIGTERM/SIGHUP; the harness's exit code (128+n on a signal)
     wake.ts           // the doorbell from the front door (ADR 503): `⏎` on a `wake` row (or `musterd <member>`) spawns `musterd send --act steer` in the viewer's own human Workspace here — the credential is that folder's binding (ADR 442), never a vault; viewerSeatFor picks the folder
     watch/            // `w` on the wake menu (ADR 546): follow a local wake read-only
-      events.ts       // a Claude Code transcript → what the wake SAID and DID (its words and tool calls, credential-scrubbed; never tool results); `endedCleanly` reads the last `stop_reason`; `formatWatchLine` is one row cut to the width
-      index.ts        // `watchWake`: the backlog (last 10), then a 500 ms poll printing only new lines; ⏎ take over, esc leave; when the wake's pid is gone — finished (end_turn) opens its conversation, anything else asks first; `ttyKeys` is the raw-mode keyboard
+      events.ts       // the ONLY way a reader makes an event: `textEvent` / `toolEvent` apply what watch may show (words and tool calls, never results; credential scrub; control characters dropped), so a new harness cannot forget it; `formatWatchLine` is one row cut to the width
+      reader.ts       // `WatchReader`: per harness, find the wake's transcript from the lease's session id → `{ events, endedCleanly }`; null = nothing to read yet
+      readers.ts      // the registry, harness id → reader; adding a harness is one reader file and one line here
+      claude.ts       // the Claude Code reader: `~/.claude/projects/*/<id>.jsonl`; `endedCleanly` reads the last `stop_reason` (`end_turn`)
+      lines.ts        // `readCompleteLines`: a jsonl file's whole lines, a half-written last line left for the next poll
+      index.ts        // `watchWake`: the backlog (last 10), then a 500 ms poll printing only new events; ⏎ take over, esc leave; when the wake's pid is gone — finished opens its conversation, anything else asks first; `ttyKeys` is the raw-mode keyboard
     yield.ts          // asking a wake to stop so a person can take over (ADR 546): the `wake-yield.json` marker, `yieldDenyReason` (what `musterd gate` denies the wake's next tool call with — keyed on its own `MUSTERD_WAKE_LEASE`), and `stopWake` (marker, 10 s grace, then SIGTERM→SIGKILL to the wake's process group)
     rows.ts           // shared row and receipt rendering for the picker and `musterd seats`
     byName.ts         // `musterd <seat>` / `musterd -`: resolve, live check, plan, record, supervise, receipt

@@ -29,4 +29,6 @@ Observed 2026-10-08 from `packages/cli/src/host/backends/*`, `trace/transcript.t
 
 ## The seam
 
-One reader per harness, on the harness adapter: *find the transcript from `session_id`*, *project it into `WatchEvent`s*, *say whether it ended cleanly*. `watch/index.ts` asks the adapter. The three safety properties stay in one shared place, not per harness: tool results are never shown, credentials go through `scrubCredentials`, control characters are stripped.
+Landed 2026-10-08 (lane 2/6). One `WatchReader` per harness, in `packages/cli/src/launcher/watch/`: *find the transcript from the lease's `session_id`*, *project it into `WatchEvent`s*, *say whether it ended cleanly*. `watch/index.ts` asks the registry (`readers.ts`), not Claude Code. The rules about what watch may show live in one place, `events.ts`: a reader can only make an event through `textEvent` / `toolEvent`, which keep words and tool calls only (the constructors take no result field), run every line through `scrubCredentials`, and strip control characters.
+
+The registry lives beside the readers, not on the onboarding harness adapters as the lane first said: those hold install-time config, and importing launcher code into them would point the dependency the wrong way.

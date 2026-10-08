@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { LocalWake } from '../live.js';
 import type { Seat } from '../store.js';
-import { readCompleteLines, watchWake, type Keys } from './index.js';
+import { claudeReader } from './claude.js';
+import { readCompleteLines } from './lines.js';
+import { watchWake, type Keys } from './index.js';
 
 const rec = (o: object) => JSON.stringify(o);
 const say = (text: string, stop = 'tool_use') =>
@@ -42,8 +44,10 @@ function run(
   const alives = aliveScript ?? [true];
   let polls = 0;
   const result = watchWake(wake, seat, {
-    transcriptPath: () => '/t/S-1.jsonl',
-    readLines: () => frames[Math.min(read++, frames.length - 1)]!,
+    reader: claudeReader({
+      transcriptPath: () => '/t/S-1.jsonl',
+      readLines: () => frames[Math.min(read++, frames.length - 1)]!,
+    }),
     alive: () => alives[Math.min(polls++, alives.length - 1)]!,
     // A real macrotask per tick, so a key pressed later by the test can land.
     sleep: () => new Promise((r) => setTimeout(r, 1)),
@@ -114,16 +118,22 @@ describe('watchWake (ADR 546)', () => {
   });
 
   it("can't watch a wake with no transcript, or a non-Claude one", async () => {
-    const none = run({ transcriptPath: () => undefined, keys: keyboard(['never']) });
+    const none = run({
+      reader: claudeReader({ transcriptPath: () => undefined }),
+      keys: keyboard(['never']),
+    });
     expect(await none.result).toBe('leave');
     expect(none.out.join('')).toContain("can't watch: no transcript for this wake yet");
     const out: string[] = [];
     expect(
-      await watchWake({ ...wake, harness: 'codex' }, seat, {
+      await watchWake({ ...wake, harness: 'unknown-harness' }, seat, {
         out: (s) => out.push(s),
         keys: keyboard(['never']),
       }),
     ).toBe('leave');
+    expect(out.join('')).toContain(
+      "can't watch: watching unknown-harness wakes is not supported yet",
+    );
   });
 
   it('releases the keyboard it opened itself', async () => {
