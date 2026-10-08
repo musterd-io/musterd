@@ -462,11 +462,32 @@ export async function pushTeam(
   return ack.accepted;
 }
 
+/**
+ * A local write rings this: push now rather than at the next 60 s tick. Debounced so a burst of
+ * acts (a handoff and its status line) is one pass; the interval stays as the fallback for a kick
+ * that landed while the hub was unreachable.
+ */
+export const SYNC_PUSH_KICK_DEBOUNCE_MS = 200;
+
+/** The running loop's doorbell, by database handle — the handle is the daemon's identity (as in
+ *  pull.ts), so two in-process daemons do not ring each other. Absent when no loop runs (a hub
+ *  that is not a joiner, cloud, a test that never started one): a kick is then a no-op. */
+const kickers = new WeakMap<Ctx['db'], () => void>();
+
+/** Ask this daemon's push loop to run soon. Never throws, never blocks the caller. */
+export function kickSyncPush(ctx: Ctx): void {
+  kickers.get(ctx.db)?.();
+}
+
 /** Start the push loop. Returns a stop function (same contract as startSeedsIngest). */
 export function startSyncPush(ctx: Ctx): () => void {
   let running = false;
+  let again = false; // a kick arrived mid-pass: the pass already read its batch, so run once more
   const tick = async () => {
-    if (running) return; // a slow hub must not stack passes
+    if (running) {
+      again = true;
+      return; // a slow hub must not stack passes
+    }
     running = true;
     try {
       for (const team of await listActiveTeams(ctx.db)) {
@@ -482,8 +503,26 @@ export function startSyncPush(ctx: Ctx): () => void {
     } finally {
       running = false;
     }
+    if (again) {
+      again = false;
+      void tick();
+    }
   };
   const handle = setInterval(() => void tick(), SYNC_PUSH_INTERVAL_MS);
   if (typeof handle.unref === 'function') handle.unref();
-  return () => clearInterval(handle);
+
+  let kick: ReturnType<typeof setTimeout> | null = null;
+  kickers.set(ctx.db, () => {
+    if (kick) return;
+    kick = setTimeout(() => {
+      kick = null;
+      void tick();
+    }, SYNC_PUSH_KICK_DEBOUNCE_MS);
+    if (typeof kick.unref === 'function') kick.unref();
+  });
+  return () => {
+    clearInterval(handle);
+    if (kick) clearTimeout(kick);
+    kickers.delete(ctx.db);
+  };
 }

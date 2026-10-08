@@ -731,6 +731,45 @@ withDrivers('push', (_o, kind) => {
       ).toBe(true);
     });
   });
+
+  describe('push on write (latency)', () => {
+    it('a send on the joiner is staged on the hub without waiting for the 60 s timer', async () => {
+      // Enrollment needs the joiner's local node row, which its first logged act mints; flush that
+      // seed so the probe below is the only unpushed event.
+      await send(joiner, 'seed');
+      await enrollJoiner();
+      await pushTeam(joinerCtx, await joinerTeam());
+      const before = ((await stagedOnHub()) as { n: number }).n;
+      const sent = Date.now();
+      const res = await post(
+        joinerBase,
+        '/teams/bravo/messages',
+        {
+          envelope: makeEnvelope({
+            id: 'lat-1',
+            team: 'bravo',
+            from: 'nick',
+            to: { kind: 'team' as const },
+            act: 'message',
+            body: 'latency probe',
+            ts: sent,
+          }),
+        },
+        nickCredentialOnJoiner(),
+      );
+      expect(res.status).toBe(201);
+      let staged = 0;
+      while (Date.now() - sent < 90_000) {
+        staged = ((await stagedOnHub()) as { n: number }).n - before;
+        if (staged > 0) break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      const ms = Date.now() - sent;
+      expect(staged).toBeGreaterThan(0);
+      // Measured 2026-10-08: 60 104 ms before the kick (the whole timer), 209 ms after.
+      expect(ms).toBeLessThan(2_000);
+    }, 100_000);
+  });
 });
 
 describe('wedgeKind (ADR 532)', () => {
