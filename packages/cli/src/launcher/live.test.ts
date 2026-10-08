@@ -1,4 +1,7 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   canOf,
@@ -6,6 +9,7 @@ import {
   fetchRosterPage,
   fetchRosters,
   liveFor,
+  localWake,
   rosterKey,
   rosterTargets,
   teamAgents,
@@ -370,5 +374,64 @@ describe('where / can (ADR 503 Decision 2)', () => {
       ['cy', null, 'nowhere', null, 'setup'],
       ['nick', 'acme/proj/nick', 'nowhere', null, 'launch'],
     ]);
+  });
+});
+
+describe('localWake (ADR 546) — only a live, unexpired wake on this machine counts', () => {
+  const file = (over: object = {}) => ({
+    lease_id: 'L1',
+    provenance: 'wake',
+    harness: 'claude-code',
+    spawner_pid: 77,
+    started_at: 1_000,
+    expires_at: 99_000,
+    session_id: 'S-1',
+    ...over,
+  });
+  const at = (f: object): string => {
+    const d = mkdtempSync(join(tmpdir(), 'lw-'));
+    mkdirSync(join(d, '.musterd'));
+    writeFileSync(join(d, '.musterd', 'wake-lease.json'), JSON.stringify(f));
+    return d;
+  };
+  const wakeLive = {
+    where: 'here' as const,
+    label: 'here',
+    surface: 'claude-code',
+    since: 1,
+    wake: null,
+  };
+  const up = { alive: () => true, now: () => 5_000 };
+
+  it('a live, unexpired wake here is found', () => {
+    const d = at(file());
+    expect(localWake(seat({ path: d }), wakeLive, up)).toEqual({
+      lease_id: 'L1',
+      pid: 77,
+      session_id: 'S-1',
+      harness: 'claude-code',
+      started_at: 1_000,
+      workspace: d,
+    });
+  });
+
+  it('a file from an older host has no session id', () => {
+    const { session_id: _s, ...old } = file();
+    expect(localWake(seat({ path: at(old) }), wakeLive, up)?.session_id).toBeNull();
+  });
+
+  it('expired, dead, elsewhere, not-a-wake, no file or a bad file is no wake', () => {
+    const d = at(file());
+    const s = seat({ path: d });
+    expect(localWake(s, wakeLive, { alive: () => true, now: () => 100_000 })).toBeNull();
+    expect(localWake(s, wakeLive, { alive: () => false, now: () => 5_000 })).toBeNull();
+    expect(localWake(s, { ...wakeLive, where: 'elsewhere' }, up)).toBeNull();
+    const { wake: _w, ...person } = wakeLive;
+    expect(localWake(s, person, up)).toBeNull();
+    expect(localWake(s, null, up)).toBeNull();
+    expect(
+      localWake(seat({ path: mkdtempSync(join(tmpdir(), 'none-')) }), wakeLive, up),
+    ).toBeNull();
+    expect(localWake(seat({ path: at({ nope: 1 }) }), wakeLive, up)).toBeNull();
   });
 });
