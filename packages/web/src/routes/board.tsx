@@ -278,7 +278,7 @@ function BoardPage() {
 
   return (
     <main className="lc">
-      <header className="lc__topbar">
+      <header className="lc__topbar lc__topbar--board">
         <MusterdWord />
         <span className="lc__team">/ {connected ? `${cfg.team} · board` : 'board'}</span>
         <span className="lc__spacer" />
