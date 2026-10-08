@@ -46,6 +46,7 @@ import type { MemberRow, MessageRow, TeamRow } from '../store/rows.js';
 import { resolveAccountStatus, resolveCapabilities } from '../store/rows.js';
 import { acceptanceTimeoutMs, getTeamBySlug } from '../store/teams.js';
 import { holdAtHub, joinerEnrollment } from '../sync/claim.js';
+import { kickSyncPush } from '../sync/push.js';
 import {
   recordActModel,
   recordDeliveryOutcome,
@@ -688,6 +689,10 @@ async function routeEnvelopeInner(
 
   // Self-reported token usage (meta.usage — ADR 082 slice 4): opt-in, harness-agnostic.
   recordTokenUsage(outgoingEnv);
+
+  // The act is durable and origin-stamped: offer it to the hub now, not at the next 60 s tick
+  // (debounced; a no-op where no push loop runs — a hub, cloud, an unenrolled machine).
+  kickSyncPush(ctx);
 
   // Deliver live to whoever is present. Durability is the log; this is the push — its outcome per
   // recipient (live vs inboxed) is attempt history, recorded as span events (ADR 090), never rows.
