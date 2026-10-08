@@ -588,6 +588,45 @@ function parseStoredJson(text: string | null): Record<string, unknown> | null {
   }
 }
 
+/**
+ * Compressed bytes of recently sent bodies, keyed by the body itself (lane 01M477S003). Compression
+ * was ~4.5% of app CPU under load: the roster is the same string for every viewer of one class
+ * (non-admin, no sponsored seats), and /live refetches it on every presence frame. Keyed by content,
+ * so a hit can never serve a stale or another viewer's body; a few entries bound the memory.
+ */
+const COMPRESSED_JSON_CACHE_MAX = 8;
+const COMPRESSED_JSON_CACHE_MAX_BYTES = 1_000_000; // a huge one-off backfill is not worth pinning
+const compressedJsonCache = new Map<string, Buffer>();
+
+function compressJson(payload: string, enc: 'br' | 'gzip', bytes: number): Buffer {
+  return enc === 'br'
+    ? brotliCompressSync(payload, {
+        params: {
+          [zlibConstants.BROTLI_PARAM_QUALITY]: 4,
+          [zlibConstants.BROTLI_PARAM_SIZE_HINT]: bytes,
+        },
+      })
+    : gzipSync(payload, { level: 6 });
+}
+
+function compressedJson(payload: string, enc: 'br' | 'gzip', bytes: number): Buffer {
+  if (bytes > COMPRESSED_JSON_CACHE_MAX_BYTES) return compressJson(payload, enc, bytes);
+  const key = `${enc}\n${payload}`;
+  const hit = compressedJsonCache.get(key);
+  if (hit) {
+    compressedJsonCache.delete(key); // re-insert: Map order is the LRU order
+    compressedJsonCache.set(key, hit);
+    return hit;
+  }
+  const buf = compressJson(payload, enc, bytes);
+  compressedJsonCache.set(key, buf);
+  if (compressedJsonCache.size > COMPRESSED_JSON_CACHE_MAX) {
+    const oldest = compressedJsonCache.keys().next().value;
+    if (oldest !== undefined) compressedJsonCache.delete(oldest);
+  }
+  return buf;
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
   const bytes = Buffer.byteLength(payload);
@@ -598,15 +637,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   }
   // Dynamic bodies can't be cached like static assets, so use a fast level (not static's brotli-11):
   // gzip-6 / brotli-4 compress a ~120 KB backfill in a couple ms while still recovering most of it.
-  const buf =
-    enc === 'br'
-      ? brotliCompressSync(payload, {
-          params: {
-            [zlibConstants.BROTLI_PARAM_QUALITY]: 4,
-            [zlibConstants.BROTLI_PARAM_SIZE_HINT]: bytes,
-          },
-        })
-      : gzipSync(payload, { level: 6 });
+  const buf = compressedJson(payload, enc, bytes);
   res.writeHead(status, {
     'content-type': 'application/json',
     'content-encoding': enc,
