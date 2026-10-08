@@ -45,7 +45,7 @@ export const WEDGE = {
   ] as Ref[],
 };
 
-export const TAGLINE = 'Muster your agents and humans into persistent teams.';
+export const TAGLINE = 'Agents that answer for their work.';
 
 /**
  * Where "Get early access" goes while musterd is in private preview: a Tally form (nick,
