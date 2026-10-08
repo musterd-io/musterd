@@ -138,8 +138,7 @@ export function styleEnvelopeFrom(
   driver: string | null,
 ): StyleEnvelope {
   const team = resolveStyle(policy);
-  const named = driver ? humans.find((m) => m.name === driver) : undefined;
-  const chosen = named ?? (humans.length === 1 ? humans[0] : undefined);
+  const chosen = chosenHuman(humans, driver);
   if (chosen) {
     const style = resolveStyle(policy, memberStylePrefs(chosen));
     return {
@@ -158,6 +157,12 @@ export function styleEnvelopeFrom(
   };
 }
 
+/** The human whose dials a seat gets: the named driver, else the team's only human. */
+function chosenHuman(humans: MemberRow[], driver: string | null): MemberRow | undefined {
+  const named = driver ? humans.find((m) => m.name === driver) : undefined;
+  return named ?? (humans.length === 1 ? humans[0] : undefined);
+}
+
 /**
  * The current style epoch a roster row should show (ADR 514 inc 4, spec §4.4 "Attestation"): a
  * human's own resolved style; an agent's is what its seat should attest — the driver its newest
@@ -174,5 +179,8 @@ export function currentStyleEpochFor(
     const self = humans.find((m) => m.name === member.name);
     return resolveStyle(policy, self ? memberStylePrefs(self) : undefined).epoch;
   }
-  return styleEnvelopeFrom(policy, humans, presenceDriver).epoch;
+  // The epoch alone: `styleEnvelopeFrom(...).epoch` rendered the whole block and resolved the team
+  // style a second time for every agent row, only to throw both away (lane 01M477S003).
+  const chosen = chosenHuman(humans, presenceDriver);
+  return resolveStyle(policy, chosen ? memberStylePrefs(chosen) : undefined).epoch;
 }
