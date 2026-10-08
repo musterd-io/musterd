@@ -732,6 +732,44 @@ withDrivers('push', (_o, kind) => {
     });
   });
 
+  describe("end to end: a joiner send reaches the hub's own messages (latency)", () => {
+    it("is readable on the hub without waiting for the hub's 60 s fold tick", async () => {
+      await send(joiner, 'seed');
+      await enrollJoiner();
+      await pushTeam(joinerCtx, await joinerTeam());
+      const sent = Date.now();
+      const res = await post(
+        joinerBase,
+        '/teams/bravo/messages',
+        {
+          envelope: makeEnvelope({
+            id: 'lat-e2e',
+            team: 'bravo',
+            from: 'nick',
+            to: { kind: 'team' as const },
+            act: 'message',
+            body: 'e2e latency probe',
+            ts: sent,
+          }),
+        },
+        nickCredentialOnJoiner(),
+      );
+      expect(res.status).toBe(201);
+      let seen = false;
+      while (Date.now() - sent < 150_000) {
+        seen =
+          (await hub.store.get('SELECT 1 AS x FROM messages WHERE id = ?', ['lat-e2e'])) !==
+          undefined;
+        if (seen) break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      const ms = Date.now() - sent;
+      expect(seen).toBe(true);
+      // Measured 2026-10-08, push-on-write already in: 60 051 ms before the hub's fold kick, 360 ms after.
+      expect(ms).toBeLessThan(2_000);
+    }, 160_000);
+  });
+
   describe('push on write (latency)', () => {
     it('a send on the joiner is staged on the hub without waiting for the 60 s timer', async () => {
       // Enrollment needs the joiner's local node row, which its first logged act mints; flush that
