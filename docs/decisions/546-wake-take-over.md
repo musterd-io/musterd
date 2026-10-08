@@ -67,6 +67,11 @@ land in increments 2–4.
   gitignored folder.
 - The file has to be treated as untrusted by its readers: a stale file (crashed host, expired lease,
   reused pid) must read as "no wake here". The launcher check lands in increment 3.
+- 2026-10-08 (lane `01M4ECTJH025RJEFC0VJPDNPE1`): every child-process wake backend now holds a lease
+  file with its session id through one helper (`holdWakeLease`), so Codex, Grok and opencode wakes are
+  findable by `musterd <seat>`. The native loop deliberately writes none: it runs inside the host, so
+  the only pid to name is the host's, and a launcher that signals a lease's pid as a process group
+  would stop the host. Native take-over waits for an in-process stop.
 - Alternatives considered: (a) **Kill the wake with a signal at once.** Rejected: it cuts a tool call
   in half and can leave a lane claim or a half-written file. The tool boundary is the safe stop.
   (b) **Send the session id to the daemon so any machine can take over.** Rejected: ADR 131 §5 keeps

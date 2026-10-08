@@ -13,17 +13,17 @@ Observed 2026-10-08 from `packages/cli/src/host/backends/*`, `trace/transcript.t
 | Harness | Host wake backend | Lease file written | `session_id` in it | Transcript, local | Existing parser |
 | --- | --- | --- | --- | --- | --- |
 | Claude Code | `claudeCode.ts` | yes | yes (ADR 546, #2201) | `~/.claude/projects/<slug>/<id>.jsonl` | `parseClaudeTranscript` |
-| Codex | `codex.ts` | yes (ADR 354) | **no** — the backend learns its thread id from stdout after the write | under `~/.codex/sessions` | `parseCodexTranscript` |
-| Grok | `grok.ts` | **no** | n/a | `$GROK_HOME/sessions/<encoded cwd>/<id>/updates.jsonl` (default `~/.grok`) | `parseGrokTranscript` |
-| opencode | `opencode.ts` | **no** | n/a | a SQLite store, `$XDG_DATA_HOME/opencode/opencode.db`, read with the `sqlite3` CLI | `parseOpencodeRows` |
+| Codex | `codex.ts` | yes (ADR 354) | yes — ~~no (2026-10-08)~~ rewritten once codex prints its thread id (lane 1/6, 2026-10-08) | under `~/.codex/sessions` | `parseCodexTranscript` |
+| Grok | `grok.ts` | yes — ~~no (2026-10-08)~~ lane 1/6 | yes — a resumed run at spawn, a fresh one once Grok has written its session | `$GROK_HOME/sessions/<encoded cwd>/<id>/updates.jsonl` (default `~/.grok`) | `parseGrokTranscript` |
+| opencode | `opencode.ts` | yes — ~~no (2026-10-08)~~ lane 1/6 | yes — rewritten from the streamed session id | a SQLite store, `$XDG_DATA_HOME/opencode/opencode.db`, read with the `sqlite3` CLI | `parseOpencodeRows` |
 | Cursor Agent | **none** — no host backend exists, so no headless wake exists to take over | n/a | n/a | `~/.cursor/projects/<slug>/agent-transcripts/<id>/<id>.jsonl` (desktop); `<id>.txt` for the `cursor-agent` CLI | `parseCursorTranscript` (jsonl only) |
-| musterd native (`musterd`) | `native.ts` | **no** | n/a | none on disk — each turn posts a `wake-turn` row (usage + transcript, bounded) to the daemon | none |
+| musterd native (`musterd`) | `native.ts` | **no, on purpose** (see below) | n/a | none on disk — each turn posts a `wake-turn` row (usage + transcript, bounded) to the daemon | none |
 
 
 ## What this means
 
-- **Watch for Codex is two small steps away**: record the thread id in the lease file, then read its transcript. Until then Codex take-over also falls back to the plain question, because the lease has no `session_id` (falsify: a Codex wake's `wake-lease.json` contains `session_id`).
-- **Grok, opencode and native wakes are invisible to the launcher.** Their backends write no lease file (2026-10-08; falsify: `grep writeWakeLease packages/cli/src/host/backends/{grok,opencode,native}.ts` finds a call). Taking one over today replaces it (ADR 092). <!-- claim: defect -->
+- ~~**Watch for Codex is two small steps away**: record the thread id in the lease file, then read its transcript. Until then Codex take-over also falls back to the plain question, because the lease has no `session_id`.~~ FIXED 2026-10-08 by lane 1/6: Codex now records the thread id, so take-over works for it; its transcript reader is lane 3/6.
+- ~~**Grok, opencode and native wakes are invisible to the launcher.** Their backends write no lease file (2026-10-08).~~ FIXED 2026-10-08 for Grok and opencode by lane 1/6 (`holdWakeLease`). Native stays invisible on purpose: it is not a child process. Its loop runs inside the host, so a lease would have to name the host's own pid, and `stopWake` signals a lease's pid as a process group — it would stop the host. Native needs an in-process stop (the loop reading the yield marker at a turn boundary), which is lane 6/6's.
 - **The yield marker's fast path needs a PreToolUse hook.** `musterd gate` is what turns the marker into a deny, and Codex has no gate hook (see [driver support matrix](driver-support-matrix.md)). On Codex the 10 s hard stop is the only stop (2026-10-08; falsify: Codex's `.codex/hooks.json` carries a PreToolUse entry that runs `musterd gate`). <!-- claim: defect -->
 - **The existing transcript parsers do not carry tool calls.** They emit `assistant_text`, `reasoning` and `usage` records; tool calls travel on a separate rail (R1, from hooks, to the daemon). Watch shows `▸ Bash  ls` lines, so each harness needs a tool-call projection beside the parser, or watch shows words only (2026-10-08; falsify: a `parse*Transcript` output contains a record that names a tool call). <!-- claim: defect -->
 
