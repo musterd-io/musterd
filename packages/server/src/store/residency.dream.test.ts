@@ -48,6 +48,9 @@ withDrivers('residency — the dream lease (ADR 494)', (o) => {
     });
     const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
     const ada = (await addMember(db, team, { name: 'ada', kind: 'agent' })).row;
+    // These tests stamp acts at a fixed fake NIGHT. A seat is owed only what arrived after it existed
+    // (ADR 549), so the members must predate them.
+    await db.run('UPDATE members SET created_at = 0 WHERE team_id = ?', [team.id]);
     await enrollResidency(db, team.id, {
       member_id: ada.id,
       harness: 'claude-code',
@@ -184,6 +187,7 @@ withDrivers('residency — the dream lease (ADR 494)', (o) => {
   it('never wakes a seat for an act a dream sent', async () => {
     const { db, team, nick, ada } = await seed({ dream: false });
     const bob = (await addMember(db, team, { name: 'bob', kind: 'agent' })).row;
+    await db.run('UPDATE members SET created_at = 0 WHERE id = ?', [bob.id]);
     for (const [id, act] of [
       ['01HDREAMCHAIN0000000000001', 'steer'],
       ['01HDREAMCHAIN0000000000002', 'request_help'],

@@ -26,6 +26,9 @@ async function seed() {
   const nick = (await addMember(db, team, { name: 'nick', kind: 'human' })).row;
   const ada = (await addMember(db, team, { name: 'Ada', kind: 'agent' })).row;
   const bob = (await addMember(db, team, { name: 'bob', kind: 'agent' })).row;
+  // These fixtures stamp messages with fake receipt times near zero. A seat is owed only what arrived
+  // after it existed (ADR 549), so the members must predate them too.
+  await db.run('UPDATE members SET created_at = 0 WHERE team_id = ?', [team.id]);
   return { db, team, nick, ada, bob };
 }
 
