@@ -1,6 +1,6 @@
 # Competitive landscape — coordination vs. the substrate
 
-> **Living document.** The competitive picture on the _coordination_ side, complementing the observability-market snapshot in `observability.md` §2. Substantive positioning shifts go through an ADR. Status: **draft**, refreshed 2026-08-24 (§13 added: the funding wave and the peer-coordination result; prior refresh 2026-08-19 — §1 Flue update, §12; original snapshot 2026-06-17).
+> **Living document.** The competitive picture on the _coordination_ side, complementing the observability-market snapshot in `observability.md` §2. Substantive positioning shifts go through an ADR. Status: **draft**, refreshed 2026-10-08 (§14 added: the multiplayer cohort, the work trackers' agents, and one table across the field; §5 Band Desktop update), prior refresh 2026-08-24 (§13 added: the funding wave and the peer-coordination result; prior refresh 2026-08-19 — §1 Flue update, §12; original snapshot 2026-06-17).
 
 This doc records what neighboring tools build, where they stop, and why musterd's choices are deliberate counter-positions rather than gaps. It is evidence for the thesis, not the thesis itself — the thesis is decided in [ADR 320](../decisions/320-positioning-the-value-prop-decided.md), which argues the value prop against its rejected alternatives and closes the question; `README.md`, `ROADMAP.md` "How priorities are decided", and `observability.md` §3 carry the compressions of it.
 
@@ -124,6 +124,8 @@ Band solved **talk** (a hosted room where cross-framework agents converse). The 
 **The threat, honestly.** Rooms are a natural place to grow typed acts and work primitives; if Band moves from conversation toward structured work, the surfaces converge. The counter-moat is the stack Band's architecture resists: **seat durability** (their no-shared-state fights it), **harness-native provisioning** (their SDK requirement fights it), the **plan/insight layer** (unbuilt on their side), and the **measured-tax research** (ADR 056) that names the problem they don't yet address. Watch their roadmap for work-ownership language.
 
 **Update 2026-08-24 — Band is funded and carrying the category's name.** What the July sighting missed: Band had already raised a **$17M seed** (announced 2026-04-23; Sierra Ventures, Hetz Ventures, Team8 — [unite.ai](https://www.unite.ai/band-raises-17m-seed-round-to-build-the-coordination-layer-for-ai-agents/)), pitched in the press as _"the coordination layer for AI agents"_ and "the WhatsApp for AI agents," with an explicit **"internet of agents" cross-org vision**. VentureBeat's VB Transform roundup (2026-07-29, [5 startups fixing the agent infrastructure gap](https://venturebeat.com/orchestration/enterprise-ai-agents-cant-talk-to-each-other-cant-be-trusted-with-permissions-and-cant-be-audited-5-startups-are-already-fixing-that)) leads with Band for agent-to-agent communication, citing autonomous workflows of 8–20 hours. The watch item stands unanswered on substance — no work-ownership or typed-act language has surfaced; the pitch is still conversation + governance visibility — but the **vocabulary risk sharpened**: "coordination layer" is now a funded company's press label, not just our phrase. The positioning ADR should assume the term is contested (see §13).
+
+**Update 2026-10-08 — the ADR 320 tripwire fired.** `docs.band.ai` now documents **Band Desktop** (formerly Jam): the `band-peer` Claude Code plugin "creates a BAND agent identity for the local Claude Code session", reattaching "rebinds the local window without creating a new BAND agent", and the UI shows "work items and ownership" and "agent swim lanes" ("A piece of work has a goal, constraints, owners, progress, and decisions"). That is harness-native join and a work-ownership primitive — two of the three conditions ADR 320's convergence watch named. Still absent from the docs: typed acts, acceptance or review, declining; and only Claude Code is supported. The counter-moat this section listed (seat durability, harness-native provisioning) no longer separates the two; what remains is refusal, enforced acceptance by another member, and attestation. [ADR 550](../decisions/550-positioning-accountable-agents.md) (accepted 2026-10-08) re-reads the position on that basis; §14 has the wider sweep.
 
 **Positioning line:** _Band connects your agents; musterd makes them a team._
 
@@ -360,3 +362,118 @@ stronger intelligence" and needs deliberate mechanism design. This page notes it
 the strongest lab has put its name on "the between-space is the problem." The correlated-failure
 thesis it supports is being chartered separately (the diversity-charter ADR in flight), which owns
 the doctrinal citation.
+
+## 14. Refresh 2026-10-08: the multiplayer cohort, the trackers' agents, and one table
+
+Added 2026-10-08 by alfie, from a sweep nick asked for after attending a Party build night. Every
+claim below was read on that date; the full notes (sources inline) were research artifacts of that
+session. This section is evidence; the thesis it feeds is [ADR 550](../decisions/550-positioning-accountable-agents.md)
+(accepted 2026-10-08), which supersedes ADR 320 decisions 1 and 4.
+
+### a. Party (party.build): a shared session, sequenced by a Flow
+
+A closed-source hosted "multiplayer workspace": a human team and role-named agents (Product,
+Architect, Engineer, Auditor, Reviewer, QA…) work in a shared **Session**; each Session runs a
+**Flow** — a server-side graph of agent steps, routes and human checkpoints (`FLOW.json`,
+`apiVersion party.ai/v1alpha1`) — inside a sandboxed **Environment**, ending in an issue, a live
+Preview and a PR. Each step runs a harness (Claude Code, Codex, Cursor, OpenCode, Grok Build) on
+Party's keys or the customer's. Pricing is flat per team, "No per-seat fees", with dollar credits
+and daily session-hours ($0 / $20 / $200 / Enterprise with VPC self-host and a BAA). Positioning:
+"Build in the open. Together."; "Slack/Teams are comm-first with agents as second-class citizens.
+Party is work-first"; "People make the calls; agents carry the work forward."
+
+The company is the renamed **Maitai** (YC S24): the app still logs in as "Skipper Mission Control —
+Managed alpha", enterprise mail goes to `sales@trymaitai.com`, and only Maitai-era seed money
+(~$500K) is on record. Public since a LinkedIn post on 2026-09-18; no docs site, repo, HN thread,
+review or named customer. Go-to-market is weekly in-person build nights and a $25K-prize hackathon
+in SF and Redwood City, each attendee leaving with three months of Starter and $100–250 of credits.
+
+**The spine.** Coordination lives in the Flow engine. nick ran a session at a Party event: no agent
+moved on its own — "it was basically like a Claude work or chat session". The client bundle has no
+agent-to-agent channel, no claim, no agent-facing API; "MCP" and "worktree" do not appear in it.
+Flows can run unattended — a founder described a brainstorming/strategy Flow working overnight
+with no human — because the graph decides who speaks next. That is authored orchestration that runs
+without a human (§1's family, with a better shared surface), and the autonomy belongs to the Flow,
+not the agents. Cell: §7's console, with the best human story in that cell.
+
+### b. The YC Fall 2026 "Multiplayer AI" cohort
+
+YC's RFS (Aaron Epstein) asks that anyone on a team "drop into the same live agent session to watch
+it work, redirect it, and hand it off" — the unit is the live session. The bulleted feature list
+that circulates with it is a third party's (Modelence), not YC's. Entrants read against this page's
+spines:
+
+- **Agent Relay** (YC F26, 2 people, Apache-2.0, 867★): "the messaging layer for AI agents:
+  channels, DMs, threads, typed actions, and reliable delivery into live sessions"; joins an
+  existing Claude Code / Codex session over MCP ("Relay does not need to own the process"); a human
+  is a participant on the same channels. The closest thing to musterd's transport. No work
+  ownership, no decline, no acceptance, no model attestation; the receipts (`accepted / delivered /
+  deferred / failed`) are delivery states. Cell: §5's protocol cell, open-source and harness-native.
+- **Pentagon** (YC P26, one founder): "a coordination layer for humans and agents"; persistent "AI
+  employees" on an org canvas who "ping another agent to get work done"; hosted, demo-only, no docs.
+  Uses the vocabulary; nothing yet to read.
+- **herdr** (YC F26, 42.9k★, Apache): a daemon that owns agent terminal sessions and sorts them into
+  an attention queue (working / blocked / done). Operator above the sessions; a Surface for musterd.
+- **Maxxwell** (Rindler, YC S26, pivoted in-batch): a desktop IDE whose unit is a "lane" — one agent
+  session — under an orchestrator session that reads the others. Shares our word with a different
+  meaning (a session, not owned work).
+- **qm** (YC's own, MIT, 15.4k★): one agent per person or room scope, acting "as the person it's
+  working for"; self-hosted. Multi-user isolation, not multi-agent.
+- **SageOx** ($15M seed, Canaan): "the hivemind for human–agent teams" — shared context and a
+  session ledger, with "murmur" awareness of in-flight work. Context, not ownership.
+- **Conductor** ($24M), **Capy**, **OneCLI** (YC S26, pivoted to a sandboxed team harness),
+  **Vibespace**: parallel sessions in worktrees or sandboxes; operator above.
+- **First-party:** Claude Code Agent Teams (teammates self-claim from a shared task list; ephemeral,
+  one lead session), Claude Code cross-session messaging, Claude Tag ("@Claude is multiplayer" in
+  Slack), Claude Projects, Codex shared cloud environments, Cursor Cloud Agents, Slack Code. The
+  live-session slice of the RFS was commoditized by the platforms within about four months.
+
+Observers' criticisms of the whole category: token cost (teams run 5–7× a single session),
+file and design conflicts, the human's attention (two or three agents per person), review as the
+new bottleneck, and "When More Is Less" (arXiv 2609.19759): multi-agent gains appear only on
+long-horizon tasks with sparse dependencies.
+
+### c. The work trackers' agents: delegated, not accountable
+
+| Tracker | How the agent appears | Can decline | Acceptance by another | Records which model | Agent is a seat? |
+| --- | --- | --- | --- | --- | --- |
+| Linear (May 2025) | durable identity, as **delegate** — never assignee | no (can ask for input) | ordinary PR review | no | no — "not billable users" |
+| Jira + Rovo Dev (GA May 2026) | own account, audit-logged | no | PR review | which agent, not which model | no — credits |
+| Plane (Sep 2026, OSS) | Linear's model | no | no | no | no |
+| Asana AI Teammates (GA Mar 2026) | operator-built, assignable | no (per-action approval) | no | no | add-on |
+| ClickUp Super Agents | operator-built, assignable | no | no | no | credits |
+| Notion Agent | a triggered feature; agents can delegate to sub-agents | no (per-action approval) | no | no | credits |
+| GitHub Copilot agent | the issue assignee | no | PR review | no | AI Credits |
+
+Linear states the boundary as design: issues are "only delegated to agents … an agent cannot be
+held accountable", so a human remains the assignee. The vendors' self-descriptions converge on
+"system of work" (Linear, Atlassian, Asana, monday, Plane, Slack); none uses "coordination layer".
+The trackers own where work lives and the noun "assignee"; for one unit of work handed to one
+agent they are sufficient. Linear's agent API makes it an integration target as much as a rival — a
+musterd seat could appear in Linear as a delegate.
+
+### d. One table across the field
+
+| | Unit coordinated | Claims / **declines** | Human on the same primitives | Joins a running session | Runs / sandboxes agents | Self-host | Work ownership | Records which model |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Party | hosted Session + Flow | no / no | approver | no | runs + sandboxes (per session) | Enterprise | Flow steps | no |
+| Band Desktop | identity in rooms | no / no | in rooms | yes (Claude Code) | no (local session) | no | work items + owners | no |
+| Agent Relay | handle + channels | — / no | yes | yes (MCP) | can spawn; no sandbox | yes | none | no |
+| Multica | board assignee | claim / no ("blocker") | same picker | no | runs (drives the CLI) | yes | enqueue→claim | no |
+| Claude Code Agent Teams | ephemeral teammate | claim / no | operator | — | runs (in the lead session) | local | task list | no |
+| Linear / Jira | delegate / assignee | no / no | human holds it | no | vendor cloud sandbox | no | the issue | no / agent only |
+| qm, herdr, Conductor, Omnigent | scope or session | no / no | operator | varies | runs; qm, Omnigent sandbox | varies | no | no |
+| **musterd** | seat (outlives the session) | claim / **decline, challenge** | same roster, same acts | yes (MCP + env) | **neither** — composes with what does; gates at the tool boundary | yes (MIT) | lanes + gates + goals | **observed model** |
+
+**What the table says.** Durable identity, joining a running session, and humans in the same
+channels are now common — the first items of ADR 320's moat. Across roughly forty products, three
+things are absent everywhere: a decline or challenge act, acceptance enforced to come from a
+different actor, and a record of which model did the work. Pricing corroborates ADR 461: no product
+charges for an agent as a seat.
+
+**What it does not say.** musterd is behind on surface and onboarding (Party, Conductor and Multica
+are usable in minutes by someone who does not run a daemon), on unattended runs as a packaged
+feature, and on adoption. On isolation it sits at a different layer: it does not run or sandbox
+agents and composes with whatever does (ADR 550 §7), so a buyer who asks "where is the sandbox"
+needs that answer in the first conversation. Its own usage does not yet show the
+refusal it leads with (ADR 550, Consequences).
