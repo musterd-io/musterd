@@ -5741,6 +5741,36 @@
   color: var(--lc-text);
 }
 
+/* The board's topbar on a phone. One row cannot hold the wordmark, the team label, the three-way
+   view switch, the identity chip, sign out and + New lane: at 390px the label wrapped to three
+   lines and the switch pushed the chip (the style sheet's door) off-screen — measured 2026-10-07
+   capturing #2193 (lane 01M4C67S6F). So the bar wraps instead: who and where on row one (wordmark,
+   label, chip, sign out), what you do with the board on row two (view switch, + New lane). The
+   label ellipsizes rather than wraps, and `order` is what pushes the two board controls down. */
+@media (max-width: 440px) {
+  .lc__topbar--board {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 52px;
+    row-gap: var(--lc-2);
+    padding-block: var(--lc-3);
+  }
+  .lc__topbar--board .lc__team {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .lc__topbar--board .lc-board__views {
+    order: 1;
+    margin-right: auto;
+  }
+  .lc__topbar--board .lc-board__new {
+    order: 1;
+  }
+}
+
 /* the rail — a calm read of the report, collapsible to the house spine */
 .lc-insight {
   display: flex;
