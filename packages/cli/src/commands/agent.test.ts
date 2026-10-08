@@ -23,6 +23,8 @@ const h = vi.hoisted(() => ({
   // dir is set to a real temp dir per-test (the command chdir's into it to register MCP).
   workspace: { dir: '', kind: 'worktree' as const, branch: 'agent/June', created: true },
   rosterHome: {} as Record<string, string>,
+  // What `seatFileUnpublished` answers for the roster home (ADR 547): null = published / not git.
+  unpublished: null as 'uncommitted' | 'unpushed' | null,
   // Mutable so a test can model the machine that has LOST the team agent key (the empty
   // `agentKeys` map an interrupted config prune leaves behind) — see the preflight suite.
   agentKeys: {} as Record<string, string>,
@@ -45,7 +47,12 @@ vi.mock('../config.js', () => ({
   saveBinding: h.saveBinding,
   saveWorkspaceSpec: h.saveWorkspaceSpec,
 }));
-vi.mock('../roster.js', () => ({ writeSeatFile: h.writeSeatFile, seatFileExists: () => false }));
+vi.mock('../roster.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../roster.js')>()),
+  writeSeatFile: h.writeSeatFile,
+  seatFileExists: () => false,
+  seatFileUnpublished: () => h.unpublished,
+}));
 vi.mock('../onboard/harnesses/index.js', () => ({
   harnessAdapters: () =>
     ['claude-code', 'cursor', 'codex', 'opencode', 'grok', 'musterd'].map((id) => ({ id })),
@@ -60,6 +67,7 @@ describe('musterd agent <name>', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     h.rosterHome = {};
+    h.unpublished = null;
     h.agentKeys = { ritual: 'mskey_team' };
     delete process.env['MUSTERD_AGENT_KEY'];
     h.workspace.dir = mkdtempSync(join(tmpdir(), 'magent-'));
@@ -303,6 +311,50 @@ describe('musterd agent <name>', () => {
     await agentCommand(parseArgs(['June']));
     expect(h.writeSeatFile).toHaveBeenCalledWith('/home/ritual/.musterd', 'June', {
       kind: 'agent',
+    });
+  });
+
+  describe('a seat file other machines cannot see yet (ADR 547 follow-up)', () => {
+    const out = async (args: string[]): Promise<string> => {
+      const chunks: string[] = [];
+      const spy = vi.spyOn(process.stdout, 'write').mockImplementation((c: never) => {
+        chunks.push(String(c));
+        return true;
+      });
+      try {
+        await agentCommand(parseArgs(args));
+      } finally {
+        spy.mockRestore();
+      }
+      return chunks.join('');
+    };
+
+    it('says the new agent is invisible to other machines until its file is committed and pushed', async () => {
+      h.rosterHome = { ritual: '/home/ritual/.musterd' };
+      h.unpublished = 'uncommitted';
+      const text = await out(['June']);
+      expect(text).toContain('other machines cannot resolve June');
+      expect(text).toContain('.musterd/seats/June.toml');
+      expect(text).toContain('git -C /home/ritual/.musterd add .musterd/seats/June.toml');
+    });
+
+    it('carries the same fact in --json', async () => {
+      h.rosterHome = { ritual: '/home/ritual/.musterd' };
+      h.unpublished = 'unpushed';
+      const body = JSON.parse(await out(['June', '--json']));
+      expect(body.seat_file_unpublished).toEqual({
+        path: '/home/ritual/.musterd/.musterd/seats/June.toml',
+        state: 'unpushed',
+      });
+    });
+
+    it('is silent when the seat file is published, and on a db-only team', async () => {
+      h.rosterHome = { ritual: '/home/ritual/.musterd' };
+      h.unpublished = null;
+      expect(await out(['June'])).not.toContain('other machines');
+      h.rosterHome = {};
+      h.unpublished = 'uncommitted'; // would warn if a roster home existed
+      expect(await out(['Kit'])).not.toContain('other machines');
     });
   });
 

@@ -52,6 +52,7 @@ import {
   seatFilePath,
   seatFileUnpublished,
   setSeatHue,
+  unpublishedSeatLines,
   writeSeatFile,
 } from '../roster.js';
 import { cliBuild } from '../version.js';
@@ -1291,17 +1292,8 @@ async function teamAdd(parsed: Parsed): Promise<number> {
     ) + '\n',
   );
   if (home && unpublished) {
-    const rel = `.musterd/seats/${name}.toml`;
-    process.stdout.write(
-      `  ${theme.warn(`other machines cannot resolve ${name} until ${rel} is ${unpublished === 'uncommitted' ? 'committed and pushed' : 'pushed'}`)}\n` +
-        theme.meta(
-          `  their sync stops at the first event naming ${name}. ` +
-            (unpublished === 'uncommitted'
-              ? `git -C ${home} add ${rel} && git -C ${home} commit -m "add ${name}" && git -C ${home} push`
-              : `git -C ${home} push`),
-        ) +
-        '\n',
-    );
+    const [warning, how] = unpublishedSeatLines(name, home, unpublished);
+    process.stdout.write(`  ${theme.warn(warning)}\n${theme.meta(`  ${how}`)}\n`);
   }
   // ADR 374 Decision 4: past a full wheel the colour is shared, and it is said out loud.
   if (res.hue_shared_with)

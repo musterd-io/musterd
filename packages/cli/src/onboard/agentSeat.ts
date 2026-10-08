@@ -1,6 +1,11 @@
 import type { HttpClient } from '../client.js';
 import { CliError } from '../errors.js';
-import { seatFileExists, writeSeatFile } from '../roster.js';
+import {
+  seatFileExists,
+  seatFileUnpublished,
+  writeSeatFile,
+  type SeatFilePublication,
+} from '../roster.js';
 import { provisionSeat } from './provisionSeat.js';
 import type { ReconcileReport, reconcileHarnesses } from './reconcile/engine.js';
 import { provisionWorkspace, type Workspace } from './workspace.js';
@@ -44,6 +49,8 @@ export interface AgentSeatResult {
   granted: boolean;
   wiring: ReconcileReport | null;
   wiringError: string | null;
+  /** ADR 547: whether the seat's file has reached a remote; null on a db-only team, outside git, or when published. */
+  seatFileUnpublished: SeatFilePublication | null;
 }
 
 export async function provisionAgentSeat(input: AgentSeatInput): Promise<AgentSeatResult> {
@@ -108,5 +115,6 @@ export async function provisionAgentSeat(input: AgentSeatInput): Promise<AgentSe
     granted: r.granted,
     wiring: r.wiring,
     wiringError: r.wiringError,
+    seatFileUnpublished: input.rosterHome ? seatFileUnpublished(input.rosterHome, name) : null,
   };
 }
