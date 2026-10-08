@@ -435,7 +435,7 @@ import {
   memberStylePrefs,
   styleDriverFor,
   styleEnvelopeFor,
-  styleHumans,
+  styleHumansOf,
   teamStyle,
 } from '../store/style.js';
 import { searchInsights } from '../store/teamMemory.js';
@@ -2053,9 +2053,12 @@ async function summarize(
   // ADR 514: the team's style once; each human row resolves their own dials against it below, and
   // every row stamps the CURRENT epoch its seat should attest (inc 4: the roster's `style stale`).
   const style = await teamStyle(ctx.db, teamId);
-  const styleHumansOnTeam = await styleHumans(ctx.db, teamId);
+  // The humans come from the presence read's own member list (non-left, non-observer — a superset
+  // of what the only-human rule counts), not a second `SELECT * FROM members` (lane 01M477S003).
+  const presenceRows = await listPresence(ctx.db, teamId, ctx.config.presenceTimeoutMs);
+  const styleHumansOnTeam = styleHumansOf(presenceRows.map((s) => s.member));
   return Promise.all(
-    (await listPresence(ctx.db, teamId, ctx.config.presenceTimeoutMs)).map(async (s) => {
+    presenceRows.map(async (s) => {
       // Two-clocks rule (M2): liveness from presence, working-label from the latest status_update — plus
       // steering (ADR 155): a human steering a live agent seat reads working + present without their own
       // heartbeat, so a driving human stops showing offline on the roster (driver-copresence-gap).
