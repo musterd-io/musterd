@@ -6,6 +6,7 @@ import { localSessionLiveness, type LocalSessionLiveness } from '../../session/l
 import { tailTranscript, transcriptPathFor } from '../../trace/tail.js';
 import type { ActuatorBackend, WakeActuation, WakeCompletion } from '../backend.js';
 import { ensurePinnedMusterd, wakeEnv } from '../pinnedBin.js';
+import { holdWakeLease, type WakeLeaseDeps } from '../wakeLeaseFile.js';
 import { findGrokWakeSessionId, readGrokWakeUsage } from './grokUsage.js';
 
 const KILL_GRACE_MS = 10_000;
@@ -93,6 +94,8 @@ export interface GrokDeps {
   /** Lane 01M3R8G033: the wake-exit R2 read (tests inject; default {@link tailGrokSession}). */
   tailSession?: (workspace: string, sessionId: string) => Promise<void>;
   resolveBin?: () => Promise<string | null>;
+  /** Lease-file seams (ADR 546; tests never touch disk). */
+  lease?: WakeLeaseDeps;
   spawn?: typeof nodeSpawn;
   readSession?: (workspace: string) => LocalSessionLiveness;
   recordFreshSession?: (workspace: string, id: string, startedAt: number) => void;
@@ -174,6 +177,23 @@ export function grokBackend(deps: GrokDeps = {}): ActuatorBackend {
             settled: Promise.resolve(undefined),
           };
         }
+        // ADR 546: the lease file, so `musterd <seat>` finds this wake. A resumed run knows its
+        // session; a fresh one is named once Grok has written it (below, when occupied).
+        const lease =
+          child.pid !== undefined
+            ? holdWakeLease(
+                spec.workspace,
+                {
+                  lease_id: spec.order.lease_id,
+                  harness: 'grok',
+                  pid: child.pid,
+                  startedAt,
+                  timeoutMs,
+                  session_id: resumeId,
+                },
+                deps.lease,
+              )
+            : undefined;
         const watchdog = setTimeout(
           () => killTree(child, deps.killGraceMs ?? KILL_GRACE_MS),
           timeoutMs,
@@ -189,6 +209,7 @@ export function grokBackend(deps: GrokDeps = {}): ActuatorBackend {
         const placeholder = `wake-${spec.order.lease_id}`;
         const settled: Promise<WakeCompletion | undefined> = exited.then(async (code) => {
           clearTimeout(watchdog);
+          const yielded = lease?.settle() ?? false;
           const duration_ms = Date.now() - startedAt;
           ctx.log(
             `run for ${spec.order.seat} (${label}) settled: exit=${code ?? 'error'} ` +
@@ -214,6 +235,7 @@ export function grokBackend(deps: GrokDeps = {}): ActuatorBackend {
             ...(usage ? { usage } : {}),
             unpriced_reason: 'harness_price_unverified',
             captures: [{ harness: 'grok', ids: [placeholder, resumeId], id: realId }],
+            ...(yielded ? { yielded: true } : {}),
           };
         });
         const verified = await ctx.verifyOccupied(
@@ -229,8 +251,12 @@ export function grokBackend(deps: GrokDeps = {}): ActuatorBackend {
               `provenance=${verified.provenance ?? 'none'}` +
               (verified.own_unattested ? ' (own child, lease unattested — ADR 379)' : ''),
           );
-          if (label === 'fresh')
+          if (label === 'fresh') {
             (deps.recordFreshSession ?? recordFreshSession)(spec.workspace, placeholder, startedAt);
+            // Grok has written its session by now; name it in the lease so a take-over resumes it.
+            const live = (deps.findSessionId ?? findGrokWakeSessionId)(spec.workspace, startedAt);
+            if (live) lease?.setSession(live);
+          }
           return { occupied: true, reason: '', settled };
         }
         killTree(child, deps.killGraceMs ?? KILL_GRACE_MS);

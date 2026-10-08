@@ -17,7 +17,12 @@ import {
   type WakeLeaseFile,
 } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { clearWakeLeaseFile, takeYieldFile, writeWakeLeaseFile } from './wakeLeaseFile.js';
+import {
+  clearWakeLeaseFile,
+  holdWakeLease,
+  takeYieldFile,
+  writeWakeLeaseFile,
+} from './wakeLeaseFile.js';
 
 /**
  * The actuator's half of the wake-lease channel (ADR 354), against a real tmpdir.
@@ -125,5 +130,42 @@ describe('takeYieldFile (ADR 546)', () => {
     mkdirSync(join(ws, BINDING_DIR), { recursive: true });
     writeFileSync(yieldPath(), '{not json');
     expect(takeYieldFile(ws, 'L1')).toBe(false);
+  });
+});
+
+describe('holdWakeLease (ADR 546)', () => {
+  const opts = {
+    lease_id: 'L1',
+    harness: 'grok',
+    pid: 77,
+    startedAt: 1_000,
+    timeoutMs: 60_000,
+  };
+
+  it('writes after spawn, rewrites with the session id, and clears at settle', () => {
+    holdWakeLease(ws, opts).setSession('S-1');
+    expect(WakeLeaseFileSchema.parse(JSON.parse(readFileSync(path(), 'utf8')))).toMatchObject({
+      lease_id: 'L1',
+      harness: 'grok',
+      spawner_pid: 77,
+      expires_at: 61_000,
+      session_id: 'S-1',
+    });
+    const h = holdWakeLease(ws, opts);
+    h.settle();
+    expect(existsSync(path())).toBe(false);
+  });
+
+  it('settle reports a taken-over run, and a settled handle never rewrites the file', () => {
+    mkdirSync(join(ws, BINDING_DIR), { recursive: true });
+    writeFileSync(
+      join(ws, BINDING_DIR, 'wake-yield.json'),
+      JSON.stringify({ lease_id: 'L1', by: 'nick', at: 1 }),
+    );
+    const h = holdWakeLease(ws, opts);
+    expect(h.settle()).toBe(true);
+    h.setSession('LATE');
+    expect(existsSync(path())).toBe(false);
+    expect(holdWakeLease(ws, opts).settle()).toBe(false);
   });
 });

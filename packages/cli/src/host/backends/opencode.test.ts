@@ -136,6 +136,33 @@ describe('opencodeBackend', () => {
     await result.settled;
   });
 
+  it('writes the lease naming the child, rewrites it with the streamed session, and reports a take-over (ADR 546)', async () => {
+    const child = new Child();
+    child.pid = 4242;
+    const writes: Array<Record<string, unknown>> = [];
+    const clears: string[] = [];
+    const backend = opencodeBackend({
+      resolveBin: async () => '/opencode',
+      recordFreshSession: () => undefined,
+      spawn: (() => child) as never,
+      lease: {
+        write: (_ws, lease) => writes.push(lease as unknown as Record<string, unknown>),
+        clear: (_ws, id) => clears.push(id),
+        takeYield: () => true,
+      },
+    });
+    const wake = backend.wake(spec, ctx);
+    await Promise.resolve();
+    expect(writes[0]).toMatchObject({ harness: 'opencode', spawner_pid: 4242 });
+    expect(writes[0]).not.toHaveProperty('session_id');
+    child.out('{"type":"step_start","timestamp":1,"sessionID":"ses_new"}');
+    const result = await wake;
+    expect(writes.at(-1)).toMatchObject({ session_id: 'ses_new' });
+    child.exit();
+    expect((await result.settled)?.yielded).toBe(true);
+    expect(clears).toHaveLength(1);
+  });
+
   it('a seat held by a non-wake session DEFERS — it does not burn the act (ADR 238)', async () => {
     const child = new Child();
     const backend = opencodeBackend({
