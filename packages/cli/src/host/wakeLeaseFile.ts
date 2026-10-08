@@ -61,3 +61,65 @@ export function takeYieldFile(workspace: string, leaseId: string): boolean {
     return false;
   }
 }
+
+export interface WakeLeaseDeps {
+  write?: (workspace: string, lease: WakeLeaseFile) => void;
+  clear?: (workspace: string, leaseId: string) => void;
+  takeYield?: (workspace: string, leaseId: string) => boolean;
+}
+
+/** A held wake lease file: rewrite it when the conversation id is learned, settle it at run exit. */
+export interface WakeLeaseHandle {
+  /** Record the harness's conversation id (ADR 546). A later id replaces an earlier one; a settled
+   *  handle ignores it, so a slow discovery can never resurrect the file of a run that has ended. */
+  setSession(id: string): void;
+  /** The run ended: remove the file and consume the yield marker. True ⇒ a person took it over. */
+  settle(): boolean;
+}
+
+/**
+ * The lease-file bookkeeping every wake backend does the same way (ADR 354/546), in one place:
+ * write after spawn, rewrite once the session id is known, clear and take the yield marker at exit.
+ * Claude Code and Codex predate this and inline the same three calls; Grok, opencode and the native
+ * loop use it, so a wake on any harness is findable by `musterd <seat>`.
+ */
+export function holdWakeLease(
+  workspace: string,
+  o: {
+    lease_id: string;
+    harness: string;
+    /** The pid a launcher may signal as a process group (the detached harness child). */
+    pid: number;
+    startedAt: number;
+    timeoutMs: number;
+    session_id?: string | undefined;
+  },
+  deps: WakeLeaseDeps = {},
+): WakeLeaseHandle {
+  const write = deps.write ?? writeWakeLeaseFile;
+  let session = o.session_id;
+  let settled = false;
+  const put = (): void =>
+    write(workspace, {
+      lease_id: o.lease_id,
+      provenance: 'wake',
+      harness: o.harness,
+      spawner_pid: o.pid,
+      started_at: o.startedAt,
+      expires_at: o.startedAt + o.timeoutMs,
+      ...(session ? { session_id: session } : {}),
+    });
+  put();
+  return {
+    setSession(id) {
+      if (settled || id === session) return;
+      session = id;
+      put();
+    },
+    settle() {
+      settled = true;
+      (deps.clear ?? clearWakeLeaseFile)(workspace, o.lease_id);
+      return (deps.takeYield ?? takeYieldFile)(workspace, o.lease_id);
+    },
+  };
+}

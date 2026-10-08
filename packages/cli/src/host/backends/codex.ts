@@ -12,7 +12,7 @@ import type {
   WakeSpec,
 } from '../backend.js';
 import { ensurePinnedMusterd, wakeEnv } from '../pinnedBin.js';
-import { clearWakeLeaseFile, takeYieldFile, writeWakeLeaseFile } from '../wakeLeaseFile.js';
+import { holdWakeLease } from '../wakeLeaseFile.js';
 
 const KILL_GRACE_MS = 10_000;
 const RESUME_VERIFY_WINDOW_MS = 30_000;
@@ -234,16 +234,27 @@ async function attempt(
   // `codexWakeEnv` put in the child's environment stops at the child. Hand it over on disk as well,
   // naming the child's pid so only a process THAT codex spawned can honour it. Written now, before
   // verification, because the adapter autojoins ~15s in; cleared when the run settles (below).
-  if (child.pid !== undefined) {
-    (deps.writeWakeLease ?? writeWakeLeaseFile)(spec.workspace, {
-      lease_id: spec.order.lease_id,
-      provenance: 'wake',
-      harness: 'codex',
-      spawner_pid: child.pid,
-      started_at: startedAt,
-      expires_at: startedAt + timeoutMs,
-    });
-  }
+  // The same bookkeeping every backend does (`holdWakeLease`), now also rewriting the file with the
+  // thread id once codex prints it, so a person can take the wake over in its conversation (ADR 546).
+  const lease =
+    child.pid !== undefined
+      ? holdWakeLease(
+          spec.workspace,
+          {
+            lease_id: spec.order.lease_id,
+            harness: 'codex',
+            pid: child.pid,
+            startedAt,
+            timeoutMs,
+            session_id: expectedId,
+          },
+          {
+            ...(deps.writeWakeLease ? { write: deps.writeWakeLease } : {}),
+            ...(deps.clearWakeLease ? { clear: deps.clearWakeLease } : {}),
+            ...(deps.takeYield ? { takeYield: deps.takeYield } : {}),
+          },
+        )
+      : undefined;
   let threadId: string | undefined;
   let usage: WakeUsage | undefined;
   let buffer = '';
@@ -253,6 +264,7 @@ async function attempt(
     buffer = lines.pop() ?? '';
     for (const line of lines) {
       threadId ??= parseCodexThreadLine(line);
+      if (threadId) lease?.setSession(threadId);
       const turn = parseCodexUsageLine(line);
       if (turn) usage = addUsage(usage, turn);
     }
@@ -276,9 +288,7 @@ async function attempt(
     threadId ??= parseCodexThreadLine(buffer);
     // The lease file dies with the run, success or failure — a killed wake must not leave a lease
     // for the next occupant of this workspace to find (ADR 354).
-    if (child.pid !== undefined)
-      (deps.clearWakeLease ?? clearWakeLeaseFile)(spec.workspace, spec.order.lease_id);
-    const yielded = (deps.takeYield ?? takeYieldFile)(spec.workspace, spec.order.lease_id);
+    const yielded = lease?.settle() ?? false;
     const duration_ms = Date.now() - startedAt;
     // The same settle line the claude backend writes, so host.log can be measured the same way
     // across harnesses — the absence of one is how this backend's hole stayed invisible.

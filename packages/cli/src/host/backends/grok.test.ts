@@ -187,3 +187,52 @@ describe('grok capture (ADR 436 clause 3 — the spawned harness is stamped at s
     expect(grokWakeEnv({ HOME: '/h' }).MUSTERD_WAKE_HARNESS).toBeUndefined();
   });
 });
+
+describe('grok wake-lease file (ADR 546 — the launcher can find this wake)', () => {
+  const setup = (over: Partial<Parameters<typeof grokBackend>[0]> = {}) => {
+    const child = new Child();
+    const writes: Array<Record<string, unknown>> = [];
+    const clears: string[] = [];
+    const backend = grokBackend({
+      resolveBin: async () => '/grok',
+      spawn: (() => child) as never,
+      readSession: () => ({ state: 'none', source: 'slot' }) as never,
+      recordFreshSession: () => undefined,
+      ensurePinned: () => undefined,
+      readUsage: () => undefined,
+      findSessionId: () => undefined,
+      tailSession: async () => undefined,
+      lease: {
+        write: (_ws, lease) => writes.push(lease as unknown as Record<string, unknown>),
+        clear: (_ws, id) => clears.push(id),
+        takeYield: () => false,
+      },
+      ...over,
+    });
+    const ctx: BackendContext = {
+      verifyOccupied: async () => ({ occupied: true, provenance: 'wake', lease_matched: true }),
+      log: () => {},
+    };
+    return { child, backend, ctx, writes, clears };
+  };
+
+  it('writes the lease naming the child, then rewrites it with the session Grok wrote', async () => {
+    const { child, backend, ctx, writes, clears } = setup({ findSessionId: () => 'G-9' });
+    const result = await backend.wake(spec, ctx);
+    expect(writes[0]).toMatchObject({ lease_id: 'l', harness: 'grok', spawner_pid: 4242 });
+    expect(writes[0]).not.toHaveProperty('session_id');
+    expect(writes.at(-1)).toMatchObject({ session_id: 'G-9' });
+    child.exit(0);
+    await result.settled;
+    expect(clears).toEqual(['l']);
+  });
+
+  it('a taken-over run settles as yielded', async () => {
+    const { child, backend, ctx } = setup({
+      lease: { write: () => {}, clear: () => {}, takeYield: () => true },
+    });
+    const result = await backend.wake(spec, ctx);
+    child.exit(0);
+    expect((await result.settled)?.yielded).toBe(true);
+  });
+});

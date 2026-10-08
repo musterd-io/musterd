@@ -458,6 +458,18 @@ describe('the wake-lease file — a second channel for a harness that strips the
     return { backend, writes, clears };
   };
 
+  it('rewrites the lease with the thread id once codex prints it (ADR 546)', async () => {
+    const child = new Child();
+    child.pid = 4242;
+    const { backend, writes } = harness(child);
+    const wake = backend.wake(spec, ctx);
+    await Promise.resolve();
+    expect(writes[0]!.lease).not.toHaveProperty('session_id');
+    child.out('{"type":"thread.started","thread_id":"new"}');
+    await wake;
+    expect(writes.at(-1)!.lease).toMatchObject({ harness: 'codex', session_id: 'new' });
+  });
+
   it('writes the lease naming the spawned child’s pid, before verification can conclude', async () => {
     const child = new Child();
     child.pid = 4242;

@@ -12,6 +12,7 @@ import type {
   WakeSpec,
 } from '../backend.js';
 import { ensurePinnedMusterd, wakeEnv } from '../pinnedBin.js';
+import { holdWakeLease, type WakeLeaseDeps } from '../wakeLeaseFile.js';
 import { addUsage } from './codex.js';
 
 const KILL_GRACE_MS = 10_000;
@@ -141,6 +142,8 @@ function killTree(child: ChildProcess, graceMs: number): void {
 }
 
 export interface OpencodeDeps {
+  /** Lease-file seams (ADR 546; tests never touch disk). */
+  lease?: WakeLeaseDeps;
   resolveBin?: () => Promise<string | null>;
   spawn?: typeof nodeSpawn;
   readSession?: (workspace: string) => LocalSessionLiveness;
@@ -205,6 +208,23 @@ async function attempt(
       settled: Promise.resolve(undefined),
     };
   }
+  // ADR 546: the lease file, so `musterd <seat>` finds this wake; rewritten when the session id
+  // is learned from stdout (a resumed run knows it already).
+  const lease =
+    child.pid !== undefined
+      ? holdWakeLease(
+          spec.workspace,
+          {
+            lease_id: spec.order.lease_id,
+            harness: 'opencode',
+            pid: child.pid,
+            startedAt,
+            timeoutMs,
+            session_id: expectedId,
+          },
+          deps.lease,
+        )
+      : undefined;
   let sessionId: string | undefined;
   let usage: WakeUsage | undefined;
   let harnessCost: number | undefined;
@@ -215,6 +235,7 @@ async function attempt(
     buffer = lines.pop() ?? '';
     for (const line of lines) {
       sessionId ??= parseOpencodeSessionLine(line);
+      if (sessionId) lease?.setSession(sessionId);
       const step = parseOpencodeStepLine(line);
       if (step) {
         usage = addUsage(usage, step.usage);
@@ -240,6 +261,7 @@ async function attempt(
   const settled: Promise<WakeCompletion | undefined> = exited.then((code) => {
     clearTimeout(watchdog);
     sessionId ??= parseOpencodeSessionLine(buffer);
+    const yielded = lease?.settle() ?? false;
     const duration_ms = Date.now() - startedAt;
     ctx.log(
       `run for ${spec.order.seat} (${label}) settled: exit=${code ?? 'error'}` +
@@ -254,6 +276,7 @@ async function attempt(
       unpriced_reason: 'harness_price_unverified',
       // ADR 436 clause 4: the capture this run made or resumed — the loop stamps it ended.
       captures: [{ harness: 'opencode', ids: [sessionId, expectedId] }],
+      ...(yielded ? { yielded: true } : {}),
     };
   });
   const verified = await Promise.race([
