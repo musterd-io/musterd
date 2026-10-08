@@ -396,7 +396,7 @@ Something addressed to a human rings them through surfaces musterd owns, never a
 
 ## Inbox delivery semantics
 
-- **At-least-once, cursor-based, no per-recipient copies.** The `messages` table is the single log. A member's inbox is a _query_ (see `listInbox`) filtered by their `inbox_cursors.last_read_ts`. "Mark read" advances the cursor.
+- **At-least-once, cursor-based, no per-recipient copies.** The `messages` table is the single log. A member's inbox is a _query_ (see `listInbox`) filtered by their `inbox_cursors.last_read_ts` — and for a seat with no cursor row yet, by the instant before the seat was created (`getCursor`, ADR 549): a seat is owed only what arrived after it existed, so a new seat does not inherit the team's history or its unanswered team-wide asks. "Mark read" advances the cursor.
 - **Live + durable are the same data.** When a member is present, `hub.deliver` pushes the envelope to their socket immediately _and_ it's already persisted — so a reconnect re-reads anything missed via the cursor. A client may receive a message both live and on the next inbox fetch; clients dedupe by `envelope.id` (at-least-once contract; documented for CLI/MCP).
 - Delivery to a recipient who is offline = nothing to push; the row sits in the log and surfaces on their next `inbox`/`reconnect`.
 - `team`/`broadcast` deliver to all current members except the sender; each has an independent cursor.

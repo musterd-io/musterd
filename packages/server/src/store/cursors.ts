@@ -15,14 +15,28 @@ import { appendReplicatedEvent } from './audit.js';
 export interface Cursor {
   member_id: string;
   last_read_message_id: string | null;
-  /** The cursor row's `created_at`. 0 when the seat has never read. */
+  /** The cursor row's `created_at`. For a seat that has never read: the instant before it was created (ADR 549). */
   last_read_ts: number;
   updated_at: number;
 }
 
 export async function getCursor(db: Driver, memberId: string): Promise<Cursor> {
   const row = await db.get<Cursor>('SELECT * FROM inbox_cursors WHERE member_id = ?', [memberId]);
-  return row ?? { member_id: memberId, last_read_message_id: null, last_read_ts: 0, updated_at: 0 };
+  if (row) return row;
+  // A seat that has never read is owed what arrived after it existed (ADR 549), not the team's whole
+  // history. The floor is the instant before the seat's creation, so an act in the same millisecond
+  // (the `@team` agent-created notice is written right after the row) still counts as unread. Before
+  // this the cursor was 0: alfie, created 2026-10-08, opened to 14,097 unread and a dozen old team-wide
+  // asks pinned to the top of every check. Reads the seat's own `created_at`, so it needs no backfill.
+  const born = await db.get<{ created_at: number }>('SELECT created_at FROM members WHERE id = ?', [
+    memberId,
+  ]);
+  return {
+    member_id: memberId,
+    last_read_message_id: null,
+    last_read_ts: born ? Math.max(0, born.created_at - 1) : 0,
+    updated_at: 0,
+  };
 }
 
 /**
