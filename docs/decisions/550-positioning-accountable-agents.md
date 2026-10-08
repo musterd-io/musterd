@@ -143,7 +143,42 @@ claim containment) stand unchanged; 5a's counter-line already says "a name on ev
 this ADR's claim in its smallest form. The honesty paragraph stands: musterd records what it sees
 and says what it does not enforce.
 
+### 7. Where musterd sits, and the security floor under the claim
+
+**Execution and orchestration belong to the harness.** musterd does not run agents, schedule them,
+or author the graph they follow. A member's work runs in whatever runs it — a Claude Code or Codex
+session, ultracode or `Workflow`, a Party Flow, a sandbox — and that member still claims, declines,
+asks and is accepted on musterd. Unattended work on musterd is members waking when work is addressed
+to them (ADR 131, ADR 179), never a graph musterd owns. Surfaces say "joins from the session it
+already runs"; they never say musterd runs, orchestrates or schedules agents.
+
+**What musterd enforces, and what it does not** (`docs/design/security.md`, "Enforce vs declare"):
+
+- It enforces what flows through it: who may send, claim and see; acceptance by a different member;
+  an ask that holds; and, at the harness's tool boundary, the lane gate that denies an edit to a
+  contended surface the seat does not own (ADR 150, through the PreToolUse hook).
+- It does not sandbox. Filesystem, network and shell isolation belong to the harness or a sandbox
+  that composes with musterd (qm, Omnigent, OneCLI and Party all sell one). The self-hosted daemon's
+  security property is locality: the work and its record stay on machines the team runs. musterd
+  Cloud (ADR 461) changes that property and must say so where it is sold.
+
+**The claim stands on two things musterd must keep true:**
+
+1. **One seat cannot act or attest as another.** Per-seat credentials and session leases (ADR 350,
+   `security.md` "Credential & grant lifecycle") are what make "who claimed it" mean the named
+   member. The open `security` goal ("a seat can't read, act as, or attest for another seat") is
+   therefore a precondition of this positioning, not a separate track.
+2. **The record is only as trustworthy as the daemon that wrote it.** The audit log is not signed;
+   "which model" and "who signed off" are daemon-trusted (and, for merges, seat-attested). Signed,
+   offline-checkable receipts for the acts that carry authority (landscape.md §9, the AgentField
+   borrow) are what would let a second party check the chain without trusting the daemon. Until they
+   exist, surfaces say the record shows the chain; they do not say it proves it.
+
 ## Falsifiers
+
+- **The impersonation test (§7).** If one seat can act, claim or attest as another — a security
+  finding, a red-team result, or a dogfood incident — the accountability claim comes off every
+  surface until the hole is closed and the fix is recorded here.
 
 - **The refusal test (§1, §2.1).** If, over the review window below, no member declines a handoff,
   challenges a human, or accepts work across model families, "a member can say no" is doctrine the

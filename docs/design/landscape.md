@@ -454,16 +454,16 @@ musterd seat could appear in Linear as a delegate.
 
 ### d. One table across the field
 
-| | Unit coordinated | Claims / **declines** | Human on the same primitives | Joins a running session | Self-host | Work ownership | Records which model |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Party | hosted Session + Flow | no / no | approver | no | Enterprise | Flow steps | no |
-| Band Desktop | identity in rooms | no / no | in rooms | yes (Claude Code) | no | work items + owners | no |
-| Agent Relay | handle + channels | — / no | yes | yes (MCP) | yes | none | no |
-| Multica | board assignee | claim / no ("blocker") | same picker | no | yes | enqueue→claim | no |
-| Claude Code Agent Teams | ephemeral teammate | claim / no | operator | — | local | task list | no |
-| Linear / Jira | delegate / assignee | no / no | human holds it | no | no | the issue | no / agent only |
-| qm, herdr, Conductor, Omnigent | scope or session | no / no | operator | varies | varies | no | no |
-| **musterd** | seat (outlives the session) | claim / **decline, challenge** | same roster, same acts | yes (MCP + env) | yes (MIT) | lanes + gates + goals | **observed model** |
+| | Unit coordinated | Claims / **declines** | Human on the same primitives | Joins a running session | Runs / sandboxes agents | Self-host | Work ownership | Records which model |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Party | hosted Session + Flow | no / no | approver | no | runs + sandboxes (per session) | Enterprise | Flow steps | no |
+| Band Desktop | identity in rooms | no / no | in rooms | yes (Claude Code) | no (local session) | no | work items + owners | no |
+| Agent Relay | handle + channels | — / no | yes | yes (MCP) | can spawn; no sandbox | yes | none | no |
+| Multica | board assignee | claim / no ("blocker") | same picker | no | runs (drives the CLI) | yes | enqueue→claim | no |
+| Claude Code Agent Teams | ephemeral teammate | claim / no | operator | — | runs (in the lead session) | local | task list | no |
+| Linear / Jira | delegate / assignee | no / no | human holds it | no | vendor cloud sandbox | no | the issue | no / agent only |
+| qm, herdr, Conductor, Omnigent | scope or session | no / no | operator | varies | runs; qm, Omnigent sandbox | varies | no | no |
+| **musterd** | seat (outlives the session) | claim / **decline, challenge** | same roster, same acts | yes (MCP + env) | **neither** — composes with what does; gates at the tool boundary | yes (MIT) | lanes + gates + goals | **observed model** |
 
 **What the table says.** Durable identity, joining a running session, and humans in the same
 channels are now common — the first items of ADR 320's moat. Across roughly forty products, three
@@ -473,5 +473,7 @@ charges for an agent as a seat.
 
 **What it does not say.** musterd is behind on surface and onboarding (Party, Conductor and Multica
 are usable in minutes by someone who does not run a daemon), on unattended runs as a packaged
-feature, on isolation (it does not sandbox), and on adoption. Its own usage does not yet show the
+feature, and on adoption. On isolation it sits at a different layer: it does not run or sandbox
+agents and composes with whatever does (ADR 550 §7), so a buyer who asks "where is the sandbox"
+needs that answer in the first conversation. Its own usage does not yet show the
 refusal it leads with (ADR 550, Consequences).
