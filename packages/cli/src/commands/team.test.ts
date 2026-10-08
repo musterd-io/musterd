@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -427,6 +428,53 @@ describe('team policy command', () => {
     const res = await capture(() => teamCommand(parseArgs(['bootstrap', 'mint', '--seat', 'Ada'])));
     expect(res.out).not.toContain('intended harness');
     expect(res.out).toContain('musterd team bootstrap mint --seat Ada --install');
+  });
+
+  describe('team add and a seat file other machines cannot see yet (ADR 547)', () => {
+    /** Make this team file-backed with a roster home that is (or is not) a git repo. */
+    function fileBackedHome(git: boolean): string {
+      const home = mkdtempSync(join(dir, 'roster-'));
+      if (git) execFileSync('git', ['init', '--quiet', '-b', 'main', home]);
+      const path = join(dir, 'config.json');
+      const config = JSON.parse(readFileSync(path, 'utf8'));
+      config.rosterHome = { ...(config.rosterHome ?? {}), dawn: home };
+      writeFileSync(path, JSON.stringify(config));
+      return home;
+    }
+
+    it('says the seat is invisible to other machines until its file is committed and pushed', async () => {
+      const home = fileBackedHome(true);
+      const res = await capture(() =>
+        teamCommand(parseArgs(['add', 'Ada', '--kind', 'agent', '--role', 'builder'])),
+      );
+      expect(res.code).toBe(0);
+      expect(res.out).toContain('other machines cannot resolve Ada');
+      expect(res.out).toContain('.musterd/seats/Ada.toml');
+      expect(res.out).toContain(`git -C ${home} add .musterd/seats/Ada.toml`);
+      expect(res.out).toContain('push');
+    });
+
+    it('carries the same fact in --json without touching the credential fields', async () => {
+      const home = fileBackedHome(true);
+      const body = JSON.parse(
+        (await capture(() => teamCommand(parseArgs(['add', 'Lin', '--kind', 'agent', '--json']))))
+          .out,
+      );
+      expect(body.seat_file_unpublished).toEqual({
+        path: join(home, '.musterd', 'seats', 'Lin.toml'),
+        state: 'uncommitted',
+      });
+      expect(body.agent_key).toMatch(/^mskey_/);
+    });
+
+    it('stays silent on a db-only team and on a roster that is not a git repo', async () => {
+      const dbOnly = await capture(() => teamCommand(parseArgs(['add', 'Eve', '--kind', 'agent'])));
+      expect(dbOnly.out).not.toContain('other machines');
+      fileBackedHome(false);
+      const noGit = await capture(() => teamCommand(parseArgs(['add', 'Ned', '--kind', 'agent'])));
+      expect(noGit.out).not.toContain('other machines');
+      expect(JSON.stringify(noGit)).not.toContain('seat_file_unpublished');
+    });
   });
 
   it('requires exactly one bootstrap mint scope', async () => {

@@ -46,7 +46,14 @@ import {
 import { CliError } from '../errors.js';
 import { theme } from '../render/theme.js';
 import { hint, success, sym } from '../render/ui.js';
-import { readSeatFiles, readSeatHues, seatFilePath, setSeatHue, writeSeatFile } from '../roster.js';
+import {
+  readSeatFiles,
+  readSeatHues,
+  seatFilePath,
+  seatFileUnpublished,
+  setSeatHue,
+  writeSeatFile,
+} from '../roster.js';
 import { cliBuild } from '../version.js';
 import { findWorkspaceDir, inherited, rejectAs, resolve, resolveRead } from './helpers.js';
 import { teamPolicyStyle } from './policy.js';
@@ -1240,6 +1247,9 @@ async function teamAdd(parsed: Parsed): Promise<number> {
     }
     writeSeatFile(home, name, { kind, role, lifecycle, until, hue });
   }
+  // ADR 547: a seat replicates over sync but its roster entry travels by git. Say so now, while the
+  // person who can push the file is the one reading this.
+  const unpublished = home ? seatFileUnpublished(home, name) : null;
   const res = await http.addMember(team, {
     name,
     kind,
@@ -1261,6 +1271,9 @@ async function teamAdd(parsed: Parsed): Promise<number> {
     process.stdout.write(
       JSON.stringify({
         member: res.member,
+        ...(home && unpublished
+          ? { seat_file_unpublished: { path: seatFilePath(home, name), state: unpublished } }
+          : {}),
         ...(res.human_credential ? { human_credential: res.human_credential } : {}),
         ...(bootstrap
           ? {
@@ -1277,6 +1290,19 @@ async function teamAdd(parsed: Parsed): Promise<number> {
       `added ${theme.memberName(name, kind)} ${theme.meta(`(${kind}${role ? `, ${role}` : ''})`)} to ${team}`,
     ) + '\n',
   );
+  if (home && unpublished) {
+    const rel = `.musterd/seats/${name}.toml`;
+    process.stdout.write(
+      `  ${theme.warn(`other machines cannot resolve ${name} until ${rel} is ${unpublished === 'uncommitted' ? 'committed and pushed' : 'pushed'}`)}\n` +
+        theme.meta(
+          `  their sync stops at the first event naming ${name}. ` +
+            (unpublished === 'uncommitted'
+              ? `git -C ${home} add ${rel} && git -C ${home} commit -m "add ${name}" && git -C ${home} push`
+              : `git -C ${home} push`),
+        ) +
+        '\n',
+    );
+  }
   // ADR 374 Decision 4: past a full wheel the colour is shared, and it is said out loud.
   if (res.hue_shared_with)
     process.stdout.write(
