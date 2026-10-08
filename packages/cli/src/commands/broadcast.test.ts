@@ -17,6 +17,9 @@ import {
   screencastEveryNthFrame,
   clearRunState,
   RESTART_EXIT_CODE,
+  decideRelaunch,
+  RELAUNCH_MAX,
+  RELAUNCH_WINDOW_MS,
   RESTARTABLE_AFTER_MS,
   socketLossExitCode,
   supervised,
@@ -772,6 +775,40 @@ describe('ffmpeg terminates when the video pipe does', () => {
       target: 'rtmps://example/app/key',
     });
     expect(args).toContain('-shortest');
+  });
+});
+
+describe('decideRelaunch (when the stream gives up on its own Chrome)', () => {
+  const now = 1_000_000;
+
+  it('relaunches Chrome alone for the first failure', () => {
+    expect(decideRelaunch([], now)).toBe('relaunch');
+  });
+
+  it('keeps relaunching while the recent failures stay under the cap', () => {
+    const recent = Array.from({ length: RELAUNCH_MAX - 1 }, (_, i) => now - 1_000 * (i + 1));
+    expect(decideRelaunch(recent, now)).toBe('relaunch');
+  });
+
+  it('gives up at the cap — a Chrome that keeps dying is a broken run, not a blip', () => {
+    // The floor `socketLossExitCode` has for the same reason: a stream that can never keep a picture
+    // must not relaunch forever on a machine that bills by the hour. Giving up hands the failure
+    // back to the whole-stream path (exit 75 under a supervisor, a plain end otherwise).
+    const recent = Array.from({ length: RELAUNCH_MAX }, (_, i) => now - 1_000 * (i + 1));
+    expect(decideRelaunch(recent, now)).toBe('give_up');
+  });
+
+  it('forgives failures that have aged out of the window', () => {
+    const old = Array.from(
+      { length: RELAUNCH_MAX + 2 },
+      (_, i) => now - RELAUNCH_WINDOW_MS - 1 - i,
+    );
+    expect(decideRelaunch(old, now)).toBe('relaunch');
+  });
+
+  it('counts a failure exactly at the window edge as aged out', () => {
+    const edge = Array.from({ length: RELAUNCH_MAX }, () => now - RELAUNCH_WINDOW_MS);
+    expect(decideRelaunch(edge, now)).toBe('relaunch');
   });
 });
 

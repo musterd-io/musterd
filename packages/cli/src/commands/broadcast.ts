@@ -834,9 +834,10 @@ export function cdpTimeoutFor(method: string): number {
  * So the container supervises: under `MUSTERD_BROADCAST_SUPERVISED` a run that cannot continue exits
  * with this code and the entrypoint loop runs a genuinely fresh process.
  *
- * It is for failures only — a lost Chrome socket (`socketLossExitCode`) and a frozen picture (the
- * frame-arrival watchdog). A daemon rebuild is NOT one (ADR 548): restarting drops the Twitch ingest,
- * and the page already converges on the new bundle by itself (ADR 292).
+ * It is for failures the stream cannot absorb: a Chrome that cannot be relaunched or keeps failing
+ * (`giveUp`, ADR 551), and the stream's own lost-socket path (`socketLossExitCode`). A daemon rebuild
+ * is NOT one (ADR 548), and neither is a single Chrome failure (ADR 551): restarting drops the Twitch
+ * ingest, and the page converges on the new bundle by itself (ADR 292).
  */
 export const RESTART_EXIT_CODE = 75;
 
@@ -876,6 +877,31 @@ export function socketLossExitCode(
   restartableAfterMs: number = RESTARTABLE_AFTER_MS,
 ): number {
   return isSupervised && ranMs >= restartableAfterMs ? RESTART_EXIT_CODE : 1;
+}
+
+/**
+ * How many times Chrome may fail inside `RELAUNCH_WINDOW_MS` before the stream stops relaunching it.
+ *
+ * A lost or frozen Chrome used to end the whole stream — ffmpeg, the RTMP session and all — and a
+ * supervisor ran it again, so every Chrome failure was also a Twitch ingest drop (ADR 551). Chrome is
+ * only the frame SOURCE: ffmpeg keeps encoding the pump's last frame while a new Chrome starts. But a
+ * Chrome that keeps dying is a broken run rather than a blip, and relaunching it forever would bill a
+ * machine that shows viewers nothing — the same floor `socketLossExitCode` keeps for a run that never
+ * worked. Past the cap the failure goes back to the whole-stream path it always had.
+ */
+export const RELAUNCH_MAX = 3;
+export const RELAUNCH_WINDOW_MS = 5 * 60_000;
+
+/** Relaunch Chrome alone, or hand the failure back to the whole-stream path? Pure — `history` is when
+ * each earlier relaunch began. */
+export function decideRelaunch(
+  history: readonly number[],
+  now: number,
+  max: number = RELAUNCH_MAX,
+  windowMs: number = RELAUNCH_WINDOW_MS,
+): 'relaunch' | 'give_up' {
+  const recent = history.filter((at) => now - at < windowMs).length;
+  return recent >= max ? 'give_up' : 'relaunch';
 }
 
 /** The daemon's current build ref (ADR 130's `/health.build`), or undefined if it can't be read. */
@@ -1214,6 +1240,22 @@ async function stopVerb(): Promise<number> {
   return 1;
 }
 
+/**
+ * The frame SOURCE: one Chrome, its profile directory, its DevTools socket and the probes reading it.
+ * Everything downstream of it — the frame pump, ffmpeg, the RTMP session — outlives it, which is the
+ * whole point (ADR 551): a Chrome that dies or freezes is replaced without the ingest dropping.
+ */
+interface Capture {
+  chrome: ChildProcess;
+  profile: string;
+  cdp?: Cdp;
+  drawFloor?: ReturnType<typeof makeDrawRateFloor>;
+  perfTimer?: NodeJS.Timeout;
+  drawFloorTimer?: NodeJS.Timeout;
+  /** Taken down on purpose — the exit and the closed socket that follow are not failures. */
+  retired: boolean;
+}
+
 export async function broadcastCommand(parsed: Parsed): Promise<number> {
   // The two read-only verbs come first: neither needs a sink or a --team, and both must work when
   // the stream they are asking about belongs to some other terminal (or to none at all).
@@ -1227,10 +1269,8 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   const stage = stagePixels(opts.resolution);
 
   const chromeBin = process.env['CHROME_BIN'] ?? chromeDefault();
-  const debugPort = 9222 + Math.floor(Math.random() * 500);
   // Clear other runs' leavings before adding our own — see `sweepStaleProfiles`.
   const swept = sweepStaleProfiles();
-  const profile = mkdtempSync(join(tmpdir(), PROFILE_PREFIX));
 
   process.stdout.write(`${theme.accent('broadcast')} — ${opts.team}  ${theme.meta(url)}\n`);
   process.stdout.write(
@@ -1262,12 +1302,16 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   // (The closures below reference `chrome`/`ffmpeg` before their declaration — safe: handlers
   // only ever run on an event-loop turn, and the spawns happen in this same synchronous block.)
   let pumpTimer: NodeJS.Timeout | undefined;
-  let perfTimer: NodeJS.Timeout | undefined;
-  let drawFloorTimer: NodeJS.Timeout | undefined;
   let live = false; // flips when the pump starts feeding ffmpeg
   /** When the pump actually started — the clock `socketLossExitCode` judges restart-eligibility by. */
   let runStartedAt = Date.now();
   let stopping = false;
+  /** The capture in flight. Replaced on a relaunch; the closures below always reach the current one. */
+  let current: Capture | undefined;
+  /** A Chrome relaunch is in progress — one at a time, and the watchdog stays quiet while it runs. */
+  let recovering = false;
+  /** When each Chrome relaunch began, for `decideRelaunch`. */
+  const relaunches: number[] = [];
   /** The daemon's build as we found it — what `--status` reports this stream as running against. */
   let baselineBuild: string | undefined;
   /**
@@ -1279,7 +1323,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   let flushScrubbedStderr: () => void = () => {};
   const forceStop = (code: number): never => {
     killGroup(ffmpeg, 'SIGKILL');
-    killGroup(chrome, 'SIGKILL');
+    if (current) killGroup(current.chrome, 'SIGKILL');
     flushScrubbedStderr(); // before exit: the last lines say why the stream died
     process.exit(code);
   };
@@ -1292,41 +1336,44 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     setTimeout(() => forceStop(1), 5000).unref();
   };
   /**
+   * Chrome cannot be kept, and the stream is ending with it: the whole-stream path, as it was before
+   * ADR 551 and as it still is for a Chrome that keeps failing.
+   *
+   * It borrows `socketLossExitCode`'s judgement whole — ask the supervisor for a relaunch once the run
+   * has proven itself, stay fatal for a run that never worked so a broken config cannot bill in a
+   * loop, and never ask on a laptop where nothing is standing by.
+   */
+  const giveUp = (why: string): never => {
+    const code = socketLossExitCode(Date.now() - runStartedAt);
+    process.stderr.write(
+      `${theme.err('✗')} ${why} ${
+        code === RESTART_EXIT_CODE ? 'Asking the supervisor for a relaunch.' : 'Ending the stream.'
+      }\n`,
+    );
+    return forceStop(code);
+  };
+  /** Set once the watchdog exists; the stop paths disarm it through this so a teardown that
+   *  stops delivery is never reported as a freeze. */
+  let disarmFrameWatch: () => void = () => {};
+  /**
+   * The picture has frozen: no screencast frame for FRAME_STALL_MS while the pump kept emitting.
+   * Chrome's delivery has wedged while everything downstream is fine, so Chrome is what gets
+   * replaced — the pump keeps re-sending the last frame to a stream that never notices (ADR 551).
+   */
+  const onFrameStall = (sinceMs: number) => {
+    if (stopping || recovering) return;
+    void relaunchCapture(
+      `no screencast frame for ${(sinceMs / 1000).toFixed(1)}s — the picture is frozen (ffmpeg keeps ` +
+        `reporting a healthy rate because the pump re-emits the last frame, so this is the only counter ` +
+        `that can see it)`,
+    );
+  };
+  /**
    * The encoder has stopped draining. Stop feeding it and end the run — do **not** wait politely for
    * ffmpeg to finalize, because a wedged sink is precisely the case where it never will, and the
    * graceful path's 5s backstop is `unref()`'d, so it only fires if the loop is still healthy. Going
    * straight to the force path is what guarantees this terminates.
    */
-  /**
-   * The picture has frozen: no screencast frame for FRAME_STALL_MS while the pump kept emitting.
-   *
-   * Treated exactly like a lost DevTools socket rather than like the encoder stall below, and the
-   * distinction is the point. An encoder that stops draining is THIS run's problem — a bad bitrate,
-   * a wedged sink — and relaunching re-runs it. A screencast that stops arriving is the class that
-   * a relaunch genuinely fixes: Chrome's delivery has wedged while everything downstream is fine.
-   * So it borrows `socketLossExitCode`'s judgement whole — ask the supervisor for a relaunch once
-   * the run has proven itself, stay fatal for a run that never worked so a broken config cannot
-   * bill in a loop, and never ask on a laptop where nothing is standing by.
-   */
-  let frozen = false;
-  /** Set once the watchdog exists; the stop paths disarm it through this so a teardown that
-   *  stops delivery is never reported as a freeze. */
-  let disarmFrameWatch: () => void = () => {};
-  const onFrameStall = (sinceMs: number) => {
-    if (frozen || stopping) return;
-    frozen = true;
-    const code = socketLossExitCode(Date.now() - runStartedAt);
-    process.stderr.write(
-      `${theme.err('✗')} no screencast frame for ${(sinceMs / 1000).toFixed(1)}s — the picture is frozen. ` +
-        `ffmpeg keeps reporting a healthy rate because the pump re-emits the last frame, so this is the ` +
-        `only counter that can see it. ${
-          code === RESTART_EXIT_CODE
-            ? 'Asking the supervisor for a relaunch.'
-            : 'Ending the stream.'
-        }\n`,
-    );
-    forceStop(code);
-  };
   let stalled = false;
   const onStall = () => {
     if (stalled) return;
@@ -1348,28 +1395,22 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   process.on('SIGHUP', onSignal);
   process.on('exit', () => {
     killGroup(ffmpeg);
-    killGroup(chrome);
-    // The profile has to be removed here, not only in `cleanup()`. Every forced stop reaches
-    // `process.exit()` without unwinding the `try`, so `cleanup()` never ran on exactly the paths
-    // that leak. Synchronous by necessity — nothing async runs in an exit handler.
-    try {
-      rmSync(profile, { recursive: true, force: true });
-    } catch {
-      /* Chrome may still hold a handle; the next run's startup sweep will get it */
+    if (current) {
+      killGroup(current.chrome);
+      // The profile has to be removed here, not only at teardown. Every forced stop reaches
+      // `process.exit()` without unwinding the `try`, so cleanup never ran on exactly the paths that
+      // leak. Synchronous by necessity — nothing async runs in an exit handler.
+      try {
+        rmSync(current.profile, { recursive: true, force: true });
+      } catch {
+        /* Chrome may still hold a handle; the next run's startup sweep will get it */
+      }
     }
     clearRunState(process.pid); // only if it is still ours — see clearRunState
   });
 
   // `detached: true` makes each child its own process-group leader, which is what lets the
   // stop path kill *everything* it spawned with one group signal — see killGroup.
-  const chrome = spawn(
-    chromeBin,
-    chromeArgs(debugPort, profile, process.platform, stage, opts.audio),
-    {
-      stdio: 'ignore',
-      detached: true,
-    },
-  );
   const ffmpeg: ChildProcess = spawn('ffmpeg', ffmpegArgs(opts, sink), {
     // stderr is piped (not inherited) so a secret scrubber sits between ffmpeg and our own
     // stderr: ffmpeg prints its RTMPS output URL — stream key and all — verbatim on error, and an
@@ -1415,11 +1456,11 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   ffmpeg.stdin?.on('error', () => {});
 
   /**
-   * Both children's exits are captured **here**, next to the spawns — not at the point we finally
+   * ffmpeg's exit is captured **here**, next to its spawn — not at the point we finally
    * want to await them.
    *
    * The old code registered `ffmpeg.once('exit')` after `connectCdp` (≤10s of polling) and
-   * `waitBroadcastReady` (≤30s), so a child that died inside that window emitted `exit` with nobody
+   * `waitBroadcastReady` (≤30s), so ffmpeg dying inside that window emitted `exit` with nobody
    * listening. `once` does not replay: the promise then never resolved, the `finally` never ran, and
    * the command hung holding a profile directory. A bad stream key does exactly that.
    */
@@ -1429,8 +1470,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
       resolve(code ?? 1);
     });
   });
-  const chromeExit = new Promise<void>((resolve) => chrome.once('exit', () => resolve()));
-  /** Either child dying *before* the stream is live is terminal, and must beat the startup awaits. */
+  /** ffmpeg dying *before* the stream is live is terminal, and must beat the startup awaits. */
   const diedDuringStartup = new Promise<never>((_, reject) => {
     void ffmpegExit.then((code) => {
       if (!live) {
@@ -1442,37 +1482,69 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
         );
       }
     });
-    void chromeExit.then(() => {
-      if (!live) reject(new CliError('headless Chrome exited before the page was ready', 1));
-    });
   });
   // A losing racer's rejection is still "handled" by the race, but if startup wins outright this
   // promise may reject later with nobody looking — claim it so Node doesn't call it unhandled.
   diedDuringStartup.catch(() => {});
 
   let exitCode = 0;
-  let cdp: Cdp | undefined;
-  const cleanup = () => {
-    disarmFrameWatch();
-    if (pumpTimer) clearInterval(pumpTimer);
-    if (perfTimer) clearInterval(perfTimer);
-    if (drawFloorTimer) clearInterval(drawFloorTimer);
-    ffmpeg.stdin?.end();
-    cdp?.close(); // an open DevTools socket is a live handle; nothing else closes it
-    killGroup(chrome);
+  const pump = makeFramePump(makeEncoderFeed(ffmpeg.stdin, onStall), opts.fps);
+  let emitted = 0;
+  const frameWatch = makeFrameWatchdog(onFrameStall);
+  disarmFrameWatch = () => {
+    frameWatch.disarm();
+    current?.drawFloor?.disarm();
+  };
+
+  /** Take a capture down for good: its probes, its socket, its Chrome, its profile. */
+  const retire = (cap: Capture): void => {
+    cap.retired = true;
+    if (cap.perfTimer) clearInterval(cap.perfTimer);
+    if (cap.drawFloorTimer) clearInterval(cap.drawFloorTimer);
+    cap.drawFloor?.disarm();
+    cap.cdp?.close(); // an open DevTools socket is a live handle; nothing else closes it
+    killGroup(cap.chrome, 'SIGKILL'); // a frozen Chrome ignores SIGTERM, and this one is not coming back
     try {
-      rmSync(profile, { recursive: true, force: true });
+      rmSync(cap.profile, { recursive: true, force: true });
     } catch {
       /* best-effort: Chrome may still be flushing its profile */
     }
   };
 
-  try {
-    // Race the whole startup sequence against either child dying: every await below can otherwise
-    // outlive the thing it is waiting for.
+  /**
+   * Start one Chrome and wire it into the pump: spawn, attach, navigate, wait for a real team, start
+   * the screencast. The same path serves the first launch and every relaunch (ADR 551).
+   *
+   * `current` is set the moment Chrome is spawned, not when it is ready — so a stop, or ffmpeg dying,
+   * mid-launch still finds this Chrome and takes it down.
+   */
+  const launchCapture = async (initial: boolean): Promise<Capture> => {
+    const debugPort = 9222 + Math.floor(Math.random() * 500);
+    const profile = mkdtempSync(join(tmpdir(), PROFILE_PREFIX));
+    // `detached: true` — see above: one group signal reaches Chrome and everything it spawned.
+    const chrome = spawn(
+      chromeBin,
+      chromeArgs(debugPort, profile, process.platform, stage, opts.audio),
+      { stdio: 'ignore', detached: true },
+    );
+    const cap: Capture = { chrome, profile, retired: false };
+    current = cap;
+    let ready = false;
+    /** Before the page is ready Chrome dying is terminal and must beat the startup awaits; after it,
+     *  it is a failure the stream survives. */
+    const chromeDied = new Promise<never>((_, reject) => {
+      chrome.once('exit', () => {
+        if (cap.retired) return;
+        if (!ready) reject(new CliError('headless Chrome exited before the page was ready', 1));
+        else if (!stopping) void relaunchCapture('headless Chrome exited');
+      });
+    });
+    chromeDied.catch(() => {});
+    // Race the whole startup sequence against Chrome dying: every await below can otherwise outlive
+    // the thing it is waiting for.
     await Promise.race([
       (async () => {
-        cdp = await connectCdp(debugPort);
+        const cdp = (cap.cdp = await connectCdp(debugPort));
         await cdp.send('Page.enable');
         await cdp.send('Runtime.enable');
         // `--window-size` is the *window*; even headless, the viewport comes up short of it (~88px of
@@ -1487,27 +1559,26 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
         await cdp.send('Page.navigate', { url });
         await waitBroadcastReady(cdp, 30_000);
       })(),
-      diedDuringStartup,
+      chromeDied,
     ]);
-    const page = cdp!;
+    ready = true;
+    const page = cap.cdp!;
 
-    const pump = makeFramePump(makeEncoderFeed(ffmpeg.stdin, onStall), opts.fps);
-    // Capture-perf instrumentation — dark unless MUSTERD_BROADCAST_PERF names a JSONL path.
+    // Capture-perf instrumentation — dark unless MUSTERD_BROADCAST_PERF names a JSONL path, and only
+    // for the first capture: the recorder truncates its file, so a relaunch would erase the run.
     // See broadcast-perf.ts for why queue *growth*, not ffmpeg's `speed=`, is the margin metric.
-    let emitted = 0;
-    const perf = startPerfRecording(page, ffmpeg, chrome, () => emitted);
+    const perf = initial ? startPerfRecording(page, ffmpeg, chrome, () => emitted) : undefined;
     const ackRefused = makeAckRefusalReporter(
-      () => stopping,
+      () => stopping || cap.retired,
       (message) =>
         process.stderr.write(
           `${theme.err('✗')} Chrome refused a screencast ack — the picture will freeze while every ` +
             `other counter reads healthy: ${message}\n`,
         ),
     );
-    const frameWatch = makeFrameWatchdog(onFrameStall);
-    // Reports, never stops — so unlike the freeze watchdog this one hands `forceStop` nothing. A
+    // Reports, never stops — so unlike the freeze watchdog this one hands nothing to a relaunch. A
     // half-rate stream is worth far more to a viewer than no stream.
-    const drawFloor = makeDrawRateFloor((achieved, floor, overMs) =>
+    const drawFloor = (cap.drawFloor = makeDrawRateFloor((achieved, floor, overMs) =>
       process.stderr.write(
         `${theme.err('✗')} the office drew ${achieved.toFixed(1)} frames/s over the last ` +
           `${Math.round(overMs / 1000)}s, under the ${floor}/s floor, while its loop was running — ` +
@@ -1515,12 +1586,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
           `healthy. The picture is at roughly ${Math.round((100 * achieved) / opts.fps)}% of ` +
           `${opts.fps}fps.\n`,
       ),
-    );
-    disarmFrameWatch = () => {
-      frameWatch.disarm();
-      drawFloor.disarm();
-      if (drawFloorTimer) clearInterval(drawFloorTimer);
-    };
+    ));
     page.on('Page.screencastFrame', (p) => {
       const frame = Buffer.from(String(p['data']), 'base64');
       perf?.frame(frame.byteLength);
@@ -1546,6 +1612,83 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
       // single largest cost in the pipeline, and feeding 60/s into a 30fps encode pays for it twice.
       everyNthFrame: screencastEveryNthFrame(opts.fps),
     });
+    if (perf) {
+      cap.perfTimer = setInterval(() => void perf.tick(), PERF_SAMPLE_MS);
+      cap.perfTimer.unref(); // measurement never holds the stream open
+    }
+    // The floor's own probe, and it is always on — the whole finding of 2026-09-17 is that the
+    // instrument which could see the degradation was opt-in, so nothing was watching it on an
+    // ordinary run. One CDP round-trip every 10s against a counter the page already keeps is a
+    // cost the pipeline cannot measure; being blind to a half-rate picture is not.
+    cap.drawFloorTimer = setInterval(() => {
+      void page
+        .send('Runtime.evaluate', {
+          expression: 'JSON.stringify(window.__office?.stats?.() ?? null)',
+          returnByValue: true,
+        })
+        .then((r) => {
+          const stats = parseOfficeStats((r['result'] as { value?: unknown } | undefined)?.value);
+          if (stats) drawFloor.sample(stats, Date.now());
+        })
+        .catch(() => {}); // a probe that cannot reach the page says nothing, and must not throw
+    }, DRAW_FLOOR_SAMPLE_MS);
+    cap.drawFloorTimer.unref(); // measurement never holds the stream open
+    return cap;
+  };
+
+  /**
+   * Chrome died or froze: replace it, and leave the stream alone (ADR 551).
+   *
+   * Everything downstream of the frame source keeps running. The pump re-emits its last frame on a
+   * wall clock, so ffmpeg keeps encoding and the RTMP session never drops — viewers see a still
+   * picture for as long as the new Chrome takes to come up, instead of the channel going offline.
+   * The whole-stream path (`giveUp`) is what a Chrome that cannot be brought back, or that keeps
+   * failing, still falls back to.
+   */
+  const relaunchCapture = async (reason: string): Promise<void> => {
+    if (recovering || stopping || ffmpeg.exitCode !== null || ffmpeg.signalCode !== null) return;
+    recovering = true;
+    disarmFrameWatch(); // nothing arrives from a Chrome that is being replaced — that is not a freeze
+    try {
+      if (decideRelaunch(relaunches, Date.now()) === 'give_up') {
+        giveUp(
+          `${reason} — Chrome has failed ${RELAUNCH_MAX} times in ${RELAUNCH_WINDOW_MS / 60_000} minutes, so this is not a blip.`,
+        );
+      }
+      relaunches.push(Date.now());
+      process.stderr.write(
+        `${theme.err('✗')} ${reason} — relaunching Chrome; the stream stays up on its last frame.\n`,
+      );
+      const began = Date.now();
+      if (current) retire(current);
+      const cap = await launchCapture(false);
+      if (stopping) {
+        retire(cap);
+        return;
+      }
+      frameWatch.arm();
+      process.stdout.write(
+        theme.meta(`capture back after ${((Date.now() - began) / 1000).toFixed(1)}s`) + '\n',
+      );
+    } catch (err) {
+      // The stream ending (a signal, ffmpeg gone) is what pulled Chrome out from under this launch.
+      if (stopping || ffmpeg.exitCode !== null || ffmpeg.signalCode !== null) return;
+      giveUp(`Chrome would not come back (${err instanceof Error ? err.message : String(err)}).`);
+    } finally {
+      recovering = false;
+    }
+  };
+
+  const cleanup = () => {
+    disarmFrameWatch();
+    if (pumpTimer) clearInterval(pumpTimer);
+    ffmpeg.stdin?.end();
+    if (current) retire(current);
+  };
+
+  try {
+    await Promise.race([launchCapture(true), diedDuringStartup]);
+
     // Tick at 2× frame cadence: the pump owes frames by wall clock, so the timer only needs to
     // fire *often enough* — late ticks emit catch-up frames instead of losing them.
     // Armed HERE, not at startup: Chrome launching and the page loading can take a minute, and
@@ -1561,27 +1704,6 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
       },
       Math.max(1, Math.round(500 / opts.fps)),
     );
-    if (perf) {
-      perfTimer = setInterval(() => void perf.tick(), PERF_SAMPLE_MS);
-      perfTimer.unref(); // measurement never holds the stream open
-    }
-    // The floor's own probe, and it is always on — the whole finding of 2026-09-17 is that the
-    // instrument which could see the degradation was opt-in, so nothing was watching it on an
-    // ordinary run. One CDP round-trip every 10s against a counter the page already keeps is a
-    // cost the pipeline cannot measure; being blind to a half-rate picture is not.
-    drawFloorTimer = setInterval(() => {
-      void page
-        .send('Runtime.evaluate', {
-          expression: 'JSON.stringify(window.__office?.stats?.() ?? null)',
-          returnByValue: true,
-        })
-        .then((r) => {
-          const stats = parseOfficeStats((r['result'] as { value?: unknown } | undefined)?.value);
-          if (stats) drawFloor.sample(stats, Date.now());
-        })
-        .catch(() => {}); // a probe that cannot reach the page says nothing, and must not throw
-    }, DRAW_FLOOR_SAMPLE_MS);
-    drawFloorTimer.unref(); // measurement never holds the stream open
     live = true; // signals now stop gracefully — there are frames worth finalizing
 
     baselineBuild = await fetchDaemonBuild(opts.server);
@@ -1610,18 +1732,9 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
      * up by `musterd stream build` + a deliberate restart, as the hosted guide already says.
      */
 
-    // The frame source dying MID-stream is terminal — flush what we have and report it. After the
-    // encoder has already exited this also fires from cleanup's own group-kill; not an error.
-    void chromeExit.then(() => {
-      if (ffmpeg.exitCode !== null || ffmpeg.signalCode !== null) return;
-      process.stderr.write(`${theme.err('✗')} headless Chrome exited\n`);
-      if (!stopping) {
-        stopping = true;
-        gracefulStop();
-      }
-    });
     // Run until ffmpeg exits — its -t duration, its sink failing, a signal ending its stdin, or the
-    // stall watchdog above. Every road converges here.
+    // stall watchdog above. Every road converges here. Chrome dying is NOT one of them: the capture
+    // is replaced in place (`relaunchCapture`).
     exitCode = await ffmpegExit;
   } finally {
     cleanup();
