@@ -1252,22 +1252,47 @@ function labelNudgeCommand(): number {
 export const ORIENT_NUDGE_TEXT =
   'musterd: unoriented seat session — run the musterd-orient skill now.';
 
+/**
+ * What the orient hook says to a session that has no seat (lane 01M4E4MSW1). Orienting reads the inbox
+ * and the lane board AS a seat; a session whose autojoin failed (alfie, 2026-10-07: a revoked
+ * credential) has none, so "run the orient skill" sent it to read as nobody and then stamp itself
+ * done. One line, like the orient text, with the way in and the repair for the usual cause.
+ */
+export const NO_SEAT_NUDGE_TEXT =
+  'musterd: this session has no seat yet — run team_join now (CLI: `musterd claim <seat>`). ' +
+  'If it says the credential is revoked or expired, a team admin runs ' +
+  '`musterd team bootstrap mint --seat <seat> --install` on this machine; orient after that.';
+
 function orientStampPath(dir: string): string {
   return join(dir, '.musterd', 'orient-stamp.json');
 }
 
-/** Due iff this is a seat workspace with a captured session the stamp does not name.
+/**
+ * Whether this folder holds a live seat: the adapter writes the session lease it was handed into the
+ * binding (ADR 471), and the interrupt probe is deaf without one. A local fact, so the nudge — which
+ * rides every prompt — makes no network call. A lease that has since died is the deaf line's to say.
+ */
+function seatedHere(dir: string): boolean {
+  return findBinding(dir, {})?.session_lease !== undefined;
+}
+
+/**
+ * What the per-prompt hook should say, if anything. Silent outside a seat workspace with a captured
+ * session; `'no-seat'` when that workspace has no live seat; `'orient'` when it has one and the
+ * stamp does not name this session.
  *
  *  Known first-turn race (miley's #1072 review note): at SessionStart the nudge hook and the
  *  capture hook are unordered — if the nudge reads first, it compares the stamp against the
  *  PREVIOUS session's capture and can stay quiet on turn 0. Deliberately left: the per-turn
  *  UserPromptSubmit repeat self-heals on the next prompt, which is exactly why the repeat exists
- *  (the label-nudge lesson). The stamp key is race-free from turn 1 onward. */
-export function orientNudgeDue(dir: string | null, runningId?: string): boolean {
-  if (!dir) return false;
+ *  (the label-nudge lesson). The stamp key is race-free from turn 1 onward. The same repeat covers
+ *  `'no-seat'` on a turn before the adapter's autojoin has landed its lease. */
+export function orientNudge(dir: string | null, runningId?: string): 'orient' | 'no-seat' | null {
+  if (!dir) return null;
   const binding = findBinding(dir, {});
   const slotId = binding?.session?.id;
-  if (!binding || binding.claim?.mode !== 'seat' || slotId === undefined) return false;
+  if (!binding || binding.claim?.mode !== 'seat' || slotId === undefined) return null;
+  if (!seatedHere(dir)) return 'no-seat';
   const current = runningId ?? slotId;
   try {
     const rec = JSON.parse(readFileSync(orientStampPath(dir), 'utf8')) as {
@@ -1276,18 +1301,30 @@ export function orientNudgeDue(dir: string | null, runningId?: string): boolean 
     };
     // Either id the stamp saw may name this session: its own id (the heal case) or the slot's (a
     // running id inherited from a parent harness's env, while the slot was right all along).
-    return rec.session_id !== current && rec.slot_id !== current;
+    return rec.session_id !== current && rec.slot_id !== current ? 'orient' : null;
   } catch {
-    return true; // no stamp (or unreadable) ⇒ due
+    return 'orient'; // no stamp (or unreadable) ⇒ due
   }
+}
+
+/** Due iff this is a seated seat workspace with a captured session the stamp does not name. */
+export function orientNudgeDue(dir: string | null, runningId?: string): boolean {
+  return orientNudge(dir, runningId) === 'orient';
 }
 
 /** Stamp this session oriented (exported for tests; `orient-stamp` is the CLI face). `runningId` is
  *  the session's own id when the harness reports one; the slot's id is recorded beside it. */
-export function writeOrientStamp(dir: string | null, now = Date.now(), runningId?: string): void {
+export function writeOrientStamp(
+  dir: string | null,
+  now = Date.now(),
+  runningId?: string,
+): boolean {
   const slotId = dir ? findBinding(dir, {})?.session?.id : undefined;
   const sessionId = runningId ?? slotId;
-  if (!dir || sessionId === undefined) return;
+  if (!dir || sessionId === undefined) return false;
+  // A session with no seat has oriented to nothing: stamping it would quiet the nudge that is
+  // trying to get it one. Refuse, and the nudge keeps asking (lane 01M4E4MSW1).
+  if (!seatedHere(dir)) return false;
   writeFileSync(
     orientStampPath(dir),
     JSON.stringify({
@@ -1296,6 +1333,7 @@ export function writeOrientStamp(dir: string | null, now = Date.now(), runningId
       oriented_at: now,
     }) + '\n',
   );
+  return true;
 }
 
 /** The running session's own id from the environment. Claude Code sets `CLAUDE_CODE_SESSION_ID` for
@@ -1318,9 +1356,9 @@ async function orientNudgeCommand(): Promise<number> {
       ? undefined
       : parseHookPayload(await readHookStdin(ORIENT_NUDGE_STDIN_MS)).session_id;
     const runningId = payloadId ?? runningSessionIdFromEnv(process.env);
-    if (orientNudgeDue(findWorkspaceDir(), runningId)) {
-      process.stdout.write(`${ORIENT_NUDGE_TEXT}\n`);
-    }
+    const nudge = orientNudge(findWorkspaceDir(), runningId);
+    if (nudge === 'no-seat') process.stdout.write(`${NO_SEAT_NUDGE_TEXT}\n`);
+    else if (nudge === 'orient') process.stdout.write(`${ORIENT_NUDGE_TEXT}\n`);
   } catch {
     // hook contract: never fail, never noise
   }
@@ -1328,10 +1366,20 @@ async function orientNudgeCommand(): Promise<number> {
 }
 
 /** `session orient-stamp` — the musterd-orient skill's final step. Best-effort: on any failure
- *  the stamp is simply absent and the nudge repeats, which is the correct failure direction. */
+ *  the stamp is simply absent and the nudge repeats, which is the correct failure direction. A
+ *  session with no seat is refused loudly (exit 1) rather than stamped. */
 function orientStampCommand(): number {
   try {
-    writeOrientStamp(findWorkspaceDir(), Date.now(), runningSessionIdFromEnv(process.env));
+    const dir = findWorkspaceDir();
+    if (writeOrientStamp(dir, Date.now(), runningSessionIdFromEnv(process.env))) return 0;
+    // Not stamped. Say why when the reason is the one that matters — no seat — and exit non-zero so
+    // the skill does not read silence as success (alfie, 2026-10-07: it stamped a seatless session).
+    if (dir && findBinding(dir, {})?.session?.id !== undefined && !seatedHere(dir)) {
+      process.stderr.write(
+        `musterd: not stamped — ${NO_SEAT_NUDGE_TEXT.replace(/^musterd: /, '')}\n`,
+      );
+      return 1;
+    }
   } catch {
     // best-effort; the nudge simply repeats
   }

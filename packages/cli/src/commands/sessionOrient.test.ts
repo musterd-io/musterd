@@ -5,9 +5,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Binding } from '../config.js';
 import { formatClaudeCodeInterrupt } from './inbox.js';
 import {
+  NO_SEAT_NUDGE_TEXT,
   ORIENT_NUDGE_TEXT,
   formatCursorInterrupt,
   formatCursorOrientation,
+  orientNudge,
   orientNudgeDue,
   writeOrientStamp,
 } from './session.js';
@@ -26,6 +28,9 @@ describe('session orient stamp/nudge', () => {
       grant: 'msgr_standing',
       model: 'claude-test-1',
       session: { harness: 'claude-code', id: 'sess-1', started_at: Date.now() },
+      // A seated workspace: the adapter wrote the lease it holds (ADR 471). Without one the folder
+      // has no live Presence — the unseated cases below take it away.
+      session_lease: 'msls_live',
       ...over,
     }) as Binding;
 
@@ -102,6 +107,46 @@ describe('session orient stamp/nudge', () => {
     expect(orientNudgeDue(ws)).toBe(false);
     writeBinding(bindingOf({ claim: undefined }));
     expect(orientNudgeDue(ws)).toBe(false);
+  });
+
+  describe('an unseated session is told to get a seat, not to orient (lane 01M4E4MSW1)', () => {
+    // alfie, 2026-10-07: autojoin failed on a revoked credential, the session had no seat, and the
+    // hook still said "run the musterd-orient skill" — whose last step then stamped it oriented.
+    const unseated = (): void => writeBinding(bindingOf({ session_lease: undefined }));
+
+    it('the nudge asks for a seat, and the orient text waits until there is one', () => {
+      unseated();
+      expect(orientNudge(ws)).toBe('no-seat');
+      writeBinding(bindingOf());
+      expect(orientNudge(ws)).toBe('orient');
+    });
+
+    it('stays silent exactly where the orient nudge is: no dir, no captured session, no seat claim', () => {
+      expect(orientNudge(null)).toBeNull();
+      writeBinding(bindingOf({ session: undefined, session_lease: undefined }));
+      expect(orientNudge(ws)).toBeNull();
+      writeBinding(bindingOf({ claim: undefined, session_lease: undefined }));
+      expect(orientNudge(ws)).toBeNull();
+    });
+
+    it('orient-stamp refuses without a live seat and writes nothing, so the nudge keeps asking', () => {
+      unseated();
+      expect(writeOrientStamp(ws)).toBe(false);
+      expect(() => readFileSync(join(ws, '.musterd', 'orient-stamp.json'), 'utf8')).toThrow();
+      expect(orientNudge(ws)).toBe('no-seat');
+    });
+
+    it('a seated stamp still lands and quiets the nudge', () => {
+      expect(writeOrientStamp(ws)).toBe(true);
+      expect(orientNudge(ws)).toBeNull();
+    });
+
+    it('the no-seat text is one line, names the way in, and the credential repair', () => {
+      expect(NO_SEAT_NUDGE_TEXT).not.toContain('\n');
+      expect(NO_SEAT_NUDGE_TEXT).toContain('team_join');
+      expect(NO_SEAT_NUDGE_TEXT).toContain('musterd team bootstrap mint --seat');
+      expect(NO_SEAT_NUDGE_TEXT).not.toContain('musterd-orient');
+    });
   });
 
   it('the nudge text names the skill and stays one line', () => {
