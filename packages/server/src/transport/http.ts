@@ -503,7 +503,7 @@ import {
   SyncOriginError,
   SyncResidenceError,
 } from '../sync/log.js';
-import { pullTeam, readPullStop } from '../sync/pull.js';
+import { kickSyncPull, pullTeam, readPullStop } from '../sync/pull.js';
 import { readPushRefusal, pushTeam } from '../sync/push.js';
 import {
   recordError,
@@ -6012,6 +6012,9 @@ export async function handleHttp(
         const body = parseOrBadRequest(SyncPushRequestSchema, await readJson(req));
         try {
           const result = await ingestBatch(ctx.db, team.id, node.id, body.events);
+          // The hub's own seats read `messages`, which only the fold fills: fold now, not at the
+          // hub's next 60 s tick.
+          if (result.accepted > 0) kickSyncPull(ctx);
           return sendJson(res, 200, SyncPushResponseSchema.parse(result));
         } catch (err) {
           if (err instanceof SyncResidenceError) {

@@ -507,12 +507,33 @@ async function evictHalted(ctx: Ctx, teamId: string, memberId: string): Promise<
     ctx.hub.broadcastTeam(teamId, { type: 'presence', member: name, status: 'offline' });
 }
 
+/** How long a kick waits so a burst of arrivals is one drain. */
+export const SYNC_PULL_KICK_DEBOUNCE_MS = 100;
+
+/** The running loop's doorbell, by database handle (same keying as push.ts's). Absent when no
+ *  pull loop runs, so a kick is then a no-op. */
+const kickers = new WeakMap<Ctx['db'], () => void>();
+
+/**
+ * Ask this daemon's pull loop to drain now. The hub rings it when `/sync/push` stages events:
+ * without it a pushed act sits in `sync_log` until the hub's own next tick before any seat on the
+ * hub can read it — a second 60 s on top of the push interval (measured 2026-10-08: joiner send →
+ * hub `messages` 60 051 ms with push-on-write already in). Never throws, never blocks the caller.
+ */
+export function kickSyncPull(ctx: Ctx): void {
+  kickers.get(ctx.db)?.();
+}
+
 /** Start the pull loop. Returns a stop function (same contract as startSyncPush). */
 export function startSyncPull(ctx: Ctx): () => void {
   let running = false;
+  let again = false; // a kick landed mid-drain: its events may be past the page already read
   let stopped = false;
   const tick = async () => {
-    if (running) return;
+    if (running) {
+      again = true;
+      return;
+    }
     running = true;
     try {
       for (const team of await listActiveTeams(ctx.db)) {
@@ -530,11 +551,27 @@ export function startSyncPull(ctx: Ctx): () => void {
     } finally {
       running = false;
     }
+    if (again && !stopped) {
+      again = false;
+      void tick();
+    }
   };
   const handle = setInterval(() => void tick(), SYNC_PULL_INTERVAL_MS);
   if (typeof handle.unref === 'function') handle.unref();
+
+  let kick: ReturnType<typeof setTimeout> | null = null;
+  kickers.set(ctx.db, () => {
+    if (kick || stopped) return;
+    kick = setTimeout(() => {
+      kick = null;
+      void tick();
+    }, SYNC_PULL_KICK_DEBOUNCE_MS);
+    if (typeof kick.unref === 'function') kick.unref();
+  });
   return () => {
     stopped = true;
     clearInterval(handle);
+    if (kick) clearTimeout(kick);
+    kickers.delete(ctx.db);
   };
 }
