@@ -338,6 +338,11 @@ function parseDoorbellView(json: unknown): DoorbellView {
 export class HttpClient {
   constructor(private opts: HttpClientOpts) {}
 
+  /** The daemon this client talks to — what a credential it mints is valid against. */
+  get server(): string {
+    return this.opts.server;
+  }
+
   /** A clone of this client that never writes ambient presence — for background polling (notify). */
   presenceNeutral(): HttpClient {
     return new HttpClient({ ...this.opts, noTouch: true });

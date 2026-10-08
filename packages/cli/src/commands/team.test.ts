@@ -391,6 +391,23 @@ describe('team policy command', () => {
       expect(await credentialCount()).toBe(before);
     });
 
+    it('never writes a key into a folder that points at a different daemon', async () => {
+      await capture(() => teamCommand(parseArgs(['add', 'Ada', '--kind', 'agent'])));
+      const elsewhere = seatFolder('Ada', { server: 'http://203.0.113.9:4849' });
+
+      // Registry path: the other-daemon folder is not a candidate at all.
+      await expect(
+        teamCommand(parseArgs(['bootstrap', 'mint', '--seat', 'Ada', '--install'])),
+      ).rejects.toThrow(/no Workspace bound to Ada/);
+      // Explicit path: named, and refused before the mint.
+      await expect(
+        teamCommand(
+          parseArgs(['bootstrap', 'mint', '--seat', 'Ada', '--install', '--into', elsewhere]),
+        ),
+      ).rejects.toThrow(/points at http:\/\/203\.0\.113\.9:4849/);
+      expect(bindingAt(elsewhere).agent_key).toBe('mskey_revoked_old');
+    });
+
     it('refuses a --into folder bound to another seat, and --install without --seat', async () => {
       await capture(() => teamCommand(parseArgs(['add', 'Ada', '--kind', 'agent'])));
       const lin = seatFolder('Lin');

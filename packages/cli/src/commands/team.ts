@@ -159,36 +159,53 @@ async function teamInvite(parsed: Parsed): Promise<number> {
   );
 }
 
+/** Same daemon, ignoring a trailing slash. */
+const sameServer = (a: string, b: string): boolean =>
+  a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
+
+/**
+ * Whether `dir`'s binding is this seat on this team AT this daemon. The server check matters: the
+ * harness presents `agent_key` to its binding's `server`, so a key minted here but written into a
+ * folder that points at another daemon (same slug, different host) would be handed to that daemon.
+ */
+function installMismatch(dir: string, team: string, seat: string, server: string): string | null {
+  const binding = readBindingAt(dir);
+  if (!binding) return `${dir} has no .musterd/binding.json to install into`;
+  if (binding.team !== team || bindingSeat(binding) !== seat) {
+    return `${dir} is bound to ${bindingSeat(binding) ?? 'no fixed seat'} on ${binding.team}, not ${seat} on ${team}`;
+  }
+  if (!sameServer(binding.server, server)) {
+    return `${dir} points at ${binding.server}, but this credential would be minted on ${server} — run the mint against that folder's daemon`;
+  }
+  return null;
+}
+
 /**
  * The one Workspace on this machine that `bootstrap mint --install` writes into: `--into`, checked
  * against its binding, or else the single folder the bindings registry (ADR 020) records for this
- * seat on this team. Zero or several is a refusal naming `--into` — never a guess at where a live
- * credential goes (lane 01M4E4MGCZ: without this the key was hand-edited in and pasted into chat).
+ * seat on this team and daemon. Zero or several is a refusal naming `--into` — never a guess at
+ * where a live credential goes (lane 01M4E4MGCZ: without this the key was hand-edited in and pasted
+ * into chat).
  */
-function installTarget(team: string, seat: string, into: string | undefined): string {
-  const boundHere = (dir: string): Binding | null => {
-    const binding = readBindingAt(dir);
-    return binding && binding.team === team && bindingSeat(binding) === seat ? binding : null;
-  };
+function installTarget(
+  team: string,
+  seat: string,
+  server: string,
+  into: string | undefined,
+): string {
   if (into !== undefined) {
     const dir = resolvePath(into);
-    const binding = readBindingAt(dir);
-    if (!binding) throw new CliError(`${dir} has no .musterd/binding.json to install into`, 6);
-    if (!boundHere(dir)) {
-      throw new CliError(
-        `${dir} is bound to ${bindingSeat(binding) ?? 'no fixed seat'} on ${binding.team}, not ${seat} on ${team}`,
-        6,
-      );
-    }
+    const mismatch = installMismatch(dir, team, seat, server);
+    if (mismatch) throw new CliError(mismatch, 6);
     return dir;
   }
   const dirs = Object.entries(loadConfig().bindings)
     .filter(([, ref]) => ref.team === team && ref.seat === seat)
     .map(([dir]) => dir)
-    .filter((dir) => boundHere(dir) !== null);
+    .filter((dir) => installMismatch(dir, team, seat, server) === null);
   if (dirs.length === 0) {
     throw new CliError(
-      `no Workspace bound to ${seat} on ${team} is recorded on this machine — pass --into <folder>`,
+      `no Workspace bound to ${seat} on ${team} at ${server} is recorded on this machine — pass --into <folder>`,
       6,
     );
   }
@@ -206,6 +223,7 @@ function installTarget(team: string, seat: string, into: string | undefined): st
 async function teamBootstrap(parsed: Parsed): Promise<number> {
   const action = parsed.positionals[1];
   const { team, http } = resolve(parsed.flags);
+  const server = http.server;
   const json = parsed.flags['json'] === true;
 
   if (action === 'mint') {
@@ -234,7 +252,7 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
     }
     // Resolve the destination BEFORE minting, so a refusal leaves no live credential behind.
     const installDir = install
-      ? installTarget(team, target, flagStr(parsed.flags, 'into'))
+      ? installTarget(team, target, server, flagStr(parsed.flags, 'into'))
       : undefined;
     const minted = await http.mintBootstrapCredential(team, {
       use: use as 'claim_seat' | 'claim_role' | 'host',
@@ -246,6 +264,9 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
     if (installDir !== undefined) {
       let written: string;
       try {
+        // Re-check after the mint: the folder must still be this seat at this daemon.
+        const mismatch = installMismatch(installDir, team, target, server);
+        if (mismatch) throw new Error(mismatch);
         written = saveBinding(installDir, {
           ...readBindingAt(installDir)!,
           agent_key: minted.agent_key,
