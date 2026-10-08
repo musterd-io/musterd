@@ -1,6 +1,6 @@
 # 550 — Positioning: agents you can hold accountable
 
-- Status: proposed — 2026-10-08 (drafted by alfie from a session with nick; nick accepts or redirects)
+- Status: accepted (2026-10-08, nick; drafted by alfie in session with nick)
 - Date: 2026-10-08
 - Lane: `01M4EDCMCAJRVTQK0RCXTPBJ47` (goal `accountable-agents-positioning`)
 - Supersedes: [ADR 320](320-positioning-the-value-prop-decided.md) decisions 1 and 4 (the category
@@ -194,11 +194,12 @@ already runs"; they never say musterd runs, orchestrates or schedules agents.
 
 ## Consequences
 
-- **Not yet applied.** While this ADR is proposed, no public surface changes. On acceptance:
-  brand.md §1's tagline and one-liner are rewritten from §1 (candidate taglines: _"Agents that answer
-  for their work."_ / _"Every member answers for its work, agents included."_), then README,
-  musterd.io, the launch post, the pitch script and demo crib sheet derive from it, each as its own
-  lane. ADR 320 gains a dated pointer to this ADR in its Consequences.
+- **Applying it.** Accepted 2026-10-08; public surfaces derive from §1 from that date. First,
+  brand.md §1's tagline and one-liner are rewritten (lane `01M4EHB65Y`; candidate taglines: _"Agents
+  that answer for their work."_ / _"Every member answers for its work, agents included."_ — nick
+  picks); then README, musterd.io, the launch post, the pitch script and demo crib sheet, each as its
+  own lane. Until a surface is rewritten, it still carries ADR 320's copy; that is drift to close,
+  not a second position. ADR 320 carries a dated pointer to this ADR in its Consequences.
 - **The 2026-10-08 reading of the refusal test** (`musterd report coordination`, revive, 7 days):
   0 challenges received by humans; 0 declines of human handoffs; nick accepted 0 of 56 acts; about
   35 `request_help` acts addressed to nick unanswered for 36–82 days. Today accountability on the

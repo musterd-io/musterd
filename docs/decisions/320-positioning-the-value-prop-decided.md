@@ -1,6 +1,6 @@
 # 320 — Positioning: the value prop argued and decided
 
-- Status: accepted (2026-08-24, nick); amendment 2026-09-16 accepted (nick, see foot)
+- Status: accepted (2026-08-24, nick); amendment 2026-09-16 accepted (nick, see foot); decisions 1 and 4 superseded by ADR 550 (2026-10-08)
 - Date: 2026-08-24
 - Lane: `01M091VTSXWSB1GRCGQ9RQQEK6`
 - Relates to: [ADR 007](007-v0.2-scope-cut.md) (protocol over framework),
@@ -172,6 +172,11 @@ substance; brand.md §1's tagline and one-liner stay canonical for their slots):
   ("assume the term is contested," "claim the distinction explicitly") are hereby answered.
 - No code changes. No glossary changes — "coordination layer" is positioning vocabulary, not a
   glossary term, and stays out of the ADR 296 enforcement set.
+- _Dated note, 2026-10-08 — decisions 1 and 4 superseded by [ADR 550](550-positioning-accountable-agents.md)
+  (accepted by nick)._ The convergence falsifier fired: Band Desktop ships harness-native join and
+  work ownership (landscape.md §5, §14). ADR 550 replaces the category claim and the "coordination
+  layer" vocabulary with accountability, and reorders the moat. Decisions 2, 3 and 5 stand and are
+  re-read there; the canonical statement above is replaced by ADR 550 §1's.
 
 ## Observability & Evaluation
 
