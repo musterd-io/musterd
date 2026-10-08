@@ -15,7 +15,7 @@ The seat credential is **not recoverable** — the daemon stores only its hash. 
 
 1. Restore `~/.musterd/config.json` by hand — `server` back to the real daemon, `current` back to the real team, and drop the throwaway team from `identities` and `knownIdentities`.
 2. Rebuild `.musterd/binding.json` with `version`, `server`, `team`, `claim` and `model`. Keep `model_observed` if it is still there — it is this workspace's own measured fact and has nothing to do with the clobber.
-3. Mint a replacement bootstrap credential as an admin: `musterd team bootstrap mint --seat <name> --expires-in 1h`, write it into the binding as `agent_key`, then `musterd claim <name>`. That mints a fresh `seat_credential`, `grant` and `session_lease`.
+3. Mint a replacement bootstrap credential as an admin, straight into the binding: `musterd team bootstrap mint --seat <name> --install` (add `--into <folder>` if this machine has several Workspaces for that seat), then `musterd claim <name>`. That mints a fresh `seat_credential`, `grant` and `session_lease`. *(Updated 2026-10-08, lane 01M4E4MGCZ: until `--install` existed this step said to write the printed key into `agent_key` by hand. On 2026-10-07 that hand edit broke twice for alfie and the key ended up pasted into a chat.)*
 4. `musterd whoami` should read `<seat> on <team> (cli · binding)`. Compare the field set against a sibling worktree's binding before you call it done.
 
 `musterd claim` holds its socket open, so in a non-interactive shell it looks hung after it has already succeeded — check the binding rather than waiting on the command.

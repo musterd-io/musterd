@@ -159,10 +159,71 @@ async function teamInvite(parsed: Parsed): Promise<number> {
   );
 }
 
+/** Same daemon, ignoring a trailing slash. */
+const sameServer = (a: string, b: string): boolean =>
+  a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
+
+/**
+ * Whether `dir`'s binding is this seat on this team AT this daemon. The server check matters: the
+ * harness presents `agent_key` to its binding's `server`, so a key minted here but written into a
+ * folder that points at another daemon (same slug, different host) would be handed to that daemon.
+ */
+function installMismatch(dir: string, team: string, seat: string, server: string): string | null {
+  const binding = readBindingAt(dir);
+  if (!binding) return `${dir} has no .musterd/binding.json to install into`;
+  if (binding.team !== team || bindingSeat(binding) !== seat) {
+    return `${dir} is bound to ${bindingSeat(binding) ?? 'no fixed seat'} on ${binding.team}, not ${seat} on ${team}`;
+  }
+  if (!sameServer(binding.server, server)) {
+    return `${dir} points at ${binding.server}, but this credential would be minted on ${server} — run the mint against that folder's daemon`;
+  }
+  return null;
+}
+
+/**
+ * The one Workspace on this machine that `bootstrap mint --install` writes into: `--into`, checked
+ * against its binding, or else the single folder the bindings registry (ADR 020) records for this
+ * seat on this team and daemon. Zero or several is a refusal naming `--into` — never a guess at
+ * where a live credential goes (lane 01M4E4MGCZ: without this the key was hand-edited in and pasted
+ * into chat).
+ */
+function installTarget(
+  team: string,
+  seat: string,
+  server: string,
+  into: string | undefined,
+): string {
+  if (into !== undefined) {
+    const dir = resolvePath(into);
+    const mismatch = installMismatch(dir, team, seat, server);
+    if (mismatch) throw new CliError(mismatch, 6);
+    return dir;
+  }
+  const dirs = Object.entries(loadConfig().bindings)
+    .filter(([, ref]) => ref.team === team && ref.seat === seat)
+    .map(([dir]) => dir)
+    .filter((dir) => installMismatch(dir, team, seat, server) === null);
+  if (dirs.length === 0) {
+    throw new CliError(
+      `no Workspace bound to ${seat} on ${team} at ${server} is recorded on this machine — pass --into <folder>`,
+      6,
+    );
+  }
+  if (dirs.length > 1) {
+    throw new CliError(
+      `${dirs.length} Workspaces are bound to ${seat} on ${team} — pick one with --into <folder>:\n` +
+        dirs.map((dir) => `  ${dir}`).join('\n'),
+      6,
+    );
+  }
+  return dirs[0]!;
+}
+
 /** Admin lifecycle for ADR 344's independently scoped bootstrap credentials. */
 async function teamBootstrap(parsed: Parsed): Promise<number> {
   const action = parsed.positionals[1];
   const { team, http } = resolve(parsed.flags);
+  const server = http.server;
   const json = parsed.flags['json'] === true;
 
   if (action === 'mint') {
@@ -182,12 +243,62 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
       ? Date.now() + parseDurationMs(expiresIn, '--expires-in')
       : undefined;
     const [use, target] = scopes[0]!;
+    const install = parsed.flags['install'] === true;
+    if (install && use !== 'claim_seat') {
+      throw new CliError(
+        '--install needs --seat <name>: only a seat has a Workspace to install into',
+        2,
+      );
+    }
+    // Resolve the destination BEFORE minting, so a refusal leaves no live credential behind.
+    const installDir = install
+      ? installTarget(team, target, server, flagStr(parsed.flags, 'into'))
+      : undefined;
     const minted = await http.mintBootstrapCredential(team, {
       use: use as 'claim_seat' | 'claim_role' | 'host',
       target,
       ...(flagStr(parsed.flags, 'label') ? { label: flagStr(parsed.flags, 'label')! } : {}),
       ...(expiresAt !== undefined ? { expires_at: expiresAt } : {}),
     });
+
+    if (installDir !== undefined) {
+      let written: string;
+      try {
+        // Re-check after the mint: the folder must still be this seat at this daemon.
+        const mismatch = installMismatch(installDir, team, target, server);
+        if (mismatch) throw new Error(mismatch);
+        written = saveBinding(installDir, {
+          ...readBindingAt(installDir)!,
+          agent_key: minted.agent_key,
+        });
+      } catch (err) {
+        // Written nowhere, so it must not stay live.
+        await http.revokeBootstrapCredential(team, minted.credential.id).catch(() => undefined);
+        throw new CliError(
+          `could not write ${installDir}: ${(err as Error).message} — the new credential was revoked; the binding is unchanged`,
+          1,
+        );
+      }
+      if (json) {
+        process.stdout.write(
+          JSON.stringify({ credential: minted.credential, installed: written }) + '\n',
+        );
+        return 0;
+      }
+      process.stdout.write(
+        success(`minted a seat bootstrap credential for ${target} and installed it`) + '\n',
+      );
+      process.stdout.write(`  ${written}\n`);
+      process.stdout.write(
+        theme.meta('written straight to the binding and not printed — nothing to copy.') + '\n',
+      );
+      process.stdout.write(theme.meta(`credential id: ${minted.credential.id}`) + '\n');
+      process.stdout.write(
+        hint(`next, from that folder: musterd claim ${target}  (or start its harness)`) + '\n',
+      );
+      return 0;
+    }
+
     if (json) {
       process.stdout.write(JSON.stringify(minted) + '\n');
       return 0;
@@ -195,9 +306,16 @@ async function teamBootstrap(parsed: Parsed): Promise<number> {
     process.stdout.write(
       success(`minted ${minted.credential.use} bootstrap credential for ${target}`) + '\n',
     );
-    process.stdout.write(theme.meta('shown once — store it in the intended harness now:') + '\n');
+    process.stdout.write(theme.meta('shown once — never paste it into a chat:') + '\n');
     process.stdout.write(`  ${minted.agent_key}\n`);
     process.stdout.write(theme.meta(`credential id: ${minted.credential.id}`) + '\n');
+    if (use === 'claim_seat') {
+      process.stdout.write(
+        hint(
+          `the seat's Workspace is on this machine? use musterd team bootstrap mint --seat ${target} --install — it writes the key there unprinted (then revoke ${minted.credential.id})`,
+        ) + '\n',
+      );
+    }
     return 0;
   }
 
