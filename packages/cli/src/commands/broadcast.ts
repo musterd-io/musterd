@@ -825,50 +825,18 @@ export function cdpTimeoutFor(method: string): number {
   return method === 'Page.navigate' ? CDP_NAVIGATE_TIMEOUT_MS : CDP_TIMEOUT_MS;
 }
 
-/** How often a live stream checks whether the code under it has moved. Well inside the ADR 152
- * auto-refresher's 120s tick, so a rebuild is picked up on the next poll rather than the next hour. */
-const BUILD_POLL_MS = 60_000;
-
 /**
- * Has the daemon been rebuilt *since this stream started*?
+ * The exit code that asks a supervisor to run us again (`EX_TEMPFAIL`).
  *
- * The comparison is against the daemon's build **as observed at startup**, not against this
- * process's own stamp. That distinction is the whole design:
+ * A container cannot use a detached replacement: `entrypoint.sh` runs us as the machine's main
+ * process, so our exit is the VM's exit — Fly's init sees `Main child exited normally with code: 0`,
+ * runs cleanup, and destroys the box (`--restart no` + `--rm`). Observed live twice on 2026-07-27.
+ * So the container supervises: under `MUSTERD_BROADCAST_SUPERVISED` a run that cannot continue exits
+ * with this code and the entrypoint loop runs a genuinely fresh process.
  *
- * - Comparing our stamp to the daemon's would restart forever for anyone running a branch build,
- *   because those two never match and never will. A dev streaming their own work-in-progress would
- *   get a stream that tears itself down every minute.
- * - Comparing the daemon to *itself over time* asks the question that actually matters: the ADR 152
- *   auto-refresher rebuilds the shared checkout and bounces the daemon, so the moment its build ref
- *   changes is precisely the moment this process's `dist` went stale underneath it.
- *
- * Pure SHA inequality, no git — and silence whenever either side is unstamped, per ADR 135: a
- * published tarball or stripped dist has no `build.json`, and reading "unknown" as "changed" is how
- * you build a restart loop.
- */
-export function daemonRebuilt(baseline: string | undefined, current: string | undefined): boolean {
-  if (!baseline || !current) return false;
-  return baseline !== current;
-}
-
-/**
- * The exit code that asks a supervisor to run us again on the new code (`EX_TEMPFAIL`).
- *
- * ADR 159 restarts a stale stream by spawning a **detached** replacement and letting this process
- * return 0. That is right on a laptop — the shell prompt comes back while the stream continues — and
- * it is fatal in a container, because there the parent is not merely a parent: `entrypoint.sh`
- * `exec`s it, so it *is* the machine's main process. Fly's init sees `Main child exited normally
- * with code: 0`, runs cleanup, and destroys the VM (`--restart no` + `--rm`) — taking the
- * one-second-old detached replacement with it. Observed live twice on 2026-07-27; both hosted runs
- * died this way, at 4 and 6 minutes, the second killed by a **docs-only** merge (the ADR 152
- * auto-refresher bounces the daemon for any commit, and any daemon bounce trips the currency check).
- *
- * The process model is the container's business, so the container supervises: under
- * `MUSTERD_BROADCAST_SUPERVISED` we do not fork at all, we exit with this code and the entrypoint
- * loop runs a genuinely fresh process. That keeps ADR 159 §4's actual decision intact — a full
- * restart on new code, not a page reload, which the ADR rejected as "half a fix wearing the costume
- * of a whole one" (reloading refreshes the web bundle while this process's capture pipeline stays
- * stale). Only the *mechanism* is environment-specific, and now it says so.
+ * It is for failures only — a lost Chrome socket (`socketLossExitCode`) and a frozen picture (the
+ * frame-arrival watchdog). A daemon rebuild is NOT one (ADR 548): restarting drops the Twitch ingest,
+ * and the page already converges on the new bundle by itself (ADR 292).
  */
 export const RESTART_EXIT_CODE = 75;
 
@@ -891,12 +859,10 @@ export const RESTARTABLE_AFTER_MS = 60_000;
 /**
  * Exit code for a Chrome DevTools socket that dropped underneath us.
  *
- * Observed 2026-08-12 on the hosted stream: the daemon bounced, and the page's disturbance raced the
- * build-poller. When the poller won, `daemonRebuilt()` exited RESTART_EXIT_CODE and `entrypoint.sh`
- * relaunched a working stream in ~3s on the same machine. When the SOCKET won, this path exited 1 —
- * which the supervisor does not rerun (`entrypoint.sh`: `[ "$code" -eq "$RESTART_EXIT_CODE" ] ||
- * exit "$code"`) — so Fly tore down a VM that a supervisor was standing by to restart. Same cause,
- * same recovery available, opposite outcome, decided by which callback fired first.
+ * Observed 2026-08-12 on the hosted stream: the daemon bounced and the page's socket dropped under it.
+ * That path exited 1 — which the supervisor does not rerun (`entrypoint.sh`: `[ "$code" -eq
+ * "$RESTART_EXIT_CODE" ] || exit "$code"`) — so Fly tore down a VM that a supervisor was standing by
+ * to restart.
  *
  * So a lost socket is a RESTARTABLE condition wherever something is willing to run us again — and it
  * generalises past the bounce that exposed it, to a Chrome OOM, a crash, or a stray kill.
@@ -1296,17 +1262,13 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   // (The closures below reference `chrome`/`ffmpeg` before their declaration — safe: handlers
   // only ever run on an event-loop turn, and the spawns happen in this same synchronous block.)
   let pumpTimer: NodeJS.Timeout | undefined;
-  let buildTimer: NodeJS.Timeout | undefined;
   let perfTimer: NodeJS.Timeout | undefined;
   let drawFloorTimer: NodeJS.Timeout | undefined;
   let live = false; // flips when the pump starts feeding ffmpeg
   /** When the pump actually started — the clock `socketLossExitCode` judges restart-eligibility by. */
   let runStartedAt = Date.now();
   let stopping = false;
-  /** Set when the stop in flight is a build pickup, not an ending — see the build watch below. */
-  let restarting = false;
-  let checking = false; // one health poll at a time
-  /** The daemon's build as we found it — the reference the watch compares against. */
+  /** The daemon's build as we found it — what `--status` reports this stream as running against. */
   let baselineBuild: string | undefined;
   /**
    * Flushes the stderr scrubber's buffered tail synchronously. Assigned once ffmpeg is spawned;
@@ -1351,7 +1313,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
    *  stops delivery is never reported as a freeze. */
   let disarmFrameWatch: () => void = () => {};
   const onFrameStall = (sinceMs: number) => {
-    if (frozen || stopping || restarting) return;
+    if (frozen || stopping) return;
     frozen = true;
     const code = socketLossExitCode(Date.now() - runStartedAt);
     process.stderr.write(
@@ -1493,7 +1455,6 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   const cleanup = () => {
     disarmFrameWatch();
     if (pumpTimer) clearInterval(pumpTimer);
-    if (buildTimer) clearInterval(buildTimer);
     if (perfTimer) clearInterval(perfTimer);
     if (drawFloorTimer) clearInterval(drawFloorTimer);
     ffmpeg.stdin?.end();
@@ -1536,7 +1497,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     let emitted = 0;
     const perf = startPerfRecording(page, ffmpeg, chrome, () => emitted);
     const ackRefused = makeAckRefusalReporter(
-      () => stopping || restarting,
+      () => stopping,
       (message) =>
         process.stderr.write(
           `${theme.err('✗')} Chrome refused a screencast ack — the picture will freeze while every ` +
@@ -1637,38 +1598,17 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     );
 
     /**
-     * Stay current with `main`.
+     * No build watch, deliberately (ADR 548, superseding ADR 159 §4).
      *
-     * A stream is the one musterd surface that can run for a day, and this one ran 11 hours showing
-     * an office that was a merged PR out of date — the daemon and `/live` both refresh themselves,
-     * the encoder had nothing. A long-lived Node process cannot hot-swap its own code, so picking up
-     * a rebuild means starting again: tear the stream down cleanly and re-exec, which is the same
-     * conclusion ADR 152 reached for the daemon.
-     *
-     * The restart is deliberately *not* a page reload. Reloading would keep the RTMP session alive
-     * and never interrupt viewers, but it only refreshes the web bundle — the capture pipeline in
-     * this process would stay stale, which is half a fix wearing the costume of a whole one.
+     * This used to poll the daemon's build and, on a change, tear the stream down and re-exec so it
+     * "stayed current". Every merge to `main` bounces the daemon, so every merge dropped the Twitch
+     * ingest — viewers saw the channel go offline (box log 2026-10-08: 17:54 and 18:15Z, ~4s each, and
+     * Twitch took longer to recover than that). The restart bought nothing the stream needed: the web
+     * bundle converges on its own (ADR 292's build-sync reloads the open page onto the served one,
+     * ffmpeg and the RTMP session untouched), and on the hosted box this process's own code is baked
+     * into the image, so a restart re-ran the same code. A change to the capture pipeline is picked
+     * up by `musterd stream build` + a deliberate restart, as the hosted guide already says.
      */
-    buildTimer = setInterval(() => {
-      if (checking || stopping || restarting) return;
-      checking = true;
-      void (async () => {
-        try {
-          const daemon = await fetchDaemonBuild(opts.server);
-          if (!daemonRebuilt(baselineBuild, daemon)) return;
-          process.stdout.write(
-            theme.meta(
-              `\ndaemon rebuilt (${baselineBuild?.slice(0, 7)} → ${daemon?.slice(0, 7)}) — restarting the stream on the new code`,
-            ) + '\n',
-          );
-          restarting = true;
-          gracefulStop(); // ffmpeg finalizes and exits → the await below returns → we re-exec
-        } finally {
-          checking = false;
-        }
-      })();
-    }, BUILD_POLL_MS);
-    buildTimer.unref(); // never the reason this process stays alive
 
     // The frame source dying MID-stream is terminal — flush what we have and report it. After the
     // encoder has already exited this also fires from cleanup's own group-kill; not an error.
@@ -1685,21 +1625,6 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     exitCode = await ffmpegExit;
   } finally {
     cleanup();
-  }
-  if (restarting) {
-    // Only *after* cleanup: the old ffmpeg has finalized and released the ingest, so the replacement
-    // isn't a second publisher on the same stream key — which the sink would reject.
-    process.stdout.write(theme.meta('restarting…') + '\n');
-    // Release the claim *before* the replacement starts, so its own `writeRunState` is not then
-    // deleted by this process's exit handler. Both are briefly alive; only one may hold the record.
-    clearRunState(process.pid);
-    if (supervised()) return RESTART_EXIT_CODE;
-    spawn(process.execPath, process.argv.slice(1), {
-      detached: true,
-      stdio: 'inherit',
-      env: process.env,
-    }).unref();
-    return 0;
   }
   if (exitCode === 0) process.stdout.write(`${theme.ok('✓')} broadcast ended cleanly\n`);
   return exitCode === 0 ? 0 : 1;

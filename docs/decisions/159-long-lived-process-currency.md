@@ -98,6 +98,10 @@ Ctrl-C therefore stops working across a restart. That is a real regression in th
 the reason a run-state file plus a `--stop` affordance is named as the follow-up rather than
 shrugged at.
 
+**Superseded in part, 2026-10-08 (ADR 548).** §4's restart on a daemon rebuild dropped the Twitch
+ingest on every merge, and ADR 292 made the page converge without it. A stream no longer restarts
+when the daemon is rebuilt; §§1–3 and 5 stand.
+
 ## Observability & Evaluation
 
 **Traces.** No new instrumentation: ffmpeg's `-stats` line every 10 s already carries the truth
