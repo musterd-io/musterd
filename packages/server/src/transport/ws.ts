@@ -63,6 +63,7 @@ import {
 import { styleDriverFor, styleEnvelopeFor } from '../store/style.js';
 import {
   findBootstrapCredential,
+  bootstrapRefusal,
   findBootstrapCredentialRecord,
   getAgentKeyHash,
   getPolicy,
@@ -289,12 +290,17 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
                 target: bootstrapRecord.target,
               },
             });
+            const refusal = bootstrapRefusal(bootstrapRecord, {
+              expired,
+              retiredLegacy:
+                bootstrapRecord.use_kind === 'legacy' && team.bootstrap_cutover_at !== null,
+            });
             send(ws, {
               type: 'refused',
               code: 'forbidden',
-              message: `this bootstrap credential is ${expired ? 'expired' : bootstrapRecord.state}`,
+              message: refusal.message,
               claimable: [],
-              hint: 'ask a team admin to mint a replacement credential',
+              hint: refusal.hint,
             });
             return;
           }
