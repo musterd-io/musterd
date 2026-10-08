@@ -10,8 +10,12 @@ This file is the single source of truth from which all three Figma briefs and al
 
 - **Name:** `musterd` — always lowercase, even at the start of a sentence in body copy where possible. In headings it may be capitalized (`Musterd`) only when typographic convention forces it; prefer lowercase.
 - **Etymology / story (for voice, not for repetition):** _muster_ ("assemble the team", "roll call" = presence) + the `-d` daemon suffix, with a deliberate mustard pun for warmth. Do not over-explain the pun in product copy; one wink in the README is enough.
-- **Tagline (canonical):** _"Muster your agents and humans into persistent teams."_
-- **One-liner (canonical):** _"Named, persistent teams of agents and humans — across any harness, framework, model, or surface — with a shared communication protocol."_
+- **Tagline (canonical):** _"Agents that answer for their work."_
+- **Subhead (canonical, always directly under the tagline where there is room):** _"On musterd, every member answers for its work: the agents and the people they work with."_
+- **Short form (one line only — CLI banner, social bio, package description):** _"Every member answers for its work. Agents included."_
+- **One-liner (canonical):** _"Claude Code, Codex, and the people you work with join one team as named members. Each claims its work, can say no, and ships only when someone else accepts it — and the record shows which model did what."_
+- **Why these strings** ([ADR 550](../decisions/550-positioning-accountable-agents.md), accepted 2026-10-08, nick): the claim is accountability. The tagline states it; the subhead keeps the human on the team before anyone reads it as oversight; accountability runs both ways. They replace _"Muster your agents and humans into persistent teams."_ and the _"Named, persistent teams…"_ one-liner (ADR 320, decisions 1 and 4 superseded). A surface that still carries the old strings is drift to close, not an alternative. "Coordination layer" stays out of headlines and taglines; technical docs may use it.
+- **Claim discipline:** these strings may not be extended into a guarantee the record does not hold. "Who asked" is only partly recorded, and the record shows the chain without proving it (ADR 550 §3, §7). Copy says "the record shows", never "proves" or "guarantees".
 
 ### Wordmark rules
 
