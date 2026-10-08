@@ -97,16 +97,32 @@ export const SyncWedgeSchema = z.object({
 });
 export type SyncWedge = z.infer<typeof SyncWedgeSchema>;
 
+/**
+ * What a wedge sentence quotes from the hub's refusal — the seat, the machine label it is bound to,
+ * and the node id the fix command names — is text a peer wrote, and the sentence reaches a terminal
+ * and an agent's context. Same rule as `sanitizeStopSubject`: plain characters only, bounded, no
+ * control or escape bytes, no line breaks, and nothing that closes the quoting the sentence puts
+ * around it (`"` and a backtick). A label is free text (a machine is "Nick's MacBook Air"), so it
+ * keeps spaces and apostrophes that a seat name does not; a node id is up to 128 characters and is
+ * pasted into a command, so it is cleaned but never cut shorter than the id itself.
+ */
+export function sanitizeWedgeLabel(label: string): string {
+  return label.replace(/[^\p{L}\p{N} ._:@/'()-]/gu, '?').slice(0, 80);
+}
+
 /** One wording for every surface that shows a wedge — the roster, the inbox, `node list`. */
 export function describeSyncWedge(w: SyncWedge, now: number = Date.now()): string {
   const mins = Math.max(0, Math.round((now - w.since) / 60_000));
   const ago = mins < 1 ? 'just now' : mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`;
+  const seat = sanitizeStopSubject(w.seat) ?? 'a seat';
+  const boundTo = sanitizeWedgeLabel(w.bound_to);
+  const nodeId = w.node_id.replace(/[^\p{L}\p{N}._:@/-]/gu, '?').slice(0, 128);
   return (
-    `⚠ this machine's sync is wedged: the hub refuses its push because seat "${w.seat}" is bound ` +
-    `to "${w.bound_to}" (a ${w.kind} event, since ${ago}). Nothing this machine writes reaches the ` +
-    `team until it clears. Fix: from a session on "${w.bound_to}", run ` +
-    `\`musterd node trust ${w.node_id}\` (ADR 358) — or an admin runs ` +
-    `\`musterd node unbind ${w.seat}\` and the next act as ${w.seat} binds it here.`
+    `⚠ this machine's sync is wedged: the hub refuses its push because seat "${seat}" is bound ` +
+    `to "${boundTo}" (a ${w.kind} event, since ${ago}). Nothing this machine writes reaches the ` +
+    `team until it clears. Fix: from a session on "${boundTo}", run ` +
+    `\`musterd node trust ${nodeId}\` (ADR 358) — or an admin runs ` +
+    `\`musterd node unbind ${seat}\` and the next act as ${seat} binds it here.`
   );
 }
 

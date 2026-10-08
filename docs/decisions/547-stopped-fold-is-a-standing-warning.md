@@ -68,6 +68,10 @@ visible and their frequency is known.
 - Follow-up 2026-10-08, lane `01M4EAQ1150XE8AB2CZ6DX2H69`: `team add` now says when the new seat file is
   uncommitted or unpushed, which is the cause of this incident (`seatFileUnpublished` in `roster.ts`).
   CLI-side only; no protocol change.
+- Follow-up 2026-10-08, lane `01M4EHMGGG3BEDX1M55GHE28E5`: `describeSyncWedge` now cleans the seat, machine
+  label and node id it quotes from the hub's refusal the way `sanitizeStopSubject` cleans a stop subject
+  (`sanitizeWedgeLabel`; a label keeps spaces and apostrophes, a node id is cleaned but never cut).
+  Wording unchanged for ordinary values; no schema change.
 
 ## Observability & Evaluation
 
