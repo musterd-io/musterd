@@ -22,7 +22,7 @@ import { verifyAccess } from './oauth.js';
 import type { MemberRow, TeamRow } from './rows.js';
 import { parseRoles, resolveAccountStatus, resolveCapabilities } from './rows.js';
 import { diagnoseSessionLease, hasValidSessionLease } from './session-leases.js';
-import { requireTeam } from './teams.js';
+import { bootstrapRefusal, findBootstrapCredentialRecord, requireTeam } from './teams.js';
 
 export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
@@ -502,9 +502,21 @@ export async function authMember(
   let member: MemberRow;
 
   if (token.startsWith(TOKEN_PREFIXES.agent_key)) {
+    // A bootstrap key only claims a seat. When this one is revoked or expired — the usual reason a
+    // folder holding only a key lands here — say so with the claim refusal's own words and the
+    // exact repair, rather than the same "bootstrap-only" for a key that was never the problem.
+    const record = await findBootstrapCredentialRecord(db, team.id, token);
+    const expired =
+      record !== null && record.expires_at !== null && record.expires_at <= Date.now();
+    if (record && (record.state === 'revoked' || expired)) {
+      const refusal = bootstrapRefusal(record, { expired, retiredLegacy: false });
+      throw new MusterdError('unauthorized', `${refusal.message}. ${refusal.hint}`);
+    }
     throw new MusterdError(
       'unauthorized',
-      'the team agent key is bootstrap-only — claim an agent seat and present its seat credential',
+      'a bootstrap key only claims a seat; routine calls need the seat credential that claim returns. ' +
+        'Run `musterd claim <seat>` in this folder. If that says the key is revoked or expired, a team ' +
+        'admin runs `musterd team bootstrap mint --seat <seat> --install` on this machine, then claim again',
     );
   } else if (token.startsWith(TOKEN_PREFIXES.agent_seat)) {
     member = await authByAgentSeatCredential(

@@ -303,6 +303,48 @@ export async function findBootstrapCredentialRecord(
   );
 }
 
+/**
+ * Why a bootstrap credential was refused, and the one thing that fixes it (lane 01M4E4MP4M). `claim`
+ * over HTTP and over the socket say this; before it they said "ask a team admin to mint a
+ * replacement" with neither the command nor where to run it (alfie, 2026-10-07: found in a wiki page).
+ * A seat credential is replaced by minting straight into the seat's Workspace (`--install`), so the key
+ * is never printed or pasted; a role or host credential has no single folder, so it is shown once.
+ */
+export function bootstrapRefusal(
+  record: Pick<BootstrapCredential, 'state' | 'use_kind' | 'target'>,
+  opts: { expired: boolean; retiredLegacy: boolean },
+): { message: string; hint: string } {
+  if (opts.retiredLegacy) {
+    return {
+      message: 'this Team has retired its legacy bootstrap credential',
+      hint: [
+        'musterd team bootstrap mint --seat <name>',
+        'musterd team bootstrap mint --role <role>',
+        'musterd team bootstrap mint --host <label>',
+      ].join('\n'),
+    };
+  }
+  const target = record.target ?? '<name>';
+  const flag =
+    record.use_kind === 'claim_seat'
+      ? '--seat'
+      : record.use_kind === 'claim_role'
+        ? '--role'
+        : '--host';
+  const command =
+    record.use_kind === 'claim_seat'
+      ? `musterd team bootstrap mint ${flag} ${target} --install`
+      : `musterd team bootstrap mint ${flag} ${target}`;
+  return {
+    message: `this bootstrap credential is ${opts.expired ? 'expired' : record.state}`,
+    hint:
+      `a team admin replaces it: ${command}` +
+      (record.use_kind === 'claim_seat'
+        ? ' (run it on the machine that holds the seat’s folder; --install writes the new key there, unprinted), then `musterd claim`'
+        : ' (shown once — hand it to the harness that needs it)'),
+  };
+}
+
 /** Revoke one scoped bootstrap credential. Legacy team keys remain on their compatibility path. */
 export async function revokeBootstrapCredential(
   db: Driver,

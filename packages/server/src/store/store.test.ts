@@ -611,6 +611,19 @@ withDrivers('store', (o) => {
       }
     });
 
+    it('the bootstrap-only refusal names the cause and the repair, in the claim refusal’s words (lane 01M4E4MP4M)', async () => {
+      const { db, team } = await freshTeam();
+      await addMember(db, team, { name: 'nick', kind: 'human' });
+      const { agent_key } = await rotateAgentKey(db, team.id);
+      const err = await authMember(db, 'dawn', agent_key, 'nick').catch((e) => e as MusterdError);
+      // Not just "bootstrap-only": a folder holding only this key has no seat credential, and the
+      // way out is to claim, then — if claim says revoked — to have an admin mint a new one.
+      // whoami keys on this phrase to tell "not claimed yet" from "rejected" (commands/whoami.ts).
+      expect(err.message).toContain('only claims a seat');
+      expect(err.message).toContain('musterd claim');
+      expect(err.message).toContain('musterd team bootstrap mint --seat');
+    });
+
     it('a human credential is self-identifying (no acting seat needed)', async () => {
       const { db, team } = await freshTeam();
       const human = await addMember(db, team, { name: 'Nick', kind: 'human' });

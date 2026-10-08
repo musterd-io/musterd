@@ -3,7 +3,11 @@ import { openTestDriver, withDrivers } from '../db/testing.js';
 import { createServer, type RunningServer } from '../index.js';
 import { listAudit } from '../store/audit.js';
 import { upsertRole } from '../store/roles.js';
-import { getTeamBySlug, mintBootstrapCredential } from '../store/teams.js';
+import {
+  getTeamBySlug,
+  mintBootstrapCredential,
+  revokeBootstrapCredential,
+} from '../store/teams.js';
 
 withDrivers('claim-http', (_o, kind) => {
   /**
@@ -368,6 +372,29 @@ withDrivers('claim-http', (_o, kind) => {
           )
         )?.first_used_at,
       ).toBeNull();
+    });
+
+    it('a revoked seat credential says what to run, as whom, and what it will do (lane 01M4E4MP4M)', async () => {
+      const team = (await getTeamBySlug(server.store, 'dawn'))!;
+      const scoped = await mintBootstrapCredential(server.store, {
+        teamId: team.id,
+        useKind: 'claim_seat',
+        target: 'Ada',
+      });
+      await revokeBootstrapCredential(server.store, team.id, scoped.credential.id);
+
+      const r = await post('/teams/dawn/claim', {
+        key: scoped.agent_key,
+        target: { seat: 'Ada' },
+        surface: 'cli',
+      });
+
+      expect(r.status).toBe(403);
+      expect(r.json).toMatchObject({ type: 'refused', code: 'forbidden' });
+      expect(r.json.message).toContain('revoked');
+      // The repair, exactly: the command, who may run it, and that it installs the key unprinted.
+      expect(r.json.hint).toContain('musterd team bootstrap mint --seat Ada --install');
+      expect(r.json.hint).toMatch(/team admin/i);
     });
 
     it('accepts a seat-scoped bootstrap credential for its target', async () => {

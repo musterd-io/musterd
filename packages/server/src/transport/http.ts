@@ -446,6 +446,7 @@ import {
   createTeam,
   cutoverLegacyBootstrap,
   findBootstrapCredential,
+  bootstrapRefusal,
   findBootstrapCredentialRecord,
   getTeamBySlug,
   getAgentKeyHash,
@@ -4671,20 +4672,13 @@ export async function handleHttp(
               target: bootstrapRecord.target,
             },
           });
+          const refusal = bootstrapRefusal(bootstrapRecord, { expired, retiredLegacy });
           return sendJson(res, 403, {
             type: 'refused',
             code: 'forbidden',
-            message: retiredLegacy
-              ? 'this Team has retired its legacy bootstrap credential'
-              : `this bootstrap credential is ${expired ? 'expired' : bootstrapRecord.state}`,
+            message: refusal.message,
             claimable: [],
-            hint: retiredLegacy
-              ? [
-                  'musterd team bootstrap mint --seat <name>',
-                  'musterd team bootstrap mint --role <role>',
-                  'musterd team bootstrap mint --host <label>',
-                ].join('\n')
-              : 'ask a team admin to mint a replacement credential',
+            hint: refusal.hint,
           });
         }
         const keyHash = await getAgentKeyHash(ctx.db, team.id);
