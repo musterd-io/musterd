@@ -87,6 +87,12 @@ function normalizeDeclaredWave(wave: number | 'later' | undefined): Wave {
   return wave === 'later' ? 'later' : null;
 }
 
+/** Cheap shape check before the goal schemas run: a Goal signal is keyed `goal`, `goal_outcome` or `goal_retract`. */
+function isGoalSignalMeta(meta: unknown): boolean {
+  if (typeof meta !== 'object' || meta === null) return false;
+  return 'goal' in meta || 'goal_outcome' in meta || 'goal_retract' in meta;
+}
+
 /**
  * Every declared Goal for the team, status + **plan epoch** attached (both derived, never stored).
  *
@@ -105,7 +111,8 @@ export async function listGoals(db: Driver, teamId: string, _teamSlug: string): 
          FROM messages m
          JOIN members mf ON mf.id = m.from_member
         WHERE m.team_id = ? AND m.meta IS NOT NULL
-          AND ((m.act = 'message' AND m.to_kind = 'team') OR m.act IN ('defer','steer'))
+          AND ((m.act = 'message' AND m.to_kind = 'team' AND m.meta LIKE '%"goal%')
+               OR m.act IN ('defer','steer'))
         ORDER BY m.ts ASC, m.id ASC`,
     [teamId],
   );
@@ -156,6 +163,10 @@ export async function listGoals(db: Driver, teamId: string, _teamSlug: string): 
     } catch {
       continue;
     }
+    // Most team messages carry unrelated meta; each failed safeParse/parse below builds a ZodError
+    // (1.4% of app CPU under load). All three shapes are objects keyed `goal`, `goal_outcome` or
+    // `goal_retract` — anything else is not ours, so skip it before any schema runs.
+    if (!isGoalSignalMeta(rawMeta)) continue;
     const asOutcome = GoalOutcomeMetaSchema.safeParse(rawMeta);
     if (asOutcome.success) {
       const o = asOutcome.data.goal_outcome;
