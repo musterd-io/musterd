@@ -123,9 +123,12 @@ export async function styleEnvelopeFor(
 
 /** The humans the only-human rule counts: on the team, not observers (review I4). */
 export async function styleHumans(db: Driver, teamId: string): Promise<MemberRow[]> {
-  return (await listMembers(db, teamId)).filter(
-    (m) => m.kind === 'human' && m.observer !== 1 && m.left_at === null,
-  );
+  return styleHumansOf(await listMembers(db, teamId));
+}
+
+/** {@link styleHumans} over members already loaded — the roster has them from `listPresence`. */
+export function styleHumansOf(members: MemberRow[]): MemberRow[] {
+  return members.filter((m) => m.kind === 'human' && m.observer !== 1 && m.left_at === null);
 }
 
 /**
