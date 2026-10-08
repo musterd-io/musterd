@@ -2,8 +2,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer as createHttpServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { makeEnvelope } from '@musterd/protocol';
+import { makeEnvelope, PROTOCOL_VERSION, type WSServerFrame } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { WebSocket } from 'ws';
 import { resolveConfig } from '../config.js';
 import type { Ctx } from '../context.js';
 import { openTestDriver, withDrivers } from '../db/testing.js';
@@ -32,6 +33,7 @@ withDrivers('push', (_o, kind) => {
   let hubBase: string;
   let joinerBase: string;
   let nickCredential: string;
+  let hubAgentKey: string;
   let nickOnJoinerCredential: string;
   const nickCredentialOnJoiner = () => nickOnJoinerCredential;
   let dir: string;
@@ -170,6 +172,7 @@ withDrivers('push', (_o, kind) => {
       creator: { name: 'nick', kind: 'human' },
     });
     nickCredential = created.json.human_credential;
+    hubAgentKey = created.json.agent_key;
     const onJoiner = await post(joinerBase, '/teams', {
       slug: 'bravo',
       creator: { name: 'nick', kind: 'human' },
@@ -768,6 +771,77 @@ withDrivers('push', (_o, kind) => {
       // Measured 2026-10-08, push-on-write already in: 60 051 ms before the hub's fold kick, 360 ms after.
       expect(ms).toBeLessThan(2_000);
     }, 160_000);
+  });
+
+  describe('end to end: a joiner send reaches a seat connected to the hub (latency)', () => {
+    it("arrives as a live deliver frame, not on the seat's next inbox read", async () => {
+      await post(hubBase, '/teams/bravo/members', { name: 'ada', kind: 'agent' }, nickCredential);
+      const grant = (
+        await post(
+          hubBase,
+          '/teams/bravo/grants',
+          { scope: 'seat', target: 'ada', lifetime: 'standing' },
+          nickCredential,
+        )
+      ).json.token as string;
+      const frames: WSServerFrame[] = [];
+      const ws = new WebSocket(`${hubBase.replace('http', 'ws')}/ws`);
+      ws.on('message', (d) => frames.push(JSON.parse(d.toString()) as WSServerFrame));
+      await new Promise<void>((r) => ws.on('open', () => r()));
+      ws.send(
+        JSON.stringify({
+          type: 'claim',
+          v: PROTOCOL_VERSION,
+          team: 'bravo',
+          key: hubAgentKey,
+          target: { seat: 'ada' },
+          grant,
+          surface: 'cli',
+        }),
+      );
+      const until = async (pred: () => boolean, ms: number) => {
+        const t0 = Date.now();
+        while (!pred() && Date.now() - t0 < ms) await new Promise((r) => setTimeout(r, 25));
+        return pred();
+      };
+      expect(await until(() => frames.some((f) => f.type === 'occupied'), 5_000)).toBe(true);
+
+      await send(joiner, 'seed');
+      await enrollJoiner();
+      await pushTeam(joinerCtx, await joinerTeam());
+      const sent = Date.now();
+      const res = await post(
+        joinerBase,
+        '/teams/bravo/messages',
+        {
+          envelope: makeEnvelope({
+            id: 'lat-live',
+            team: 'bravo',
+            from: 'nick',
+            to: { kind: 'team' as const },
+            act: 'message',
+            body: 'live probe',
+            ts: sent,
+          }),
+        },
+        nickCredentialOnJoiner(),
+      );
+      expect(res.status).toBe(201);
+      const got = await until(
+        () =>
+          frames.some(
+            (f) =>
+              f.type === 'deliver' &&
+              (f as { envelope: { id: string } }).envelope.id === 'lat-live',
+          ),
+        20_000,
+      );
+      const ms = Date.now() - sent;
+      ws.close();
+      expect(got).toBe(true);
+      // Measured 2026-10-08: no frame at all within 20 s before (the fold wrote `messages` only), 317 ms after.
+      expect(ms).toBeLessThan(2_000);
+    }, 60_000);
   });
 
   describe('push on write (latency)', () => {
