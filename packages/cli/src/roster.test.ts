@@ -8,6 +8,7 @@ import {
   seatFileExists,
   seatFilePath,
   seatFileUnpublished,
+  unpublishedSeatLines,
   writeSeatFile,
 } from './roster.js';
 
@@ -122,5 +123,25 @@ describe('seatFileUnpublished — a seat other machines cannot resolve yet (ADR 
     writeSeatFile(home, 'alfie', { kind: 'agent' });
     writeFileSync(join(home, '.gitignore'), '.musterd/seats/\n');
     expect(seatFileUnpublished(home, 'alfie')).toBe('uncommitted');
+  });
+});
+
+describe('unpublishedSeatLines — the one sentence for a seat file that has not reached a remote', () => {
+  it('names the seat, the file and the exact git commands for an uncommitted file', () => {
+    const [warn, how] = unpublishedSeatLines('alfie', '/r', 'uncommitted');
+    expect(warn).toBe(
+      'other machines cannot resolve alfie until .musterd/seats/alfie.toml is committed and pushed',
+    );
+    expect(how).toContain('their sync stops at the first event naming alfie');
+    expect(how).toContain('git -C /r add .musterd/seats/alfie.toml');
+    expect(how).toContain('commit -m "add alfie"');
+    expect(how).toContain('push');
+  });
+
+  it('asks only for a push when the file is already committed', () => {
+    const [warn, how] = unpublishedSeatLines('alfie', '/r', 'unpushed');
+    expect(warn).toContain('until .musterd/seats/alfie.toml is pushed');
+    expect(how).not.toContain(' add ');
+    expect(how).toContain('git -C /r push');
   });
 });

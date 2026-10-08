@@ -109,6 +109,27 @@ export function seatFileUnpublished(home: string, name: string): SeatFilePublica
   }
 }
 
+/**
+ * The two lines every command that creates a seat prints when its seat file has not reached a remote
+ * (`team add`, `musterd agent`): what is wrong, then the commands that fix it. One wording, so the
+ * paths cannot drift apart.
+ */
+export function unpublishedSeatLines(
+  name: string,
+  home: string,
+  state: SeatFilePublication,
+): [warning: string, how: string] {
+  const rel = `.musterd/seats/${name}.toml`;
+  const fix =
+    state === 'uncommitted'
+      ? `git -C ${home} add ${rel} && git -C ${home} commit -m "add ${name}" && git -C ${home} push`
+      : `git -C ${home} push`;
+  return [
+    `other machines cannot resolve ${name} until ${rel} is ${state === 'uncommitted' ? 'committed and pushed' : 'pushed'}`,
+    `their sync stops at the first event naming ${name}. ${fix}`,
+  ];
+}
+
 /** Every seat file under a roster home, parsed, keyed by seat name. */
 export function readSeatFiles(home: string): Record<string, SeatFile> {
   const dir = seatsDir(home);

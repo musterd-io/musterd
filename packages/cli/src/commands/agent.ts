@@ -7,6 +7,7 @@ import { provisionAgentSeat } from '../onboard/agentSeat.js';
 import { harnessAdapters } from '../onboard/harnesses/index.js';
 import { theme } from '../render/theme.js';
 import { success, sym } from '../render/ui.js';
+import { seatFilePath, unpublishedSeatLines } from '../roster.js';
 import { resolve, resolveRead } from './helpers.js';
 
 /**
@@ -83,6 +84,7 @@ export async function agentCommand(
 
   // Member declaration, credential, grant, binding, permissions, spec, desired set and wiring are one
   // shared sequence (`provisionAgentSeat`), so this command and the launcher cannot drift.
+  const rosterHome = loadConfig().rosterHome[team];
   const r = await provisionAgentSeat({
     name,
     team,
@@ -95,7 +97,7 @@ export async function agentCommand(
     keepDesired: flagStr(parsed.flags, 'harness') === undefined,
     keepToolkit: flagStr(parsed.flags, 'profile') === undefined,
     sourceDir: process.cwd(),
-    rosterHome: loadConfig().rosterHome[team],
+    rosterHome,
     role,
     hue,
     model,
@@ -117,6 +119,14 @@ export async function agentCommand(
         harnesses,
         mcpRegistered: r.wiringError === null,
         granted: r.granted,
+        ...(rosterHome && r.seatFileUnpublished
+          ? {
+              seat_file_unpublished: {
+                path: seatFilePath(rosterHome, name),
+                state: r.seatFileUnpublished,
+              },
+            }
+          : {}),
       }) + '\n',
     );
     return 0;
@@ -132,6 +142,13 @@ export async function agentCommand(
         ? 'folder'
         : 'this folder';
   process.stdout.write(`${theme.ok(sym.ok)} workspace ${ws.dir} ${theme.meta(`(${where})`)}\n`);
+  // ADR 547: the seat replicates over sync but its roster entry travels by git.
+  if (rosterHome && r.seatFileUnpublished) {
+    const [warning, how] = unpublishedSeatLines(name, rosterHome, r.seatFileUnpublished);
+    process.stdout.write(
+      `${theme.warn(sym.warn)} ${theme.warn(warning)}\n${theme.meta(`  ${how}`)}\n`,
+    );
+  }
 
   if (r.wiringError === null) {
     process.stdout.write(

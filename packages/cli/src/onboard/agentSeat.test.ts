@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -89,5 +90,26 @@ describe('provisionAgentSeat (ADR 491)', () => {
     });
     await provisionAgentSeat(j);
     expect(readSeatFiles(home)['ada']).toMatchObject({ kind: 'agent', role: 'engineer' });
+  });
+
+  describe('a seat file other machines cannot see yet (ADR 547 follow-up)', () => {
+    const gitRepo = (): string => {
+      const home = join(dir, 'roster');
+      execFileSync('git', ['init', '--quiet', '-b', 'main', home]);
+      return home;
+    };
+
+    it('reports an agent seat file git has never seen, so `musterd agent` can say so', async () => {
+      const r = await provisionAgentSeat(input({ rosterHome: gitRepo() }));
+      expect(r.seatFileUnpublished).toBe('uncommitted');
+    });
+
+    it('is null on a db-only team and on a roster that is not a git repo', async () => {
+      expect((await provisionAgentSeat(input())).seatFileUnpublished).toBeNull();
+      const plain = join(dir, 'plain-roster');
+      expect(
+        (await provisionAgentSeat(input({ rosterHome: plain }))).seatFileUnpublished,
+      ).toBeNull();
+    });
   });
 });
