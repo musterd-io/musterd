@@ -202,7 +202,7 @@ export async function launchSeat(
     const by = loadConfig().identities[seat.team]?.name ?? 'a person';
     const stop = async (): Promise<void> => void (await (deps.stopWake ?? stopWake)(wake, by));
     if (choice === 'watch') {
-      const ended = await (deps.watch ?? watchNotYet)(wake, seat);
+      const ended = await (deps.watch ?? defaultWatch)(wake, seat);
       if (ended === 'leave') return 0;
       // 'take-over' stops the wake; 'finished' / 'ended' mean it is already gone.
       if (ended === 'take-over') await stop();
@@ -322,9 +322,9 @@ function refuseWake(seat: Seat, live: Live, now: number): never {
   );
 }
 
-/** Until the watch view lands (increment 4), `w` says so instead of doing nothing. */
-async function watchNotYet(): Promise<WatchEnd> {
-  throw new CliError('watching a wake is not available in this build yet — use ⏎ to take over', 1);
+/** The watch view, loaded on demand so the launcher's paint path never pays for it (ADR 546). */
+async function defaultWatch(wake: LocalWake, seat: Seat): Promise<WatchEnd> {
+  return (await import('./watch/index.js')).watchWake(wake, seat);
 }
 
 /**
