@@ -70,6 +70,20 @@ describe('watchEvents (ADR 546)', () => {
     expect(ev.at(-1)!.ts).toBeNull();
   });
 
+  it('drops terminal escape sequences from words and tool arguments', () => {
+    const evil = rec({
+      type: 'assistant',
+      message: {
+        content: [
+          { type: 'text', text: 'hi \u001b[2J\u001b]0;pwned\u0007there\u009b31m' },
+          { type: 'tool_use', name: 'Bash', input: { command: 'ls\u001b[31m /tmp' } },
+        ],
+      },
+    });
+    // eslint-disable-next-line no-control-regex
+    for (const e of watchEvents([evil])) expect(e.line).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
+  });
+
   it('a half-written last line is skipped, not fatal', () => {
     expect(() => watchEvents(['{"type":"assistant","mess'])).not.toThrow();
     expect(watchEvents(['{"type":"assistant","mess'])).toEqual([]);

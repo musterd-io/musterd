@@ -25,7 +25,18 @@ function parse(line: string): Record_ | null {
   }
 }
 
-const oneLine = (s: string): string => s.replace(/\s+/g, ' ').trim();
+/**
+ * Whitespace collapsed to single spaces, and every other control character (C0, DEL, C1 — ESC
+ * included) dropped: a wake's words and tool arguments are untrusted text headed for a terminal,
+ * and an escape sequence in them could rewrite the screen or set the title.
+ */
+/* eslint-disable no-control-regex */
+const oneLine = (s: string): string =>
+  s
+    .replace(/\s+/g, ' ')
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
+    .trim();
+/* eslint-enable no-control-regex */
 
 /**
  * What a wake said and did, read from its Claude Code transcript lines: its words and its tool
