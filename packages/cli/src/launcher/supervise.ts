@@ -52,7 +52,7 @@ export function supervise(plan: LaunchPlan, deps: SuperviseDeps = {}): Promise<S
     try {
       child = spawnFn(plan.bin, plan.args, {
         cwd: plan.cwd,
-        env: deps.env ?? process.env,
+        env: plan.env ? { ...(deps.env ?? process.env), ...plan.env } : (deps.env ?? process.env),
         stdio: 'inherit',
       });
     } catch (err) {

@@ -12,6 +12,8 @@ export interface LaunchPlan {
   cwd: string;
   /** The harness id, or `shell` for a human seat. */
   harness: string;
+  /** Extra environment for the harness (ADR 546: `MUSTERD_TOOK_OVER`), layered over the launcher's. */
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface PlanInput {
