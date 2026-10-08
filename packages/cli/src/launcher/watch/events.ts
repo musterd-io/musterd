@@ -1,10 +1,17 @@
 import { scrubCredentials } from '@musterd/protocol';
 
-/** One thing a wake did, as `watch` shows it (ADR 546). */
+declare const madeByConstructor: unique symbol;
+
+/**
+ * One thing a wake did, as `watch` shows it (ADR 546). Branded: the only way to hold one is
+ * {@link textEvent} / {@link toolEvent}, so a reader that builds an object literal does not
+ * typecheck — what watch may show cannot be skipped by writing the shape by hand.
+ */
 export interface WatchEvent {
-  ts: number | null;
-  kind: 'text' | 'tool';
-  line: string;
+  readonly [madeByConstructor]: true;
+  readonly ts: number | null;
+  readonly kind: 'text' | 'tool';
+  readonly line: string;
 }
 
 /**
@@ -28,14 +35,16 @@ export const oneLine = (s: string): string =>
  */
 export function textEvent(ts: number | null, words: string): WatchEvent | null {
   const text = oneLine(words);
-  return text ? { ts, kind: 'text', line: `“${scrubCredentials(text).text}”` } : null;
+  return text
+    ? ({ ts, kind: 'text', line: `“${scrubCredentials(text).text}”` } as WatchEvent)
+    : null;
 }
 
 /** A tool call: its name and the one argument that says what it is about (`arg` may be empty). */
 export function toolEvent(ts: number | null, name: string, arg: string): WatchEvent {
   const shown = oneLine(arg);
   const line = `▸ ${oneLine(name)}${shown ? `  ${shown}` : ''}`;
-  return { ts, kind: 'tool', line: scrubCredentials(line).text };
+  return { ts, kind: 'tool', line: scrubCredentials(line).text } as WatchEvent;
 }
 
 const clock = (ts: number): string => {

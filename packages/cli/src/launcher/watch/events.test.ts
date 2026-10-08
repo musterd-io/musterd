@@ -29,15 +29,23 @@ describe('textEvent / toolEvent — what watch may show, once (ADR 546)', () => 
   });
 });
 
+describe('WatchEvent is branded (ADR 546)', () => {
+  it('an object literal is not a WatchEvent — only the constructors make one', () => {
+    // @ts-expect-error a hand-built event skips the scrub, so it must not typecheck
+    const bad: import('./events.js').WatchEvent = { ts: null, kind: 'text', line: 'raw' };
+    expect(bad.line).toBe('raw');
+  });
+});
+
 describe('formatWatchLine (ADR 546)', () => {
   it('is one row, trimmed to the width', () => {
-    const row = formatWatchLine({ ts: null, kind: 'text', line: 'x'.repeat(200) }, 40);
+    const row = formatWatchLine(toolEvent(null, 'Bash', 'x'.repeat(200)), 40);
     expect([...row].length).toBeLessThanOrEqual(40);
     expect(row.endsWith('…')).toBe(true);
   });
   it('prefixes the time when it is known, and leaves a short line alone', () => {
     const ts = new Date(2026, 9, 7, 9, 5).getTime();
-    expect(formatWatchLine({ ts, kind: 'tool', line: '▸ Bash  ls' }, 80)).toBe('09:05  ▸ Bash  ls');
-    expect(formatWatchLine({ ts: null, kind: 'tool', line: '▸ Bash  ls' }, 80)).toBe('▸ Bash  ls');
+    expect(formatWatchLine(toolEvent(ts, 'Bash', 'ls'), 80)).toBe('09:05  ▸ Bash  ls');
+    expect(formatWatchLine(toolEvent(null, 'Bash', 'ls'), 80)).toBe('▸ Bash  ls');
   });
 });
