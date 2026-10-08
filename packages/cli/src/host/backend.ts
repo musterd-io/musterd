@@ -49,6 +49,9 @@ export interface WakeCompletion {
   /** ADR 436 clause 4: the session capture(s) this run made or resumed, which the LOOP stamps
    *  ended at settle. Host-local — stripped before the supplementary report. */
   captures?: CaptureClaim[];
+  /** ADR 546: the run ended because a person took the seat over (a yield marker named its lease).
+   *  Rides the supplementary report; never changes the primary outcome. */
+  yielded?: boolean;
 }
 
 /** A backend's claim on the binding's captured session (ADR 436 clause 4): the ids this run made

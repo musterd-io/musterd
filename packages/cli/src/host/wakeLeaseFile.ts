@@ -1,6 +1,12 @@
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BINDING_DIR, WAKE_LEASE_FILE, type WakeLeaseFile } from '@musterd/protocol';
+import {
+  BINDING_DIR,
+  WAKE_LEASE_FILE,
+  WAKE_YIELD_FILE,
+  WakeYieldFileSchema,
+  type WakeLeaseFile,
+} from '@musterd/protocol';
 
 /**
  * The actuator's half of the wake-lease file channel (ADR 354): written beside `binding.json` right
@@ -37,5 +43,21 @@ export function clearWakeLeaseFile(workspace: string, leaseId: string): void {
     rmSync(path, { force: true });
   } catch {
     /* already gone, or unreadable — nothing to clear */
+  }
+}
+
+/**
+ * Remove the yield marker if it names `leaseId` (ADR 546). True ⇒ this run was taken over. A marker
+ * for another lease is left for that lease's run; a missing or unreadable one is no yield.
+ */
+export function takeYieldFile(workspace: string, leaseId: string): boolean {
+  const path = join(workspace, BINDING_DIR, WAKE_YIELD_FILE);
+  try {
+    const parsed = WakeYieldFileSchema.safeParse(JSON.parse(readFileSync(path, 'utf8')));
+    if (!parsed.success || parsed.data.lease_id !== leaseId) return false;
+    rmSync(path, { force: true });
+    return true;
+  } catch {
+    return false;
   }
 }

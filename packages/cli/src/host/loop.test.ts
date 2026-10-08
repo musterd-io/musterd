@@ -1023,6 +1023,29 @@ describe('the supplementary wake-cost report (inc 5)', () => {
     ]);
   });
 
+  it('a taken-over run posts one supplement that says yielded, with no cost or duration (ADR 546)', async () => {
+    const { client, calls } = fakeClient([order()]);
+    const backend: ActuatorBackend = {
+      harness: 'claude-code',
+      wake: async () => ({
+        outcome: { occupied: true, session: 'fresh' },
+        settled: Promise.resolve({ yielded: true }),
+      }),
+    };
+    const result = await pollHostOnce(
+      deps({
+        backends: new Map([['claude-code', backend]]),
+        loadRegistry: () => ({ entries: [entryOf()] }),
+        clientFor: () => client,
+      }),
+    );
+    await Promise.all(result.settled);
+    expect(calls.reports).toEqual([
+      { lease_id: 'L1', occupied: true, session: 'fresh' },
+      { lease_id: 'L1', occupied: true, yielded: true },
+    ]);
+  });
+
   it('no supplement when the primary already carried cost (fast-fail merge) or none exists', async () => {
     const { client, calls } = fakeClient([order(), order({ lease_id: 'L2', act_id: 'A2' })]);
     let call = 0;

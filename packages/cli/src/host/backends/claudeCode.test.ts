@@ -1100,6 +1100,59 @@ describe('a wake that cannot run says WHY (finding 18 fix 3)', () => {
   });
 });
 
+describe('claudeCodeBackend.wake — the lease file and the yield marker (ADR 546)', () => {
+  it('writes the lease file with the session id after spawn, and clears it when the run settles', async () => {
+    const child = new FakeChild();
+    child.pid = 4242;
+    const writes: unknown[] = [];
+    const clears: string[] = [];
+    const { backend } = harness(child, {
+      writeWakeLease: (_ws, lease) => writes.push(lease),
+      clearWakeLease: (_ws, id) => clears.push(id),
+      takeYield: () => false,
+    });
+    const actuation = await backend.wake(
+      spec(),
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
+    );
+    expect(writes).toEqual([
+      expect.objectContaining({
+        lease_id: 'L1',
+        provenance: 'wake',
+        harness: 'claude-code',
+        spawner_pid: 4242,
+        session_id: '00000000-0000-4000-8000-000000000000',
+      }),
+    ]);
+    expect(clears).toEqual([]);
+    child.exit(0);
+    await actuation.settled;
+    expect(clears).toEqual(['L1']);
+  });
+
+  it('a run that settles while a yield marker names its lease completes as yielded', async () => {
+    const child = new FakeChild();
+    const { backend } = harness(child, { takeYield: (_ws, id) => id === 'L1' });
+    const actuation = await backend.wake(
+      spec(),
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
+    );
+    child.exit(0);
+    expect((await actuation.settled)?.yielded).toBe(true);
+  });
+
+  it('a run with no yield marker completes without the field', async () => {
+    const child = new FakeChild();
+    const { backend } = harness(child, { takeYield: () => false });
+    const actuation = await backend.wake(
+      spec(),
+      ctx(async () => ({ occupied: true, provenance: 'wake', lease_matched: true })),
+    );
+    child.exit(0);
+    expect(await actuation.settled).not.toHaveProperty('yielded');
+  });
+});
+
 describe('WakeCompletion (inc 5): settled resolves the run summary; fast-fail merges', () => {
   it('settled resolves cost/duration parsed from the run summary after exit', async () => {
     const child = new FakeChild();

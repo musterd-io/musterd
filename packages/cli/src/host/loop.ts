@@ -601,7 +601,12 @@ export async function pollHostOnce(deps: HostPollDeps): Promise<HostPollResult> 
             );
           }
           if (!completion) return;
-          if (completion.cost_usd === undefined && completion.duration_ms === undefined) return;
+          if (
+            completion.cost_usd === undefined &&
+            completion.duration_ms === undefined &&
+            completion.yielded !== true
+          )
+            return;
           if (
             actuation.outcome.cost_usd !== undefined ||
             actuation.outcome.duration_ms !== undefined
