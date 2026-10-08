@@ -17,7 +17,7 @@ import {
   type WakeLeaseFile,
 } from '@musterd/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { clearWakeLeaseFile, writeWakeLeaseFile } from './wakeLeaseFile.js';
+import { clearWakeLeaseFile, takeYieldFile, writeWakeLeaseFile } from './wakeLeaseFile.js';
 
 /**
  * The actuator's half of the wake-lease channel (ADR 354), against a real tmpdir.
@@ -105,5 +105,25 @@ describe('clearWakeLeaseFile — removes only the lease it was asked about', () 
     writeFileSync(path(), '{not json');
     expect(() => clearWakeLeaseFile(ws, 'A')).not.toThrow();
     expect(existsSync(path())).toBe(true);
+  });
+});
+
+describe('takeYieldFile (ADR 546)', () => {
+  const yieldPath = () => join(ws, BINDING_DIR, 'wake-yield.json');
+
+  it('takes a marker for this lease and leaves one for another lease alone', () => {
+    mkdirSync(join(ws, BINDING_DIR), { recursive: true });
+    writeFileSync(yieldPath(), JSON.stringify({ lease_id: 'L2', by: 'nick', at: 1 }));
+    expect(takeYieldFile(ws, 'L1')).toBe(false);
+    expect(existsSync(yieldPath())).toBe(true);
+    expect(takeYieldFile(ws, 'L2')).toBe(true);
+    expect(existsSync(yieldPath())).toBe(false);
+    expect(takeYieldFile(ws, 'L2')).toBe(false); // gone is not a yield
+  });
+
+  it('an unreadable marker is no yield', () => {
+    mkdirSync(join(ws, BINDING_DIR), { recursive: true });
+    writeFileSync(yieldPath(), '{not json');
+    expect(takeYieldFile(ws, 'L1')).toBe(false);
   });
 });

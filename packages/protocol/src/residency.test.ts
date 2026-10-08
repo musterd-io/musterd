@@ -414,3 +414,11 @@ describe('SessionAttestationBodySchema — the ladder rung on a goodbye (ADR 164
     expect(parsed).not.toHaveProperty('age_ms');
   });
 });
+
+describe('WakeReportBodySchema yielded (ADR 546)', () => {
+  it('a wake report may say the run yielded to a person', () => {
+    expect(
+      WakeReportBodySchema.parse({ lease_id: 'L1', occupied: true, yielded: true }).yielded,
+    ).toBe(true);
+  });
+});

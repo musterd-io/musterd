@@ -685,6 +685,23 @@ withDrivers('residency-http', (_o, kind) => {
       return leases.json.orders[0].lease_id as string;
     }
 
+    // ADR 546: a person taking a wake over ends the run; the host says so on the supplement, which
+    // carries no cost to price, and must not read as a duplicate primary.
+    it('a yielded-only supplementary report records residency.wake_cost with yielded', async () => {
+      const leaseId = await reportedLease();
+      const r = await post(
+        '/teams/dawn/residency/wake-report',
+        { lease_id: leaseId, occupied: true, yielded: true },
+        agentKey,
+      );
+      expect(r.status).toBe(200);
+      expect(r.json.status).toBe('cost_recorded');
+      expect(JSON.parse((await audits('residency.wake_cost'))[0]!.detail as string)).toMatchObject({
+        lease_id: leaseId,
+        yielded: true,
+      });
+    });
+
     // ADR 210's Eval splits the eligible cohort by exact-match result, so the result has to survive
     // the wire onto BOTH audit rows the Eval reads. Before this it existed only in a host log line.
     it('carries the exact-match result onto residency.woke and residency.wake_cost', async () => {

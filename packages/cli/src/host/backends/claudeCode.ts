@@ -7,6 +7,7 @@ import {
   matchBinding,
   type ContinuityRegistry,
   type WakeExactMatchResult,
+  type WakeLeaseFile,
 } from '@musterd/protocol';
 import { fmtBytes } from '../../args.js';
 import { invalidateClaudeBinCache, resolveClaudeBin } from '../../claudeBin.js';
@@ -25,6 +26,7 @@ import type {
   WakeSpec,
 } from '../backend.js';
 import { ensurePinnedMusterd, expectedProvenance, wakeEnv } from '../pinnedBin.js';
+import { clearWakeLeaseFile, takeYieldFile, writeWakeLeaseFile } from '../wakeLeaseFile.js';
 
 /**
  * Backend #1: Claude Code, fresh-first with the increment-4 resume upgrade (ADR 131 §5). The
@@ -146,6 +148,11 @@ export interface ClaudeCodeDeps {
   /** Injectable lookup of THIS spawn's transcript by its minted/resumed session id (default:
    *  {@link findClaudeTranscript}) — lane 01M3ABD9DM; tests never touch $HOME. */
   findSpawnTranscript?: (sessionId: string) => { bytes: number; mtimeMs: number } | undefined;
+  /** Injectable lease-file write/clear (defaults: the real files) — ADR 546; tests never touch disk. */
+  writeWakeLease?: (workspace: string, lease: WakeLeaseFile) => void;
+  clearWakeLease?: (workspace: string, leaseId: string) => void;
+  /** Injectable yield-marker take (default: {@link takeYieldFile}) — ADR 546. */
+  takeYield?: (workspace: string, leaseId: string) => boolean;
 }
 
 /** Claude Code writes `~/.claude/projects/<workspace slug>/<session id>.jsonl`. The slug is lossy,
@@ -425,6 +432,19 @@ function runAttempt(
   } catch (err) {
     return { spawnFailure: `spawn failed: ${(err as Error).message}`.slice(0, 200) };
   }
+  // ADR 546: the same lease file Codex writes (ADR 354), now for Claude Code too and carrying the
+  // conversation id, so a person running `musterd <seat>` can find this wake and take it over.
+  if (child.pid !== undefined) {
+    (deps.writeWakeLease ?? writeWakeLeaseFile)(spec.workspace, {
+      lease_id: spec.order.lease_id,
+      provenance: 'wake',
+      harness: 'claude-code',
+      spawner_pid: child.pid,
+      started_at: spawnedAt,
+      expires_at: spawnedAt + opts.timeoutMs,
+      session_id: opts.sessionId,
+    });
+  }
 
   let stdout = '';
   child.stdout?.on('data', (d: Buffer) => {
@@ -457,6 +477,11 @@ function runAttempt(
 
   const settled: Promise<WakeCompletion | undefined> = exited.then((code) => {
     clearTimeout(watchdog);
+    // The lease file dies with the run, and a yield marker naming this lease is consumed here — the
+    // run was taken over (ADR 546). A marker for another lease is left alone.
+    if (child.pid !== undefined)
+      (deps.clearWakeLease ?? clearWakeLeaseFile)(spec.workspace, spec.order.lease_id);
+    const yielded = (deps.takeYield ?? takeYieldFile)(spec.workspace, spec.order.lease_id);
     const summary = parseRunSummary(stdout);
     const cost = summary?.cost_usd !== undefined ? ` cost=$${summary.cost_usd.toFixed(4)}` : '';
     ctx.log(
@@ -477,6 +502,7 @@ function runAttempt(
       // ADR 436 clause 4: the SessionEnd hook stamps a clean exit; the loop's stamp covers the exits
       // it never sees — a watchdog kill, a crash — for the session this attempt ran.
       captures: [{ harness: 'claude-code', ids: [opts.sessionId] }],
+      ...(yielded ? { yielded: true } : {}),
     };
   });
 
@@ -723,6 +749,8 @@ export function claudeCodeBackend(deps: ClaudeCodeDeps = {}): ActuatorBackend {
               ? { duration_ms: durations.reduce((a, k) => a + k.duration_ms!, 0) }
               : {}),
             ...(captures.length > 0 ? { captures } : {}),
+            // ADR 546: any attempt of this lease taken over means the lease was.
+            ...(known.some((k) => k.yielded) ? { yielded: true } : {}),
           };
         });
       // Per-order knobs (increment 5): tool policy + turn cap ride the argv; the transcript bound

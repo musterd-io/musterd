@@ -41,5 +41,20 @@ export const WakeLeaseFileSchema = z.object({
   started_at: z.number().int().nonnegative(),
   /** Past this the file is dead even if nothing cleared it. */
   expires_at: z.number().int().nonnegative(),
+  /** The conversation id the host gave the harness (`--session-id` / `--resume`), so a person can
+   *  take the wake over in that conversation (ADR 546). Local only — never sent to the daemon.
+   *  Absent from older hosts: take over then falls back to the plain live-seat question. */
+  session_id: z.string().min(1).max(128).optional(),
 });
 export type WakeLeaseFile = z.infer<typeof WakeLeaseFileSchema>;
+
+/** The marker a launcher writes to ask the wake holding `lease_id` to stop (ADR 546). `musterd gate`
+ *  denies that wake's next tool call while it exists; the host removes it when the run settles. */
+export const WAKE_YIELD_FILE = 'wake-yield.json';
+export const WakeYieldFileSchema = z.object({
+  lease_id: z.string().min(1).max(64),
+  /** The person taking over, for the deny line and the audit. */
+  by: z.string().min(1).max(64),
+  at: z.number().int().nonnegative(),
+});
+export type WakeYieldFile = z.infer<typeof WakeYieldFileSchema>;

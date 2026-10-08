@@ -748,6 +748,9 @@ export const WakeReportBodySchema = z.object({
    *  `residency.wake_deferred`, and consumes NO attempt/cooldown/hourly budget: a working human
    *  must never exhaust the act. `occupied` is false on a deferral. */
   deferred: z.boolean().optional(),
+  /** ADR 546: the run ended because a person took the seat over (the yield marker named this
+   *  lease). Rides the supplementary report; never changes the primary outcome. */
+  yielded: z.boolean().optional(),
   /** Attested spend for the wake run, when the backend surfaces it. The primary report rarely has
    *  it (verification concludes long before the run exits, where cost is printed) — a woken run's
    *  cost usually arrives on a SUPPLEMENTARY report for the already-settled lease, which the

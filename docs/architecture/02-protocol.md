@@ -221,6 +221,14 @@ inbox wakes are not edges. `WakeProgressBodySchema` is a strict `{ lease_id }` b
 `POST /teams/:slug/residency/wake-progress` — presence of the POST means spawned; it does not
 settle the lease (ADR 262). Extra keys are rejected; this is not `wake-report`.
 
+The wake-lease file (`.musterd/wake-lease.json`, ADR 354) now carries an optional `session_id` —
+the conversation id the host gave the harness — and Claude Code wakes write it as Codex wakes
+already did (ADR 546). It never leaves the machine. `WAKE_YIELD_FILE` (`wake-yield.json`,
+`WakeYieldFileSchema` `{ lease_id, by, at }`) is the marker a launcher writes to ask the wake
+holding `lease_id` to stop. `WakeReportBodySchema` gains optional `yielded`: the supplementary
+report for a run a person took over, recorded as a `residency.wake_cost` row with `yielded: true`.
+It never changes the primary outcome, so a take-over does not count as a failed wake.
+
 ## Durable review promises (ADR 490, SPEC A.14)
 
 `review-promise.ts` owns the shared reference and projection schemas. `meta.review` is a strict

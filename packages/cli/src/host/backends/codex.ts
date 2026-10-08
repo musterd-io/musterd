@@ -12,7 +12,7 @@ import type {
   WakeSpec,
 } from '../backend.js';
 import { ensurePinnedMusterd, wakeEnv } from '../pinnedBin.js';
-import { clearWakeLeaseFile, writeWakeLeaseFile } from '../wakeLeaseFile.js';
+import { clearWakeLeaseFile, takeYieldFile, writeWakeLeaseFile } from '../wakeLeaseFile.js';
 
 const KILL_GRACE_MS = 10_000;
 const RESUME_VERIFY_WINDOW_MS = 30_000;
@@ -168,6 +168,8 @@ export interface CodexDeps {
    *  tests assert the contract without touching a filesystem. */
   writeWakeLease?: (workspace: string, lease: WakeLeaseFile) => void;
   clearWakeLease?: (workspace: string, leaseId: string) => void;
+  /** Injectable yield-marker take (default: {@link takeYieldFile}) — ADR 546. */
+  takeYield?: (workspace: string, leaseId: string) => boolean;
   killGraceMs?: number;
   resumeVerifyWindowMs?: number;
   /** Injectable pinned-shim write; wake PATH must resolve this actuator's CLI before Homebrew. */
@@ -276,6 +278,7 @@ async function attempt(
     // for the next occupant of this workspace to find (ADR 354).
     if (child.pid !== undefined)
       (deps.clearWakeLease ?? clearWakeLeaseFile)(spec.workspace, spec.order.lease_id);
+    const yielded = (deps.takeYield ?? takeYieldFile)(spec.workspace, spec.order.lease_id);
     const duration_ms = Date.now() - startedAt;
     // The same settle line the claude backend writes, so host.log can be measured the same way
     // across harnesses — the absence of one is how this backend's hole stayed invisible.
@@ -291,6 +294,7 @@ async function attempt(
       unpriced_reason: 'harness_prints_no_price',
       // ADR 436 clause 4: the capture this run made or resumed — the loop stamps it ended.
       captures: [{ harness: 'codex', ids: [threadId, expectedId] }],
+      ...(yielded ? { yielded: true } : {}),
     };
   });
   const verified = await Promise.race([

@@ -4426,8 +4426,13 @@ export async function handleHttp(
           // but harness-attested cost/duration only exist at run exit — a second report carrying
           // them lands as `residency.wake_cost` (outside every rate/attempt derivation; the wake
           // metrics dedupe by lease_id). A cost-less duplicate is still a conflict — the mutual-
-          // exclusion guard against a double-reporting host stays intact.
-          if (body.cost_usd !== undefined || body.duration_ms !== undefined) {
+          // exclusion guard against a double-reporting host stays intact. A `yielded` report (ADR 546:
+          // a person took the seat over) is the same kind of supplement, with nothing to price.
+          if (
+            body.cost_usd !== undefined ||
+            body.duration_ms !== undefined ||
+            body.yielded === true
+          ) {
             await appendAudit(ctx.db, team.id, {
               actor: null,
               action: 'residency.wake_cost',
@@ -4439,6 +4444,7 @@ export async function handleHttp(
                 ...(settled.edge ? { edge: settled.edge } : {}),
                 ...(body.cost_usd !== undefined ? { cost_usd: body.cost_usd } : {}),
                 ...(body.duration_ms !== undefined ? { duration_ms: body.duration_ms } : {}),
+                ...(body.yielded ? { yielded: true } : {}),
                 // ADR 364: tokens and the reason there is no price — recorded as the harness said
                 // them; `harness_cost_usd` is its claim and never enters the totals.
                 ...(body.usage ? { usage: body.usage } : {}),
