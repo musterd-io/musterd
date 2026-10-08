@@ -239,6 +239,151 @@ describe('launchByName (ADR 491 Decision 2)', () => {
     });
   });
 
+  describe('a live local wake (ADR 546)', () => {
+    const woken = async () =>
+      [
+        {
+          id: 'm',
+          team: 'revive',
+          name: 'stanley',
+          kind: 'agent',
+          created_at: 1,
+          presence: 'online',
+          roles: [],
+          role: '',
+          lifecycle: 'forever',
+          presences: [
+            {
+              surface: 'claude-code',
+              status: 'online',
+              last_seen_at: 1,
+              attached_at: 1,
+              provenance: 'wake',
+              wake_for: {
+                edge: 'dispatch_continuation',
+                lane_id: '01M46YWG8YHEV2SKW9F1N0W8FG',
+                act_id: null,
+                act: null,
+                from: null,
+              },
+            },
+          ],
+        },
+      ] as never;
+    // Built per call: `dir` is made in beforeEach, after this describe body runs.
+    const cat = (): Catalog =>
+      catalog(seat('revive/agents/stanley', { server: 'http://127.0.0.1:4849', kind: 'agent' }))();
+    const found = (over: object = {}) =>
+      vi.fn(() => ({
+        lease_id: 'L1',
+        pid: 77,
+        session_id: 'S-1',
+        harness: 'claude-code',
+        started_at: 1,
+        workspace: dir,
+        ...over,
+      }));
+    function setup(over: Partial<LaunchDeps> = {}) {
+      const planned: Array<{ session: unknown; mode: string; harness: unknown }> = [];
+      const stop = vi.fn(async () => 'yielded' as const);
+      const made = deps({
+        roster: woken,
+        catalog: cat,
+        localWake: found() as never,
+        stopWake: stop,
+        plan: (async (i: { session: unknown; mode: string; harness: unknown }) => {
+          planned.push({ session: i.session, mode: i.mode, harness: i.harness });
+          return { bin: 'claude', args: ['--resume'], cwd: dir, harness: 'claude-code' };
+        }) as never,
+        mirror: async () => ({ added: [], unchanged: [], skipped: [] }) as never,
+        ...over,
+      });
+      return { ...made, planned, stop };
+    }
+
+    it('⏎ stops the wake and resumes ITS conversation, telling the session why', async () => {
+      const { d, supervise, planned, stop } = setup({
+        isTTY: true,
+        choose: async () => 'take-over',
+      });
+      expect(await launchByName('stanley', parseArgs([]), d)).toBe(0);
+      expect(stop).toHaveBeenCalledWith(
+        expect.objectContaining({ lease_id: 'L1', pid: 77 }),
+        expect.any(String),
+      );
+      expect(planned).toEqual([
+        { session: { harness: 'claude-code', id: 'S-1' }, mode: 'resume', harness: 'claude-code' },
+      ]);
+      const plan = (supervise.mock.calls[0] as unknown as [{ env?: NodeJS.ProcessEnv }])[0];
+      expect(plan.env).toMatchObject({ MUSTERD_TOOK_OVER: 'to carry on with lane 01M46YWG8Y' });
+    });
+
+    it('esc stops nothing and launches nothing', async () => {
+      const { d, supervise, stop } = setup({ isTTY: true, choose: async () => 'cancel' });
+      expect(await launchByName('stanley', parseArgs([]), d)).toBe(0);
+      expect(stop).not.toHaveBeenCalled();
+      expect(supervise).not.toHaveBeenCalled();
+    });
+
+    it('--take-over and --force take over without a TTY', async () => {
+      for (const flag of ['--take-over', '--force']) {
+        const { d, supervise, stop } = setup({ isTTY: false });
+        expect(await launchByName('stanley', parseArgs([flag]), d)).toBe(0);
+        expect(stop).toHaveBeenCalledTimes(1);
+        expect(supervise).toHaveBeenCalledTimes(1);
+      }
+    });
+
+    it('with no TTY and no flag, the refusal names --take-over and --watch', async () => {
+      const { d, stop } = setup({ isTTY: false });
+      await expect(launchByName('stanley', parseArgs([]), d)).rejects.toMatchObject({
+        exitCode: 1,
+        message: expect.stringMatching(/--take-over .*--watch/),
+      });
+      expect(stop).not.toHaveBeenCalled();
+    });
+
+    it('watch that ends because the wake finished resumes without stopping anything', async () => {
+      const { d, supervise, stop } = setup({
+        isTTY: true,
+        choose: async () => 'watch',
+        watch: async () => 'finished',
+      });
+      expect(await launchByName('stanley', parseArgs([]), d)).toBe(0);
+      expect(stop).not.toHaveBeenCalled();
+      expect(supervise).toHaveBeenCalledTimes(1);
+    });
+
+    it('watch left with esc launches nothing; ⏎ inside watch takes over', async () => {
+      const left = setup({ isTTY: true, choose: async () => 'watch', watch: async () => 'leave' });
+      expect(await launchByName('stanley', parseArgs([]), left.d)).toBe(0);
+      expect(left.supervise).not.toHaveBeenCalled();
+      const took = setup({
+        isTTY: true,
+        choose: async () => 'watch',
+        watch: async () => 'take-over',
+      });
+      expect(await launchByName('stanley', parseArgs([]), took.d)).toBe(0);
+      expect(took.stop).toHaveBeenCalledTimes(1);
+      expect(took.supervise).toHaveBeenCalledTimes(1);
+    });
+
+    it('a wake file with no session id (an older host) falls back to the plain question', async () => {
+      const confirm = vi.fn(async () => false);
+      const choose = vi.fn(async () => 'take-over' as const);
+      const { d, stop } = setup({
+        isTTY: true,
+        confirm,
+        choose,
+        localWake: found({ session_id: null }) as never,
+      });
+      expect(await launchByName('stanley', parseArgs([]), d)).toBe(0);
+      expect(choose).not.toHaveBeenCalled();
+      expect(stop).not.toHaveBeenCalled();
+      expect(confirm.mock.calls[0]?.[0]).toMatch(/Open one anyway\? \(y\/N\) $/);
+    });
+  });
+
   it('an ambiguous name with --path refuses instead of opening the picker (review)', async () => {
     const picker = vi.fn(async () => 0);
     const { d } = deps({ isTTY: true, picker });

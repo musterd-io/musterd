@@ -11,6 +11,7 @@ import {
   liveSummary,
   renderSeatsList,
   seatLine,
+  wakeMenu,
   wakeReason,
 } from './rows.js';
 import type { Seat } from './store.js';
@@ -246,5 +247,35 @@ describe('roster-first rows in `musterd seats` (ADR 503)', () => {
     expect(out).toContain('cy  nowhere  set up');
     expect(out).not.toMatch(/on the team[\s\S]*ada/);
     expect(out).toContain("dawn: roster unavailable — this machine's folders only");
+  });
+});
+
+describe('wakeMenu (ADR 546)', () => {
+  const H = 3_600_000;
+  const live = {
+    where: 'here' as const,
+    label: 'here',
+    surface: 'claude-code',
+    since: NOW - H,
+    wake: {
+      edge: 'dispatch_continuation' as const,
+      lane_id: '01M46YWG8YHEV2SKW9F1N0W8FG',
+      act_id: null,
+      act: null,
+      from: null,
+    },
+  };
+  it('names the wake, why, and the three keys', () => {
+    expect(wakeMenu('dolly', live, NOW)).toEqual([
+      `dolly is busy — a wake started ${sinceLabel(NOW - H, NOW)} to carry on with lane 01M46YWG8Y.`,
+      '  ⏎  take over   stop the wake, continue its conversation here',
+      '  w  watch       follow it live; ⏎ takes over at any point',
+      '  esc cancel',
+    ]);
+  });
+  it('drops the clauses the roster could not fill', () => {
+    expect(wakeMenu('dolly', { ...live, since: null, wake: null }, NOW)[0]).toBe(
+      'dolly is busy — a wake.',
+    );
   });
 });

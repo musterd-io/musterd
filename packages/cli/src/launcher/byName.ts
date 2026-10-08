@@ -8,10 +8,24 @@ import { harnessAdapters } from '../onboard/harnesses/index.js';
 import { describeMirror, mirrorRepoServers } from '../onboard/repoServers.js';
 import { nearestCommand } from '../render/help.js';
 import { buildCatalog, type Catalog } from './catalog.js';
-import { fetchRoster, liveFor, viewerNameFor } from './live.js';
+import {
+  fetchRoster,
+  liveFor,
+  localWake,
+  viewerNameFor,
+  type Live,
+  type LocalWake,
+} from './live.js';
 import { planLaunch, type LaunchPlan } from './plan.js';
 import { resolveSeatWord } from './resolve.js';
-import { describeMove, formatReceipt, liveQuestion, liveSummary } from './rows.js';
+import {
+  describeMove,
+  formatReceipt,
+  liveQuestion,
+  liveSummary,
+  wakeMenu,
+  wakeReason,
+} from './rows.js';
 import {
   launcherFilePath,
   readLauncherFile,
@@ -24,13 +38,24 @@ import {
 } from './store.js';
 import { supervise, type SuperviseResult } from './supervise.js';
 import { wakeMember } from './wake.js';
+import { stopWake } from './yield.js';
 
 export interface LaunchOptions {
   mode: 'fresh' | 'resume';
   harness: string | null;
-  /** Skip the live check — `--force`, or the picker already asked. */
+  /** Skip the live check — `--force`, or the picker already asked. On a wake it takes over. */
   force: boolean;
+  /** `--take-over`: stop the live local wake and continue its conversation (ADR 546). */
+  takeOver?: boolean;
+  /** `--watch`: follow the live local wake read-only (ADR 546). */
+  watch?: boolean;
 }
+
+/** What a person chose to do about a live local wake (ADR 546). */
+export type WakeChoice = 'take-over' | 'watch' | 'cancel';
+
+/** How watching a wake ended (ADR 546). */
+export type WatchEnd = 'take-over' | 'leave' | 'finished' | 'ended';
 
 /** What `openPicker` takes from the name path: the search, plus the flags typed with the name. */
 export interface PickerOpenOptions {
@@ -55,6 +80,22 @@ export interface LaunchDeps {
   wake?: typeof wakeMember;
   /** The repo-server mirror run before a launch (ADR 529; tests). */
   mirror?: typeof mirrorRepoServers;
+  /** Finds the live local wake (ADR 546; tests). */
+  localWake?: typeof localWake;
+  /** The take over / watch / cancel choice on a TTY (ADR 546; tests). */
+  choose?: (lines: string[]) => Promise<WakeChoice>;
+  /** Asks a wake to stop (ADR 546; tests). */
+  stopWake?: typeof stopWake;
+  /** Follows a wake read-only (ADR 546; tests). */
+  watch?: (wake: LocalWake, seat: Seat) => Promise<WatchEnd>;
+  /** Plans the launch (tests). */
+  plan?: typeof planLaunch;
+}
+
+/** What a take-over adds to the launch: the wake's conversation, and why the session exists. */
+interface TakeOver {
+  session: { harness: string; id: string };
+  env: NodeJS.ProcessEnv;
 }
 
 /**
@@ -86,6 +127,8 @@ export async function launchByName(
     mode,
     harness: flagStr(parsed.flags, 'harness') ?? null,
     force: parsed.flags['force'] === true,
+    ...(parsed.flags['take-over'] === true ? { takeOver: true } : {}),
+    ...(parsed.flags['watch'] === true ? { watch: true } : {}),
   };
   if (res.kind === 'ambiguous') {
     const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
@@ -123,6 +166,7 @@ export async function launchSeat(
   seat: Seat,
   opts: LaunchOptions,
   deps: LaunchDeps = {},
+  takeOver?: TakeOver,
 ): Promise<number> {
   const env = deps.env ?? process.env;
   const now = deps.now ?? Date.now;
@@ -135,28 +179,62 @@ export async function launchSeat(
       1,
     );
 
-  if (!opts.force) {
-    const live = liveFor(seat, await (deps.roster ?? fetchRoster)(seat.server, seat.team));
-    if (live) {
-      const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
-      if (!isTTY)
-        throw new CliError(
-          `${seat.member} is live ${liveSummary(live, now())} — pass --force to open a second session`,
-          1,
-        );
-      const ok = await (deps.confirm ?? confirmOnTTY)(`${liveQuestion(seat.member, live, now())} `);
-      if (!ok) return 0;
+  // `--force` still reads the roster: on a wake it means take over (ADR 546), so it has to know.
+  // A take-over's own relaunch (`takeOver` set) has just decided and skips the read.
+  const live = takeOver
+    ? null
+    : liveFor(seat, await (deps.roster ?? fetchRoster)(seat.server, seat.team));
+  // ADR 546: a wake on this machine is not "a live seat, open a second session?" — it is something a
+  // person can take over or watch. Only with the wake's conversation id: an older host wrote none, and
+  // resuming nothing is worse than the plain question below.
+  const wake = live ? (deps.localWake ?? localWake)(seat, live) : null;
+  if (live && wake?.session_id && !takeOver) {
+    const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+    const choice: WakeChoice =
+      opts.takeOver || opts.force
+        ? 'take-over'
+        : opts.watch
+          ? 'watch'
+          : isTTY
+            ? await (deps.choose ?? chooseOnTTY)(wakeMenu(seat.member, live, now()))
+            : refuseWake(seat, live, now());
+    if (choice === 'cancel') return 0;
+    const by = loadConfig().identities[seat.team]?.name ?? 'a person';
+    const stop = async (): Promise<void> => void (await (deps.stopWake ?? stopWake)(wake, by));
+    if (choice === 'watch') {
+      const ended = await (deps.watch ?? watchNotYet)(wake, seat);
+      if (ended === 'leave') return 0;
+      // 'take-over' stops the wake; 'finished' / 'ended' mean it is already gone.
+      if (ended === 'take-over') await stop();
+    } else {
+      await stop();
     }
+    return launchSeat(seat, { mode: 'resume', harness: wake.harness, force: true }, deps, {
+      session: { harness: wake.harness, id: wake.session_id },
+      env: { MUSTERD_TOOK_OVER: wakeReason(live.wake).trim() || 'the wake' },
+    });
+  }
+  if (!opts.force && live) {
+    const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+    if (!isTTY)
+      throw new CliError(
+        `${seat.member} is live ${liveSummary(live, now())} — pass --force to open a second session`,
+        1,
+      );
+    const ok = await (deps.confirm ?? confirmOnTTY)(`${liveQuestion(seat.member, live, now())} `);
+    if (!ok) return 0;
   }
 
   const binding = loadBinding(seat.path);
   const captured = binding.kind === 'valid' ? binding.value.session : undefined;
   const path = launcherFilePath(env);
-  const plan = await planLaunch({
+  const plan = await (deps.plan ?? planLaunch)({
     seat,
     mode: opts.mode,
     harness: opts.harness,
-    session: captured ? { harness: captured.harness, id: captured.id } : null,
+    // A take-over resumes the WAKE's conversation, not the binding's captured one (ADR 546).
+    session:
+      takeOver?.session ?? (captured ? { harness: captured.harness, id: captured.id } : null),
     recent: readLauncherFile(path).seats[seat.address] ?? null,
     registry: seat.kind === 'human' ? [] : harnessAdapters(),
     env,
@@ -171,6 +249,7 @@ export async function launchSeat(
       /* the next launch retries */
     }
   }
+  if (takeOver) plan.env = { ...plan.env, ...takeOver.env };
   record(path, (f) => withLaunch(f, seat, plan.harness, opts.mode, now()));
   const result = await (deps.supervise ?? supervise)(plan);
   record(path, (f) => withExit(f, seat.address, now(), result.code));
@@ -231,5 +310,53 @@ async function confirmOnTTY(question: string): Promise<boolean> {
     return /^y(es)?$/i.test((await rl.question(question)).trim());
   } finally {
     rl.close();
+  }
+}
+
+/** The refusal off a TTY when a wake holds the seat: how to take it over or watch it (ADR 546). */
+function refuseWake(seat: Seat, live: Live, now: number): never {
+  throw new CliError(
+    `${seat.member} is live ${liveSummary(live, now)} — pass --take-over to continue its conversation, ` +
+      `--watch to follow it, or --force`,
+    1,
+  );
+}
+
+/** Until the watch view lands (increment 4), `w` says so instead of doing nothing. */
+async function watchNotYet(): Promise<WatchEnd> {
+  throw new CliError('watching a wake is not available in this build yet — use ⏎ to take over', 1);
+}
+
+/**
+ * One keypress: ⏎ take over, `w` watch, esc or ⌃C cancel (ADR 546). Raw mode, restored on every
+ * exit path; anything else is ignored rather than guessed at.
+ */
+async function chooseOnTTY(lines: string[]): Promise<WakeChoice> {
+  process.stderr.write(lines.join('\n') + '\n');
+  const stdin = process.stdin;
+  const wasRaw = stdin.isRaw;
+  stdin.setRawMode(true);
+  stdin.resume();
+  try {
+    return await new Promise<WakeChoice>((resolve) => {
+      const onData = (buf: Buffer): void => {
+        const k = buf.toString();
+        const choice: WakeChoice | null =
+          k === '\r' || k === '\n'
+            ? 'take-over'
+            : k === 'w' || k === 'W'
+              ? 'watch'
+              : k === '\u001b' || k === '\u0003'
+                ? 'cancel'
+                : null;
+        if (!choice) return;
+        stdin.off('data', onData);
+        resolve(choice);
+      };
+      stdin.on('data', onData);
+    });
+  } finally {
+    stdin.setRawMode(wasRaw);
+    stdin.pause();
   }
 }

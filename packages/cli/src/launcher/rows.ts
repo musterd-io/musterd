@@ -250,7 +250,7 @@ export function liveSummary(live: Live, now: number): string {
  * `musterd <seat>` and the picker print; the terminal frame in figma-brief-terminal.md copies them.
  */
 export function wakeMenu(member: string, live: Live, now: number): string[] {
-  const since = live.since !== null ? ` started ${sinceLabel(live.since, now)} ago` : '';
+  const since = live.since !== null ? ` started ${sinceLabel(live.since, now)}` : '';
   return [
     `${member} is busy — a wake${since}${wakeReason(live.wake)}.`,
     '  ⏎  take over   stop the wake, continue its conversation here',
