@@ -76,6 +76,7 @@ land in increments 2–4.
 
 ## Observability & Evaluation
 
-`residency.wake_cost` rows with `yielded: true` count take-overs (query the audit log). There is no
-eval, because this changes no agent-facing behaviour: the deny line a taken-over wake sees only asks
-it to end its turn. The unit tests pin the three wire changes, and CI runs them.
+n/a — a human-facing launcher flow and a host-side lease file. It changes no agent-facing behaviour:
+the deny line a taken-over wake sees only asks it to end its turn. `residency.wake_cost` rows with
+`yielded: true` count take-overs (query the audit log), and the unit tests pin the three wire
+changes.
