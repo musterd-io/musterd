@@ -1,100 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { endedCleanly, formatWatchLine, watchEvents } from './events.js';
+import { formatWatchLine, oneLine, textEvent, toolEvent } from './events.js';
 
-const rec = (o: object) => JSON.stringify(o);
-const lines = [
-  rec({
-    type: 'assistant',
-    timestamp: '2026-10-07T16:27:00Z',
-    message: {
-      stop_reason: 'tool_use',
-      content: [
-        {
-          type: 'text',
-          text: "The umbrella's three PRs are merged;\nchecking main has all of them.",
-        },
-        {
-          type: 'tool_use',
-          name: 'Bash',
-          input: { command: 'git log --oneline origin/main -5', description: 'x' },
-        },
-      ],
-    },
-  }),
-  rec({ type: 'user', message: { content: [{ type: 'tool_result', content: 'SECRET OUTPUT' }] } }),
-  rec({
-    type: 'assistant',
-    timestamp: '2026-10-07T16:29:00Z',
-    message: {
-      stop_reason: 'tool_use',
-      content: [
-        {
-          type: 'tool_use',
-          name: 'mcp__musterd__lane_submit',
-          input: { id: '01M46YWG8YHEV2SKW9F1N0W8FG' },
-        },
-      ],
-    },
-  }),
-  rec({
-    type: 'assistant',
-    message: {
-      stop_reason: 'end_turn',
-      content: [{ type: 'text', text: 'export KEY=mskey_abcdefabcdefabcdefabcdef0123456789' }],
-    },
-  }),
-  'not json',
-];
-
-describe('watchEvents (ADR 546)', () => {
-  it('reads words and tool calls, never tool results', () => {
-    const got = watchEvents(lines).map((e) => e.line);
-    expect(got).toHaveLength(4);
-    expect(got.slice(0, 3)).toEqual([
-      "“The umbrella's three PRs are merged; checking main has all of them.”",
-      '▸ Bash  git log --oneline origin/main -5',
-      '▸ lane_submit  01M46YWG8YHEV2SKW9F1N0W8FG',
-    ]);
-    expect(got.join('\n')).not.toContain('SECRET OUTPUT');
+describe('textEvent / toolEvent — what watch may show, once (ADR 546)', () => {
+  it('quotes words on one line', () => {
+    expect(textEvent(1, 'line one\n  line   two')?.line).toBe('“line one line two”');
+    expect(textEvent(1, '   ')).toBeNull();
   });
 
-  it('scrubs a credential in the words', () => {
-    const last = watchEvents(lines).at(-1)!.line;
-    expect(last).not.toContain('mskey_abcdef');
-    expect(last).toContain('<redacted:');
+  it('scrubs a credential from words and from a tool argument', () => {
+    const key = 'mskey_abcdefabcdefabcdefabcdef0123456789';
+    expect(textEvent(null, `export KEY=${key}`)?.line).not.toContain('mskey_abcdef');
+    expect(toolEvent(null, 'Bash', `echo ${key}`).line).not.toContain('mskey_abcdef');
+    expect(textEvent(null, `export KEY=${key}`)?.line).toContain('<redacted:');
   });
 
-  it('carries the record timestamp, or null', () => {
-    const ev = watchEvents(lines);
-    expect(ev[0]!.ts).toBe(Date.parse('2026-10-07T16:27:00Z'));
-    expect(ev.at(-1)!.ts).toBeNull();
-  });
-
-  it('drops terminal escape sequences from words and tool arguments', () => {
-    const evil = rec({
-      type: 'assistant',
-      message: {
-        content: [
-          { type: 'text', text: 'hi \u001b[2J\u001b]0;pwned\u0007there\u009b31m' },
-          { type: 'tool_use', name: 'Bash', input: { command: 'ls\u001b[31m /tmp' } },
-        ],
-      },
-    });
+  it('drops terminal escape sequences and other control characters from both', () => {
+    const evil = 'hi \u001b[2J\u001b]0;pwned\u0007there\u009b31m';
     // eslint-disable-next-line no-control-regex
-    for (const e of watchEvents([evil])) expect(e.line).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
+    const control = /[\u0000-\u001f\u007f-\u009f]/;
+    expect(textEvent(null, evil)?.line).not.toMatch(control);
+    expect(toolEvent(null, 'Ba\u001bsh', 'ls\u001b[31m /tmp').line).not.toMatch(control);
+    expect(oneLine('a\u001b[0mb')).toBe('a[0mb');
   });
 
-  it('a half-written last line is skipped, not fatal', () => {
-    expect(() => watchEvents(['{"type":"assistant","mess'])).not.toThrow();
-    expect(watchEvents(['{"type":"assistant","mess'])).toEqual([]);
-  });
-});
-
-describe('endedCleanly (ADR 546)', () => {
-  it('is true when the last assistant record stopped on end_turn', () => {
-    expect(endedCleanly(lines)).toBe(true);
-    expect(endedCleanly(lines.slice(0, 3))).toBe(false); // ended on a tool call
-    expect(endedCleanly([])).toBe(false);
+  it('a tool call is its name and the one argument, or just the name', () => {
+    expect(toolEvent(null, 'Bash', 'ls -la').line).toBe('▸ Bash  ls -la');
+    expect(toolEvent(null, 'Bash', '').line).toBe('▸ Bash');
   });
 });
 
