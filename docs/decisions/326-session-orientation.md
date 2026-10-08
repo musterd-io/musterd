@@ -256,3 +256,11 @@ Shipped as guidance v27 (`renderOrientSkill`). The §Experiment falsifier gains 
 whose memory names a lane whose PR has landed unsubmitted, oriented fresh — the `LANDED` line must
 appear under it. The three cases, the two false positives caught before landing, and the case
 still missed are in `docs/wiki/memory-outlives-the-merge.md`.
+
+Amended 2026-10-08, lane `01M4E4MSW1` (alfie's setup report, 2026-10-07): the nudge and the stamp both
+assumed a seat. A session whose autojoin failed on a revoked credential was told to orient and the skill's
+last step stamped it done, though it had read the inbox and the board as nobody. Now a workspace with no
+live seat (no `session_lease` in its binding, the same fact the interrupt probe needs) is nudged with
+`NO_SEAT_NUDGE_TEXT` — `team_join`, and the credential repair — and `musterd session orient-stamp` exits 1
+with that sentence instead of stamping. The nudge stays local, with no network call on the per-prompt
+path. A lease that has since died is still the deaf interrupt line's to report.
