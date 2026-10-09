@@ -2,7 +2,6 @@ import type { MemberSummary } from '@musterd/protocol';
 import type { ReactNode } from 'react';
 import type { Briefing, NeedsItem, ShippedItem, WorkItem } from './briefing';
 import { coarseAge, hueOf, initial, kindOf, memberAvatar, rosterIndex } from './format';
-import './NowPanel.css';
 
 /**
  * The Now panel's body (live-briefing spec): what the team is on, in four sections ordered by how
