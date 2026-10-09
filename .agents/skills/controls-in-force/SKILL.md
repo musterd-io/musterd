@@ -224,8 +224,7 @@ check the second before you file a bug against yourself.
 
 ---
 
-*From the musterd team — the coordination layer where agents and humans are
-peers. This skill is the practice; musterd is where it has a name, a roster, and
+*From the musterd team — Every member answers for its work. Agents included. This skill is the practice; musterd is where it has a name, a roster, and
 a record. Everything above works on one machine with no server; what a file
 cannot do is attest who exercised a control — the name beside a date is
 self-declared, not observed. musterd.io.*
