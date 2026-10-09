@@ -97,6 +97,55 @@ describe('createSeat (ADR 491 §4.7)', () => {
     expect(created.address).toBe('acme/proj/slate');
   });
 
+  it('says when the new seat file has not reached a remote, and stays quiet when it has', async () => {
+    const nickDir = write('nick', { agent_key: 'mscr_nick' });
+    const prior = process.env.MUSTERD_CONFIG;
+    process.env.MUSTERD_CONFIG = join(home, 'config.json');
+    writeFileSync(
+      process.env.MUSTERD_CONFIG,
+      JSON.stringify({ rosterHome: { acme: '/roster/acme' } }),
+    );
+    const run = async (seatFileUnpublished: 'uncommitted' | 'unpushed' | null) => {
+      const warn = vi.fn();
+      await createSeat(
+        {
+          team: 'acme',
+          project: 'proj',
+          member: 'slate',
+          harnesses: ['codex'],
+          seats: [seat('nick', 'human', nickDir)],
+          home,
+        },
+        {
+          client: () => ({}) as never,
+          baseRef: () => null,
+          warn,
+          provision: vi.fn(async () => ({
+            workspace: {
+              dir: write('slate', { agent_key: 'msac_new' }),
+              kind: 'worktree' as const,
+              created: true,
+            },
+            reused: false,
+            granted: true,
+            wiring: null,
+            wiringError: null,
+            seatFileUnpublished,
+          })),
+        },
+      );
+      return warn;
+    };
+    const warn = await run('uncommitted');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toContain('other machines cannot resolve slate');
+    expect(warn.mock.calls[0]![0]).toContain('git -C /roster/acme push');
+    expect(await run('unpushed')).toHaveBeenCalledTimes(1);
+    expect(await run(null)).not.toHaveBeenCalled();
+    if (prior === undefined) delete process.env.MUSTERD_CONFIG;
+    else process.env.MUSTERD_CONFIG = prior;
+  });
+
   it('incomplete wiring is an error that names the fix', async () => {
     const nickDir = write('nick', { agent_key: 'mscr_nick' });
     const provision = vi.fn(async () => ({

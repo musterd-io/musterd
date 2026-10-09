@@ -72,6 +72,10 @@ visible and their frequency is known.
   label and node id it quotes from the hub's refusal the way `sanitizeStopSubject` cleans a stop subject
   (`sanitizeWedgeLabel`; a label keeps spaces and apostrophes, a node id is cleaned but never cut).
   Wording unchanged for ordinary values; no schema change.
+- Follow-up 2026-10-08, lane `01M4EHMFHSSV4CNSEGRFHPR871`: the launcher's create-a-seat path (`createSeat`)
+  prints the same two lines when the seat file it wrote has not reached a remote. A sponsored mint
+  (`provisionOnce`) needs none: it writes no seat file, and ADR 463 §4.2 keeps sponsored agents off
+  file-backed rosters.
 
 ## Observability & Evaluation
 

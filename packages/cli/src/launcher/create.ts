@@ -5,6 +5,7 @@ import { loadBinding, loadConfig } from '../config.js';
 import { CliError } from '../errors.js';
 import { provisionAgentSeat } from '../onboard/agentSeat.js';
 import { resolveBaseRef } from '../onboard/workspace.js';
+import { unpublishedSeatLines } from '../roster.js';
 import { buildCatalog } from './catalog.js';
 import type { Seat } from './store.js';
 
@@ -35,6 +36,8 @@ export interface CreateDeps {
   provision?: typeof provisionAgentSeat;
   client?: (server: string, key: string) => HttpClient;
   baseRef?: (dir: string) => string | null;
+  /** Where the seat-file warning goes (ADR 547); the launcher's own stderr by default. */
+  warn?: (line: string) => void;
 }
 
 /** Set up an agent seat in `team/project` on this machine and return it, ready to launch. */
@@ -59,6 +62,7 @@ export async function createSeat(input: CreateInput, deps: CreateDeps = {}): Pro
     b.value.agent_key,
   );
   const base = (deps.baseRef ?? resolveBaseRef)(acting.path);
+  const rosterHome = config.rosterHome[input.team];
   const result = await (deps.provision ?? provisionAgentSeat)({
     name: input.member,
     team: input.team,
@@ -68,8 +72,18 @@ export async function createSeat(input: CreateInput, deps: CreateDeps = {}): Pro
     toolkit: '',
     sourceDir: acting.path,
     ...(base ? { base } : {}),
-    rosterHome: config.rosterHome[input.team],
+    rosterHome,
   });
+  // ADR 547: the seat replicates over sync but its roster entry travels by git, so a seat made here
+  // is invisible to other machines until its file is pushed — the same two lines `musterd agent` prints.
+  if (rosterHome && result.seatFileUnpublished) {
+    const [warning, how] = unpublishedSeatLines(
+      input.member,
+      rosterHome,
+      result.seatFileUnpublished,
+    );
+    (deps.warn ?? ((line) => process.stderr.write(`${line}\n`)))(`⚠ ${warning}\n  ${how}`);
+  }
   if (result.wiringError) {
     throw new CliError(
       `set up ${input.member} at ${result.workspace.dir}, but wiring is incomplete: ${result.wiringError} — run \`musterd wire\` there`,
