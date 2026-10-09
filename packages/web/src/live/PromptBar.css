@@ -1,0 +1,113 @@
+/* The demo prompt bar (lane 01M4H4ARQC). Its own file, loaded with its lazy chunk: the default /live
+   pays nothing for it. Sized to be read from the back of a room — the input is larger than the
+   stream's body — and quiet when idle: paper, one border, mustard only on the focus ring. */
+.pbar {
+  position: fixed;
+  z-index: calc(var(--lc-z-overlay) + 2);
+  left: 50%;
+  bottom: 60px;
+  transform: translateX(-50%);
+  width: min(1100px, calc(100% - 32px));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'cast input send'
+    'status status status';
+  align-items: center;
+  gap: var(--lc-3) var(--lc-5);
+  padding: var(--lc-4) var(--lc-5);
+  background: var(--lc-ground-2);
+  border: 1px solid var(--lc-border-2);
+  border-radius: var(--lc-r-md);
+  box-shadow: 0 2px 0 var(--lc-border);
+}
+.pbar__cast {
+  grid-area: cast;
+  display: flex;
+  align-items: center;
+  gap: var(--lc-2);
+}
+.pbar__label {
+  margin-right: var(--lc-2);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lc-muted);
+}
+.pbar__chip {
+  all: unset;
+  box-sizing: border-box;
+  min-height: 30px;
+  padding: 0 var(--lc-4);
+  border: 1px solid var(--lc-border-2);
+  border-radius: var(--lc-r-sm);
+  font-size: 14px;
+  color: var(--lc-muted);
+  cursor: pointer;
+}
+.pbar__chip.is-on {
+  background: var(--lc-surface-2);
+  border-color: var(--lc-text);
+  color: var(--lc-text);
+  font-weight: 600;
+}
+.pbar__input {
+  grid-area: input;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px var(--lc-4);
+  resize: none;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1.3;
+  color: var(--lc-text);
+  background: var(--lc-surface);
+  border: 1px solid var(--lc-border-2);
+  border-radius: var(--lc-r-sm);
+}
+.pbar__input::placeholder {
+  color: var(--lc-faint);
+}
+.pbar__send {
+  all: unset;
+  box-sizing: border-box;
+  grid-area: send;
+  min-height: 44px;
+  padding: 0 var(--lc-6);
+  border-radius: var(--lc-r-sm);
+  background: var(--lc-text);
+  color: var(--lc-ground-2);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pbar__send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.pbar__status {
+  grid-area: status;
+  margin: 0;
+  font-size: 14px;
+  color: var(--lc-dim);
+}
+.pbar__status:empty {
+  display: none;
+}
+.pbar__chip:focus-visible,
+.pbar__input:focus-visible,
+.pbar__send:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 2px;
+}
+@media (max-width: 880px) {
+  .pbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'cast cast'
+      'input send'
+      'status status';
+  }
+}

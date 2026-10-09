@@ -1123,3 +1123,38 @@ re-baseline may only tighten and measured + 15% loosens, so these are raises. Ne
 
 - Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — total JS must read under 275 KB and live
   CSS under 21 KB. If the overlay is ever removed or made a smaller chunk, these raises should go with it.
+
+### 2026-10-09 — The Demo Day prompt bar: app CSS 7,600 → 8,400 B (lane 01M4H4ARQCVVS31EKJPHCXMY7P)
+
+The prompt bar's stylesheet is its own file (`PromptBar.css`, 738 B gzip), imported by the lazy `PromptBar`
+chunk. `/live` mounts that chunk only behind three gates (`?promptbar=1`, a signed-in member, an admin), so a
+default visit fetches neither its JS nor its CSS. The gate still budgets every emitted stylesheet. It is
+classified `app`, an on-demand chunk like `/board`, not `live`.
+
+| Budget  | Before (main) | This branch | Ceiling → new |
+| ------- | ------------- | ----------- | ------------- |
+| app CSS | ~7.4 KB       | ~8.1 KB     | 7,600 → 8,400 |
+
+The app group had ~230 B free, under the file's 738 B. No trim is available: the file is the bar's whole look. A
+re-baseline may only tighten, so this is a raise.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — app CSS must read under 8.2 KB. If the
+  prompt bar is removed after Demo Day, this raise goes with it.
+
+### 2026-10-09 — total JS 283,000 → 288,000 B, with the prompt bar on top of the Now card v2 (lane 01M4H4ARQCVVS31EKJPHCXMY7P)
+
+Measured with the prompt bar rebased onto main after the Now card v2 landed (#2305). Each PR passed on its own
+branch. Together they do not fit.
+
+| Reading                       | total JS          |
+| ----------------------------- | ----------------- |
+| main after #2305              | 275.6 KB          |
+| + prompt bar (rebased)        | 277.2 KB (283,853 B) |
+| ceiling                       | 283,000 → 288,000 |
+
+The bar is a lazy chunk, so the eager graph is unaffected (137.5 KB of 138.4 KB) and lazy-loading cannot move
+the total (ADR 183). It is demo code due to come out after Demo Day; removing it repays ~1.5 KB. New ceiling is
+measured + the ~0.7 KB CI gzip delta + ~1.2%.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main after this lands — total JS reads under
+  278 KB.

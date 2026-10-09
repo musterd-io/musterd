@@ -1,3 +1,4 @@
+import type { Envelope } from '@musterd/protocol';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import {
   lazy,
@@ -20,6 +21,7 @@ import { TeamColumn, captionColorFor } from '../live/TeamColumn';
 import type { Caption } from '../live/captions';
 import { applyTierClock, askIsLoud, deriveAsks } from '../live/asks';
 import { logOpenMode } from '../live/stillMode';
+import { promptBarFlag, promptBarVisible } from '../live/promptAct';
 import { revealWhenMounted } from '../live/reveal';
 import { LogDrawer } from '../live/LogDrawer';
 import { Ticker } from '../live/Ticker';
@@ -102,6 +104,11 @@ const NO_COLLAPSE: Collapsed = { office: false, team: false };
 const LazyStream = lazy(() => import('../live/Stream').then((m) => ({ default: m.Stream })));
 // The Now briefing is not needed to paint the room: it comes up a beat after first paint anyway, so
 // its code rides a lazy chunk and /live's eager graph (ADR 151/183) does not pay for it.
+// The demo prompt bar (lane 01M4H4ARQC): a lazy chunk with its own CSS, mounted only behind its three
+// gates, so the default /live pays nothing for it.
+const LazyPromptBar = lazy(() =>
+  import('../live/PromptBar').then((m) => ({ default: m.PromptBar })),
+);
 const LazyNowOverlay = lazy(() =>
   import('../live/NowOverlay').then((m) => ({ default: m.NowOverlay })),
 );
@@ -233,7 +240,7 @@ function LivePage() {
     onConnected: armRecovery,
   });
   const {
-    envelopes,
+    envelopes: streamed,
     roster,
     error,
     liveIds,
@@ -242,6 +249,18 @@ function LivePage() {
     rosterUnreadable,
     rosterStale,
   } = stream;
+  // What this browser sent through the demo prompt bar. The firehose skips the sender, so the ack is
+  // folded in here or the huddle it opens would not appear on the very screen that opened it.
+  const [sent, setSent] = useState<Envelope[]>([]);
+  const envelopes = useMemo(
+    () =>
+      sent.length === 0
+        ? streamed
+        : [...streamed, ...sent.filter((s) => !streamed.some((e) => e.id === s.id))],
+    [streamed, sent],
+  );
+  const [promptbar, setPromptbar] = useState(false);
+  useEffect(() => setPromptbar(promptBarFlag(window.location.search, window.location.hash)), []);
 
   // The office overlay's reel: everyone in the room and what they are on. Derived here (not in the
   // scene) so both routes hand the scene the same already-projected shape.
@@ -701,6 +720,12 @@ function LivePage() {
             board={board}
             hide={stripAskIds}
           />
+          {/* Gates: ?promptbar=1, a signed-in member (not the read-only observer), and an admin. */}
+          {promptBarVisible({ flag: promptbar, signedIn, admin: canSetHold }) && cfg && (
+            <Suspense fallback={null}>
+              <LazyPromptBar cfg={cfg} onSent={(ack) => setSent((prev) => [...prev, ack])} />
+            </Suspense>
+          )}
           <LogDrawer open={logOpen} onClose={closeLog} title={`Team log — ${team}`}>
             <Suspense fallback={<p className="lc-drawer__loading">Opening the log…</p>}>
               <LazyStream envelopes={envelopes} roster={roster} liveIds={liveIds} cfg={cfg ?? undefined} />
