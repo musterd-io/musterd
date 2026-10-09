@@ -1099,3 +1099,27 @@ The worst frame stays inside the log's recorded envelope (42–794 ms) and nothi
 task; the p95 rise is 28 bodies walking in at once through the existing actor engine. An idle room
 parks at 0 ticks/s before and after a welcome (`?quiet&idle=all`), and under reduced motion a welcome
 runs with 0 rAF ticks (an off-loop timer steps it, and stops once it is done).
+
+### 2026-10-09 — The Now briefing: total JS 278,600 → 283,000 B, live CSS 20,800 → 21,600 B (lane 01M4GXHERZF6A2KFMBK2G616CK)
+
+The Now briefing (an overlay that docks to a side tab, grouped by human, goal and who shipped) replaces the
+first build's Now tab. Measured on this branch (`pnpm --filter @musterd/web build && pnpm perf:check`); "before" is #2265's reading, which is main's since the revert (no web change has landed after it):
+
+| Budget      | Before (main) | This branch | Ceiling → new     |
+| ----------- | ------------- | ----------- | ----------------- |
+| initial JS  | 136.2 KB      | 135.7 KB    | 141,700 (unmoved) |
+| total JS    | 270.8 KB      | 273.1 KB    | 278,600 → 283,000 |
+| live CSS    | 20.1 KB       | 20.7 KB     | 20,800 → 21,600   |
+
+**The eager graph went down.** The overlay is a lazy chunk (`LazyNowOverlay` in `live.tsx`): it comes up a
+beat after first paint anyway, so /live's first paint does not pay for it. That is the remedy ADR 183 names
+for the initial budget, and it worked (-0.5 KB against main). It cannot move the total, and a 44th chunk adds
+~1 KB of per-chunk overhead — about 1 KB of the +2.3 KB total is that overhead; the rest is the grouping and the three layouts.
+
+No trim was available: the first build's Now CSS and component were replaced in the same change, the
+remainder is the overlay's three layouts and the by-goal / by-person grouping, which are the surface. A
+re-baseline may only tighten and measured + 15% loosens, so these are raises. New ceilings are measured + the
+~0.7 KB CI gzip delta + ~1.2%.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — total JS must read under 275 KB and live
+  CSS under 21 KB. If the overlay is ever removed or made a smaller chunk, these raises should go with it.
