@@ -8,6 +8,7 @@ export function loadSeen(path = seenPath): SeenLedger {
     arxiv: Array.isArray(raw.arxiv) ? raw.arxiv.map(String) : [],
     hf: Array.isArray(raw.hf) ? raw.hf.map(String) : [],
     exn: Array.isArray(raw.exn) ? raw.exn.map(String) : [],
+    pending: Array.isArray(raw.pending) ? raw.pending : [],
   };
 }
 
@@ -40,11 +41,57 @@ export function mergeCandidates(groups: RadarCandidate[][]): RadarCandidate[] {
     for (const c of group) {
       const prev = byId.get(c.id);
       if (!prev || (prev.source === 'hf' && c.source === 'arxiv')) {
-        byId.set(c.id, c);
+        byId.set(c.id, { ...c, relatedExn: unionEpisodes(prev?.relatedExn ?? [], c.relatedExn) });
+      } else if (prev) {
+        byId.set(c.id, { ...prev, relatedExn: unionEpisodes(prev.relatedExn, c.relatedExn) });
       }
     }
   }
   return [...byId.values()].sort((a, b) =>
     a.published < b.published ? 1 : a.published > b.published ? -1 : 0,
   );
+}
+
+function unionEpisodes(
+  left: RadarCandidate['relatedExn'],
+  right: RadarCandidate['relatedExn'],
+): RadarCandidate['relatedExn'] {
+  const ids = new Set<string>();
+  return [...left, ...right].filter(({ episodeId }) => {
+    if (ids.has(episodeId)) return false;
+    ids.add(episodeId);
+    return true;
+  });
+}
+
+/** Select the oldest retries and a bounded fresh batch; old pending rows do not expire by date. */
+export function partitionRadarCandidates(
+  fresh: RadarCandidate[],
+  seen: SeenLedger,
+  retryLimit: number,
+): { ready: RadarCandidate[]; deferred: NonNullable<SeenLedger['pending']>; truncated: boolean } {
+  const pending = [...(seen.pending ?? [])].sort(
+    (a, b) =>
+      a.firstAttempt.localeCompare(b.firstAttempt) || a.canonicalId.localeCompare(b.canonicalId),
+  );
+  const pendingLimit = Math.max(0, Math.min(50, Math.floor(retryLimit)));
+  const selected = pending.slice(0, pendingLimit).map(
+    (item): RadarCandidate => ({
+      source:
+        item.sourceIds.find(({ source }) => source !== 'exn')?.source ??
+        item.sourceIds[0]?.source ??
+        'arxiv',
+      id: item.canonicalId,
+      title: item.title,
+      url: item.url,
+      published: item.published,
+      relatedExn: item.episodeIds.map((episodeId) => ({ episodeId })),
+    }),
+  );
+  const selectedFresh = fresh.slice(0, 50);
+  return {
+    ready: mergeCandidates([selected, selectedFresh]),
+    deferred: pending.slice(pendingLimit),
+    truncated: pending.length > pendingLimit || fresh.length > 50,
+  };
 }
