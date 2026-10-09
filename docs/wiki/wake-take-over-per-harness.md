@@ -15,7 +15,7 @@ Observed 2026-10-08 from `packages/cli/src/host/backends/*`, `trace/transcript.t
 | Claude Code | `claudeCode.ts` | yes | yes (ADR 546, #2201) | `~/.claude/projects/<slug>/<id>.jsonl` | `parseClaudeTranscript` |
 | Codex | `codex.ts` | yes (ADR 354) | yes — ~~no (2026-10-08)~~ rewritten once codex prints its thread id (lane 1/6, 2026-10-08) | `~/.codex/sessions/Y/M/D/rollout-<ts>-<thread>.jsonl` | `parseCodexTranscript`; watch reads `event_msg.item_completed` (`watch/codex.ts`, lane 3/6, 2026-10-08) |
 | Grok | `grok.ts` | yes — ~~no (2026-10-08)~~ lane 1/6 | yes — a resumed run at spawn, a fresh one once Grok has written its session | `$GROK_HOME/sessions/<encoded cwd>/<id>/updates.jsonl` (default `~/.grok`) | `parseGrokTranscript` |
-| opencode | `opencode.ts` | yes — ~~no (2026-10-08)~~ lane 1/6 | yes — rewritten from the streamed session id | a SQLite store, `$XDG_DATA_HOME/opencode/opencode.db`, read with the `sqlite3` CLI | `parseOpencodeRows` |
+| opencode | `opencode.ts` | yes — ~~no (2026-10-08)~~ lane 1/6 | yes — rewritten from the streamed session id | a SQLite store, `$XDG_DATA_HOME/opencode/opencode.db`, read with the `sqlite3` CLI | `parseOpencodeRows`; watch reads `text` and `tool` parts (`watch/opencode.ts`, lane 5/6, 2026-10-08) |
 | Cursor Agent | **none** — no host backend exists, so no headless wake exists to take over | n/a | n/a | `~/.cursor/projects/<slug>/agent-transcripts/<id>/<id>.jsonl` (desktop); `<id>.txt` for the `cursor-agent` CLI | `parseCursorTranscript` (jsonl only) |
 | musterd native (`musterd`) | `native.ts` | **no, on purpose** (see below) | n/a | none on disk — each turn posts a `wake-turn` row (usage + transcript, bounded) to the daemon | none |
 

@@ -168,9 +168,9 @@ export function opencodeReadSql(sessionId: string, after: number, limit: number)
  ORDER BY m.time_created, m.id, p.id;`;
 }
 
-type RunSqlite = (db: string, sql: string) => Promise<string | null>;
+export type RunSqlite = (db: string, sql: string) => Promise<string | null>;
 
-const runSqlite: RunSqlite = (db, sql) =>
+export const runSqlite: RunSqlite = (db, sql) =>
   new Promise((resolve) => {
     try {
       execFile(

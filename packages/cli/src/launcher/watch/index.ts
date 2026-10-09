@@ -85,14 +85,14 @@ export async function watchWake(
     out(`can't watch: watching ${wake.harness} wakes is not supported yet\n`);
     return 'leave';
   }
-  const snap = (): WatchSnapshot | null => {
+  const snap = async (): Promise<WatchSnapshot | null> => {
     try {
-      return reader.snapshot(wake);
+      return await reader.snapshot(wake);
     } catch {
       return null; // a transcript that cannot be read this poll is read again on the next one
     }
   };
-  const first = snap();
+  const first = await snap();
   if (!first) {
     out(`can't watch: no transcript for this wake yet\n`);
     return 'leave';
@@ -113,7 +113,7 @@ export async function watchWake(
       const key = await turn();
       if (key === 'enter') return 'take-over';
       if (key === 'esc' || key === null) return 'leave';
-      shot = snap() ?? shot;
+      shot = (await snap()) ?? shot;
       for (const e of shot.events.slice(consumed)) out(formatWatchLine(e, cols) + '\n');
       consumed = shot.events.length;
       if (alive(wake.pid)) continue;
