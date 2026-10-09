@@ -112,6 +112,7 @@ describe('dedup', () => {
     title: 't',
     url: 'https://arxiv.org/abs/2503.13657',
     published: '2025-03-17',
+    relatedExn: [],
     ...over,
   });
 

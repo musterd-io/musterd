@@ -28,6 +28,7 @@ const cand = (source: 'arxiv' | 'hf' | 'exn', id: string) => ({
   title: 't',
   url: 'https://x',
   published: '2026-10-01',
+  relatedExn: [],
   abstract: '',
 });
 

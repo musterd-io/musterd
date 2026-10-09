@@ -126,6 +126,7 @@ export function parseArxivAtom(xml: string): RadarCandidate[] {
       title,
       url: `https://arxiv.org/abs/${id}`,
       published,
+      relatedExn: [],
       ...(summary ? { abstract: truncateDescription(summary) } : {}),
       ...(categories.length ? { categories: [...new Set(categories)] } : {}),
     });
@@ -245,6 +246,7 @@ function candidateFromHfPaper(paper: {
     title: collapseWs(paper.title),
     url: `https://huggingface.co/papers/${id}`,
     published,
+    relatedExn: [],
     ...(abstract !== undefined ? { abstract } : {}),
   };
 }
@@ -367,6 +369,7 @@ export function parseExnFeed(data: unknown): RadarCandidate[] {
       title: collapseWs(title),
       url,
       published: discovered_at.slice(0, 10),
+      relatedExn: [{ episodeId: id }],
       ...(abstract ? { abstract: truncateDescription(abstract) } : {}),
     });
   }
