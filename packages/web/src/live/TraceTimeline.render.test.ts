@@ -2,7 +2,7 @@ import type { TraceSessionEvent } from '@musterd/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { timelineSummary, TraceTimeline } from './TraceTimeline';
+import { foldTraceRead, timelineSummary, TraceTimeline, type TraceView } from './TraceTimeline';
 
 /**
  * What the per-seat timeline RENDERS (ADR 445 increment 4b). Rendered with `react-dom/server`
@@ -64,5 +64,24 @@ describe('TraceTimeline', () => {
     expect(render([], 'loading')).toContain('Reading ryder&#x27;s trace');
     expect(render([], 'error')).toContain('Could not read ryder&#x27;s trace');
     expect(render([])).toContain('not traced, or not yours to read');
+  });
+});
+
+describe('foldTraceRead (following an open trace)', () => {
+  const loading: TraceView = { state: 'loading', events: [] };
+
+  it('a successful read replaces the list, including with an empty one', () => {
+    const first = foldTraceRead(loading, { events: [ev({ seq: 1 })] });
+    expect(first).toEqual({ state: 'ready', events: [ev({ seq: 1 })] });
+    expect(foldTraceRead(first, { events: [] })).toEqual({ state: 'ready', events: [] });
+  });
+
+  it('a failed refresh keeps the last list', () => {
+    const shown = foldTraceRead(loading, { events: [ev({ seq: 1 })] });
+    expect(foldTraceRead(shown, null)).toBe(shown);
+  });
+
+  it('a read that never succeeded says so', () => {
+    expect(foldTraceRead(loading, null).state).toBe('error');
   });
 });
