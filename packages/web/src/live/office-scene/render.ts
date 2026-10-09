@@ -1390,6 +1390,9 @@ export function boardAnchor(fit: Fit): {
   /** Screen y of the middle of the board's top edge — where its sign hangs. On a slanted wall the
    *  box's top is the high corner, so this sits lower than `y`. */
   topMidY: number;
+  /** The slope of the board's top edge in screen degrees — the wall's iso angle, which the sign
+   *  is skewed by so it lies in the wall's plane rather than flat on the screen. */
+  tiltDeg: number;
 } {
   const { tc, uc, w: W, h: H } = WALL_BOARD;
   const edge = WALL_EDGES[WALL_BOARD.wall]!;
@@ -1403,11 +1406,13 @@ export function boardAnchor(fit: Fit): {
   const ys = corners.map((c) => c.y);
   const x = Math.min(...xs);
   const y = Math.min(...ys);
-  const topMidY = Math.min(
-    wallPt(edge, tc, uc - H / 2 / WALL_H, fit).y,
-    wallPt(edge, tc, uc + H / 2 / WALL_H, fit).y,
-  );
-  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, topMidY };
+  const lo = wallPt(edge, tc, uc - H / 2 / WALL_H, fit).y;
+  const hi = wallPt(edge, tc, uc + H / 2 / WALL_H, fit).y;
+  const topMidY = Math.min(lo, hi);
+  // The top edge's two corners: the pair at whichever height `topMidY` came from.
+  const [l, r] = lo <= hi ? [corners[0]!, corners[1]!] : [corners[3]!, corners[2]!];
+  const tiltDeg = (Math.atan2(r.y - l.y, r.x - l.x) * 180) / Math.PI;
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, topMidY, tiltDeg };
 }
 
 /**

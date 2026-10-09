@@ -408,6 +408,17 @@ describe('the wall agile board', () => {
       expect(a.topMidY).toBeLessThan(a.y + a.h);
     }
   });
+
+  // nick, 2026-10-09: a level sign on a slanted wall reads as pasted on the screen, not hung on the
+  // wall. The sign is skewed by the board's own top-edge slope, so it lies in the wall's plane.
+  it('boardAnchor gives the slope of the board’s top edge, which the sign is skewed by', () => {
+    for (const f of [fit, fitFloor(1200, 900), fitFloor(700, 500)]) {
+      const a = boardAnchor(f);
+      expect(Number.isFinite(a.tiltDeg)).toBe(true);
+      expect(Math.abs(a.tiltDeg)).toBeGreaterThan(5); // the wall runs at the iso angle, not level
+      expect(Math.abs(a.tiltDeg)).toBeLessThan(45);
+    }
+  });
 });
 
 /**
