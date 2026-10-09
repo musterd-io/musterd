@@ -1,92 +1,153 @@
-import type { MemberSummary } from '@musterd/protocol';
+import type { LaneBoard, MemberSummary } from '@musterd/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { Briefing, NeedsItem, WorkItem } from './briefing';
-import { LOUD_ROWS, NowSections, QUIET_ROWS } from './NowPanel';
+import type { AskView } from './asks';
+import { briefing } from './briefing';
+import { NowSections, ownersOf, sinceLabel } from './NowPanel';
 
-const NOW = 1_800_000_000_000;
-const empty: Briefing = { needsHuman: [], inProgress: [], inReview: [], shipped: [], headline: '' };
-const roster = [{ name: 'ann', kind: 'agent', presence: 'online' }] as unknown as MemberSummary[];
-const need = (id: string, over: Partial<NeedsItem> = {}): NeedsItem => ({
+const NOW = new Date('2026-10-08T09:00:00').getTime(); // a Thursday morning
+const SINCE = new Date('2026-10-07T00:00:00').getTime();
+const roster = [
+  { name: 'ann', kind: 'agent', presence: 'online' },
+  { name: 'bob', kind: 'agent', presence: 'online' },
+  { name: 'nick', kind: 'human', presence: 'online' },
+] as unknown as MemberSummary[];
+
+const lane = (id: string, state: string, over: Record<string, unknown> = {}) => ({
   id,
-  kind: 'blocked',
   title: `title ${id}`,
-  owner: 'ann',
-  waitingOn: null,
-  since: NOW - 3_600_000,
-  laneId: id,
-  ref: id,
+  state,
+  owner_seat: 'ann',
+  goal_id: null,
+  depends_on: [],
+  claimed_at: NOW - 3_600_000,
+  updated_at: NOW - 3_600_000,
+  resolved_at: null,
   ...over,
 });
-const work = (n: number): WorkItem[] =>
-  Array.from({ length: n }, (_, i) => ({
-    id: `lane:w${i}`,
-    title: `work ${i}`,
-    owner: 'ann',
-    goal: null,
-    since: NOW - 60_000,
-  }));
-const render = (brief: Briefing) =>
+const ask = (id: string, species: string, to: string | null): AskView =>
+  ({
+    env: { id, from: 'bob', ts: NOW - 7_200_000, body: `question ${id}` },
+    species,
+    tier: 'standard',
+    to,
+    deadline: NOW + 1,
+    state: 'open',
+  }) as unknown as AskView;
+
+const make = (lanes: unknown[], asks: AskView[] = [], extra: Record<string, unknown> = {}) =>
+  briefing({
+    board: { lanes, warnings: [] } as unknown as LaneBoard,
+    goals: [{ id: 'g1', title: 'Launch — ships publicly' }],
+    asks,
+    roster,
+    now: NOW,
+    shippedSince: SINCE,
+    ...extra,
+  });
+const render = (lanes: unknown[], asks: AskView[] = [], full = false, extra = {}) =>
   renderToStaticMarkup(
     createElement(NowSections, {
-      brief,
+      brief: make(lanes, asks, extra),
       roster,
       now: NOW,
+      since: SINCE,
+      full,
       onOpenLane: () => {},
       onOpenAsk: () => {},
-      onOpenBoard: () => {},
+      onMore: () => {},
     }),
   );
 
-describe('NowSections', () => {
-  it('goes loud, with the full title, when something needs a human', () => {
-    const long = 'a blocked lane whose title is long enough that clipping it would hide the point';
-    const html = render({ ...empty, needsHuman: [need('a', { title: long })] });
-    expect(html).toContain('now-needs is-loud');
-    expect(html).toContain(long);
-    expect(html).toContain('blocked');
-    expect(html).toContain('1h');
+describe('NowSections — needs a human', () => {
+  it('heads each human with what they are being asked for, by name', () => {
+    const html = render([], [ask('1', 'approve', 'nick'), ask('2', 'consult', 'nick')]);
+    expect(html).toContain('Needs approval and clarification from nick');
+    expect(html).toContain('question 1');
+    expect(html).toContain('now-sec--needs is-loud');
   });
 
-  it('says so calmly when nothing is waiting', () => {
-    const html = render(empty);
-    expect(html).toContain('nothing is waiting on anyone');
+  it('gives blocked lanes their own header and names no human for them', () => {
+    const html = render([lane('c', 'blocked')]);
+    expect(html).toContain('Blocked');
+    expect(html).not.toContain('now-h--loud'); // no human heading: a lane names no one to ask
+  });
+
+  it('says what a blocked lane waits on', () => {
+    const html = render([
+      lane('dep', 'active', { title: 'the thing it needs', owner_seat: 'bob' }),
+      lane('c', 'blocked', { depends_on: ['dep'] }),
+    ]);
+    expect(html).toContain('waits on the thing it needs (bob)');
+  });
+
+  it('is calm when nothing is waiting or blocked', () => {
+    const html = render([lane('a', 'active')]);
+    expect(html).toContain('Nothing is waiting on anyone, and nothing is blocked.');
     expect(html).not.toContain('is-loud');
   });
 
-  it('renders a seat request as a link to /approvals and an ask as a button', () => {
-    const html = render({
-      ...empty,
-      needsHuman: [
-        need('r1', { kind: 'seat-request', laneId: null, owner: null, title: 'wants to join as zed' }),
-        need('e1', { kind: 'ask', laneId: null }),
-      ],
-    });
+  it('sends a seat claim to an admin and to the approvals page', () => {
+    const req = { id: 'r1', target: 'seat:zed', ts: NOW - 60_000, status: 'pending' };
+    const html = render([], [], false, { requests: [req] });
+    expect(html).toContain('Needs approval from an admin');
     expect(html).toContain('href="/approvals"');
-    expect(html).toContain('wants to join as zed');
-    expect(html).toContain('<button');
+  });
+});
+
+describe('NowSections — the plate, by goal, and what landed, by person', () => {
+  it('groups in progress by goal, not by person', () => {
+    const html = render([
+      lane('a', 'active', { goal_id: 'g1' }),
+      lane('b', 'active', { goal_id: 'g1', owner_seat: 'bob' }),
+      lane('c', 'active'),
+    ]);
+    expect(html).toContain('by goal');
+    expect(html).toContain('Launch');
+    expect(html).toContain('No goal');
   });
 
-  it('mounts a bounded number of rows and says how many more the board holds', () => {
-    const html = render({ ...empty, inProgress: work(20) });
-    const rows = html.match(/class="now-row"/g) ?? [];
-    expect(rows).toHaveLength(QUIET_ROWS);
-    expect(html).toContain(`+${20 - QUIET_ROWS} more on the board`);
+  it('is a one-line-per-goal summary in the overlay, and every lane in full', () => {
+    const lanes = Array.from({ length: 5 }, (_, i) => lane(`w${i}`, 'active', { goal_id: 'g1' }));
+    const overlay = render(lanes);
+    expect((overlay.match(/class="now-r"/g) ?? []).length).toBe(1); // the goal's one line
+    expect(overlay).toContain('Launch');
+    expect(overlay).not.toContain('title w0'); // lane titles wait for the full view
+    const full = render(lanes, [], true);
+    expect(full).toContain('is-full');
+    expect(full).toContain('title w0');
+    expect((full.match(/class="now-r"/g) ?? []).length).toBe(5);
   });
 
-  it('hides less in the loud section', () => {
-    const html = render({
-      ...empty,
-      needsHuman: Array.from({ length: LOUD_ROWS + 2 }, (_, i) => need(`n${i}`)),
-    });
-    expect((html.match(/class="now-need now-need--blocked"/g) ?? []).length).toBe(LOUD_ROWS);
-    expect(html).toContain('+2 more on the board');
+  it('lists what shipped by who shipped it, since yesterday', () => {
+    const html = render([
+      lane('s1', 'done', { owner_seat: 'ann', resolved_at: NOW - 1000 }),
+      lane('s2', 'done', { owner_seat: 'bob', resolved_at: NOW - 2000 }),
+    ]);
+    expect(html).toContain('since yesterday');
+    expect(html).toContain('ann');
+    expect(html).toContain('bob');
   });
 
-  it('survives an owner who is not on the roster', () => {
-    const html = render({ ...empty, inProgress: [{ ...work(1)[0]!, owner: 'ghost' }] });
-    expect(html).toContain('ghost');
+  it('survives an owner who is not on the roster, and an empty team', () => {
+    const html = render([lane('a', 'active', { owner_seat: 'ghost' })]);
     expect(html).not.toContain('undefined');
+    expect(render([])).toContain('no lanes in hand');
+  });
+});
+
+describe('ownersOf', () => {
+  it('names who is on a goal, three at most', () => {
+    expect(ownersOf(['ann', 'bob', 'ann', null])).toBe('ann, bob');
+    expect(ownersOf(['a', 'b', 'c', 'd', 'e'])).toBe('a, b, c +2');
+    expect(ownersOf([])).toBe('');
+  });
+});
+
+describe('sinceLabel', () => {
+  it('says yesterday for yesterday and the weekday beyond it', () => {
+    expect(sinceLabel(new Date('2026-10-07T00:00:00').getTime(), NOW)).toBe('yesterday');
+    expect(sinceLabel(new Date('2026-10-02T00:00:00').getTime(), new Date('2026-10-05T09:00:00').getTime())).toBe('Friday');
   });
 });

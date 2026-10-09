@@ -3,13 +3,17 @@ import { askIsLoud, type AskView } from './asks';
 
 /**
  * The briefing: the one place the page decides what is in progress, what needs a human, what is in
- * review and what shipped. `/live`'s Now panel and `/broadcast`'s lower-third both render this, and
- * the topbar headline is built from the same four arrays — so a count can never disagree with the
- * list under it (the old meter counted a presence posture, the old team column counted lane-owning
- * cards: "1 working" over "3 working", 2026-10-09).
+ * review and what shipped. `/live`'s Now overlay reads it, and the topbar headline is built from the
+ * same arrays — so a count can never disagree with the list under it (the old meter counted a
+ * presence posture, the old team column counted lane-owning cards: "1 working" over "3 working",
+ * 2026-10-09).
  *
- * Pure, over what the page already holds. Counts are **lanes**, not people; the per-member view
- * stays in `teamCards.ts`.
+ * It is the page a member opens in the morning having forgotten yesterday, so it answers three
+ * things, each grouped the way that question is asked: what is on the team's plate **by goal**, what
+ * is waiting **by the human who has to act**, and what landed **by who landed it**. (The Team column
+ * already answers "who is on what" by person; repeating that is the failure the first version was.)
+ *
+ * Pure, over what the page already holds. Counts are **lanes**, not people.
  *
  * Two rules keep the counts honest (measured 2026-10-09: "15 in progress" over a column saying
  * "2 working"): a lane is **in progress** only while its owner is present — a claim held by an
@@ -18,13 +22,26 @@ import { askIsLoud, type AskView } from './asks';
  * `teamCards` and the asks strip draw).
  *
  * `requests` (pending seat claims) is admin-only data and is read only when the caller passes it.
- * `/broadcast` never does — a public stream does not announce who is knocking.
  */
 
-/** A lane that reached `done` inside this window counts as shipped today. */
+/** A lane that reached `done` inside this window counts as shipped TODAY (the headline's number). */
 export const SHIPPED_WINDOW_MS = 24 * 60 * 60 * 1000;
 const SHOWN_TITLE = 90;
 
+/**
+ * Where "what we did yesterday" starts: the start of the previous *working* day, in the viewer's own
+ * clock. Monday morning wants Friday's work, so Saturday, Sunday and Monday reach back to Friday.
+ */
+export function briefingSince(now: number): number {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  const back = [2, 3, 1, 1, 1, 1, 1][d.getDay()]!; // Sun→Fri, Mon→Fri, Tue..Fri→yesterday, Sat→Fri
+  d.setDate(d.getDate() - back);
+  return d.getTime();
+}
+
+/** What a human is being asked for. The words are the ask's own species, not a guess. */
+export type Want = 'approval' | 'clarification' | 'an answer';
 export type NeedsKind = 'ask' | 'approval' | 'blocked' | 'seat-request';
 
 export interface NeedsItem {
@@ -37,6 +54,10 @@ export interface NeedsItem {
   owner: string | null;
   /** Whom an ask was routed to; null for a team ask and for everything that is not an ask. */
   waitingOn: string | null;
+  /** What is being asked of the human — null for a blocked lane, which names no human. */
+  want: Want | null;
+  /** For a blocked lane: the first dependency still open, when one is declared. */
+  waitsOn: { title: string; owner: string | null } | null;
   /** When the wait began. */
   since: number;
   /** Set for `blocked`, so the surface can open the lane. */
@@ -49,6 +70,7 @@ export interface WorkItem {
   id: string;
   title: string;
   owner: string | null;
+  goalId: string | null;
   /** The goal's name ("Name — what it promises" → "Name"), when the lane names one. */
   goal: string | null;
   since: number;
@@ -61,17 +83,62 @@ export interface ShippedItem {
   at: number;
 }
 
+/** The asks waiting on one human, headed by what they are being asked for. */
+export interface NeedsGroup {
+  key: string;
+  /** Who has to act: a human's name, "an admin" (seat claims), or "the team" (a team-wide ask). */
+  human: string;
+  /** "Needs approval from nick" — built from the kinds actually in the group. */
+  heading: string;
+  items: NeedsItem[];
+}
+
+export interface GoalGroup {
+  key: string;
+  /** The goal's short name, or "No goal". */
+  goal: string;
+  items: WorkItem[];
+}
+
+export interface ShippedGroup {
+  who: string;
+  items: ShippedItem[];
+}
+
 export interface Briefing {
+  /** Everything that wants a human, asks and blocked lanes together — the headline's number. */
   needsHuman: NeedsItem[];
+  /** The asks, approvals and seat claims, grouped under the human who has to act. */
+  needsGroups: NeedsGroup[];
+  /** Blocked lanes. They name no human, so they get their own header. */
+  blocked: NeedsItem[];
   inProgress: WorkItem[];
+  /** In progress, grouped by goal — the biggest first. */
+  byGoal: GoalGroup[];
   inReview: WorkItem[];
+  /** Lanes done since `shippedSince` (default: the last 24 h). */
   shipped: ShippedItem[];
+  /** The same, grouped by who landed it — the most first. */
+  shippedBy: ShippedGroup[];
   headline: string;
 }
 
 const recency = (l: Lane) => l.claimed_at ?? l.updated_at;
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const firstLine = (s: string) => clip((s.split('\n', 1)[0] ?? '').trim(), SHOWN_TITLE);
+
+const WANT_ORDER: Want[] = ['approval', 'clarification', 'an answer'];
+
+/** "approval" · "approval and clarification" · "approval, clarification and an answer". */
+export function needsHeading(human: string, wants: readonly Want[]): string {
+  const ws = WANT_ORDER.filter((w) => wants.includes(w));
+  const list =
+    ws.length <= 1 ? (ws[0] ?? 'an answer') : `${ws.slice(0, -1).join(', ')} and ${ws[ws.length - 1]}`;
+  return `Needs ${list} from ${human}`;
+}
+
+const wantOf = (species: string): Want =>
+  species === 'approve' ? 'approval' : species === 'consult' ? 'clarification' : 'an answer';
 
 export function briefing(input: {
   board: LaneBoard | null;
@@ -80,8 +147,11 @@ export function briefing(input: {
   roster: readonly MemberSummary[];
   requests?: readonly Request[];
   now: number;
+  /** Where the shipped list starts. Defaults to the last 24 h; the overlay passes `briefingSince`. */
+  shippedSince?: number;
 }): Briefing {
   const { board, goals, asks, roster, requests = [], now } = input;
+  const shippedSince = input.shippedSince ?? now - SHIPPED_WINDOW_MS;
   const humans = new Set(roster.filter((m) => m.kind === 'human').map((m) => m.name));
   const present = new Set(roster.filter((m) => m.presence !== 'offline').map((m) => m.name));
   // The item names the goal, it does not retell it (slop tell 8).
@@ -90,11 +160,13 @@ export function briefing(input: {
     id: `lane:${l.id}`,
     title: l.title,
     owner: l.owner_seat,
+    goalId: l.goal_id,
     goal: l.goal_id ? (goalName.get(l.goal_id) ?? null) : null,
     since: recency(l),
   });
 
   const lanes = board?.lanes ?? [];
+  const byId = new Map(lanes.map((l) => [l.id, l] as const));
   const byRecency = (a: Lane, b: Lane) => recency(b) - recency(a);
   const inProgress = lanes
     .filter(
@@ -110,13 +182,11 @@ export function briefing(input: {
     .sort(byRecency)
     .map(work);
   const shipped = lanes
-    .filter(
-      (l) => l.state === 'done' && l.resolved_at !== null && now - l.resolved_at < SHIPPED_WINDOW_MS,
-    )
+    .filter((l) => l.state === 'done' && l.resolved_at !== null && l.resolved_at >= shippedSince)
     .sort((a, b) => b.resolved_at! - a.resolved_at!)
     .map((l): ShippedItem => ({ id: `lane:${l.id}`, title: l.title, by: l.owner_seat, at: l.resolved_at! }));
 
-  const needsHuman: NeedsItem[] = [
+  const asked: NeedsItem[] = [
     ...asks
       .filter((a) => askIsLoud(a.state) && (a.to === null || humans.has(a.to)))
       .map(
@@ -126,23 +196,11 @@ export function briefing(input: {
           title: firstLine(a.env.body),
           owner: a.env.from,
           waitingOn: a.to,
+          want: wantOf(a.species),
+          waitsOn: null,
           since: a.env.ts,
           laneId: null,
           ref: a.env.id,
-        }),
-      ),
-    ...lanes
-      .filter((l) => l.state === 'blocked')
-      .map(
-        (l): NeedsItem => ({
-          id: `lane:${l.id}`,
-          kind: 'blocked',
-          title: l.title,
-          owner: l.owner_seat,
-          waitingOn: null,
-          since: recency(l),
-          laneId: l.id,
-          ref: l.id,
         }),
       ),
     ...requests
@@ -154,6 +212,8 @@ export function briefing(input: {
           title: `wants to join${r.target ? ` as ${r.target.replace(/^(seat|role):/, '')}` : ''}`,
           owner: null,
           waitingOn: null,
+          want: 'approval',
+          waitsOn: null,
           since: r.ts,
           laneId: null,
           ref: r.id,
@@ -161,18 +221,92 @@ export function briefing(input: {
       ),
   ].sort((a, b) => a.since - b.since); // longest-waiting first
 
+  const blocked = lanes
+    .filter((l) => l.state === 'blocked')
+    .map((l): NeedsItem => {
+      const dep = l.depends_on
+        .map((id) => byId.get(id))
+        .find((d) => d !== undefined && d.state !== 'done' && d.state !== 'abandoned');
+      return {
+        id: `lane:${l.id}`,
+        kind: 'blocked',
+        title: l.title,
+        owner: l.owner_seat,
+        waitingOn: null,
+        want: null,
+        waitsOn: dep ? { title: dep.title, owner: dep.owner_seat } : null,
+        since: recency(l),
+        laneId: l.id,
+        ref: l.id,
+      };
+    })
+    .sort((a, b) => a.since - b.since);
+
+  // Under the human who has to act. A seat claim is for an admin; a team-wide ask is for the team.
+  const groups = new Map<string, NeedsItem[]>();
+  for (const n of asked) {
+    const human = n.kind === 'seat-request' ? 'an admin' : (n.waitingOn ?? 'the team');
+    const list = groups.get(human);
+    if (list) list.push(n);
+    else groups.set(human, [n]);
+  }
+  const needsGroups: NeedsGroup[] = [...groups.entries()]
+    .map(([human, items]) => ({
+      key: `human:${human}`,
+      human,
+      heading: needsHeading(
+        human,
+        items.map((i) => i.want ?? 'an answer'),
+      ),
+      items,
+    }))
+    .sort((a, b) => b.items.length - a.items.length || a.human.localeCompare(b.human));
+
+  const goalGroups = new Map<string, WorkItem[]>();
+  for (const w of inProgress) {
+    const key = w.goal ?? '';
+    const list = goalGroups.get(key);
+    if (list) list.push(w);
+    else goalGroups.set(key, [w]);
+  }
+  const byGoal: GoalGroup[] = [...goalGroups.entries()]
+    .map(([goal, items]) => ({ key: `goal:${goal}`, goal: goal || 'No goal', items }))
+    .sort(
+      (a, b) =>
+        Number(a.goal === 'No goal') - Number(b.goal === 'No goal') ||
+        b.items.length - a.items.length ||
+        a.goal.localeCompare(b.goal),
+    );
+
+  const shippers = new Map<string, ShippedItem[]>();
+  for (const s of shipped) {
+    const who = s.by ?? 'someone';
+    const list = shippers.get(who);
+    if (list) list.push(s);
+    else shippers.set(who, [s]);
+  }
+  const shippedBy: ShippedGroup[] = [...shippers.entries()]
+    .map(([who, items]) => ({ who, items }))
+    .sort((a, b) => b.items.length - a.items.length || a.who.localeCompare(b.who));
+
+  const needsHuman = [...asked, ...blocked].sort((a, b) => a.since - b.since);
+  const today = shipped.filter((s) => now - s.at < SHIPPED_WINDOW_MS).length;
   const parts = [
     inProgress.length ? `${inProgress.length} in progress` : null,
     needsHuman.length ? `${needsHuman.length} need${needsHuman.length === 1 ? 's' : ''} a human` : null,
     inReview.length ? `${inReview.length} in review` : null,
-    shipped.length ? `${shipped.length} shipped today` : null,
+    today ? `${today} shipped today` : null,
   ].filter((p): p is string => p !== null);
 
   return {
     needsHuman,
+    needsGroups,
+    blocked,
     inProgress,
+    byGoal,
     inReview,
     shipped,
+    shippedBy,
     headline: parts.length ? parts.join(' · ') : 'quiet — nothing in flight',
   };
 }

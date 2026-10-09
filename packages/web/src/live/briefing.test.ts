@@ -1,7 +1,7 @@
 import type { LaneBoard, MemberSummary } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import type { AskView } from './asks';
-import { briefing, SHIPPED_WINDOW_MS } from './briefing';
+import { briefing, briefingSince, needsHeading, SHIPPED_WINDOW_MS } from './briefing';
 
 const NOW = 1_800_000_000_000;
 const lane = (id: string, state: string, over: Record<string, unknown> = {}) => ({
@@ -144,5 +144,107 @@ describe('briefing', () => {
   it('says quiet for an empty team and for a missing board', () => {
     expect(run().headline).toBe('quiet — nothing in flight');
     expect(run({ board: null }).headline).toBe('quiet — nothing in flight');
+  });
+
+  it('puts every kind of ask under the human who has to act, headed by what they are asked for', () => {
+    const b = run({
+      asks: [
+        ask('1', 'open', 'approve', 9_000, 'nick'),
+        ask('2', 'open', 'consult', 8_000, 'nick'),
+        ask('3', 'open', 'escalate', 7_000, null),
+      ],
+    });
+    expect(b.needsGroups.map((g) => [g.human, g.heading])).toEqual([
+      ['nick', 'Needs approval and clarification from nick'],
+      ['the team', 'Needs an answer from the team'],
+    ]);
+    expect(b.needsGroups[0]!.items.map((i) => i.ref)).toEqual(['1', '2']);
+  });
+
+  it('gives a seat claim to an admin, and keeps blocked lanes out of the human groups', () => {
+    const req = { id: 'r1', target: 'seat:zed', ts: NOW - 1000, status: 'pending' } as never;
+    const b = run({ requests: [req], board: board(lane('c', 'blocked')) });
+    expect(b.needsGroups.map((g) => g.heading)).toEqual(['Needs approval from an admin']);
+    expect(b.blocked.map((x) => x.laneId)).toEqual(['c']);
+    expect(b.needsHuman).toHaveLength(2); // the headline still counts both
+  });
+
+  it('says what a blocked lane waits on when it declares an open dependency', () => {
+    const b = run({
+      board: board(
+        lane('dep', 'active', { title: 'the thing it needs', owner_seat: 'bob' }),
+        lane('c', 'blocked', { depends_on: ['dep'] }),
+      ),
+    });
+    expect(b.blocked[0]!.waitsOn).toEqual({ title: 'the thing it needs', owner: 'bob' });
+    const done = run({
+      board: board(lane('dep', 'done'), lane('c', 'blocked', { depends_on: ['dep'] })),
+    });
+    expect(done.blocked[0]!.waitsOn).toBeNull();
+  });
+
+  it('groups in progress by goal, the biggest first and the goalless last', () => {
+    const b = run({
+      board: board(
+        lane('a', 'active', { goal_id: 'g1' }),
+        lane('b', 'active', { goal_id: 'g2' }),
+        lane('c', 'active', { goal_id: 'g2' }),
+        lane('d', 'active'),
+      ),
+      goals: [
+        { id: 'g1', title: 'Launch — ships' },
+        { id: 'g2', title: 'Cloud — hosted' },
+      ],
+    });
+    expect(b.byGoal.map((g) => [g.goal, g.items.length])).toEqual([
+      ['Cloud', 2],
+      ['Launch', 1],
+      ['No goal', 1],
+    ]);
+  });
+
+  it('lists what shipped since a given moment, by who shipped it, the most first', () => {
+    const since = NOW - 3 * 24 * 60 * 60 * 1000;
+    const b = run({
+      shippedSince: since,
+      board: board(
+        lane('a', 'done', { owner_seat: 'ann', resolved_at: NOW - 2 * 24 * 60 * 60 * 1000 }),
+        lane('b', 'done', { owner_seat: 'bob', resolved_at: NOW - 1000 }),
+        lane('c', 'done', { owner_seat: 'bob', resolved_at: NOW - 2000 }),
+        lane('d', 'done', { owner_seat: 'ann', resolved_at: since - 1 }),
+      ),
+    });
+    expect(b.shippedBy.map((g) => [g.who, g.items.length])).toEqual([
+      ['bob', 2],
+      ['ann', 1],
+    ]);
+    // the headline stays "today": only the two inside 24 h
+    expect(b.headline).toBe('2 shipped today');
+  });
+});
+
+describe('briefingSince', () => {
+  const at = (iso: string) => new Date(iso).getTime();
+  const day = (ms: number) => new Date(ms).getDay();
+  it('reaches back to the previous working day, and to Friday over a weekend', () => {
+    // 2026-10-07 is a Wednesday, 10-12 a Monday, 10-10 a Saturday, 10-11 a Sunday.
+    expect(day(briefingSince(at('2026-10-07T09:00:00')))).toBe(2); // Tue
+    expect(day(briefingSince(at('2026-10-12T09:00:00')))).toBe(5); // Mon → Fri
+    expect(day(briefingSince(at('2026-10-11T09:00:00')))).toBe(5); // Sun → Fri
+    expect(day(briefingSince(at('2026-10-10T09:00:00')))).toBe(5); // Sat → Fri
+  });
+
+  it('starts at midnight of that day', () => {
+    const d = new Date(briefingSince(at('2026-10-07T15:30:00')));
+    expect([d.getHours(), d.getMinutes()]).toEqual([0, 0]);
+  });
+});
+
+describe('needsHeading', () => {
+  it('names one want plainly, and joins several in a fixed order', () => {
+    expect(needsHeading('nick', ['approval'])).toBe('Needs approval from nick');
+    expect(needsHeading('nick', ['an answer', 'approval', 'clarification'])).toBe(
+      'Needs approval, clarification and an answer from nick',
+    );
   });
 });

@@ -7301,23 +7301,264 @@
   color: var(--lc-danger-ink);
 }
 
-/* The Now panel (live-briefing spec). Lives inside `.lc-team`, so it inherits that column's track,
-   collapse rail and big-screen zoom. Tokens are the live page's own; --lc-warn is a FILL, and
-   --lc-warn-ink is anything read as text (packages/web/AGENTS.md). */
-.now {
+/* The Now briefing (live-briefing spec): what a member reads when they sit down having forgotten
+   yesterday. One card with three homes — an overlay over the room's left, a side tab it docks to, and
+   a full-screen layout — and the same geometry properties in all three so the move between them is
+   one transition, not three animations. Docked, the card is scaled to the tab's size at the tab's
+   position, so collapsing visibly shrinks INTO the tab and opening grows OUT of it. --lc-warn is a
+   FILL; --lc-warn-ink is anything read as text (packages/web/AGENTS.md). */
+.lc__canvas:not(.bc__canvas) {
+  position: relative;
+}
+.now-ov {
   --now-band: color-mix(in srgb, var(--lc-warn) 22%, var(--lc-ground-2));
   --now-band-edge: color-mix(in srgb, var(--lc-warn) 70%, var(--lc-ground-2));
+  position: absolute;
+  z-index: var(--lc-z-overlay);
+  top: 72px;
+  left: var(--lc-5);
+  width: min(440px, 36%);
+  height: min(calc(100% - 92px), 760px);
   display: flex;
   flex-direction: column;
+  background: var(--lc-ground-2);
+  border: 1px solid var(--lc-border);
+  border-radius: var(--lc-r-md);
+  /* A hard edge, not a soft cast shadow: a blurred shadow darkens whatever sits beside the card (a
+     nameplate read 4.48 against 4.5 beside it) and is the template look the designer skill names. */
+  box-shadow: 0 2px 0 var(--lc-border);
+  transform-origin: 0 0;
+  transition:
+    top var(--lc-dur-4) var(--lc-ease-out),
+    left var(--lc-dur-4) var(--lc-ease-out),
+    width var(--lc-dur-4) var(--lc-ease-out),
+    height var(--lc-dur-4) var(--lc-ease-out),
+    transform var(--lc-dur-4) var(--lc-ease-out),
+    opacity var(--lc-dur-3) var(--lc-ease-out);
+}
+.now-ov--full,
+.now-ov--overlay.is-phone {
+  top: 12px;
+  left: 12px;
+  width: calc(100% - 24px);
+  height: calc(100% - 24px);
+}
+.now-ov--docked {
+  /* Shrunk onto the tab: its top-left corner lands where the tab's is. */
+  transform: translate(-16px, 40px) scale(0.06);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    top var(--lc-dur-4) var(--lc-ease-out),
+    left var(--lc-dur-4) var(--lc-ease-out),
+    width var(--lc-dur-4) var(--lc-ease-out),
+    height var(--lc-dur-4) var(--lc-ease-out),
+    transform var(--lc-dur-4) var(--lc-ease-out),
+    opacity var(--lc-dur-3) var(--lc-ease-out),
+    visibility 0s linear var(--lc-dur-4);
+}
+.now-ov__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--lc-4);
+  padding: var(--lc-3) var(--lc-5);
+  border-bottom: 1px solid var(--lc-border);
+}
+.now-ov__k {
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lc-muted);
+}
+.now-ov__headline {
+  margin: 2px 0 0;
+  text-wrap: balance;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--lc-text);
+}
+.now-ov__ctl {
+  display: flex;
+  gap: var(--lc-2);
+}
+.now-ctl {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--lc-r-sm);
+  color: var(--lc-muted);
+  cursor: pointer;
+}
+.now-ctl:hover {
+  background: var(--lc-surface);
+  color: var(--lc-text);
+}
+.now-ctl svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.now-ctl:focus-visible,
+.now-dock:focus-visible,
+.now-r:focus-visible,
+.now-more__btn:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 2px;
+}
+.now-ov__scroll {
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding: 0 var(--lc-5) var(--lc-5);
+}
+
+/* The side tab it docks to: a spine on the room's left edge, with how many need a human on it. */
+.now-dock {
+  all: unset;
+  box-sizing: border-box;
+  position: absolute;
+  z-index: var(--lc-z-overlay);
+  top: 112px;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lc-3);
+  min-width: 32px;
+  min-height: 88px;
+  padding: var(--lc-4) var(--lc-2);
+  background: var(--lc-ground-2);
+  border: 1px solid var(--lc-border);
+  border-left: 0;
+  border-radius: 0 var(--lc-r-md) var(--lc-r-md) 0;
+  box-shadow: 0 2px 0 var(--lc-border);
+  cursor: pointer;
+  color: var(--lc-text);
+  transition:
+    opacity var(--lc-dur-3) var(--lc-ease-out),
+    background-color var(--lc-dur-2) var(--lc-ease-out);
+}
+.now-dock:hover {
+  background: var(--lc-surface);
+}
+.now-dock.is-away {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--lc-dur-3) var(--lc-ease-out),
+    visibility 0s linear var(--lc-dur-3);
+}
+.now-dock__label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.now-dock__n {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--lc-warn);
+  color: var(--lc-text);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* On a phone the tab is a small pill in the team header's empty right side — a spine down the left
+   edge would sit on top of the column's own avatars — and the card shrinks toward it. */
+@media (max-width: 880px) {
+  .now-dock {
+    top: 6px;
+    left: auto;
+    right: var(--lc-4);
+    flex-direction: row;
+    align-items: center;
+    min-width: 0;
+    min-height: 32px;
+    padding: 0 var(--lc-4);
+    border: 1px solid var(--lc-border);
+    border-radius: 16px;
+  }
+  .now-dock__label {
+    writing-mode: horizontal-tb;
+    transform: none;
+  }
+  .now-ov--docked {
+    transform-origin: 100% 0;
+    transform: translate(-4px, -6px) scale(0.06);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .now-ov,
+  .now-ov--docked,
+  .now-dock,
+  .now-dock.is-away {
+    transition: none;
+  }
+}
+.now-ov.is-still,
+.now-ov.is-still.now-ov--docked,
+.now-dock.is-still {
+  transition: none;
+}
+
+/* The body: three columns in full view, one stack in the overlay. */
+.now-body.is-full {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-areas:
+    'needs progress shipped'
+    'review progress shipped';
+  grid-template-rows: auto 1fr;
+  gap: 0 var(--lc-8);
+  align-items: start;
+}
+.now-sec--needs {
+  grid-area: needs;
+}
+.now-sec--progress {
+  grid-area: progress;
+}
+.now-sec--shipped {
+  grid-area: shipped;
+}
+.now-sec--review {
+  grid-area: review;
+}
+.now-sec {
+  margin-top: var(--lc-4);
+}
+.now-sec--needs.is-loud {
+  padding: 0 var(--lc-4) var(--lc-2);
+  background: var(--now-band);
+  border: 1px solid var(--now-band-edge);
+  border-radius: var(--lc-r-sm);
 }
 .now-h {
   display: flex;
   align-items: baseline;
   gap: var(--lc-3);
-  margin: var(--lc-5) 0 var(--lc-3);
+  margin: var(--lc-3) 0 var(--lc-1);
   font-family: var(--font-mono, monospace);
   font-size: 11px;
   font-weight: 600;
@@ -7325,145 +7566,125 @@
   text-transform: uppercase;
   color: var(--lc-muted);
 }
-.now-h__n {
+.now-h b {
   font-weight: 600;
-  color: var(--lc-text);
+  color: inherit;
 }
 .now-h__sub {
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
 }
+.now-h--loud,
+.now-h--loud b {
+  color: var(--lc-warn-ink);
+}
+.now-h--blocked,
+.now-h--blocked b {
+  color: var(--lc-danger-ink);
+}
 .now-list {
   list-style: none;
   margin: 0;
   padding: 0;
 }
-
-/* Needs a human: the only loud section. A calm line when empty — good news, not a missing section. */
-.now-needs.is-loud {
-  margin: var(--lc-4) calc(var(--lc-5) * -0.5) 0;
-  padding: 0 var(--lc-5) var(--lc-3);
-  background: var(--now-band);
-  border: 1px solid var(--now-band-edge);
-  border-radius: var(--lc-r-md);
-}
-.now-h--loud {
-  color: var(--lc-warn-ink);
-}
-.now-h--loud .now-h__n {
-  color: var(--lc-warn-ink);
-}
-.now-calm {
-  margin: var(--lc-5) 0 var(--lc-2);
-  font-size: 13px;
-  color: var(--lc-muted);
-}
-.now-need {
-  border-top: 1px solid var(--now-band-edge);
-}
-.now-need:first-child {
-  border-top: 0;
-}
-.now-need__hit {
+.now-r {
   all: unset;
   box-sizing: border-box;
   display: grid;
-  gap: 3px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: var(--lc-4);
   width: 100%;
-  padding: var(--lc-4) 0;
+  min-height: 26px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--lc-border);
   cursor: pointer;
 }
-.now-need__hit:focus-visible,
-.now-row__hit:focus-visible,
-.now-more__btn:focus-visible {
-  outline: 2px solid var(--lc-focus);
-  outline-offset: 2px;
-}
-.now-need__kind {
-  justify-self: start;
-  font-family: var(--font-mono, monospace);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--lc-warn-ink);
-}
-.now-need--blocked .now-need__kind {
-  color: var(--lc-danger-ink);
-}
-.now-need__title {
-  font-size: 15px;
+.now-r__t {
+  font-size: 13px;
   line-height: 1.3;
   color: var(--lc-text);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
-.now-need__meta,
-.now-row__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--lc-3) var(--lc-4);
-  font-size: 12px;
+.now-r__m {
+  font-size: 11.5px;
   color: var(--lc-muted);
-}
-.now-need__meta {
-  color: var(--lc-warn-ink);
-}
-.now-need__age,
-.now-row__age {
-  margin-left: auto;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-
-/* The three quiet sections. */
-.now-sec {
-  border-top: 1px solid var(--lc-border);
-  margin-top: var(--lc-4);
-}
-.now-needs + .now-sec {
-  border-top: 0;
-}
-.now-row {
-  border-bottom: 1px solid var(--lc-border);
-}
-.now-row:last-child {
-  border-bottom: 0;
-}
-.now-row__hit {
-  all: unset;
-  box-sizing: border-box;
-  display: grid;
-  gap: 3px;
-  width: 100%;
-  padding: var(--lc-3) 0;
-  cursor: pointer;
-}
-.now-row__title {
-  font-size: 14px;
-  line-height: 1.3;
-  color: var(--lc-text);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+.now-r__sub {
+  grid-column: 1 / -1;
+  font-size: 11.5px;
+  font-style: italic;
+  color: var(--lc-muted);
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
-.now-row--done .now-row__title {
+.now-sec--needs .now-r {
+  border-bottom-color: var(--now-band-edge);
+}
+.now-sec--needs .now-r__m {
+  color: var(--lc-warn-ink);
+}
+.now-r--done .now-r__t {
   color: var(--lc-muted);
 }
-.now-row__goal {
-  font-style: italic;
+.now-goal,
+.now-person {
+  margin-top: var(--lc-3);
 }
+.now-goal__h,
+.now-person__h {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-2);
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--lc-text);
+}
+.now-goal__h b,
+.now-person__h b,
+.now-r__n {
+  font-weight: 400;
+  color: var(--lc-muted);
+}
+.now-goal__n {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.now-r__t b {
+  font-weight: 600;
+}
+.now-r__t .now-dot {
+  margin-right: var(--lc-2);
+  vertical-align: -3px;
+}
+.now-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+}
+.now-calm,
 .now-empty {
-  margin: 0 0 var(--lc-3);
+  margin: var(--lc-4) 0 var(--lc-2);
   font-size: 13px;
   color: var(--lc-muted);
 }
 .now-more {
   list-style: none;
+  margin: 0;
 }
 .now-more__btn {
   all: unset;
@@ -7477,59 +7698,4 @@
   text-underline-offset: 2px;
   color: var(--lc-muted);
   cursor: pointer;
-}
-
-/* Who: the member's own avatar colour, so the dot is the person the floor and the cards already show. */
-.now-who {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--lc-2);
-}
-.now-who__dot {
-  display: inline-grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  font-size: 9px;
-  font-weight: 700;
-  color: #fff;
-}
-
-/* Tabs in the team column's header — Now | Team. */
-.lc-team__tabs {
-  display: flex;
-  align-items: center;
-  gap: var(--lc-4);
-}
-.lc-team__tab {
-  all: unset;
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--lc-2);
-  min-width: 32px;
-  min-height: 32px;
-  padding: 0 var(--lc-2);
-  justify-content: center;
-  font-family: var(--font-mono, monospace);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--lc-muted);
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-}
-.lc-team__tab[aria-selected='true'] {
-  color: var(--lc-text);
-  border-bottom-color: currentColor;
-}
-.lc-team__tab:focus-visible {
-  outline: 2px solid var(--lc-focus);
-  outline-offset: 2px;
-}
-.lc-team__tab-n {
-  font-weight: 400;
-  letter-spacing: 0;
 }

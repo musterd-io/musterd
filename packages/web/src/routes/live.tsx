@@ -23,7 +23,7 @@ import { logOpenMode } from '../live/stillMode';
 import { revealWhenMounted } from '../live/reveal';
 import { LogDrawer } from '../live/LogDrawer';
 import { Ticker } from '../live/Ticker';
-import { briefing } from '../live/briefing';
+import { briefing, briefingSince } from '../live/briefing';
 import { useSeatRequests } from '../live/useSeatRequests';
 import { TopMeter } from '../live/TopMeter';
 import type { LiveConfig } from '../live/client';
@@ -100,6 +100,11 @@ const NO_COLLAPSE: Collapsed = { office: false, team: false };
 /** The log drawer hosts today's `Stream` unchanged (ADR 464 lane 2) — fetched the first time it
  *  opens, never before: the stream column left /live's eager graph with the column itself. */
 const LazyStream = lazy(() => import('../live/Stream').then((m) => ({ default: m.Stream })));
+// The Now briefing is not needed to paint the room: it comes up a beat after first paint anyway, so
+// its code rides a lazy chunk and /live's eager graph (ADR 151/183) does not pay for it.
+const LazyNowOverlay = lazy(() =>
+  import('../live/NowOverlay').then((m) => ({ default: m.NowOverlay })),
+);
 // ADR 516: rendered only while a hold is in force, so its formatter (in `@musterd/protocol/wire`)
 // stays out of /live's eager graph on every ordinary day.
 const HoldsBanner = lazy(() =>
@@ -258,6 +263,7 @@ function LivePage() {
         roster,
         requests: seatRequests,
         now: Date.now(),
+        shippedSince: briefingSince(Date.now()),
       }),
     [board, report, asks, roster, seatRequests],
   );
@@ -641,13 +647,16 @@ function LivePage() {
               unreadable={rosterUnreadable}
               stale={rosterStale}
               asks={asks}
-              brief={brief}
-              onOpenLane={setBoardLane}
-              onOpenAsk={onActClick}
-              onOpenBoard={() =>
-                openBoard(new DOMRect(window.innerWidth / 2, window.innerHeight / 2, 1, 1))
-              }
             />
+            <Suspense fallback={null}>
+              <LazyNowOverlay
+                brief={brief}
+                roster={roster}
+                since={briefingSince(Date.now())}
+                onOpenLane={setBoardLane}
+                onOpenAsk={onActClick}
+              />
+            </Suspense>
           </div>
           {/* The headline ticker (ADR 464 §5): the last few notable moments, under the room. */}
           <Ticker
