@@ -1,5 +1,7 @@
 import { claudeReader } from './claude.js';
 import { codexReader } from './codex.js';
+import { grokReader } from './grok.js';
+import { opencodeReader } from './opencode.js';
 import type { WatchReader } from './reader.js';
 
 /**
@@ -9,5 +11,7 @@ import type { WatchReader } from './reader.js';
 export function watchReaderFor(harness: string): WatchReader | undefined {
   if (harness === 'claude-code') return claudeReader();
   if (harness === 'codex') return codexReader();
+  if (harness === 'grok') return grokReader();
+  if (harness === 'opencode') return opencodeReader();
   return undefined;
 }
