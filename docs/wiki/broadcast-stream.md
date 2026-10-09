@@ -31,15 +31,29 @@ in that window was not watched. Sink-side failures are the next section.
 
 ## What still takes the stream offline is downstream of ffmpeg, and one transient RTMP error costs about two minutes (2026-10-09; falsify: `fly machine exec` an iptables DROP on the box's route to `rtmps://live.twitch.tv` for 5 s on a live stream and read `fly logs` — ffmpeg still alive afterwards, or no `crash detected` within ~2 min, falsifies this) <!-- claim: defect -->
 
-Read from the code and the logs, **not yet reproduced**. After `◉ live`, `broadcast.ts` waits on one
-thing, `exitCode = await ffmpegExit`. ffmpeg exits for any sink failure: Twitch dropping the RTMP
-session, a network blip on Fly's side, a rejected key. The command returns 1; `entrypoint.sh` only
-loops on 75, so it `exit`s and the machine goes down. `stream ensure` (a 60 s LaunchAgent) sees
-"machine gone, no stop record" and starts a new one. Measured on this launch: machine created
-00:43:46Z, `◉ live` 00:44:44Z, so about 58 s from create to live. The worst case for one sink error is
-therefore the `ensure` tick (up to 60 s) plus that boot, **about two minutes offline, plus a fresh
-Fly machine and a new tailnet node**. Retrying the RTMP connection inside the machine would cost
-seconds, but nothing does it.
+**Falsified for a 5 s packet drop (2026-10-09).** Written from the code before it was run. The 5 s `DROP`
+was then run on the box: ffmpeg (pid 962), node (pid 955) and the machine were untouched, because TCP rode
+the blip out. The claim survives only for a connection that dies, which is measured in the next section.
+
+## A reset connection from Twitch's side takes the whole machine down, and the stream is back in about 96 s; a 5 s packet drop does not (2026-10-09; falsify: `fly machine exec` an `iptables` REJECT with `tcp-reset` on outbound 443 for 3 s on a live hosted stream — ffmpeg still running afterwards, or no `crash detected` and relaunch, falsifies this) <!-- claim: defect -->
+
+**Measured (hosted box, 2026-10-09Z).** A 3 s `REJECT --reject-with tcp-reset` on outbound 443:
+
+| time (Z) | event |
+| --- | --- |
+| 01:03:09 | `[tls] IO error: Connection reset by peer` from ffmpeg |
+| 01:03:11 | `Main child exited normally with code: 1`; the machine reboots and is not restarted (policy `no`) |
+| 01:03:54 | `stream ensure` records the crash and starts a new machine |
+| 01:04:19 | the new machine's API socket is up |
+| 01:04:45 | `◉ live` on machine `781e029ce950d8` |
+
+So 96 s from the reset to `◉ live`, on a new Fly machine and a new tailnet node. Twitch's own recovery
+comes on top; it was not watched.
+
+Why: after `◉ live`, `broadcast.ts` waits on one thing, `exitCode = await ffmpegExit`. ffmpeg exits on a
+dead sink, the command returns 1, and `entrypoint.sh` only loops on 75, so it exits and the machine
+goes with it. Nothing reconnects the RTMP session in place. The 96 s is the `ensure` tick (45 s here after the
+machine died, up to 60 s) plus 51 s from detection to `◉ live` (25 s to launch the machine, 26 s for it to go live; the first launch today took 58 s from create to live).
 
 What the history says about the laptop side (`~/.musterd/stream/ensure.log`, 31k lines, last
 written 2026-10-06, no timestamps): 53 `crash detected`, 51 `live again`, and 24 `no such host` lines
@@ -60,11 +74,11 @@ was live in those windows, so none of it is a measured outage.
   without it, so the stream could stay up with a frozen office; I have not seen which. Reproduce from
   the box (drop the route to the daemon's `:4849`) rather than by sleeping the laptop, which would
   also take the daemon, and every seat, down.
-- Twitch rejecting the key or the ingest. Needs a deliberately wrong key or a blocked route, on a live
-  stream.
+- Twitch rejecting the key. Needs a deliberately wrong key on a live stream; the reset above is the
+  closest stand-in and does not tell a rejected key from a dropped session.
 - How long Twitch shows the channel offline for each of those. Needs a watcher on Twitch's side.
 
-Inc 3 stops at measuring. Follows-up: deferred — retrying ffmpeg's sink in place gets a lane and an ADR once the falsifier above has been run and shows ffmpeg exiting on a short sink outage (2026-10-09).
+Inc 3 measured the reset case; the rest of the list above is still open. Follows-up: 01M4F32MMP63ZF9AVNHWWF3N6A (inc 4: reconnect the RTMP sink inside the machine).
 
 ## A merge to `main` dropped the Twitch ingest, and the restart it ran bought nothing (2026-10-08; falsify: with a hosted stream live on the new image, merge any commit and read `fly logs -a musterd-broadcast` — a `relaunching the stream` line inside the rebuild window falsifies this) <!-- claim: defect -->
 
