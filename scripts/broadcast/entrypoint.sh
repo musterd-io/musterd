@@ -139,8 +139,8 @@ timeout 15 "$CHROME_BIN" --headless=new --no-sandbox --disable-dev-shm-usage \
 
 # This loop is the whole reason the entrypoint no longer `exec`s the stream.
 #
-# A stream that cannot continue (a lost DevTools socket, a frozen picture) exits RESTART_EXIT_CODE
-# and wants running again. On a laptop that is a DETACHED replacement and an exit, so the shell
+# A stream that cannot continue (a Chrome that will not come back or keeps failing — ADR 551 — or a
+# lost DevTools socket) exits RESTART_EXIT_CODE and wants running again. On a laptop that is a DETACHED replacement and an exit, so the shell
 # prompt returns. Under `exec` here, that same move killed the machine — this process is the VM's
 # main process, so its exit made Fly's init tear the box down one second after the replacement
 # started streaming. Both hosted runs on 2026-07-27 died that way (4 and 6 min).

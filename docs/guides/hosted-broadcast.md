@@ -13,10 +13,12 @@
 - **The rented machine's main process is the entrypoint's supervisor loop**, and the stream runs
   inside it. Ending the stream (stop, Ctrl-C semantics, the ADR 159 stall watchdog, `--duration`)
   exits the loop, and `--rm` destroys the machine — billing tracks streamed hours (~$10–12/mo
-  at ~90h). The loop exists for one case: a stream that cannot continue (a lost Chrome socket, a
-  frozen picture) exits `75` instead of ending the machine, and the loop runs it again. A merge to
+  at ~90h). The loop exists for one case: a stream that cannot continue (a Chrome that will not come
+  back or keeps failing) exits `75` instead of ending the machine, and the loop runs it again. A merge to
   `main` is **not** such a case (ADR 548) — the stream keeps running through a daemon rebuild, and
-  the page reloads itself onto the new bundle (ADR 292). A change to the capture code itself needs
+  the page reloads itself onto the new bundle (ADR 292). Nor is one Chrome crash or freeze (ADR 551):
+  Chrome alone is relaunched, ffmpeg and the Twitch connection stay up, and viewers see a still frame
+  meanwhile. A change to the capture code itself needs
   `musterd stream build` and a restart.
 - **No Docker on the operator's machine** — images build on Fly's remote builders.
 - **Secrets are Fly secrets** (`TS_AUTHKEY`, `MUSTERD_STREAM_KEY`), set by the operator directly so

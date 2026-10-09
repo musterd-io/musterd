@@ -10,6 +10,23 @@ The stream rents one Fly machine per stream (its lifetime IS the stream's) reach
 
 The verbs record intent in `~/.musterd/stream/state.json`: `start` says live (before launching), `stop` says stopped with **who and why** (`--reason`, shown by `stream status`) — so a machine gone while the file says live is a crash by definition. `musterd service install --stream` installs a 60s LaunchAgent running `stream ensure`: crash → relaunch (≤3 per 30min, then it stands down and asks the team as the `streamwatch` service seat until a human `stream start` re-arms). Consequences to know: killing the machine any way other than `stream stop` now gets healed within ~60s, and `stream start --once` is the opt-out for deliberately unsupervised (e.g. `--duration`) runs. The 2026-08-18 Chrome death ("Chrome DevTools socket closed", dead until a human noticed) is the incident this closes; ADR 292 keeps the restarted page's bundle current from there.
 
+## A Chrome failure ended the whole stream though only the picture source had died (2026-10-08; falsify: `fly machine exec` a `kill -9` of Chrome's process group on a live hosted stream — a changed ffmpeg pid, a new machine, or a second `◉ live` line falsifies this) <!-- claim: defect -->
+
+A frozen picture (the frame-arrival watchdog), a Chrome exit and a lost DevTools socket all ended the
+stream: `forceStop` killed ffmpeg, or a graceful stop returned 0, and on the box the supervisor ran
+the whole thing again. ffmpeg and the RTMP session were healthy in every case. The frame pump already
+re-emits the last frame on a wall clock, so they could keep running while a new Chrome started.
+
+ADR 551 replaces Chrome alone (`relaunchCapture`): the capture is retired, a new one launched by the
+same `launchCapture`, the watchdog re-armed. Capped at 3 relaunches in 5 minutes, then the old
+whole-stream path. Verified on real local captures to a file: a killed Chrome came back in 7.9 s with
+ffmpeg's pid unchanged and a 75.0 s / 1125-frame output; a SIGSTOPped one was caught at 5.0 s and came
+back in 13.9 s; the fourth failure gave up. Viewers see a still frame for the relaunch (8–26 s on a
+loaded laptop; not yet measured on the box), not an offline channel.
+
+**Not run:** the same kill on the hosted box. Sink-side failures (Twitch refusing the key, the network,
+the laptop sleeping) still end the stream — inc 3 of lane `01M4EHDK1Q`.
+
 ## A merge to `main` dropped the Twitch ingest, and the restart it ran bought nothing (2026-10-08; falsify: with a hosted stream live on the new image, merge any commit and read `fly logs -a musterd-broadcast` — a `relaunching the stream` line inside the rebuild window falsifies this) <!-- claim: defect -->
 
 nick saw the channel go "offline" and come back. The box log had two matching events 21 minutes apart
