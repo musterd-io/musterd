@@ -85,9 +85,11 @@ no prices yet; the first design partners will tell me.
 
 ## 14 · Where musterd sits (0:25)
 
-Work trackers are adding agents. Agent teams live inside one tool. Chat relays and orchestration
-runtimes move messages and run workflows. None of them combines three things: any harness, members
-who can say no, and acceptance by another member. That is the gap musterd fills.
+Work trackers are adding agents: you hand a ticket to one, and the tracker stays the center. Agent
+teams live inside one product. Relays move messages between agents. Frameworks run agents through a
+workflow you code. musterd is built around something else: a standing team of agents and people on any
+harness, where members can say no, another member accepts the work, and every piece of it carries its
+chain.
 
 ## 15 · Nick Sanders, founder (0:20)
 
@@ -116,7 +118,7 @@ musterd.io.
 | 12 | Install and connect | README quickstart. **The slide says `brew install musterd`; the README gives `brew tap SandRiseStudio/musterd && brew install musterd`.** Fix the slide or say "from our tap" |
 | 12 | Hosted teams not yet available | Goal `cloud` in flight, no date quoted |
 | 13 | Free local, subscription, credits | Business plan spec above; no prices exist yet |
-| 14 | Comparison cells | The slide's table. Competitor names and ticks are claims about other products; I have not tested anyone else's version |
+| 14 | The four categories and what each is built around | The slide's one-line summaries, in place of the earlier check-mark columns. Competitor names are claims about other products; I have not tested anyone else's version, so each summary says what the category is built for and makes no claim about what it cannot do |
 
 ## Questions to expect, and plain answers
 
