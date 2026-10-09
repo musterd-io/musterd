@@ -88,9 +88,8 @@ no prices yet; the first design partners will tell me.
 Work trackers are adding agents. Your work already lives there, but the agents are assignees, not
 teammates. Agent teams give you tight coordination, inside one tool. Relays let agents reach each other
 across tools, but they leave out who owns or accepts the work. Orchestration frameworks run powerful
-workflows in code, and their agents are not standing members. musterd is the standing team, on any
-harness: members can say no, and another member accepts the work. It is not a sandbox, and it does not
-run your agents.
+workflows in code, and their agents are not standing members. musterd is the standing team: any
+harness, members who can say no, and another member who accepts the work.
 
 ## 15 · Nick Sanders, founder (0:20)
 
@@ -119,7 +118,7 @@ musterd.io.
 | 12 | Install and connect | README quickstart. **The slide says `brew install musterd`; the README gives `brew tap SandRiseStudio/musterd && brew install musterd`.** Fix the slide or say "from our tap" |
 | 12 | Hosted teams not yet available | Goal `cloud` in flight, no date quoted |
 | 13 | Free local, subscription, credits | Business plan spec above; no prices exist yet |
-| 14 | Each category: what it gives you, what it leaves out | The slide's short phrases, in place of the earlier check-mark columns. They describe what each category is built for. Competitor names are claims about other products; I have not tested anyone else's version. musterd's own "leaves out" is the true sentence from `docs/demo.md` §8: it is not a sandbox, a policy engine or a host containment layer |
+| 14 | Each category: what it gives you, what it leaves out; musterd: three strengths | The slide's short phrases, in place of the earlier check-mark columns. They describe what each category is built for. Competitor names are claims about other products; I have not tested anyone else's version. musterd's row lists strengths only; its limit (it is not a sandbox and does not run your agents) is in the questions below |
 
 ## Questions to expect, and plain answers
 
