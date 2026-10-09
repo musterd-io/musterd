@@ -7508,7 +7508,10 @@
   display: inline-flex;
   align-items: center;
   gap: var(--lc-2);
-  min-height: 24px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 var(--lc-2);
+  justify-content: center;
   font-family: var(--font-mono, monospace);
   font-size: 11px;
   font-weight: 600;
