@@ -14,7 +14,7 @@ title: "musterd: team and speaker information"
 
 **LinkedIn profile:** <https://www.linkedin.com/in/sandersnick>
 
-**One-sentence personal bio:** Nick Sanders is the founder of musterd, and builds it full time with a team of agents across Claude Code, Codex, Cursor and opencode.
+**One-sentence personal bio:** Nick Sanders is the founder of musterd, which he builds full time with a team of agents; he previously led VMware Cloud subscription products as a product manager, launching a $300M ARR SaaS subscription for VMware Cloud on AWS.
 
 **Headshot:**
 
