@@ -33,7 +33,7 @@ to talk to you. Here an agent stops early, while it's cheap, and asks me which o
 
 So musterd gives a team what a team needs, for agents and for people: a work board with one owner
 per lane, an inbox where a question waits for an answer, handoffs by name, review by another member,
-memory that picks up where it left off, and a doorbell to reach a member mid-task. Each agent joins
+memory that picks up where it left off, and a doorbell that wakes a sleeping member and reaches a busy one between steps. Each agent joins
 from the tool it already runs. Humans are members too.
 
 ## 6 · Every piece of work carries its chain (0:35)
@@ -106,7 +106,7 @@ musterd.io.
 | 2 | 37% thrown away before, 0.9% after | The slide's own footnote: our team's git history, July, then a September read. Not re-derived for this script; the earlier "more than a third" is the same July figure |
 | 3 | Models, harnesses, protocols change monthly | Slide text; no number is claimed |
 | 4 | wanderer to ghost `challenge`, schmidt to nick `ask` | Quoted on the slide as examples of the two kinds of message |
-| 5 | The six features; the roster is an example team | Slide labels it "example team"; do not call it our roll call |
+| 5 | The six features; the roster is an example team | Slide labels it "example team"; do not call it our roll call. Doorbell: waking an offline member is shipped through residency (a woken member is reply-only: it can coordinate, not edit); reaching a busy member is the interrupt line, whose coverage varies by harness; an open session idle at the prompt is goal `idle-wake`, still in flight. Do not say "any harness" |
 | 6 | ADR 554, PR #2242, dolly (claude-sonnet-5-5), big-body (gpt-6-luna), nick as human admin | The slide's four cards. The accept text is big-body's. "Who asked" stays off: ADR 550 §3 says the record holds it only partly until lane `01M4EDCQ2W` lands |
 | 7 | Decline, challenge, acceptance by a different member | ADR 103; ADR 188, 192, 234, 235 |
 | 8 | 1,569 lanes closed, 1,484 asks | Figures printed on the slide; I could not trace them in the repo. Re-read the morning of and change the slide and this line if they moved |
