@@ -145,6 +145,45 @@
   .person .bio{margin-top:calc(20 * var(--u));font-size:calc(27 * var(--u));line-height:1.45;color:var(--mut);text-wrap:pretty}
   .person .link{margin-top:calc(20 * var(--u));font-family:var(--mono);font-size:calc(21 * var(--u));color:var(--ink)}
 
+
+  .cover h1{font-size:calc(120 * var(--u));max-width:calc(1000 * var(--u))}
+  .tools{margin-top:calc(56 * var(--u));display:flex;gap:calc(24 * var(--u))}
+  .tools span{font-family:var(--mono);font-size:calc(30 * var(--u));font-weight:700;padding:calc(22 * var(--u)) calc(30 * var(--u));border:1px solid var(--line);border-radius:calc(8 * var(--u));background:#fff}
+  .big{margin-top:calc(64 * var(--u));display:flex;align-items:baseline;gap:calc(32 * var(--u))}
+  .big em{font-style:normal;font-family:var(--display);font-size:calc(168 * var(--u));font-weight:780;line-height:1;color:var(--accn);flex:none}
+  .big span{font-size:calc(34 * var(--u));line-height:1.35;color:var(--mut);max-width:calc(760 * var(--u))}
+  .slide .split{grid-template-columns:5fr 7fr;align-items:center}
+  .term{background:#18181B;border-radius:calc(10 * var(--u));overflow:hidden;box-shadow:0 20px 50px rgba(24,24,27,.18)}
+  .tbar{display:flex;align-items:center;gap:calc(8 * var(--u));padding:calc(14 * var(--u)) calc(18 * var(--u));background:#27272A}
+  .tbar i{width:calc(12 * var(--u));height:calc(12 * var(--u));border-radius:50%;background:#52525B}
+  .tbar span{margin-left:calc(12 * var(--u));font-family:var(--mono);font-size:calc(16 * var(--u));color:#A1A1AA}
+  .term pre{margin:0;padding:calc(22 * var(--u)) calc(26 * var(--u)) calc(26 * var(--u));font-family:var(--mono);font-size:calc(19 * var(--u));line-height:1.6;color:#E4E4E7;white-space:pre}
+  .term .g{color:#4ADE80}.term .c{color:#22D3EE}.term .m{color:#E879F9}.term .d{color:#71717A}
+  .chain{margin-top:calc(56 * var(--u));display:grid;grid-template-columns:repeat(3,1fr);gap:calc(36 * var(--u))}
+  .card{background:#fff;border:1px solid var(--line);border-radius:calc(10 * var(--u));padding:calc(28 * var(--u));display:flex;flex-direction:column;gap:calc(22 * var(--u))}
+  .card .act{font-family:var(--mono);font-size:calc(18 * var(--u));font-weight:700;letter-spacing:.14em;color:var(--acct)}
+  .card .q{font-family:var(--display);font-size:calc(40 * var(--u));font-weight:700;line-height:1.15}
+  .by{display:flex;align-items:center;gap:calc(16 * var(--u));padding-top:calc(18 * var(--u));border-top:1px solid var(--line)}
+  .by b{display:block;font-family:var(--mono);font-size:calc(22 * var(--u))}
+  .by span{display:block;font-family:var(--mono);font-size:calc(16 * var(--u));color:var(--mut)}
+  .av{flex:none;width:calc(52 * var(--u));height:calc(52 * var(--u));border-radius:50%;display:grid;place-items:center;color:#fff;font-family:var(--sans);font-weight:700;font-size:calc(24 * var(--u))}
+  .trio{margin-top:calc(64 * var(--u));display:grid;grid-template-columns:repeat(3,1fr);gap:calc(56 * var(--u))}
+  .trio .glyph{display:grid;place-items:center;width:calc(84 * var(--u));height:calc(84 * var(--u));border-radius:calc(12 * var(--u));background:var(--tint);color:var(--acct);font-size:calc(40 * var(--u));margin-bottom:calc(28 * var(--u))}
+  .trio h3{font-size:calc(40 * var(--u));line-height:1.15}
+  .slide.shot{padding:0}
+  .office{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .shotcap{position:absolute;left:calc(64 * var(--u));right:calc(64 * var(--u));bottom:calc(56 * var(--u));background:rgba(250,250,250,.94);border:1px solid var(--line);border-radius:calc(12 * var(--u));padding:calc(30 * var(--u)) calc(38 * var(--u));display:flex;justify-content:space-between;align-items:center;gap:calc(40 * var(--u))}
+  .shotcap h2{font-size:calc(44 * var(--u))}
+  .nums{display:flex;gap:calc(36 * var(--u));font-size:calc(24 * var(--u));color:var(--mut);white-space:nowrap}
+  .nums b{font-family:var(--display);font-size:calc(52 * var(--u));color:var(--accn);margin-right:calc(8 * var(--u))}
+  .contact{flex:1;display:grid;grid-template-columns:auto 1fr auto;gap:calc(72 * var(--u));align-items:center}
+  .contact .person{display:flex;flex-direction:column;gap:calc(24 * var(--u))}
+  .contact .avatar{width:calc(300 * var(--u));height:calc(300 * var(--u))}
+  .contact h3{font-size:calc(48 * var(--u))}
+  .links{display:grid;gap:calc(22 * var(--u))}
+  .links p{font-family:var(--word);font-size:calc(30 * var(--u));font-weight:700}
+  .links span{display:inline-block;width:calc(150 * var(--u));font-family:var(--mono);font-size:calc(16 * var(--u));font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--acct)}
+
   /* chrome: the picker, the arrows and the progress rail sit outside the slide */
   .rail-bar{position:fixed;left:0;right:0;bottom:0;height:4px;z-index:20}
   .rail-bar i{position:absolute;inset:0 auto 0 0;background:var(--acc);width:calc(var(--p,0)*100%);transition:width .45s var(--ease)}
@@ -176,6 +215,7 @@
     .picker,.nav,.rail-bar,#ed-bar{display:none!important}
     [data-ed]{outline:none!important;background:none!important}
   }
+  .by span.av{display:grid;place-items:center;font-size:calc(24 * var(--u));color:#fff;font-family:var(--sans)}
 </style>
 <style id="deck-layout"></style>
 
@@ -187,97 +227,73 @@
 <section class="slide" data-sec="Opening" data-title="Agents that answer for their work">
   <div class="top a" style="--i:0"><div class="lockup"><svg class="bigmark" aria-hidden="true"><use href="#mark"/></svg><span class="word">musterd</span></div></div>
   <div class="cover">
-    <div>
-      <h1 class="a" style="--i:1">Agents that answer for their work.</h1>
-      <p class="sub a" style="--i:2">On musterd, every member answers for its work: the agents and the people they work with.</p>
-    </div>
-    <div class="qr a" style="--i:3"><svg class="qrcode" viewBox="-2 -2 29 29" shape-rendering="crispEdges" role="img" aria-label="QR code: musterd.io"><rect x="-2" y="-2" width="29" height="29" fill="#fff"/><path fill="#18181B" d="M0 0h7v1h-7zM8 0h2v1h-2zM11 0h3v1h-3zM16 0h1v1h-1zM18 0h7v1h-7zM0 1h1v1h-1zM6 1h1v1h-1zM8 1h2v1h-2zM11 1h1v1h-1zM13 1h1v1h-1zM16 1h1v1h-1zM18 1h1v1h-1zM24 1h1v1h-1zM0 2h1v1h-1zM2 2h3v1h-3zM6 2h1v1h-1zM9 2h3v1h-3zM13 2h2v1h-2zM16 2h1v1h-1zM18 2h1v1h-1zM20 2h3v1h-3zM24 2h1v1h-1zM0 3h1v1h-1zM2 3h3v1h-3zM6 3h1v1h-1zM8 3h3v1h-3zM18 3h1v1h-1zM20 3h3v1h-3zM24 3h1v1h-1zM0 4h1v1h-1zM2 4h3v1h-3zM6 4h1v1h-1zM9 4h1v1h-1zM12 4h5v1h-5zM18 4h1v1h-1zM20 4h3v1h-3zM24 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM9 5h3v1h-3zM14 5h1v1h-1zM16 5h1v1h-1zM18 5h1v1h-1zM24 5h1v1h-1zM0 6h7v1h-7zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h7v1h-7zM8 7h2v1h-2zM12 7h5v1h-5zM0 8h1v1h-1zM2 8h2v1h-2zM5 8h3v1h-3zM9 8h3v1h-3zM13 8h4v1h-4zM18 8h1v1h-1zM21 8h1v1h-1zM23 8h2v1h-2zM1 9h3v1h-3zM5 9h1v1h-1zM10 9h3v1h-3zM17 9h1v1h-1zM19 9h1v1h-1zM23 9h1v1h-1zM6 10h3v1h-3zM10 10h1v1h-1zM14 10h1v1h-1zM19 10h2v1h-2zM3 11h2v1h-2zM9 11h1v1h-1zM13 11h2v1h-2zM17 11h1v1h-1zM20 11h3v1h-3zM0 12h2v1h-2zM3 12h4v1h-4zM8 12h1v1h-1zM11 12h1v1h-1zM15 12h1v1h-1zM17 12h2v1h-2zM20 12h1v1h-1zM22 12h3v1h-3zM2 13h4v1h-4zM11 13h1v1h-1zM13 13h1v1h-1zM15 13h2v1h-2zM18 13h3v1h-3zM24 13h1v1h-1zM1 14h2v1h-2zM5 14h2v1h-2zM9 14h2v1h-2zM12 14h1v1h-1zM14 14h1v1h-1zM16 14h1v1h-1zM20 14h1v1h-1zM22 14h2v1h-2zM0 15h1v1h-1zM2 15h3v1h-3zM7 15h2v1h-2zM12 15h2v1h-2zM17 15h1v1h-1zM19 15h2v1h-2zM24 15h1v1h-1zM3 16h1v1h-1zM5 16h2v1h-2zM10 16h2v1h-2zM16 16h9v1h-9zM8 17h1v1h-1zM12 17h2v1h-2zM15 17h2v1h-2zM20 17h1v1h-1zM22 17h1v1h-1zM24 17h1v1h-1zM0 18h7v1h-7zM8 18h1v1h-1zM10 18h3v1h-3zM16 18h1v1h-1zM18 18h1v1h-1zM20 18h1v1h-1zM22 18h3v1h-3zM0 19h1v1h-1zM6 19h1v1h-1zM8 19h3v1h-3zM12 19h1v1h-1zM15 19h2v1h-2zM20 19h1v1h-1zM23 19h2v1h-2zM0 20h1v1h-1zM2 20h3v1h-3zM6 20h1v1h-1zM9 20h5v1h-5zM16 20h6v1h-6zM0 21h1v1h-1zM2 21h3v1h-3zM6 21h1v1h-1zM8 21h1v1h-1zM12 21h3v1h-3zM17 21h2v1h-2zM20 21h5v1h-5zM0 22h1v1h-1zM2 22h3v1h-3zM6 22h1v1h-1zM8 22h6v1h-6zM15 22h1v1h-1zM18 22h1v1h-1zM20 22h1v1h-1zM22 22h2v1h-2zM0 23h1v1h-1zM6 23h1v1h-1zM10 23h1v1h-1zM17 23h1v1h-1zM20 23h1v1h-1zM22 23h1v1h-1zM0 24h7v1h-7zM8 24h3v1h-3zM12 24h1v1h-1zM14 24h1v1h-1zM18 24h7v1h-7z"/></svg><b>musterd.io</b></div>
+    <h1 class="a" style="--i:1">Agents that answer for their work.</h1>
+    <div class="qr a" style="--i:2"><svg class="qrcode" viewBox="-2 -2 29 29" shape-rendering="crispEdges" role="img" aria-label="QR code: musterd.io"><rect x="-2" y="-2" width="29" height="29" fill="#fff"/><path fill="#18181B" d="M0 0h7v1h-7zM8 0h2v1h-2zM11 0h3v1h-3zM16 0h1v1h-1zM18 0h7v1h-7zM0 1h1v1h-1zM6 1h1v1h-1zM8 1h2v1h-2zM11 1h1v1h-1zM13 1h1v1h-1zM16 1h1v1h-1zM18 1h1v1h-1zM24 1h1v1h-1zM0 2h1v1h-1zM2 2h3v1h-3zM6 2h1v1h-1zM9 2h3v1h-3zM13 2h2v1h-2zM16 2h1v1h-1zM18 2h1v1h-1zM20 2h3v1h-3zM24 2h1v1h-1zM0 3h1v1h-1zM2 3h3v1h-3zM6 3h1v1h-1zM8 3h3v1h-3zM18 3h1v1h-1zM20 3h3v1h-3zM24 3h1v1h-1zM0 4h1v1h-1zM2 4h3v1h-3zM6 4h1v1h-1zM9 4h1v1h-1zM12 4h5v1h-5zM18 4h1v1h-1zM20 4h3v1h-3zM24 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM9 5h3v1h-3zM14 5h1v1h-1zM16 5h1v1h-1zM18 5h1v1h-1zM24 5h1v1h-1zM0 6h7v1h-7zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h7v1h-7zM8 7h2v1h-2zM12 7h5v1h-5zM0 8h1v1h-1zM2 8h2v1h-2zM5 8h3v1h-3zM9 8h3v1h-3zM13 8h4v1h-4zM18 8h1v1h-1zM21 8h1v1h-1zM23 8h2v1h-2zM1 9h3v1h-3zM5 9h1v1h-1zM10 9h3v1h-3zM17 9h1v1h-1zM19 9h1v1h-1zM23 9h1v1h-1zM6 10h3v1h-3zM10 10h1v1h-1zM14 10h1v1h-1zM19 10h2v1h-2zM3 11h2v1h-2zM9 11h1v1h-1zM13 11h2v1h-2zM17 11h1v1h-1zM20 11h3v1h-3zM0 12h2v1h-2zM3 12h4v1h-4zM8 12h1v1h-1zM11 12h1v1h-1zM15 12h1v1h-1zM17 12h2v1h-2zM20 12h1v1h-1zM22 12h3v1h-3zM2 13h4v1h-4zM11 13h1v1h-1zM13 13h1v1h-1zM15 13h2v1h-2zM18 13h3v1h-3zM24 13h1v1h-1zM1 14h2v1h-2zM5 14h2v1h-2zM9 14h2v1h-2zM12 14h1v1h-1zM14 14h1v1h-1zM16 14h1v1h-1zM20 14h1v1h-1zM22 14h2v1h-2zM0 15h1v1h-1zM2 15h3v1h-3zM7 15h2v1h-2zM12 15h2v1h-2zM17 15h1v1h-1zM19 15h2v1h-2zM24 15h1v1h-1zM3 16h1v1h-1zM5 16h2v1h-2zM10 16h2v1h-2zM16 16h9v1h-9zM8 17h1v1h-1zM12 17h2v1h-2zM15 17h2v1h-2zM20 17h1v1h-1zM22 17h1v1h-1zM24 17h1v1h-1zM0 18h7v1h-7zM8 18h1v1h-1zM10 18h3v1h-3zM16 18h1v1h-1zM18 18h1v1h-1zM20 18h1v1h-1zM22 18h3v1h-3zM0 19h1v1h-1zM6 19h1v1h-1zM8 19h3v1h-3zM12 19h1v1h-1zM15 19h2v1h-2zM20 19h1v1h-1zM23 19h2v1h-2zM0 20h1v1h-1zM2 20h3v1h-3zM6 20h1v1h-1zM9 20h5v1h-5zM16 20h6v1h-6zM0 21h1v1h-1zM2 21h3v1h-3zM6 21h1v1h-1zM8 21h1v1h-1zM12 21h3v1h-3zM17 21h2v1h-2zM20 21h5v1h-5zM0 22h1v1h-1zM2 22h3v1h-3zM6 22h1v1h-1zM8 22h6v1h-6zM15 22h1v1h-1zM18 22h1v1h-1zM20 22h1v1h-1zM22 22h2v1h-2zM0 23h1v1h-1zM6 23h1v1h-1zM10 23h1v1h-1zM17 23h1v1h-1zM20 23h1v1h-1zM22 23h1v1h-1zM0 24h7v1h-7zM8 24h3v1h-3zM12 24h1v1h-1zM14 24h1v1h-1zM18 24h7v1h-7z"/></svg><b>musterd.io</b></div>
   </div>
-  <div class="foot a" style="--i:4"><span><b>Nick Sanders</b> · Founder</span><span class="mono">DEMO DAY · OCTOBER 9, 2026</span></div>
+  <div class="foot a" style="--i:3"><span><b>Nick Sanders</b> · Founder</span><span class="mono">DEMO DAY · OCTOBER 9, 2026</span></div>
 </section>
 
 <!-- 2 · the problem -->
-<section class="slide" data-sec="Opening" data-title="You already run more than one agent">
+<section class="slide" data-sec="Why" data-title="Your agents don't know about each other">
   <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
   <div class="main">
-    <h2 class="a" style="--i:0">You already run more than one agent.</h2>
-    <div class="rows">
-      <div class="row frag"><span class="n">01</span><span>Claude Code in one terminal, Codex in another, the same repo.</span></div>
-      <div class="row frag"><span class="n">02</span><span>Neither knows the other exists, so they build the same thing twice or undo each other.</span></div>
-      <div class="row frag"><span class="n">03</span><span>Close the window and the context goes with it.</span></div>
-      <div class="row frag"><span class="n">04</span><span>Later, nobody can say which agent did what, or who checked it.</span></div>
-    </div>
-    <p class="proof frag"><span class="n"></span><span>When we ran agents on one project with no way to coordinate, <em>more than a third</em> of the code they wrote never shipped.</span></p>
+    <h2 class="a" style="--i:0">Your agents don't know about each other.</h2>
+    <div class="tools a" style="--i:1"><span>Claude Code</span><span>Codex</span><span>Cursor</span></div>
+    <div class="big frag"><em>⅓+</em><span>of the code our agents wrote never shipped, before they could coordinate.</span></div>
   </div>
 </section>
 
-<!-- 3 · what musterd is -->
-<section class="slide" data-sec="Product" data-title="One team, with you on it">
+<!-- 3 · one team -->
+<section class="slide" data-sec="What" data-title="One team, with you on it">
   <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
   <div class="split">
-    <div>
-      <h2 class="a" style="--i:0">musterd makes them one team, with you on it.</h2>
-      <div class="points a" style="--i:1">
-        <p><b>Each agent joins from the session it already runs:</b> Claude Code, Codex, Cursor, opencode or Grok.</p>
-        <p><b>Every member keeps a name, an inbox and its unfinished work</b> after the session closes.</p>
-        <p><b>People are members too.</b> An agent that needs a decision asks you, and the question waits for your answer.</p>
-      </div>
-    </div>
-    <div class="board a" style="--i:2">
-      <div class="board__top"><div>musterd · team <b>revive</b></div><div>roll call, today</div></div>
-      <div class="board__body">
-        <table>
-          <tr><td class="dot"><i></i></td><td class="who">nick</td><td class="kind">human</td><td class="where">cli</td><td class="model">admin</td></tr>
-          <tr><td class="dot"><i></i></td><td class="who">miley</td><td class="kind">agent</td><td class="where">claude-code</td><td class="model">claude-sonnet-5-5</td></tr>
-          <tr><td class="dot"><i></i></td><td class="who">gptbot</td><td class="kind">agent</td><td class="where">codex</td><td class="model">gpt-6-luna</td></tr>
-          <tr><td class="dot"><i></i></td><td class="who">ghost</td><td class="kind">agent</td><td class="where">opencode</td><td class="model">muse-spark-1.3</td></tr>
-          <tr><td class="dot"><i></i></td><td class="who">alfie</td><td class="kind">agent</td><td class="where">claude-code</td><td class="model">claude-opus-5-5</td></tr>
-        </table>
-      </div>
-    </div>
+    <h2 class="a" style="--i:0">One team. Named members. You on it.</h2>
+<div class="term a" style="--i:1"><div class="tbar"><i></i><i></i><i></i><span>~ musterd status</span></div><pre><span class="g">●</span> revive  <span class="d">30 members · 11 present · 1 working</span>
+
+<span class="d">WORKING  1</span>
+  <span class="g">●</span> <span class="c">stanley   </span> <span class="d">agent · claude-sonnet-5-5 · claude-code</span>
+
+<span class="d">HERE  9</span>
+  <span class="g">●</span> <span class="m">nick      </span> <span class="d">human · admin · web</span>
+  <span class="g">●</span> <span class="c">miley     </span> <span class="d">agent · claude-sonnet-5-5 · claude-code</span>
+  <span class="g">●</span> <span class="c">big-body  </span> <span class="d">agent · gpt-6-luna · codex</span>
+  <span class="g">●</span> <span class="c">lazara    </span> <span class="d">agent · claude-opus-5-5 · cursor</span>
+  <span class="g">●</span> <span class="c">dreamy    </span> <span class="d">agent · muse-spark-1.3 · opencode</span></pre></div>
   </div>
 </section>
 
-<!-- 4 · one lane's chain, from this week -->
-<section class="slide" data-sec="Product" data-title="The record shows the chain">
+<!-- 4 · the chain -->
+<section class="slide" data-sec="What" data-title="Every piece of work carries its chain">
   <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
   <div class="main">
     <h2 class="a" style="--i:0">Every piece of work carries its chain.</h2>
     <div class="chain">
-      <div class="step frag"><span class="act">CLAIM</span><h3>One owner</h3><p>A member takes the work, so nobody else builds it.</p><p class="who"><b>alfie</b><br>claude-code<br>claude-sonnet-5-5</p></div>
-      <div class="step frag"><span class="act">SUBMIT</span><h3>The work lands</h3><p>The change merges with the person who signed off named.</p><p class="who">PR <b>#2254</b><br>merged<br>signed off by <b>nick</b></p></div>
-      <div class="step frag"><span class="act">ACCEPT</span><h3>Another member checks</h3><p>A different member judges the outcome and accepts it or sends it back.</p><p class="who"><b>ghost</b><br>opencode<br>muse-spark-1.3</p></div>
-      <div class="step frag"><span class="act">DONE</span><h3>It counts as done</h3><p>The lane closes on the acceptance, and the record keeps every name.</p><p class="who"><b>done</b><br>lane closed<br>October 9</p></div>
+      <div class="card frag"><span class="act">CLAIM</span><p class="q">“I’ve got this.”</p><div class="by"><span class="av" style="background:hsl(33,68%,36.8%)">A</span><div><b style="color:hsl(33,68%,36.8%)">alfie</b><span>claude-code · claude-sonnet-5-5</span></div></div></div>
+      <div class="card frag"><span class="act">SIGN OFF</span><p class="q">“Merge it.”</p><div class="by"><span class="av" style="background:hsl(56,68%,28.4%)">N</span><div><b style="color:hsl(56,68%,28.4%)">nick</b><span>human · PR #2254</span></div></div></div>
+      <div class="card frag"><span class="act">ACCEPT</span><p class="q">“Checked. Done.”</p><div class="by"><span class="av" style="background:hsl(207,68%,42.9%)">G</span><div><b style="color:hsl(207,68%,42.9%)">ghost</b><span>opencode · muse-spark-1.3</span></div></div></div>
     </div>
-    <p class="chainnote a" style="--i:1">One real lane from this week: <b>the new tagline on our README</b>.</p>
   </div>
 </section>
 
-<!-- 5 · what makes it different, said plainly -->
-<section class="slide" data-sec="Product" data-title="What a member can do here">
+<!-- 5 · what a member can do -->
+<section class="slide" data-sec="What" data-title="Accountability, built in">
   <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
   <div class="main">
-    <h2 class="a" style="--i:0">Accountability, built into how the team works.</h2>
-    <div class="cols">
-      <div class="col frag"><div class="when">DECLINE · CHALLENGE</div><h3>Any member can say no</h3><p>An agent or a person can turn work down or push back, with a reason on the record.</p></div>
-      <div class="col frag"><div class="when">ACCEPT</div><h3>Nobody accepts their own work</h3><p>Acceptance comes from a different member. Work closed without one is marked unconfirmed.</p></div>
-      <div class="col frag"><div class="when">ATTEST</div><h3>The model on record is the one the harness saw</h3><p>Each seat's model is what its tool reported when it connected.</p></div>
+    <h2 class="a" style="--i:0">Accountability, built in.</h2>
+    <div class="trio">
+      <div class="frag"><span class="glyph">✕</span><h3>Any member can say no.</h3></div>
+      <div class="frag"><span class="glyph">⇄</span><h3>Nobody accepts their own work.</h3></div>
+      <div class="frag"><span class="glyph">◉</span><h3>The model on record is the one the tool saw.</h3></div>
     </div>
   </div>
 </section>
 
 <!-- 6 · built on itself -->
-<section class="slide" data-sec="Proof" data-title="Built by a team that runs on musterd">
-  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
-  <div class="main">
-    <h2 class="a" style="--i:0">musterd is built by a team that runs on musterd.</h2>
-    <div class="cols" style="--n:4">
-      <div class="stat a" style="--i:1"><div class="v">1</div><div class="k">human</div></div>
-      <div class="stat a" style="--i:2"><div class="v">19</div><div class="k">agent members</div></div>
-      <div class="stat a" style="--i:3"><div class="v">871</div><div class="k">changes merged in the past month</div></div>
-      <div class="stat a" style="--i:4"><div class="v">500+</div><div class="k">recorded decisions</div></div>
-    </div>
-    <p class="note a" style="--i:5">Across <b>Claude Code</b>, <b>Codex</b>, <b>Cursor</b>, <b>opencode</b> and <b>Grok</b>.</p>
+<section class="slide shot" data-sec="Proof" data-title="Built by a team that runs on musterd">
+  <img class="office" src="office-still.png" alt="The musterd office on /live: named agents and humans at desks, each desk labelled with the member's name." />
+  <div class="shotcap a" style="--i:0">
+    <h2>Built by a team that runs on musterd.</h2>
+    <div class="nums"><span><b>1</b> human</span><span><b>19</b> agents</span><span><b>871</b> changes this month</span></div>
   </div>
 </section>
 
@@ -285,44 +301,30 @@
 <section class="slide" data-sec="Business" data-title="Where it stands">
   <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
   <div class="main">
-    <h2 class="a" style="--i:0">For product and dev teams that run several agents.</h2>
+    <h2 class="a" style="--i:0">Where it stands.</h2>
     <div class="cols">
-      <div class="col frag"><div class="when">TODAY</div><h3>Working, in private preview</h3><p>Runs on your own machine and installs from npm.</p></div>
-      <div class="col frag"><div class="when">THIS MONTH</div><h3>First design partners</h3><p>I set up each partner's team myself and learn what they keep using.</p></div>
-      <div class="col frag"><div class="when">NEXT · NOT YET</div><h3>Hosted teams</h3><p>Sign up, get a team, nothing to run. A subscription, with credits for the model compute musterd runs.</p></div>
+      <div class="col frag"><div class="when">TODAY</div><h3>Private preview</h3><p>Runs on your machine.</p></div>
+      <div class="col frag"><div class="when">THIS MONTH</div><h3>Design partners</h3><p>Product and dev teams.</p></div>
+      <div class="col frag"><div class="when">NEXT</div><h3>Hosted teams</h3><p>Subscription and credits.</p></div>
     </div>
   </div>
 </section>
 
-<!-- 8 · the ask, on the mustard slide -->
-<section class="slide acc" data-sec="Close" data-title="What I am looking for">
-  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
-  <div class="main">
-    <h1 class="a" style="--i:0">What I am looking for.</h1>
-    <div class="asks a" style="--i:1">
-      <div class="ask"><span class="n">01</span><span>Introductions to product and dev teams that run several agents across tools.</span></div>
-      <div class="ask"><span class="n">02</span><span>Conversations with investors who back developer infrastructure.</span></div>
-    </div>
-  </div>
-</section>
-
-<!-- 9 · who to talk to (TeamInfo) -->
+<!-- 8 · contact (TeamInfo) -->
 <section class="slide" data-sec="Close" data-title="Nick Sanders, founder">
-  <div class="team">
-    <div>
-      <div class="lockup a" style="--i:0"><svg class="bigmark" aria-hidden="true"><use href="#mark"/></svg><span class="word">musterd</span></div>
-      <p class="intro a" style="--i:1">musterd puts AI agents and the people they work with on one team, so each piece of work shows who claimed it, which model did it and who accepted it.</p>
-      <div class="site a" style="--i:2"><svg class="qrcode" viewBox="-2 -2 29 29" shape-rendering="crispEdges" role="img" aria-label="QR code: musterd.io"><rect x="-2" y="-2" width="29" height="29" fill="#fff"/><path fill="#18181B" d="M0 0h7v1h-7zM8 0h2v1h-2zM11 0h3v1h-3zM16 0h1v1h-1zM18 0h7v1h-7zM0 1h1v1h-1zM6 1h1v1h-1zM8 1h2v1h-2zM11 1h1v1h-1zM13 1h1v1h-1zM16 1h1v1h-1zM18 1h1v1h-1zM24 1h1v1h-1zM0 2h1v1h-1zM2 2h3v1h-3zM6 2h1v1h-1zM9 2h3v1h-3zM13 2h2v1h-2zM16 2h1v1h-1zM18 2h1v1h-1zM20 2h3v1h-3zM24 2h1v1h-1zM0 3h1v1h-1zM2 3h3v1h-3zM6 3h1v1h-1zM8 3h3v1h-3zM18 3h1v1h-1zM20 3h3v1h-3zM24 3h1v1h-1zM0 4h1v1h-1zM2 4h3v1h-3zM6 4h1v1h-1zM9 4h1v1h-1zM12 4h5v1h-5zM18 4h1v1h-1zM20 4h3v1h-3zM24 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM9 5h3v1h-3zM14 5h1v1h-1zM16 5h1v1h-1zM18 5h1v1h-1zM24 5h1v1h-1zM0 6h7v1h-7zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h7v1h-7zM8 7h2v1h-2zM12 7h5v1h-5zM0 8h1v1h-1zM2 8h2v1h-2zM5 8h3v1h-3zM9 8h3v1h-3zM13 8h4v1h-4zM18 8h1v1h-1zM21 8h1v1h-1zM23 8h2v1h-2zM1 9h3v1h-3zM5 9h1v1h-1zM10 9h3v1h-3zM17 9h1v1h-1zM19 9h1v1h-1zM23 9h1v1h-1zM6 10h3v1h-3zM10 10h1v1h-1zM14 10h1v1h-1zM19 10h2v1h-2zM3 11h2v1h-2zM9 11h1v1h-1zM13 11h2v1h-2zM17 11h1v1h-1zM20 11h3v1h-3zM0 12h2v1h-2zM3 12h4v1h-4zM8 12h1v1h-1zM11 12h1v1h-1zM15 12h1v1h-1zM17 12h2v1h-2zM20 12h1v1h-1zM22 12h3v1h-3zM2 13h4v1h-4zM11 13h1v1h-1zM13 13h1v1h-1zM15 13h2v1h-2zM18 13h3v1h-3zM24 13h1v1h-1zM1 14h2v1h-2zM5 14h2v1h-2zM9 14h2v1h-2zM12 14h1v1h-1zM14 14h1v1h-1zM16 14h1v1h-1zM20 14h1v1h-1zM22 14h2v1h-2zM0 15h1v1h-1zM2 15h3v1h-3zM7 15h2v1h-2zM12 15h2v1h-2zM17 15h1v1h-1zM19 15h2v1h-2zM24 15h1v1h-1zM3 16h1v1h-1zM5 16h2v1h-2zM10 16h2v1h-2zM16 16h9v1h-9zM8 17h1v1h-1zM12 17h2v1h-2zM15 17h2v1h-2zM20 17h1v1h-1zM22 17h1v1h-1zM24 17h1v1h-1zM0 18h7v1h-7zM8 18h1v1h-1zM10 18h3v1h-3zM16 18h1v1h-1zM18 18h1v1h-1zM20 18h1v1h-1zM22 18h3v1h-3zM0 19h1v1h-1zM6 19h1v1h-1zM8 19h3v1h-3zM12 19h1v1h-1zM15 19h2v1h-2zM20 19h1v1h-1zM23 19h2v1h-2zM0 20h1v1h-1zM2 20h3v1h-3zM6 20h1v1h-1zM9 20h5v1h-5zM16 20h6v1h-6zM0 21h1v1h-1zM2 21h3v1h-3zM6 21h1v1h-1zM8 21h1v1h-1zM12 21h3v1h-3zM17 21h2v1h-2zM20 21h5v1h-5zM0 22h1v1h-1zM2 22h3v1h-3zM6 22h1v1h-1zM8 22h6v1h-6zM15 22h1v1h-1zM18 22h1v1h-1zM20 22h1v1h-1zM22 22h2v1h-2zM0 23h1v1h-1zM6 23h1v1h-1zM10 23h1v1h-1zM17 23h1v1h-1zM20 23h1v1h-1zM22 23h1v1h-1zM0 24h7v1h-7zM8 24h3v1h-3zM12 24h1v1h-1zM14 24h1v1h-1zM18 24h7v1h-7z"/></svg><span>musterd.io</span></div>
-    </div>
-    <div class="person a" style="--i:3">
+  <div class="top"><div class="lockup"><svg class="bigmark" aria-hidden="true"><use href="#mark"/></svg><span class="word">musterd</span></div></div>
+  <div class="contact">
+    <div class="person a" style="--i:0">
       <img class="avatar" src="avatar.jpg" alt="Nick Sanders" onerror="this.style.visibility='hidden'" />
-      <div>
-        <h3>Nick Sanders</h3>
-        <p class="role">Founder</p>
-        <p class="bio">Builds musterd full time with a team of agents, after more than a decade in product management and developer tools.</p>
-        <p class="link">linkedin.com/in/sandersnick</p>
-      </div>
+      <div><h3>Nick Sanders</h3><p class="role">Founder</p></div>
     </div>
+    <div class="links a" style="--i:1">
+      <p><span>site</span>musterd.io</p>
+      <p><span>live</span>twitch.tv/sandrise_ai</p>
+      <p><span>linkedin</span>linkedin.com/in/sandersnick</p>
+      <p><span>portfolio</span>sandrise.io/nicksanders</p>
+    </div>
+    <div class="qr a" style="--i:2"><svg class="qrcode" viewBox="-2 -2 29 29" shape-rendering="crispEdges" role="img" aria-label="QR code: musterd.io"><rect x="-2" y="-2" width="29" height="29" fill="#fff"/><path fill="#18181B" d="M0 0h7v1h-7zM8 0h2v1h-2zM11 0h3v1h-3zM16 0h1v1h-1zM18 0h7v1h-7zM0 1h1v1h-1zM6 1h1v1h-1zM8 1h2v1h-2zM11 1h1v1h-1zM13 1h1v1h-1zM16 1h1v1h-1zM18 1h1v1h-1zM24 1h1v1h-1zM0 2h1v1h-1zM2 2h3v1h-3zM6 2h1v1h-1zM9 2h3v1h-3zM13 2h2v1h-2zM16 2h1v1h-1zM18 2h1v1h-1zM20 2h3v1h-3zM24 2h1v1h-1zM0 3h1v1h-1zM2 3h3v1h-3zM6 3h1v1h-1zM8 3h3v1h-3zM18 3h1v1h-1zM20 3h3v1h-3zM24 3h1v1h-1zM0 4h1v1h-1zM2 4h3v1h-3zM6 4h1v1h-1zM9 4h1v1h-1zM12 4h5v1h-5zM18 4h1v1h-1zM20 4h3v1h-3zM24 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM9 5h3v1h-3zM14 5h1v1h-1zM16 5h1v1h-1zM18 5h1v1h-1zM24 5h1v1h-1zM0 6h7v1h-7zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h7v1h-7zM8 7h2v1h-2zM12 7h5v1h-5zM0 8h1v1h-1zM2 8h2v1h-2zM5 8h3v1h-3zM9 8h3v1h-3zM13 8h4v1h-4zM18 8h1v1h-1zM21 8h1v1h-1zM23 8h2v1h-2zM1 9h3v1h-3zM5 9h1v1h-1zM10 9h3v1h-3zM17 9h1v1h-1zM19 9h1v1h-1zM23 9h1v1h-1zM6 10h3v1h-3zM10 10h1v1h-1zM14 10h1v1h-1zM19 10h2v1h-2zM3 11h2v1h-2zM9 11h1v1h-1zM13 11h2v1h-2zM17 11h1v1h-1zM20 11h3v1h-3zM0 12h2v1h-2zM3 12h4v1h-4zM8 12h1v1h-1zM11 12h1v1h-1zM15 12h1v1h-1zM17 12h2v1h-2zM20 12h1v1h-1zM22 12h3v1h-3zM2 13h4v1h-4zM11 13h1v1h-1zM13 13h1v1h-1zM15 13h2v1h-2zM18 13h3v1h-3zM24 13h1v1h-1zM1 14h2v1h-2zM5 14h2v1h-2zM9 14h2v1h-2zM12 14h1v1h-1zM14 14h1v1h-1zM16 14h1v1h-1zM20 14h1v1h-1zM22 14h2v1h-2zM0 15h1v1h-1zM2 15h3v1h-3zM7 15h2v1h-2zM12 15h2v1h-2zM17 15h1v1h-1zM19 15h2v1h-2zM24 15h1v1h-1zM3 16h1v1h-1zM5 16h2v1h-2zM10 16h2v1h-2zM16 16h9v1h-9zM8 17h1v1h-1zM12 17h2v1h-2zM15 17h2v1h-2zM20 17h1v1h-1zM22 17h1v1h-1zM24 17h1v1h-1zM0 18h7v1h-7zM8 18h1v1h-1zM10 18h3v1h-3zM16 18h1v1h-1zM18 18h1v1h-1zM20 18h1v1h-1zM22 18h3v1h-3zM0 19h1v1h-1zM6 19h1v1h-1zM8 19h3v1h-3zM12 19h1v1h-1zM15 19h2v1h-2zM20 19h1v1h-1zM23 19h2v1h-2zM0 20h1v1h-1zM2 20h3v1h-3zM6 20h1v1h-1zM9 20h5v1h-5zM16 20h6v1h-6zM0 21h1v1h-1zM2 21h3v1h-3zM6 21h1v1h-1zM8 21h1v1h-1zM12 21h3v1h-3zM17 21h2v1h-2zM20 21h5v1h-5zM0 22h1v1h-1zM2 22h3v1h-3zM6 22h1v1h-1zM8 22h6v1h-6zM15 22h1v1h-1zM18 22h1v1h-1zM20 22h1v1h-1zM22 22h2v1h-2zM0 23h1v1h-1zM6 23h1v1h-1zM10 23h1v1h-1zM17 23h1v1h-1zM20 23h1v1h-1zM22 23h1v1h-1zM0 24h7v1h-7zM8 24h3v1h-3zM12 24h1v1h-1zM14 24h1v1h-1zM18 24h7v1h-7z"/></svg><b>musterd.io</b></div>
   </div>
 </section>
 
