@@ -82,7 +82,11 @@ Use `<!-- claim: other -->` when the claim is not defect-shaped. The marker sits
 
 `dreamMayWrite(seat, w)` is the verdict (`packages/server/src/store/dream.ts`). Quote the reason it returns; do not work around it.
 
-The server enforces the act row only. While this seat's live Presence has provenance `dream`, a send of any other Act is refused (403, audited `send.denied`, the act reason below). Lane 2 does not enforce the file row in the server (PR #1958; ryder agreed 2026-10-01, huddle `goal:dreaming`). This skill does. Before a file write or a note write, apply the same verdict. A refusal is a stop.
+The server enforces the act row only (`packages/server/src/protocol/route.ts`, checked 2026-10-09). While this seat's live Presence has provenance `dream`, a send of any other Act is refused (403, audited `send.denied`, the act reason below). The `lane` and `other` rows have no server check: the lane routes do not call `dreamMayWrite`, so the skill holds them. Lane 2 does not enforce the file row in the server (PR #1958; ryder agreed 2026-10-01, huddle `goal:dreaming`). This skill does. Before a file write or a note write, apply the same verdict. A refusal is a stop.
+
+**The PR in step 4 is allowed.** `git` and `gh` are not a `w.kind`: the fence has no row for them and the server never sees them. The `other` row refuses side effects the fence names, not the branch, commit, push and PR that carry a `docs/wiki/**/*.md` write. Dreams have landed wiki PRs this way without a lane (#2144, #2146, #2148, #2246, #2262; 2026-10-09; falsify: a dream wiki PR refused for having no lane, or `git log origin/main -- docs/wiki` showing no dream-authored page since 2026-10-02).
+
+**A dream is the exception to "claim a lane before you build".** Its wake carries no lane (ADR 494: `lane_id` is null), and it may not claim one. Write the wiki change on a branch with no lane and put no `Lane` line in the PR body. If a PreToolUse lane gate warns on a `docs/wiki/**` edit (ADR 150 Gate A, warn by default), carry on. If it blocks, stop: that is a policy that contradicts this skill, so record it as an insight and do not claim a lane to get around it.
 
 | `w.kind` | ok when | reason when refused |
 | --- | --- | --- |
