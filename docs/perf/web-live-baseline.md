@@ -1140,3 +1140,21 @@ re-baseline may only tighten, so this is a raise.
 
 - Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — app CSS must read under 8.2 KB. If the
   prompt bar is removed after Demo Day, this raise goes with it.
+
+### 2026-10-09 — total JS 283,000 → 288,000 B, with the prompt bar on top of the Now card v2 (lane 01M4H4ARQCVVS31EKJPHCXMY7P)
+
+Measured with the prompt bar rebased onto main after the Now card v2 landed (#2305). Each PR passed on its own
+branch. Together they do not fit.
+
+| Reading                       | total JS          |
+| ----------------------------- | ----------------- |
+| main after #2305              | 275.6 KB          |
+| + prompt bar (rebased)        | 277.2 KB (283,853 B) |
+| ceiling                       | 283,000 → 288,000 |
+
+The bar is a lazy chunk, so the eager graph is unaffected (137.5 KB of 138.4 KB) and lazy-loading cannot move
+the total (ADR 183). It is demo code due to come out after Demo Day; removing it repays ~1.5 KB. New ceiling is
+measured + the ~0.7 KB CI gzip delta + ~1.2%.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main after this lands — total JS reads under
+  278 KB.
