@@ -22,7 +22,9 @@ in `Live.css`/`Broadcast.css`.
 | 1   | `briefing.ts` + tests; headline replaces the topbar meter              | `01M4FG58SX6BBJ736S4W1CHASS` | —          |
 | 2   | The Now panel on `/live`, Team tab, admin seat requests                | `01M4FG5JRAR3QD460DWC7M7E7M` | 1          |
 | 2b  | The office blocked marker, split out of 2                              | `01M4GP19XE5JEC6MA7YCGZGSK6` | 2          |
-| 3   | The `/broadcast` lower-third                                           | `01M4FG5NWKCYSYQ9RWG06Y4TNC` | 1          |
+| 3   | The `/broadcast` lower-third — built (#2272), then reverted            | `01M4FG5NWKCYSYQ9RWG06Y4TNC` | 1          |
+| 3r  | The revert of increment 3                                              | `01M4GXHA3TBYXCT3A6TXEYFAQV` | 3          |
+| 2c  | Now rebuilt as the morning briefing overlay                            | `01M4GXHERZF6A2KFMBK2G616CK` | 2          |
 
 The spec lane `01M4FG1R7C84HM4RE5GF7FF6WZ` closes when this plan's PR merges; it is the design record, not
 one of the increments. When an increment closes and others remain, say what is left (`follows_up`).
