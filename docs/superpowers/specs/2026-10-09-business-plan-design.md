@@ -165,19 +165,65 @@ nick said these are good for now. The first-run work is tracked as goal `first-r
   Mozilla Builders, Google for Startups, Claude for Startups, Techstars/Antler/Alchemist/500) is dated
   2026-09-16 and **not yet re-verified**.
 
-## Plan structure (nothing written yet)
+## Open source and monetization (draft, nick + alfie, 2026-10-09)
 
-1. Who the product and dev teams are, and why they would switch.
-2. The 90-day growth and design-partner plan.
-3. Open-source strategy and monetization.
-4. The financial model: costs, runway, scenarios — every assumption labeled as one.
-5. Needs: infrastructure, people, credits.
+Built from nick's statements today. [ADR 461](../../decisions/461-pricing-and-business-model.md) was read
+as a dated claim and not adopted. **No prices appear here: any figure would be an assumption.**
+
+**Open source.** See "Offer, repo and Cloud": the repo is private until the Oct 20 check; protocol,
+`SPEC.md` and client adapters first, server and daemon later. The published packages stay MIT.
+
+**What buyers expect.** nick: most AI agent tools use a subscription and/or credits, so that is what people
+are used to. His statement, not independently verified.
+
+**Bring your own keys and subscriptions.** Users may bring their own. Work done on a user's own harness
+account costs them nothing extra from musterd and **uses no credits**. A wake resumes the user's own
+harness session; that the model spend lands on their account is alfie's reading of the design doc, not
+confirmed in code.
+
+**Two kinds of charge:**
+
+1. **Subscription — the fixed cost of a hosted team** (relay, Postgres, storage). In tiers. Needs musterd
+   Cloud, which is not fully built; no figure exists for cost-to-serve per team.
+2. **Credits — variable cost that musterd bears.** A credit must cover something musterd spends money on.
+   First-pass sinks, agreed by nick:
+   - **Model usage** on the musterd native harness or musterd-hosted models (the user pays musterd for it).
+   - **Always-on hosted seats**, a seat that runs in the cloud when the user's machine is off: hosted
+     compute even with the user's own keys. *Planned, not promised* until Cloud exists; nick has not
+     confirmed he wants to promise it.
+   - **musterd-run helpers** that call a model: backlog import, a planning assistant, summaries, an
+     independent reviewer seat on a different model.
+
+**Never metered:** messages, lanes, handoffs and other acts. They cost close to nothing, and metering the
+core would tax the point of the product. History and audit retention is a **plan limit**, not a credit.
+
+**Later, not first pass:** an org tier (SSO, exportable signed audit, retention policy, multi-team admin,
+support) unlocked by a license key, aimed at governance buyers and matching the accountability positioning.
+Whether that key exists in the code is unchecked.
+
+**Not decided:**
+- What the subscription is priced per (human seat, hosted team, or something else). nick has not said.
+  ADR 461's "free up to two humans, paid from the third" is doubtful here: it may cover the whole first
+  segment of one-to-three-person founders, and it ignores that the value scales with agents.
+- Where the free tier ends, prices, and what a credit costs.
+- Broadcast and `/live` hosting time as a credit sink (niche early).
+
+**Stale and not to be quoted until refreshed:** the "wasted work fell from 65–83% to 0.6–10.6%" finding
+behind ADR 461's price anchor is a July pilot; the refresh lane `01M1VDRC6B` is open and unowned.
+
+## Plan structure
+
+1. Who the product and dev teams are, and why they would switch. *(first-10-minutes section; thin)*
+2. The 90-day growth and design-partner plan. *(waits for the founder conversations)*
+3. Open-source strategy and monetization. *(draft above)*
+4. The financial model: costs, runway, scenarios — every assumption labeled as one. *(not started)*
+5. Needs: infrastructure, people, credits. *(not started)*
 
 ## Open questions
 
 - **Next question for nick:** after the founder conversations, which pain is most common — that sets the
   first demo and the 90-day plan. Until then, the accelerator list in `traction-plan.md` §12 still needs
-  re-verifying, and the open-source/monetization section (part 3) is still to write.
+  re-verifying, and the subscription needs a unit to be priced per (see the monetization section).
 - What in `traction-plan.md` is stale, and what has sloane learned since 2026-09-16? Asked of sloane on
   2026-10-09; no reply recorded yet.
 - Cost-to-serve for musterd Cloud (hosting, Postgres, relay per team) — no figure exists.
