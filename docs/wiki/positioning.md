@@ -1,12 +1,14 @@
 # Positioning and brand architecture
 
-SandRise Studio is the maker, never a product brand; musterd and batond are independent products (a house of brands); and the competitive line is coordination-of-independent-actors, not intra-task orchestration — humans are the maximally separable actor no monolith can absorb.
+SandRise Studio is the maker, never a product brand; musterd and batond are independent products (a house of brands); and ~~the competitive line is coordination-of-independent-actors, not intra-task orchestration — humans are the maximally separable actor no monolith can absorb~~ **superseded 2026-10-09:** the claim is accountability ([ADR 550](../decisions/550-positioning-accountable-agents.md), accepted 2026-10-08, superseding ADR 320 decisions 1 and 4), and the field is a reference, never the opening.
 
 ## Brand architecture (decided 2026-06-11, reversible)
 
 SandRise Studio (`SandRiseStudio` org) is the quiet "from the makers of" entity. musterd (public) and batond (private) stand on their own names. amprealize is NOT an umbrella tier — it may be reborn later as the top-of-stack planning/insights product built ON musterd + batond; do not propose it as a middle layer.
 
 ## The competitive line (analysis lives in docs/design/landscape.md §4–§7)
+
+_The page's competitive line, ~~"Band connects your agents; musterd makes them a team"~~, is superseded 2026-10-09 by [ADR 550](../decisions/550-positioning-accountable-agents.md) §5: no public surface opens by describing what other products do or lack, so the comparison is a tab, an FAQ answer or an appendix slide. The analysis below is reference for those, not a message._
 
 The "multi-agent is a trap" critique targets intra-task orchestration; musterd coordinates actors that already exist independently, and the human peer is the carve-out the monolith argument cannot absorb. Intra-task orchestration is commoditizing INTO harness and model API (ultracode, Fugu) — every instance sharpens the carve-out. band.ai (landscape.md §5) is the closest sighted competitor; the fork is executions-vs-seats, line: "Band connects your agents; musterd makes them a team." One design constraint worth keeping active: a handoff carrying too little context recreates the critique's deprivation problem — handoffs propagate real context (thread + lane + branch), never a bare pointer.
 
