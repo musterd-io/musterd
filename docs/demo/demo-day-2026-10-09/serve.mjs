@@ -4,9 +4,10 @@
 //
 //   node docs/demo/demo-day-2026-10-09/serve.mjs      → http://localhost:4861/
 //
-// Serves the repo read-only, listens on 127.0.0.1 only, and accepts two writes, both needing the
-// X-Page-Editor header that a page on another origin cannot send without a CORS preflight this
-// server never answers:
+// Serves THIS folder read-only (nothing else from the repo), listens on 127.0.0.1 only, refuses any
+// request whose Host header is not localhost or 127.0.0.1 (a page on another site cannot reach it
+// through DNS rebinding), and accepts two writes, both needing the X-Page-Editor header that a page
+// on another origin cannot send without a CORS preflight this server never answers:
 //   POST /__save?path=<an existing .html in THIS folder>   edits from the editor
 //   POST /__pdf?path=<an existing .html in THIS folder>    prints that page with headless Chrome
 // The PDF goes to $PDF_OUT (default ~/Downloads/musterd_DemoDay) as BP_musterd.pdf. Node built-ins only.
@@ -41,6 +42,16 @@ function resolve(urlPath) {
   return p === root || p.startsWith(root + path.sep) ? p : null;
 }
 
+// only this folder is ever served; the deck needs nothing else
+const inHere = (file) => file !== null && file.startsWith(here + path.sep);
+
+// DNS rebinding: a hostile page can point its own name at 127.0.0.1, and the browser then treats
+// this server as that page's origin. The Host header still names the hostile site, so refuse it.
+const hostOk = (req) => {
+  const h = req.headers.host;
+  return h === `localhost:${port}` || h === `127.0.0.1:${port}`;
+};
+
 async function body(req) {
   const chunks = [];
   let n = 0;
@@ -70,6 +81,7 @@ const json = (res, code, obj) => {
 createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${port}`);
   try {
+    if (!hostOk(req)) return void res.writeHead(403).end();
     if (url.pathname === '/__save') {
       const file = guarded(req, url);
       if (!file) return void res.writeHead(403).end();
@@ -102,7 +114,7 @@ createServer(async (req, res) => {
       return void res.end();
     }
     const file = resolve(url.pathname);
-    if (!file || !(await stat(file)).isFile()) return void res.writeHead(404).end();
+    if (!inHere(file) || !(await stat(file)).isFile()) return void res.writeHead(404).end();
     res.writeHead(200, {
       'content-type': TYPES[path.extname(file)] || 'application/octet-stream',
       'cache-control': 'no-store',
