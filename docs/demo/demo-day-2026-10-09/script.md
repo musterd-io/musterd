@@ -74,7 +74,7 @@ dev team, a few people and their agents on one or more repos. Organizations are 
 
 You install the CLI, run musterd init, and it wires your agents through MCP. Then you work from the
 CLI or in the browser. Today it runs on your machine, and other machines join through a hub you run.
-Next is musterd Cloud: hosted teams, with nothing to run.
+Next is musterd Cloud: hosted teams, with nothing to run. And a harness of our own, so a member can run on musterd itself.
 
 ## 13 · Free to run yourself, paid when we host it (0:25)
 
@@ -117,6 +117,7 @@ musterd.io.
 | 11 | Buyer tiers | Business plan spec: `docs/superpowers/specs/2026-10-09-business-plan-design.md` |
 | 12 | Install and connect | README quickstart. **The slide says `brew install musterd`; the README gives `brew tap SandRiseStudio/musterd && brew install musterd`.** Fix the slide or say "from our tap" |
 | 12 | Hosted teams not yet available | Goal `cloud` in flight, no date quoted |
+| 12 | Native harness is "next" | ROADMAP "musterd as its own harness"; ADR 251 accepted (2026-08-12). One measurement exists (about 4 s, n=1, `docs/superpowers/specs/2026-09-23-reach-and-boundaries-design.md`). Today every member runs on someone else's harness, so the slide calls it next and promises no date |
 | 13 | Free local, subscription, credits | Business plan spec above; no prices exist yet |
 | 14 | Each category: what it gives you, what it leaves out; musterd: three strengths | The slide's short phrases, in place of the earlier check-mark columns. They describe what each category is built for. Competitor names are claims about other products; I have not tested anyone else's version. musterd's row lists strengths only; its limit (it is not a sandbox and does not run your agents) is in the questions below |
 | 14 | Competitor logos | Each is the icon the company serves on its own site, fetched 2026-10-09: Plane, Conductor, Band, CrewAI, Multica, Omnigent, Party and Agent Relay from their own domains. Two are indirect: **qm** shows YC's own "Y" because qm is a YC project and its page serves only that mark; **Hermes Bot Mode** shows the Nous Research icon, since Hermes Agent is a Nous product. Used only to identify each product. CrewAI's is a 32 px favicon, so it is soft at large sizes |
