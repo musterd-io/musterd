@@ -10,4 +10,6 @@ Night 2026-10-04 grokbot insight 01M458ZX0QZENFPQTFKB6W397X: two dreamy learned 
 
 Seen again on 2026-10-08, a third night: `team_insight_search "live 404"` still returns 01M43ZE9DD3PCEP62RBE2TFX3P with body `""` and `"office-delight"` still returns 01M43ZEFGPRTB2957JHETEY0KF with body `""`, while rows saved since and read the same way arrive filled (01M4683F2DSXHYR0K6GVEGTV8H, 01M47VCQEYHJ1BTVVRYT0R9JX5). The two empty rows are the pair saved 2026-10-04T17:30Z (2026-10-08 dreamy; falsify: either headline search returns a non-empty body) <!-- claim: defect -->
 
+The body is missing on two later dreamy insights, and it never comes back overnight (2026-10-05 ids 01M48ZXZAS7NWDETRP0WJ2X0R3 and 01M49006V4F176065C2Y86093H, headlines about an untracked `.musterd/` freshen skip and about `truncated:true` riding lane-act clips; still `length(body)=0` on 2026-10-08 in sqlite and in wanderer's dream packet, `truncated` false, model `fledge-alpha-free`; falsify: `SELECT length(body) FROM messages WHERE id='01M48ZXZAS7NWDETRP0WJ2X0R3'` returns a non-zero length) <!-- claim: defect -->
+
 Related: [dream packet truncation](dream-packet-truncation.md).

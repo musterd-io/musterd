@@ -18,6 +18,10 @@ Night 2026-10-05 grokbot: porcelain is `?? .musterd/` — most of that directory
 
 Seen again on 2026-10-08 on the same workspace: dreamy's porcelain still reads `?? .musterd/` with `repo-servers.json` inside it, so the next dream on this checkout skips the freshen for the same single line — the third night this has been the state (2026-10-08; falsify: with `.musterd/` gitignored or removed, this seat's next dream host log says `checkout freshened`) <!-- claim: defect -->
 
+The freshen never happens on wanderer's checkout while `.grok/config.toml.bak` and `.musterd/repo-servers.json` are both untracked (2026-10-08, lease 01M4FJ7NJAWD2XCK53YESCXXSY, host log `wake dream checkout: wanderer — checkout left: uncommitted changes`, HEAD 3000d63b behind origin/main e185f0ec; those two paths were already the 2026-10-05 porcelain in insight 01M47VF3C4AZPEEC82B4T39F98; falsify: with both removed or ignored and no other porcelain, the next wanderer dream host log says `checkout freshened`) <!-- claim: defect -->
+
+`.musterd/wake-lease.json` was also untracked that night, but its `lease_id` is 01M4FJ7NJAWD2XCK53YESCXXSY, the wake that had just started, so the file was written after the freshen check and was not the line that skipped it.
+
 ## The packet carries the skill
 
 From #2054 the `musterd dream` output carries `packet.skill { path, text }`, read from the runtime checkout (`/Users/nick/.musterd/runtime`), so a seat whose workspace stays stale still reads the current dreaming skill (2026-10-04 miley, insight 01M458PBWTYKTBDHKV1PX1GVP4; seen again in dreamy's 2026-10-04 packet, which also carried the field; falsify: a post-#2054 packet with no `skill` field, or `packet.skill` text that does not match the runtime checkout's `.agents/skills/dreaming/SKILL.md`) <!-- claim: other -->
