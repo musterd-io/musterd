@@ -87,8 +87,8 @@ new figure.
 ## Questions to expect, and plain answers
 
 - **Is anyone using it?** Only our own team so far. First design partners start this month.
-- **Is it open source?** The packages are MIT. The repository is private until it is ready for strangers
-  to try; I decide what to open after the first design partners.
+- **Is it open source?** The packages are MIT. I decide what else to open after the first design
+  partners.
 - **Who pays, and how much?** Hosted teams by subscription, with credits for model compute that musterd
   runs. I have no prices yet; design partners tell me what they would pay.
 - **What if Claude Code, Codex or Cursor add this themselves?** musterd works across all of them, so a
