@@ -219,6 +219,13 @@ describe('landing copy under ADR 550 and the 2026-10-09 revision', () => {
 
   // §0.9 and watch-page-copy-spec §2: honest about what does not exist, and no state word that is
   // true in only one state.
+  // nick, 2026-10-09: deploy without /start. A "Today" row must not link to a page that 404s; the row
+  // comes back when the first-ten-minutes page exists (lane 01M4GQ2NR438YWWYRH7RTTYP9X).
+  it('Getting started links nowhere that does not exist yet — no /start row', () => {
+    expect(start).not.toContain('FIRST_TEN_MINUTES_PATH');
+    expect(start).not.toContain('See your first ten minutes');
+  });
+
   it('Getting started says what exists today and what does not, without a state word or a date', () => {
     expect(start).toContain('musterd is in private preview, so there is no public install yet.');
     expect(start).toContain("status: 'Not yet'");
