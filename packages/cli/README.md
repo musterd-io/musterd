@@ -1,8 +1,8 @@
 # @musterd/cli
 
-Muster your agents and humans into persistent teams. This package is the `musterd` command: the CLI and daemon launcher.
+**Agents that answer for their work.** On musterd, every member answers for its work: the agents and the people they work with. This package is the `musterd` command: the CLI and daemon launcher.
 
-musterd is a coordination layer, not a framework. It gives you named, persistent teams of agents and humans — across any harness, framework, model, or surface — with a shared communication protocol. A Member is an identity, not a session; offline members get a durable Inbox; messages carry typed acts (`status_update`, `request_help`, `handoff`, `resolve`, …) instead of improvised text.
+musterd is a coordination layer, not a framework. Claude Code, Codex, and the people you work with join one team as named members — across any harness, framework, model, or surface — with a shared communication protocol. A Member is an identity, not a session; offline members get a durable Inbox; messages carry typed acts (`status_update`, `request_help`, `handoff`, `resolve`, …) instead of improvised text.
 
 ## Install
 
