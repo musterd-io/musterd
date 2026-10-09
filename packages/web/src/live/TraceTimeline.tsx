@@ -112,31 +112,78 @@ export function TraceTimeline({
   );
 }
 
+/** How often an open seat re-reads its trace. The route is a bounded structural read (ADR 445). */
+export const TRACE_FOLLOW_MS = 4000;
+
+export interface TraceView {
+  state: 'loading' | 'ready' | 'error';
+  events: TraceSessionEvent[];
+}
+
+/**
+ * Fold one read into what the panel shows. A refresh that fails keeps the last list — only a read
+ * that has never succeeded shows the error, so a blip on a followed trace does not blank it.
+ */
+export function foldTraceRead(
+  prev: TraceView,
+  read: { events: TraceSessionEvent[] } | null,
+): TraceView {
+  if (read) return { state: 'ready', events: read.events };
+  return prev.state === 'ready' ? prev : { state: 'error', events: prev.events };
+}
+
 /**
  * The fetching half, mounted by the roster only while a seat is expanded — and loaded lazily
  * (`RosterPanel.tsx` `lazy()`s this module) so none of it rides /live's eager graph (ADR 151/183):
  * the roster pays one small button per row and nothing else until a reader reaches for a trace.
+ *
+ * While open it follows: it re-reads every `TRACE_FOLLOW_MS`, stops while the tab is hidden (and
+ * reads at once when it returns), and keeps the last list when a refresh fails.
  */
 export default function SeatTracePanel({ cfg, seat }: { cfg: LiveConfig; seat: string }) {
-  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [events, setEvents] = useState<TraceSessionEvent[]>([]);
+  const [view, setView] = useState<TraceView>({ state: 'loading', events: [] });
 
   useEffect(() => {
     let cancelled = false;
-    setState('loading');
-    void fetchSeatTrace(cfg, seat)
-      .then((r) => {
-        if (cancelled) return;
-        setEvents(r.events);
-        setState('ready');
-      })
-      .catch(() => {
-        if (!cancelled) setState('error');
-      });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let inflight = false;
+    setView({ state: 'loading', events: [] });
+
+    const read = async () => {
+      timer = undefined;
+      inflight = true;
+      let r: { events: TraceSessionEvent[] } | null = null;
+      try {
+        r = await fetchSeatTrace(cfg, seat);
+      } catch {
+        r = null;
+      }
+      inflight = false;
+      if (cancelled) return;
+      setView((v) => foldTraceRead(v, r));
+      schedule();
+    };
+    const schedule = () => {
+      if (cancelled || timer !== undefined || document.hidden) return;
+      timer = setTimeout(() => void read(), TRACE_FOLLOW_MS);
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (timer !== undefined) clearTimeout(timer);
+        timer = undefined;
+      } else if (timer === undefined && !inflight) {
+        void read();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    if (!document.hidden) void read();
     return () => {
       cancelled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [cfg, seat]);
 
-  return <TraceTimeline seat={seat} events={events} state={state} />;
+  return <TraceTimeline seat={seat} events={view.events} state={view.state} />;
 }
