@@ -110,6 +110,7 @@ with `--flow auto`; `--reset-policy` would also clear the flow. The Squig board 
 | # | Time | Request | T claim | T ask | Challenge | Other-model accept | Woke | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 13:35 | "Suggest a better name for the Doorbell feature, the one that wakes a sleeping member and reaches a busy one." (throwaway) | none (answers, no lanes) | 1:04, a plain message from dolly asking nick to pick a scope, not a flagged ask | 0 declines; one counterpoint from wanderer at 4:58 | n/a | ghost 0:54 (resumed; reply had no thread), dolly 1:04 (fresh), big-body 2:18 (resume failed, fresh fallback), wanderer 4:58 (resume failed, fresh fallback) | All four converged on "Knock". An earlier 13:31 attempt woke nobody: the pasted backslash swallowed `--to`, so it went to @team (closed 13:34). /live reloaded at 13:37 on a web publish. |
+| 2 | 13:5x | "Write one sentence on what musterd is not, for the contact slide." plus the in-thread footer (throwaway, terminal) | none (answers, no lanes) | none; dolly's answer went to nick as a plain message at 0:52 | 0 | n/a | dolly 0:52 (resumed, $0.43), ghost 1:16 (resumed), big-body 2:25 (resume failed: no Presence attested the lease, fresh fallback), wanderer 3:34 (resumed) | All four replies were thread turns (4 of 4; run 1 was 3 of 4). Slowest seat 3:34 against 4:58 in run 1. Closed by nick after about 11 minutes. |
 
 ## After the runs
 
@@ -132,4 +133,19 @@ by staging.
 - **The web publisher reloads /live** about a minute after any web merge, and the auto-refresher bounces the
   daemon when `main` moves. Whether a docs-only merge bounces the daemon is not confirmed, so hold every
   merge during a run.
+
+## What run 2 showed (2026-10-09)
+
+- **The slowest seat came in at 3:34, against 4:58.** First reply 0:52 (run 1: 0:54). Three of four had
+  answered by 2:25 (run 1: 2:18). The first three arrive at the same speed; the improvement is the tail.
+- **Run 1's fresh sessions made later wakes resume.** dolly (cold start in run 1, over the resume limit)
+  and wanderer (failed resume in run 1) both resumed in run 2. big-body failed its resume again, with a
+  different reason (run 1: thread id mismatch; run 2: no Presence attested the lease) and fell back to a
+  fresh session. So big-body is the seat to watch.
+- **The footer worked.** All four replies were thread turns. In run 1 ghost's reply had `thread` = null.
+- **No question and no challenge.** A "write one sentence" request has no open decision in it, so nobody
+  asked or declined. Use a request with a real decision for the demo (see the options above).
+- **The answers were good enough to use.** For example dolly: "musterd is not another agent, an
+  orchestrator that drives yours, or an approval queue: your agents keep their own harnesses, and your
+  people stay on the team." The live demo's best moment is the replies appearing in order.
 
