@@ -88,16 +88,26 @@ export function pidAlive(pid: number): boolean {
  * host's own watchdog does (detached ⇒ the harness leads its group). ADR 546.
  */
 export async function stopWake(
-  wake: { workspace: string; lease_id: string; pid: number },
+  wake: { workspace: string; lease_id: string; pid: number; in_process?: boolean },
   by: string,
   deps: StopDeps = {},
-): Promise<'yielded' | 'killed'> {
+): Promise<'yielded' | 'killed' | 'stuck'> {
   const alive = deps.alive ?? pidAlive;
   const kill = deps.kill ?? ((p: number, s: NodeJS.Signals) => void process.kill(p, s));
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const now = deps.now ?? Date.now;
   const holds = deps.holds ?? ((w) => leaseStillHeld(w.workspace, w.lease_id, w.pid));
   writeYieldFile(wake.workspace, { lease_id: wake.lease_id, by, at: now() });
+  if (wake.in_process) {
+    // The wake is a loop inside the host: its pid is the host's, so there is nothing to signal. It
+    // reads the marker itself and ends at a tool boundary; the lease file clearing is the answer.
+    const deadline = now() + (deps.graceMs ?? 10_000);
+    while (holds(wake)) {
+      if (now() >= deadline) return 'stuck';
+      await sleep(POLL_MS);
+    }
+    return 'yielded';
+  }
   const waitGone = async (ms: number): Promise<boolean> => {
     const deadline = now() + ms;
     while (now() < deadline) {

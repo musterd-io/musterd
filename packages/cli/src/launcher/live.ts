@@ -159,6 +159,9 @@ export interface LocalWake {
   harness: string;
   started_at: number;
   workspace: string;
+  /** A loop inside the host process (the native harness): `pid` is the host's, never signalled, and
+   *  there is no conversation to resume (ADR 546, lane 6/6). */
+  in_process?: boolean;
 }
 
 /**
@@ -189,6 +192,7 @@ export function localWake(
       harness: f.harness,
       started_at: f.started_at,
       workspace: seat.path,
+      ...(f.in_process ? { in_process: true } : {}),
     };
   } catch {
     return null;

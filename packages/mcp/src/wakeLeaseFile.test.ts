@@ -82,6 +82,11 @@ describe('readWakeLeaseFile — the actuator-written lease, honoured only by the
     expect(readWakeLeaseFile(dir, { now: NOW, ancestors: () => [9999, 8888, 1] })).toBeUndefined();
   });
 
+  it('refuses an in-process lease — its pid is the host’s, so any child of the daemon would match (ADR 546)', () => {
+    write({ ...valid, harness: 'musterd', in_process: true });
+    expect(readWakeLeaseFile(dir, { now: NOW, ancestors: () => [4242] })).toBeUndefined();
+  });
+
   it('refuses an expired file — a wake that ended leaves no lease for the next occupant', () => {
     write({ ...valid, expires_at: NOW - 1 });
     expect(readWakeLeaseFile(dir, { now: NOW, ancestors: () => [7, 4242, 80] })).toBeUndefined();

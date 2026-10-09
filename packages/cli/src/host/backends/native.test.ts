@@ -1,4 +1,4 @@
-import type { WakeTurnBody } from '@musterd/protocol';
+import type { WakeLeaseFile, WakeTurnBody } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import type { BackendContext, WakeSpec } from '../backend.js';
 import type { AgentLoopEngine, EngineRunResult, EngineRunSpec, EngineTurn } from '../engine.js';
@@ -105,9 +105,13 @@ function makeDeps(overrides: Partial<NativeDeps> = {}): {
   deps: NativeDeps;
   posted: WakeTurnBody[];
   closed: { count: number };
+  leases: { written: WakeLeaseFile[]; cleared: string[] };
+  spooled: { turns: unknown[]; ends: boolean[] };
 } {
   const posted: WakeTurnBody[] = [];
   const closed = { count: 0 };
+  const leases = { written: [] as WakeLeaseFile[], cleared: [] as string[] };
+  const spooled = { turns: [] as unknown[], ends: [] as boolean[] };
   const deps: NativeDeps = {
     engine: scriptedEngine({}),
     readBinding: () => binding,
@@ -126,9 +130,21 @@ function makeDeps(overrides: Partial<NativeDeps> = {}): {
     }),
     env: {},
     finalReadDelayMs: 0,
+    // No test touches the disk: the lease file, the watch spool and the yield marker are all stubs.
+    lease: {
+      write: (_ws, lease) => leases.written.push(lease),
+      clear: (_ws, id) => leases.cleared.push(id),
+      takeYield: () => false,
+    },
+    openSpool: () => ({
+      turn: (content) => void spooled.turns.push(content),
+      end: (clean) => void spooled.ends.push(clean),
+    }),
+    yieldRequested: () => false,
+    yieldPollMs: 5,
     ...overrides,
   };
-  return { deps, posted, closed };
+  return { deps, posted, closed, leases, spooled };
 }
 
 function ctx(verify: BackendContext['verifyOccupied'], log: string[] = []): BackendContext {
@@ -310,5 +326,108 @@ describe('nativeBackend.wake', () => {
       ctx(async () => ({ occupied: true, provenance: 'session', lease_matched: true }), log),
     );
     expect(log.some((l) => l.includes('provenance'))).toBe(true);
+  });
+});
+
+describe('nativeBackend.wake — take-over and watch (ADR 546, lane 6/6)', () => {
+  const verified = async () => ({ occupied: true, provenance: 'wake', lease_matched: true });
+
+  it('holds an in-process lease with the host pid, and clears it when the run settles', async () => {
+    const { deps, leases, spooled } = makeDeps({
+      engine: scriptedEngine({ turns: [turn(0.005)] }),
+    });
+    const actuation = await nativeBackend(deps).wake(spec(), ctx(verified));
+    expect(leases.written).toEqual([
+      expect.objectContaining({
+        lease_id: 'L1',
+        harness: 'musterd',
+        spawner_pid: process.pid,
+        in_process: true,
+      }),
+    ]);
+    expect(leases.written[0]!.session_id).toBeUndefined();
+    await actuation.settled;
+    expect(leases.cleared).toEqual(['L1']);
+    // The watch spool got the turn's assistant content and a clean end.
+    expect(spooled.turns).toEqual([[{ type: 'text', text: 'working' }]]);
+    expect(spooled.ends).toEqual([true]);
+  });
+
+  it('a run cut short is spooled as not clean', async () => {
+    const { deps, spooled } = makeDeps({
+      engine: scriptedEngine({ result: { end: 'max_turns' } }),
+    });
+    await (
+      await nativeBackend(deps).wake(spec(), ctx(verified))
+    ).settled;
+    expect(spooled.ends).toEqual([false]);
+  });
+
+  it('a yield marker ends an idle loop and the completion says it was taken over', async () => {
+    let marker = false;
+    const { deps } = makeDeps({
+      engine: scriptedEngine({ holdUntilAbort: true }),
+      yieldRequested: () => marker,
+      lease: { write: () => undefined, clear: () => undefined, takeYield: () => marker },
+    });
+    const actuation = await nativeBackend(deps).wake(spec(), ctx(verified));
+    marker = true;
+    const completion = await actuation.settled;
+    expect(completion?.yielded).toBe(true);
+  });
+
+  it('waits for a running tool to return before it stops the loop', async () => {
+    let marker = false;
+    let finishTool!: (v: string) => void;
+    let aborted = false;
+    const engine: AgentLoopEngine = {
+      provider: 'scripted',
+      async run(runSpec) {
+        runSpec.signal?.addEventListener('abort', () => (aborted = true), { once: true });
+        await runSpec.tools[0]!.run({});
+        await new Promise<void>((r) => setTimeout(r, 30));
+        return {
+          turns: 1,
+          end: aborted ? 'aborted' : 'completed',
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        };
+      },
+    };
+    const { deps } = makeDeps({
+      engine,
+      openBridge: async () => ({
+        tools: [
+          {
+            name: 'team_send',
+            description: '',
+            input_schema: { type: 'object' },
+            run: () => new Promise<string>((r) => (finishTool = r)),
+          },
+        ],
+        close: async () => undefined,
+      }),
+      yieldRequested: () => marker,
+    });
+    const actuation = await nativeBackend(deps).wake(spec(), ctx(verified));
+    marker = true;
+    await new Promise<void>((r) => setTimeout(r, 40)); // several polls pass with the tool running
+    expect(aborted).toBe(false);
+    finishTool('sent');
+    await actuation.settled;
+    expect(aborted).toBe(true);
+  });
+
+  it('a marker for another lease stops nothing', async () => {
+    const { deps } = makeDeps({
+      engine: scriptedEngine({ turns: [turn(0.005)] }),
+      yieldRequested: (_ws, lease) => lease === 'OTHER',
+    });
+    const completion = await (await nativeBackend(deps).wake(spec(), ctx(verified))).settled;
+    expect(completion?.yielded).toBeUndefined();
   });
 });

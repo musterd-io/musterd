@@ -19,6 +19,8 @@ import type {
 import type { AgentLoopEngine, EngineTurn } from '../engine.js';
 import { anthropicEngine } from '../engines/anthropic.js';
 import { expectedProvenance } from '../pinnedBin.js';
+import { holdWakeLease, peekYieldFile, type WakeLeaseDeps } from '../wakeLeaseFile.js';
+import { openWakeWatchSpool, type WakeWatchSpool } from '../wakeWatchSpool.js';
 import { nativeMcpConfig, openNativeBridge, type NativeBridge } from './nativeBridge.js';
 
 /**
@@ -45,6 +47,10 @@ import { nativeMcpConfig, openNativeBridge, type NativeBridge } from './nativeBr
 
 /** Beat before the post-run final roster read — presence lands async after the last tool call. */
 const FINAL_READ_DELAY_MS = 2_000;
+
+/** How often the loop looks for a yield marker (ADR 546) — the in-process stand-in for the deny a
+ *  hooked harness gets at its next tool call, and for the launcher's 10 s hard stop. */
+const YIELD_POLL_MS = 500;
 
 /** ADR 101 env > binding, resolved by the backend so the engine can stay providerly dumb about
  *  ladders. Never defaults: an undeclared model defers the wake rather than guessing. */
@@ -79,6 +85,13 @@ export interface NativeDeps {
   telemetry?: (server: string, agentKey: string) => TurnTelemetry;
   env?: Record<string, string | undefined>;
   finalReadDelayMs?: number;
+  /** Lease-file seams (ADR 546; tests never touch disk). */
+  lease?: WakeLeaseDeps;
+  /** The watch spool (ADR 546; tests). */
+  openSpool?: (workspace: string, leaseId: string) => WakeWatchSpool;
+  /** True while a yield marker names this lease (ADR 546; tests). */
+  yieldRequested?: (workspace: string, leaseId: string) => boolean;
+  yieldPollMs?: number;
 }
 
 const defaultTelemetry = (server: string, agentKey: string): TurnTelemetry =>
@@ -144,6 +157,48 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
       const telemetry = (deps.telemetry ?? defaultTelemetry)(spec.server, binding.agent_key);
       const startedAt = Date.now();
       const controller = new AbortController();
+      // ADR 546: findable by `musterd <seat>` like every other wake — but the loop runs in THIS
+      // process, so the lease names the host's pid, says so (`in_process`), and is never signalled.
+      const lease = holdWakeLease(
+        spec.workspace,
+        {
+          lease_id: spec.order.lease_id,
+          harness: 'musterd',
+          pid: process.pid,
+          startedAt,
+          timeoutMs: spec.bounds.timeout_ms,
+          in_process: true,
+        },
+        deps.lease,
+      );
+      const spool = (deps.openSpool ?? openWakeWatchSpool)(spec.workspace, spec.order.lease_id);
+      // A person asked the wake to stop (ADR 546). Stop at a tool boundary, as hooked harnesses do:
+      // abort at once when no tool is running, else when the running one returns.
+      let toolsRunning = 0;
+      let yielding = false;
+      const stopIfIdle = (): void => {
+        if (yielding && toolsRunning === 0) controller.abort();
+      };
+      const tools = bridge.tools.map((t) => ({
+        ...t,
+        run: async (input: unknown): Promise<string> => {
+          toolsRunning += 1;
+          try {
+            return await t.run(input);
+          } finally {
+            toolsRunning -= 1;
+            stopIfIdle();
+          }
+        },
+      }));
+      const yieldPoll = setInterval(() => {
+        if (yielding) return;
+        if ((deps.yieldRequested ?? peekYieldFile)(spec.workspace, spec.order.lease_id)) {
+          yielding = true;
+          stopIfIdle();
+        }
+      }, deps.yieldPollMs ?? YIELD_POLL_MS);
+      yieldPoll.unref();
       let timedOut = false;
       // The mandatory watchdog (ADR 131 §6): aborts the in-process loop instead of killing a tree.
       const watchdog = setTimeout(() => {
@@ -154,6 +209,7 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
 
       let telemetryFailed = false;
       const postTurn = (turn: EngineTurn): void => {
+        spool.turn((turn.transcript as { assistant?: unknown } | null)?.assistant, Date.now());
         // Fire-and-forget: the capture rail is best-effort by design; one narrator line on the
         // first failure, never per turn.
         void telemetry
@@ -175,7 +231,7 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
       const runPromise = engine.run({
         model,
         prompt: spec.order.composed_line,
-        tools: bridge.tools,
+        tools,
         maxTurns: spec.bounds.max_turns,
         signal: controller.signal,
         onTurn: postTurn,
@@ -185,7 +241,10 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
       // this, so the loop (and the bridge's presence) can never be orphaned.
       const settled: Promise<WakeCompletion | undefined> = runPromise.then(async (result) => {
         clearTimeout(watchdog);
+        clearInterval(yieldPoll);
         await bridge.close();
+        const yielded = lease.settle();
+        spool.end(result.end === 'completed');
         const cost = result.cost_usd !== undefined ? ` cost=$${result.cost_usd.toFixed(4)}` : '';
         ctx.log(
           `native loop for ${seat} settled: end=${result.end} turns=${String(result.turns)}` +
@@ -194,6 +253,7 @@ export function nativeBackend(deps: NativeDeps = {}): ActuatorBackend {
         return {
           ...(result.cost_usd !== undefined ? { cost_usd: result.cost_usd } : {}),
           duration_ms: Date.now() - startedAt,
+          ...(yielded ? { yielded: true } : {}),
         };
       });
 

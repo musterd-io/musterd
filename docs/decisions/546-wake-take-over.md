@@ -72,6 +72,19 @@ land in increments 2–4.
   findable by `musterd <seat>`. The native loop deliberately writes none: it runs inside the host, so
   the only pid to name is the host's, and a launcher that signals a lease's pid as a process group
   would stop the host. Native take-over waits for an in-process stop.
+- 2026-10-08 (lane `01M4ECTZ84NRQMBQQXPQX64RF5`, wake watch 6/6): the native loop is now findable,
+  stoppable and watchable, in process. `WakeLeaseFile.in_process` (optional) marks a lease whose
+  `spawner_pid` is the host's own: a launcher never signals it, and the MCP adapter never honours it
+  (the host's children would otherwise match its pid). The loop polls the yield marker every 500 ms and
+  stops at a tool boundary — at once when no tool is running, else when the running one returns — so a
+  native wake gets the same guarantee a hooked harness gets from `musterd gate`. `stopWake` on an
+  `in_process` lease writes the marker and waits up to 10 s for the lease file to clear; past that it
+  answers `stuck`, and the launcher refuses rather than open a second session beside a running loop.
+  Watch reads `wake-watch.jsonl`, a local spool the host writes beside the lease (words and tool calls
+  only, credentials scrubbed, 256 KiB cap, mode 0600, named by lease id, left in place for the
+  watcher's final read and replaced by the next wake). **Take over on a native wake stops it and opens a
+  FRESH session; it does not resume**, because native has no harness conversation to `--resume`.
+  Resume-by-replay from the `wake-turn` capture rows is native phase 2 and is not built.
 - Alternatives considered: (a) **Kill the wake with a signal at once.** Rejected: it cuts a tool call
   in half and can leave a lane claim or a half-written file. The tool boundary is the safe stop.
   (b) **Send the session id to the daemon so any machine can take over.** Rejected: ADR 131 §5 keeps

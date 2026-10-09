@@ -415,6 +415,15 @@ describe('localWake (ADR 546) — only a live, unexpired wake on this machine co
     });
   });
 
+  it('an in-process (native) wake is found, flagged, and has no conversation', () => {
+    const { session_id: _s, ...native } = file({ harness: 'musterd', in_process: true });
+    expect(localWake(seat({ path: at(native) }), wakeLive, up)).toMatchObject({
+      harness: 'musterd',
+      session_id: null,
+      in_process: true,
+    });
+  });
+
   it('a file from an older host has no session id', () => {
     const { session_id: _s, ...old } = file();
     expect(localWake(seat({ path: at(old) }), wakeLive, up)?.session_id).toBeNull();
