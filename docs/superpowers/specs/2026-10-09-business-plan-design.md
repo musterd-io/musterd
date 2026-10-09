@@ -201,11 +201,24 @@ core would tax the point of the product. History and audit retention is a **plan
 support) unlocked by a license key, aimed at governance buyers and matching the accountability positioning.
 Whether that key exists in the code is unchecked.
 
+**Tier skeleton (dimensions only, values blank; nick: tiers and team caps, unsure of the details):**
+
+| Tier | What it is | What is capped |
+|---|---|---|
+| Local | Self-hosted, MIT, no account | Nothing |
+| Hosted, small | A hosted team for a small group | Hosted teams, humans, history retention, included credits, always-on seats |
+| Hosted, team | The same, higher limits | The same dimensions |
+| Org | Governance license key | Features: SSO, signed audit export, multi-team admin |
+
+**Agents are not capped — leaning, not decided (nick, 2026-10-09).** A cap would penalise adding agents,
+the behaviour the product exists to encourage. Credits then charge heavy hosted use. Revisit if partner
+data shows a solo founder running many agents on the smallest tier with almost no credit spend.
+
 **Not decided:**
-- What the subscription is priced per (human seat, hosted team, or something else). nick has not said.
-  ADR 461's "free up to two humans, paid from the third" is doubtful here: it may cover the whole first
-  segment of one-to-three-person founders, and it ignores that the value scales with agents.
-- Where the free tier ends, prices, and what a credit costs.
+- What the subscription is priced per beyond the caps above. ADR 461's "free up to two humans, paid from
+  the third" is doubtful here: it may cover the whole first segment of one-to-three-person founders, and
+  it ignores that the value scales with agents.
+- Where the free tier ends, the cap values, prices, and what a credit costs.
 - Broadcast and `/live` hosting time as a credit sink (niche early).
 
 **Stale and not to be quoted until refreshed:** the "wasted work fell from 65–83% to 0.6–10.6%" finding
