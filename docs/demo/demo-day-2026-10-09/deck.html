@@ -388,6 +388,12 @@
   .fixl{font-family:var(--display);font-weight:700;font-size:calc(24 * var(--u));margin-right:calc(8 * var(--u))}
   .ac{font-size:calc(20 * var(--u));color:var(--mut)}
   .ac code{font-family:var(--mono);font-weight:700;color:var(--acct);background:#fff;border:1px solid var(--line);border-radius:4px;padding:calc(2 * var(--u)) calc(8 * var(--u));margin-right:calc(6 * var(--u))}
+  .churn .logos{margin-top:calc(18 * var(--u));display:flex;flex-wrap:wrap;gap:calc(12 * var(--u));align-items:center}
+  .churn .logos img,.churn .logos svg{width:calc(30 * var(--u));height:calc(30 * var(--u))}
+  .slide.on .churn .frag.shown .logos>*{animation:pop .45s var(--ease) both}
+  .slide.on .churn .frag.shown .logos>*:nth-child(2){animation-delay:.05s}.slide.on .churn .frag.shown .logos>*:nth-child(3){animation-delay:.1s}.slide.on .churn .frag.shown .logos>*:nth-child(4){animation-delay:.15s}.slide.on .churn .frag.shown .logos>*:nth-child(5){animation-delay:.2s}.slide.on .churn .frag.shown .logos>*:nth-child(6){animation-delay:.25s}.slide.on .churn .frag.shown .logos>*:nth-child(7){animation-delay:.3s}.slide.on .churn .frag.shown .logos>*:nth-child(8){animation-delay:.35s}.slide.on .churn .frag.shown .logos>*:nth-child(9){animation-delay:.4s}
+  .pc{font-family:var(--mono);font-size:calc(17 * var(--u));font-weight:700;padding:calc(4 * var(--u)) calc(10 * var(--u));border:1px solid var(--line);border-radius:4px;background:#fff}
+  .whyline{font-size:calc(30 * var(--u))}
 </style>
 <style id="deck-layout"></style>
 
@@ -425,6 +431,20 @@
 
 <!-- 3 · one team -->
 <!-- why they need to talk -->
+<!-- why now -->
+<section class="slide" data-sec="Why" data-title="The best agent changes every month">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
+  <div class="main">
+    <h2 class="a" style="--i:0">The best agent changes every month</h2>
+    <div class="churn">
+      <div class="frag"><span class="when">MODELS</span><p>Frontier labs and open models ship stronger releases every week.</p><div class="logos"><img src="logos/claude.svg" alt="" /><img src="logos/openai.svg" alt="" /><img src="logos/googlegemini.svg" alt="" /><img src="logos/x.svg" alt="" /><img src="logos/meta.svg" alt="" /><img src="logos/deepseek.svg" alt="" /><img src="logos/qwen.svg" alt="" /><img src="logos/mistralai.svg" alt="" /><img src="logos/moonshotai.svg" alt="" /></div></div>
+      <div class="frag"><span class="when">HARNESSES</span><p>New tools to run agents in, and the next one is coming.</p><div class="logos"><img src="logos/claude.svg" alt="" /><img src="logos/openai.svg" alt="" /><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#0D0D0D" d="M12 1.5 2.9 6.75v10.5L12 22.5l9.1-5.25V6.75L12 1.5Zm0 2.3 7.1 4.1L12 12 4.9 7.9 12 3.8Z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" fill="#0D0D0D"/><rect x="7" y="7" width="10" height="10" fill="#FAFAFA"/><rect x="9" y="9" width="6" height="6" fill="#0D0D0D"/></svg><img src="logos/x.svg" alt="" /></div></div>
+      <div class="frag"><span class="when">PROTOCOLS + RESEARCH</span><p>New standards and new results, every month.</p><div class="logos"><span class="pc">MCP</span><span class="pc">A2A</span><span class="pc">arXiv</span></div></div>
+    </div>
+    <p class="whyline frag">You will switch and mix tools to keep up. <b>Your team, its record and its memory have to come with you.</b></p>
+  </div>
+</section>
+
 <section class="slide" data-sec="Why" data-title="Why agents need to talk">
   <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
   <div class="main">
@@ -441,7 +461,6 @@
         <p><b>Your call when assumptions break:</b> risk, spend, what to stop.</p>
       </div>
     </div>
-    <div class="fix frag"><span class="fixl">The fix is small</span><span class="ac"><code>claim</code> “I've got this file.”</span><span class="ac"><code>handoff</code> “This one's yours now.”</span><span class="ac"><code>submit</code> “Done, check it.”</span></div>
   </div>
 </section>
 
@@ -556,19 +575,6 @@
   <aside hidden>Only the title is up. Each click adds one step and its caption; read the caption, then click. The inbox is the hub: it is checked after every tool call, a teammate's question arrives through it, and after Miley submits her work a tier 1 review request sends her to review someone else's, then back to the inbox. Wrap up is not the handoff act: a handoff transfers a lane, with its branch, to another member when she cannot finish it. "Ready for review" shows the flow we are moving to (open the PR, then review); today the merge comes first. Hooks named are Claude Code's; other harnesses get the same moments.</aside>
 </section>
 
-<!-- why now -->
-<section class="slide" data-sec="Business" data-title="Why now">
-  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
-  <div class="main">
-    <h2 class="a" style="--i:0">The best agent changes every month</h2>
-    <div class="churn">
-      <div class="frag"><span class="when">MODELS</span><p>Frontier labs and open models ship stronger releases every week.</p></div>
-      <div class="frag"><span class="when">HARNESSES</span><p>Claude Code, Codex, Cursor, opencode, Grok, and the next one.</p></div>
-      <div class="frag"><span class="when">PROTOCOLS + RESEARCH</span><p>New standards and new results, every month.</p></div>
-    </div>
-    <p class="whyline frag">Teams switch and mix tools to keep up. <b>The work has to come with them:</b> the team, the record, the memory.</p>
-  </div>
-</section>
 
 <!-- who buys first -->
 <section class="slide" data-sec="Business" data-title="Who buys first">
@@ -601,10 +607,10 @@
 </section>
 
 <!-- money -->
-<section class="slide" data-sec="Business" data-title="How musterd makes money">
+<section class="slide" data-sec="Business" data-title="Business model">
   <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
   <div class="main">
-    <h2 class="a" style="--i:0">How musterd makes money</h2>
+    <h2 class="a" style="--i:0">Free to run yourself, paid when we host it</h2>
     <div class="tiers">
       <div class="tier frag"><div class="when">LOCAL · FREE</div><h3>Run it yourself</h3><p>MIT. Your machines. No caps.</p></div>
       <div class="tier hot frag"><div class="when">HOSTED · SUBSCRIPTION</div><h3>musterd Cloud</h3><p>Tiers with caps on teams, people and history. Credits for model compute musterd runs; your own keys use none.</p></div>
