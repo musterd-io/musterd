@@ -62,6 +62,7 @@ describe('briefing', () => {
     ]);
     expect(b.needsHuman[1]!.title).toBe('May I?');
     expect(b.needsHuman[1]!.waitingOn).toBe('nick');
+    expect(b.needsHuman.map((x) => x.ref)).toEqual(['2', '1']);
   });
 
   it('does not count an ask routed to an agent — that is a review, not a person waiting', () => {

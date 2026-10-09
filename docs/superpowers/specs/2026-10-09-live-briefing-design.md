@@ -60,6 +60,11 @@ list and is passed only when the viewer is an admin. Output:
 
 Notes from reading the code:
 
+- **Two rules the first browser check forced (2026-10-09):** a lane is *in progress* only while its owner
+  is present (a claim held by an offline seat is not progress; the first reading was "15 in progress"
+  over a column saying "2 working"), and an ask *needs a human* only when it is team-wide or routed to a
+  human (an agent-routed review ask is a review, not a person waiting). Both are in `briefing.ts` and
+  pinned by tests.
 - Lanes carry no "blocked reason" field. A blocked item shows title, owner, time blocked and its
   `depends_on` when declared. It does not invent a reason.
 - `teamCards.ts` and `workingOn.ts` already derive per-member state for the office and the member cards.
@@ -76,11 +81,13 @@ Notes from reading the code:
   card with kind (ask / approval / blocked / seat request), title, owner and how long it has waited.
   Click opens the thing, as the asks strip and board overlay do now. Empty: a single calm line
   ("nothing is waiting on anyone"), so an empty section reads as good news and not as a missing one.
-- The other three are quiet lists: full title wrapped (not clipped), owner chip, goal, age; about five
-  rows each plus "+N more". Windowed, per the web contract (no unbounded mounts).
+- The other three are quiet lists: title wrapped to two lines (three in the loud section; the full text is
+  on hover and one click away), owner chip, goal, age; five rows each plus "+N more on the board". Windowed, per the web contract (no unbounded mounts).
 - The topbar meter is replaced by the headline sentence.
-- The office stays. A seat that owns a blocked lane gets a small marker on its plate, so the picture and
-  the list agree.
+- The office stays. A seat that owns a blocked lane should get a small marker on its plate, so the picture
+  and the list agree. **Split out of increment 2 (2026-10-09)** into its own lane: the scene's glyph
+  overlay is driven by its own ask data and both routes read one room object, so it is a scene change,
+  not a panel change. Lane `01M4GP19XE5JEC6MA7YCGZGSK6`.
 - The per-member cards move to a **Team** tab on the same panel, so the whole roster (idle and away
   included) is still one click away.
 - Phone: the panel is first and the office stays hidden, as today.

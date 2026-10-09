@@ -24,6 +24,7 @@ import { revealWhenMounted } from '../live/reveal';
 import { LogDrawer } from '../live/LogDrawer';
 import { Ticker } from '../live/Ticker';
 import { briefing } from '../live/briefing';
+import { useSeatRequests } from '../live/useSeatRequests';
 import { TopMeter } from '../live/TopMeter';
 import type { LiveConfig } from '../live/client';
 import {
@@ -242,12 +243,23 @@ function LivePage() {
   // folds in the answers this browser just sent; a second copy here costs one pass over the buffer.
   const derivedAsks = useMemo(() => deriveAsks(envelopes), [envelopes]);
   const asks = useMemo(() => applyTierClock(derivedAsks, Date.now()), [derivedAsks]);
-  // The one sentence the topbar speaks, from the same selector the lists read — so it cannot disagree
-  // with them. `Date.now()` is read when an input changes, not per tick: the 24 h shipped window moves
-  // by minutes, not seconds.
-  const headline = useMemo(
-    () => briefing({ board, goals: report?.goals ?? [], asks, roster, now: Date.now() }).headline,
-    [board, report, asks, roster],
+  // The briefing (live-briefing spec): the topbar's sentence and the column's Now tab read ONE
+  // derivation, so a count cannot disagree with the list under it. Pending seat claims are admin-only
+  // data — they are asked for only once someone is signed in, and a "no" ends the asking.
+  const seatRequests = useSeatRequests(cfg, signedIn);
+  // `Date.now()` is read when an input changes, not per tick: the 24 h shipped window moves by
+  // minutes, not seconds.
+  const brief = useMemo(
+    () =>
+      briefing({
+        board,
+        goals: report?.goals ?? [],
+        asks,
+        roster,
+        requests: seatRequests,
+        now: Date.now(),
+      }),
+    [board, report, asks, roster, seatRequests],
   );
   const entries = roomEntries(roster, board);
 
@@ -549,7 +561,7 @@ function LivePage() {
             office overlay, which carries them over the scene on both /live and /broadcast — repeating
             them a few inches above was the duplication nick asked us to drop (2026-07-24). */}
         <MusterdWord />
-        {connected && <TopMeter teamName={team} envelopes={envelopes} roster={roster} headline={headline} />}
+        {connected && <TopMeter teamName={team} envelopes={envelopes} roster={roster} headline={brief.headline} />}
         <span className="lc__spacer" />
         {connected && (
           <button
@@ -629,6 +641,12 @@ function LivePage() {
               unreadable={rosterUnreadable}
               stale={rosterStale}
               asks={asks}
+              brief={brief}
+              onOpenLane={setBoardLane}
+              onOpenAsk={onActClick}
+              onOpenBoard={() =>
+                openBoard(new DOMRect(window.innerWidth / 2, window.innerHeight / 2, 1, 1))
+              }
             />
           </div>
           {/* The headline ticker (ADR 464 §5): the last few notable moments, under the room. */}
