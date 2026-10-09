@@ -15,6 +15,14 @@ export const MAX_CAST = 4;
 
 export const DEMO_ANCHOR = 'docs/demo/demo-day-2026-10-09/rehearsal-log.md';
 
+/**
+ * Appended to a huddle's body, after a blank line (alfie, from nick's first rehearsal): opened with the
+ * bare sentence, two of four seats answered in the thread and at least one answered nick directly,
+ * because nothing said where to reply. Verbatim; never shown in the input or the success line.
+ */
+export const REPLY_FOOTER =
+  "Reply in this thread (team_send with thread = this act's id), not as a direct message. If you need nick, send an ask in this thread.";
+
 /** The CLI's default room pattern (`<whiteboard base>/b/huddle-<id>`); the whiteboard is not part of
  *  the demo, so nothing opens it — HuddleMetaSchema only needs a valid URL. */
 const WHITEBOARD_BASE = 'http://127.0.0.1:4851';
@@ -40,7 +48,7 @@ export function promptAct(text: string, on: readonly string[], roomId: string): 
   return {
     act: 'message',
     to: { kind: 'team' },
-    body,
+    body: `${body}\n\n${REPLY_FOOTER}`,
     meta: {
       huddle: {
         topic: { kind: 'design', id: 'demo' },

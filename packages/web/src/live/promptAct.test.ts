@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { CAST, DEMO_ANCHOR, promptAct, promptBarFlag, promptBarVisible } from './promptAct';
+import { CAST, DEMO_ANCHOR, promptAct, promptBarFlag, promptBarVisible, REPLY_FOOTER } from './promptAct';
 
 describe('promptAct — the envelope the bar sends', () => {
   it('opens a huddle on the cast, the shape `musterd huddle open --to a,b,c,d` sends', () => {
     const a = promptAct('  Give the members eyes.  ', CAST, '01ABC')!;
     expect(a.act).toBe('message');
     expect(a.to).toEqual({ kind: 'team' });
-    expect(a.body).toBe('Give the members eyes.');
+    expect(a.body).toBe(`Give the members eyes.\n\n${REPLY_FOOTER}`);
     expect(a.meta).toEqual({
       huddle: {
         topic: { kind: 'design', id: 'demo' },
@@ -49,5 +49,17 @@ describe('the gates', () => {
     expect(promptBarVisible({ flag: false, signedIn: true, admin: true })).toBe(false);
     expect(promptBarVisible({ flag: true, signedIn: false, admin: true })).toBe(false); // the observer
     expect(promptBarVisible({ flag: true, signedIn: true, admin: false })).toBe(false);
+  });
+});
+
+describe('the reply footer (alfie, after the first rehearsal)', () => {
+  it('is the fixed text, verbatim, after a blank line — on a huddle only', () => {
+    expect(REPLY_FOOTER).toBe(
+      "Reply in this thread (team_send with thread = this act's id), not as a direct message. If you need nick, send an ask in this thread.",
+    );
+    expect(promptAct('hi', CAST, 'x')!.body.endsWith(`\n\n${REPLY_FOOTER}`)).toBe(true);
+    // A one-seat directed message is a conversation with that seat; "not as a direct message" would
+    // contradict it, so it goes without.
+    expect(promptAct('hi', ['ghost'], 'x')!.body).toBe('hi');
   });
 });
