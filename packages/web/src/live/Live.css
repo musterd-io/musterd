@@ -239,6 +239,10 @@
   .lc__topbar .lc-clock__zone {
     display: none;
   }
+  /* The Now chip took the room the clock had; a phone shows the time already. */
+  .lc__topbar .lc-clock {
+    display: none;
+  }
 }
 
 /* Topbar round buttons — the sound toggle and the office panel controls (collapse / companion)
@@ -7586,6 +7590,17 @@
   align-items: center;
   column-gap: var(--lc-5);
   row-gap: 3px;
+}
+@container (max-width: 560px) {
+  /* A phone's card: the name gets its own line, the faces, bar and count share the next. */
+  .nowc-goal {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name name name'
+      'faces bar of'
+      'state state state';
+    row-gap: 6px;
+  }
 }
 .nowc-goal__name {
   grid-area: name;
