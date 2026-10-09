@@ -12,14 +12,17 @@ describe('landing page', () => {
   it('no longer pulls the /live stylesheet', () => {
     expect(src()).not.toContain('Live.css');
   });
-  // ADR 428: ONE office, and the stream is it. The hero still keeps the first screen — the install
-  // command is what that screen is for — and the stream follows it immediately. `OfficeProof` is
-  // gone; a second office block is the defect this asserts against coming back.
-  it('puts the stream directly after the hero, and has no second office block', () => {
+  // ADR 428: ONE office, and the stream is it. `OfficeProof` is gone; a second office block is the
+  // defect this asserts against coming back. Since 2026-10-09 (homepage-copy-spec §0.4/§0.5) the
+  // real-lane card sits between the hero and the stream, until the order is reopened with an ADR.
+  it('puts the stream after the hero and the claim-to-accepted card, and has no second office block', () => {
     const order = src();
     expect(order).not.toContain('OfficeProof');
-    expect(order.indexOf('<LightHero')).toBeLessThan(order.indexOf('<StreamSection'));
+    expect(order.indexOf('<LightHero')).toBeLessThan(order.indexOf('<ClaimToAccepted'));
+    expect(order.indexOf('<ClaimToAccepted')).toBeLessThan(order.indexOf('<StreamSection'));
     expect(order.indexOf('<StreamSection')).toBeLessThan(order.indexOf('<WhatIs'));
+    expect(order.indexOf('<HowItWorks')).toBeLessThan(order.indexOf('<GettingStarted'));
+    expect(order.indexOf('<GettingStarted')).toBeLessThan(order.indexOf('<Teasers'));
   });
 });
 
@@ -86,21 +89,35 @@ describe('the office slot in the stream section', () => {
 // ADR 320 decision 5 (2026-09-16): the landing leads with names, never with containment, and the
 // category noun is never bare (decision 4).
 describe('landing copy under ADR 320 §5', () => {
-  const hero = readFileSync(new URL('../components/site/LightHero.tsx', import.meta.url), 'utf8');
-  const whatIs = readFileSync(new URL('../components/site/WhatIs.tsx', import.meta.url), 'utf8');
+  // Whitespace-collapsed: JSX wraps a sentence across lines, and these pins are about the words.
+  const flat = (rel: string) =>
+    readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\s+/g, ' ');
+  const hero = flat('../components/site/LightHero.tsx');
+  const whatIs = flat('../components/site/WhatIs.tsx');
   // Scoped 2026-09-17 after big-body's cross-family security read (act 01M2PH26PH): the unscoped
   // claim reads as a promise about everything an agent does, including the shell and filesystem
   // musterd never sees. What is true is the roster: acts the daemon accepted.
   it('the hero scopes the naming claim to the roster, and puts a human on it', () => {
-    // 2026-10-05 (homepage-copy-spec §9): the subhead now names the reader's problem, and the
-    // naming claim lives only in card 4's heading, scoped. The overclaim stays banned here, and
-    // the human must still be on the team in the hero's first breath.
+    // 2026-10-09 (homepage-copy-spec §0.3): the subhead carries the ADR 550 chain and names the
+    // people as members. The naming claim still lives only in card 4's heading, scoped, and the
+    // overclaim stays banned here.
     expect(hero).not.toMatch(/Every act has a name on it/);
-    expect(hero).toMatch(/with you on the team/);
+    expect(hero).toContain('the people you work with join one team as named members');
+    expect(hero).toContain('Every piece of work shows who claimed it, which model did it and who accepted it.');
+    expect(hero).toContain('Any member can say no.');
   });
-  it('the what-is heading qualifies "coordination layer" with the peers clause', () => {
-    expect(whatIs).toContain('The coordination layer where agents and humans are peers');
-    expect(whatIs).not.toMatch(/A coordination layer for agents you already run/);
+  it('the hero has no contrast frame, and says what a click leads to', () => {
+    const code = hero.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(code).not.toMatch(/not watching from outside/);
+    expect(code).not.toMatch(/Watch it live/); // a state claim in prerendered HTML
+    expect(code).toContain('Watch the team work');
+    expect(code).toContain('Private preview. We write to you when there is a seat for your team.');
+  });
+  it('the what-is heading no longer leads with "coordination layer" (ADR 550 decision 1)', () => {
+    const code = whatIs.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(code).toContain('Members who answer for their work');
+    expect(code).not.toMatch(/coordination layer/i);
+    expect(code).not.toMatch(/A coordination layer for agents you already run/);
   });
   it('the naming card says what is observed and disclaims sandboxing', () => {
     expect(whatIs).toContain('does not sandbox');
@@ -127,13 +144,90 @@ describe('landing copy under ADR 320 §5', () => {
   // Unscoped, "the record holds what the harness observed" reads as a tool-call transcript —
   // the weakest sentence on the page per both security reads.
   it('scopes what the harness observed to seat occupancy', () => {
-    // 2026-10-05 plain-words pass (homepage-copy-spec §9): same scope, said as model identity at
-    // connect time, without "harness".
-    expect(whatIs).toContain('Which model is in each seat is what its tool reported when it connected');
+    // 2026-10-09 (homepage-copy-spec §0.7): the contrast frame ("not what the agent says about
+    // itself") and the "ships" claim are gone; the scope — the model at connect time — is kept.
+    expect(whatIs).toContain('The model in each seat is the one its tool reported when it connected');
     expect(whatIs).not.toMatch(/the record holds what the harness observed/);
   });
   it('no surface here uses the critic\'s noun', () => {
     expect(hero + whatIs).not.toMatch(/swarm/i);
+  });
+});
+
+// 2026-10-09, homepage-copy-spec §0 (ADR 550 and the first-time visitor). Comments are stripped so a
+// guard against a string RENDERING does not fire on the prose explaining why it must not.
+describe('landing copy under ADR 550 and the 2026-10-09 revision', () => {
+  const read = (rel: string) =>
+    readFileSync(new URL(rel, import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
+      // JSX wraps a sentence across lines; a pin is about the words, not where prettier broke them.
+      .replace(/\s+/g, ' ');
+  const hero = read('../components/site/LightHero.tsx');
+  const whatIs = read('../components/site/WhatIs.tsx');
+  const how = read('../components/HowItWorks.tsx');
+  const why = read('../components/site/WhyTalk.tsx');
+  const card = read('../components/site/ClaimToAccepted.tsx');
+  const start = read('../components/site/GettingStarted.tsx');
+
+  // §0.2: acceptance arrives after the merge, so it is "counts as done", never "ships on its
+  // author's word". "Shipped" about CODE (WhyTalk's own-history sentence) is correct and not tested.
+  it('says "counts as done", not "ships", wherever acceptance is described', () => {
+    for (const code of [hero, whatIs, how, card]) {
+      expect(code).not.toMatch(/Nothing ships/);
+      expect(code).not.toMatch(/ships on its author/);
+    }
+    expect(whatIs).toContain('Nothing counts as done until a different member has looked at what landed.');
+  });
+
+  it('keeps the contrast frame out of the cards and the steps', () => {
+    expect(whatIs).not.toMatch(/Most agent tools give you agents you assign work to/);
+    expect(whatIs).not.toMatch(/not what the agent says about itself/);
+  });
+
+  it('keeps the scoped boundary sentence and the sandbox disclaimer, verbatim', () => {
+    expect(whatIs).toContain(
+      'musterd does not sandbox your agents; your own host, sandbox and provider controls still do that. It names the work that goes through the team.',
+    );
+  });
+
+  it('How a team works: the second member judges what landed, and the preview note moved to the hero', () => {
+    expect(how).toContain('The work lands, and is judged by a second member');
+    expect(how).toContain('A second member looks at what landed, in the product');
+    expect(how).toContain('An agent cannot set it for itself.');
+    expect(how).not.toMatch(/musterd is in private preview/);
+    expect(how).not.toMatch(/what actually shipped/);
+  });
+
+  it('Why agents talk: answers the audience, dates the proof, scopes the history to us', () => {
+    expect(why).toContain('A shared file can hold a result. Talk carries what is not a result yet');
+    expect(why).toContain('wasted 65 to 83 percent of their work');
+    expect(why).toContain('One project, a pilot, measured in July 2026.');
+    expect(why).toContain('On our own team, more than a third of the code agents wrote without coordination never shipped.');
+    // The pair must not be borrowed as a transferable rate (ADR 294).
+    expect(why).not.toMatch(/\bevery team\b|\byour team will\b/i);
+  });
+
+  // §0.4: a real lane, dated, with the model from the presence record, and no "who asked".
+  it('the claim-to-accepted card is a dated snapshot of a real lane, and leaves "who asked" out', () => {
+    expect(card).toContain('One piece of work, from claim to accepted');
+    expect(card).toContain('Pull request 2240, merged 2026-10-08');
+    expect(card).toContain('sloane, a different member, 2026-10-09');
+    expect(card).toContain('A snapshot of the board, taken 2026-10-09.');
+    expect(card).not.toMatch(/who asked|asked for it|requested by/i);
+  });
+
+  // §0.9 and watch-page-copy-spec §2: honest about what does not exist, and no state word that is
+  // true in only one state.
+  it('Getting started says what exists today and what does not, without a state word or a date', () => {
+    expect(start).toContain('musterd is in private preview, so there is no public install yet.');
+    expect(start).toContain("status: 'Not yet'");
+    expect(start).toContain('Install and connect your agents.');
+    for (const code of [card, start]) {
+      expect(code).not.toMatch(/\b(live|now|currently)\b/i);
+    }
+    // The "Not yet" row promises nothing: no link, no date.
+    expect(start).toMatch(/status: 'Not yet'[\s\S]*?link: null/);
   });
 });
 

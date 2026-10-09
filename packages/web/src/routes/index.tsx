@@ -8,6 +8,8 @@ import {
   webSiteNode,
 } from '../brand/siteMeta';
 import { HowItWorks } from '../components/HowItWorks';
+import { ClaimToAccepted } from '../components/site/ClaimToAccepted';
+import { GettingStarted } from '../components/site/GettingStarted';
 import { LightHero } from '../components/site/LightHero';
 import { SiteFooter } from '../components/site/SiteFooter';
 import { SiteNav } from '../components/site/SiteNav';
@@ -44,6 +46,9 @@ function Home() {
     <main className="site-page">
       <SiteNav />
       <LightHero />
+      {/* One real lane, claim to accepted (homepage-copy-spec §0.4): under the hero and above the
+          stream until the section order is reopened with an ADR (§0.5). */}
+      <ClaimToAccepted />
       {/* The hero keeps the first screen and the stream follows it immediately (ADR 428). The office used to appear twice
           here, as a still above and a player below; there is one slot now and the still is that
           slot's offline state. */}
@@ -51,6 +56,7 @@ function Home() {
       <WhyTalk />
       <WhatIs />
       <HowItWorks />
+      <GettingStarted />
       <Teasers />
       <SiteFooter />
     </main>

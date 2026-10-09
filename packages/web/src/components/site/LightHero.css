@@ -62,3 +62,10 @@
 .lh__cta:focus-visible {
   text-decoration: underline;
 }
+
+.lh__note {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  margin: 0.8rem 0 0;
+}
