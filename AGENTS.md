@@ -29,7 +29,9 @@ Only `@musterd/protocol` is imported across package boundaries. The CLI and MCP 
 | cli        | `pnpm --filter @musterd/cli test` + Scenario A (`06-testing.md`) + Figma terminal snapshot match      |
 | mcp        | `pnpm --filter @musterd/mcp test` + Scenario B                                                        |
 | flagship   | `pnpm test:scenarios` (Scenario C — the 3-pane demo as an automated test)                             |
-| any "done" | `pnpm -r build && pnpm -r lint && pnpm test` all green                                                |
+| any "done" | `gates` CI green (`build → typecheck → test → coverage → format:check → change-adr:check`)            |
+
+These name what each milestone is checked by; **CI runs them, you don't have to.** Locally, run only the fast gates in Git workflow step 3 — and a single package's tests while you iterate on that package, never the full suite to pre-verify CI.
 
 A milestone is **done** only when the `07-conventions.md` "Definition of done" checklist is fully satisfied.
 
@@ -61,11 +63,11 @@ Isolate dogfood state from your real `~/.musterd` with env: `MUSTERD_CONFIG`, `M
 
 What your change needs depends entirely on _what you changed_:
 
-| You changed…                          | What to do                                                                                                                    | Bounces the daemon?      |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| **Web / UI** (`packages/web`)         | **Nothing.** Merge to `main`. Within ~60s the build-publisher rebuilds and republishes, and the daemon serves the new bundle. | **No**                   |
-| **Server / protocol / CLI**           | `musterd service refresh` (sync `main` → build → restart)                                                                     | **Yes** — announce first |
-| **Un-merged WIP you want to eyeball** | `pnpm dev` in your workspace → `http://localhost:5174/live`                                                                   | No                       |
+| You changed…                          | What to do                                                                                                                                                                                                      | Bounces the daemon?                                           |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **Web / UI** (`packages/web`)         | **Nothing.** Merge to `main`. Within ~60s the build-publisher rebuilds and republishes, and the daemon serves the new bundle.                                                                                   | **No**                                                        |
+| **Server / protocol / CLI**           | **Nothing.** Merge to `main`; the auto-refresher syncs, builds and restarts the daemon (`~/.musterd/autorefresh/refresh.log`). `musterd service refresh` only where no refresher is installed or a tick failed. | **Yes**, automatically — announce first if you run it by hand |
+| **Un-merged WIP you want to eyeball** | `pnpm dev` in your workspace → `http://localhost:5174/live`                                                                                                                                                     | No                                                            |
 
 **Do not run `service refresh` to see a UI change.** It restarts the _shared_ daemon and drops your teammates' live sessions for nothing. The UI is **decoupled from the daemon's build**: the served bundle lives in `~/.musterd/live/web`, published from the `agents-live` workspace — **not** in the daemon's checkout. So the daemon's build SHA and the UI's SHA differ routinely, and that is correct, not drift to "fix" with a refresh.
 
