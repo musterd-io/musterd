@@ -16,11 +16,12 @@ to check, not as the base.
   the expansion path.
 - **12-month goal:** traction first, and funding is also needed.
 - **Evidence today:** no one outside the team has used musterd. It has only been seen in demos.
-- **Capacity:** nick, full time, solo.
-- **Runway:** about 3 months of personal funding (said "a couple", then corrected to 3).
+- **Capacity:** nick, full time, with about a dozen agent seats building. His scarce resource is attention
+  and the calendar, not build capacity.
+- **Runway:** about 3 months, and the limit is **not cash** — see "Runway and what counts as progress".
 - **Spend:** about $500 a month for one person — Claude, OpenAI, Grok and Cursor subscriptions, a couple
   of domains, fly.io, ubicloud, cloudflare, GitHub. It does **not** include future user scale or
-  musterd Cloud.
+  musterd Cloud. nick covers it, and all his other personal expenses are covered.
 - **Open to:** accelerators, incubators and cohorts; real funding; paid design partners; hiring if needed.
 
 ## What follows from it
@@ -31,7 +32,9 @@ funding. Costs can be modeled honestly from today; revenue cannot yet.
 
 Fundraising and traction both outlast 3 months of runway, so the plan needs a bridge.
 
-## Chosen approach: C — accelerator applications and paid design partners on one calendar
+## Chosen approach: C — accelerator applications and design partners on one calendar
+
+(Renamed from "paid design partners": nick chose **free for now**, below.)
 
 - **A. Accelerator-led.** Fastest route to cash and credits. Weakness: zero outside users makes the
   applications thin, and decision dates belong to the programs.
@@ -81,6 +84,43 @@ setups below. This is a power user's view plus guesses; hold it until a design p
   the personal agents (muse, instinct, hermes, dots) in musterd; muse the model via opencode is covered by
   opencode. Do not promise personal-agent support in an application until one has joined a team.
 
+## Offer, repo and Cloud (nick, 2026-10-09)
+
+- **Offer to the first partners: concierge setup, a direct line to nick and a say in the roadmap, free for
+  now.** Money comes later, once they have stayed. alfie argued once for a small payment as a stronger
+  signal; nick chose free, and the runway section below explains why that holds.
+- **Willingness to pay without charging:** ask each partner what they would pay for a hosted team and
+  record the answer by name. It is the nearest money signal while the offer is free.
+- **musterd Cloud is not fully built.** A hosted team cannot be the paid offer yet. Option B (pre-sell
+  it with a delivery date) is parked unless fifty gives a credible date. Readiness readout asked of fifty
+  2026-10-09 (what a stranger can do now, smallest usable slice and its date, cost-to-serve per team);
+  no reply recorded yet. Do not quote a Cloud date until it arrives.
+- **The repo is private on purpose, temporarily.** nick made it private on 2026-10-03 because it was not
+  ready for people to try, and partly to safeguard the idea and code. alfie's view: the published packages
+  are already MIT, the idea is already public, and at 0 users obscurity is the larger risk; nick's call.
+  Working position: **stay private until the Oct 20 readiness check, then decide — protocol, `SPEC.md` and
+  client adapters first, server and daemon later.** While private, any GitHub-visibility claim in an
+  application has to wait. The accelerator preference for open source is not verified.
+
+## Runway and what counts as progress (nick, 2026-10-09)
+
+The limit is **how long nick's wife will wait without income**, about 3 months, so roughly **Jan 9, 2027**.
+Cash is not the constraint. She needs **visible progress toward a way to make money**, not revenue itself,
+so usage, retention and applications count.
+
+| Date | Milestone |
+|---|---|
+| Oct 16 | First outside partner installed, with nick beside them |
+| Oct 20 | A stranger passes the 10-minute install test; repo-visibility decision |
+| Nov 2 | YC application submitted (8pm PT), plus any other deadlines nick chooses |
+| Early Dec | At least two outside teams still using it after two weeks |
+| By Dec | Each partner has said what they would pay for a hosted team |
+| Dec 11 | YC decision (about) |
+| Jan 9 | Decision point: continue, or the fallback (not yet defined) |
+
+nick said these are good for now. The first-run work is tracked as goal `first-run-10-minutes` (lanes
+`01M4FDBSN8`, `01M4FDBVGB`, `01M4FDBXPX`).
+
 ## Verified 2026-10-09 (web search; re-check before relying)
 
 - **YC W27:** on-time deadline **Nov 2, 2026, 8pm PT**; decision about Dec 11; batch Jan–Mar 2027, SF.
@@ -108,9 +148,8 @@ setups below. This is a power user's view plus guesses; hold it until a design p
 
 ## Open questions
 
-- **Next question for nick:** what do you want to be able to show on Nov 2 (YC deadline), given about 25
-  days solo and the three first-run gaps above: how is the time split between building the first-run fixes
-  and recruiting partners?
+- **Next question for nick:** the fallback at Jan 9 — what is it, and when does he decide? Then the
+  90-day partner plan: who is approached first, in what order, and what each is asked to do.
 - What in `traction-plan.md` is stale, and what has sloane learned since 2026-09-16? Asked of sloane on
   2026-10-09; no reply recorded yet.
 - Cost-to-serve for musterd Cloud (hosting, Postgres, relay per team) — no figure exists.
