@@ -79,16 +79,23 @@ enrolled on this laptop with `flow auto`, `convene_huddles` is on as a team defa
   30-minute work timeouts.
 
 To rehearse more than once an hour, nick shortens the cooldown for the cast from his own Workspace.
-The shape comes from `musterd help residency`; run `musterd residency status` afterwards to check it:
+**`residency on` replaces a seat's whole override set, not just the flags you pass.** The first run of
+this command without `--flow auto` set all four seats back to `flow manual`, and `residency status`
+showed it. Pass every override you want to keep, then read the status:
 
 ```bash
+cd ~/musterd/revive/agents/nick
 for s in dolly big-body ghost wanderer; do
-  musterd residency on --seat $s --workspace ~/musterd/revive/agents/$s --cooldown 2m --hourly-cap 8
+  musterd residency on --seat $s --workspace ~/musterd/revive/agents/$s \
+    --flow auto --cooldown 2m --hourly-cap 8
 done
+musterd residency status
 ```
 
-After the demo, `musterd residency on --seat <name> --reset-policy` returns a seat to the team
-defaults. The Squig board is not part of the demo (nick, 2026-10-09).
+Each of the four then reads `flow auto* · cooldown 2m* · 8/h*` (checked 2026-10-09 12:40).
+
+After the demo, put the cooldown back with the same loop and `--cooldown 30m --hourly-cap 2`, still
+with `--flow auto`; `--reset-policy` would also clear the flow. The Squig board is not part of the demo (nick, 2026-10-09).
 
 ## Before each run
 
