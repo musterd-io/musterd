@@ -29,7 +29,7 @@ Source runs: three one-sentence requests to the same four enrolled members, the 
 ## A lane handed to an editing member keeps waking it
 
 - **A lane handed to a member on `seat-policy` and never resolved by that member is worked again on every dispatch tick** (observed 2026-10-09: three extra wakes in about ten minutes, each re-doing the task, one opening a second draft PR after the first was closed). Resolve the lane from the member's own session as its last step, and write that step into the lane. Falsify: a handed-off lane that stays claimed and is not woken again.
-- **The dispatch loop was already on for this team** (inferred 2026-10-09, because a handoff was derived as a `work_order`; `musterd team policy` is admin-only and was not read). Turning it on is team-wide: every offline member on `flow auto` that owns a claimed or active lane would be started. Falsify: `musterd team policy` showing the dispatch loop off.
+- **The dispatch loop was already on for this team** (inferred 2026-10-09 because a handoff was derived as a `work_order`; ~~`musterd team policy` was not read~~ CONFIRMED 2026-10-09 by nick: it prints `dispatch loop: on` with no `default` marker, so the team set it). Turning it on is team-wide: every offline member on `flow auto` that owns a claimed or active lane would be started. Falsify: `musterd team policy` showing the dispatch loop off.
 
 ## What moves `main` during a talk
 
