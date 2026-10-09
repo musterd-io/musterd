@@ -16,7 +16,7 @@ Seen again on 2026-10-05 with the same single-line cause: wanderer's workspace h
 
 Night 2026-10-05 grokbot: porcelain is `?? .musterd/` — most of that directory is gitignored, `repo-servers.json` is not — the same one-untracked-file skip on a second night. Independently, HEAD was still on last night's wiki branch `docs/dream-leftover-wiki-pr` after #2076 merged, so freshen would skip for the named-branch reason too (that cause is still an insight, seen once).
 
-Seen again on 2026-10-08 on the same workspace: dreamy's porcelain still reads `?? .musterd/` with `repo-servers.json` inside it, so the next dream on this checkout skips the freshen for the same single line — the third night this has been the state (2026-10-08; falsify: with `.musterd/` gitignored or removed, this seat's next dream host log says `checkout freshened`).
+Seen again on 2026-10-08 on the same workspace: dreamy's porcelain still reads `?? .musterd/` with `repo-servers.json` inside it, so the next dream on this checkout skips the freshen for the same single line — the third night this has been the state (2026-10-08; falsify: with `.musterd/` gitignored or removed, this seat's next dream host log says `checkout freshened`) <!-- claim: defect -->
 
 ## The packet carries the skill
 
