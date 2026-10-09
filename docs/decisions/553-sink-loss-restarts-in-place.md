@@ -60,6 +60,9 @@ like ADR 551's `RELAUNCH_MAX`, would close that.
 
 Follows-up: deferred — a restart cap, once a sink is seen restarting more than 3 times in 5 minutes (2026-10-09).
 
+2026-10-09: the first measurement on the box showed the 60 s floor (decision 2) ending the machine on a
+retry that Twitch closed 1 s after `◉ live`. ADR 555 exempts a supervised retry from that floor, with a cap.
+
 ADR 551 decision 3 is changed by this ADR: the sink half still ends the stream, but under a supervisor
 that now means a restart in the machine (decision 1 here).
 

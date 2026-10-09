@@ -881,7 +881,28 @@ export function socketLossExitCode(
 }
 
 /**
- * The exit code for ffmpeg ending after the stream was live (ADR 553).
+ * How many short runs in a row a relaunched stream may have before a sink that keeps dying ends the
+ * machine instead (ADR 555). The supervisor counts them and hands the count in `SINK_RETRY_ENV`.
+ */
+export const SINK_RETRY_MAX = 6;
+
+/**
+ * Set by `entrypoint.sh` on every rerun after a 75: the number of runs since the last proven one that
+ * ended before `RESTARTABLE_AFTER_MS`. Unset on the machine's first run, so "this is a retry" and "how
+ * many retries have failed" travel in one value (ADR 555).
+ */
+export const SINK_RETRY_ENV = 'MUSTERD_BROADCAST_SINK_RETRY';
+
+/** The retry count the supervisor handed in, or undefined on a first run. */
+export function sinkRetryCount(env: NodeJS.ProcessEnv = process.env): number | undefined {
+  const v = env[SINK_RETRY_ENV];
+  if (v === undefined || v === '') return undefined;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 ? n : undefined;
+}
+
+/**
+ * The exit code for ffmpeg ending after the stream was live (ADR 553, amended by ADR 555).
  *
  * ffmpeg dies when its sink does: Twitch resetting the RTMP session, a network path that drops, a key
  * revoked mid-run. That used to return 1, which `entrypoint.sh` does not rerun, so the machine ended and
@@ -889,18 +910,26 @@ export function socketLossExitCode(
  * on a new Fly machine and a new tailnet node. A supervised run asks to be run again instead: the
  * broadcast restarts inside the same machine, with Chrome already warm.
  *
- * The same judgement as `socketLossExitCode` decides whether that is safe — a run that never proved
- * itself (a rejected key, a bad config) ends rather than looping — and the same two cases stay as they
- * were: a clean ffmpeg exit (`--duration`, a finished stop) is 0, and a stop someone asked for is not a
- * sink loss, so it is not restarted.
+ * The 60 s floor of `socketLossExitCode` decides whether a FIRST run earned that — a run that never
+ * proved itself (a rejected key, a bad config) ends rather than looping. A RETRY is different: the
+ * stream was live in this machine already, and measured 2026-10-09 Twitch refuses a reconnect made
+ * within seconds of a reset (the new session was closed ~1 s after `◉ live`). Judging that retry by
+ * the floor ended the machine on exactly the failure it was meant to ride out. So once the supervisor
+ * says this is a retry, a short run restarts too, until `SINK_RETRY_MAX` of them in a row have failed
+ * — a revoked key still ends, a few minutes later. A clean ffmpeg exit (`--duration`, a finished stop)
+ * is 0, and a stop someone asked for is not a sink loss, so it is not restarted.
  */
 export function sinkLossExitCode(
   ffmpegCode: number,
-  opts: { stopping: boolean; ranMs: number; isSupervised?: boolean },
+  opts: { stopping: boolean; ranMs: number; isSupervised?: boolean; retry?: number | undefined },
 ): number {
   if (ffmpegCode === 0) return 0;
   if (opts.stopping) return 1;
-  return socketLossExitCode(opts.ranMs, opts.isSupervised);
+  const isSupervised = opts.isSupervised ?? supervised();
+  if (isSupervised && opts.retry !== undefined && opts.retry < SINK_RETRY_MAX) {
+    return RESTART_EXIT_CODE;
+  }
+  return socketLossExitCode(opts.ranMs, isSupervised);
 }
 
 /**
@@ -1769,6 +1798,7 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
   const code = sinkLossExitCode(exitCode, {
     stopping,
     ranMs: Date.now() - runStartedAt,
+    retry: sinkRetryCount(),
   });
   if (code === RESTART_EXIT_CODE) {
     process.stderr.write(
