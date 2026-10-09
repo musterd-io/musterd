@@ -9,7 +9,7 @@ import {
   type NowMode,
   type NowStorage,
 } from './nowWhen';
-import { stillMode } from './stillMode';
+import { nowOpenMode, stillMode } from './stillMode';
 
 /**
  * The Now briefing's shell (live-briefing spec): one card with three homes. On the first visit of a
@@ -58,6 +58,13 @@ export function NowOverlay({ brief, roster, since, onOpenLane, onOpenAsk }: NowO
     const isPhone = window.matchMedia(PHONE_QUERY).matches;
     setStill(isStill);
     setPhone(isPhone);
+    // Measurement modes (stillMode.ts): `?now-open` mounts it open for the one sweep that reads its
+    // text; plain `?still` keeps it docked so every other sweep sees the page as it was.
+    if (nowOpenMode()) {
+      setMode('overlay');
+      return;
+    }
+    if (isStill) return;
     const start = startMode(readBriefedAt(store()), Date.now(), { phone: isPhone });
     if (!start.opened) return;
     // The stamp is written when the overlay actually opens, never before: an effect that is run,
@@ -67,10 +74,6 @@ export function NowOverlay({ brief, roster, since, onOpenLane, onOpenAsk }: NowO
       writeBriefedAt(store(), Date.now());
       setMode('overlay');
     };
-    if (isStill) {
-      open();
-      return;
-    }
     // Two frames: the first paints docked, the second lets the transition see a change.
     let second = 0;
     const first = requestAnimationFrame(() => {

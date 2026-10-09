@@ -143,3 +143,20 @@ export const platesOpenMode = (): boolean => flagHere('plates-open');
 export const isLogOpen = (search: string): boolean => hasFlag(search, 'log-open');
 
 export const logOpenMode = (): boolean => flagHere('log-open');
+
+/**
+ * `?now-open` — MEASUREMENT MODE for the Now briefing (live-briefing spec).
+ *
+ * Fifth of the same bargain. The briefing opens by itself on the first visit of a period, so a
+ * sweep with fresh storage would find the room with a card laid over its left side — and the
+ * card's text is exactly what no gate was measuring. Two halves, kept together here:
+ *
+ *   - under `?still` the briefing stays DOCKED, so every other sweep measures the page as it was
+ *     (a floating card must not change what those sweeps are about);
+ *   - under `?now-open` it mounts OPEN, with no entrance to race, so one sweep measures it.
+ *
+ * Scope: the briefing's INITIAL state only; its controls behave normally.
+ */
+export const isNowOpen = (search: string): boolean => hasFlag(search, 'now-open');
+
+export const nowOpenMode = (): boolean => flagHere('now-open');

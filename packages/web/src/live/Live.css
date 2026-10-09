@@ -7324,7 +7324,9 @@
   background: var(--lc-ground-2);
   border: 1px solid var(--lc-border);
   border-radius: var(--lc-r-md);
-  box-shadow: 0 2px 0 var(--lc-border), 0 18px 44px rgba(60, 40, 20, 0.22);
+  /* A hard edge, not a soft cast shadow: a blurred shadow darkens whatever sits beside the card (a
+     nameplate read 4.48 against 4.5 beside it) and is the template look the designer skill names. */
+  box-shadow: 0 2px 0 var(--lc-border);
   transform-origin: 0 0;
   transition:
     top var(--lc-dur-4) var(--lc-ease-out),
@@ -7442,7 +7444,7 @@
   border: 1px solid var(--lc-border);
   border-left: 0;
   border-radius: 0 var(--lc-r-md) var(--lc-r-md) 0;
-  box-shadow: 0 6px 18px rgba(60, 40, 20, 0.16);
+  box-shadow: 0 2px 0 var(--lc-border);
   cursor: pointer;
   color: var(--lc-text);
   transition:

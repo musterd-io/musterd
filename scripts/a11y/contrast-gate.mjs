@@ -557,6 +557,17 @@ if (!STATIC_ONLY) {
       '/live (connected, log open)',
       LOG_FLOOR,
     );
+    /* The NOW BRIEFING, open (`?now-open`, live-briefing spec). It opens by itself on the first visit
+       of a period, as a card laid over the room's left — so under `?still` it stays docked (every
+       sweep above measures the page as it was) and this one pass mounts it open: the headline, the
+       amber needs-a-human band, the goal / person lines, and the dock's badge, none of which any
+       other sweep reads. One lighting value: the card is opaque paper over the room, so its inks do
+       not track the room's light. */
+    report(
+      await sweep(`${base}/live?team=${team}&light=${SCENE_LIGHTS[0]}${SCENE_STILL}&now-open`),
+      '/live (connected, now briefing open)',
+      LIVE_FLOOR,
+    );
   } finally {
     await sh(['down']);
   }
