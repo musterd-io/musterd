@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadSeen, partitionBySeen } from './dedup.ts';
 import { emitDigest } from './digest.ts';
+import { fetchEpisodeScript } from './exn.ts';
 import { parseExnFeed, sweepExn } from './fetch.ts';
 import type { RadarCandidate, SweepReport } from './types.ts';
 
@@ -32,6 +33,7 @@ describe('parseExnFeed', () => {
       title: 'Patterns and problems in multiagent systems',
       url: 'https://www.anthropic.com/research/multiagent-systems',
       published: '2026-08-24',
+      relatedExn: [{ episodeId: 'uuid-1' }],
     });
     expect(c!.abstract).toContain('Coordination failures');
     expect(c!.abstract).toContain('swarm hype');
@@ -41,12 +43,93 @@ describe('parseExnFeed', () => {
     const [c] = parseExnFeed({
       items: [item({ id: 'uuid-2', url: 'https://arxiv.org/html/2608.21156v1' })],
     });
-    expect(c).toMatchObject({ source: 'exn', id: '2608.21156' });
+    expect(c).toMatchObject({
+      source: 'exn',
+      id: '2608.21156',
+      relatedExn: [{ episodeId: 'uuid-2' }],
+    });
   });
 
   it('drops malformed rows rather than throwing', () => {
     expect(parseExnFeed({ items: [{ id: 'x' }, 42, null] })).toEqual([]);
     expect(parseExnFeed('not json shape')).toEqual([]);
+  });
+});
+
+describe('fetchEpisodeScript', () => {
+  const episode = {
+    id: 'episode-uuid',
+    episodeNumber: 12,
+    title: 'Coordination failures',
+    hosts: ['Ava', 'Vince'],
+    chapters: [],
+    segments: [
+      { speaker: 'Ava', text: 'The first point.' },
+      { speaker: 'Vince', text: 'The second point.' },
+    ],
+  };
+
+  it('uses the documented route, bearer key, and ordered dialogue segments', async () => {
+    let requestUrl = '';
+    let requestInit: RequestInit | undefined;
+    const fetchFn = async (url: string, init?: RequestInit) => {
+      requestUrl = url;
+      requestInit = init;
+      return new Response(JSON.stringify(episode), { status: 200 });
+    };
+
+    const result = await fetchEpisodeScript('episode-uuid', 'test-key', fetchFn);
+
+    expect(requestUrl).toBe('https://ingest.sandrise.io/v1/episodes/episode-uuid/script');
+    expect(new Headers(requestInit?.headers).get('authorization')).toBe('Bearer test-key');
+    expect(result).toEqual({
+      url: requestUrl,
+      text: 'Ava: The first point.\n\nVince: The second point.',
+    });
+  });
+
+  it('honors Retry-After before retrying a rate-limited script request', async () => {
+    const started: number[] = [];
+    let attempt = 0;
+    const fetchFn = async () => {
+      started.push(Date.now());
+      attempt += 1;
+      return attempt === 1
+        ? new Response('', { status: 429, headers: { 'Retry-After': '1' } })
+        : new Response(JSON.stringify(episode), { status: 200 });
+    };
+
+    await fetchEpisodeScript('episode-uuid', 'test-key', fetchFn);
+
+    expect(started).toHaveLength(2);
+    expect(started[1]! - started[0]!).toBeGreaterThanOrEqual(1_000);
+  }, 5_000);
+
+  it('fails closed for an unsuccessful or incomplete script response', async () => {
+    await expect(
+      fetchEpisodeScript(
+        'episode-uuid',
+        'test-key',
+        async () => new Response('nope', { status: 503 }),
+      ),
+    ).rejects.toThrow(/503/);
+    await expect(
+      fetchEpisodeScript(
+        'episode-uuid',
+        'test-key',
+        async () => new Response(JSON.stringify({ ...episode, segments: [] }), { status: 200 }),
+      ),
+    ).rejects.toThrow(/segment|empty/i);
+  });
+
+  it('rejects an oversized provider response before parsing it', async () => {
+    await expect(
+      fetchEpisodeScript(
+        'episode-uuid',
+        'test-key',
+        async () => new Response('{}', { status: 200, headers: { 'content-length': '2000001' } }),
+      ),
+    ).rejects.toThrow(/response limit/i);
   });
 });
 
@@ -95,6 +178,7 @@ describe('seen ledger with the exn source', () => {
       title: 't',
       url: 'u',
       published: '2026-08-24',
+      relatedExn: [],
     };
     const { fresh } = partitionBySeen([c], { arxiv: [], hf: [], exn: ['uuid-1'] });
     expect(fresh).toEqual([]);
@@ -112,7 +196,16 @@ describe('seen ledger with the exn source', () => {
       new_count: 1,
       printed: 1,
       truncated: false,
-      new: [{ source: 'exn', id: 'uuid-1', title: 't', url: 'u', published: '2026-08-24' }],
+      new: [
+        {
+          source: 'exn',
+          id: 'uuid-1',
+          title: 't',
+          url: 'u',
+          published: '2026-08-24',
+          relatedExn: [{ episodeId: 'uuid-1' }],
+        },
+      ],
       warnings: [],
       triage: {
         prompt_version: 'radar-v1',

@@ -9,8 +9,22 @@ export interface RadarCandidate {
   url: string;
   /** ISO date (YYYY-MM-DD) when known. */
   published: string;
+  /** Exploring Next episode UUIDs that must be read even after paper-ID deduplication. */
+  relatedExn: Array<{ episodeId: string }>;
   abstract?: string;
   categories?: string[];
+}
+
+export interface PendingCandidate {
+  sourceIds: Array<{ source: RadarSource; id: string }>;
+  canonicalId: string;
+  title: string;
+  url: string;
+  published: string;
+  episodeIds: string[];
+  firstAttempt: string;
+  lastAttempt: string;
+  failure: string;
 }
 
 export interface SeenLedger {
@@ -18,6 +32,8 @@ export interface SeenLedger {
   hf: string[];
   /** Exploring Next feed row uuids (source added 2026-08-24; legacy files default to []). */
   exn: string[];
+  /** Metadata-only retries; absent in legacy ledgers. */
+  pending?: PendingCandidate[];
 }
 
 export type TriageVerdict = 'ignore' | 'record-as-evidence' | 'consider-ADR';

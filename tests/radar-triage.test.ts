@@ -16,6 +16,7 @@ const cand = (over: Partial<RadarCandidate> & { id: string; title: string }): Ra
   source: 'arxiv',
   url: `https://arxiv.org/abs/${over.id}`,
   published: '2026-07-20',
+  relatedExn: [],
   abstract: 'A multi-agent coordination study.',
   ...over,
 });
