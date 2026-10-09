@@ -648,3 +648,47 @@ machine is `performance-2x` (2 vCPU, 4 GB) instead of `performance-1x`. It tests
 - **Next:** either take those three reads down, or measure Neon at 2 CU to price the alternative.
   Keep the app machine at `performance-2x` as a separate decision; staging returns to `performance-1x`
   until `fly.toml` says otherwise.
+
+## 2026-10-09 — Cloud runs 22–27: p95 sits at 2.1 s on one core; a second core buys 23%, not the budget (lanes 01M477S003, 01M4F0W1SG)
+
+Runs 22–27 use one shape: 75 humans, 75 agents and 75 viewers, `RAMP=1000 DURATION=1300`, a
+`performance-4x` bench machine, Neon 1 CU, staging on main `1831ecf5`. Runs 19–21 are not on this
+page. Runs 22–26 use a `performance-1x` app machine; run 27 uses `performance-2x`.
+
+| run | app machine | p50 | p95 | p99 | requests (req/s) | errors | what it showed |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 22 | 1x | 912 ms | 1 862 ms | 2 327 ms | — | — | after the `GET /teams` slices |
+| 23 | 1x | 1 065 ms | 2 155 ms | 2 656 ms | 61 039 (47.0) | 1 | same build as 22; ~15% run-to-run spread |
+| 25 | 1x | 1 100 ms | 2 202 ms | 2 870 ms | 61 137 (47.0) | 1 | repeat; no CPU profile (see below) |
+| 26 | 1x | 1 010 ms | 2 077 ms | 2 609 ms | 60 676 (46.7) | 5 | repeat; no CPU profile |
+| 27 | 2x | 757 ms | 1 604 ms | 2 009 ms | 64 845 (49.9) | 3 | the falsifier below |
+
+- **Run-to-run spread is about ±8% of p95.** Four 1x runs on one build span 1 862–2 202 ms (mean
+  2 074). A single run cannot show a change smaller than that.
+- **The app core is saturated, and Neon is not.** On 1x, app CPU in run 23 climbed 9, 14, 29, 41, 62,
+  84, 92, 95% at 3-minute steps (user 74, sys 9, softirq 12, steal 0.5). The `pg_stat_statements`
+  delta for run 23 shows about 264 s of total database execution time over a 1 300 s run, so Neon
+  spent most of the run waiting for the app. The largest statements: the presence-and-wake roster
+  (28 301 calls × 4.1 ms = 117 s, one per `GET /teams`), the inbox read (15 567 × 2.4 ms), the node
+  `next_seq` update (5 487 × 6.0 ms).
+- **Falsifier (run 23's reading: "the app core is the limit"):** a `performance-2x` machine should
+  lower p95 if so. It did: 2 077 → 1 604 ms against run 26, and 2 074 → 1 604 ms (−23%) against the
+  four-run mean; throughput rose 6%. App CPU on 2x peaked at about 47% of both cores (8, 7, 12, 19,
+  27, 41, 47, 44% at 3-minute steps), which is about 0.94 of one core. One Node event loop is
+  still full, and the second core only takes GC and I/O. Run 27 is one run, but its p95 sits 458 ms
+  under the fastest 1x run, more than the 340 ms spread across the four 1x runs.
+- **Neither size meets the budget** (p95 under 1 000 ms). More vCPUs on one process do not get
+  there. The remaining levers are CPU per request, and a second machine, which waits on lane
+  01M3Z4EMH3 (nick, 2026-10-02: one machine for now).
+- **Cost per request is mostly transaction overhead (unproven).** Run 23 made about 873 000
+  transactions for 61 000 requests, about 14 per request. Each is `BEGIN`, `SET LOCAL ROLE`,
+  `set_config`, `COMMIT`. If per-transaction driver work, not query time, fills the app core, then
+  batching bare reads would help; lane 01M3Z455NE already batched a request's bare reads once. The CPU profile that
+  would show where the time goes was not captured: the `auto` classifier blocks `fly ssh` from my seat
+  and the two attempts (runs 25 and 26) missed the 22-minute plateau window.
+- **Errors:** 1, 1, 5 and 3 of about 61 000 requests (0.002–0.008%): viewer WebSockets closed with
+  1006, and three 502s from the edge (one each on `POST /mcp inbox`, `GET /teams/:slug`, `GET
+  /report`). The server logged no warning.
+- **Next:** capture a plateau CPU profile with a script the operator starts before minute 15, then
+  decide between cutting transactions per request and a second machine. Staging was returned to
+  `performance-1x` / 2 GB after run 27, matching `deploy/cloud/fly.toml`.
