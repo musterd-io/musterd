@@ -692,3 +692,32 @@ page. Runs 22–26 use a `performance-1x` app machine; run 27 uses `performance-
 - **Next:** capture a plateau CPU profile with a script the operator starts before minute 15, then
   decide between cutting transactions per request and a second machine. Staging was returned to
   `performance-1x` / 2 GB after run 27, matching `deploy/cloud/fly.toml`.
+
+## 2026-10-09 — Cloud run 28: the plateau CPU profile — no single hot spot; the roster's style epoch is the cheap win (lane 01M4FGJAEEA9K2D0Z561RRCW34)
+
+Run 22's shape on `performance-1x`, main `1831ecf5`, team `lb-run28`. The operator started
+`profile28.sh` before the bench. It waited until 1 020 s after the seeded line, sent SIGUSR1, and
+profiled the app's Node thread for 120 s (16:06:27–16:08:27Z, 17–19 minutes in). Fly's CPU gauge read
+86, 97 and 98% busy at the last three 3-minute steps. 95 756 samples.
+
+| share of samples | where |
+| --- | --- |
+| 13% | decoding Postgres rows (`parseRow`, `addFields`, packet parser) |
+| 11% | garbage collection |
+| 11% | event loop idle (the Fly gauge also counts kernel network time the JS profile does not) |
+| 8.9% | `sendJson`, of which 4.1% is synchronous gzip/brotli of the 151 KB `GET /teams/:slug` body |
+| 7.6% | sending transactions to Postgres (`inTransaction`) |
+| 6.9% | `summarize`, the roster builder; 4.8 points of it is style epochs |
+
+- **No single hot spot.** The costs are spread across row decoding, GC, compression and transaction
+  traffic, which is why a second core helped by 23% and not by half (run 27). Row decoding plus GC is
+  about 24%, so fewer or smaller roster reads are the larger lever.
+- **The cheap win is the style epoch.** `currentStyleEpochFor` hashes (`JSON.stringify` + SHA-256) once
+  per roster row, and the human rows resolve their style a second time for `dials`. Agent rows nearly
+  all resolve to the same value. That ran about 4.8 points of the core at 28 000+ `GET /teams` calls
+  per run. A per-call memo keeps the wire unchanged.
+- **Run 28's latency is not a baseline.** p50 1 208 ms, p95 2 912 ms, p99 3 694 ms, 57 823 requests
+  (44.5/s), 0 errors. The inspector and a 120 s profile ran on a core that was already full, and p95
+  sits above the four unprofiled 1x runs (1 862–2 202 ms). Do not use it in the spread.
+- **Next:** one lane for the style-epoch memo, one for trimming the roster's reads. Re-measure each
+  with an unprofiled run, since a single run cannot show less than the ±8% spread.
