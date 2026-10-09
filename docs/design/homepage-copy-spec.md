@@ -7,6 +7,170 @@ role's call. miley's half is layout and the visual system; every string below is
 Companion to [watch-page-copy-spec.md](./watch-page-copy-spec.md). That spec's §2 rule governs
 this page too and is not restated in full here — read it first.
 
+## 0. Revision of 2026-10-09 — ADR 550 and the first-time visitor
+
+Lane `01M4FHQ0SXG3YZPCPWMJM54AKQ`. nick named sloane the single owner of the page's copy on
+2026-10-09, after four independent reviews of the live site (dreamy, gptbot, lazara, sloane) agreed
+on the same gaps. miley implements. alfie writes the copy of the "first 10 minutes" page and does
+not edit this one. §1 to §5 below are the record of the earlier revisions and stay as history;
+**where this section and §1 to §5 disagree, this section governs.**
+
+### 0.1 What the reviews found
+
+The tagline is live and correct. The page under it still sells the old pitch, and a visitor cannot
+tell what to do after the form.
+
+1. The hero subhead is the collision pitch, and it uses a contrast frame ("not watching from
+   outside"). The ADR 550 chain is nowhere above the fold.
+2. `WhatIs` is headed "The coordination layer where agents and humans are peers". ADR 550 decision 1
+   takes that phrase out of headlines.
+3. There is no path to start. `/docs` is concepts and the spec. "musterd is in private preview"
+   appears once, at the bottom of `HowItWorks`, so the primary button sets no expectation.
+4. At 390x844 the explanation ("Why your agents need to talk") starts at y=944, behind the office,
+   and "How a team works" at y=2631 (gptbot's measurement).
+5. The page only talks to people who already run agents.
+6. The proof number never meets its other half.
+7. Two sentences claim something the record does not hold: "nothing ships on its author's word" and
+   acceptance before shipping. Review asks arrive after the merge. Work counts as done when a different
+   member accepts what landed.
+
+### 0.2 Rules for every string below
+
+- **"Counts as done", never "ships", for acceptance.** Merge comes first and a different member
+  judges the landed result afterwards (ADR 192, ADR 235). ADR 550's own canonical statement says
+  "nothing ships until someone else accepts it". That is the one sentence in the ADR the record
+  contradicts, and its `## Decision` is frozen. This page uses the corrected form, and alfie is asked
+  to note the difference in ADR 550's Consequences.
+- **No contrast frame** (brand.md §4), in any string, caption or alt text. Say what the thing is and stop.
+- **"Who asked" stays out of every sentence that reads as a guarantee** (ADR 550 §3: the record holds
+  who opened a lane, not who asked).
+- **"Coordination layer" appears in no heading, tagline or opening sentence.** Technical docs keep it.
+- **No state word** ("live", "now", "currently") in prerendered HTML unless true in both states
+  (watch-page-copy-spec §2 and §2 below).
+- **The scoped boundary sentence stays**: musterd names the work that goes through the team; it does
+  not contain the agent.
+
+### 0.3 Hero (`LightHero`)
+
+| element                  | was                                                                                                                  | becomes                                                                                                                                                                                                        |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| H1                       | `Agents that answer for their work.`                                                                                 | unchanged                                                                                                                                                                                                      |
+| subhead                  | `Run Claude Code, Codex and Cursor on one repo without them stepping on each other — and with you on the team, not watching from outside.` | `Claude Code, Codex, Cursor and the people you work with join one team as named members. Every piece of work shows who claimed it, which model did it and who accepted it. Any member can say no.` |
+| primary CTA              | `Get early access`                                                                                                   | unchanged                                                                                                                                                                                                      |
+| line under the CTAs (new) | —                                                                                                                   | `Private preview. We write to you when there is a seat for your team.`                                                                                                                                         |
+| secondary CTA            | `Watch it live`                                                                                                      | `Watch the team work`                                                                                                                                                                                          |
+
+Why: the subhead carries the whole chain at the strength the record holds it (claimed: verified;
+model: observed; accepted: verified and enforced to be a different member), names the people as
+members, and states the refusal that no other product surveyed has. The line under the CTAs answers
+"what happens after I click" and "why is there no install" in one sentence. **nick confirms the
+promise in that line against what the form actually sends**; the copy cannot see the form's
+follow-up. "Watch it live" is a state claim in prerendered HTML, so the secondary CTA names the action.
+
+### 0.4 One piece of work, from claim to accepted (new section, directly under the hero)
+
+H2: `One piece of work, from claim to accepted`
+
+Lead, one sentence: `This is a lane from our own team, as the record has it.`
+
+A record card with five rows (label, value). The values are real and dated. miley renders them from a
+snapshot, not a live query, and the card's footer says when it was taken.
+
+| label       | value                                                                                                                                           |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Work        | `Watch an in-process wake from the launcher`                                                                                                    |
+| Claimed by  | `dolly`                                                                                                                                         |
+| Model       | the model on the lane's presence record, as the harness reported it (read at snapshot time; a pull request's commit trailer is not the source) |
+| Landed      | `Pull request 2240, merged 2026-10-08`                                                                                                          |
+| Accepted by | `sloane, a different member, 2026-10-09`                                                                                                        |
+
+Below the card, two sentences:
+
+> The reviewer ran the landed commit's tests, found that the brief and the result differed in one
+> word, and said so in the verdict before accepting. The record keeps that note with the work.
+
+Footer, small: `A snapshot of the board, taken 2026-10-09.`
+
+Why a real lane and not an invented one: gptbot's review asks for one task, claim and landed review
+to show the mechanism, and a real lane is the proof that the chain exists. It leaves "who asked" out
+on purpose (ADR 550 §3). The reviewer's note is real: the verdict named the "not a file" reading. If
+the lane's record changes, retake the snapshot and never edit the values by hand.
+
+### 0.5 Section order and the mobile measurement
+
+The copy works in any order. The order is a separate decision because ADR 428 fixed it:
+`SiteNav → LightHero → StreamSection → WhyTalk → WhatIs → HowItWorks → Teasers → SiteFooter`.
+gptbot measured the cost at 390x844: the explanation starts at y=944. **Recommendation: put the §0.4
+card and WhyTalk above the stream.** That reopens ADR 428, so it needs an ADR from miley and nick's
+call. Until then the copy ships in the current order, with §0.4 under the hero and above the stream.
+
+### 0.6 Why your agents need to talk (`WhyTalk`)
+
+Keep the two columns. Three edits.
+
+1. **Answer the audience's question** with one sentence at the head of the left column, from
+   `docs/design/why-agents-talk.md`: `A shared file can hold a result. Talk carries what is not a result yet: an objection, an ambiguity found halfway, a promise, or the answer only the other agent has.`
+2. **Pair the proof, with its date, in one sentence**:
+   `On a test project, agents working side by side wasted 65 to 83 percent of their work. With lane gates it was under 11 percent. One project, a pilot, measured in July 2026.`
+   The source (finding 006) and the pilot's caveat go in the docs link under it, not in the sentence.
+3. **Keep the sentence about our own history, scoped to us**:
+   `On our own team, more than a third of the code agents wrote without coordination never shipped.`
+   This sentence says "shipped" about code, which is correct. It is not an acceptance claim.
+
+**Dependency:** the July receipt is 994 commits old, and the refresh lane `01M1VDRC6B` is unowned. Do
+not lead with the pair in the hero or an ad. Under a date, here, it is honest. If the refresh lands
+first, change "July 2026" and the numbers together.
+
+### 0.7 What musterd is (`WhatIs`)
+
+| element | was | becomes |
+| --- | --- | --- |
+| H2 | `The coordination layer where agents and humans are peers` | `Members who answer for their work` |
+| cards 1 and 2 | | unchanged |
+| card 3 body | `Most agent tools give you agents you assign work to. Here any member, agent or human, can take on work, turn it down or push back, and nothing counts as done until someone else accepts it. You are on the same team, with the same inbox.` | `Any member, agent or human, can take on work, turn it down or push back. Nothing counts as done until a different member has looked at what landed. You are on the same team, with the same inbox.` |
+| card 4 heading | `Every act on the roster has a name on it` | unchanged (§4.4) |
+| card 4 body | `Which model is in each seat is what its tool reported when it connected, not what the agent says about itself. Nothing ships on its author's word. musterd does not sandbox your agents; ...` | `The model in each seat is the one its tool reported when it connected, and the record names it. musterd does not sandbox your agents; your own host, sandbox and provider controls still do that. It names the work that goes through the team.` |
+
+Card 3 loses the sentence that opens by describing other products (ADR 550 §5, brand.md §4). Card 4
+loses its contrast frame and the "ships" claim. The disclaimer is kept verbatim, including "still do
+that", as its own sentence, because a security reader checks for it.
+
+### 0.8 How a team works (`HowItWorks`)
+
+Steps 1 and 3 are unchanged. Two bodies change.
+
+- **Step 2** (`Work changes hands on the record`): `A member claims a piece of work, builds it, and hands it to a teammate. The handoff is an act with a name on it, so the record shows what happened.`
+- **Step 4** (`The work lands, and is judged by a second member`): `A second member looks at what landed, in the product, and accepts it or sends it back. Calling work done is a teammate's act. An agent cannot set it for itself.`
+
+The note `musterd is in private preview.` moves to the hero (§0.3) and is removed here.
+
+### 0.9 Getting started (replaces the block removed on 2026-10-03)
+
+H2: `Getting started`
+
+Lead: `musterd is in private preview, so there is no public install yet. This is the path today.`
+
+Three rows, each with a status label set small in the mono face:
+
+| status    | row                                                                                                                                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Today`   | `Request a seat.` Body: `Fill in the form. We write to you when there is a seat for your team.` Link: `Get early access` (`EARLY_ACCESS_URL`).                                              |
+| `Today`   | `See your first ten minutes.` Body: `What the first session looks like, step by step, with the board as it really appears.` Link: the first-10-minutes page (dreamy sets the path; placeholder `/start` until then). |
+| `Not yet` | `Install and connect your agents.` Body: `One command, for the agents you already run. It opens to the preview first.` No link.                                                              |
+
+Why: this answers "what am I signing up for" during the preview and is honest about what does not
+exist (brand.md §4, "honest about scope"). The `Not yet` row carries no date because nothing on this
+page may promise one; the goal's target is internal. When the first-run goal ships, that row becomes a
+`Today` row with the real command and nothing else on the page changes.
+
+### 0.10 Small things
+
+- The stream's dark-state fallback (dreamy F6) is a new string for miley to place:
+  `The team is off the clock. Here is the last session.` It is true in both states.
+- `landing.test.ts` pins the old hero subhead, card 3 and card 4 strings. miley updates the pins in the
+  same change, and the strings above are the new pins.
+- Hard rule 3 applies: this spec and the page land in the same change.
+
 ## 1. Why this page changes
 
 Three things, in descending order of how badly they need fixing.
