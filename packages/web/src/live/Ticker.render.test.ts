@@ -42,7 +42,6 @@ describe('Ticker', () => {
       createElement(Ticker, {
         roster: [m('ryder'), m('dolly', { hue: 20 })],
         board,
-        onSeeAll: () => {},
         envelopes: [
           env(1, { act: 'status_update', body: 'PRIVATE STATUS' }),
           env(2, {
@@ -61,7 +60,29 @@ describe('Ticker', () => {
     expect(html).not.toContain('SECRET');
     expect(html).not.toContain('PRIVATE STATUS');
     expect(html).toContain('--member:hsl(');
-    expect(html).toContain('See every message');
+    // The log's door moved to the topbar (live-briefing spec, increment 4).
+    expect(html).not.toContain('See every message');
+  });
+
+  it('drops a moment the asks strip is already showing', () => {
+    const ask = env(5, {
+      id: 'ASK1',
+      act: 'ask',
+      to: { kind: 'member', name: 'nick' },
+      body: 'Ship it?',
+      meta: { species: 'approve', tier: 'blocking' },
+    });
+    const shown = (hide?: ReadonlySet<string>) =>
+      renderToStaticMarkup(
+        createElement(Ticker, {
+          roster: [m('ryder')],
+          board,
+          envelopes: [ask],
+          ...(hide ? { hide } : {}),
+        }),
+      );
+    expect(shown()).toContain('Ship it?');
+    expect(shown(new Set(['ASK1']))).not.toContain('Ship it?');
   });
 
   it('says so when nothing notable has happened yet', () => {
@@ -72,7 +93,7 @@ describe('Ticker', () => {
 });
 
 describe('TopMeter', () => {
-  it('reads the team, the heartbeat, the rate over the true span, and who is working', () => {
+  it('reads the team, the heartbeat (its age on hover), and the rate over the true span', () => {
     const now = 100 * MIN;
     const html = renderToStaticMarkup(
       createElement(TopMeter, {
@@ -87,10 +108,11 @@ describe('TopMeter', () => {
       }),
     );
     expect(html).toContain('revive');
-    expect(html).toContain('last act 3s ago');
+    expect(html).toContain('title="last act 3s ago"');
+    expect(html).not.toContain('>last act');
     expect(html).toContain('2 acts');
     expect(html).toContain('last 40 min');
-    expect(html).toContain('1 working · 2 between tasks · 1 human');
+    expect(html).not.toContain('1 working');
     expect(html).toContain('<svg');
   });
 });

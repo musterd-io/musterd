@@ -16,13 +16,14 @@ export function Ticker({
   envelopes,
   roster,
   board,
-  onSeeAll,
+  hide,
 }: {
   envelopes: readonly Envelope[];
   roster: readonly MemberSummary[];
   board: LaneBoard | null;
-  /** Opens the log drawer — every message, not just the notable ones. */
-  onSeeAll?: () => void;
+  /** Act ids the asks strip is already showing. Their moments are dropped here: the same ask in the
+   *  strip and again as a chip was the page saying one thing twice (live-briefing spec, increment 4). */
+  hide?: ReadonlySet<string>;
 }) {
   const idx = rosterIndex(roster as MemberSummary[]);
   const items = useMemo(() => {
@@ -31,11 +32,12 @@ export function Ticker({
     const tail = envelopes.slice(-SCAN);
     const lines: Headline[] = [];
     for (const e of tail) {
+      if (hide?.has(e.id)) continue;
       const h = headline(e, ctx);
       if (h) lines.push(h);
     }
     return collapseHeadlines(lines).slice(-SHOW).reverse();
-  }, [envelopes, board]);
+  }, [envelopes, board, hide]);
 
   return (
     <div className="lc-ticker" aria-label="Latest moments">
@@ -58,16 +60,6 @@ export function Ticker({
           );
         })}
       </ul>
-      {onSeeAll && (
-        <button
-          type="button"
-          className="lc-ticker__all"
-          onClick={onSeeAll}
-          title="Open the log (L)"
-        >
-          See every message <span aria-hidden="true">→</span>
-        </button>
-      )}
     </div>
   );
 }
