@@ -56,7 +56,7 @@ list and is passed only when the viewer is an admin. Output:
 | `inProgress` | Lanes in `claimed` or `active`: title, owner, goal title, age. Humans and agents alike.                                                          |
 | `inReview`   | Lanes in `awaiting_acceptance`.                                                                                                                  |
 | `shipped`    | Lanes that reached `done` in the last 24 h, newest first: title, closed-by, time. Read from the board, never from envelope text.                  |
-| `headline`   | One sentence built from the four arrays, e.g. "3 in progress · 2 need a human · 1 in review · 4 shipped today". It counts lanes, not people: the old meter counted a presence posture and the old column counted lane-owning cards, which is the disagreement above; the per-member Team tab keeps the person view.                                      |
+| `headline`   | One sentence built from the four arrays, e.g. "3 in progress · 2 need a human · 1 in review · 4 shipped today". It counts lanes, not people: the old meter counted a presence posture and the old column counted lane-owning cards, which is the disagreement above; the Team column keeps the person view.                                      |
 
 Notes from reading the code:
 
