@@ -21,7 +21,7 @@ import { TeamColumn, captionColorFor } from '../live/TeamColumn';
 import type { Caption } from '../live/captions';
 import { applyTierClock, askIsLoud, deriveAsks } from '../live/asks';
 import { logOpenMode } from '../live/stillMode';
-import { promptBarFlag, promptBarVisible } from '../live/promptAct';
+import { promptBarFlag, promptBarVisible } from '../live/promptGate';
 import { revealWhenMounted } from '../live/reveal';
 import { LogDrawer } from '../live/LogDrawer';
 import { Ticker } from '../live/Ticker';
@@ -723,7 +723,12 @@ function LivePage() {
           {/* Gates: ?promptbar=1, a signed-in member (not the read-only observer), and an admin. */}
           {promptBarVisible({ flag: promptbar, signedIn, admin: canSetHold }) && cfg && (
             <Suspense fallback={null}>
-              <LazyPromptBar cfg={cfg} onSent={(ack) => setSent((prev) => [...prev, ack])} />
+              <LazyPromptBar
+                cfg={cfg}
+                roster={roster}
+                viewer={cfg.as}
+                onSent={(ack) => setSent((prev) => [...prev, ack])}
+              />
             </Suspense>
           )}
           <LogDrawer open={logOpen} onClose={closeLog} title={`Team log — ${team}`}>

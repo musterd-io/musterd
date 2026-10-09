@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
 import { MusterdWord } from '../brand/MusterdWord';
@@ -7,8 +7,44 @@ import { memberColor } from '../live/format';
 import { CaptionPill } from '../live/CaptionPill';
 import { isStill } from '../live/stillMode';
 import type { Caption } from '../live/captions';
+import type { MemberSummary } from '@musterd/protocol';
 import type { OfficeData, OfficeEvent, OfficeHandle, OfficeNode } from '../live/office-scene';
 import { spritesFromUrl } from './broadcast';
+
+// `?promptbar`: the /live composer on the preview floor, so it can be looked at without a signed-in
+// admin seat (on /live it mounts only for one). Its sends go to a team that does not exist and fail,
+// which is what the error state looks like.
+const PREVIEW_ROSTER = (
+  [
+    ['nick', 'human', 'online'],
+    ['Ada', 'agent', 'online'],
+    ['Bo', 'agent', 'online'],
+    ['Cy', 'agent', 'online'],
+    ['Dev', 'agent', 'online'],
+    ['Eli', 'agent', 'offline'],
+    ['Fen', 'agent', 'online'],
+    ['Hana', 'agent', 'offline'],
+  ] as const
+).map(([name, kind, presence], i) => ({ name, kind, presence, hue: (i * 47) % 360 })) as unknown as MemberSummary[];
+const LazyPromptBar = lazy(() =>
+  import('../live/PromptBar').then((m) => ({ default: m.PromptBar })),
+);
+/** Read after mount, so the prerendered page and the first client render agree. */
+function PreviewPromptBar() {
+  const [on, setOn] = useState(false);
+  useEffect(() => setOn(new URLSearchParams(window.location.search).has('promptbar')), []);
+  if (!on) return null;
+  return (
+    <Suspense fallback={null}>
+      <LazyPromptBar
+        cfg={{ team: 'preview', as: 'nick', token: 'preview' }}
+        roster={PREVIEW_ROSTER}
+        viewer="nick"
+        onSent={() => {}}
+      />
+    </Suspense>
+  );
+}
 
 export const Route = createFileRoute('/office-preview')({
   head: () => ({
@@ -815,6 +851,7 @@ function OfficePreviewPage() {
           <p className="lc-office__caption">office choreography preview</p>
         </section>
       </div>
+      <PreviewPromptBar />
     </main>
   );
 }

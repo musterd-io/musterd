@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { CAST, DEMO_ANCHOR, promptAct, promptBarFlag, promptBarVisible, REPLY_FOOTER } from './promptAct';
+import {
+  audienceFor,
+  CAST,
+  DEMO_ANCHOR,
+  promptAct,
+  promptBarFlag,
+  promptBarVisible,
+  REPLY_FOOTER,
+} from './promptAct';
 
 describe('promptAct — the envelope the bar sends', () => {
   it('opens a huddle on the cast, the shape `musterd huddle open --to a,b,c,d` sends', () => {
@@ -61,5 +69,21 @@ describe('the reply footer (alfie, after the first rehearsal)', () => {
     // A one-seat directed message is a conversation with that seat; "not as a direct message" would
     // contradict it, so it goes without.
     expect(promptAct('hi', ['ghost'], 'x')!.body).toBe('hi');
+  });
+});
+
+describe('audienceFor — the composer\'s @-picker (alfie, nick: "the future of musterd chat")', () => {
+  it('nobody picked convenes the four-seat set, exactly as before', () => {
+    expect(audienceFor([])).toEqual([...CAST]);
+    const a = promptAct('hi', audienceFor([]), 'x')!;
+    expect((a.meta as { eligible: string[] }).eligible).toEqual([...CAST]);
+  });
+
+  it('one picked is a directed message; two to four is a huddle on exactly those', () => {
+    expect(promptAct('hi', audienceFor(['izzo']), 'x')!.to).toEqual({ kind: 'member', name: 'izzo' });
+    const h = promptAct('hi', audienceFor(['izzo', 'dolly']), 'x')!;
+    expect(h.to).toEqual({ kind: 'team' });
+    expect((h.meta as { eligible: string[] }).eligible).toEqual(['izzo', 'dolly']);
+    expect(audienceFor(['a', 'b', 'c', 'd', 'e'])).toHaveLength(4);
   });
 });

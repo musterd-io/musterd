@@ -1158,3 +1158,18 @@ measured + the ~0.7 KB CI gzip delta + ~1.2%.
 
 - Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main after this lands — total JS reads under
   278 KB.
+
+### 2026-10-09 — app CSS 8,400 → 9,300 B: the prompt bar becomes a composer (lane 01M4H7MNN45SR4ES6PFN8M3WK4)
+
+nick: the first bar was "extremely unpolished". The composer that replaces it has a floating box, the team's faces,
+an @-picker and a sent bubble, and `PromptBar.css` goes from 738 to 1,376 B gzip. It is still its own file in the
+lazy chunk, mounted only behind `?promptbar=1`, a signed-in member and an admin. A default `/live` fetches none of
+it, and initial JS fell 137.7 → 137.3 KB in the same change because the gate checks moved to `promptGate.ts`, which
+keeps `promptAct.ts` out of the eager graph.
+
+| Budget  | Before   | This branch | Ceiling → new |
+| ------- | -------- | ----------- | ------------- |
+| app CSS | ~7.9 KB  | ~8.6 KB     | 8,400 → 9,300 |
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — app CSS under 8.8 KB. If the composer comes
+  out after Demo Day, this raise and the 7,600 → 8,400 one before it go with it.
