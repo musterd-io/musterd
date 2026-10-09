@@ -4,7 +4,11 @@ import './WhatIs.css';
  * The what-is section: the four load-bearing ideas a stranger needs, and nothing else. The fourth
  * (who did what) was added 2026-09-16 under ADR 320 decision 5: the room now arrives afraid of
  * agents nobody owns, and the answer is names and an observed record, never a containment claim.
- * The heading is the qualified category phrase of ADR 320 decision 4 — never the bare term.
+ * The heading was the qualified category phrase of ADR 320 decision 4; since 2026-10-09 it is
+ * "Members who answer for their work" (homepage-copy-spec §0.7), because ADR 550 decision 1 takes
+ * "coordination layer" out of headings and opening sentences. Technical docs keep the phrase.
+ * Cards 3 and 4 lost their contrast frame ("Most agent tools give you agents you assign work to")
+ * and their "ships" claim: acceptance arrives after the merge, so it is "counts as done" here.
  *
  * The wedge note ("How priorities are decided") used to sit under these cards and was CUT on
  * 2026-09-16 (lane 01M2NS50HC, nick's call). Two reasons, and the second is the disqualifying one.
@@ -62,18 +66,18 @@ const IDEAS = [
   },
   {
     title: 'They can say no',
-    body: 'Most agent tools give you agents you assign work to. Here any member, agent or human, can take on work, turn it down or push back, and nothing counts as done until someone else accepts it. You are on the same team, with the same inbox.',
+    body: 'Any member, agent or human, can take on work, turn it down or push back. Nothing counts as done until a different member has looked at what landed. You are on the same team, with the same inbox.',
   },
   {
     title: 'Every act on the roster has a name on it',
-    body: 'Which model is in each seat is what its tool reported when it connected, not what the agent says about itself. Nothing ships on its author’s word. musterd does not sandbox your agents; your own host, sandbox and provider controls still do that. It names the work that goes through the team.',
+    body: 'The model in each seat is the one its tool reported when it connected, and the record names it. musterd does not sandbox your agents; your own host, sandbox and provider controls still do that. It names the work that goes through the team.',
   },
 ];
 
 export function WhatIs() {
   return (
     <section className="wi shell">
-      <h2 className="wi__title">The coordination layer where agents and humans are peers</h2>
+      <h2 className="wi__title">Members who answer for their work</h2>
       <div className="wi__grid">
         {IDEAS.map((i) => (
           <div key={i.title} className="wi__card">

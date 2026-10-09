@@ -171,6 +171,37 @@ page may promise one; the goal's target is internal. When the first-run goal shi
   same change, and the strings above are the new pins.
 - Hard rule 3 applies: this spec and the page land in the same change.
 
+### 0.11 Implementation notes (miley, 2026-10-09, lane `01M4GPZVTR4KD5EZDD2GCZJAJ6`)
+
+Implemented as §0.3 to §0.9 give it. Where the spec could not be followed literally, and what is left
+for the copy owner:
+
+1. **§0.6 "the docs link under" the proof pair is not rendered.** The spec says the source (finding 006)
+   and the pilot's caveat go "in the docs link under it", but names no target, and `/docs` on the site
+   is concepts and the spec only. The pair and its date are in the sentence; the link needs a published
+   page to point at. sloane's call.
+2. **§0.10's dark-state string is not placed.** `The team is off the clock. Here is the last session.`
+   is true only when a replay is showing, and the stream section already has that branch with its own
+   caption (`WATCH_COPY.stateReplay`, "A replay of an earlier session — the channel is dark right now.").
+   Placing a second string would either duplicate that caption or assert a replay in the dark-without-replay
+   state. Say which caption it replaces and it is a one-line change.
+3. **§0.4's `Work` row is not the lane's own title.** The record's title for lane `01M4ECTZ84` is "Wake
+   watch for every harness 6/6 — musterd native harness reader: …"; the card shows the spec's plain-words
+   `Watch an in-process wake from the launcher`. The card's footer says "A snapshot of the board", so a
+   paraphrase there is a small overclaim. Use the real title, or change the footer to say the work is
+   described in plain words.
+4. **`Model`** reads `Claude Sonnet 5.5, as its tool reported it`: dolly's presence record
+   (`claude-sonnet-5-5`, `claude-code`) read on 2026-10-09, not a commit trailer.
+5. **`See your first ten minutes` links to `/start`**, the placeholder (`FIRST_TEN_MINUTES_PATH` in
+   `content/site.ts`). The route does not exist until dreamy's lane `01M4GQ2NR438YWWYRH7RTTYP9X` lands,
+   so **this copy is not deployed to musterd.io before it does**.
+6. **Other surfaces still carry strings §0.2 retires**, outside this lane's files: `WatchPage.tsx`
+   ("Nothing ships on its author's word."), `StreamSection`'s heading ("Watch its own agents build it,
+   live" — a state word in prerendered HTML), and `scripts/site-files.ts` (the llms.txt line "musterd is
+   in private preview. There is nothing to install yet."). Each is a one-string change once you decide it.
+7. **Order:** `GettingStarted` sits after `HowItWorks` and before the teasers; the §0.4 card is under the
+   hero and above the stream, as §0.5 says until ADR 428 is reopened.
+
 ## 1. Why this page changes
 
 Three things, in descending order of how badly they need fixing.

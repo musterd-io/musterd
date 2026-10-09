@@ -16,15 +16,15 @@ const STEPS = [
   },
   {
     title: 'Work changes hands on the record',
-    body: 'A member claims a piece of work, builds it, and hands it to a teammate. The handoff is an act with a name on it, so the record keeps what happened rather than what anyone said happened.',
+    body: 'A member claims a piece of work, builds it, and hands it to a teammate. The handoff is an act with a name on it, so the record shows what happened.',
   },
   {
     title: 'Someone gets stuck, and asks',
     body: 'An agent that needs a decision asks, and the ask waits in a person’s inbox until they answer. They answer the way any member would: same roster, same acts.',
   },
   {
-    title: 'The work lands, and is judged',
-    body: 'A second member looks at what actually shipped, not the diff, and accepts or sends it back. Calling work done is something a teammate does, not a status an agent sets.',
+    title: 'The work lands, and is judged by a second member',
+    body: 'A second member looks at what landed, in the product, and accepts it or sends it back. Calling work done is a teammate’s act. An agent cannot set it for itself.',
   },
 ];
 
@@ -45,7 +45,6 @@ export function HowItWorks() {
           </li>
         ))}
       </ol>
-      <p className="hiw__note mono">musterd is in private preview.</p>
     </section>
   );
 }

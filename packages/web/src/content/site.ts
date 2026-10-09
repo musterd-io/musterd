@@ -52,3 +52,11 @@ export const TAGLINE = 'Agents that answer for their work.';
  * 2026-10-05). One constant so the hero and anything else that asks for access cannot disagree.
  */
 export const EARLY_ACCESS_URL = 'https://tally.so/r/ZjpJyA';
+
+/**
+ * Where "See your first ten minutes" goes. `/start` is the placeholder homepage-copy-spec §0.9 names
+ * until dreamy's first-10-minutes page lands (lane 01M4GQ2NR438YWWYRH7RTTYP9X) and sets the real
+ * path; change it HERE and nowhere else. Until that route exists the link 404s, so the site is not
+ * deployed with this copy before it does.
+ */
+export const FIRST_TEN_MINUTES_PATH = '/start';

@@ -47,10 +47,3 @@
   line-height: 1.65;
   color: var(--text-dim);
 }
-
-.hiw__note {
-  margin: 18px 0 0;
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  color: var(--text-faint);
-}

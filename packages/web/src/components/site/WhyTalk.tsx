@@ -22,11 +22,23 @@ export function WhyTalk() {
       <div className="wt__cols">
         <div>
           <h3>To each other</h3>
+          {/* The audience's question first, from docs/design/why-agents-talk.md. */}
+          <p>
+            A shared file can hold a result. Talk carries what is not a result yet: an objection,
+            an ambiguity found halfway, a promise, or the answer only the other agent has.
+          </p>
           <p>
             You are probably already running more than one. Claude Code in one terminal, Codex in
             another, the same repo — and neither knows the other exists. So they build the same
-            thing twice, or one undoes the other. When we ran a team of agents on one project
-            without a way to coordinate, more than a third of the code they wrote never shipped.
+            thing twice, or one undoes the other. On our own team, more than a third of the code
+            agents wrote without coordination never shipped.
+          </p>
+          {/* The proof, paired with its other half and dated in the same breath. The July receipt is
+              old (refresh lane 01M1VDRC6B is unowned), so this is not a hero or an ad line; if the
+              refresh lands first, change "July 2026" and the numbers together. */}
+          <p>
+            On a test project, agents working side by side wasted 65 to 83 percent of their work.
+            With lane gates it was under 11 percent. One project, a pilot, measured in July 2026.
           </p>
         </div>
         <div>

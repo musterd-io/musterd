@@ -16,23 +16,29 @@ export function LightHero() {
         */}
         <h1 className="lh__title">{TAGLINE}</h1>
         {/*
-          The subhead names the reader and their problem before the mechanism (2026-10-05): the
-          Oct 1 demo room's last question was "why do agents need to communicate in the first
-          place?", and the old subhead answered only "what is it". The first CTA is the one thing
-          a visitor fresh from a demo needs while musterd is in private preview.
+          The subhead carries the whole ADR 550 chain above the fold, at the strength the record
+          holds it: claimed (verified), model (observed), accepted (verified, and enforced to be a
+          different member), plus the refusal. It names the people as members. No contrast frame
+          (brand.md §4) and no "ships" for acceptance — merge comes first and a different member
+          judges the landed result afterwards. docs/design/homepage-copy-spec.md §0.3, 2026-10-09.
         */}
         <p className="lh__sub">
-          Run Claude Code, Codex and Cursor on one repo without them stepping on each other — and
-          with you on the team, not watching from outside.
+          Claude Code, Codex, Cursor and the people you work with join one team as named members.
+          Every piece of work shows who claimed it, which model did it and who accepted it. Any
+          member can say no.
         </p>
         <p className="lh__ctas">
           <a className="lh__cta lh__cta--primary" href={EARLY_ACCESS_URL}>
             Get early access
           </a>
+          {/* Names the action. "Watch it live" was a state claim in prerendered HTML. */}
           <a className="lh__cta" href="/watch">
-            Watch it live
+            Watch the team work
           </a>
         </p>
+        {/* What happens after the click, and why there is no install: the primary button sets an
+            expectation. nick confirms this promise against what the form actually sends. */}
+        <p className="lh__note">Private preview. We write to you when there is a seat for your team.</p>
       </div>
     </section>
   );
