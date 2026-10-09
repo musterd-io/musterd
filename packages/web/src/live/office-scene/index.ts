@@ -924,7 +924,7 @@ export function mountOffice(
       const plate = document.createElement('span');
       plate.className = 'lc-gl-label__plate';
       const dot = document.createElement('span');
-      dot.className = `lc-gl-label__dot lc-gl-label__dot--${DOT_STATE[node.posture]}`;
+      dot.className = `lc-gl-label__dot lc-gl-label__dot--${node.dozing ? 'off' : DOT_STATE[node.posture]}`;
       plate.appendChild(dot);
       const who = document.createElement('span');
       who.className = 'lc-gl-label__who';
@@ -1113,7 +1113,10 @@ export function mountOffice(
         el.title = '';
       }
 
-      el.classList.toggle('is-offline', node.presence !== 'online');
+      el.classList.toggle('is-offline', node.presence !== 'online' || node.dozing === true);
+      // Woken seats wear a moonlit plate (nick, 2026-10-09): you can tell a wake from a person at a
+      // keyboard across the room, not only by reading the tag.
+      el.classList.toggle('is-woken', node.woken === true);
     }
     for (const [name, el] of labels) {
       if (!seen.has(name)) {

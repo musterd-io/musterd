@@ -1,6 +1,6 @@
 import type { MemberSummary } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
-import { dreamingSeat, wokenBadge, wokenSeat } from './wokenSeat';
+import { dreamingSeat, lingerUntil, WAKE_LINGER_MS, wokenBadge, wokenSeat } from './wokenSeat';
 
 /**
  * A woken seat says so — the read half of "a woken agent is invisible on /live".
@@ -122,5 +122,34 @@ describe('wokenBadge — what the surfaces are allowed to say', () => {
   it('says in its own tooltip that the sender is not knowable here', () => {
     expect(wokenBadge().title).toMatch(/wake/i);
     expect(wokenBadge().title).toMatch(/sender|who|audit/i);
+  });
+});
+
+// nick, 2026-10-09: ghost answered from the chat bar "but immediately left again". A wake is one run;
+// when it ends the seat goes offline. Display only: for WAKE_LINGER_MS after a WAKE presence ends, the
+// member dozes at their desk instead of walking straight out. The wire is not touched.
+describe('lingerUntil — a woken seat dozes a while after its wake ends', () => {
+  const NOW = 1_800_000_000_000;
+  const gone = (presences: unknown[]) =>
+    ({ ...seat(presences), presence: 'offline', posture: 'offline' }) as unknown as MemberSummary;
+
+  it('holds an offline seat whose last presence was a wake, until the linger runs out', () => {
+    const m = gone([p({ status: 'offline', provenance: 'wake', last_seen_at: NOW - 30_000 })]);
+    expect(lingerUntil(m, NOW)).toBe(NOW - 30_000 + WAKE_LINGER_MS);
+    expect(lingerUntil(m, NOW - 30_000 + WAKE_LINGER_MS + 1)).toBeNull();
+  });
+
+  it('does not hold a seat that left a normal session, or one still online', () => {
+    expect(lingerUntil(gone([p({ status: 'offline', provenance: 'session', last_seen_at: NOW - 1000 })]), NOW)).toBeNull();
+    expect(lingerUntil(gone([p({ status: 'offline', last_seen_at: NOW - 1000 })]), NOW)).toBeNull(); // ADR 236
+    expect(lingerUntil(seat([p({ provenance: 'wake' })]), NOW)).toBeNull();
+  });
+
+  it('reads the latest presence, not the first', () => {
+    const m = gone([
+      p({ status: 'offline', provenance: 'session', last_seen_at: NOW - 900_000 }),
+      p({ status: 'offline', provenance: 'wake', last_seen_at: NOW - 10_000 }),
+    ]);
+    expect(lingerUntil(m, NOW)).toBe(NOW - 10_000 + WAKE_LINGER_MS);
   });
 });

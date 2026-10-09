@@ -183,7 +183,11 @@ describe('RosterPanel — a woken seat says so', () => {
  * the same recipe. Keeping the two identical is what makes that sweep evidence for this chip.
  */
 describe('the woken marks stay fill-free — 4.60:1 leaves no room for a tint', () => {
-  for (const selector of ['.lc-stat--woken', '.lc-gl-label__woken']) {
+  // The office nameplate's tag left this recipe on 2026-10-09 (nick: "make woken slightly more
+  // prominent"): it is a solid indigo pill under WHITE text, pinned below. Light text on a fill is
+  // not the tint-under-dark-ink case this guard exists for. The roster chip keeps the ink recipe,
+  // and the /office-preview sweep is no longer evidence for it — this guard is.
+  for (const selector of ['.lc-stat--woken']) {
     const rule = new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`).exec(css)?.[1];
 
     it(`${selector} exists`, () => {
@@ -199,6 +203,15 @@ describe('the woken marks stay fill-free — 4.60:1 leaves no room for a tint', 
       expect(rule).toMatch(/color:\s*var\(--lc-accent-ink\)/);
     });
   }
+});
+
+describe('the nameplate woken tag is a solid pill under white text', () => {
+  const rule = /\.lc-gl-label__woken\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  it('fills with the woken indigo and sets light text on it', () => {
+    expect(rule).toMatch(/--lc-woken-fill:\s*#4b43b8/);
+    expect(rule).toMatch(/background:\s*var\(--lc-woken-fill\)/);
+    expect(rule).toMatch(/color:\s*#fff/);
+  });
 });
 
 /**

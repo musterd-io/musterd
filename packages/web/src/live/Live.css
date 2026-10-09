@@ -1753,13 +1753,12 @@
   text-transform: lowercase;
   color: var(--lc-warn-ink);
 }
-/* The woken tag (ADR 131 residency): like `dnd` this is a STATE rather than an identity, so it
-   takes dnd's grammar — border + text in an `-ink` token on the plate's own paper, and NO FILL.
-   The no-fill part is not taste, it is dnd's own measured scar one comment up: a 14% tint under
-   that tag lightened the ground and took a 5.11 to 4.35. `--lc-accent-ink` is 4.60 worst case, so
-   there is even less room here than there was there — any tint at all would fail.
-   Quieter than dnd in weight and border alpha, because dnd is an instruction to the room (do not
-   walk to me) and this is context you read after something has caught your eye. */
+/* The woken tag (ADR 131 residency). It used to be dnd's quiet grammar — border + ink, no fill —
+   and nick could not tell a wake from a person at a keyboard (2026-10-09: "make woken slightly more
+   prominent"). It is now a SOLID indigo pill with white text: a fill under LIGHT text, so the tint
+   problem dnd measured (a 14% tint under dark ink took 5.11 to 4.35) does not apply — #4b43b8 under
+   white is ~7:1. Indigo is the lane family already in the palette, and here it is the night colour:
+   woken, dozing, dreaming. The plate's paper goes moonlit to match (`.is-woken`, below). */
 /* The walk tag (ADR 464 §3.2): the verb a walker wears — "handing off → dolly" — in the act's own
    family colour on the plate's paper, gone the frame the walk ends. */
 .lc-gl-label__walk {
@@ -1777,18 +1776,19 @@
   white-space: nowrap;
 }
 .lc-gl-label__woken {
+  --lc-woken-fill: #4b43b8;
   flex: none;
   margin-left: 4px;
-  padding: 1px 4px;
-  border-radius: 4px;
-  border: 1px solid color-mix(in srgb, var(--lc-accent-ink) 40%, transparent);
+  padding: 1.5px 5px;
+  border-radius: 999px;
+  background: var(--lc-woken-fill);
   font-family: var(--font-mono, monospace);
   font-size: var(--lc-type-tag);
-  font-weight: 500;
-  letter-spacing: 0.07em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   line-height: 1;
   text-transform: lowercase;
-  color: var(--lc-accent-ink);
+  color: #fff;
 }
 /* ── the expand, animated ───────────────────────────────────────────────────────────────────────
    The detail used to be a `display: none` -> `inline-flex` swap, which is a jump cut: there is no
@@ -2007,6 +2007,20 @@
     0 0 0 1px color-mix(in srgb, var(--lc-accent) 22%, transparent),
     0 3px 8px -1px var(--lc-paper-drop),
     0 0 18px -3px color-mix(in srgb, var(--lc-accent) 40%, transparent);
+}
+/* A woken seat's plate: moonlit paper, so a wake reads across the room (nick, 2026-10-09). The rim
+   stays the member's own hue. Before the offline rule on purpose: a seat dozing after its wake is
+   offline, and the offline plate wins — it says asleep, the tag still says why it was here. */
+.lc-gl-label.is-woken .lc-gl-label__plate {
+  --lc-woken-paper: #e7e5fa;
+  background:
+    linear-gradient(
+      170deg,
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0.12) 42%,
+      rgba(255, 255, 255, 0) 68%
+    ),
+    var(--lc-woken-paper);
 }
 .lc-gl-label.is-offline .lc-gl-label__plate {
   color: var(--lc-dim);
