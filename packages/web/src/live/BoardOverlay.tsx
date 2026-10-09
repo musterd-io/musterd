@@ -42,6 +42,7 @@ export function BoardOverlay({
   goals,
   origin,
   focusLane = null,
+  focusGoal,
   onClose,
 }: {
   cfg: LiveConfig | null;
@@ -54,16 +55,20 @@ export function BoardOverlay({
   origin: DOMRect | null;
   /** A lane to arrive focused on (`/live?lane=<id>`) — Board pins, rings and scrolls to it. */
   focusLane?: string | null;
+  /** A goal to arrive drilled into (the Now card's goal rows); null is "lanes on no goal". */
+  focusGoal?: string | null | undefined;
   onClose: () => void;
 }) {
   const { board, me, busyId, note, doCreate, doPatch } = useBoardData(cfg, roster, base);
   const [composing, setComposing] = useState(false);
   // Same default rule as /board (no stored preference in the overlay): grid iff goals exist.
   const unshipped = goals.filter((g) => g.status !== 'shipped').length;
-  const [chosenView, setChosenView] = useState<'grid' | 'columns' | 'table' | null>(null);
+  const [chosenView, setChosenView] = useState<'grid' | 'columns' | 'table' | null>(
+    focusGoal === undefined ? null : 'columns',
+  );
   const view = chosenView ?? resolveBoardView(null, unshipped);
   // Drill-in inside the overlay: a card click filters the columns to that goal's lanes.
-  const [goalFocus, setGoalFocus] = useState<string | null | undefined>(undefined);
+  const [goalFocus, setGoalFocus] = useState<string | null | undefined>(focusGoal);
   const [closing, setClosing] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);

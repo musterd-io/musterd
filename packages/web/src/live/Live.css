@@ -7289,28 +7289,29 @@
   color: var(--lc-danger-ink);
 }
 
-/* The Now briefing (live-briefing spec): what a member reads when they sit down having forgotten
-   yesterday. One card with three homes — an overlay over the room's left, a side tab it docks to, and
-   a full-screen layout — and the same geometry properties in all three so the move between them is
-   one transition, not three animations. Docked, the card is scaled to the tab's size at the tab's
-   position, so collapsing visibly shrinks INTO the tab and opening grows OUT of it. --lc-warn is a
-   FILL; --lc-warn-ink is anything read as text (packages/web/AGENTS.md). */
+/* The Now briefing (live-briefing spec, "The Now card, v2"): what a member reads when they sit down
+   having forgotten yesterday. One card over the room that docks into a "Now" chip in the topbar —
+   docked, the card is scaled onto the chip at the chip's measured position (--now-dock-x/-y, set by
+   NowOverlay.tsx), so docking visibly shrinks INTO the chip and opening grows OUT of it.
+
+   Colour rule (the spec keeps the list of what nick turned down): a hue on this card is a member's
+   face, mustard (the waiting-on-you band, the goal bars) or danger ink on "blocked". Nothing else.
+   --lc-warn is a FILL; --lc-warn-ink is anything read as text (packages/web/AGENTS.md). */
 .lc__canvas:not(.bc__canvas) {
   position: relative;
 }
 .now-ov {
-  --now-band: color-mix(in srgb, var(--lc-warn) 22%, var(--lc-ground-2));
-  --now-band-edge: color-mix(in srgb, var(--lc-warn) 70%, var(--lc-ground-2));
   position: absolute;
   z-index: var(--lc-z-overlay);
   top: 72px;
-  left: var(--lc-5);
-  width: min(440px, 36%);
-  height: min(calc(100% - 92px), 760px);
+  left: var(--lc-7);
+  width: min(920px, calc(100% - 48px));
+  max-height: calc(100% - 92px);
   display: flex;
   flex-direction: column;
+  container-type: inline-size;
   background: var(--lc-ground-2);
-  border: 1px solid var(--lc-border);
+  border: 1px solid var(--lc-border-2);
   border-radius: var(--lc-r-md);
   /* A hard edge, not a soft cast shadow: a blurred shadow darkens whatever sits beside the card (a
      nameplate read 4.48 against 4.5 beside it) and is the template look the designer skill names. */
@@ -7320,7 +7321,6 @@
     top var(--lc-dur-4) var(--lc-ease-out),
     left var(--lc-dur-4) var(--lc-ease-out),
     width var(--lc-dur-4) var(--lc-ease-out),
-    height var(--lc-dur-4) var(--lc-ease-out),
     transform var(--lc-dur-4) var(--lc-ease-out),
     opacity var(--lc-dur-3) var(--lc-ease-out);
 }
@@ -7329,11 +7329,11 @@
   top: 12px;
   left: 12px;
   width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
   height: calc(100% - 24px);
 }
 .now-ov--docked {
-  /* Shrunk onto the tab: its top-left corner lands where the tab's is. */
-  transform: translate(-16px, 40px) scale(0.06);
+  transform: translate(var(--now-dock-x, 0px), var(--now-dock-y, 0px)) scale(0.06);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -7341,35 +7341,25 @@
     top var(--lc-dur-4) var(--lc-ease-out),
     left var(--lc-dur-4) var(--lc-ease-out),
     width var(--lc-dur-4) var(--lc-ease-out),
-    height var(--lc-dur-4) var(--lc-ease-out),
     transform var(--lc-dur-4) var(--lc-ease-out),
     opacity var(--lc-dur-3) var(--lc-ease-out),
     visibility 0s linear var(--lc-dur-4);
 }
 .now-ov__head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: var(--lc-4);
-  padding: var(--lc-3) var(--lc-5);
-  border-bottom: 1px solid var(--lc-border);
+  padding: var(--lc-3) var(--lc-6) var(--lc-2);
 }
 .now-ov__k {
   margin: 0;
   font-family: var(--font-mono, monospace);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--lc-muted);
-}
-.now-ov__headline {
-  margin: 2px 0 0;
-  text-wrap: balance;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.3;
-  color: var(--lc-text);
 }
 .now-ov__ctl {
   display: flex;
@@ -7399,291 +7389,315 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.now-ctl:focus-visible,
-.now-dock:focus-visible,
-.now-r:focus-visible,
-.now-more__btn:focus-visible {
-  outline: 2px solid var(--lc-focus);
-  outline-offset: 2px;
-}
 .now-ov__scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 var(--lc-5) var(--lc-5);
+  padding: 0 var(--lc-6) var(--lc-5);
 }
 
-/* The side tab it docks to: a spine on the room's left edge, with how many need a human on it. */
-.now-dock {
+/* The chip it docks into, in the topbar after the meter. The dot is a FILL and does not pulse: what
+   waits on you does not stop waiting on its own (designer tell 3). */
+.lc__nowslot {
+  display: contents;
+}
+.now-chip {
   all: unset;
   box-sizing: border-box;
-  position: absolute;
-  z-index: var(--lc-z-overlay);
-  top: 112px;
-  left: 0;
-  display: flex;
-  flex-direction: column;
+  flex: none;
+  display: inline-flex;
   align-items: center;
   gap: var(--lc-3);
-  min-width: 32px;
-  min-height: 88px;
-  padding: var(--lc-4) var(--lc-2);
+  height: 30px;
+  padding: 0 var(--lc-4);
+  border: 1px solid var(--lc-border-2);
+  border-radius: var(--lc-r-sm);
   background: var(--lc-ground-2);
-  border: 1px solid var(--lc-border);
-  border-left: 0;
-  border-radius: 0 var(--lc-r-md) var(--lc-r-md) 0;
-  box-shadow: 0 2px 0 var(--lc-border);
-  cursor: pointer;
-  color: var(--lc-text);
-  transition:
-    opacity var(--lc-dur-3) var(--lc-ease-out),
-    background-color var(--lc-dur-2) var(--lc-ease-out);
-}
-.now-dock:hover {
-  background: var(--lc-surface);
-}
-.now-dock.is-away {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition:
-    opacity var(--lc-dur-3) var(--lc-ease-out),
-    visibility 0s linear var(--lc-dur-3);
-}
-.now-dock__label {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  font-family: var(--font-mono, monospace);
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.now-dock__n {
-  display: grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  background: var(--lc-warn);
   color: var(--lc-text);
-  font-size: 11px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  white-space: nowrap;
 }
-/* On a phone the tab is a small pill in the team header's empty right side — a spine down the left
-   edge would sit on top of the column's own avatars — and the card shrinks toward it. */
+.now-chip:hover,
+.now-chip.is-open {
+  background: var(--lc-surface-2);
+}
+.now-chip__you {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--lc-warn-ink);
+}
+.now-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lc-warn);
+  box-shadow: 0 0 0 1px var(--lc-warn-ink);
+}
 @media (max-width: 880px) {
-  .now-dock {
-    top: 6px;
-    left: auto;
-    right: var(--lc-4);
-    flex-direction: row;
-    align-items: center;
-    min-width: 0;
-    min-height: 32px;
-    padding: 0 var(--lc-4);
-    border: 1px solid var(--lc-border);
-    border-radius: 16px;
-  }
-  .now-dock__label {
-    writing-mode: horizontal-tb;
-    transform: none;
-  }
   .now-ov--docked {
     transform-origin: 100% 0;
-    transform: translate(-4px, -6px) scale(0.06);
+  }
+}
+@media (max-width: 560px) {
+  /* The words go; the dot and its count stay. */
+  .now-chip__you {
+    font-size: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .now-ov,
-  .now-ov--docked,
-  .now-dock,
-  .now-dock.is-away {
+  .now-ov--docked {
     transition: none;
   }
 }
 .now-ov.is-still,
-.now-ov.is-still.now-ov--docked,
-.now-dock.is-still {
+.now-ov.is-still.now-ov--docked {
   transition: none;
 }
 
-/* The body: three columns in full view, one stack in the overlay. */
-.now-body.is-full {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-areas:
-    'needs progress shipped'
-    'review progress shipped';
-  grid-template-rows: auto 1fr;
-  gap: 0 var(--lc-8);
-  align-items: start;
+/* The card body. */
+.mface {
+  display: block;
+  flex: none;
 }
-.now-sec--needs {
-  grid-area: needs;
-}
-.now-sec--progress {
-  grid-area: progress;
-}
-.now-sec--shipped {
-  grid-area: shipped;
-}
-.now-sec--review {
-  grid-area: review;
-}
-.now-sec {
-  margin-top: var(--lc-4);
-}
-.now-sec--needs.is-loud {
-  padding: 0 var(--lc-4) var(--lc-2);
-  background: var(--now-band);
-  border: 1px solid var(--now-band-edge);
+.nowc-you {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-5);
+  padding: var(--lc-4) var(--lc-5);
+  background: color-mix(in srgb, var(--lc-warn) 30%, var(--lc-ground-2));
   border-radius: var(--lc-r-sm);
 }
-.now-h {
-  display: flex;
-  align-items: baseline;
-  gap: var(--lc-3);
-  margin: var(--lc-3) 0 var(--lc-1);
-  font-family: var(--font-mono, monospace);
+.nowc-you__text {
+  min-width: 0;
+  flex: 1;
+}
+.nowc-you__k,
+.nowc-you__what,
+.nowc-you__who {
+  margin: 0;
+}
+.nowc-you__k {
   font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--lc-warn-ink);
+}
+.nowc-you__what {
+  margin-top: 2px;
+  font-size: 14.5px;
+  line-height: 1.3;
+  color: var(--lc-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nowc-you__who {
+  font-size: 12px;
+  color: var(--lc-muted);
+}
+.nowc-you__go {
+  all: unset;
+  box-sizing: border-box;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 var(--lc-5);
+  border: 1px solid color-mix(in srgb, var(--lc-warn-ink) 45%, transparent);
+  border-radius: var(--lc-r-sm);
+  background: var(--lc-ground-2);
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  color: var(--lc-text);
+  cursor: pointer;
+}
+.nowc-you__go:hover {
+  background: var(--lc-surface);
+}
+.nowc-others {
+  margin: var(--lc-3) 0 0;
+  font-size: 12.5px;
+  color: var(--lc-muted);
+}
+.nowc-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+.nowc-sec {
+  min-width: 0;
+  padding-right: var(--lc-6);
+}
+.nowc-sec--ship {
+  padding: 0 0 0 var(--lc-6);
+  border-left: 1px solid var(--lc-border);
+}
+@container (max-width: 760px) {
+  .nowc-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .nowc-sec {
+    padding-right: 0;
+  }
+  .nowc-sec--ship {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+.nowc-h {
+  margin: var(--lc-6) 0 var(--lc-3);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--lc-muted);
 }
-.now-h b {
-  font-weight: 600;
-  color: inherit;
-}
-.now-h__sub {
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
-}
-.now-h--loud,
-.now-h--loud b {
-  color: var(--lc-warn-ink);
-}
-.now-h--blocked,
-.now-h--blocked b {
-  color: var(--lc-danger-ink);
-}
-.now-list {
-  list-style: none;
+.nowc-list {
   margin: 0;
   padding: 0;
+  list-style: none;
 }
-.now-r {
+.nowc-list > li + li {
+  border-top: 1px solid var(--lc-border);
+}
+.nowc-goal,
+.nowc-shiprow {
   all: unset;
   box-sizing: border-box;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  column-gap: var(--lc-4);
   width: 100%;
-  min-height: 26px;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--lc-border);
+  padding: 10px var(--lc-3);
   cursor: pointer;
 }
-.now-r__t {
-  font-size: 13px;
-  line-height: 1.3;
+.nowc-goal:hover,
+.nowc-shiprow:hover {
+  background: var(--lc-surface);
+}
+.nowc-goal {
+  grid-template-columns: minmax(0, 1fr) 76px 120px 92px;
+  grid-template-areas:
+    'name faces bar of'
+    'state state state state';
+  align-items: center;
+  column-gap: var(--lc-5);
+  row-gap: 3px;
+}
+.nowc-goal__name {
+  grid-area: name;
+  font-family: var(--font-display, var(--font-sans));
+  font-size: 15px;
+  font-weight: 600;
   color: var(--lc-text);
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.now-r__m {
-  font-size: 11.5px;
-  color: var(--lc-muted);
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
 }
-.now-r__sub {
-  grid-column: 1 / -1;
-  font-size: 11.5px;
-  font-style: italic;
-  color: var(--lc-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.now-sec--needs .now-r {
-  border-bottom-color: var(--now-band-edge);
-}
-.now-sec--needs .now-r__m {
-  color: var(--lc-warn-ink);
-}
-.now-r--done .now-r__t {
-  color: var(--lc-muted);
-}
-.now-goal,
-.now-person {
-  margin-top: var(--lc-3);
-}
-.now-goal__h,
-.now-person__h {
+.nowc-faces {
+  grid-area: faces;
+  justify-self: end;
   display: flex;
   align-items: center;
-  gap: var(--lc-2);
-  margin: 0;
-  font-size: 12.5px;
+}
+.nowc-faces > .mface + .mface {
+  margin-left: -5px;
+}
+.nowc-faces__more {
+  margin-left: 4px;
+  font-size: 11.5px;
+  color: var(--lc-muted);
+}
+.nowc-bar {
+  grid-area: bar;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--lc-surface-3);
+  overflow: hidden;
+}
+.nowc-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--lc-accent);
+}
+.nowc-goal__of {
+  grid-area: of;
+  justify-self: end;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--lc-dim);
+  white-space: nowrap;
+}
+.nowc-goal__state {
+  grid-area: state;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--lc-faint);
+}
+.nowc-goal__state:empty {
+  display: none;
+}
+.nowc-blocked {
+  font-weight: 600;
+  color: var(--lc-danger-ink);
+}
+.nowc-shiprow {
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--lc-4);
+  row-gap: 1px;
+}
+.nowc-shiprow > .mface {
+  grid-row: span 2;
+  align-self: start;
+}
+.nowc-shiprow__who {
+  font-family: var(--font-display, var(--font-sans));
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--lc-text);
 }
-.now-goal__h b,
-.now-person__h b,
-.now-r__n {
-  font-weight: 400;
-  color: var(--lc-muted);
-}
-.now-goal__n {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.now-r__t b {
-  font-weight: 600;
-}
-.now-r__t .now-dot {
-  margin-right: var(--lc-2);
-  vertical-align: -3px;
-}
-.now-dot {
-  display: inline-grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  font-size: 9px;
-  font-weight: 700;
-  color: #fff;
-}
-.now-calm,
-.now-empty {
-  margin: var(--lc-4) 0 var(--lc-2);
+.nowc-shiprow__n {
+  font-family: var(--font-mono, monospace);
   font-size: 13px;
-  color: var(--lc-muted);
+  font-weight: 600;
+  color: var(--lc-text);
 }
-.now-more {
-  list-style: none;
-  margin: 0;
+.nowc-shiprow__last {
+  grid-column: 2 / -1;
+  font-size: 12px;
+  color: var(--lc-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.now-more__btn {
+.nowc-more {
   all: unset;
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: var(--lc-2) 0;
-  font-size: 12px;
+  min-height: 28px;
+  padding: var(--lc-2) var(--lc-3);
+  font-size: 12.5px;
   text-decoration: underline;
   text-underline-offset: 2px;
   color: var(--lc-muted);
   cursor: pointer;
+}
+.nowc-empty {
+  margin: 0;
+  padding: var(--lc-3);
+  font-size: 13px;
+  color: var(--lc-muted);
+}
+.now-ctl:focus-visible,
+.now-chip:focus-visible,
+.nowc-you__go:focus-visible,
+.nowc-goal:focus-visible,
+.nowc-shiprow:focus-visible,
+.nowc-more:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 2px;
 }

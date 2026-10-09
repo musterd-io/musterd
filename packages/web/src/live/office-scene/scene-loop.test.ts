@@ -143,8 +143,8 @@ describe('the welcome reads where people ARE, not the baked frame (lane 01M3F81D
 
 describe('the team column is linked to the room (ADR 464, lane 1)', () => {
   it('the handle exposes setLinked, and it only toggles a plate class — no canvas redraw', () => {
-    expect(index).toMatch(/setLinked: \(name: string \| null\) =>/);
-    const at = index.indexOf('setLinked: (name');
+    expect(index).toMatch(/setLinked: \(names: string \| readonly string\[\] \| null\) =>/);
+    const at = index.indexOf('setLinked: (names');
     const fn = index.slice(at, index.indexOf('\n    },', at));
     expect(fn).toContain("classList.toggle('is-linked'");
     expect(fn).not.toMatch(/draw|bake|renderScene/);

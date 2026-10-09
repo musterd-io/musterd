@@ -193,7 +193,8 @@ export function OfficeScene({
    * column's header) can carry it. */
   onCaption?: (caption: Caption | null) => void;
   /** ADR 464: the member whose card is hovered in the team column — their plate wears a ring. */
-  linked?: string | null;
+  /** One member (a team card under the pointer) or several (a Now goal row): their plates ring. */
+  linked?: string | readonly string[] | null;
   /** ADR 464: a plate under the pointer (null on leave), so the route can ring that member's card. */
   onPlateHover?: (name: string | null) => void;
 }) {

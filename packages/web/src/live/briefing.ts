@@ -100,6 +100,27 @@ export interface GoalGroup {
   items: WorkItem[];
 }
 
+/** One goal row on the Now card (spec, "The Now card, v2"): how far along, what is moving, who. */
+export interface GoalMotion {
+  key: string;
+  /** Null for the "No goal" row. */
+  goalId: string | null;
+  /** The goal's short name ("Name — what it promises" → "Name"), or "No goal". */
+  name: string;
+  /** The full title, for the hover. */
+  title: string;
+  /** Lanes done, of all the goal's lanes but the abandoned ones. */
+  done: number;
+  total: number;
+  working: number;
+  review: number;
+  blocked: number;
+  /** Owners of the moving lanes, newest first, once each. */
+  people: string[];
+  /** The newest moving lane's time — the row order. */
+  latest: number;
+}
+
 export interface ShippedGroup {
   who: string;
   items: ShippedItem[];
@@ -115,6 +136,8 @@ export interface Briefing {
   inProgress: WorkItem[];
   /** In progress, grouped by goal — the biggest first. */
   byGoal: GoalGroup[];
+  /** Goals with something working, in review or blocked — newest first, "No goal" last. */
+  goalsInMotion: GoalMotion[];
   inReview: WorkItem[];
   /** Lanes done since `shippedSince` (default: the last 24 h). */
   shipped: ShippedItem[];
@@ -278,6 +301,44 @@ export function briefing(input: {
         a.goal.localeCompare(b.goal),
     );
 
+  // A lane is "working" here exactly when it is in `inProgress`, so the rows add up to the headline.
+  const working = new Set(inProgress.map((w) => w.id));
+  const motion = new Map<string, { goalId: string | null; lanes: Lane[] }>();
+  for (const l of lanes) {
+    if (l.state === 'abandoned') continue;
+    const key = l.goal_id ?? '';
+    const m = motion.get(key);
+    if (m) m.lanes.push(l);
+    else motion.set(key, { goalId: l.goal_id, lanes: [l] });
+  }
+  const goalTitle = new Map(goals.map((g) => [g.id, g.title] as const));
+  const goalsInMotion: GoalMotion[] = [];
+  for (const [key, { goalId, lanes: ls }] of motion) {
+    const isWorking = (l: Lane) => working.has(`lane:${l.id}`);
+    const moving = ls
+      .filter((l) => isWorking(l) || l.state === 'awaiting_acceptance' || l.state === 'blocked')
+      .sort(byRecency);
+    if (moving.length === 0) continue;
+    const people = [...new Set(moving.map((l) => l.owner_seat).filter((o): o is string => o !== null))];
+    const title = goalId ? (goalTitle.get(goalId) ?? goalId) : 'No goal';
+    goalsInMotion.push({
+      key: `motion:${key}`,
+      goalId,
+      name: goalId ? (goalName.get(goalId) ?? goalId) : 'No goal',
+      title,
+      done: ls.filter((l) => l.state === 'done').length,
+      total: ls.length,
+      working: ls.filter(isWorking).length,
+      review: ls.filter((l) => l.state === 'awaiting_acceptance').length,
+      blocked: ls.filter((l) => l.state === 'blocked').length,
+      people,
+      latest: recency(moving[0]!),
+    });
+  }
+  goalsInMotion.sort(
+    (a, b) => Number(a.goalId === null) - Number(b.goalId === null) || b.latest - a.latest,
+  );
+
   const shippers = new Map<string, ShippedItem[]>();
   for (const s of shipped) {
     const who = s.by ?? 'someone';
@@ -304,9 +365,30 @@ export function briefing(input: {
     blocked,
     inProgress,
     byGoal,
+    goalsInMotion,
     inReview,
     shipped,
     shippedBy,
     headline: parts.length ? parts.join(' · ') : 'quiet — nothing in flight',
   };
+}
+
+/**
+ * What waits on whom, from the viewer's side (spec, "The Now card, v2"): the viewer's own asks, newest
+ * first, for the band at the top of the card; everyone else's as counts for the quiet line under it.
+ * A viewer who is not signed in has nothing of their own.
+ */
+export function waitingFor(
+  brief: Pick<Briefing, 'needsGroups'>,
+  viewer: string | null,
+): { mine: NeedsItem[]; others: { who: string; n: number }[] } {
+  const mine = viewer
+    ? [...(brief.needsGroups.find((g) => g.human === viewer)?.items ?? [])].sort(
+        (a, b) => b.since - a.since,
+      )
+    : [];
+  const others = brief.needsGroups
+    .filter((g) => g.human !== viewer)
+    .map((g) => ({ who: g.human, n: g.items.length }));
+  return { mine, others };
 }
