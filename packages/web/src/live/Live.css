@@ -4766,11 +4766,19 @@
   display: flex;
   align-items: center;
   gap: var(--lc-6);
+  /* The headline is long ("19 in progress · 4 need a human · 3 in review · 37 shipped today") and
+     the buttons to its right are `flex: none`: the meter yields, and its last cell ellipsizes
+     rather than painting over them. */
+  flex: 0 1 auto;
   min-width: 0;
+  overflow: hidden;
   font-family: var(--font-mono, monospace);
   font-size: 12px;
   color: var(--lc-muted);
   white-space: nowrap;
+}
+.lc-meter > * {
+  flex: none;
 }
 .lc-meter__team {
   font-weight: 600;
@@ -4811,7 +4819,11 @@
   fill: var(--lc-accent);
   opacity: 0.85;
 }
-.lc-meter__who {
+.lc-meter > .lc-meter__who {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--lc-dim);
 }
 @media (max-width: 1080px) {
