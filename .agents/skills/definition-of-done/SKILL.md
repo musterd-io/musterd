@@ -33,8 +33,9 @@ A task is done only when **all** of these are true — not most:
 Clauses 4 and 7 are the ones teams drop first, and they are the reason this list
 is worth writing down at all. Tests were never the part people skipped.
 
-The local run of 1–3 is a fast smoke test for speed. **CI is the authority** —
-if they disagree, CI is right and your machine is interesting.
+Whatever you run locally before pushing is a fast smoke test for speed, not a
+substitute for the gate; which checks belong in it is your team's rule. **CI is
+the authority** — if they disagree, CI is right and your machine is interesting.
 
 ## Done is two claims, not one
 
