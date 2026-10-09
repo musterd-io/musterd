@@ -1,7 +1,9 @@
 # /live and /broadcast briefing — design
 
 **Status:** design approved in chat 2026-10-09 (nick, miley); written spec awaiting review. Lane
-`01M4FG1R7C84HM4RE5GF7FF6WZ`. Goal: `launch`.
+`01M4FG1R7C84HM4RE5GF7FF6WZ`. Goal: `launch`. Revised the same afternoon after nick saw the overlay live:
+the card was redesigned (§"The Now card, v2") and the page around it was thinned (§"Consolidation");
+that revision is awaiting review.
 
 ## What nick asked for (2026-10-09)
 
@@ -69,7 +71,8 @@ Notes from reading the code:
   `depends_on` when declared. It does not invent a reason.
 - `teamCards.ts` and `workingOn.ts` already derive per-member state for the office and the member cards.
   They stay. `briefing.ts` reuses their helpers (`memberPosture`, the in-flight sets) instead of
-  re-deriving, and the topbar meter and the team column are changed to read the new headline.
+  re-deriving, and the topbar meter and the team column are changed to read the new headline
+  (increment 4 takes the headline back out of the topbar: the Now card carries the counts).
 - The "1 working" vs "3 working" mismatch is fixed here, by there being one definition, and pinned by a
   test that renders the headline and the lists from one fixture and asserts the counts agree.
 
@@ -94,24 +97,93 @@ tab is a small pill in the team header. The stamp is written when the overlay ac
 that runs twice cannot spend the period on a cancelled frame. Storage is a per-viewer convenience: if it
 throws, the briefing opens as on a first visit (`nowWhen.ts`).
 
-**What it says, grouped the way each question is asked** (the Team column is by person; this is not):
+What it says, and how it looks, is §"The Now card, v2" below. The first build's content (a "Needs …"
+section per human, a separate Blocked header, one text line per goal, a person line per shipper) was
+replaced the same day: nick found it "wayy too dense with text … not visual enough".
 
-- **Needs …, by the human who has to act.** Asks and seat claims under a heading built from what is being
-  asked of whom — "Needs approval from nick", "Needs approval and clarification from nick", "Needs an answer
-  from the team", "Needs approval from an admin" (seat claims, admin credential only). The wording is the
-  ask's own species (approve → approval, consult → clarification, escalate → an answer).
-- **Blocked**, under its own header: a lane names a dependency, not a person to ask, so no human is
-  invented. A blocked row says what it waits on when a dependency is declared and still open.
-- **In progress, by goal**: one line per goal with who is on it in the overlay; every lane in full view.
-- **Shipped since yesterday, by who shipped it**: one line per person in the overlay, their titles in full
-  view. "Yesterday" is the start of the previous *working* day in the viewer's own clock (Monday reaches back
-  to Friday), so the morning-after question has its answer; the topbar headline still counts the last 24 h.
-- **In review**: last, and shortest.
+## The Now card, v2 (approved 2026-10-09, mockup v9)
 
-Rows are one line each; the full title is on hover. Counts are lanes, not people. The rules in the section
-above hold: a lane is in progress only while its owner is present, and an ask needs a human only when it is
-team-wide or routed to a human. Rows open the lane or the ask exactly as the board and the asks strip do;
-"+N more" opens full view.
+nick, on the first build: too dense with text, not visual or colourful enough, not intuitive. Six mockup
+rounds followed. What he rejected is as useful as what he approved:
+
+- a glowing, gradient "needs you" orb and a pulsing card: "UI/AI slop" (designer tells 1 and 3);
+- a rainbow of per-goal colours, pill chips and a legend: still slop (tells 2, 4, 8);
+- one tick per lane: "not intuitive enough" — an encoding that needs a legend;
+- single initials for people: "not enough to identify the members";
+- a strict ink-on-paper version with no colour at all: "back to no colors/visuals";
+- a 780 px two-column version with six goals: "too dense".
+
+**The rule that came out of it.** Colour on the card means something. It comes from three places only:
+the **members' own faces** (each person drawn as the office draws them, so the hues belong to people),
+**mustard** (the one accent: the "waiting on you" band and the goal bars) and **danger ink** (only on
+"blocked"). Everything else is the `/live` paper and ink, in the three Recursive cuts. No gradient, no
+pulse, no pill, no legend.
+
+**Shape.** One card, `min(920px, 100vw − 48px)` wide, over the room. Top to bottom:
+
+1. **Header row**: "Now", and the full-screen and dock controls.
+2. **Waiting on you** — only when the viewer is a signed-in human with asks routed to them (the briefing
+   rule: team-wide or routed to a human). A flat mustard-tinted band (`--lc-warn` fill, `--lc-warn-ink`
+   text) holding the asker's face, the newest ask's text, who asked and when, and an **Answer** button
+   that opens the ask as the strip does. More than one: "Waiting on you · 3" and the newest. Asks routed
+   to *other* humans, and seat-claim requests for an admin, are one quiet line under it ("2 waiting on
+   sloane · 1 seat request"), no tint. Approve and Deny stay in the asks strip, the one place you act
+   from (nick chose this, 2026-10-09: the strip is the live home, Now only reports it).
+3. **Two columns**, goals left and shipped right (320 px); below 880 px wide they stack.
+   - **Goals in motion**: a goal is in motion when one of its lanes is in progress, in review or
+     blocked. Four rows, then "N more goals", which expands in place. Ordered by the newest lane update.
+     A row is one line — the goal's **title** in Recursive Casual (cut to one line, the full title on
+     hover; the `story` field is not used, so the row reads like the board), the **faces** of its lanes'
+     owners (three, then "+N"), a thin mustard **bar** and its words: "3 of 8 done". Under it, small, the
+     non-zero states: "4 working · 1 in review · 1 blocked", blocked in danger ink. `done of total`
+     counts the goal's lanes with `abandoned` left out of both. Lanes with no goal gather in a last row,
+     "No goal".
+   - **Shipped since yesterday**: one row per person, most first: face, name, count, and the title of the
+     newest thing they shipped on a second line. Four rows, then "N more people". "Since yesterday"
+     keeps its meaning from the first build (the previous working day).
+4. Nothing else. The headline sentence, the In review section and the Blocked section are gone from the
+   card: the counts live in the goal rows, and blocked lanes show inside their goal.
+
+**Faces.** A new `MemberFace` (inline SVG, about 24 px) draws a member's head from
+`office-scene/appearance.ts` (`appearanceOf`, already pure and stable per name) with the member's
+identity colour as a ring. Agents get the scene's antenna and visor, humans get eyes: the same tell the
+room uses (ADR 079), so a member reads the same on the card and on the floor. It lives in the Now chunk,
+not the eager graph. Hovering a face names the member.
+
+**The room answers back.** Hovering or focusing a goal row sets `/live`'s existing `linked` state to its
+owners, so their plates light up in the office; the colour and motion stay in the room, where
+`PRODUCT.md` puts the spectacle. Clicking a goal row opens the board overlay drilled into that goal (a
+new `focusGoal` prop on `BoardOverlay`, which already has the drill-in state). Clicking a shipped row
+opens that person's newest shipped lane.
+
+**Docking.** The card docks into a **topbar chip**, "Now", not a tab on the room's left edge (one less
+thing over the room). When something waits on the viewer the chip reads "Now · 1 needs you" with a
+small static mustard dot. No pulse: the state does not turn off on its own. The open and dock transition
+still scales the card from and into the chip; reduced motion and `?still` skip it. When it opens by
+itself is unchanged (`nowWhen.ts`).
+
+## Consolidation — the rest of the page stops repeating Now (approved 2026-10-09)
+
+nick's screenshot showed the same facts three and four times: the topbar headline equalled the card's
+title; one ask was in the asks strip, in Now, and again as the ticker's first chip; "last act", the
+sparkline and the ticker all answered "is anything happening?".
+
+- **Topbar.** The headline leaves `TopMeter`. The meter keeps the team name, the heartbeat and the
+  rate with its sparkline; "last act …" folds into the heartbeat's hover text. The Now chip sits after
+  the meter. "See every message" leaves the ticker and becomes a log icon button in the topbar, beside
+  the Seeds button.
+- **Ticker.** A chip whose act is an ask still open in the strip is dropped; the ticker carries activity
+  only.
+- **Asks strip.** Unchanged. It is the one place an ask is answered.
+
+## The work board sign (approved 2026-10-09)
+
+The wall board opens the board overlay, but nothing says so: its hotspot (`office-scene/index.ts`,
+`lc-boardspot`) carries a "work board" tag that shows only on hover. The tag becomes a permanent small
+wooden sign hung on two strings above the board, in the scene's own wood and Recursive Casual: "work
+board ›". Hovering or focusing the board or the sign lifts the sign a couple of pixels and brightens it;
+reduced motion keeps it still. `/live` only, because only there is the board a control; `/broadcast`
+paints the board as it does today.
 
 ## `/broadcast` — built, then reverted (2026-10-09)
 
@@ -147,13 +219,20 @@ Seat-claim requests stay off any public surface (Decisions, 3).
 2. The Now panel on `/live` (merged #2265 as a tab; rebuilt as the overlay above, lane `01M4GXHERZF6A2KFMBK2G616CK`), including the seat-request read. The office blocked marker was split out. Lane `01M4FG5JRAR3QD460DWC7M7E7M`.
 3. The `/broadcast` lower-third. Lane `01M4FG5NWKCYSYQ9RWG06Y4TNC`.
 
-All three are under goal `launch`; the plan is
+4. Consolidation: topbar headline out, ticker drops open-ask chips, log icon. Lane
+   `01M4H2GYHN9DB8DE5TQN5K1VKV`.
+5. The work board sign. Lane `01M4H2H10QASWMX10CPTJ0BRA4`.
+6. The Now card v2, `MemberFace`, goal drill-in, and the topbar dock chip. Lane
+   `01M4H2H4JD5ATGKB9GXHVTQW3A`. Lands after 4, which clears the topbar room the chip takes.
+
+All six are under goal `launch`; the plan for 1–3 is
 [`2026-10-09-live-briefing.md`](../plans/2026-10-09-live-briefing.md).
 
 ## Not in scope
 
 A first-time-visitor welcome tour, a public seat-request count, reasons for a blocked lane (needs a
-protocol field and an ADR), and any change to the office scene beyond the one marker.
+protocol field and an ADR), and any change to the office scene beyond the one marker and the board
+sign. Per-goal colours: a goal has no colour of its own, and inventing one is the rainbow nick turned down.
 
 ## Falsifiers
 
@@ -161,5 +240,10 @@ protocol field and an ADR), and any change to the office scene beyond the one ma
   wrong. The unit test is that fixture.
 - If a viewer without an admin credential sees seat-claim requests anywhere, or `/broadcast` shows any,
   the privacy decision is broken.
-- If `/live` connected at 1440×900 does not show every non-empty "Needs a human" item without scrolling
-  or a click, the panel has failed its one job.
+- If `/live` connected at 1440×900 does not show every open ask routed to a human without scrolling or
+  a click — in the asks strip, which is now their one home — the page has failed its one job.
+- If a viewer with an ask routed to them opens `/live` and the Now card does not show "Waiting on you"
+  first, or the dock chip does not say so, the card has failed.
+- If a goal row's "d of n done" disagrees with that goal's lanes on the board, the count is wrong.
+- If any colour on the card is not a member's face, mustard, or danger ink on "blocked", the colour
+  rule is broken — run the designer skill's ten tells on a capture, not on the code.
