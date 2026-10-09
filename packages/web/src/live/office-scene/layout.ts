@@ -543,6 +543,10 @@ export const CHECK_IN_S = 1.2;
  */
 export const WAGON_PICKUP = { lx: 240, ly: 760 };
 export const WALL_DROP = { lx: 860, ly: 40 };
+/** Where a member stands to take a card off the wall board when they claim a lane (nick, 2026-10-09):
+ * the floor under the board's middle (lx ≈ 796, its centre at tc 0.885), clear of the counter's padded
+ * footprint. Pinned walkable and reachable from every desk by `nav.test.ts`. */
+export const BOARD_STAND = { lx: 796, ly: 34 };
 
 /** The printer/supply station against the back wall — moved out of the bench run (it stood at
  * lx 390, which is now mid-counter), into the band between the bench's end and the kitchenette. */

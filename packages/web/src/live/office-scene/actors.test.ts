@@ -7,7 +7,7 @@ import {
   homePoses,
   travelDir,
 } from './actors';
-import { COFFEE_STAND, DESK_SLOTS, ENTRANCE, NOOK, NOOK_RUG_R, STRIP_CAP } from './layout';
+import { BOARD_STAND, COFFEE_STAND, DESK_SLOTS, ENTRANCE, NOOK, NOOK_RUG_R, STRIP_CAP } from './layout';
 import { GESTURE, IDLE_GESTURES } from './skeleton';
 import { LEISURE_SPOTS } from './layout';
 import { assignSeats } from './seating';
@@ -1390,5 +1390,78 @@ describe('what the Welcome Wagon asks the actors (lane 01M3F81DD9)', () => {
     }
     expect(reached).toBe(true);
     expect(actors.checkInHolds()).toBe(1); // it turned true AT the mark, not after walking on
+  });
+});
+
+/**
+ * Claiming a lane (nick, 2026-10-09): the claimer walks to the wall board, stands and thinks, reaches
+ * up and takes the card, carries it home and sets it down. The card leaves the wall at the reach —
+ * `takenSeeds()` is what the board painter reads — and not before.
+ */
+describe('claiming a lane at the board', () => {
+  const SEED = 0xc1a1;
+  const run = () => {
+    const { placements, byName } = world([node('Ada'), node('Bo')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    return { actors, home: actors.poses().get('Ada')! };
+  };
+
+  it('walks to the board, thinks there, takes the card, and carries it home', () => {
+    const { actors, home } = run();
+    expect(actors.claim('Ada', SEED)).toBe(true);
+    const seen = { nearBoard: Infinity, chin: false, reach: false, cardCarried: false, takenEarly: false };
+    let guard = 0;
+    while (actors.active() && guard++ < 4000) {
+      actors.step(0.05);
+      const p = actors.poses().get('Ada')!;
+      seen.nearBoard = Math.min(seen.nearBoard, Math.hypot(p.lx - BOARD_STAND.lx, p.ly - BOARD_STAND.ly));
+      if (p.gesture === GESTURE.chin) {
+        seen.chin = true;
+        if (actors.takenSeeds().includes(SEED)) seen.takenEarly = true;
+      }
+      if (p.gesture === GESTURE.reach) seen.reach = true;
+      if (p.carry === 'card') seen.cardCarried = true;
+    }
+    expect(actors.active()).toBe(false);
+    expect(seen.nearBoard).toBeLessThan(12);
+    expect(seen.chin).toBe(true);
+    expect(seen.reach).toBe(true);
+    expect(seen.cardCarried).toBe(true);
+    expect(seen.takenEarly).toBe(false); // the card stays on the wall while they think
+    seated(actors, 'Ada');
+    const back = actors.poses().get('Ada')!;
+    expect(back.lx).toBeCloseTo(home.lx, 5);
+    expect(back.ly).toBeCloseTo(home.ly, 5);
+    expect(back.carry).not.toBe('card');
+  });
+
+  it('reports the card as taken from the reach until the walk ends', () => {
+    const { actors } = run();
+    actors.claim('Ada', SEED);
+    let takenWhileCarrying = false;
+    let guard = 0;
+    while (actors.active() && guard++ < 4000) {
+      actors.step(0.05);
+      if (actors.poses().get('Ada')!.carry === 'card' && actors.takenSeeds().includes(SEED))
+        takenWhileCarrying = true;
+    }
+    expect(takenWhileCarrying).toBe(true);
+    expect(actors.takenSeeds()).toEqual([]);
+  });
+
+  it('is a real act: it preempts an errand and refuses a member who is not in the room', () => {
+    const { actors } = run();
+    expect(actors.claim('Nobody', SEED)).toBe(false);
+    expect(actors.ambientWalk('Ada')).toBe(true);
+    actors.step(0.3);
+    expect(actors.claim('Ada', SEED)).toBe(true);
+    let chin = false;
+    let guard = 0;
+    while (actors.active() && guard++ < 4000) {
+      actors.step(0.05);
+      if (actors.poses().get('Ada')!.gesture === GESTURE.chin) chin = true;
+    }
+    expect(chin).toBe(true);
   });
 });

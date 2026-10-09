@@ -17,6 +17,7 @@ import {
   SINK_STAND,
   WAGON_PICKUP,
   WALL_DROP,
+  BOARD_STAND,
 } from './layout';
 import { findPath, walkable } from './nav';
 
@@ -260,6 +261,17 @@ describe('the front desk blocks', () => {
     for (let i = 0; i < LEISURE_SPOTS.length; i++) {
       const s = LEISURE_SPOTS[i]!;
       if (s.sit === 0) expect(walkable(s.lx, s.ly), `leisure ${i} ${s.zone} (${s.lx},${s.ly})`).toBe(true);
+    }
+  });
+});
+
+describe('the stand in front of the work board', () => {
+  it('is walkable and reachable from every desk', () => {
+    expect(walkable(BOARD_STAND.lx, BOARD_STAND.ly)).toBe(true);
+    for (const d of DESK_SLOTS) {
+      const path = findPath({ lx: d.lx, ly: d.ly }, BOARD_STAND);
+      expect(path.at(-1)).toEqual(BOARD_STAND);
+      expect(deepestPenetration(path)).toBeLessThanOrEqual(MAX_GRAZE);
     }
   });
 });

@@ -182,5 +182,7 @@ describe('walkTag — the verb over a walker (ADR 464 §3.2)', () => {
     ['help', 'izzo', 'asking for help'],
     ['steer', 'izzo', 'redirecting izzo'],
     ['steer', null, 'redirecting'],
+    ['claim', 'Rotate the leaked keys', 'claiming Rotate the leaked keys'],
+    ['claim', null, 'claiming a lane'],
   ] as const)('%s → %s', (kind, to, out) => expect(walkTag(kind, to)).toBe(out));
 });

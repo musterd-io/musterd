@@ -129,6 +129,11 @@ export const GESTURE = {
    * is why it is listed in `ERRAND_GESTURES` below (that list IS the "not scheduler-pickable" family).
    */
   wave: 19,
+  /** Claiming a lane (2026-10-09): the right hand goes up to the wall board for the card. Rises and
+   *  holds at the top — `take` brings it down — so the two legs read as one reach. */
+  reach: 20,
+  /** …and down again with the card in it, to where `carry: 'card'` holds it. */
+  take: 21,
 } as const;
 
 /**
@@ -136,7 +141,11 @@ export const GESTURE = {
  * scheduler. Listed here (rather than by id range) because this is the ONLY thing that separates the
  * two families, and the separation has to be derivable — see `IDLE_GESTURES` directly below.
  */
-const ERRAND_GESTURES = ['browse', 'fill', 'eat', 'pour', 'call', 'wave'] as const;
+const ERRAND_GESTURES = ['browse', 'fill', 'eat', 'pour', 'call', 'wave', 'reach', 'take'] as const;
+
+/** Beats that are the two halves of ONE motion over two legs — the first ends where the second starts
+ *  (the hand up at the wall board), so neither returns to rest alone; the pair does. */
+export const SPLIT_BEATS: ReadonlyArray<readonly [number, number]> = [[GESTURE.reach, GESTURE.take]];
 
 /** A beat the gesture scheduler may pick: everything in the registry that is not an errand overlay. */
 export type IdleGesture = (typeof GESTURE)[Exclude<keyof typeof GESTURE, (typeof ERRAND_GESTURES)[number]>];
@@ -589,6 +598,12 @@ function applyOverlays(s: Skel, inp: SkelInput): void {
       s.wrist[i] = hand;
       s.elbow[i] = ik2(s.shoulder[i], hand, C.upperArm, C.foreArm, v(sgn * 0.9, -0.6, 0));
     }
+  } else if (inp.carry === 'card') {
+    // The lane's card, held up in front at chest height and a little out — a thing being brought back,
+    // not stowed: the walk keeps its counter-swing left arm.
+    const hand = v(5, s.chest.y - 3, s.chest.z + 11);
+    s.wrist[1] = hand;
+    s.elbow[1] = ik2(s.shoulder[1], hand, C.upperArm, C.foreArm, v(0.9, -0.6, 0));
   } else if (inp.carry === 'bottle' || inp.carry === 'mug') {
     // One-handed: the right hand holds it out in front, low — the walk keeps its counter-swing left arm.
     const hand = v(6, s.chest.y - 10, s.chest.z + 10);
@@ -640,6 +655,15 @@ function applyOverlays(s: Skel, inp: SkelInput): void {
     s.wrist[1] = lerp3(s.wrist[1], up, a);
     s.elbow[1] = ik2(s.shoulder[1], s.wrist[1], C.upperArm, C.foreArm, v(1, -0.6, 0.2));
     s.head = v(s.head.x + a * 1.5, s.head.y, s.head.z);
+  } else if (inp.gesture === GESTURE.reach || inp.gesture === GESTURE.take) {
+    // The reach for the card: up and forward to the board's height. `reach` rises and arrives; `take`
+    // starts at the top and comes down to wherever the carry put the hand. One motion over two legs,
+    // so the card can appear in the hand exactly at the top, where it leaves the wall.
+    const a = inp.gesture === GESTURE.reach ? smooth(inp.gestureT) : 1 - smooth(inp.gestureT);
+    const top = v(C.shoulderW - 1, s.shoulder[1].y + C.upperArm * 0.75, s.shoulder[1].z + C.foreArm + 4);
+    s.wrist[1] = lerp3(s.wrist[1], top, a);
+    s.elbow[1] = ik2(s.shoulder[1], s.wrist[1], C.upperArm, C.foreArm, v(1, -0.5, 0.2));
+    s.head = v(s.head.x, s.head.y + a * 1.2, s.head.z + a * 0.6); // the eyes go up with the hand
   } else if (inp.gesture === GESTURE.glance) {
     // Glance: the head turns away from the screen and drifts back. Cheap, and startlingly human.
     const a = arcEnv(inp.gestureT);
