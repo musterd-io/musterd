@@ -22,6 +22,7 @@ import {
   RELAUNCH_WINDOW_MS,
   RESTARTABLE_AFTER_MS,
   socketLossExitCode,
+  sinkLossExitCode,
   supervised,
   liveRunState,
   pidAlive,
@@ -809,6 +810,35 @@ describe('decideRelaunch (when the stream gives up on its own Chrome)', () => {
   it('counts a failure exactly at the window edge as aged out', () => {
     const edge = Array.from({ length: RELAUNCH_MAX }, () => now - RELAUNCH_WINDOW_MS);
     expect(decideRelaunch(edge, now)).toBe('relaunch');
+  });
+});
+
+describe('sinkLossExitCode (ffmpeg exits after the stream is live — ADR 553)', () => {
+  const proven = RESTARTABLE_AFTER_MS;
+
+  it('keeps a clean end clean — --duration and a finished stop exit 0', () => {
+    expect(sinkLossExitCode(0, { stopping: false, ranMs: proven, isSupervised: true })).toBe(0);
+  });
+
+  it('asks the supervisor to run the broadcast again when the sink dies under a proven run', () => {
+    // Twitch resetting the session (measured 2026-10-09: "Connection reset by peer") used to exit 1,
+    // which ended the machine; 75 reruns the broadcast inside it.
+    expect(sinkLossExitCode(1, { stopping: false, ranMs: proven, isSupervised: true })).toBe(
+      RESTART_EXIT_CODE,
+    );
+  });
+
+  it('does not restart a run that never proved itself — a rejected key must not loop', () => {
+    expect(sinkLossExitCode(1, { stopping: false, ranMs: proven - 1, isSupervised: true })).toBe(1);
+  });
+
+  it('does not restart under nothing that would rerun it — a laptop run ends', () => {
+    expect(sinkLossExitCode(1, { stopping: false, ranMs: proven, isSupervised: false })).toBe(1);
+  });
+
+  it('does not restart a stop someone asked for', () => {
+    // A signal makes ffmpeg exit non-zero while it finalizes; that is the stop working.
+    expect(sinkLossExitCode(255, { stopping: true, ranMs: proven, isSupervised: true })).toBe(1);
   });
 });
 

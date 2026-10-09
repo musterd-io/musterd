@@ -835,7 +835,8 @@ export function cdpTimeoutFor(method: string): number {
  * with this code and the entrypoint loop runs a genuinely fresh process.
  *
  * It is for failures the stream cannot absorb: a Chrome that cannot be relaunched or keeps failing
- * (`giveUp`, ADR 551), and the stream's own lost-socket path (`socketLossExitCode`). A daemon rebuild
+ * (`giveUp`, ADR 551), the stream's own lost-socket path (`socketLossExitCode`), and a sink that died
+ * under a live run (`sinkLossExitCode`, ADR 553). A daemon rebuild
  * is NOT one (ADR 548), and neither is a single Chrome failure (ADR 551): restarting drops the Twitch
  * ingest, and the page converges on the new bundle by itself (ADR 292).
  */
@@ -877,6 +878,29 @@ export function socketLossExitCode(
   restartableAfterMs: number = RESTARTABLE_AFTER_MS,
 ): number {
   return isSupervised && ranMs >= restartableAfterMs ? RESTART_EXIT_CODE : 1;
+}
+
+/**
+ * The exit code for ffmpeg ending after the stream was live (ADR 553).
+ *
+ * ffmpeg dies when its sink does: Twitch resetting the RTMP session, a network path that drops, a key
+ * revoked mid-run. That used to return 1, which `entrypoint.sh` does not rerun, so the machine ended and
+ * the 60 s LaunchAgent had to start a new one — measured 2026-10-09 at 96 s from the reset to `◉ live`,
+ * on a new Fly machine and a new tailnet node. A supervised run asks to be run again instead: the
+ * broadcast restarts inside the same machine, with Chrome already warm.
+ *
+ * The same judgement as `socketLossExitCode` decides whether that is safe — a run that never proved
+ * itself (a rejected key, a bad config) ends rather than looping — and the same two cases stay as they
+ * were: a clean ffmpeg exit (`--duration`, a finished stop) is 0, and a stop someone asked for is not a
+ * sink loss, so it is not restarted.
+ */
+export function sinkLossExitCode(
+  ffmpegCode: number,
+  opts: { stopping: boolean; ranMs: number; isSupervised?: boolean },
+): number {
+  if (ffmpegCode === 0) return 0;
+  if (opts.stopping) return 1;
+  return socketLossExitCode(opts.ranMs, opts.isSupervised);
 }
 
 /**
@@ -1740,5 +1764,16 @@ export async function broadcastCommand(parsed: Parsed): Promise<number> {
     cleanup();
   }
   if (exitCode === 0) process.stdout.write(`${theme.ok('✓')} broadcast ended cleanly\n`);
-  return exitCode === 0 ? 0 : 1;
+  // ffmpeg ending on its own after the stream was live is the sink dying, not the end of the run
+  // (ADR 553): under a supervisor that is a restart inside the machine, not the machine's end.
+  const code = sinkLossExitCode(exitCode, {
+    stopping,
+    ranMs: Date.now() - runStartedAt,
+  });
+  if (code === RESTART_EXIT_CODE) {
+    process.stderr.write(
+      `${theme.err('✗')} ffmpeg ended (code ${exitCode}) — the sink dropped. Asking the supervisor for a relaunch.\n`,
+    );
+  }
+  return code;
 }

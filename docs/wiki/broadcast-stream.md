@@ -88,7 +88,11 @@ is down.
   closest stand-in and does not tell a rejected key from a dropped session.
 - How long Twitch shows the channel offline for each of those. Needs a watcher on Twitch's side.
 
-Inc 3 measured the reset case; the rest of the list above is still open. Follows-up: 01M4F32MMP63ZF9AVNHWWF3N6A (inc 4: reconnect the RTMP sink inside the machine).
+Inc 3 measured the reset case; the rest of the list above is still open. Inc 4 (ADR 553, lane
+`01M4F32MMP63ZF9AVNHWWF3N6A`) changes the reset case: ffmpeg ending after `◉ live` now exits 75 under a
+supervisor, so the broadcast restarts inside the machine instead of the machine ending. Not yet measured
+on the box; the 96 s above is the before number. Falsify: repeat the 3 s `tcp-reset` on a live stream on
+the new image — a new machine id, or a gap near 96 s, falsifies it.
 
 ## A merge to `main` dropped the Twitch ingest, and the restart it ran bought nothing (2026-10-08; falsify: with a hosted stream live on the new image, merge any commit and read `fly logs -a musterd-broadcast` — a `relaunching the stream` line inside the rebuild window falsifies this) <!-- claim: defect -->
 
