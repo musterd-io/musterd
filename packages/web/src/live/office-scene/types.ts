@@ -45,6 +45,8 @@ export interface OfficeNode {
   workSource: 'lane' | 'status' | null;
   laneState: LaneState | null;
   moreLanes: number;
+  /** Owns a lane that is blocked (briefing inc 2b) — a small flag on the plate. */
+  blocked?: boolean;
   /** Self-set do-not-disturb (ADR 044) — at their desk, headphones on, never walked to (§4). */
   dnd: boolean;
   /** Why the seat is dark (ADR 141/315) — drives the owned-desk texture and the left_team exit. */

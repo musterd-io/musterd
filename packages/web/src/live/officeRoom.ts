@@ -32,6 +32,17 @@ export interface OfficeRoomProps {
   status: ConnStatus;
 }
 
+/**
+ * Who owns a blocked lane (briefing inc 2b): they wear a small flag on their plate. Derived from the
+ * room's own `board`, so it reaches /live and /broadcast through the one room object — no second
+ * wiring for the stream to miss.
+ */
+export function blockedOwners(board: LaneBoard | null): Set<string> {
+  const out = new Set<string>();
+  for (const l of board?.lanes ?? []) if (l.state === 'blocked' && l.owner_seat) out.add(l.owner_seat);
+  return out;
+}
+
 /** What a route already holds after `useLiveStream` — named structurally so this module owes the hook
  *  nothing but the fields it reads. */
 export interface RoomStream {

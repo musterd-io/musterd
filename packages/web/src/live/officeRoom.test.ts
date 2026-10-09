@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { officeRoom, type OfficeRoomProps } from './officeRoom';
+import { blockedOwners, officeRoom, type OfficeRoomProps } from './officeRoom';
 
 const src = (rel: string): string =>
   readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
@@ -97,4 +97,23 @@ describe('/live and /broadcast frame the same room', () => {
       expect(leaked, `${name} should take these from officeRoom, not pass them itself`).toEqual([]);
     });
   }
+});
+
+describe('blockedOwners — who wears the blocked flag in the room (briefing inc 2b)', () => {
+  const board = (lanes: unknown[]) => ({ lanes, warnings: [] }) as unknown as OfficeRoomProps['board'];
+  it('is the owners of blocked lanes, once each, and nobody for an unowned or unblocked lane', () => {
+    const b = board([
+      { id: 'a', state: 'blocked', owner_seat: 'izzo' },
+      { id: 'b', state: 'blocked', owner_seat: 'izzo' },
+      { id: 'c', state: 'blocked', owner_seat: null },
+      { id: 'd', state: 'active', owner_seat: 'dolly' },
+    ]);
+    expect([...blockedOwners(b)]).toEqual(['izzo']);
+    expect(blockedOwners(null).size).toBe(0);
+  });
+
+  it('reaches the scene through the room’s own board, so /live and /broadcast agree', () => {
+    expect(src('./OfficeScene.tsx')).toMatch(/blocked: blocked\.has\(m\.name\)/);
+    expect(src('./office-scene/index.ts')).toMatch(/if \(node\.blocked\)[\s\S]{0,400}lc-gl-label__flag/);
+  });
 });
