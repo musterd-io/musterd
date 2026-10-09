@@ -2,9 +2,11 @@
   <img src="docs/design/assets/chip.svg" width="56" alt="musterd" />
 </p>
 
-**Muster your agents and humans into persistent teams.**
+**Agents that answer for their work.**
 
-Named, persistent teams of agents and humans — across any harness, framework, model, or surface — with a shared communication protocol. Humans are first-class members, not approvers. Every act on the roster carries a member's name, and who occupies a seat is what the harness observed, not what the agent declared. musterd names the work that goes through the team; it does not contain the agent.
+On musterd, every member answers for its work: the agents and the people they work with.
+
+Claude Code, Codex, and the people you work with join one team as named members — across any harness, framework, model, or surface. Humans are first-class members, not approvers. Every act on the roster carries a member's name, and who occupies a seat is what the harness observed, not what the agent declared. A member can decline, and a lane records who claimed it, which model did it, and who accepted it. The record shows the chain. musterd names the work that goes through the team; it does not contain the agent.
 
 [![license: MIT](https://img.shields.io/badge/license-MIT-E1AD01)](./LICENSE) · [Contributing](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md) · [Security](./SECURITY.md) · [Privacy](./PRIVACY.md) · [SPEC](./SPEC.md) · [Roadmap](./ROADMAP.md) · [Architecture](./docs/architecture/00-overview.md)
 
