@@ -1,6 +1,6 @@
 # Research radar full-text automation
 
-- Status: design approved in conversation; written spec awaiting review
+- Status: design and durable-retry amendment approved in conversation
 - Date: 2026-10-09
 - Goal: `research-fulltext-automation`
 
@@ -20,11 +20,11 @@ The workflow uses `ANTHROPIC_API_KEY`, `EXA_API_KEY`, and the repo's fine-graine
 
 ## Pipeline
 
-1. At the existing weekly cadence (Monday 08:00 UTC), run arXiv, HF Papers, and the read-only Exploring Next feed; keep the current date window, source filters, cross-source deduplication, and cap of 50 new candidates.
+1. At the existing weekly cadence (Monday 08:00 UTC), run arXiv, HF Papers, and the read-only Exploring Next feed; keep the current date window, source filters, and cross-source deduplication. Process up to 50 fresh candidates and up to 50 oldest pending candidates per run; report either cap if it truncates the eligible set.
 2. Preserve Exploring Next episode IDs and source URLs through cross-source deduplication. If an Exploring Next row is merged into a canonical arXiv/HF candidate, its episode reference must remain attached so the transcript is still retrieved. For every candidate that survives those filters, retrieve the full original article body. For every attached Exploring Next episode, also retrieve its full script. Process each complete body in ordered chunks that fit the model context; collect chunk-level evidence and combine it before candidate-level ranking. Every chunk must be processed. No summarization, truncation, failed chunk, or missing full-text response may be treated as a complete read.
 3. Run the existing tier-1 filter over the complete-read evidence for all candidates. Run tier-2 scoring on the existing shortlist (maximum 10), using the same complete-read evidence. Preserve the current verdicts, relevance dimensions, prompt versioning, and human graduation gate.
 4. Emit the weekly digest with the existing verdict groups and scores, plus source links, an explicit full-text read status, prompt/model versions, and a count of candidates deferred because a complete read failed. Do not include article bodies, transcript bodies, or long verbatim passages in the digest.
-5. Update `seen.json` only for candidates whose required full text was retrieved and whose triage completed. Retrieval, model, or write failures leave the affected candidate unseen so a later scheduled run retries it. A partial run may emit successful candidates while listing failed candidate IDs and their source links in the Actions summary; failed candidates stay out of the ledger.
+5. Add a metadata-only `pending` array to `seen.json`, preserving its existing `arxiv`, `hf`, and `exn` arrays. It records each failed candidate's source ID, canonical ID, title, URL, published date, attached Exploring Next episode IDs, first/last attempt dates, and concise failure category; it never stores abstracts, article text, or transcript text. Each weekly run retries up to 50 oldest pending candidates regardless of the source's date window. Full-text retrieval and triage success moves the candidate IDs into the existing seen arrays and removes its pending row. Retrieval, model, or write failures keep or add the affected row. A partial run may emit successful candidates while listing failed candidate IDs and their source links in the Actions summary.
 6. Write digest and ledger through a staged, atomic publication step so a failed write cannot leave only one of the pair updated. Open/update a weekly draft PR using the established PAT-authored PR pattern so required CI checks run. The PR remains human-reviewed and is never auto-merged.
 
 ## Data and privacy boundaries
@@ -41,13 +41,13 @@ The workflow uses `ANTHROPIC_API_KEY`, `EXA_API_KEY`, and the repo's fine-graine
 - Exa non-success status, missing/empty extracted text, missing ExN script, incomplete chunk processing, or a failed model call is a candidate failure. Record a concise failure category in the workflow summary; do not fall back to the feed's short description or audio summary as the article read.
 - Retry transient retrieval failures with bounded backoff, reusing the radar's existing timeout/retry policy where it applies. Permanent/unavailable sources remain unseen for the next run.
 - Serialize scheduled and manually dispatched runs. Use one weekly digest path and one weekly PR branch; a repeat run must not silently overwrite a digest that has already been reviewed. It may update the same open draft PR only while the PR has no review or approval and the weekly artifact remains unmerged. If it has been reviewed, report the retryable items and leave the reviewed artifact untouched for the next week.
-- Enforce the 50-candidate sweep cap and 10-item tier-2 cap. Report truncation explicitly. Process every candidate inside the 50-item cap through complete retrieval before ranking.
+- Enforce the 50-fresh-candidate cap, 50-pending-retry cap, and 10-item tier-2 cap. Report truncation explicitly. Process every selected candidate through complete retrieval before ranking.
 
 ## Interfaces and compatibility
 
 - No `@musterd/protocol` schema or musterd server changes.
 - Extend the existing `scripts/radar/` pipeline and add a separate workflow file. Keep the current hand-run dry sweep and local triage path usable; the new full-text path is the scheduled automated path.
-- Keep the existing source candidate IDs, seen-ledger format, digest path, verdict ladder, and no-auto-merge rule. Retain each successfully read Exploring Next episode ID in the existing `exn` ledger even when cross-source deduplication uses a paper ID as the canonical candidate. Add read-status metadata to the digest without storing source bodies.
+- Keep the existing source candidate IDs, seen-ledger arrays, digest path, verdict ladder, and no-auto-merge rule; add only the metadata-only `pending` array to the seen ledger. Retain each successfully read Exploring Next episode ID in the existing `exn` ledger even when cross-source deduplication uses a paper ID as the canonical candidate. Add read-status metadata to the digest without storing source bodies.
 - Update `scripts/radar/README.md` and `docs/design/research-radar-plan.md` to describe the new scheduled full-text path and the revised M5 scheduling status; those files currently say weekly triage/emit remain manual.
 - Do not change the LaunchAgent's service identity or make it perform secret-bearing LLM work; it remains a local dry-sweep/status signal unless a later decision retires it.
 
@@ -58,7 +58,7 @@ Article URLs are untrusted input, so retrieval must defend against SSRF, redirec
 ## Acceptance criteria
 
 1. A scheduled run fetches the full article body for every new candidate in the capped weekly set and the complete script for each Exploring Next episode before triage.
-2. Each candidate's read manifest accounts for every article and attached episode-script chunk; missing, partial, or failed source text cannot become a normal candidate verdict or a seen-ledger entry.
+2. Each candidate's read manifest accounts for every article and attached episode-script chunk; missing, partial, or failed source text cannot become a normal candidate verdict or a seen-ledger entry, and the metadata-only pending row survives beyond the 7-day source window.
 3. The digest records links, read status, models/prompt version, and counts without containing source bodies; the Actions summary lists retryable failures without source text.
 4. A failed publish cannot leave a digest and `seen.json` inconsistent; rerunning a partial week retries failed candidates without duplicating successfully reviewed items.
 5. The weekly workflow is independently schedulable, serializes overlapping runs, opens or updates a draft PR, and never merges it.
