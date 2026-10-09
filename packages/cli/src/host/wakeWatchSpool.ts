@@ -1,4 +1,4 @@
-import { appendFileSync, chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, lstatSync, mkdirSync, openSync, rmSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { BINDING_DIR, scrubCredentials } from '@musterd/protocol';
 import { pickArg } from '../launcher/watch/events.js';
@@ -50,32 +50,48 @@ export function spoolLinesFor(content: unknown, at: number): SpoolLine[] {
 }
 
 /**
- * Open the spool for `leaseId`. Removed first and created exclusively, so a symlink planted at the
- * path is replaced and never written through. Best-effort throughout: a folder the host cannot write
+ * Open the spool for `leaseId`. Removed first and created exclusively with `O_NOFOLLOW`, and every
+ * line goes through that one descriptor, so a symlink planted at the path — before the open or swapped
+ * in after it — is never written through. A binding folder that is itself a symlink is refused.
+ * Best-effort throughout: a folder the host cannot write
  * to costs the watch view, never the wake.
  */
 export function openWakeWatchSpool(workspace: string, leaseId: string): WakeWatchSpool {
-  const path = join(workspace, BINDING_DIR, WAKE_WATCH_FILE);
+  const dir = join(workspace, BINDING_DIR);
+  const path = join(dir, WAKE_WATCH_FILE);
   let bytes = 0;
-  let ok = true;
+  let fd: number | undefined;
   const put = (line: SpoolLine, force = false): void => {
-    if (!ok) return;
+    if (fd === undefined) return;
     const text = JSON.stringify(line) + '\n';
     if (!force && bytes + text.length > SPOOL_MAX_BYTES) return;
     try {
-      appendFileSync(path, text, { mode: 0o600 });
+      writeSync(fd, text);
       bytes += text.length;
     } catch {
-      ok = false;
+      close();
     }
   };
+  const close = (): void => {
+    if (fd === undefined) return;
+    try {
+      closeSync(fd);
+    } catch {
+      /* already closed */
+    }
+    fd = undefined;
+  };
   try {
-    mkdirSync(join(workspace, BINDING_DIR), { recursive: true });
+    mkdirSync(dir, { recursive: true });
+    if (!lstatSync(dir).isDirectory()) throw new Error('binding folder is not a directory');
     rmSync(path, { force: true });
-    writeFileSync(path, '', { mode: 0o600, flag: 'wx' });
-    chmodSync(path, 0o600);
+    fd = openSync(
+      path,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      0o600,
+    );
   } catch {
-    ok = false;
+    fd = undefined;
   }
   put({ lease_id: leaseId }, true);
   return {
@@ -84,6 +100,7 @@ export function openWakeWatchSpool(workspace: string, leaseId: string): WakeWatc
     },
     end(clean) {
       put({ end: clean ? 'clean' : 'early' }, true);
+      close();
     },
   };
 }
