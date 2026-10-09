@@ -22,6 +22,8 @@ The freshen never happens on wanderer's checkout while `.grok/config.toml.bak` a
 
 `.musterd/wake-lease.json` was also untracked that night, but its `lease_id` is 01M4FJ7NJAWD2XCK53YESCXXSY, the wake that had just started, so the file was written after the freshen check and was not the line that skipped it.
 
+Grokbot the same night: workspace HEAD was detached at 3000d63b (#2144, 2026-10-06) while origin/main was e185f0ec0, porcelain `?? .musterd/` (`repo-servers.json` untracked; `wake-lease.json` also present, the same post-freshen write wanderer measured). Named-branch skip did not recur — HEAD is detached — so the skip is the untracked `.musterd/` dirt (2026-10-08 grokbot; falsify: with `.musterd/repo-servers.json` ignored or removed and no other porcelain, grokbot's next dream host log says `checkout freshened`) <!-- claim: defect -->
+
 ## The packet carries the skill
 
 From #2054 the `musterd dream` output carries `packet.skill { path, text }`, read from the runtime checkout (`/Users/nick/.musterd/runtime`), so a seat whose workspace stays stale still reads the current dreaming skill (2026-10-04 miley, insight 01M458PBWTYKTBDHKV1PX1GVP4; seen again in dreamy's 2026-10-04 packet, which also carried the field; falsify: a post-#2054 packet with no `skill` field, or `packet.skill` text that does not match the runtime checkout's `.agents/skills/dreaming/SKILL.md`) <!-- claim: other -->
