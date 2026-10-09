@@ -2478,7 +2478,8 @@
   right: 12px;
 }
 .lc-boardspot__caret {
-  color: var(--lc-muted);
+  /* --lc-dim, not --lc-muted: on the oak under the asks sheet's dim, muted read 4.44 (CI, #2300). */
+  color: var(--lc-dim);
 }
 .lc-boardspot:hover .lc-boardspot__tag,
 .lc-boardspot:focus-visible .lc-boardspot__tag {
