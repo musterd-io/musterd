@@ -68,12 +68,22 @@ laptop was on battery (32 %, discharging) when I checked, after the stream resta
 stop idle sleep but not a closed lid, so a lid close with the stream live is a real path. No stream
 was live in those windows, so none of it is a measured outage.
 
+**A daemon outage of 90 s does not take the stream down (2026-10-09; falsify: on a live hosted stream, `iptables -I OUTPUT -d <daemon tailnet ip> -j DROP` for 90 s, then read `ps` and `fly logs` — a changed ffmpeg pid, a new machine, or a `relaunching` / `capture back` line falsifies this)** <!-- claim: other -->
+
+This stands in for the laptop sleeping: from the box the daemon (`100.100.246.14:4849`) simply goes
+away. Dropped for 90 s on machine `781e029ce950d8` (01:09:15Z), the block confirmed with a probe
+(`curl` to `/health` returned `000` while the rule was in, `200` after). node 959, ffmpeg 966 and
+Chrome 967 kept their uptimes, the machine did not change, and `fly logs` carried no watchdog,
+relaunch or ffmpeg error line. The page keeps drawing locally, so the frame watchdog (arrival-based)
+never sees a gap. **Not seen:** what the picture showed (a live office, or a frozen one), and whether
+the page's data reconnected cleanly afterwards; nobody was watching Twitch. And 90 s is shorter than
+a real sleep: a closed lid is minutes to hours, and `ensure` cannot relaunch anything while the laptop
+is down.
+
 **Not measured, and why:**
 
-- Laptop sleep while live. The box only sees the daemon go away. The page may keep animating
-  without it, so the stream could stay up with a frozen office; I have not seen which. Reproduce from
-  the box (drop the route to the daemon's `:4849`) rather than by sleeping the laptop, which would
-  also take the daemon, and every seat, down.
+- A daemon outage of minutes, and the picture during and after any outage. Needs someone watching
+  Twitch, or a capture of the page.
 - Twitch rejecting the key. Needs a deliberately wrong key on a live stream; the reset above is the
   closest stand-in and does not tell a rejected key from a dropped session.
 - How long Twitch shows the channel offline for each of those. Needs a watcher on Twitch's side.
