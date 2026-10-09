@@ -67,7 +67,8 @@ the lines. A run that reaches the cap ends with `Main child exited normally with
 
 **Eval.** Dataset: the hosted box, one reset per run. Baseline (before, 2026-10-09, image `b8c90e58e30e`): 3 s
 `tcp-reset` -> `◉ live` in 7 s, session closed by Twitch 1 s later, machine ended, `ensure` replaced it.
-Pending: the same test on the image built from this change.
+After (2026-10-09, image `917843deea30`): same machine, two relaunches (Twitch closed the first at 04:05:39,
+accepted the second), `◉ live` that held 14 s after the reset. One run.
 
 **Experiment.** On the hosted box, `iptables -I OUTPUT -p tcp --dport 443 -j REJECT --reject-with tcp-reset`
 for 3 s while the stream is live. The machine id must be unchanged and `fly logs` must end with a `◉ live`
