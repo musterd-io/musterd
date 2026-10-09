@@ -224,6 +224,68 @@ data shows a solo founder running many agents on the smallest tier with almost n
 **Stale and not to be quoted until refreshed:** the "wasted work fell from 65–83% to 0.6–10.6%" finding
 behind ADR 461's price anchor is a July pilot; the refresh lane `01M1VDRC6B` is open and unowned.
 
+## What carries over from the traction plan (read 2026-10-09)
+
+[`traction-plan.md`](../../design/traction-plan.md) is sloane's, dated 2026-09-16, and no reply from
+sloane on what has changed is recorded, so this is **alfie's read of the document against today's
+facts**, not sloane's update. Three buckets. The plan stays where it is; this section does not edit it.
+
+**Superseded by nick's statements today — do not reuse the plan's version:**
+
+| Traction plan says | Today |
+|---|---|
+| Window is nine weeks to 2026-11-20, "household income covered through roughly May 2027" (§1) | Runway is about 3 months, to about Jan 9, 2027, and the limit is visible progress toward income (see "Runway"). The May figure conflicts; nick's statement today wins |
+| First user is a solo developer with two or more harnesses; second is a 2–5 person team (§3) | First buyer is product and dev teams; solo builders feed in. Close, not the same: the plan's own line that the solo user "later brings it to the second" is consistent with it |
+| Weekly funnel: 3–5 installs a week, 10 installs and 3 active by Oct 28, 5 installs by Oct 14 (§6, §13) | `docs/design/traction-log.tsv` has **no data rows** as read today, so the Oct 14 and Oct 28 measures are already missed or unlogged. Replaced by Oct 16 (first outside partner) and Oct 20 (10-minute stranger test) |
+| Public launch Oct 28 – Nov 2 with Show HN, Reddit and an X thread (§7) | The repo has been private since Oct 3; the launch waits on the Oct 20 visibility decision. A Show HN with no repo to open has not been planned |
+| "Not built in the window: pricing" (§3, §15) | Pricing is now in scope; this spec drafts the structure and ADR 461 is a dated claim |
+| Public GitHub, npm and Homebrew as live surfaces (§1, §2) | npm and Homebrew as before; GitHub is private |
+
+**Still holds — use as written:**
+
+- **The ask.** "Try it with your team for two weeks; I'll sit with you for the first hour" (§6) is the
+  concierge offer above, almost word for word.
+- **The qualifying question.** "Do you run more than one agent session?" (§6) is a cheap filter before
+  the founder guide's question 1.
+- **Watch, don't help, write down where they got stuck.** (§6) The product research is the stuck point;
+  the install is the excuse for it. This is the Oct 16 and Oct 20 method.
+- **One quotes file, with name, date and what they were doing** (`docs/design/quotes.md`, 50 lines
+  today). It is the evidence an application cites. The "what would you pay" answer belongs there too.
+- **Read the measures as diagnostics** (§13): many conversations but few qualified means the wrong rooms;
+  many qualified but few attempts means the ask is wrong; many attempts but few installs means the
+  product broke. Re-run the install test after each fix.
+- **Counting rules.** The product has no usage analytics ([PRIVACY.md](../../../PRIVACY.md)), so
+  installs and "still using it" are hand-counted. npm downloads: read the **current version only**; the
+  headline counts registry mirrors and ran 2× to ~40× the current-version figure depending on the
+  window. 12 downloads a week of the then-current CLI on 2026-09-19. Never quote the headline, and quote
+  a ratio only with its window.
+- **YC detail not above.** Apply on time with the same numbers; the video is the 2-minute demo; whether to
+  join the batch is nick's and can wait for the Dec 11 answer (§12).
+- **The fallback has groundwork.** Traction plan §16 holds the product-manager track (story, target tiers,
+  a portfolio gap: **no musterd case study** on `sandrise.io/nicksanders`, and interview talking points that
+  were a version behind). That is the "continue or fallback" decision's second branch; nick's call
+  whether to keep it alive in parallel. Not read in full here.
+
+**Unverified, dated 2026-09-16 — a lead, not a fact:**
+
+- §12's cohort table (Conviction Embed, Neo, SPC, Sequoia Arc, OpenAI Grove, AI Grant, HF0, Mozilla
+  Builders, Google for Startups, Claude for Startups, Techstars/Antler/Alchemist/500). See "Verified".
+- §11's people and companies: Band (nick met the team 2026-07-03; "worth a second coffee"), Multica,
+  Pilot Protocol, xpander, and the funds the plan names as having priced this cell (Version One, Pico,
+  Sierra/Hetz/Team8). The funding figures behind them are from the landscape doc, not re-read.
+- §10's events: AGNTCon + MCPCon NA (Oct 22–23), AI Engineer Code Summit (Nov 10–12, invitation only),
+  SF Demo Night. The Code Summit speaker CFP closed Oct 11. Re-check each before travelling. Whether the
+  Oct 7 Startup Grind demo happened or went anywhere is not in the log.
+- §9's "small things that travel" skills track (`agent-whiteboard` and three more): whether any shipped is
+  not checked here.
+- nick's in-person time drops from 2026-11-20 (§1). nick has not restated this today; it sets how many
+  weeks remain for events and installs by hand. **Ask nick before using it.**
+
+**Lessons from the Oct 1 Multiplayer AI demo** (weekly log, 2026-10-05) change the live demo more than
+the plan: product first, vote only after an act has landed, no typed arguments on stage, and rehearsed
+one-line answers to the six questions the room asked. They are carried into the live-demo brainstorm, not
+repeated here.
+
 ## Plan structure
 
 1. Who the product and dev teams are, and why they would switch. *(first-10-minutes section; thin)*
@@ -237,8 +299,9 @@ behind ADR 461's price anchor is a July pilot; the refresh lane `01M1VDRC6B` is 
 - **Next question for nick:** after the founder conversations, which pain is most common — that sets the
   first demo and the 90-day plan. Until then, the accelerator list in `traction-plan.md` §12 still needs
   re-verifying, and the subscription needs a unit to be priced per (see the monetization section).
-- What in `traction-plan.md` is stale, and what has sloane learned since 2026-09-16? Asked of sloane on
-  2026-10-09; no reply recorded yet.
+- What has sloane learned since 2026-09-16? Asked of sloane on 2026-10-09; no reply recorded yet. What is
+  stale in `traction-plan.md` is answered from the document in "What carries over"; sloane's reply, if it
+  comes, corrects that section.
 - Cost-to-serve for musterd Cloud (hosting, Postgres, relay per team) — no figure exists.
 
 ## Not here
