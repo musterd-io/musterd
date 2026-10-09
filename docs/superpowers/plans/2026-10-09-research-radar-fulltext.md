@@ -36,7 +36,7 @@
 
 ## File Map
 
-- `scripts/radar/types.ts` — canonical candidate, attached Exploring Next references, retry records, and read-manifest types.
+- `scripts/radar/types.ts` — canonical candidate, attached Exploring Next references, and retry-ledger types.
 - `scripts/radar/config.ts` — full-text retrieval and chunk limits alongside the existing timeout and candidate limits.
 - `scripts/radar/fetch.ts` — feed parsing that retains source references through cross-source deduplication.
 - `scripts/radar/content.ts` — HTTPS source URL checks and Exa full-text retrieval.
@@ -73,6 +73,7 @@ Each lane depends on the approved design-and-plan lane `01M4GQJSP8AQND8S8N6A82H0
 
 **Interfaces:**
 - `RadarCandidate` adds `relatedExn: Array<{ episodeId: string }>`; ordinary candidates use an empty array.
+- `SeenLedger` adds optional `pending?: PendingCandidate[]`, with absence read as an empty list. `PendingCandidate` contains only the retry metadata listed in Task 3. These shared types are added in Task 1 because that lane owns `types.ts`; Task 3 consumes them without editing the shared file.
 - `fetchArticleText(url: string, apiKey: string, fetchFn?: FetchFn): Promise<{ url: string; text: string }>` calls Exa in full-text mode and accepts only a successful, non-empty text result for the requested URL.
 - `fetchEpisodeScript(episodeId: string, fetchFn?: FetchFn): Promise<{ url: string; text: string }>` calls the public endpoint documented by the current Exploring Next OpenAPI/MCP surface. First verify that surface and pin its real request/response shape in the fixture; if no public read path exists, stop the task and report the gap instead of scraping a guessed route.
 - `isPublicHttpsUrl(value: string): boolean` rejects non-HTTPS URLs, embedded credentials, localhost and private/link-local IP literals. Validate returned/final URLs as well as submitted URLs.
@@ -131,7 +132,6 @@ Expected: every source chunk contributes to evidence and all incomplete-read cas
 - Modify: `scripts/radar/dedup.ts`
 - Modify: `scripts/radar/digest.ts`
 - Modify: `scripts/radar/sweep.ts`
-- Modify: `scripts/radar/types.ts`
 - Create: `scripts/radar/dedup.test.ts`
 - Modify: `scripts/radar/digest.test.ts`
 - Create: `scripts/radar/sweep.test.ts`
