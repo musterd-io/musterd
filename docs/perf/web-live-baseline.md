@@ -1099,3 +1099,28 @@ The worst frame stays inside the log's recorded envelope (42–794 ms) and nothi
 task; the p95 rise is 28 bodies walking in at once through the existing actor engine. An idle room
 parks at 0 ticks/s before and after a welcome (`?quiet&idle=all`), and under reduced motion a welcome
 runs with 0 rAF ticks (an off-loop timer steps it, and stops once it is done).
+
+### 2026-10-09 — /broadcast briefing: app CSS raised 7,600 → 8,000 B (lane 01M4FG5NWKCYSYQ9RWG06Y4TNC)
+
+The stream's lower-third (`BroadcastBriefing`, live-briefing spec inc 3) lives in `Broadcast.css`, which
+the budget classifies `app`. Measured on this branch (`pnpm --filter @musterd/web build && pnpm perf:check`):
+
+| Bundle (app group) | gzip B | Note                                          |
+| ------------------ | ------ | --------------------------------------------- |
+| `Board`            | 3,169  | unchanged                                     |
+| `Broadcast`        | 1,970  | ~+520 over main: the lower-third's own rules  |
+| `approvals`        | 1,823  | unchanged                                     |
+| `join`             | 539    | unchanged                                     |
+| `audit`            | 217    | unchanged                                     |
+| **group**          | 7,718  | against 7,600 — 118 B over, before the CI delta |
+
+Initial JS read 136.1 KB (was 136.2) and live CSS 20.1 KB (unchanged); total JS read 271.3 KB of 272.1,
+the feature's own ~0.5 KB of component code (lazy-loading cannot move total, ADR 183).
+
+No trim was available that keeps the surface: the overage is ~0.1–0.2 KB against ~0.5 KB of feature, so any
+cut that closes it removes the lower-third's styling. The live group (`Live.css`, 20,393 B of 20,800) has
+~0.2 KB free and cannot absorb it. A re-baseline may only tighten and measured + 15% loosens, so this is a
+raise, not a re-baseline. New ceiling is measured + the CI gzip delta + ~1.2%.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — app CSS must read under 7.8 KB. At or under
+  7.4 KB (main's), the lower-third has left the graph and this raise should go with it.
