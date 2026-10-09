@@ -137,15 +137,26 @@ export function NowOverlay({
     const el = card.current;
     const c = chip.current;
     if (!el || !c || !el.offsetParent) return;
+    const parent = el.offsetParent as HTMLElement;
+    // The room's asks strip and huddle rail share one box at its top; the card sits under it, never
+    // over it — the strip is where an ask is answered, and the rail grows and shrinks as huddles open.
+    const asks = parent.querySelector<HTMLElement>('.lc-office__asks');
     const place = () => {
-      const from = (el.offsetParent as HTMLElement).getBoundingClientRect();
+      const from = parent.getBoundingClientRect();
+      const below = asks ? asks.getBoundingClientRect().bottom - from.top + 12 : 72;
+      el.style.setProperty('--now-top', `${Math.max(72, Math.round(below))}px`);
       const to = c.getBoundingClientRect();
       el.style.setProperty('--now-dock-x', `${to.left - from.left - el.offsetLeft}px`);
       el.style.setProperty('--now-dock-y', `${to.top - from.top - el.offsetTop}px`);
     };
     place();
+    const ro = asks && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(place) : null;
+    if (asks) ro?.observe(asks);
     window.addEventListener('resize', place);
-    return () => window.removeEventListener('resize', place);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', place);
+    };
   }, [slot, mode]);
 
   // A goal row lights its people in the room; docking must not leave them lit.

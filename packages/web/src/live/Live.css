@@ -7303,10 +7303,11 @@
 .now-ov {
   position: absolute;
   z-index: var(--lc-z-overlay);
-  top: 72px;
+  /* Under the room's asks strip and huddle rail, measured by NowOverlay.tsx. */
+  top: var(--now-top, 72px);
   left: var(--lc-7);
   width: min(920px, calc(100% - 48px));
-  max-height: calc(100% - 92px);
+  max-height: calc(100% - var(--now-top, 72px) - 20px);
   display: flex;
   flex-direction: column;
   container-type: inline-size;

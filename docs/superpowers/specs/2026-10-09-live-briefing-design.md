@@ -119,7 +119,9 @@ the **members' own faces** (each person drawn as the office draws them, so the h
 "blocked"). Everything else is the `/live` paper and ink, in the three Recursive cuts. No gradient, no
 pulse, no pill, no legend.
 
-**Shape.** One card, `min(920px, 100vw − 48px)` wide, over the room. Top to bottom:
+**Shape.** One card, `min(920px, 100vw − 48px)` wide, over the room, placed just under the room's
+asks strip and huddle rail (measured, since the rail grows as huddles open — a fixed offset covered the
+huddle row in the first capture). Top to bottom:
 
 1. **Header row**: "Now", and the full-screen and dock controls.
 2. **Waiting on you** — only when the viewer is a signed-in human with asks routed to them (the briefing
@@ -144,9 +146,12 @@ pulse, no pill, no legend.
 4. Nothing else. The headline sentence, the In review section and the Blocked section are gone from the
    card: the counts live in the goal rows, and blocked lanes show inside their goal.
 
-**Faces.** A new `MemberFace` (inline SVG, about 24 px) draws a member's head from
-`office-scene/appearance.ts` (`appearanceOf`, already pure and stable per name) with the member's
-identity colour as a ring. Agents get the scene's antenna and visor, humans get eyes: the same tell the
+**Faces.** A new `MemberFace` (inline SVG, about 26 px) draws a member's head and shoulders from
+`office-scene/appearance.ts` (`appearanceOf`, already pure and stable per name): skin, hair and hat as
+on the floor, and shoulders in the member's identity colour, which is the colour of their top in the
+room. A first cut drew only a small head inside an identity-coloured ring; at row size nobody could be
+told apart (capture, 2026-10-09). A name the roster does not know gets a plain disc, never a made-up
+face. Agents get the scene's antenna and visor, humans get eyes: the same tell the
 room uses (ADR 079), so a member reads the same on the card and on the floor. It lives in the Now chunk,
 not the eager graph. Hovering a face names the member.
 
