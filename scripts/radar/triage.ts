@@ -12,6 +12,7 @@ import {
   promptPath,
 } from './config.ts';
 import type { FetchFn } from './fetch.ts';
+import type { CandidateReadResult } from './fullText.ts';
 import { completeAnthropic, extractJson } from './llm.ts';
 import type {
   RadarCandidate,
@@ -35,6 +36,7 @@ export type CompleteFn = typeof completeAnthropic;
 
 export interface TriageArgs {
   candidates: RadarCandidate[];
+  readResults?: CandidateReadResult[];
   apiKey: string;
   fetchFn?: FetchFn | undefined;
   completeFn?: CompleteFn | undefined;
@@ -54,7 +56,7 @@ function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
 
-function candidateBlock(c: RadarCandidate): string {
+function candidateBlock(c: RadarCandidate, evidence?: string): string {
   return [
     `id: ${c.id}`,
     `source: ${c.source}`,
@@ -62,7 +64,9 @@ function candidateBlock(c: RadarCandidate): string {
     `url: ${c.url}`,
     `published: ${c.published || 'unknown'}`,
     `categories: ${(c.categories ?? []).join(', ') || 'n/a'}`,
-    `abstract: ${(c.abstract ?? '').slice(0, 1200) || '(none)'}`,
+    evidence === undefined
+      ? `abstract: ${(c.abstract ?? '').slice(0, 1200) || '(none)'}`
+      : `full-text evidence (derived from every source chunk):\n${evidence}`,
   ].join('\n');
 }
 
@@ -189,6 +193,27 @@ export function selectShortlist(
 
 export async function runTriage(args: TriageArgs): Promise<TriageReport> {
   const warnings: string[] = [];
+  const readById = args.readResults
+    ? new Map(args.readResults.map((result) => [result.candidateId, result]))
+    : undefined;
+  const candidates = args.readResults
+    ? args.candidates.filter((candidate) => {
+        const result = readById?.get(candidate.id);
+        if (result?.status === 'complete') return true;
+        warnings.push(
+          `full-text read failed for ${candidate.id}: ${result?.failure ?? 'missing_result'}`,
+        );
+        return false;
+      })
+    : args.candidates;
+  const evidenceById = new Map(
+    (args.readResults ?? [])
+      .filter(
+        (result): result is Extract<CandidateReadResult, { status: 'complete' }> =>
+          result.status === 'complete',
+      )
+      .map((result) => [result.candidateId, result.evidence]),
+  );
   const promptBody = args.promptBody ?? loadPromptBody();
   const floor = args.relevanceFloor ?? RELEVANCE_FLOOR;
   const shortlistMax = args.shortlistMax ?? SHORTLIST_MAX;
@@ -196,7 +221,7 @@ export async function runTriage(args: TriageArgs): Promise<TriageReport> {
   const tier2Model = args.tier2Model ?? TIER2_MODEL;
   const complete = args.completeFn ?? completeAnthropic;
 
-  if (args.candidates.length === 0) {
+  if (candidates.length === 0) {
     return {
       prompt_version: PROMPT_VERSION,
       tier1_model: tier1Model,
@@ -212,8 +237,8 @@ export async function runTriage(args: TriageArgs): Promise<TriageReport> {
     };
   }
 
-  const tier1User = `Candidates (${args.candidates.length}):\n\n${args.candidates
-    .map(candidateBlock)
+  const tier1User = `Candidates (${candidates.length}):\n\n${candidates
+    .map((candidate) => candidateBlock(candidate, evidenceById.get(candidate.id)))
     .join('\n\n---\n\n')}`;
 
   let tier1: Tier1Hit[] = [];
@@ -226,7 +251,7 @@ export async function runTriage(args: TriageArgs): Promise<TriageReport> {
       apiKey: args.apiKey,
       fetchFn: args.fetchFn,
     });
-    tier1 = parseTier1(extractJson(reply.text), args.candidates);
+    tier1 = parseTier1(extractJson(reply.text), candidates);
   } catch (err) {
     warnings.push(`tier-1 failed: ${err instanceof Error ? err.message : String(err)}`);
     return {
@@ -234,7 +259,7 @@ export async function runTriage(args: TriageArgs): Promise<TriageReport> {
       tier1_model: tier1Model,
       tier2_model: tier2Model,
       relevance_floor: floor,
-      candidates_in: args.candidates.length,
+      candidates_in: candidates.length,
       shortlisted: 0,
       shortlist_truncated: false,
       tier1: [],
@@ -246,13 +271,13 @@ export async function runTriage(args: TriageArgs): Promise<TriageReport> {
 
   // Fill missing candidates as drop
   const hitIds = new Set(tier1.map((h) => h.id));
-  for (const c of args.candidates) {
+  for (const c of candidates) {
     if (!hitIds.has(c.id)) {
       tier1.push({ id: c.id, keep: false, score: 0, reason: 'tier-1 omitted' });
     }
   }
 
-  const { shortlist, truncated } = selectShortlist(args.candidates, tier1, shortlistMax);
+  const { shortlist, truncated } = selectShortlist(candidates, tier1, shortlistMax);
   if (truncated) {
     warnings.push(`shortlist truncated to ${shortlistMax} (tier-1 keep set larger)`);
   }
@@ -263,7 +288,7 @@ export async function runTriage(args: TriageArgs): Promise<TriageReport> {
       tier1_model: tier1Model,
       tier2_model: tier2Model,
       relevance_floor: floor,
-      candidates_in: args.candidates.length,
+      candidates_in: candidates.length,
       shortlisted: 0,
       shortlist_truncated: truncated,
       tier1,
@@ -274,7 +299,7 @@ export async function runTriage(args: TriageArgs): Promise<TriageReport> {
   }
 
   const tier2User = `Shortlist (${shortlist.length}):\n\n${shortlist
-    .map(candidateBlock)
+    .map((candidate) => candidateBlock(candidate, evidenceById.get(candidate.id)))
     .join('\n\n---\n\n')}`;
 
   let tier2: Tier2Result[] = [];
@@ -299,7 +324,7 @@ export async function runTriage(args: TriageArgs): Promise<TriageReport> {
     tier1_model: tier1Model,
     tier2_model: tier2Model,
     relevance_floor: floor,
-    candidates_in: args.candidates.length,
+    candidates_in: candidates.length,
     shortlisted: shortlist.length,
     shortlist_truncated: truncated,
     tier1,

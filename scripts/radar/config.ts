@@ -50,6 +50,12 @@ export const FETCH_RETRIES = 2;
 
 export const MAX_ABSTRACT_CHARS = 2_000;
 
+/** Full-text limits use Unicode code points so split points never bisect a character. */
+export const MAX_SOURCE_CHARS = 250_000;
+export const MAX_CANDIDATE_CHARS = 500_000;
+export const FULL_TEXT_CHUNK_CHARS = 50_000;
+export const FULL_TEXT_EVIDENCE_MAX_TOKENS = 1_024;
+
 /** Default lookback window for a weekly job. */
 export const DEFAULT_SINCE_DAYS = 7;
 
