@@ -1,0 +1,69 @@
+import type { Envelope } from '@musterd/protocol';
+
+/**
+ * The demo prompt bar's one decision (lane 01M4H4ARQC, Demo Day 2026-10-09): what a typed request
+ * becomes on the wire. It mirrors `musterd huddle open --topic design:demo --anchor … --to
+ * dolly,big-body,ghost,wanderer --turns 40 "<request>"` (packages/cli/src/commands/huddle.ts), so the
+ * bar and the CLI fallback send the same envelope shape. Pure, so the shape is pinned by a test.
+ */
+
+/** The demo's cast, in the order the chips show them. */
+export const CAST = ['dolly', 'big-body', 'ghost', 'wanderer'] as const;
+
+/** An eligible set holds at most four (the CLI's MAX_ELIGIBLE). */
+export const MAX_CAST = 4;
+
+export const DEMO_ANCHOR = 'docs/demo/demo-day-2026-10-09/rehearsal-log.md';
+
+/** The CLI's default room pattern (`<whiteboard base>/b/huddle-<id>`); the whiteboard is not part of
+ *  the demo, so nothing opens it — HuddleMetaSchema only needs a valid URL. */
+const WHITEBOARD_BASE = 'http://127.0.0.1:4851';
+
+export type PromptAct = {
+  act: Envelope['act'];
+  to: Envelope['to'];
+  body: string;
+  meta: Record<string, unknown>;
+};
+
+/**
+ * Two or more on: a huddle on the team with that eligible set — what the CLI's `--to a,b,c` makes.
+ * Exactly one on: a plain directed message to that seat (a doorbell wake). None: nothing to send.
+ */
+export function promptAct(text: string, on: readonly string[], roomId: string): PromptAct | null {
+  const body = text.trim();
+  const cast = on.slice(0, MAX_CAST);
+  if (!body || cast.length === 0) return null;
+  if (cast.length === 1) {
+    return { act: 'message', to: { kind: 'member', name: cast[0]! }, body, meta: {} };
+  }
+  return {
+    act: 'message',
+    to: { kind: 'team' },
+    body,
+    meta: {
+      huddle: {
+        topic: { kind: 'design', id: 'demo' },
+        room: `${WHITEBOARD_BASE}/b/huddle-${roomId.toLowerCase()}`,
+        anchor: DEMO_ANCHOR,
+        budget: { turns: 40 },
+      },
+      eligible: [...cast],
+    },
+  };
+}
+
+/** `?promptbar=1` / `?promptbar` or `#promptbar` — the first of the bar's three gates. */
+export function promptBarFlag(search: string, hash: string): boolean {
+  if (hash === '#promptbar') return true;
+  const v = new URLSearchParams(search).get('promptbar');
+  return v !== null && v !== '0' && v !== 'false';
+}
+
+/**
+ * All three gates (lane 01M4H4ARQC): the flag, a signed-in member (never the read-only observer,
+ * ADR 063), and an admin. Any one missing and the route mounts nothing.
+ */
+export function promptBarVisible(g: { flag: boolean; signedIn: boolean; admin: boolean }): boolean {
+  return g.flag && g.signedIn && g.admin;
+}
