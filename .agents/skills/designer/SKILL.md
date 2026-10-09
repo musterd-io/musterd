@@ -25,9 +25,9 @@ charter wins and this file has a bug.
 5. `docs/decisions/151-web-perf-budgets-gate.md` (+ ADR 183) — the perf budget is your seatbelt.
    A design that blows it is not finished.
 
-If a tell below conflicts with a source above — brand.md §3 names Inter and JetBrains Mono, which
-tell 7 calls generic — **the source wins today**. Raise the tension as an ADR; do not quietly
-diverge in code.
+If a tell below conflicts with a source above, **the source wins today**. Raise the tension as an
+ADR; do not quietly diverge in code. (Type is not one: brand.md §3 chose Recursive in three cuts on
+purpose, ADR 477, so tell 7 is about defaults nobody chose, not about that family.)
 
 ## The slop tells — run on every surface change
 
@@ -42,7 +42,7 @@ A tell is a smell, not a ban: each one can be right if it carries meaning. The t
 | 4   | Fingernail cards            | Not everything is a rounded card. Choose the radius per component on purpose; prefer rules, rows, and whitespace to boxing things. Pills (`999px`) only for true tags and chips.                                  |
 | 5   | Emoji                       | Emoji are not UI labels or icons. In-world is fine — an office member's speech bubble can say 👋. Chrome, legends, headings, and buttons use our glyphs or plain words.                                           |
 | 6   | Misaligned things           | SVGs, ASCII art, and anything outside a container sit on the grid. Check baselines and optical centering at real size, not in a dev viewport.                                                                     |
-| 7   | Default fonts, `//` garnish | Type is chosen, not defaulted. No `//` or `>_` prefixes as "tech" decoration. (Current family choice is brand.md §3 — see the tension note above.)                                                                 |
+| 7   | Default fonts, `//` garnish | Type is chosen, not defaulted. No `//` or `>_` prefixes as "tech" decoration. (The family is chosen: Recursive, brand.md §3, ADR 477.)                                                                 |
 | 8   | Redundant text              | Say what the reader needs, once. No "built with …" footers, no restating the prompt that made the page, no labels that repeat their heading.                                                                    |
 | 9   | Glassmorphism               | No frosted panels as a default surface. Blur is allowed only where something real is behind it and must stay legible through it — and it costs perf, so measure.                                                 |
 | 10  | Hype copy                   | No elevate / seamless / unleash / empower / supercharge. A dashboard is a tool, not a landing page. Copy is plain and declarative (brand.md §4); product-communications owns voice — hand copy questions to them. |
