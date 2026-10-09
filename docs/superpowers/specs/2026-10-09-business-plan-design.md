@@ -38,8 +38,48 @@ Fundraising and traction both outlast 3 months of runway, so the plan needs a br
 - **B. Design-partner-led.** Produces the evidence. Weakness: at an illustrative $200–500 a month each,
   three partners are $600–1,500 a month — proof of demand, not a living.
 - **C (chosen).** The design partners are the traction evidence in the applications, and each deadline
-  dates an install. Go/no-go check at about week 6: if no outside team has stuck with it, the install
-  experience is the problem, and fundraising cannot fix that.
+  dates an install. The first go/no-go was a week-6 check; since the first-run gaps are already known it
+  is now an observable 10-minute install test (see "First 10 minutes and retention").
+
+## First 10 minutes and retention (nick, 2026-10-09)
+
+- **First 10 minutes:** a new team wants to understand how musterd or a musterd agent helps, how to get
+  started, and then either to bring an existing project in as work items or to plan new work.
+- **Why they come back:** all work in one place; agents pick work up easily; humans see how work is
+  progressing and stay in the loop.
+
+**Gaps nick named (checked read-only against the repo, not tested as a new user):**
+
+1. No path imports work from outside musterd. The README quickstart ends at "agent online", not at "your work
+   is on a board".
+2. It is not intuitive why, when, or for what benefit to add agents to the team.
+3. No guided tour of what musterd is, what value it has, and how to use it.
+
+**Consequence for approach C:** the install experience is a known problem, so the week-6 go/no-go is
+replaced by an observable check: a stranger goes from install to their own work on the board in 10 minutes,
+with nick watching but not helping. The first design partners get concierge onboarding by hand; every
+repeated step is a candidate for the product to do itself. Costs nick's time, with about 25 days to the YC
+deadline.
+
+### When to add an agent
+
+nick's own reasons: capacity to build, research or brainstorm something new; a different model, to try it
+or get another perspective; a specific role or domain the team lacks. He rarely adds a seat to pick up
+existing work. Hypotheses about new teams (untested): an independent reviewer on another model; a second
+tool joining; a human teammate bringing their own agent; a parallel seat on a backlog slice.
+
+The likely lead reason is **connect the agents you already have**, not "add a seat": see the founders'
+setups below. This is a power user's view plus guesses; hold it until a design partner confirms it.
+
+## Design partners (nick, 2026-10-09)
+
+- **Candidates:** nick's wife, and a few founders he met recently (not cold, but new relationships). Aim for
+  at least two who are not friends or family, so the evidence holds in an application.
+- **Founders' setups:** Claude Code, Cursor, Codex, opencode, Grok, plus personal agents (muse, instinct,
+  hermes, dots, usually one per person). One to three repos; many dev agents each.
+- **Tested in musterd:** the five coding harnesses are first-class in the code. nick has **never tried**
+  the personal agents (muse, instinct, hermes, dots) in musterd; muse the model via opencode is covered by
+  opencode. Do not promise personal-agent support in an application until one has joined a team.
 
 ## Verified 2026-10-09 (web search; re-check before relying)
 
@@ -68,8 +108,9 @@ Fundraising and traction both outlast 3 months of runway, so the plan needs a br
 
 ## Open questions
 
-- **Next question for nick:** if a product or dev team tried musterd tomorrow, what do they do in the first
-  10 minutes, and what makes them keep it? Including whether install and first run are ready.
+- **Next question for nick:** what do you want to be able to show on Nov 2 (YC deadline), given about 25
+  days solo and the three first-run gaps above: how is the time split between building the first-run fixes
+  and recruiting partners?
 - What in `traction-plan.md` is stale, and what has sloane learned since 2026-09-16? Asked of sloane on
   2026-10-09; no reply recorded yet.
 - Cost-to-serve for musterd Cloud (hosting, Postgres, relay per team) — no figure exists.
