@@ -73,26 +73,45 @@ Notes from reading the code:
 - The "1 working" vs "3 working" mismatch is fixed here, by there being one definition, and pinned by a
   test that renders the headline and the lists from one fixture and asserts the counts agree.
 
-## `/live` — the Now panel
+## `/live` — the Now briefing (rebuilt 2026-10-09)
 
-- Replaces the team column. Four stacked sections: **Needs a human**, **In progress**, **In review**,
-  **Shipped (24 h)**.
-- **Needs a human** is the only loud section. Non-empty: a warm-amber band with a count; each row is a
-  card with kind (ask / approval / blocked / seat request), title, owner and how long it has waited.
-  Click opens the thing, as the asks strip and board overlay do now. Empty: a single calm line
-  ("nothing is waiting on anyone"), so an empty section reads as good news and not as a missing one.
-- The other three are quiet lists: title wrapped to two lines (three in the loud section; the full text is
-  on hover and one click away), owner chip, goal, age; five rows each plus "+N more on the board". Windowed, per the web contract (no unbounded mounts).
-- The topbar meter is replaced by the headline sentence.
-- The office stays. A seat that owns a blocked lane should get a small marker on its plate, so the picture
-  and the list agree. **Split out of increment 2 (2026-10-09)** into its own lane: the scene's glyph
-  overlay is driven by its own ask data and both routes read one room object, so it is a scene change,
-  not a panel change. Lane `01M4GP19XE5JEC6MA7YCGZGSK6`.
-- The per-member cards move to a **Team** tab on the same panel, so the whole roster (idle and away
-  included) is still one click away.
-- Phone: the panel is first and the office stays hidden, as today.
-- Seat-claim requests: fetched only when the viewer's credential is admin-grade; a failed or forbidden
-  read renders nothing, never an error.
+The first build was a **Now tab** beside Team in the team column. nick on seeing it: it "just looks like the
+team tab", the "needs a human" title should name the human, the items were "way too big", and the point
+is the thing a member needs *when they sign on in the morning having forgotten what they and the team did
+yesterday*: who is working on what, what the issues are, who has done what. It was rebuilt (lane
+`01M4GXHERZF6A2KFMBK2G616CK`) as follows; the team column is back exactly as it was.
+
+**One card, three homes.** An **overlay** over the room's left (the room stays live and untouched behind
+it), a **side tab** it docks to, and a **full-screen** layout. They share one set of geometry properties,
+so moving between them is a single transition: docked, the card is scaled onto the tab at the tab's
+position, so collapsing visibly shrinks *into* the tab and opening grows *out of* it. Not modal: it takes no
+focus, and Esc steps it down (full → overlay → tab). Reduced motion and `?still` skip the transition.
+
+**When it opens by itself.** On the first visit of a *period* (eight hours: a morning and the afternoon
+after it are one sitting), once, after the first paint so the entrance plays. Otherwise it starts docked.
+A phone never auto-opens (the overlay would cover the one column it has) and does not spend the period; its
+tab is a small pill in the team header. The stamp is written when the overlay actually opens, so an effect
+that runs twice cannot spend the period on a cancelled frame. Storage is a per-viewer convenience: if it
+throws, the briefing opens as on a first visit (`nowWhen.ts`).
+
+**What it says, grouped the way each question is asked** (the Team column is by person; this is not):
+
+- **Needs …, by the human who has to act.** Asks and seat claims under a heading built from what is being
+  asked of whom — "Needs approval from nick", "Needs approval and clarification from nick", "Needs an answer
+  from the team", "Needs approval from an admin" (seat claims, admin credential only). The wording is the
+  ask's own species (approve → approval, consult → clarification, escalate → an answer).
+- **Blocked**, under its own header: a lane names a dependency, not a person to ask, so no human is
+  invented. A blocked row says what it waits on when a dependency is declared and still open.
+- **In progress, by goal**: one line per goal with who is on it in the overlay; every lane in full view.
+- **Shipped since yesterday, by who shipped it**: one line per person in the overlay, their titles in full
+  view. "Yesterday" is the start of the previous *working* day in the viewer's own clock (Monday reaches back
+  to Friday), so the morning-after question has its answer; the topbar headline still counts the last 24 h.
+- **In review**: last, and shortest.
+
+Rows are one line each; the full title is on hover. Counts are lanes, not people. The rules in the section
+above hold: a lane is in progress only while its owner is present, and an ask needs a human only when it is
+team-wide or routed to a human. Rows open the lane or the ask exactly as the board and the asks strip do;
+"+N more" opens full view.
 
 ## `/broadcast` — built, then reverted (2026-10-09)
 
@@ -125,8 +144,7 @@ Seat-claim requests stay off any public surface (Decisions, 3).
 
 1. `briefing.ts` plus tests; the headline replaces the topbar meter. Fixes the count mismatch. Lane
    `01M4FG58SX6BBJ736S4W1CHASS`.
-2. The Now panel on `/live`, including the Team tab, the seat-request read and the office blocked
-   marker. Lane `01M4FG5JRAR3QD460DWC7M7E7M`.
+2. The Now panel on `/live` (merged #2265 as a tab; rebuilt as the overlay above, lane `01M4GXHERZF6A2KFMBK2G616CK`), including the seat-request read. The office blocked marker was split out. Lane `01M4FG5JRAR3QD460DWC7M7E7M`.
 3. The `/broadcast` lower-third. Lane `01M4FG5NWKCYSYQ9RWG06Y4TNC`.
 
 All three are under goal `launch`; the plan is

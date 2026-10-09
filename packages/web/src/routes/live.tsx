@@ -23,7 +23,8 @@ import { logOpenMode } from '../live/stillMode';
 import { revealWhenMounted } from '../live/reveal';
 import { LogDrawer } from '../live/LogDrawer';
 import { Ticker } from '../live/Ticker';
-import { briefing } from '../live/briefing';
+import { briefing, briefingSince } from '../live/briefing';
+import { NowOverlay } from '../live/NowOverlay';
 import { useSeatRequests } from '../live/useSeatRequests';
 import { TopMeter } from '../live/TopMeter';
 import type { LiveConfig } from '../live/client';
@@ -258,6 +259,7 @@ function LivePage() {
         roster,
         requests: seatRequests,
         now: Date.now(),
+        shippedSince: briefingSince(Date.now()),
       }),
     [board, report, asks, roster, seatRequests],
   );
@@ -641,12 +643,13 @@ function LivePage() {
               unreadable={rosterUnreadable}
               stale={rosterStale}
               asks={asks}
+            />
+            <NowOverlay
               brief={brief}
+              roster={roster}
+              since={briefingSince(Date.now())}
               onOpenLane={setBoardLane}
               onOpenAsk={onActClick}
-              onOpenBoard={() =>
-                openBoard(new DOMRect(window.innerWidth / 2, window.innerHeight / 2, 1, 1))
-              }
             />
           </div>
           {/* The headline ticker (ADR 464 §5): the last few notable moments, under the room. */}
