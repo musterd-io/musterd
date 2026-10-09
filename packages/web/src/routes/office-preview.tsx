@@ -633,6 +633,13 @@ function OfficePreviewPage() {
         </button>
         <button
           className="lc__pbtn"
+          title="claim a lane (walk to the board, take the card)"
+          onClick={() => fire({ kind: 'walk-claim', who: 'Dev', lane: 'preview-lane', title: 'Rotate the leaked keys' })}
+        >
+          ⇡
+        </button>
+        <button
+          className="lc__pbtn"
           title="broadcast (megaphone)"
           onClick={() => fire({ kind: 'megaphone', from: 'Ivy' })}
         >

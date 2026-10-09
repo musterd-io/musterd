@@ -740,6 +740,23 @@ function drawCarry(ctx: CanvasRenderingContext2D, px: (j: V3) => Proj, k: Skel, 
     return;
   }
   const wr = px(k.wrist[1]);
+  if (kind === 'card') {
+    // The lane's card, off the wall board: the open column's unbleached paper with its washi tab still
+    // on it — the same note the wall was showing a second ago, so the eye follows it home.
+    // The wall's own sticky size (~17×11 units), so the card reads at room scale; the dark rim is what
+    // keeps pale paper legible against a pale shirt — at a first cut of 10×7 it vanished into the body.
+    const w = 15 * u;
+    const h = 10 * u;
+    ctx.fillStyle = 'rgba(60, 40, 20, 0.22)';
+    ctx.fillRect(wr.p.x - w / 2 + u, wr.p.y - h + u, w, h); // a hair of shadow
+    ctx.fillStyle = '#8f8470';
+    ctx.fillRect(wr.p.x - w / 2 - 0.7 * u, wr.p.y - h - 0.7 * u, w + 1.4 * u, h + 1.4 * u); // the rim
+    ctx.fillStyle = '#EFE8D8';
+    ctx.fillRect(wr.p.x - w / 2, wr.p.y - h, w, h);
+    ctx.fillStyle = 'rgba(180, 168, 143, 0.9)';
+    ctx.fillRect(wr.p.x - 3.5 * u, wr.p.y - h - 1.6 * u, 7 * u, 3 * u); // the washi tab
+    return;
+  }
   if (kind === 'phone') {
     // A phone, held at whatever the pose has done with the right hand — which on a call is the ear.
     const w = 4.2 * u;

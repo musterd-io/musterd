@@ -289,3 +289,20 @@ describe('helpWalks — one trip per seat, in the order the sender named them', 
     expect(helpWalks(ev([]))).toEqual([]);
   });
 });
+
+describe('claiming a lane (nick, 2026-10-09)', () => {
+  it('sends the claimer to the board for the lane it claimed', () => {
+    const e = env('message', {
+      from: 'izzo',
+      to: { kind: 'team' } as Recipient,
+      meta: { lane_claim: { lane: '01LANE', title: 'Rotate the leaked keys' } },
+      body: '[lane] claimed "Rotate the leaked keys"',
+    });
+    expect(actToEvent(e)).toEqual({
+      kind: 'walk-claim',
+      who: 'izzo',
+      lane: '01LANE',
+      title: 'Rotate the leaked keys',
+    });
+  });
+});

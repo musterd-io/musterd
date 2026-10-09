@@ -17,6 +17,8 @@ export interface WallSticky {
   /** Stable per-lane hash — seeds the placement jitter so notes don't reshuffle on repaint. */
   seed: number;
   state: LaneState;
+  /** Someone is walking off with this card (a claim in flight): its slot stays, its paper does not. */
+  taken?: true;
 }
 
 export interface WallBoardColumn {
@@ -50,6 +52,22 @@ export function laneSeed(id: string): number {
     h = Math.imul(h, 0x01000193);
   }
   return h >>> 0;
+}
+
+/**
+ * The board as it reads while someone has a card in their hand (nick, 2026-10-09): a lane being claimed
+ * leaves an empty slot in the OPEN column from the moment it is taken until the board's own refresh
+ * moves it to "claimed". Only the open column — the same lane already showing under "claimed" is the
+ * card arriving, not leaving. Pure; returns the input untouched when nothing is taken.
+ */
+export function withTaken(board: WallBoard | null, taken: readonly number[]): WallBoard | null {
+  if (!board || taken.length === 0) return board;
+  const t = new Set(taken);
+  return board.map((col) =>
+    col.key !== 'open' || !col.stickies.some((s) => t.has(s.seed))
+      ? col
+      : { ...col, stickies: col.stickies.map((s) => (t.has(s.seed) ? { ...s, taken: true as const } : s)) },
+  );
 }
 
 /** Project the real lane board down to what the wall can carry. Null in, null out. */

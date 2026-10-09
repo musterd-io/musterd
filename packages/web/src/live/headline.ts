@@ -129,8 +129,11 @@ export function headline(env: Envelope, ctx: HeadlineContext): Headline | null {
  * "handing off → dolly" · "asking for help" · "redirecting izzo". One home with `headline()`, so
  * the band and the room say the same thing about the same act.
  */
-export function walkTag(kind: 'handoff' | 'help' | 'steer', to: string | null): string {
+export function walkTag(kind: 'handoff' | 'help' | 'steer' | 'claim', to: string | null): string {
   switch (kind) {
+    case 'claim':
+      // `to` is the lane's title here: what they are on their way to pick up.
+      return to ? `claiming ${to}` : 'claiming a lane';
     case 'handoff':
       return to ? `handing off → ${to}` : 'handing off';
     case 'help':

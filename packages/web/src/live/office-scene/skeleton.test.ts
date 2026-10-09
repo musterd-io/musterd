@@ -11,6 +11,7 @@ import {
   handsInLap,
   seedOf,
   solveSkeleton,
+  SPLIT_BEATS,
   STRIDE,
   typingBurst,
   type SkelInput,
@@ -227,15 +228,30 @@ describe('typing', () => {
 
 describe('seated micro-beats', () => {
   const kinds = Object.values(GESTURE);
+  const halves = new Set(SPLIT_BEATS.flat());
 
   it('every beat starts and ends at the plain seated pose — no pop on entry or exit', () => {
     const plain = solveSkeleton(sit());
-    for (const kind of kinds) {
+    for (const kind of kinds.filter((k) => !halves.has(k))) {
       for (const gT of [0, 1]) {
         const s = solveSkeleton(sit({ gesture: kind, gestureT: gT }));
         expect(s.wrist[1].y).toBeCloseTo(plain.wrist[1].y, 4);
         expect(s.head.z).toBeCloseTo(plain.head.z, 4);
       }
+    }
+  });
+
+  it('a split beat is one motion: rest → the seam → rest, with no jump at the seam', () => {
+    const plain = solveSkeleton(sit());
+    for (const [first, second] of SPLIT_BEATS) {
+      const start = solveSkeleton(sit({ gesture: first, gestureT: 0 }));
+      const end = solveSkeleton(sit({ gesture: second, gestureT: 1 }));
+      expect(start.wrist[1].y).toBeCloseTo(plain.wrist[1].y, 4);
+      expect(end.wrist[1].y).toBeCloseTo(plain.wrist[1].y, 4);
+      const a = solveSkeleton(sit({ gesture: first, gestureT: 1 }));
+      const b = solveSkeleton(sit({ gesture: second, gestureT: 0 }));
+      expect(a.wrist[1].y).toBeCloseTo(b.wrist[1].y, 4);
+      expect(a.wrist[1].y).toBeGreaterThan(plain.wrist[1].y + 10); // and the seam is up at the board
     }
   });
 

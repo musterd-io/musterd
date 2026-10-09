@@ -81,7 +81,7 @@ import {
 } from './render';
 import { makeSpriteCache } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
-import type { WallBoard } from './wallboard';
+import { laneSeed, withTaken, type WallBoard } from './wallboard';
 import {
   enqueueSpeech,
   shapeSpeech,
@@ -565,6 +565,16 @@ export function mountOffice(
   let teamName = 'revive';
   let teamWorkingHours: OfficeData['teamWorkingHours'] = null;
   let wallBoard: WallBoard | null = null; // the wall's agile board (bake-time data)
+  /** Cards in someone's hand, and for a while after: a claimed lane's slot stays empty until the board's
+   *  own refresh has moved it to "claimed" (or 12s pass), so the card does not pop back onto the wall
+   *  between the walker sitting down and the board catching up. `laneSeed` → expiry (ms). */
+  const takenUntil = new Map<number, number>();
+  function wallBoardNow(): WallBoard | null {
+    const now = performance.now();
+    for (const seed of actors.takenSeeds()) takenUntil.set(seed, now + 12_000);
+    for (const [seed, until] of takenUntil) if (until < now) takenUntil.delete(seed);
+    return takenUntil.size ? withTaken(wallBoard, [...takenUntil.keys()]) : wallBoard;
+  }
   let heads = new Map<string, Pt>(); // home head anchors — where in-place cues sit
   let occupied = false; // any online member on the floor → overhead lights on
   let lightEnv: LightEnv = computeLightEnv(pstNowHours(), occupied); // office lighting from the PST clock
@@ -749,7 +759,7 @@ export function mountOffice(
       pet,
       actors.sceneFx(),
       recep,
-      wallBoard,
+      wallBoardNow(),
       teamWorkingHours,
       { welcome: welcomeRoom.paint },
     );
@@ -1704,7 +1714,7 @@ export function mountOffice(
       pet,
       actors.sceneFx(),
       recep,
-      wallBoard,
+      wallBoardNow(),
       teamWorkingHours,
       { sprites, dpr, welcome: welcomeRoom.paint },
     );
@@ -2368,6 +2378,15 @@ export function mountOffice(
           pushCue(ev.from, '#c6a3ff', '↦');
         }
         break;
+      case 'walk-claim':
+        // Claiming a lane (nick, 2026-10-09): to the wall board, think, take the card, carry it home.
+        if (actors.claim(ev.who, laneSeed(ev.lane))) {
+          const t = ev.title.length > 28 ? `${ev.title.slice(0, 27)}…` : ev.title;
+          walkTags.set(ev.who, walkTag('claim', t || null));
+        } else {
+          pushCue(ev.who, '#948DDE', '');
+        }
+        break;
       case 'megaphone':
         // Broadcast staging: the announcer raises a megaphone, a wave sweeps the room, and every other
         // present member gets a brief "heard it" pulse.
@@ -2494,7 +2513,7 @@ export function mountOffice(
         pet,
         actors.sceneFx(),
         recep,
-        wallBoard,
+        wallBoardNow(),
         teamWorkingHours,
         o,
       );
@@ -2611,7 +2630,7 @@ export function mountOffice(
         pet,
         actors.sceneFx(),
         recep,
-        wallBoard,
+        wallBoardNow(),
         teamWorkingHours,
         o,
       );
@@ -2662,7 +2681,7 @@ export function mountOffice(
         pet,
         actors.sceneFx(),
         recep,
-        wallBoard,
+        wallBoardNow(),
         teamWorkingHours,
         o,
       );

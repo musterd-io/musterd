@@ -220,3 +220,18 @@ describe('motion means something (ADR 464, lane 4)', () => {
     expect(body('positionLabels')).toContain('syncWalkTags()');
   });
 });
+
+describe('claiming a lane walks to the board (nick, 2026-10-09)', () => {
+  it('sends the claimer through actors.claim with the lane’s seed, and tags the walk', () => {
+    const at = index.indexOf("case 'walk-claim':");
+    expect(at).toBeGreaterThan(-1);
+    const body = index.slice(at, index.indexOf('break;', at));
+    expect(body).toContain('actors.claim(ev.who, laneSeed(ev.lane))');
+    expect(body).toContain("walkTag('claim'");
+  });
+
+  it('paints the wall from wallBoardNow(), so a card in someone’s hand leaves its slot empty', () => {
+    expect(index).not.toMatch(/recep,\s*wallBoard,/);
+    expect(index).toMatch(/recep,\s*wallBoardNow\(\),/);
+  });
+});

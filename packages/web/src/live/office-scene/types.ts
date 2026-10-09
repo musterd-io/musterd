@@ -198,7 +198,9 @@ export type CarryKind =
   | 'phone'
   | 'laptop'
   /** A first-day human's cardboard box, a plant poking out of it (lane 01M3F81DD9). */
-  | 'movingBox';
+  | 'movingBox'
+  /** The lane's card, just taken off the wall board by the member who claimed it (2026-10-09). */
+  | 'card';
 
 /** Motion intensity == notification tier (memory: travel-intensity == notification tiers). */
 export type Tier = 'ambient' | 'needs-attn' | 'urgent';
@@ -220,6 +222,8 @@ export type OfficeEvent =
   | { kind: 'note'; from: string; to: string[]; tone: ActTone }
   | { kind: 'walk-help'; from: string; to: string[]; tier: Tier }
   | { kind: 'walk-handoff'; from: string; to: string; label: string }
+  /** A lane claimed: the claimer walks to the wall board, takes the lane's card, carries it home. */
+  | { kind: 'walk-claim'; who: string; lane: string; title: string }
   | { kind: 'megaphone'; from: string }
   /** `of`: whose work was accepted (the act's recipient) — the celebration lands on THEM, not the
    *  acceptor. Null/absent for team-addressed accepts, where there is no single celebrant. */

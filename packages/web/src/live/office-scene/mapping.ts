@@ -30,6 +30,18 @@ export function actToEvent(env: Envelope): OfficeEvent | null {
   // Lane open/resolve/handoff (ADR 083 §4: an ordinary `message` + meta, no new act) get their own
   // choreography instead of collapsing into the generic team megaphone or 1:1 note.
   if (lane === 'lane_open') return { kind: 'screen-pulse', who: from, tone };
+  // A claim walks the claimer to the wall board for the card (nick, 2026-10-09). Before this it fell
+  // through to `message` and played the team megaphone, which said nothing about taking work.
+  if (lane === 'lane_claim') {
+    const c = env.meta?.['lane_claim'] as { lane?: unknown; title?: unknown } | undefined;
+    if (typeof c?.lane === 'string')
+      return {
+        kind: 'walk-claim',
+        who: from,
+        lane: c.lane,
+        title: typeof c.title === 'string' ? c.title : '',
+      };
+  }
   if (lane === 'lane_resolve') return { kind: 'resolve', who: from };
   if (lane === 'lane_handoff') {
     return to.kind === 'member'

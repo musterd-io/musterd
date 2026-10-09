@@ -2,6 +2,7 @@ import {
   CHECK_IN_MARKS,
   CHECK_IN_S,
   COFFEE_STAND,
+  BOARD_STAND,
   COOLER_STAND,
   DESK_SLOTS,
   ENTRANCE,
@@ -330,8 +331,12 @@ interface Walk {
   checkIn?: { mark: number; holdLeg: number };
   /** Built from a real act (help / handoff) — what the Welcome Wagon waits out before it starts. */
   act?: true;
+  /** A lane claim's trip to the wall board: which card (`laneSeed`), and the leg at which it leaves the
+   *  wall and is in the hand — from there until the walk ends, the board paints its slot empty. */
+  claim?: { seed: number; takeLeg: number };
 }
-type Req = { kind: 'help' | 'handoff'; to: string; urgent: boolean };
+type WalkReq = { kind: 'help' | 'handoff'; to: string; urgent: boolean };
+type Req = WalkReq | { kind: 'claim'; seed: number };
 
 /** How fast an errand ambles — slower than an act-walk; nobody hurries to the fridge. */
 const ERRAND_SPEED = 68;
@@ -481,7 +486,13 @@ export interface Actors {
     animate: boolean,
   ): void;
   /** Enqueue a walk to a teammate. Returns false if it can't play (mover or target not present). */
-  walk(from: string, req: Req): boolean;
+  walk(from: string, req: WalkReq): boolean;
+  /** Claiming a lane (nick, 2026-10-09): walk to the wall board, stand and think, reach up and take the
+   *  card (`seed` = `laneSeed(lane id)`), carry it home, set it down. A real act — it preempts an errand
+   *  and queues behind other act walks. False when the member is not in the room. */
+  claim(from: string, seed: number): boolean;
+  /** The cards in someone's hand right now (claim walks past their take leg), as `laneSeed`s. */
+  takenSeeds(): number[];
   /** Enqueue an ambient coffee run for a seated desk member (home → machine → pour → drink → home).
    * Self-generated filler, not a real act; returns false if the member can't stroll (absent, in the
    * nook/queue, exiting, or already busy). See ADR 086 Phase 2. */
@@ -914,7 +925,41 @@ export function createActors(): Actors {
     return false;
   }
 
+  /**
+   * The claim trip. Out at an act-walk's pace; at the board a 1.5s think (hand to chin, facing the
+   * wall), then the reach — up to the board, the card appears in the hand at the top — and back down
+   * with it; home carrying the card; a short set-down at the desk. ~6–8s end to end, depending on how
+   * far the desk is.
+   */
+  function buildClaim(from: string, seed: number, origin?: { lx: number; ly: number }): Walk | null {
+    const home = homes.get(from);
+    if (!home) return null;
+    const start = origin ?? home;
+    const avoid = othersAt(from);
+    const out = legsAlong(findPath({ lx: start.lx, ly: start.ly }, BOARD_STAND, avoid), 100, 1.2, 4.5, null);
+    const stand = out.length ? endOf(out) : { lx: start.lx, ly: start.ly };
+    const face = travelDir(stand.lx, stand.ly, stand.lx, 0); // the board hangs on the ly=0 wall
+    const back = legsAlong(findPath(stand, { lx: home.lx, ly: home.ly }, avoid), 100, 1.2, 4.5, 'card');
+    const legs: Leg[] = [
+      ...out,
+      hold(stand, face, 1.5, { overlay: GESTURE.chin }),
+      hold(stand, face, 0.35, { overlay: GESTURE.reach }),
+      hold(stand, face, 0.4, { carry: 'card', overlay: GESTURE.take }),
+      ...back,
+      hold(home, home.dir, 0.45, { carry: 'card' }),
+    ];
+    return {
+      legs,
+      i: 0,
+      t: 0,
+      small: home.small,
+      act: true,
+      claim: { seed, takeLeg: out.length + 2 },
+    };
+  }
+
   function build(from: string, req: Req, origin?: { lx: number; ly: number }): Walk | null {
+    if (req.kind === 'claim') return buildClaim(from, req.seed, origin);
     const home = homes.get(from);
     const target = homes.get(req.to);
     if (!home || !target) return null;
@@ -1046,6 +1091,31 @@ export function createActors(): Actors {
         walks.set(name, straightWalk(name, from, entrancePose(from), true, 'out'));
         doorPulses++;
       }
+    },
+    claim(from, seed) {
+      if (!homes.has(from) || exiting.has(from)) return false;
+      const inflight = walks.get(from);
+      if (inflight && (inflight.ambient || inflight.yield)) {
+        // Same contract as `walk`: a real act never queues behind filler — start from where they stand.
+        const w = buildClaim(from, seed, posesNow().get(from));
+        pending.delete(from);
+        if (w) {
+          walks.set(from, w);
+          return true;
+        }
+        walks.delete(from);
+      }
+      const q = pending.get(from) ?? [];
+      if (q.length >= 3) return false;
+      q.push({ kind: 'claim', seed });
+      pending.set(from, q);
+      if (!walks.has(from)) startNext(from);
+      return true;
+    },
+    takenSeeds() {
+      const out: number[] = [];
+      for (const w of walks.values()) if (w.claim && w.i >= w.claim.takeLeg) out.push(w.claim.seed);
+      return out;
     },
     walk(from, req) {
       if (!homes.has(from) || !homes.has(req.to) || from === req.to || exiting.has(from))

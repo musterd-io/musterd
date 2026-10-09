@@ -898,6 +898,9 @@ function wallLaneBoard(
     const noteW = 17;
     const noteH = 11;
     for (let s = 0; s < col.stickies.length; s++) {
+      // A card in someone's hand (a claim in flight) leaves its slot empty — the cork shows through
+      // exactly where the paper was, which is the whole read of "taken".
+      if (col.stickies[s]!.taken) continue;
       const seed = col.stickies[s]!.seed;
       // Seeded jitter, ±1.5 units across and ±0.8 up — pinned by a hand, stable across repaints.
       const ja = (((seed >>> (s * 3)) % 7) - 3) * 0.5;

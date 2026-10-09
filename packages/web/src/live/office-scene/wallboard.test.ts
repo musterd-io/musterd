@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Lane, LaneBoard } from '@musterd/protocol';
-import { laneSeed, projectWallBoard, STICKY_CAP, WALL_COLUMNS } from './wallboard';
+import { laneSeed, projectWallBoard, STICKY_CAP, WALL_COLUMNS, withTaken } from './wallboard';
 
 const lane = (over: Partial<Lane> = {}): Lane => ({
   id: 'L1',
@@ -84,5 +84,24 @@ describe('projectWallBoard — the board squinted at from across the room', () =
   it('seeds are stable per lane id and differ across ids', () => {
     expect(laneSeed('01KYX3DA20')).toBe(laneSeed('01KYX3DA20'));
     expect(laneSeed('a')).not.toBe(laneSeed('b'));
+  });
+});
+
+describe('withTaken — a card someone has walked off with', () => {
+  it('marks the lane taken in the open column only, keeping its slot', () => {
+    const wb = projectWallBoard(
+      board([lane({ id: 'A', state: 'open' }), lane({ id: 'B', state: 'open' }), lane({ id: 'A2', state: 'claimed' })]),
+    )!;
+    const out = withTaken(wb, [laneSeed('A'), laneSeed('A2')])!;
+    const open = out.find((c) => c.key === 'open')!;
+    expect(open.stickies.map((s) => s.taken === true)).toEqual([true, false]);
+    const claimed = out.find((c) => c.key === 'claimed')!;
+    expect(claimed.stickies.every((s) => !s.taken)).toBe(true);
+  });
+
+  it('returns the board untouched when nothing is taken', () => {
+    const wb = projectWallBoard(board([lane({ id: 'A' })]));
+    expect(withTaken(wb, [])).toBe(wb);
+    expect(withTaken(null, [1])).toBeNull();
   });
 });
