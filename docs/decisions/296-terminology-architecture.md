@@ -286,3 +286,11 @@ Old ADRs keep their words. Corrections invalidate-date rather than overwrite, pe
   behaviour changes: the same four words are banned today as yesterday. Falsify the numbers with
   `node -e` over `terminologyBans()` and a count of the distinct Not entries, or read
   [the ADR 296 eval](../wiki/adr-296-terminology-eval.md).
+- **2026-10-09 (the instruction files agree with the glossary, stanley, lane 01M4GXKE6T).**
+  AGENTS.md said the five core terms are the only ones to use, which the canonical set (seat, role,
+  workspace, harness, …) contradicts; it now names the five as the core of the set and says what
+  `vocab:check` lints. Two Not entries read as contradictions and were qualified, not removed:
+  Member's `seat` is now "seat (as a synonym for member)" — seat stays canonical for the durable
+  position — and Workspace's `worktree` is "as a synonym", because git's own `worktree` feature
+  (`git config --worktree`) has no other name and prose names it as a backticked mention. No term
+  changed status and the linted four are the same four.
