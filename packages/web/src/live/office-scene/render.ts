@@ -1382,7 +1382,15 @@ export function furnishedBox(): FitBox {
  * (the `magicAnchors` pattern: pure geometry out, index.ts places the element). The wall shears the
  * board, so the box brackets all four projected corners rather than trusting any two.
  */
-export function boardAnchor(fit: Fit): { x: number; y: number; w: number; h: number } {
+export function boardAnchor(fit: Fit): {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Screen y of the middle of the board's top edge — where its sign hangs. On a slanted wall the
+   *  box's top is the high corner, so this sits lower than `y`. */
+  topMidY: number;
+} {
   const { tc, uc, w: W, h: H } = WALL_BOARD;
   const edge = WALL_EDGES[WALL_BOARD.wall]!;
   const corners = [
@@ -1395,7 +1403,11 @@ export function boardAnchor(fit: Fit): { x: number; y: number; w: number; h: num
   const ys = corners.map((c) => c.y);
   const x = Math.min(...xs);
   const y = Math.min(...ys);
-  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+  const topMidY = Math.min(
+    wallPt(edge, tc, uc - H / 2 / WALL_H, fit).y,
+    wallPt(edge, tc, uc + H / 2 / WALL_H, fit).y,
+  );
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, topMidY };
 }
 
 /**

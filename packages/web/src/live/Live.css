@@ -2397,9 +2397,8 @@
     0 3px 22px -4px color-mix(in srgb, var(--lc-speech-tone) 58%, transparent);
 }
 /* ── the agile board's hotspot ─────────────────────────────────────────────────────────────────────
-   A real <button> laid over the painted wall board (the canvas takes no pointer events). Invisible at
-   rest — the board is scenery until you reach for it — then a warm ring + a small mono caption on
-   hover/focus. Sits in the label layer BELOW bubbles/nameplates (DOM order), and never on /broadcast
+   A real <button> laid over the painted wall board (the canvas takes no pointer events). At rest only
+   its sign shows (`__tag`, hung above it); hover/focus adds a warm ring and lifts the board. Sits in the label layer BELOW bubbles/nameplates (DOM order), and never on /broadcast
    (the scene only creates it under interactiveLabels). No backdrop-filter: office-block house rule. */
 .lc-boardspot {
   position: absolute;
@@ -2433,30 +2432,57 @@
   }
 }
 .lc-boardspot__tag {
+  /* The sign over the wall board (live-briefing spec, increment 5), in the board frame's own oak
+     (render.ts PINBOARD) so it reads as part of the room, not as chrome laid over it. Always shown:
+     the board opens, and before this only a hover said so. */
+  --lc-oak: #dcbf8e;
+  --lc-oak-lit: #f0dcb4;
+  --lc-oak-shade: #b9915f;
   position: absolute;
   left: 50%;
-  bottom: -6px;
-  transform: translate(-50%, 100%) translateY(-2px);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  /* Hung from the middle of the board's top edge, not the box's top: on the slanted wall the box's
+     top is the board's high corner (`--lc-sign-drop`, set by the scene from `boardAnchor`). */
+  bottom: calc(100% - var(--lc-sign-drop, 0px) + 12px);
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-family: var(--font-display, var(--font-sans));
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  line-height: 1;
   white-space: nowrap;
   color: var(--lc-text);
-  background: color-mix(in srgb, var(--lc-surface) 92%, transparent);
-  border: 1px solid var(--lc-border);
-  border-radius: var(--lc-r-sm, 6px);
-  padding: 2px 7px;
-  opacity: 0;
-  transition:
-    opacity var(--lc-dur-2) var(--lc-ease-out),
-    transform var(--lc-dur-3) var(--lc-ease-out);
-  pointer-events: none;
+  background: var(--lc-oak);
+  border-top: 1px solid var(--lc-oak-lit);
+  border-radius: 3px;
+  box-shadow: 0 2px 0 var(--lc-oak-shade);
+  padding: 4px 9px 5px;
+  pointer-events: auto;
+  transition: background var(--lc-dur-2) var(--lc-ease-out);
+}
+/* The two strings it hangs from. */
+.lc-boardspot__tag::before,
+.lc-boardspot__tag::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  width: 1px;
+  height: 10px;
+  background: var(--lc-oak-shade);
+}
+.lc-boardspot__tag::before {
+  left: 12px;
+}
+.lc-boardspot__tag::after {
+  right: 12px;
+}
+.lc-boardspot__caret {
+  color: var(--lc-muted);
 }
 .lc-boardspot:hover .lc-boardspot__tag,
 .lc-boardspot:focus-visible .lc-boardspot__tag {
-  opacity: 1;
-  transform: translate(-50%, 100%) translateY(0);
+  background: var(--lc-oak-lit);
 }
 
 /* the soft acknowledge pulse the moment a bubble is clicked (focus hands off to the stream flash) */

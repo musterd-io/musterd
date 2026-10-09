@@ -370,9 +370,17 @@ export function mountOffice(
           el.type = 'button';
           el.className = 'lc-boardspot';
           el.setAttribute('aria-label', 'Open the work board');
+          // The sign hung above the board (live-briefing spec, increment 5): it says what the board is
+          // and that it opens, before anyone has to find out by hovering. A child of the button, so a
+          // click on the sign is a click on the board.
           const tag = document.createElement('span');
           tag.className = 'lc-boardspot__tag';
           tag.textContent = 'work board';
+          const caret = document.createElement('span');
+          caret.className = 'lc-boardspot__caret';
+          caret.setAttribute('aria-hidden', 'true');
+          caret.textContent = '›';
+          tag.appendChild(caret);
           el.appendChild(tag);
           el.addEventListener('click', () => options.onBoardClick!(el.getBoundingClientRect()));
           if (options.onBoardHover) {
@@ -392,6 +400,8 @@ export function mountOffice(
     boardSpot.style.top = `${a.y}px`;
     boardSpot.style.width = `${a.w}px`;
     boardSpot.style.height = `${a.h}px`;
+    // How far below the box's top the board's top edge is at its middle — the sign hangs from there.
+    boardSpot.style.setProperty('--lc-sign-drop', `${a.topMidY - a.y}px`);
   }
   const ctx = canvas.getContext('2d')!;
   // Warm the izzocam chyron face the canvas labels/glyphs paint in, so they land on-brand from the

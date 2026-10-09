@@ -397,6 +397,17 @@ describe('the wall agile board', () => {
     expect(a.w).toBeGreaterThan(0);
     expect(a.h).toBeGreaterThan(0);
   });
+
+  // The sign hangs over the middle of the board's top edge (live-briefing spec, increment 5). On a
+  // slanted wall that is lower than the box's top, which is the board's high corner; a sign hung from
+  // the box top floated clear of the board, over the window (captured 2026-10-09 at 1440×900).
+  it('boardAnchor gives the top edge’s midpoint inside the box, below its top on a slanted wall', () => {
+    for (const f of [fit, fitFloor(1200, 900), fitFloor(700, 500)]) {
+      const a = boardAnchor(f);
+      expect(a.topMidY).toBeGreaterThan(a.y);
+      expect(a.topMidY).toBeLessThan(a.y + a.h);
+    }
+  });
 });
 
 /**
