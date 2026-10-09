@@ -2,11 +2,12 @@
  * Radar M4 — the emit rail: weekly digest + seen-ledger append (research-radar-plan §4.5, §5).
  *
  * A digest is a TRIAGE artifact — emitting an untriaged sweep is refused, because a bare candidate
- * list has no verdicts for a human to act on. The seen ledger gains EVERY candidate that entered
- * triage, not only the surfaced ones the plan first sketched: marking only surfaced ids would
- * re-pay tier-1 for the same ignores every single week (the fetch window overlaps the cadence).
- * A same-week re-emit refuses rather than overwriting — the first digest is data.
+ * list has no verdicts for a human to act on. Successfully triaged candidates enter the seen
+ * ledger, including ignores, so tier-1 is not repaid every week. A source-read or triage failure
+ * stays in the metadata-only pending queue for retry. A same-week re-emit refuses rather than
+ * overwriting — the first digest is data.
  */
+import { randomUUID } from 'node:crypto';
 import {
   copyFileSync,
   existsSync,
@@ -16,7 +17,6 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { loadSeen } from './dedup.ts';
 import { isoWeekString } from './fetch.ts';

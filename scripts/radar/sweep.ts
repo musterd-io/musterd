@@ -16,6 +16,7 @@ import { pathToFileURL } from 'node:url';
 import { DEFAULT_PRINT_LIMIT, DEFAULT_SINCE_DAYS, radarDir, repoRoot, seenPath } from './config.ts';
 import { loadSeen, mergeCandidates, partitionBySeen, partitionRadarCandidates } from './dedup.ts';
 import { sweepArxiv, sweepExn, sweepHf, type FetchFn } from './fetch.ts';
+import type { CandidateReadResult } from './fullText.ts';
 import { requireAnthropicKey } from './llm.ts';
 import { runTriage, type CompleteFn } from './triage.ts';
 import type { RadarCandidate, SweepReport, TriageReport } from './types.ts';
@@ -47,32 +48,6 @@ export interface SweepArgs {
 export interface SweepRunReport extends SweepReport {
   readFailures: Array<{ candidateId: string; failure: string }>;
 }
-
-type SweepReadResult =
-  | {
-      status: 'complete';
-      candidateId: string;
-      evidence: string;
-      manifest: Array<{
-        source: 'article' | 'exn';
-        url: string;
-        characters: number;
-        chunks: number;
-        complete: boolean;
-      }>;
-    }
-  | {
-      status: 'failed';
-      candidateId: string;
-      failure: string;
-      manifest: Array<{
-        source: 'article' | 'exn';
-        url: string;
-        characters: number;
-        chunks: number;
-        complete: boolean;
-      }>;
-    };
 
 export function parseArgs(argv: string[]): SweepArgs {
   let json = false;
@@ -164,7 +139,7 @@ export async function runSweep(args: SweepArgs): Promise<SweepRunReport> {
   const truncated = (selection?.truncated ?? false) || fresh.length > args.limit;
 
   let triage: TriageReport | undefined;
-  let readResults: SweepReadResult[] = [];
+  let readResults: CandidateReadResult[] = [];
   if (args.triage) {
     const apiKey = args.apiKey ?? requireAnthropicKey();
     if (args.fullText) {
@@ -174,7 +149,7 @@ export async function runSweep(args: SweepArgs): Promise<SweepRunReport> {
       readResults = await readCandidatesWithLimit(printed, (candidate) =>
         readCandidateFullText(candidate, {
           exaApiKey,
-          fetchFn,
+          ...(fetchFn ? { fetchFn } : {}),
           ...(args.completeFn ? { completeFn: args.completeFn } : {}),
         }),
       );
@@ -211,9 +186,9 @@ export async function runSweep(args: SweepArgs): Promise<SweepRunReport> {
 
 async function readCandidatesWithLimit(
   candidates: RadarCandidate[],
-  read: (candidate: RadarCandidate) => Promise<SweepReadResult>,
-): Promise<SweepReadResult[]> {
-  const results = new Array<SweepReadResult>(candidates.length);
+  read: (candidate: RadarCandidate) => Promise<CandidateReadResult>,
+): Promise<CandidateReadResult[]> {
+  const results = new Array<CandidateReadResult>(candidates.length);
   let cursor = 0;
   const workers = Array.from({ length: Math.min(3, candidates.length) }, async () => {
     for (;;) {

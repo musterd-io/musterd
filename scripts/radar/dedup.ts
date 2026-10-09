@@ -8,7 +8,7 @@ export function loadSeen(path = seenPath): SeenLedger {
     arxiv: Array.isArray(raw.arxiv) ? raw.arxiv.map(String) : [],
     hf: Array.isArray(raw.hf) ? raw.hf.map(String) : [],
     exn: Array.isArray(raw.exn) ? raw.exn.map(String) : [],
-    pending: Array.isArray(raw.pending) ? raw.pending : [],
+    ...(Array.isArray(raw.pending) ? { pending: raw.pending } : {}),
   };
 }
 

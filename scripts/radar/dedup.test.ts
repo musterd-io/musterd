@@ -37,7 +37,7 @@ describe('loadSeen', () => {
     dirs.push(dir);
     const file = join(dir, 'seen.json');
     writeFileSync(file, JSON.stringify({ arxiv: ['a'], hf: [], exn: [] }));
-    expect(loadSeen(file).pending).toEqual([]);
+    expect(loadSeen(file).pending ?? []).toEqual([]);
     expect(JSON.parse(readFileSync(file, 'utf8'))).not.toHaveProperty('pending');
   });
 });

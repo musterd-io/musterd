@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { commitRadarArtifacts, emitDigest, isoWeek, renderDigest } from './digest.ts';
 import { parseArgs } from './sweep.ts';
 import type { SweepReport } from './types.ts';
@@ -209,6 +209,41 @@ describe('emitDigest', () => {
     expect(seen.exn).not.toContain('episode-p1');
   });
 
+  it('clears a successful pending retry after recording its canonical and episode IDs', () => {
+    const dir = tempRadarDir();
+    writeFileSync(
+      join(dir, 'seen.json'),
+      JSON.stringify({
+        arxiv: [],
+        hf: [],
+        exn: [],
+        pending: [
+          {
+            sourceIds: [
+              { source: 'arxiv', id: '2608.01001' },
+              { source: 'exn', id: 'episode-p1' },
+            ],
+            canonicalId: '2608.01001',
+            title: 'P1',
+            url: 'https://x/1',
+            published: '2026-08-20',
+            episodeIds: ['episode-p1'],
+            firstAttempt: '2026-08-01',
+            lastAttempt: '2026-08-10',
+            failure: 'article_retrieval',
+          },
+        ],
+      }),
+    );
+
+    const result = emitDigest(report(), dir);
+    const seen = JSON.parse(readFileSync(join(dir, 'seen.json'), 'utf8'));
+    expect(result.pending).toBe(0);
+    expect(seen.pending).toEqual([]);
+    expect(seen.arxiv).toContain('2608.01001');
+    expect(seen.exn).toContain('episode-p1');
+  });
+
   it('refuses to overwrite an existing digest for the same week', () => {
     const dir = tempRadarDir();
     emitDigest(report(), dir);
@@ -230,7 +265,10 @@ describe('emitDigest', () => {
     writeFileSync(digestPath, 'previous digest');
     writeFileSync(seenPath, '{"arxiv":["old"],"hf":[],"exn":[]}\n');
     let renames = 0;
-    const replace = (from: string, to: string) => {
+    const replace = (
+      from: Parameters<typeof renameSync>[0],
+      to: Parameters<typeof renameSync>[1],
+    ) => {
       renames += 1;
       if (renames === 2) throw new Error('simulated replacement failure');
       renameSync(from, to);
@@ -245,6 +283,29 @@ describe('emitDigest', () => {
         replace,
       ),
     ).toThrow(/simulated replacement failure/);
+    expect(readFileSync(digestPath, 'utf8')).toBe('previous digest');
+    expect(readFileSync(seenPath, 'utf8')).toBe('{"arxiv":["old"],"hf":[],"exn":[]}\n');
+  });
+
+  it('preserves both prior artifacts when the first replacement fails', () => {
+    const dir = tempRadarDir();
+    const digestPath = join(dir, '2026-W35.md');
+    const seenPath = join(dir, 'seen.json');
+    writeFileSync(digestPath, 'previous digest');
+    writeFileSync(seenPath, '{"arxiv":["old"],"hf":[],"exn":[]}\n');
+    const replace: typeof renameSync = () => {
+      throw new Error('simulated first replacement failure');
+    };
+
+    expect(() =>
+      commitRadarArtifacts(
+        digestPath,
+        seenPath,
+        'new digest',
+        { arxiv: [], hf: [], exn: [] },
+        replace,
+      ),
+    ).toThrow(/simulated first replacement failure/);
     expect(readFileSync(digestPath, 'utf8')).toBe('previous digest');
     expect(readFileSync(seenPath, 'utf8')).toBe('{"arxiv":["old"],"hf":[],"exn":[]}\n');
   });
