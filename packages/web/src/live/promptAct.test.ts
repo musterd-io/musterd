@@ -26,13 +26,15 @@ describe('promptAct — the envelope the bar sends', () => {
     });
   });
 
-  it('with one member on, sends a plain directed message to that seat', () => {
-    expect(promptAct('hello', ['ghost'], 'x')).toEqual({
-      act: 'message',
-      to: { kind: 'member', name: 'ghost' },
-      body: 'hello',
-      meta: {},
-    });
+  // nick, 2026-10-09: a plain directed message to ghost sat in ghost's inbox — the wake rail only
+  // starts a sleeping seat for interrupt-class acts, and a huddle is one. So one name is a one-seat
+  // huddle, exactly what `musterd huddle open --to ghost` sends: it wakes them.
+  it('with one member on, opens a huddle addressed to that seat — which wakes it', () => {
+    const a = promptAct('hello', ['ghost'], 'x')!;
+    expect(a.act).toBe('message');
+    expect(a.to).toEqual({ kind: 'member', name: 'ghost' });
+    expect(a.meta['huddle']).toBeDefined();
+    expect(a.meta['eligible']).toBeUndefined();
   });
 
   it('sends nothing for empty text or nobody on, and never more than four', () => {
@@ -61,14 +63,12 @@ describe('the gates', () => {
 });
 
 describe('the reply footer (alfie, after the first rehearsal)', () => {
-  it('is the fixed text, verbatim, after a blank line — on a huddle only', () => {
+  it('is the fixed text, verbatim, after a blank line, on every huddle', () => {
     expect(REPLY_FOOTER).toBe(
       "Reply in this thread (team_send with thread = this act's id), not as a direct message. If you need nick, send an ask in this thread.",
     );
     expect(promptAct('hi', CAST, 'x')!.body.endsWith(`\n\n${REPLY_FOOTER}`)).toBe(true);
-    // A one-seat directed message is a conversation with that seat; "not as a direct message" would
-    // contradict it, so it goes without.
-    expect(promptAct('hi', ['ghost'], 'x')!.body).toBe('hi');
+    expect(promptAct('hi', ['ghost'], 'x')!.body.endsWith(`\n\n${REPLY_FOOTER}`)).toBe(true);
   });
 });
 
@@ -79,7 +79,7 @@ describe('audienceFor — the composer\'s @-picker (alfie, nick: "the future of 
     expect((a.meta as { eligible: string[] }).eligible).toEqual([...CAST]);
   });
 
-  it('one picked is a directed message; two to four is a huddle on exactly those', () => {
+  it('one picked is a huddle with that seat; two to four is a huddle on exactly those', () => {
     expect(promptAct('hi', audienceFor(['izzo']), 'x')!.to).toEqual({ kind: 'member', name: 'izzo' });
     const h = promptAct('hi', audienceFor(['izzo', 'dolly']), 'x')!;
     expect(h.to).toEqual({ kind: 'team' });

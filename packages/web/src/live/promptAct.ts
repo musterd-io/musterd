@@ -35,29 +35,27 @@ export type PromptAct = {
 };
 
 /**
- * Two or more on: a huddle on the team with that eligible set — what the CLI's `--to a,b,c` makes.
- * Exactly one on: a plain directed message to that seat (a doorbell wake). None: nothing to send.
+ * Always a huddle — what `musterd huddle open` sends. Two to four on: on the team with that eligible
+ * set (the CLI's `--to a,b,c`). One on: addressed to that seat (`--to ghost`). It has to be a huddle
+ * even for one: the wake rail starts a sleeping seat only for interrupt-class acts, and a plain
+ * directed message is not one — nick's first one-seat send sat unread in ghost's inbox (2026-10-09).
+ * None on, or no text: nothing to send.
  */
 export function promptAct(text: string, on: readonly string[], roomId: string): PromptAct | null {
   const body = text.trim();
   const cast = on.slice(0, MAX_CAST);
   if (!body || cast.length === 0) return null;
-  if (cast.length === 1) {
-    return { act: 'message', to: { kind: 'member', name: cast[0]! }, body, meta: {} };
-  }
+  const huddle = {
+    topic: { kind: 'design', id: 'demo' },
+    room: `${WHITEBOARD_BASE}/b/huddle-${roomId.toLowerCase()}`,
+    anchor: DEMO_ANCHOR,
+    budget: { turns: 40 },
+  };
   return {
     act: 'message',
-    to: { kind: 'team' },
+    to: cast.length === 1 ? { kind: 'member', name: cast[0]! } : { kind: 'team' },
     body: `${body}\n\n${REPLY_FOOTER}`,
-    meta: {
-      huddle: {
-        topic: { kind: 'design', id: 'demo' },
-        room: `${WHITEBOARD_BASE}/b/huddle-${roomId.toLowerCase()}`,
-        anchor: DEMO_ANCHOR,
-        budget: { turns: 40 },
-      },
-      eligible: [...cast],
-    },
+    meta: cast.length === 1 ? { huddle } : { huddle, eligible: [...cast] },
   };
 }
 
@@ -66,7 +64,7 @@ export { promptBarFlag, promptBarVisible } from './promptGate';
 /**
  * Who hears it, from the composer's @-picker: nobody picked is "@team", which convenes the four-seat
  * demo set exactly as the first bar did (the set is no longer shown); picking narrows it — one name is
- * a directed message, two to four a huddle on those (`promptAct` decides which by the count).
+ * a huddle with that seat, two to four a huddle on those (`promptAct` decides the shape by the count).
  */
 export function audienceFor(picked: readonly string[]): string[] {
   return picked.length === 0 ? [...CAST] : picked.slice(0, MAX_CAST);
