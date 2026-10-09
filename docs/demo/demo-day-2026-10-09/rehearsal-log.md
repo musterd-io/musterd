@@ -111,6 +111,7 @@ with `--flow auto`; `--reset-policy` would also clear the flow. The Squig board 
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 13:35 | "Suggest a better name for the Doorbell feature, the one that wakes a sleeping member and reaches a busy one." (throwaway) | none (answers, no lanes) | 1:04, a plain message from dolly asking nick to pick a scope, not a flagged ask | 0 declines; one counterpoint from wanderer at 4:58 | n/a | ghost 0:54 (resumed; reply had no thread), dolly 1:04 (fresh), big-body 2:18 (resume failed, fresh fallback), wanderer 4:58 (resume failed, fresh fallback) | All four converged on "Knock". An earlier 13:31 attempt woke nobody: the pasted backslash swallowed `--to`, so it went to @team (closed 13:34). /live reloaded at 13:37 on a web publish. |
 | 2 | 13:5x | "Write one sentence on what musterd is not, for the contact slide." plus the in-thread footer (throwaway, terminal) | none (answers, no lanes) | none; dolly's answer went to nick as a plain message at 0:52 | 0 | n/a | dolly 0:52 (resumed, $0.43), ghost 1:16 (resumed), big-body 2:25 (resume failed: no Presence attested the lease, fresh fallback), wanderer 3:34 (resumed) | All four replies were thread turns (4 of 4; run 1 was 3 of 4). Slowest seat 3:34 against 4:58 in run 1. Closed by nick after about 11 minutes. |
+| 3 (live) | ~16:38 | "Give the musterd members eyes: let them look at the office through a vision model." typed in the /live chat bar (the composer; footer added by the bar) | none: all four asked or agreed before acting | big-body asked nick one-shot or ongoing at 0:57; dolly said it had asked nick the same | 0 declines; wanderer raised a design objection at 2:19 (whose picture the frame is) | n/a | big-body 0:57, ghost 1:17, dolly 1:17, wanderer 2:19; all four resumed; wakes created at +1.5 s (big-body, wanderer) and +45 s (dolly, ghost) | Nobody edited: no PRs, no branches. Seats appeared on the office floor one after another over about a minute (nick noticed). The handoff beat was not run: lane 01M4HD5DDAQ8K7MN56NGEW1QYP stayed unclaimed. Huddle eb646489-3669-468a-bed8-01bc3f2fd938, 4 of 40 turns, closed by nick. |
 
 ## After the runs
 
@@ -148,4 +149,23 @@ by staging.
 - **The answers were good enough to use.** For example dolly: "musterd is not another agent, an
   orchestrator that drives yours, or an approval queue: your agents keep their own harnesses, and your
   people stay on the team." The live demo's best moment is the replies appearing in order.
+
+## What the live run showed (2026-10-09)
+
+- **The composer works end to end.** One typed sentence, no `@` picked, opened a huddle on the four-seat set
+  with the reply footer, and all four answered in the thread (4 of 4 counted).
+- **All four resumed this time,** after the cold starts and failed resumes of runs 1 and 2. First reply 0:57,
+  last 2:19.
+- **Seats start one at a time, so they appear one at a time.** The host actuates due wakes serially and
+  polls each host-label group after the previous group's wakes verify (`packages/cli/src/host/loop.ts`, "Orders
+  are actuated one at a time"). dolly and ghost, on the newer host name, were not even claimed until 45 s after
+  the send. A concurrent actuation lane is open: `01M4HGY13ZZY0SZ6XBF0K0R1KH`.
+- **A real design question came out of it.** The four converged on request-scoped, office-view-only "eyes", and
+  wanderer's point (a member's harness has no canvas, so whose frame?) is a better prompt for the Eyes option than
+  anything the rehearsals produced.
+- **No edits happened** because nobody was asked to edit. The handoff to dolly was proven separately in a test
+  (draft PR 50 s after the handoff) and not run live.
+- **Cleanup lessons.** A lane handed to a `seat-policy` seat must be resolved by that seat, or the dispatch loop
+  keeps waking it and it re-does the work (two duplicate draft PRs in testing). `residency on` replaces a seat's
+  whole override set. `residency policy` sets team defaults only; there is no per-seat form.
 
