@@ -2,7 +2,7 @@ import type { MemberSummary } from '@musterd/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { PromptBar } from './PromptBar';
+import { composerOpenFrom, PromptBar } from './PromptBar';
 
 const m = (name: string, kind: string, presence = 'online') =>
   ({ name, kind, presence, hue: 200 }) as unknown as MemberSummary;
@@ -43,5 +43,31 @@ describe('PromptBar — the composer', () => {
 
   it('has a send button that is disabled until there is text', () => {
     expect(html).toMatch(/<button[^>]*class="pbar__send"[^>]*disabled=""/);
+  });
+});
+
+describe('collapse and expand (nick, 2026-10-09)', () => {
+  it('starts open, with a control to collapse it', () => {
+    expect(html).toContain('aria-label="Collapse the chat bar"');
+    expect(html).toContain('class="pbar__input"');
+  });
+
+  it('remembers the reader’s choice, and opens when it cannot read one', () => {
+    const store = (v: string | null) => ({ getItem: () => v, setItem: () => {} });
+    expect(composerOpenFrom(store('closed'))).toBe(false);
+    expect(composerOpenFrom(store('open'))).toBe(true);
+    expect(composerOpenFrom(store(null))).toBe(true);
+    expect(composerOpenFrom(null)).toBe(true);
+    const throws = { getItem: () => { throw new Error('private mode'); }, setItem: () => {} };
+    expect(composerOpenFrom(throws)).toBe(true);
+  });
+});
+
+describe('the @-picker (nick: "shouldnt it close automatically?")', () => {
+  it('has no Done button — picking a member closes it', async () => {
+    const src = (await import('node:fs')).readFileSync(new URL('./PromptBar.tsx', import.meta.url), 'utf8');
+    expect(src).not.toContain('pbar__done');
+    const toggle = src.slice(src.indexOf('const toggle ='), src.indexOf('const root ='));
+    expect(toggle).toContain('setPicking(false)');
   });
 });

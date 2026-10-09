@@ -8,17 +8,17 @@
   left: 50%;
   bottom: 68px;
   transform: translateX(-50%);
-  width: min(720px, calc(100% - 32px));
+  width: min(640px, calc(100% - 32px));
 }
 .pbar__box {
   display: flex;
   align-items: center;
-  gap: var(--lc-4);
-  padding: 8px 8px 8px 12px;
+  gap: var(--lc-3);
+  padding: 5px 5px 5px 10px;
   background: color-mix(in srgb, var(--lc-ground-2) 88%, transparent);
   backdrop-filter: blur(10px);
   border: 1px solid var(--lc-border-2);
-  border-radius: 20px;
+  border-radius: 18px;
   box-shadow: 0 10px 28px rgba(60, 40, 20, 0.18);
 }
 .pbar__box:focus-within {
@@ -30,7 +30,7 @@
   flex: none;
 }
 .pbar__faces > .mface + .mface {
-  margin-left: -8px;
+  margin-left: -7px;
 }
 .pbar__faces > .mface {
   box-shadow: 0 0 0 2px var(--lc-ground-2);
@@ -46,18 +46,18 @@
   all: unset;
   box-sizing: border-box;
   flex: none;
-  max-width: 220px;
-  min-height: 30px;
-  padding: 0 12px;
+  max-width: 200px;
+  min-height: 26px;
+  padding: 0 10px;
   border-radius: 999px;
   background: var(--lc-surface-2);
-  font-size: 14px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--lc-dim);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 30px;
+  line-height: 26px;
   cursor: pointer;
 }
 .pbar__to.is-picked {
@@ -68,16 +68,16 @@
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
-  min-height: 40px;
-  max-height: 120px;
-  padding: 9px 4px;
+  min-height: 32px;
+  max-height: 104px;
+  padding: 7px 2px;
   resize: none;
   scrollbar-width: none;
   border: 0;
   outline: none;
   background: transparent;
   font: inherit;
-  font-size: 18px;
+  font-size: 15px;
   line-height: 1.3;
   color: var(--lc-text);
 }
@@ -86,7 +86,7 @@
 }
 .pbar__hint {
   flex: none;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--lc-faint);
   white-space: nowrap;
 }
@@ -96,8 +96,8 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: color-mix(in srgb, var(--lc-accent-bright) 45%, var(--lc-ground-2));
   color: color-mix(in srgb, var(--lc-text) 60%, transparent);
@@ -115,17 +115,87 @@
   transform: translateY(-1px);
 }
 .pbar__send svg {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+/* Collapse and expand (nick, 2026-10-09). The collapse control sits at the bar's left edge; collapsed,
+   the bar is one small pill in the same spot, so it is easy to find again. */
+.pbar.is-collapsed {
+  width: auto;
+}
+.pbar__min {
+  all: unset;
+  box-sizing: border-box;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: var(--lc-muted);
+  cursor: pointer;
+}
+.pbar__min:hover {
+  background: var(--lc-surface);
+  color: var(--lc-text);
+}
+.pbar__min svg,
+.pbar__fab svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pbar__fab {
+  all: unset;
+  box-sizing: border-box;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 16px 0 13px;
+  background: color-mix(in srgb, var(--lc-ground-2) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--lc-border-2);
+  border-radius: 999px;
+  box-shadow: 0 8px 22px rgba(60, 40, 20, 0.16);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--lc-text);
+  cursor: pointer;
+  animation: pbar-echo-in var(--lc-dur-3) var(--lc-ease-out);
+}
+.pbar__fab svg {
+  color: var(--lc-accent-ink);
+}
+.pbar__fab:hover {
+  background: var(--lc-surface);
+}
+/* A draft is waiting inside: a small mustard dot, a fill, never text. */
+.pbar__draft {
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lc-accent-bright);
+}
+.pbar__box {
+  animation: pbar-echo-in var(--lc-dur-3) var(--lc-ease-out);
+}
 .pbar__error {
-  margin: 8px 12px 0;
-  font-size: 14px;
+  margin: 6px 12px 0;
+  font-size: 13px;
   color: var(--lc-danger-ink);
 }
 
@@ -175,19 +245,6 @@
 .pbar__whostate.is-here {
   color: var(--lc-success-ink);
 }
-.pbar__done {
-  all: unset;
-  box-sizing: border-box;
-  display: block;
-  width: 100%;
-  min-height: 34px;
-  margin-top: 4px;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--lc-muted);
-  cursor: pointer;
-}
 
 /* The sent line, floating up from the sender's face, then gone. */
 .pbar__echo {
@@ -209,7 +266,7 @@
   background: var(--lc-ground-2);
   border: 1px solid var(--lc-border-2);
   border-radius: 16px 16px 4px 16px;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.35;
   color: var(--lc-text);
   box-shadow: 0 6px 18px rgba(60, 40, 20, 0.14);
@@ -225,7 +282,9 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pbar__echo {
+  .pbar__echo,
+  .pbar__box,
+  .pbar__fab {
     animation: none;
   }
   .pbar__echo.is-leaving {
@@ -238,10 +297,11 @@
     transform: none;
   }
 }
+.pbar__min:focus-visible,
+.pbar__fab:focus-visible,
 .pbar__to:focus-visible,
 .pbar__send:focus-visible,
-.pbar__who:focus-visible,
-.pbar__done:focus-visible {
+.pbar__who:focus-visible {
   outline: 2px solid var(--lc-focus);
   outline-offset: 2px;
 }

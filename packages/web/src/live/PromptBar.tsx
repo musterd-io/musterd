@@ -18,6 +18,25 @@ import './PromptBar.css';
  */
 
 const FACES = 5;
+
+/** The reader's collapse choice — a per-viewer convenience, so browser storage, guarded. */
+const OPEN_KEY = 'musterd.live.composer';
+type Store = { getItem(k: string): string | null; setItem(k: string, v: string): void };
+const store = (): Store | null => {
+  try {
+    return typeof window === 'undefined' ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+};
+/** Open unless the reader collapsed it last time; open too when storage cannot be read. */
+export function composerOpenFrom(s: Store | null): boolean {
+  try {
+    return s?.getItem(OPEN_KEY) !== 'closed';
+  } catch {
+    return true;
+  }
+}
 /** How long the sent line holds above the composer before it fades. */
 const ECHO_MS = 3600;
 
@@ -40,6 +59,16 @@ export function PromptBar({
   const listening = [...members].sort(
     (a, b) => Number(b.presence !== 'offline') - Number(a.presence !== 'offline'),
   );
+  const [open, setOpenState] = useState(() => composerOpenFrom(store()));
+  const setOpen = (next: boolean) => {
+    setOpenState(next);
+    try {
+      store()?.setItem(OPEN_KEY, next ? 'open' : 'closed');
+    } catch {
+      /* private mode — the choice just is not remembered */
+    }
+    if (!next) setPicking(false);
+  };
   const [text, setText] = useState('');
   const [picked, setPicked] = useState<readonly string[]>([]);
   const [picking, setPicking] = useState(false);
@@ -88,7 +117,9 @@ export function PromptBar({
       setPicking(false);
     }
   };
-  const toggle = (name: string) =>
+  // Picking closes the list and puts you back in the sentence (nick, 2026-10-09: a list that stayed open
+  // after choosing ghost had no obvious way out). "@" again adds another; picking a chosen name removes it.
+  const toggle = (name: string) => {
     setPicked((cur) =>
       cur.includes(name)
         ? cur.filter((n) => n !== name)
@@ -96,13 +127,58 @@ export function PromptBar({
           ? [...cur, name]
           : cur,
     );
+    setPicking(false);
+    window.setTimeout(() => input.current?.focus(), 0);
+  };
+  // …and Escape or a click anywhere outside the composer closes it too.
+  const root = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!picking) return;
+    const away = (e: PointerEvent) => {
+      if (root.current && !root.current.contains(e.target as Node)) setPicking(false);
+    };
+    const esc = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setPicking(false);
+      input.current?.focus();
+    };
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('pointerdown', away);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [picking]);
   const address = picked.length === 0 ? '@team' : picked.map((n) => `@${n}`).join(' ');
 
+  if (!open) {
+    return (
+      <div className="pbar is-collapsed">
+        <button
+          type="button"
+          className="pbar__fab"
+          aria-expanded={false}
+          aria-label="Open the chat bar"
+          onClick={() => {
+            setOpen(true);
+            window.setTimeout(() => input.current?.focus(), 0);
+          }}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5A1.5 1.5 0 0 1 11.5 11H7l-3 2.5V11h0A1.5 1.5 0 0 1 3 9.5z" />
+          </svg>
+          Ask your team
+          {text.trim() && <span className="pbar__draft" aria-label="you have a draft" />}
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="pbar">
+    <div className="pbar" ref={root}>
       {echo && (
         <div className={`pbar__echo${echo.leaving ? ' is-leaving' : ''}`} key={echo.key}>
-          <MemberFace name={viewer} roster={idx} size={28} />
+          <MemberFace name={viewer} roster={idx} size={24} />
           <p className="pbar__echotext">{echo.text}</p>
         </div>
       )}
@@ -128,22 +204,24 @@ export function PromptBar({
               </button>
             );
           })}
-          <button
-            type="button"
-            className="pbar__done"
-            onClick={() => {
-              setPicking(false);
-              input.current?.focus();
-            }}
-          >
-            Done
-          </button>
         </div>
       )}
       <div className="pbar__box">
+        <button
+          type="button"
+          className="pbar__min"
+          aria-expanded={true}
+          aria-label="Collapse the chat bar"
+          title="Collapse"
+          onClick={() => setOpen(false)}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 6.5 8 10.5l4-4" />
+          </svg>
+        </button>
         <span className="pbar__faces" aria-hidden="true">
           {listening.slice(0, FACES).map((m) => (
-            <MemberFace key={m.name} name={m.name} roster={idx} size={28} />
+            <MemberFace key={m.name} name={m.name} roster={idx} size={24} />
           ))}
           {listening.length > FACES && (
             <span className="pbar__more">+{listening.length - FACES}</span>
