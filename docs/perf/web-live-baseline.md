@@ -942,6 +942,19 @@ after lane 5 (main) → this branch: total JS 257.1 → 255.7 KiB (44 → 42 chu
 134.9 → 130.7 KiB (13 → 11 eager chunks, a re-chunking side effect of the smaller graph), app CSS
 7.0 → 6.0 KiB.
 
+## 2026-10-08 — `totalJsGzipBytes` 275,200 → 278,600: un-red main after ADR 550's site copy (lane 01M4EKYAWS1SRE63RVGXGCX900)
+
+Main @ `8060e004` went red on `perf:check` for every PR with a web build — CLI-only ones included:
+total JS gzip read **268.8 KB against a 268.8 KB budget** on CI. The gate prints one decimal, so the
+true figure sits between 275,201 and 275,302 B, i.e. 1–102 B over. The last bytes in are #2228's
+longer `SITE_ONE_LINER` — ADR 550's accepted short form, which is the decided brand copy and not
+shaveable. Lazy-loading cannot move total (ADR 183); no dependency to drop; a re-baseline would
+loosen. New ceiling is the CI-measured upper bound + ~1.2%, per the 2026-09-01/14 precedents.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main — total must read under
+  272.1 KiB (278,600 B). If main reads at or under 275,200 B (268.75 KiB), the over-budget cause has
+  left the graph and this raise should go with it.
+
 ## 2026-10-05 — `totalJsGzipBytes` 271,100 → 275,200: the dense /board goal table (board readability inc 2, lane 01M472ETXPJX92917BTQP9W56R)
 
 Measured with Node zlib over `packages/web/dist/client` after a build, as the gate does: main @
