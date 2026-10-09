@@ -41,6 +41,8 @@ export interface NeedsItem {
   since: number;
   /** Set for `blocked`, so the surface can open the lane. */
   laneId: string | null;
+  /** The raw id the surface opens: the ask's envelope id, the lane id, or the request id. */
+  ref: string;
 }
 
 export interface WorkItem {
@@ -126,6 +128,7 @@ export function briefing(input: {
           waitingOn: a.to,
           since: a.env.ts,
           laneId: null,
+          ref: a.env.id,
         }),
       ),
     ...lanes
@@ -139,6 +142,7 @@ export function briefing(input: {
           waitingOn: null,
           since: recency(l),
           laneId: l.id,
+          ref: l.id,
         }),
       ),
     ...requests
@@ -152,6 +156,7 @@ export function briefing(input: {
           waitingOn: null,
           since: r.ts,
           laneId: null,
+          ref: r.id,
         }),
       ),
   ].sort((a, b) => a.since - b.since); // longest-waiting first

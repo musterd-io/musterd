@@ -20,7 +20,8 @@ in `Live.css`/`Broadcast.css`.
 | #   | Increment                                                              | Lane                         | Depends on |
 | --- | ---------------------------------------------------------------------- | ---------------------------- | ---------- |
 | 1   | `briefing.ts` + tests; headline replaces the topbar meter              | `01M4FG58SX6BBJ736S4W1CHASS` | —          |
-| 2   | The Now panel on `/live`, Team tab, admin seat requests, office marker | `01M4FG5JRAR3QD460DWC7M7E7M` | 1          |
+| 2   | The Now panel on `/live`, Team tab, admin seat requests                | `01M4FG5JRAR3QD460DWC7M7E7M` | 1          |
+| 2b  | The office blocked marker, split out of 2                              | `01M4GP19XE5JEC6MA7YCGZGSK6` | 2          |
 | 3   | The `/broadcast` lower-third                                           | `01M4FG5NWKCYSYQ9RWG06Y4TNC` | 1          |
 
 The spec lane `01M4FG1R7C84HM4RE5GF7FF6WZ` closes when this plan's PR merges; it is the design record, not
@@ -354,7 +355,7 @@ alpha via `color-mix`, text `--lc-warn-ink`, defined on `.now` (the consumers mo
   `TeamColumn` passed as the `team` tab body. Admin seat requests: `const requests = useSeatRequests(cfg)`
   passed into `briefing({ …, requests })`; a seat-request row's `onOpen` is `window.location.assign('/approvals')`.
 - [ ] **Step 4:** run — PASS; `pnpm typecheck && pnpm lint && pnpm format:check`.
-- [ ] **Step 5: office marker** — in `officeRoom.ts` add a `blocked: ReadonlySet<string>` of owner names
+- [ ] **Step 5: office marker — moved to increment 2b (lane `01M4GP19XE5JEC6MA7YCGZGSK6`, 2026-10-09).** Original intent: in `officeRoom.ts` add a `blocked: ReadonlySet<string>` of owner names
   derived from `brief.needsHuman` (`kind === 'blocked'`), and have the plate render a small marker when the
   seat is in it. Test: `officeRoom` given a board with one blocked lane owned by `ann` lists `ann` in
   `blocked`.

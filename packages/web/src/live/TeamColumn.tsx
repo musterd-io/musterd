@@ -1,11 +1,14 @@
 import type { LaneBoard, MemberSummary } from '@musterd/protocol';
+import { useState } from 'react';
 import type { AskView } from './asks';
+import type { Briefing } from './briefing';
 import { CaptionPill } from './CaptionPill';
 import type { Caption } from './captions';
 import type { LiveConfig } from './client';
 import { acceptanceCapacity, initial, memberAvatar, memberColor } from './format';
 import { modelBadge } from './modelBadge';
 import { providerIconHtml } from './modelProviderIcon';
+import { NowSections } from './NowPanel';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { TeamCard } from './TeamCard';
 import { teamCards, type TeamCard as TeamCardModel } from './teamCards';
@@ -51,6 +54,10 @@ export function TeamColumn({
   stale = false,
   asks = [],
   still = false,
+  brief,
+  onOpenLane,
+  onOpenAsk,
+  onOpenBoard,
 }: {
   roster: MemberSummary[];
   board: LaneBoard | null;
@@ -80,7 +87,15 @@ export function TeamColumn({
   stale?: boolean;
   /** Non-interactive (a stream source): no hover link, no expanding, no operator notes. */
   still?: boolean;
+  /** The briefing (live-briefing spec). Given, the column opens on a **Now** tab — what needs a
+   *  human, what is in progress, in review and shipped — with the per-member cards one tab over.
+   *  Absent (the stream's column), the column is the cards alone, as before. */
+  brief?: Briefing;
+  onOpenLane?: (laneId: string) => void;
+  onOpenAsk?: (envelopeId: string) => void;
+  onOpenBoard?: () => void;
 }) {
+  const [tab, setTab] = useColumnTab(brief !== undefined && !still);
   const { cards, offline } = teamCards(roster, board, goals, asks);
   const working = cards.filter((c) => c.state === 'working').length;
   if (collapsed) {
@@ -126,12 +141,48 @@ export function TeamColumn({
   return (
     <aside className="lc-team" aria-label="The team">
       <header className="lc-team__head">
-        <span className="lc-team__title">The team</span>
-        <span className="lc-team__count">{working} working</span>
+        {brief && !still ? (
+          <div className="lc-team__tabs" role="tablist" aria-label="The team column">
+            <button
+              type="button"
+              role="tab"
+              className="lc-team__tab"
+              aria-selected={tab === 'now'}
+              onClick={() => setTab('now')}
+            >
+              Now
+            </button>
+            <button
+              type="button"
+              role="tab"
+              className="lc-team__tab"
+              aria-selected={tab === 'team'}
+              onClick={() => setTab('team')}
+            >
+              Team <span className="lc-team__tab-n">{cards.length}</span>
+            </button>
+          </div>
+        ) : (
+          <>
+            <span className="lc-team__title">The team</span>
+            <span className="lc-team__count">{working} working</span>
+          </>
+        )}
         <span className="lc-team__spacer" />
         {onCollapse && <CollapseButton side="mid" label="the team" onClick={onCollapse} />}
       </header>
       <CaptionPill caption={caption} color={captionColor} className="lc-team__caption" />
+      {brief && !still && tab === 'now' ? (
+        <NowSections
+          brief={brief}
+          roster={roster}
+          now={now}
+          onOpenLane={onOpenLane ?? noop}
+          onOpenAsk={onOpenAsk ?? noop}
+          onOpenBoard={onOpenBoard ?? noop}
+        />
+      ) : (
+        <>
       <ul className="lc-team__cards">
         {(still ? cards.filter((c) => !IDLE.has(c.state)) : cards).map((c) => (
           <TeamCard
@@ -149,9 +200,40 @@ export function TeamColumn({
       </ul>
       {still && <IdleStrip cards={cards.filter((c) => IDLE.has(c.state))} />}
       {offline > 0 && <p className="lc-team__offline">+ {offline} offline</p>}
+        </>
+      )}
       {!still && <TeamColumnNotes roster={roster} unreadable={unreadable} stale={stale} />}
     </aside>
   );
+}
+
+const noop = () => {};
+
+const TAB_KEY = 'musterd.live.column-tab';
+
+/**
+ * Which tab the column opens on — Now by default, and the last choice thereafter. A per-viewer
+ * convenience only: storage can be absent or throw (a private window), and the column renders
+ * correctly without it.
+ */
+function useColumnTab(enabled: boolean): ['now' | 'team', (t: 'now' | 'team') => void] {
+  const [tab, setTabState] = useState<'now' | 'team'>(() => {
+    if (!enabled || typeof window === 'undefined') return 'now';
+    try {
+      return window.localStorage.getItem(TAB_KEY) === 'team' ? 'team' : 'now';
+    } catch {
+      return 'now';
+    }
+  });
+  const setTab = (t: 'now' | 'team') => {
+    setTabState(t);
+    try {
+      window.localStorage.setItem(TAB_KEY, t);
+    } catch {
+      /* private mode */
+    }
+  };
+  return [tab, setTab];
 }
 
 /** States with nothing in hand — on a stream they are names, not cards. */
