@@ -8,7 +8,7 @@ Six-minute pitch to investors, founders and media. The organizers' upload folder
 | `BP_musterd.pdf` | `deck.html`: edit it in the browser (below), then press D or run `build.sh` |
 | `Logo_musterd.png` | `docs/design/assets/chip.svg`, rendered at 2048 px with a transparent ground |
 | `TeamInfo_musterd.docx` | `teaminfo.md`, built with `pandoc` |
-| `Avatar_NickSanders.jpg` | nick's headshot; not committed |
+| `Avatar_NickSanders.jpg` | nick's headshot; not committed. Slide 9 reads a copy at `avatar.jpg` here, which `.gitignore` keeps out of git |
 
 `script.md` is the spoken text, the source for every number, and likely questions.
 
