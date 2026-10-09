@@ -81,12 +81,14 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   speech-bubble click opens it on its act (`live/reveal.ts`). The stream column and companion mode
   it replaced retired on 2026-09-28.
 - **Busyness meter** (`live/TopMeter.tsx`, from `live/busyness.ts`) — in the top bar: the team,
-  a heartbeat that pulses on every act, acts over the loaded span (never extrapolated), and who is
-  working / between tasks / human.
+  a heartbeat that pulses on every act (the last act's age on hover), and acts over the loaded span
+  (never extrapolated). Counts of who is working on what are the Now card's, not the meter's
+  (live-briefing spec, increment 4). The team log's door is a topbar button beside Seeds.
 - **Headline ticker** (`live/Ticker.tsx`, from `live/headline.ts`) — under the room: the last few
   notable moments in one line, newest left, each chip in its actor's hue. `headline()` builds every
   line from names and lane titles, never the act body (an ask's question, clipped, is the one
-  exception); adjacent same-actor same-verb lines within 30s fold into a count.
+  exception); adjacent same-actor same-verb lines within 30s fold into a count. An ask the asks
+  strip is showing is left out, so the page does not say it twice.
 - **Team column** (`live/TeamColumn.tsx` + `live/TeamCard.tsx`) — who is here, read by a room
   (ADR 464): one card per present member with the provider logo and readable model name
   (`modelBadge.ts`: observed / declared / unknown / human — never a guess), a plain-language state
@@ -192,9 +194,9 @@ live/
   reveal.ts                     // the "reveal this act in the log" window event + revealWhenMounted (the drawer mounts the stream lazily)
   LogDrawer.tsx                 // the /live log drawer (ADR 464 lane 2): a right-edge dialog around the stream; Escape closes, focus returns
   busyness.ts                   // envelopes + roster → last-act age, acts over the loaded span (bucketed), who is working (pure, node-tested)
-  TopMeter.tsx                  // the top bar's busyness meter: team · heartbeat · sparkline · counts
+  TopMeter.tsx                  // the top bar's busyness meter: team · heartbeat · sparkline
   headline.ts                   // notable act → { who, verb, object, target } from names and titles, never the body; collapseHeadlines (pure)
-  Ticker.tsx                    // the headline ticker under the room: newest ~3 headlines in the actor's hue + "See every message"
+  Ticker.tsx                    // the headline ticker under the room: newest ~3 headlines in the actor's hue, minus asks the strip already shows
 
   RosterPanel.tsx               // the roster rail (no route mounts it since ADR 464) + `SeatDetail`, the per-seat operator block the team card expands to; `trace` expander (ADR 445 inc 4b) lazy-loads the timeline
   askPhrase.ts                  // the ask banner's words (spec §6 table) + askBanner() view-model: open / settled / idle (pure)

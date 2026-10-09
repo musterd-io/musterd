@@ -8,25 +8,16 @@ const roster = [
   { name: 'ann', kind: 'agent', presence: 'online', posture: 'working' },
   { name: 'bob', kind: 'agent', presence: 'online', posture: 'between' },
 ] as unknown as MemberSummary[];
-const render = (headline?: string) =>
-  renderToStaticMarkup(
-    createElement(TopMeter, {
-      teamName: 'revive',
-      envelopes: [],
-      roster,
-      now: 0,
-      ...(headline === undefined ? {} : { headline }),
-    }),
-  );
+const render = () =>
+  renderToStaticMarkup(createElement(TopMeter, { teamName: 'revive', envelopes: [], roster, now: 0 }));
 
 describe('TopMeter', () => {
-  it('speaks the briefing headline in place of the posture tally', () => {
-    const html = render('2 in progress · 1 needs a human');
-    expect(html).toContain('2 in progress · 1 needs a human');
+  // Live-briefing spec, increment 4: the counts live in the Now card. A tally here was the same
+  // facts a second time, and the long headline ran under the topbar buttons (#2290).
+  it('carries no tally and no headline — the Now card has the counts', () => {
+    const html = render();
+    expect(html).not.toContain('working');
     expect(html).not.toContain('between tasks');
-  });
-
-  it('keeps the posture tally when no headline is given', () => {
-    expect(render()).toContain('1 working');
+    expect(html).not.toContain('lc-meter__who');
   });
 });

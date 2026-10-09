@@ -4,22 +4,20 @@ import { busyness, lastActLabel } from './busyness';
 
 /**
  * The top bar's busyness meter (ADR 464, spec §5): the team's name, a heartbeat that pulses on
- * every act, a sparkline of acts over what the page has loaded, and who is working. It answers
+ * every act (its age on hover), and a sparkline of acts over what the page has loaded. It answers
  * the question a room asks first — "is anything happening?" — without a word from the presenter.
+ * Who is working, and on what, is the Now card's (live-briefing spec, increment 4): a tally here
+ * was the same counts a second time.
  */
 export function TopMeter({
   teamName,
   envelopes,
   roster,
-  headline,
   now,
 }: {
   teamName: string;
   envelopes: readonly Envelope[];
   roster: readonly MemberSummary[];
-  /** The briefing's one sentence ("2 in progress · 1 needs a human"). When set it replaces the
-   *  per-posture tally, which counted a different thing than the lists under it. */
-  headline?: string;
   /** The clock, for tests; the component ticks its own once a second when unset. */
   now?: number;
 }) {
@@ -28,14 +26,6 @@ export function TopMeter({
   const b = busyness(envelopes, roster, at);
   const last = envelopes.length ? envelopes[envelopes.length - 1]!.id : 'none';
   const peak = Math.max(1, ...b.buckets);
-  const { working, between, humans } = b.counts;
-  const who = [
-    `${working} working`,
-    between > 0 ? `${between} between tasks` : null,
-    humans > 0 ? `${humans} human${humans === 1 ? '' : 's'}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
   return (
     <div className="lc-meter" aria-label="Team activity">
       <span className="lc-meter__team">{teamName}</span>
@@ -46,7 +36,6 @@ export function TopMeter({
           className={`lc-meter__dot${b.lastActAgeMs === null ? ' is-quiet' : ''}`}
           aria-hidden="true"
         />
-        <span className="lc-meter__last">{lastActLabel(b.lastActAgeMs)}</span>
       </span>
       <span className="lc-meter__rate" title={`${envelopes.length} acts loaded · ${b.spanLabel}`}>
         <span className="lc-meter__n">{b.rateLabel}</span>
@@ -63,7 +52,6 @@ export function TopMeter({
         </svg>
         <span className="lc-meter__span">{b.spanLabel}</span>
       </span>
-      <span className="lc-meter__who">{headline ?? who}</span>
     </div>
   );
 }

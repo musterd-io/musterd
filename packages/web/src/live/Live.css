@@ -4766,9 +4766,8 @@
   display: flex;
   align-items: center;
   gap: var(--lc-6);
-  /* The headline is long ("19 in progress · 4 need a human · 3 in review · 37 shipped today") and
-     the buttons to its right are `flex: none`: the meter yields, and its last cell ellipsizes
-     rather than painting over them. */
+  /* The buttons to its right are `flex: none`: on a narrow bar the meter yields and clips rather
+     than painting over them (#2290). */
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -4819,22 +4818,13 @@
   fill: var(--lc-accent);
   opacity: 0.85;
 }
-.lc-meter > .lc-meter__who {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--lc-dim);
-}
 @media (max-width: 1080px) {
-  .lc-meter__span,
-  .lc-meter__who {
+  .lc-meter__span {
     display: none;
   }
 }
 @media (max-width: 720px) {
-  .lc-meter__rate,
-  .lc-meter__last {
+  .lc-meter__rate {
     display: none;
   }
 }
@@ -4904,20 +4894,6 @@
 .lc-ticker__empty {
   font-size: 12px;
   color: var(--lc-muted);
-}
-.lc-ticker__all {
-  flex: none;
-  min-height: 28px;
-  padding: 0 var(--lc-4);
-  border: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 12px;
-  color: var(--lc-accent-ink);
-  cursor: pointer;
-}
-.lc-ticker__all:hover {
-  text-decoration: underline;
 }
 
 /* ─── log drawer (ADR 464 §5) — every message, one keystroke away ─────── */

@@ -18,7 +18,7 @@ import { MemberSignInFields, MemberSignInToggle, type AdvancedState } from '../l
 import { OfficeScene } from '../live/OfficeScene';
 import { TeamColumn, captionColorFor } from '../live/TeamColumn';
 import type { Caption } from '../live/captions';
-import { applyTierClock, deriveAsks } from '../live/asks';
+import { applyTierClock, askIsLoud, deriveAsks } from '../live/asks';
 import { logOpenMode } from '../live/stillMode';
 import { revealWhenMounted } from '../live/reveal';
 import { LogDrawer } from '../live/LogDrawer';
@@ -248,6 +248,11 @@ function LivePage() {
   // folds in the answers this browser just sent; a second copy here costs one pass over the buffer.
   const derivedAsks = useMemo(() => deriveAsks(envelopes), [envelopes]);
   const asks = useMemo(() => applyTierClock(derivedAsks, Date.now()), [derivedAsks]);
+  // The acts the asks strip is showing; the ticker leaves them out rather than repeat them.
+  const stripAskIds = useMemo(
+    () => new Set(asks.filter((a) => askIsLoud(a.state)).map((a) => a.env.id)),
+    [asks],
+  );
   // The briefing (live-briefing spec): the topbar's sentence and the column's Now tab read ONE
   // derivation, so a count cannot disagree with the list under it. Pending seat claims are admin-only
   // data — they are asked for only once someone is signed in, and a "no" ends the asking.
@@ -567,7 +572,7 @@ function LivePage() {
             office overlay, which carries them over the scene on both /live and /broadcast — repeating
             them a few inches above was the duplication nick asked us to drop (2026-07-24). */}
         <MusterdWord />
-        {connected && <TopMeter teamName={team} envelopes={envelopes} roster={roster} headline={brief.headline} />}
+        {connected && <TopMeter teamName={team} envelopes={envelopes} roster={roster} />}
         <span className="lc__spacer" />
         {connected && (
           <button
@@ -579,6 +584,20 @@ function LivePage() {
           >
             <svg viewBox="0 0 16 16" aria-hidden="true">
               <path d="M8 13V7M8 8C5.4 8 3.4 6.6 3 4c2.7-.2 4.7 1 5 4ZM8 10c2.6 0 4.6-1.4 5-4-2.7-.2-4.7 1-5 4Z" />
+            </svg>
+          </button>
+        )}
+        {connected && (
+          <button
+            type="button"
+            className={`lc__pbtn${logOpen ? ' lc__pbtn--on' : ''}`}
+            onClick={() => setLogOpen(true)}
+            aria-pressed={logOpen}
+            aria-label="Open the team log"
+            title="Every message — the team log (L)"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M3 4h10M3 8h10M3 12h6" />
             </svg>
           </button>
         )}
@@ -663,7 +682,7 @@ function LivePage() {
             envelopes={envelopes}
             roster={roster}
             board={board}
-            onSeeAll={() => setLogOpen(true)}
+            hide={stripAskIds}
           />
           <LogDrawer open={logOpen} onClose={closeLog} title={`Team log — ${team}`}>
             <Suspense fallback={<p className="lc-drawer__loading">Opening the log…</p>}>
