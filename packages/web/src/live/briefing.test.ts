@@ -101,11 +101,15 @@ describe('briefing', () => {
     expect(b.shipped.map((x) => x.id)).toEqual(['lane:in']);
   });
 
-  it('survives a lane with no owner and no goal', () => {
+  it('survives a blocked lane with no owner, and an in-progress lane with no goal', () => {
     const b = run({ board: board(lane('x', 'blocked', { owner_seat: null })) });
     expect(b.needsHuman[0]!.owner).toBeNull();
-    const w = run({ board: board(lane('y', 'active', { owner_seat: null })) });
-    expect(w.inProgress[0]).toMatchObject({ owner: null, goal: null });
+    const w = run({ board: board(lane('y', 'active')) });
+    expect(w.inProgress[0]).toMatchObject({ owner: 'ann', goal: null });
+  });
+
+  it('leaves an unowned lane out of in progress rather than crashing', () => {
+    expect(run({ board: board(lane('z', 'active', { owner_seat: null })) }).inProgress).toEqual([]);
   });
 
   it('names the goal by its short title', () => {
