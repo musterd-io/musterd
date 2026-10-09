@@ -12,7 +12,7 @@ and this file has a bug — fix it with a PR, do not follow it.
 ## Authoritative sources (read before writing anything public)
 
 1. `docs/design/brand.md` — voice and tone (§4), terminology glossary (§5),
-   marks and color (§1–§3, ADR 154). The glossary's five terms — Team, Member,
+   marks and color (§1–§3, ADRs 154 and 497). The glossary's five terms — Team, Member,
    Presence, Surface, Act — are load-bearing and must be used with their exact
    meanings; never introduce synonyms ("room", "user", "session", "platform",
    "event"). ADR 296 makes the glossary a generated, gated artifact — treat
@@ -20,15 +20,21 @@ and this file has a bug — fix it with a PR, do not follow it.
 2. `PRODUCT.md` — register, users, product purpose, brand personality
    (engineered, luminous, quiet-confident), anti-references.
 3. `SPEC.md` — the normative definitions behind the glossary.
-4. `docs/wiki/positioning.md` + `docs/design/landscape.md` — brand
+4. `docs/decisions/550-positioning-accountable-agents.md` — the claim
+   (agents you can hold accountable), the chain it rests on, the claim
+   discipline (the record shows; never "proves" or "guarantees"), and §5: the
+   field is a reference, never the opening. It supersedes ADR 320 decisions 1
+   and 4 (accepted 2026-10-08).
+5. `docs/wiki/positioning.md` + `docs/design/landscape.md` — brand
    architecture (SandRise Studio is maker, never product brand) and the
-   competitive line (coordination of independent actors, not intra-task
-   orchestration; "Band connects your agents; musterd makes them a team").
+   competitor analysis. The analysis is for the tab, the FAQ answer and the
+   appendix slide, not for an opening line.
 
-**The positioning decision is not yours.** It is made in the positioning ADR;
-you execute the decided message and keep every surface telling the same story.
-Until that ADR lands, treat `docs/wiki/positioning.md` as current direction and
-flag — don't resolve — any tension you find.
+**The positioning decision is not yours.** It is made in ADR 550; you execute
+the decided message and keep every surface telling the same story. A surface
+that still carries ADR 320's copy is drift to close, not a second position:
+flag it, and don't resolve a tension between ADR 550 and anything else
+yourself.
 
 ## Charter boundaries (from the product-communications role)
 
@@ -152,9 +158,10 @@ in transit.
 
 ## Marketing assets
 
-- Marks: only the wordmark, Brand Chip, and Nameplate Tile (ADR 154; sources
-  in `docs/design/assets/`). Never a lone capital M, gradients on the chip,
-  or a new mascot.
+- Marks: only the wordmark, the mark (ADR 497, which replaced the ADR 154
+  chip) and the Nameplate Tile (ADR 154, face by ADR 497); sources in
+  `docs/design/assets/`. Never a lone capital M, gradients on the mark, or a
+  new mascot.
 - One accent: mustard `#E1AD01` on zinc neutrals. Web/marketing surfaces may
   go maximal per brand.md §7; the words stay plain even when the pixels
   don't.
