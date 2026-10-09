@@ -1,4 +1,12 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BINDING_DIR } from '@musterd/protocol';
@@ -90,6 +98,26 @@ describe('openWakeWatchSpool', () => {
     symlinkSync(target, file());
     openWakeWatchSpool(ws, 'L1').turn([{ type: 'text', text: 'x' }], 1);
     expect(existsSync(target)).toBe(false);
+  });
+
+  it('keeps writing to the file it created when the path is swapped for a symlink later', () => {
+    const target = join(ws, 'victim.txt');
+    const s = openWakeWatchSpool(ws, 'L1');
+    rmSync(file());
+    symlinkSync(target, file());
+    s.turn([{ type: 'text', text: 'x' }], 1);
+    s.end(true);
+    expect(existsSync(target)).toBe(false);
+  });
+
+  it('writes nothing when the binding folder is itself a symlink', () => {
+    const elsewhere = join(ws, 'elsewhere');
+    mkdirSync(elsewhere);
+    symlinkSync(elsewhere, join(ws, BINDING_DIR));
+    const s = openWakeWatchSpool(ws, 'L1');
+    s.turn([{ type: 'text', text: 'x' }], 1);
+    s.end(true);
+    expect(existsSync(join(elsewhere, WAKE_WATCH_FILE))).toBe(false);
   });
 
   it('never throws when the folder cannot be written', () => {
