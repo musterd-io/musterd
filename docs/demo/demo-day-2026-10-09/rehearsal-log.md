@@ -6,19 +6,24 @@ the method and the log. The demo plan itself is written after the numbers are in
 
 ## What a run is
 
-nick opens one huddle from his own Workspace, naming the cast:
+nick opens one huddle from his own Workspace, naming the cast. `--topic` and `--anchor` are required;
+the anchor is where the output would land, and for a rehearsal it need not exist:
 
 ```bash
 cd ~/musterd/revive/agents/nick
-musterd huddle open --to dolly,big-body,ghost,wanderer --turns 40 "<one real request, one sentence>"
+musterd huddle open --topic design:eyes --anchor docs/design/eyes.md \
+  --to dolly,big-body,ghost,wanderer --turns 40 "<one real request, one sentence>"
 ```
 
 A huddle names at most four seats, and only a named seat is woken (ADR 254, ADR 386). Convening
 needs `musterd residency policy --convene-huddles on` and each cast seat enrolled with `--flow auto`;
-both are admin settings, so nick checks them before run 1.
+both are admin settings, so nick checks them before run 1. A seat with a session already open in its
+Workspace is not woken (ADR 485); the huddle waits in its inbox, so close those sessions first.
 
 Start the stopwatch when the command returns. One run lasts 3 minutes, the length of the live beat.
-Stop it on the first of: the 3 minutes end, or the team goes quiet for 60 seconds.
+Stop it on the first of: the 3 minutes end, or the team goes quiet for 60 seconds. Then close the
+huddle so nobody keeps building on the clock: `musterd huddle close <id> --anchor-ref none
+"rehearsal"`. A closed huddle summons nobody, and the daemon enforces no turn budget itself.
 
 ## What to write down
 
