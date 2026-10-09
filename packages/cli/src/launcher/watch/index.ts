@@ -1,7 +1,7 @@
 import type { WatchEnd } from '../byName.js';
 import type { LocalWake } from '../live.js';
 import type { Seat } from '../store.js';
-import { pidAlive } from '../yield.js';
+import { leaseStillHeld, pidAlive } from '../yield.js';
 import { formatWatchLine } from './events.js';
 import type { WatchReader, WatchSnapshot } from './reader.js';
 import { watchReaderFor } from './readers.js';
@@ -78,7 +78,12 @@ export async function watchWake(
 ): Promise<WatchEnd> {
   const out = deps.out ?? ((s: string) => void process.stderr.write(s));
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const alive = deps.alive ?? pidAlive;
+  // An in-process wake's pid is the host's and outlives the wake: its lease file is what says it ended.
+  const alive =
+    deps.alive ??
+    (wake.in_process
+      ? (pid: number) => leaseStillHeld(wake.workspace, wake.lease_id, pid)
+      : pidAlive);
   const cols = deps.cols ?? process.stderr.columns ?? 80;
   const reader = deps.reader ?? watchReaderFor(wake.harness);
   if (!reader) {
@@ -118,10 +123,16 @@ export async function watchWake(
       consumed = shot.events.length;
       if (alive(wake.pid)) continue;
       if (shot.endedCleanly) {
-        out('wake finished — opening its conversation\n');
+        out(
+          wake.in_process
+            ? 'wake finished — starting a fresh session\n'
+            : 'wake finished — opening its conversation\n',
+        );
         return 'finished';
       }
-      out('wake ended before finishing\n⏎ open its conversation · esc quit\n');
+      out(
+        `wake ended before finishing\n⏎ ${wake.in_process ? 'start a fresh session' : 'open its conversation'} · esc quit\n`,
+      );
       for (;;) {
         const answer = await turn();
         if (answer === 'enter') return 'ended';

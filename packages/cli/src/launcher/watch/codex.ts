@@ -2,12 +2,9 @@ import { readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { LocalWake } from '../live.js';
-import { textEvent, toolEvent, type WatchEvent } from './events.js';
+import { pickArg, textEvent, toolEvent, type WatchEvent } from './events.js';
 import { readCompleteLines } from './lines.js';
 import type { WatchReader } from './reader.js';
-
-/** Which MCP tool arguments say what a call is about, in the order they are tried. */
-const MCP_ARG_KEYS = ['id', 'lane_id', 'to', 'act', 'title', 'body', 'path', 'query'] as const;
 
 interface Rec {
   timestamp?: unknown;
@@ -65,9 +62,7 @@ export function watchEvents(lines: readonly string[]): WatchEvent[] {
         out.push(toolEvent(ts, 'Bash', commandOf(item['command'])));
         break;
       case 'McpToolCall': {
-        const args = (item['arguments'] ?? {}) as Record<string, unknown>;
-        const key = MCP_ARG_KEYS.find((k) => typeof args[k] === 'string' && args[k] !== '');
-        out.push(toolEvent(ts, str(item['tool']) || 'mcp', key ? str(args[key]) : ''));
+        out.push(toolEvent(ts, str(item['tool']) || 'mcp', pickArg(item['arguments'])));
         break;
       }
       case 'FileChange': {

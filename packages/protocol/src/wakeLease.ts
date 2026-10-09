@@ -45,6 +45,11 @@ export const WakeLeaseFileSchema = z.object({
    *  take the wake over in that conversation (ADR 546). Local only — never sent to the daemon.
    *  Absent from older hosts: take over then falls back to the plain live-seat question. */
   session_id: z.string().min(1).max(128).optional(),
+  /** True when the wake is a loop running INSIDE the host process (the native harness), so
+   *  `spawner_pid` is the host's own pid: a launcher must never signal it, and the adapter must not
+   *  honour the file (it names no child to attest). The yield marker is how such a wake is stopped
+   *  (ADR 546, lane 6/6). */
+  in_process: z.boolean().optional(),
 });
 export type WakeLeaseFile = z.infer<typeof WakeLeaseFileSchema>;
 

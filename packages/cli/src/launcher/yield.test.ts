@@ -74,6 +74,39 @@ describe('stopWake (ADR 546)', () => {
     expect(readYieldFile(d)).toEqual({ lease_id: 'L1', by: 'nick', at: expect.any(Number) });
   });
 
+  it('an in-process wake is never signalled: it is yielded once its lease clears', async () => {
+    const d = ws();
+    const c = fakeClock();
+    let polls = 0;
+    const kills: string[] = [];
+    const r = await stopWake({ workspace: d, lease_id: 'L1', pid: 77, in_process: true }, 'nick', {
+      ...c,
+      holds: () => ++polls < 3,
+      alive: () => true, // the host outlives the wake — its pid says nothing
+      kill: (p, s) => kills.push(`${p}:${s}`),
+    });
+    expect(r).toBe('yielded');
+    expect(kills).toEqual([]);
+    expect(readYieldFile(d)).toMatchObject({ lease_id: 'L1', by: 'nick' });
+  });
+
+  it('an in-process wake that does not end within the grace is stuck, and still never signalled', async () => {
+    const c = fakeClock();
+    const kills: string[] = [];
+    const r = await stopWake(
+      { workspace: ws(), lease_id: 'L1', pid: 77, in_process: true },
+      'nick',
+      {
+        ...c,
+        holds: () => true,
+        alive: () => true,
+        kill: (p, s) => kills.push(`${p}:${s}`),
+      },
+    );
+    expect(r).toBe('stuck');
+    expect(kills).toEqual([]);
+  });
+
   it('a wake still alive after the grace gets SIGTERM to its group, then SIGKILL', async () => {
     const d = ws();
     const c = fakeClock();

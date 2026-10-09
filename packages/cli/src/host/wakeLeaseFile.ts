@@ -62,6 +62,21 @@ export function takeYieldFile(workspace: string, leaseId: string): boolean {
   }
 }
 
+/**
+ * True while a yield marker naming `leaseId` exists — read, never removed (that is {@link takeYieldFile},
+ * at settle). The native loop polls this: it has no `musterd gate` hook to deny its next tool call.
+ */
+export function peekYieldFile(workspace: string, leaseId: string): boolean {
+  try {
+    const parsed = WakeYieldFileSchema.safeParse(
+      JSON.parse(readFileSync(join(workspace, BINDING_DIR, WAKE_YIELD_FILE), 'utf8')),
+    );
+    return parsed.success && parsed.data.lease_id === leaseId;
+  } catch {
+    return false;
+  }
+}
+
 export interface WakeLeaseDeps {
   write?: (workspace: string, lease: WakeLeaseFile) => void;
   clear?: (workspace: string, leaseId: string) => void;
@@ -93,6 +108,8 @@ export function holdWakeLease(
     startedAt: number;
     timeoutMs: number;
     session_id?: string | undefined;
+    /** The wake is a loop inside this process: `pid` is the host's own and is never signalled. */
+    in_process?: boolean | undefined;
   },
   deps: WakeLeaseDeps = {},
 ): WakeLeaseHandle {
@@ -108,6 +125,7 @@ export function holdWakeLease(
       started_at: o.startedAt,
       expires_at: o.startedAt + o.timeoutMs,
       ...(session ? { session_id: session } : {}),
+      ...(o.in_process ? { in_process: true } : {}),
     });
   put();
   return {

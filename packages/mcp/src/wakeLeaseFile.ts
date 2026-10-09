@@ -40,6 +40,9 @@ export function readWakeLeaseFile(
   const result = WakeLeaseFileSchema.safeParse(parsed);
   if (!result.success) return undefined;
   const lease = result.data;
+  // An in-process wake (the native loop) names the HOST's pid, not a child's: honouring it would let
+  // any child of the daemon in this folder attest a lease it was never given (ADR 546).
+  if (lease.in_process) return undefined;
   // The two conditions that make this an attestation and not a default (ADR 236): the file must
   // name a process in OUR ancestry — the one the actuator spawned — and it must still be inside the
   // wake it was written for. Ancestry rather than the parent alone because the harness the actuator

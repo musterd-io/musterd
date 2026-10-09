@@ -223,7 +223,9 @@ settle the lease (ADR 262). Extra keys are rejected; this is not `wake-report`.
 
 The wake-lease file (`.musterd/wake-lease.json`, ADR 354) now carries an optional `session_id` —
 the conversation id the host gave the harness — and Claude Code wakes write it as Codex wakes
-already did (ADR 546). It never leaves the machine. `WAKE_YIELD_FILE` (`wake-yield.json`,
+already did (ADR 546). It never leaves the machine. An optional `in_process: true` marks a wake that
+is a loop inside the host process (the native harness): `spawner_pid` is then the host's own, a
+launcher never signals it, and the MCP adapter does not honour the file. `WAKE_YIELD_FILE` (`wake-yield.json`,
 `WakeYieldFileSchema` `{ lease_id, by, at }`) is the marker a launcher writes to ask the wake
 holding `lease_id` to stop. `WakeReportBodySchema` gains optional `yielded`: the supplementary
 report for a run a person took over, recorded as a `residency.wake_cost` row with `yielded: true`.

@@ -94,7 +94,8 @@ export interface LaunchDeps {
 
 /** What a take-over adds to the launch: the wake's conversation, and why the session exists. */
 interface TakeOver {
-  session: { harness: string; id: string };
+  /** Absent for a native wake: it has no harness conversation to resume (ADR 546, lane 6/6). */
+  session?: { harness: string; id: string };
   env: NodeJS.ProcessEnv;
 }
 
@@ -188,7 +189,7 @@ export async function launchSeat(
   // person can take over or watch. Only with the wake's conversation id: an older host wrote none, and
   // resuming nothing is worse than the plain question below.
   const wake = live ? (deps.localWake ?? localWake)(seat, live) : null;
-  if (live && wake?.session_id && !takeOver) {
+  if (live && wake && (wake.session_id || wake.in_process) && !takeOver) {
     const isTTY = deps.isTTY ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
     const choice: WakeChoice =
       opts.takeOver || opts.force
@@ -200,7 +201,12 @@ export async function launchSeat(
             : refuseWake(seat, live, now());
     if (choice === 'cancel') return 0;
     const by = loadConfig().identities[seat.team]?.name ?? 'a person';
-    const stop = async (): Promise<void> => void (await (deps.stopWake ?? stopWake)(wake, by));
+    const stop = async (): Promise<void> => {
+      if ((await (deps.stopWake ?? stopWake)(wake, by)) === 'stuck')
+        // Opening a second session beside a loop that is still running is the thing take-over exists
+        // to prevent; the marker stays, so the loop still ends at its next tool boundary.
+        throw new CliError(`${seat.member}'s wake did not stop in time — try again in a moment`, 1);
+    };
     if (choice === 'watch') {
       const ended = await (deps.watch ?? defaultWatch)(wake, seat);
       if (ended === 'leave') return 0;
@@ -209,9 +215,15 @@ export async function launchSeat(
     } else {
       await stop();
     }
+    const tookOver = { MUSTERD_TOOK_OVER: wakeReason(live.wake).trim() || 'the wake' };
+    // A native wake has no conversation to continue: the person gets a fresh session on the seat.
+    if (wake.in_process || !wake.session_id)
+      return launchSeat(seat, { mode: 'fresh', harness: opts.harness, force: true }, deps, {
+        env: tookOver,
+      });
     return launchSeat(seat, { mode: 'resume', harness: wake.harness, force: true }, deps, {
       session: { harness: wake.harness, id: wake.session_id },
-      env: { MUSTERD_TOOK_OVER: wakeReason(live.wake).trim() || 'the wake' },
+      env: tookOver,
     });
   }
   if (!opts.force && live) {

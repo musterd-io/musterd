@@ -58,3 +58,14 @@ export function formatWatchLine(e: WatchEvent, cols: number): string {
   const chars = [...full];
   return chars.length <= cols ? full : `${chars.slice(0, Math.max(1, cols - 1)).join('')}…`;
 }
+
+/** Which tool arguments say what a call is about, in the order they are tried. */
+const ARG_KEYS = ['id', 'lane_id', 'to', 'act', 'title', 'body', 'path', 'query'] as const;
+
+/** The one argument of an MCP tool call worth showing, or '' — never the whole input. */
+export function pickArg(args: unknown): string {
+  if (typeof args !== 'object' || args === null) return '';
+  const a = args as Record<string, unknown>;
+  const key = ARG_KEYS.find((k) => typeof a[k] === 'string' && a[k] !== '');
+  return key ? (a[key] as string) : '';
+}

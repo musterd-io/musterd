@@ -74,6 +74,7 @@ src/
       reader.ts       // `WatchReader`: per harness, find the wake's transcript from the lease's session id → `{ events, endedCleanly }`; null = nothing to read yet
       readers.ts      // the registry, harness id → reader; adding a harness is one reader file and one line here
       codex.ts        // the Codex reader: finds `~/.codex/sessions/Y/M/D/rollout-*-<thread>.jsonl` by the lease's thread id, shows its words (`AgentMessage`) and tools (`CommandExecution`, `McpToolCall`, `FileChange`) from the completed `item_completed` records — never an output or MCP result; `task_complete` is the clean end
+      native.ts       // the native reader: no transcript file, so the host's spool (`.musterd/wake-watch.jsonl`, `host/wakeWatchSpool.ts`) — first line must name THIS lease, then words and tool calls through `textEvent`/`toolEvent`, then an `end` line (`clean` is the clean end); another lease's spool reads as nothing
       opencode.ts     // the opencode reader: its SQLite store (`$XDG_DATA_HOME/opencode/opencode.db`) through the `sqlite3` CLI, the trace tail's own read; keeps a cursor so a poll asks only for newer messages; shows `text` parts and `tool` parts (name + one input) — never a tool part's `state.output`/`metadata`, reasoning or step bookkeeping; `finish: stop` on the last message is the clean end; no `sqlite3` or an unreadable store = "no transcript". The session id goes into SQL, so only `[\w-]+` is accepted
       grok.ts         // the Grok reader: `$GROK_HOME/sessions/<encoded cwd>/<id>/updates.jsonl` via the trace code's `transcriptPathFor`; joins streamed `agent_message_chunk`s into one message, shows `tool_call`s (name + one argument), never a `tool_call_update` (the results) or thoughts; holds back a message still streaming; `turn_completed` is the clean end
       claude.ts       // the Claude Code reader: `~/.claude/projects/*/<id>.jsonl`; `endedCleanly` reads the last `stop_reason` (`end_turn`)
@@ -123,6 +124,7 @@ src/
     dreamCheckout.ts  // freshenForDream (lane 01M41G80VN): before a DREAM wake only, fast-forward the seat's workspace to origin/main — only a detached HEAD, only a clean tree, only a fast-forward; never a gate, one log line; so the dreaming skill the wake names is on disk
     pinnedBin.ts      // every spawned-harness wake exports the actuator's OWN build: shim execing this process's node+entry, PREPENDED to the woken harness's PATH — woken hooks call a bare `musterd`, and the host's PATH resolved a frozen Homebrew tarball; best-effort, degrades to inherited PATH
     wakeLeaseFile.ts  // the wake lease on DISK (ADR 354): written beside binding.json at spawn naming the harness child's pid, cleared at settle — for harnesses that sanitize the MCP env (codex: 12 vars, no MUSTERD_*), where the env channel ADR 241 relies on stops at the child
+    wakeWatchSpool.ts // the native wake's watch spool (ADR 546, 6/6): the in-process loop leaves no transcript, so each turn's words and tool calls (never a result; credentials scrubbed, fields clipped, 256 KiB cap, 0600, `wx` over a symlink) are appended to `.musterd/wake-watch.jsonl` beside the lease; local only (ADR 131 §5), left for the watcher's final read, replaced by the next wake
     wakeCapture.ts    // ADR 436 clause 4 — a wake that settled is over: endWakeCapture stamps `ended_at` on the capture a backend's settle CLAIMS (its ids; Grok's `wake-<lease>` placeholder renamed to the real headless session), applied by the loop at settle; never a session that took the slot mid-wake, never an already-ended one
     engine.ts         // the AgentLoopEngine seam (ADR 251 §3): prompt + tools + bounds → turns/usage/end-reason, provider-neutral; the named insertion point for a second provider (ADR 101/110), with per-turn observation for capture/telemetry
     engines/
@@ -414,7 +416,11 @@ move it, `setup` points at the picker.
   `MUSTERD_TOOK_OVER` set so the session opens by saying whose conversation it is. **Watch** follows
   the wake read-only; `⏎` there takes over. `--take-over` and `--watch` pick without a prompt, and
   `--force` on a wake means take over. A lease file with no `session_id` (an older host), a stale
-  one, or a wake on another machine falls back to the plain question above.
+  one, or a wake on another machine falls back to the plain question above. A **native** wake (the
+  loop runs inside the host, `in_process` in the lease) is found the same way, but its pid is the
+  host's and is never signalled: take over writes the marker and waits up to 10 s for the loop to end
+  at a tool boundary (it refuses if it does not), then opens a **fresh** session — native has no
+  conversation to resume.
 - When the harness exits: one receipt line on stderr, and the harness's exit code (128 + n on signal n).
 - Exit codes: 2 for no match or an ambiguous name (the candidates are listed); 1 for a seat that needs
   repair, a live seat without `--force`, or a harness that is not installed.

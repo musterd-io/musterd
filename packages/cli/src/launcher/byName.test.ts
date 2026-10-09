@@ -368,6 +368,35 @@ describe('launchByName (ADR 491 Decision 2)', () => {
       expect(took.supervise).toHaveBeenCalledTimes(1);
     });
 
+    it('a native wake (in process) is stopped, then the person gets a FRESH session — nothing to resume', async () => {
+      const { d, supervise, planned, stop } = setup({
+        isTTY: true,
+        choose: async () => 'take-over',
+        localWake: found({ session_id: null, harness: 'musterd', in_process: true }) as never,
+      });
+      expect(await launchByName('stanley', parseArgs([]), d)).toBe(0);
+      expect(stop).toHaveBeenCalledWith(
+        expect.objectContaining({ lease_id: 'L1', in_process: true }),
+        expect.any(String),
+      );
+      expect(planned).toEqual([{ session: null, mode: 'fresh', harness: null }]);
+      const plan = (supervise.mock.calls[0] as unknown as [{ env?: NodeJS.ProcessEnv }])[0];
+      expect(plan.env).toMatchObject({ MUSTERD_TOOK_OVER: expect.any(String) });
+    });
+
+    it('a native wake that will not stop launches nothing — no second session beside a running loop', async () => {
+      const { d, supervise } = setup({
+        isTTY: true,
+        choose: async () => 'take-over',
+        localWake: found({ session_id: null, harness: 'musterd', in_process: true }) as never,
+        stopWake: vi.fn(async () => 'stuck' as const),
+      });
+      await expect(launchByName('stanley', parseArgs([]), d)).rejects.toThrow(
+        /did not stop in time/,
+      );
+      expect(supervise).not.toHaveBeenCalled();
+    });
+
     it('a wake file with no session id (an older host) falls back to the plain question', async () => {
       const confirm = vi.fn(async () => false);
       const choose = vi.fn(async () => 'take-over' as const);
