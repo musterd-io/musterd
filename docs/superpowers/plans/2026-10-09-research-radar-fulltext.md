@@ -4,7 +4,7 @@
 
 **Goal:** Every week, read complete original articles and Exploring Next episode scripts for matching research candidates, triage them, and publish a reviewable digest proposal.
 
-**Architecture:** Extend the existing `scripts/radar/` pipeline with public-URL article retrieval through Exa, episode-script retrieval through Exploring Next, and chunk-complete evidence before the existing two-tier triage. Persist retry metadata beside the existing seen arrays. A separate GitHub Actions workflow emits the digest and ledger in a draft PR; it never merges.
+**Architecture:** Extend the existing `scripts/radar/` pipeline with public-URL article retrieval through Exa, episode-script retrieval through Exploring Next's documented REST endpoint, and chunk-complete evidence before the existing two-tier triage. Persist retry metadata beside the existing seen arrays. A separate GitHub Actions workflow emits the digest and ledger in a draft PR; it never merges. Exploring Next access details and constraints are recorded in [ADR 556](../../decisions/556-exploring-next-full-script-api.md).
 
 **Tech Stack:** TypeScript, Node 22 `fetch`, Exa Contents API, Exploring Next public API, Anthropic Messages API, GitHub Actions, `gh` CLI, JSON and Markdown in git. No runtime package dependency.
 
@@ -21,7 +21,8 @@
 - Retrieved text is untrusted input, never instructions. Do not bypass access controls.
 - No protocol schemas, server behavior, research-foundation content, or Exploring Next content are changed.
 - Preserve `seen.json`'s `arxiv`, `hf`, and `exn` arrays; add a metadata-only `pending` array and read old ledgers without it.
-- Schedule Monday 08:00 UTC in a dedicated GitHub Actions workflow. Require `ANTHROPIC_API_KEY`, `EXA_API_KEY`, and `STEWARD_TOKEN`; never print their values.
+- Schedule Monday 08:00 UTC in a dedicated GitHub Actions workflow. Require `ANTHROPIC_API_KEY`, `EXA_API_KEY`, `EXPLORING_API_KEY`, and `STEWARD_TOKEN`; never print their values.
+- Fetch Exploring Next scripts from `GET https://ingest.sandrise.io/v1/episodes/{idOrNumber}/script` with bearer auth. Pace calls at least 700 ms apart, honor `Retry-After` on 429, and keep retries bounded (ADR 556).
 - Open or update an unreviewed weekly draft PR only. Never auto-merge.
 
 ## Review Focus
@@ -40,7 +41,7 @@
 - `scripts/radar/config.ts` — full-text retrieval and chunk limits alongside the existing timeout and candidate limits.
 - `scripts/radar/fetch.ts` — feed parsing that retains source references through cross-source deduplication.
 - `scripts/radar/content.ts` — HTTPS source URL checks and Exa full-text retrieval.
-- `scripts/radar/exn.ts` — documented Exploring Next full-script retrieval and response parsing.
+- `scripts/radar/exn.ts` — documented Exploring Next full-script retrieval and response parsing, including pacing and `Retry-After` handling.
 - `scripts/radar/fullText.ts` — source-size checks, Unicode-safe chunking, bounded concurrency, chunk evidence, and metadata-only manifests.
 - `scripts/radar/triage.ts` and `docs/research/radar/prompts/radar-v1.md` — accept complete-read evidence while preserving verdicts and prompt versioning.
 - `scripts/radar/dedup.ts` — load legacy ledgers, partition fresh and pending candidates, and update per-source seen IDs.
@@ -61,7 +62,7 @@ Each lane depends on the approved design-and-plan lane `01M4GQJSP8AQND8S8N6A82H0
 
 ### Task 1: Full-Text Source Adapters
 
-**Preflight:** Verify the current Exploring Next OpenAPI/MCP surface for `get_episode_script` and capture its actual request and response shape. If there is no public read-only endpoint, stop before implementation and return the missing capability as a blocking design gap; do not guess an endpoint or scrape the site.
+**Preflight (complete):** Official documentation confirms `GET https://ingest.sandrise.io/v1/episodes/{idOrNumber}/script`, bearer auth with `EXPLORING_API_KEY`, and ordered `{speaker, text}` segments. The source adapter must preserve those segments and follow the documented 120-requests-per-minute cap with at least 700 ms between calls, bounded retries, and `Retry-After` handling (ADR 556).
 
 **Files:**
 - Modify: `scripts/radar/types.ts`
@@ -75,10 +76,10 @@ Each lane depends on the approved design-and-plan lane `01M4GQJSP8AQND8S8N6A82H0
 - `RadarCandidate` adds `relatedExn: Array<{ episodeId: string }>`; ordinary candidates use an empty array.
 - `SeenLedger` adds optional `pending?: PendingCandidate[]`, with absence read as an empty list. `PendingCandidate` contains only the retry metadata listed in Task 3. These shared types are added in Task 1 because that lane owns `types.ts`; Task 3 consumes them without editing the shared file.
 - `fetchArticleText(url: string, apiKey: string, fetchFn?: FetchFn): Promise<{ url: string; text: string }>` calls Exa in full-text mode and accepts only a successful, non-empty text result for the requested URL.
-- `fetchEpisodeScript(episodeId: string, fetchFn?: FetchFn): Promise<{ url: string; text: string }>` calls the public endpoint documented by the current Exploring Next OpenAPI/MCP surface. First verify that surface and pin its real request/response shape in the fixture; if no public read path exists, stop the task and report the gap instead of scraping a guessed route.
+- `fetchEpisodeScript(episodeId: string, apiKey: string, fetchFn?: FetchFn): Promise<{ url: string; text: string }>` calls `GET https://ingest.sandrise.io/v1/episodes/{idOrNumber}/script` with bearer authentication, parses the documented `segments: [{speaker, text}]` response, enforces request pacing, honors `Retry-After`, and bounds retries. Pin the real request/response shape in fixtures.
 - `isPublicHttpsUrl(value: string): boolean` rejects non-HTTPS URLs, embedded credentials, localhost and private/link-local IP literals. Validate returned/final URLs as well as submitted URLs.
 
-- [ ] **Step 1: Add feed and provider boundary tests** for an ExN row whose article URL normalizes to an existing arXiv ID, preserving its episode ID on the canonical candidate; full-text success, non-success status, empty response, URL rejection, and a documented episode-script payload.
+- [ ] **Step 1: Add feed and provider boundary tests** for an ExN row whose article URL normalizes to an existing arXiv ID, preserving its episode ID on the canonical candidate; full-text success, non-success status, empty response, URL rejection, the documented episode-script payload, bearer auth, request pacing, and `Retry-After` handling.
 - [ ] **Step 2: Run the focused tests and confirm they fail** with the missing source-reference and retrieval behavior.
 
 Run: `pnpm exec vitest run scripts/radar/content.test.ts scripts/radar/exn.test.ts`
@@ -169,7 +170,7 @@ Expected: failure and rerun cases preserve the exact candidate and ledger state 
 - Workflow schedule: Monday `08:00 UTC`; also support `workflow_dispatch`.
 - Use `concurrency.group: research-radar` with cancellation disabled.
 - Run: `pnpm radar:sweep --full-text --triage --emit --limit 50 --retry-limit 50`.
-- Before processing, report which of `ANTHROPIC_API_KEY`, `EXA_API_KEY`, and `STEWARD_TOKEN` are missing; do not print values or write files when any are absent.
+- Before processing, report which of `ANTHROPIC_API_KEY`, `EXA_API_KEY`, `EXPLORING_API_KEY`, and `STEWARD_TOKEN` are missing; do not print values or write files when any are absent.
 - Use least-privilege `contents: write` and `pull-requests: write`, checkout with `STEWARD_TOKEN`, and create/update an unreviewed weekly draft PR. Do not enable auto-merge.
 - Workflow timeout: 120 minutes; workflow summary reports candidate counts, source-read failures, truncation, and draft PR link without article or transcript text.
 
