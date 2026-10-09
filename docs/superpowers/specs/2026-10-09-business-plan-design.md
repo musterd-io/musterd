@@ -84,6 +84,33 @@ setups below. This is a power user's view plus guesses; hold it until a design p
   the personal agents (muse, instinct, hermes, dots) in musterd; muse the model via opencode is covered by
   opencode. Do not promise personal-agent support in an application until one has joined a team.
 
+**Order (alfie's proposal, nick agreed to the shape):** nick's wife first, around Oct 12–14, on the
+current rough build — she finds the first-run bugs but is not evidence for an application. Then the
+founders from Oct 16, who are the evidence. Who among the founders goes first, and what pain they feel
+most, is **not yet known (nick, 2026-10-09)**: the first conversation is the discovery.
+
+### Founder conversation guide (draft, used before anyone installs)
+
+Aim: learn what they do today. Do not pitch first. Ask about the last time something happened, not what
+they would hypothetically do.
+
+1. **Setup.** Which agents and tools do you run now, and in how many repos? Who else on your team uses them?
+2. **The last collision.** Tell me about the last time two agents, or an agent and a person, stepped on each
+   other. What happened, and what did it cost you?
+3. **Visibility.** How do you know what each agent is working on right now? When did you last lose track?
+4. **Handoffs.** What happens to an agent's context when you close the session or switch tools? A recent
+   example?
+5. **Tracking work.** Where does your work live today (issues, notes, a doc)? What would have to be true
+   for you to try a shared board?
+6. **What you already pay for.** What do you spend on agents and tools each month? Is anything on that list
+   you would drop?
+7. **After the session, not before.** Now that you have seen it: would you keep using it this week, and
+   what would you pay for a hosted team? Record their words and their name.
+
+Notes: do not promise muse, instinct, hermes or dots (untried). Question 7 is the only money question,
+and only after they have used it. Answers to 2–4 pick the first demo: collisions → lane claims;
+visibility → the board; lost context → handoffs and seat memory.
+
 ## Offer, repo and Cloud (nick, 2026-10-09)
 
 - **Offer to the first partners: concierge setup, a direct line to nick and a say in the roadmap, free for
@@ -116,7 +143,7 @@ so usage, retention and applications count.
 | Early Dec | At least two outside teams still using it after two weeks |
 | By Dec | Each partner has said what they would pay for a hosted team |
 | Dec 11 | YC decision (about) |
-| Jan 9 | Decision point: continue, or the fallback (not yet defined) |
+| Jan 9 | Decision point: continue, or the fallback — a part-time or full-time job (nick); timing of that call not discussed, parked on purpose |
 
 nick said these are good for now. The first-run work is tracked as goal `first-run-10-minutes` (lanes
 `01M4FDBSN8`, `01M4FDBVGB`, `01M4FDBXPX`).
@@ -148,8 +175,9 @@ nick said these are good for now. The first-run work is tracked as goal `first-r
 
 ## Open questions
 
-- **Next question for nick:** the fallback at Jan 9 — what is it, and when does he decide? Then the
-  90-day partner plan: who is approached first, in what order, and what each is asked to do.
+- **Next question for nick:** after the founder conversations, which pain is most common — that sets the
+  first demo and the 90-day plan. Until then, the accelerator list in `traction-plan.md` §12 still needs
+  re-verifying, and the open-source/monetization section (part 3) is still to write.
 - What in `traction-plan.md` is stale, and what has sloane learned since 2026-09-16? Asked of sloane on
   2026-10-09; no reply recorded yet.
 - Cost-to-serve for musterd Cloud (hosting, Postgres, relay per team) — no figure exists.
