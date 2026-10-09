@@ -1173,3 +1173,13 @@ keeps `promptAct.ts` out of the eager graph.
 
 - Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` — app CSS under 8.8 KB. If the composer comes
   out after Demo Day, this raise and the 7,600 → 8,400 one before it go with it.
+
+### 2026-10-09 — total JS 288,000 → 292,000 B, measured after the afternoon's web merges (lane 01M4H7MNN45SR4ES6PFN8M3WK4)
+
+The composer branch, rebased on main after #2312 (claim walk), #2313 (homepage copy), #2314 (prompt-bar footer) and
+#2315 (blocked marker), reads 280.8 KB (287,539 B) total JS against 281.3 KB. That leaves 0.5 KB, which is less than
+the ~0.7 KB CI gzip delta. Initial is 137.3 KB of 138.4 KB, unchanged by the composer, because the gate split took
+`promptAct.ts` out of the eager graph. No trim is available that is not a feature, and a re-baseline would loosen, so
+this is a raise to measured + ~0.7 KB + ~1.2%.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main after this lands — total JS under 282 KB.
