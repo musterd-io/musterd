@@ -11,11 +11,15 @@ export function TopMeter({
   teamName,
   envelopes,
   roster,
+  headline,
   now,
 }: {
   teamName: string;
   envelopes: readonly Envelope[];
   roster: readonly MemberSummary[];
+  /** The briefing's one sentence ("2 in progress · 1 needs a human"). When set it replaces the
+   *  per-posture tally, which counted a different thing than the lists under it. */
+  headline?: string;
   /** The clock, for tests; the component ticks its own once a second when unset. */
   now?: number;
 }) {
@@ -59,7 +63,7 @@ export function TopMeter({
         </svg>
         <span className="lc-meter__span">{b.spanLabel}</span>
       </span>
-      <span className="lc-meter__who">{who}</span>
+      <span className="lc-meter__who">{headline ?? who}</span>
     </div>
   );
 }
