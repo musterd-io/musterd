@@ -102,7 +102,7 @@ export function PromptBar({
     <div className="pbar">
       {echo && (
         <div className={`pbar__echo${echo.leaving ? ' is-leaving' : ''}`} key={echo.key}>
-          <MemberFace name={viewer} roster={idx} size={28} />
+          <MemberFace name={viewer} roster={idx} size={24} />
           <p className="pbar__echotext">{echo.text}</p>
         </div>
       )}
@@ -143,7 +143,7 @@ export function PromptBar({
       <div className="pbar__box">
         <span className="pbar__faces" aria-hidden="true">
           {listening.slice(0, FACES).map((m) => (
-            <MemberFace key={m.name} name={m.name} roster={idx} size={28} />
+            <MemberFace key={m.name} name={m.name} roster={idx} size={24} />
           ))}
           {listening.length > FACES && (
             <span className="pbar__more">+{listening.length - FACES}</span>
