@@ -4,7 +4,7 @@
 //
 //   node docs/demo/demo-day-2026-10-09/serve.mjs      → http://localhost:4861/
 //
-// Serves THIS folder read-only (nothing else from the repo), listens on 127.0.0.1 only, refuses any
+// Serves THIS folder and the committed Recursive font files read-only (nothing else from the repo), listens on 127.0.0.1 only, refuses any
 // request whose Host header is not localhost or 127.0.0.1 (a page on another site cannot reach it
 // through DNS rebinding), and accepts two writes, both needing the X-Page-Editor header that a page
 // on another origin cannot send without a CORS preflight this server never answers:
@@ -42,8 +42,9 @@ function resolve(urlPath) {
   return p === root || p.startsWith(root + path.sep) ? p : null;
 }
 
-// only this folder is ever served; the deck needs nothing else
-const inHere = (file) => file !== null && file.startsWith(here + path.sep);
+// only this folder and the committed font files are ever served; the deck needs nothing else
+const fonts = path.join(root, 'packages/web/src/styles/fonts');
+const inHere = (file) => file !== null && (file.startsWith(here + path.sep) || file.startsWith(fonts + path.sep));
 
 // DNS rebinding: a hostile page can point its own name at 127.0.0.1, and the browser then treats
 // this server as that page's origin. The Host header still names the hostile site, so refuse it.

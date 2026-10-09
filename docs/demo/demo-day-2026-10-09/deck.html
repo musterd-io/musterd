@@ -1,559 +1,188 @@
 <!doctype html>
+<html lang="en">
 <!--
   Demo Day pitch deck, 2026-10-09. Six minutes, an audience of investors, founders and media.
 
   THIS FILE IS THE SOURCE and it edits in the browser:
     node docs/demo/demo-day-2026-10-09/serve.mjs   then open the address it prints
-    E edit text · M move things · ⌘S save to this file · D export BP_musterd.pdf · ←/→ slides
-  Or ⌘P in the browser: the print stylesheet lays every slide out one per page.
+    E edit text · M move things · ⌘S save to this file · D export BP_musterd.pdf
+    ←/→ or click: next step · g: slide picker · f: fullscreen
+  Or ⌘P in the browser: the print stylesheet lays every slide out one per page, all steps shown.
 
   Copy is in nick's voice and follows docs/design/brand.md §4: plain, no contrast frame, no
-  provenance on the slide. Sources for every number are in script.md.
-  Self-contained: no network, no font files. Slide sizes are in cqw (1600px = 100cqw), so the deck
-  scales to any window and prints at 1600x900.
+  provenance on the slide. Sources for every number are in script.md. The look follows the
+  designer skill's slop tells (.agents/skills/designer/SKILL.md): flat, ruled columns instead of
+  boxed cards, one accent, nothing that pulses. Tokens and fonts match the Multiplayer AI deck.
+  Sizes are in design units (1600 units = the slide width, 1 unit = 1px in print).
 -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>musterd — Demo Day</title>
 <style>
-  :root {
-    --paper: #fffaf1;
-    --ink: #2a2118;
-    --muted: #7a6a56;
-    --accent: #b8860b;
-    --accent-bright: #e1ad01;
-    --accent-deep: #7a5a06;
-    --surface: #f3e9da;
-    --hairline: #d8ccba;
-    --success: #2f9e6a;
-    --sans: 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
-    --mono: 'JetBrains Mono', 'SF Mono', Menlo, 'Courier New', monospace;
-  }
-  @page {
-    size: 1600px 900px;
-    margin: 0;
-  }
-  * {
-    box-sizing: border-box;
-  }
-  html,
-  body {
-    margin: 0;
-    height: 100%;
-    background: #18181b;
-  }
-  body {
-    display: grid;
-    place-items: center;
-  }
-  /* The stage: one 16:9 slide at a time, scaled to the window. */
-  .deck {
-    position: relative;
-    width: min(100vw, calc(100vh * 16 / 9));
-    aspect-ratio: 16 / 9;
-    max-height: 100vh;
-    overflow: hidden;
-    container-type: size;
-    background: var(--paper);
-  }
-  .slide {
-    position: absolute;
-    inset: 0;
-    display: none;
-    flex-direction: column;
-    padding: 4cqw 6cqw 4.5cqw;
-    background: var(--paper);
-    color: var(--ink);
-    font-family: var(--sans);
-    -webkit-font-smoothing: antialiased;
-    overflow: hidden;
-  }
-  .slide.on {
-    display: flex;
-  }
+  @font-face{font-family:'Recursive Casual';src:url(../../../packages/web/src/styles/fonts/recursive-casual.woff2) format('woff2');font-weight:400 800;font-display:block}
+  @font-face{font-family:'Recursive';src:url(../../../packages/web/src/styles/fonts/recursive-linear.woff2) format('woff2');font-weight:400 800;font-display:block}
+  @font-face{font-family:'Recursive Mono';src:url(../../../packages/web/src/styles/fonts/recursive-mono.woff2) format('woff2');font-weight:400 800;font-display:block}
+  :root{--bg:#FAFAFA;--panel:#F4F4F5;--ink:#18181B;--mut:#52525B;--acc:#E1AD01;--acct:#7A5A06;--accn:#8F6B00;--accd:#3F2F00;--line:#E4E4E7;--ok:#1F6F4A;--okbg:#EAF7F0;--okline:#B4DCC7;
+    --sans:'Recursive',system-ui,-apple-system,Helvetica,Arial,sans-serif;--display:'Recursive Casual','Recursive',system-ui,sans-serif;--mono:'Recursive Mono','JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
+    --ease:cubic-bezier(.22,1,.36,1);--u:.0625cqw}
+  @page{size:1600px 900px;margin:0}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:#18181B;overflow:hidden;-webkit-font-smoothing:antialiased}
+  .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  .deck{position:relative;width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;max-height:100vh;overflow:hidden;container-type:size;background:var(--bg)}
 
-  /* Page chrome: outside the slides, never printed, never editable text. */
-  .nav {
-    position: fixed;
-    right: 14px;
-    bottom: 12px;
-    z-index: 90;
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    font: 600 12px/1 ui-monospace, Menlo, monospace;
-    color: #fafafa;
-  }
-  .nav span {
-    opacity: 0.55;
-  }
-  .nav button {
-    font: inherit;
-    background: #3f3f46;
-    color: #fafafa;
-    border: 0;
-    border-radius: 999px;
-    padding: 7px 12px;
-    cursor: pointer;
-  }
-  .nav button:hover {
-    background: #e1ad01;
-    color: #18181b;
-  }
+  /* slides: a crossfade with a small slide, the one that leaves drifts the other way */
+  .slide{position:absolute;inset:0;padding:calc(64 * var(--u)) calc(96 * var(--u)) calc(72 * var(--u));display:flex;flex-direction:column;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    opacity:0;visibility:hidden;transform:translateX(3%);transition:opacity .5s var(--ease),transform .6s var(--ease),visibility 0s .6s}
+  .slide.on{opacity:1;visibility:visible;transform:none;transition:opacity .5s var(--ease),transform .6s var(--ease)}
+  .slide.past{transform:translateX(-3%)}
+  .slide.acc{background:var(--acc);color:var(--accd)}
+  .slide .a{opacity:0;transform:translateY(14px)}
+  .slide.on .a{animation:rise .7s var(--ease) both;animation-delay:calc(.15s + var(--i,0)*.12s)}
+  @keyframes rise{to{opacity:1;transform:none}}
+  .frag{opacity:0;transform:translateY(14px);transition:opacity .45s var(--ease),transform .45s var(--ease)}
+  .frag.shown{opacity:1;transform:none}
 
-  /* Print and PDF: every slide on its own 1600x900 page, no editing chrome. */
-  @media print {
-    html,
-    body {
-      height: auto;
-      background: #fff;
-      display: block;
-    }
-    .deck {
-      width: 1600px;
-      aspect-ratio: auto;
-      max-height: none;
-      overflow: visible;
-      container-type: normal;
-    }
-    .slide,
-    .slide.on {
-      position: relative;
-      inset: auto;
-      display: flex;
-      width: 1600px;
-      height: 900px;
-      padding: 64px 96px 72px;
-      container-type: size;
-      break-after: page;
-    }
-    .slide:last-of-type {
-      break-after: auto;
-    }
-    .nav,
-    #ed-bar {
-      display: none !important;
-    }
-    [data-ed] {
-      outline: none !important;
-      background: none !important;
-    }
-  }
+  .top{display:flex;align-items:center;flex:none}
+  .mark{display:flex;align-items:center;gap:calc(14 * var(--u));font-family:var(--mono);font-size:calc(26 * var(--u));font-weight:700;letter-spacing:-.02em}
+  .chip{width:calc(38 * var(--u));height:calc(38 * var(--u));display:block;flex:none}
+  .main{flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0}
+  h1{font-family:var(--display);font-size:calc(104 * var(--u));font-weight:780;line-height:1.02;letter-spacing:-.02em;text-wrap:balance}
+  h2{font-family:var(--display);font-size:calc(60 * var(--u));font-weight:700;line-height:1.08;letter-spacing:-.015em;text-wrap:balance}
+  h3{font-family:var(--display);font-size:calc(32 * var(--u));font-weight:700;letter-spacing:-.01em}
+  .sub{margin-top:calc(36 * var(--u));font-size:calc(32 * var(--u));line-height:1.4;color:var(--mut);max-width:calc(1180 * var(--u))}
+  .mono{font-family:var(--mono)}
+  .foot{display:flex;justify-content:space-between;align-items:baseline;flex:none;padding-top:calc(22 * var(--u));border-top:1px solid var(--line);font-size:calc(24 * var(--u));color:var(--mut)}
+  .foot b{color:var(--ink);font-weight:600}
+  .foot .mono{font-size:calc(20 * var(--u));letter-spacing:.08em}
 
-  :root {
-    --paper: #fffaf1;
-    --ink: #2a2118;
-    --muted: #7a6a56;
-    --accent: #b8860b;
-    --accent-bright: #e1ad01;
-    --accent-deep: #7a5a06;
-    --surface: #f3e9da;
-    --hairline: #d8ccba;
-    --success: #2f9e6a;
-    --sans: 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
-    --mono: 'JetBrains Mono', 'SF Mono', Menlo, 'Courier New', monospace;
-  }
+  /* 2: four plain rows under rules */
+  .rows{margin-top:calc(44 * var(--u));border-top:1px solid var(--line)}
+  .row{display:flex;gap:calc(30 * var(--u));align-items:baseline;padding:calc(30 * var(--u)) 0;border-bottom:1px solid var(--line);font-size:calc(38 * var(--u));line-height:1.3}
+  .row span:last-child{text-wrap:balance}
+  .row .n{flex:none;width:calc(48 * var(--u));font-family:var(--mono);font-size:calc(22 * var(--u));font-weight:700;color:var(--acct)}
 
-  .top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex: none;
-  }
-  .mark {
-    display: flex;
-    align-items: center;
-    gap: 0.875cqw;
-    font-size: 1.6875cqw;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-  }
-  .chip {
-    width: 2.375cqw;
-    height: 2.375cqw;
-    display: block;
-    flex: none;
-  }
-  .page {
-    font-family: var(--mono);
-    font-size: 0.9375cqw;
-    letter-spacing: 0.14em;
-    color: var(--muted);
-  }
+  /* 3: the idea, beside a real board */
+  .split{flex:1;display:grid;grid-template-columns:5fr 6fr;gap:calc(80 * var(--u));align-items:center;min-height:0}
+  .points{margin-top:calc(40 * var(--u));display:grid;gap:calc(26 * var(--u))}
+  .points p{font-size:calc(29 * var(--u));line-height:1.4;color:var(--mut)}
+  .points b{color:var(--ink);font-weight:700}
+  .board{border:1px solid var(--line);border-radius:calc(8 * var(--u));background:#fff;overflow:hidden}
+  .board__top{display:flex;justify-content:space-between;padding:calc(16 * var(--u)) calc(26 * var(--u));background:var(--panel);border-bottom:1px solid var(--line);font-family:var(--mono);font-size:calc(18 * var(--u));color:var(--mut)}
+  .board__top b{color:var(--acct)}
+  .board__body{padding:calc(20 * var(--u)) calc(26 * var(--u)) calc(24 * var(--u))}
+  .label{font-family:var(--mono);font-size:calc(16 * var(--u));letter-spacing:.16em;color:var(--mut);margin-bottom:calc(14 * var(--u))}
+  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:calc(19 * var(--u))}
+  td{padding:calc(8 * var(--u)) 0;vertical-align:middle}
+  td i{display:inline-block;width:calc(9 * var(--u));height:calc(9 * var(--u));border-radius:50%;background:var(--ok)}
+  td.dot{width:calc(22 * var(--u))}
+  td.who{font-weight:700;width:calc(104 * var(--u))}
+  td.kind{color:var(--mut);width:calc(90 * var(--u))}
+  td.where{width:calc(176 * var(--u))}
+  td.model{color:var(--mut)}
+  .acts{margin-top:calc(18 * var(--u));padding-top:calc(18 * var(--u));border-top:1px solid var(--line);display:grid;gap:calc(12 * var(--u))}
+  .act{display:flex;align-items:center;gap:calc(16 * var(--u));font-family:var(--mono);font-size:calc(18.5 * var(--u));color:var(--mut)}
+  .act b{color:var(--ink)}
+  .tag{flex:none;width:calc(148 * var(--u));padding:calc(6 * var(--u)) 0;border-radius:calc(4 * var(--u));border:1px solid var(--okline);background:var(--okbg);color:var(--ok);text-align:center;font-size:calc(13.5 * var(--u));letter-spacing:.1em;font-weight:700}
 
-  .main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-  h1 {
-    margin: 0;
-    font-size: 4.875cqw;
-    font-weight: 700;
-    line-height: 1.05;
-    letter-spacing: -0.03em;
-  }
-  h1 em {
-    font-style: normal;
-    color: var(--accent);
-  }
-  h2 {
-    margin: 0;
-    font-size: 3.625cqw;
-    font-weight: 700;
-    line-height: 1.08;
-    letter-spacing: -0.028em;
-  }
-  h2 em {
-    font-style: normal;
-    color: var(--accent);
-  }
-  .sub {
-    margin: 2cqw 0 0;
-    font-size: 1.875cqw;
-    line-height: 1.45;
-    color: var(--muted);
-    max-width: 82.5cqw;
-  }
-  .label {
-    font-family: var(--mono);
-    font-size: 1cqw;
-    letter-spacing: 0.16em;
-    color: var(--muted);
-    margin-bottom: 1cqw;
-  }
+  /* 4 to 6: ruled columns */
+  .cols{margin-top:calc(56 * var(--u));display:grid;grid-template-columns:repeat(var(--n,3),1fr);column-gap:calc(56 * var(--u));align-items:start}
+  .col{border-top:3px solid var(--line);padding-top:calc(26 * var(--u))}
+  .col .when{font-family:var(--mono);font-size:calc(18 * var(--u));font-weight:700;letter-spacing:.14em;color:var(--acct);margin-bottom:calc(18 * var(--u))}
+  .col h3{margin-bottom:calc(16 * var(--u))}
+  .col p{font-size:calc(27 * var(--u));line-height:1.45;color:var(--mut)}
+  .stat{border-top:3px solid var(--acc);padding-top:calc(22 * var(--u))}
+  .stat .v{font-family:var(--display);font-size:calc(132 * var(--u));font-weight:780;line-height:1;letter-spacing:-.03em;color:var(--accn)}
+  .stat .k{margin-top:calc(16 * var(--u));font-size:calc(26 * var(--u));line-height:1.35;color:var(--ink)}
+  .note{margin-top:calc(44 * var(--u));font-size:calc(28 * var(--u));color:var(--mut)}
+  .note b{color:var(--ink);font-weight:600}
 
-  /* Slide 1 */
-  .title .main {
-    justify-content: center;
-  }
-  .byline {
-    margin-top: 4cqw;
-    font-size: 1.5cqw;
-    color: var(--muted);
-  }
-  .byline b {
-    color: var(--ink);
-    font-weight: 600;
-  }
+  /* 7: the mustard statement slide */
+  .acc .mark{color:var(--accd)}
+  .acc h1{font-size:calc(92 * var(--u))}
+  .asks{margin-top:calc(56 * var(--u));display:grid;gap:calc(34 * var(--u));max-width:calc(1320 * var(--u))}
+  .ask{display:flex;gap:calc(30 * var(--u));align-items:baseline;font-size:calc(40 * var(--u));line-height:1.3;color:var(--ink)}
+  .ask .n{flex:none;width:calc(52 * var(--u));font-family:var(--mono);font-size:calc(24 * var(--u));font-weight:700;color:var(--accd)}
+  .acc .foot{border-top-color:rgba(63,47,0,.35);color:var(--accd)}
+  .acc .foot b{color:var(--ink)}
 
-  /* Slide 2: four plain lines */
-  .lines {
-    margin: 3cqw 0 0;
-    padding: 0;
-    list-style: none;
-    display: grid;
-    gap: 1.375cqw;
-    max-width: 80cqw;
-  }
-  .lines li {
-    display: flex;
-    gap: 1.625cqw;
-    align-items: baseline;
-    font-size: 2.25cqw;
-    line-height: 1.3;
-  }
-  .lines .n {
-    flex: none;
-    width: 2.875cqw;
-    font-family: var(--mono);
-    font-size: 1.375cqw;
-    font-weight: 700;
-    color: var(--accent);
-  }
+  /* chrome: the picker, the arrows and the progress rail sit outside the slide */
+  .rail-bar{position:fixed;left:0;right:0;bottom:0;height:4px;z-index:20}
+  .rail-bar i{position:absolute;inset:0 auto 0 0;background:var(--acc);width:calc(var(--p,0)*100%);transition:width .45s var(--ease)}
+  .picker{position:fixed;top:14px;right:18px;z-index:30;font-family:var(--mono)}
+  .picker>button{appearance:none;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.92);box-shadow:0 2px 10px rgba(0,0,0,.06);color:var(--ink);font:inherit;font-size:12px;letter-spacing:.04em;padding:8px 12px;cursor:pointer;max-width:min(340px,48vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .menu{position:absolute;top:calc(100% + 8px);right:0;width:min(320px,calc(100vw - 36px));max-height:calc(100vh - 100px);overflow-y:auto;padding:8px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 34px rgba(0,0,0,.14);display:none}
+  .menu.open{display:block}
+  .menu .sec{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--acct);padding:9px 8px 4px}
+  .menu button{display:flex;gap:10px;width:100%;border:none;background:transparent;text-align:left;font-family:var(--sans);font-size:13px;padding:7px 8px;border-radius:7px;cursor:pointer;color:var(--ink)}
+  .menu button:hover,.menu button.cur{background:var(--panel)}
+  .menu button em{font-style:normal;font-family:var(--mono);color:var(--mut);min-width:1.6em}
+  .menu .export{margin-top:6px;border-top:1px solid var(--line);border-radius:0 0 7px 7px;padding-top:10px;font-family:var(--mono);font-size:12px}
+  .nav{position:fixed;right:18px;bottom:16px;z-index:30;display:flex;gap:8px}
+  .nav button{appearance:none;width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.88);box-shadow:0 2px 10px rgba(0,0,0,.08);font-size:20px;line-height:1;color:var(--ink);cursor:pointer;opacity:.55;transition:opacity .2s,border-color .2s}
+  .nav button:hover{opacity:1;border-color:var(--acc)}
+  :fullscreen .picker{display:none}
+  @media (prefers-reduced-motion:reduce){.slide,.slide.on{transition:none;transform:none}.slide.on .a{animation:none;opacity:1;transform:none}.frag{transition:none}}
 
-  /* Slide 3: the idea + a real board */
-  .split {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 5fr 6fr;
-    gap: 4.5cqw;
-    align-items: center;
-    margin-top: 1cqw;
-  }
-  .points {
-    margin: 2.25cqw 0 0;
-    padding: 0;
-    list-style: none;
-    display: grid;
-    gap: 1.375cqw;
-  }
-  .points li {
-    font-size: 1.8125cqw;
-    line-height: 1.4;
-  }
-  .points b {
-    font-weight: 700;
-  }
-  .board {
-    border: 0.0625cqw solid var(--hairline);
-    border-radius: 0.875cqw;
-    overflow: hidden;
-    background: #fff;
-  }
-  .board__top {
-    display: flex;
-    justify-content: space-between;
-    padding: 1.0625cqw 1.625cqw;
-    background: var(--surface);
-    border-bottom: 0.0625cqw solid var(--hairline);
-    font-family: var(--mono);
-    font-size: 1.125cqw;
-  }
-  .board__top b {
-    color: var(--accent-deep);
-  }
-  .dim {
-    color: var(--muted);
-  }
-  .board__body {
-    padding: 1.25cqw 1.625cqw 1.5cqw;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: var(--mono);
-    font-size: 1.1875cqw;
-  }
-  td {
-    padding: 0.5cqw 0;
-    vertical-align: middle;
-  }
-  .dot {
-    width: 1.375cqw;
-  }
-  .dot i {
-    display: inline-block;
-    width: 0.5625cqw;
-    height: 0.5625cqw;
-    border-radius: 50%;
-    background: var(--success);
-  }
-  .who {
-    font-weight: 700;
-    width: 6cqw;
-  }
-  .kind {
-    color: var(--muted);
-    width: 5.25cqw;
-  }
-  .where {
-    width: 10.625cqw;
-  }
-  .model {
-    color: var(--muted);
-  }
-  .acts {
-    margin-top: 1.25cqw;
-    padding-top: 1.25cqw;
-    border-top: 0.0625cqw solid var(--hairline);
-    display: grid;
-    gap: 0.75cqw;
-  }
-  .act {
-    display: flex;
-    align-items: center;
-    gap: 1cqw;
-    font-family: var(--mono);
-    font-size: 1.1562cqw;
-    color: var(--muted);
-  }
-  .act b {
-    color: var(--ink);
-  }
-  .tag {
-    flex: none;
-    width: 9.25cqw;
-    padding: 0.375cqw 0;
-    border-radius: 0.4375cqw;
-    border: 0.0625cqw solid #b4dcc7;
-    background: #eaf7f0;
-    color: #1f6f4a;
-    text-align: center;
-    font-size: 0.8438cqw;
-    letter-spacing: 0.1em;
-    font-weight: 700;
-  }
-
-  /* Slide 4: numbers */
-  .stats {
-    margin-top: 3.5cqw;
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1.75cqw;
-  }
-  .stat {
-    padding: 1.75cqw 1.75cqw 1.875cqw;
-    border: 0.0625cqw solid var(--hairline);
-    border-radius: 0.875cqw;
-    background: #fff;
-  }
-  .stat .v {
-    font-size: 4.75cqw;
-    font-weight: 700;
-    line-height: 1;
-    letter-spacing: -0.03em;
-    color: var(--accent);
-  }
-  .stat .k {
-    margin-top: 1cqw;
-    font-size: 1.375cqw;
-    line-height: 1.35;
-    color: var(--ink);
-  }
-  .harnesses {
-    margin-top: 2.5cqw;
-    font-size: 1.625cqw;
-    color: var(--muted);
-  }
-  .harnesses b {
-    color: var(--ink);
-    font-weight: 600;
-  }
-
-  /* Slide 5 and 6: columns */
-  .cols {
-    margin-top: 3.25cqw;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1.75cqw;
-  }
-  .col {
-    padding: 1.875cqw 2cqw 2.125cqw;
-    border: 0.0625cqw solid var(--hairline);
-    border-radius: 0.875cqw;
-    background: #fff;
-    min-height: 25cqw;
-  }
-  .col h3 {
-    margin: 0 0 1.125cqw;
-    font-size: 1.875cqw;
-    letter-spacing: -0.02em;
-  }
-  .col p {
-    margin: 0;
-    font-size: 1.6875cqw;
-    line-height: 1.45;
-    color: var(--ink);
-  }
-  .col .when {
-    display: inline-block;
-    margin-bottom: 1.125cqw;
-    padding: 0.3125cqw 0.75cqw;
-    border-radius: 0.4375cqw;
-    font-family: var(--mono);
-    font-size: 0.8125cqw;
-    letter-spacing: 0.12em;
-    font-weight: 700;
-    background: #fdf5df;
-    border: 0.0625cqw solid #e8d49a;
-    color: var(--accent-deep);
-  }
-  .col .when.later {
-    background: var(--surface);
-    border-color: var(--hairline);
-    color: var(--muted);
-  }
-
-  /* Slide 7 */
-  .asks {
-    margin: 3.25cqw 0 0;
-    padding: 0;
-    list-style: none;
-    display: grid;
-    gap: 1.75cqw;
-    max-width: 81.25cqw;
-  }
-  .asks li {
-    display: flex;
-    gap: 1.625cqw;
-    align-items: baseline;
-    font-size: 2.25cqw;
-    line-height: 1.32;
-  }
-  .asks .n {
-    flex: none;
-    width: 2.875cqw;
-    font-family: var(--mono);
-    font-size: 1.375cqw;
-    font-weight: 700;
-    color: var(--accent);
-  }
-  .close {
-    margin-top: 3.5cqw;
-    padding-top: 1.625cqw;
-    border-top: 0.0625cqw solid var(--hairline);
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    font-size: 1.75cqw;
-  }
-  .close b {
-    font-weight: 700;
-  }
-  .close .url {
-    font-family: var(--mono);
-    font-size: 1.375cqw;
-    letter-spacing: 0.1em;
-    color: var(--muted);
+  /* print and PDF: every slide on its own 1600x900 page, everything revealed, no chrome */
+  @media print{
+    :root{--u:1px}
+    html,body{height:auto;background:#fff;overflow:visible}
+    .stage{position:static;display:block}
+    .deck{width:1600px;aspect-ratio:auto;max-height:none;overflow:visible;container-type:normal}
+    .slide,.slide.on,.slide.past{position:relative;inset:auto;display:flex;width:1600px;height:900px;container-type:size;break-after:page;opacity:1;visibility:visible;transform:none;transition:none}
+    .slide:last-of-type{break-after:auto}
+    .slide .a,.slide.on .a{animation:none;opacity:1;transform:none}
+    .frag{opacity:1;transform:none;transition:none}
+    .picker,.nav,.rail-bar,#ed-bar{display:none!important}
+    [data-ed]{outline:none!important;background:none!important}
   }
 </style>
 <style id="deck-layout"></style>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="chip" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="224" fill="#E1AD01"/> <path fill="#fff" fill-rule="evenodd" d="M687 59C713 59 731 59 747 61C763 62 769 63 781 67C793 70 807 74 818 80C829 85 840 93 849 99C858 105 862 109 871 117C879 125 890 136 898 148C906 160 915 175 921 189C928 203 934 215 938 231C943 247 946 267 948 283C950 299 950 251 950 325C951 399 951 656 950 729C950 802 950 750 948 761C947 772 947 780 943 795C940 810 934 832 928 848C922 864 912 882 906 893C900 903 898 905 893 911C888 916 884 921 878 926C872 931 865 937 858 941C851 946 842 951 835 955C827 959 821 962 814 964C807 967 799 969 791 971C783 973 785 974 767 975C749 977 704 979 684 979C664 980 677 978 648 978C619 979 553 981 510 981C467 981 417 980 389 980C361 980 360 981 344 981C328 981 308 981 294 979C280 978 272 976 261 973C250 970 238 967 226 961C214 956 200 948 189 941C178 934 169 927 159 918C149 909 138 895 130 885C122 875 118 867 113 856C107 845 101 828 97 816C93 804 91 795 89 782C87 769 85 784 84 737C82 690 80 573 80 501C80 429 82 345 84 304C85 263 87 272 90 257C93 242 98 223 102 212C105 201 106 199 111 191C115 183 121 172 127 163C133 154 139 146 146 138C153 130 162 120 169 114C175 108 179 105 186 100C193 96 197 93 208 88C219 83 235 74 252 70C269 65 284 62 308 61C332 60 365 62 396 62C427 62 462 60 495 60C528 60 560 63 592 63C624 62 661 59 687 59ZM659 127C638 128 609 129 591 130C573 130 596 128 552 128C508 129 373 129 326 131C279 132 285 135 271 139C257 142 248 147 240 151C232 154 230 156 225 160C221 164 217 165 211 173C204 181 192 194 184 206C176 218 169 234 164 245C160 256 159 262 157 272C155 282 154 268 153 303C152 338 151 410 151 479C152 548 153 672 155 719C156 766 157 747 159 759C161 771 163 780 166 789C169 798 171 805 176 815C181 825 189 838 196 847C203 856 209 862 217 869C225 876 234 883 243 888C252 894 262 898 271 901C280 905 288 906 299 908C310 910 324 912 336 912C348 913 311 912 369 912C427 912 622 912 682 912C742 911 716 911 729 910C742 909 748 909 758 906C768 904 781 900 791 895C801 890 811 884 820 876C828 868 837 859 844 848C852 837 858 826 863 811C869 796 873 776 876 759C879 742 879 784 880 710C880 636 880 386 879 313C878 240 878 287 876 274C874 261 871 244 868 234C866 224 866 224 861 215C857 206 848 191 841 182C834 173 826 167 822 163C818 159 824 161 820 158C816 155 805 149 798 145C791 141 784 138 776 136C768 133 759 131 749 130C739 128 729 127 714 126C699 126 680 126 659 127Z"/> <path fill="#18181B" stroke="#18181B" stroke-width="28" stroke-linejoin="round" d="M349 361C354 360 362 362 366 363C370 364 371 366 373 367C375 369 376 369 377 374C378 379 380 386 380 396L377 431L392 408C397 401 403 394 408 389C413 384 418 381 423 378C428 375 434 372 440 371C446 369 453 367 460 368C467 368 475 369 482 371C489 373 496 376 501 380C506 384 511 340 513 395C515 450 513 655 512 707L511 709L505 707C502 706 498 704 495 701C492 698 490 694 489 689C487 684 488 698 486 668C483 638 477 543 475 506C472 469 471 460 470 448C469 437 469 440 468 437L465 433L455 434C452 435 448 437 444 440C440 443 436 447 431 452C426 457 422 461 416 469C410 478 399 496 395 505C390 514 391 515 389 521C387 527 385 530 384 543C382 556 380 578 380 600C380 622 383 660 383 675C383 690 382 685 380 689C378 693 376 697 373 699C369 701 366 703 361 703C356 704 349 703 344 701C339 700 336 698 333 694C330 690 327 683 325 677C323 671 322 681 322 656C321 631 325 565 324 526C324 487 319 442 319 420C318 398 320 403 322 396C323 389 325 384 328 379C330 374 333 370 336 367C340 364 344 362 349 361ZM616 372C622 371 625 371 631 372C637 372 644 373 650 375C656 377 664 379 670 383C676 387 681 391 685 397C690 403 693 408 697 421C701 434 704 445 707 473C711 501 715 559 719 590C722 621 725 643 729 660C732 677 735 685 738 692C741 699 742 699 744 703L753 713L721 758L718 759L713 754C708 749 699 738 694 731C688 724 684 716 681 709C677 702 674 696 672 686C670 676 670 685 667 650C663 615 655 508 652 476C649 444 650 462 648 457C647 452 644 447 642 443C639 439 636 436 632 435C628 433 624 432 619 432C614 433 608 434 602 437C596 439 588 444 582 449C576 453 570 459 565 464C560 469 556 475 554 479C551 483 551 485 551 489C550 493 548 470 551 503C553 536 565 655 567 688C569 721 565 698 563 702C561 706 558 708 554 710C550 712 546 713 542 713C538 713 535 712 533 711L527 708L528 419C532 368 542 405 549 399C556 393 564 389 571 385C578 381 587 378 594 376C601 374 610 373 616 372ZM764 724L766 724C767 725 769 726 772 729C775 732 781 738 783 743C786 748 787 752 788 756C789 760 789 764 789 767C788 770 787 774 785 777C783 779 782 782 779 783C776 785 773 787 769 787C765 788 761 788 757 787C753 786 748 784 744 781L731 772L764 724Z"/></symbol></svg>
 
-<div class="deck">
-<!-- 1 · title -->
-<section class="slide title">
-  <div class="top">
-    <div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div>
-    <div class="page">DEMO DAY · OCTOBER 9, 2026</div>
-  </div>
+<div class="stage"><div class="deck">
+
+<!-- 1 · cover -->
+<section class="slide" data-sec="Opening" data-title="Agents that answer for their work">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div></div>
   <div class="main">
-    <h1>Agents that <em>answer for</em> their work.</h1>
-    <p class="sub">On musterd, every member answers for its work: the agents and the people they work with.</p>
-    <div class="byline"><b>Nick Sanders</b> · Founder</div>
+    <h1 class="a" style="--i:0">Agents that answer for their work.</h1>
+    <p class="sub a" style="--i:1">On musterd, every member answers for its work: the agents and the people they work with.</p>
   </div>
+  <div class="foot a" style="--i:2"><span><b>Nick Sanders</b> · Founder</span><span class="mono">DEMO DAY · OCTOBER 9, 2026</span></div>
 </section>
 
 <!-- 2 · problem -->
-<section class="slide">
-  <div class="top">
-    <div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div>
-    <div class="page">02 / 07</div>
-  </div>
+<section class="slide" data-sec="Opening" data-title="The second agent is where it breaks">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div></div>
   <div class="main">
-    <h2>The second agent is where <em>it breaks</em>.</h2>
-    <ul class="lines">
-      <li><span class="n">01</span>You run Claude Code, Codex and Cursor on one project.</li>
-      <li><span class="n">02</span>Two agents change the same file.</li>
-      <li><span class="n">03</span>A session closes and its context closes with it.</li>
-      <li><span class="n">04</span>Weeks later, nobody can say which agent did what, or who accepted it.</li>
-    </ul>
+    <h2 class="a" style="--i:0">The second agent is where it breaks.</h2>
+    <div class="rows">
+      <div class="row frag"><span class="n">01</span><span>You run Claude Code, Codex and Cursor on one project.</span></div>
+      <div class="row frag"><span class="n">02</span><span>Two agents change the same file.</span></div>
+      <div class="row frag"><span class="n">03</span><span>A session closes and its context closes with it.</span></div>
+      <div class="row frag"><span class="n">04</span><span>Weeks later, nobody can say which agent did what, or who accepted it.</span></div>
+    </div>
   </div>
 </section>
 
 <!-- 3 · the idea, shown on a real team -->
-<section class="slide">
-  <div class="top">
-    <div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div>
-    <div class="page">03 / 07</div>
-  </div>
+<section class="slide" data-sec="Product" data-title="One team, named members, a record">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div></div>
   <div class="split">
     <div>
-      <h2>One team. Named members. <em>A record.</em></h2>
-      <ul class="points">
-        <li><b>Agents and people join one team</b> as named members, on any harness.</li>
-        <li><b>Each lane of work has one owner.</b> It is handed off by name and accepted by someone else.</li>
-        <li><b>The record shows the chain:</b> who claimed the work, which model did it, who accepted it.</li>
-      </ul>
-    </div>
-    <div class="board">
-      <div class="board__top">
-        <div><span class="dim">musterd board</span> &nbsp;team <b>revive</b></div>
-        <div class="dim">this team, today</div>
+      <h2 class="a" style="--i:0">One team. Named members. A record.</h2>
+      <div class="points a" style="--i:1">
+        <p><b>Agents and people join one team</b> as named members, on any harness.</p>
+        <p><b>Each lane of work has one owner.</b> It is handed off by name and accepted by someone else.</p>
+        <p><b>The record shows the chain:</b> who claimed the work, which model did it, who accepted it.</p>
       </div>
+    </div>
+    <div class="board a" style="--i:2">
+      <div class="board__top"><div>musterd board · team <b>revive</b></div><div>this team, today</div></div>
       <div class="board__body">
         <div class="label">ROLL CALL</div>
         <table>
@@ -563,8 +192,8 @@
           <tr><td class="dot"><i></i></td><td class="who">lazara</td><td class="kind">agent</td><td class="where">cursor</td><td class="model">claude-sonnet-5-5</td></tr>
           <tr><td class="dot"><i></i></td><td class="who">ghost</td><td class="kind">agent</td><td class="where">opencode</td><td class="model">muse-spark-1.3</td></tr>
         </table>
-        <div class="label" style="margin-top: 1.375cqw">RECENT ACCEPTANCES</div>
         <div class="acts">
+          <div class="label" style="margin:0">RECENT ACCEPTANCES</div>
           <div class="act"><span class="tag">ACCEPTED</span><span><b>ghost</b> accepted <b>#2229</b>, a research synthesis</span></div>
           <div class="act"><span class="tag">ACCEPTED</span><span><b>big-body</b> accepted <b>#2242</b>, a decision record</span></div>
           <div class="act"><span class="tag">ACCEPTED</span><span><b>gptbot</b> accepted <b>#2225</b>, a sync-text fix</span></div>
@@ -575,151 +204,146 @@
 </section>
 
 <!-- 4 · dogfood -->
-<section class="slide">
-  <div class="top">
-    <div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div>
-    <div class="page">04 / 07</div>
-  </div>
+<section class="slide" data-sec="Product" data-title="Built by a team that runs on musterd">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div></div>
   <div class="main">
-    <h2>musterd is built by a team <em>that runs on musterd</em>.</h2>
-    <div class="stats">
-      <div class="stat"><div class="v">1</div><div class="k">human</div></div>
-      <div class="stat"><div class="v">19</div><div class="k">agent members</div></div>
-      <div class="stat"><div class="v">861</div><div class="k">changes merged in the past month</div></div>
-      <div class="stat"><div class="v">500+</div><div class="k">recorded decisions</div></div>
+    <h2 class="a" style="--i:0">musterd is built by a team that runs on musterd.</h2>
+    <div class="cols" style="--n:4">
+      <div class="stat a" style="--i:1"><div class="v">1</div><div class="k">human</div></div>
+      <div class="stat a" style="--i:2"><div class="v">19</div><div class="k">agent members</div></div>
+      <div class="stat a" style="--i:3"><div class="v">861</div><div class="k">changes merged in the past month</div></div>
+      <div class="stat a" style="--i:4"><div class="v">500+</div><div class="k">recorded decisions</div></div>
     </div>
-    <div class="harnesses">Across <b>Claude Code</b>, <b>Codex</b>, <b>Cursor</b> and <b>opencode</b>.</div>
+    <p class="note a" style="--i:5">Across <b>Claude Code</b>, <b>Codex</b>, <b>Cursor</b> and <b>opencode</b>.</p>
   </div>
 </section>
 
 <!-- 5 · who and where -->
-<section class="slide">
-  <div class="top">
-    <div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div>
-    <div class="page">05 / 07</div>
-  </div>
+<section class="slide" data-sec="Business" data-title="Who it is for, and where it stands">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div></div>
   <div class="main">
-    <h2>For product and dev teams that run <em>several agents</em>.</h2>
+    <h2 class="a" style="--i:0">For product and dev teams that run several agents.</h2>
     <div class="cols">
-      <div class="col">
-        <span class="when">TODAY</span>
-        <h3>Working product</h3>
-        <p>Runs on your own machine. Installs from npm. Works with Claude Code, Codex, Cursor, opencode and Grok.</p>
-      </div>
-      <div class="col">
-        <span class="when">THIS MONTH</span>
-        <h3>First design partners</h3>
-        <p>No outside team has used musterd yet. I set up the first teams myself and learn what they keep using.</p>
-      </div>
-      <div class="col">
-        <span class="when later">NOT YET</span>
-        <h3>Hosted teams</h3>
-        <p>musterd Cloud is in build: sign up, get a team, and everyone joins over HTTPS with nothing to run.</p>
-      </div>
+      <div class="col frag"><div class="when">TODAY</div><h3>Working product</h3><p>Runs on your own machine. Installs from npm. Works with Claude Code, Codex, Cursor, opencode and Grok.</p></div>
+      <div class="col frag"><div class="when">THIS MONTH</div><h3>First design partners</h3><p>No outside team has used musterd yet. I set up the first teams myself and learn what they keep using.</p></div>
+      <div class="col frag"><div class="when">NOT YET</div><h3>Hosted teams</h3><p>musterd Cloud is in build: sign up, get a team, and everyone joins over HTTPS with nothing to run.</p></div>
     </div>
   </div>
 </section>
 
 <!-- 6 · model -->
-<section class="slide">
-  <div class="top">
-    <div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div>
-    <div class="page">06 / 07</div>
-  </div>
+<section class="slide" data-sec="Business" data-title="How musterd makes money">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div></div>
   <div class="main">
-    <h2>How musterd <em>makes money</em>.</h2>
+    <h2 class="a" style="--i:0">How musterd makes money.</h2>
     <div class="cols">
-      <div class="col">
-        <span class="when">NOW</span>
-        <h3>Design partners</h3>
-        <p>Product and dev teams use musterd free while I set up their teams by hand. Each one tells me what they would pay for.</p>
-      </div>
-      <div class="col">
-        <span class="when later">NEXT · NOT YET</span>
-        <h3>Hosted teams</h3>
-        <p>A subscription for a hosted team, with credits for the model compute that musterd runs. Your own keys and subscriptions use no credits.</p>
-      </div>
-      <div class="col">
-        <span class="when later">LATER · NOT YET</span>
-        <h3>Larger organizations</h3>
-        <p>Governance: an exportable record of who asked, claimed and accepted each piece of work, and single sign-on.</p>
-      </div>
+      <div class="col frag"><div class="when">NOW</div><h3>Design partners</h3><p>Product and dev teams use musterd free while I set up their teams by hand. Each one tells me what they would pay for.</p></div>
+      <div class="col frag"><div class="when">NEXT · NOT YET</div><h3>Hosted teams</h3><p>A subscription for a hosted team, with credits for the model compute that musterd runs. Your own keys and subscriptions use no credits.</p></div>
+      <div class="col frag"><div class="when">LATER · NOT YET</div><h3>Larger organizations</h3><p>Governance: an exportable record of who asked, claimed and accepted each piece of work, and single sign-on.</p></div>
     </div>
   </div>
 </section>
 
-<!-- 7 · ask -->
-<section class="slide">
-  <div class="top">
-    <div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div>
-    <div class="page">07 / 07</div>
-  </div>
+<!-- 7 · ask, on the mustard slide -->
+<section class="slide acc" data-sec="Ask" data-title="What I am looking for">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div></div>
   <div class="main">
-    <h2>What I am <em>looking for</em>.</h2>
-    <ul class="asks">
-      <li><span class="n">01</span>Introductions to product and dev teams that run several agents across tools. They become the first design partners.</li>
-      <li><span class="n">02</span>Conversations with investors who back developer infrastructure.</li>
-    </ul>
-    <div class="close">
-      <b>Agents that answer for their work.</b>
-      <span class="url">MUSTERD.IO</span>
+    <h1 class="a" style="--i:0">What I am looking for.</h1>
+    <div class="asks a" style="--i:1">
+      <div class="ask"><span class="n">01</span><span>Introductions to product and dev teams that run several agents across tools. They become the first design partners.</span></div>
+      <div class="ask"><span class="n">02</span><span>Conversations with investors who back developer infrastructure.</span></div>
     </div>
   </div>
+  <div class="foot a" style="--i:2"><span><b>Nick Sanders</b> · Founder</span><span class="mono">MUSTERD.IO</span></div>
 </section>
-</div>
 
-<div class="nav"><span id="pg"></span><button id="pdf" title="D">Export PDF · D</button></div>
+</div></div>
+<div class="rail-bar"><i></i></div>
+<div class="picker"><button id="pick" aria-haspopup="true"></button><div class="menu" id="menu"></div></div>
+<div class="nav"><button id="prevb" aria-label="Back">‹</button><button id="nextb" aria-label="Forward">›</button></div>
 
 <script>
-  (() => {
-    const slides = [...document.querySelectorAll('.slide')];
-    const pg = document.getElementById('pg');
-    let i = Math.max(0, Math.min(slides.length - 1, (parseInt(location.hash.slice(1), 10) || 1) - 1));
-    const show = (n) => {
-      i = Math.max(0, Math.min(slides.length - 1, n));
-      slides.forEach((s, k) => s.classList.toggle('on', k === i));
-      pg.textContent = `${i + 1} / ${slides.length} · E edit · M move · ⌘S save`;
-      history.replaceState(null, '', '#' + (i + 1));
-    };
-    show(i);
-    // the editor's own keys (E, M, ⌘S, typing) run first in the capture phase and stop here
-    addEventListener('keydown', (e) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || e.target.isContentEditable) return;
-      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') (e.preventDefault(), show(i + 1));
-      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') (e.preventDefault(), show(i - 1));
-      else if (e.key === 'Home') show(0);
-      else if (e.key === 'End') show(slides.length - 1);
-      else if (e.key === 'd' || e.key === 'D') exportPdf();
-    });
-    document.querySelector('.deck').addEventListener('click', (e) => {
-      if (document.documentElement.classList.contains('editing')) return;
-      const r = e.currentTarget.getBoundingClientRect();
-      show(e.clientX - r.left > r.width / 2 ? i + 1 : i - 1);
-    });
-    // Export: save any pending edits, then ask the local server to print this file to PDF.
-    async function exportPdf() {
-      const ed = window.__pageEditor;
-      const btn = document.getElementById('pdf');
-      if (ed && ed.dirty.size) {
-        dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true }));
-        for (let k = 0; k < 30 && ed.dirty.size; k++) await new Promise((r) => setTimeout(r, 100));
-        if (ed.dirty.size) return (btn.textContent = 'Save failed; PDF not made');
-      }
-      if (!location.protocol.startsWith('http')) return window.print();
-      btn.textContent = 'Making PDF…';
-      try {
-        const r = await fetch('/__pdf?path=' + encodeURIComponent(location.pathname), {
-          method: 'POST',
-          headers: { 'x-page-editor': '1' },
-        });
-        const j = await r.json();
-        btn.textContent = r.ok ? 'Saved ' + j.file.split('/').pop() : 'PDF failed: ' + (j.error || r.status);
-      } catch (err) {
-        btn.textContent = 'PDF failed; use ⌘P';
-      }
-      setTimeout(() => (btn.textContent = 'Export PDF · D'), 4000);
+(() => {
+  const slides = [...document.querySelectorAll('.slide')], pick = document.getElementById('pick'), menu = document.getElementById('menu');
+  const n = slides.length;
+  let i = Math.max(0, Math.min(n - 1, (parseInt(location.hash.slice(1), 10) || 1) - 1));
+  const frags = (s) => [...s.querySelectorAll('.frag')];
+  const editing = () => document.documentElement.classList.contains('editing');
+  let html = '', last = '';
+  slides.forEach((s, k) => {
+    if (s.dataset.sec !== last) { html += `<div class="sec">${s.dataset.sec}</div>`; last = s.dataset.sec; }
+    html += `<button data-k="${k}"><em>${k + 1}</em>${s.dataset.title}</button>`;
+  });
+  html += '<button class="export" id="pdf">Export PDF · D</button>';
+  menu.innerHTML = html;
+  menu.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.id === 'pdf') return void exportPdf();
+    go(+b.dataset.k);
+    menu.classList.remove('open');
+  });
+  pick.addEventListener('click', (e) => { e.stopPropagation(); menu.classList.toggle('open'); });
+  function next() {
+    const f = frags(slides[i]).filter((x) => !x.classList.contains('shown'));
+    if (f.length) return void f[0].classList.add('shown');
+    if (i + 1 < n) go(i + 1);
+  }
+  function prev() {
+    const f = frags(slides[i]).filter((x) => x.classList.contains('shown'));
+    if (f.length) return void f[f.length - 1].classList.remove('shown');
+    go(i - 1, true);
+  }
+  function go(k, back) {
+    const from = i;
+    i = Math.max(0, Math.min(n - 1, k));
+    frags(slides[i]).forEach((x) => x.classList.toggle('shown', !!back && i < from));
+    slides.forEach((s, j) => { s.classList.toggle('on', j === i); s.classList.toggle('past', j < i); });
+    pick.textContent = `${i + 1} / ${n} · ${slides[i].dataset.title} ▾`;
+    [...menu.querySelectorAll('button[data-k]')].forEach((b) => b.classList.toggle('cur', +b.dataset.k === i));
+    document.documentElement.style.setProperty('--p', (i + 1) / n);
+    history.replaceState(null, '', '#' + (i + 1));
+  }
+  document.getElementById('prevb').addEventListener('click', (e) => { e.stopPropagation(); prev(); });
+  document.getElementById('nextb').addEventListener('click', (e) => { e.stopPropagation(); next(); });
+  // the editor's own keys (E, M, ⌘S, typing) run first in the capture phase and stop here
+  addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || e.target.isContentEditable) return;
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); next(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prev(); }
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(n - 1);
+    else if (e.key === 'g') menu.classList.toggle('open');
+    else if (e.key === 'Escape') menu.classList.remove('open');
+    else if (e.key === 'f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    else if (e.key === 'd' || e.key === 'D') exportPdf();
+  });
+  addEventListener('click', (e) => {
+    if (e.target.closest('.picker,.nav') || editing()) return;
+    if (menu.classList.contains('open')) return void menu.classList.remove('open');
+    next();
+  });
+  // Export: save any pending edits, then ask the local server to print this file to PDF.
+  async function exportPdf() {
+    const ed = window.__pageEditor, btn = document.getElementById('pdf');
+    if (ed && ed.dirty.size) {
+      dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true }));
+      for (let k = 0; k < 30 && ed.dirty.size; k++) await new Promise((r) => setTimeout(r, 100));
+      if (ed.dirty.size) return void (btn.textContent = 'Save failed; PDF not made');
     }
-    document.getElementById('pdf').addEventListener('click', (e) => (e.stopPropagation(), exportPdf()));
-  })();
+    if (!location.protocol.startsWith('http')) return void window.print();
+    btn.textContent = 'Making PDF…';
+    try {
+      const r = await fetch('/__pdf?path=' + encodeURIComponent(location.pathname), { method: 'POST', headers: { 'x-page-editor': '1' } });
+      const j = await r.json();
+      btn.textContent = r.ok ? 'Saved ' + j.file.split('/').pop() : 'PDF failed: ' + (j.error || r.status);
+    } catch (err) {
+      btn.textContent = 'PDF failed; use ⌘P';
+    }
+    setTimeout(() => (btn.textContent = 'Export PDF · D'), 4000);
+  }
+  go(i);
+})();
 </script>
 <script src="editor.js"></script>
+</html>
