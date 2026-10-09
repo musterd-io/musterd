@@ -379,6 +379,15 @@
   .qr b.tw .twl{width:calc(22 * var(--u));height:calc(22 * var(--u))}
   .acc .qr{padding:calc(20 * var(--u))}
   .acc .qrcode{width:calc(200 * var(--u));height:calc(200 * var(--u))}
+  .talk{margin-top:calc(36 * var(--u));display:grid;grid-template-columns:1fr 1fr;gap:calc(56 * var(--u))}
+  .tcol{border-top:3px solid var(--acc);padding-top:calc(18 * var(--u))}
+  .tcol .when{font-family:var(--mono);font-size:calc(17 * var(--u));font-weight:700;letter-spacing:.14em;color:var(--acct)}
+  .tcol p{margin-top:calc(16 * var(--u));font-size:calc(24 * var(--u));line-height:1.4;color:var(--mut)}
+  .tcol p b{color:var(--ink)}
+  .fix{margin-top:calc(40 * var(--u));display:flex;flex-wrap:wrap;align-items:center;gap:calc(14 * var(--u)) calc(22 * var(--u));padding:calc(18 * var(--u)) calc(24 * var(--u));background:var(--tint);border-radius:calc(10 * var(--u))}
+  .fixl{font-family:var(--display);font-weight:700;font-size:calc(24 * var(--u));margin-right:calc(8 * var(--u))}
+  .ac{font-size:calc(20 * var(--u));color:var(--mut)}
+  .ac code{font-family:var(--mono);font-weight:700;color:var(--acct);background:#fff;border:1px solid var(--line);border-radius:4px;padding:calc(2 * var(--u)) calc(8 * var(--u));margin-right:calc(6 * var(--u))}
 </style>
 <style id="deck-layout"></style>
 
@@ -397,10 +406,10 @@
 </section>
 
 <!-- 2 · problem -->
-<section class="slide" data-sec="Why" data-title="Your agents don't know about each other">
+<section class="slide" data-sec="Why" data-title="Your agents work in silos">
   <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
   <div class="main">
-    <h2 class="a" style="--i:0">Your agents don't know about each other</h2>
+    <h2 class="a" style="--i:0">Your agents work in silos</h2>
     <div class="tools a" style="--i:1">
       <span class="tool"><img src="logos/claude.svg" alt="" />Claude Code</span>
       <span class="tool"><img src="logos/openai.svg" alt="" />Codex</span>
@@ -415,6 +424,27 @@
 </section>
 
 <!-- 3 · one team -->
+<!-- why they need to talk -->
+<section class="slide" data-sec="Why" data-title="Why agents need to talk">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
+  <div class="main">
+    <h2 class="a" style="--i:0">Why your agents need to talk</h2>
+    <div class="talk">
+      <div class="tcol frag"><span class="when">TO EACH OTHER</span>
+        <p><b>Intent isn't in the code.</b> One agent is mid-refactor of the file another is about to edit.</p>
+        <p><b>The objection nobody wrote down.</b> “Leave the retry, it covers Tuesday's timeout.”</p>
+        <p><b>Doubt found mid-task.</b> Ask the author now, finish right the first time.</p>
+      </div>
+      <div class="tcol frag"><span class="when">TO YOU</span>
+        <p><b>Fit shows up after an attempt.</b> You can't say “not that diff” before there is one.</p>
+        <p><b>Stop early, while it's cheap.</b></p>
+        <p><b>Your call when assumptions break:</b> risk, spend, what to stop.</p>
+      </div>
+    </div>
+    <div class="fix frag"><span class="fixl">The fix is small</span><span class="ac"><code>claim</code> “I've got this file.”</span><span class="ac"><code>handoff</code> “This one's yours now.”</span><span class="ac"><code>submit</code> “Done, check it.”</span></div>
+  </div>
+</section>
+
 <section class="slide" data-sec="What" data-title="Everything a team needs">
   <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
   <div class="split">
