@@ -68,3 +68,27 @@ export function wokenBadge(): { label: string; title: string } {
       'Who sent it is not knowable from here — that lives on the admin-only audit.',
   };
 }
+
+/** How long a woken seat dozes at its desk after the wake that brought it in has ended. */
+export const WAKE_LINGER_MS = 120_000;
+
+/**
+ * Until when a seat that has just gone offline should still be drawn dozing at its desk, or null.
+ *
+ * A wake (ADR 131) is one short run: the seat comes in, answers, and its presence goes offline the
+ * moment the run ends — so on the floor it walked in, spoke and walked straight back out (nick,
+ * 2026-10-09: "but immediately left again"). This is display only: for `WAKE_LINGER_MS` after a
+ * WAKE presence ends, the office keeps the member at their desk, asleep. The wire is untouched and
+ * the plate says offline the whole time. It reads the stamped provenance of the LATEST presence and
+ * nothing else (ADR 236: a row that did not say is not a wake).
+ */
+export function lingerUntil(
+  m: Pick<MemberSummary, 'presence' | 'presences'>,
+  now: number,
+): number | null {
+  if (m.presence !== 'offline' || !m.presences?.length) return null;
+  const last = m.presences.reduce((a, b) => (b.last_seen_at > a.last_seen_at ? b : a));
+  if (last.provenance !== 'wake') return null;
+  const until = last.last_seen_at + WAKE_LINGER_MS;
+  return until > now ? until : null;
+}

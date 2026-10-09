@@ -75,6 +75,9 @@ export interface OfficeNode {
    * it. Like `woken`, this is not a posture. Optional so hand-built preview nodes can leave it out.
    */
   dreaming?: boolean;
+  /** A wake just ended and the seat is offline, but the room keeps it dozing at its desk for a while
+   *  (`lingerUntil`, wokenSeat.ts). Display only: the plate's dot and dimming say offline. */
+  dozing?: boolean;
 }
 
 /**

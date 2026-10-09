@@ -1,5 +1,5 @@
 import type { Envelope, LaneBoard, MemberSummary, WorkingHours } from '@musterd/protocol';
-import { lazy, Suspense, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { MusterdWord } from '../brand/MusterdWord';
 import { memberColor, memberPosture } from './format';
 import { gatheredFrom } from './huddles';
@@ -11,7 +11,7 @@ import { actToEvent, speechEventFor } from './office-scene/mapping';
 import { CollapseButton, PanelRail } from './PanelChrome';
 import { captionFor, type Caption } from './captions';
 import type { RoomEntry } from './workingOn';
-import { dreamingSeat, wokenSeat } from './wokenSeat';
+import { dreamingSeat, lingerUntil, wokenSeat } from './wokenSeat';
 import { blockedOwners, type OfficeRoomProps } from './officeRoom';
 import { projectWallBoard } from './office-scene/wallboard';
 
@@ -34,6 +34,7 @@ function computeData(
   board: LaneBoard | null,
   envelopes: Envelope[],
   asks: readonly AskView[],
+  now: number = Date.now(),
 ): OfficeData {
   const byName = new Map(entries.map((e) => [e.name, e]));
   const humans = new Set(roster.filter((m) => m.kind === 'human').map((m) => m.name));
@@ -50,6 +51,9 @@ function computeData(
     asks: roomAsks(asks, humans, Date.now()),
     nodes: roster.map((m) => {
       const kind = m.kind === 'human' ? 'human' : 'agent';
+      // Just woken and already gone: doze at the desk for a while instead of walking straight out
+      // (display only — the plate keeps saying offline; `lingerUntil` in wokenSeat.ts).
+      const dozing = lingerUntil(m, now) !== null;
       const live =
         m.presences?.find((p) => p.status === 'online' || p.status === 'away') ?? m.presences?.[0];
       const entry = byName.get(m.name);
@@ -57,9 +61,9 @@ function computeData(
         name: m.name,
         kind,
         service: m.kind === 'service',
-        presence: m.presence,
-        activity: m.activity ?? (m.presence === 'offline' ? 'offline' : 'active'),
-        posture: memberPosture(m),
+        presence: dozing ? 'online' : m.presence,
+        activity: dozing ? 'active' : (m.activity ?? (m.presence === 'offline' ? 'offline' : 'active')),
+        posture: dozing ? 'working' : memberPosture(m),
         state: m.state ?? null,
         color: memberColor(m.name, kind, m.hue),
         hue: m.hue ?? null,
@@ -81,8 +85,9 @@ function computeData(
         // Reads the same live row `surface` and `model` came from just above, via the shared
         // helper — a plate that took its harness from one attachment and its provenance from
         // another would be describing two sessions as one.
-        woken: wokenSeat(m),
-        dreaming: dreamingSeat(m),
+        woken: dozing || wokenSeat(m),
+        dreaming: dozing || dreamingSeat(m),
+        ...(dozing ? { dozing: true } : {}),
       };
     }),
   };
@@ -205,9 +210,22 @@ export function OfficeScene({
   const handleRef = useRef<OfficeHandle | null>(null);
   const emittedRef = useRef<Set<string>>(new Set());
 
+  // A dozing seat (a wake that just ended) needs one more pass when its linger runs out, so it gets up
+  // and leaves on time even if nothing else changes — one timer, to the earliest expiry.
+  const [lingerTick, setLingerTick] = useState(0);
+  useEffect(() => {
+    const now = Date.now();
+    const next = Math.min(
+      ...roster.map((m) => lingerUntil(m, now) ?? Infinity),
+    );
+    if (!Number.isFinite(next)) return;
+    const t = window.setTimeout(() => setLingerTick((n) => n + 1), next - now + 50);
+    return () => window.clearTimeout(t);
+  }, [roster, lingerTick]);
   const data = useMemo(
     () => computeData(teamName, teamWorkingHours, roster, entries, board, envelopes, asks),
-    [teamName, teamWorkingHours, roster, entries, board, envelopes, asks],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- lingerTick re-reads the clock
+    [teamName, teamWorkingHours, roster, entries, board, envelopes, asks, lingerTick],
   );
   // Latest-value refs for the mount effect below, which subscribes ONCE and must not re-run when a
   // prop identity changes (re-running it would tear down and rebuild the whole canvas scene).
