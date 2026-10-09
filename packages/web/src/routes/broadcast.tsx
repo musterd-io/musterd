@@ -14,6 +14,8 @@ import { justShipped } from '../live/buildSync';
 import { officeRoom } from '../live/officeRoom';
 import { useWorkingOn } from '../live/useWorkingOn';
 import { roomEntries } from '../live/workingOn';
+import { BroadcastBriefing } from '../live/BroadcastBriefing';
+import { briefing } from '../live/briefing';
 import { useReport } from '../live/useReport';
 import { TeamColumn, captionColorFor } from '../live/TeamColumn';
 import { Ticker } from '../live/Ticker';
@@ -287,6 +289,13 @@ function BroadcastPage() {
   // The room's ask moment (ADR 464 §3.3) reads the same derivation the page's banner does.
   const derivedAsks = useMemo(() => deriveAsks(envelopes), [envelopes]);
   const asks = useMemo(() => applyTierClock(derivedAsks, Date.now()), [derivedAsks]);
+  // The stream's briefing. Built WITHOUT `requests`: pending seat claims are admin-only data and a
+  // public stream does not announce who is knocking (spec, decision 3) — this observer could not read
+  // them anyway, and the component filters the kind a second time.
+  const brief = useMemo(
+    () => briefing({ board, goals: report?.goals ?? [], asks, roster, now: Date.now() }),
+    [board, report, asks, roster],
+  );
 
   // Connect from the URL only — no form, no localStorage team memory. A stream source is launched by a
   // URL (an OBS source, a headless capturer), so the URL is the whole configuration.
@@ -357,6 +366,11 @@ function BroadcastPage() {
               />
             </div>
             <Ticker envelopes={envelopes} roster={roster} board={board} />
+            {/* The lower-third: in the room's empty bottom-left corner, above the floating ticker,
+                so the column keeps every card it had. */}
+            <div className="bb-corner">
+              <BroadcastBriefing brief={brief} />
+            </div>
           </>
         )}
         {/* Operator diagnostics, not stream chrome: the two states where there is no office to look

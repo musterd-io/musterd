@@ -96,14 +96,23 @@ Notes from reading the code:
 
 ## `/broadcast` — the lower-third
 
-- The headline sentence in large type, and below it one bucket at a time rotating slowly with up to
-  three big rows (title and owner only; no ages or chips).
-- **Needs a human interrupts the rotation.** While non-empty it holds the lower-third until it clears.
-- No seat-claim requests (see Decisions 3). Asks, approve-asks and blocked lanes only. A blocked lane
-  is a stronger public claim than "working on"; titles are already public on this surface.
-- The rotation stops when the tab is hidden and honors still mode, per the animation rule in
-  `packages/web/AGENTS.md`.
-- `/broadcast` keeps its own route and its no-seat property.
+Built 2026-10-09 (lane `01M4FG5NWKCYSYQ9RWG06Y4TNC`); three things differ from the first draft, each
+because the frame said so:
+
+- **Where it sits.** In the room's empty bottom-left corner, above the floating ticker, over the office
+  track only — not in the team column. Measured: seated in the column it cost two of six working cards
+  at the 1080 stage, and that column has been trimmed for real estate before. The corner takes nothing
+  from the cards.
+- **What rotates.** *In progress* is **not** a rotating bucket here: the cards are that list, by person,
+  and repeating it is the same fact twice. The headline sentence still counts it. What rotates is *In
+  review* and *Shipped today*.
+- **How much.** Two rows, then "+N more" — two is what fits the corner without covering the floor.
+
+The rest holds: the headline sentence in large type, **Needs a human holds the frame** while anything is
+in it (asks, approve-asks, blocked lanes; never rotated away), no seat-claim requests (see Decisions 3 —
+the caller builds the briefing without `requests`, and the component drops the kind a second time), the
+rotation stops while the tab is hidden and does not start in `?still`, and `/broadcast` keeps its own
+route and its no-seat property.
 
 ## Constraints that apply
 
