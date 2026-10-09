@@ -112,8 +112,23 @@ separate the two. **How long Twitch refuses is not measured.**
 
 ADR 555 treats a rerun after a restart as a retry: `entrypoint.sh` hands the stream a count of short runs
 in a row (`MUSTERD_BROADCAST_SINK_RETRY`) and waits 10, 20, then 30 s between them; the stream asks for a
-rerun until six short runs have failed, then ends the machine and `ensure` takes over as before. Not yet
-measured on the box.
+rerun until six short runs have failed, then ends the machine and `ensure` takes over as before.
+
+**Measured on the box with ADR 555 (machine `894036c6431608`, image `917843deea30`, 2026-10-09Z):**
+
+| time (Z) | event |
+| --- | --- |
+| 04:05:31 | 3 s `tcp-reset`; ffmpeg ends |
+| 04:05:32 | relaunch (the run had lasted 66 s, so no extra wait) |
+| 04:05:37 | `◉ live` |
+| 04:05:39 | Twitch closes the new session (`End of file`); ffmpeg ends again |
+| 04:05:42 | retry 2 (`ran 7s`; the loop waited out the 10 s floor) |
+| 04:05:45 | `◉ live`, and it stayed up (checked to 04:11, no further error) |
+
+14 s from the reset to a live that held, on the same machine, against 96 s on a new one. It took two
+relaunches: Twitch refused the first reconnect about 2 s after accepting the TCP session and took the
+second. One run, one reset: how long Twitch refuses a reconnect is still not known, and the cap of six is a guess.
+Picture and Twitch-side offline time were not watched.
 
 ## A merge to `main` dropped the Twitch ingest, and the restart it ran bought nothing (2026-10-08; falsify: with a hosted stream live on the new image, merge any commit and read `fly logs -a musterd-broadcast` — a `relaunching the stream` line inside the rebuild window falsifies this) <!-- claim: defect -->
 
