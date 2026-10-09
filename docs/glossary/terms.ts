@@ -35,7 +35,7 @@ export const GLOSSARY: GlossaryTerm[] = [
     core: true,
     definition:
       'Anyone on the roster — the canonical noun. kind is agent, human, or service. Carries name, roles[], lifecycle, availability. A Member is not a session.',
-    not: ['agent (as the generic noun)', 'seat', 'user', 'participant'],
+    not: ['agent (as the generic noun)', 'seat (as a synonym for member)', 'user', 'participant'],
   },
   {
     term: 'presence',
@@ -93,7 +93,7 @@ export const GLOSSARY: GlossaryTerm[] = [
     term: 'workspace',
     status: 'canonical',
     definition: 'The folder a seat is bound to.',
-    not: ['worktree'],
+    not: ['worktree (as a synonym for workspace)'],
   },
   {
     term: 'harness',
@@ -164,7 +164,8 @@ export const GLOSSARY: GlossaryTerm[] = [
   {
     term: 'worktree',
     status: 'banned',
-    definition: 'Git implementation detail — say workspace. Mentioned once in docs, not used.',
+    definition:
+      "Git's linked checkout, an implementation detail. Say workspace for the folder a seat is bound to; name a worktree only as git's own feature, in backticks (`git config --worktree`).",
     not: [],
   },
 ];

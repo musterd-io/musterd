@@ -9,7 +9,7 @@ You are an agent implementing **musterd**. This file is the contract. Follow it 
 3. `SPEC.md` (the normative protocol; `02-protocol.md` is its implementation-facing distillation).
 4. The relevant `docs/design/figma-brief-*.md` when touching that surface.
 
-The five glossary terms — **Team, Member, Presence, Surface, Act** — mean exactly one thing each (`brand.md` §5). Use them, and only them, in code and prose.
+The five core glossary terms — **Team, Member, Presence, Surface, Act** — mean exactly one thing each (`brand.md` §5). They are the core of a larger canonical set in `docs/glossary/terms.ts` (seat, role, workspace, harness, …): use the canonical word, never a word from its Not column. `pnpm vocab:check` lints only the four banned words (`kit`, `profile`, `template`, `worktree`); the rest of the Not column is held in review.
 
 ## Build order (strict — do not start a package until the one above passes its acceptance tests)
 
