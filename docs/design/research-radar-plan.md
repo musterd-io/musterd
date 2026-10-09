@@ -1,6 +1,6 @@
 # Research radar — implementation plan
 
-> **Plan.** The implementation plan for the *ingest* half of musterd's research practice (ADR 056): a scheduled agent that sweeps new research, triages it for relevance, and emits an in-repo digest a human curates. Corrections via ADR + update this doc. Status: **M1–M4 landed (scaffold + dry-sweep + two-tier triage + emit, with the Exploring Next feed as a third source); M5 deferred (§8). 2026-06-25 / updated 2026-08-24**.
+> **Plan.** The implementation plan for the *ingest* half of musterd's research practice (ADR 056): a scheduled agent that sweeps new research, triages it for relevance, and emits an in-repo digest a human curates. Corrections via ADR + update this doc. Status: **M1–M4 landed; M5 uses the weekly full-text GitHub Actions workflow described in §8. Updated 2026-10-09.**
 
 ## 1. Goal & scope
 
@@ -16,7 +16,7 @@ Keep musterd shaped by the field without a human manually trawling arXiv. Each w
 | Cadence | **Weekly** | Matches paper-publication pace; daily is mostly empty/noise. |
 | Output | **In-repo file** (`docs/research/radar/<YYYY-WW>.md`) | Versioned, diffable, reviewable; a notify pings when ready. |
 | Graduation | **Digest only** | Radar surfaces + scores; human picks winners; ADRs/evidence drafted on request. No auto-merge into the thesis. |
-| Run location | ~~Cloud routine~~ **Deferred** (2026-08-24, nick) | Hand-run weekly until a few digests prove the rail; see §8. |
+| Run location | **GitHub Actions** (2026-10-09) | Weekly full-text run plus manual dispatch; emits a draft PR for human review. The earlier deferral is recorded in §8. |
 | Exploring Next | **Source, not sink** (2026-08-24, nick) | The feed direction inverted: EN's hand-curated pipeline feeds the radar (read-only GET of its public feed). Nothing posts into EN — its ingest auto-generates an episode per URL (no review stage exists), so an outbound feed would be auto-publish, not suggestion. |
 
 ## 3. Architecture — lift, don't reinvent
@@ -33,7 +33,7 @@ These are external repos; the radar reimplements the small slices it needs in th
 ## 4. Pipeline (one synchronous run)
 
 1. **Sweep** — arXiv (`cs.MA`, `cs.AI`, `cs.HC`) + HF Papers + the Exploring Next public feed (`exn` — items are already human-curated for interest; rows carry `audio_summary`, triage signal no abstract has; arXiv-linked rows normalize to the arXiv id so cross-source dedup collapses them) on a fixed query set: multi-agent coordination, human-agent collaboration, agent failure taxonomies, LLM-agent eval/observability, agent topology, human-in-the-loop. Reuse the Exploring Next fetchers' shape.
-2. **Dedup** — drop anything already in `docs/research/radar/seen.json` (by arXiv id / HF id). *This is the gap both prior projects left open — it is load-bearing for digest readability.*
+2. **Dedup** — drop anything already in `docs/research/radar/seen.json` (by canonical paper id and Exploring Next episode id). Retry pending candidates independently of the seven-day feed window. *This is the gap both prior projects left open — it is load-bearing for digest readability.*
 3. **Tier-1 filter (cheap model)** — score the ~50 new candidates for coarse relevance; keep a shortlist (~5–10). Mirrors Exploring Next's cheap-planner pattern.
 4. **Tier-2 honest-score (stronger model)** — on the shortlist only: the weighted relevance score + the **brutal-honesty** gut-check + a verdict. Expensive model runs on few items.
 5. **Emit** — write the weekly digest + append **every triaged id** to `seen.json` (changed from "surfaced ids" 2026-08-24: marking only surfaced would re-pay tier-1 for the same ignores every week, since the fetch window overlaps the cadence); print a one-line "digest ready" notify. A same-week re-emit refuses rather than overwriting.
@@ -46,7 +46,7 @@ Synchronous, single-threaded, no queue. A weekly job has no need for async worke
 docs/research/
   README.md                  # lab notebook (exists)
   radar/
-    seen.json                # {"arxiv": [...ids], "hf": [...ids]} — dedup ledger
+    seen.json                # canonical source IDs + metadata-only pending retries
     <YYYY-WW>.md             # one digest per week
 ```
 
@@ -81,14 +81,13 @@ Model ids live in one config constant; recorded per-run. Avoid amprealize's "Opu
 
 ## 8. Scheduling
 
-**Deferred (2026-08-24, nick).** With Exploring Next as a read-side source there is nothing to couple to its crons, and §10 rule 1 says nothing more until the digest has run for weeks. Current cadence: hand-run `pnpm radar:sweep --triage --emit` weekly; revisit a runner (cloud routine vs local) after a few real digests. The original choice (weekly cloud routine, Monday 08:00) stands as the default when M5 is picked back up — its exact schedule/command gets confirmed with nick before creation.
+**Prior deferral (2026-08-24, nick).** With Exploring Next as a read-side source there was nothing to couple to its crons, so the digest was hand-run while the rail was exercised. The weekly cloud-runner decision was reopened when full-text automation was approved on 2026-10-09.
 
-**Weekly tick (2026-10-02, lane `01M3TAKHQ4HRNDJX0TQGESYZJ6`).** The ADR 166 sweep LaunchAgent now
-runs `pnpm radar:sweep --weekly --post` on its tick (`scripts/radar/weekly.ts`): the dry sweep — no
-key, no write — and one `status_update` to the team as the `sweep` seat naming how many candidates
-are waiting and how old the last digest is, with the hand-run command. This closes "nothing runs"
-without touching the deferral above: the triaged emit is still the human's step, and its schedule is
-still the decision this section defers.
+**Weekly full-text workflow (2026-10-09, lane `01M4GR4A7NNXFC3FY6ZN8YY52W`).** `.github/workflows/research-radar.yml` runs Monday at 08:00 UTC and supports `workflow_dispatch`. It reads full article text and every attached Exploring Next script, triages the complete reads, reconciles metadata-only retries, then opens or updates one unreviewed weekly draft PR with the digest and ledger. It never merges. If any required repository secret is missing, it reports the secret names and leaves repository files untouched. The workflow summary contains counts, read failures, truncation, and the draft PR link; source bodies are not included. Operator details and local commands are in [`scripts/radar/README.md`](../../scripts/radar/README.md).
+
+**Weekly tick (2026-10-02, lane `01M3TAKHQ4HRNDJX0TQGESYZJ6`).** The ADR 166 sweep LaunchAgent
+continues to run `pnpm radar:sweep --weekly --post` (`scripts/radar/weekly.ts`): a no-key dry sweep
+and team summary as the `sweep` seat. GitHub Actions owns full-text triage and the digest proposal.
 
 ## 9. Guardrails
 
@@ -113,7 +112,7 @@ amprealize's *core* research_service stayed lean and worked; the platform around
 - **M2 — ingestion:** arXiv + HF fetchers (port the Exploring Next slices) + dedup against `seen.json`; verify a dry sweep returns sane candidates. **Done** (`pnpm radar:sweep`).
 - **M3 — triage:** tier-1 filter + tier-2 honest-score + verdict ladder; verify on a hand-picked week. **Done** (`pnpm radar:sweep --triage`).
 - **M4 — emit:** digest writer (frontmatter + verdict grouping) + `seen.json` update + notify. **Done** (`pnpm radar:sweep --triage --emit`; the Exploring Next source landed with it).
-- **M5 — schedule:** deferred — see §8.
+- **M5 — schedule:** Monday 08:00 UTC GitHub Actions full-text run + manual dispatch, draft PR only — see §8.
 
 Each of M1–M5 is a complete, runnable step (run the radar by hand through M4 before automating in M5).
 
