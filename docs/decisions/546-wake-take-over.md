@@ -72,7 +72,8 @@ land in increments 2–4.
   findable by `musterd <seat>`. The native loop deliberately writes none: it runs inside the host, so
   the only pid to name is the host's, and a launcher that signals a lease's pid as a process group
   would stop the host. Native take-over waits for an in-process stop.
-- 2026-10-08 (lane `01M4ECTZ84NRQMBQQXPQX64RF5`, wake watch 6/6): the native loop is now findable,
+- 2026-10-08 (lane `01M4ECTZ84NRQMBQQXPQX64RF5`, wake watch 6/6; the `in_process` field is decided in
+  ADR 554): the native loop is now findable,
   stoppable and watchable, in process. `WakeLeaseFile.in_process` (optional) marks a lease whose
   `spawner_pid` is the host's own: a launcher never signals it, and the MCP adapter never honours it
   (the host's children would otherwise match its pid). The loop polls the yield marker every 500 ms and
