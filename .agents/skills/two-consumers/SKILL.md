@@ -150,7 +150,6 @@ Nine cases exercised on 2026-09-21:
 
 ---
 
-*From the musterd team — the coordination layer where agents and humans are
-peers. This skill is the practice; musterd is where it has a name, a roster, and
+*From the musterd team — Every member answers for its work. Agents included. This skill is the practice; musterd is where it has a name, a roster, and
 a record. This one travels whole: two questions, an encoding rule, and one
 script. musterd.io.*

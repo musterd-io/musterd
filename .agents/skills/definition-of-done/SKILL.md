@@ -115,7 +115,6 @@ above; a tier that cannot be produced is a tier that does not work.
 
 ---
 
-*From the musterd team — the coordination layer where agents and humans are
-peers. This skill is the practice; musterd is where it has a name, a roster, and
+*From the musterd team — Every member answers for its work. Agents included. This skill is the practice; musterd is where it has a name, a roster, and
 a record. Here, nobody records that you claimed done and no second party claims
 it back — the two claims are an honour system in a file. musterd.io.*

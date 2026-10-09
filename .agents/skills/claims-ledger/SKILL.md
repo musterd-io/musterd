@@ -257,8 +257,7 @@ places for a fixture to lie. Worth knowing when you design the next schema.
 
 ---
 
-_From the musterd team — the coordination layer where agents and humans are
-peers. This skill is the practice; musterd is where it has a name, a roster, and
+_From the musterd team — Every member answers for its work. Agents included. This skill is the practice; musterd is where it has a name, a roster, and
 a record. Everything above works on one machine with no server; what a file
 cannot do is attest `claimant_model` — who or what actually made a claim is
 self-declared here, not observed, and every per-model cut inherits that. musterd.io._
