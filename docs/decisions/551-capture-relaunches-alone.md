@@ -66,6 +66,13 @@ slate is the obvious follow-up and is not built here.
 Failures that sit on the sink side still end the stream: a lost network path to Twitch, Twitch
 refusing the key, the laptop sleeping under the daemon. Measuring how often those occur is inc 3.
 
+*Note, 2026-10-09:* the experiment below ran on the box: `kill -9` of Chrome's process group left the
+machine and ffmpeg (pid 962) unchanged, Chrome came back as a new pid, and `fly logs` carried `capture
+back after 3.5s`. Inc 3 then measured the sink side: a 5 s packet drop is ridden out, a reset connection
+ended the machine (96 s to live), and a 90 s daemon outage did not touch the stream. Decision 3's "the
+sink half is unchanged" is changed by ADR 553: a sink that dies under a live run restarts the broadcast
+inside the machine.
+
 ## Observability & Evaluation
 
 **Traces.** A relaunch writes `✗ <reason> — relaunching Chrome; the stream stays up on its last
@@ -86,4 +93,4 @@ code path the hosted box runs. Baseline: before this change a Chrome kill ended 
 **Experiment.** On the hosted box, `fly machine exec` a `kill -9` of Chrome's process group while
 the stream is live. ffmpeg's pid and the machine must be unchanged, the box log must show
 `capture back`, and Twitch must keep reporting LIVE. A machine replacement or a second `◉ live`
-line falsifies this ADR. Not yet run on the box.
+line falsifies this ADR. Run on the box 2026-10-09 (see the note above); it held.
