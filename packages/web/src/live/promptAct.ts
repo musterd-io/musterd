@@ -61,17 +61,13 @@ export function promptAct(text: string, on: readonly string[], roomId: string): 
   };
 }
 
-/** `?promptbar=1` / `?promptbar` or `#promptbar` — the first of the bar's three gates. */
-export function promptBarFlag(search: string, hash: string): boolean {
-  if (hash === '#promptbar') return true;
-  const v = new URLSearchParams(search).get('promptbar');
-  return v !== null && v !== '0' && v !== 'false';
-}
+export { promptBarFlag, promptBarVisible } from './promptGate';
 
 /**
- * All three gates (lane 01M4H4ARQC): the flag, a signed-in member (never the read-only observer,
- * ADR 063), and an admin. Any one missing and the route mounts nothing.
+ * Who hears it, from the composer's @-picker: nobody picked is "@team", which convenes the four-seat
+ * demo set exactly as the first bar did (the set is no longer shown); picking narrows it — one name is
+ * a directed message, two to four a huddle on those (`promptAct` decides which by the count).
  */
-export function promptBarVisible(g: { flag: boolean; signedIn: boolean; admin: boolean }): boolean {
-  return g.flag && g.signedIn && g.admin;
+export function audienceFor(picked: readonly string[]): string[] {
+  return picked.length === 0 ? [...CAST] : picked.slice(0, MAX_CAST);
 }
