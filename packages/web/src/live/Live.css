@@ -2447,7 +2447,10 @@
   /* Hung from the middle of the board's top edge, not the box's top: on the slanted wall the box's
      top is the board's high corner (`--lc-sign-drop`, set by the scene from `boardAnchor`). */
   bottom: calc(100% - var(--lc-sign-drop, 0px) + 12px);
-  transform: translateX(-50%);
+  /* Skewed by the board's top-edge slope (`--lc-sign-tilt`, from `boardAnchor`), so it lies in the
+     wall's plane like the board under it. skewY keeps the strings vertical, as a hung sign's are. */
+  transform: translateX(-50%) skewY(var(--lc-sign-tilt, 0deg));
+  transform-origin: 50% 100%;
   display: inline-flex;
   align-items: baseline;
   gap: 5px;

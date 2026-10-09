@@ -402,6 +402,7 @@ export function mountOffice(
     boardSpot.style.height = `${a.h}px`;
     // How far below the box's top the board's top edge is at its middle — the sign hangs from there.
     boardSpot.style.setProperty('--lc-sign-drop', `${a.topMidY - a.y}px`);
+    boardSpot.style.setProperty('--lc-sign-tilt', `${a.tiltDeg.toFixed(2)}deg`);
   }
   const ctx = canvas.getContext('2d')!;
   // Warm the izzocam chyron face the canvas labels/glyphs paint in, so they land on-brand from the
