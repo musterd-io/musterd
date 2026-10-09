@@ -69,6 +69,13 @@ violation for an overlap one, which only measuring caught. Containment is **not*
 inside a card-link is a nesting, both are reachable, and reporting it would fire on every composite
 control on the site.
 
+**Overlap is judged on what is visible (2026-10-09).** A target inside a scroll container (`overflow: auto|scroll`)
+is measured on its full box for SIZE, but for OVERLAP only the part the container leaves visible counts, and a
+target wholly scrolled out of view overlaps nothing. Before this a list that scrolls failed against whatever
+abutted its edge: rows three screens down have boxes that sit exactly under the ticker, which no finger can
+reach. Fixed elements escape their ancestors' clip and are not shortened. Falsify: a scrolling list whose
+visible rows overlap a neighbour must still fail (`target-size-rules.test.ts`).
+
 ## The inline exception, which is the hard part
 
 Too permissive and the gate is decorative; too strict and it is noise someone deletes. Both

@@ -272,7 +272,25 @@ const MEASURE = /* js */ `(() => {
     if (r.width === 0 || r.height === 0) { rows.push({ skipped: 'zero-box', sel: pathOf(el) }); continue; }
     if (cs.visibility === 'hidden' || cs.opacity === '0') { rows.push({ skipped: 'invisible', sel: pathOf(el) }); continue; }
     if (el.closest('[inert]') || el.hasAttribute('disabled')) { rows.push({ skipped: 'inert', sel: pathOf(el) }); continue; }
+    // The part of the box that survives the scroll containers around it. Fixed elements escape
+    // them; only auto/scroll containers count (their content is reachable by scrolling, so it is
+    // still a target, just not one a finger can be on right now). null = wholly scrolled out.
+    let vis;
+    if (cs.position !== 'fixed') {
+      let x0 = r.left, y0 = r.top, x1 = r.right, y1 = r.bottom, clipped = false;
+      for (let p = el.parentElement; p && p !== document.documentElement; p = p.parentElement) {
+        const o = getComputedStyle(p);
+        const scrolls = /(auto|scroll)/.test(o.overflowX + ' ' + o.overflowY);
+        if (!scrolls) continue;
+        const pr = p.getBoundingClientRect();
+        x0 = Math.max(x0, pr.left); y0 = Math.max(y0, pr.top);
+        x1 = Math.min(x1, pr.right); y1 = Math.min(y1, pr.bottom);
+        clipped = true;
+      }
+      if (clipped) vis = (x1 > x0 && y1 > y0) ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+    }
     rows.push({
+      ...(vis !== undefined ? { vis } : {}),
       sel: pathOf(el),
       name: (el.getAttribute('aria-label') || el.textContent || el.getAttribute('title') || '')
         .trim().replace(/\\s+/g, ' ').slice(0, 40),

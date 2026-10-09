@@ -118,6 +118,32 @@ describe('the house floor — stricter than the spec, and never confused with it
   });
 });
 
+describe('overlappingPairs — what a finger can reach', () => {
+  it('ignores a target wholly scrolled out of view, even when its box sits on another target', () => {
+    const ticker = t(0, 660, 200, 40);
+    const scrolledOut = t(0, 660, 200, 40, { vis: null });
+    expect(overlappingPairs([ticker, scrolledOut])).toHaveLength(0);
+  });
+
+  it('judges a half-scrolled target on its visible part, not its full box', () => {
+    const ticker = t(0, 660, 200, 40);
+    // the row's box runs 640–700 but its scroll container ends at 660, so 640–660 is what shows
+    const half = t(0, 640, 200, 60, { vis: { x: 0, y: 640, w: 200, h: 20 } });
+    expect(overlappingPairs([ticker, half])).toHaveLength(0);
+  });
+
+  it('still catches two visible targets that overlap', () => {
+    const a = t(0, 0, 44, 44, { vis: { x: 0, y: 0, w: 44, h: 44 } });
+    const b = t(30, 30, 44, 44);
+    expect(overlappingPairs([a, b])).toHaveLength(1);
+  });
+
+  it('keeps judging SIZE on the full box when part of it is scrolled away', () => {
+    const half = t(0, 640, 200, 60, { vis: { x: 0, y: 640, w: 200, h: 20 } });
+    expect(judge(half, []).verdict).toBe('size');
+  });
+});
+
 describe('overlappingPairs', () => {
   it('reports a partial overlap', () => {
     const a = t(0, 0, 40, 40);

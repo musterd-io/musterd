@@ -116,10 +116,22 @@ export const overlappingPairs = (targets) => {
     for (let j = i + 1; j < targets.length; j++) {
       const a = targets[i];
       const b = targets[j];
-      if (!overlaps(a, b)) continue;
+      // A finger lands on what is VISIBLE. `vis` is the part of a target left after the scroll
+      // containers around it clip it (absent when nothing clips it, null when it is wholly scrolled
+      // out of view). A row three screens down inside a list that scrolls has a rect that can sit
+      // exactly under the ticker, and no finger can put it there — judged on that rect, a
+      // well-formed scrolling list fails against whatever abuts its edge (the Now panel, 2026-10-09).
+      // SIZE is still judged on the full box: a row half-scrolled is not an undersized target.
+      if (a.vis === null || b.vis === null) continue;
+      const va = a.vis ?? a;
+      const vb = b.vis ?? b;
+      if (!overlaps(va, vb)) continue;
       const contained =
-        (a.x <= b.x && a.y <= b.y && a.x + a.w >= b.x + b.w && a.y + a.h >= b.y + b.h) ||
-        (b.x <= a.x && b.y <= a.y && b.x + b.w >= a.x + a.w && b.y + b.h >= a.y + a.h);
+        (va.x <= vb.x &&
+          va.y <= vb.y &&
+          va.x + va.w >= vb.x + vb.w &&
+          va.y + va.h >= vb.y + vb.h) ||
+        (vb.x <= va.x && vb.y <= va.y && vb.x + vb.w >= va.x + va.w && vb.y + vb.h >= va.y + va.h);
       if (contained) continue;
       out.push([a, b]);
     }
