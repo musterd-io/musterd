@@ -45,7 +45,8 @@ Then:
   dedicated seeds channel, and optionally pin `SLACK_SEEDS_CHANNEL` in wrangler.toml to that
   channel's id. Confirmation ("🌱 saved") posts through `SLACK_WEBHOOK_URL`.
 - **musterd**: set the team policy keys `seeds_relay_url` and `seeds_relay_token`; the daemon
-  polls `GET /seeds?after=<cursor>` and opens a lane per seed.
+  polls `GET /seeds?after=<cursor>` and files each record as a Seed (ADR 291). A
+  lane exists only if exploration promotes the Seed.
 
 ## Endpoints
 

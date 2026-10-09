@@ -807,7 +807,7 @@ async function teamPolicy(parsed: Parsed): Promise<number> {
       process.stdout.write(
         hint(
           updated.seeds_relay_url
-            ? `seeds ingest on — the daemon polls ${maskWebhook(updated.seeds_relay_url)} and opens a lane per captured seed`
+            ? `seeds ingest on — the daemon polls ${maskWebhook(updated.seeds_relay_url)} and files each captured idea as a Seed (a lane comes only if exploration promotes it)`
             : 'seeds ingest is off',
         ) + '\n',
       );
