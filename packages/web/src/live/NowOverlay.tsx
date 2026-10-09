@@ -1,7 +1,8 @@
 import type { MemberSummary } from '@musterd/protocol';
-import { useEffect, useRef, useState } from 'react';
-import type { Briefing } from './briefing';
-import { NowSections } from './NowPanel';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { waitingFor, type Briefing } from './briefing';
+import { NowCard } from './NowPanel';
 import {
   readBriefedAt,
   startMode,
@@ -14,8 +15,8 @@ import { nowOpenMode, stillMode } from './stillMode';
 /**
  * The Now briefing's shell (live-briefing spec): one card with three homes. On the first visit of a
  * period it comes up as an overlay over the room — which stays live and untouched behind it — and
- * when the reader collapses it, it shrinks into a tab on the room's left edge and stays there until
- * they ask for it back, as the overlay or full screen. See `nowWhen.ts` for when it opens by itself.
+ * when the reader docks it, it shrinks into the "Now" chip in the topbar and stays there until they
+ * ask for it back, as the overlay or full screen. See `nowWhen.ts` for when it opens by itself.
  *
  * Not modal: it takes no focus when it opens and the room behind it keeps working. Esc steps it
  * down (full → overlay → tab) while focus is inside it.
@@ -42,11 +43,28 @@ export interface NowOverlayProps {
   roster: readonly MemberSummary[];
   /** Where the shipped list starts (`briefingSince`). */
   since: number;
+  /** The signed-in member, or null for an observer: whose asks get the band and the chip's count. */
+  viewer: string | null;
   onOpenLane: (laneId: string) => void;
   onOpenAsk: (envelopeId: string) => void;
+  onOpenGoal: (goalId: string | null) => void;
+  onLight: (names: readonly string[] | null) => void;
+  /** The id of the topbar element the dock chip is portalled into. A prop, not an import the route
+   *  makes from here: this module is a lazy chunk and the route must not pull it eagerly. */
+  slotId: string;
 }
 
-export function NowOverlay({ brief, roster, since, onOpenLane, onOpenAsk }: NowOverlayProps) {
+export function NowOverlay({
+  brief,
+  roster,
+  since,
+  viewer,
+  onOpenLane,
+  onOpenAsk,
+  onOpenGoal,
+  onLight,
+  slotId,
+}: NowOverlayProps) {
   // First paint is docked on server and client alike; the entrance is a second step, so there is
   // a docked state for it to grow out of.
   const [mode, setMode] = useState<NowMode>('docked');
@@ -107,30 +125,74 @@ export function NowOverlay({ brief, roster, since, onOpenLane, onOpenAsk }: NowO
     return () => el.removeEventListener('keydown', onKey);
   }, []);
 
+  // The chip lives in the topbar (spec, "Docking"), so it is portalled there; the slot is found
+  // after mount, which is also when the card's docked geometry can be measured against it.
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => setSlot(document.getElementById(slotId)), [slotId]);
+  const chip = useRef<HTMLButtonElement | null>(null);
+  // Docked, the card is scaled onto the chip at the chip's position, so docking visibly shrinks INTO
+  // it and opening grows OUT of it. The offset is measured, not guessed: the chip's place in the
+  // topbar moves with the window and with what else the topbar holds.
+  useLayoutEffect(() => {
+    const el = card.current;
+    const c = chip.current;
+    if (!el || !c || !el.offsetParent) return;
+    const parent = el.offsetParent as HTMLElement;
+    // The room's asks strip and huddle rail share one box at its top; the card sits under it, never
+    // over it — the strip is where an ask is answered, and the rail grows and shrinks as huddles open.
+    const asks = parent.querySelector<HTMLElement>('.lc-office__asks');
+    const place = () => {
+      const from = parent.getBoundingClientRect();
+      const below = asks ? asks.getBoundingClientRect().bottom - from.top + 12 : 72;
+      el.style.setProperty('--now-top', `${Math.max(72, Math.round(below))}px`);
+      const to = c.getBoundingClientRect();
+      el.style.setProperty('--now-dock-x', `${to.left - from.left - el.offsetLeft}px`);
+      el.style.setProperty('--now-dock-y', `${to.top - from.top - el.offsetTop}px`);
+    };
+    place();
+    const ro = asks && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(place) : null;
+    if (asks) ro?.observe(asks);
+    window.addEventListener('resize', place);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', place);
+    };
+  }, [slot, mode]);
+
+  // A goal row lights its people in the room; docking must not leave them lit.
+  useEffect(() => {
+    if (mode === 'docked') onLight(null);
+  }, [mode, onLight]);
+
   const now = Date.now();
   const open = mode !== 'docked';
-  const waiting = brief.needsHuman.length;
+  const yours = waitingFor(brief, viewer).mine.length;
   const cls = (base: string) => `${base}${still ? ' is-still' : ''}`;
+
+  const dock = (
+    <button
+      type="button"
+      ref={chip}
+      className={cls(`now-chip${open ? ' is-open' : ''}`)}
+      onClick={() => setMode(open ? 'docked' : 'overlay')}
+      aria-expanded={open}
+      aria-controls="now-ov"
+      aria-label={`Team briefing${yours ? ` — ${yours} waiting on you` : ''}`}
+      title={open ? 'Dock the team briefing' : 'Open the team briefing'}
+    >
+      <span className="now-chip__label">Now</span>
+      {yours > 0 && (
+        <span className="now-chip__you" aria-hidden="true">
+          <i className="now-chip__dot" />
+          {yours} needs you
+        </span>
+      )}
+    </button>
+  );
 
   return (
     <>
-      <button
-        type="button"
-        className={cls(`now-dock${open ? ' is-away' : ''}`)}
-        onClick={() => setMode('overlay')}
-        aria-expanded={open}
-        aria-controls="now-ov"
-        aria-label={`Open the team briefing${waiting ? ` — ${waiting} need a human` : ''}`}
-        title="Open the team briefing"
-        inert={open}
-      >
-        <span className="now-dock__label">Now</span>
-        {waiting > 0 && (
-          <span className="now-dock__n" aria-hidden="true">
-            {waiting}
-          </span>
-        )}
-      </button>
+      {slot && createPortal(dock, slot)}
       <section
         id="now-ov"
         className={cls(`now-ov now-ov--${mode}${phone ? ' is-phone' : ''}`)}
@@ -139,10 +201,7 @@ export function NowOverlay({ brief, roster, since, onOpenLane, onOpenAsk }: NowO
         ref={card}
       >
         <header className="now-ov__head">
-          <div>
-            <p className="now-ov__k">Now</p>
-            <p className="now-ov__headline">{brief.headline}</p>
-          </div>
+          <p className="now-ov__k">Now</p>
           <div className="now-ov__ctl">
             {mode === 'full' ? (
               <button
@@ -169,23 +228,25 @@ export function NowOverlay({ brief, roster, since, onOpenLane, onOpenAsk }: NowO
               type="button"
               className="now-ctl"
               onClick={() => setMode('docked')}
-              aria-label="Collapse to the side tab"
-              title="Collapse to the side tab"
+              aria-label="Dock to the topbar"
+              title="Dock to the topbar"
             >
-              <Icon d="M10 3 5 8l5 5M3 3v10" />
+              <Icon d="M3 10 8 5l5 5M3 13h10" />
             </button>
           </div>
         </header>
         <div className="now-ov__scroll">
-          <NowSections
+          <NowCard
             brief={brief}
             roster={roster}
+            viewer={viewer}
             now={now}
             since={since}
             full={mode === 'full'}
             onOpenLane={onOpenLane}
             onOpenAsk={onOpenAsk}
-            onMore={() => setMode('full')}
+            onOpenGoal={onOpenGoal}
+            onLight={onLight}
           />
         </div>
       </section>

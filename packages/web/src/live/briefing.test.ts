@@ -1,7 +1,7 @@
 import type { LaneBoard, MemberSummary } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import type { AskView } from './asks';
-import { briefing, briefingSince, needsHeading, SHIPPED_WINDOW_MS } from './briefing';
+import { briefing, briefingSince, needsHeading, SHIPPED_WINDOW_MS, waitingFor } from './briefing';
 
 const NOW = 1_800_000_000_000;
 const lane = (id: string, state: string, over: Record<string, unknown> = {}) => ({
@@ -246,5 +246,110 @@ describe('needsHeading', () => {
     expect(needsHeading('nick', ['an answer', 'approval', 'clarification'])).toBe(
       'Needs approval, clarification and an answer from nick',
     );
+  });
+});
+
+// Live-briefing spec, "The Now card, v2": a goal row says how far along it is ("3 of 8 done"), what
+// is moving in it, and whose faces are on it.
+describe('goalsInMotion', () => {
+  const GOALS = [
+    { id: 'g1', title: 'Launch — musterd ships publicly' },
+    { id: 'g2', title: 'Postgres store' },
+    { id: 'g3', title: 'Quiet goal' },
+  ];
+
+  it('counts done of total per goal, leaving abandoned lanes out of both', () => {
+    const b = run({
+      goals: GOALS,
+      board: board(
+        lane('a', 'active', { goal_id: 'g1' }),
+        lane('b', 'done', { goal_id: 'g1' }),
+        lane('c', 'done', { goal_id: 'g1' }),
+        lane('d', 'open', { goal_id: 'g1', owner_seat: null }),
+        lane('e', 'abandoned', { goal_id: 'g1' }),
+      ),
+    });
+    const g = b.goalsInMotion.find((x) => x.goalId === 'g1')!;
+    expect([g.done, g.total]).toEqual([2, 4]);
+    expect(g.name).toBe('Launch');
+    expect(g.title).toBe('Launch — musterd ships publicly');
+  });
+
+  it('is in motion only while something in it is working, in review or blocked', () => {
+    const b = run({
+      goals: GOALS,
+      board: board(
+        lane('a', 'awaiting_acceptance', { goal_id: 'g2' }),
+        lane('b', 'blocked', { goal_id: 'g2', owner_seat: 'dreamy' }),
+        lane('c', 'done', { goal_id: 'g3' }),
+        lane('d', 'open', { goal_id: 'g3', owner_seat: null }),
+      ),
+    });
+    expect(b.goalsInMotion.map((g) => g.goalId)).toEqual(['g2']);
+    const g = b.goalsInMotion[0]!;
+    expect([g.working, g.review, g.blocked]).toEqual([0, 1, 1]);
+  });
+
+  it('puts the people on its moving lanes in, newest first and once each', () => {
+    const b = run({
+      goals: GOALS,
+      board: board(
+        lane('a', 'active', { goal_id: 'g1', owner_seat: 'ann', claimed_at: NOW - 9_000 }),
+        lane('b', 'active', { goal_id: 'g1', owner_seat: 'nick', claimed_at: NOW - 1_000 }),
+        lane('c', 'claimed', { goal_id: 'g1', owner_seat: 'ann', claimed_at: NOW - 5_000 }),
+        lane('d', 'done', { goal_id: 'g1', owner_seat: 'dreamy' }),
+      ),
+    });
+    expect(b.goalsInMotion[0]!.people).toEqual(['nick', 'ann']);
+  });
+
+  it('orders by the newest moving lane, with lanes on no goal last', () => {
+    const b = run({
+      goals: GOALS,
+      board: board(
+        lane('n', 'active', { goal_id: null, claimed_at: NOW - 100 }),
+        lane('a', 'active', { goal_id: 'g1', claimed_at: NOW - 9_000 }),
+        lane('b', 'active', { goal_id: 'g2', claimed_at: NOW - 1_000 }),
+      ),
+    });
+    expect(b.goalsInMotion.map((g) => g.name)).toEqual(['Postgres store', 'Launch', 'No goal']);
+    expect(b.goalsInMotion[2]!.goalId).toBeNull();
+  });
+
+  it('agrees with the headline: its working counts sum to in progress', () => {
+    const b = run({
+      goals: GOALS,
+      board: board(
+        lane('a', 'active', { goal_id: 'g1' }),
+        lane('b', 'claimed', { goal_id: 'g2' }),
+        lane('c', 'active', { goal_id: null }),
+      ),
+    });
+    expect(b.goalsInMotion.reduce((n, g) => n + g.working, 0)).toBe(b.inProgress.length);
+  });
+});
+
+describe('waitingFor', () => {
+  it('splits what waits on the viewer from what waits on everyone else', () => {
+    const b = run({
+      roster: [...ROSTER, member('sloane', 'human')],
+      asks: [
+        ask('1', 'open', 'approve', 9_000, 'nick'),
+        ask('2', 'open', 'consult', 3_000, 'nick'),
+        ask('3', 'open', 'consult', 5_000, 'sloane'),
+        ask('4', 'open', 'consult', 5_000, null),
+      ],
+    });
+    const w = waitingFor(b, 'nick');
+    expect(w.mine.map((i) => i.ref)).toEqual(['2', '1']); // newest first: the band shows the top one
+    expect(w.others).toEqual([
+      { who: 'sloane', n: 1 },
+      { who: 'the team', n: 1 },
+    ]);
+  });
+
+  it('gives a viewer who is not signed in nothing of their own', () => {
+    const b = run({ asks: [ask('1', 'open', 'approve', 9_000, 'nick')] });
+    expect(waitingFor(b, null)).toEqual({ mine: [], others: [{ who: 'nick', n: 1 }] });
   });
 });

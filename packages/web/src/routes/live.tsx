@@ -105,6 +105,8 @@ const LazyStream = lazy(() => import('../live/Stream').then((m) => ({ default: m
 const LazyNowOverlay = lazy(() =>
   import('../live/NowOverlay').then((m) => ({ default: m.NowOverlay })),
 );
+/** Where the Now card's dock chip lands in the topbar (it is portalled in from the lazy chunk). */
+const NOW_SLOT_ID = 'lc-now-slot';
 // ADR 516: rendered only while a hold is in force, so its formatter (in `@musterd/protocol/wire`)
 // stays out of /live's eager graph on every ordinary day.
 const HoldsBanner = lazy(() =>
@@ -154,6 +156,8 @@ function LivePage() {
   const phone = usePhone();
   /** ADR 464: the member under the pointer — on a card or on their plate — so both wear a ring. */
   const [linked, setLinked] = useState<string | null>(null);
+  /** The people on the Now goal row under the pointer — their plates ring together. */
+  const [lit, setLit] = useState<readonly string[] | null>(null);
   /** The room's narration line, lifted out of the scene so the team column's header can carry it. */
   const [caption, setCaption] = useState<Caption | null>(null);
 
@@ -396,7 +400,9 @@ function LivePage() {
   // activeElement read any later sees only <body>), and focus goes home after the close commits.
   const [boardOrigin, setBoardOrigin] = useState<DOMRect | null>(null);
   const [boardLane, setBoardLane] = useState<string | null>(null);
-  const boardOpen = boardOrigin != null || boardLane != null;
+  // A goal the board opens drilled into (a Now goal row); null is "lanes on no goal", undefined none.
+  const [boardGoal, setBoardGoal] = useState<string | null | undefined>(undefined);
+  const boardOpen = boardOrigin != null || boardLane != null || boardGoal !== undefined;
   const boardOpener = useRef<HTMLElement | null>(null);
   const openBoard = useCallback((rect: DOMRect) => {
     boardOpener.current = (document.activeElement as HTMLElement | null) ?? null;
@@ -405,9 +411,15 @@ function LivePage() {
     // without a hand, so it stays silent. Centre-panned: the overlay is chrome over the room.
     roomTone.moment('boardOpen', 0);
   }, []);
+  const openGoal = useCallback((goalId: string | null) => {
+    boardOpener.current = (document.activeElement as HTMLElement | null) ?? null;
+    setBoardGoal(goalId);
+    roomTone.moment('boardOpen', 0);
+  }, []);
   const closeBoard = useCallback(() => {
     setBoardOrigin(null);
     setBoardLane(null);
+    setBoardGoal(undefined);
     roomTone.moment('boardClose', 0);
     // A macrotask, not rAF: focus must go home even in a hidden tab (rAF stalls there), and by the
     // time this runs React has committed the close and lifted `inert`.
@@ -573,6 +585,7 @@ function LivePage() {
             them a few inches above was the duplication nick asked us to drop (2026-07-24). */}
         <MusterdWord />
         {connected && <TopMeter teamName={team} envelopes={envelopes} roster={roster} />}
+        {connected && <span id={NOW_SLOT_ID} className="lc__nowslot" />}
         <span className="lc__spacer" />
         {connected && (
           <button
@@ -647,7 +660,7 @@ function LivePage() {
               topSlot={phone ? null : asksStrip}
               workCues={WORK_CUES}
               onCaption={setCaption}
-              linked={linked}
+              linked={lit ?? linked}
               onPlateHover={setLinked}
             />
             <TeamColumn
@@ -672,8 +685,12 @@ function LivePage() {
                 brief={brief}
                 roster={roster}
                 since={briefingSince(Date.now())}
+                viewer={signedIn ? (cfg?.as ?? null) : null}
                 onOpenLane={setBoardLane}
                 onOpenAsk={onActClick}
+                onOpenGoal={openGoal}
+                onLight={setLit}
+                slotId={NOW_SLOT_ID}
               />
             </Suspense>
           </div>
@@ -698,6 +715,7 @@ function LivePage() {
                 goals={report?.goals ?? []}
                 origin={boardOrigin}
                 focusLane={boardLane}
+                focusGoal={boardGoal}
                 onClose={closeBoard}
               />
             </Suspense>

@@ -205,6 +205,10 @@ live/
   TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type; click expands to `SeatDetail`
   teamCards.ts                  // roster + lane board + goals → ordered team cards in plain words (pure, node-tested)
   modelBadge.ts                 // presence → provider + readable model label; observed / declared / unknown / human / service — never a guess
+  briefing.ts                   // the Now briefing's one selector (pure, node-tested): needs-a-human by human, goals in motion ("d of n done", who), shipped by who; waitingFor(viewer)
+  NowOverlay.tsx                // the Now card's shell (lazy chunk): overlay / full screen, docked into the topbar's "Now" chip (portalled); opens itself once per period (nowWhen.ts)
+  NowPanel.tsx                  // the Now card's body: waiting-on-you band, goals in motion, shipped since yesterday; a goal row lights its people in the room
+  MemberFace.tsx                // a member's head as the office draws them (appearanceOf), as small inline SVG; the agent visor / human eyes tell survives
   TraceTimeline.tsx             // the per-seat trace timeline (ADR 445 inc 4b): pure TraceTimeline + default SeatTracePanel (fetch, then re-reads every 4s while open, paused on a hidden tab, last list kept on a failed refresh); a lazy chunk, never on /live's eager graph
   SeedsTray.tsx                 // read-only active/history Seed drawer; promoted history → focused Lane
   OfficeScene.tsx               // React wrapper: mounts the scene, feeds it envelopes → emit

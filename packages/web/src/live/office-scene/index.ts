@@ -2724,9 +2724,11 @@ export function mountOffice(
         hit: solidHit(p.lx, p.ly),
         sit: p.sit,
       })),
-    setLinked: (name: string | null) => {
-      // A class toggle only — the ring is CSS, so linking costs no frame (ADR 464).
-      for (const [who, el] of labels) el.classList.toggle('is-linked', who === name);
+    setLinked: (names: string | readonly string[] | null) => {
+      // A class toggle only — the ring is CSS, so linking costs no frame (ADR 464). Several at once
+      // when a Now goal row lights everyone on that goal.
+      const on = new Set(names === null ? [] : typeof names === 'string' ? [names] : names);
+      for (const [who, el] of labels) el.classList.toggle('is-linked', on.has(who));
     },
     setSuspended: (on: boolean) => {
       // A stream never parks (ADR 157). The broadcast route has no collapse control, so this only ever
