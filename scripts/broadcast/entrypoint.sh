@@ -161,6 +161,15 @@ RESTART_EXIT_CODE=75
 # instantly would spin and bill for nothing while never showing a viewer a frame.
 RESTART_MIN_INTERVAL=10
 
+# A sink Twitch refuses to take back right after a reset (ADR 555). Measured 2026-10-09: the in-machine
+# relaunch reached `◉ live` in 7 s and Twitch closed the new session ~1 s later. So a rerun after a
+# restart is a RETRY, and the stream is told so through MUSTERD_BROADCAST_SINK_RETRY — the count of
+# runs in a row, since the last one that lasted RESTARTABLE_AFTER_S, that ended short. The stream keeps
+# asking for a rerun until SINK_RETRY_MAX (in broadcast.ts) of them have failed; this loop only counts
+# and waits, so the wait grows (10, 20, then 30 s) and a revoked key ends the machine in a few minutes.
+RESTARTABLE_AFTER_S=60
+short_runs=0
+
 while :; do
   started=$SECONDS
   # The measured passing configuration — change it in the spec before changing it here.
@@ -207,9 +216,23 @@ while :; do
   [ "$code" -eq "$RESTART_EXIT_CODE" ] || exit "$code"
 
   elapsed=$((SECONDS - started))
-  if [ "$elapsed" -lt "$RESTART_MIN_INTERVAL" ]; then
-    sleep $((RESTART_MIN_INTERVAL - elapsed))
+  if [ "$elapsed" -ge "$RESTARTABLE_AFTER_S" ]; then
+    short_runs=0
+  else
+    short_runs=$((short_runs + 1))
   fi
+  # 0 after a proven run, then 10, 20, 30, 30 … — never less than the floor below.
+  wait_s=$RESTART_MIN_INTERVAL
+  if [ "$short_runs" -gt 0 ]; then
+    # Cap the shift first: the count is unbounded here (the stream is what ends the loop) and a
+    # large shift overflows to a negative wait.
+    if [ "$short_runs" -ge 3 ]; then wait_s=30; else wait_s=$((5 << short_runs)); fi
+    [ "$wait_s" -ge "$RESTART_MIN_INTERVAL" ] || wait_s=$RESTART_MIN_INTERVAL
+  fi
+  if [ "$elapsed" -lt "$wait_s" ]; then
+    sleep $((wait_s - elapsed))
+  fi
+  export MUSTERD_BROADCAST_SINK_RETRY=$short_runs
   # Do NOT name a cause here. RESTART_EXIT_CODE has several of them now — a lost DevTools socket, a
   # frozen picture (the frame-arrival watchdog), a Chrome that keeps failing, and a sink that dropped
   # (ffmpeg ending after the stream was live, ADR 553) — and this line used to

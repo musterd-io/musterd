@@ -23,6 +23,9 @@ import {
   RESTARTABLE_AFTER_MS,
   socketLossExitCode,
   sinkLossExitCode,
+  sinkRetryCount,
+  SINK_RETRY_ENV,
+  SINK_RETRY_MAX,
   supervised,
   liveRunState,
   pidAlive,
@@ -839,6 +842,66 @@ describe('sinkLossExitCode (ffmpeg exits after the stream is live — ADR 553)',
   it('does not restart a stop someone asked for', () => {
     // A signal makes ffmpeg exit non-zero while it finalizes; that is the stop working.
     expect(sinkLossExitCode(255, { stopping: true, ranMs: proven, isSupervised: true })).toBe(1);
+  });
+
+  // ADR 555. Measured 2026-10-09: after a 3 s reset the in-machine relaunch reached `◉ live` in 7 s,
+  // then Twitch closed the new session ~1 s later. That retry ran well under the 60 s floor and ended the
+  // machine, which is the failure the restart exists to ride out.
+  it('restarts a SHORT run when it is a retry — Twitch refusing a reconnect is not a bad config', () => {
+    expect(
+      sinkLossExitCode(1, { stopping: false, ranMs: 7_000, isSupervised: true, retry: 0 }),
+    ).toBe(RESTART_EXIT_CODE);
+  });
+
+  it('keeps retrying until SINK_RETRY_MAX short runs have failed in a row, then ends', () => {
+    const at = (retry: number) =>
+      sinkLossExitCode(1, { stopping: false, ranMs: 7_000, isSupervised: true, retry });
+    expect(at(SINK_RETRY_MAX - 1)).toBe(RESTART_EXIT_CODE);
+    expect(at(SINK_RETRY_MAX)).toBe(1);
+  });
+
+  it('a retry that cleared the floor still restarts once the cap is spent — the floor is the fallback', () => {
+    expect(
+      sinkLossExitCode(1, {
+        stopping: false,
+        ranMs: proven,
+        isSupervised: true,
+        retry: SINK_RETRY_MAX,
+      }),
+    ).toBe(RESTART_EXIT_CODE);
+  });
+
+  it('a first run (no retry count) keeps the floor — a rejected key must not loop', () => {
+    expect(
+      sinkLossExitCode(1, { stopping: false, ranMs: 7_000, isSupervised: true, retry: undefined }),
+    ).toBe(1);
+  });
+
+  it('a retry does not override a stop someone asked for, a clean exit, or an unsupervised run', () => {
+    expect(sinkLossExitCode(255, { stopping: true, ranMs: 1, isSupervised: true, retry: 0 })).toBe(
+      1,
+    );
+    expect(sinkLossExitCode(0, { stopping: false, ranMs: 1, isSupervised: true, retry: 0 })).toBe(
+      0,
+    );
+    expect(sinkLossExitCode(1, { stopping: false, ranMs: 1, isSupervised: false, retry: 0 })).toBe(
+      1,
+    );
+  });
+});
+
+describe('sinkRetryCount (what entrypoint.sh hands in)', () => {
+  it('is undefined on a first run and a count on a retry', () => {
+    expect(sinkRetryCount({})).toBeUndefined();
+    expect(sinkRetryCount({ [SINK_RETRY_ENV]: '' })).toBeUndefined();
+    expect(sinkRetryCount({ [SINK_RETRY_ENV]: '0' })).toBe(0);
+    expect(sinkRetryCount({ [SINK_RETRY_ENV]: '3' })).toBe(3);
+  });
+
+  it('ignores a value that is not a count — a mangled env must not read as a retry', () => {
+    expect(sinkRetryCount({ [SINK_RETRY_ENV]: 'soon' })).toBeUndefined();
+    expect(sinkRetryCount({ [SINK_RETRY_ENV]: '-1' })).toBeUndefined();
+    expect(sinkRetryCount({ [SINK_RETRY_ENV]: '1.5' })).toBeUndefined();
   });
 });
 

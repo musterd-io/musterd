@@ -90,9 +90,30 @@ is down.
 
 Inc 3 measured the reset case; the rest of the list above is still open. Inc 4 (ADR 553, lane
 `01M4F32MMP63ZF9AVNHWWF3N6A`) changes the reset case: ffmpeg ending after `◉ live` now exits 75 under a
-supervisor, so the broadcast restarts inside the machine instead of the machine ending. Not yet measured
-on the box; the 96 s above is the before number. Falsify: repeat the 3 s `tcp-reset` on a live stream on
-the new image — a new machine id, or a gap near 96 s, falsifies it.
+supervisor, so the broadcast restarts inside the machine instead of the machine ending.
+
+### Twitch refuses a reconnect made seconds after a reset, so one in-machine retry is not enough (2026-10-09; falsify: repeat the 3 s `tcp-reset` on a live hosted stream on an image built from ADR 555 — a second `◉ live` followed by an ffmpeg `End of file` and an exit of the machine falsifies the retry, and a later `◉ live` on the same machine id that holds supports it) <!-- claim: defect -->
+
+**Measured (hosted box, machine `80e450b6543428`, image `b8c90e58e30e` = inc 4):**
+
+| time (Z) | event |
+| --- | --- |
+| 03:45:48 | `Connection reset by peer`; `ffmpeg ended (code 1) — the sink dropped. Asking the supervisor for a relaunch.` |
+| 03:45:49 | `▸ relaunching the stream (ran 132s)` — same machine |
+| 03:45:55 | `◉ live` — 7 s after the reset (the 96 s baseline was a new machine) |
+| 03:45:56 | ffmpeg: `tls Error in the pull function … End of file` on `rtmps://live.twitch.tv` — Twitch closed the new session |
+| 03:45:58 | `Main child exited normally with code: 1`; the machine ended, `ensure` replaced it |
+
+The in-machine restart works. What ended the machine was the 60 s floor: the retry ran 7 s, below
+`RESTARTABLE_AFTER_MS`, so `sinkLossExitCode` returned 1. The floor exists so a rejected key cannot loop;
+here it fired on a retry of a stream that had been live for 132 s. The `iptables` rule came off at about
+03:45:51, so Twitch refusing the connection is the likelier cause than the rule, but this run does not
+separate the two. **How long Twitch refuses is not measured.**
+
+ADR 555 treats a rerun after a restart as a retry: `entrypoint.sh` hands the stream a count of short runs
+in a row (`MUSTERD_BROADCAST_SINK_RETRY`) and waits 10, 20, then 30 s between them; the stream asks for a
+rerun until six short runs have failed, then ends the machine and `ensure` takes over as before. Not yet
+measured on the box.
 
 ## A merge to `main` dropped the Twitch ingest, and the restart it ran bought nothing (2026-10-08; falsify: with a hosted stream live on the new image, merge any commit and read `fly logs -a musterd-broadcast` — a `relaunching the stream` line inside the rebuild window falsifies this) <!-- claim: defect -->
 
