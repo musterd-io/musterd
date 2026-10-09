@@ -56,7 +56,7 @@ list and is passed only when the viewer is an admin. Output:
 | `inProgress` | Lanes in `claimed` or `active`: title, owner, goal title, age. Humans and agents alike.                                                          |
 | `inReview`   | Lanes in `awaiting_acceptance`.                                                                                                                  |
 | `shipped`    | Lanes that reached `done` in the last 24 h, newest first: title, closed-by, time. Read from the board, never from envelope text.                  |
-| `headline`   | One sentence built from the four arrays, e.g. "3 working · 1 blocked · 2 waiting on you · 4 shipped today".                                      |
+| `headline`   | One sentence built from the four arrays, e.g. "3 in progress · 2 need a human · 1 in review · 4 shipped today". It counts lanes, not people: the old meter counted a presence posture and the old column counted lane-owning cards, which is the disagreement above; the per-member Team tab keeps the person view.                                      |
 
 Notes from reading the code:
 
@@ -111,12 +111,14 @@ Notes from reading the code:
 
 ## Increments
 
-1. `briefing.ts` plus tests; the headline replaces the topbar meter. Fixes the count mismatch.
-2. The Now panel on `/live` (including the Team tab, the seat-request read and the office blocked
-   marker).
-3. The `/broadcast` lower-third.
+1. `briefing.ts` plus tests; the headline replaces the topbar meter. Fixes the count mismatch. Lane
+   `01M4FG58SX6BBJ736S4W1CHASS`.
+2. The Now panel on `/live`, including the Team tab, the seat-request read and the office blocked
+   marker. Lane `01M4FG5JRAR3QD460DWC7M7E7M`.
+3. The `/broadcast` lower-third. Lane `01M4FG5NWKCYSYQ9RWG06Y4TNC`.
 
-Each is its own lane under goal `launch`. Lane ids go in the plan's Increments table.
+All three are under goal `launch`; the plan is
+[`2026-10-09-live-briefing.md`](../plans/2026-10-09-live-briefing.md).
 
 ## Not in scope
 
