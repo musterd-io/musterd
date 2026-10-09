@@ -1620,6 +1620,19 @@
   font-weight: 700;
   color: var(--lc-paper-ink);
 }
+.lc-gl-label__flag {
+  /* Briefing inc 2b: owns a blocked lane. A fill in danger red, not text, so the fill token is right. */
+  display: inline-flex;
+  flex: none;
+  width: 9px;
+  height: 11px;
+  margin-left: 4px;
+  color: var(--lc-danger);
+}
+.lc-gl-label__flag > svg {
+  width: 100%;
+  height: 100%;
+}
 /* The provider mark as an enamel pin: a domed, colour-filled badge with a specular cap, seated into
    the paper with a shadow beneath. At 11px the highlight is doing the legibility work — a flat chip
    this size reads as a coloured square, where a lit dome reads as an object. */

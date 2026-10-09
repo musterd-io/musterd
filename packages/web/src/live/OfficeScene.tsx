@@ -12,7 +12,7 @@ import { CollapseButton, PanelRail } from './PanelChrome';
 import { captionFor, type Caption } from './captions';
 import type { RoomEntry } from './workingOn';
 import { dreamingSeat, wokenSeat } from './wokenSeat';
-import type { OfficeRoomProps } from './officeRoom';
+import { blockedOwners, type OfficeRoomProps } from './officeRoom';
 import { projectWallBoard } from './office-scene/wallboard';
 
 /** The key (ADR 464 §3.4) is a corner card a viewer reads once; it rides a lazy chunk so the words
@@ -39,6 +39,7 @@ function computeData(
   const humans = new Set(roster.filter((m) => m.kind === 'human').map((m) => m.name));
   // ADR 449's `sponsored_by` is a member ID; the welcome caption says the sponsor's NAME.
   const nameById = new Map(roster.map((m) => [m.id, m.name]));
+  const blocked = blockedOwners(board);
   return {
     teamName,
     teamWorkingHours,
@@ -68,6 +69,7 @@ function computeData(
         workTitle: entry?.title ?? null,
         workSource: entry?.source ?? null,
         laneState: entry?.laneState ?? null,
+        blocked: blocked.has(m.name),
         moreLanes: entry?.moreLanes ?? 0,
         dnd: m.availability?.status === 'dnd',
         offline_reason: m.offline_reason ?? null,

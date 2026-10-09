@@ -930,6 +930,16 @@ export function mountOffice(
       who.className = 'lc-gl-label__who';
       who.textContent = name;
       plate.appendChild(who);
+      if (node.blocked) {
+        // Briefing inc 2b: owns a blocked lane. A small pennant in danger ink right after the name —
+        // seen across the room on /live and on the stream alike, and only while it is true.
+        const flag = document.createElement('span');
+        flag.className = 'lc-gl-label__flag';
+        flag.title = 'owns a blocked lane';
+        flag.innerHTML =
+          '<svg viewBox="0 0 10 12" aria-hidden="true"><path d="M2 1v10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M2.6 1.5h6l-1.8 2.4 1.8 2.4h-6z" fill="currentColor"/></svg>';
+        plate.appendChild(flag);
+      }
 
       if (present) {
         // The divider only exists once there is detail to divide from the name. Collapsed, the plate
