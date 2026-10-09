@@ -9,21 +9,25 @@
     ←/→ or click: next step · g: slide picker · f: fullscreen
   Or ⌘P in the browser: the print stylesheet lays every slide out one per page, all steps shown.
 
-  Copy is in nick's voice and follows docs/design/brand.md §4: plain, no contrast frame, no
-  provenance on the slide. Sources for every number are in script.md. The look follows the
-  designer skill's slop tells (.agents/skills/designer/SKILL.md): flat, ruled columns instead of
-  boxed cards, one accent, nothing that pulses. Tokens and fonts match the Multiplayer AI deck.
-  Sizes are in design units (1600 units = the slide width, 1 unit = 1px in print).
+  The story leads with the value: the accountability claim (ADR 550), what musterd is, one real
+  lane's chain, and the three things a member can do here; the business is one slide. Copy is in
+  nick's voice and follows brand.md §4; sources for every number are in script.md. The look follows
+  the designer skill's slop tells, with the Multiplayer AI deck's tokens and fonts. The mark is
+  ADR 497's (full cut large, small cut in the header). The QR code encodes https://musterd.io.
+  avatar.jpg is nick's headshot, kept out of git (.gitignore); copy it in to render slide 9.
+  Sizes are in design units: 1600 units = the slide width, 1 unit = 1px in print.
 -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>musterd — Demo Day</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&display=swap" />
 <style>
   @font-face{font-family:'Recursive Casual';src:url(../../../packages/web/src/styles/fonts/recursive-casual.woff2) format('woff2');font-weight:400 800;font-display:block}
   @font-face{font-family:'Recursive';src:url(../../../packages/web/src/styles/fonts/recursive-linear.woff2) format('woff2');font-weight:400 800;font-display:block}
   @font-face{font-family:'Recursive Mono';src:url(../../../packages/web/src/styles/fonts/recursive-mono.woff2) format('woff2');font-weight:400 800;font-display:block}
-  :root{--bg:#FAFAFA;--panel:#F4F4F5;--ink:#18181B;--mut:#52525B;--acc:#E1AD01;--acct:#7A5A06;--accn:#8F6B00;--accd:#3F2F00;--line:#E4E4E7;--ok:#1F6F4A;--okbg:#EAF7F0;--okline:#B4DCC7;
+  :root{--bg:#FAFAFA;--panel:#F4F4F5;--ink:#18181B;--mut:#52525B;--acc:#E1AD01;--acct:#7A5A06;--accn:#8F6B00;--accd:#3F2F00;--line:#E4E4E7;--tint:#FBF3D5;--ok:#1F6F4A;--okbg:#EAF7F0;--okline:#B4DCC7;
     --sans:'Recursive',system-ui,-apple-system,Helvetica,Arial,sans-serif;--display:'Recursive Casual','Recursive',system-ui,sans-serif;--mono:'Recursive Mono','JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
+    --word:'JetBrains Mono','Recursive Mono',ui-monospace,Menlo,monospace;
     --ease:cubic-bezier(.22,1,.36,1);--u:.0625cqw}
   @page{size:1600px 900px;margin:0}
   *{box-sizing:border-box;margin:0;padding:0}
@@ -32,7 +36,7 @@
   .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
   .deck{position:relative;width:min(100vw,calc(100vh*16/9));aspect-ratio:16/9;max-height:100vh;overflow:hidden;container-type:size;background:var(--bg)}
 
-  /* slides: a crossfade with a small slide, the one that leaves drifts the other way */
+  /* slides: a crossfade with a small slide; the one that leaves drifts the other way */
   .slide{position:absolute;inset:0;padding:calc(64 * var(--u)) calc(96 * var(--u)) calc(72 * var(--u));display:flex;flex-direction:column;background:var(--bg);color:var(--ink);font-family:var(--sans);
     opacity:0;visibility:hidden;transform:translateX(3%);transition:opacity .5s var(--ease),transform .6s var(--ease),visibility 0s .6s}
   .slide.on{opacity:1;visibility:visible;transform:none;transition:opacity .5s var(--ease),transform .6s var(--ease)}
@@ -45,67 +49,101 @@
   .frag.shown{opacity:1;transform:none}
 
   .top{display:flex;align-items:center;flex:none}
-  .mark{display:flex;align-items:center;gap:calc(14 * var(--u));font-family:var(--mono);font-size:calc(26 * var(--u));font-weight:700;letter-spacing:-.02em}
+  .mark{display:flex;align-items:center;gap:calc(14 * var(--u));font-family:var(--word);font-size:calc(26 * var(--u));font-weight:700;letter-spacing:-.02em}
   .chip{width:calc(38 * var(--u));height:calc(38 * var(--u));display:block;flex:none}
   .main{flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0}
-  h1{font-family:var(--display);font-size:calc(104 * var(--u));font-weight:780;line-height:1.02;letter-spacing:-.02em;text-wrap:balance}
+  h1{font-family:var(--display);font-size:calc(100 * var(--u));font-weight:780;line-height:1.02;letter-spacing:-.02em;text-wrap:balance}
   h2{font-family:var(--display);font-size:calc(60 * var(--u));font-weight:700;line-height:1.08;letter-spacing:-.015em;text-wrap:balance}
   h3{font-family:var(--display);font-size:calc(32 * var(--u));font-weight:700;letter-spacing:-.01em}
-  .sub{margin-top:calc(36 * var(--u));font-size:calc(32 * var(--u));line-height:1.4;color:var(--mut);max-width:calc(1180 * var(--u))}
+  .sub{margin-top:calc(32 * var(--u));font-size:calc(32 * var(--u));line-height:1.4;color:var(--mut);max-width:calc(880 * var(--u));text-wrap:pretty}
   .mono{font-family:var(--mono)}
   .foot{display:flex;justify-content:space-between;align-items:baseline;flex:none;padding-top:calc(22 * var(--u));border-top:1px solid var(--line);font-size:calc(24 * var(--u));color:var(--mut)}
   .foot b{color:var(--ink);font-weight:600}
   .foot .mono{font-size:calc(20 * var(--u));letter-spacing:.08em}
 
-  /* 2: four plain rows under rules */
-  .rows{margin-top:calc(44 * var(--u));border-top:1px solid var(--line)}
-  .row{display:flex;gap:calc(30 * var(--u));align-items:baseline;padding:calc(30 * var(--u)) 0;border-bottom:1px solid var(--line);font-size:calc(38 * var(--u));line-height:1.3}
+  /* 1: cover — the mark large, the line, and the way to the site */
+  .lockup{display:flex;align-items:center;gap:calc(26 * var(--u))}
+  .bigmark{width:calc(96 * var(--u));height:calc(96 * var(--u));display:block;flex:none}
+  .lockup .word{font-family:var(--word);font-size:calc(56 * var(--u));font-weight:700;letter-spacing:-.02em}
+  .cover{flex:1;display:grid;grid-template-columns:1fr auto;gap:calc(80 * var(--u));align-items:center}
+  .qr{display:flex;flex-direction:column;align-items:center;gap:calc(14 * var(--u));background:#fff;border:1px solid var(--line);border-radius:calc(12 * var(--u));padding:calc(26 * var(--u)) calc(26 * var(--u)) calc(20 * var(--u))}
+  .qrcode{width:calc(236 * var(--u));height:calc(236 * var(--u));display:block}
+  .qr b{font-family:var(--word);font-size:calc(24 * var(--u));font-weight:700;letter-spacing:-.01em}
+
+  /* 2: rows under rules */
+  .rows{margin-top:calc(40 * var(--u));border-top:1px solid var(--line)}
+  .row{display:flex;gap:calc(30 * var(--u));align-items:baseline;padding:calc(26 * var(--u)) 0;border-bottom:1px solid var(--line);font-size:calc(36 * var(--u));line-height:1.3}
   .row span:last-child{text-wrap:balance}
   .row .n{flex:none;width:calc(48 * var(--u));font-family:var(--mono);font-size:calc(22 * var(--u));font-weight:700;color:var(--acct)}
+  .proof{margin-top:calc(36 * var(--u));display:flex;gap:calc(30 * var(--u));align-items:baseline;font-size:calc(30 * var(--u));line-height:1.35}
+  .proof .n{flex:none;width:calc(48 * var(--u))}
+  .proof b{font-weight:700}
+  .proof em{font-style:normal;color:var(--accn);font-weight:700}
 
-  /* 3: the idea, beside a real board */
-  .split{flex:1;display:grid;grid-template-columns:5fr 6fr;gap:calc(80 * var(--u));align-items:center;min-height:0}
-  .points{margin-top:calc(40 * var(--u));display:grid;gap:calc(26 * var(--u))}
-  .points p{font-size:calc(29 * var(--u));line-height:1.4;color:var(--mut)}
+  /* 3: what it is, beside the real roll call */
+  .split{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:calc(72 * var(--u));align-items:center;min-height:0}
+  .points{margin-top:calc(40 * var(--u));display:grid;gap:calc(24 * var(--u))}
+  .points p{font-size:calc(29 * var(--u));line-height:1.4;color:var(--mut);text-wrap:pretty}
   .points b{color:var(--ink);font-weight:700}
   .board{border:1px solid var(--line);border-radius:calc(8 * var(--u));background:#fff;overflow:hidden}
-  .board__top{display:flex;justify-content:space-between;padding:calc(16 * var(--u)) calc(26 * var(--u));background:var(--panel);border-bottom:1px solid var(--line);font-family:var(--mono);font-size:calc(18 * var(--u));color:var(--mut)}
+  .board__top{display:flex;justify-content:space-between;padding:calc(16 * var(--u)) calc(24 * var(--u));background:var(--panel);border-bottom:1px solid var(--line);font-family:var(--mono);font-size:calc(18 * var(--u));color:var(--mut)}
   .board__top b{color:var(--acct)}
-  .board__body{padding:calc(20 * var(--u)) calc(26 * var(--u)) calc(24 * var(--u))}
-  .label{font-family:var(--mono);font-size:calc(16 * var(--u));letter-spacing:.16em;color:var(--mut);margin-bottom:calc(14 * var(--u))}
-  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:calc(19 * var(--u))}
-  td{padding:calc(8 * var(--u)) 0;vertical-align:middle}
+  .board__body{padding:calc(18 * var(--u)) calc(24 * var(--u)) calc(22 * var(--u))}
+  .label{font-family:var(--mono);font-size:calc(16 * var(--u));letter-spacing:.16em;color:var(--mut);margin-bottom:calc(12 * var(--u))}
+  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:calc(21 * var(--u))}
+  td{padding:calc(9 * var(--u)) 0;vertical-align:middle}
   td i{display:inline-block;width:calc(9 * var(--u));height:calc(9 * var(--u));border-radius:50%;background:var(--ok)}
   td.dot{width:calc(22 * var(--u))}
   td.who{font-weight:700;width:calc(104 * var(--u))}
-  td.kind{color:var(--mut);width:calc(90 * var(--u))}
-  td.where{width:calc(176 * var(--u))}
+  td.kind{color:var(--mut);width:calc(84 * var(--u))}
+  td.where{width:calc(160 * var(--u))}
   td.model{color:var(--mut)}
-  .acts{margin-top:calc(18 * var(--u));padding-top:calc(18 * var(--u));border-top:1px solid var(--line);display:grid;gap:calc(12 * var(--u))}
-  .act{display:flex;align-items:center;gap:calc(16 * var(--u));font-family:var(--mono);font-size:calc(18.5 * var(--u));color:var(--mut)}
-  .act b{color:var(--ink)}
-  .tag{flex:none;width:calc(148 * var(--u));padding:calc(6 * var(--u)) 0;border-radius:calc(4 * var(--u));border:1px solid var(--okline);background:var(--okbg);color:var(--ok);text-align:center;font-size:calc(13.5 * var(--u));letter-spacing:.1em;font-weight:700}
+  td{white-space:nowrap}
 
-  /* 4 to 6: ruled columns */
-  .cols{margin-top:calc(56 * var(--u));display:grid;grid-template-columns:repeat(var(--n,3),1fr);column-gap:calc(56 * var(--u));align-items:start}
-  .col{border-top:3px solid var(--line);padding-top:calc(26 * var(--u))}
+  /* 4: one lane's chain, left to right */
+  .chain{margin-top:calc(52 * var(--u));display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,auto);column-gap:calc(32 * var(--u))}
+  .step{grid-row:span 4;display:grid;grid-template-rows:subgrid;row-gap:0;align-content:start;border-top:3px solid var(--acc);padding-top:calc(22 * var(--u))}
+  .act{display:block;font-family:var(--mono);font-size:calc(17 * var(--u));font-weight:700;letter-spacing:.12em;color:var(--acct);margin-bottom:calc(16 * var(--u))}
+  .step h3{font-size:calc(30 * var(--u));margin-bottom:calc(12 * var(--u))}
+  .step p{font-size:calc(25 * var(--u));line-height:1.45;color:var(--mut);text-wrap:pretty}
+  .step .who{margin-top:calc(18 * var(--u));padding-top:calc(14 * var(--u));border-top:1px solid var(--line);font-family:var(--mono);font-size:calc(19 * var(--u));line-height:1.6;color:var(--mut);white-space:nowrap}
+  .step .who b{color:var(--ink)}
+  .chainnote{margin-top:calc(44 * var(--u));font-size:calc(28 * var(--u));color:var(--mut)}
+  .chainnote b{color:var(--ink);font-weight:600}
+
+  /* 5 and 7: ruled columns */
+  .cols{margin-top:calc(56 * var(--u));display:grid;grid-template-columns:repeat(var(--n,3),1fr);grid-template-rows:repeat(3,auto);column-gap:calc(56 * var(--u))}
+  .col{grid-row:span 3;display:grid;grid-template-rows:subgrid;row-gap:0;align-content:start;border-top:3px solid var(--line);padding-top:calc(26 * var(--u))}
   .col .when{font-family:var(--mono);font-size:calc(18 * var(--u));font-weight:700;letter-spacing:.14em;color:var(--acct);margin-bottom:calc(18 * var(--u))}
   .col h3{margin-bottom:calc(16 * var(--u))}
-  .col p{font-size:calc(27 * var(--u));line-height:1.45;color:var(--mut)}
-  .stat{border-top:3px solid var(--acc);padding-top:calc(22 * var(--u))}
+  .col p{font-size:calc(27 * var(--u));line-height:1.45;color:var(--mut);text-wrap:pretty}
+
+  /* 6: numbers */
+  .stat{grid-row:span 3;border-top:3px solid var(--acc);padding-top:calc(22 * var(--u))}
   .stat .v{font-family:var(--display);font-size:calc(132 * var(--u));font-weight:780;line-height:1;letter-spacing:-.03em;color:var(--accn)}
   .stat .k{margin-top:calc(16 * var(--u));font-size:calc(26 * var(--u));line-height:1.35;color:var(--ink)}
   .note{margin-top:calc(44 * var(--u));font-size:calc(28 * var(--u));color:var(--mut)}
   .note b{color:var(--ink);font-weight:600}
 
-  /* 7: the mustard statement slide */
+  /* 8: the mustard statement slide */
   .acc .mark{color:var(--accd)}
-  .acc h1{font-size:calc(92 * var(--u))}
-  .asks{margin-top:calc(56 * var(--u));display:grid;gap:calc(34 * var(--u));max-width:calc(1320 * var(--u))}
+  .acc h1{font-size:calc(88 * var(--u))}
+  .asks{margin-top:calc(52 * var(--u));display:grid;gap:calc(32 * var(--u));max-width:calc(1320 * var(--u))}
   .ask{display:flex;gap:calc(30 * var(--u));align-items:baseline;font-size:calc(40 * var(--u));line-height:1.3;color:var(--ink)}
   .ask .n{flex:none;width:calc(52 * var(--u));font-family:var(--mono);font-size:calc(24 * var(--u));font-weight:700;color:var(--accd)}
-  .acc .foot{border-top-color:rgba(63,47,0,.35);color:var(--accd)}
-  .acc .foot b{color:var(--ink)}
+
+  /* 9: who to talk to */
+  .team{flex:1;display:grid;grid-template-columns:5fr 6fr;gap:calc(88 * var(--u));align-items:center}
+  .team .intro{margin-top:calc(30 * var(--u));font-size:calc(32 * var(--u));line-height:1.4;color:var(--ink);text-wrap:pretty}
+  .team .site{margin-top:calc(36 * var(--u));display:flex;align-items:center;gap:calc(26 * var(--u))}
+  .team .site .qrcode{width:calc(150 * var(--u));height:calc(150 * var(--u))}
+  .team .site span{font-family:var(--word);font-size:calc(30 * var(--u));font-weight:700}
+  .person{display:grid;grid-template-columns:calc(280 * var(--u)) 1fr;gap:calc(44 * var(--u));align-items:start}
+  .avatar{width:calc(280 * var(--u));height:calc(280 * var(--u));border-radius:calc(12 * var(--u));object-fit:cover;background:var(--panel);display:block}
+  .person h3{font-size:calc(44 * var(--u))}
+  .person .role{margin-top:calc(6 * var(--u));font-size:calc(26 * var(--u));color:var(--acct);font-weight:600}
+  .person .bio{margin-top:calc(20 * var(--u));font-size:calc(27 * var(--u));line-height:1.45;color:var(--mut);text-wrap:pretty}
+  .person .link{margin-top:calc(20 * var(--u));font-family:var(--mono);font-size:calc(21 * var(--u));color:var(--ink)}
 
   /* chrome: the picker, the arrows and the progress rail sit outside the slide */
   .rail-bar{position:fixed;left:0;right:0;bottom:0;height:4px;z-index:20}
@@ -141,120 +179,151 @@
 </style>
 <style id="deck-layout"></style>
 
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="chip" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="224" fill="#E1AD01"/> <path fill="#fff" fill-rule="evenodd" d="M687 59C713 59 731 59 747 61C763 62 769 63 781 67C793 70 807 74 818 80C829 85 840 93 849 99C858 105 862 109 871 117C879 125 890 136 898 148C906 160 915 175 921 189C928 203 934 215 938 231C943 247 946 267 948 283C950 299 950 251 950 325C951 399 951 656 950 729C950 802 950 750 948 761C947 772 947 780 943 795C940 810 934 832 928 848C922 864 912 882 906 893C900 903 898 905 893 911C888 916 884 921 878 926C872 931 865 937 858 941C851 946 842 951 835 955C827 959 821 962 814 964C807 967 799 969 791 971C783 973 785 974 767 975C749 977 704 979 684 979C664 980 677 978 648 978C619 979 553 981 510 981C467 981 417 980 389 980C361 980 360 981 344 981C328 981 308 981 294 979C280 978 272 976 261 973C250 970 238 967 226 961C214 956 200 948 189 941C178 934 169 927 159 918C149 909 138 895 130 885C122 875 118 867 113 856C107 845 101 828 97 816C93 804 91 795 89 782C87 769 85 784 84 737C82 690 80 573 80 501C80 429 82 345 84 304C85 263 87 272 90 257C93 242 98 223 102 212C105 201 106 199 111 191C115 183 121 172 127 163C133 154 139 146 146 138C153 130 162 120 169 114C175 108 179 105 186 100C193 96 197 93 208 88C219 83 235 74 252 70C269 65 284 62 308 61C332 60 365 62 396 62C427 62 462 60 495 60C528 60 560 63 592 63C624 62 661 59 687 59ZM659 127C638 128 609 129 591 130C573 130 596 128 552 128C508 129 373 129 326 131C279 132 285 135 271 139C257 142 248 147 240 151C232 154 230 156 225 160C221 164 217 165 211 173C204 181 192 194 184 206C176 218 169 234 164 245C160 256 159 262 157 272C155 282 154 268 153 303C152 338 151 410 151 479C152 548 153 672 155 719C156 766 157 747 159 759C161 771 163 780 166 789C169 798 171 805 176 815C181 825 189 838 196 847C203 856 209 862 217 869C225 876 234 883 243 888C252 894 262 898 271 901C280 905 288 906 299 908C310 910 324 912 336 912C348 913 311 912 369 912C427 912 622 912 682 912C742 911 716 911 729 910C742 909 748 909 758 906C768 904 781 900 791 895C801 890 811 884 820 876C828 868 837 859 844 848C852 837 858 826 863 811C869 796 873 776 876 759C879 742 879 784 880 710C880 636 880 386 879 313C878 240 878 287 876 274C874 261 871 244 868 234C866 224 866 224 861 215C857 206 848 191 841 182C834 173 826 167 822 163C818 159 824 161 820 158C816 155 805 149 798 145C791 141 784 138 776 136C768 133 759 131 749 130C739 128 729 127 714 126C699 126 680 126 659 127Z"/> <path fill="#18181B" stroke="#18181B" stroke-width="28" stroke-linejoin="round" d="M349 361C354 360 362 362 366 363C370 364 371 366 373 367C375 369 376 369 377 374C378 379 380 386 380 396L377 431L392 408C397 401 403 394 408 389C413 384 418 381 423 378C428 375 434 372 440 371C446 369 453 367 460 368C467 368 475 369 482 371C489 373 496 376 501 380C506 384 511 340 513 395C515 450 513 655 512 707L511 709L505 707C502 706 498 704 495 701C492 698 490 694 489 689C487 684 488 698 486 668C483 638 477 543 475 506C472 469 471 460 470 448C469 437 469 440 468 437L465 433L455 434C452 435 448 437 444 440C440 443 436 447 431 452C426 457 422 461 416 469C410 478 399 496 395 505C390 514 391 515 389 521C387 527 385 530 384 543C382 556 380 578 380 600C380 622 383 660 383 675C383 690 382 685 380 689C378 693 376 697 373 699C369 701 366 703 361 703C356 704 349 703 344 701C339 700 336 698 333 694C330 690 327 683 325 677C323 671 322 681 322 656C321 631 325 565 324 526C324 487 319 442 319 420C318 398 320 403 322 396C323 389 325 384 328 379C330 374 333 370 336 367C340 364 344 362 349 361ZM616 372C622 371 625 371 631 372C637 372 644 373 650 375C656 377 664 379 670 383C676 387 681 391 685 397C690 403 693 408 697 421C701 434 704 445 707 473C711 501 715 559 719 590C722 621 725 643 729 660C732 677 735 685 738 692C741 699 742 699 744 703L753 713L721 758L718 759L713 754C708 749 699 738 694 731C688 724 684 716 681 709C677 702 674 696 672 686C670 676 670 685 667 650C663 615 655 508 652 476C649 444 650 462 648 457C647 452 644 447 642 443C639 439 636 436 632 435C628 433 624 432 619 432C614 433 608 434 602 437C596 439 588 444 582 449C576 453 570 459 565 464C560 469 556 475 554 479C551 483 551 485 551 489C550 493 548 470 551 503C553 536 565 655 567 688C569 721 565 698 563 702C561 706 558 708 554 710C550 712 546 713 542 713C538 713 535 712 533 711L527 708L528 419C532 368 542 405 549 399C556 393 564 389 571 385C578 381 587 378 594 376C601 374 610 373 616 372ZM764 724L766 724C767 725 769 726 772 729C775 732 781 738 783 743C786 748 787 752 788 756C789 760 789 764 789 767C788 770 787 774 785 777C783 779 782 782 779 783C776 785 773 787 769 787C765 788 761 788 757 787C753 786 748 784 744 781L731 772L764 724Z"/></symbol></svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="mark" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="224" fill="#E1AD01"/> <path fill="#fff" fill-rule="evenodd" d="M687 59C713 59 731 59 747 61C763 62 769 63 781 67C793 70 807 74 818 80C829 85 840 93 849 99C858 105 862 109 871 117C879 125 890 136 898 148C906 160 915 175 921 189C928 203 934 215 938 231C943 247 946 267 948 283C950 299 950 251 950 325C951 399 951 656 950 729C950 802 950 750 948 761C947 772 947 780 943 795C940 810 934 832 928 848C922 864 912 882 906 893C900 903 898 905 893 911C888 916 884 921 878 926C872 931 865 937 858 941C851 946 842 951 835 955C827 959 821 962 814 964C807 967 799 969 791 971C783 973 785 974 767 975C749 977 704 979 684 979C664 980 677 978 648 978C619 979 553 981 510 981C467 981 417 980 389 980C361 980 360 981 344 981C328 981 308 981 294 979C280 978 272 976 261 973C250 970 238 967 226 961C214 956 200 948 189 941C178 934 169 927 159 918C149 909 138 895 130 885C122 875 118 867 113 856C107 845 101 828 97 816C93 804 91 795 89 782C87 769 85 784 84 737C82 690 80 573 80 501C80 429 82 345 84 304C85 263 87 272 90 257C93 242 98 223 102 212C105 201 106 199 111 191C115 183 121 172 127 163C133 154 139 146 146 138C153 130 162 120 169 114C175 108 179 105 186 100C193 96 197 93 208 88C219 83 235 74 252 70C269 65 284 62 308 61C332 60 365 62 396 62C427 62 462 60 495 60C528 60 560 63 592 63C624 62 661 59 687 59ZM659 127C638 128 609 129 591 130C573 130 596 128 552 128C508 129 373 129 326 131C279 132 285 135 271 139C257 142 248 147 240 151C232 154 230 156 225 160C221 164 217 165 211 173C204 181 192 194 184 206C176 218 169 234 164 245C160 256 159 262 157 272C155 282 154 268 153 303C152 338 151 410 151 479C152 548 153 672 155 719C156 766 157 747 159 759C161 771 163 780 166 789C169 798 171 805 176 815C181 825 189 838 196 847C203 856 209 862 217 869C225 876 234 883 243 888C252 894 262 898 271 901C280 905 288 906 299 908C310 910 324 912 336 912C348 913 311 912 369 912C427 912 622 912 682 912C742 911 716 911 729 910C742 909 748 909 758 906C768 904 781 900 791 895C801 890 811 884 820 876C828 868 837 859 844 848C852 837 858 826 863 811C869 796 873 776 876 759C879 742 879 784 880 710C880 636 880 386 879 313C878 240 878 287 876 274C874 261 871 244 868 234C866 224 866 224 861 215C857 206 848 191 841 182C834 173 826 167 822 163C818 159 824 161 820 158C816 155 805 149 798 145C791 141 784 138 776 136C768 133 759 131 749 130C739 128 729 127 714 126C699 126 680 126 659 127Z"/> <path fill="#18181B" fill-rule="evenodd" d="M692 50C718 50 735 51 750 52C765 53 769 54 780 57C791 60 804 64 815 69C826 74 838 80 848 88C858 95 867 103 877 112C886 121 898 135 906 144C913 153 913 153 920 167C927 181 941 211 946 228C952 245 952 255 954 271C956 287 957 250 958 324C959 398 959 644 958 718C958 792 956 754 955 767C954 780 953 786 951 796C950 806 948 815 945 824C943 833 940 842 936 851C932 860 926 873 922 881C918 889 915 893 911 899C907 905 902 912 897 918C892 924 888 929 882 934C876 939 868 945 861 950C854 955 846 959 839 963C832 967 824 970 817 972C810 975 802 977 794 979C786 981 786 982 767 983C748 985 755 986 683 987C611 988 400 989 335 989C270 989 309 988 296 987C283 986 270 984 258 981C246 978 234 975 222 969C210 964 195 957 183 949C171 941 159 931 149 921C139 911 129 899 121 889C113 879 108 870 103 859C97 848 93 837 89 823C85 809 80 790 78 774C75 758 75 776 74 730C73 684 72 567 72 496C72 425 73 345 75 304C77 263 79 264 83 248C86 232 91 216 95 205C99 194 102 187 107 179C111 171 115 164 121 155C127 147 135 137 142 129C149 120 158 111 165 105C172 99 177 95 183 91C189 87 193 84 201 80C209 76 220 70 229 67C238 63 242 61 255 59C268 56 286 52 309 51C332 51 366 53 396 53C426 53 453 51 486 51C519 51 559 53 593 53C627 53 666 50 692 50ZM686 59C660 59 623 62 591 62C559 63 526 60 494 60C462 60 428 62 398 62C368 62 331 61 312 61C293 61 295 62 285 64C275 65 262 67 252 70C242 72 235 75 227 79C219 82 213 85 206 89C199 92 190 97 184 102C178 106 174 109 168 114C162 120 153 129 147 137C140 145 134 152 129 160C123 168 117 178 113 187C108 196 105 200 102 212C98 224 93 242 90 257C87 272 85 263 84 304C82 345 80 428 80 501C80 574 82 692 84 739C85 786 86 769 89 782C91 795 93 804 97 816C100 828 106 844 112 855C118 866 122 874 130 885C138 896 152 911 161 920C170 929 176 933 186 939C196 946 212 955 224 960C236 966 248 970 260 973C272 976 280 978 294 979C308 981 328 981 344 981C360 981 375 980 390 980C405 980 391 982 434 981C477 981 604 979 646 978C688 978 668 980 688 979C708 979 750 977 767 975C784 974 784 973 791 971C798 970 804 968 811 965C818 963 827 959 835 955C843 951 850 947 857 942C864 937 872 932 878 926C885 920 891 914 895 908C900 902 901 903 906 893C912 883 922 864 928 848C934 832 940 815 943 796C947 777 949 813 950 734C952 655 951 395 950 320C950 245 950 297 948 283C947 269 944 250 939 234C935 218 928 203 921 189C915 175 907 161 899 149C891 138 879 126 871 117C863 109 858 105 849 99C840 93 829 85 818 80C807 74 794 70 782 67C770 63 764 62 748 61C732 59 712 59 686 59ZM662 127C682 127 702 126 716 127C730 127 738 128 748 130C758 131 766 133 775 136C784 138 792 142 799 146C806 149 816 155 820 158C823 161 818 159 822 163C826 167 835 174 841 183C848 192 857 206 861 215C866 224 866 224 868 234C871 244 875 260 876 275C878 290 879 249 879 321C880 393 880 635 880 709C879 783 878 748 875 764C873 780 869 795 864 808C860 821 854 832 847 843C840 854 831 865 823 873C814 881 806 887 796 892C786 898 772 902 762 905C752 908 750 908 737 909C724 910 744 911 682 912C620 912 425 912 368 912C310 912 347 913 336 912C325 912 310 910 299 908C288 906 278 904 269 900C260 897 251 893 242 887C233 882 225 876 217 869C209 863 204 857 197 848C190 839 181 825 176 815C171 805 169 797 166 788C163 779 161 770 159 759C157 748 156 765 155 719C154 673 152 552 152 483C151 414 152 339 153 304C154 269 155 283 157 273C159 263 160 256 165 245C169 234 175 220 183 208C190 196 200 184 209 175C217 166 228 159 235 154C242 149 244 148 250 146C256 143 260 142 268 140C276 138 289 135 299 134C309 132 292 131 327 131C362 130 467 129 511 129C555 128 568 130 593 130C618 129 641 127 662 127ZM688 134C666 134 613 137 591 137C569 137 572 135 556 135C540 136 523 137 492 137C461 138 393 136 369 136C345 137 354 138 346 138C338 139 334 137 324 138C314 138 301 140 289 143C277 145 261 150 252 154C243 157 240 159 235 163C230 166 225 170 221 173C217 176 218 174 214 179C210 184 202 193 196 201C190 209 184 221 180 229C176 237 173 244 171 252C168 260 165 271 164 279C162 287 161 292 161 302C160 312 159 276 159 336C160 396 160 597 161 663C162 730 163 717 165 735C166 753 167 759 170 770C172 781 175 791 179 800C182 809 187 818 192 826C197 834 201 840 208 848C215 855 224 863 231 870C238 876 246 880 253 884C260 888 266 891 274 893C282 896 292 899 303 900C314 902 274 903 337 904C400 904 613 904 681 903C749 902 728 902 745 899C762 897 770 894 781 889C792 885 802 878 811 872C819 866 825 860 832 851C839 841 847 826 851 817C856 808 857 804 859 796C862 788 864 784 865 772C867 760 869 804 870 727C871 650 871 383 871 309C870 235 870 293 869 284C868 275 867 263 864 253C862 243 859 231 856 223C852 215 848 209 844 203C840 197 836 190 831 184C826 178 820 172 815 167C810 162 808 160 802 157C796 153 788 149 781 146C774 143 769 141 759 139C749 137 732 135 720 134C708 134 710 134 688 134Z"/> <path fill="#18181B" d="M349 361C354 360 362 362 366 363C370 364 371 366 373 367C375 369 376 369 377 374C378 379 380 386 380 396L377 431L392 408C397 401 403 394 408 389C413 384 418 381 423 378C428 375 434 372 440 371C446 369 453 367 460 368C467 368 475 369 482 371C489 373 496 376 501 380C506 384 511 340 513 395C515 450 513 655 512 707L511 709L505 707C502 706 498 704 495 701C492 698 490 694 489 689C487 684 488 698 486 668C483 638 477 543 475 506C472 469 471 460 470 448C469 437 469 440 468 437L465 433L455 434C452 435 448 437 444 440C440 443 436 447 431 452C426 457 422 461 416 469C410 478 399 496 395 505C390 514 391 515 389 521C387 527 385 530 384 543C382 556 380 578 380 600C380 622 383 660 383 675C383 690 382 685 380 689C378 693 376 697 373 699C369 701 366 703 361 703C356 704 349 703 344 701C339 700 336 698 333 694C330 690 327 683 325 677C323 671 322 681 322 656C321 631 325 565 324 526C324 487 319 442 319 420C318 398 320 403 322 396C323 389 325 384 328 379C330 374 333 370 336 367C340 364 344 362 349 361ZM616 372C622 371 625 371 631 372C637 372 644 373 650 375C656 377 664 379 670 383C676 387 681 391 685 397C690 403 693 408 697 421C701 434 704 445 707 473C711 501 715 559 719 590C722 621 725 643 729 660C732 677 735 685 738 692C741 699 742 699 744 703L753 713L721 758L718 759L713 754C708 749 699 738 694 731C688 724 684 716 681 709C677 702 674 696 672 686C670 676 670 685 667 650C663 615 655 508 652 476C649 444 650 462 648 457C647 452 644 447 642 443C639 439 636 436 632 435C628 433 624 432 619 432C614 433 608 434 602 437C596 439 588 444 582 449C576 453 570 459 565 464C560 469 556 475 554 479C551 483 551 485 551 489C550 493 548 470 551 503C553 536 565 655 567 688C569 721 565 698 563 702C561 706 558 708 554 710C550 712 546 713 542 713C538 713 535 712 533 711L527 708L528 419C532 368 542 405 549 399C556 393 564 389 571 385C578 381 587 378 594 376C601 374 610 373 616 372ZM764 724L766 724C767 725 769 726 772 729C775 732 781 738 783 743C786 748 787 752 788 756C789 760 789 764 789 767C788 770 787 774 785 777C783 779 782 782 779 783C776 785 773 787 769 787C765 788 761 788 757 787C753 786 748 784 744 781L731 772L764 724Z"/></symbol><symbol id="mark-sm" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="224" fill="#E1AD01"/> <path fill="#fff" fill-rule="evenodd" d="M687 59C713 59 731 59 747 61C763 62 769 63 781 67C793 70 807 74 818 80C829 85 840 93 849 99C858 105 862 109 871 117C879 125 890 136 898 148C906 160 915 175 921 189C928 203 934 215 938 231C943 247 946 267 948 283C950 299 950 251 950 325C951 399 951 656 950 729C950 802 950 750 948 761C947 772 947 780 943 795C940 810 934 832 928 848C922 864 912 882 906 893C900 903 898 905 893 911C888 916 884 921 878 926C872 931 865 937 858 941C851 946 842 951 835 955C827 959 821 962 814 964C807 967 799 969 791 971C783 973 785 974 767 975C749 977 704 979 684 979C664 980 677 978 648 978C619 979 553 981 510 981C467 981 417 980 389 980C361 980 360 981 344 981C328 981 308 981 294 979C280 978 272 976 261 973C250 970 238 967 226 961C214 956 200 948 189 941C178 934 169 927 159 918C149 909 138 895 130 885C122 875 118 867 113 856C107 845 101 828 97 816C93 804 91 795 89 782C87 769 85 784 84 737C82 690 80 573 80 501C80 429 82 345 84 304C85 263 87 272 90 257C93 242 98 223 102 212C105 201 106 199 111 191C115 183 121 172 127 163C133 154 139 146 146 138C153 130 162 120 169 114C175 108 179 105 186 100C193 96 197 93 208 88C219 83 235 74 252 70C269 65 284 62 308 61C332 60 365 62 396 62C427 62 462 60 495 60C528 60 560 63 592 63C624 62 661 59 687 59ZM659 127C638 128 609 129 591 130C573 130 596 128 552 128C508 129 373 129 326 131C279 132 285 135 271 139C257 142 248 147 240 151C232 154 230 156 225 160C221 164 217 165 211 173C204 181 192 194 184 206C176 218 169 234 164 245C160 256 159 262 157 272C155 282 154 268 153 303C152 338 151 410 151 479C152 548 153 672 155 719C156 766 157 747 159 759C161 771 163 780 166 789C169 798 171 805 176 815C181 825 189 838 196 847C203 856 209 862 217 869C225 876 234 883 243 888C252 894 262 898 271 901C280 905 288 906 299 908C310 910 324 912 336 912C348 913 311 912 369 912C427 912 622 912 682 912C742 911 716 911 729 910C742 909 748 909 758 906C768 904 781 900 791 895C801 890 811 884 820 876C828 868 837 859 844 848C852 837 858 826 863 811C869 796 873 776 876 759C879 742 879 784 880 710C880 636 880 386 879 313C878 240 878 287 876 274C874 261 871 244 868 234C866 224 866 224 861 215C857 206 848 191 841 182C834 173 826 167 822 163C818 159 824 161 820 158C816 155 805 149 798 145C791 141 784 138 776 136C768 133 759 131 749 130C739 128 729 127 714 126C699 126 680 126 659 127Z"/> <path fill="#18181B" stroke="#18181B" stroke-width="28" stroke-linejoin="round" d="M349 361C354 360 362 362 366 363C370 364 371 366 373 367C375 369 376 369 377 374C378 379 380 386 380 396L377 431L392 408C397 401 403 394 408 389C413 384 418 381 423 378C428 375 434 372 440 371C446 369 453 367 460 368C467 368 475 369 482 371C489 373 496 376 501 380C506 384 511 340 513 395C515 450 513 655 512 707L511 709L505 707C502 706 498 704 495 701C492 698 490 694 489 689C487 684 488 698 486 668C483 638 477 543 475 506C472 469 471 460 470 448C469 437 469 440 468 437L465 433L455 434C452 435 448 437 444 440C440 443 436 447 431 452C426 457 422 461 416 469C410 478 399 496 395 505C390 514 391 515 389 521C387 527 385 530 384 543C382 556 380 578 380 600C380 622 383 660 383 675C383 690 382 685 380 689C378 693 376 697 373 699C369 701 366 703 361 703C356 704 349 703 344 701C339 700 336 698 333 694C330 690 327 683 325 677C323 671 322 681 322 656C321 631 325 565 324 526C324 487 319 442 319 420C318 398 320 403 322 396C323 389 325 384 328 379C330 374 333 370 336 367C340 364 344 362 349 361ZM616 372C622 371 625 371 631 372C637 372 644 373 650 375C656 377 664 379 670 383C676 387 681 391 685 397C690 403 693 408 697 421C701 434 704 445 707 473C711 501 715 559 719 590C722 621 725 643 729 660C732 677 735 685 738 692C741 699 742 699 744 703L753 713L721 758L718 759L713 754C708 749 699 738 694 731C688 724 684 716 681 709C677 702 674 696 672 686C670 676 670 685 667 650C663 615 655 508 652 476C649 444 650 462 648 457C647 452 644 447 642 443C639 439 636 436 632 435C628 433 624 432 619 432C614 433 608 434 602 437C596 439 588 444 582 449C576 453 570 459 565 464C560 469 556 475 554 479C551 483 551 485 551 489C550 493 548 470 551 503C553 536 565 655 567 688C569 721 565 698 563 702C561 706 558 708 554 710C550 712 546 713 542 713C538 713 535 712 533 711L527 708L528 419C532 368 542 405 549 399C556 393 564 389 571 385C578 381 587 378 594 376C601 374 610 373 616 372ZM764 724L766 724C767 725 769 726 772 729C775 732 781 738 783 743C786 748 787 752 788 756C789 760 789 764 789 767C788 770 787 774 785 777C783 779 782 782 779 783C776 785 773 787 769 787C765 788 761 788 757 787C753 786 748 784 744 781L731 772L764 724Z"/></symbol></svg>
 
 <div class="stage"><div class="deck">
 
 <!-- 1 · cover -->
 <section class="slide" data-sec="Opening" data-title="Agents that answer for their work">
-  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div></div>
-  <div class="main">
-    <h1 class="a" style="--i:0">Agents that answer for their work.</h1>
-    <p class="sub a" style="--i:1">On musterd, every member answers for its work: the agents and the people they work with.</p>
-  </div>
-  <div class="foot a" style="--i:2"><span><b>Nick Sanders</b> · Founder</span><span class="mono">DEMO DAY · OCTOBER 9, 2026</span></div>
-</section>
-
-<!-- 2 · problem -->
-<section class="slide" data-sec="Opening" data-title="The second agent is where it breaks">
-  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div></div>
-  <div class="main">
-    <h2 class="a" style="--i:0">The second agent is where it breaks.</h2>
-    <div class="rows">
-      <div class="row frag"><span class="n">01</span><span>You run Claude Code, Codex and Cursor on one project.</span></div>
-      <div class="row frag"><span class="n">02</span><span>Two agents change the same file.</span></div>
-      <div class="row frag"><span class="n">03</span><span>A session closes and its context closes with it.</span></div>
-      <div class="row frag"><span class="n">04</span><span>Weeks later, nobody can say which agent did what, or who accepted it.</span></div>
+  <div class="top a" style="--i:0"><div class="lockup"><svg class="bigmark" aria-hidden="true"><use href="#mark"/></svg><span class="word">musterd</span></div></div>
+  <div class="cover">
+    <div>
+      <h1 class="a" style="--i:1">Agents that answer for their work.</h1>
+      <p class="sub a" style="--i:2">On musterd, every member answers for its work: the agents and the people they work with.</p>
     </div>
+    <div class="qr a" style="--i:3"><svg class="qrcode" viewBox="-2 -2 29 29" shape-rendering="crispEdges" role="img" aria-label="QR code: musterd.io"><rect x="-2" y="-2" width="29" height="29" fill="#fff"/><path fill="#18181B" d="M0 0h7v1h-7zM8 0h2v1h-2zM11 0h3v1h-3zM16 0h1v1h-1zM18 0h7v1h-7zM0 1h1v1h-1zM6 1h1v1h-1zM8 1h2v1h-2zM11 1h1v1h-1zM13 1h1v1h-1zM16 1h1v1h-1zM18 1h1v1h-1zM24 1h1v1h-1zM0 2h1v1h-1zM2 2h3v1h-3zM6 2h1v1h-1zM9 2h3v1h-3zM13 2h2v1h-2zM16 2h1v1h-1zM18 2h1v1h-1zM20 2h3v1h-3zM24 2h1v1h-1zM0 3h1v1h-1zM2 3h3v1h-3zM6 3h1v1h-1zM8 3h3v1h-3zM18 3h1v1h-1zM20 3h3v1h-3zM24 3h1v1h-1zM0 4h1v1h-1zM2 4h3v1h-3zM6 4h1v1h-1zM9 4h1v1h-1zM12 4h5v1h-5zM18 4h1v1h-1zM20 4h3v1h-3zM24 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM9 5h3v1h-3zM14 5h1v1h-1zM16 5h1v1h-1zM18 5h1v1h-1zM24 5h1v1h-1zM0 6h7v1h-7zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h7v1h-7zM8 7h2v1h-2zM12 7h5v1h-5zM0 8h1v1h-1zM2 8h2v1h-2zM5 8h3v1h-3zM9 8h3v1h-3zM13 8h4v1h-4zM18 8h1v1h-1zM21 8h1v1h-1zM23 8h2v1h-2zM1 9h3v1h-3zM5 9h1v1h-1zM10 9h3v1h-3zM17 9h1v1h-1zM19 9h1v1h-1zM23 9h1v1h-1zM6 10h3v1h-3zM10 10h1v1h-1zM14 10h1v1h-1zM19 10h2v1h-2zM3 11h2v1h-2zM9 11h1v1h-1zM13 11h2v1h-2zM17 11h1v1h-1zM20 11h3v1h-3zM0 12h2v1h-2zM3 12h4v1h-4zM8 12h1v1h-1zM11 12h1v1h-1zM15 12h1v1h-1zM17 12h2v1h-2zM20 12h1v1h-1zM22 12h3v1h-3zM2 13h4v1h-4zM11 13h1v1h-1zM13 13h1v1h-1zM15 13h2v1h-2zM18 13h3v1h-3zM24 13h1v1h-1zM1 14h2v1h-2zM5 14h2v1h-2zM9 14h2v1h-2zM12 14h1v1h-1zM14 14h1v1h-1zM16 14h1v1h-1zM20 14h1v1h-1zM22 14h2v1h-2zM0 15h1v1h-1zM2 15h3v1h-3zM7 15h2v1h-2zM12 15h2v1h-2zM17 15h1v1h-1zM19 15h2v1h-2zM24 15h1v1h-1zM3 16h1v1h-1zM5 16h2v1h-2zM10 16h2v1h-2zM16 16h9v1h-9zM8 17h1v1h-1zM12 17h2v1h-2zM15 17h2v1h-2zM20 17h1v1h-1zM22 17h1v1h-1zM24 17h1v1h-1zM0 18h7v1h-7zM8 18h1v1h-1zM10 18h3v1h-3zM16 18h1v1h-1zM18 18h1v1h-1zM20 18h1v1h-1zM22 18h3v1h-3zM0 19h1v1h-1zM6 19h1v1h-1zM8 19h3v1h-3zM12 19h1v1h-1zM15 19h2v1h-2zM20 19h1v1h-1zM23 19h2v1h-2zM0 20h1v1h-1zM2 20h3v1h-3zM6 20h1v1h-1zM9 20h5v1h-5zM16 20h6v1h-6zM0 21h1v1h-1zM2 21h3v1h-3zM6 21h1v1h-1zM8 21h1v1h-1zM12 21h3v1h-3zM17 21h2v1h-2zM20 21h5v1h-5zM0 22h1v1h-1zM2 22h3v1h-3zM6 22h1v1h-1zM8 22h6v1h-6zM15 22h1v1h-1zM18 22h1v1h-1zM20 22h1v1h-1zM22 22h2v1h-2zM0 23h1v1h-1zM6 23h1v1h-1zM10 23h1v1h-1zM17 23h1v1h-1zM20 23h1v1h-1zM22 23h1v1h-1zM0 24h7v1h-7zM8 24h3v1h-3zM12 24h1v1h-1zM14 24h1v1h-1zM18 24h7v1h-7z"/></svg><b>musterd.io</b></div>
+  </div>
+  <div class="foot a" style="--i:4"><span><b>Nick Sanders</b> · Founder</span><span class="mono">DEMO DAY · OCTOBER 9, 2026</span></div>
+</section>
+
+<!-- 2 · the problem -->
+<section class="slide" data-sec="Opening" data-title="You already run more than one agent">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
+  <div class="main">
+    <h2 class="a" style="--i:0">You already run more than one agent.</h2>
+    <div class="rows">
+      <div class="row frag"><span class="n">01</span><span>Claude Code in one terminal, Codex in another, the same repo.</span></div>
+      <div class="row frag"><span class="n">02</span><span>Neither knows the other exists, so they build the same thing twice or undo each other.</span></div>
+      <div class="row frag"><span class="n">03</span><span>Close the window and the context goes with it.</span></div>
+      <div class="row frag"><span class="n">04</span><span>Later, nobody can say which agent did what, or who checked it.</span></div>
+    </div>
+    <p class="proof frag"><span class="n"></span><span>When we ran agents on one project with no way to coordinate, <em>more than a third</em> of the code they wrote never shipped.</span></p>
   </div>
 </section>
 
-<!-- 3 · the idea, shown on a real team -->
-<section class="slide" data-sec="Product" data-title="One team, named members, a record">
-  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div></div>
+<!-- 3 · what musterd is -->
+<section class="slide" data-sec="Product" data-title="One team, with you on it">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
   <div class="split">
     <div>
-      <h2 class="a" style="--i:0">One team. Named members. A record.</h2>
+      <h2 class="a" style="--i:0">musterd makes them one team, with you on it.</h2>
       <div class="points a" style="--i:1">
-        <p><b>Agents and people join one team</b> as named members, on any harness.</p>
-        <p><b>Each lane of work has one owner.</b> It is handed off by name and accepted by someone else.</p>
-        <p><b>The record shows the chain:</b> who claimed the work, which model did it, who accepted it.</p>
+        <p><b>Each agent joins from the session it already runs:</b> Claude Code, Codex, Cursor, opencode or Grok.</p>
+        <p><b>Every member keeps a name, an inbox and its unfinished work</b> after the session closes.</p>
+        <p><b>People are members too.</b> An agent that needs a decision asks you, and the question waits for your answer.</p>
       </div>
     </div>
     <div class="board a" style="--i:2">
-      <div class="board__top"><div>musterd board · team <b>revive</b></div><div>this team, today</div></div>
+      <div class="board__top"><div>musterd · team <b>revive</b></div><div>roll call, today</div></div>
       <div class="board__body">
-        <div class="label">ROLL CALL</div>
         <table>
           <tr><td class="dot"><i></i></td><td class="who">nick</td><td class="kind">human</td><td class="where">cli</td><td class="model">admin</td></tr>
           <tr><td class="dot"><i></i></td><td class="who">miley</td><td class="kind">agent</td><td class="where">claude-code</td><td class="model">claude-sonnet-5-5</td></tr>
-          <tr><td class="dot"><i></i></td><td class="who">gptbot</td><td class="kind">agent</td><td class="where">codex</td><td class="model">gpt-6.1-sol</td></tr>
-          <tr><td class="dot"><i></i></td><td class="who">lazara</td><td class="kind">agent</td><td class="where">cursor</td><td class="model">claude-sonnet-5-5</td></tr>
+          <tr><td class="dot"><i></i></td><td class="who">gptbot</td><td class="kind">agent</td><td class="where">codex</td><td class="model">gpt-6-luna</td></tr>
           <tr><td class="dot"><i></i></td><td class="who">ghost</td><td class="kind">agent</td><td class="where">opencode</td><td class="model">muse-spark-1.3</td></tr>
+          <tr><td class="dot"><i></i></td><td class="who">alfie</td><td class="kind">agent</td><td class="where">claude-code</td><td class="model">claude-opus-5-5</td></tr>
         </table>
-        <div class="acts">
-          <div class="label" style="margin:0">RECENT ACCEPTANCES</div>
-          <div class="act"><span class="tag">ACCEPTED</span><span><b>ghost</b> accepted <b>#2229</b>, a research synthesis</span></div>
-          <div class="act"><span class="tag">ACCEPTED</span><span><b>big-body</b> accepted <b>#2242</b>, a decision record</span></div>
-          <div class="act"><span class="tag">ACCEPTED</span><span><b>gptbot</b> accepted <b>#2225</b>, a sync-text fix</span></div>
-        </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- 4 · dogfood -->
-<section class="slide" data-sec="Product" data-title="Built by a team that runs on musterd">
-  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div></div>
+<!-- 4 · one lane's chain, from this week -->
+<section class="slide" data-sec="Product" data-title="The record shows the chain">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
+  <div class="main">
+    <h2 class="a" style="--i:0">Every piece of work carries its chain.</h2>
+    <div class="chain">
+      <div class="step frag"><span class="act">CLAIM</span><h3>One owner</h3><p>A member takes the work, so nobody else builds it.</p><p class="who"><b>alfie</b><br>claude-code<br>claude-sonnet-5-5</p></div>
+      <div class="step frag"><span class="act">SUBMIT</span><h3>The work lands</h3><p>The change merges with the person who signed off named.</p><p class="who">PR <b>#2254</b><br>merged<br>signed off by <b>nick</b></p></div>
+      <div class="step frag"><span class="act">ACCEPT</span><h3>Another member checks</h3><p>A different member judges the outcome and accepts it or sends it back.</p><p class="who"><b>ghost</b><br>opencode<br>muse-spark-1.3</p></div>
+      <div class="step frag"><span class="act">DONE</span><h3>It counts as done</h3><p>The lane closes on the acceptance, and the record keeps every name.</p><p class="who"><b>done</b><br>lane closed<br>October 9</p></div>
+    </div>
+    <p class="chainnote a" style="--i:1">One real lane from this week: <b>the new tagline on our README</b>.</p>
+  </div>
+</section>
+
+<!-- 5 · what makes it different, said plainly -->
+<section class="slide" data-sec="Product" data-title="What a member can do here">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
+  <div class="main">
+    <h2 class="a" style="--i:0">Accountability, built into how the team works.</h2>
+    <div class="cols">
+      <div class="col frag"><div class="when">DECLINE · CHALLENGE</div><h3>Any member can say no</h3><p>An agent or a person can turn work down or push back, with a reason on the record.</p></div>
+      <div class="col frag"><div class="when">ACCEPT</div><h3>Nobody accepts their own work</h3><p>Acceptance comes from a different member. Work closed without one is marked unconfirmed.</p></div>
+      <div class="col frag"><div class="when">ATTEST</div><h3>The model on record is the one the harness saw</h3><p>Each seat's model is what its tool reported when it connected.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 · built on itself -->
+<section class="slide" data-sec="Proof" data-title="Built by a team that runs on musterd">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
   <div class="main">
     <h2 class="a" style="--i:0">musterd is built by a team that runs on musterd.</h2>
     <div class="cols" style="--n:4">
       <div class="stat a" style="--i:1"><div class="v">1</div><div class="k">human</div></div>
       <div class="stat a" style="--i:2"><div class="v">19</div><div class="k">agent members</div></div>
-      <div class="stat a" style="--i:3"><div class="v">861</div><div class="k">changes merged in the past month</div></div>
+      <div class="stat a" style="--i:3"><div class="v">871</div><div class="k">changes merged in the past month</div></div>
       <div class="stat a" style="--i:4"><div class="v">500+</div><div class="k">recorded decisions</div></div>
     </div>
-    <p class="note a" style="--i:5">Across <b>Claude Code</b>, <b>Codex</b>, <b>Cursor</b> and <b>opencode</b>.</p>
+    <p class="note a" style="--i:5">Across <b>Claude Code</b>, <b>Codex</b>, <b>Cursor</b>, <b>opencode</b> and <b>Grok</b>.</p>
   </div>
 </section>
 
-<!-- 5 · who and where -->
-<section class="slide" data-sec="Business" data-title="Who it is for, and where it stands">
-  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div></div>
+<!-- 7 · where it stands -->
+<section class="slide" data-sec="Business" data-title="Where it stands">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
   <div class="main">
     <h2 class="a" style="--i:0">For product and dev teams that run several agents.</h2>
     <div class="cols">
-      <div class="col frag"><div class="when">TODAY</div><h3>Working product</h3><p>Runs on your own machine. Installs from npm. Works with Claude Code, Codex, Cursor, opencode and Grok.</p></div>
-      <div class="col frag"><div class="when">THIS MONTH</div><h3>First design partners</h3><p>No outside team has used musterd yet. I set up the first teams myself and learn what they keep using.</p></div>
-      <div class="col frag"><div class="when">NOT YET</div><h3>Hosted teams</h3><p>musterd Cloud is in build: sign up, get a team, and everyone joins over HTTPS with nothing to run.</p></div>
+      <div class="col frag"><div class="when">TODAY</div><h3>Working, in private preview</h3><p>Runs on your own machine and installs from npm.</p></div>
+      <div class="col frag"><div class="when">THIS MONTH</div><h3>First design partners</h3><p>I set up each partner's team myself and learn what they keep using.</p></div>
+      <div class="col frag"><div class="when">NEXT · NOT YET</div><h3>Hosted teams</h3><p>Sign up, get a team, nothing to run. A subscription, with credits for the model compute musterd runs.</p></div>
     </div>
   </div>
 </section>
 
-<!-- 6 · model -->
-<section class="slide" data-sec="Business" data-title="How musterd makes money">
-  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div></div>
-  <div class="main">
-    <h2 class="a" style="--i:0">How musterd makes money.</h2>
-    <div class="cols">
-      <div class="col frag"><div class="when">NOW</div><h3>Design partners</h3><p>Product and dev teams use musterd free while I set up their teams by hand. Each one tells me what they would pay for.</p></div>
-      <div class="col frag"><div class="when">NEXT · NOT YET</div><h3>Hosted teams</h3><p>A subscription for a hosted team, with credits for the model compute that musterd runs. Your own keys and subscriptions use no credits.</p></div>
-      <div class="col frag"><div class="when">LATER · NOT YET</div><h3>Larger organizations</h3><p>Governance: an exportable record of who asked, claimed and accepted each piece of work, and single sign-on.</p></div>
-    </div>
-  </div>
-</section>
-
-<!-- 7 · ask, on the mustard slide -->
-<section class="slide acc" data-sec="Ask" data-title="What I am looking for">
-  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#chip"/></svg><span>musterd</span></div></div>
+<!-- 8 · the ask, on the mustard slide -->
+<section class="slide acc" data-sec="Close" data-title="What I am looking for">
+  <div class="top"><div class="mark"><svg class="chip" aria-hidden="true"><use href="#mark-sm"/></svg><span>musterd</span></div></div>
   <div class="main">
     <h1 class="a" style="--i:0">What I am looking for.</h1>
     <div class="asks a" style="--i:1">
-      <div class="ask"><span class="n">01</span><span>Introductions to product and dev teams that run several agents across tools. They become the first design partners.</span></div>
+      <div class="ask"><span class="n">01</span><span>Introductions to product and dev teams that run several agents across tools.</span></div>
       <div class="ask"><span class="n">02</span><span>Conversations with investors who back developer infrastructure.</span></div>
     </div>
   </div>
-  <div class="foot a" style="--i:2"><span><b>Nick Sanders</b> · Founder</span><span class="mono">MUSTERD.IO</span></div>
+</section>
+
+<!-- 9 · who to talk to (TeamInfo) -->
+<section class="slide" data-sec="Close" data-title="Nick Sanders, founder">
+  <div class="team">
+    <div>
+      <div class="lockup a" style="--i:0"><svg class="bigmark" aria-hidden="true"><use href="#mark"/></svg><span class="word">musterd</span></div>
+      <p class="intro a" style="--i:1">musterd puts AI agents and the people they work with on one team, so each piece of work shows who claimed it, which model did it and who accepted it.</p>
+      <div class="site a" style="--i:2"><svg class="qrcode" viewBox="-2 -2 29 29" shape-rendering="crispEdges" role="img" aria-label="QR code: musterd.io"><rect x="-2" y="-2" width="29" height="29" fill="#fff"/><path fill="#18181B" d="M0 0h7v1h-7zM8 0h2v1h-2zM11 0h3v1h-3zM16 0h1v1h-1zM18 0h7v1h-7zM0 1h1v1h-1zM6 1h1v1h-1zM8 1h2v1h-2zM11 1h1v1h-1zM13 1h1v1h-1zM16 1h1v1h-1zM18 1h1v1h-1zM24 1h1v1h-1zM0 2h1v1h-1zM2 2h3v1h-3zM6 2h1v1h-1zM9 2h3v1h-3zM13 2h2v1h-2zM16 2h1v1h-1zM18 2h1v1h-1zM20 2h3v1h-3zM24 2h1v1h-1zM0 3h1v1h-1zM2 3h3v1h-3zM6 3h1v1h-1zM8 3h3v1h-3zM18 3h1v1h-1zM20 3h3v1h-3zM24 3h1v1h-1zM0 4h1v1h-1zM2 4h3v1h-3zM6 4h1v1h-1zM9 4h1v1h-1zM12 4h5v1h-5zM18 4h1v1h-1zM20 4h3v1h-3zM24 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM9 5h3v1h-3zM14 5h1v1h-1zM16 5h1v1h-1zM18 5h1v1h-1zM24 5h1v1h-1zM0 6h7v1h-7zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h7v1h-7zM8 7h2v1h-2zM12 7h5v1h-5zM0 8h1v1h-1zM2 8h2v1h-2zM5 8h3v1h-3zM9 8h3v1h-3zM13 8h4v1h-4zM18 8h1v1h-1zM21 8h1v1h-1zM23 8h2v1h-2zM1 9h3v1h-3zM5 9h1v1h-1zM10 9h3v1h-3zM17 9h1v1h-1zM19 9h1v1h-1zM23 9h1v1h-1zM6 10h3v1h-3zM10 10h1v1h-1zM14 10h1v1h-1zM19 10h2v1h-2zM3 11h2v1h-2zM9 11h1v1h-1zM13 11h2v1h-2zM17 11h1v1h-1zM20 11h3v1h-3zM0 12h2v1h-2zM3 12h4v1h-4zM8 12h1v1h-1zM11 12h1v1h-1zM15 12h1v1h-1zM17 12h2v1h-2zM20 12h1v1h-1zM22 12h3v1h-3zM2 13h4v1h-4zM11 13h1v1h-1zM13 13h1v1h-1zM15 13h2v1h-2zM18 13h3v1h-3zM24 13h1v1h-1zM1 14h2v1h-2zM5 14h2v1h-2zM9 14h2v1h-2zM12 14h1v1h-1zM14 14h1v1h-1zM16 14h1v1h-1zM20 14h1v1h-1zM22 14h2v1h-2zM0 15h1v1h-1zM2 15h3v1h-3zM7 15h2v1h-2zM12 15h2v1h-2zM17 15h1v1h-1zM19 15h2v1h-2zM24 15h1v1h-1zM3 16h1v1h-1zM5 16h2v1h-2zM10 16h2v1h-2zM16 16h9v1h-9zM8 17h1v1h-1zM12 17h2v1h-2zM15 17h2v1h-2zM20 17h1v1h-1zM22 17h1v1h-1zM24 17h1v1h-1zM0 18h7v1h-7zM8 18h1v1h-1zM10 18h3v1h-3zM16 18h1v1h-1zM18 18h1v1h-1zM20 18h1v1h-1zM22 18h3v1h-3zM0 19h1v1h-1zM6 19h1v1h-1zM8 19h3v1h-3zM12 19h1v1h-1zM15 19h2v1h-2zM20 19h1v1h-1zM23 19h2v1h-2zM0 20h1v1h-1zM2 20h3v1h-3zM6 20h1v1h-1zM9 20h5v1h-5zM16 20h6v1h-6zM0 21h1v1h-1zM2 21h3v1h-3zM6 21h1v1h-1zM8 21h1v1h-1zM12 21h3v1h-3zM17 21h2v1h-2zM20 21h5v1h-5zM0 22h1v1h-1zM2 22h3v1h-3zM6 22h1v1h-1zM8 22h6v1h-6zM15 22h1v1h-1zM18 22h1v1h-1zM20 22h1v1h-1zM22 22h2v1h-2zM0 23h1v1h-1zM6 23h1v1h-1zM10 23h1v1h-1zM17 23h1v1h-1zM20 23h1v1h-1zM22 23h1v1h-1zM0 24h7v1h-7zM8 24h3v1h-3zM12 24h1v1h-1zM14 24h1v1h-1zM18 24h7v1h-7z"/></svg><span>musterd.io</span></div>
+    </div>
+    <div class="person a" style="--i:3">
+      <img class="avatar" src="avatar.jpg" alt="Nick Sanders" onerror="this.style.visibility='hidden'" />
+      <div>
+        <h3>Nick Sanders</h3>
+        <p class="role">Founder</p>
+        <p class="bio">Builds musterd full time with a team of agents, after more than a decade in product management and developer tools.</p>
+        <p class="link">linkedin.com/in/sandersnick</p>
+      </div>
+    </div>
+  </div>
 </section>
 
 </div></div>
