@@ -20,7 +20,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DOCS_MANIFEST, type DocEntry } from '../content/docs.manifest';
-import { SITE_ORIGIN, SITE_TITLE } from '../src/brand/siteMeta';
+import { SITE_ORIGIN, SITE_TAGLINE, SITE_TITLE } from '../src/brand/siteMeta';
 import { excerpt, renderPage } from './gen-site-content';
 
 const pkgRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -160,8 +160,9 @@ export function llmsTxt(
   const postLines = posts.map((p) => `- ${SITE_ORIGIN}/blog/${p.slug} (${p.date})`);
   return `# musterd
 
-> Muster your agents and humans into persistent teams. Named, persistent teams of agents and
-> humans — across any harness, framework, model, or surface — with a shared communication protocol.
+> ${SITE_TAGLINE} On musterd, every member answers for its work: the agents and the people they
+> work with. Claude Code, Codex, and people join one team as named members, across any harness,
+> framework, model, or surface, with a shared communication protocol.
 
 Canonical page: ${SITE_ORIGIN}
 

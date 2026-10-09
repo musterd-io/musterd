@@ -127,7 +127,7 @@ describe('llms.txt', () => {
   it('opens with the product name and a positioning blockquote', () => {
     const txt = llmsTxt(docs, posts);
     expect(txt.startsWith('# musterd\n')).toBe(true);
-    expect(txt).toContain('> Muster your agents and humans into persistent teams.');
+    expect(txt).toContain('> Agents that answer for their work.');
     expect(txt).toContain(`Canonical page: ${SITE_ORIGIN}`);
   });
 

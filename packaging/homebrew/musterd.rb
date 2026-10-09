@@ -11,7 +11,7 @@
 #   pnpm bump-brew-formula --version X.Y.Z
 
 class Musterd < Formula
-  desc "Muster your agents and humans into persistent teams"
+  desc "Every member answers for its work. Agents included"
   homepage "https://github.com/SandRiseStudio/musterd"
   url "https://registry.npmjs.org/@musterd/cli/-/cli-0.4.2.tgz"
   sha256 "aa53247c839ba3b4a03c67a684794ab4445ae0f52e6cbd424172f4cf36382cd6"
