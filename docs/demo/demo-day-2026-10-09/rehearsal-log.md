@@ -109,9 +109,27 @@ with `--flow auto`; `--reset-policy` would also clear the flow. The Squig board 
 
 | # | Time | Request | T claim | T ask | Challenge | Other-model accept | Woke | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 13:35 | "Suggest a better name for the Doorbell feature, the one that wakes a sleeping member and reaches a busy one." (throwaway) | none (answers, no lanes) | 1:04, a plain message from dolly asking nick to pick a scope, not a flagged ask | 0 declines; one counterpoint from wanderer at 4:58 | n/a | ghost 0:54 (resumed; reply had no thread), dolly 1:04 (fresh), big-body 2:18 (resume failed, fresh fallback), wanderer 4:58 (resume failed, fresh fallback) | All four converged on "Knock". An earlier 13:31 attempt woke nobody: the pasted backslash swallowed `--to`, so it went to @team (closed 13:34). /live reloaded at 13:37 on a web publish. |
 
 ## After the runs
 
 Read the columns, then decide: if the odds of a question or a challenge inside 3 minutes are poor,
 change the request type, or add a "left running" tail ending on the Twitch QR. Do not change the odds
 by staging.
+
+## What run 1 showed (2026-10-09)
+
+- **Cold wakes take 1 to 5 minutes.** The fastest seat spoke at 0:54 and the slowest at 4:58. A 3-minute live
+  beat catches two or three of the four. Send the real request early, during the preceding slides.
+- **Two resumes failed** (big-body: thread id missing or mismatched; wanderer: no Presence attested the
+  lease) and each fell back to a fresh session, which roughly doubled its wait. Dolly's transcript is over
+  the 256 KiB resume limit, so it always starts fresh. Fresh sessions are recorded, so a later wake of the
+  same seat may resume faster. Run 2 tests that.
+- **A reply can have no thread.** ghost's reply carried `meta.in_reply_to` = the huddle root and `thread` =
+  null, so the huddle read (thread-matched turns only) showed it as silent. Count `in_reply_to` too.
+- **A single pasted line can break a command.** A backslash line continuation turned `--to` into message text
+  and addressed the huddle to @team, which summons nobody (ADR 386). Type the command on one line.
+- **The web publisher reloads /live** about a minute after any web merge, and the auto-refresher bounces the
+  daemon when `main` moves. Whether a docs-only merge bounces the daemon is not confirmed, so hold every
+  merge during a run.
+
