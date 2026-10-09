@@ -1,0 +1,173 @@
+<title>Demo Day Run of Show</title>
+<style>
+/* Layout: one card fills the screen; the say-line is the biggest thing on it. Next and Back sit under the thumb. */
+:root{
+  --bg:#F7F6F2; --panel:#FFFFFF; --ink:#16161A; --mut:#62626B; --line:#E3E1DA;
+  --gold:#E1AD01; --gold-bg:#FBF1CC; --bad:#B3361F;
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#101013; --panel:#18181D; --ink:#F4F3EE; --mut:#A6A6B0; --line:#2B2B33;
+  --gold:#F0BE1A; --gold-bg:#2D2608; --bad:#FF8A70; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101013; --panel:#18181D; --ink:#F4F3EE; --mut:#A6A6B0; --line:#2B2B33;
+  --gold:#F0BE1A; --gold-bg:#2D2608; --bad:#FF8A70; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden}
+.app{height:100%;display:grid;grid-template-rows:auto 1fr auto auto;padding-inline:16px;max-width:560px;margin-inline:auto;gap:10px;padding-block:10px 12px}
+button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.top{display:flex;align-items:center;gap:10px}
+.dots{flex:1;display:flex;gap:4px;min-width:0}
+.dots i{flex:1;height:5px;border-radius:3px;background:var(--line)}
+.dots i.on{background:var(--gold)}
+.t{font-family:var(--mono);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.t.over{color:var(--bad)}
+.sm{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:8px 12px;min-height:40px;font-weight:700;font-size:14px}
+.sm.go{background:var(--gold);border-color:var(--gold);color:#16161A}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;display:flex;flex-direction:column;justify-content:center;gap:14px;min-height:0;overflow:auto}
+.card.live{border-color:var(--gold);background:var(--gold-bg)}
+.meta{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);color:var(--mut);font-size:15px;font-weight:700}
+.meta b{color:var(--ink);font-size:20px}
+h1{margin:0;font-size:24px;font-weight:800;line-height:1.15;text-wrap:balance}
+.say{font-size:30px;font-weight:700;line-height:1.22;margin:0;text-wrap:pretty}
+.say2{font-size:23px;font-weight:700;line-height:1.25;margin:0;color:var(--ink)}
+.do{margin:0;color:var(--mut);font-size:18px;line-height:1.3}
+ol.steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px}
+ol.steps li{font-size:24px;font-weight:700;line-height:1.2}
+ol.steps li small{display:block;font-size:17px;font-weight:400;color:var(--mut);margin-top:2px}
+.chips{display:flex;gap:8px}
+.chips button{flex:1;min-height:44px;border:1px solid var(--line);background:var(--panel);border-radius:12px;font-weight:700;font-size:14px;padding-inline:4px}
+.nav{display:grid;grid-template-columns:1fr 2fr;gap:10px}
+.nav button{min-height:60px;border-radius:14px;border:1px solid var(--line);background:var(--panel);font-size:20px;font-weight:800}
+.nav .next{background:var(--gold);border-color:var(--gold);color:#16161A}
+.sheet{position:fixed;inset:0;background:var(--bg);z-index:10;padding:calc(14px + env(safe-area-inset-top,0px)) 16px calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px;max-width:560px;margin-inline:auto}
+.sheet[hidden]{display:none}
+.sheet h1{font-size:20px}
+.sheet .body{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.opt{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.opt b{font-family:var(--mono);font-size:13px;color:var(--mut)}
+.opt p{margin:4px 0 0;font-size:21px;font-weight:700;line-height:1.25}
+.opt span{display:block;margin-top:6px;color:var(--mut);font-size:15px}
+.fixrow{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;font-size:20px;line-height:1.25}
+.fixrow b{display:block;font-size:14px;font-family:var(--mono);color:var(--mut);margin-bottom:2px}
+pre{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;font-family:var(--mono);font-size:13px;white-space:pre-wrap;word-break:break-word}
+.chk label{display:flex;gap:14px;align-items:center;font-size:22px;font-weight:700;padding:6px 0}
+.chk input{width:28px;height:28px;flex:none;accent-color:var(--gold)}
+.chk input:checked+span{color:var(--mut);text-decoration:line-through}
+</style>
+
+<div class="app">
+  <div class="top">
+    <div class="dots" id="dots" aria-hidden="true"></div>
+    <div class="t" id="t">0:00</div>
+    <button class="sm go" id="go" type="button">Start</button>
+  </div>
+  <div class="card" id="card"></div>
+  <div class="chips">
+    <button type="button" data-sheet="qa">Q&amp;A</button>
+    <button type="button" data-sheet="req">Request</button>
+    <button type="button" data-sheet="fix">If it breaks</button>
+    <button type="button" data-sheet="cmd">Command</button>
+  </div>
+  <div class="nav">
+    <button type="button" id="back">Back</button>
+    <button type="button" id="next" class="next">Next</button>
+  </div>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <h1 id="sheetTitle"></h1>
+  <div class="body" id="sheetBody"></div>
+  <button class="sm" id="close" type="button" style="min-height:52px;font-size:18px">Close</button>
+</div>
+
+<script>
+(function(){
+  var cards=[
+    {pre:true},
+    {at:'0:00',t:0,h:'Cover',sl:'slide 1',say:'I\u2019m Nick. I\u2019m building musterd, and it makes agents accountable for their work.',dox:'Every member, agent or person, answers for what it did. Pause. Click.'},
+    {at:'0:15',t:15,h:'Silos',sl:'slide 2',say:'Agents tend to work in silos. Same pattern as human teams: everyone busy, nobody knows what the others are doing.',say2:'On our own team, 37% of agent code was thrown away before musterd. After, 0.9%.',dox:'Pause after 37%. Then switch to /live.'},
+    {at:'0:40',t:40,live:true,h:'/live: type it',sl:'~30 seconds',say:'\u201cThis is my team\u2019s office. Every desk is a member: agents and people. Let me ask them something I actually want an answer to.\u201d',dox:'Type your request (bar, or: demo <request>). Enter. Then back to the deck.'},
+    {at:'1:10',t:70,h:'A team',sl:'slide 5 \u00b7 picker (g)',say:'One team: agents and people, in whatever tool each already runs. A doorbell wakes a sleeping member and reaches a busy one.',dox:'The doorbell is what is waking them right now.'},
+    {at:'1:30',t:90,h:'Who it\u2019s for',sl:'slide 12',say:'Solo builders come first. The first buyer is product and dev teams. Organizations come later.',dox:'Keep one line: teams that run several agents across tools.'},
+    {at:'1:50',t:110,h:'Business model',sl:'slide 14',say:'Free to run yourself. Paid when we host it: a subscription, plus credits for model compute we run.',say2:'I don\u2019t have prices yet. The first design partners will tell me.',dox:'Don\u2019t say open source: packages are MIT, the repo is private for now.'},
+    {at:'2:15',t:135,h:'Where it sits',sl:'slide 15',say:'musterd is the standing team: any harness, members who can say no, another member who accepts.',dox:'Trackers add agents as assignees; agent teams live inside one tool; relays move messages. Say what each is built for.'},
+    {at:'2:35',t:155,live:true,h:'Back to /live',sl:'until 4:30',say:'\u201cLet\u2019s see what they said.\u201d',dox:'Say who replied, which tool, what it did.'},
+    {at:'2:40',t:160,live:true,h:'Narrate what lands',sl:'until 4:30',steps:[
+      ['Each reply','name, tool, model: \u201cEvery answer carries who said it.\u201d'],
+      ['A different model','\u201cThey don\u2019t share a harness. They share the team.\u201d'],
+      ['A question to you','read it, answer aloud: \u201cthe team asking its human\u201d'],
+      ['A decline or disagreement','\u201cA member saying no.\u201d'],
+      ['A slow seat','keep going. Stop by 4:35']]},
+    {at:'4:35',t:275,live:true,h:'Land it',sl:'then slide 9',say:'\u201cMinutes ago none of them were running. Now each has answered, with a name and a model on it. That\u2019s a team, not a pile of agents.\u201d'},
+    {at:'4:45',t:285,h:'Watch it live',sl:'slide 9 \u00b7 picker',say:'I build this in public on Twitch, every day. The QR code takes you there.'},
+    {at:'4:55',t:295,h:'Close',sl:'slide 10',say:'I\u2019m Nick. This is musterd: agents that answer for their work. musterd.io.',dox:'Then stop talking. Questions.'}
+  ];
+  var i=0,start=0,timer=null,wake=null;
+  var card=document.getElementById('card'),dots=document.getElementById('dots'),tEl=document.getElementById('t'),go=document.getElementById('go');
+  var pre=[['p1','Four seats asleep, no open sessions'],['p2','Warm-up sent, demo alias tested'],['p3','/live signed in, localhost:4849'],['p4','Deck file open, terminal large'],['p5','Hold placed, charger in'],['p6','Do Not Disturb on']];
+  function esc(s){return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+  function draw(){
+    var c=cards[i],h='';
+    card.classList.toggle('live',!!c.live);
+    if(c.pre){
+      h='<div class="meta"><b>Before you walk up</b><span>tick each</span></div><div class="chk">'+pre.map(function(p){return '<label><input type="checkbox" id="'+p[0]+'"><span>'+esc(p[1])+'</span></label>'}).join('')+'</div>';
+    }else{
+      h='<div class="meta"><b>'+c.at+'</b><span>'+esc(c.sl)+'</span></div><h1>'+esc(c.h)+'</h1>';
+      if(c.say)h+='<p class="say">'+esc(c.say)+'</p>';
+      if(c.say2)h+='<p class="say2">'+esc(c.say2)+'</p>';
+      if(c.dox)h+='<p class="do">'+esc(c.dox)+'</p>';
+      if(c.steps)h+='<ol class="steps">'+c.steps.map(function(s){return '<li>'+esc(s[0])+'<small>'+esc(s[1])+'</small></li>'}).join('')+'</ol>';
+    }
+    card.innerHTML=h;card.scrollTop=0;
+    dots.innerHTML=cards.map(function(_,k){return '<i class="'+(k<=i?'on':'')+'"></i>'}).join('');
+    document.getElementById('back').disabled=i===0;
+    document.getElementById('next').textContent=i===cards.length-1?'Done':'Next';
+    [].slice.call(card.querySelectorAll('.chk input')).forEach(function(b){
+      try{b.checked=localStorage.getItem('ros2-'+b.id)==='1'}catch(e){}
+      b.addEventListener('change',function(){try{localStorage.setItem('ros2-'+b.id,b.checked?'1':'0')}catch(e){}});
+    });
+  }
+  function step(d){var n=i+d;if(n<0||n>=cards.length)return;i=n;draw()}
+  document.getElementById('next').addEventListener('click',function(){step(1)});
+  document.getElementById('back').addEventListener('click',function(){step(-1)});
+  var x0=null;
+  document.addEventListener('touchstart',function(e){x0=e.touches[0].clientX},{passive:true});
+  document.addEventListener('touchend',function(e){if(x0===null)return;var dx=e.changedTouches[0].clientX-x0;x0=null;if(Math.abs(dx)>70)step(dx<0?1:-1)},{passive:true});
+  function fmt(s){return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2)}
+  function tick(){var s=start?Math.floor((Date.now()-start)/1000):0;tEl.textContent=fmt(s);tEl.classList.toggle('over',s>360)}
+  go.addEventListener('click',function(){
+    if(timer){clearInterval(timer);timer=null;start=0;go.textContent='Start';go.classList.add('go');if(wake){try{wake.release()}catch(e){}wake=null}tick();return}
+    start=Date.now();timer=setInterval(tick,500);go.textContent='Reset';go.classList.remove('go');tick();
+    try{if(navigator.wakeLock){navigator.wakeLock.request('screen').then(function(l){wake=l}).catch(function(){})}}catch(e){}
+  });
+  var sheets={
+    qa:{t:'If they ask',h:'<div class="fixrow"><b>IS ANYONE USING IT?</b>Only our own team so far. The first design partners start this month.</div><div class="fixrow"><b>DOES IT RUN MY AGENTS?</b>No. They keep running in Claude Code or Codex and join the team from there.</div><div class="fixrow"><b>WHAT IF CLAUDE CODE ADDS THIS?</b>A team that mixes tools gets one record. I have not tested anyone else\u2019s version.</div><div class="fixrow"><b>WHO PAYS?</b>Hosted teams, by subscription and credits. No prices yet.</div><div class="fixrow"><b>IS IT OPEN SOURCE?</b>The packages are MIT. The repo is private for now.</div>'},
+    req:{t:'Pick one request',h:'<div class="opt"><b>A · EYES</b><p>Give the musterd members eyes: let them look at the office through a vision model.</p><span>A text-only model should decline.</span></div><div class="opt"><b>B · VOICES</b><p>Let the team talk out loud, and let me talk back.</p><span>Expect a question on cost.</span></div><div class="opt"><b>C · FORK AND RACE</b><p>When a task is hard, run it on two members on different models in parallel, and let a third judge the winner.</p><span>Expect a budget question.</span></div>'},
+    fix:{t:'If it breaks',h:'<div class="fixrow"><b>NOTHING BACK BY 3:30</b>“They’re still waking. You can watch the rest on Twitch.” Jump to slide 6, the real chain.</div><div class="fixrow"><b>NOBODY WAKES</b>“That one’s slower; the rest are in.” Keep going.</div><div class="fixrow"><b>TYPING FAILS</b>Paste the long form from Command. Same message.</div><div class="fixrow"><b>RUNNING LONG</b>Drop slide 15, then slide 12.</div><div class="fixrow"><b>HARD QUESTION</b>“Only our own team so far. Design partners start this month.”</div>'},
+    cmd:{t:'Command and links',h:'<h1>Type on stage</h1><pre id="stagetext">demo Give the musterd members eyes: let them look at the office through a vision model.</pre><h1 style="margin-top:12px">Paste once before you go (defines demo)</h1><pre id="aliastext">demo() { ( cd ~/musterd/revive/agents/nick &amp;&amp; musterd huddle open --topic design:demo --anchor docs/demo/demo-day-2026-10-09/rehearsal-log.md --to dolly,big-body,ghost,wanderer --turns 40 "$* Reply in this thread (team_send with thread = this act\'s id), not as a direct message. If you need nick, send an ask in this thread." ) }</pre><button class="sm cpbtn" data-src="aliastext" type="button" style="min-height:48px">Copy</button><h1 style="margin-top:12px">Open</h1><pre>deck  file:///Users/nick/musterd_DemoDay_present/docs/demo/demo-day-2026-10-09/deck.html\nlive  http://localhost:4849/live?team=revive&amp;promptbar=1</pre><h1 style="margin-top:12px">Long form (fallback)</h1><pre id="cmdtext">cd ~/musterd/revive/agents/nick\nmusterd huddle open --topic design:demo --anchor docs/demo/demo-day-2026-10-09/rehearsal-log.md --to dolly,big-body,ghost,wanderer --turns 40 "&lt;your request&gt; Reply in this thread (team_send with thread = this act\'s id), not as a direct message. If you need nick, send an ask in this thread."</pre><button class="sm cpbtn" data-src="cmdtext" type="button" style="min-height:48px">Copy</button><h1 style="margin-top:12px">Stop the huddle (id is printed when you open it)</h1><pre id="aftertext">musterd huddle close &lt;id&gt; --anchor-ref none "demo"\n# afterwards, put the cast\'s wake limits back\nfor s in dolly big-body ghost wanderer; do musterd residency on --seat $s --workspace ~/musterd/revive/agents/$s --flow auto --cooldown 30m --hourly-cap 2; done</pre>'}
+  };
+  var sheet=document.getElementById('sheet');
+  [].slice.call(document.querySelectorAll('[data-sheet]')).forEach(function(b){
+    b.addEventListener('click',function(){
+      var s=sheets[b.dataset.sheet];
+      document.getElementById('sheetTitle').textContent=s.t;
+      var body=document.getElementById('sheetBody');
+      if(b.dataset.sheet==='cmd'){body.innerHTML=s.h}else{body.innerHTML=s.h}
+      sheet.hidden=false;
+      [].slice.call(body.querySelectorAll('.cpbtn')).forEach(function(cp){
+        cp.addEventListener('click',function(){
+          var el=document.getElementById(cp.dataset.src),text=el.innerText;
+          function sel(){var r=document.createRange();r.selectNodeContents(el);var g=window.getSelection();g.removeAllRanges();g.addRange(r);cp.textContent='Selected'}
+          try{navigator.clipboard.writeText(text).then(function(){cp.textContent='Copied'},sel)}catch(e){sel()}
+        });
+      });
+    });
+  });
+  document.getElementById('close').addEventListener('click',function(){sheet.hidden=true});
+  draw();
+})();
+</script>
