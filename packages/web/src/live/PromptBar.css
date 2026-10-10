@@ -29,9 +29,6 @@
   align-items: center;
   flex: none;
 }
-.pbar__faces > .mface + .mface {
-  margin-left: -7px;
-}
 .pbar__faces > .mface {
   box-shadow: 0 0 0 2px var(--lc-ground-2);
   border-radius: 50%;
@@ -172,7 +169,7 @@
   font-weight: 600;
   color: var(--lc-text);
   cursor: pointer;
-  animation: pbar-echo-in var(--lc-dur-3) var(--lc-ease-out);
+  animation: pbar-in var(--lc-dur-3) var(--lc-ease-out);
 }
 .pbar__fab svg {
   color: var(--lc-accent-ink);
@@ -191,7 +188,7 @@
   background: var(--lc-accent-bright);
 }
 .pbar__box {
-  animation: pbar-echo-in var(--lc-dur-3) var(--lc-ease-out);
+  animation: pbar-in var(--lc-dur-3) var(--lc-ease-out);
 }
 .pbar__error {
   margin: 6px 12px 0;
@@ -246,49 +243,275 @@
   color: var(--lc-success-ink);
 }
 
-/* The sent line, floating up from the sender's face, then gone. */
-.pbar__echo {
-  position: absolute;
-  bottom: calc(100% + 12px);
-  right: 12px;
+/* The thread over the composer (lane 01M4KY55N1): the viewer's sentence on the right, the room's
+   replies on the left with their faces, an ask as a card with its answers. The same paper as the box,
+   so the two read as one chat. Tall enough for a few replies, then it scrolls. */
+.cthread {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  max-width: 70%;
-  animation: pbar-echo-in var(--lc-dur-4) var(--lc-ease-out);
-  transition:
-    opacity var(--lc-dur-5) var(--lc-ease-out),
-    transform var(--lc-dur-5) var(--lc-ease-out);
-}
-.pbar__echotext {
-  margin: 0;
-  padding: 9px 14px;
-  background: var(--lc-ground-2);
+  flex-direction: column;
+  max-height: min(48vh, 440px);
+  margin-bottom: 8px;
+  background: color-mix(in srgb, var(--lc-ground-2) 92%, transparent);
+  backdrop-filter: blur(10px);
   border: 1px solid var(--lc-border-2);
-  border-radius: 16px 16px 4px 16px;
-  font-size: 14px;
-  line-height: 1.35;
+  border-radius: 18px;
+  box-shadow: 0 10px 28px rgba(60, 40, 20, 0.18);
+  animation: pbar-in var(--lc-dur-3) var(--lc-ease-out);
+}
+.cthread__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--lc-border);
+}
+.cthread__cast {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+.cthread__cast > * + * {
+  margin-left: -3px;
+}
+.pbar__faces > .mface + .mface {
+  margin-left: -7px;
+}
+.cthread__count {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--lc-dim);
+}
+.cthread__waking,
+.cthread__closed {
+  font-weight: 500;
+  color: var(--lc-muted);
+}
+.cthread__hide {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: var(--lc-muted);
+  cursor: pointer;
+}
+.cthread__hide:hover {
+  background: var(--lc-surface);
   color: var(--lc-text);
-  box-shadow: 0 6px 18px rgba(60, 40, 20, 0.14);
 }
-.pbar__echo.is-leaving {
-  opacity: 0;
-  transform: translateY(-14px);
+.cthread__hide svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
 }
-@keyframes pbar-echo-in {
+.cthread__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 12px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.cthread__msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 88%;
+  animation: pbar-in var(--lc-dur-3) var(--lc-ease-out);
+}
+.cthread__msg > .mface {
+  flex: none;
+  margin-top: 2px;
+}
+.cthread__msg.is-mine {
+  align-self: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+.cthread__col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.cthread__by {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 7px;
+  padding-left: 2px;
+}
+.cthread__by b {
+  font-family: var(--font-display, var(--font-sans));
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--lc-text);
+}
+.cthread__model,
+.cthread__asks {
+  font-size: 12px;
+  color: var(--lc-dim);
+}
+.cthread__time {
+  font-size: 11px;
+  color: var(--lc-muted);
+  font-variant-numeric: tabular-nums;
+}
+.cthread__direct {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--lc-surface-2);
+  font-size: 11px;
+  color: var(--lc-dim);
+}
+.cthread__bubble {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--lc-ground-2);
+  border: 1px solid var(--lc-border);
+  border-radius: 4px 14px 14px 14px;
+  font-size: 14px;
+  line-height: 1.42;
+  color: var(--lc-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.is-mine > .cthread__bubble {
+  background: var(--lc-surface-2);
+  border-color: transparent;
+  border-radius: 14px 14px 4px 14px;
+}
+/* A long reply shows its first lines; a click opens the rest. */
+button.cthread__bubble {
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  overflow: hidden;
+}
+button.cthread__bubble.is-open {
+  display: block;
+}
+.cthread__ask.is-open > .cthread__bubble {
+  border-color: var(--lc-accent);
+}
+.cthread__answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+}
+.cthread__ans {
+  all: unset;
+  box-sizing: border-box;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--lc-border-2);
+  background: var(--lc-ground-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 26px;
+  color: var(--lc-text);
+  cursor: pointer;
+}
+.cthread__ans:hover:not(:disabled) {
+  background: var(--lc-surface);
+}
+.cthread__ans.is-yes {
+  border-color: color-mix(in srgb, var(--lc-success) 55%, var(--lc-border-2));
+  color: var(--lc-success-ink);
+}
+.cthread__ans.is-quiet {
+  border-color: transparent;
+  color: var(--lc-dim);
+}
+.cthread__ans:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.cthread__settled {
+  margin: 2px 0 0 2px;
+  font-size: 12px;
+  color: var(--lc-dim);
+}
+
+/* A face with its state. Answered: a small green tick on the shoulder. Waking: the face is dimmed and
+   a dashed ring turns slowly round it. That ring is the one loop in the composer, and it runs only
+   while a wake is actually under way. */
+.cseat {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--lc-ground-2);
+}
+.cseat.is-waking > .mface {
+  opacity: 0.5;
+}
+.cseat.is-waking::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border: 1.5px dashed var(--lc-dim);
+  border-radius: 50%;
+  animation: cseat-wake 6s linear infinite;
+}
+.cseat__tick {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 12px;
+  height: 12px;
+  padding: 1px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--lc-success);
+  box-shadow: 0 0 0 1.5px var(--lc-ground-2);
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+@keyframes cseat-wake {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.pbar__fabcount {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--lc-surface-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--lc-dim);
+}
+@keyframes pbar-in {
   from {
     opacity: 0;
     transform: translateY(8px);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pbar__echo,
+  .cthread,
+  .cthread__msg,
+  .cseat.is-waking::after,
   .pbar__box,
   .pbar__fab {
     animation: none;
-  }
-  .pbar__echo.is-leaving {
-    transform: none;
   }
   .pbar__send {
     transition: none;
@@ -301,7 +524,10 @@
 .pbar__fab:focus-visible,
 .pbar__to:focus-visible,
 .pbar__send:focus-visible,
-.pbar__who:focus-visible {
+.pbar__who:focus-visible,
+.cthread__hide:focus-visible,
+.cthread__ans:focus-visible,
+button.cthread__bubble:focus-visible {
   outline: 2px solid var(--lc-focus);
   outline-offset: 2px;
 }
@@ -309,5 +535,11 @@
   .pbar__faces,
   .pbar__hint {
     display: none;
+  }
+  .cthread {
+    max-height: 42vh;
+  }
+  .cthread__msg {
+    max-width: 100%;
   }
 }
