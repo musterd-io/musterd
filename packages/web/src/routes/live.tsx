@@ -729,6 +729,8 @@ function LivePage() {
                 cfg={cfg}
                 roster={roster}
                 viewer={cfg.as}
+                envelopes={envelopes}
+                asks={asks}
                 onSent={(ack) => setSent((prev) => [...prev, ack])}
               />
             </Suspense>

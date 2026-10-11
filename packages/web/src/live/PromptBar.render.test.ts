@@ -1,8 +1,10 @@
-import type { MemberSummary } from '@musterd/protocol';
+import type { Envelope, MemberSummary } from '@musterd/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { composerOpenFrom, PromptBar } from './PromptBar';
+import { deriveAsks } from './asks';
+import { REPLY_FOOTER } from './promptAct';
 
 const m = (name: string, kind: string, presence = 'online') =>
   ({ name, kind, presence, hue: 200 }) as unknown as MemberSummary;
@@ -21,6 +23,8 @@ const html = renderToStaticMarkup(
     cfg: { team: 'revive', as: 'nick', token: 'mscr_x' },
     roster,
     viewer: 'nick',
+    envelopes: [],
+    asks: [],
     onSent: () => {},
   }),
 );
@@ -67,7 +71,84 @@ describe('the @-picker (nick: "shouldnt it close automatically?")', () => {
   it('has no Done button — picking a member closes it', async () => {
     const src = (await import('node:fs')).readFileSync(new URL('./PromptBar.tsx', import.meta.url), 'utf8');
     expect(src).not.toContain('pbar__done');
-    const toggle = src.slice(src.indexOf('const toggle ='), src.indexOf('const root ='));
+    const toggle = src.slice(src.indexOf('const toggle ='), src.indexOf('const box ='));
     expect(toggle).toContain('setPicking(false)');
+  });
+});
+
+describe('the thread panel (lane 01M4KY55N1)', () => {
+  const t0 = Date.now() - 60_000;
+  const env = (over: Partial<Envelope> & Pick<Envelope, 'id' | 'from'>): Envelope =>
+    ({
+      team: 'revive',
+      to: { kind: 'member', name: 'nick' },
+      act: 'message',
+      body: '',
+      thread: null,
+      meta: null,
+      ts: t0,
+      ...over,
+    }) as Envelope;
+  const root = env({
+    id: 'root',
+    from: 'nick',
+    to: { kind: 'team' },
+    body: `Plan the first ten minutes\n\n${REPLY_FOOTER}`,
+    meta: { huddle: { topic: { kind: 'design', id: 'demo' } }, eligible: ['dolly', 'ghost', 'stanley'] },
+  });
+  const render = (envelopes: Envelope[]) =>
+    renderToStaticMarkup(
+      createElement(PromptBar, {
+        cfg: { team: 'revive', as: 'nick', token: 'mscr_x' },
+        roster,
+        viewer: 'nick',
+        envelopes,
+        asks: deriveAsks(envelopes),
+        onSent: () => {},
+      }),
+    );
+
+  it('is absent until the viewer has sent something', () => {
+    expect(html).not.toContain('class="cthread');
+  });
+
+  it('opens with the sentence as typed, and nobody has answered yet', () => {
+    const out = render([root]);
+    expect(out).toContain('Plan the first ten minutes');
+    expect(out).not.toContain('Reply in this thread'); // the routing footer is plumbing
+    expect(out).toContain('0 of 3 have answered');
+  });
+
+  it('says waking… while an asleep seat has not answered', () => {
+    const out = render([root]);
+    expect(out).toContain('waking…');
+    expect(out).toMatch(/class="cseat is-waking"[^>]*title="ghost — waking…"/);
+    expect(out).toMatch(/class="cseat is-here"[^>]*title="dolly"/);
+  });
+
+  it('counts a reply by thread or by in_reply_to, and ticks who answered', () => {
+    const out = render([
+      root,
+      env({ id: 'r1', from: 'dolly', thread: 'root', body: 'On it.', ts: t0 + 5_000, meta: { model: 'claude-opus-5-5' } }),
+      env({ id: 'r2', from: 'ghost', body: 'Woke up for this.', ts: t0 + 54_000, meta: { in_reply_to: 'root' } }),
+    ]);
+    expect(out).toContain('2 of 3 have answered');
+    expect(out).toContain('On it.');
+    expect(out).toContain('Opus 5.5');
+    expect(out).toContain('Woke up for this.');
+    expect(out.match(/class="cseat__tick"/g)?.length).toBe(2); // dolly + ghost
+    expect(out).toContain('waking…'); // stanley still is
+  });
+
+  it('puts an ask to the viewer inline, with the three answers', () => {
+    const out = render([
+      root,
+      env({ id: 'a1', from: 'wanderer', act: 'ask', thread: 'root', body: 'Ship the port fix today?', ts: t0 + 9_000, meta: { species: 'approve', tier: 'standard' } }),
+    ]);
+    expect(out).toContain('needs your approval');
+    expect(out).toContain('Ship the port fix today?');
+    expect(out).toContain('>Approve<');
+    expect(out).toContain('>Deny<');
+    expect(out).toContain('>Deciding — 1h<');
   });
 });

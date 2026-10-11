@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
 import { MusterdWord } from '../brand/MusterdWord';
@@ -7,32 +7,70 @@ import { memberColor } from '../live/format';
 import { CaptionPill } from '../live/CaptionPill';
 import { isStill } from '../live/stillMode';
 import type { Caption } from '../live/captions';
-import type { MemberSummary } from '@musterd/protocol';
+import type { Envelope, MemberSummary } from '@musterd/protocol';
+import { buildEnvelope } from '@musterd/protocol/wire';
+import { deriveAsks } from '../live/asks';
+import type { sendAct } from '../live/client';
 import type { OfficeData, OfficeEvent, OfficeHandle, OfficeNode } from '../live/office-scene';
 import { spritesFromUrl } from './broadcast';
 
 // `?promptbar`: the /live composer on the preview floor, so it can be looked at without a signed-in
-// admin seat (on /live it mounts only for one). Its sends go to a team that does not exist and fail,
-// which is what the error state looks like.
+// admin seat (on /live it mounts only for one). There is no daemon here, so its sends go to a fake that
+// answers on a script: one seat replies on the thread, one by `in_reply_to` only (ghost's shape in
+// rehearsal 1), one asks nick something, and wanderer stays asleep, so every thread state shows.
 const PREVIEW_ROSTER = (
   [
     ['nick', 'human', 'online'],
-    ['Ada', 'agent', 'online'],
-    ['Bo', 'agent', 'online'],
-    ['Cy', 'agent', 'online'],
-    ['Dev', 'agent', 'online'],
-    ['Eli', 'agent', 'offline'],
-    ['Fen', 'agent', 'online'],
-    ['Hana', 'agent', 'offline'],
+    ['dolly', 'agent', 'online'],
+    ['big-body', 'agent', 'online'],
+    ['ghost', 'agent', 'offline'],
+    ['wanderer', 'agent', 'offline'],
+    ['miley', 'agent', 'online'],
+    ['stanley', 'agent', 'offline'],
   ] as const
 ).map(([name, kind, presence], i) => ({ name, kind, presence, hue: (i * 47) % 360 })) as unknown as MemberSummary[];
 const LazyPromptBar = lazy(() =>
   import('../live/PromptBar').then((m) => ({ default: m.PromptBar })),
 );
-/** Read after mount, so the prerendered page and the first client render agree. */
+type SendInput = Parameters<typeof sendAct>[1];
+const PREVIEW_SCRIPT: { after: number; from: string; act: Envelope['act']; body: string; how: 'thread' | 'reply_to'; meta?: Record<string, unknown> }[] = [
+  { after: 2500, from: 'dolly', act: 'message', how: 'thread', body: 'On it: install, then the tour. Draft copy in an hour.', meta: { model: 'claude-opus-5-5' } },
+  { after: 5200, from: 'ghost', act: 'message', how: 'reply_to', body: 'Woke up for this. Install still asks for a port on a fresh laptop. Fix that first.', meta: { model: 'gpt-6' } },
+  { after: 7800, from: 'big-body', act: 'ask', how: 'thread', body: 'Can I ship the port fix today? It touches daemon config.', meta: { model: 'claude-sonnet-5-5', species: 'approve', tier: 'standard' } },
+];
+/** The fake wire, in `pnpm dev` only: production builds drop it (`import.meta.env.DEV` is a constant),
+ *  so the shipped preview carries none of it and its sends fail into the error state, as before. */
+function scriptedSend(add: (e: Envelope) => void) {
+  return async (_cfg: unknown, input: SendInput): Promise<Envelope> => {
+    const env = { ...buildEnvelope({ id: crypto.randomUUID(), team: 'preview', from: 'nick', body: input.body ?? '', thread: input.thread ?? null, meta: input.meta ?? null, to: input.to, act: input.act }), ts: Date.now() } as Envelope;
+    if (env.meta?.['huddle']) {
+      for (const line of PREVIEW_SCRIPT) {
+        window.setTimeout(() => {
+          const reply = buildEnvelope({
+            id: crypto.randomUUID(),
+            team: 'preview',
+            from: line.from,
+            to: { kind: 'member', name: 'nick' },
+            act: line.act,
+            body: line.body,
+            thread: line.how === 'thread' ? env.id : null,
+            meta: line.how === 'reply_to' ? { ...line.meta, in_reply_to: env.id } : (line.meta ?? null),
+          });
+          add({ ...reply, ts: Date.now() } as Envelope);
+        }, line.after);
+      }
+    }
+    return env;
+  };
+}
+const fakeSend = import.meta.env.DEV ? scriptedSend : null;
 function PreviewPromptBar() {
   const [on, setOn] = useState(false);
+  const [envelopes, setEnvelopes] = useState<Envelope[]>([]);
   useEffect(() => setOn(new URLSearchParams(window.location.search).has('promptbar')), []);
+  const add = useCallback((e: Envelope) => setEnvelopes((prev) => (prev.some((p) => p.id === e.id) ? prev : [...prev, e])), []);
+  const send = useMemo(() => fakeSend?.(add), [add]);
+  const asks = useMemo(() => deriveAsks(envelopes), [envelopes]);
   if (!on) return null;
   return (
     <Suspense fallback={null}>
@@ -40,7 +78,10 @@ function PreviewPromptBar() {
         cfg={{ team: 'preview', as: 'nick', token: 'preview' }}
         roster={PREVIEW_ROSTER}
         viewer="nick"
-        onSent={() => {}}
+        envelopes={envelopes}
+        asks={asks}
+        onSent={add}
+        {...(send ? { send: send as typeof sendAct } : {})}
       />
     </Suspense>
   );
