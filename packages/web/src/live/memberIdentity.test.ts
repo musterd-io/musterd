@@ -4,7 +4,7 @@ import {
   loadMemberIdentity,
   resolveIdentity,
   saveMemberIdentity,
-  fetchLocalIdentity,
+  fetchLocalIdentities,
 } from './memberIdentity';
 
 const LEGACY = (team: string) => `musterd.board.member.v1.${team}`;
@@ -112,7 +112,7 @@ describe('resolveIdentity — the precedence chain', () => {
   });
 });
 
-describe('fetchLocalIdentity — never throws, because every failure means the same thing', () => {
+describe('fetchLocalIdentities — never throws, because every failure means the same thing', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('returns null when this machine has no identity for the team', async () => {
@@ -120,20 +120,20 @@ describe('fetchLocalIdentity — never throws, because every failure means the s
       'fetch',
       vi.fn().mockResolvedValue(new Response(JSON.stringify({ available: false }), { status: 200 })),
     );
-    await expect(fetchLocalIdentity('revive')).resolves.toBeNull();
+    await expect(fetchLocalIdentities('revive')).resolves.toEqual([]);
   });
 
   it('returns null on the off-machine refusal rather than surfacing an error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 403 })));
-    await expect(fetchLocalIdentity('revive')).resolves.toBeNull();
+    await expect(fetchLocalIdentities('revive')).resolves.toEqual([]);
   });
 
   it('returns null when the daemon is unreachable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('connection refused')));
-    await expect(fetchLocalIdentity('revive')).resolves.toBeNull();
+    await expect(fetchLocalIdentities('revive')).resolves.toEqual([]);
   });
 
-  it('hands back the identity when this machine has one', async () => {
+  it('reads a pre-ADR-557 daemon’s single identity', async () => {
     vi.stubGlobal(
       'fetch',
       vi
@@ -144,7 +144,21 @@ describe('fetchLocalIdentity — never throws, because every failure means the s
           }),
         ),
     );
-    await expect(fetchLocalIdentity('revive')).resolves.toEqual({ as: 'nick', credential: 'mscr_x' });
+    await expect(fetchLocalIdentities('revive')).resolves.toEqual([{ as: 'nick', credential: 'mscr_x' }]);
+  });
+
+  it('hands back every human seat this machine holds (ADR 557)', async () => {
+    const identities = [
+      { as: 'nick', credential: 'mscr_n' },
+      { as: 'Ada', credential: 'mscr_a' },
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ available: true, ...identities[0], identities }), { status: 200 }),
+      ),
+    );
+    await expect(fetchLocalIdentities('revive')).resolves.toEqual(identities);
   });
 
   it('treats a half-shaped answer as no identity — available without a credential is not an identity', async () => {
@@ -156,6 +170,6 @@ describe('fetchLocalIdentity — never throws, because every failure means the s
           new Response(JSON.stringify({ available: true, as: 'nick' }), { status: 200 }),
         ),
     );
-    await expect(fetchLocalIdentity('revive')).resolves.toBeNull();
+    await expect(fetchLocalIdentities('revive')).resolves.toEqual([]);
   });
 });

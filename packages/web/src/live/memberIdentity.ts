@@ -69,29 +69,36 @@ export function forgetMemberIdentity(team: string): void {
 }
 
 /**
- * Ask the daemon whether THIS machine has a sign-in identity for the team (ADR 222).
+ * Ask the daemon which human seats THIS machine can sign in as for the team (ADR 222; every one of
+ * them since ADR 557, not just the CLI's current identity). Empty when there are none.
  *
  * **Never throws.** "No CLI identity here", "you are not on this machine" (the localhost gate, which
- * must refuse — the route returns a credential) and "the daemon is unreachable" are three different
+ * must refuse — the route returns credentials) and "the daemon is unreachable" are three different
  * causes with one meaning for the caller: there is no one-click path, offer the credential form
  * instead. An error banner for any of them would be noise about a button that was never promised.
+ * A daemon from before ADR 557 answers with one `as`/`credential` and no list; that still reads.
  */
-export async function fetchLocalIdentity(
+export async function fetchLocalIdentities(
   team: string,
-): Promise<{ as: string; credential: string } | null> {
+): Promise<{ as: string; credential: string }[]> {
   try {
     const res = await fetch(`/teams/${encodeURIComponent(team)}/local-identity`);
-    if (!res.ok) return null;
+    if (!res.ok) return [];
     const json = (await res.json()) as {
       available?: boolean;
       as?: string;
       credential?: string;
+      identities?: { as?: unknown; credential?: unknown }[];
     };
-    return json.available && json.as && json.credential
-      ? { as: json.as, credential: json.credential }
-      : null;
+    if (!json.available) return [];
+    const list = Array.isArray(json.identities) ? json.identities : [json];
+    return list.flatMap((i) =>
+      typeof i.as === 'string' && typeof i.credential === 'string' && i.as && i.credential
+        ? [{ as: i.as, credential: i.credential }]
+        : [],
+    );
   } catch {
-    return null;
+    return [];
   }
 }
 

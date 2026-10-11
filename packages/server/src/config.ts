@@ -158,41 +158,60 @@ export function resolveRosterRoots(env: NodeJS.ProcessEnv = process.env): string
 }
 
 /**
- * This machine's CLI identity for a team, read from the global `~/.musterd/config.json` (ADR 222).
+ * Every human sign-in identity this machine's CLI holds for a team, read from the global
+ * `~/.musterd/config.json` (ADR 222, widened by ADR 557).
  *
  * Same file and same rationale as {@link resolveRosterRoots} directly above — reading the global
  * config keeps the daemon decoupled from the CLI package while sharing the `~/.musterd/` home the db
  * already lives in — so this is an established pattern applied to a second key, not a new coupling.
  *
+ * Two places, in this order: `identities[team]` (the CLI's current identity) and then the
+ * `knownIdentities` vault, which keeps every identity the CLI has ever held. ADR 222 read only the
+ * first, and that slot is machine-wide: on 2026-10-10 a seat's claim had left it holding ryder's agent
+ * key, so the one-click sign-in offered nobody while the vault still held nick's credential. Every
+ * distinct (name, key) pair is returned, in that order; the route offers, per member, the first one
+ * that still authenticates — so a stale vault entry cannot hide a working one behind it.
+ *
  * Best-effort by construction: an absent, unreadable, or malformed config is simply "no local
  * identity", never an error, because a machine without one is an ordinary machine and the caller's
  * remedy (offer the credential form instead) is the same for every cause.
  */
-export function readLocalIdentity(
+export function readLocalIdentities(
   team: string,
   env: NodeJS.ProcessEnv = process.env,
-): { name: string; key: string } | null {
+): { name: string; key: string }[] {
   try {
     const cfgPath = env['MUSTERD_CONFIG'] ?? join(homedir(), '.musterd', 'config.json');
     const raw = JSON.parse(readFileSync(cfgPath, 'utf8')) as {
-      identities?: Record<string, { name?: unknown; key?: unknown }>;
+      identities?: Record<string, unknown>;
+      knownIdentities?: unknown;
+    };
+    const found: { name: string; key: string }[] = [];
+    const add = (entry: unknown) => {
+      const id = entry as { name?: unknown; key?: unknown } | null;
+      if (!id || typeof id.name !== 'string' || typeof id.key !== 'string') return;
+      // Only a human credential signs a human in. An agent seat authenticates with the team agent
+      // key or its own seat key, which is a harness fact rather than a person — the same gate
+      // `musterd board` applies before it will stage a handoff.
+      if (!id.key.startsWith(TOKEN_PREFIXES.credential)) return;
+      if (found.some((f) => f.name === id.name && f.key === id.key)) return;
+      found.push({ name: id.name, key: id.key });
     };
     // `hasOwn` before the read: a team slug is a lookup key here, and inherited members of
     // Object.prototype must never answer for one. `constructor` is the case that shows why it is not
     // theoretical — `Object.prototype.constructor.name` is the string `'Object'`, so a guard that
-    // checked only `name` would accept it. Today the `key` check happens to catch it; that is luck,
+    // checked only `name` would accept it. The `key` check would happen to catch it; that is luck,
     // and this makes it intent.
     const identities = raw.identities;
-    if (!identities || !Object.hasOwn(identities, team)) return null;
-    const id = identities[team];
-    if (!id || typeof id.name !== 'string' || typeof id.key !== 'string') return null;
-    // Only a human credential signs a human in. An agent seat authenticates with the team agent key,
-    // which is a harness fact rather than a person — the same gate `musterd board` applies before it
-    // will stage a handoff.
-    if (!id.key.startsWith(TOKEN_PREFIXES.credential)) return null;
-    return { name: id.name, key: id.key };
+    if (identities && Object.hasOwn(identities, team)) add(identities[team]);
+    if (Array.isArray(raw.knownIdentities)) {
+      for (const entry of raw.knownIdentities) {
+        if ((entry as { team?: unknown } | null)?.team === team) add(entry);
+      }
+    }
+    return found;
   } catch {
-    return null;
+    return [];
   }
 }
 

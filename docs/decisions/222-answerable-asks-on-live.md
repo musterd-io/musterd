@@ -107,7 +107,8 @@ for want of a signed-in tab.
 
 **In-page, the everyday path.** The rail offers **"Sign in as ⟨you⟩ to answer"**, one click, via a new
 localhost-gated `GET /teams/:slug/local-identity` returning the identity the CLI already holds for
-this team, or `{available: false}`.
+this team, or `{available: false}`. _(Amended 2026-10-10: it now returns every human credential the
+CLI's vault holds for the team that still authenticates — [ADR 557](557-local-identity-every-human-credential.md).)_
 
 **No nonce, deliberately.** ADR 170's nonce exists to make a CLI→browser _link_ inert. When the
 browser asks the daemon directly there is no link to make inert, nothing to expire, and nothing to
@@ -149,7 +150,8 @@ where a cached observer could never be escaped.
 Costs nothing. ADR 039's invariant is one team, one daemon, so separate projects mean separate
 daemons on separate ports and localStorage is already per-origin. The per-team key is belt-and-braces
 on an isolation that already holds, and `GET /teams/:slug/local-identity` resolves
-`identities[<slug>]` from a CLI vault already keyed by team.
+`identities[<slug>]` from a CLI vault already keyed by team. _(Amended 2026-10-10: and the
+`knownIdentities` vault — [ADR 557](557-local-identity-every-human-credential.md).)_
 
 What multi-team adds is not a mechanism problem but a safety one, and it is why the seat chip is a
 requirement rather than a nicety.

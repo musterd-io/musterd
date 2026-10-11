@@ -1052,6 +1052,65 @@ withDrivers('integration · misc', (_o, kind) => {
       const res = await get('/teams/dusk/local-identity');
       expect(res.json.available).toBe(false);
     });
+
+    // ADR 557: the vault, not just the one machine-wide slot.
+    it('finds the human in the vault when a seat has overwritten identities[team] with an agent key', async () => {
+      const team = await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          identities: { dusk: { name: 'ryder', key: 'msac_aseatkey' } },
+          knownIdentities: [
+            { team: 'dusk', name: 'ryder', key: 'msac_aseatkey' },
+            { team: 'dusk', name: 'nick', key: team.json.human_credential },
+          ],
+        }),
+      );
+
+      const res = await get('/teams/dusk/local-identity');
+      expect(res.json.available).toBe(true);
+      expect(res.json.as).toBe('nick');
+      expect(res.json.identities).toEqual([{ as: 'nick', credential: team.json.human_credential }]);
+    });
+
+    it('offers every human seat this machine holds a working credential for, and no other team’s', async () => {
+      const team = await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
+      const nickCred = team.json.human_credential as string;
+      const ada = await post('/teams/dusk/members', { name: 'Ada', kind: 'human' }, nickCred);
+      const adaCred = ada.json.human_credential as string;
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          identities: { dusk: { name: 'nick', key: nickCred } },
+          knownIdentities: [
+            { team: 'dusk', name: 'nick', key: nickCred },
+            { team: 'dusk', name: 'Ada', key: adaCred },
+            { team: 'elsewhere', name: 'Bo', key: 'mscr_otherteam' },
+          ],
+        }),
+      );
+
+      const res = await get('/teams/dusk/local-identity');
+      expect(res.json.identities.map((i: { as: string }) => i.as)).toEqual(['nick', 'Ada']);
+    });
+
+    it('skips a credential that no longer authenticates, and offers the working one behind it', async () => {
+      const team = await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          knownIdentities: [
+            { team: 'dusk', name: 'nick', key: 'mscr_stalerotatedaway' },
+            { team: 'dusk', name: 'nick', key: team.json.human_credential },
+          ],
+        }),
+      );
+
+      // The stale key is tried first and refused; the working one behind it is still offered.
+      const res = await get('/teams/dusk/local-identity');
+      expect(res.json.identities).toEqual([{ as: 'nick', credential: team.json.human_credential }]);
+      expect(JSON.stringify(res.json)).not.toContain('mscr_stalerotatedaway');
+    });
   });
 
   describe('local sign-in identity is refused off this machine (ADR 222)', () => {

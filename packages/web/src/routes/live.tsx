@@ -40,7 +40,7 @@ import {
   redeemSignin,
 } from '../live/client';
 import {
-  fetchLocalIdentity,
+  fetchLocalIdentities,
   forgetMemberIdentity,
   loadMemberIdentity,
   saveMemberIdentity,
@@ -306,16 +306,17 @@ function LivePage() {
    * The name goes in state (the rail renders it); the credential stays in a ref, so it never enters
    * the render path or a dependency array.
    */
-  const [localIdentity, setLocalIdentity] = useState<string | null>(null);
-  const localCreds = useRef<{ as: string; credential: string } | null>(null);
+  const [localIdentities, setLocalIdentities] = useState<string[]>([]);
+  const localIdentity = localIdentities[0] ?? null;
+  const localCreds = useRef<{ as: string; credential: string }[]>([]);
   useEffect(() => {
     const slug = cfg?.team;
     if (!slug || signedIn) return;
     let cancelled = false;
-    void fetchLocalIdentity(slug).then((id) => {
+    void fetchLocalIdentities(slug).then((ids) => {
       if (cancelled) return;
-      localCreds.current = id;
-      setLocalIdentity(id?.as ?? null);
+      localCreds.current = ids;
+      setLocalIdentities(ids.map((i) => i.as));
     });
     return () => {
       cancelled = true;
@@ -358,8 +359,8 @@ function LivePage() {
    * yourself is a click and nothing else happens. If it does not — off-machine, or no CLI identity
    * here — the same button falls back to the credential form, which does work over the network.
    */
-  const signInHere = useCallback(() => {
-    const id = localCreds.current;
+  const signInHere = useCallback((as?: string) => {
+    const id = localCreds.current.find((i) => i.as === as) ?? localCreds.current[0];
     const slug = cfg?.team;
     if (id && slug) signIn(slug, { as: id.as, token: id.credential });
     else promptSignIn();
@@ -580,6 +581,7 @@ function LivePage() {
       cfg={cfg}
       watchLink={watchLink}
       localIdentity={localIdentity}
+      localIdentities={localIdentities}
       onSignIn={signInHere}
       onSignOut={signOut}
       board={board}
