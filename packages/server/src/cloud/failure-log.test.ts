@@ -175,4 +175,163 @@ describe('a 500 carries its cause on the request log line (lane 01M3ZPM3FE)', ()
       await s.close();
     }
   });
+
+  it('sanitizes an OAuth authorization error and logs its cause on the request line', async () => {
+    const errorLog = vi.spyOn(log, 'error');
+    const statement = 'SELECT * FROM private_schema.oauth_clients WHERE client_id = ?';
+    const queryError = Object.assign(new Error(`relation lookup failed\n  in: ${statement}`), {
+      code: '42P01',
+    });
+    const { s, seed, url, arm } = await bootCloudWithQueryFault({
+      match: /oauth_clients/i,
+      error: queryError,
+    });
+    try {
+      const team = await createTeam(seed, { slug: 'revive' });
+      const { client_id } = await registerClient(seed, {
+        teamId: team.id,
+        clientName: 'oauth-error-test',
+        redirectUris: ['https://app.example/cb'],
+      });
+      const query = new URLSearchParams({
+        response_type: 'code',
+        client_id,
+        redirect_uri: 'https://app.example/cb',
+        state: 'state',
+        code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+        code_challenge_method: 'S256',
+      });
+
+      arm();
+      const r = await hostRequest(url, `/oauth/revive/authorize?${query}`, 'revive.musterd.test', {
+        headers: { 'x-forwarded-proto': 'https' },
+      });
+      expect(r.status, r.body).toBe(500);
+      expect(JSON.parse(r.body)).toEqual({
+        error: { code: 'server_error', message: 'internal server error' },
+      });
+      expect(r.body).not.toContain('in:');
+      expect(r.body).not.toContain(statement);
+
+      const line = await vi.waitFor(() => {
+        const found = errorLog.mock.calls
+          .map(([fields]) => fields)
+          .find((f: LogFields) => f.msg === 'http_request' && f.status === 500);
+        expect(found).toBeDefined();
+        return found!;
+      });
+      expect(line).toMatchObject({ sqlstate: '42P01' });
+      expect(String(line.err)).toContain('in: SELECT * FROM private_schema.oauth_clients');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('sanitizes unexpected OAuth token failures and logs their cause', async () => {
+    const errorLog = vi.spyOn(log, 'error');
+    const statement = 'SELECT * FROM private_schema.oauth_codes WHERE code_hash = ?';
+    const queryError = Object.assign(new Error(`relation lookup failed\n  in: ${statement}`), {
+      code: '42P01',
+    });
+    const { s, seed, url, arm } = await bootCloudWithQueryFault({
+      match: /oauth_codes/i,
+      error: queryError,
+    });
+    try {
+      const team = await createTeam(seed, { slug: 'revive' });
+      const { client_id } = await registerClient(seed, {
+        teamId: team.id,
+        clientName: 'oauth-token-error-test',
+        redirectUris: ['https://app.example/cb'],
+      });
+
+      arm();
+      const r = await hostRequest(url, '/oauth/revive/token', 'revive.musterd.test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forwarded-proto': 'https' },
+        body: JSON.stringify({
+          grant_type: 'authorization_code',
+          code: 'mscode_missing',
+          redirect_uri: 'https://app.example/cb',
+          client_id,
+          code_verifier: 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk',
+        }),
+      });
+      expect(r.status, r.body).toBe(400);
+      expect(JSON.parse(r.body)).toEqual({
+        error: 'invalid_grant',
+        error_description: 'internal server error',
+      });
+      expect(r.body).not.toContain('in:');
+      expect(r.body).not.toContain(statement);
+
+      const line = await vi.waitFor(() => {
+        const found = errorLog.mock.calls
+          .map(([fields]) => fields)
+          .find((f: LogFields) => f.msg === 'http_request' && f.status === 400);
+        expect(found).toBeDefined();
+        return found!;
+      });
+      expect(line).toMatchObject({ sqlstate: '42P01' });
+      expect(String(line.err)).toContain('in: SELECT * FROM private_schema.oauth_codes');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('sanitizes unexpected OAuth refresh failures and logs their cause', async () => {
+    const errorLog = vi.spyOn(log, 'error');
+    const statement = 'SELECT * FROM private_schema.oauth_tokens WHERE token_hash = ?';
+    const queryError = Object.assign(new Error(`relation lookup failed\n  in: ${statement}`), {
+      code: '42P01',
+    });
+    const { s, seed, url, arm } = await bootCloudWithQueryFault({
+      match: /oauth_tokens/i,
+      error: queryError,
+    });
+    try {
+      const team = await createTeam(seed, { slug: 'revive' });
+      const { row } = await addMember(seed, team, { name: 'ada', kind: 'human', role: '' });
+      const { client_id } = await registerClient(seed, {
+        teamId: team.id,
+        clientName: 'oauth-refresh-error-test',
+        redirectUris: ['https://app.example/cb'],
+      });
+      const pair = await mintTokenPair(seed, {
+        teamId: team.id,
+        memberId: row.id,
+        clientId: client_id,
+      });
+
+      arm();
+      const r = await hostRequest(url, '/oauth/revive/token', 'revive.musterd.test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forwarded-proto': 'https' },
+        body: JSON.stringify({
+          grant_type: 'refresh_token',
+          refresh_token: pair.refresh_token,
+          client_id,
+        }),
+      });
+      expect(r.status, r.body).toBe(400);
+      expect(JSON.parse(r.body)).toEqual({
+        error: 'invalid_grant',
+        error_description: 'internal server error',
+      });
+      expect(r.body).not.toContain('in:');
+      expect(r.body).not.toContain(statement);
+
+      const line = await vi.waitFor(() => {
+        const found = errorLog.mock.calls
+          .map(([fields]) => fields)
+          .find((f: LogFields) => f.msg === 'http_request' && f.status === 400);
+        expect(found).toBeDefined();
+        return found!;
+      });
+      expect(line).toMatchObject({ sqlstate: '42P01' });
+      expect(String(line.err)).toContain('in: SELECT * FROM private_schema.oauth_tokens');
+    } finally {
+      await s.close();
+    }
+  });
 });
