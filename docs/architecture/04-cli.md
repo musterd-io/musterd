@@ -206,6 +206,7 @@ src/
     check.ts          // rows vs the live board: goals that exist are linked, never re-declared (re-declare amends); deps resolve to file keys or board lanes in any state; cycles; likely duplicates; creation order (stable topo)
     stage.ts          // .musterd/imports/<id>.json: what step 1 previewed + the `created` resume map; writes the folder's own .gitignore (`*`) — .musterd/ is not wholly ignored (ADR 058); atomic writes
     save.ts           // step 2: refusals (errors / saved / other team / >24h), then goals → lanes through a two-call port (HttpClient fits), persisting each new id before the next call so a re-run resumes, never duplicates
+    render.ts         // preview (goals → lanes, linked goals, no-goal lanes, diagnostics, the one next step), save result, list
   commands/
     init.ts           // musterd init (delegates to onboard/init.ts); --check → onboard/doctor.ts drift report; --check --fix → restore agent_key for traced-key drift then re-check, `wire` for entry drift, full init otherwise (ADR 165)
     wire.ts           // musterd wire: headless fragment reconcile, plus --migrate-bootstrap atomic replacement of a Workspace's legacy Team key while Presence stays occupied (ADR 080/282/350)
@@ -234,6 +235,7 @@ src/
     fmt.ts            // musterd fmt [--check] — canonicalize .musterd roster files: team + seats + roles (ADR 058 guard 2)
     send.ts           // send
     huddle.ts         // huddle open/say/close/show/room (show --trace reads GET /huddles/:id/trace, ADR 493; room opens the board in Squig through the whiteboard's token-gated API and the browser, ADR 537) — a huddle is a thread: meta.huddle on the root, turns in the thread, resolve names the anchor; lays the whiteboard room out best-effort, never spawns it (ADR 378)
+    import.ts         // `musterd import <file>` (check + preview + stage, exit 1 on errors) | `save <id>` (resumable) | `list` — spec 2026-10-10 "bring work in"; save goes through HttpClient.declareGoal/openLane, no protocol change
     inbox.ts          // inbox [--watch] [--wait] [--limit <n>] — bounded recent window + day-grouped smart dates, always-show-unread (ADR 054/117)
     nudge.ts          // `inbox --waiting`: the waiting-acts banner + the acts behind it, read-only — the approval-prompt hook target (ADR 053); `musterd nudge` is the hidden pre-2026-09-03 alias
     reap.ts           // musterd reap [--yes] (ADR 242): list orphaned MCP sidecars from the daemon's footprint tick; --yes asks the daemon to kill them (re-verified server-side, audited)

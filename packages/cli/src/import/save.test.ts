@@ -1,7 +1,7 @@
 import type { DeclareGoal, OpenLane } from '@musterd/protocol';
 import { describe, expect, it, vi } from 'vitest';
-import type { ImportStage } from './stage.js';
 import { refusal, saveStage, type SavePort } from './save.js';
+import type { ImportStage } from './stage.js';
 
 const NOW = Date.UTC(2026, 9, 10, 12);
 const base = (): ImportStage => ({

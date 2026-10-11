@@ -558,6 +558,24 @@ export const CATALOG: readonly CommandEntry[] = [
     examples: ['musterd seed list', 'musterd seed claim 01SEED…'],
   },
   {
+    name: 'import',
+    signature: '<file.csv|file.jsonl>  |  save <id>  |  list',
+    summary: 'bring existing work in: preview a file of goals and lanes, then save it',
+    group: 'work',
+    detail:
+      'Two steps (spec 2026-10-10 "bring work in"). `import <file>` checks every row against the board,\n' +
+      'prints what it would create, and stages it in .musterd/imports/ — it creates nothing.\n' +
+      '`import save <id>` creates exactly the staged goals, then lanes, unclaimed; a re-run after a\n' +
+      'failure resumes and never duplicates. A goal already on the board is linked, not re-declared.\n' +
+      'Columns: kind (goal|lane), key, title, detail, story, goal, depends_on (;-separated), stakes, source_ref.\n' +
+      'The musterd-import skill writes this file for you from the repo or GitHub issues.',
+    examples: [
+      'musterd import backlog.csv',
+      'musterd import save 20261010-130509-a1f2',
+      'musterd import list',
+    ],
+  },
+  {
     name: 'huddle',
     signature:
       'list [--all]  |  show <id>  |  room <id> [--print]  |  open --topic <goal|lane|design>:<id> --anchor <path|pr|lane> [--to a,b|@team] [--turns N] [--until <ms|ISO>] "<why>"  |  say <id> [--act <act>] "<turn>"  |  close <id> --anchor-ref <ref|none> "<what landed>"',
