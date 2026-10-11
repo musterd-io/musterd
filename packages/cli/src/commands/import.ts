@@ -9,7 +9,13 @@ import { checkAgainstBoard } from '../import/check.js';
 import { renderList, renderPreview, renderSaved } from '../import/render.js';
 import { formatFor, parseImportFile } from '../import/rows.js';
 import { saveStage } from '../import/save.js';
-import { createStage, listStages, readStage, writeStage } from '../import/stage.js';
+import {
+  createStage,
+  ensureImportsDir,
+  listStages,
+  readStage,
+  writeStage,
+} from '../import/stage.js';
 import { findWorkspaceDir, resolve } from './helpers.js';
 
 const USAGE =
@@ -28,6 +34,7 @@ export async function importCommand(parsed: Parsed): Promise<number> {
       'musterd import needs a musterd workspace — run `musterd init` here first',
       2,
     );
+  ensureImportsDir(ws);
 
   if (first === 'list') {
     process.stdout.write(renderList(listStages(ws), Date.now()) + '\n');

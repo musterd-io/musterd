@@ -59,15 +59,22 @@ export function newStageId(now: number): string {
   return `${date}-${time}-${randomBytes(2).toString('hex')}`;
 }
 
+/** Make the imports folder and its own `.gitignore` (`*`) — before anything can fail, so a draft a
+ *  skill wrote there is never committed even when the import itself never stages. */
+export function ensureImportsDir(workspace: string): string {
+  const dir = importsDir(workspace);
+  mkdirSync(dir, { recursive: true });
+  const ignore = join(dir, '.gitignore');
+  if (!existsSync(ignore)) writeFileSync(ignore, '*\n');
+  return dir;
+}
+
 export function createStage(
   workspace: string,
   init: Omit<ImportStage, 'version' | 'id' | 'created' | 'saved_at'>,
   now: number,
 ): ImportStage {
-  const dir = importsDir(workspace);
-  mkdirSync(dir, { recursive: true });
-  const ignore = join(dir, '.gitignore');
-  if (!existsSync(ignore)) writeFileSync(ignore, '*\n');
+  ensureImportsDir(workspace);
   const stage: ImportStage = {
     version: 1,
     id: newStageId(now),

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer, openDb, type RunningServer } from '@musterd/server';
@@ -144,5 +144,8 @@ describe('import command', () => {
 
   it('refuses a file it cannot read', async () => {
     await expect(importCommand(parseArgs(['nope.csv']))).rejects.toThrow(/cannot read nope\.csv/);
+    // the imports folder ignores itself before anything else can fail, so a draft the skill
+    // wrote there is never committed (review finding)
+    expect(readFileSync(join(dir, '.musterd', 'imports', '.gitignore'), 'utf8')).toBe('*\n');
   });
 });

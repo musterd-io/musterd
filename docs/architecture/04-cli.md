@@ -204,8 +204,8 @@ src/
     csv.ts            // hand-written RFC 4180 reader (quotes, "" escapes, CRLF, BOM) — no dependency (hard rule 6)
     rows.ts           // CSV/JSONL → ImportRow[] through a CLI-local zod schema (hard rule 4; not a wire schema); row-local errors drop the row, warnings keep it
     check.ts          // rows vs the live board: goals that exist are linked, never re-declared (re-declare amends); deps resolve to file keys or board lanes in any state; cycles; likely duplicates; creation order (stable topo)
-    stage.ts          // .musterd/imports/<id>.json: what step 1 previewed + the `created` resume map; writes the folder's own .gitignore (`*`) — .musterd/ is not wholly ignored (ADR 058); atomic writes
-    save.ts           // step 2: refusals (errors / saved / other team / >24h), then goals → lanes through a two-call port (HttpClient fits), persisting each new id before the next call so a re-run resumes, never duplicates
+    stage.ts          // .musterd/imports/<id>.json: what step 1 previewed + the `created` resume map; `ensureImportsDir` writes the folder's own .gitignore (`*`) before anything can fail — .musterd/ is not wholly ignored (ADR 058); atomic writes
+    save.ts           // step 2: refusals (errors / saved / other team / >24h unless already started), one more goals read so a goal that appeared since the preview is linked not re-declared, then goals → lanes through a port HttpClient fits, persisting each new id before the next call; a failure says how to resume
     render.ts         // preview (goals → lanes, linked goals, no-goal lanes, diagnostics, the one next step), save result, list
   commands/
     init.ts           // musterd init (delegates to onboard/init.ts); --check → onboard/doctor.ts drift report; --check --fix → restore agent_key for traced-key drift then re-check, `wire` for entry drift, full init otherwise (ADR 165)

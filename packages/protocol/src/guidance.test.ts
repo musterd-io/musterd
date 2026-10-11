@@ -233,7 +233,7 @@ describe('version-bump discipline (ADR 085)', () => {
     44: 'b00114dc9d56316b', // ADR 514 (lane 01M46MQD2F): the push-back bullet names the style block that will carry each human's dials from team_join; the bullet itself leaves in agent-style inc 3
     45: '51712f8b3f289f85', // ADR 514 inc 3 (lane 01M46MQQFS): the push-back bullet leaves — the style block on team_join carries the floor and each human's dials; the primer points at it
     46: 'd1324abe1740c3da', // lane 01M46S44K8 (ADR 259/516): the skill says harness memory holds facts about the human, never team facts or rules — a rule no hold carries is not a rule
-    47: '1b6081405e813b60', // + musterd-import skill unit (spec 2026-10-10 "bring work in", lane 01M4FDBSN8)
+    47: '0f0eefd223371a7f', // + musterd-import skill unit + a pointer to it in the main skill (spec 2026-10-10 "bring work in", lane 01M4FDBSN8)
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {
@@ -413,5 +413,13 @@ describe('musterd-import skill (spec 2026-10-10 "bring work in")', () => {
 
   it('has frontmatter named musterd-import', () => {
     expect(renderImportFrontmatter()).toMatch(/^---\nname: musterd-import\ndescription: /);
+  });
+});
+
+describe('the main skill points at musterd-import (review finding: Codex/opencode have no native shell)', () => {
+  it('names the canonical import skill file so every harness can find it', () => {
+    const body = renderSkillBody({ team: 'dawn' });
+    expect(body).toContain('`.musterd/skill/import.md`');
+    expect(body).toMatch(/bring existing work in/i);
   });
 });

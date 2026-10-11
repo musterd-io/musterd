@@ -35,6 +35,7 @@ const base = (): ImportStage => ({
 function fakePort(failOnLane?: string) {
   let n = 0;
   const port: SavePort = {
+    goals: vi.fn(async () => ({ goals: [] as { id: string }[] })),
     declareGoal: vi.fn(async (_t: string, body: DeclareGoal) => ({ id: body.id })),
     openLane: vi.fn(async (_t: string, body: OpenLane) => {
       if (body.title === failOnLane) throw new Error('daemon restarted');
@@ -117,6 +118,7 @@ describe('saveStage', () => {
     expect(stage.saved_at).toBeNull();
 
     const second: SavePort = {
+      goals: vi.fn(async () => ({ goals: [{ id: 'g' }] })),
       declareGoal: vi.fn(),
       openLane: vi.fn(async () => ({ lane: { id: 'L9' } })),
     };
@@ -144,5 +146,46 @@ describe('saveStage', () => {
     ).rejects.toThrow(/dusk/);
     expect(port.declareGoal).not.toHaveBeenCalled();
     expect(port.openLane).not.toHaveBeenCalled();
+  });
+  it('resumes a partly saved stage even when it is older than 24 hours', async () => {
+    const stage: ImportStage = {
+      ...base(),
+      created_at: NOW - 48 * 3600_000,
+      created: { 'goal:g': 'g', 'lane:a': 'L1' },
+    };
+    expect(refusal(stage, 'dawn', NOW)).toBeNull();
+    const port = fakePort();
+    const res = await saveStage(stage, { team: 'dawn', port, persist: () => {}, now: () => NOW });
+    expect(port.openLane).toHaveBeenCalledTimes(1);
+    expect(res.lanes.map((l) => l.resumed)).toEqual([true, false]);
+  });
+
+  it('links a goal that appeared on the board since the preview instead of re-declaring it', async () => {
+    const port = fakePort();
+    port.goals = vi.fn(async () => ({ goals: [{ id: 'g' }] }));
+    let last: ImportStage | undefined;
+    const res = await saveStage(base(), {
+      team: 'dawn',
+      port,
+      persist: (s) => (last = structuredClone(s)),
+      now: () => NOW,
+    });
+    expect(port.declareGoal).not.toHaveBeenCalled();
+    expect(res.goals).toEqual([{ ref: 'goal:g', id: 'g', resumed: false, linked: true }]);
+    expect(last!.linked_goals).toEqual(['g']);
+    expect(port.openLane).toHaveBeenCalledTimes(2);
+  });
+
+  it('says how to resume when a call fails partway', async () => {
+    const port = fakePort('B');
+    const err = await saveStage(base(), {
+      team: 'dawn',
+      port,
+      persist: () => {},
+      now: () => NOW,
+    }).catch((e: unknown) => e as Error);
+    expect(err.message).toContain('daemon restarted');
+    expect(err.message).toContain('stopped after 2 of 3');
+    expect(err.message).toContain('re-run `musterd import save s1` to resume');
   });
 });
