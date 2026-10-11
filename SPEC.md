@@ -871,3 +871,26 @@ Team's pool, ordered for the reading Member. The pool is the same for every Memb
   Act — and empty for tier 5. Defaults to `[]`.
 - This orders a read. It delivers no Act and selects no holder; role routing stays as ADR 272 §5
   left it.
+
+## A.22 Idle-at-prompt wake (unreleased — ADR 558)
+
+An open session idle at its prompt is pushed a turn when a teammate directs an act at its seat. The
+daemon decides what rings; the adapter decides when (ADR 558 §2).
+
+- `GET /teams/:slug/inbox/interrupt-check` accepts `seam=boundary|idle` (default `boundary`; an
+  unparseable value is `boundary`, never a 400). `rail` keeps its meaning: the harness id.
+- With `seam=idle`, a supporting server MUST answer from the boundary set plus every act
+  `idleRingable(env, seat)` accepts: directed at the seat (by name or by `meta.eligible`), not from
+  it, and `meta.urgent === true` or act ∈ {`steer`, `ask`, `request_help`, `handoff`}. A directed
+  `ask`/`request_help`/`handoff` is discharged by an `accept`/`decline` naming it or by the seat's
+  own reply to it. The line MUST be composed exactly as on the boundary seam.
+- A server MUST answer `{raised: false, idle_wake: false}` and write no row when the seat's
+  effective `ResidencyPolicy.idle_wake` (team default ⊕ seat override, default `true`) is false.
+- A server MUST record `interrupt.raised` with `detail.seam: 'idle'` for an idle-seam raise, and
+  MUST dedupe `interrupt.raised` per (seat, act) across both seams.
+- `HeartbeatFrame` carries optional `hearing: 'idle'|'deaf'` and `hearing_reason` (≤ 80 chars).
+  Absent means no change. A server SHOULD record `presence.hearing {hearing, reason}` on change.
+- `POST /teams/:slug/inbox/idle-wake` takes a strict `IdleWakeReport`
+  `{act, outcome: 'injected'|'failed'|'capped', harness, reason?, cap?: 'sender'|'session'}` and
+  records `idle_wake.injected` or `idle_wake.capped`. It MUST refuse any other field (no line, no
+  body).
