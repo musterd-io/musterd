@@ -16,6 +16,7 @@ function fakes(
   const calls: string[] = [];
   const hints: string[] = [];
   const shown: string[] = [];
+  const bodies: string[] = [];
   let t = 1_000_000;
   const acts = script.acts ?? [];
   const port: TourPort = {
@@ -42,14 +43,17 @@ function fakes(
     sleep: async () => undefined,
   };
   const ui: TourUi = {
-    show: (title) => void shown.push(title),
+    show: (title, body) => {
+      shown.push(title);
+      bodies.push(body);
+    },
     hint: (text) => void hints.push(text),
     pressEnter: async () => true,
     pickAgent: async (names) => names[1] ?? names[0] ?? null,
     judge: async () => (script.judge === undefined ? { accept: true, note: '' } : script.judge),
     afterDecline: async () => script.afterDecline ?? 'skip',
   };
-  return { port, ui, calls, shown, hints };
+  return { port, ui, calls, shown, bodies, hints };
 }
 
 const act = (p: Partial<Envelope> & { meta?: Record<string, unknown> }): Envelope =>
@@ -88,6 +92,14 @@ describe('runTour', () => {
     expect(f.shown[0]).toBe('Step 1 of 9 · What musterd is');
     expect(f.shown).toContain('Step 6 of 9 · You judge it');
     expect(f.shown.at(-1)).toBe('Step 9 of 9 · Where to go next');
+  });
+
+  it('step 2 shows the roster it names', async () => {
+    const f = fakes({ acts: [claim, ask] });
+    await runTour(f.port, f.ui, 'nick', opts);
+    const team = f.bodies[f.shown.indexOf('Step 2 of 9 · Your team')]!;
+    expect(team).toContain('  nick  human, you');
+    expect(team).toContain('  ada   agent');
   });
 
   it('dedupes overlapping polls', async () => {
