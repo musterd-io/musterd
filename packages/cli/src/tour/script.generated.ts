@@ -35,7 +35,8 @@ export interface TourStep {
 }
 
 export const TOUR_LANE_PREFIX = '[tour]';
-export const TOUR_LANE_TITLE = `${TOUR_LANE_PREFIX} Summarise this repo's README in three lines`;
+/** `{you}` keeps two people's tours apart on one team; resume finds a lane by this exact title. */
+export const TOUR_LANE_TITLE = `${TOUR_LANE_PREFIX} {you}: summarise this repo's README in three lines`;
 
 export const TOUR_REQUEST =
   '{you} is taking the musterd tour, and this is your part. Claim lane {lane} with lane_claim. ' +

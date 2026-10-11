@@ -119,6 +119,7 @@ src/
     script.generated.ts // GENERATED from content/tour.data.ts by `pnpm tour:gen` — the tour's copy; `tour:check` gates drift
     machine.ts        // the tour's pure step machine: (state, event) → state; only acts about the tour's own lane move it
     screens.ts        // the tour's pure text: step titles, filled bodies, the verdict line, the due hint (cmd/tour frames)
+    run.ts            // runTour: the tour's loop over a TourPort + TourUi — polls the team timeline, dedupes, resumes, hints
   host/               // the `musterd host` wake actuator — harness residency's per-machine hand (ADR 131 inc 3)
     registry.ts       // machine-local seat → workspace/harness registry (~/.musterd/host-registry.json); written by `residency on`, never by the daemon; canonicalServer + isLoopbackServer (the trace tap sends content only to a loopback daemon)
     backend.ts        // ActuatorBackend seam: spawn-or-invoke + roster-derived verify + WakeOutcome; native row must stay expressible (ADR 131 §7)
@@ -268,6 +269,7 @@ src/
     notify.ts         // human-reachability nudge loop (ADR 024/035)
     role.ts           // the team's role library — list / show / create / assign (ADR 227, narrowed by 296); `assign` recompiles the seat's harness permissions (ADR 261 inc 2) and `--remove` lifts the removed role's ceiling (lane 01M3TAM44Q) instead of only warning
     toolkit.ts        // workspace equipment — list / show / create; carries no authority (ADR 296)
+    tour.ts           // musterd tour [--reset] — binds tour/run.ts to the daemon (roster, lanes, timeline poll) and to @clack/prompts
     reset.ts          // local clean-slate db + config wipe (ADR 022)
     uninstall.ts      // per-folder uninstall — unwinds what init wrote (ADR 027)
     helpers.ts        // shared command helpers (active-identity resolution, ADR 036)

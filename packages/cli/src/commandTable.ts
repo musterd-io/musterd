@@ -65,6 +65,7 @@ export const COMMANDS: Readonly<Record<string, () => Promise<CommandFn>>> = {
   surface: async () => (await import('./commands/surface.js')).surfaceCommand,
   team: async () => (await import('./commands/team.js')).teamCommand,
   toolkit: async () => (await import('./commands/toolkit.js')).toolkitCommand,
+  tour: async () => (await import('./commands/tour.js')).tourCommand,
   trace: async () => (await import('./commands/trace.js')).traceCommand,
   unbind: async () => (await import('./commands/unbind.js')).unbindCommand,
   uninstall: async () => (await import('./commands/uninstall.js')).uninstallCommand,

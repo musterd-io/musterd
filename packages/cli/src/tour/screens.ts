@@ -5,13 +5,13 @@ import { fill, TOUR_STEPS, type TourStepId } from './script.generated.js';
  * The tour's text, as pure functions: what each step says once its placeholders are filled. The
  * `cmd/tour` frames in docs/design/figma-brief-terminal.md are pinned by screens.test.ts.
  */
-export interface TourVars {
+export type TourVars = {
   you: string;
   agent: string;
   lane: string;
   /** The model the harness observed, from the roster; '' when unattested. */
   model: string;
-}
+};
 
 function stepOf(id: TourStepId) {
   const step = TOUR_STEPS.find((s) => s.id === id);
