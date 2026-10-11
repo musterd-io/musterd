@@ -203,6 +203,7 @@ src/
   import/             // `musterd import` (spec 2026-10-10 "bring work in"): file → board check → stage → resumable save; no protocol change
     csv.ts            // hand-written RFC 4180 reader (quotes, "" escapes, CRLF, BOM) — no dependency (hard rule 6)
     rows.ts           // CSV/JSONL → ImportRow[] through a CLI-local zod schema (hard rule 4; not a wire schema); row-local errors drop the row, warnings keep it
+    check.ts          // rows vs the live board: goals that exist are linked, never re-declared (re-declare amends); deps resolve to file keys or board lanes in any state; cycles; likely duplicates; creation order (stable topo)
   commands/
     init.ts           // musterd init (delegates to onboard/init.ts); --check → onboard/doctor.ts drift report; --check --fix → restore agent_key for traced-key drift then re-check, `wire` for entry drift, full init otherwise (ADR 165)
     wire.ts           // musterd wire: headless fragment reconcile, plus --migrate-bootstrap atomic replacement of a Workspace's legacy Team key while Presence stays occupied (ADR 080/282/350)
