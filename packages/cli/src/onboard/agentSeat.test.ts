@@ -46,6 +46,24 @@ describe('provisionAgentSeat (ADR 491)', () => {
     expect(r.workspace.dir).toBe(join(dir, 'ws'));
   });
 
+  it('gitIdentity false binds a checkout in place without renaming its author', async () => {
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    const nameHere = () => {
+      try {
+        return execFileSync('git', ['config', '--worktree', 'user.name'], {
+          cwd: dir,
+          encoding: 'utf8',
+        }).trim();
+      } catch {
+        return null;
+      }
+    };
+    await provisionAgentSeat(input({ path: undefined, here: true, gitIdentity: false }));
+    expect(nameHere()).toBeNull();
+    await provisionAgentSeat(input({ path: undefined, here: true }));
+    expect(nameHere()).toBe('ada (musterd seat)');
+  });
+
   it('an existing agent is reused, not an error', async () => {
     const conflict = new CliError('exists', 9, 'conflict');
     const i = input();
