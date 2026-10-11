@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import liveCss from '../live/Live.css?url';
 import brandCss from '../brand/brand.css?url';
 import { MusterdWord } from '../brand/MusterdWord';
@@ -37,35 +37,38 @@ const PREVIEW_SCRIPT: { after: number; from: string; act: Envelope['act']; body:
   { after: 5200, from: 'ghost', act: 'message', how: 'reply_to', body: 'Woke up for this. Install still asks for a port on a fresh laptop. Fix that first.', meta: { model: 'gpt-6' } },
   { after: 7800, from: 'big-body', act: 'ask', how: 'thread', body: 'Can I ship the port fix today? It touches daemon config.', meta: { model: 'claude-sonnet-5-5', species: 'approve', tier: 'standard' } },
 ];
+/** The fake wire, in `pnpm dev` only: production builds drop it (`import.meta.env.DEV` is a constant),
+ *  so the shipped preview carries none of it and its sends fail into the error state, as before. */
+function scriptedSend(add: (e: Envelope) => void) {
+  return async (_cfg: unknown, input: SendInput): Promise<Envelope> => {
+    const env = { ...buildEnvelope({ id: crypto.randomUUID(), team: 'preview', from: 'nick', body: input.body ?? '', thread: input.thread ?? null, meta: input.meta ?? null, to: input.to, act: input.act }), ts: Date.now() } as Envelope;
+    if (env.meta?.['huddle']) {
+      for (const line of PREVIEW_SCRIPT) {
+        window.setTimeout(() => {
+          const reply = buildEnvelope({
+            id: crypto.randomUUID(),
+            team: 'preview',
+            from: line.from,
+            to: { kind: 'member', name: 'nick' },
+            act: line.act,
+            body: line.body,
+            thread: line.how === 'thread' ? env.id : null,
+            meta: line.how === 'reply_to' ? { ...line.meta, in_reply_to: env.id } : (line.meta ?? null),
+          });
+          add({ ...reply, ts: Date.now() } as Envelope);
+        }, line.after);
+      }
+    }
+    return env;
+  };
+}
+const fakeSend = import.meta.env.DEV ? scriptedSend : null;
 function PreviewPromptBar() {
   const [on, setOn] = useState(false);
   const [envelopes, setEnvelopes] = useState<Envelope[]>([]);
   useEffect(() => setOn(new URLSearchParams(window.location.search).has('promptbar')), []);
   const add = useCallback((e: Envelope) => setEnvelopes((prev) => (prev.some((p) => p.id === e.id) ? prev : [...prev, e])), []);
-  const send = useCallback(
-    async (_cfg: unknown, input: SendInput): Promise<Envelope> => {
-      const env = { ...buildEnvelope({ id: crypto.randomUUID(), team: 'preview', from: 'nick', body: input.body ?? '', thread: input.thread ?? null, meta: input.meta ?? null, to: input.to, act: input.act }), ts: Date.now() } as Envelope;
-      if (env.meta?.['huddle']) {
-        for (const line of PREVIEW_SCRIPT) {
-          window.setTimeout(() => {
-            const reply = buildEnvelope({
-              id: crypto.randomUUID(),
-              team: 'preview',
-              from: line.from,
-              to: { kind: 'member', name: 'nick' },
-              act: line.act,
-              body: line.body,
-              thread: line.how === 'thread' ? env.id : null,
-              meta: line.how === 'reply_to' ? { ...line.meta, in_reply_to: env.id } : (line.meta ?? null),
-            });
-            add({ ...reply, ts: Date.now() } as Envelope);
-          }, line.after);
-        }
-      }
-      return env;
-    },
-    [add],
-  );
+  const send = useMemo(() => fakeSend?.(add), [add]);
   if (!on) return null;
   return (
     <Suspense fallback={null}>
@@ -75,7 +78,7 @@ function PreviewPromptBar() {
         viewer="nick"
         envelopes={envelopes}
         onSent={add}
-        send={send as typeof sendAct}
+        {...(send ? { send: send as typeof sendAct } : {})}
       />
     </Suspense>
   );
