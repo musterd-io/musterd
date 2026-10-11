@@ -116,6 +116,10 @@ hostile same-user process.
 actuator.** Unanimous. Native is the only row where that gap is structurally absent, and only
 because there is no prompt to wait at.
 
+_(2026-10-10: [ADR 558](../decisions/558-idle-at-prompt-wake.md) designs the answer — the adapter pushes the
+daemon-composed line into an idle session through the harness's own inject, claude-code first. Unbuilt
+until its canary passes; the table above stays the measured state until then.)_
+
 ### (3) A Presence lease the probe can authenticate with
 
 The weakest clause on the board. It failed the same day for two **different** reasons, and the
