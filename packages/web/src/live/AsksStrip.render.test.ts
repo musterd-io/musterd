@@ -217,3 +217,34 @@ describe('the rail, rendered — "notify me here"', () => {
       expect(html).not.toContain('notify me here');
     }));
 });
+
+describe('a way in with nothing waiting (nick, 2026-10-10)', () => {
+  const observer = { as: 'obs-quiet-otter', team: 'revive' } as unknown as LiveConfig;
+  const strip = (props: Record<string, unknown>) =>
+    renderToStaticMarkup(createElement(AsksStrip, { envelopes: [], roster, cfg: observer, ...props }));
+
+  it('offers "Sign in as nick" in the identity slot when this machine holds nick', () => {
+    const html = strip({ localIdentity: 'nick' });
+    expect(html).toContain('no open questions');
+    expect(html.match(/Sign in as nick/g)?.length).toBe(1);
+  });
+
+  it('falls back to the credential form off this machine, and offers nothing on a watch link', () => {
+    expect(strip({})).toContain('sign in →');
+    const watching = strip({ watchLink: true });
+    expect(watching).not.toContain('Sign in as');
+    expect(watching).not.toContain('sign in →');
+  });
+
+  it('does not repeat the button when the lead ask already carries it', () => {
+    const html = strip({ localIdentity: 'nick', envelopes: [ask('a1', 'standard', 1_000)] });
+    expect(html).toContain('Sign in as nick to answer');
+    expect(html.match(/Sign in as nick/g)?.length).toBe(1);
+  });
+
+  it('shows who you are, not a sign-in, once signed in', () => {
+    const html = renderToStaticMarkup(createElement(AsksStrip, { envelopes: [], roster, cfg, localIdentity: 'nick' }));
+    expect(html).toContain('nick · revive');
+    expect(html).not.toContain('Sign in as');
+  });
+});

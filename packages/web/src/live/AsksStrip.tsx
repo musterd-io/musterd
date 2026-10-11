@@ -215,6 +215,9 @@ export function AsksStrip({
    *   to sign in would be a nag aimed at someone with no seat to sign into.
    */
   const wayIn: 'offer' | 'paste' | 'none' = watchLink ? 'none' : localIdentity ? 'offer' : 'paste';
+  /** The lead ask already carries a sign-in button; the identity slot then stays quiet. */
+  const leadOffersSignIn =
+    !!lead && askIsLoud(lead.state) && !canAnswer && leadIsOurs && wayIn !== 'none';
 
   const answer = useCallback(
     async (ask: AskView, kind: 'accept' | 'decline' | 'deciding') => {
@@ -452,6 +455,31 @@ export function AsksStrip({
             title={`signed in as ${cfg.as} on ${cfg.team} — watch as an observer instead`}
           >
             {cfg.as} · {cfg.team}
+          </button>
+        )}
+        {/* The same slot, signed out (nick, 2026-10-10: "shouldnt there be a sign in option on /live
+            itself?"). The ask's own button above is the way in only while an ask of yours is open;
+            with nothing waiting there was none, and the gated composer could not be reached. So the
+            slot that says who you are says how to become yourself — unless the lead ask already
+            offers it, which would be the same button twice. */}
+        {!canAnswer && wayIn === 'offer' && !leadOffersSignIn && (
+          <button
+            type="button"
+            className="lc-ask__btn lc-asks__signin"
+            onClick={onSignIn}
+            title={`sign in as ${localIdentity} on this machine`}
+          >
+            Sign in as {localIdentity}
+          </button>
+        )}
+        {!canAnswer && wayIn === 'paste' && !leadOffersSignIn && (
+          <button
+            type="button"
+            className="lc-ask__btn lc-asks__link lc-asks__signin--ghost"
+            onClick={onSignIn}
+            title="sign in with your seat credential"
+          >
+            sign in →
           </button>
         )}
       </div>
