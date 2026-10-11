@@ -205,6 +205,7 @@ src/
     rows.ts           // CSV/JSONL → ImportRow[] through a CLI-local zod schema (hard rule 4; not a wire schema); row-local errors drop the row, warnings keep it
     check.ts          // rows vs the live board: goals that exist are linked, never re-declared (re-declare amends); deps resolve to file keys or board lanes in any state; cycles; likely duplicates; creation order (stable topo)
     stage.ts          // .musterd/imports/<id>.json: what step 1 previewed + the `created` resume map; writes the folder's own .gitignore (`*`) — .musterd/ is not wholly ignored (ADR 058); atomic writes
+    save.ts           // step 2: refusals (errors / saved / other team / >24h), then goals → lanes through a two-call port (HttpClient fits), persisting each new id before the next call so a re-run resumes, never duplicates
   commands/
     init.ts           // musterd init (delegates to onboard/init.ts); --check → onboard/doctor.ts drift report; --check --fix → restore agent_key for traced-key drift then re-check, `wire` for entry drift, full init otherwise (ADR 165)
     wire.ts           // musterd wire: headless fragment reconcile, plus --migrate-bootstrap atomic replacement of a Workspace's legacy Team key while Presence stays occupied (ADR 080/282/350)
