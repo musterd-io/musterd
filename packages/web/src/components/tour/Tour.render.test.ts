@@ -61,6 +61,17 @@ describe('TourPanel — spec docs/design/tour-web-copy.md §3', () => {
     expect(html).toContain('Still waiting.');
   });
 
+  it('while it waits, shows the clock, what the roster says and what the agent said', () => {
+    const html = panel(at('claims'), {
+      wait: { elapsed: '0:32', now: 'dolly is online and has the request.', said: 'on it' },
+    });
+    expect(html).toContain('Waiting on dolly');
+    expect(html).toMatch(/aria-hidden="true">0:32</);
+    expect(html).toContain('dolly is online and has the request.');
+    expect(html).toContain('dolly says: <q>on it</q>');
+    expect(panel(at('claims'))).not.toContain('Waiting on');
+  });
+
   it('shows what the agent wrote as text, never as markup, with both verdicts', () => {
     const html = panel(at('judge', { askId: 'ask1' }), { detail: '<b>three</b>\nlines' });
     expect(html).toContain('&lt;b&gt;three&lt;/b&gt;');

@@ -11,8 +11,11 @@ import {
 } from '../../live/client';
 import {
   advance,
+  agentNow,
   agentsOf,
+  clock,
   hintFor,
+  latestSaid,
   initialState,
   modelOf,
   stepLines,
@@ -189,11 +192,13 @@ export function Tour({
     })();
   }, [s, cfg, port, viewer]);
 
-  // A clock for the hints, only while the tour waits on the agent.
-  const waiting = s?.step === 'claims' || s?.step === 'hands_back';
+  // A clock for the elapsed line and the hints, only while the tour waits on the agent. A decline
+  // stops the wait: nothing more is coming.
+  const waiting = (s?.step === 'claims' && s.outcome !== 'declined') || s?.step === 'hands_back';
   useEffect(() => {
     if (!waiting) return;
-    const t = setInterval(() => setNow(Date.now()), 10_000);
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(t);
   }, [waiting]);
 
@@ -259,6 +264,15 @@ export function Tour({
           s={s}
           vars={vars}
           hint={waiting && run ? hintFor(s.step, now - run.at, vars) : null}
+          wait={
+            waiting && run
+              ? {
+                  elapsed: clock(now - run.at),
+                  now: agentNow(roster.find((m) => m.name === s.agent), s.step),
+                  said: latestSaid([...run.extra, ...envelopes], s.agent, run.at),
+                }
+              : null
+          }
           agents={agents}
           detail={detail}
           note={note}
@@ -313,10 +327,18 @@ function Lines({ lines, mono }: { lines: string[]; mono?: boolean }) {
   return <>{out}</>;
 }
 
+/** What the panel shows while it waits on the agent, so the wait never reads as a stall. */
+export interface TourWait {
+  elapsed: string;
+  now: string | null;
+  said: string | null;
+}
+
 export function TourPanel({
   s,
   vars,
   hint,
+  wait = null,
   agents,
   detail,
   note,
@@ -334,6 +356,7 @@ export function TourPanel({
   s: TourState;
   vars: TourVars;
   hint: string | null;
+  wait?: TourWait | null;
   agents: readonly string[];
   detail: string;
   note: string | null;
@@ -471,6 +494,24 @@ export function TourPanel({
       <div className="tour__body" aria-live="polite">
         {s.step === 'hands_back' && s.sentBack > 0 && <p>{fill(TOUR_MESSAGES.sentBack, vars)}</p>}
         {body}
+        {wait && (
+          <div className="tour__wait">
+            <p className="tour__waiting">
+              <span className="tour__dot" aria-hidden="true" />
+              Waiting on {s.agent} · {/* Every second inside a live region would chatter at a screen reader; the lines below carry
+                  the news. */}
+              <span className="tour__clock" aria-hidden="true">
+                {wait.elapsed}
+              </span>
+            </p>
+            {wait.now && <p className="tour__muted">{wait.now}</p>}
+            {wait.said && (
+              <p className="tour__muted">
+                {s.agent} says: <q>{wait.said}</q>
+              </p>
+            )}
+          </div>
+        )}
         {hint && <p className="tour__muted">{hint}</p>}
         {error && (
           <p className="tour__error" role="alert">

@@ -111,3 +111,35 @@
 .tour__note .lc-ask__btn {
   justify-self: start;
 }
+.tour__wait {
+  margin-top: var(--lc-3);
+  padding-top: var(--lc-3);
+  border-top: 1px solid var(--lc-border-2);
+}
+.tour__waiting {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-2);
+  font-weight: 600;
+}
+.tour__clock {
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+}
+.tour__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lc-accent);
+  animation: tour-pulse 1.4s ease-in-out infinite;
+}
+@keyframes tour-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour__dot {
+    animation: none;
+  }
+}

@@ -2,7 +2,10 @@ import type { Envelope, Lane, MemberSummary } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import {
   advance,
+  agentNow,
+  clock,
   hintFor,
+  latestSaid,
   initialState,
   modelOf,
   stepLines,
@@ -137,6 +140,11 @@ describe('tour text', () => {
     expect(hintFor('claims', 61_000, vars)).toMatch(/^Still waiting/);
     expect(hintFor('claims', 181_000, vars)).toMatch(/take a few minutes/);
   });
+
+  it('drops the terminal-only Ctrl-C sentence from a hint on the web', () => {
+    expect(hintFor('claims', 181_000, vars)).not.toMatch(/Ctrl-C|musterd tour/);
+    expect(hintFor('claims', 181_000, vars)).toMatch(/waits as long as it takes\.$/);
+  });
 });
 
 describe('tour entry (spec §2–3)', () => {
@@ -176,5 +184,43 @@ describe('tour entry (spec §2–3)', () => {
     // Reference values from the `ulid` package's decodeTime, which the CLI tour uses.
     expect(ulidTime('01ARZ3NDEKTSV4RRFFQ69G5FAV')).toBe(1469922850259);
     expect(ulidTime(LANE)).toBe(1791677085647);
+  });
+});
+
+describe('while the tour waits on the agent', () => {
+  const m = (over: Record<string, unknown>) =>
+    ({ name: 'ghost', kind: 'agent', presence: 'online', ...over }) as unknown as MemberSummary;
+
+  it('counts the wait as m:ss', () => {
+    expect(clock(0)).toBe('0:00');
+    expect(clock(47_400)).toBe('0:47');
+    expect(clock(185_000)).toBe('3:05');
+  });
+
+  it('says musterd is waking an offline agent only when its wake can reach it', () => {
+    expect(agentNow(m({ presence: 'offline', wakeable: true }), 'claims')).toMatch(/waking it/);
+    expect(
+      agentNow(m({ presence: 'offline', wakeable: true, wakeability: 'enrolled_host_stale' }), 'claims'),
+    ).toMatch(/can't wake it/);
+    expect(agentNow(m({ presence: 'offline' }), 'claims')).toMatch(/can't wake it/);
+  });
+
+  it('reads an online agent as idle or busy, and as working once it has the lane', () => {
+    expect(agentNow(m({ posture: 'idle' }), 'claims')).toBe('ghost is online and has the request.');
+    expect(agentNow(m({ posture: 'working' }), 'claims')).toMatch(/busy with other work/);
+    expect(agentNow(m({}), 'hands_back')).toMatch(/working on the lane/);
+    expect(agentNow(undefined, 'claims')).toBeNull();
+  });
+
+  it('quotes the agent’s newest status_update since the step began', () => {
+    const acts = [
+      env({ from: 'ghost', act: 'status_update', body: 'old', ts: 5 }),
+      env({ from: 'ghost', act: 'status_update', body: 'reading the README', ts: 20 }),
+      env({ from: 'ghost', act: 'status_update', body: 'summarising', ts: 30 }),
+      env({ from: 'dolly', act: 'status_update', body: 'not ghost', ts: 40 }),
+      env({ from: 'ghost', act: 'message', body: 'not a status', ts: 50 }),
+    ];
+    expect(latestSaid(acts, 'ghost', 10)).toBe('summarising');
+    expect(latestSaid(acts, 'ghost', 60)).toBeNull();
   });
 });
