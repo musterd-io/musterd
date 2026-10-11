@@ -137,7 +137,7 @@
 // it prints the list as before and omits the "N of M claimable" line (both counts default to 0).
 // Epoch 32 — ADR 558 (idle-at-prompt wake, increment 2): `seam=idle` on interrupt-check, the
 // `idle_wake` residency policy key, `hearing` on the heartbeat, and `POST …/inbox/idle-wake`. A
-// daemon behind this epoch ignores `seam` (its reply carries no `seam` echo, so the adapter stays
-// deaf) and drops the policy key; an adapter behind it never injects and sends no `hearing`.
+// daemon behind this epoch ignores `seam` (its reply carries no `seam` echo, which the adapter reads
+// as silence) and drops the policy key; an adapter behind it never injects or sends `hearing`.
 export const FEATURE_EPOCH = 32 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;
