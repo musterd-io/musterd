@@ -5,6 +5,8 @@ import {
   GUIDANCE_CONTENT_VERSION,
   parseContentStamp,
   renderContentStamp,
+  renderImportFrontmatter,
+  renderImportSkill,
   renderOrientFrontmatter,
   renderOrientSkill,
   renderSelfLabelSessionFrontmatter,
@@ -39,6 +41,8 @@ import { canonicalFingerprint, type ObservedFragment } from './reconcile/fragmen
 export const CANONICAL_SKILL_PATH = '.musterd/skill/SKILL.md';
 /** Harness-neutral orient ritual (ADR 333) — Codex/OpenCode/native catalog; primer does not point here. */
 export const CANONICAL_ORIENT_PATH = '.musterd/skill/orient.md';
+/** Harness-neutral `musterd-import` skill (spec 2026-10-10 "bring work in"), beside orient. */
+export const CANONICAL_IMPORT_PATH = '.musterd/skill/import.md';
 
 const SLASH_COMMANDS = ['standup', 'handoff', 'claim'] as const;
 
@@ -152,6 +156,25 @@ function orientSkillFile(flavor: 'claude-code' | 'cursor' | 'canonical'): string
   return `${renderOrientFrontmatter()}\n\n${renderOrientSkill()}`;
 }
 
+/** The `musterd-import` skill shell (spec 2026-10-10 "bring work in"), the same three flavors as
+ *  orient: Claude/Grok frontmatter, a Cursor `.mdc` rule, and the body-only canonical file. */
+function importSkillFile(flavor: 'claude-code' | 'cursor' | 'canonical'): string {
+  if (flavor === 'canonical') return renderImportSkill();
+  if (flavor === 'cursor') {
+    return [
+      '---',
+      'description: Bring existing work onto the musterd board as goals and lanes: scan this repo or ' +
+        'its GitHub issues, write an import file, preview it with `musterd import`, and save only ' +
+        'after the human says yes.',
+      'alwaysApply: false',
+      '---',
+      '',
+      renderImportSkill(),
+    ].join('\n');
+  }
+  return `${renderImportFrontmatter()}\n\n${renderImportSkill()}`;
+}
+
 /**
  * Write the guidance surface into `dir`: the canonical `.musterd/skill/SKILL.md` always, plus the
  * skill + slash commands for each harness that declares `guidance` placement. Best-effort and
@@ -170,6 +193,7 @@ export function writeGuidance(
   writeOne(dir, CANONICAL_SKILL_PATH, skillFile('canonical', opts.team), force, written, skipped);
   // ADR 333: canonical orient ritual for harnesses with no native skill catalog.
   writeOne(dir, CANONICAL_ORIENT_PATH, orientSkillFile('canonical'), force, written, skipped);
+  writeOne(dir, CANONICAL_IMPORT_PATH, importSkillFile('canonical'), force, written, skipped);
 
   for (const h of harnesses) {
     const g = h.guidance;
@@ -189,6 +213,9 @@ export function writeGuidance(
     if (g.orientSkillPath) {
       // ADR 333: catalog on every harness that declares a native shell (Claude Code + Cursor).
       writeOne(dir, g.orientSkillPath, orientSkillFile(g.frontmatter), force, written, skipped);
+    }
+    if (g.importSkillPath) {
+      writeOne(dir, g.importSkillPath, importSkillFile(g.frontmatter), force, written, skipped);
     }
     if (g.commandsDir) {
       for (const name of SLASH_COMMANDS) {
@@ -233,13 +260,18 @@ export function establishedHarnesses(dir: string, harnesses: Harness[]): Harness
 /** Every relative path guidance *could* occupy, across the canonical location and all harnesses — the
  * removal set for uninstall and the expected set for the doctor. */
 export function guidanceTargets(harnesses: Harness[]): string[] {
-  const paths = new Set<string>([CANONICAL_SKILL_PATH, CANONICAL_ORIENT_PATH]);
+  const paths = new Set<string>([
+    CANONICAL_SKILL_PATH,
+    CANONICAL_ORIENT_PATH,
+    CANONICAL_IMPORT_PATH,
+  ]);
   for (const h of harnesses) {
     const g = h.guidance;
     if (!g) continue;
     paths.add(g.skillPath);
     if (g.selfLabelSkillPath) paths.add(g.selfLabelSkillPath);
     if (g.orientSkillPath) paths.add(g.orientSkillPath);
+    if (g.importSkillPath) paths.add(g.importSkillPath);
     if (g.commandsDir)
       for (const n of SLASH_COMMANDS) paths.add(join(g.commandsDir, `musterd-${n}.md`));
   }
@@ -275,7 +307,12 @@ export function removeGuidance(dir: string, harnesses: Harness[]): { removed: st
   const removed = removeStamped(dir, [...guidanceTargets(harnesses), ...RETIRED_GUIDANCE_PATHS]);
   // Tidy musterd-owned dirs left empty (best-effort; leave shared dirs like .claude/commands alone
   // if the user has other files there).
-  for (const rel of ['.claude/skills/musterd', '.claude/skills/musterd-orient', '.musterd/skill']) {
+  for (const rel of [
+    '.claude/skills/musterd',
+    '.claude/skills/musterd-orient',
+    '.claude/skills/musterd-import',
+    '.musterd/skill',
+  ]) {
     const abs = join(dir, rel);
     try {
       if (existsSync(abs) && readdirSync(abs).length === 0)
@@ -304,6 +341,9 @@ export function guidanceFileMap(g: HarnessGuidance, team: string): Record<string
   if (g.orientSkillPath) {
     out[g.orientSkillPath] = stamped(orientSkillFile(g.frontmatter));
   }
+  if (g.importSkillPath) {
+    out[g.importSkillPath] = stamped(importSkillFile(g.frontmatter));
+  }
   if (g.commandsDir) {
     for (const name of SLASH_COMMANDS) {
       out[join(g.commandsDir, `musterd-${name}.md`)] = stamped(renderSlashCommand(name));
@@ -317,6 +357,7 @@ export function canonicalGuidanceMap(team: string): Record<string, string> {
   return {
     [CANONICAL_SKILL_PATH]: stamped(skillFile('canonical', team)),
     [CANONICAL_ORIENT_PATH]: stamped(orientSkillFile('canonical')),
+    [CANONICAL_IMPORT_PATH]: stamped(importSkillFile('canonical')),
   };
 }
 

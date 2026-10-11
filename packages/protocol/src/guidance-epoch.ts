@@ -21,9 +21,11 @@ export const GUIDANCE_INSTALL_PATHS: readonly string[] = [
   // Canonical — written for every harness, including those with no native mechanism.
   '.musterd/skill/SKILL.md',
   '.musterd/skill/orient.md',
+  '.musterd/skill/import.md',
   // Claude Code
   '.claude/skills/musterd/SKILL.md',
   '.claude/skills/musterd-orient/SKILL.md',
+  '.claude/skills/musterd-import/SKILL.md',
   '.claude/commands/musterd-standup.md',
   '.claude/commands/musterd-handoff.md',
   '.claude/commands/musterd-claim.md',
@@ -31,12 +33,14 @@ export const GUIDANCE_INSTALL_PATHS: readonly string[] = [
   '.cursor/rules/musterd.mdc',
   '.cursor/rules/musterd-label-session.mdc',
   '.cursor/rules/musterd-orient.mdc',
+  '.cursor/rules/musterd-import.mdc',
   '.cursor/commands/musterd-standup.md',
   '.cursor/commands/musterd-handoff.md',
   '.cursor/commands/musterd-claim.md',
   // Grok
   '.grok/skills/musterd/SKILL.md',
   '.grok/skills/musterd-orient/SKILL.md',
+  '.grok/skills/musterd-import/SKILL.md',
   '.grok/commands/musterd-standup.md',
   '.grok/commands/musterd-handoff.md',
   '.grok/commands/musterd-claim.md',

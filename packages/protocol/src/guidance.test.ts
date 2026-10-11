@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   GUIDANCE_CONTENT_VERSION,
+  renderImportFrontmatter,
+  renderImportSkill,
   renderOrientFrontmatter,
   renderOrientSkill,
   GUIDANCE_STAMP_PREFIX,
@@ -158,6 +160,7 @@ describe('the wall (ADR 442): guidance never reaches another session', () => {
     renderSkillBody({ team: 'dawn' }),
     renderSelfLabelSessionSkill(),
     renderOrientSkill(),
+    renderImportSkill(),
     renderSlashCommand('standup'),
     renderSlashCommand('handoff'),
     renderSlashCommand('claim'),
@@ -230,6 +233,7 @@ describe('version-bump discipline (ADR 085)', () => {
     44: 'b00114dc9d56316b', // ADR 514 (lane 01M46MQD2F): the push-back bullet names the style block that will carry each human's dials from team_join; the bullet itself leaves in agent-style inc 3
     45: '51712f8b3f289f85', // ADR 514 inc 3 (lane 01M46MQQFS): the push-back bullet leaves — the style block on team_join carries the floor and each human's dials; the primer points at it
     46: 'd1324abe1740c3da', // lane 01M46S44K8 (ADR 259/516): the skill says harness memory holds facts about the human, never team facts or rules — a rule no hold carries is not a rule
+    47: '0f0eefd223371a7f', // + musterd-import skill unit + a pointer to it in the main skill (spec 2026-10-10 "bring work in", lane 01M4FDBSN8)
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {
@@ -244,6 +248,8 @@ describe('version-bump discipline (ADR 085)', () => {
       renderSelfLabelSessionFrontmatter(),
       renderOrientSkill(),
       renderOrientFrontmatter(),
+      renderImportSkill(),
+      renderImportFrontmatter(),
     ].join('\n---\n');
     const hash = createHash('sha256').update(rendered).digest('hex').slice(0, 16);
     expect(SNAPSHOTS[GUIDANCE_CONTENT_VERSION]).toBeDefined();
@@ -370,5 +376,50 @@ describe('the channel rule (lane 01M2RP18EV)', () => {
     // can no longer bake an identity that disagrees with `.musterd/binding.json`.
     expect(body).not.toMatch(/resolve to a different identity/i);
     expect(body).not.toMatch(/two identities/i);
+  });
+});
+
+describe('musterd-import skill (spec 2026-10-10 "bring work in")', () => {
+  const skill = renderImportSkill();
+
+  it('makes the save a human checkpoint', () => {
+    expect(skill).toContain('`musterd import save <id>` only after the human says yes');
+    expect(skill).toMatch(/never save an import you previewed yourself\s+without that yes/);
+  });
+
+  it('names both sources, the cap and the fallback when gh is missing', () => {
+    expect(skill).toContain('gh issue list --state open');
+    expect(skill).toMatch(/about 5 goals and 30 lanes/);
+    expect(skill).toMatch(
+      /If `gh` is missing or not signed in, say so and continue with the repo scan/,
+    );
+  });
+
+  it('names the file columns', () => {
+    for (const col of [
+      'kind',
+      'key',
+      'title',
+      'detail',
+      'story',
+      'goal',
+      'depends_on',
+      'stakes',
+      'source_ref',
+    ]) {
+      expect(skill).toContain(`\`${col}\``);
+    }
+  });
+
+  it('has frontmatter named musterd-import', () => {
+    expect(renderImportFrontmatter()).toMatch(/^---\nname: musterd-import\ndescription: /);
+  });
+});
+
+describe('the main skill points at musterd-import (review finding: Codex/opencode have no native shell)', () => {
+  it('names the canonical import skill file so every harness can find it', () => {
+    const body = renderSkillBody({ team: 'dawn' });
+    expect(body).toContain('`.musterd/skill/import.md`');
+    expect(body).toMatch(/bring existing work in/i);
   });
 });

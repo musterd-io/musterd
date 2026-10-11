@@ -181,7 +181,7 @@ src/
     reconcile/fragments.ts // the fragment adapter contract (ADR 281/282): HarnessAdapter/FragmentIntent types, canonical SHA-256 fingerprints, scope-discriminated resource keys, registry order
     reconcile/engine.ts  // inspectHarnesses (read-only) + reconcileHarnesses: the frozen action matrix, write-ahead journal sequence, fingerprint-compared recovery, one allowlisted musterd.provisioning.operation span per fragment (ADR 282/286)
     harnesses/musterd.ts // the native musterd adapter (always available, Surface musterd, zero external fragments) + the internal musterd-core guidance fragment producer
-    guidance.ts       // writeGuidance/removeGuidance: skill + slash-command files per harness, content-stamped (ADR 085); always writes canonical `.musterd/skill/orient.md` (ADR 333)
+    guidance.ts       // writeGuidance/removeGuidance: skill + slash-command files per harness, content-stamped (ADR 085); always writes canonical `.musterd/skill/orient.md` (ADR 333) and `.musterd/skill/import.md` (the musterd-import skill, spec 2026-10-10 "bring work in"; native copies beside orient on Claude Code, Cursor, Grok)
     pending.ts        // client-side pending-presence markers (ADR 033)
     permissions.ts    // ADR 261: STANDARD_FLOOR + installSeatPermissions — the harness permission layer becomes a provisioned artifact; liftSeatPermissions (inc 2 reversal, lane 01M3TAM44Q): a removed role's deny/ask entries come out unless a still-held role compiles them too; allow is never touched
     primer.ts         // renderRepositoryPrimer + idempotent upsertPrimer → Team-only AGENTS.md primer (ADR 307)
@@ -200,6 +200,13 @@ src/
   archaeology/        // wasted-work collector (ADR 123 predicates): cookoff `all` population, or live-repo `pulls` = main + PR heads, per PR (ADR 462)
     engine.ts         // pure predicate-set-v1 classifier: W3 dup → W1 abandoned → W2 clobbered → W4 churn
     git.ts            // RepoFacts extractor over git plumbing; actor identity = ADR 109 attribution
+  import/             // `musterd import` (spec 2026-10-10 "bring work in"): file → board check → stage → resumable save; no protocol change
+    csv.ts            // hand-written RFC 4180 reader (quotes, "" escapes, CRLF, BOM) — no dependency (hard rule 6)
+    rows.ts           // CSV/JSONL → ImportRow[] through a CLI-local zod schema (hard rule 4; not a wire schema); row-local errors drop the row, warnings keep it
+    check.ts          // rows vs the live board: goals that exist are linked, never re-declared (re-declare amends); deps resolve to file keys or board lanes in any state; cycles; likely duplicates; creation order (stable topo)
+    stage.ts          // .musterd/imports/<id>.json: what step 1 previewed + the `created` resume map; `ensureImportsDir` writes the folder's own .gitignore (`*`) before anything can fail — .musterd/ is not wholly ignored (ADR 058); atomic writes
+    save.ts           // step 2: refusals (errors / saved / other team / >24h unless already started), one more goals read so a goal that appeared since the preview is linked not re-declared, then goals → lanes through a port HttpClient fits, persisting each new id before the next call; a failure says how to resume
+    render.ts         // preview (goals → lanes, linked goals, no-goal lanes, diagnostics, the one next step), save result, list
   commands/
     init.ts           // musterd init (delegates to onboard/init.ts); --check → onboard/doctor.ts drift report; --check --fix → restore agent_key for traced-key drift then re-check, `wire` for entry drift, full init otherwise (ADR 165)
     wire.ts           // musterd wire: headless fragment reconcile, plus --migrate-bootstrap atomic replacement of a Workspace's legacy Team key while Presence stays occupied (ADR 080/282/350)
@@ -228,6 +235,7 @@ src/
     fmt.ts            // musterd fmt [--check] — canonicalize .musterd roster files: team + seats + roles (ADR 058 guard 2)
     send.ts           // send
     huddle.ts         // huddle open/say/close/show/room (show --trace reads GET /huddles/:id/trace, ADR 493; room opens the board in Squig through the whiteboard's token-gated API and the browser, ADR 537) — a huddle is a thread: meta.huddle on the root, turns in the thread, resolve names the anchor; lays the whiteboard room out best-effort, never spawns it (ADR 378)
+    import.ts         // `musterd import <file>` (check + preview + stage, exit 1 on errors) | `save <id>` (resumable) | `list` — spec 2026-10-10 "bring work in"; save goes through HttpClient.declareGoal/openLane, no protocol change
     inbox.ts          // inbox [--watch] [--wait] [--limit <n>] — bounded recent window + day-grouped smart dates, always-show-unread (ADR 054/117)
     nudge.ts          // `inbox --waiting`: the waiting-acts banner + the acts behind it, read-only — the approval-prompt hook target (ADR 053); `musterd nudge` is the hidden pre-2026-09-03 alias
     reap.ts           // musterd reap [--yes] (ADR 242): list orphaned MCP sidecars from the daemon's footprint tick; --yes asks the daemon to kill them (re-verified server-side, audited)

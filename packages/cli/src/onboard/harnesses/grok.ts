@@ -406,6 +406,7 @@ export const grok: Harness = {
     frontmatter: 'claude-code',
     commandsDir: '.grok/commands',
     orientSkillPath: '.grok/skills/musterd-orient/SKILL.md',
+    importSkillPath: '.grok/skills/musterd-import/SKILL.md',
   },
 
   observeModel: (payload) => {

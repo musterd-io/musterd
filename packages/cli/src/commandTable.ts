@@ -30,6 +30,7 @@ export const COMMANDS: Readonly<Record<string, () => Promise<CommandFn>>> = {
   hold: async () => (await import('./commands/hold.js')).holdCommand,
   host: async () => (await import('./commands/host.js')).hostCommand,
   huddle: async () => (await import('./commands/huddle.js')).huddleCommand,
+  import: async () => (await import('./commands/import.js')).importCommand,
   human: async () => (await import('./commands/human.js')).humanCommand,
   inbox: async () => (await import('./commands/inbox.js')).inboxCommand,
   init: async () => (await import('./commands/init.js')).initCommand,
