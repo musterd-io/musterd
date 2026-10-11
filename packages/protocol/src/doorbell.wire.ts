@@ -61,8 +61,8 @@ export interface IdleRingInput {
   act: string;
   from: string;
   to: { kind: string; name?: string };
-  meta?: Record<string, unknown> | null;
-  thread?: string | null;
+  meta?: Record<string, unknown> | null | undefined;
+  thread?: string | null | undefined;
 }
 
 /**

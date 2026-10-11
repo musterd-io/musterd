@@ -117,6 +117,8 @@ import {
   GovernedPolicySchema,
   GovernedPolicyReadResponseSchema,
   HarnessIdSchema,
+  IdleWakeReportSchema,
+  InterruptSeamSchema,
   WIRE_ATTESTATION_SOURCES,
   SyncTracePushRequestSchema,
   SyncTracePushResponseSchema,
@@ -7760,12 +7762,32 @@ export async function handleHttp(
         }
         const { team, member } = auth;
         assertSeatCanRead(member);
+        // ADR 558: which seam asked. Unparseable → the boundary seam, never a 400: the bell must
+        // not fail on a caller's typo (the ADR 423 `rail` rule). The idle seam is the MCP adapter
+        // asking for a session idle at its prompt; it adds the plain directed acts and honours the
+        // `idle_wake` switch, and every reply it gets echoes `seam` so an adapter can tell this
+        // daemon from one that predates the seam (and ignored it).
+        const seamParsed = InterruptSeamSchema.safeParse(
+          url.searchParams.get('seam') ?? 'boundary',
+        );
+        const seam = seamParsed.success ? seamParsed.data : 'boundary';
+        const idle = seam === 'idle';
+        if (idle) {
+          const enrollment = await getResidency(ctx.db, team.id, member.id);
+          const effective = effectiveWakePolicy(
+            seatWakeDefaults(await getPolicy(ctx.db, team.id), member),
+            enrollment?.policy ?? null,
+          );
+          if (!effective.idle_wake)
+            return sendJson(res, 200, { raised: false, idle_wake: false, seam });
+        }
         const cursor = await getCursor(ctx.db, member.id);
         // Only the shapes the fold can use (see `listInterruptCandidates`): this route runs at every
         // tool boundary of every live agent, so it must not carry the seat's whole unread window back
         // into V8 to discover that nothing is raised.
         const rows = await listInterruptCandidates(ctx.db, member, {
           cursorTs: cursor.last_read_ts,
+          ...(idle ? { directed: true } : {}),
         });
         const messages = await rowsToEnvelopes(ctx.db, team.slug, rows);
         // obligations: true — this is the live rail (ADR 225). A routed acceptance belongs on it and
@@ -7773,9 +7795,11 @@ export async function handleHttp(
         const pending = pendingInterrupts(messages, member.name, {
           obligations: true,
           huddles: true,
+          directed: idle,
         });
         recordInterruptCheck(pending.length > 0 ? 'raised' : 'silent');
-        if (pending.length === 0) return sendJson(res, 200, { raised: false });
+        if (pending.length === 0)
+          return sendJson(res, 200, idle ? { raised: false, seam } : { raised: false });
         // Headline by class, not recency (ADR 225 amendment): the wake queue's newest-first order
         // is not the notice's — see `headlineInterrupt`.
         const { latest, huddleTopic, rest } = headlineInterrupt(pending, messages);
@@ -7814,6 +7838,8 @@ export async function handleHttp(
               count: pending.length,
               line,
               rail,
+              // Only on the idle seam, so a boundary row stays byte-identical to a pre-558 one.
+              ...(idle ? { seam } : {}),
             },
           });
         }
@@ -7822,7 +7848,34 @@ export async function handleHttp(
           line,
           count: pending.length,
           act: { id: latest.id, from: latest.from, act: latest.act },
+          ...(idle ? { seam } : {}),
         });
+      }
+
+      // ADR 558 §7: the idle-wake outcome report. The adapter posts one per inject attempt and per
+      // capped ring, with x-musterd-no-touch — injecting is presence-neutral (spec §2), and so is
+      // saying it happened. Structured fields only: the schema is strict and has no field for the
+      // line, so a report can never carry an act's body into the audit log.
+      if (method === 'POST' && rest === '/inbox/idle-wake') {
+        const { team, member } = await authTouch(ctx, slug, req);
+        assertSeatCanRead(member);
+        const body = parseOrBadRequest(IdleWakeReportSchema, await readJson(req));
+        await appendAudit(ctx.db, team.id, {
+          actor: member.name,
+          action: body.outcome === 'capped' ? 'idle_wake.capped' : 'idle_wake.injected',
+          target: member.name,
+          result: 'allow',
+          detail:
+            body.outcome === 'capped'
+              ? { act: body.act, harness: body.harness, cap: body.cap ?? null }
+              : {
+                  act: body.act,
+                  harness: body.harness,
+                  ok: body.outcome === 'injected',
+                  reason: body.reason ?? null,
+                },
+        });
+        return sendJson(res, 200, { ok: true });
       }
 
       if (method === 'GET' && rest === '/inbox') {

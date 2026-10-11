@@ -25,7 +25,12 @@ describe('idle-wake shapes (ADR 558)', () => {
   it('the local state file parses empty and keeps markers', () => {
     expect(IdleWakeStateSchema.parse({})).toEqual({});
     expect(
-      IdleWakeStateSchema.parse({ session_id: 's', last_prompt_at: 1, last_stop_at: 2, switch: 'off' }),
+      IdleWakeStateSchema.parse({
+        session_id: 's',
+        last_prompt_at: 1,
+        last_stop_at: 2,
+        switch: 'off',
+      }),
     ).toMatchObject({ switch: 'off' });
   });
 });
