@@ -1,6 +1,6 @@
 import type { Envelope } from '@musterd/protocol';
 import { advance, initialState, type TourState } from './machine.js';
-import { hintFor, stepBody, stepTitle, type TourVars } from './screens.js';
+import { hintFor, printable, stepBody, stepTitle, type TourVars } from './screens.js';
 import { fill, TOUR_LANE_TITLE, TOUR_MESSAGES, TOUR_REQUEST } from './script.generated.js';
 
 /**
@@ -56,6 +56,13 @@ export async function runTour(
   opts: { reset: boolean; pollMs: number },
 ): Promise<number> {
   const roster = await port.roster();
+  // The verdict must come from a person. The daemon does not check that the member answering an
+  // acceptance ask is the one it was routed to, and `musterd init` binds the project folder to the
+  // agent's seat — so run from there, the tour would have the agent accept its own work.
+  if (roster.find((m) => m.name === me)?.kind !== 'human') {
+    ui.hint(fill(TOUR_MESSAGES.notHuman, { me }));
+    return 2;
+  }
   const agents = roster.filter((m) => m.kind === 'agent' && m.name !== me);
   const title = fill(TOUR_LANE_TITLE, { you: me });
 
@@ -113,14 +120,16 @@ export async function runTour(
     }
 
     if (state.step === 'claims' && state.outcome === 'declined') {
-      ui.hint(`${fill(TOUR_MESSAGES.declined, vars)} ${state.declineReason ?? ''}`.trim());
+      ui.hint(
+        `${fill(TOUR_MESSAGES.declined, vars)} ${printable(state.declineReason ?? '')}`.trim(),
+      );
       if ((await ui.afterDecline(state.declineReason ?? '')) === 'quit') return stop(ui);
       state = advance(state, { type: 'skip_to_record' });
       continue;
     }
 
     if (state.step === 'judge' && state.askId) {
-      const verdict = await ui.judge(await port.laneDetail(vars.lane));
+      const verdict = await ui.judge(printable(await port.laneDetail(vars.lane)));
       if (!verdict) return stop(ui);
       await port.verdict(state.askId, verdict.accept, verdict.note);
       state = advance(state, { type: 'verdict', accept: verdict.accept });

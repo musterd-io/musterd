@@ -157,6 +157,8 @@ export const TOUR_STEPS: readonly TourStep[] = [
 ];
 
 export const TOUR_MESSAGES = {
+  notHuman:
+    'The tour runs as you, and this folder acts as {me}, an agent. Make yourself a workspace with musterd human <your-name>, then run musterd tour there.',
   noAgent:
     'No agent on your team yet. Open your agent in this folder, or add one: musterd agent <name>',
   pickAgent: 'Which agent should take the tour lane?',

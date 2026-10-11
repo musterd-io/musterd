@@ -56,3 +56,13 @@ export function hintFor(id: TourStepId, elapsedMs: number, v: TourVars): string 
   const last = due[due.length - 1];
   return last ? fill(last.text, { you: v.you, agent: v.agent, lane: v.lane }) : null;
 }
+
+/**
+ * What an agent wrote (the lane summary, a decline reason), made safe to print: every control
+ * character except newline and tab is dropped, so an escape sequence cannot clear the screen, retitle
+ * the terminal or forge the tour's own lines.
+ */
+export function printable(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, '');
+}

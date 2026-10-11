@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { initialState, type TourState } from './machine.js';
-import { hintFor, stepBody, stepTitle, verdictLine } from './screens.js';
+import { hintFor, printable, stepBody, stepTitle, verdictLine } from './screens.js';
 
 const v = { you: 'nick', agent: 'ada', lane: '01M4TOUR01', model: 'claude-opus-5-5' };
 const at = (step: TourState['step'], extra: Partial<TourState> = {}): TourState => ({
@@ -64,5 +64,11 @@ describe('cmd/tour frames', () => {
       "Still waiting. Switch to ada's window and say: check your inbox.",
     );
     expect(hintFor('claims', 181_000, v)).toMatch(/^ada can take a few minutes to wake\./);
+  });
+});
+
+describe('printable', () => {
+  it('keeps newlines and tabs, drops every other control character', () => {
+    expect(printable('a\tb\nc\x1b[31md\x07\x9be\r')).toBe('a\tb\nc[31mde');
   });
 });

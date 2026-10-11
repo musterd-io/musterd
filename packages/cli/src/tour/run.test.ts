@@ -127,6 +127,25 @@ describe('runTour', () => {
     expect(f.hints[0]).toMatch(/^No agent on your team yet\./);
   });
 
+  it('refuses to run as an agent: the verdict must come from a person', async () => {
+    const f = fakes({});
+    expect(await runTour(f.port, f.ui, 'ada', opts)).toBe(2);
+    expect(f.calls).toEqual([]);
+    expect(f.hints[0]).toMatch(/^The tour runs as you, and this folder acts as ada, an agent\./);
+  });
+
+  it('strips terminal control sequences from what the agent wrote', async () => {
+    const f = fakes({ acts: [claim, ask] });
+    f.port.laneDetail = async () => 'line one\x1b[2J\x1b]0;pwned\x07\nline two';
+    let judged = '';
+    f.ui.judge = async (summary) => {
+      judged = summary;
+      return { accept: true, note: '' };
+    };
+    await runTour(f.port, f.ui, 'nick', opts);
+    expect(judged).toBe('line one[2J]0;pwned\nline two');
+  });
+
   it('more than one agent: asks which one', async () => {
     const f = fakes({
       acts: [act({ ...claim, from: 'bo' }), act({ ...ask, from: 'bo' })],
