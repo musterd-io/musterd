@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createRequire } from 'node:module';
 import { McpServer, createMcpHandler, type McpHttpHandler } from '@modelcontextprotocol/server';
@@ -5,7 +6,7 @@ import { ACTS, ActSchema, makeEnvelope, type Act, type Recipient } from '@muster
 import { ulid } from 'ulid';
 import { z } from 'zod';
 import { teamCtx, type Ctx } from '../context.js';
-import { asMusterdError, MusterdError } from '../errors.js';
+import { asMusterdHttpError, MusterdError } from '../errors.js';
 import { noteRequestFailure } from '../log.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { getCursor } from '../store/cursors.js';
@@ -41,6 +42,7 @@ import { issueAgentConnect, mintSponsoredAgent, originFrom } from './sponsoredAg
  */
 
 const handlers = new Map<string, McpHttpHandler>();
+const requestResponse = new AsyncLocalStorage<ServerResponse>();
 
 /**
  * Bridge a zod-v3 object schema to what SDK 2.0.0's `registerTool` accepts: the Standard Schema
@@ -89,6 +91,23 @@ function textResult(text: string) {
 
 function toolError(text: string) {
   return { content: [{ type: 'text' as const, text }], isError: true as const };
+}
+
+function remoteToolError(err: unknown, includeCode = false) {
+  const me = asMusterdHttpError(err);
+  if (me.httpStatus >= 500) {
+    const res = requestResponse.getStore();
+    if (res) noteRequestFailure(res, err);
+  }
+  return toolError(includeCode ? `${me.code}: ${me.message}` : me.message);
+}
+
+async function withRemoteToolErrors<T>(run: () => Promise<T>) {
+  try {
+    return await run();
+  } catch (err) {
+    return remoteToolError(err);
+  }
 }
 
 /** The audience parser, mirroring the adapter's `normalizeTo` (same rules, no shared import). */
@@ -187,39 +206,40 @@ async function buildRemoteServer(ctx: Ctx, webReq: Request): Promise<McpServer> 
         },
       }),
     },
-    async (rawArgs: unknown) => {
-      const parsed = TeamInboxInput.safeParse(rawArgs ?? {});
-      if (!parsed.success)
-        return toolError('invalid input: ids (string|string[]) | limit | unread_only');
-      const args = parsed.data;
-      const member = await getMemberByName(ctx.db, team.id, memberName);
-      if (!member) return toolError('seat is gone — sign in again');
-      if (args.ids !== undefined) {
-        const ids = (Array.isArray(args.ids) ? args.ids : args.ids.split(',')).filter(
-          (s) => s.length > 0,
-        );
-        const rows = await listInbox(ctx.db, member, { ids });
+    (rawArgs: unknown) =>
+      withRemoteToolErrors(async () => {
+        const parsed = TeamInboxInput.safeParse(rawArgs ?? {});
+        if (!parsed.success)
+          return toolError('invalid input: ids (string|string[]) | limit | unread_only');
+        const args = parsed.data;
+        const member = await getMemberByName(ctx.db, team.id, memberName);
+        if (!member) return toolError('seat is gone — sign in again');
+        if (args.ids !== undefined) {
+          const ids = (Array.isArray(args.ids) ? args.ids : args.ids.split(',')).filter(
+            (s) => s.length > 0,
+          );
+          const rows = await listInbox(ctx.db, member, { ids });
+          return textResult(
+            JSON.stringify({
+              messages: await rowsToEnvelopes(ctx.db, slug, rows),
+              cursor: await getCursor(ctx.db, member.id),
+            }),
+          );
+        }
+        const cursor = await getCursor(ctx.db, member.id);
+        const rows = await listInbox(ctx.db, member, {
+          unreadOnly: args.unread_only ?? false,
+          cursorTs: cursor.last_read_ts,
+          cursorId: cursor.last_read_message_id,
+          ...(args.limit ? { limit: args.limit } : { headLimit: 200 }),
+        });
         return textResult(
           JSON.stringify({
             messages: await rowsToEnvelopes(ctx.db, slug, rows),
             cursor: await getCursor(ctx.db, member.id),
           }),
         );
-      }
-      const cursor = await getCursor(ctx.db, member.id);
-      const rows = await listInbox(ctx.db, member, {
-        unreadOnly: args.unread_only ?? false,
-        cursorTs: cursor.last_read_ts,
-        cursorId: cursor.last_read_message_id,
-        ...(args.limit ? { limit: args.limit } : { headLimit: 200 }),
-      });
-      return textResult(
-        JSON.stringify({
-          messages: await rowsToEnvelopes(ctx.db, slug, rows),
-          cursor: await getCursor(ctx.db, member.id),
-        }),
-      );
-    },
+      }),
   );
 
   // ADR 449 §3: a human member creates an agent they sponsor — the same mint as
@@ -241,32 +261,33 @@ async function buildRemoteServer(ctx: Ctx, webReq: Request): Promise<McpServer> 
         },
       }),
     },
-    async (rawArgs: unknown) => {
-      const parsed = TeamAgentCreateInput.safeParse(rawArgs ?? {});
-      if (!parsed.success) return toolError('invalid input: name | role?');
-      const sponsor = await getMemberByName(ctx.db, team.id, memberName);
-      if (!sponsor) return toolError('seat is gone — sign in again');
-      try {
-        const origin = originFrom(
-          webReq.headers.get('host'),
-          webReq.headers.get('x-forwarded-proto'),
-        );
-        const minted = await mintSponsoredAgent(ctx, team, sponsor, parsed.data, origin);
-        // ADR 463 §2: lead with whichever happened — the sponsor's host is standing it up, or
-        // here is the link to open on the device that will run it.
-        return textResult(
-          minted.hosting === 'sponsor_host'
-            ? `Created agent "${minted.member.name}" on ${slug}, sponsored by you. The team has been told.\n` +
-                `Your host ${minted.host} is setting it up; it will greet you shortly. ` +
-                "(If it doesn't within 15 minutes you'll get a connect link.)"
-            : `Created agent "${minted.member.name}" on ${slug}, sponsored by you. The team has been told.\n` +
-                `Open this link on the device that will run it (expires in 15 minutes, works once):\n` +
-                `${minted.connect_url}`,
-        );
-      } catch (err) {
-        return toolError(asMusterdError(err).message);
-      }
-    },
+    (rawArgs: unknown) =>
+      withRemoteToolErrors(async () => {
+        const parsed = TeamAgentCreateInput.safeParse(rawArgs ?? {});
+        if (!parsed.success) return toolError('invalid input: name | role?');
+        const sponsor = await getMemberByName(ctx.db, team.id, memberName);
+        if (!sponsor) return toolError('seat is gone — sign in again');
+        try {
+          const origin = originFrom(
+            webReq.headers.get('host'),
+            webReq.headers.get('x-forwarded-proto'),
+          );
+          const minted = await mintSponsoredAgent(ctx, team, sponsor, parsed.data, origin);
+          // ADR 463 §2: lead with whichever happened — the sponsor's host is standing it up, or
+          // here is the link to open on the device that will run it.
+          return textResult(
+            minted.hosting === 'sponsor_host'
+              ? `Created agent "${minted.member.name}" on ${slug}, sponsored by you. The team has been told.\n` +
+                  `Your host ${minted.host} is setting it up; it will greet you shortly. ` +
+                  "(If it doesn't within 15 minutes you'll get a connect link.)"
+              : `Created agent "${minted.member.name}" on ${slug}, sponsored by you. The team has been told.\n` +
+                  `Open this link on the device that will run it (expires in 15 minutes, works once):\n` +
+                  `${minted.connect_url}`,
+          );
+        } catch (err) {
+          return remoteToolError(err);
+        }
+      }),
   );
 
   // ADR 456 §2: a teammate starts a team agent from their phone — the same issue path as
@@ -284,25 +305,26 @@ async function buildRemoteServer(ctx: Ctx, webReq: Request): Promise<McpServer> 
         properties: { name: { type: 'string', description: "the agent's member name" } },
       }),
     },
-    async (rawArgs: unknown) => {
-      const parsed = TeamAgentConnectInput.safeParse(rawArgs ?? {});
-      if (!parsed.success) return toolError('invalid input: name');
-      const caller = await getMemberByName(ctx.db, team.id, memberName);
-      if (!caller) return toolError('seat is gone — sign in again');
-      try {
-        const origin = originFrom(
-          webReq.headers.get('host'),
-          webReq.headers.get('x-forwarded-proto'),
-        );
-        const issued = await issueAgentConnect(ctx, team, caller, parsed.data.name, origin);
-        return textResult(
-          `Connect link for "${issued.member}" (expires in 15 minutes, works once):\n` +
-            `${issued.connect_url}`,
-        );
-      } catch (err) {
-        return toolError(asMusterdError(err).message);
-      }
-    },
+    (rawArgs: unknown) =>
+      withRemoteToolErrors(async () => {
+        const parsed = TeamAgentConnectInput.safeParse(rawArgs ?? {});
+        if (!parsed.success) return toolError('invalid input: name');
+        const caller = await getMemberByName(ctx.db, team.id, memberName);
+        if (!caller) return toolError('seat is gone — sign in again');
+        try {
+          const origin = originFrom(
+            webReq.headers.get('host'),
+            webReq.headers.get('x-forwarded-proto'),
+          );
+          const issued = await issueAgentConnect(ctx, team, caller, parsed.data.name, origin);
+          return textResult(
+            `Connect link for "${issued.member}" (expires in 15 minutes, works once):\n` +
+              `${issued.connect_url}`,
+          );
+        } catch (err) {
+          return remoteToolError(err);
+        }
+      }),
   );
 
   server.registerTool(
@@ -326,55 +348,55 @@ async function buildRemoteServer(ctx: Ctx, webReq: Request): Promise<McpServer> 
         },
       }),
     },
-    async (rawArgs: unknown) => {
-      const parsed = TeamSendInput.safeParse(rawArgs ?? {});
-      if (!parsed.success)
-        return toolError('invalid input: to | act | body | thread? | reply_to? | meta?');
-      const args = parsed.data;
-      const parsedAct = ActSchema.safeParse(args.act);
-      if (!parsedAct.success) return toolError(`unknown act "${args.act}"`);
-      const act = parsedAct.data;
-      let addressed: { to: Recipient; eligible: string[] | null };
-      try {
-        addressed = parseRecipient(args.to, act);
-      } catch (err) {
-        return toolError(err instanceof Error ? err.message : String(err));
-      }
-      const member = await getMemberByName(ctx.db, team.id, memberName);
-      if (!member) return toolError('seat is gone — sign in again');
-      const meta: Record<string, unknown> = { ...(args.meta ?? {}) };
-      if (args.reply_to) meta['in_reply_to'] = args.reply_to;
-      if (addressed.eligible) meta['eligible'] = addressed.eligible;
-      try {
-        const envelope = makeEnvelope({
-          id: ulid(),
-          team: slug,
-          from: memberName,
-          to: addressed.to,
-          act,
-          body: args.body,
-          thread: args.thread ?? null,
-          meta: Object.keys(meta).length > 0 ? meta : null,
-        });
-        // The ONE validate+persist+deliver path (routeEnvelope) — a remote send is a send.
-        // No sender occupancy id by design (stateless, like POST /messages): the model stamp
-        // falls back to the member's newest attested presence.
-        const result = await routeEnvelope(ctx, team, member, envelope);
-        return textResult(
-          JSON.stringify({
-            sent: envelope.id,
-            ...(result.handoff_lane ? { handoff_lane: result.handoff_lane } : {}),
-            ...(result.lane_verdict ? { lane_verdict: result.lane_verdict } : {}),
-            ...(result.lane_escalation ? { lane_escalation: result.lane_escalation } : {}),
-            ...(result.lane_ack ? { lane_ack: result.lane_ack } : {}),
-            ...(result.lane_superseded ? { lane_superseded: result.lane_superseded } : {}),
-          }),
-        );
-      } catch (err) {
-        const me = asMusterdError(err);
-        return toolError(`${me.code}: ${me.message}`);
-      }
-    },
+    (rawArgs: unknown) =>
+      withRemoteToolErrors(async () => {
+        const parsed = TeamSendInput.safeParse(rawArgs ?? {});
+        if (!parsed.success)
+          return toolError('invalid input: to | act | body | thread? | reply_to? | meta?');
+        const args = parsed.data;
+        const parsedAct = ActSchema.safeParse(args.act);
+        if (!parsedAct.success) return toolError(`unknown act "${args.act}"`);
+        const act = parsedAct.data;
+        let addressed: { to: Recipient; eligible: string[] | null };
+        try {
+          addressed = parseRecipient(args.to, act);
+        } catch (err) {
+          return toolError(asMusterdHttpError(err).message);
+        }
+        const member = await getMemberByName(ctx.db, team.id, memberName);
+        if (!member) return toolError('seat is gone — sign in again');
+        const meta: Record<string, unknown> = { ...(args.meta ?? {}) };
+        if (args.reply_to) meta['in_reply_to'] = args.reply_to;
+        if (addressed.eligible) meta['eligible'] = addressed.eligible;
+        try {
+          const envelope = makeEnvelope({
+            id: ulid(),
+            team: slug,
+            from: memberName,
+            to: addressed.to,
+            act,
+            body: args.body,
+            thread: args.thread ?? null,
+            meta: Object.keys(meta).length > 0 ? meta : null,
+          });
+          // The ONE validate+persist+deliver path (routeEnvelope) — a remote send is a send.
+          // No sender occupancy id by design (stateless, like POST /messages): the model stamp
+          // falls back to the member's newest attested presence.
+          const result = await routeEnvelope(ctx, team, member, envelope);
+          return textResult(
+            JSON.stringify({
+              sent: envelope.id,
+              ...(result.handoff_lane ? { handoff_lane: result.handoff_lane } : {}),
+              ...(result.lane_verdict ? { lane_verdict: result.lane_verdict } : {}),
+              ...(result.lane_escalation ? { lane_escalation: result.lane_escalation } : {}),
+              ...(result.lane_ack ? { lane_ack: result.lane_ack } : {}),
+              ...(result.lane_superseded ? { lane_superseded: result.lane_superseded } : {}),
+            }),
+          );
+        } catch (err) {
+          return remoteToolError(err, true);
+        }
+      }),
   );
 
   return server;
@@ -545,7 +567,7 @@ export async function handleMcpRoute(
     memberName = auth.member.name;
     memberId = auth.member.id;
   } catch (err) {
-    const me = asMusterdError(err);
+    const me = asMusterdHttpError(err);
     if (me.httpStatus >= 500) noteRequestFailure(res, err);
     // RFC 6750 §3: an invalid/expired/revoked bearer 401s as invalid_token. The description
     // stays out of the header — the body already says it, and the header must not become an
@@ -574,10 +596,12 @@ export async function handleMcpRoute(
   }
   try {
     const webReq = await toWebRequest(req, path, url, { team: slug, member: memberName });
-    const webRes = await (await getHandler(ctx, slug)).fetch(webReq);
+    const webRes = await requestResponse.run(res, async () =>
+      (await getHandler(ctx, slug)).fetch(webReq),
+    );
     await sendWebResponse(res, webRes);
   } catch (err) {
-    const me = asMusterdError(err);
+    const me = asMusterdHttpError(err);
     if (me.httpStatus >= 500) noteRequestFailure(res, err);
     // A factory throw means the seat vanished mid-request; anything else is a 500 with no secret.
     if (!res.headersSent) {
