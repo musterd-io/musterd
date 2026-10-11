@@ -248,3 +248,14 @@ describe('a way in with nothing waiting (nick, 2026-10-10)', () => {
     expect(html).not.toContain('Sign in as');
   });
 });
+
+describe('every human seat this machine holds (ADR 557)', () => {
+  it('offers "Sign in as" for each of them, signed out', () => {
+    const observer = { as: 'obs-quiet-otter', team: 'revive' } as unknown as LiveConfig;
+    const html = renderToStaticMarkup(
+      createElement(AsksStrip, { envelopes: [], roster, cfg: observer, localIdentity: 'nick', localIdentities: ['nick', 'Ada'] }),
+    );
+    expect(html).toContain('Sign in as nick');
+    expect(html).toContain('Sign in as Ada');
+  });
+});

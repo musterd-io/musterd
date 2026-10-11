@@ -48,6 +48,7 @@ export function AsksStrip({
   cfg,
   watchLink = false,
   localIdentity = null,
+  localIdentities = localIdentity ? [localIdentity] : [],
   onSignIn,
   onSignOut,
   board = null,
@@ -62,7 +63,10 @@ export function AsksStrip({
   watchLink?: boolean;
   /** The seat this machine can sign in as with one click, when the daemon says it has one. */
   localIdentity?: string | null;
-  onSignIn?: () => void;
+  /** Every human seat this machine can sign in as (ADR 557); the identity slot offers each. */
+  localIdentities?: readonly string[];
+  /** Sign in as that seat, or this machine's first identity, or open the credential form. */
+  onSignIn?: (as?: string) => void;
   onSignOut?: () => void;
   /** The lane board the page already holds (useWorkingOn) — feeds the review queue; null renders none. */
   board?: LaneBoard | null;
@@ -390,7 +394,7 @@ export function AsksStrip({
               <button
                 type="button"
                 className="lc-ask__btn lc-asks__signin"
-                onClick={onSignIn}
+                onClick={() => onSignIn?.()}
                 title={`sign in as ${localIdentity} on this machine`}
               >
                 Sign in as {localIdentity} to answer
@@ -400,7 +404,7 @@ export function AsksStrip({
               <button
                 type="button"
                 className="lc-ask__btn lc-asks__link lc-asks__signin--ghost"
-                onClick={onSignIn}
+                onClick={() => onSignIn?.()}
                 title="sign in with your seat credential to answer asks"
               >
                 sign in with a credential →
@@ -462,21 +466,25 @@ export function AsksStrip({
             with nothing waiting there was none, and the gated composer could not be reached. So the
             slot that says who you are says how to become yourself — unless the lead ask already
             offers it, which would be the same button twice. */}
-        {!canAnswer && wayIn === 'offer' && !leadOffersSignIn && (
-          <button
-            type="button"
-            className="lc-ask__btn lc-asks__signin"
-            onClick={onSignIn}
-            title={`sign in as ${localIdentity} on this machine`}
-          >
-            Sign in as {localIdentity}
-          </button>
-        )}
+        {!canAnswer &&
+          wayIn === 'offer' &&
+          !leadOffersSignIn &&
+          localIdentities.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className="lc-ask__btn lc-asks__signin"
+              onClick={() => onSignIn?.(name)}
+              title={`sign in as ${name} on this machine`}
+            >
+              Sign in as {name}
+            </button>
+          ))}
         {!canAnswer && wayIn === 'paste' && !leadOffersSignIn && (
           <button
             type="button"
             className="lc-ask__btn lc-asks__link lc-asks__signin--ghost"
-            onClick={onSignIn}
+            onClick={() => onSignIn?.()}
             title="sign in with your seat credential"
           >
             sign in →

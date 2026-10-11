@@ -154,7 +154,7 @@ import {
 import { cloudHealth } from '../cloud/health.js';
 import { hostAllows } from '../cloud/hostIsolation.js';
 import { trustsLocalPeer } from '../cloud/localTrust.js';
-import { checkUpgrade, readLocalIdentity, resolveRosterRoots } from '../config.js';
+import { checkUpgrade, readLocalIdentities, resolveRosterRoots } from '../config.js';
 import { operatorCtx, teamCtx, type Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
 import { schemaVersionOf } from '../db/migrations.js';
@@ -2884,12 +2884,20 @@ export async function handleHttp(
               detail: { reason: 'off_machine' },
             }),
         );
-        const local = readLocalIdentity(team.slug);
-        // The vault can name a seat this team has never heard of — a stale entry, a renamed seat, a
-        // team recreated under the same slug. Confirm before offering, so the page is never handed a
-        // credential that cannot connect and then blamed for the failure.
-        if (!local || !(await getMemberByName(ctx.db, team.id, local.name))) {
-          return sendJson(res, 200, { available: false });
+        // Every human credential this machine holds for the team (ADR 557), kept only if it still
+        // authenticates as that member: the vault can name a seat this team has never heard of, a
+        // renamed seat, a rotated credential, or a seat that has left. Offering one of those would
+        // hand the page a button that cannot connect, and then blame the page for the failure.
+        // `authMember` is the same read-only check every authenticated request runs.
+        const offered: { as: string; credential: string }[] = [];
+        for (const local of readLocalIdentities(team.slug)) {
+          if (offered.some((o) => o.as === local.name)) continue;
+          try {
+            await authMember(ctx.db, team.slug, local.key, local.name);
+          } catch {
+            continue;
+          }
+          offered.push({ as: local.name, credential: local.key });
         }
         // **The successful offer is deliberately NOT audited.** ADR 170's rows record discrete human
         // acts — running `musterd board`, redeeming a nonce once. This route is probed automatically
@@ -2903,7 +2911,9 @@ export async function handleHttp(
         // browser, which is read off `accept`/`decline`/`wait` envelopes, not off this route. The
         // refusal below stays audited because a refused cross-machine attempt is a security event
         // about an action someone took, not a note about where a human was sitting.
-        return sendJson(res, 200, { available: true, as: local.name, credential: local.key });
+        if (offered.length === 0) return sendJson(res, 200, { available: false });
+        // `as`/`credential` stay the first offer, for a /live bundle published before ADR 557.
+        return sendJson(res, 200, { available: true, ...offered[0], identities: offered });
       }
 
       const handoffMatch = rest.match(/^\/signin-handoff\/([^/]+)$/);
