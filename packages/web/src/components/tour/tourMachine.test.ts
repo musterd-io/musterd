@@ -1,0 +1,180 @@
+import type { Envelope, Lane, MemberSummary } from '@musterd/protocol';
+import { describe, expect, it } from 'vitest';
+import {
+  advance,
+  hintFor,
+  initialState,
+  modelOf,
+  stepLines,
+  stepTitle,
+  tourEntry,
+  tourLaneOf,
+  ulidTime,
+  verdictLine,
+  type TourState,
+} from './tourMachine';
+
+const LANE = '01M4M4DDYFFX7FFD5YVRAQ1C50';
+const env = (over: Partial<Envelope>): Envelope =>
+  ({
+    id: `e${Math.random()}`,
+    team: 'revive',
+    from: 'dolly',
+    to: { kind: 'team' },
+    act: 'message',
+    body: '',
+    thread: null,
+    meta: null,
+    ts: 1,
+    ...over,
+  }) as Envelope;
+const waiting = (step: TourState['step']): TourState => ({
+  ...initialState('nick', 'dolly'),
+  step,
+  laneId: LANE,
+  requestId: 'req1',
+});
+const member = (name: string, kind: string, model?: string) =>
+  ({ name, kind, presences: model ? [{ model }] : [] }) as unknown as MemberSummary;
+const lane = (title: string, state: string, id = LANE) => ({ id, title, state }) as unknown as Lane;
+const TITLE = "[tour] nick: summarise this repo's README in three lines";
+
+describe('tour machine — the CLI tour’s rules, on the web', () => {
+  it('walks what → team → give_work on Continue, and give_work only on the lane opening', () => {
+    let s = initialState('nick', 'dolly');
+    s = advance(s, { type: 'continue' });
+    expect(s.step).toBe('team');
+    s = advance(s, { type: 'continue' });
+    expect(s.step).toBe('give_work');
+    expect(advance(s, { type: 'continue' })).toBe(s);
+    s = advance(s, { type: 'lane_opened', laneId: LANE, requestId: 'req1' });
+    expect(s).toMatchObject({ step: 'claims', laneId: LANE, requestId: 'req1' });
+  });
+
+  it('moves on the agent’s claim of THIS lane only', () => {
+    const s = waiting('claims');
+    const other = env({ meta: { lane_claim: { lane: 'OTHER' } } });
+    expect(advance(s, { type: 'act', env: other })).toBe(s);
+    const someoneElse = env({ from: 'ghost', meta: { lane_claim: { lane: LANE } } });
+    expect(advance(s, { type: 'act', env: someoneElse })).toBe(s);
+    const claim = env({ meta: { lane_claim: { lane: LANE } } });
+    expect(advance(s, { type: 'act', env: claim }).step).toBe('hands_back');
+  });
+
+  it('takes the acceptance ask routed to the viewer, and keeps its id for the verdict', () => {
+    const ask = env({
+      id: 'ask1',
+      act: 'ask',
+      to: { kind: 'member', name: 'nick' },
+      meta: { lane_review: { lane: LANE } },
+    });
+    expect(advance(waiting('hands_back'), { type: 'act', env: ask })).toMatchObject({
+      step: 'judge',
+      askId: 'ask1',
+    });
+    const toTeam = { ...ask, to: { kind: 'team' } } as Envelope;
+    expect(advance(waiting('hands_back'), { type: 'act', env: toTeam }).step).toBe('hands_back');
+  });
+
+  it('records a decline only when it answers the tour’s own request', () => {
+    const stray = env({ act: 'decline', body: 'no', meta: { in_reply_to: 'other' } });
+    expect(advance(waiting('claims'), { type: 'act', env: stray }).outcome).toBeUndefined();
+    const no = env({ act: 'decline', body: 'busy', meta: { in_reply_to: 'req1' } });
+    const s = advance(waiting('claims'), { type: 'act', env: no });
+    expect(s).toMatchObject({ step: 'claims', outcome: 'declined', declineReason: 'busy' });
+    expect(advance(s, { type: 'skip_to_record' }).step).toBe('record');
+  });
+
+  it('sends back to hands_back, counts it, and the agent’s self-close goes to record', () => {
+    let s: TourState = { ...waiting('judge'), askId: 'ask1' };
+    s = advance(s, { type: 'verdict', accept: false });
+    expect(s).toMatchObject({ step: 'hands_back', sentBack: 1 });
+    expect(s.askId).toBeUndefined();
+    const resolve = env({ meta: { lane_resolve: { lane: LANE } } });
+    expect(advance(s, { type: 'act', env: resolve })).toMatchObject({
+      step: 'record',
+      outcome: 'self_closed',
+    });
+  });
+
+  it('says the verdict in the four forms of spec §4', () => {
+    const s = waiting('record');
+    expect(verdictLine({ ...s, outcome: 'accepted' }, 'nick')).toBe('accepted by nick');
+    expect(verdictLine({ ...s, outcome: 'accepted', sentBack: 2 }, 'nick')).toBe(
+      'sent back by nick, then accepted by nick',
+    );
+    expect(verdictLine({ ...s, outcome: 'self_closed' }, 'nick')).toBe('closed by dolly itself');
+    expect(verdictLine({ ...s, outcome: 'declined' }, 'nick')).toBe('declined by dolly');
+  });
+});
+
+describe('tour text', () => {
+  const vars = { you: 'nick', agent: 'dolly', lane: LANE, model: '' };
+
+  it('titles a step by its place in the script', () => {
+    expect(stepTitle('judge')).toBe('Step 6 of 9 · You judge it');
+  });
+
+  it('drops the model line with no attested model, except on record', () => {
+    expect(stepLines(waiting('team'), vars).join('\n')).not.toMatch(/running/);
+    expect(stepLines(waiting('team'), { ...vars, model: 'opus' }).join('\n')).toMatch(
+      /dolly is running opus/,
+    );
+    const record = stepLines({ ...waiting('record'), outcome: 'accepted' }, vars);
+    expect(record[1]).toBe(
+      'opened by nick · claimed by dolly · model unattested · accepted by nick',
+    );
+  });
+
+  it('drops a line naming the agent until one is chosen', () => {
+    const lines = stepLines(initialState('nick', ''), { ...vars, agent: '' });
+    expect(lines.join('\n')).not.toMatch(/\{agent\}|you give\s/);
+    expect(lines[0]).toBe('musterd makes your agents accountable.');
+  });
+
+  it('shows only the latest hint that is due', () => {
+    expect(hintFor('claims', 59_000, vars)).toBeNull();
+    expect(hintFor('claims', 61_000, vars)).toMatch(/^Still waiting/);
+    expect(hintFor('claims', 181_000, vars)).toMatch(/take a few minutes/);
+  });
+});
+
+describe('tour entry (spec §2–3)', () => {
+  const roster = [member('nick', 'human'), member('dolly', 'agent', 'claude-opus-5-5')];
+
+  it('offers Take the tour to a human with an agent and no tour lane', () => {
+    expect(tourEntry([], roster, 'nick')).toEqual({ kind: 'take' });
+  });
+
+  it('offers nothing to an agent viewer, before the board is read, or with no agent', () => {
+    expect(tourEntry([], roster, 'dolly')).toEqual({ kind: 'none' });
+    expect(tourEntry(null, roster, 'nick')).toEqual({ kind: 'none' });
+    expect(tourEntry([], [member('nick', 'human')], 'nick')).toEqual({ kind: 'none' });
+  });
+
+  it('resumes an open tour lane, and offers nothing once it closed', () => {
+    expect(tourEntry([lane(TITLE, 'claimed')], roster, 'nick').kind).toBe('resume');
+    expect(tourEntry([lane(TITLE, 'done')], roster, 'nick')).toEqual({ kind: 'none' });
+    expect(tourEntry([lane(TITLE.replace('nick', 'alfie'), 'open')], roster, 'nick').kind).toBe(
+      'take',
+    );
+  });
+
+  it('finds the newest of two lanes with the title (after Start over)', () => {
+    const old = lane(TITLE, 'abandoned', '01M4M4DDYF0000000000000000');
+    const fresh = lane(TITLE, 'open', '01M4MZZZZZ0000000000000000');
+    expect(tourLaneOf([fresh, old], 'nick')?.id).toBe(fresh.id);
+    expect(tourLaneOf([old, fresh], 'nick')?.id).toBe(fresh.id);
+  });
+
+  it('reads the model from the roster, treating unknown as none', () => {
+    expect(modelOf(roster, 'dolly')).toBe('claude-opus-5-5');
+    expect(modelOf([member('dolly', 'agent', 'unknown')], 'dolly')).toBe('');
+  });
+
+  it('decodes the time a lane opened from its ULID', () => {
+    // Reference values from the `ulid` package's decodeTime, which the CLI tour uses.
+    expect(ulidTime('01ARZ3NDEKTSV4RRFFQ69G5FAV')).toBe(1469922850259);
+    expect(ulidTime(LANE)).toBe(1791677085647);
+  });
+});

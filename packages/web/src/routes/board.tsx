@@ -1,6 +1,6 @@
 import type { LaneBoard, MemberSummary } from '@musterd/protocol';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Board } from '../live/Board';
 import {
   MemberSignInFields,
@@ -53,6 +53,10 @@ const RAIL_KEY = 'musterd.board.rail';
  * create/claim/advance/handoff/resolve, member-authed, optimistic on the daemon's echo. The default
  * observer path stays exactly what it was: a hidden read-only seat, no account, no controls.
  */
+// The first-run tour (lane 01M4M4DDYF): the same lazy chunk /live mounts, for a human viewer only.
+const LazyTour = lazy(() => import('../components/tour/Tour').then((m) => ({ default: m.Tour })));
+const TOUR_SLOT_ID = 'lc-tour-slot';
+
 function BoardPage() {
   const router = useRouter();
   const [team, setTeam] = useState('');
@@ -281,6 +285,7 @@ function BoardPage() {
       <header className="lc__topbar lc__topbar--board">
         <MusterdWord />
         <span className="lc__team">/ {connected ? `${cfg.team} · board` : 'board'}</span>
+        {connected && <span id={TOUR_SLOT_ID} className="lc__nowslot" />}
         <span className="lc__spacer" />
         {connected && (
           <div className="lc-board__views" role="group" aria-label="Board view">
@@ -356,6 +361,18 @@ function BoardPage() {
           </>
         )}
       </header>
+      {me && cfg && meRow?.kind === 'human' && (
+        <Suspense fallback={null}>
+          <LazyTour
+            cfg={cfg}
+            viewer={me}
+            roster={roster}
+            envelopes={envelopes}
+            lanes={board?.lanes ?? null}
+            slotId={TOUR_SLOT_ID}
+          />
+        </Suspense>
+      )}
 
       {!connected ? (
         <div className="lc-form">

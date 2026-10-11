@@ -114,6 +114,10 @@ const LazyNowOverlay = lazy(() =>
 );
 /** Where the Now card's dock chip lands in the topbar (it is portalled in from the lazy chunk). */
 const NOW_SLOT_ID = 'lc-now-slot';
+// The first-run tour (lane 01M4M4DDYF): a lazy chunk mounted only for a viewer signed in as a human,
+// its entry button portalled into the topbar slot below.
+const LazyTour = lazy(() => import('../components/tour/Tour').then((m) => ({ default: m.Tour })));
+const TOUR_SLOT_ID = 'lc-tour-slot';
 // ADR 516: rendered only while a hold is in force, so its formatter (in `@musterd/protocol/wire`)
 // stays out of /live's eager graph on every ordinary day.
 const HoldsBanner = lazy(() =>
@@ -607,6 +611,7 @@ function LivePage() {
         <MusterdWord />
         {connected && <TopMeter teamName={team} envelopes={envelopes} roster={roster} />}
         {connected && <span id={NOW_SLOT_ID} className="lc__nowslot" />}
+        {connected && <span id={TOUR_SLOT_ID} className="lc__nowslot" />}
         <span className="lc__spacer" />
         {connected && (
           <button
@@ -722,6 +727,18 @@ function LivePage() {
             board={board}
             hide={stripAskIds}
           />
+          {signedIn && cfg && roster.find((m) => m.name === cfg.as)?.kind === 'human' && (
+            <Suspense fallback={null}>
+              <LazyTour
+                cfg={cfg}
+                viewer={cfg.as}
+                roster={roster}
+                envelopes={envelopes}
+                lanes={board?.lanes ?? null}
+                slotId={TOUR_SLOT_ID}
+              />
+            </Suspense>
+          )}
           {/* Gates: ?promptbar=1, a signed-in member (not the read-only observer), and an admin. */}
           {promptBarVisible({ flag: promptbar, signedIn, admin: canSetHold }) && cfg && (
             <Suspense fallback={null}>
