@@ -249,8 +249,8 @@ function LivePage() {
     rosterUnreadable,
     rosterStale,
   } = stream;
-  // What this browser sent through the demo prompt bar. The firehose skips the sender, so the ack is
-  // folded in here or the huddle it opens would not appear on the very screen that opened it.
+  // What this browser sent through the demo prompt bar, folded in from the ack so a huddle shows on
+  // the screen that opened it at once; the firehose copy that follows is deduped by id below.
   const [sent, setSent] = useState<Envelope[]>([]);
   const envelopes = useMemo(
     () =>

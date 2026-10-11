@@ -1137,7 +1137,15 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
             ))!;
             // Pass this connection's occupancy id so the per-act model stamp reads *this* session's
             // attestation, not the member's newest presence (ADR 101).
-            const result = await routeEnvelope(ctx, teamRow, member, env, conn.presenceId);
+            const result = await routeEnvelope(
+              ctx,
+              teamRow,
+              member,
+              env,
+              conn.presenceId,
+              false,
+              conn.connId,
+            );
             send(ws, { type: 'ack', id: result.message.id });
             break;
           }

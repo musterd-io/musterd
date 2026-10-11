@@ -14,9 +14,8 @@ export interface BoardNote {
  * `/live`. The caller supplies `base` — its own `useWorkingOn` result — so a host that already
  * holds the lane board (as `/live` does) never fetches it twice.
  *
- * Optimistic overlay: our own writes fold in from the daemon's echo (the firehose skips the sender,
- * so the echo is the only copy we see). Any fresh base fetch is daemon truth and supersedes it —
- * base identity is the reset trigger.
+ * Optimistic overlay: our own writes fold in from the daemon's echo, ahead of the firehose. Any
+ * fresh base fetch is daemon truth and supersedes it — base identity is the reset trigger.
  */
 export function useBoardData(
   cfg: LiveConfig | null,

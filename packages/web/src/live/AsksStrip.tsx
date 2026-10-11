@@ -74,8 +74,8 @@ export function AsksStrip({
    *  first; the default is the bare reveal event, which is right wherever the stream is mounted. */
   onReveal?: (id: string) => void;
 }) {
-  // Answers this browser just sent: the firehose deliberately skips the sender, so the POST ack is the
-  // only copy this client sees — fold it into the derivation so the card settles immediately.
+  // Answers this browser just sent: fold the POST ack into the derivation so the card settles
+  // immediately; the firehose copy that follows is deduped by id in `deriveAsks`.
   const [localAnswers, setLocalAnswers] = useState<Envelope[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

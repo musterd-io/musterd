@@ -128,6 +128,60 @@ withDrivers('integration · ws', (_o, kind) => {
       l.close();
     });
 
+    it("firehose: a human's own CLI send reaches their open /live tab; only the sending connection is skipped (lane 01M4H7YKS5)", async () => {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const nickTok = team.json.human_credential;
+      await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, nickTok);
+
+      // nick has a /live tab on the firehose; Ada is an ordinary recipient.
+      const tab = new TestWs();
+      const a = new TestWs();
+      await Promise.all([tab.open(), a.open()]);
+      await tab.claim('dawn', nickTok, 'nick', 'web');
+      await tab.subscribe('team-all');
+      await a.claim(
+        'dawn',
+        team.json.agent_key,
+        'Ada',
+        'claude-code',
+        await standingGrant(nickTok, 'Ada'),
+      );
+
+      const envelope = (id: string) => ({
+        id,
+        v: PROTOCOL_VERSION,
+        team: 'dawn',
+        from: 'nick',
+        to: { kind: 'team' },
+        act: 'status_update',
+        body: id,
+        ts: Date.now(),
+      });
+
+      // 1. An HTTP send (the CLI's path) has no sending connection, so the tab — same member — gets it.
+      const sent = await post('/teams/dawn/messages', { envelope: envelope('cli-1') }, nickTok);
+      expect(sent.status).toBeLessThan(300);
+      const echoed = await tab.waitFor('deliver');
+      expect((echoed as any).envelope.id).toBe('cli-1');
+      await a.waitFor('deliver');
+
+      // 2. A send over the tab's own socket is acked there and NOT echoed back on the firehose.
+      tab.send({ type: 'send', envelope: envelope('tab-1') });
+      await tab.waitFor('ack');
+      await new Promise((r) => setTimeout(r, 40));
+      expect(tab.frames.filter((f) => f.type === 'deliver').map((f: any) => f.envelope.id)).toEqual(
+        ['cli-1'],
+      );
+      // The recipient still gets each act exactly once.
+      expect(a.frames.filter((f) => f.type === 'deliver').map((f: any) => f.envelope.id)).toEqual([
+        'cli-1',
+        'tab-1',
+      ]);
+
+      tab.close();
+      a.close();
+    });
+
     it('firehose (subscribe team-all): a regular member is pushed a DM between two others — visibility is team-wide (ADR 407)', async () => {
       const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
       const tok = team.json.human_credential;
