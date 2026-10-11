@@ -422,6 +422,49 @@ so a box is never wider than the screen.
     ada can take a few minutes to wake. The tour waits as long as it takes. Ctrl-C to stop; `musterd tour` picks up where you left off.
     ```
 
+### First-run connect frames (ADR 559)
+
+`musterd init`'s default path. Strings come from `packages/cli/src/onboard/connect.ts` and
+`onboard/init.ts`; `resultLine` is pinned by `connect.test.ts`, the prompts' options by
+`connect.run.test.ts`. Shown as nick on revive, no color.
+
+35. `cmd/init` · intent — the new first option, selected by default:
+
+    ```
+    What would you like to do on revive?
+    ● Connect the agents you already have  (one seat per repo, every agent on this machine wired in)
+    ○ Add a new agent
+    ○ Activate an existing member
+    ○ Just me — watch the team live
+    ```
+
+36. `cmd/init` · repos — this folder first and preselected, then suggestions with the agents that
+    worked there and how long ago:
+
+    ```
+    Which repos should be connected? (each becomes a seat)
+    ◼ ~/code/api     (this folder)
+    ◻ ~/code/web     (Claude Code, Cursor · 2h ago)
+    ◻ ~/code/infra   (Codex · 3d ago)
+    ```
+
+37. `cmd/init` · connect summary — one line per repo (`✓` wired, `⚠` bound with a wiring problem,
+    `✗` failed), then how to start each:
+
+    ```
+    ✓ api — Claude Code, Cursor
+    ⚠ web — Claude Code; cursor: mcp.json unreadable; run musterd wire there
+    ✗ infra — mint refused
+
+    ┌ Start any of them
+    │ api  cd ~/code/api && claude
+    │ web  cd ~/code/web && claude
+    │
+    │ musterd status   see them on the roster
+    └
+    2 seats on revive.
+    ```
+
 ## Page: States (empty + error)
 
 1. `state/empty-inbox` — `inbox empty — nobody's mustered anything yet` (dim). (Exact string; the CLI uses it verbatim.)
