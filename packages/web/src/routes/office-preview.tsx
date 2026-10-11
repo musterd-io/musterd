@@ -9,6 +9,7 @@ import { isStill } from '../live/stillMode';
 import type { Caption } from '../live/captions';
 import type { Envelope, MemberSummary } from '@musterd/protocol';
 import { buildEnvelope } from '@musterd/protocol/wire';
+import { deriveAsks } from '../live/asks';
 import type { sendAct } from '../live/client';
 import type { OfficeData, OfficeEvent, OfficeHandle, OfficeNode } from '../live/office-scene';
 import { spritesFromUrl } from './broadcast';
@@ -69,6 +70,7 @@ function PreviewPromptBar() {
   useEffect(() => setOn(new URLSearchParams(window.location.search).has('promptbar')), []);
   const add = useCallback((e: Envelope) => setEnvelopes((prev) => (prev.some((p) => p.id === e.id) ? prev : [...prev, e])), []);
   const send = useMemo(() => fakeSend?.(add), [add]);
+  const asks = useMemo(() => deriveAsks(envelopes), [envelopes]);
   if (!on) return null;
   return (
     <Suspense fallback={null}>
@@ -77,6 +79,7 @@ function PreviewPromptBar() {
         roster={PREVIEW_ROSTER}
         viewer="nick"
         envelopes={envelopes}
+        asks={asks}
         onSent={add}
         {...(send ? { send: send as typeof sendAct } : {})}
       />

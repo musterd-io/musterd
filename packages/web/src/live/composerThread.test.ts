@@ -10,6 +10,8 @@ import {
   sentenceOf,
   THREAD_RECENT_MS,
 } from './composerThread';
+import { deriveAsks, SPECIES_VERB_YOU } from './asks';
+import { VERB_YOU } from './ComposerReplies';
 import { promptAct, REPLY_FOOTER } from './promptAct';
 
 const T = 1_791_600_000_000;
@@ -97,7 +99,7 @@ describe('the fold', () => {
 
   it('gathers asks on the thread with their state, and answers them the asks strip’s way', () => {
     const ask = env({ id: 'q', from: 'dolly', act: 'ask', thread: 'root', ts: T + 5, meta: { species: 'approve', tier: 'standard' } });
-    const t = composerThread([root, ask], root, 'nick');
+    const t = composerThread([root, ask], root, 'nick', deriveAsks([root, ask]));
     expect(t.asks.map((a) => [a.env.id, a.state])).toEqual([['q', 'open']]);
     expect(t.answered.has('dolly')).toBe(true);
     expect(askAnswer(t.asks[0]!, 'accept')).toEqual({
@@ -106,7 +108,8 @@ describe('the fold', () => {
       thread: 'root',
       meta: { in_reply_to: 'q' },
     });
-    const answered = composerThread([root, ask, env({ id: 'y', from: 'nick', act: 'accept', to: { kind: 'member', name: 'dolly' }, thread: 'root', ts: T + 9, meta: { in_reply_to: 'q' } })], root, 'nick');
+    const all = [root, ask, env({ id: 'y', from: 'nick', act: 'accept', to: { kind: 'member', name: 'dolly' }, thread: 'root', ts: T + 9, meta: { in_reply_to: 'q' } })];
+    const answered = composerThread(all, root, 'nick', deriveAsks(all));
     expect(answered.asks[0]!.state).toBe('accepted');
     expect(answered.lines).toEqual([]); // the answer act is not a line of conversation
   });
@@ -129,5 +132,11 @@ describe('what the avatar stack says', () => {
   it('says nothing for a seat that is simply here, or once the thread closed', () => {
     expect(seatState('ghost', open, member('ghost', 'online', 'session'))).toBe('here');
     expect(seatState('ghost', { ...open, closed: true }, member('ghost', 'offline'))).toBe('here');
+  });
+});
+
+describe('the inline ask card speaks the asks strip’s words', () => {
+  it('has the same second-person verbs as asks.ts (copied only to keep asks.ts out of the eager graph)', () => {
+    expect(VERB_YOU).toEqual(SPECIES_VERB_YOU);
   });
 });

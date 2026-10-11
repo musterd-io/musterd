@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { composerOpenFrom, PromptBar } from './PromptBar';
+import { deriveAsks } from './asks';
 import { REPLY_FOOTER } from './promptAct';
 
 const m = (name: string, kind: string, presence = 'online') =>
@@ -23,6 +24,7 @@ const html = renderToStaticMarkup(
     roster,
     viewer: 'nick',
     envelopes: [],
+    asks: [],
     onSent: () => {},
   }),
 );
@@ -101,6 +103,7 @@ describe('the thread panel (lane 01M4KY55N1)', () => {
         roster,
         viewer: 'nick',
         envelopes,
+        asks: deriveAsks(envelopes),
         onSent: () => {},
       }),
     );

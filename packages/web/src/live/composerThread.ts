@@ -1,7 +1,6 @@
 import type { Envelope, MemberSummary } from '@musterd/protocol';
-import { deriveAsks, type AskView } from './asks';
+import type { AskView } from './asks';
 import { REPLY_FOOTER } from './promptAct';
-import { wokenSeat } from './wokenSeat';
 
 /**
  * The composer's thread panel (lane 01M4KY55N1, alfie's steers 01M4H7F9KB / 01M4H7PHC9): after nick
@@ -81,10 +80,16 @@ export function latestThreadRoot(
   return null;
 }
 
+/**
+ * `asks` is the route's own asks fold, passed in rather than re-derived here: importing `asks.ts`
+ * into this lazy chunk split it out of /live's eager graph into a chunk of its own, and that extra
+ * chunk alone broke the initial-JS budget.
+ */
 export function composerThread(
   envelopes: readonly Envelope[],
   root: Envelope,
   viewer: string,
+  asks: readonly AskView[] = [],
 ): ComposerThread {
   const cast = castOf(root);
   const inCast = new Set(cast);
@@ -121,8 +126,15 @@ export function composerThread(
     if (inCast.has(e.from)) answered.add(e.from);
     lines.push({ env: e, direct });
   }
-  const asks = askIds.size ? deriveAsks([...envelopes]).filter((a) => askIds.has(a.env.id)) : [];
-  return { root, sentence: sentenceOf(root.body), cast, lines, asks, answered, closed };
+  return {
+    root,
+    sentence: sentenceOf(root.body),
+    cast,
+    lines,
+    asks: asks.filter((a) => askIds.has(a.env.id)),
+    answered,
+    closed,
+  };
 }
 
 /** The viewer's words as typed: the composer's routing footer is plumbing, not part of the sentence. */
@@ -143,7 +155,11 @@ export function seatState(
 ): SeatState {
   if (thread.answered.has(name)) return 'replied';
   if (thread.closed || !member) return 'here';
-  if (member.presence === 'offline' || wokenSeat(member)) return 'waking';
+  // `wokenSeat`'s reading, inlined: importing it here split it out of /live's eager chunk into one of
+  // its own, and that one extra chunk alone broke the initial-JS budget. Same rule: the live row's
+  // stamped provenance, never inferred.
+  const live = member.presences?.find((p) => p.status === 'online' || p.status === 'away');
+  if (member.presence === 'offline' || live?.provenance === 'wake') return 'waking';
   return 'here';
 }
 

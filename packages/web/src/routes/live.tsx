@@ -252,12 +252,13 @@ function LivePage() {
   // What this browser sent through the demo prompt bar, folded in from the ack so a huddle shows on
   // the screen that opened it at once; the firehose copy that follows is deduped by id below.
   const [sent, setSent] = useState<Envelope[]>([]);
-  const envelopes = useMemo(() => {
-    if (sent.length === 0) return streamed;
-    const have = new Set(streamed.map((e) => e.id));
-    const extra = sent.filter((s) => !have.has(s.id));
-    return extra.length === 0 ? streamed : [...streamed, ...extra].sort((a, b) => a.ts - b.ts);
-  }, [streamed, sent]);
+  const envelopes = useMemo(
+    () =>
+      sent.length === 0
+        ? streamed
+        : [...streamed, ...sent.filter((s) => !streamed.some((e) => e.id === s.id))],
+    [streamed, sent],
+  );
   const [promptbar, setPromptbar] = useState(false);
   useEffect(() => setPromptbar(promptBarFlag(window.location.search, window.location.hash)), []);
 
@@ -729,9 +730,8 @@ function LivePage() {
                 roster={roster}
                 viewer={cfg.as}
                 envelopes={envelopes}
-                onSent={(ack) =>
-                  setSent((prev) => (prev.some((p) => p.id === ack.id) ? prev : [...prev, ack]))
-                }
+                asks={asks}
+                onSent={(ack) => setSent((prev) => [...prev, ack])}
               />
             </Suspense>
           )}

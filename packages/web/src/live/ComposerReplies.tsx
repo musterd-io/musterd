@@ -1,6 +1,6 @@
 import type { MemberSummary } from '@musterd/protocol';
 import { useEffect, useRef } from 'react';
-import { askIsLoud, SPECIES_VERB_YOU, type AskView } from './asks';
+import type { AskView } from './asks';
 import {
   answeredLine,
   seatState,
@@ -23,6 +23,17 @@ import { displayModel } from './modelBadge';
  */
 
 const TICK = 'M3.5 8.5 6.5 11.5 12.5 5';
+
+/**
+ * `SPECIES_VERB_YOU` (asks.ts), copied: importing asks.ts into this lazy chunk split it out of /live's
+ * eager graph and broke the initial-JS budget. A test pins the two equal, so the vocabulary cannot
+ * drift (asks.ts explains why one ask must read the same everywhere).
+ */
+export const VERB_YOU: Record<AskView['species'], string> = {
+  consult: 'asks what you think',
+  escalate: 'escalated to you',
+  approve: 'needs your approval',
+};
 
 /** A face with what this seat is doing about the thread: a tick once it answered, a ring while waking. */
 export function SeatFace({
@@ -183,12 +194,12 @@ function AskCard({
   onAnswer: (ask: AskView, kind: 'accept' | 'decline' | 'deciding') => void;
 }) {
   const mine = ask.to === viewer || ask.to === null;
-  const open = askIsLoud(ask.state);
+  const open = ask.state === 'open' || ask.state === 'held'; // askIsLoud, inlined for the same reason
   return (
     <div className={`cthread__col cthread__ask${open ? ' is-open' : ''}`}>
       <div className="cthread__by">
         <b>{ask.env.from}</b>
-        {mine ? SPECIES_VERB_YOU[ask.species] : `asks ${ask.to}`}
+        {mine ? VERB_YOU[ask.species] : `asks ${ask.to}`}
         <time>{clock(ask.env.ts)}</time>
       </div>
       {ask.env.body && <Bubble text={ask.env.body} />}

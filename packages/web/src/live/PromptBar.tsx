@@ -49,6 +49,7 @@ export function PromptBar({
   roster,
   viewer,
   envelopes,
+  asks,
   onSent,
   send: sendFn = sendAct,
 }: {
@@ -58,6 +59,8 @@ export function PromptBar({
   viewer: string;
   /** The page's timeline, own sends included — what the thread panel folds. */
   envelopes: readonly Envelope[];
+  /** The route's asks fold over that timeline; the panel shows the ones raised on its thread. */
+  asks: readonly AskView[];
   /** The route folds the ack in at once, ahead of the firehose copy (the AsksStrip precedent). */
   onSent: (ack: Envelope) => void;
   /** The wire. /office-preview passes a fake so its fixture can answer. */
@@ -81,8 +84,8 @@ export function PromptBar({
     [envelopes, viewer, hidden, now],
   );
   const thread = useMemo(
-    () => (root ? composerThread(envelopes, root, viewer) : null),
-    [envelopes, root, viewer],
+    () => (root ? composerThread(envelopes, root, viewer, asks) : null),
+    [envelopes, root, viewer, asks],
   );
   const hide = () => root && setHidden((h) => [...h, root.id]);
   const [answering, setAnswering] = useState<string | null>(null);
