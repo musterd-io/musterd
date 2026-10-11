@@ -200,6 +200,8 @@ src/
   archaeology/        // wasted-work collector (ADR 123 predicates): cookoff `all` population, or live-repo `pulls` = main + PR heads, per PR (ADR 462)
     engine.ts         // pure predicate-set-v1 classifier: W3 dup → W1 abandoned → W2 clobbered → W4 churn
     git.ts            // RepoFacts extractor over git plumbing; actor identity = ADR 109 attribution
+  import/             // `musterd import` (spec 2026-10-10 "bring work in"): file → board check → stage → resumable save; no protocol change
+    csv.ts            // hand-written RFC 4180 reader (quotes, "" escapes, CRLF, BOM) — no dependency (hard rule 6)
   commands/
     init.ts           // musterd init (delegates to onboard/init.ts); --check → onboard/doctor.ts drift report; --check --fix → restore agent_key for traced-key drift then re-check, `wire` for entry drift, full init otherwise (ADR 165)
     wire.ts           // musterd wire: headless fragment reconcile, plus --migrate-bootstrap atomic replacement of a Workspace's legacy Team key while Presence stays occupied (ADR 080/282/350)
