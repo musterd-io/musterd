@@ -43,6 +43,7 @@ export * from './huddleTrace.js';
 export * from './seatfile.js';
 export * from './errors.js';
 export * from './frames.js';
+export * from './idleWake.js';
 export * from './primer.js';
 export * from './guidance-epoch.js';
 export * from './guidance.js';

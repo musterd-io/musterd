@@ -3,6 +3,7 @@ import { PresenceStatusSchema, ProvenanceSchema, SurfaceSchema } from './acts.js
 import { ClaimFrame, OccupiedFrame, PendingFrame, RefusedFrame } from './claim-handshake.js';
 import { EnvelopeSchema } from './envelope.js';
 import { ErrorCodeSchema } from './errors.js';
+import { HearingReasonSchema, HearingSchema } from './idleWake.js';
 import { MemberSchema } from './member.js';
 import { WIRE_ATTESTATION_SOURCES } from './model.js';
 import { StyleEpochSchema } from './style.js';
@@ -71,6 +72,10 @@ export const HeartbeatFrame = z.object({
   // Style re-attestation (ADR 514, additive): the epoch of the style block this seat is running.
   // Absent ⇒ no change, never a clear — the guidance_epoch rule, for the same reason.
   style_epoch: StyleEpochSchema.optional(),
+  // Idle-wake hearing (ADR 558, additive): can this session be pushed while idle? Absent ⇒ no
+  // change, never a clear — the guidance_epoch rule.
+  hearing: HearingSchema.optional(),
+  hearing_reason: HearingReasonSchema.optional(),
 });
 
 export const WSClientFrame = z.discriminatedUnion('type', [

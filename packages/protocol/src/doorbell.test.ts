@@ -6,6 +6,8 @@ import {
   DoorbellRecordSchema,
   doorbellPrefsProblem,
   holdsRing,
+  idleMayRing,
+  idleRingable,
   maskPrefs,
   actMayRing,
   publicHttpsUrlProblem,
@@ -241,5 +243,58 @@ describe('ringTargets — dream provenance (ADR 494)', () => {
     expect(ringTargets(base)).toEqual(['nick']);
     expect(ringTargets({ ...base, from_provenance: 'dream' })).toEqual([]);
     expect(ringTargets({ ...base, to: null, from_provenance: 'dream' })).toEqual([]);
+  });
+});
+
+describe('idleRingable (ADR 558 §1)', () => {
+  const env = (o: Partial<Parameters<typeof idleRingable>[0]> = {}) => ({
+    act: 'ask',
+    from: 'ryder',
+    to: { kind: 'member' as const, name: 'izzo' },
+    meta: null,
+    thread: null,
+    ...o,
+  });
+  it.each(['steer', 'ask', 'request_help', 'handoff'])('a directed %s rings', (act) => {
+    expect(idleRingable(env({ act }), 'izzo')).toBe(true);
+  });
+  it.each([
+    'message',
+    'status_update',
+    'insight',
+    'accept',
+    'decline',
+    'resolve',
+    'wait',
+    'challenge',
+    'defer',
+  ])('a directed %s does not ring unless urgent', (act) => {
+    expect(idleRingable(env({ act }), 'izzo')).toBe(false);
+    expect(idleRingable(env({ act, meta: { urgent: true } }), 'izzo')).toBe(true);
+  });
+  it('team-addressed never rings, even request_help', () => {
+    expect(idleRingable(env({ act: 'request_help', to: { kind: 'team' } }), 'izzo')).toBe(false);
+  });
+  it('an eligible set naming the seat counts as directed', () => {
+    const e = env({
+      act: 'request_help',
+      to: { kind: 'team' },
+      meta: { eligible: ['izzo', 'dolly'] },
+    });
+    expect(idleRingable(e, 'izzo')).toBe(true);
+    expect(idleRingable(e, 'stanley')).toBe(false);
+  });
+  it('the seat never rings itself', () => {
+    expect(idleRingable(env({ from: 'izzo' }), 'izzo')).toBe(false);
+  });
+  it('a lane_review ask rings (it is a directed ask)', () => {
+    expect(idleRingable(env({ meta: { lane_review: { lane: 'x' } } }), 'izzo')).toBe(true);
+  });
+  it('idleMayRing also admits any threaded act so a huddle turn reaches the daemon', () => {
+    const turn = env({ act: 'message', to: { kind: 'team' }, thread: '01ROOT' });
+    expect(idleRingable(turn, 'izzo')).toBe(false);
+    expect(idleMayRing(turn, 'izzo')).toBe(true);
+    expect(idleMayRing(env({ act: 'status_update', to: { kind: 'team' } }), 'izzo')).toBe(false);
+    expect(idleMayRing({ ...turn, from: 'izzo' }, 'izzo')).toBe(false);
   });
 });
