@@ -15,7 +15,8 @@ import { z } from 'zod';
 import { trustsLocalPeer } from '../cloud/localTrust.js';
 import { teamCtx, type Ctx } from '../context.js';
 import type { Driver } from '../db/driver.js';
-import { asMusterdError, MusterdError } from '../errors.js';
+import { asMusterdError, asMusterdHttpError, MusterdError } from '../errors.js';
+import { noteRequestFailure } from '../log.js';
 import { routeEnvelope } from '../protocol/route.js';
 import { appendAudit } from '../store/audit.js';
 import { checkInvite, consumeInvite } from '../store/invites.js';
@@ -181,7 +182,8 @@ function sendOAuthJson(res: ServerResponse, status: number, body: unknown): void
 }
 
 function sendOAuthError(res: ServerResponse, err: unknown): void {
-  const me = asMusterdError(err);
+  const me = asMusterdHttpError(err);
+  if (me.httpStatus >= 500) noteRequestFailure(res, err);
   sendOAuthJson(res, me.httpStatus, me.toBody());
 }
 
@@ -205,6 +207,7 @@ function sendTokenError(
 function sendIfUnavailable(res: ServerResponse, err: unknown): boolean {
   const me = asMusterdError(err);
   if (me.httpStatus !== 503) return false;
+  noteRequestFailure(res, err);
   res.setHeader('retry-after', '5');
   sendTokenError(res, 503, 'temporarily_unavailable', me.message);
   return true;
@@ -921,6 +924,7 @@ export async function handleOAuthRoutes(
       if (sendIfUnavailable(res, err)) return true;
       // CIMD is syntax-checked only here. Grant redemption below is the authority; do not fetch.
       if (!isCimdClientId(tokenReq.client_id)) {
+        if (!(err instanceof MusterdError)) noteRequestFailure(res, err);
         sendTokenError(res, 401, 'invalid_client', 'unknown client for this team');
         return true;
       }
@@ -968,7 +972,8 @@ export async function handleOAuthRoutes(
         return true;
       } catch (err) {
         if (sendIfUnavailable(res, err)) return true;
-        const me = asMusterdError(err);
+        if (!(err instanceof MusterdError)) noteRequestFailure(res, err);
+        const me = asMusterdHttpError(err);
         sendTokenError(res, 400, 'invalid_grant', me.message);
         return true;
       }
@@ -997,7 +1002,8 @@ export async function handleOAuthRoutes(
       return true;
     } catch (err) {
       if (sendIfUnavailable(res, err)) return true;
-      const me = asMusterdError(err);
+      if (!(err instanceof MusterdError)) noteRequestFailure(res, err);
+      const me = asMusterdHttpError(err);
       const reused = /reused/.test(me.message);
       if (reused) {
         await appendAudit(ctx.db, team.id, {
