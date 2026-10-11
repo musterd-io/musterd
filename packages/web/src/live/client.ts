@@ -246,8 +246,8 @@ export async function fetchLaneBoard(
  * indistinguishable from a CLI one to the daemon (same validation, same ask lifecycle audit). Only
  * meaningful for a **real** seat (the auto-provisioned observer is read-only by construction, ADR 063
  * — the daemon rejects its sends); callers gate the affordance on roster membership. Returns the
- * daemon's ack envelope so the view can fold the answer into its local timeline immediately (the
- * firehose deliberately skips the sender, so the ack is the only copy this client will see).
+ * daemon's ack envelope so the view can fold the answer into its local timeline immediately; the
+ * firehose copy of this HTTP send arrives a moment later and is deduped by id.
  */
 export async function sendAct(
   cfg: LiveConfig,
@@ -296,8 +296,8 @@ export async function sendAct(
  * so a signed-in human creates/claims/moves work exactly like a CLI seat would. The daemon emits the
  * `lane_open`/`lane_claim`/`lane_state`/`lane_handoff`/`lane_resolve` team acts itself on these
  * verbs — the client must never send a companion act. Both return the daemon's echo (`{lane,
- * warnings}`) so the board can fold the change in optimistically: the firehose deliberately skips
- * the sender, so this echo is the only copy the writing client sees (the AsksStrip precedent).
+ * warnings}`) so the board can fold the change in optimistically, ahead of the firehose's lane act
+ * (the AsksStrip precedent).
  */
 async function laneMutation(
   cfg: LiveConfig,

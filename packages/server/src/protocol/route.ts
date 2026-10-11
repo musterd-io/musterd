@@ -197,10 +197,22 @@ export async function routeEnvelope(
    *  strip fails closed** — a new client-facing route that forgets this cannot mint interrupts, and a
    *  daemon route that forgets it merely loses the interrupt (visible in tests, not exploitable). */
   daemonComposed = false,
+  /** The WS connection the act arrived on, if any — it gets the `ack`, so the firehose skips it and
+   *  only it. An HTTP send has none, and every firehose connection of the sender gets the act. */
+  senderConnId?: string,
 ): Promise<RouteResult> {
   return withEnvelopeSpan(
     env,
-    async () => await routeEnvelopeInner(ctx, team, sender, env, senderPresenceId, daemonComposed),
+    async () =>
+      await routeEnvelopeInner(
+        ctx,
+        team,
+        sender,
+        env,
+        senderPresenceId,
+        daemonComposed,
+        senderConnId,
+      ),
   );
 }
 
@@ -211,6 +223,7 @@ async function routeEnvelopeInner(
   env: Envelope,
   senderPresenceId?: string,
   daemonComposed = false,
+  senderConnId?: string,
 ): Promise<RouteResult> {
   // ADR 231: a `handoff` that names no lane. Only `lane_handoff` ever wrote
   // `meta.lane_handoff.lane`, so a plain `team_send {act:'handoff'}` hands over work without saying
@@ -707,15 +720,15 @@ async function routeEnvelopeInner(
   }
 
   // Fan out to firehose observers (ADR 061): every envelope on the team, for read-only watchers like
-  // the dashboard. Skip recipients (already delivered) and the sender (got an ack) so no double-send.
+  // the dashboard. Skip recipients (already delivered) and the one connection the act came in on (got
+  // an ack) so no double-send. Not every connection of the sender: that member-wide skip kept a
+  // human's own CLI sends off their open /live tab until a refresh (lane 01M4H7YKS5).
   const firehoseEnv = rowToEnvelope(
     message,
     team.slug,
     sender.name,
     env.to.kind === 'member' ? env.to.name : null,
   );
-  const skip = new Set(recipients);
-  skip.add(sender.id);
   // What a non-party subscriber may see is its ADR 407 grade (see `hub.broadcastFirehose`): a
   // directed envelope reaches every claimed seat, a confidential ask — ADR 407 §3, the one act that
   // names a seat as its subject — reaches admins and full observers only, and a public watch-link
@@ -723,9 +736,10 @@ async function routeEnvelopeInner(
   const firehoseDelivered = ctx.hub.broadcastFirehose(
     team.id,
     { type: 'deliver', envelope: firehoseEnv },
-    skip,
+    new Set(recipients),
     message.to_kind === 'member',
     confidentialAskSubject(env) !== null,
+    senderConnId,
   );
 
   // The to-human ask stream's guaranteed reach (ADR 147 §3): an `ask` routes to admin humans by default.
@@ -734,7 +748,11 @@ async function routeEnvelopeInner(
   // technically reach the human" true even when the ask is directed at a non-admin: the durable message
   // row is the inbox reach, this push is the loud reach. (Its loud *surface* — Slack + /live — is item 3.)
   if (env.act === 'ask') {
-    ctx.hub.deliverToAdmins(team.id, { type: 'deliver', envelope: firehoseEnv }, skip);
+    ctx.hub.deliverToAdmins(
+      team.id,
+      { type: 'deliver', envelope: firehoseEnv },
+      new Set([...recipients, sender.id]),
+    );
   }
   // The doorbell (ADR 443): ring any human this act rings, through musterd's own surfaces. Detached
   // and never throwing — the send has already persisted and delivered.

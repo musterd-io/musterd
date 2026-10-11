@@ -156,8 +156,10 @@ export class Hub {
 
   /**
    * Push a frame to every firehose subscriber on a team, skipping members in `skipMemberIds`
-   * (recipients + sender already handled by `deliver`/`ack`, so no one is double-sent). Every
-   * subscriber that reaches this loop is therefore a NON-PARTY, and what it may see is its ADR 407
+   * (recipients, already handled by `deliver`) and the one connection `skipConnId` the act was sent
+   * from (it got an `ack`). The sender's OTHER connections are not skipped: a human who sends from
+   * the CLI must see it on their own /live tab (lane 01M4H7YKS5). Every other subscriber that
+   * reaches this loop is a NON-PARTY, and what it may see is its ADR 407
    * grade: a `directed` (member-kind) envelope reaches `team` and `full` connections; a
    * `confidential` one — a to-human ask naming a seat, ADR 407 §3 — reaches `full` only; a
    * public-grade observer on a shared watch-link gets team/broadcast acts and nothing else
@@ -169,11 +171,13 @@ export class Hub {
     skipMemberIds?: Set<string>,
     directed?: boolean,
     confidential?: boolean,
+    skipConnId?: string,
   ): number {
     let n = 0;
     for (const connId of this.firehose) {
       const conn = this.byConn.get(connId);
       if (!conn || conn.teamId !== teamId) continue;
+      if (connId === skipConnId) continue;
       if (skipMemberIds?.has(conn.memberId)) continue;
       const grade = conn.visibility ?? 'public';
       if (directed && grade === 'public') continue;

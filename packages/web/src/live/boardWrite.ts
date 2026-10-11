@@ -94,9 +94,8 @@ export function acceptanceWait(lane: Lane): { reviewer: string } | { note: strin
 }
 
 /**
- * Fold a mutation echo into the board optimistically. The firehose deliberately skips the sender, so
- * this `{lane, warnings}` echo is the only copy the writing client sees (the AsksStrip precedent);
- * the next lane-event refetch reconciles with daemon truth. In-place replace keeps card order stable;
+ * Fold a mutation echo into the board optimistically, ahead of the firehose's lane act (the AsksStrip
+ * precedent); the next lane-event refetch reconciles with daemon truth. In-place replace keeps card order stable;
  * the echoed lane's warnings are authoritative-fresh, everyone else's are kept as-is.
  */
 export function applyLaneEcho(board: LaneBoard, result: LaneResult): LaneBoard {

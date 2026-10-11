@@ -50,7 +50,7 @@ export function PromptBar({
   roster: readonly MemberSummary[];
   /** The signed-in member — whose face the sent line floats from. */
   viewer: string;
-  /** The firehose skips the sender, so the route folds the ack in itself (the AsksStrip precedent). */
+  /** The route folds the ack in at once, ahead of the firehose copy (the AsksStrip precedent). */
   onSent: (ack: Envelope) => void;
 }) {
   const idx = rosterIndex(roster as MemberSummary[]);
