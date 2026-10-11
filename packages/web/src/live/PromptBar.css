@@ -148,7 +148,7 @@
 }
 .pbar__min svg,
 .pbar__fab svg,
-.cthread svg {
+.cseat__tick {
   width: 15px;
   height: 15px;
   fill: none;
@@ -321,7 +321,7 @@
   background: var(--lc-surface-2);
   border-radius: 14px 14px 4px;
 }
-.cthread__ask .cthread__bubble {
+.cthread__ask.is-open .cthread__bubble {
   border-color: var(--lc-accent);
 }
 .cthread .lc-ask__btn {
@@ -350,12 +350,12 @@
   position: absolute;
   right: -3px;
   bottom: -3px;
-  width: 12px;
-  height: 12px;
   border-radius: 50%;
   background: var(--lc-success);
 }
-.cseat .cseat__tick {
+.cseat__tick.cseat__tick {
+  width: 12px;
+  height: 12px;
   color: #fff;
   stroke-width: 2.4;
 }

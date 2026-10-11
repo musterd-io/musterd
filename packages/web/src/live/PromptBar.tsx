@@ -44,17 +44,6 @@ export function composerOpenFrom(s: Store | null): boolean {
     return true;
   }
 }
-/** Threads the reader hid, so a reload does not bring them back. Newest last, a few kept. */
-const HIDDEN_KEY = 'musterd.live.composer.hidden';
-function hiddenFrom(s: Store | null): string[] {
-  try {
-    const v: unknown = JSON.parse(s?.getItem(HIDDEN_KEY) ?? '[]');
-    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
 export function PromptBar({
   cfg,
   roster,
@@ -78,7 +67,9 @@ export function PromptBar({
   const members = roster.filter((m) => m.kind !== 'service' && m.name !== viewer);
 
   // The thread the panel shows: the viewer's newest huddle, unless they hid it.
-  const [hidden, setHidden] = useState<string[]>(() => hiddenFrom(store()));
+  // Hidden for this visit only; a reload within the hour brings the thread back, which is the safer way
+  // to be wrong mid-demo.
+  const [hidden, setHidden] = useState<string[]>([]);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -93,16 +84,7 @@ export function PromptBar({
     () => (root ? composerThread(envelopes, root, viewer) : null),
     [envelopes, root, viewer],
   );
-  const hide = () => {
-    if (!root) return;
-    const next = [...hidden, root.id].slice(-20);
-    setHidden(next);
-    try {
-      store()?.setItem(HIDDEN_KEY, JSON.stringify(next));
-    } catch {
-      /* private mode — hidden for this visit only */
-    }
-  };
+  const hide = () => root && setHidden((h) => [...h, root.id]);
   const [answering, setAnswering] = useState<string | null>(null);
   const answer = async (ask: AskView, kind: 'accept' | 'decline' | 'deciding') => {
     setAnswering(ask.env.id);

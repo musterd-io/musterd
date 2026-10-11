@@ -155,24 +155,20 @@ function Bubble({ text }: { text: string }) {
   return <p className="cthread__bubble">{text.trim()}</p>;
 }
 
-/** How a settled ask reads in the thread. Who answered is named, because it may not have been you. */
-function settledLine(ask: AskView, viewer: string): string | null {
-  const who = !ask.answeredBy || ask.answeredBy === viewer ? 'You' : ask.answeredBy;
-  switch (ask.state) {
-    case 'accepted':
-      return `${who} approved`;
-    case 'declined':
-      return `${who} said no`;
-    case 'deferred':
-      return `${who === 'You' ? 'You are' : `${who} is`} deciding`;
-    case 'resolved':
-      return 'Settled';
-    case 'lapsed':
-    case 'risk_accepted':
-      return 'The clock ran out, so they went ahead';
-    default:
-      return null;
-  }
+const SETTLED: Partial<Record<AskView['state'], string>> = {
+  accepted: 'Approved',
+  declined: 'Declined',
+  deferred: 'Deferred an hour',
+  resolved: 'Settled',
+  lapsed: 'Timed out',
+  risk_accepted: 'Timed out',
+};
+
+/** How a settled ask reads. Who answered is named, because it may not have been you. */
+function settledLine(ask: AskView, viewer: string): string {
+  const verb = SETTLED[ask.state] ?? '';
+  if (!ask.answeredBy) return verb;
+  return `${verb} by ${ask.answeredBy === viewer ? 'you' : ask.answeredBy}`;
 }
 
 function AskCard({
