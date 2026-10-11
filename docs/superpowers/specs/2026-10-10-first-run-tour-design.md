@@ -29,7 +29,7 @@ Shared by both surfaces. Copy is drafted in `content/tour.data.ts`, not here.
 | 0 | What this is | reads two lines: the ADR 550 claim, in second person | they continue |
 | 1 | Your team | sees the roster: themselves and their agent as named members, with the model the harness observed | immediately |
 | 2 | Give it work | accepts a small, safe lane the tour opens for them: read the repo's README and write a three-line summary in the lane note. No files change. | the lane is opened under their name |
-| 3 | It claims it | watches the tour hand the lane to their agent | the agent claims it |
+| 3 | It claims it | watches the tour ask their agent to claim the lane | the agent claims it |
 | 4 | It hands it back | waits | the agent submits, and the lane is waiting on their acceptance |
 | 5 | You judge it | reads the summary, then accepts it or sends it back with a note | their verdict is recorded |
 | 6 | The record | sees this lane's chain: who opened it, who claimed it, which model did it, who accepted it | immediately |
@@ -61,11 +61,12 @@ tour shows "opened by" and does not word it as a guarantee of who asked.
 - **Source:** `content/tour.data.ts` at the repo root — a typed module. Each step has an id, its copy,
   the event it waits on (lane opened / claimed / awaiting acceptance / resolved, or none), and its
   "nothing yet" hints with their delays.
-- **Generated copies:** `pnpm tour:gen` writes one generated, committed copy into the CLI package and one
-  into the web package. Only `@musterd/protocol` may be imported across package boundaries, so neither
+- **Generated copy:** `pnpm tour:gen` writes one generated, committed copy into the CLI package. The
+  web package's generated folder is gitignored and rebuilt by its build-prep, which reads
+  `content/tour.data.ts` there (lane `01M4M4DDYF`). Only `@musterd/protocol` may be imported across package boundaries, so neither
   package imports the root module. The precedent is `content/roadmap.data.ts` → `pnpm roadmap:gen`
   (ADR 041).
-- **Drift gate:** `pnpm tour:check` fails if either generated copy differs from the source; it runs in
+- **Drift gate:** `pnpm tour:check` fails if the CLI copy differs from the source; it runs in
   `format:check`.
 - **Rejected:** putting the script in `@musterd/protocol` (it is the wire contract, ADR-gated); having
   the daemon serve it (server work for static copy).
@@ -89,7 +90,14 @@ emits lane open, claim, state and resolve events; no server change is planned.
 - **Large existing team:** the tour opens one lane, titled with a `[tour]` prefix, and sends nothing
   beyond its handoff.
 
-## Verify first (before building on them)
+## Verify first (checked 2026-10-10, read-only; details in the plan)
+
+All three hold, with two adjustments: the lane is opened unowned and the agent is *asked* to claim it
+(a handoff emits no claim event), and the CLI polls the team timeline every 2s (the socket skips a
+member's own acts). The web build reads `content/tour.data.ts` at its build-prep, since the web's
+generated folder is gitignored; the CLI gets the committed generated copy.
+
+The original items:
 
 1. **Acceptance reaches the person.** On a one-agent team, ordinary routing may find no eligible
    acceptor and let the agent self-close, which skips step 5. The handoff tells the agent to submit
