@@ -84,6 +84,10 @@ prompt; it cannot inject context, so there is no repeating-nudge seam on Cursor 
   canonical `.musterd/skill/import.md` for Codex and opencode. Its prose is in
   `protocol/src/guidance.ts` (`GUIDANCE_CONTENT_VERSION` 47, ADR 085), and its paths join
   `GUIDANCE_INSTALL_PATHS` so the epoch reader sees them (ADR 417). No wire schema changes.
+- **2026-10-10 — the import skill reads Linear, Jira and Notion (lane 01M4M4A67Z).** Phase 2 of the
+  same spec adds one section per tracker to the same skill body (`GUIDANCE_CONTENT_VERSION` 48):
+  read through the harness's own connector, read-only, or from the tool's CSV export. musterd still
+  holds no tracker credentials. Same install paths; no wire schema changes.
 
 ## Observability & Evaluation
 

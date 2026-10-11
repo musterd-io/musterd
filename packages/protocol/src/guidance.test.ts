@@ -234,6 +234,7 @@ describe('version-bump discipline (ADR 085)', () => {
     45: '51712f8b3f289f85', // ADR 514 inc 3 (lane 01M46MQQFS): the push-back bullet leaves — the style block on team_join carries the floor and each human's dials; the primer points at it
     46: 'd1324abe1740c3da', // lane 01M46S44K8 (ADR 259/516): the skill says harness memory holds facts about the human, never team facts or rules — a rule no hold carries is not a rule
     47: '0f0eefd223371a7f', // + musterd-import skill unit + a pointer to it in the main skill (spec 2026-10-10 "bring work in", lane 01M4FDBSN8)
+    48: '2e33b61b92826439', // musterd-import reads Linear, Jira and Notion through the harness's connector, read-only, or a CSV export; never asks for a token (lane 01M4M4A67Z)
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {
@@ -393,6 +394,16 @@ describe('musterd-import skill (spec 2026-10-10 "bring work in")', () => {
     expect(skill).toMatch(
       /If `gh` is missing or not signed in, say so and continue with the repo scan/,
     );
+  });
+
+  it('reads Linear, Jira and Notion through a connector, or else an export (phase 2, lane 01M4M4A67Z)', () => {
+    expect(skill).toMatch(/\*\*Linear:\*\*[\s\S]*`source_ref` the issue identifier \(`LIN-42`\)/);
+    expect(skill).toMatch(/\*\*Jira:\*\*[\s\S]*`statusCategory != Done`[\s\S]*`PROJ-123`/);
+    expect(skill).toMatch(/\*\*Notion:\*\*[\s\S]*database the human names/);
+    expect(skill).toMatch(/connector[\s\S]*read-only/);
+    expect(skill).toMatch(/no connector[\s\S]*CSV export/i);
+    expect(skill).toMatch(/Urgent or Highest[\s\S]*`high`[\s\S]*Low[\s\S]*`low`/);
+    expect(skill).toMatch(/Never ask the human for an API key or token/);
   });
 
   it('names the file columns', () => {

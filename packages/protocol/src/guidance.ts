@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 47;
+export const GUIDANCE_CONTENT_VERSION = 48;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -593,6 +593,21 @@ export function renderImportSkill(): string {
     '     number,title,body,labels,milestone,url`. Milestones, or else the main labels, become goals;',
     '     each issue becomes a lane with `source_ref` `github#<number>` and the URL in `detail`.',
     '     If `gh` is missing or not signed in, say so and continue with the repo scan.',
+    '   - **Linear, Jira or Notion:** use the connector this harness already has for that tool, and',
+    '     use it read-only: never create, edit or comment on anything in the tracker.',
+    "     With no connector, ask the human for the tool's CSV export and map its columns the same way.",
+    '     Never ask the human for an API key or token; musterd holds no tracker credentials.',
+    '     - **Linear:** open issues (not Done or Canceled). Projects, or else cycles, become goals;',
+    '       each issue becomes a lane with `source_ref` the issue identifier (`LIN-42`) and the URL',
+    '       in `detail`.',
+    '     - **Jira:** issues matching `statusCategory != Done`. Epics, or else fix versions, become',
+    '       goals; each issue becomes a lane with `source_ref` the issue key (`PROJ-123`) and the',
+    '       URL in `detail`.',
+    '     - **Notion:** the database the human names. Its status or project property becomes the',
+    '       goals; each row becomes a lane with `source_ref` the page URL. Ask which property',
+    '       groups the work if more than one could.',
+    '     - **Priority:** Urgent or Highest becomes stakes `high`, Low becomes `low`; leave stakes',
+    '       empty for anything else.',
     '   - **Pasted text:** one lane per item the human listed; ask before inventing goals for it.',
     '3. **Keep the first import small:** about 5 goals and 30 lanes. Tell the human what you left out',
     '   and why, so they can bring it in later.',
