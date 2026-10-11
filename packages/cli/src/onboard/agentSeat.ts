@@ -40,6 +40,11 @@ export interface AgentSeatInput {
   driver?: string | undefined;
   here?: boolean | undefined;
   path?: string | undefined;
+  /**
+   * `false` leaves the folder's git identity alone. init's connect path binds a person's own
+   * checkout, where rewriting `user.name` would author their commits as the seat (lane 01M4FDBVGB).
+   */
+  gitIdentity?: boolean | undefined;
   reconcile?: typeof reconcileHarnesses | undefined;
 }
 
@@ -98,6 +103,7 @@ export async function provisionAgentSeat(input: AgentSeatInput): Promise<AgentSe
         cwd: input.sourceDir,
         ...(input.path ? { path: input.path } : {}),
         ...(input.base ? { base: input.base } : {}),
+        ...(input.gitIdentity === false ? { gitIdentity: false } : {}),
       }),
     wiring: {
       desired: input.harnesses,
