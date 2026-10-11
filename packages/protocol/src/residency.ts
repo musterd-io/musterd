@@ -126,6 +126,12 @@ export const ResidencyPolicySchema = z.object({
    * `false` per seat refuses being convened even where the team has enabled it.
    */
   convene_huddles: z.boolean().default(false),
+  /**
+   * ADR 558: may an idle open session of this seat be pushed a turn when a directed act arrives?
+   * On by default — the act was addressed to this seat, and the adapter's caps bound the cost.
+   * `false` per seat or team keeps the act waiting for the next tool boundary or prompt.
+   */
+  idle_wake: z.boolean().default(true),
   /** Watchdog for work-order wakes only (ADR 191 / 199) — a coding session, not a reply. Default
    *  30m. Work-orders do not clamp below this on the host (ADR 199); reply wakes still honor the
    *  operator `--timeout` ceiling. */

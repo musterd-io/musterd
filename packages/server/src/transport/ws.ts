@@ -4,6 +4,7 @@ import {
   PROTOCOL_VERSION,
   type WSServerFrame,
   type ClaimTarget,
+  type Hearing,
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
@@ -101,6 +102,9 @@ interface ConnState {
    * the socket before it expires, so a long-lived adapter never presents a dead one. Absent on human
    * and observer connections, which carry no HTTP lease. */
   lease?: { id: string };
+  /** ADR 558: the last `hearing` this connection's heartbeat carried, so only a change writes the
+   *  `presence.hearing` row — a reconnect re-reports once, a steady state writes nothing. */
+  hearing?: Hearing;
 }
 
 /**
@@ -1100,6 +1104,22 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
               // ADR 514: the style block a seat runs changes when an admin or the human moves a
               // dial; the adapter re-sends the epoch it read, and the roster follows.
               await reattestStyleEpoch(ctx.db, conn.presenceId, frame.style_epoch);
+              // ADR 558: whether an idle session can be pushed a turn. An audit row on change only —
+              // the roster column is increment 5; until then this row is the instrument.
+              if (frame.hearing && frame.hearing !== state.hearing) {
+                state.hearing = frame.hearing;
+                await appendAudit(ctx.db, conn.teamId, {
+                  actor: conn.memberName,
+                  action: 'presence.hearing',
+                  target: conn.memberName,
+                  result: 'allow',
+                  detail: {
+                    occupancy: conn.presenceId,
+                    hearing: frame.hearing,
+                    reason: frame.hearing_reason ?? null,
+                  },
+                });
+              }
             } else {
               // The row behind this socket is gone — the reaper removed it while the socket stayed
               // open — and the session lease that joined on it is dead with it, so every hook probe

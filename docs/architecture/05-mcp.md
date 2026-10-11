@@ -382,7 +382,12 @@ src/
                   //   stale-grant refuse → drop grant + one bare retry (ADR 193);
                   //   claim + heartbeat run reconcileCursorCapture then refreshAttestation (ADR 270);
                   //   heartbeat + HTTP x-musterd-surface attest occupancy surface from capture (ADR 275)
-  sessionLiveness.ts // the ADR 164 ladder: judges OUR OWN harness session on the heartbeat tick (ppid / successor / ended_at / transcript staleness) so a process that outlived its session stops attesting presence; fails open
+  sessionLiveness.ts // the ADR 164 ladder: judges OUR OWN harness session on the heartbeat tick (ppid / successor / ended_at / transcript staleness) so a process that outlived its session stops attesting presence; fails open; an armed idle-wake core (ADR 558) keeps presence past the `stale` rung, and `transcriptMtime()` / `capturedSessionId()` feed it
+  idleWake/       // ADR 558 — idle-at-prompt wake: the daemon decides WHAT rings (`seam=idle`), this decides WHEN
+    decider.ts    // IdleWake: onDeliver (idleMayRing pre-filter) / onConnected (catch-up) → 5 s coalesce → idle test (no tool in flight, last Stop newer than last prompt, 30 s keyboard guard, transcript quiet 15 s; no evidence = not idle) → seam=idle check → caps (3/h per sender, 6/h per session) → isPushableLine (one short printable line of the composed shape — it becomes a USER turn) → inject → report; deaf on switch-off / policy-off / a failed inject (10 min backoff) / no turn within 60 s of an inject; hearing() rides the heartbeat
+    inject.ts     // InjectAdapter (probe + inject) and injectAdapterFor(harness): claude-code today, every other harness deaf by name (`no-inject:<harness>`) until its increment lands
+    claudeInbox.ts // the claude-code adapter: NDJSON over CLAUDE_CODE_MESSAGING_SOCKET — optional auth line, then one user message; socket and token read from this process's env, the token never logged or echoed in a reason
+    state.ts      // read-only twin of the CLI's `.musterd/idle-wake.json` reader + markersFor (markers from another session id are dropped; the switch is kept)
   cursorCapture.ts // ADR 270: Cursor .txt enumeration + heartbeat reconcile — heals a mismatched cursor slot and drops leftover model_observed when observe hooks never fire; injected enumerator in tests; never imports CLI session.ts
   claim.ts        // claimSeat() mint-or-reuse + claimAndJoin() + adoptIdentity() (live claim, ADR 034)
   harness.ts      // bounded MCP clientInfo capture: adapter-local harness diagnostics, never model inference (ADR 120)

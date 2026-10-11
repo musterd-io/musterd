@@ -51,7 +51,8 @@ import { findWorkspaceDir, resolve, resolveRead } from './helpers.js';
 const POLICY_FLAGS_USAGE =
   '[--lane both|interrupt|batched] [--cooldown <15m>] [--hourly-cap <n>] [--attempt-cap <n>] ' +
   '[--tool-policy reply-only|seat-policy] [--timeout <5m>] [--work-timeout <30m>] ' +
-  '[--flow manual|auto] [--convene-huddles on|off] [--max-turns <n>] [--budget <usd>] ' +
+  '[--flow manual|auto] [--convene-huddles on|off] [--idle-wake on|off] [--max-turns <n>] ' +
+  '[--budget <usd>] ' +
   '[--transcript-max <MiB, fractions OK>] [--dream on|off] [--dream-nightly <1-3>] ' +
   '[--dream-budget <usd>]';
 
@@ -223,6 +224,14 @@ export function collectPolicyFlags(parsed: Parsed): ResidencyPolicyOverride | un
       throw new CliError(`--convene-huddles wants on|off (got "${convene}")`, 2);
     out['convene_huddles'] = convene === 'on';
   }
+  // ADR 558: may an idle open session be pushed a turn? `policy` sets the team default,
+  // `on <seat>` the seat's override — the same flag parser serves both.
+  const idleWake = flagStr(parsed.flags, 'idle-wake');
+  if (idleWake !== undefined) {
+    if (idleWake !== 'on' && idleWake !== 'off')
+      throw new CliError(`--idle-wake wants on|off (got "${idleWake}")`, 2);
+    out['idle_wake'] = idleWake === 'on';
+  }
   num('max-turns', 'max_turns');
   const budget = flagStr(parsed.flags, 'budget');
   if (budget !== undefined) {
@@ -272,6 +281,7 @@ export function renderPolicy(
   ];
   if (policy.convene_huddles) bits.push(`convenes huddles${star('convene_huddles')}`);
   else if (override && override.convene_huddles === false) bits.push('refuses huddle convene*');
+  if (!policy.idle_wake) bits.push(`idle wake off${star('idle_wake')}`);
   if (policy.dream_enabled) {
     const ceiling =
       policy.dream_budget_usd !== undefined

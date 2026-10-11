@@ -671,3 +671,56 @@ describe('a huddle OPEN convenes the seats it names (ADR 378 inc 4)', () => {
     });
   });
 });
+
+describe('pendingInterrupts directed (ADR 558 seam=idle)', () => {
+  const env = (
+    over: Partial<Envelope> & Pick<Envelope, 'id' | 'from' | 'to' | 'act'>,
+  ): Envelope => ({
+    v: PROTOCOL_VERSION,
+    team: 'dawn',
+    body: 'x',
+    thread: null,
+    meta: null,
+    ts: 1,
+    ...over,
+  });
+  const toIzzo = { kind: 'member' as const, name: 'izzo' };
+
+  it('admits a plain directed ask/request_help/handoff only when directed is on', () => {
+    const msgs = ['ask', 'request_help', 'handoff'].map((act, i) =>
+      env({ id: `0${i}`, act: act as Envelope['act'], from: 'ryder', to: toIzzo }),
+    );
+    expect(pendingInterrupts(msgs, 'izzo', { obligations: true, huddles: true })).toHaveLength(0);
+    expect(
+      pendingInterrupts(msgs, 'izzo', { obligations: true, huddles: true, directed: true }),
+    ).toHaveLength(3);
+  });
+
+  it('a directed ask is discharged by my reply to it, or by an accept from anyone', () => {
+    const ask = env({ id: '01', act: 'ask', from: 'ryder', to: toIzzo });
+    const reply = env({
+      id: '02',
+      act: 'message',
+      from: 'izzo',
+      to: { kind: 'member', name: 'ryder' },
+      meta: { in_reply_to: '01' },
+      ts: 2,
+    });
+    const accept = { ...reply, from: 'nick', act: 'accept' as const };
+    expect(pendingInterrupts([ask, reply], 'izzo', { directed: true })).toHaveLength(0);
+    expect(pendingInterrupts([ask, accept], 'izzo', { directed: true })).toHaveLength(0);
+  });
+
+  it('team-addressed request_help without an eligible set stays off the idle seam', () => {
+    const rh = env({ id: '01', act: 'request_help', from: 'ryder', to: { kind: 'team' } });
+    expect(pendingInterrupts([rh], 'izzo', { directed: true })).toHaveLength(0);
+  });
+
+  it('a superseded steer stays superseded on the idle seam', () => {
+    const old = env({ id: '01', act: 'steer', from: 'ryder', to: toIzzo, ts: 1 });
+    const cur = env({ id: '02', act: 'steer', from: 'ryder', to: toIzzo, ts: 2 });
+    expect(pendingInterrupts([old, cur], 'izzo', { directed: true }).map((m) => m.id)).toEqual([
+      '02',
+    ]);
+  });
+});

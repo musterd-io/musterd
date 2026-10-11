@@ -125,6 +125,14 @@ export type AuditAction =
   // two-word state. Deduped to one row per seat per REFUSAL_WINDOW_MS, because the probe fires at
   // every tool boundary and a deaf seat would otherwise write a row a second.
   | 'interrupt.refused'
+  // ADR 558: the idle-wake adapter's outcome report (`POST …/inbox/idle-wake`) — one per inject
+  // attempt (`detail.ok`, `reason` on a failure) and one per ring a cap held back (`detail.cap`).
+  // target = the reporting seat. Structured fields only: the schema has no field for the line.
+  | 'idle_wake.injected'
+  | 'idle_wake.capped'
+  // ADR 558: a live connection's heartbeat changed its `hearing` (`idle`|`deaf`, with a reason). One
+  // row per change per connection; the roster column is increment 5.
+  | 'presence.hearing'
   // Doorbell contract clause 7 (docs/design/daemon-doorbell-contract.md): an interrupt-class act
   // with NO answering move — a `steer`, an urgent message — was RENDERED to its addressee by an
   // inbox read. That is its discharge: the ADR 287 watermark may hold behind it forever (an
@@ -625,6 +633,10 @@ export const AUDIT_SUBJECT: Record<AuditAction, AuditSubject> = {
   'request.expired': 'none',
   'interrupt.raised': 'target',
   'interrupt.refused': 'actor',
+  // The adapter reports on its session while the seat is idle at its prompt — not the seat acting.
+  'idle_wake.injected': 'none',
+  'idle_wake.capped': 'none',
+  'presence.hearing': 'none',
   'inbox.rendered': 'actor',
   'memory.save': 'actor',
   'memory.clear': 'actor',

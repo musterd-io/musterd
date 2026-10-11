@@ -4,6 +4,8 @@
  * zod module (`doorbell.ts`) builds its enum from this tuple and re-exports every name here.
  */
 
+import { eligibleOf } from './envelope.wire.js';
+
 /** The four sinks, in route order. `live` is always on (ADR 443 §3). */
 export const DOORBELL_SINKS = ['live', 'os', 'slack', 'webhook'] as const;
 export type DoorbellSink = (typeof DOORBELL_SINKS)[number];
@@ -49,4 +51,37 @@ export function ringTargets(input: {
 function isLaneReview(meta: Record<string, unknown> | null | undefined): boolean {
   const review = meta?.['lane_review'];
   return typeof review === 'object' && review !== null;
+}
+
+/** The acts that ring an idle session when directed to its seat (idle-wake spec §1, ADR 558). */
+const IDLE_RINGS = new Set(['steer', 'ask', 'request_help', 'handoff']);
+
+/** The envelope fields the idle rule reads — structural, so `/live` and the adapter can call it. */
+export interface IdleRingInput {
+  act: string;
+  from: string;
+  to: { kind: string; name?: string };
+  meta?: Record<string, unknown> | null | undefined;
+  thread?: string | null | undefined;
+}
+
+/**
+ * Does this act ring `seat`'s idle session (ADR 558 §1)? Directed — to the seat, or an eligible set
+ * naming it — and either flagged urgent or one of the four acts that ask the seat to do something.
+ * A team-addressed act never rings an idle session; huddle turns ring through the live set's
+ * membership rule on the daemon, which an envelope alone cannot decide.
+ */
+export function idleRingable(env: IdleRingInput, seat: string): boolean {
+  if (env.from === seat) return false;
+  const named = eligibleOf(env.meta);
+  const directed = named ? named.includes(seat) : env.to.kind === 'member' && env.to.name === seat;
+  if (!directed) return false;
+  if (env.meta?.['urgent'] === true) return true;
+  return IDLE_RINGS.has(env.act);
+}
+
+/** The adapter's cheap pre-filter: {@link idleRingable}, or any threaded act (a possible huddle
+ *  turn) — the daemon's `seam=idle` read is the authority for both. */
+export function idleMayRing(env: IdleRingInput, seat: string): boolean {
+  return idleRingable(env, seat) || (env.from !== seat && env.thread != null);
 }

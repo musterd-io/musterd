@@ -17,6 +17,9 @@ export {
   actMayRing,
   DOORBELL_SINKS,
   type DoorbellSink,
+  idleMayRing,
+  idleRingable,
+  type IdleRingInput,
   OFF_MACHINE_SINKS,
   ringTargets,
 } from './doorbell.wire.js';

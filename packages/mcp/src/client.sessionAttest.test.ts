@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MusterdClient } from './client.js';
+import type { IdleWake } from './idleWake/decider.js';
 import { SessionAttestation } from './sessionLiveness.js';
 
 /**
@@ -108,6 +109,25 @@ describe('attestSession hands the transcript age down (lane 01M2KCG5Z8)', () => 
     // ADR 164 crash backstop must still fire.
     expect(attest(), 'no first-hand evidence — the backstop stands').toBe(true);
     expect(client.releasedByLiveness).toBe(true);
+    client.close();
+  });
+});
+
+describe('an armed idle-wake core keeps presence past the stale rung (ADR 558 §5)', () => {
+  it('a session that can be pushed while idle is not released for a quiet transcript', () => {
+    const { client, attest, transcriptFallsSilent } = adapterJudging();
+    client.attachIdleWake({ armed: () => true } as unknown as IdleWake);
+    transcriptFallsSilent();
+    expect(attest(), 'idle at the prompt and reachable — keep the seat').toBe(false);
+    expect(client.releasedByLiveness).toBe(false);
+    client.close();
+  });
+
+  it('a deaf core changes nothing: the backstop still fires', () => {
+    const { client, attest, transcriptFallsSilent } = adapterJudging();
+    client.attachIdleWake({ armed: () => false } as unknown as IdleWake);
+    transcriptFallsSilent();
+    expect(attest()).toBe(true);
     client.close();
   });
 });

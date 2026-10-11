@@ -2,6 +2,7 @@ import { hostname } from 'node:os';
 import {
   DeferUntilSchema,
   eligibleOf,
+  idleRingable,
   OBLIGATION_ACTS_ANY,
   OBLIGATION_ACTS_DIRECTED,
   PROTOCOL_VERSION,
@@ -542,6 +543,9 @@ export function pendingInterrupts(
     /** ADR 271 §4, built: the daemon's "the red you parked behind is resolved" notice
      *  (`meta.incident.resolved_by`) is a wake reason when `incident.wake_on_resolve` is on. */
     incidentResolves?: boolean;
+    /** ADR 558: the idle seam — admit every act `idleRingable` accepts (a plain directed ask,
+     *  request_help, handoff). Live seam only, like `obligations`: never the paid wake rail. */
+    directed?: boolean;
   } = {},
 ): Envelope[] {
   const resolved = new Set<string>();
@@ -664,6 +668,14 @@ export function pendingInterrupts(
     const named = eligibleOf(m.meta as Record<string, unknown> | null | undefined);
     return named ? named.includes(me) : m.to.kind === 'member' && m.to.name === me;
   };
+  // ADR 558: discharged by an accept/decline naming it (any sender) or by my own reply — the
+  // clause 7(iv) rule a steer already uses, applied to the acts the idle seam adds.
+  const isDirectedIdle = (m: Envelope) =>
+    opts.directed === true &&
+    idleRingable(m, me) &&
+    !discharged.has(m.id) &&
+    !answeredByMe.has(m.id) &&
+    !answeredInThreadByMe(m);
   // ADR 254: an eligible set REPLACES the default obligation rule rather than adding to it — which is
   // what narrows `request_help` from "every seat on the team" (its behaviour without a set, below) to
   // the named few. Discharge is checked here rather than at the filter so a stood-down act stops
@@ -708,7 +720,8 @@ export function pendingInterrupts(
           isHuddleTurn(m) ||
           isHuddleOpen(m) ||
           isIncidentRoute(m) ||
-          isIncidentResolve(m)) &&
+          isIncidentResolve(m) ||
+          isDirectedIdle(m)) &&
         !resolved.has(m.thread ?? m.id) &&
         // Directed obligations (no eligible set) were missing this: `discharged` only ran inside
         // the eligible-set branch of `actionNeeded`, so a self-answered `lane_review` ask kept

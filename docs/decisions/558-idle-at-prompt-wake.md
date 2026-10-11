@@ -188,6 +188,16 @@ report never fakes liveness.
   spec's `.musterd/session/` file is now `.musterd/idle-wake.json`, with the socket read from the
   environment. The socket's wire format is not in Claude Code's public docs; it was read from the
   2.1.296 `[uds-messaging]` debug help, and the canary confirms it.
+- _(2026-10-11, building increment 2.)_ Two corrections to the first bullet's compatibility story.
+  First, every `seam=idle` reply echoes `seam`, and the adapter reads a reply without the echo (a
+  pre-558 daemon that ignored the parameter) as silence, not as a line to push. Second, the idle
+  line becomes a **user-role** turn in the receiving session, not hook output, so it is guarded
+  twice. The daemon stays silent on the idle seam unless every field the line interpolates (team,
+  sender, act id, thread, huddle topic) is a short plain token, because `id`, `thread` and a
+  huddle's `topic.id` are sender-chosen strings the envelope schema bounds only by `min(1)`. The
+  adapter also pushes nothing that is not one short printable line of the composed shape, and
+  reports `failed` with reason `line-shape`. The boundary seam is unchanged and still carries such
+  an act as hook output. Found by a commit security review during the build.
 
 Follows-up: lane `01M4M6PXZT8ND6F17ZSBDKZQCS` — the core and the claude-code inject, with its canary.
 Follows-up: lane `01M4M6Q5ERZTP2GGHJZM71HP9R` — the opencode inject.

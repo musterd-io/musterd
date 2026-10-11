@@ -183,6 +183,40 @@ withDrivers('interruptCandidates', (o) => {
       );
     });
 
+    it('ADR 558 seam=idle: the directed read gives the same answer as the whole window', async () => {
+      const { db, team, nick, ada, bob } = await corpus();
+      await say(db, team, nick, ada, 'handoff', 'plain-handoff');
+      await say(db, team, bob, ada, 'request_help', 'plain-help');
+      await say(db, team, bob, ada, 'ask', 'answered-ask', {
+        meta: { species: 'consult', tier: 'advisory' },
+      });
+      await say(db, team, ada, bob, 'message', 'my-answer', {
+        meta: { in_reply_to: 'answered-ask' },
+      });
+      const fold = async (rows: Awaited<ReturnType<typeof listInbox>>) =>
+        pendingInterrupts(await rowsToEnvelopes(db, team.slug, rows), ada.name, {
+          obligations: true,
+          directed: true,
+        }).map((e) => e.id);
+      const narrowed = await fold(
+        await listInterruptCandidates(db, ada, { cursorTs: 0, directed: true }),
+      );
+      // The whole window omits my own sends, so hand it my answer the way the narrowed read does.
+      const whole = await listInbox(db, ada, { unreadOnly: true, cursorTs: 0 });
+      const mine = await listInterruptCandidates(db, ada, { cursorTs: 0 });
+      expect(narrowed).toEqual(
+        await fold([...whole, ...mine.filter((r) => r.from_member === ada.id)]),
+      );
+      expect(narrowed).toEqual(
+        expect.arrayContaining(['plain-ask', 'plain-handoff', 'plain-help']),
+      );
+      expect(narrowed).not.toContain('answered-ask');
+      // The boundary seam is unchanged: none of the plain directed acts ring there.
+      expect(await viaCandidates(db, team, ada, true)).not.toEqual(
+        expect.arrayContaining(['plain-handoff']),
+      );
+    });
+
     it('reads only the shapes the fold can use, not the window', async () => {
       const { db, ada } = await corpus();
       const whole = await listInbox(db, ada, { unreadOnly: true, cursorTs: 0 });

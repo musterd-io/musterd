@@ -135,5 +135,9 @@
 // excludes unmet-dependency lanes; `up_next_total` and `up_next_blocked_total` ride beside it. A
 // daemon behind this epoch serves the old oldest-first window and neither count; a renderer behind
 // it prints the list as before and omits the "N of M claimable" line (both counts default to 0).
-export const FEATURE_EPOCH = 31 as const;
+// Epoch 32 — ADR 558 (idle-at-prompt wake, increment 2): `seam=idle` on interrupt-check, the
+// `idle_wake` residency policy key, `hearing` on the heartbeat, and `POST …/inbox/idle-wake`. A
+// daemon behind this epoch ignores `seam` (its reply carries no `seam` echo, which the adapter reads
+// as silence) and drops the policy key; an adapter behind it never injects or sends `hearing`.
+export const FEATURE_EPOCH = 32 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;

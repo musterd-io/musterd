@@ -51,8 +51,18 @@ export async function listInterruptCandidates(
   db: Driver,
   member: { id: string; team_id: string; name: string },
   /** `cursorTs` is the cursor row's `created_at` (see `cursors.ts`) — the window is in receipt order. */
-  opts: { cursorTs?: number } = {},
+  opts: {
+    cursorTs?: number;
+    /** ADR 558: the idle seam also admits a plain directed ask/request_help/handoff — the shapes
+     *  `pendingInterrupts`' `directed` flag adds. Off, the query text and parameters are
+     *  byte-identical to the boundary seam's. */
+    directed?: boolean;
+  } = {},
 ): Promise<MessageRow[]> {
+  const directed = opts.directed
+    ? `
+            OR (to_member = ? AND act IN ('ask','request_help','handoff'))`
+    : '';
   const windowRows = await db.all<MessageRow>(
     `SELECT * FROM messages
         WHERE team_id = ?
@@ -66,7 +76,7 @@ export async function listInterruptCandidates(
             OR meta LIKE '%"lane_review"%'
             OR meta LIKE '%"eligible"%'
             OR meta LIKE '%"huddle"%'
-            OR meta LIKE '%"incident"%'
+            OR meta LIKE '%"incident"%'${directed}
           )
           AND (
             act IN ('steer','resolve','accept','decline')
@@ -75,7 +85,7 @@ export async function listInterruptCandidates(
             OR json_extract(meta, '$.eligible') IS NOT NULL
             OR json_extract(meta, '$.huddle') IS NOT NULL
             OR json_extract(meta, '$.incident.routed_to') IS NOT NULL
-            OR json_extract(meta, '$.incident.resolved_by') IS NOT NULL
+            OR json_extract(meta, '$.incident.resolved_by') IS NOT NULL${directed}
             OR (
               thread_id IS NOT NULL
               AND EXISTS (
@@ -88,7 +98,17 @@ export async function listInterruptCandidates(
             )
           )
         ORDER BY created_at ASC, id ASC`,
-    [member.team_id, member.id, member.id, opts.cursorTs ?? 0, member.team_id],
+    opts.directed
+      ? [
+          member.team_id,
+          member.id,
+          member.id,
+          opts.cursorTs ?? 0,
+          member.id,
+          member.id,
+          member.team_id,
+        ]
+      : [member.team_id, member.id, member.id, opts.cursorTs ?? 0, member.team_id],
   );
 
   // Doorbell contract clause 7 (docs/design/daemon-doorbell-contract.md): six clauses governed
