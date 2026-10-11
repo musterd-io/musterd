@@ -110,9 +110,9 @@ describe('recentRepos', () => {
       { dir: api, harnesses: ['grok', 'opencode'], lastUsed: 300_000 },
       { dir: web, harnesses: ['opencode'], lastUsed: 200_000 },
     ]);
-    expect(
-      recentRepos({ ...base, home, harnessIds: ['grok', 'opencode'], limit: 1 }),
-    ).toHaveLength(1);
+    expect(recentRepos({ ...base, home, harnessIds: ['grok', 'opencode'], limit: 1 })).toHaveLength(
+      1,
+    );
   });
 
   it('maps a subfolder to its git root', () => {

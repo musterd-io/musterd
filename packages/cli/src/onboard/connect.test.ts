@@ -26,6 +26,7 @@ const okProvision = () =>
   > & { mock: { calls: [Record<string, unknown>][] } };
 
 const base = {
+  excludeCredential: () => true,
   desired: ['claude-code', 'cursor'],
   team: 'revive',
   server: 'http://x',
@@ -161,6 +162,38 @@ describe('connectRepos', () => {
       writePrimer: () => {},
     });
     expect(r).toMatchObject({ status: 'partial', detail: 'reconcile threw' });
+  });
+
+  it('ignores the credential-holding binding before provisioning', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'connect-'));
+    writeFileSync(join(dir, '.gitignore'), 'node_modules\n');
+    const provision = vi.fn(async (i: { sourceDir: string }) => {
+      expect(readFileSync(join(i.sourceDir, '.gitignore'), 'utf8')).toContain(
+        '.musterd/binding.json',
+      );
+      return seat(i.sourceDir, wiredRows);
+    }) as unknown as NonNullable<ConnectReposInput['provision']>;
+    const [r] = await connectRepos({
+      ...base,
+      excludeCredential: undefined,
+      repos: [dir],
+      provision,
+      writePrimer: () => {},
+    });
+    expect(r!.status).toBe('ok');
+    expect(readFileSync(join(dir, '.gitignore'), 'utf8').startsWith('node_modules\n')).toBe(true);
+  });
+
+  it('says so when the binding could not be ignored', async () => {
+    const [r] = await connectRepos({
+      ...base,
+      repos: ['/c/web'],
+      provision: okProvision(),
+      writePrimer: () => {},
+      excludeCredential: () => false,
+    });
+    expect(r).toMatchObject({ status: 'partial' });
+    expect(r!.detail).toContain("don't commit it");
   });
 
   it('appends the primer to an existing AGENTS.md', async () => {

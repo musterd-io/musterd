@@ -1,8 +1,15 @@
-import { basename, resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { basename, resolve, sep } from 'node:path';
+import * as p from '@clack/prompts';
+import type { HttpClient } from '../client.js';
+import { excludeCredentialFromGit } from '../config.js';
 import { paint as pc } from '../render/theme.js';
 import { sym } from '../render/ui.js';
 import { provisionAgentSeat, type AgentSeatInput } from './agentSeat.js';
+import { bindingRefusal } from './guard.js';
+import { HARNESSES, harnessAdapters } from './harnesses/index.js';
 import { renderRepositoryPrimer, upsertPrimer } from './primer.js';
+import { recentRepos } from './recents.js';
 
 /**
  * `musterd init`'s default path (lane 01M4FDBVGB): one seat per picked repo, every chosen harness
@@ -44,6 +51,7 @@ export interface ConnectReposInput {
   model?: string | undefined;
   provision?: typeof provisionAgentSeat;
   writePrimer?: (dir: string) => void;
+  excludeCredential?: (dir: string) => boolean;
 }
 
 const WIRED = new Set(['applied', 'unchanged', 'satisfied-unmanaged']);
@@ -53,12 +61,16 @@ export async function connectRepos(input: ConnectReposInput): Promise<ConnectRes
   const writePrimer =
     input.writePrimer ??
     ((dir: string) => void upsertPrimer(dir, renderRepositoryPrimer({ team: input.team })));
+  const excludeCredential = input.excludeCredential ?? excludeCredentialFromGit;
   const taken = [...input.roster];
   const out: ConnectResult[] = [];
   for (const dir of input.repos) {
     const name = seatNameFor(dir, taken);
     taken.push(name);
     try {
+      // The binding about to land here holds the seat's credential, and this is the person's own
+      // repo: ignore it first, so not even a failed run leaves a committable key (ADR 176).
+      const ignored = excludeCredential(dir);
       const r = await provision({
         name,
         team: input.team,
@@ -80,9 +92,12 @@ export async function connectRepos(input: ConnectReposInput): Promise<ConnectRes
       for (const id of input.desired) {
         const mine = rows.filter((x) => x.harness === id);
         const bad = mine.filter((x) => !WIRED.has(x.result) && x.result !== 'pending');
-        if (bad.length > 0) problems.push(`${id}: ${bad.map((x) => x.detail ?? x.result).join(', ')}`);
+        if (bad.length > 0)
+          problems.push(`${id}: ${bad.map((x) => x.detail ?? x.result).join(', ')}`);
         else if (mine.length > 0 && mine.every((x) => WIRED.has(x.result))) wired.push(id);
       }
+      if (!ignored)
+        problems.push("couldn't add .musterd/binding.json to .gitignore — don't commit it");
       const detail = r.wiringError ?? (problems.length ? problems.join('; ') : null);
       writePrimer(dir);
       out.push({ dir, name, status: detail ? 'partial' : 'ok', wired, detail });
@@ -100,4 +115,144 @@ export function resultLine(r: ConnectResult, labels: Record<string, string>): st
   if (r.status === 'partial')
     return `${pc.yellow(sym.warn)} ${r.name} — ${harnesses}; ${r.detail}; run musterd wire there`;
   return `${pc.green(sym.ok)} ${r.name} — ${harnesses}`;
+}
+
+export interface RunConnectInput {
+  team: string;
+  server: string;
+  http: Pick<HttpClient, 'roster'> & AgentSeatInput['http'];
+  cwd: string;
+  home: string;
+  rosterHome?: string | undefined;
+  driver?: string | undefined;
+  model?: string | undefined;
+}
+
+/** init's own cancel guard, repeated here because init imports this module. */
+function guard<T>(value: T | symbol): T {
+  if (p.isCancel(value)) {
+    p.cancel('Cancelled.');
+    process.exit(0);
+  }
+  return value as T;
+}
+
+function ago(at: number, now: number): string {
+  const min = Math.max(0, Math.round((now - at) / 60_000));
+  if (min < 60) return `${min}m ago`;
+  if (min < 48 * 60) return `${Math.round(min / 60)}h ago`;
+  return `${Math.round(min / 1440)}d ago`;
+}
+
+const tilde = (dir: string, home: string) =>
+  dir.startsWith(home + sep) ? '~' + dir.slice(home.length) : dir;
+
+/** How to bring a connected seat up, by the first selected harness. */
+function launchHint(desired: readonly string[], dir: string): string {
+  const hints: Record<string, string> = {
+    'claude-code': `cd ${dir} && claude`,
+    cursor: `open ${dir} in Cursor`,
+    codex: `open ${dir} in Codex`,
+    opencode: `cd ${dir} && opencode`,
+    grok: `cd ${dir} && grok`,
+  };
+  const first = desired.find((id) => hints[id]);
+  return first ? hints[first]! : `cd ${dir} && musterd host`;
+}
+
+function realOr(dir: string): string {
+  try {
+    return realpathSync(dir);
+  } catch {
+    return dir;
+  }
+}
+
+/**
+ * The connect path's prompts: which agents (once, for every repo), which repos (this folder first,
+ * then what the agents have recently worked in), then one result line per repo. Returns the exit
+ * code: 1 when any repo failed.
+ */
+export async function runConnect(input: RunConnectInput): Promise<number> {
+  const sd = p.spinner();
+  sd.start('Looking for the agents on this machine');
+  const detected = await Promise.all(HARNESSES.map(async (h) => ({ h, d: await h.detect() })));
+  sd.stop('Scanned for agents');
+  for (const { h, d } of detected)
+    p.log.step(
+      `${pc.bold(h.label)} ${pc.dim('—')} ${d.installed ? pc.yellow('installed') : pc.dim('not installed')}`,
+    );
+
+  const labels: Record<string, string> = Object.fromEntries(HARNESSES.map((h) => [h.id, h.label]));
+  const installed = new Set(detected.filter((x) => x.d.installed).map((x) => x.h.id));
+  const adapters = harnessAdapters().filter((a) => a.id !== 'musterd');
+  const desired = guard(
+    await p.multiselect({
+      message: 'Which agents should join? (space toggles, enter confirms)',
+      options: adapters.map((a) => ({
+        value: a.id,
+        label: labels[a.id] ?? a.id,
+        ...(installed.has(a.id) ? {} : { hint: 'pending — not installed here' }),
+      })),
+      initialValues: adapters.filter((a) => installed.has(a.id)).map((a) => a.id),
+      required: false,
+    }),
+  ) as string[];
+
+  const now = Date.now();
+  const here = realOr(input.cwd);
+  const hereOk = bindingRefusal(here, input.home) === null;
+  const suggestions = recentRepos({
+    home: input.home,
+    harnessIds: [...installed],
+    exclude: [here],
+  });
+  const repos = guard(
+    await p.multiselect({
+      message: 'Which repos should be connected? (each becomes a seat)',
+      options: [
+        ...(hereOk ? [{ value: here, label: tilde(here, input.home), hint: 'this folder' }] : []),
+        ...suggestions.map((r) => ({
+          value: r.dir,
+          label: tilde(r.dir, input.home),
+          hint: `${r.harnesses.map((id) => labels[id] ?? id).join(', ')} · ${ago(r.lastUsed, now)}`,
+        })),
+      ],
+      initialValues: hereOk ? [here] : [],
+      required: false,
+    }),
+  ) as string[];
+  if (repos.length === 0) {
+    p.outro('Nothing connected. Run `musterd init` again when you want to.');
+    return 0;
+  }
+
+  const { members } = await input.http.roster(input.team);
+  const s = p.spinner();
+  s.start(`Connecting ${repos.length} repo${repos.length === 1 ? '' : 's'}`);
+  const results = await connectRepos({
+    repos,
+    desired,
+    team: input.team,
+    server: input.server,
+    http: input.http,
+    roster: members.map((m) => m.name),
+    rosterHome: input.rosterHome,
+    driver: input.driver,
+    model: input.model,
+  });
+  s.stop(`Connected to ${pc.bold(input.team)}`);
+  for (const r of results) p.log.message(resultLine(r, labels));
+
+  const up = results.filter((r) => r.status !== 'failed');
+  if (up.length > 0) {
+    p.note(
+      up
+        .map((r) => `${pc.cyan(r.name)}  ${launchHint(desired, tilde(r.dir, input.home))}`)
+        .join('\n') + `\n\n${pc.yellow('musterd status')}   see them on the roster`,
+      'Start any of them',
+    );
+  }
+  p.outro(pc.yellow(`${up.length} seat${up.length === 1 ? '' : 's'} on ${input.team}.`));
+  return results.some((r) => r.status === 'failed') ? 1 : 0;
 }

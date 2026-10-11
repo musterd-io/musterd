@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, appendFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
 import * as p from '@clack/prompts';
 import { type MemberSummary, resolveAttestedModel } from '@musterd/protocol';
@@ -20,6 +21,7 @@ import {
 import { renderBanner } from '../render/rows.js';
 import { paint as pc, theme } from '../render/theme.js';
 import { sym } from '../render/ui.js';
+import { runConnect } from './connect.js';
 import { acceptSurface, readDeclined } from './declined.js';
 import { bindingRefusal, inspectInitTarget, nameBoundElsewhere } from './guard.js';
 import { CANONICAL_SKILL_PATH, establishedHarnesses, writeGuidance } from './guidance.js';
@@ -577,6 +579,11 @@ export async function runInit(): Promise<number> {
     await p.select({
       message: `What would you like to do on ${pc.bold(team)}?`,
       options: [
+        {
+          value: 'connect',
+          label: 'Connect the agents you already have',
+          hint: 'one seat per repo, every agent on this machine wired in',
+        },
         { value: 'new', label: 'Add a new agent', hint: 'connect a coding agent as a teammate' },
         {
           value: 'existing',
@@ -589,8 +596,24 @@ export async function runInit(): Promise<number> {
           hint: 'be present and supervise',
         },
       ],
+      initialValue: 'connect',
     }),
   );
+
+  if (intent === 'connect') {
+    // The first-run default (lane 01M4FDBVGB): every installed agent into each picked repo, one
+    // seat per repo, in one run. `Add a new agent` below stays the detailed single-seat path.
+    return runConnect({
+      team,
+      server,
+      http,
+      cwd: process.cwd(),
+      home: homedir(),
+      rosterHome: config.rosterHome[team],
+      driver: config.current ? config.identities[config.current]?.name?.trim() : undefined,
+      model: resolveAttestedModel(process.env),
+    });
+  }
 
   if (intent === 'watch') {
     // Supervising posture: the human is already a member (joined at team create); nothing to mint.

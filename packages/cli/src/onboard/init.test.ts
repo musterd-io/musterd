@@ -232,6 +232,8 @@ vi.mock('../config.js', () => ({
 vi.mock('node:child_process', () => ({ spawn: vi.fn(() => ({ unref: vi.fn() })) }));
 // The tour handoff (spec 2026-10-10-first-run-tour-design) — mocked so a "yes" is observable without
 // making a workspace or starting the tour.
+const connectMock = vi.hoisted(() => ({ run: vi.fn(async (_input: unknown) => 0) }));
+vi.mock('./connect.js', () => ({ runConnect: connectMock.run }));
 vi.mock('./tourOffer.js', () => ({ startTourAsPerson: vi.fn(async () => 0) }));
 
 let cwd: string;
@@ -676,6 +678,21 @@ describe('runInit — intent branches', () => {
 
     expect(await runInit()).toBe(0);
     expect(h.claimKeys).toEqual(['mskey_team']);
+  });
+
+  it('"Connect the agents you already have" is the default and hands off to runConnect', async () => {
+    h.textQueue.push('dawn', 'nick', ''); // createTeam
+    h.selectQueue.push('connect'); // intent
+    connectMock.run.mockResolvedValueOnce(1);
+    expect(await runInit()).toBe(1); // runConnect's exit code is init's
+    expect(connectMock.run).toHaveBeenCalledWith(
+      expect.objectContaining({ team: 'dawn', cwd: process.cwd() }),
+    );
+    expect(h.http.addMember).not.toHaveBeenCalled();
+    const intents = h.selectOptions.find((o) =>
+      (o as { value: string }[]).some((x) => x.value === 'connect'),
+    ) as { value: string }[];
+    expect(intents[0]!.value).toBe('connect');
   });
 
   it('"activate an existing member" surfaces a refusal instead of dead-ending', async () => {
