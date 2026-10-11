@@ -219,7 +219,7 @@ export function PromptBar({
           Ask your team
           {thread && !thread.closed && thread.cast.length > 0 && (
             <span className="pbar__fabcount">
-              {thread.cast.filter((c) => thread.answered.has(c)).length} of {thread.cast.length}
+              · {thread.cast.filter((c) => thread.answered.has(c)).length} of {thread.cast.length}
             </span>
           )}
           {text.trim() && <span className="pbar__draft" aria-label="you have a draft" />}

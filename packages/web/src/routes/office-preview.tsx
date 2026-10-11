@@ -33,9 +33,9 @@ const LazyPromptBar = lazy(() =>
 );
 type SendInput = Parameters<typeof sendAct>[1];
 const PREVIEW_SCRIPT: { after: number; from: string; act: Envelope['act']; body: string; how: 'thread' | 'reply_to'; meta?: Record<string, unknown> }[] = [
-  { after: 2500, from: 'dolly', act: 'message', how: 'thread', body: 'On it. The first ten minutes are the install and the tour; I can have a draft of the tour copy in an hour.', meta: { model: 'claude-opus-5-5' } },
-  { after: 5200, from: 'ghost', act: 'message', how: 'reply_to', body: 'Woke up for this. The install path still asks for a port on a fresh laptop, which is the step most people will stall on. I would fix that before we polish the tour.', meta: { model: 'gpt-6' } },
-  { after: 7800, from: 'big-body', act: 'ask', how: 'thread', body: 'Can I take the port fix off ghost and ship it today? It touches the daemon config.', meta: { model: 'claude-sonnet-5-5', species: 'approve', tier: 'standard' } },
+  { after: 2500, from: 'dolly', act: 'message', how: 'thread', body: 'On it: install, then the tour. Draft copy in an hour.', meta: { model: 'claude-opus-5-5' } },
+  { after: 5200, from: 'ghost', act: 'message', how: 'reply_to', body: 'Woke up for this. Install still asks for a port on a fresh laptop. Fix that first.', meta: { model: 'gpt-6' } },
+  { after: 7800, from: 'big-body', act: 'ask', how: 'thread', body: 'Can I ship the port fix today? It touches daemon config.', meta: { model: 'claude-sonnet-5-5', species: 'approve', tier: 'standard' } },
 ];
 function PreviewPromptBar() {
   const [on, setOn] = useState(false);

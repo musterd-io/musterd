@@ -1,5 +1,5 @@
 import type { MemberSummary } from '@musterd/protocol';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { askIsLoud, SPECIES_VERB_YOU, type AskView } from './asks';
 import {
   answeredLine,
@@ -89,37 +89,36 @@ export function ComposerThreadPanel({
           ))}
         </span>
         <span className="cthread__count" aria-live="polite">
-          {answeredLine(thread)}
-          {waking && <span className="cthread__waking"> · waking…</span>}
-          {thread.closed && <span className="cthread__closed"> · closed</span>}
+          <b>{answeredLine(thread)}</b>
+          {waking && ' · waking…'}
+          {thread.closed && ' · closed'}
         </span>
-        <button type="button" className="cthread__hide" aria-label="Hide replies" title="Hide" onClick={onHide}>
+        <button type="button" className="pbar__min" aria-label="Hide replies" title="Hide" onClick={onHide}>
           <svg viewBox="0 0 16 16" aria-hidden="true">
             <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
           </svg>
         </button>
       </header>
       <ol
-        className="cthread__lines"
         ref={list}
         onScroll={(e) => {
           const el = e.currentTarget;
           pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
         }}
       >
-        <li className="cthread__msg is-mine">
+        <li className="is-mine">
           <Bubble text={thread.sentence} />
-          <time className="cthread__time">{clock(thread.root.ts)}</time>
+          <time>{clock(thread.root.ts)}</time>
         </li>
         {items.map(({ key, line, ask }) =>
           line ? (
             line.env.from === viewer ? (
-              <li key={key} className="cthread__msg is-mine">
+              <li key={key} className="is-mine">
                 <Bubble text={line.env.body} />
-                <time className="cthread__time">{clock(line.env.ts)}</time>
+                <time>{clock(line.env.ts)}</time>
               </li>
             ) : (
-              <li key={key} className="cthread__msg">
+              <li key={key}>
                 <MemberFace name={line.env.from} roster={idx} size={30} />
                 <div className="cthread__col">
                   <Byline name={line.env.from} model={line.env.meta?.['model']} ts={line.env.ts} direct={line.direct} />
@@ -128,7 +127,7 @@ export function ComposerThreadPanel({
               </li>
             )
           ) : (
-            <li key={key} className="cthread__msg">
+            <li key={key}>
               <MemberFace name={ask!.env.from} roster={idx} size={30} />
               <AskCard ask={ask!} viewer={viewer} busy={busy === ask!.env.id} onAnswer={onAnswer} />
             </li>
@@ -144,28 +143,16 @@ function Byline({ name, model, ts, direct }: { name: string; model: unknown; ts:
   return (
     <div className="cthread__by">
       <b>{name}</b>
-      {m && <span className="cthread__model">{m}</span>}
-      <time className="cthread__time">{clock(ts)}</time>
-      {direct && <span className="cthread__direct">to you</span>}
+      {m}
+      <time>{clock(ts)}</time>
+      {direct && ' · to you'}
     </div>
   );
 }
 
-/** Replies run long. A bubble shows its first few lines and opens on a click; short ones never clamp. */
+/** One message. A long reply shows in full; the panel scrolls rather than hiding the rest behind a click. */
 function Bubble({ text }: { text: string }) {
-  const [open, setOpen] = useState(false);
-  const long = text.length > 320 || text.split('\n').length > 6;
-  if (!long) return <p className="cthread__bubble">{text.trim()}</p>;
-  return (
-    <button
-      type="button"
-      className={`cthread__bubble is-long${open ? ' is-open' : ''}`}
-      aria-expanded={open}
-      onClick={() => setOpen((o) => !o)}
-    >
-      {text.trim()}
-    </button>
-  );
+  return <p className="cthread__bubble">{text.trim()}</p>;
 }
 
 /** How a settled ask reads in the thread. Who answered is named, because it may not have been you. */
@@ -177,7 +164,7 @@ function settledLine(ask: AskView, viewer: string): string | null {
     case 'declined':
       return `${who} said no`;
     case 'deferred':
-      return `${who === 'You' ? 'You are' : `${who} is`} deciding — they check back in an hour`;
+      return `${who === 'You' ? 'You are' : `${who} is`} deciding`;
     case 'resolved':
       return 'Settled';
     case 'lapsed':
@@ -205,24 +192,24 @@ function AskCard({
     <div className={`cthread__col cthread__ask${open ? ' is-open' : ''}`}>
       <div className="cthread__by">
         <b>{ask.env.from}</b>
-        <span className="cthread__asks">{mine ? SPECIES_VERB_YOU[ask.species] : `asks ${ask.to}`}</span>
-        <time className="cthread__time">{clock(ask.env.ts)}</time>
+        {mine ? SPECIES_VERB_YOU[ask.species] : `asks ${ask.to}`}
+        <time>{clock(ask.env.ts)}</time>
       </div>
       {ask.env.body && <Bubble text={ask.env.body} />}
       {open && mine ? (
-        <div className="cthread__answers">
-          <button type="button" disabled={busy} className="cthread__ans is-yes" onClick={() => onAnswer(ask, 'accept')}>
+        <div>
+          <button type="button" disabled={busy} className="lc-ask__btn lc-ask__btn--accept" onClick={() => onAnswer(ask, 'accept')}>
             Approve
           </button>
-          <button type="button" disabled={busy} className="cthread__ans" onClick={() => onAnswer(ask, 'decline')}>
+          <button type="button" disabled={busy} className="lc-ask__btn lc-ask__btn--decline" onClick={() => onAnswer(ask, 'decline')}>
             Deny
           </button>
-          <button type="button" disabled={busy} className="cthread__ans is-quiet" onClick={() => onAnswer(ask, 'deciding')}>
+          <button type="button" disabled={busy} className="lc-ask__btn lc-ask__btn--later" onClick={() => onAnswer(ask, 'deciding')}>
             Deciding — 1h
           </button>
         </div>
       ) : (
-        !open && settledLine(ask, viewer) && <p className="cthread__settled">{settledLine(ask, viewer)}</p>
+        !open && <div className="cthread__by">{settledLine(ask, viewer)}</div>
       )}
     </div>
   );
