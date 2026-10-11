@@ -1043,6 +1043,7 @@ export const claudeCode: Harness = {
     // ADR 333: Claude Code's native skill catalog. Other harnesses get their own shell or the
     // canonical `.musterd/skill/orient.md`; this path is no longer "the only copy".
     orientSkillPath: '.claude/skills/musterd-orient/SKILL.md',
+    importSkillPath: '.claude/skills/musterd-import/SKILL.md',
   },
 
   // Claude Code hands its hooks a `transcript_path`, and the newest assistant turn in that file

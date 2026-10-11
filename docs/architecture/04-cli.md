@@ -181,7 +181,7 @@ src/
     reconcile/fragments.ts // the fragment adapter contract (ADR 281/282): HarnessAdapter/FragmentIntent types, canonical SHA-256 fingerprints, scope-discriminated resource keys, registry order
     reconcile/engine.ts  // inspectHarnesses (read-only) + reconcileHarnesses: the frozen action matrix, write-ahead journal sequence, fingerprint-compared recovery, one allowlisted musterd.provisioning.operation span per fragment (ADR 282/286)
     harnesses/musterd.ts // the native musterd adapter (always available, Surface musterd, zero external fragments) + the internal musterd-core guidance fragment producer
-    guidance.ts       // writeGuidance/removeGuidance: skill + slash-command files per harness, content-stamped (ADR 085); always writes canonical `.musterd/skill/orient.md` (ADR 333)
+    guidance.ts       // writeGuidance/removeGuidance: skill + slash-command files per harness, content-stamped (ADR 085); always writes canonical `.musterd/skill/orient.md` (ADR 333) and `.musterd/skill/import.md` (the musterd-import skill, spec 2026-10-10 "bring work in"; native copies beside orient on Claude Code, Cursor, Grok)
     pending.ts        // client-side pending-presence markers (ADR 033)
     permissions.ts    // ADR 261: STANDARD_FLOOR + installSeatPermissions — the harness permission layer becomes a provisioned artifact; liftSeatPermissions (inc 2 reversal, lane 01M3TAM44Q): a removed role's deny/ask entries come out unless a still-held role compiles them too; allow is never touched
     primer.ts         // renderRepositoryPrimer + idempotent upsertPrimer → Team-only AGENTS.md primer (ADR 307)

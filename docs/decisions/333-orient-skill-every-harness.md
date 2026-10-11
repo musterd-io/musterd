@@ -78,6 +78,12 @@ prompt; it cannot inject context, so there is no repeating-nudge seam on Cursor 
 - **2026-09-17 — still one orient body ([ADR 418](418-session-label-capability-is-the-tool-list.md)).**
   Desktop vs terminal cannot be provisioned apart. The shared skill now contains the tool-list tree;
   do not generate per-driver orient files.
+- **2026-10-10 — a second skill rides this catalog (lane 01M4FDBSN8).** The `musterd-import`
+  skill ([spec](../superpowers/specs/2026-10-10-bring-work-in-design.md)) installs exactly where
+  orient does: native beside it on Claude Code, Cursor (`.mdc`, `alwaysApply: false`) and Grok,
+  canonical `.musterd/skill/import.md` for Codex and opencode. Its prose is in
+  `protocol/src/guidance.ts` (`GUIDANCE_CONTENT_VERSION` 47, ADR 085), and its paths join
+  `GUIDANCE_INSTALL_PATHS` so the epoch reader sees them (ADR 417). No wire schema changes.
 
 ## Observability & Evaluation
 

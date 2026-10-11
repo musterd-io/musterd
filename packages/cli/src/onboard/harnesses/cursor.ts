@@ -314,6 +314,7 @@ export const cursor: Harness = {
     // ADR 333: catalog the orient ritual as a description-gated rule. The sessionStart hook injects
     // the block once; there is no repeating nudge on Cursor (beforeSubmitPrompt cannot inject).
     orientSkillPath: '.cursor/rules/musterd-orient.mdc',
+    importSkillPath: '.cursor/rules/musterd-import.mdc',
   },
 
   // NO `observeModel` — deliberately, since 2026-09-04 (ADR 383). ADR 198 read `model_id` off the

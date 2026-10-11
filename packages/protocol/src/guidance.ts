@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 46;
+export const GUIDANCE_CONTENT_VERSION = 47;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -82,6 +82,8 @@ export const SKILL_CLI_COMMANDS = [
   'unbind',
   'reclaim',
   'session',
+  // spec 2026-10-10 "bring work in": the musterd-import skill names `musterd import`.
+  'import',
 ] as const;
 
 /** The content-stamp prefix. A full stamp reads: `<!-- musterd:content v1 sha256:abcd1234 -->`. */
@@ -561,6 +563,62 @@ export function renderOrientFrontmatter(): string {
     'description: Orient a seat session at start: inbox, seat memory, handle directed asks and ' +
       'incidents unprompted, surface the rest, then stamp oriented. Use when the injected ' +
       'orientation block or the orient nudge appears, before other work.',
+    '---',
+  ].join('\n');
+}
+
+/**
+ * The `musterd-import` skill (spec 2026-10-10 "bring work in", lane 01M4FDBSN8): the agent half of
+ * `musterd import`. It writes the import file from the repo or GitHub issues; the CLI checks, previews,
+ * stages and saves. The save is the human's checkpoint.
+ */
+export function renderImportSkill(): string {
+  return [
+    '# Bring existing work in',
+    '',
+    "Turn a team's existing work into goals and lanes on the board, in two steps the human can see.",
+    'Use it on a new team, or when the human asks to bring a repo, a backlog or a plan in.',
+    '',
+    '1. **Ask what to bring in:** this repo, its GitHub issues, something the human pastes, or new',
+    '   work to plan. Ask once; do not start reading before you know.',
+    '2. **Gather it.**',
+    '   - **This repo:** the README, ROADMAP and TODO files, plan and spec docs, a `TODO`/`FIXME`',
+    '     search grouped into themes (never one lane per comment), unmerged branches, and recent',
+    '     commits for work in progress. Themes become goals; concrete pieces of work become lanes.',
+    '   - **GitHub issues:** `gh issue list --state open --limit 200 --json',
+    '     number,title,body,labels,milestone,url`. Milestones, or else the main labels, become goals;',
+    '     each issue becomes a lane with `source_ref` `github#<number>` and the URL in `detail`.',
+    '     If `gh` is missing or not signed in, say so and continue with the repo scan.',
+    '   - **Pasted text:** one lane per item the human listed; ask before inventing goals for it.',
+    '3. **Keep the first import small:** about 5 goals and 30 lanes. Tell the human what you left out',
+    '   and why, so they can bring it in later.',
+    '4. **Write the file** to `.musterd/imports/draft-<time>.csv`. Columns: `kind` (goal or lane),',
+    '   `key` (required for a goal: lowercase-with-dashes, it becomes the goal id; optional for a',
+    '   lane, so other lanes can depend on it), `title`, `detail` (lanes: say where you found it),',
+    '   `story` (goals: one plain line, at most 140 characters), `goal` (a goal key from the file or',
+    '   an existing goal id), `depends_on` (keys or full lane ids, separated by `;`), `stakes` (low,',
+    '   normal or high), `source_ref`. Leave owners, scope and risk out: imported lanes open',
+    '   unclaimed, and whoever claims one decides those.',
+    '5. **Preview:** run `musterd import <file>` and show the human the whole preview. Fix every ✗',
+    '   and re-run until it is clean; explain each ⚠ (an existing goal is linked, not re-declared;',
+    '   a likely duplicate may already be on the board).',
+    '6. **Save:** run `musterd import save <id>` only after the human says yes to that preview.',
+    "   The two steps are the human's checkpoint: never save an import you previewed yourself",
+    '   without that yes. If the save stops partway, run the same command again; it resumes.',
+    '7. **Afterwards:** point the human at the board (`musterd next`, or the /live link the save',
+    '   printed). Do not claim the imported lanes unless the human asks you to.',
+    '',
+  ].join('\n');
+}
+
+/** Frontmatter for {@link renderImportSkill} on a harness that gates skills on a description. */
+export function renderImportFrontmatter(): string {
+  return [
+    '---',
+    'name: musterd-import',
+    'description: Bring existing work onto the musterd board as goals and lanes: scan this repo or ' +
+      'its GitHub issues, write an import file, preview it with `musterd import`, and save only after ' +
+      'the human says yes. Use on a new team or when asked to bring a backlog or plan in.',
     '---',
   ].join('\n');
 }

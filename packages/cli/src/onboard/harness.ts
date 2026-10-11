@@ -206,6 +206,9 @@ export interface HarnessGuidance {
    * no native catalog (Codex, OpenCode) omit this; they get the canonical `.musterd/skill/orient.md`
    * instead. Presence of this path is catalog, not a claim that the repeating nudge fires there. */
   orientSkillPath?: string;
+  /** Path for the **musterd-import** skill (spec 2026-10-10 "bring work in") — declared beside
+   * `orientSkillPath` on the same harnesses; Codex and OpenCode get canonical `.musterd/skill/import.md`. */
+  importSkillPath?: string;
 }
 
 /** What a harness gets to work with when observing its own session's model. */

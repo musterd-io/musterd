@@ -8,6 +8,7 @@ import {
 } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import {
+  CANONICAL_IMPORT_PATH,
   CANONICAL_ORIENT_PATH,
   CANONICAL_SKILL_PATH,
   contentHash,
@@ -55,10 +56,10 @@ describe('writeGuidance', () => {
     expect(readFileSync(join(dir, CANONICAL_SKILL_PATH), 'utf8')).not.toContain('name: musterd');
   });
 
-  it('gives Codex the canonical team skill and the canonical orient skill (no native mechanism)', () => {
+  it('gives Codex the canonical team, orient and import skills (no native mechanism)', () => {
     const dir = tmp();
     const res = writeGuidance(dir, [codex], { team: 'dawn' });
-    expect(res.files).toEqual([CANONICAL_SKILL_PATH, CANONICAL_ORIENT_PATH]);
+    expect(res.files).toEqual([CANONICAL_SKILL_PATH, CANONICAL_ORIENT_PATH, CANONICAL_IMPORT_PATH]);
   });
 
   it('renders the Cursor rule with .mdc frontmatter', () => {
@@ -245,6 +246,34 @@ describe('orient guidance unit (ADR 333)', () => {
     expect(removed).toContain(rel);
     expect(removed).toContain(CANONICAL_ORIENT_PATH);
     expect(existsSync(join(dir, '.claude/skills/musterd-orient'))).toBe(false);
+  });
+});
+
+describe('import guidance unit (spec 2026-10-10 "bring work in")', () => {
+  it('writes Claude native, Cursor .mdc, Grok native and canonical import.md beside orient', () => {
+    const dir = tmp();
+    const res = writeGuidance(dir, [claudeCode, cursor, codex], { team: 'dawn' });
+    const claude = '.claude/skills/musterd-import/SKILL.md';
+    const cursorRule = '.cursor/rules/musterd-import.mdc';
+    expect(res.files).toEqual(expect.arrayContaining([claude, cursorRule, CANONICAL_IMPORT_PATH]));
+    expect(readFileSync(join(dir, claude), 'utf8')).toContain('name: musterd-import');
+    const cursorText = readFileSync(join(dir, cursorRule), 'utf8');
+    expect(cursorText).toContain('alwaysApply: false');
+    expect(cursorText).not.toContain('name: musterd-import');
+    const canonical = readFileSync(join(dir, CANONICAL_IMPORT_PATH), 'utf8');
+    expect(canonical).toContain('# Bring existing work in');
+    expect(canonical).not.toContain('name: musterd-import');
+    expect(guidanceTargets(HARNESSES)).toContain('.grok/skills/musterd-import/SKILL.md');
+  });
+
+  it('is enumerated by guidanceTargets and removed by removeGuidance (dir pruned)', () => {
+    const dir = tmp();
+    writeGuidance(dir, [claudeCode], { team: 'dawn' });
+    const rel = '.claude/skills/musterd-import/SKILL.md';
+    expect(guidanceTargets([claudeCode])).toContain(rel);
+    const { removed } = removeGuidance(dir, [claudeCode]);
+    expect(removed).toEqual(expect.arrayContaining([rel, CANONICAL_IMPORT_PATH]));
+    expect(existsSync(join(dir, '.claude/skills/musterd-import'))).toBe(false);
   });
 });
 
