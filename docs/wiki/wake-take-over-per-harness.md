@@ -34,3 +34,5 @@ Observed 2026-10-08 from `packages/cli/src/host/backends/*`, `trace/transcript.t
 Landed 2026-10-08 (lane 2/6). One `WatchReader` per harness, in `packages/cli/src/launcher/watch/`: *find the transcript from the lease's `session_id`*, *project it into `WatchEvent`s*, *say whether it ended cleanly*. `watch/index.ts` asks the registry (`readers.ts`), not Claude Code. The rules about what watch may show live in one place, `events.ts`: a reader can only make an event through `textEvent` / `toolEvent`, which keep words and tool calls only (the constructors take no result field), run every line through `scrubCredentials`, and strip control characters.
 
 The registry lives beside the readers, not on the onboarding harness adapters as the lane first said: those hold install-time config, and importing launcher code into them would point the dependency the wrong way.
+
+Related: [dream lease file stamped wake](dream-lease-stamped-wake.md) — the lease file's `provenance` field is the literal `wake`, including on a dream.

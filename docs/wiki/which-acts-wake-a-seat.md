@@ -41,4 +41,4 @@ Not measured here: §c (the enrollment horizon) on a live enrollment, and a seat
 - **Urgent flag** → any directed act with `meta.urgent: true` reaches both lanes, but it is capability-gated (`can_flag_urgent`, `packages/protocol/src/capabilities.ts`) and scarce by design; do not reach for it to paper over the `message` gap.
 - **It genuinely can wait for their next session** → `message` is correct. Say so to yourself when you pick it.
 
-Related: [wake leases](wake-leases.md) for what happens after a wake is minted; [the instrument discharges the act](the-instrument-discharges-the-act.md) for what counts as answering one.
+Related: [wake leases](wake-leases.md) for what happens after a wake is minted; [the instrument discharges the act](the-instrument-discharges-the-act.md) for what counts as answering one; [dream cannot verdict a lane_review ask](dream-cannot-verdict-acceptance.md) for the case where the immediate lane wakes a dream that cannot answer.
