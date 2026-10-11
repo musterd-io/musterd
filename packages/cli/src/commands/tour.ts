@@ -3,7 +3,9 @@ import { makeEnvelope } from '@musterd/protocol';
 import { decodeTime, ulid } from 'ulid';
 import type { Parsed } from '../args.js';
 import { paint as pc } from '../render/theme.js';
+import { termWidth } from '../render/ui.js';
 import { runTour, type TourPort, type TourUi } from '../tour/run.js';
+import { wrapBody } from '../tour/screens.js';
 import { TOUR_MESSAGES } from '../tour/script.generated.js';
 import { resolve, sendOrEcho } from './helpers.js';
 
@@ -80,8 +82,9 @@ export async function tourCommand(parsed: Parsed): Promise<number> {
   };
 
   const ui: TourUi = {
-    show: (title, body) => p.note(body, title),
-    hint: (text) => p.log.info(pc.dim(text)),
+    // clack draws a note as wide as its longest line; the box adds 6 columns, a log line 3.
+    show: (title, body) => p.note(wrapBody(body, termWidth() - 6), title),
+    hint: (text) => p.log.info(pc.dim(wrapBody(text, termWidth() - 3))),
     pressEnter: async () => {
       const go = await p.confirm({ message: 'Continue?', initialValue: true });
       return !p.isCancel(go) && go;
@@ -94,7 +97,7 @@ export async function tourCommand(parsed: Parsed): Promise<number> {
       return p.isCancel(pick) ? null : pick;
     },
     judge: async (summary) => {
-      p.log.message(summary || pc.dim('(the lane has no summary yet)'));
+      p.log.message(wrapBody(summary, termWidth() - 3) || pc.dim('(the lane has no summary yet)'));
       const accept = await p.select({
         message: 'Your verdict',
         options: [

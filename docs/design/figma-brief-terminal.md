@@ -385,7 +385,8 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
 The copy comes from `content/tour.data.ts`, copied into the CLI by `pnpm tour:gen`; these frames
 pin how the CLI fills it. Each step prints as a note titled by `stepTitle` with its body under it.
 All four are pinned character-for-character by `packages/cli/src/tour/screens.test.ts`, as nick with
-agent ada, no color, 80 columns.
+agent ada, no color, 80 columns. Every step wraps to the terminal width, keeping each line's indent,
+so a box is never wider than the screen.
 
 31. `cmd/tour` · title — the note title on every step:
 
@@ -393,11 +394,15 @@ agent ada, no color, 80 columns.
     Step 3 of 9 · Give it work
     ```
 
-32. `cmd/tour` · team — step 2 with an observed model. With no observed model the second line drops:
+32. `cmd/tour` · team — step 2 with an observed model. With no observed model the second line drops.
+    Under the body, the roster: you, then the agent, then `and N more members` on a larger team:
 
     ```
     This is your roster. You and ada are both members, each with a name that stays.
     ada is running claude-opus-5-5. The harness reports the model; the agent does not choose what it says.
+
+      nick  human, you
+      ada   agent
     ```
 
 33. `cmd/tour` · record — step 7 after nick accepts. With no observed model the chain reads

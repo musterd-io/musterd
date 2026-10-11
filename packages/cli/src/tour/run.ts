@@ -1,6 +1,6 @@
 import type { Envelope } from '@musterd/protocol';
 import { advance, initialState, type TourState } from './machine.js';
-import { hintFor, printable, stepBody, stepTitle, type TourVars } from './screens.js';
+import { hintFor, printable, rosterLines, stepBody, stepTitle, type TourVars } from './screens.js';
 import { fill, TOUR_LANE_TITLE, TOUR_MESSAGES, TOUR_REQUEST } from './script.generated.js';
 
 /**
@@ -93,7 +93,11 @@ export async function runTour(
     cursor = open.openedAt - OVERLAP_MS;
   } else {
     for (const step of ['what', 'team'] as const) {
-      ui.show(stepTitle(step), stepBody({ ...state, step }, vars));
+      const body = stepBody({ ...state, step }, vars);
+      ui.show(
+        stepTitle(step),
+        step === 'team' ? [body, '', ...rosterLines(roster, me, agent)].join('\n') : body,
+      );
       if (!(await ui.pressEnter())) return stop(ui);
       state = advance(state, { type: 'continue' });
     }

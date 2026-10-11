@@ -1,3 +1,4 @@
+import { wrapText } from '../render/ui.js';
 import type { TourState } from './machine.js';
 import { fill, TOUR_STEPS, type TourStepId } from './script.generated.js';
 
@@ -55,6 +56,38 @@ export function hintFor(id: TourStepId, elapsedMs: number, v: TourVars): string 
   const due = stepOf(id).hints.filter((h) => elapsedMs >= h.afterMs);
   const last = due[due.length - 1];
   return last ? fill(last.text, { you: v.you, agent: v.agent, lane: v.lane }) : null;
+}
+
+/**
+ * Step 2's roster: you, then the agent taking the tour. The body's own line carries the model. A
+ * large team collapses to a count, so the step stays one screen.
+ */
+export function rosterLines(
+  roster: readonly { name: string }[],
+  you: string,
+  agent: string,
+): string[] {
+  const width = Math.max(you.length, agent.length);
+  const lines = [`  ${you.padEnd(width)}  human, you`, `  ${agent.padEnd(width)}  agent`];
+  const rest = roster.filter((m) => m.name !== you && m.name !== agent).length;
+  if (rest > 0) lines.push(`  and ${rest} more member${rest === 1 ? '' : 's'}`);
+  return lines;
+}
+
+/**
+ * Fit a step to the terminal. A line that fits keeps its spacing (the `next` step aligns columns);
+ * a longer one wraps at word boundaries and keeps its indent, so a step never draws wider than the
+ * screen and breaks its own box.
+ */
+export function wrapBody(text: string, width: number): string {
+  return text
+    .split('\n')
+    .flatMap((line) => {
+      if (line.length <= width) return [line];
+      const indent = /^ */.exec(line)![0];
+      return wrapText(line, Math.max(1, width - indent.length)).map((l) => indent + l);
+    })
+    .join('\n');
 }
 
 /**
