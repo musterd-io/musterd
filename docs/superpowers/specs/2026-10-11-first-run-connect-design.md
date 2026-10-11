@@ -71,8 +71,9 @@ of re-implementing init's inline steps.
 New units:
 
 - **`packages/cli/src/onboard/recents.ts`** — `recentRepos({ harnesses, home, now, limit })` returns
-  `{ dir, harnesses, lastUsed }[]`. Each harness module gains an optional
-  `recentFolders(home): Promise<{ dir, at }[]>`, read-only, returning `[]` on any read or parse error:
+  `{ dir, harnesses, lastUsed }[]`. One reader per harness lives in the same file
+  (`RECENT_READERS`, keyed by harness id), so the `Harness` interface does not change. Each is
+  read-only and returns `[]` on any read or parse error:
 
   | Harness     | Source                                                                       |
   | ----------- | ---------------------------------------------------------------------------- |
