@@ -380,6 +380,43 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
     adapter re-reads the block. A seat attesting nothing shows neither (an older adapter, not a stale
     one); an `out` seat is silent.
 
+### First-run tour frames (spec 2026-10-10-first-run-tour-design)
+
+The copy comes from `content/tour.data.ts`, copied into the CLI by `pnpm tour:gen`; these frames
+pin how the CLI fills it. Each step prints as a note titled by `stepTitle` with its body under it.
+All four are pinned character-for-character by `packages/cli/src/tour/screens.test.ts`, as nick with
+agent ada, no color, 80 columns.
+
+31. `cmd/tour` · title — the note title on every step:
+
+    ```
+    Step 3 of 9 · Give it work
+    ```
+
+32. `cmd/tour` · team — step 2 with an observed model. With no observed model the second line drops:
+
+    ```
+    This is your roster. You and ada are both members, each with a name that stays.
+    ada is running claude-opus-5-5. The harness reports the model; the agent does not choose what it says.
+    ```
+
+33. `cmd/tour` · record — step 7 after nick accepts. With no observed model the chain reads
+    `model unattested`; sent back once, then accepted, it ends `sent back by nick, then accepted by
+    nick`; closed by the agent itself, `closed by ada itself`:
+
+    ```
+    This is the chain the team keeps for lane 01M4TOUR01:
+    opened by nick · claimed by ada · model claude-opus-5-5 · accepted by nick
+    Every lane on the team carries the same chain, whoever does the work.
+    ```
+
+34. `cmd/tour` · waiting hints — while step 4 waits for the claim, one dim line at 60s, then at 3m:
+
+    ```
+    Still waiting. Switch to ada's window and say: check your inbox.
+    ada can take a few minutes to wake. The tour waits as long as it takes. Ctrl-C to stop; `musterd tour` picks up where you left off.
+    ```
+
 ## Page: States (empty + error)
 
 1. `state/empty-inbox` — `inbox empty — nobody's mustered anything yet` (dim). (Exact string; the CLI uses it verbatim.)

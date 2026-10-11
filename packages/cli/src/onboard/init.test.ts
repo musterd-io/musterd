@@ -230,6 +230,9 @@ vi.mock('../config.js', () => ({
 }));
 
 vi.mock('node:child_process', () => ({ spawn: vi.fn(() => ({ unref: vi.fn() })) }));
+// The tour handoff (spec 2026-10-10-first-run-tour-design) — mocked so a "yes" is observable without
+// making a workspace or starting the tour.
+vi.mock('./tourOffer.js', () => ({ startTourAsPerson: vi.fn(async () => 0) }));
 
 let cwd: string;
 let origCwd: string;
@@ -808,6 +811,23 @@ describe('runInit — add-agent happy path', () => {
     );
     happyAnswers();
     expect(await runInit()).toBe(1);
+  });
+
+  it('offers the tour once the agent is online, and starts it as the person on yes', async () => {
+    const { startTourAsPerson } = await import('./tourOffer.js');
+    happyAnswers();
+    h.confirmQueue.push(true); // take the tour
+    expect(await runInit()).toBe(0);
+    expect(startTourAsPerson).toHaveBeenCalledWith('nick', 'dawn');
+  });
+
+  it('declining the tour ends init as before', async () => {
+    const { startTourAsPerson } = await import('./tourOffer.js');
+    vi.mocked(startTourAsPerson).mockClear();
+    happyAnswers();
+    h.confirmQueue.push(false); // no tour
+    expect(await runInit()).toBe(0);
+    expect(startTourAsPerson).not.toHaveBeenCalled();
   });
 
   it('repoints an already-configured harness and warns about the new member', async () => {

@@ -115,6 +115,11 @@ src/
   notify/             // the `musterd notify` human-reachability nudge (ADR 024/035)
     os.ts             // OS push notification (macOS/Linux/Windows); osNotifyDelivered resolves whether the notifier took it
     select.ts         // pick which away human to nudge
+  tour/               // the first-run tour behind `musterd tour` (spec 2026-10-10-first-run-tour-design)
+    script.generated.ts // GENERATED from content/tour.data.ts by `pnpm tour:gen` — the tour's copy; `tour:check` gates drift
+    machine.ts        // the tour's pure step machine: (state, event) → state; only acts about the tour's own lane move it
+    screens.ts        // the tour's pure text: step titles, filled bodies, the verdict line, the due hint (cmd/tour frames)
+    run.ts            // runTour: the tour's loop over a TourPort + TourUi — polls the team timeline, dedupes, resumes, hints
   host/               // the `musterd host` wake actuator — harness residency's per-machine hand (ADR 131 inc 3)
     registry.ts       // machine-local seat → workspace/harness registry (~/.musterd/host-registry.json); written by `residency on`, never by the daemon; canonicalServer + isLoopbackServer (the trace tap sends content only to a loopback daemon)
     backend.ts        // ActuatorBackend seam: spawn-or-invoke + roster-derived verify + WakeOutcome; native row must stay expressible (ADR 131 §7)
@@ -185,6 +190,7 @@ src/
     pending.ts        // client-side pending-presence markers (ADR 033)
     permissions.ts    // ADR 261: STANDARD_FLOOR + installSeatPermissions — the harness permission layer becomes a provisioned artifact; liftSeatPermissions (inc 2 reversal, lane 01M3TAM44Q): a removed role's deny/ask entries come out unless a still-held role compiles them too; allow is never touched
     primer.ts         // renderRepositoryPrimer + idempotent upsertPrimer → Team-only AGENTS.md primer (ADR 307)
+    tourOffer.ts      // startTourAsPerson: init's tour handoff — `musterd human <driver>` for a workspace of the person's own, then `musterd tour` from it
     toolkit.ts        // Toolkit = harness-agnostic provisioning template ("profile" pre-ADR-296, "role template" pre-ADR-272); resolve/apply (ADR 026/029/038); tools.codex_plugins declared for the Codex adapter (ADR 323)
     toolkits/builtins.ts // the shipped built-in toolkit seed library
     harnesses/        // per-harness feature differences (labeling, hooks, skills discovery) are observed environment facts — documented in docs/wiki/driver-support-matrix.md, not modelled (ADR 296)
@@ -272,6 +278,7 @@ src/
     notify.ts         // human-reachability nudge loop (ADR 024/035)
     role.ts           // the team's role library — list / show / create / assign (ADR 227, narrowed by 296); `assign` recompiles the seat's harness permissions (ADR 261 inc 2) and `--remove` lifts the removed role's ceiling (lane 01M3TAM44Q) instead of only warning
     toolkit.ts        // workspace equipment — list / show / create; carries no authority (ADR 296)
+    tour.ts           // musterd tour [--reset] — binds tour/run.ts to the daemon (roster, lanes, timeline poll) and to @clack/prompts
     reset.ts          // local clean-slate db + config wipe (ADR 022)
     uninstall.ts      // per-folder uninstall — unwinds what init wrote (ADR 027)
     helpers.ts        // shared command helpers (active-identity resolution, ADR 036)

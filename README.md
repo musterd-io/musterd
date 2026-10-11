@@ -46,7 +46,7 @@ brew tap SandRiseStudio/musterd && brew install musterd
 musterd init
 ```
 
-`musterd init` is the one-command path: it finds Claude Code / Cursor, asks if it can configure the musterd MCP server for you, then shows a live spinner that flips to `● Ada is online via claude-code` the instant your agent connects.
+`musterd init` is the one-command path: it finds Claude Code / Cursor, asks if it can configure the musterd MCP server for you, then shows a live spinner that flips to `● Ada is online via claude-code` the instant your agent connects. Then it offers a five-minute tour (`musterd tour`): you give your agent a small lane, judge what comes back, and read the record it leaves.
 
 Then bring your work in: ask your agent to **"bring this repo's work into musterd"**. Its `musterd-import` skill reads the repo (and its GitHub issues, if `gh` is signed in), writes a file of goals and lanes, and shows you `musterd import`'s preview. Nothing is created until you say yes and it runs `musterd import save`. You can also fill in a CSV yourself — see `musterd help import`.
 

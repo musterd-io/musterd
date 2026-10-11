@@ -163,6 +163,19 @@ export const CATALOG: readonly CommandEntry[] = [
     ],
   },
   {
+    name: 'tour',
+    signature: '[--reset]',
+    summary: 'a hands-on tour: give your agent a small lane, judge it, read the record',
+    group: 'setup',
+    primary: true,
+    detail:
+      'Walks you through musterd on your own team. The tour opens one small lane in your name, asks ' +
+      'your agent to claim it and submit it to you, and you accept it or send it back. Then it ' +
+      "shows the lane's record and when to add a seat. Ctrl-C stops; run it again to pick up where " +
+      'you left off. --reset abandons an open tour lane and starts over.',
+    examples: ['musterd tour', 'musterd tour --reset'],
+  },
+  {
     name: 'wire',
     signature: '[--autojoin] [--key mskey_…] [--migrate-bootstrap]',
     summary: 'headless self-wire from a committed .musterd/workspace.json',
