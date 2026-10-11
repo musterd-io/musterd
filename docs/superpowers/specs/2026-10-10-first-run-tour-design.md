@@ -109,7 +109,9 @@ The original items:
 ## Delivery order
 
 1. The script, `tour:gen` and `tour:check`.
-2. `musterd tour`, and the offer at the end of `musterd init` ("Take the 5-minute tour? [Y/n]").
+2. `musterd tour`, and the offer at the end of `musterd init` ("Take the 5-minute tour?"). The tour
+   acts only as a person: init's folder is bound to the agent's seat, so on yes init first runs
+   `musterd human <driver>` and starts the tour from that workspace (nick, 2026-10-10).
 3. The web UI-copy spec, handed to miley with a new lane under `first-run-10-minutes`.
 4. miley's web tour; copy fixes from the first outside run.
 

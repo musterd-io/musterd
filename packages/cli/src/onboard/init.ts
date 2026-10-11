@@ -943,6 +943,21 @@ export async function runInit(): Promise<number> {
     );
   }
 
+  // The tour needs a live agent and acts as the person, never as this folder's agent seat — so it is
+  // offered only when the agent joined and init knows who is driving it.
+  if (joined && driver) {
+    const tour = guard(
+      await p.confirm({
+        message: `Take the 5-minute tour? ${pc.dim('(it makes you a workspace of your own first)')}`,
+        initialValue: true,
+      }),
+    );
+    if (tour) {
+      p.outro(pc.yellow('Starting the tour.'));
+      return (await import('./tourOffer.js')).startTourAsPerson(driver, team);
+    }
+  }
+
   p.note(
     `${pc.yellow('musterd inbox --watch')}   be present and watch the team live\n` +
       `${pc.yellow('musterd status')}         see who's online\n` +
