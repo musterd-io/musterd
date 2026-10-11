@@ -168,7 +168,11 @@ export function stepLines(s: TourState, v: TourVars): string[] {
 export function hintFor(id: TourStepId, elapsedMs: number, v: TourVars): string | null {
   const due = stepOf(id).hints.filter((h) => elapsedMs >= h.afterMs);
   const last = due[due.length - 1];
-  return last ? fill(last.text, { you: v.you, agent: v.agent, lane: v.lane }) : null;
+  if (!last) return null;
+  // The shared hints were written for the terminal; a page has no Ctrl-C and no `musterd tour`, and
+  // its own Stop and Resume buttons already say how to leave and come back.
+  const web = last.text.replace(/\s*Ctrl-C[^.]*\./, '');
+  return fill(web, { you: v.you, agent: v.agent, lane: v.lane });
 }
 
 /** The viewer's own tour lane, in any state — resume finds it by its exact title (spec §2). */
@@ -210,7 +214,55 @@ export function modelOf(roster: readonly MemberSummary[], name: string): string 
   return model === 'unknown' ? '' : model;
 }
 
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+/** `0:47` — how long the tour has been waiting on the agent. */
+export function clock(ms: number): string {
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+}
+
+/**
+ * What the roster says the agent is doing while the tour waits on it. A woken agent can take most
+ * of a minute to start, and before this line the panel was silent for all of it (nick, 2026-10-11:
+ * ghost took 47s to claim and he could not tell whether anything was happening). Only what the
+ * roster asserts: a seat whose wake is not reachable right now is never called "being woken".
+ */
+export function agentNow(
+  member: MemberSummary | undefined,
+  step: TourStepId,
+): string | null {
+  if (!member) return null;
+  const name = member.name;
+  if (member.presence === 'offline') {
+    const canWake = member.wakeability
+      ? member.wakeability === 'wakeable'
+      : member.wakeable === true;
+    return canWake
+      ? `${name} isn't running right now, so musterd is waking it. That usually takes under a minute.`
+      : `${name} is offline, and musterd can't wake it from here. It will see the request when it next starts.`;
+  }
+  if (step === 'hands_back') {
+    return `${name} is online and working on the lane. When it's done, it submits it for your review.`;
+  }
+  return member.posture === 'working' || member.activity === 'working'
+    ? `${name} is online but busy with other work. It reads the request between tasks.`
+    : `${name} is online and has the request.`;
+}
+
+/** The agent's newest status_update since `since` — its own word on what it is doing. */
+export function latestSaid(
+  acts: readonly Envelope[],
+  agent: string,
+  since: number,
+): string | null {
+  let found: Envelope | null = null;
+  for (const e of acts) {
+    if (e.from !== agent || e.act !== 'status_update' || e.ts < since || !e.body.trim()) continue;
+    if (!found || e.ts > found.ts) found = e;
+  }
+  return found ? found.body.trim() : null;
+}
+
+const CROCKFORD ='0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 /** When a lane opened, from its ULID's first ten characters; the resume replay starts there. */
 export function ulidTime(id: string): number {
