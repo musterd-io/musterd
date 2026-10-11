@@ -235,6 +235,7 @@ describe('version-bump discipline (ADR 085)', () => {
     46: 'd1324abe1740c3da', // lane 01M46S44K8 (ADR 259/516): the skill says harness memory holds facts about the human, never team facts or rules — a rule no hold carries is not a rule
     47: '0f0eefd223371a7f', // + musterd-import skill unit + a pointer to it in the main skill (spec 2026-10-10 "bring work in", lane 01M4FDBSN8)
     48: '2e33b61b92826439', // musterd-import reads Linear, Jira and Notion through the harness's connector, read-only, or a CSV export; never asks for a token (lane 01M4M4A67Z)
+    49: '3f1fe9596e3a7372', // musterd-import plans new work (goals → 3-7 lanes, agreed before the file), points at `musterd import sheet`, and says where an issue that fits no group goes (lane 01M4M4AAJA)
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {
@@ -404,6 +405,13 @@ describe('musterd-import skill (spec 2026-10-10 "bring work in")', () => {
     expect(skill).toMatch(/no connector[\s\S]*CSV export/i);
     expect(skill).toMatch(/Urgent or Highest[\s\S]*`high`[\s\S]*Low[\s\S]*`low`/);
     expect(skill).toMatch(/Never ask the human for an API key or token/);
+  });
+
+  it('plans new work, offers the blank sheet, and says where ungrouped issues go (phase 3, lane 01M4M4AAJA)', () => {
+    expect(skill).toMatch(/\*\*New work to plan:\*\*[\s\S]*outcomes/);
+    expect(skill).toMatch(/3 to 7 lanes/);
+    expect(skill).toContain('`musterd import sheet`');
+    expect(skill).toMatch(/fits no group[\s\S]*issue type or main label/);
   });
 
   it('names the file columns', () => {
