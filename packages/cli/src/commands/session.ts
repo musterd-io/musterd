@@ -12,6 +12,7 @@ import { HttpClient } from '../client.js';
 import { findBinding, requireUsableBinding, saveBinding } from '../config.js';
 import { CliError } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
+import { writeIdleWakeState } from '../idleWake/state.js';
 import { HARNESSES } from '../onboard/harnesses/index.js';
 import { dischargedIds, openActionNeeded } from '../render/rows.js';
 import { clock, theme } from '../render/theme.js';
@@ -89,12 +90,25 @@ export async function sessionCommand(
   if (sub === 'orient-stamp') return orientStampCommand();
   if (sub === 'statusline') return statuslineCommand(parsed);
   if (sub === 'bind') return bindCommand(parsed);
+  if (sub === 'idle-wake') return idleWakeCommand(parsed);
   if (sub === 'show' || sub === undefined) return showCommand(parsed);
   throw new CliError(
-    'usage: musterd session start --stdin | end --stdin | observe --stdin [--orient] [--interrupt] | label-nudge | orient-nudge | orient-stamp | statusline --stdin | bind --thread <id> | show  ' +
+    'usage: musterd session start --stdin | end --stdin | observe --stdin [--orient] [--interrupt] | label-nudge | orient-nudge | orient-stamp | statusline --stdin | bind --thread <id> | idle-wake on|off | show  ' +
       '(start/end/observe are hook-driven — `musterd init` provisions the hooks; humans want `show`)',
     2,
   );
+}
+
+/** `musterd session idle-wake on|off` — this workspace's session switch (ADR 558). The adapter
+ *  re-reads it before every inject, so it takes effect without a restart. */
+function idleWakeCommand(parsed: Parsed): number {
+  const v = parsed.positionals[1];
+  if (v !== 'on' && v !== 'off') throw new CliError('usage: musterd session idle-wake on|off', 2);
+  const dir = findWorkspaceDir();
+  if (!dir) throw new CliError('not in a musterd workspace', 2);
+  writeIdleWakeState(dir, { switch: v });
+  process.stdout.write(`idle wake ${v} for this workspace's sessions\n`);
+  return 0;
 }
 
 /** The harness class this capture path serves. The hook JSON shape below is Claude Code's; other

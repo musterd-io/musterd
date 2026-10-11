@@ -1027,6 +1027,8 @@ export const CATALOG: readonly CommandEntry[] = [
       '--lane both|interrupt|batched, --cooldown 15m, --hourly-cap N, --attempt-cap N, ' +
       '--tool-policy reply-only|seat-policy, --timeout 5m, --work-timeout 30m, --flow manual|auto, ' +
       '--convene-huddles on|off (does opening a huddle wake the seats it names — ADR 386), ' +
+      '--idle-wake on|off (may an open session idle at its prompt be pushed a turn when a ' +
+      'directed act arrives — on by default, ADR 558), ' +
       '--max-turns N, --budget USD, ' +
       '--transcript-max MiB (fractions OK — the default bound is 0.25, i.e. 256 KiB); ' +
       '--reset-policy clears a seat back to team defaults. There is no ' +
@@ -1044,7 +1046,8 @@ export const CATALOG: readonly CommandEntry[] = [
   {
     name: 'session',
     signature:
-      'show [--json]  |  start --stdin | end --stdin  |  bind --thread <id>  |  orient-nudge | orient-stamp',
+      'show [--json]  |  start --stdin | end --stdin  |  bind --thread <id>  |  idle-wake on|off  |  ' +
+      'orient-nudge | orient-stamp',
     summary: 'this workspace’s captured harness session — what a wake would resume (ADR 131)',
     group: 'ops',
     detail:
@@ -1065,9 +1068,14 @@ export const CATALOG: readonly CommandEntry[] = [
       'automatically, and this re-binds when that never happened (capture arrived late, inherited ' +
       'session, dialogue moved). It binds the CURRENT capture only — a hand-named session is the ' +
       'unprovable claim exact-match continuity exists to refuse. No capture means nothing to bind ' +
-      'and wakes on that thread stay fresh.',
+      'and wakes on that thread stay fresh. ' +
+      '`idle-wake on|off` is this workspace’s session switch for idle-at-prompt wake (ADR 558): ' +
+      'off, the MCP adapter never pushes a turn into an open session sitting at its prompt, and a ' +
+      'directed act waits for the next tool boundary or prompt. Read before every inject, so it ' +
+      'takes effect without a restart; the team and seat switch is `residency policy|on --idle-wake`.',
     examples: [
       'musterd session show',
+      'musterd session idle-wake off',
       'musterd session show --json',
       'musterd session bind --thread 01KZ4C4R8NDZ1F7N7NJET2MG9K',
     ],

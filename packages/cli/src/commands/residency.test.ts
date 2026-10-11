@@ -187,6 +187,17 @@ describe('seatWorkspace — which folder receives the grant (ADR 442)', () => {
   });
 });
 
+describe('--idle-wake (ADR 558)', () => {
+  const flags = (...argv: string[]) => collectPolicyFlags(parseArgs(['policy', ...argv]));
+  it('on and off set the knob', () => {
+    expect(flags('--idle-wake', 'on')).toEqual({ idle_wake: true });
+    expect(flags('--idle-wake', 'off')).toEqual({ idle_wake: false });
+  });
+  it('refuses anything but on|off, naming the flag', () => {
+    expect(() => flags('--idle-wake', 'yes')).toThrow(/--idle-wake wants on\|off/);
+  });
+});
+
 describe('--convene-huddles (ADR 386)', () => {
   const flags = (...argv: string[]) => collectPolicyFlags(parseArgs(['policy', ...argv]));
 

@@ -3,6 +3,7 @@ import { flagStr, type Parsed } from '../args.js';
 import { findBinding } from '../config.js';
 import { CliError } from '../errors.js';
 import { readHookStdin } from '../hookStdin.js';
+import { writeIdleWakeState } from '../idleWake/state.js';
 import { theme } from '../render/theme.js';
 import { sessionDigest } from '../session/digest.js';
 import { snapshotTodos } from '../todos/snapshot.js';
@@ -50,6 +51,7 @@ export async function traceCommand(parsed: Parsed): Promise<number> {
     const dir = findWorkspaceDir() ?? process.cwd();
     const binding = findBinding(dir);
     const harness = flagStr(parsed.flags, 'harness') ?? 'claude-code';
+    noteTurnMarker(raw, dir); // ADR 558 — the idle-wake turn markers ride the same tap
     await tapHook(raw, {
       binding,
       dir,
@@ -66,6 +68,26 @@ export async function traceCommand(parsed: Parsed): Promise<number> {
     // fail-open by contract
   }
   return 0;
+}
+
+/**
+ * ADR 558: the idle-wake turn markers. `UserPromptSubmit` → `last_prompt_at`, `Stop` →
+ * `last_stop_at`, keyed to the payload's session, in the workspace's `.musterd/idle-wake.json`.
+ * The MCP adapter reads them to tell "idle at the prompt" from "mid-turn" and to keep an inject
+ * off a prompt the human just typed. Local and before the network tap, so a daemon that is down
+ * still leaves the evidence.
+ */
+export function noteTurnMarker(raw: string, dir: string, now = Date.now()): void {
+  try {
+    const p = JSON.parse(raw) as { hook_event_name?: unknown; session_id?: unknown };
+    if (typeof p.session_id !== 'string' || !p.session_id) return;
+    if (p.hook_event_name === 'UserPromptSubmit')
+      writeIdleWakeState(dir, { session_id: p.session_id, last_prompt_at: now });
+    else if (p.hook_event_name === 'Stop')
+      writeIdleWakeState(dir, { session_id: p.session_id, last_stop_at: now });
+  } catch {
+    /* fail-open by contract */
+  }
 }
 
 /**
