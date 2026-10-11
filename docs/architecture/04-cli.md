@@ -118,6 +118,7 @@ src/
   tour/               // the first-run tour behind `musterd tour` (spec 2026-10-10-first-run-tour-design)
     script.generated.ts // GENERATED from content/tour.data.ts by `pnpm tour:gen` — the tour's copy; `tour:check` gates drift
     machine.ts        // the tour's pure step machine: (state, event) → state; only acts about the tour's own lane move it
+    screens.ts        // the tour's pure text: step titles, filled bodies, the verdict line, the due hint (cmd/tour frames)
   host/               // the `musterd host` wake actuator — harness residency's per-machine hand (ADR 131 inc 3)
     registry.ts       // machine-local seat → workspace/harness registry (~/.musterd/host-registry.json); written by `residency on`, never by the daemon; canonicalServer + isLoopbackServer (the trace tap sends content only to a loopback daemon)
     backend.ts        // ActuatorBackend seam: spawn-or-invoke + roster-derived verify + WakeOutcome; native row must stay expressible (ADR 131 §7)

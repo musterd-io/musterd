@@ -563,7 +563,7 @@ git commit -m "feat(tour): the pure step machine, advanced only by acts about th
 - Produces:
   ```ts
   export interface TourVars { you: string; agent: string; lane: string; model: string }
-  export function stepTitle(id: TourStepId, index: number): string;   // 'Step 3 of 9 · Give it work'
+  export function stepTitle(id: TourStepId): string;   // 'Step 3 of 9 · Give it work'
   export function stepBody(s: TourState, v: TourVars): string;        // body lines filled, joined by '\n'
   export function verdictLine(s: TourState, you: string): string;     // 'accepted by nick' | 'sent back by nick, then accepted by nick' | 'closed by ada itself' | 'declined by ada'
   export function hintFor(id: TourStepId, elapsedMs: number, v: TourVars): string | null; // latest due hint
@@ -583,7 +583,7 @@ const v = { you: 'nick', agent: 'ada', lane: '01M4TOUR01', model: 'claude-opus-5
 
 describe('cmd/tour frames', () => {
   it('cmd/tour · title', () => {
-    expect(stepTitle('give_work', 2)).toBe('Step 3 of 9 · Give it work');
+    expect(stepTitle('give_work')).toBe('Step 3 of 9 · Give it work');
   });
   it('cmd/tour · record (accepted)', () => {
     const s = { ...initialState('nick', 'ada'), step: 'record' as const, laneId: v.lane, outcome: 'accepted' as const };
