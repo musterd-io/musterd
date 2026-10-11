@@ -42,6 +42,7 @@ describe('ResidencyPolicySchema (ADR 131 inc 5) — the knobs, defaults in ONE p
       // per-daemon from a root whose CROSS-MACHINE arrival has never been observed — an unmeasured
       // paid action across a boundary nobody has watched. Flip after lane 01M1Q8GQGW reports.
       convene_huddles: false,
+      idle_wake: true,
       work_timeout_ms: 30 * 60_000,
       dream_enabled: false,
       dream_nightly_wakes: 1,
