@@ -142,6 +142,18 @@ describe('import command', () => {
     expect(out.out).toMatch(/backlog\.csv · 1 goal, 2 lanes · ready to save/);
   });
 
+  it('writes a blank sheet, refuses to overwrite it, and the preview flags its examples', async () => {
+    const out = await capture(() => importCommand(parseArgs(['sheet'])));
+    expect(out.code).toBe(0);
+    const rel = out.out.match(/✓ wrote (\.musterd\/imports\/sheet-\d{8}\.csv)/)![1]!;
+    expect(out.out).toContain(`then: musterd import ${rel}`);
+    await expect(importCommand(parseArgs(['sheet']))).rejects.toThrow(/already exists/);
+
+    const preview = await capture(() => importCommand(parseArgs([rel])));
+    expect(preview.code).toBe(0);
+    expect(preview.out).toContain("still the sheet's example");
+  });
+
   it('refuses a file it cannot read', async () => {
     await expect(importCommand(parseArgs(['nope.csv']))).rejects.toThrow(/cannot read nope\.csv/);
     // the imports folder ignores itself before anything else can fail, so a draft the skill

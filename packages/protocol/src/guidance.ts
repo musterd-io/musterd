@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 48;
+export const GUIDANCE_CONTENT_VERSION = 49;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -608,7 +608,14 @@ export function renderImportSkill(): string {
     '       groups the work if more than one could.',
     '     - **Priority:** Urgent or Highest becomes stakes `high`, Low becomes `low`; leave stakes',
     '       empty for anything else.',
+    '   - **An issue that fits no group** (no milestone, project, epic or fix version): group those',
+    '     by issue type or main label, or leave them out and say so in step 3.',
     '   - **Pasted text:** one lane per item the human listed; ask before inventing goals for it.',
+    '   - **New work to plan:** ask what outcomes the human wants in the next few weeks, one at a',
+    '     time. Propose each outcome as a goal with a one-line story, then split it into 3 to 7 lanes',
+    '     a seat could each finish in a day or two; give lanes keys and `depends_on` where one needs',
+    '     another. Agree the list with the human before you write the file. If the human would rather',
+    '     fill in a spreadsheet, run `musterd import sheet` and give them the path it prints.',
     '3. **Keep the first import small:** about 5 goals and 30 lanes. Tell the human what you left out',
     '   and why, so they can bring it in later.',
     '4. **Write the file** to `.musterd/imports/draft-<time>.csv`. Columns: `kind` (goal or lane),',

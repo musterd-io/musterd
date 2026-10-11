@@ -572,7 +572,7 @@ export const CATALOG: readonly CommandEntry[] = [
   },
   {
     name: 'import',
-    signature: '<file.csv|file.jsonl>  |  save <id>  |  list',
+    signature: '<file.csv|file.jsonl>  |  save <id>  |  list  |  sheet [path]',
     summary: 'bring existing work in: preview a file of goals and lanes, then save it',
     group: 'work',
     detail:
@@ -581,8 +581,11 @@ export const CATALOG: readonly CommandEntry[] = [
       '`import save <id>` creates exactly the staged goals, then lanes, unclaimed; a re-run after a\n' +
       'failure resumes and never duplicates. A goal already on the board is linked, not re-declared.\n' +
       'Columns: kind (goal|lane), key, title, detail, story, goal, depends_on (;-separated), stakes, source_ref.\n' +
-      'The musterd-import skill writes this file for you from the repo or GitHub issues.',
+      '`import sheet` writes a blank one to fill in by hand: the header and an example goal and lane;\n' +
+      'a row still matching an example is flagged at preview. It never overwrites a file.\n' +
+      'The musterd-import skill writes this file for you from the repo, an issue tracker, or a plan.',
     examples: [
+      'musterd import sheet',
       'musterd import backlog.csv',
       'musterd import save 20261010-130509-a1f2',
       'musterd import list',

@@ -31,7 +31,7 @@ export interface ImportRow {
 
 export const GOAL_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
-const COLUMNS = [
+export const IMPORT_COLUMNS = [
   'kind',
   'key',
   'title',
@@ -88,7 +88,7 @@ export function parseImportFile(
       continue;
     }
     for (const col of Object.keys(parsed.data)) {
-      if (!(COLUMNS as readonly string[]).includes(col) && !warnedColumns.has(col)) {
+      if (!(IMPORT_COLUMNS as readonly string[]).includes(col) && !warnedColumns.has(col)) {
         warnedColumns.add(col);
         diagnostics.push(warn(row, 'unknown_column', `unknown column "${col}" is ignored`));
       }

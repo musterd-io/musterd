@@ -88,6 +88,11 @@ prompt; it cannot inject context, so there is no repeating-nudge seam on Cursor 
   same spec adds one section per tracker to the same skill body (`GUIDANCE_CONTENT_VERSION` 48):
   read through the harness's own connector, read-only, or from the tool's CSV export. musterd still
   holds no tracker credentials. Same install paths; no wire schema changes.
+- **2026-10-11 — the import skill plans new work (lane 01M4M4AAJA).** Phase 3 adds a planning
+  mode (outcomes → goals → 3 to 7 lanes, agreed before the file), a pointer to the new
+  `musterd import sheet`, and a rule for issues that fit no group, found in a real Jira run where
+  only 9 of 60 open issues had a fix version (`GUIDANCE_CONTENT_VERSION` 49). Same install paths;
+  no wire schema changes.
 
 ## Observability & Evaluation
 

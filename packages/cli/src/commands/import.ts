@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { resolve as resolvePath } from 'node:path';
+import { join, relative, resolve as resolvePath } from 'node:path';
 import { resolveProject } from '@musterd/protocol/project';
 import { flagStr, type Parsed } from '../args.js';
 import type { HttpClient } from '../client.js';
@@ -9,9 +9,11 @@ import { checkAgainstBoard } from '../import/check.js';
 import { renderList, renderPreview, renderSaved } from '../import/render.js';
 import { formatFor, parseImportFile } from '../import/rows.js';
 import { saveStage } from '../import/save.js';
+import { defaultSheetName, exampleDiagnostics, writeSheet } from '../import/sheet.js';
 import {
   createStage,
   ensureImportsDir,
+  importsDir,
   listStages,
   readStage,
   writeStage,
@@ -22,7 +24,8 @@ const USAGE =
   'usage:\n' +
   '  musterd import <file.csv|file.jsonl>   check against the board, preview, and stage (creates nothing)\n' +
   '  musterd import save <id>               create the staged goals and lanes (re-run resumes)\n' +
-  '  musterd import list                    staged imports in this workspace';
+  '  musterd import list                    staged imports in this workspace\n' +
+  '  musterd import sheet [path]            a blank sheet to fill in by hand (never overwrites)';
 
 /** `musterd import` (spec 2026-10-10 "bring work in"): two steps — preview+stage, then save. */
 export async function importCommand(parsed: Parsed): Promise<number> {
@@ -38,6 +41,18 @@ export async function importCommand(parsed: Parsed): Promise<number> {
 
   if (first === 'list') {
     process.stdout.write(renderList(listStages(ws), Date.now()) + '\n');
+    return 0;
+  }
+
+  if (first === 'sheet') {
+    const path = second ? resolvePath(second) : join(importsDir(ws), defaultSheetName(Date.now()));
+    writeSheet(path);
+    const rel = relative(process.cwd(), path) || path;
+    process.stdout.write(
+      `✓ wrote ${rel}\n` +
+        '  fill it in, one row per goal or lane, and delete the two example rows; then: ' +
+        `musterd import ${rel}\n`,
+    );
     return 0;
   }
 
@@ -82,7 +97,7 @@ export async function importCommand(parsed: Parsed): Promise<number> {
       goals: plan.goals,
       lanes: plan.lanes,
       linked_goals: plan.linkedGoals,
-      diagnostics: [...rowDiagnostics, ...plan.diagnostics],
+      diagnostics: [...rowDiagnostics, ...exampleDiagnostics(rows), ...plan.diagnostics],
     },
     Date.now(),
   );

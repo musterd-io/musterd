@@ -213,6 +213,7 @@ src/
     stage.ts          // .musterd/imports/<id>.json: what step 1 previewed + the `created` resume map; `ensureImportsDir` writes the folder's own .gitignore (`*`) before anything can fail — .musterd/ is not wholly ignored (ADR 058); atomic writes
     save.ts           // step 2: refusals (errors / saved / other team / >24h unless already started), one more goals read so a goal that appeared since the preview is linked not re-declared, then goals → lanes through a port HttpClient fits, persisting each new id before the next call; a failure says how to resume
     render.ts         // preview (goals → lanes, linked goals, no-goal lanes, diagnostics, the one next step), save result, list
+    sheet.ts          // `import sheet`: a blank CSV (header + one example goal and lane) written with `wx`, never over a file; `example_row` warns when a row still matches an example
   commands/
     init.ts           // musterd init (delegates to onboard/init.ts); --check → onboard/doctor.ts drift report; --check --fix → restore agent_key for traced-key drift then re-check, `wire` for entry drift, full init otherwise (ADR 165)
     wire.ts           // musterd wire: headless fragment reconcile, plus --migrate-bootstrap atomic replacement of a Workspace's legacy Team key while Presence stays occupied (ADR 080/282/350)
