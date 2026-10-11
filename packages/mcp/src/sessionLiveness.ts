@@ -144,6 +144,19 @@ export class SessionAttestation {
     return this.adoptedHarnessLabel;
   }
 
+  /** ADR 558: when the captured session's transcript last moved — undefined when there is no live
+   *  capture or the file cannot be stat'd. Reads the binding fresh; never adopts. */
+  transcriptMtime(): number | undefined {
+    const session = this.readSession(this.bindingDir);
+    if (!session?.transcript_path || session.ended_at !== undefined) return undefined;
+    return this.statMtime(session.transcript_path);
+  }
+
+  /** ADR 558: the captured session id in the binding right now, adopted or not. */
+  capturedSessionId(): string | undefined {
+    return this.readSession(this.bindingDir)?.id;
+  }
+
   /** Adoption-time sanity: a capture already ended, or already quiet past the horizon, is a corpse
    *  — somebody else's session, or a workspace whose hooks never ran. Not evidence about us. */
   private looksAlive(session: SessionCapture, now: number): boolean {

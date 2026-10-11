@@ -38,12 +38,14 @@ import {
   type BuiltOn,
   type DisputeAnswerWire,
   type ClaimCheck,
+  type IdleWakeReport,
 } from '@musterd/protocol';
 import { WebSocket } from 'ws';
 import { clearGrantFromBinding } from './binding.js';
 import { persistRenewedLease } from './claim.js';
 import { refreshAttestation, type McpConfig } from './config.js';
 import { reconcileCursorCapture } from './cursorCapture.js';
+import type { IdleCheck, IdleWake } from './idleWake/decider.js';
 import { SessionAttestation } from './sessionLiveness.js';
 
 /**
@@ -240,6 +242,9 @@ export class MusterdClient {
   private heartbeat: NodeJS.Timeout | null = null;
   /** The ADR 164 session ladder, created lazily on the first heartbeat tick. */
   private session: SessionAttestation | null = null;
+  /** ADR 558: the idle-at-prompt wake core, attached by the entrypoint; null in tests and on a
+   *  surface that never builds one. */
+  private idleWake: IdleWake | null = null;
   private backoff = 1000;
   private closed = false;
   /** True while the member should hold presence — gates reconnect, cleared by leave()/close(). */
@@ -390,6 +395,48 @@ export class MusterdClient {
     this.styleEnvelope = next;
   }
 
+  /** ADR 558: can this session be pushed while idle? Rides every heartbeat; the daemon writes a
+   *  row only when it changes. Absent when no idle-wake core is attached. */
+  private hearingAttestation(): Record<string, unknown> {
+    if (!this.idleWake) return {};
+    try {
+      const { hearing, reason } = this.idleWake.hearing();
+      return { hearing, ...(reason ? { hearing_reason: reason.slice(0, 80) } : {}) };
+    } catch {
+      return {};
+    }
+  }
+
+  /** ADR 558: attach the idle-wake core. Deliveries and (re)connects feed it from here on. */
+  attachIdleWake(iw: IdleWake): void {
+    this.idleWake = iw;
+  }
+
+  /** The ADR 164 ladder, created on first use — the heartbeat and the idle-wake core share it. */
+  private sessionLadder(): SessionAttestation {
+    return (this.session ??= new SessionAttestation({
+      bindingDir: this.config.bindingDir ?? process.cwd(),
+    }));
+  }
+
+  /** ADR 558: when this workspace's captured session transcript last moved; undefined if unknown. */
+  transcriptMtime(): number | undefined {
+    try {
+      return this.sessionLadder().transcriptMtime();
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** ADR 558: the captured harness session id, so turn markers from another session are ignored. */
+  capturedSessionId(): string | undefined {
+    try {
+      return this.sessionLadder().capturedSessionId();
+    } catch {
+      return undefined;
+    }
+  }
+
   /** The heartbeat frame, built fresh each tick so every attestation reads current state. */
   private heartbeatFrame(): Record<string, unknown> {
     return {
@@ -415,6 +462,7 @@ export class MusterdClient {
         : {}),
       // Style re-attestation (ADR 514): the envelope moves when `refreshStyle` fetches a new one.
       ...this.styleAttestation(),
+      ...this.hearingAttestation(),
       // Occupancy follows capture (ADR 275): refreshAttestation just updated config.surface from
       // the slot; send it so the presence row does not keep the claim-time declaration.
       surface: this.config.surface,
@@ -990,6 +1038,45 @@ export class MusterdClient {
     }
   }
 
+  /**
+   * The idle seam of the same probe (ADR 558 §2): asked by the idle-wake core, never by a tool
+   * boundary. Presence-neutral (`x-musterd-no-touch`): an idle session asking whether to wake must
+   * not itself count as activity. A reply without the `seam` echo comes from a daemon that predates
+   * the seam and ignored it — that is silence, not a line to push. Never throws.
+   */
+  async idleInterruptCheck(rail: string | undefined): Promise<IdleCheck> {
+    if (!this.holdsSeat) return null;
+    try {
+      const q = new URLSearchParams({ seam: 'idle', ...(rail ? { rail } : {}) });
+      const res = (await this.request(
+        'GET',
+        `/teams/${this.config.team}/inbox/interrupt-check?${q.toString()}`,
+        undefined,
+        { headers: { 'x-musterd-no-touch': '1' }, timeoutMs: 5_000 },
+      )) as {
+        raised?: boolean;
+        line?: string;
+        seam?: string;
+        idle_wake?: boolean;
+        act?: { id?: string; from?: string };
+      };
+      if (res.seam !== 'idle') return null;
+      if (res.idle_wake === false) return { off: true };
+      if (!res.raised || !res.line || !res.act?.id || !res.act.from) return null;
+      return { line: res.line, act: res.act.id, from: res.act.from };
+    } catch {
+      return null;
+    }
+  }
+
+  /** The idle-wake outcome report (ADR 558 §7). Fire-and-forget, presence-neutral, never throws. */
+  reportIdleWake(report: IdleWakeReport): void {
+    void this.request('POST', `/teams/${this.config.team}/inbox/idle-wake`, report, {
+      headers: { 'x-musterd-no-touch': '1' },
+      timeoutMs: 1500,
+    }).catch(() => undefined);
+  }
+
   /** The insight report (ADR 050/084) — one server-side projection. */
   report(): Promise<Report> {
     return this.request('GET', `/teams/${this.config.team}/report`);
@@ -1182,14 +1269,15 @@ export class MusterdClient {
   private attestSession(): boolean {
     let verdict;
     try {
-      this.session ??= new SessionAttestation({
-        bindingDir: this.config.bindingDir ?? process.cwd(),
-      });
-      verdict = this.session.check();
+      verdict = this.sessionLadder().check();
     } catch {
       return false; // fail open — an unjudgeable session is not evidence of a dead one
     }
     if (verdict.verdict === 'live') return false;
+    // ADR 558 §5: a session that can be pushed while idle is reachable, however long its transcript
+    // has been quiet — a session idle at its prompt for an hour is exactly what idle wake serves.
+    // Only the `stale` inference yields; `ppid` and `ended` are facts and still release.
+    if (verdict.rung === 'stale' && this.idleWakeArmed()) return false;
     // Activity outranks inference — see shouldReleaseOnVerdict. Without this, the re-arm below only
     // recovers from a wrong verdict every 15s; with it, a working session never gets one.
     if (
@@ -1224,6 +1312,14 @@ export class MusterdClient {
     if (verdict.verdict === 'exit') this.onReplaced?.();
     else this.armDormantWatch();
     return true;
+  }
+
+  private idleWakeArmed(): boolean {
+    try {
+      return this.idleWake?.armed() ?? false;
+    } catch {
+      return false;
+    }
   }
 
   /** The ladder's verdict, as the daemon's `presence.session_ended` row (ADR 164 increment 2). */
@@ -1420,6 +1516,9 @@ export class MusterdClient {
         this.returnOnPending = false;
         this.returnOnPending = false;
         this.config.member = frame.seat.name;
+        // ADR 558: the first join and every reconnect — acts that landed while the socket was down
+        // get one idle check. Arms a timer only; the check runs after the coalescing window.
+        this.idleWake?.onConnected();
         if (frame.seat_credential) this.config.seatCredential = frame.seat_credential;
         if (frame.session_lease) {
           this.config.sessionLease = frame.session_lease;
@@ -1612,6 +1711,11 @@ export class MusterdClient {
     if (this.seen.has(env.id)) return;
     this.seen.add(env.id);
     this.buffer.push(env);
+    try {
+      this.idleWake?.onDeliver(env);
+    } catch {
+      // never let the idle core cost a delivery
+    }
   }
 
   /** Drain buffered live deliveries (dedup by id is already applied). */

@@ -18,6 +18,9 @@ import {
   observeHarnessInitialization,
   observeHarnessRequests,
 } from './harness.js';
+import { IdleWake } from './idleWake/decider.js';
+import { injectAdapterFor } from './idleWake/inject.js';
+import { markersFor, readIdleWakeState } from './idleWake/state.js';
 import { readAndConsumeResolution, writePendingMarker } from './pending.js';
 import { instrumentToolRepair } from './repair.js';
 import { scopeToolSurface } from './scope.js';
@@ -178,8 +181,8 @@ function armAutojoinOnFirstToolCall(
       name,
       config,
       AUTOJOIN_EXEMPT_TOOLS.has(name)
-        ? cb
-        : async (...args: unknown[]) => {
+        ? countInFlight(cb)
+        : countInFlight(async (...args: unknown[]) => {
             // Re-arm when the ADR 164 liveness ladder released the seat (fault B2). The ladder
             // demotes on INFERENCE — a quiet transcript, an `ended_at` written for a session that
             // may not even be ours — and its own contract says a dormant adapter returns on the next
@@ -193,8 +196,25 @@ function armAutojoinOnFirstToolCall(
             // now that a rejection is observable rather than swallowed upstream).
             await attempt().catch(() => {});
             return cb(...args);
-          },
+          }),
     );
+}
+
+/** MCP tool calls running in this adapter right now — the idle-wake core's first idle test
+ *  (ADR 558 §3): a session running one of our tools is not idle, and the boundary seam carries it. */
+let inFlight = 0;
+export function toolCallsInFlight(): number {
+  return inFlight;
+}
+function countInFlight(cb: (...args: unknown[]) => unknown): (...args: unknown[]) => unknown {
+  return async (...args: unknown[]) => {
+    inFlight++;
+    try {
+      return await cb(...args);
+    } finally {
+      inFlight--;
+    }
+  };
 }
 
 /** Build (but do not connect) the MCP server with the musterd tools registered. `onFirstToolCall`
@@ -444,6 +464,22 @@ async function main(): Promise<void> {
     transport,
   });
   const stopToolTelemetry = startToolTelemetryFlush(client, recorder);
+  // ADR 558: idle-at-prompt wake. The daemon decides what rings (`seam=idle`); this decides when,
+  // from evidence only this machine has. The harness is the attested surface (it follows capture),
+  // and the inject adapter for anything but claude-code is deaf by name until its increment lands.
+  const bindingDir = config.bindingDir ?? process.cwd();
+  client.attachIdleWake(
+    new IdleWake({
+      seat: () => client.member ?? null,
+      adapter: () => injectAdapterFor(config.surface ?? null),
+      readState: () => markersFor(readIdleWakeState(bindingDir), client.capturedSessionId()),
+      envSwitchOff: process.env['MUSTERD_IDLE_WAKE'] === 'off',
+      inFlight: toolCallsInFlight,
+      transcriptMtime: () => client.transcriptMtime(),
+      check: () => client.idleInterruptCheck(config.surface ?? undefined),
+      report: (r) => client.reportIdleWake(r),
+    }),
+  );
 
   // The one graceful teardown, shared by every exit path: stop the resolution watcher, drop presence,
   // and flush the telemetry tail with a hard cap so a dead collector never hangs the exit.
