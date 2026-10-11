@@ -86,7 +86,7 @@ describe('tour machine — the CLI tour’s rules, on the web', () => {
   });
 
   it('sends back to hands_back, counts it, and the agent’s self-close goes to record', () => {
-    let s = { ...waiting('judge'), askId: 'ask1' };
+    let s: TourState = { ...waiting('judge'), askId: 'ask1' };
     s = advance(s, { type: 'verdict', accept: false });
     expect(s).toMatchObject({ step: 'hands_back', sentBack: 1 });
     expect(s.askId).toBeUndefined();
