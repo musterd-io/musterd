@@ -1,6 +1,6 @@
 # Idle-at-prompt wake — design
 
-**Status:** design approved in chat 2026-10-10 (nick, izzo); written spec awaiting review. Lane
+**Status:** approved 2026-10-10 (nick). Plan: [`2026-10-10-idle-wake.md`](../plans/2026-10-10-idle-wake.md), which also records the planning corrections (`seam`, `.musterd/idle-wake.json`). Lane
 `01M4C2NTYQCFDRF4EJD2H1AB4E`. Goal: `idle-wake`. The ADR follows this spec (increment 1).
 
 ## What this is for
@@ -64,22 +64,22 @@ already rings at boundaries and rings here too).
 The rule is one pure protocol function, `idleRingable(env, seat)`, beside `ringTargets` in
 `doorbell.wire.ts`, so the daemon and `/live` read the same rule.
 
-**The daemon composes the line** (ADR 088 §4). The adapter calls `GET /inbox/interrupt-check?rail=idle`.
+**The daemon composes the line** (ADR 088 §4). The adapter calls `GET /inbox/interrupt-check?seam=idle`. (`rail` already names the harness, ADR 423, so the seam is its own parameter.)
 That route applies `idleRingable` over the same candidate window as today, runs the same discharge
 predicate (ADR 434, `store/discharge.ts`), and returns the same act-id line ADR 088 amendment 4 composes
 (`team_inbox_check {ids:[…]}` / `musterd inbox --id …`). It writes `interrupt.raised` with
-`rail: 'idle'` (ADR 423), once per (seat, act), exactly as the boundary rail does.
+`seam: 'idle'` beside the harness `rail` (ADR 423), once per (seat, act), exactly as the boundary seam does.
 
 ### 2. The core loop (in `@musterd/mcp`)
 
 1. A `deliver` frame arrives for an act that `idleRingable` accepts.
 2. The adapter checks the switches (§5). Off → stop.
 3. It checks **idle**: no MCP tool call in flight in this adapter, the harness's last turn has ended (a
-   turn-end marker the Stop / `session.idle` hook writes to the session file), and the session
+   turn-end marker the Stop / `session.idle` hook writes to `.musterd/idle-wake.json`), and the session
    transcript has not moved for 15 s.
    - Busy → stop. The boundary seam already carries the act at the next tool call.
 4. It waits a **coalescing window** of 5 s, so a burst becomes one line.
-5. It calls `interrupt-check?rail=idle`. No line (already discharged, already rung) → stop.
+5. It calls `interrupt-check?seam=idle`. No line (already discharged, already rung) → stop.
 6. It applies the **guards** (§3), then calls `inject(line)` on this harness's inject adapter (§4).
 7. It records the outcome (§6).
 
@@ -117,13 +117,13 @@ One small module per harness in `@musterd/mcp`, with two calls:
 - `probe(): { ready: true } | { ready: false, reason }`
 - `inject(line): { ok: true } | { ok: false, reason }`
 
-Session details an adapter needs are written by a **SessionStart hook** (installed by
-`musterd init --refresh-hooks`, the clause-5 writer) to a session-scoped file under `.musterd/session/`.
-The adapter finds its file by the session id it already attests (ADR 164).
+Turn markers (last prompt, last turn end) and the session switch live in `.musterd/idle-wake.json`, written
+by the existing trace hook on `UserPromptSubmit` / `Stop` and by `musterd session idle-wake`. It holds no
+secret. Anything a harness needs beyond that (codex's thread id) is the per-harness increment's to add.
 
 | harness | inject | prerequisites | status at spec time |
 | --- | --- | --- | --- |
-| claude-code | Post the line to the session's **inbox socket** (`CLAUDE_CODE_MESSAGING_SOCKET`, token `CLAUDE_CODE_MESSAGING_TOKEN`). Documented: "When the receiving session is idle, Claude Code starts a new turn with the message." The stdio MCP server is a child of `claude`, so it may be an "own child" and may see the variables directly; the SessionStart hook records them either way. **Fallback:** a `notifications/claude/channel` event, when the musterd launcher started the session with the channels flag. | Claude Code 2.1.224+. Not in bare mode. Channel fallback: claude.ai or Console login, `--dangerously-load-development-channels server:musterd` during the preview, interactive only, `MCP_PROTOCOL_NEGOTIATION=legacy` if the adapter negotiates the 2026-07-28 MCP revision. | docs-confirmed; unmeasured |
+| claude-code | Post the line to the session's **inbox socket** (`CLAUDE_CODE_MESSAGING_SOCKET`, token `CLAUDE_CODE_MESSAGING_TOKEN`). Documented: "When the receiving session is idle, Claude Code starts a new turn with the message." The stdio MCP server is a child of `claude`, so it may be an "own child" and may see the variables directly; the adapter reads them from its own environment (present in `claude` children, checked 2026-10-10 on 2.1.296); the token is never persisted. Wire format (NDJSON auth line, then a `user` message) is printed in Claude Code's own `[uds-messaging]` debug help. **Fallback:** a `notifications/claude/channel` event, when the musterd launcher started the session with the channels flag. | Claude Code 2.1.224+. Not in bare mode. Channel fallback: claude.ai or Console login, `--dangerously-load-development-channels server:musterd` during the preview, interactive only, `MCP_PROTOCOL_NEGOTIATION=legacy` if the adapter negotiates the 2026-07-28 MCP revision. | docs-confirmed; unmeasured |
 | codex | `codex queue --thread <id> --message <line>` (app-server `thread/queue/add`). Release notes for 0.149.0: "Queued messages now wake idle sessions reliably". The thread id comes from the SessionStart hook. | codex 0.149.0+ (0.157+ auto-starts the queue daemon). Below that, `probe()` says deaf. | release-notes only; queue-wake fixes still landing in 0.162 (#51427, #51419) |
 | opencode | The adapter writes a **ring file** in the session dir. The ADR 392 plugin watches it and calls `client.session.promptAsync`, so it rings *after* the session went idle, not only at the transition. The plugin's cap of 4 is replaced by the core's caps. | the ADR 392 plugin at the new generation | in-process call works "usually"; open #45564 reports ~90% no-turn on 1.18.22–23 over HTTP |
 | grok | Deaf. | — | leader socket (`~/.grok/leader.sock`) is a lead, undocumented |
@@ -141,7 +141,7 @@ Later overrides earlier:
    `convene_huddles`. Set with `musterd residency policy --idle-wake on|off`.
 2. **Per seat:** `musterd residency on <seat> --idle-wake on|off`.
 3. **Per session:** `MUSTERD_IDLE_WAKE=off` at launch, or `musterd session idle-wake on|off` from inside
-   the session. Both write the session file. The adapter re-reads the file before every inject, so the
+   the session. Both are read by the adapter (the env var directly; the command writes `.musterd/idle-wake.json`). The adapter re-reads the file before every inject, so the
    switch takes effect without a restart.
 
 ### 6. Hearing, and "live but deaf"
@@ -162,7 +162,7 @@ The adapter reports `hearing: 'idle' | 'deaf'` plus `hearing_reason` on claim an
 
 ### 7. Observability
 
-- `interrupt.raised {rail: 'idle', harness}` per idle ring (ADR 423 row, new rail value).
+- `interrupt.raised {seam: 'idle', rail: <harness>}` per idle ring (ADR 423 row, new `seam` field).
 - `idle_wake.injected {ok, harness, reason?}` per inject; `idle_wake.capped {cap}` per capped act.
 - `musterd report delivery` gains an idle-rail column: rung, turn within 60 s, discharged.
 - **Baseline:** 0 idle rings to attended sessions today; ghost's 9 asks, 0 verdicts on 2026-10-07.
@@ -172,19 +172,19 @@ The adapter reports `hearing: 'idle' | 'deaf'` plus `hearing_reason` on claim an
 - **Unit:** the decider with a fake inject adapter — idle detection, the coalescing window, both caps,
   the 30 s keyboard guard, all three switches, catch-up on reconnect, the deaf flip.
 - **Protocol fixtures:** `idleRingable` over every act type, directed vs team, eligible sets, huddle turns.
-- **Daemon integration:** `rail=idle` dedupe, discharge, and the `interrupt.raised` row.
+- **Daemon integration:** `seam=idle` dedupe, discharge, and the `interrupt.raised` row.
 - **Live canary, one per harness:** a session idle for 2 minutes or more; a teammate sends a `steer`.
   Pass: the session's first turn starts within 60 s and the woken model reads the act by id. Record the
   half-typed-draft and open-dialog behavior while there. **Falsifier:** a ringable act to an armed, idle
-  session that produces no `interrupt.raised {rail:'idle'}` row, or a row and no turn.
+  session that produces no `interrupt.raised {seam:'idle'}` row, or a row and no turn.
 
 ## Increments
 
 Each is its own lane under `idle-wake`.
 
-1. Lane `01M4M6PM79M093N5WKPX3Z8T7X`. **ADR:** `idleRingable`, the `rail=idle` route, `hearing`, and the `idle_wake` policy fields (protocol
+1. Lane `01M4M6PM79M093N5WKPX3Z8T7X`. **ADR:** `idleRingable`, the `seam=idle` route, `hearing`, and the `idle_wake` policy fields (protocol
    changes, hard rule 1).
-2. Lane `01M4M6PXZT8ND6F17ZSBDKZQCS`. **Core + claude-code:** the adapter decider, guards, switches, session file, SessionStart hook, the
+2. Lane `01M4M6PXZT8ND6F17ZSBDKZQCS`. **Core + claude-code:** the adapter decider, guards, switches, `.musterd/idle-wake.json` turn markers, the
    inbox-socket inject, its canary.
 3. Lane `01M4M6Q5ERZTP2GGHJZM71HP9R`. **opencode:** the ring file and the plugin watcher, replacing the transition-only bell; canary with a
    hit rate over N trials.
