@@ -22,6 +22,12 @@ export const IDLE_RETRY_AFTER_FAILURE_MS = 10 * 60_000;
 /** What `seam=idle` answered: a line to push, the seat's switch off, or nothing to say. */
 export type IdleCheck = { line: string; act: string; from: string } | { off: true } | null;
 
+/** The daemon-composed interrupt line, and nothing else: one line, printable ASCII plus the two
+ *  glyphs the line uses (⚡, —), bounded. A newline or a control character is never pushed. */
+export function isPushableLine(line: string): boolean {
+  return line.length <= 800 && /^⚡ musterd \[[a-z0-9-]+\]: [\x20-\x7E—]+$/.test(line);
+}
+
 export interface IdleWakeDeps {
   seat: () => string | null;
   adapter: () => InjectAdapter;
@@ -186,6 +192,17 @@ export class IdleWake {
     const cap = this.capFor([res.from], now);
     if (cap) {
       this.deps.report({ act: res.act, outcome: 'capped', harness: adapter.harness, cap });
+      return;
+    }
+    // Defence in depth (ADR 558): what is pushed becomes a USER-role turn, so it must be what the
+    // daemon composes — one short printable line. Anything else is not pushed and not retried.
+    if (!isPushableLine(res.line)) {
+      this.deps.report({
+        act: res.act,
+        outcome: 'failed',
+        harness: adapter.harness,
+        reason: 'line-shape',
+      });
       return;
     }
     const r = await adapter.inject(res.line);

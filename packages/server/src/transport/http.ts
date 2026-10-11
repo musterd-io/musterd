@@ -1026,6 +1026,12 @@ function composeInterruptLine(
     : `${prefix} ${noun} from ${head} — ${read}.`;
 }
 
+/** A field the idle seam may put on a line that becomes a user turn (ADR 558): a short identifier
+ *  — letters, digits and `_ . : -` — never prose, never whitespace, never a newline. */
+function isLineToken(s: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/.test(s);
+}
+
 /**
  * The read that fetches EXACTLY the act this line is about (lane 01M2P69FHZ).
  *
@@ -7809,6 +7815,18 @@ export async function handleHttp(
         // is gone the moment the act discharges. Recomposing it later from the acts table would
         // produce a plausible string, not the one the seat received, which is the difference
         // between evidence and a reconstruction.
+        // ADR 558: on the idle seam the line becomes a USER-role turn in the receiving session, not
+        // hook output, so every field it interpolates must be a plain token. `id`, `thread` and a
+        // huddle's `topic.id` are sender-supplied strings the envelope schema bounds only by
+        // `min(1)` — a topic id that is a sentence would arrive looking like the human's prompt.
+        // Anything else is silence here; the boundary seam still carries the act, unchanged.
+        if (
+          idle &&
+          ![team.slug, latest.from, latest.id, latest.thread ?? 'x', huddleTopic ?? 'x'].every(
+            isLineToken,
+          )
+        )
+          return sendJson(res, 200, { raised: false, seam });
         const line = composeInterruptLine(team.slug, latest, pending.length, huddleTopic, rest);
         // Which rail asked. The caller declares it (`musterd inbox --interrupt-check --hook X`);
         // until ADR 423 the flag only shaped the CLI's own stdout and never reached the server, so
