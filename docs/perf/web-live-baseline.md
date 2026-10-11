@@ -1183,3 +1183,23 @@ the ~0.7 KB CI gzip delta. Initial is 137.3 KB of 138.4 KB, unchanged by the com
 this is a raise to measured + ~0.7 KB + ~1.2%.
 
 - Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main after this lands — total JS under 282 KB.
+
+### 2026-10-11 — total JS 292,000 → 301,200 B and app CSS 9,300 → 10,500 B: the first-run tour (lane 01M4M4DDYFFX7FFD5YVRAQ1C50)
+
+The tour walks a human through giving an agent one small lane and judging it, on `/live` and `/board` (spec
+`docs/design/tour-web-copy.md`). It is one lazy chunk with its own stylesheet, mounted only for a viewer signed in as
+a human, so a watcher fetches none of it. Main @ 5ac73bff had 0.9 KB of total JS and 0.1 KB of app CSS free; nick
+approved the raise on 2026-10-11 before the build.
+
+| Budget     | Main     | This branch          | Ceiling → new     |
+| ---------- | -------- | -------------------- | ----------------- |
+| total JS   | 284.3 KB | 289.9 KB (296,870 B) | 292,000 → 301,200 |
+| app CSS    | 9.0 KB   | 9.7 KB (9,937 B)     | 9,300 → 10,500    |
+| initial JS | 138.2 KB | 138.3 KB             | unchanged         |
+
+The tour chunk is 5,384 B gzip: the shared script copied verbatim from `content/tour.data.ts` at build-prep, the step
+machine ported from the CLI tour, and the panel. Lazy-loading cannot move total (ADR 183), there is nothing to
+delete, and a re-baseline would loosen. JS is measured + the ~0.7 KB CI gzip delta + ~1.2%; CSS is measured + ~5%.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main after this lands — total JS under 290.5 KB,
+  app CSS under 9.8 KB.

@@ -3,7 +3,8 @@
  * @musterd/protocol across package lines, so it cannot import content/ directly).
  *   pnpm tour:gen    — write packages/cli/src/tour/script.generated.ts
  *   pnpm tour:check  — exit 1 if that file is out of date
- * The web build reads content/tour.data.ts at its own build-prep (lane 01M4M4DDYF).
+ * The web build copies content/tour.data.ts the same way at its own build-prep
+ * (packages/web/scripts/gen-site-content.ts → src/content/generated/tour.ts, lane 01M4M4DDYF).
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';

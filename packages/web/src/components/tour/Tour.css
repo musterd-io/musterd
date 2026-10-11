@@ -1,0 +1,113 @@
+/* The first-run tour (lane 01M4M4DDYF). Its own file, loaded with its lazy chunk, which mounts only for
+   a viewer signed in as a human. A paper card at the bottom left, clear of the composer on the right
+   and the team column; the buttons are /live's own ask pills. */
+.tour-entry {
+  flex: none;
+  min-height: 28px;
+  padding: 0 var(--lc-4);
+  border: 1px solid var(--lc-border-2);
+  border-radius: 999px;
+  background: var(--lc-surface-2);
+  color: var(--lc-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.tour-entry:hover {
+  border-color: var(--lc-accent);
+}
+.tour-entry--link,
+.tour__link {
+  border-color: transparent;
+  background: none;
+  color: var(--lc-dim);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.tour-entry__note {
+  font-size: 12px;
+  color: var(--lc-dim);
+}
+.tour {
+  position: fixed;
+  z-index: calc(var(--lc-z-overlay) + 2);
+  left: 16px;
+  bottom: 68px;
+  width: min(380px, calc(100% - 32px));
+  max-height: calc(100% - 140px);
+  overflow-y: auto;
+  padding: var(--lc-4) var(--lc-5);
+  background: var(--lc-ground-2);
+  border: 1px solid var(--lc-border-2);
+  border-radius: 14px;
+  box-shadow: 0 10px 28px rgba(60, 40, 20, 0.18);
+  color: var(--lc-text);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.tour__title {
+  margin: 0 0 var(--lc-2);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lc-accent-ink);
+}
+.tour__body p,
+.tour__list {
+  margin: 0 0 var(--lc-2);
+}
+.tour__list {
+  padding-left: 18px;
+}
+.tour__body h3 {
+  margin-top: var(--lc-4);
+}
+.tour__cmd {
+  display: block;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  white-space: pre;
+}
+.tour__quote {
+  white-space: pre-wrap;
+  padding: var(--lc-2) var(--lc-3);
+  border-left: 2px solid var(--lc-border-2);
+  background: var(--lc-surface);
+}
+.tour__muted {
+  color: var(--lc-dim);
+}
+.tour__error {
+  color: var(--lc-danger-ink);
+}
+.tour__actions,
+.tour__pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lc-3);
+  margin-top: var(--lc-3);
+}
+.tour .lc-ask__btn,
+.tour__link {
+  min-height: 28px;
+  font-size: 12.5px;
+}
+.tour__pick p {
+  flex-basis: 100%;
+}
+.tour__note {
+  display: grid;
+  gap: var(--lc-2);
+  flex: 1;
+}
+.tour__note textarea {
+  font: inherit;
+  padding: var(--lc-2);
+  border: 1px solid var(--lc-border-2);
+  border-radius: 8px;
+  background: var(--lc-surface);
+  color: var(--lc-text);
+}
+.tour__note .lc-ask__btn {
+  justify-self: start;
+}
