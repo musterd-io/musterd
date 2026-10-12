@@ -158,6 +158,21 @@ Phantom Presence now drops within the 45s reclaim grace instead of lingering. Th
 > [ADR 175](../decisions/175-mcp-spec-2026-07-28-readiness.md) for the executed checklist and the
 > 2026-08-12 Consequences notes.
 
+## Cold-start bench
+
+`node scripts/mcp/bench.mjs --surface <harness>` times the stdio adapter the external harnesses
+launch (claude-code, cursor, codex, opencode, grok). One JSON line: module-import milliseconds,
+then spawn → legacy `initialize`, then spawn → `tools/list`, plus the list's byte size and whether
+`ttlMs` was on that result. It never calls a tool, so it does not claim a seat. The native musterd
+host has no stdio entry and is not part of this bench.
+
+The default entry is `~/.musterd/runtime/packages/mcp/dist/index.js` (the adapter a harness
+actually runs), then a repo `packages/mcp/dist/index.js`. `--entry` and `MUSTERD_MCP` override.
+`--surface` supplies the launch marker the process needs in order to boot.
+
+`tools_list_has_ttl` is false on this bench. The bench speaks `initialize`, which is the wire
+every current harness opens with, and the cache hints ride the 2026-07-28 era only.
+
 ## The core tools (JSON schemas — verbatim contract)
 
 This section contracts the **six core team tools** verbatim; the lane, goal, seat-memory, and report
