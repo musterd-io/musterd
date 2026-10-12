@@ -98,6 +98,22 @@ way), which is the cheapest third of a core to give back to Chrome. The after-nu
 here once the image is rebuilt and the stream relaunched; 720p stays the next lever if the floor
 still does not hold.
 
+**After (same day, machine `683e6e3fe3e038`, image `9d6a43c3feaa`, 3 min up, #2433 landed):**
+
+| process               | before (medium) | after (veryfast) |
+| --------------------- | --------------- | ---------------- |
+| ffmpeg                | 140% CPU        | 33% CPU          |
+| Chrome (3 processes)  | ~200%           | ~213%            |
+| idle                  | 0%              | 33%              |
+| load average (1 min)  | 6.0             | 3.7 (still settling from launch) |
+| draw floor            | 8.7/s at 70 s   | no floor line in the first 4 min |
+
+`ps` on the box shows `-preset veryfast` in the running ffmpeg. The encoder gave back about a core,
+Chrome took some of it, and the draw floor that fired at 70 s on the old machine has not fired. The
+longer-run draw rate is not yet measured; read the next `the office drew` line in `fly logs`, if one
+comes, before calling the floor held. ffmpeg's `-stats` line arrives only when Fly flushes it, so
+`speed=` for this run is unread too.
+
 **What the first row is expected to show,** from #369's spot measurement: delivered ~35 fps at
 ~181 KB/frame, canvas drawing at ~60, so **draws/delivered ≈ 1.7–2.0**. If that holds, the page is
 being painted roughly twice for every frame that reaches the encoder, and the plan's candidate #1 is
