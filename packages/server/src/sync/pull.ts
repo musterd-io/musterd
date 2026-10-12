@@ -9,7 +9,7 @@ import {
 import type { Ctx } from '../context.js';
 import { failureFields, log } from '../log.js';
 import { readNodeState } from '../node/state.js';
-import { handleFoldedMessages } from '../protocol/route.js';
+import { deliverFoldedLive, handleFoldedMessages } from '../protocol/route.js';
 import { countLanesBefore, insertLaneSnapshot } from '../store/lanes.js';
 import { getMemberById, haltedSentence } from '../store/members.js';
 import { replaceSeatBindings } from '../store/nodes.js';
@@ -482,6 +482,8 @@ export async function pullPage(
       log.warn({ msg: 'incident_hook_failed', team: team.slug, err: String(err) });
     }
   }
+  // Live push to whoever is connected HERE (hub and joiner alike): the fold only wrote `messages`.
+  if (result.messages.length > 0) await deliverFoldedLive(ctx, team.slug, result.messages);
   // ADR 525: a halt decided on the hub reached this node. The fold set the standing and revoked the
   // leases; a live socket here is closed now with the halt's own sentence, as the deciding node does.
   for (const memberId of result.halted ?? []) await evictHalted(ctx, team.id, memberId);

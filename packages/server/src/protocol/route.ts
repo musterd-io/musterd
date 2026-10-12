@@ -816,6 +816,66 @@ async function routeEnvelopeInner(
  * which routes as the lane owner: incident traffic reads as coming from whoever carries the lane.
  */
 /**
+ * Push messages the fold just inserted to the sockets open on THIS machine — recipients first, then
+ * firehose watchers — the delivery `routeEnvelope` does for a local send. The fold writes `messages`
+ * and nothing else, so before this a remote act reached an open seat only when it next read its inbox
+ * (ADR 325 "not yet true", fixed here). Live is the push, durable is the row: a seat that is not
+ * connected simply gets it from its inbox, and a client that sees it live and again on a read
+ * dedupes by `envelope.id` (at-least-once, 03-server.md). Delivery only — none of `routeEnvelope`'s
+ * side effects (verdicts, incident pool, doorbell) run: those are the sender's machine's or the
+ * hub's, and `handleFoldedMessages` fires the hub's. Never throws; a failed push is the inbox's job.
+ */
+export async function deliverFoldedLive(
+  ctx: Ctx,
+  teamSlug: string,
+  messageIds: string[],
+): Promise<number> {
+  if (messageIds.length === 0) return 0;
+  const team = await getTeamBySlug(ctx.db, teamSlug);
+  if (!team) return 0;
+  let delivered = 0;
+  for (const id of messageIds) {
+    try {
+      const row = await ctx.db.get<MessageRow>(
+        'SELECT * FROM messages WHERE team_id = ? AND id = ?',
+        [team.id, id],
+      );
+      if (!row) continue;
+      const sender = await getMemberById(ctx.db, row.from_member);
+      if (!sender) continue;
+      let recipients: { id: string; name: string }[];
+      if (row.to_kind === 'member' && row.to_member) {
+        const target = await getMemberById(ctx.db, row.to_member);
+        recipients =
+          target && target.left_at === null ? [{ id: target.id, name: target.name }] : [];
+      } else {
+        recipients = await ctx.db.all<{ id: string; name: string }>(
+          'SELECT id, name FROM members WHERE team_id = ? AND left_at IS NULL AND observer = 0 AND id != ?',
+          [team.id, sender.id],
+        );
+      }
+      const toName = row.to_kind === 'member' ? (recipients[0]?.name ?? null) : null;
+      const env = rowToEnvelope(row, team.slug, sender.name, toName);
+      for (const r of recipients) {
+        delivered += ctx.hub.deliver(r.id, { type: 'deliver', envelope: env });
+      }
+      const skip = new Set(recipients.map((r) => r.id));
+      skip.add(sender.id);
+      delivered += ctx.hub.broadcastFirehose(
+        team.id,
+        { type: 'deliver', envelope: env },
+        skip,
+        row.to_kind === 'member',
+        confidentialAskSubject(env) !== null,
+      );
+    } catch (err) {
+      log.warn({ msg: 'folded_live_delivery_failed', message: id, err: String(err) });
+    }
+  }
+  return delivered;
+}
+
+/**
  * The hub's half of ADR 371 §2: run the route-time hooks a FOLDED message still owes. A joiner's
  * `status_update` carrying a `blocked_by` report was never routed here — it folded — so the pool
  * never saw it. Called from the hub's pull with the ids the fold just inserted (never from a scan

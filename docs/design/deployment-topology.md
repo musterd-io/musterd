@@ -217,8 +217,7 @@ promoted daemon on SQLite satisfies the CAS — one process, one writer.
 
 ### Not yet true
 
-**Folded events are not pushed to open sockets.** They are in `messages`, so inbox reads see them;
-live WebSocket delivery of a remote event is a follow-up. **The inbox and wake cursors still key on
+**Folded events reach open sockets** (since 2026-10-08, `deliverFoldedLive`): they are in `messages` for inbox reads and pushed live to whoever is connected on the folding machine. **The inbox and wake cursors still key on
 `ts`** — the origin's clock — so a folded event older than a seat's last read is invisible to that
 seat; the readers move to `created_at` in their own lane, a hard precondition before a second
 machine enrolls (spec §"The ts-cursor defect"). **Lane transitions replicate; a joiner's claim is
