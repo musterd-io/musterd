@@ -7,6 +7,7 @@ import {
   hubHead,
   highestContiguousSeq,
   ingestBatch,
+  laneGenesis,
   SyncDuplicateIdError,
   SyncGapError,
   SyncOriginError,
@@ -275,6 +276,54 @@ withDrivers('log', (_o, kind) => {
         { next_seq: 1 },
         { next_seq: 1 },
       ]);
+      await db.close();
+    });
+  });
+
+  describe('lane genesis', () => {
+    let seq = 0;
+    async function append(
+      db: ReturnType<typeof openDb>,
+      teamId: string,
+      payload: Record<string, unknown>,
+    ) {
+      seq += 1;
+      const hub = ((await hubHead(db, teamId)) ?? 0) + 1;
+      await db.run(
+        'INSERT INTO sync_log (id, team_id, origin_node, origin_seq, hub_seq, payload, received_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [`e${seq}`, teamId, 'node-a', seq, hub, JSON.stringify(payload), 0],
+      );
+    }
+    const opened = (lane: string) => ({
+      kind: 'lane',
+      event: { action: 'lane.opened', target: lane, detail: { lane } },
+    });
+
+    it('tracks the smallest lane.opened id as the log grows, older births included', async () => {
+      const { db, team } = await seed();
+      expect(await laneGenesis(db, team.id)).toBeNull();
+      await append(db, team.id, opened('01B'));
+      expect(await laneGenesis(db, team.id)).toBe('01B');
+      // Not a birth: neither a later message nor a later transition moves the watermark.
+      await append(db, team.id, { kind: 'message', envelope: { id: 'm1' } });
+      await append(db, team.id, {
+        kind: 'lane',
+        event: { action: 'lane.claimed', target: '01A', detail: { lane: '01A' } },
+      });
+      expect(await laneGenesis(db, team.id)).toBe('01B');
+      // A birth for an OLDER lane appended later (clock skew across machines) lowers it.
+      await append(db, team.id, opened('01A'));
+      await append(db, team.id, opened('01C'));
+      expect(await laneGenesis(db, team.id)).toBe('01A');
+      await db.close();
+    });
+
+    it('keeps teams apart', async () => {
+      const { db, team } = await seed();
+      const other = await createTeam(db, { slug: 'dawn' });
+      await append(db, team.id, opened('01Z'));
+      expect(await laneGenesis(db, team.id)).toBe('01Z');
+      expect(await laneGenesis(db, other.id)).toBeNull();
       await db.close();
     });
   });
