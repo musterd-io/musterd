@@ -82,7 +82,7 @@ Every step is a no-op once done, so a failure is fixed and the script re-run. In
    Autorefresh (step 2) keeps it on `main` from then on, as on the hub.
 2. **Services** — `musterd service install` (daemon, loopback), `--wake` (the actuator that wakes
    this machine's seats), `--auto --mode notice` (autorefresh). launchd, `RunAtLoad`.
-3. **Team home** — clones the roster repo to `~/musterd/revive`, `team create revive --as nick`
+3. **Team home** — clones the roster repo to `~/musterd/revive`, `team create revive --member nick`
    there (the joiner holds the team under the same slug before enrolling; this also mints your
    admin credential on this daemon), and declares the clone as the daemon's roster root. Without
    that the roster is two members and the fold **blocks** on the first hub event naming anyone

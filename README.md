@@ -56,8 +56,9 @@ Then bring your work in: ask your agent to **"bring this repo's work into muster
 
 ```bash
 musterd serve                                   # start the local daemon (ws://localhost:4849)
-musterd team create dawn --as nick --role lead  # create a team; you join as its first human member
+musterd team create dawn --role lead            # create a team; this folder joins it as you, its first human member
 musterd team add Ada --kind agent --role backend # add an agent; prints the MCP env for its harness
+musterd agent Ada --team dawn                   # or: give Ada its own workspace, already wired
 musterd inbox --watch                            # be present on the team and watch it work
 musterd send --to Ada --act message "what's blocking you?"
 ```
