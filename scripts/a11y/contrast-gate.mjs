@@ -44,6 +44,7 @@
 import { spawn } from 'node:child_process';
 import { createReadStream, existsSync, readdirSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { availableParallelism } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SHARED_BLOCKER_GATES, sharedBlockerNotice } from '../lib/shared-blocker-notice.mjs';
@@ -252,21 +253,41 @@ const freePort = () =>
     });
   });
 
-const sweep = (url) =>
+/**
+ * One sweep: its own process and its own Chrome (own profile, own debugging port), so sweeps do not
+ * share anything and can run side by side. With `buffered`, the sweep's stderr is held and replayed
+ * when its result is reported, so a parallel run reads exactly like a serial one: each route's
+ * diagnostics sit directly above its own result line, which is what the `!` line points at.
+ */
+const sweep = (url, { buffered = false } = {}) =>
   new Promise((resolve) => {
     const child = spawn(process.execPath, [join(HERE, 'contrast-sweep.mjs'), url], {
-      stdio: ['ignore', 'pipe', 'inherit'],
+      stdio: ['ignore', 'pipe', buffered ? 'pipe' : 'inherit'],
       env: { ...process.env, CHROME_BIN: CHROME },
     });
     let out = '';
+    let err = '';
     child.stdout.on('data', (d) => (out += d));
-    child.on('close', (code) => resolve({ code, out }));
+    child.stderr?.on('data', (d) => (err += d));
+    child.on('close', (code) => resolve({ code, out, err }));
   });
+
+/*
+ * How many prerendered sweeps run at once. Serial, the phase took ~145s on CI (2026-10-12, run
+ * 38320351035): seventeen sweeps of ~5.3s each, mostly Chrome start-up and the settle wait, plus
+ * two ~27s office scenes. Each sweep is one Chrome on one page, so the runner's CPUs bound it; one
+ * is left for the static server and the scene's own timers. A11Y_SWEEP_CONCURRENCY=1 is the old
+ * serial run, for a reader who wants to rule parallelism out.
+ */
+const SWEEP_CONCURRENCY = Math.max(
+  1,
+  Number(process.env['A11Y_SWEEP_CONCURRENCY']) || Math.min(4, availableParallelism() - 1),
+);
 
 console.log(
   CONNECTED_ONLY
     ? `contrast-gate — connected phase only over ${DIR}\n`
-    : `contrast-gate — ${ROUTES.length} routes over ${DIR}\n`,
+    : `contrast-gate — ${ROUTES.length} routes over ${DIR}, ${SWEEP_CONCURRENCY} at a time\n`,
 );
 const failed = [];
 /** Routes that went UNMEASURED (sweep exit 2) — a subset of `failed`, reported apart from it. */
@@ -421,20 +442,43 @@ const SCENE_STILL = '&still';
  */
 const SCENE_MOTION = ['', '&reduced'];
 
+/** Every prerendered sweep, in report order. */
+const jobs = [];
 for (const route of CONNECTED_ONLY ? [] : ROUTES) {
   if (sceneRoutes.has(route)) {
     for (const light of SCENE_LIGHTS) {
       for (const motion of SCENE_MOTION) {
-        report(
-          await sweep(`http://127.0.0.1:${BOUND}${route}?light=${light}${SCENE_STILL}${motion}`),
-          `${route} (light=${light}${motion ? ', reduced' : ''})`,
-        );
+        jobs.push({
+          url: `http://127.0.0.1:${BOUND}${route}?light=${light}${SCENE_STILL}${motion}`,
+          label: `${route} (light=${light}${motion ? ', reduced' : ''})`,
+        });
       }
     }
   } else {
-    report(await sweep(`http://127.0.0.1:${BOUND}${route}`), route);
+    jobs.push({ url: `http://127.0.0.1:${BOUND}${route}`, label: route });
   }
 }
+/* Run up to SWEEP_CONCURRENCY at once; report strictly in job order as each next result lands. */
+const results = new Array(jobs.length);
+let next = 0;
+let reported = 0;
+const flush = () => {
+  while (reported < jobs.length && results[reported]) {
+    const r = results[reported];
+    if (r.err) process.stderr.write(r.err);
+    report(r, jobs[reported].label);
+    reported += 1;
+  }
+};
+await Promise.all(
+  Array.from({ length: Math.min(SWEEP_CONCURRENCY, jobs.length) }, async () => {
+    while (next < jobs.length) {
+      const i = next++;
+      results[i] = await sweep(jobs[i].url, { buffered: true });
+      flush();
+    }
+  }),
+);
 
 server.close();
 if (CONNECTED_ONLY) {
