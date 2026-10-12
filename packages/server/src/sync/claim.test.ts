@@ -111,9 +111,13 @@ withDrivers('claim', (_o, kind) => {
     dir = mkdtempSync(join(tmpdir(), 'musterd-claim-'));
     process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
 
-    hub = createServer({ db: await openTestDriver(kind), port: 0 });
+    hub = createServer({ db: await openTestDriver(kind), port: 0, syncLoops: false });
     hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-    joiner = createServer({ db: await openTestDriver(kind, { instance: 'b' }), port: 0 });
+    joiner = createServer({
+      db: await openTestDriver(kind, { instance: 'b' }),
+      port: 0,
+      syncLoops: false,
+    });
     joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
     joinerCtx = {
       db: joiner.store,
