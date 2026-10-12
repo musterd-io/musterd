@@ -8,6 +8,7 @@ import {
 import type { Driver } from '../db/driver.js';
 import { getMemberByName } from '../store/members.js';
 import { bindSeatToNode } from '../store/nodes.js';
+import { ringStreams } from './streamHub.js';
 
 /**
  * The hub's staging log for pushed events (ADR 325 increment 3b-i).
@@ -119,7 +120,7 @@ export async function ingestBatch(
   events: SyncEvent[],
   now: number = Date.now(),
 ): Promise<{ accepted: number; hub_seq_high: number }> {
-  return db.tx(async (t) => {
+  const result = await db.tx(async (t) => {
     // Authentication proves WHICH node is pushing; it does not prove the node may write to THIS
     // team's log, because `nodes.id` is global while a node belongs to one team. Increment 3a's one
     // confirmed hole was exactly this confusion between a global id and a team-scoped check.
@@ -279,6 +280,10 @@ export async function ingestBatch(
 
     return { accepted, hub_seq_high: await hubHead(t, teamId) };
   });
+  // ADR 552 §3: the one place the hub's log grows. Ring AFTER the commit so a poked joiner's pull
+  // finds the rows; never throws, and a missed poke costs only the 60 s tick.
+  if (result.accepted > 0) ringStreams(teamId, result.hub_seq_high);
+  return result;
 }
 
 /**

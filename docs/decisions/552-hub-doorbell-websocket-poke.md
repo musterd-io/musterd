@@ -98,18 +98,21 @@ not (a pong proves the socket, not the node's work: the next pull does).
 - One idle socket per joiner per team on the hub; at single-digit machines this is negligible.
 - A stream-hostile proxy costs only latency: the upgrade fails, the tick carries on.
 - `SPEC.md` is unaffected: `/sync/*` is daemon-to-daemon, outside the normative protocol (ADR 325).
-  `02-protocol.md` and `03-server.md` gain the stream; `SyncStreamFrameSchema` is a protocol-package
+  `03-server.md` gains the stream (`02-protocol.md` carries no `/sync/*` section); `SyncStreamFrameSchema` is a protocol-package
   schema addition and this ADR is its gate (hard rule 1).
+- Measured 2026-10-12 on two real daemons (the `push.test.ts` harness), hub send → live `deliver` frame
+  on a joiner seat, five runs: 324, 329, 336, 347, 358 ms (median 336 ms), 60 s tick still enabled.
+  Hub CPU per event at 1 and 3 joiners is not yet recorded; the eval above still owes it.
 - Superseded within this ADR before acceptance: the first draft chose a long-poll
   (`GET /sync/pull?wait=S`). It was dropped on 2026-10-12 because step 4 needs a duplex channel and the
   `ws` server already exists; `ringStreams` is the same single ring point that design used.
 
 ## Observability & Evaluation
 
-- **Traces:** hub `sync_stream_open` / `sync_stream_close` (debug; team, node, `reason`: `client`,
-  `ping_timeout`, `shutdown`) and `sync_stream_rang` (debug; team, `seq`, `streams`). Joiner
-  `sync_stream_up`, `sync_stream_down` (once per outage), `sync_stream_poke` (debug; `seq`,
-  `coalesced`).
+- **Traces:** hub `sync_stream_open` / `sync_stream_close` (info; team, node, `reason`: `ping_timeout`
+  for a reaped stream) and `sync_stream_refused` (warn). Joiner `sync_stream_up`, and
+  `sync_stream_down` (warn, once per outage). A poke is not logged per event: the daemon has no debug
+  level, and `sync_pulled` already records the pull a poke causes.
 - **Eval:** two real daemons (the `push.test.ts` harness), a seat connected on the **joiner**, a send on
   the **hub**, time to the `deliver` frame on the joiner. Baseline: up to 60 s (the timer, as steps
   1–2 were measured). Accepted if the median over 5 runs is under 2 s with the 60 s tick still

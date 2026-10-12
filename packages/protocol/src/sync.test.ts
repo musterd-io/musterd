@@ -4,6 +4,7 @@ import {
   SyncEventSchema,
   SyncPullResponseSchema,
   SyncPushRequestSchema,
+  SyncStreamFrameSchema,
   syncEventId,
   syncEventTeam,
 } from './sync.js';
@@ -120,5 +121,19 @@ describe('the sync wire format (ADR 325)', () => {
         nodes: [{ id: 'n', label: 'l', last_seen_at: null }],
       }).nodes,
     ).toHaveLength(1);
+  });
+});
+
+describe('SyncStreamFrameSchema (ADR 552)', () => {
+  it('parses head, ping and pong', () => {
+    expect(SyncStreamFrameSchema.parse({ type: 'head', seq: 7 })).toEqual({ type: 'head', seq: 7 });
+    expect(SyncStreamFrameSchema.parse({ type: 'ping' })).toEqual({ type: 'ping' });
+    expect(SyncStreamFrameSchema.parse({ type: 'pong' })).toEqual({ type: 'pong' });
+  });
+
+  it('refuses a head with a bad seq and an unknown frame', () => {
+    expect(SyncStreamFrameSchema.safeParse({ type: 'head', seq: -1 }).success).toBe(false);
+    expect(SyncStreamFrameSchema.safeParse({ type: 'head', seq: 1.5 }).success).toBe(false);
+    expect(SyncStreamFrameSchema.safeParse({ type: 'push' }).success).toBe(false);
   });
 });

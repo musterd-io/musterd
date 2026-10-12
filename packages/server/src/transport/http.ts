@@ -507,6 +507,7 @@ import {
 } from '../sync/log.js';
 import { kickSyncPull, pullTeam, readPullStop } from '../sync/pull.js';
 import { readPushRefusal, pushTeam } from '../sync/push.js';
+import { kickSyncStream } from '../sync/streamJoiner.js';
 import {
   recordError,
   recordInterruptCheck,
@@ -2491,6 +2492,8 @@ export async function handleHttp(
         credential: minted.node_credential,
         enrolled_at: Date.now(),
       });
+      // ADR 552: open the doorbell stream now rather than at the next rescan.
+      kickSyncStream(ctx);
       return sendJson(res, 200, { node_id: minted.node_id, team: body.team });
     }
 

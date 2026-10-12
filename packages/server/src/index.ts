@@ -42,6 +42,8 @@ import { startTraceContentPrune } from './store/trace.js';
 import { startTraceCoverageSweep } from './store/traceCoverage.js';
 import { startSyncPull } from './sync/pull.js';
 import { startSyncPush } from './sync/push.js';
+import { attachSyncStream } from './sync/streamHub.js';
+import { startSyncStream } from './sync/streamJoiner.js';
 import { startTracePush } from './sync/tracePush.js';
 import { registerRuntimeGauges, startTelemetry, telemetryEnabled } from './telemetry.js';
 import { handleHttp } from './transport/http.js';
@@ -251,11 +253,13 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   // Keep the handle: `close()` MUST be able to terminate live WS clients. Discarding it is what hung
   // the daemon on 2026-07-27 — see the close() comment below.
   const wss = attachWsServer(ctx, http);
+  const syncStream = attachSyncStream(ctx, http);
   let stopReaper: (() => void) | null = null;
   let stopSeeds: (() => void) | null = null;
   let stopDigest: (() => void) | null = null;
   let stopSync: (() => void) | null = null;
   let stopPull: (() => void) | null = null;
+  let stopStream: (() => void) | null = null;
   let stopFootprint: (() => void) | null = null;
   let stopTracePrune: (() => void) | null = null;
   let stopAuditRetention: (() => void) | null = null;
@@ -341,7 +345,11 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
           // ADR 494 §5: the morning digest, posted at each team's working-hours start.
           if (loops.has('digest')) stopDigest = startDigestSchedule(opCtx);
           if (loops.has('sync_push')) stopSync = startSyncPush(opCtx);
-          if (loops.has('sync_pull')) stopPull = startSyncPull(opCtx);
+          if (loops.has('sync_pull')) {
+            stopPull = startSyncPull(opCtx);
+            // ADR 552: the hub's doorbell. The 60 s tick above stays the floor.
+            stopStream = startSyncStream(opCtx);
+          }
           // ADR 453 §4: its own loop, so a stalled /sync/trace never delays /sync/push.
           if (loops.has('trace_push')) stopTracePush = startTracePush(opCtx);
           if (loops.has('footprint')) stopFootprint = startFootprintSampler(opCtx);
@@ -500,6 +508,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         stopDigest?.();
         stopSync?.();
         stopPull?.();
+        stopStream?.();
         stopFootprint?.();
         stopTracePrune?.();
         stopAuditRetention?.();
@@ -512,6 +521,7 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
         void stopTelemetry?.();
         void closeReportService(db);
         // Kill the upgraded sockets FIRST — http.close() below never settles while they live.
+        syncStream.close();
         for (const client of wss.clients) client.terminate();
         wss.close();
         http.close(() => {
