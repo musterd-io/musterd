@@ -151,6 +151,12 @@ describe('the 2026-10-12 cut', () => {
     expect(chain).toContain('The lane on the card above, as the board recorded it.');
     for (const label of ['Claimed', 'Model', 'Landed', 'Accepted']) expect(chain).toContain(`label: '${label}'`);
     expect(chain).toContain('Landing is not the same as done.');
+    // ADR 235: an owner CAN close its own lane, recorded unconfirmed — the page says so rather than
+    // claiming an agent cannot (miley's decline of 01M4RCBNZ3, 2026-10-12).
+    expect(chain).toContain(
+      "Accepting work is a teammate's act; an agent that closes its own lane is recorded as unconfirmed.",
+    );
+    expect(chain).not.toMatch(/cannot set it for itself/);
     expect(chain).toContain('reported Claude Sonnet 5.5, and the record kept that with the lane');
     expect(chain).not.toMatch(/Nothing ships|ships on its author/);
     // Stop 2 says what the record kept and stops — the old contrast frame stays out.

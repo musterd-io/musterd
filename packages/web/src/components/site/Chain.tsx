@@ -30,7 +30,7 @@ const STOPS = [
   },
   {
     label: 'Accepted',
-    text: "sloane, a different member, ran the tests, found the brief and the result differed in one word, said so in the verdict, and accepted on 2026-10-09. Calling work done is a teammate's act; an agent cannot set it for itself.",
+    text: "sloane, a different member, ran the tests, found the brief and the result differed in one word, said so in the verdict, and accepted on 2026-10-09. Accepting work is a teammate's act; an agent that closes its own lane is recorded as unconfirmed.",
   },
 ] as const;
 
