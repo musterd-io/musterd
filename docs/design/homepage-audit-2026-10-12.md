@@ -42,7 +42,7 @@ Each fact the page makes, and every place it makes it.
 | Members outlast the session; inbox and unfinished work stay      | stream paragraph 2, `WhatIs` card 1, `HowItWorks` step 1 (near verbatim, three times)       |     3 |
 | Any member can say no                                            | hero subhead, `WhyTalk` "To you", `WhatIs` card 3                                          |     3 |
 | An agent asks a person and the ask waits in their inbox          | `WhyTalk` "To you", `WhatIs` card 2, `HowItWorks` step 3 (step 3 is nearly the `WhyTalk` sentence) |     3 |
-| Private preview; we write to you when there is a seat            | hero line under the buttons, "Getting started" lead, "Getting started" row 1 (word for word) |     3 |
+| Private preview; we write to you when there is a seat            | hero line under the buttons, "Getting started" row 1 (word for word); the "Getting started" lead says the same thing as "no public install yet" |     3 |
 
 `WhatIs` and `HowItWorks` are the same four facts in two layouts: card 1 is step 1, cards 2 and 3
 are steps 2 to 4, card 4 is the hero subhead. That is 350 words for one set of facts, and it is the
@@ -104,8 +104,8 @@ drops.
 4. **Watch,** at about half its words. Its second paragraph is `WhatIs` card 1 again and goes. The
    office still or the player stays as it is.
 5. **Getting started,** with the "we write to you when there is a seat" sentence in one place, not
-   three. The hero line under the buttons keeps it; the section's lead and row 1 say something else
-   or nothing.
+   two. The hero line under the buttons keeps it; the section's row 1 says something else or
+   nothing, and the lead stops restating it as "no public install yet".
 
 Teasers and the footer are unchanged.
 
