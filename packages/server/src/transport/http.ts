@@ -431,6 +431,7 @@ import { redeemHandoff, stageHandoff } from '../store/signinHandoff.js';
 import { issueAgentConnectNonce } from '../store/sponsoredAgents.js';
 import { revokeSponsoredDescendants } from '../store/sponsoredCascade.js';
 import { staleLaneWarnings } from '../store/staleness.js';
+import { healthStoreSizes } from '../store/storeSizesHealth.js';
 import {
   applyStylePrefs,
   currentStyleEpochFor,
@@ -2339,7 +2340,13 @@ export async function handleHttp(
           return bytes === undefined ? {} : { trace_db_bytes: bytes };
         })(),
         // ADR 478 §Observability: store sizes, so growth is watched rather than discovered.
-        ...(await storeSizes(ctx.db, ctx.config.dbPath, defaultArchiveDir(ctx.config.dbPath))),
+        // Off the event loop on a file-backed store (lane 01M4RNPQD0): the sizes' dbstat walk was
+        // stalling this very probe for seconds. See store/storeSizesHealth.ts.
+        ...(await healthStoreSizes(
+          ctx.db,
+          ctx.config.dbPath,
+          defaultArchiveDir(ctx.config.dbPath),
+        )),
         connections: await countLivePresences(ctx.db, ctx.config.presenceTimeoutMs),
         // Quiescence (2026-08-03 design): age of the newest audited action across live agent seats,
         // for the auto-refresher's quiet-floor — `connections` says who is ATTACHED, this says who
