@@ -71,6 +71,7 @@ import {
   recordBootstrapCredentialUse,
   requireTeam,
 } from '../store/teams.js';
+import { isSyncStreamPath } from '../sync/streamHub.js';
 import { recordError, recordPresenceChurn } from '../telemetry.js';
 import { isReloadOf, type Connection } from './hub.js';
 
@@ -212,6 +213,8 @@ export function attachWsServer(rootCtx: Ctx, server: import('node:http').Server)
 
   server.on('upgrade', (req: IncomingMessage, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
+    // ADR 552: the node-to-node sync stream upgrades on its own path, handled by attachSyncStream.
+    if (isSyncStreamPath(url.pathname)) return;
     if (url.pathname !== '/ws') {
       socket.destroy();
       return;

@@ -17,6 +17,7 @@ import { attach } from '../store/presence.js';
 import { getTeamBySlug } from '../store/teams.js';
 import { Hub } from '../transport/hub.js';
 import { pushTeam, readPushRefusal, wedgeKind } from './push.js';
+import { streamCount } from './streamHub.js';
 
 withDrivers('push', (_o, kind) => {
   /**
@@ -35,6 +36,7 @@ withDrivers('push', (_o, kind) => {
   let nickCredential: string;
   let hubAgentKey: string;
   let nickOnJoinerCredential: string;
+  let joinerAgentKey: string;
   const nickCredentialOnJoiner = () => nickOnJoinerCredential;
   let dir: string;
   /** The joiner's own context — pushTeam runs inside the joiner daemon, not the hub. */
@@ -178,6 +180,7 @@ withDrivers('push', (_o, kind) => {
       creator: { name: 'nick', kind: 'human' },
     });
     nickOnJoinerCredential = onJoiner.json.human_credential;
+    joinerAgentKey = onJoiner.json.agent_key;
   });
 
   afterEach(async () => {
@@ -842,6 +845,131 @@ withDrivers('push', (_o, kind) => {
       // Measured 2026-10-08: no frame at all within 20 s before (the fold wrote `messages` only), 317 ms after.
       expect(ms).toBeLessThan(2_000);
     }, 60_000);
+  });
+
+  describe('the hub doorbell (ADR 552)', () => {
+    const until = async (pred: () => boolean | Promise<boolean>, ms: number) => {
+      const t0 = Date.now();
+      while (!(await pred()) && Date.now() - t0 < ms) await new Promise((r) => setTimeout(r, 25));
+      return await pred();
+    };
+    const hubTeamId = async () => (await getTeamBySlug(hub.store, 'bravo'))!.id;
+
+    async function streamUp() {
+      await send(joiner, 'seed');
+      await enrollJoiner();
+      await pushTeam(joinerCtx, await joinerTeam());
+      const id = await hubTeamId();
+      expect(await until(() => streamCount(id) > 0, 10_000)).toBe(true);
+      return id;
+    }
+
+    it('rings a joiner seat live on a hub send, without waiting for the 60 s pull tick', async () => {
+      await post(
+        joinerBase,
+        '/teams/bravo/members',
+        { name: 'ada', kind: 'agent' },
+        nickCredentialOnJoiner(),
+      );
+      const grant = (
+        await post(
+          joinerBase,
+          '/teams/bravo/grants',
+          { scope: 'seat', target: 'ada', lifetime: 'standing' },
+          nickCredentialOnJoiner(),
+        )
+      ).json.token as string;
+      const frames: WSServerFrame[] = [];
+      const ws = new WebSocket(`${joinerBase.replace('http', 'ws')}/ws`);
+      ws.on('message', (d) => frames.push(JSON.parse(d.toString()) as WSServerFrame));
+      await new Promise<void>((r) => ws.on('open', () => r()));
+      ws.send(
+        JSON.stringify({
+          type: 'claim',
+          v: PROTOCOL_VERSION,
+          team: 'bravo',
+          key: joinerAgentKey,
+          target: { seat: 'ada' },
+          grant,
+          surface: 'cli',
+        }),
+      );
+      expect(await until(() => frames.some((f) => f.type === 'occupied'), 5_000)).toBe(true);
+      await streamUp();
+
+      const sent = Date.now();
+      const res = await post(
+        hubBase,
+        '/teams/bravo/messages',
+        {
+          envelope: makeEnvelope({
+            id: 'lat-doorbell',
+            team: 'bravo',
+            from: 'nick',
+            to: { kind: 'team' as const },
+            act: 'message',
+            body: 'doorbell probe',
+            ts: sent,
+          }),
+        },
+        nickCredential,
+      );
+      expect(res.status).toBe(201);
+      const got = await until(
+        () =>
+          frames.some(
+            (f) =>
+              f.type === 'deliver' &&
+              (f as { envelope: { id: string } }).envelope.id === 'lat-doorbell',
+          ),
+        20_000,
+      );
+      const ms = Date.now() - sent;
+      ws.close();
+      expect(got).toBe(true);
+      // Baseline before this ADR: up to SYNC_PULL_INTERVAL_MS (60 s) — the joiner only learned on its tick.
+      expect(ms).toBeLessThan(2_000);
+    }, 60_000);
+
+    it('refuses an upgrade without a machine credential', async () => {
+      const ws = new WebSocket(`${hubBase.replace('http', 'ws')}/teams/bravo/sync/stream`);
+      const status = await new Promise<number>((resolve) => {
+        ws.on('unexpected-response', (_req, res) => resolve(res.statusCode ?? 0));
+        ws.on('error', () => undefined);
+      });
+      expect(status).toBe(401);
+      const bad = new WebSocket(`${hubBase.replace('http', 'ws')}/teams/bravo/sync/stream`, {
+        headers: { authorization: 'Bearer msnode_nope' },
+      });
+      const badStatus = await new Promise<number>((resolve) => {
+        bad.on('unexpected-response', (_req, res) => resolve(res.statusCode ?? 0));
+        bad.on('error', () => undefined);
+      });
+      expect(badStatus).toBe(401);
+    });
+
+    it('answers a ping, and survives a malformed frame', async () => {
+      await streamUp();
+      const node = readNodeState().nodes['bravo']!;
+      const ws = new WebSocket(`${hubBase.replace('http', 'ws')}/teams/bravo/sync/stream`, {
+        headers: { authorization: `Bearer ${node.credential}` },
+      });
+      const got: string[] = [];
+      ws.on('message', (d) => got.push(d.toString()));
+      await new Promise<void>((r) => ws.on('open', () => r()));
+      ws.send('not json');
+      ws.send(JSON.stringify({ type: 'push' }));
+      ws.send(JSON.stringify({ type: 'ping' }));
+      expect(await until(() => got.some((m) => m.includes('"pong"')), 5_000)).toBe(true);
+      ws.close();
+    });
+
+    it('does not delay close() while a stream is open', async () => {
+      await streamUp();
+      const t0 = Date.now();
+      await hub.close();
+      expect(Date.now() - t0).toBeLessThan(3_000);
+    });
   });
 
   describe('push on write (latency)', () => {

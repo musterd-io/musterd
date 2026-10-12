@@ -499,3 +499,20 @@ export const SyncLanesResponseSchema = z.object({
   lanes: z.array(LaneSchema),
 });
 export type SyncLanesResponse = z.infer<typeof SyncLanesResponseSchema>;
+
+/**
+ * ADR 552: the hub doorbell. A joiner opens a WebSocket to `GET /teams/:slug/sync/stream`
+ * (machine credential, like `/sync/pull`); the hub rings it when its log grows. A `head` frame is a
+ * poke, never the data — the joiner answers it with the pull it already runs. `ping`/`pong` is
+ * liveness only. Daemon-to-daemon, so outside the normative SPEC (ADR 325).
+ */
+export const SyncStreamFrameSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('head'), seq: z.number().int().nonnegative() }),
+  z.object({ type: z.literal('ping') }),
+  z.object({ type: z.literal('pong') }),
+]);
+export type SyncStreamFrame = z.infer<typeof SyncStreamFrameSchema>;
+
+/** The hub pings this often; a stream silent for `SYNC_STREAM_DEAD_AFTER_MS` is dropped (ADR 552 §4). */
+export const SYNC_STREAM_PING_MS = 20_000;
+export const SYNC_STREAM_DEAD_AFTER_MS = 45_000;
