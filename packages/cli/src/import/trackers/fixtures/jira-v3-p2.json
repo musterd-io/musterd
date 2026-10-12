@@ -1,0 +1,28 @@
+{
+  "issues": [
+    {
+      "id": "12341049",
+      "key": "CLI-82",
+      "fields": {
+        "summary": "Interaction with Commons Configuration",
+        "priority": {
+          "name": "Major"
+        },
+        "fixVersions": [],
+        "issuetype": {
+          "name": "Improvement"
+        },
+        "parent": {
+          "key": "CLI-77",
+          "fields": {
+            "summary": "a story",
+            "issuetype": {
+              "name": "Story"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "isLast": true
+}

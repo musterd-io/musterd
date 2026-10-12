@@ -386,4 +386,82 @@ describe('import command', () => {
       expect(listStages(dir)).toEqual([]);
     });
   });
+
+  describe('import jira (spec 2026-10-11)', () => {
+    type Issue = { key: string; summary: string; done: boolean };
+    let issues: Issue[];
+    let jira: Server;
+    let site: string;
+
+    beforeEach(async () => {
+      issues = [
+        { key: 'CLI-1', summary: 'Help formatter wraps badly', done: false },
+        { key: 'CLI-2', summary: 'Option groups', done: false },
+      ];
+      jira = createHttpServer((req, res) => {
+        const url = new URL(req.url ?? '/', 'http://x');
+        res.setHeader('content-type', 'application/json');
+        const one = /\/issue\/(CLI-\d+)$/.exec(url.pathname);
+        if (one) {
+          const i = issues.find((x) => x.key === one[1])!;
+          res.end(
+            JSON.stringify({
+              key: i.key,
+              fields: { status: { statusCategory: { key: i.done ? 'done' : 'indeterminate' } } },
+            }),
+          );
+          return;
+        }
+        const open = issues.filter((i) => !i.done);
+        res.end(
+          JSON.stringify({
+            startAt: 0,
+            total: open.length,
+            issues: open.map((i) => ({
+              key: i.key,
+              fields: {
+                summary: i.summary,
+                priority: { name: 'Major' },
+                fixVersions: [{ id: '9', name: '1.10.0' }],
+              },
+            })),
+          }),
+        );
+      });
+      await new Promise<void>((r) => jira.listen(0, '127.0.0.1', r));
+      site = `http://127.0.0.1:${String((jira.address() as AddressInfo).port)}/jira`;
+    });
+    afterEach(() => new Promise<void>((r) => jira.close(() => r())));
+
+    const stageId = (out: string) => /musterd import save (\S+)/.exec(out)![1]!;
+
+    it('imports a project anonymously, then re-syncs a rename and a resolved issue', async () => {
+      const first = await capture(() => importCommand(parseArgs(['jira', site, 'CLI'])));
+      expect(first.out).toContain('new 2');
+      await capture(() => importCommand(parseArgs(['save', stageId(first.out)])));
+      issues[0]!.summary = 'Help formatter wraps long options badly';
+      issues[1]!.done = true;
+      const second = await capture(() => importCommand(parseArgs(['jira', site, 'CLI'])));
+      expect(second.out).toContain('renamed 1 · closed upstream: abandon 1');
+      await capture(() => importCommand(parseArgs(['save', stageId(second.out)])));
+      const { lanes } = await board().laneBoard('dawn', { history: true });
+      const byRef = new Map(lanes.map((l) => [l.source_ref, l]));
+      expect(byRef.get('CLI-1')).toMatchObject({
+        title: 'Help formatter wraps long options badly',
+        goal_id: '1-10-0',
+      });
+      expect(byRef.get('CLI-2')).toMatchObject({
+        state: 'abandoned',
+        abandon_reason: 'closed in Jira (CLI-2)',
+      });
+      const third = await capture(() => importCommand(parseArgs(['jira', site, 'CLI'])));
+      expect(third.out).toContain('nothing to change');
+    });
+
+    it('needs a site and a project key', async () => {
+      await expect(capture(() => importCommand(parseArgs(['jira', site])))).rejects.toThrow(
+        /usage: musterd import jira <site> <PROJECT-KEY>/,
+      );
+    });
+  });
 });

@@ -19,6 +19,7 @@ import {
   writeStage,
 } from '../import/stage.js';
 import { githubSource, githubToken, repoFromRemote } from '../import/trackers/github.js';
+import { jiraAuth, jiraSource } from '../import/trackers/jira.js';
 import { linearKey, linearSource } from '../import/trackers/linear.js';
 import { runTrackerImport } from '../import/trackers/run.js';
 import { findWorkspaceDir, resolve } from './helpers.js';
@@ -33,7 +34,10 @@ const USAGE =
   '                                         open issues from GitHub (gh auth token, or GITHUB_TOKEN);\n' +
   '                                         run it again to re-sync — reads only, writes nothing back\n' +
   '  musterd import linear <TEAM-KEY> [--limit N]\n' +
-  '                                         open issues from Linear (LINEAR_API_KEY); run it again to re-sync';
+  '                                         open issues from Linear (LINEAR_API_KEY); run it again to re-sync\n' +
+  '  musterd import jira <site> <PROJECT-KEY> [--limit N]\n' +
+  '                                         open issues from Jira (JIRA_EMAIL+JIRA_API_TOKEN, JIRA_PAT, or\n' +
+  '                                         anonymous on a public site); run it again to re-sync';
 
 /** `musterd import` (spec 2026-10-10 "bring work in"): two steps — preview+stage, then save. */
 export async function importCommand(parsed: Parsed): Promise<number> {
@@ -122,6 +126,38 @@ export async function importCommand(parsed: Parsed): Promise<number> {
       http,
       project: resolveProject({ explicit: flagStr(parsed.flags, 'project') }),
       rerun: `linear ${key}`,
+      ...limitFlag(parsed),
+    });
+  }
+
+  if (first === 'jira') {
+    // Positional, not --site/--project: --project already names the musterd project.
+    const [, rawSite, rawKey] = parsed.positionals;
+    const key = rawKey?.trim().toUpperCase();
+    if (!rawSite || !key || !/^[A-Z][A-Z0-9_]*$/.test(key))
+      throw new CliError(
+        'usage: musterd import jira <site> <PROJECT-KEY> [--limit N]   (e.g. issues.apache.org/jira CLI)',
+        2,
+      );
+    const site = /^https?:\/\//.test(rawSite) ? rawSite : `https://${rawSite}`;
+    try {
+      new URL(site);
+    } catch {
+      throw new CliError(`"${rawSite}" is not a Jira site URL`, 2);
+    }
+    const creds = jiraAuth(site);
+    const source = jiraSource({
+      site,
+      project: key,
+      auth: creds.auth,
+      ...(creds.withheld ? { withheld: creds.withheld } : {}),
+    });
+    return runTrackerImport(source, {
+      ws,
+      team,
+      http,
+      project: resolveProject({ explicit: flagStr(parsed.flags, 'project') }),
+      rerun: `jira ${rawSite} ${key}`,
       ...limitFlag(parsed),
     });
   }

@@ -573,7 +573,7 @@ export const CATALOG: readonly CommandEntry[] = [
   {
     name: 'import',
     signature:
-      '<file.csv|file.jsonl>  |  github [owner/repo]  |  linear <TEAM-KEY>  |  save <id>  |  list  |  sheet [path]',
+      '<file.csv|file.jsonl>  |  github [owner/repo]  |  linear <TEAM-KEY>  |  jira <site> <KEY>  |  save <id>  |  list  |  sheet [path]',
     summary: 'bring existing work in: preview a file of goals and lanes, then save it',
     group: 'work',
     detail:
@@ -589,12 +589,15 @@ export const CATALOG: readonly CommandEntry[] = [
       'holds (else GITHUB_TOKEN), and stages the same preview; run it again to re-sync: renamed\n' +
       'issues retitle their lanes, closed ones abandon an unclaimed lane. It never writes to GitHub.\n' +
       '`import linear <TEAM-KEY>` does the same for a Linear team, with LINEAR_API_KEY: projects,\n' +
-      'else cycles, become goals.',
+      'else cycles, become goals. `import jira <site> <PROJECT-KEY>` reads a Jira project with\n' +
+      'JIRA_EMAIL + JIRA_API_TOKEN (sent only to *.atlassian.net), JIRA_PAT (sent only to the\n' +
+      'host in JIRA_SITE), or anonymously on a public site.',
     examples: [
       'musterd import sheet',
       'musterd import backlog.csv',
       'musterd import github acme/app',
       'musterd import linear ENG',
+      'musterd import jira issues.apache.org/jira CLI',
       'musterd import save 20261010-130509-a1f2',
       'musterd import list',
     ],

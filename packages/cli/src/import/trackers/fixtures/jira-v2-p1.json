@@ -1,0 +1,56 @@
+{
+  "startAt": 0,
+  "maxResults": 2,
+  "total": 3,
+  "issues": [
+    {
+      "id": "12341042",
+      "key": "CLI-77",
+      "fields": {
+        "summary": "[cli] Factored out help for common groups",
+        "description": "If the same group is used within several different options then the help \nsystem should be able to display the information more consisely.  I.e. the \ncommon group is printed separately.",
+        "priority": {
+          "name": "Highest"
+        },
+        "fixVersions": [
+          {
+            "id": "12345",
+            "name": "1.10.0"
+          }
+        ],
+        "issuetype": {
+          "name": "Improvement"
+        }
+      }
+    },
+    {
+      "id": "12341046",
+      "key": "CLI-81",
+      "fields": {
+        "summary": "Default Values from Properties object",
+        "description": "When processing a command line it would be useful to be able to take default \nvalues from a properties object.  This way user/project/system preferences \ncould be applied automatically.\n\nShould be an ",
+        "priority": {
+          "name": "Lowest"
+        },
+        "fixVersions": [
+          {
+            "id": "12345",
+            "name": "1.10.0"
+          }
+        ],
+        "issuetype": {
+          "name": "Improvement"
+        },
+        "parent": {
+          "key": "CLI-300",
+          "fields": {
+            "summary": "Help formatter rework",
+            "issuetype": {
+              "name": "Epic"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
