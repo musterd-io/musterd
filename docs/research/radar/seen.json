@@ -10,10 +10,186 @@
     "2609.03871",
     "2609.03818",
     "2609.03727",
-    "2609.03667"
+    "2609.03667",
+    "2610.13755",
+    "2610.13703",
+    "2610.13479",
+    "2610.13416",
+    "2610.13296",
+    "2610.13273",
+    "2610.13116"
   ],
   "hf": [
-    "2609.02783"
+    "2609.02783",
+    "2610.08215",
+    "2610.12299",
+    "2610.07625",
+    "2610.07967"
   ],
-  "exn": []
+  "exn": [
+    "2609.37226",
+    "8dc3e0b1-9814-4892-b4e4-4c232ddf51d8"
+  ],
+  "pending": [
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.13772"
+        }
+      ],
+      "canonicalId": "2610.13772",
+      "title": "MARGoS: A Configuration-Driven Platform for Reproducible MARL Experiments in ARGoS",
+      "url": "https://arxiv.org/abs/2610.13772",
+      "published": "2026-10-09",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-12",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.13737"
+        }
+      ],
+      "canonicalId": "2610.13737",
+      "title": "SafeDiSTL: Decomposing Joint Constraints for Safe Multi-Agent Reinforcement Learning",
+      "url": "https://arxiv.org/abs/2610.13737",
+      "published": "2026-10-09",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-12",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.13663"
+        }
+      ],
+      "canonicalId": "2610.13663",
+      "title": "A Multi-Agent LLM System for Automated Tuning of Specialized Neural Network Models",
+      "url": "https://arxiv.org/abs/2610.13663",
+      "published": "2026-10-09",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-12",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.13594"
+        }
+      ],
+      "canonicalId": "2610.13594",
+      "title": "MENTOR: Learning from Failure with On-Policy Pedagogical Intervention",
+      "url": "https://arxiv.org/abs/2610.13594",
+      "published": "2026-10-09",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-12",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.13534"
+        }
+      ],
+      "canonicalId": "2610.13534",
+      "title": "MAGMA-Bench: Evaluating Long-Horizon Embodied Agents under Dynamic Tasks and Execution Failures",
+      "url": "https://arxiv.org/abs/2610.13534",
+      "published": "2026-10-09",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-12",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.13494"
+        }
+      ],
+      "canonicalId": "2610.13494",
+      "title": "Humanize MLE Agents: Multi-Agent Session Alternation Beyond Single-Agent Limits",
+      "url": "https://arxiv.org/abs/2610.13494",
+      "published": "2026-10-09",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-12",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.13439"
+        }
+      ],
+      "canonicalId": "2610.13439",
+      "title": "Collective Autonomous Vehicle Routing Needs Social Awareness for Coexistence with Human Drivers",
+      "url": "https://arxiv.org/abs/2610.13439",
+      "published": "2026-10-09",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-12",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.13267"
+        }
+      ],
+      "canonicalId": "2610.13267",
+      "title": "Forgetting is Not Always Bad: A Neuro-Inspired Memory Repair Mechanism for Poisoned LLM Agents",
+      "url": "https://arxiv.org/abs/2610.13267",
+      "published": "2026-10-09",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-12",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "arxiv",
+          "id": "2610.13144"
+        }
+      ],
+      "canonicalId": "2610.13144",
+      "title": "Competence-Aware Orchestration for LLM-Based Multi-Agent Systems",
+      "url": "https://arxiv.org/abs/2610.13144",
+      "published": "2026-10-09",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-12",
+      "failure": "triage_incomplete"
+    },
+    {
+      "sourceIds": [
+        {
+          "source": "hf",
+          "id": "2610.13947"
+        }
+      ],
+      "canonicalId": "2610.13947",
+      "title": "Towards Physically Grounded Articulated 3D Assets: A Multi-Agent Pipeline and Benchmark",
+      "url": "https://huggingface.co/papers/2610.13947",
+      "published": "2026-10-09",
+      "episodeIds": [],
+      "firstAttempt": "2026-10-12",
+      "lastAttempt": "2026-10-12",
+      "failure": "triage_incomplete"
+    }
+  ]
 }
