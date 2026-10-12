@@ -153,7 +153,7 @@ vi.mock('@clack/prompts', () => ({
   outro: vi.fn(),
   note: vi.fn(),
   log: { info: vi.fn(), warn: vi.fn(), step: vi.fn(), success: vi.fn(), error: vi.fn() },
-  spinner: () => ({ start: vi.fn(), stop: vi.fn() }),
+  spinner: () => ({ start: vi.fn(), stop: vi.fn(), message: vi.fn() }),
   confirm: vi.fn(async () => h.confirmQueue.shift()),
   select: vi.fn(async (o: { options?: { value: string; hint?: string }[] }) => {
     // Record what each picker OFFERED, not just what was chosen — "which teams can I reach from
@@ -230,6 +230,23 @@ vi.mock('../config.js', () => ({
 }));
 
 vi.mock('node:child_process', () => ({ spawn: vi.fn(() => ({ unref: vi.fn() })) }));
+// The slow-daemon probe: whether something holds the server's port. Default: nothing does.
+const net = vi.hoisted(() => ({ taken: false }));
+vi.mock('node:net', () => ({
+  connect: vi.fn(() => {
+    const handlers: Record<string, () => void> = {};
+    const sock = {
+      setTimeout: vi.fn(),
+      destroy: vi.fn(),
+      once: (ev: string, fn: () => void) => {
+        handlers[ev] = fn;
+        if (ev === 'error') queueMicrotask(() => (net.taken ? handlers['connect'] : fn)?.());
+        return sock;
+      },
+    };
+    return sock;
+  }),
+}));
 // The tour handoff (spec 2026-10-10-first-run-tour-design) — mocked so a "yes" is observable without
 // making a workspace or starting the tour.
 const connectMock = vi.hoisted(() => ({ run: vi.fn(async (_input: unknown) => 0) }));
@@ -298,6 +315,8 @@ beforeEach(() => {
 
 afterEach(() => {
   process.chdir(origCwd);
+  net.taken = false;
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -349,6 +368,35 @@ describe('runInit — guards and exits', () => {
     );
     h.confirmQueue.push(false); // decline "start the daemon now?"
     expect(await runInit()).toBe(1);
+  });
+
+  it('waits for a daemon that holds the port but is slow, instead of starting another', async () => {
+    net.taken = true;
+    let n = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: n++ > 1 }) as Response), // two slow probes, then it answers
+    );
+    h.textQueue.push('dawn', 'nick', ''); // createTeam
+    h.selectQueue.push('watch'); // intent
+    expect(await runInit()).toBe(0);
+    const { spawn } = await import('node:child_process');
+    expect(spawn).not.toHaveBeenCalled();
+    expect(h.confirmQueue).toHaveLength(0);
+  });
+
+  it('a daemon that holds the port but never answers stops with exit 1, not a second daemon', async () => {
+    net.taken = true;
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false }) as Response),
+    );
+    const run = runInit();
+    await vi.runAllTimersAsync();
+    expect(await run).toBe(1);
+    const { spawn } = await import('node:child_process');
+    expect(spawn).not.toHaveBeenCalled();
   });
 
   it('starts the daemon, then proceeds (watch posture) when health comes up', async () => {
