@@ -166,29 +166,33 @@ describe('the 2026-10-12 cut', () => {
     expect(chain).not.toMatch(/who asked|asked for it|requested by/i);
   });
 
-  it('the chain shows a dated capture of the real board card, never a live query', () => {
+  it('the chain shows a capture of the real board card, never a live query, and spells no date in copy', () => {
     expect(chain).toMatch(/captures\/board-lane-\d{4}-\d{2}-\d{2}\.webp/);
-    expect(chain).toContain('The lane on our board, captured <span className="nowrap">2026-10-12</span>.');
+    expect(chain).toContain("The lane&rsquo;s card on our board.");
+    expect(chain).toContain('Pull request 2240 merged. Landing is not the same as done.');
+    expect(chain).toContain('accepted the next day.');
     expect(chain).not.toMatch(/fetch\(|useBoardData|useLiveStream/);
   });
 
-  it('Why agents talk: answers the audience beside a real ask, and dates the proof', () => {
-    expect(why).toContain('A shared file can hold a result. Talk carries what is not a result yet');
-    expect(why).toContain('An agent that needs one asks you, and the ask waits in your inbox until you answer.');
-    expect(why).toContain('wasted 65 to 83 percent of their work');
-    expect(why).toContain('One project, a pilot, measured in July 2026.');
+  it('Why agents talk: one argument in three paragraphs, our own receipt, no date in the copy', () => {
+    // §0a.4 (nick, 2026-10-12): the problem, then talk as the fix beside a real ask, then the close.
+    expect(why).toContain('You probably run more than one agent already, each in its own window, on the same repo.');
+    expect(why).toContain('On our own team, 37 percent of what our agents wrote never shipped. Now it is under one percent.');
+    expect(why).toContain('Talk is what stops that. A file holds a result; talk carries what is not a result yet');
+    expect(why).toContain('The ask waits in your inbox; nobody guesses.');
+    expect(why).toContain('The tools will keep changing.');
+    expect(why).toContain('The team and its record stay, whichever agent does the work.');
+    expect(why.indexOf('wt__lead')).toBeLessThan(why.indexOf('wt__pair'));
+    expect(why.indexOf('wt__pair')).toBeLessThan(why.indexOf('wt__close'));
     // The frame shows an ask nobody has answered yet, so the caption says "waiting" (§0a.4).
-    expect(why).toContain('An ask from an agent to a person, waiting in the inbox. Sent');
-    // §0a.4 lead and close (nick, #2414): one line each, in that order around the pair and proof.
-    expect(why).toContain('Your agents work in silos, and neither knows the other exists.');
-    expect(why).toContain('The best agent changes every month. Your team and its record come with you.');
-    expect(why.indexOf('work in silos')).toBeLessThan(why.indexOf('wt__pair'));
-    expect(why.indexOf('measured in July 2026')).toBeLessThan(why.indexOf('best agent changes'));
-    // §0a.1: left the page on purpose.
+    expect(why).toContain('An ask from an agent to a person, waiting in the inbox.');
+    // Left the page 2026-10-12: the pilot frame, the slogan lines, the ISO dates, the old openers.
+    expect(why).not.toMatch(/test project|a pilot|July 2026|\d{4}-\d{2}-\d{2}/);
+    expect(why).not.toMatch(/work in silos|best agent changes every month/);
     expect(why).not.toMatch(/more than a third of the code/);
     expect(why).not.toMatch(/You are probably already running more than one/);
     expect(why).not.toMatch(/wt__move/);
-    // The pair must not be borrowed as a transferable rate (ADR 294).
+    // Our pair must not be borrowed as a transferable rate (ADR 294).
     expect(why).not.toMatch(/\bevery team\b|\byour team will\b/i);
   });
 
