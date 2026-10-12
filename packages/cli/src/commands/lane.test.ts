@@ -347,6 +347,22 @@ describe('lane commands', () => {
     expect(lanes.find((l) => l.id === id)?.goal_id).toBe('goals-front-door');
   });
 
+  it('open and update carry --source-ref; a second live lane on the ref is refused (ADR 561)', async () => {
+    const res = await capture(() =>
+      laneCommand(parseArgs(['open', 'from github', '--source-ref', 'acme/app#3'])),
+    );
+    expect(res.code).toBe(0);
+    expect(res.out).toContain('⌁ acme/app#3');
+    await expect(
+      capture(() => laneCommand(parseArgs(['open', 'again', '--source-ref', 'acme/app#3']))),
+    ).rejects.toThrow(/source_ref "acme\/app#3" already belongs to lane/);
+    const id = await openLane(['plain']);
+    const upd = await capture(() =>
+      laneCommand(parseArgs(['update', id, '--source-ref', 'ENG-42'])),
+    );
+    expect(upd.out).toContain('⌁ ENG-42');
+  });
+
   it('lanes renders an empty board hint', async () => {
     const res = await capture(() => lanesCommand(parseArgs([])));
     expect(res.code).toBe(0);

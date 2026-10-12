@@ -278,6 +278,15 @@ export function recipientNames(to: Envelope['to'], eligible?: string[] | null): 
   return [];
 }
 
+/**
+ * ADR 561: where a lane's source chip links — the first `https://` URL on the first line of its
+ * detail, which is where `musterd import` puts the issue URL. Anything else gets no link.
+ */
+export function sourceRefHref(detail: string | null | undefined): string | null {
+  const first = (detail ?? '').split('\n', 1)[0] ?? '';
+  return /https:\/\/\S+/.exec(first)?.[0] ?? null;
+}
+
 export function initial(name: string): string {
   return (name.trim()[0] ?? '?').toUpperCase();
 }

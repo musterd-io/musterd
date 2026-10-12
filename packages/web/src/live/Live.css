@@ -5456,6 +5456,19 @@
   border-color: color-mix(in srgb, var(--lc-info) 34%, transparent);
   background: color-mix(in srgb, var(--lc-info) 10%, transparent);
 }
+/* ADR 561: the issue a lane came from — the chip's own muted ink, dashed so it reads as a pointer
+ * outward rather than a team fact; the link inherits the ink and underlines only on hover. */
+.lc-card__chip--src {
+  border-style: dashed;
+}
+.lc-card__chip--src a {
+  color: inherit;
+  text-decoration: none;
+}
+.lc-card__chip--src a:hover,
+.lc-card__chip--src a:focus-visible {
+  text-decoration: underline;
+}
 /* ADR 518: who an awaiting-acceptance card waits on — mustard, the colour of a held ask. Dark ink
  * on a light tint, so the name stays readable at chip size. */
 .lc-card__chip--wait {

@@ -10,6 +10,7 @@ import {
   formatClock,
   goalEvent,
   initial,
+  sourceRefHref,
   isFeatureBehind,
   memberAvatar,
   memberColor,
@@ -740,5 +741,22 @@ describe('hueOf — the roster index answers the hue the way kindOf answers the 
     const idx = rosterIndex([{ name: 'miley', kind: 'agent', hue: 212 } as never]);
     expect(hueOf('miley', idx)).toBe(212);
     expect(hueOf('stranger', idx)).toBeNull();
+  });
+});
+
+describe('sourceRefHref (ADR 561)', () => {
+  it('links the source chip to the first https URL on the detail’s first line', () => {
+    expect(sourceRefHref('https://github.com/acme/app/issues/12\nmore')).toBe(
+      'https://github.com/acme/app/issues/12',
+    );
+    expect(sourceRefHref('See https://linear.app/acme/issue/ENG-42 for context')).toBe(
+      'https://linear.app/acme/issue/ENG-42',
+    );
+  });
+  it('gives no link without one, for a later line, or for a non-https URL', () => {
+    expect(sourceRefHref(null)).toBeNull();
+    expect(sourceRefHref('plain words\nhttps://example.com/x')).toBeNull();
+    expect(sourceRefHref('http://example.com/x')).toBeNull();
+    expect(sourceRefHref('javascript:alert(1) https://ok.example')).toBe('https://ok.example');
   });
 });
