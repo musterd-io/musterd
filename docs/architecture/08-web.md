@@ -84,11 +84,9 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   a heartbeat that pulses on every act (the last act's age on hover), and acts over the loaded span
   (never extrapolated). Counts of who is working on what are the Now card's, not the meter's
   (live-briefing spec, increment 4). The team log's door is a topbar button beside Seeds.
-- **Headline ticker** (`live/Ticker.tsx`, from `live/headline.ts`) — under the room: the last few
-  notable moments in one line, newest left, each chip in its actor's hue. `headline()` builds every
-  line from names and lane titles, never the act body (an ask's question, clipped, is the one
-  exception); adjacent same-actor same-verb lines within 30s fold into a count. An ask the asks
-  strip is showing is left out, so the page does not say it twice.
+- **Headline ticker** — retired 2026-10-12 (nick: never looked at it, on `/live` or `/broadcast`;
+  the team column beside the room carries each member's latest moment). `live/headline.ts` stays:
+  the office scene reads `walkTag` from it.
 - **Team column** (`live/TeamColumn.tsx` + `live/TeamCard.tsx`) — who is here, read by a room
   (ADR 464): one card per present member with the provider logo and readable model name
   (`modelBadge.ts`: observed / declared / unknown / human — never a guess), a plain-language state
@@ -99,9 +97,8 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   (`SeatDetail`, exported from `live/RosterPanel.tsx`): posture chip with offline reason
   (ADR 138/141), account-status exceptions and capability deviations (ADR 070), residency (ADR 131),
   and the per-seat `trace` expander (ADR 445). Collapsed, it is a rail of avatars with logo pips.
-  `/broadcast` mounts the same column `still` beside the room, with the headline ticker under it
-  (ADR 464 lane 5): no hover, no expanding, no operator notes, sized off the 16:9 stage rather than
-  the window. There the ticker floats over the room's foot rather than taking a row (2026-10-01).
+  `/broadcast` mounts the same column `still` beside the room (ADR 464 lane 5): no hover, no
+  expanding, no operator notes, sized off the 16:9 stage rather than the window.
 - **Room framing** (2026-10-01): `/live` and `/broadcast` fit the *furnished* room (`furnishedBox` in
   `office-scene/render.ts` — door, agile board, wall faces, floor tip), not the whole scene with its
   empty wall tops and slab (`fitBox` / `ROOM_BOX` in `iso.ts`; the musterd.io hero and /office-preview
@@ -111,8 +108,9 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
 - **Holds banner** (`live/HoldsBanner.tsx`, read by `live/useTeamHolds.ts`) — above the room, the
   Team's active holds (ADR 516): `⏸ merges paused by nick until 15:30 (42m left): demo 14:00`, one
   line per hold from `describeHoldLine` in `@musterd/protocol/wire`, a 30s poll of `GET /holds`, and
-  nothing when nothing is in force. A lazy chunk — it loads only once a hold is in force or the viewer
-  may set one. Increment 4: `lift` on each hold and a `pause…` form (effect, reason, duration preset)
+  nothing when nothing is in force — an admin no longer gets an empty bar on every visit (nick,
+  2026-10-12): the `pause…` form is `HoldsPause`, mounted in the topbar's right end. Both are one
+  lazy chunk. Increment 4: `lift` on each hold and the `pause…` form (effect, reason, duration preset)
   render from the read's `can_set` alone — the daemon's per-reader answer, never the viewer's role in
   the client — and a refusal shows in place in the daemon's words.
 - **How agents talk to me** (`live/StyleSheet.tsx`, merges in `live/styleEdit.ts`; ADR 514
@@ -197,7 +195,6 @@ live/
   busyness.ts                   // envelopes + roster → last-act age, acts over the loaded span (bucketed), who is working (pure, node-tested)
   TopMeter.tsx                  // the top bar's busyness meter: team · heartbeat · sparkline
   headline.ts                   // notable act → { who, verb, object, target } from names and titles, never the body; collapseHeadlines (pure)
-  Ticker.tsx                    // the headline ticker under the room: newest ~3 headlines in the actor's hue, minus asks the strip already shows
 
   RosterPanel.tsx               // the roster rail (no route mounts it since ADR 464) + `SeatDetail`, the per-seat operator block the team card expands to; `trace` expander (ADR 445 inc 4b) lazy-loads the timeline
   askPhrase.ts                  // the ask banner's words (spec §6 table) + askBanner() view-model: open / settled / idle (pure)

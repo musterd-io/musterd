@@ -1,7 +1,7 @@
 /*
  * musterd — broadcast mode (ADR 157). Route-local styles for /broadcast: a fixed 1920×1080 capture
  * stage centred in a letterbox. The chrome beside and under the room is /live's own team column
- * and ticker (ADR 464 lane 5), styled in Live.css so the page and the stream cannot drift apart.
+ * (ADR 464 lane 5), styled in Live.css so the page and the stream cannot drift apart.
  * This file only ships in the /broadcast lazy chunk and holds the stage and its few stream-only
  * departures.
  *
@@ -53,48 +53,10 @@
   --col-team: clamp(280px, 20%, 380px);
   animation: none;
 }
-/* The ticker floats over the room's foot instead of taking a 40px row of the frame (nick, 2026-10-01).
-   The room is height-bound at every aspect (`fitFloor`), so a row given back to it is room on screen:
-   1040 → 1080 at the 1080 rung. It spans the room only — `right` is the team column's own width,
-   resolved against the stage exactly as `--col-team` is — and drops its ground and rule, because over
-   the room's foot it sits on the floor's margin, where the chips carry their own paper. */
-.bc__stage > .lc-ticker {
-  position: absolute;
-  left: 0;
-  right: clamp(280px, 20%, 380px);
-  bottom: 0;
-  z-index: var(--lc-z-overlay);
-  background: none;
-  border-top: none;
-}
-/* …and the watermark and the corner stacked above it rise clear of it together (Live.css keeps the
-   corner 26px above the mark), rather than sitting under the ticker's last chip. */
-.bc .lc-office__mark {
-  bottom: calc(40px + var(--lc-3));
-}
-.bc .lc-office__corner {
-  bottom: calc(40px + var(--lc-3) + 26px);
-}
-
-/* The column's type, one step larger on a stream (read from across a room, through an encode).
-   `zoom` scales the whole column together — names, chips, lane titles, row rhythm — so its proportions
-   are the ones /live was designed and contrast-gated at, just bigger. Chrome is the only renderer.
-   Only at the 1080 rung: at 720 the column already reads this large (its 280px floor is 28% of the
-   frame), and the extra step there costs a visible card. The stage's own width says which rung —
-   the window does not (see `.bc__canvas` above), hence a container query, not a media query. */
-.bc__stage {
-  container-type: inline-size;
-}
-@container (min-width: 1600px) {
-  .bc .lc-team {
-    zoom: 1.12;
-  }
-}
-
 /* /live's narrow-WINDOW layouts must not reach the stage. They are `@media` queries, which ask about
    the browser window; the stage is a fixed 1920 or 1280 frame scaled to fit it, so a small preview
    window (or big-body's 390px check, 2026-10-01) folded the room away, moved the column to the left
-   and cut the ticker to one item inside a frame that is still full width. Undo exactly those three. */
+   (the third thing it undid, a one-chip ticker, left with the ticker on 2026-10-12). Undo those. */
 @media (max-width: 880px) {
   .bc .lc__canvas,
   .bc .lc__canvas.is-team-collapsed {
@@ -107,14 +69,6 @@
   }
   .bc .lc-team {
     grid-column: 2;
-  }
-}
-@media (max-width: 720px) {
-  .bc .lc-ticker__item:not(:first-child) {
-    display: inline-flex;
-  }
-  .bc .lc-ticker__item:first-child {
-    max-width: 44%;
   }
 }
 

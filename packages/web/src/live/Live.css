@@ -1558,6 +1558,12 @@
       rgba(255, 255, 255, 0) 68%
     ),
     color-mix(in srgb, var(--lc-paper-2) 96%, transparent);
+  /* nick, 2026-10-12: "slightly more transparent". The whole plate at 82% — ink included — rather
+     than thinning the stock further: at 96% → 80% stock alone the specular band stayed at full
+     strength and the plate read as a lit chip over a see-through card, which is odder than a plate
+     that is simply a little lighter. The mono name still clears AA on the darkest paper it lands on
+     (paper-ink 10.99 on paper-2, ×0.82 is well above 7). */
+  opacity: 0.82;
   /* THE RIM IS THE MEMBER'S, not the house mustard. Every plate used to wear the same
      `--lc-accent` edge, so on a floor of twelve the only thing saying WHO was the 5px dot — and the
      dot is spent on posture (working / idle / away / offline), which is a different question. The
@@ -3355,10 +3361,10 @@
   box-sizing: border-box;
   width: 100%;
   display: grid;
-  grid-template-columns: 28px 1fr;
-  column-gap: var(--lc-4);
-  row-gap: 2px;
-  padding: var(--lc-4) var(--lc-5);
+  grid-template-columns: 24px 1fr;
+  column-gap: var(--lc-3);
+  row-gap: 1px;
+  padding: var(--lc-3) var(--lc-5);
   cursor: pointer;
 }
 .lc-team-card__hit:focus-visible {
@@ -3367,15 +3373,15 @@
 }
 .lc-team-card__avatar {
   grid-row: span 2;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12px;
 }
 .lc-team-card__who {
   display: flex;
@@ -3384,8 +3390,10 @@
   gap: var(--lc-4);
   min-width: 0;
 }
+/* nick, 2026-10-12: smaller, so more of the team fits the column. Name 15 → 13, the work line
+   16 → 13.5, state 11 → 10, meta 12 → 11, avatar 28 → 24: a card went from ~82px to ~64px tall. */
 .lc-team-card__name {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 650;
   color: var(--lc-text);
 }
@@ -3420,13 +3428,13 @@
   grid-column: 2;
 }
 .lc-team-card__state {
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--lc-muted);
 }
 .lc-team-card__work {
-  font-size: 16px;
+  font-size: 13.5px;
   line-height: 1.3;
   color: var(--lc-text);
   display: -webkit-box;
@@ -3451,11 +3459,11 @@
   white-space: nowrap;
 }
 .lc-team-card__meta {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--lc-muted);
 }
 .lc-team-card__detail {
-  padding: 0 var(--lc-5) var(--lc-4) calc(28px + var(--lc-4) + var(--lc-5));
+  padding: 0 var(--lc-5) var(--lc-3) calc(24px + var(--lc-3) + var(--lc-5));
 }
 .lc-team__offline {
   margin: 0;
@@ -4888,73 +4896,6 @@
   .lc-meter__rate {
     display: none;
   }
-}
-
-/* ─── headline ticker (ADR 464 §5) — the last few moments, under the room ─ */
-.lc-ticker {
-  display: flex;
-  align-items: center;
-  gap: var(--lc-5);
-  flex: 0 0 auto;
-  height: 40px;
-  padding: 0 var(--lc-6);
-  border-top: 1px solid var(--lc-border);
-  background: var(--lc-ground-2);
-  overflow: hidden;
-}
-.lc-ticker__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--lc-4);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-}
-.lc-ticker__item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--lc-3);
-  min-width: 0;
-  max-width: 44%;
-  padding: 3px var(--lc-4) 3px var(--lc-3);
-  border: 1px solid color-mix(in srgb, var(--member) 45%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--member) 12%, transparent);
-  font-size: 13px;
-  color: var(--lc-text);
-  animation: lc-caption-in var(--lc-dur-2) ease-out;
-}
-.lc-ticker__item:first-child {
-  max-width: 60%;
-}
-/* A phone shows the newest moment only — three chips at 390px were three ellipses. */
-@media (max-width: 720px) {
-  .lc-ticker__item:not(:first-child) {
-    display: none;
-  }
-  .lc-ticker__item:first-child {
-    max-width: 100%;
-  }
-}
-.lc-ticker__dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--member);
-}
-.lc-ticker__text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.lc-ticker__empty {
-  font-size: 12px;
-  color: var(--lc-muted);
 }
 
 /* ─── log drawer (ADR 464 §5) — every message, one keystroke away ─────── */
@@ -7313,6 +7254,12 @@
   text-align: center;
 }
 /* ADR 516 inc 4: the admin's lift / pause… controls on the banner — the halt control's shape. */
+/* The topbar's "pause…" (lane 01M4S4FGTK): the banner's control, without the banner. */
+.lc-holds--inline {
+  padding: 0;
+  border-bottom: none;
+  flex: none;
+}
 .lc-holds__row,
 .lc-holds__box,
 .lc-holds__form {

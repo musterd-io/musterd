@@ -16,7 +16,6 @@ import { useWorkingOn } from '../live/useWorkingOn';
 import { roomEntries } from '../live/workingOn';
 import { useReport } from '../live/useReport';
 import { TeamColumn, captionColorFor } from '../live/TeamColumn';
-import { Ticker } from '../live/Ticker';
 import type { Caption } from '../live/captions';
 
 export const Route = createFileRoute('/broadcast')({
@@ -206,8 +205,8 @@ interface BroadcastWindow {
 /**
  * **Broadcast mode** (ADR 157) — the office as a stream source.
  *
- * `/broadcast?team=<slug>` renders the office, the team column and the headline ticker (ADR 464 lane
- * 5 — the same story /live tells, so a stream viewer and a room viewer read one page) on a fixed
+ * `/broadcast?team=<slug>` renders the office and the team column (ADR 464 lane 5 — the same story
+ * /live tells, so a stream viewer and a room viewer read one page) on a fixed
  * 16:9 stage: no controls, no connect form, nothing to press. OBS points a Browser source straight at
  * this URL, so there is no window capture and no compositor round-trip — the failure mode that
  * melted the laptop the first time round.
@@ -356,7 +355,6 @@ function BroadcastPage() {
                 still
               />
             </div>
-            <Ticker envelopes={envelopes} roster={roster} board={board} />
           </>
         )}
         {/* Operator diagnostics, not stream chrome: the two states where there is no office to look
