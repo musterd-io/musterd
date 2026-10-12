@@ -169,6 +169,9 @@ async function applySync(
   if (a.kind === 'rename') {
     if (lane.state === 'done' || lane.state === 'abandoned')
       return { ok: false, note: `${lane.state} since the preview — left alone` };
+    // A stage from before `held_by` reads as unheld at preview: a lane held now is then left alone.
+    if (lane.owner_seat !== (a.held_by ?? null))
+      return { ok: false, note: 'claimed since the preview — left alone' };
     await port.updateLane(team, a.lane_id, { title: a.title! });
     return { ok: true };
   }

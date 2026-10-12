@@ -27,6 +27,11 @@ export interface SyncAction {
   title?: string;
   /** rename and abandon: the lane's title at preview (the preview's row reads it). */
   from?: string;
+  /**
+   * rename: who held the lane at preview (null = nobody). Save skips the rename when that has
+   * changed — a lane claimed since the preview is left alone (spec §3 Save).
+   */
+  held_by?: string | null;
   /** abandon: `closed in GitHub (acme/app#9)`. */
   reason?: string;
 }
@@ -152,6 +157,7 @@ export function planSync(input: {
         ref: issue.ref,
         from: lane.title,
         title: issue.title,
+        held_by: lane.owner_seat,
       });
     else if (!owned.legacy) plan.unchanged += 1;
   }

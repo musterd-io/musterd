@@ -42,8 +42,23 @@ describe('planSync — the spec §3 table', () => {
     const p = plan([issue(1, 'New')], [l]);
     expect(p.fresh).toEqual([]);
     expect(p.actions).toEqual([
-      { kind: 'rename', lane_id: l.id, ref: 'acme/app#1', from: 'Old', title: 'New' },
+      {
+        kind: 'rename',
+        lane_id: l.id,
+        ref: 'acme/app#1',
+        from: 'Old',
+        title: 'New',
+        held_by: null,
+      },
     ]);
+  });
+
+  it('a rename records who held the lane at preview', () => {
+    const l = lane({ title: 'Old', source_ref: 'acme/app#1', state: 'claimed', owner_seat: 'ada' });
+    expect(plan([issue(1, 'New')], [l]).actions[0]).toMatchObject({
+      kind: 'rename',
+      held_by: 'ada',
+    });
   });
 
   it('open, lane with the same title → unchanged, counted', () => {
@@ -114,7 +129,14 @@ describe('planSync — the spec §3 table', () => {
     expect(p.actions).toEqual([
       { kind: 'adopt', lane_id: same.id, ref: 'acme/app#1' },
       { kind: 'adopt', lane_id: moved.id, ref: 'acme/app#2' },
-      { kind: 'rename', lane_id: moved.id, ref: 'acme/app#2', from: 'Old', title: 'New' },
+      {
+        kind: 'rename',
+        lane_id: moved.id,
+        ref: 'acme/app#2',
+        from: 'Old',
+        title: 'New',
+        held_by: null,
+      },
     ]);
   });
 });
