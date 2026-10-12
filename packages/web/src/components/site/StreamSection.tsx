@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import officeStill from '../../brand/office-still.png?url';
-import { TWITCH_CHANNEL, TWITCH_COLLECTION, TWITCH_URL } from './twitchEmbed';
+import { TWITCH_CHANNEL, TWITCH_REPLAY, TWITCH_URL } from './twitchEmbed';
 import {
   type Liveness,
   loadTwitchSdk,
@@ -107,7 +107,7 @@ export function StreamSection() {
         });
         /* A dark channel shows yesterday's work instead of a photograph of the room. The still
            stays beneath it and returns the moment anything about this fails. */
-        replayWhenDark(player, twitch.Player, TWITCH_COLLECTION, () => {
+        replayWhenDark(player, twitch.Player, TWITCH_REPLAY, () => {
           if (!cancelled) setReplaying(true);
         });
       })
