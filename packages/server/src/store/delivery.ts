@@ -373,11 +373,52 @@ async function ccdNudges(
   return { total: row?.total ?? 0, verbatim: row?.verbatim ?? 0 };
 }
 
+/**
+ * The two audit counts `recipientLedger` reads, tallied once for a whole ledger instead of once per
+ * (act, recipient). Each per-call read scans every `interrupt.raised` / `actor.session_message` row
+ * for the team through `json_extract` — 189 such calls were ~1s of the hub's 2s
+ * `openDirectedLedger`, which every wake-lease poll runs (2026-10-12). Same rows, same predicates,
+ * grouped instead of probed.
+ */
+interface AuditTallies {
+  raises: Map<string, number>;
+  nudges: Map<string, { total: number; verbatim: number }>;
+}
+
+const raiseKey = (recipientName: string, actId: string): string => `${recipientName}\0${actId}`;
+
+async function auditTallies(db: Driver, teamId: string): Promise<AuditTallies> {
+  const raises = new Map<string, number>();
+  for (const r of await db.all<{ target: string; act: string | null; n: number }>(
+    `SELECT target, json_extract(detail, '$.act') AS act, COUNT(*) AS n FROM audit
+        WHERE team_id = ? AND action = 'interrupt.raised'
+        GROUP BY target, json_extract(detail, '$.act')`,
+    [teamId],
+  )) {
+    if (r.act !== null) raises.set(raiseKey(r.target, String(r.act)), Number(r.n));
+  }
+  const nudges = new Map<string, { total: number; verbatim: number }>();
+  for (const r of await db.all<{ ref: string | null; total: number; verbatim: number }>(
+    `SELECT json_extract(detail, '$.nudge_ref') AS ref, COUNT(*) AS total,
+              COALESCE(SUM(CASE WHEN json_extract(detail, '$.verbatim') = 1 THEN 1 ELSE 0 END), 0) AS verbatim
+         FROM audit
+        WHERE team_id = ? AND action = 'actor.session_message'
+        GROUP BY json_extract(detail, '$.nudge_ref')`,
+    [teamId],
+  )) {
+    if (r.ref !== null) {
+      nudges.set(String(r.ref), { total: Number(r.total), verbatim: Number(r.verbatim) });
+    }
+  }
+  return { raises, nudges };
+}
+
 async function recipientLedger(
   db: Driver,
   msg: MessageRow,
   recipient: RecipientRow,
   resolve: { act: string; id: string; ts: number } | null,
+  tallies?: AuditTallies,
 ): Promise<DeliveryRecipient> {
   // ADR 254: on an eligible-set act the FIRST answer from anyone discharges it for every named seat
   // (`anyAnswer`); everywhere else the per-recipient clause stands unchanged.
@@ -396,20 +437,29 @@ async function recipientLedger(
     (cursor.last_read_ts === msg.created_at &&
       cursor.last_read_message_id !== null &&
       cursor.last_read_message_id >= msg.id);
-  const nudges = await ccdNudges(db, msg);
+  const nudges = tallies
+    ? (tallies.nudges.get(msg.id) ?? { total: 0, verbatim: 0 })
+    : await ccdNudges(db, msg);
   return {
     seat: recipient.name,
     seat_id: normalizeSeatName(recipient.name),
     state: answered ? 'answered' : seen ? 'seen' : 'logged',
     seen_by: seen ? cursor.updated_at : null,
     answered,
-    interrupt_raises: await interruptRaises(db, msg, recipient.name),
+    interrupt_raises: tallies
+      ? (tallies.raises.get(raiseKey(recipient.name, msg.id)) ?? 0)
+      : await interruptRaises(db, msg, recipient.name),
     ccd_nudges: nudges.total,
     ccd_nudges_verbatim: nudges.verbatim,
   };
 }
 
-async function actDeliveryOf(db: Driver, msg: MessageRow, now: number): Promise<ActDelivery> {
+async function actDeliveryOf(
+  db: Driver,
+  msg: MessageRow,
+  now: number,
+  tallies?: AuditTallies,
+): Promise<ActDelivery> {
   const resolve = await threadResolve(db, msg);
   const from = await db.get<{ name: string }>('SELECT name FROM members WHERE id = ?', [
     msg.from_member,
@@ -424,7 +474,7 @@ async function actDeliveryOf(db: Driver, msg: MessageRow, now: number): Promise<
     age_ms: Math.max(0, now - msg.ts),
     urgent: isUrgent(msg),
     recipients: await Promise.all(
-      (await recipientsOf(db, msg)).map((r) => recipientLedger(db, msg, r, resolve)),
+      (await recipientsOf(db, msg)).map((r) => recipientLedger(db, msg, r, resolve, tallies)),
     ),
   };
 }
@@ -491,5 +541,7 @@ export async function openDirectedLedger(
         ORDER BY m.ts ASC`,
     [teamId],
   );
-  return Promise.all(rows.map((m) => actDeliveryOf(db, m, now)));
+  if (rows.length === 0) return [];
+  const tallies = await auditTallies(db, teamId);
+  return Promise.all(rows.map((m) => actDeliveryOf(db, m, now, tallies)));
 }

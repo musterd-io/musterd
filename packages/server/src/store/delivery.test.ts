@@ -190,6 +190,50 @@ withDrivers('delivery', (o) => {
       expect(await openDirectedLedger(db, team.id, 10_000)).toHaveLength(0);
     });
 
+    it('reports the same raise and nudge counts per recipient as the single-act ledger', async () => {
+      const { db, team, nick, ada } = await seed();
+      await msg(db, team, nick, null, 'request_help', 'r1', 1_000);
+      await msg(db, team, nick, ada, 'handoff', 'h1', 2_000);
+      const raise = (target: string, act: string) =>
+        appendAudit(db, team.id, {
+          actor: 'nick',
+          action: 'interrupt.raised',
+          target,
+          result: 'allow',
+          detail: { act, act_kind: 'request_help', tier: 'urgent', count: 1 },
+        });
+      const nudge = (ref: string, verbatim: boolean) =>
+        appendAudit(db, team.id, {
+          actor: 'nick',
+          action: 'actor.session_message',
+          target: 'Ada',
+          result: 'allow',
+          detail: { nudge_ref: ref, verbatim },
+        });
+      await raise('Ada', 'r1');
+      await raise('Ada', 'r1');
+      await raise('bob', 'r1');
+      await raise('Ada', 'h1');
+      await raise('Ada', 'elsewhere');
+      await nudge('r1', true);
+      await nudge('r1', false);
+      await nudge('h1', true);
+      await nudge('elsewhere', true);
+
+      const ledger = await openDirectedLedger(db, team.id, 10_000);
+      for (const id of ['r1', 'h1']) {
+        expect(ledger.find((d) => d.id === id)).toEqual(await actDelivery(db, team.id, id, 10_000));
+      }
+      const r1 = ledger.find((d) => d.id === 'r1')!;
+      const seat = (name: string) => r1.recipients.find((r) => r.seat === name)!;
+      expect(seat('Ada')).toMatchObject({
+        interrupt_raises: 2,
+        ccd_nudges: 2,
+        ccd_nudges_verbatim: 1,
+      });
+      expect(seat('bob')).toMatchObject({ interrupt_raises: 1 });
+    });
+
     it('includes urgent directed acts of any act type, but not ordinary chatter', async () => {
       const { db, team, nick, ada } = await seed();
       await msg(db, team, nick, ada, 'message', 'm1', 1_000, {
