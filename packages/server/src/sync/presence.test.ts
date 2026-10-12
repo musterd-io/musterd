@@ -240,7 +240,10 @@ withDrivers('presence', (_o, kind) => {
         5,
         undefined,
         {
-          actor: 'ada',
+          // hana, not ada: the hub's push loop stages this write in the background and binds its
+          // actor to the hub at ingest, which would refuse the joiner's push of ada's attach below
+          // as bound_elsewhere. hana is the hub-resident seat; nothing here needs the actor to be ada.
+          actor: 'hana',
         },
       );
       await attach(
@@ -272,7 +275,10 @@ withDrivers('presence', (_o, kind) => {
         5,
         undefined,
         {
-          actor: 'ada',
+          // hana, not ada: the hub's push loop stages this write in the background and binds its
+          // actor to the hub at ingest, which would refuse the joiner's push of ada's attach below
+          // as bound_elsewhere. hana is the hub-resident seat; nothing here needs the actor to be ada.
+          actor: 'hana',
         },
       );
       await attach(
