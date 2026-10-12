@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DriverError } from './driver.js';
+import { withRequestTiming } from './requestTiming.js';
 import { sqliteDriver } from './sqliteDriver.js';
 
 function fresh() {
@@ -155,6 +156,63 @@ describe('sqliteDriver', () => {
     await d.tx(async (t) => {
       expect(t.forTeam('t1')).toBe(t);
       expect(t.asOperator()).toBe(t);
+    });
+  });
+
+  /**
+   * Lane 01M4S0ZAG8: one transaction runs at a time and every outer statement waits for it, so a
+   * body that awaits something slow stalls every request that touches the store, which on the Air
+   * showed up as a ~5 s wake-leases poll every ~5 minutes. The driver now says who held the queue
+   * and how long a request waited for it.
+   */
+  describe('queue timing', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
+    });
+
+    it('logs a transaction held past a second, naming where it was opened', async () => {
+      vi.stubEnv('MUSTERD_SILENT', '0');
+      const lines: string[] = [];
+      vi.spyOn(process.stdout, 'write').mockImplementation((c) => (lines.push(String(c)), true));
+      vi.spyOn(process.stderr, 'write').mockImplementation((c) => (lines.push(String(c)), true));
+      const d = fresh();
+      await d.tx(async (t) => {
+        await t.run('INSERT INTO t (v) VALUES (?)', ['a']);
+        await new Promise((r) => setTimeout(r, 1_050));
+      });
+      const slow = lines
+        .filter((l) => l.includes('"sqlite_tx_slow"'))
+        .map((l) => JSON.parse(l) as Record<string, unknown>);
+      expect(slow).toHaveLength(1);
+      expect(slow[0]!.hold_ms as number).toBeGreaterThanOrEqual(1_000);
+      expect(String(slow[0]!.at)).toContain('sqliteDriver.test.ts');
+    });
+
+    it("records a request's wait behind another transaction and its own hold", async () => {
+      const d = fresh();
+      let release!: () => void;
+      const holder = d.tx(() => new Promise<void>((r) => (release = r)));
+      const { timing, result } = withRequestTiming(() =>
+        d.tx((t) => t.run('INSERT INTO t (v) VALUES (?)', ['b'])),
+      );
+      await new Promise((r) => setTimeout(r, 60));
+      release();
+      await Promise.all([holder, result]);
+      expect(timing.tx).toBe(1);
+      expect(timing.waitMs).toBeGreaterThanOrEqual(50);
+      expect(timing.holdMs).toBeLessThan(50);
+    });
+
+    it("records an outer statement's wait behind a transaction", async () => {
+      const d = fresh();
+      let release!: () => void;
+      const holder = d.tx(() => new Promise<void>((r) => (release = r)));
+      const { timing, result } = withRequestTiming(() => d.get('SELECT 1 AS one'));
+      await new Promise((r) => setTimeout(r, 60));
+      release();
+      await Promise.all([holder, result]);
+      expect(timing.waitMs).toBeGreaterThanOrEqual(50);
     });
   });
 });
