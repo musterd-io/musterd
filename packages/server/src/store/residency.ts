@@ -1397,11 +1397,13 @@ async function dueCandidates(
   // A team has tens of members and a window has thousands of rows, so the per-row `getMemberById`
   // asked the same few questions over and over — 800 statements to learn 31 names. Memoised for the
   // life of this derivation only: membership cannot change inside the poll's transaction, and the
-  // map dies with the call, so there is no cache to invalidate.
-  const names = new Map<string, string | undefined>();
-  const nameOf = async (id: string): Promise<string | undefined> => {
-    if (!names.has(id)) names.set(id, (await getMemberById(db, id))?.name);
-    return names.get(id);
+  // map dies with the call, so there is no cache to invalidate. It holds the lookup, not its result:
+  // the rows hydrate concurrently, and a map of settled names missed on every one of them.
+  const names = new Map<string, Promise<string | undefined>>();
+  const nameOf = (id: string): Promise<string | undefined> => {
+    let name = names.get(id);
+    if (!name) names.set(id, (name = getMemberById(db, id).then((m) => m?.name)));
+    return name;
   };
 
   if (lanes.immediate || lanes.batched) {

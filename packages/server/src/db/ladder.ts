@@ -209,6 +209,15 @@ export const LADDER: PortableMigration[] = [
       await d.exec(LANES_SOURCE_REF_INDEX_SQL);
     },
   },
+  {
+    // v92 — lane 01M4S0ZAG8: the wake poll's per-seat audit reads (`deferralSnoozeUntil`, the dream
+    // night's leases and deferrals, `residency.woke` lookups) filter on `target` inside one action.
+    // `idx_audit_team_action_ts` stops at the action, so each read walked every row of it — 8,432
+    // `residency.wake_deferred` rows per seat on the revive hub — and one poll spent ~800 ms of a
+    // ~950 ms transaction there. With `target` in the key the same poll is ~150 ms.
+    version: 92,
+    sql: 'CREATE INDEX IF NOT EXISTS idx_audit_team_action_target_ts ON audit(team_id, action, target, ts)',
+  },
 ];
 
 const LANES_SOURCE_REF_INDEX_SQL =
