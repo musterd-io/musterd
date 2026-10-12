@@ -319,20 +319,33 @@ export async function hasEnrolledJoiners(
  * born minutes before lane replication began (2026-09-04).
  */
 export async function laneGenesis(db: Driver, teamId: string): Promise<string | null> {
-  return (
-    (
-      await db.get<{ id: string | null }>(
-        `SELECT MIN(COALESCE(json_extract(payload, '$.event.detail.lane'),
-                             json_extract(payload, '$.event.target'))) AS id
-           FROM sync_log
-          WHERE team_id = ?
-            AND json_extract(payload, '$.kind') = 'lane'
-            AND json_extract(payload, '$.event.action') = 'lane.opened'`,
-        [teamId],
-      )
-    )?.id ?? null
+  // Incremental: sync_log is append-only with a dense hub_seq, so the watermark over rows up to
+  // `seq` never changes and only rows past it need reading. The full json_extract scan this replaces
+  // ran on every /sync/pull and every hub tick — 4.1s over 248k rows on the hub, 2026-10-12, which
+  // is what wedged the daemon's event loop.
+  let memo = genesisMemo.get(db);
+  if (!memo) genesisMemo.set(db, (memo = new Map()));
+  const known = memo.get(teamId) ?? { seq: 0, id: null };
+  const high = await hubHead(db, teamId);
+  if (high <= known.seq) return known.id;
+  const row = await db.get<{ id: string | null }>(
+    `SELECT MIN(COALESCE(json_extract(payload, '$.event.detail.lane'),
+                         json_extract(payload, '$.event.target'))) AS id
+       FROM sync_log
+      WHERE team_id = ?
+        AND hub_seq > ? AND hub_seq <= ?
+        AND json_extract(payload, '$.kind') = 'lane'
+        AND json_extract(payload, '$.event.action') = 'lane.opened'`,
+    [teamId, known.seq, high],
   );
+  const found = row?.id ?? null;
+  const id = known.id === null ? found : found === null || known.id < found ? known.id : found;
+  // A concurrent caller may have advanced further; never move the memo backwards.
+  if ((memo.get(teamId)?.seq ?? 0) < high) memo.set(teamId, { seq: high, id });
+  return id;
 }
+
+const genesisMemo = new WeakMap<Driver, Map<string, { seq: number; id: string | null }>>();
 
 export async function readStaged(
   db: Driver,
