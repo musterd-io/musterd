@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -11,12 +19,22 @@ afterEach(() => {
 });
 
 function script(name: string): string {
-  const step = workflow.split(`      - name: ${name}\n`)[1]!.split('\n      - ')[0]!;
-  return step
+  return stepBlock(name)
     .split('        run: |\n')[1]!
     .split('\n')
     .map((line) => line.slice(10))
     .join('\n');
+}
+
+function stepBlock(name: string): string {
+  return workflow.split(`      - name: ${name}\n`)[1]!.split('\n      - ')[0]!;
+}
+
+function workflowFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    return statSync(path).isDirectory() ? workflowFiles(path) : path.endsWith('.yml') ? [path] : [];
+  });
 }
 
 function run(
@@ -152,5 +170,35 @@ describe('weekly radar workflow', () => {
       const result = spawnSync('bash', ['-n'], { input: script(name), encoding: 'utf8' });
       expect(result.status, `${name}: ${result.stderr}`).toBe(0);
     }
+  });
+
+  it('pins every third-party GitHub Action to a full commit SHA and version comment', () => {
+    const paths = [...workflowFiles('.github/workflows'), ...workflowFiles('.github/actions')];
+    const unpinned = paths.flatMap((path) =>
+      readFileSync(path, 'utf8')
+        .split('\n')
+        .filter((line) => line.includes('uses:'))
+        .filter((line) => !line.includes('uses: ./'))
+        .filter((line) => !/uses:\s+[^\s]+@[0-9a-f]{40}\s+# v\d+\.\d+\.\d+\s*$/.test(line))
+        .map((line) => `${path}: ${line.trim()}`),
+    );
+    expect(unpinned).toEqual([]);
+  });
+
+  it('keeps STEWARD_TOKEN out of the radar checkout and read-only PR lookup', () => {
+    const start = workflow.indexOf('      - uses: actions/checkout');
+    const end = workflow.indexOf('\n      - name:', start + 1);
+    const checkoutStep = workflow.slice(start, end);
+    const lookup = stepBlock('Select weekly draft PR');
+    const publish = stepBlock('Create or update the unreviewed weekly draft');
+
+    expect(checkoutStep).toContain('persist-credentials: false');
+    expect(checkoutStep).toContain('fetch-depth: 0');
+    expect(checkoutStep).not.toContain('secrets.STEWARD_TOKEN');
+    expect(lookup).toContain('GH_TOKEN: ${{ github.token }}');
+    expect(lookup).not.toContain('secrets.STEWARD_TOKEN');
+    expect(publish).toContain('GH_TOKEN: ${{ secrets.STEWARD_TOKEN }}');
+    expect(publish).toContain('git push');
+    expect(publish).toContain('gh pr create');
   });
 });
