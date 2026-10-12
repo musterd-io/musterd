@@ -96,6 +96,10 @@ is never written to the stage file, printed, or sent to the daemon.
 | **`source_ref`** | `owner/repo#12`                                    | `ENG-42`                                         | `PROJ-123`                                                                                     |
 | **Stakes**      | label `priority:high` / `priority:low` if present   | Urgent → `high`, Low → `low`                     | Highest → `high`, Low or Lowest → `low`                                                        |
 
+_(Corrected 2026-10-12, lane 01M4Q7PNWW: `--team` and `--project` already name the musterd team and
+project on every CLI command, so the tracker's own keys are positional, like the GitHub repo:
+`musterd import linear ENG` and `musterd import jira <site> PROJ`.)_
+
 - **The repo** defaults to the `origin` remote (`git remote get-url origin`).
 - **Detail:** the issue URL goes on the first line of `detail`, then the body, cut to the lane detail
   limit.

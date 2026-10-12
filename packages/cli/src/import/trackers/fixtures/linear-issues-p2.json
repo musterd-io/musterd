@@ -1,0 +1,18 @@
+{
+  "data": {
+    "issues": {
+      "nodes": [
+        {
+          "identifier": "ENG-16",
+          "title": "Dark mode",
+          "url": "https://linear.app/acme/issue/ENG-16/dark-mode",
+          "description": "",
+          "priority": 0,
+          "project": null,
+          "cycle": null
+        }
+      ],
+      "pageInfo": { "hasNextPage": false, "endCursor": "cursor-2" }
+    }
+  }
+}

@@ -19,6 +19,7 @@ import {
   writeStage,
 } from '../import/stage.js';
 import { githubSource, githubToken, repoFromRemote } from '../import/trackers/github.js';
+import { linearKey, linearSource } from '../import/trackers/linear.js';
 import { runTrackerImport } from '../import/trackers/run.js';
 import { findWorkspaceDir, resolve } from './helpers.js';
 
@@ -30,7 +31,9 @@ const USAGE =
   '  musterd import sheet [path]            a blank sheet to fill in by hand (never overwrites)\n' +
   '  musterd import github [owner/repo] [--limit N]\n' +
   '                                         open issues from GitHub (gh auth token, or GITHUB_TOKEN);\n' +
-  '                                         run it again to re-sync — reads only, writes nothing back';
+  '                                         run it again to re-sync — reads only, writes nothing back\n' +
+  '  musterd import linear <TEAM-KEY> [--limit N]\n' +
+  '                                         open issues from Linear (LINEAR_API_KEY); run it again to re-sync';
 
 /** `musterd import` (spec 2026-10-10 "bring work in"): two steps — preview+stage, then save. */
 export async function importCommand(parsed: Parsed): Promise<number> {
@@ -96,6 +99,29 @@ export async function importCommand(parsed: Parsed): Promise<number> {
       project: resolveProject({ explicit: flagStr(parsed.flags, 'project') }),
       rerun: `github ${repo}`,
       legacyGithub: own?.toLowerCase() === repo.toLowerCase(),
+      ...limitFlag(parsed),
+    });
+  }
+
+  if (first === 'linear') {
+    // Positional, not --team: --team already names the musterd team on every command.
+    const key = second?.trim().toUpperCase();
+    if (!key || !/^[A-Z0-9]+$/.test(key))
+      throw new CliError(
+        'usage: musterd import linear <TEAM-KEY> [--limit N]   (the Linear team key, e.g. ENG)',
+        2,
+      );
+    const source = linearSource({
+      team: key,
+      key: linearKey(),
+      ...(process.env['MUSTERD_LINEAR_API'] ? { endpoint: process.env['MUSTERD_LINEAR_API'] } : {}),
+    });
+    return runTrackerImport(source, {
+      ws,
+      team,
+      http,
+      project: resolveProject({ explicit: flagStr(parsed.flags, 'project') }),
+      rerun: `linear ${key}`,
       ...limitFlag(parsed),
     });
   }
