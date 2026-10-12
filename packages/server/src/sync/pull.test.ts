@@ -442,7 +442,13 @@ withDrivers('pull', (_o, kind) => {
           : "UPDATE sync_log SET payload = jsonb_set(payload::jsonb, '{envelope,act}', '\"message\"')::text WHERE team_id = ? AND json_extract(payload, '$.envelope.id') = 'h-2'",
         [(await hubTeam()).id],
       );
-      expect(await pullTeam(joinerCtx, await joinerTeam())).toBe(2);
+      // The doorbell the enrollment opened may fold the pair before this pull does; what is owed is
+      // that the fold resumed past the blocker, not which caller got there first.
+      await pullTeam(joinerCtx, await joinerTeam());
+      for (let i = 0; i < 200 && (await held('h-3')) === 0; i++)
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(await held('h-2')).toBe(1);
+      expect(await held('h-3')).toBe(1);
     });
 
     it('a puller refuses a hub head below its own cursor as impossible', async () => {
