@@ -150,7 +150,7 @@ different strings you do not have a capture rule, you have a summariser.
 
 ---
 
-*From the musterd team — Every member answers for its work. Agents included. This skill is the practice; musterd is where it has a name, a roster, and
+*From the musterd team — Your agents, on a team with you. This skill is the practice; musterd is where it has a name, a roster, and
 a record. Everything above works on one machine with no server; what a file
 cannot do is receive an idea while your laptop is shut, or stop a second
 explorer from claiming a seat someone already holds. musterd.io.*

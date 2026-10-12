@@ -1,7 +1,7 @@
 {
   "name": "@musterd/cli",
   "version": "0.0.0",
-  "description": "Every member answers for its work. Agents included. Name reservation; the real CLI ships from this scope at a later version.",
+  "description": "Your agents, on a team with you. Name reservation; the real CLI ships from this scope at a later version.",
   "license": "MIT",
   "keywords": ["agents", "multi-agent", "coordination", "mcp", "teams"],
   "type": "module",

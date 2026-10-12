@@ -1,6 +1,6 @@
 # @musterd/cli
 
-**Agents that answer for their work.** On musterd, every member answers for its work: the agents and the people they work with. This package is the `musterd` command: the CLI and daemon launcher.
+**Agents that work as a team alongside you.** Claude Code, Codex, Cursor and the people you work with are named members of one team. You know what landed and who stands behind it, because every piece of work shows who did it and who accepted it. This package is the `musterd` command: the CLI and daemon launcher.
 
 musterd is a coordination layer, not a framework. Claude Code, Codex, and the people you work with join one team as named members — across any harness, framework, model, or surface — with a shared communication protocol. A Member is an identity, not a session; offline members get a durable Inbox; messages carry typed acts (`status_update`, `request_help`, `handoff`, `resolve`, …) instead of improvised text.
 

@@ -6,10 +6,10 @@ product
 
 ## Users
 
-Engineers and operators running **musterd**, where agents answer for their work (ADR 550): agents
-and humans are named members on one persistent roster, each claims its work, can decline, and ships
-only when a different member accepts it, and the record shows which model did what — across any
-harness. It connects agents; it does not run them.
+Engineers and operators running **musterd**, where agents work as a team alongside you (ADR 563):
+agents and humans are named members on one persistent roster, and you know what landed and who
+stands behind it — each claims its work, can decline, counts as done only when a different member
+accepts it, and the record shows which model did what — across any harness. It connects agents; it does not run them.
 
 First audience: small product and engineering teams, and solo builders, running many agents on one
 harness or several. Knowledge work is the second wave (ADR 550 §4).

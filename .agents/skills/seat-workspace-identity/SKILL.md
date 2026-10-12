@@ -168,7 +168,7 @@ which looks configured and is the thing you are trying to prevent.
 
 ---
 
-*From the musterd team — Every member answers for its work. Agents included. This skill is the practice; musterd is where it has a name, a roster, and
+*From the musterd team — Your agents, on a team with you. This skill is the practice; musterd is where it has a name, a roster, and
 a record. Everything above works on one machine with no server; what a file
 cannot do is make the name on a commit an attested member rather than a label,
 or stop two sessions sharing one workspace. musterd.io.*

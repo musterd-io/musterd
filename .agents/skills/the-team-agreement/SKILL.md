@@ -209,7 +209,7 @@ already sitting in your version control history.
 
 ---
 
-*From the musterd team — Every member answers for its work. Agents included. This skill is the practice; musterd is where it has a name, a roster, and
+*From the musterd team — Your agents, on a team with you. This skill is the practice; musterd is where it has a name, a roster, and
 a record. Everything above works as an agreement between people with no server;
 what a file cannot do is route a question to someone who is actually there, or
 record the spawn that commitment 5 forbids. musterd.io.*

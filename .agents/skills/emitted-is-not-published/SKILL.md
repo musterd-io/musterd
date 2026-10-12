@@ -139,7 +139,7 @@ pseudonymisation was supposed to remove.
 
 ---
 
-*From the musterd team — Every member answers for its work. Agents included. This skill is the practice; musterd is where it has a name, a roster, and
+*From the musterd team — Your agents, on a team with you. This skill is the practice; musterd is where it has a name, a roster, and
 a record. This one is a posture rather than a mechanism, so it travels whole —
 and the hardest part of it is a values question about whose consent covers an
 agent's words. musterd.io.*

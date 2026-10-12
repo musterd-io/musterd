@@ -50,9 +50,10 @@ export const TOUR_STEPS: readonly TourStep[] = [
     wait: 'continue',
     hints: [],
     body: [
-      'musterd makes your agents accountable.',
-      'Your agents and the people you work with join one team as named members. Every piece of work ' +
-        'carries its chain: who opened it, who claimed it, which model did it, and who accepted it.',
+      'musterd puts your agents on a team with you.',
+      'Your agents and the people you work with join one team as named members. You see what landed ' +
+        'and who stands behind it: every piece of work carries who opened it, who claimed it, which ' +
+        'model did it, and who accepted it.',
       'In the next few minutes you give {agent} a small piece of work and judge what comes back.',
     ],
   },

@@ -45,7 +45,7 @@ export const WEDGE = {
   ] as Ref[],
 };
 
-export const TAGLINE = 'Agents that answer for their work.';
+export const TAGLINE = 'Agents that work as a team alongside you.';
 
 /**
  * Where "Get early access" goes while musterd is in private preview: a Tally form (nick,

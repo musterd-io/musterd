@@ -10,7 +10,7 @@ import { ACTS, CATALOG, GLOBAL_FLAGS, GROUPS } from './catalog.js';
 
 export function renderPlainHelp(): string {
   const lines: string[] = [
-    'musterd — every member answers for its work. agents included.',
+    'musterd — your agents, on a team with you.',
     '',
     'usage:',
   ];
