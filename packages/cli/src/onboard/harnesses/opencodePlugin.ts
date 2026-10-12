@@ -91,6 +91,7 @@ export function renderOpencodePlugin(): string {
   return `${opencodePluginHeader()}
 /* eslint-disable import/no-default-export -- OpenCode V2 requires a default export (ADR 521); this file is generated, never edited. */
 import { execFile } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -176,8 +177,10 @@ function readJson(path) {
 function writeJson(path, value) {
   try {
     mkdirSync(join(path, ".."), { recursive: true });
-    const tmp = path + "." + String(process.pid) + ".tmp";
-    writeFileSync(tmp, JSON.stringify(value), { mode: 0o600 });
+    // Fresh name, O_EXCL: a planted file or symlink at the tmp path fails the write, never
+    // redirects it; rename() replaces a link at \`path\`, never its target.
+    const tmp = path + "." + randomBytes(6).toString("hex") + ".tmp";
+    writeFileSync(tmp, JSON.stringify(value), { mode: 0o600, flag: "wx" });
     renameSync(tmp, path);
   } catch {
     // best-effort: no stamp reads as no plugin, which is deaf, which is honest

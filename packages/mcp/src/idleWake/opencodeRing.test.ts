@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import {
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -63,6 +71,18 @@ describe('opencode ring inject (ADR 558 increment 3)', () => {
     const ringPath = join(dir, '.musterd', 'idle-ring.json');
     expect(JSON.parse(readFileSync(ringPath, 'utf8'))).toEqual({ seq: 'seq1', line: LINE, at: T });
     expect(statSync(ringPath).mode & 0o777).toBe(0o600);
+  });
+
+  it('replaces a symlink planted at the ring path, never writing through it', async () => {
+    const dir = workspace();
+    stamp(dir);
+    const victim = join(dir, 'victim.txt');
+    writeFileSync(victim, 'untouched');
+    const ringPath = join(dir, '.musterd', 'idle-ring.json');
+    symlinkSync(victim, ringPath);
+    await opencodeRing(dir, clock()).inject(LINE);
+    expect(readFileSync(victim, 'utf8')).toBe('untouched');
+    expect(lstatSync(ringPath).isSymbolicLink()).toBe(false);
   });
 
   it('passes the plugin refusal through, busy included', async () => {

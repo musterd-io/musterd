@@ -61,8 +61,10 @@ export function opencodeRing(dir: string, deps: OpencodeRingDeps = {}): InjectAd
     const ring: IdleRing = { seq: newSeq(), line, at: now() };
     try {
       const path = join(base, IDLE_RING_FILE);
-      const tmp = `${path}.${String(process.pid)}.tmp`;
-      writeFileSync(tmp, JSON.stringify(ring), { mode: 0o600 });
+      // A fresh name opened O_EXCL ('wx'): a planted file or symlink at the tmp path fails the
+      // write instead of redirecting it. rename() replaces a link at `path`, never its target.
+      const tmp = `${path}.${randomBytes(6).toString('hex')}.tmp`;
+      writeFileSync(tmp, JSON.stringify(ring), { mode: 0o600, flag: 'wx' });
       renameSync(tmp, path);
     } catch (err) {
       return { ok: false, reason: `ring:${(err as NodeJS.ErrnoException).code ?? 'error'}` };
