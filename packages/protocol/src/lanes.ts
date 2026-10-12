@@ -334,6 +334,12 @@ export const LaneFollowsUpSchema = z.union([
 ]);
 export type LaneFollowsUp = z.infer<typeof LaneFollowsUpSchema>;
 
+/**
+ * ADR 561: the issue a lane came from (`acme/app#12`, `ENG-42`) — the key `musterd import` re-sync
+ * matches on. One lane that is neither done nor abandoned per ref per team; the store refuses a second.
+ */
+export const LaneSourceRefSchema = z.string().min(1).max(200);
+
 /** ADR 487 §5.4: how long a Goal's live lanes may all sit untouched before `team_next` says so. */
 export const GOAL_STALE_DAYS = 7;
 
@@ -492,6 +498,8 @@ export const LaneSchema = z.object({
   follows_up: LaneFollowsUpSchema.nullable().optional(),
   /** ADR 487: why the lane was dropped (≤ 280), set on or after the move to `abandoned`. */
   abandon_reason: z.string().nullable().optional(),
+  /** ADR 561: the issue this lane came from. Absent reads as none (skew posture, like `follows_up`). */
+  source_ref: LaneSourceRefSchema.nullable().optional(),
   /** ADR 487 §5.2: the seat session's unfinished to-dos, last write wins. Absent reads as none. */
   unfinished_todos: LaneTodosSchema.nullable().optional(),
   /**
@@ -580,6 +588,8 @@ export const OpenLaneSchema = z.object({
   branch: z.string().optional(),
   /** Link this lane to a Goal at open (ADR 084) — the id `musterd next` groups + derives status by. */
   goal_id: z.string().optional(),
+  /** The issue this lane came from (ADR 561); refused with 409 while another open lane holds it. */
+  source_ref: LaneSourceRefSchema.optional(),
   /** Declared risk tags (ADR 169) — any tag routes the review ask human-first. */
   risk: z.array(z.string()).optional(),
   /** Declared acceptance stakes (ADR 234). Omitted ⇒ `normal`; nothing routes on it yet. */
@@ -614,6 +624,8 @@ export const UpdateLaneSchema = z.object({
   branch: z.string().optional(),
   /** Re-link (or clear, with null) this lane's Goal (ADR 084). */
   goal_id: z.string().nullable().optional(),
+  /** Set the issue this lane came from (ADR 561); refused with 409 while another open lane holds it. */
+  source_ref: LaneSourceRefSchema.optional(),
   /** Transfer ownership to this seat (lane_handoff / lane_claim sets it to the caller). */
   owner_seat: z.string().optional(),
   /**

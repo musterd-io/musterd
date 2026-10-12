@@ -74,3 +74,20 @@ describe('scope is the only wire token (ADR 296 tier 2 mirror dropped, epoch 16)
     expect(patch.scope).toBeUndefined();
   });
 });
+
+describe('source_ref (ADR 561)', () => {
+  it('rides open and update, bounded 1–200', () => {
+    expect(OpenLaneSchema.parse({ title: 't', source_ref: 'acme/app#12' }).source_ref).toBe(
+      'acme/app#12',
+    );
+    expect(UpdateLaneSchema.parse({ source_ref: 'ENG-42' }).source_ref).toBe('ENG-42');
+    expect(() => OpenLaneSchema.parse({ title: 't', source_ref: '' })).toThrow();
+    expect(() => OpenLaneSchema.parse({ title: 't', source_ref: 'x'.repeat(201) })).toThrow();
+  });
+  it('a lane without it still parses (older daemon), and null reads as none', () => {
+    const lane = { ...base, scope: [] };
+    expect(LaneSchema.parse(lane).source_ref).toBeUndefined();
+    expect(LaneSchema.parse({ ...lane, source_ref: null }).source_ref).toBeNull();
+    expect(LaneSchema.parse({ ...lane, source_ref: 'CLI-7' }).source_ref).toBe('CLI-7');
+  });
+});
