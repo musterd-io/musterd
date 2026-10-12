@@ -20,12 +20,12 @@ const key = (team: string, as: string) => `musterd.live.v1:${team}:${as}`;
 const read = new Map<string, LiveSnapshot | null>();
 /** Seats signed out on this page. The old connection's saver can still fire (its timer, a tab hide)
  *  before /live reconnects as the observer, and must not write the snapshot straight back. Lifted
- *  when that seat connects again (loadSnapshot). */
+ *  only when a new connection starts as that seat (resumeSnapshot) — never by a read, which any
+ *  re-render of the old connection performs. */
 const cleared = new Set<string>();
 
 export function loadSnapshot(team: string, as: string): LiveSnapshot | null {
   const k = key(team, as);
-  cleared.delete(k);
   if (!read.has(k)) {
     let snap: LiveSnapshot | null = null;
     try {
@@ -37,6 +37,11 @@ export function loadSnapshot(team: string, as: string): LiveSnapshot | null {
     read.set(k, snap);
   }
   return read.get(k)!;
+}
+
+/** A new connection as this seat: its snapshot may be kept again. */
+export function resumeSnapshot(team: string, as: string): void {
+  cleared.delete(key(team, as));
 }
 
 /** The newest envelopes kept: enough for the ticker, the asks and the meter, small enough to write. */

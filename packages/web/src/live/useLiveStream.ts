@@ -9,7 +9,7 @@ import {
   type LiveConfig,
 } from './client';
 import { ensureBuildSync } from './buildSync';
-import { loadSnapshot } from './liveCache';
+import { loadSnapshot, resumeSnapshot } from './liveCache';
 import { coalesce } from './coalesce';
 import { firehoseSound } from './sound';
 import { capNewest } from './window';
@@ -107,6 +107,7 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
     const cfg: LiveConfig = { team, as, token };
     let alive = true;
     // Paint the last snapshot at once; the backfill below replaces it (lane 01M4RNBNFM).
+    resumeSnapshot(team, as);
     const snap = loadSnapshot(team, as);
     setEnvelopes(snap?.envelopes ?? []);
     setRoster(snap?.roster ?? []);

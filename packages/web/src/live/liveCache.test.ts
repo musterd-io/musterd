@@ -46,7 +46,11 @@ describe('liveCache', () => {
     c.clearSnapshot('revive', 'nick');
     c.saveSnapshot('revive', 'nick', { roster, envelopes: [], board: null });
     expect(store.has('musterd.live.v1:revive:nick')).toBe(false);
+    // A re-render of the old connection reads the snapshot; that must not lift the guard.
     c.loadSnapshot('revive', 'nick');
+    c.saveSnapshot('revive', 'nick', { roster, envelopes: [], board: null });
+    expect(store.has('musterd.live.v1:revive:nick')).toBe(false);
+    c.resumeSnapshot('revive', 'nick');
     c.saveSnapshot('revive', 'nick', { roster, envelopes: [], board: null });
     expect(store.has('musterd.live.v1:revive:nick')).toBe(true);
   });
