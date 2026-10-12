@@ -439,6 +439,7 @@ import {
   styleDriverFor,
   styleEnvelopeFor,
   styleHumansOf,
+  styleResolver,
   teamStyle,
 } from '../store/style.js';
 import { searchInsights } from '../store/teamMemory.js';
@@ -2102,6 +2103,8 @@ async function summarize(
   // ADR 514: the team's style once; each human row resolves their own dials against it below, and
   // every row stamps the CURRENT epoch its seat should attest (inc 4: the roster's `style stale`).
   const style = await teamStyle(ctx.db, teamId);
+  // One resolve per distinct prefs blob for the whole roster, not two per row (lane 01M4GQ2G7B).
+  const resolveRowStyle = styleResolver(style);
   // The humans come from the presence read's own member list (non-left, non-observer — a superset
   // of what the only-human rule counts), not a second `SELECT * FROM members` (lane 01M477S003).
   const presenceRows = await listPresence(ctx.db, teamId, ctx.config.presenceTimeoutMs);
@@ -2149,14 +2152,14 @@ async function summarize(
           (viewerIsAdmin || s.member.sponsored_by === viewer.id),
         working_hours: effectiveWorkingHours,
         // ADR 514: how seats talk to this human — resolved dials, no prose; null on agent rows.
-        style:
-          s.member.kind === 'human' ? resolveStyle(style, memberStylePrefs(s.member)).dials : null,
+        style: s.member.kind === 'human' ? resolveRowStyle(s.member).dials : null,
         style_epoch: currentStyleEpochFor(
           style,
           styleHumansOnTeam,
           s.member,
           // The driver the newest live presence attested, the `driverForSeat` read without a query.
           s.presences.find((p) => p.driver)?.driver ?? null,
+          resolveRowStyle,
         ),
         presence: presenceStatus,
         presences: s.presences,

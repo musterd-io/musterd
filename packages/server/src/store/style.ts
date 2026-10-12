@@ -1,4 +1,5 @@
 import {
+  type ResolvedStyle,
   type StyleEnvelope,
   type StylePolicy,
   type StylePrefs,
@@ -20,7 +21,9 @@ import { getPolicy } from './teams.js';
  */
 
 /** A member's own style prefs; a malformed blob reads as none (team defaults). Agents have none. */
-export function memberStylePrefs(m: MemberRow): StylePrefs | undefined {
+export function memberStylePrefs(
+  m: Pick<MemberRow, 'kind' | 'style_prefs'>,
+): StylePrefs | undefined {
   if (m.kind !== 'human' || !m.style_prefs) return undefined;
   try {
     return StylePrefsSchema.safeParse(JSON.parse(m.style_prefs)).data;
@@ -166,6 +169,30 @@ function chosenHuman(humans: MemberRow[], driver: string | null): MemberRow | un
   return named ?? (humans.length === 1 ? humans[0] : undefined);
 }
 
+/** Resolve a member's style (none: team defaults), as `resolveStyle(policy, memberStylePrefs(m))`. */
+export type StyleResolver = (
+  m: Pick<MemberRow, 'kind' | 'style_prefs'> | undefined,
+) => ResolvedStyle;
+
+/**
+ * A {@link StyleResolver} that resolves each distinct input once (lane 01M4GQ2G7B): the roster
+ * resolved and hashed a style per row, twice per human row, and nearly every agent row lands on the
+ * same team defaults — 4.8 points of the app core at plateau (run 28). Keyed on the only member
+ * fields `resolveStyle` reads, so it is correct for one policy; build one per request.
+ */
+export function styleResolver(policy: StylePolicy): StyleResolver {
+  const cache = new Map<string, ResolvedStyle>();
+  return (m) => {
+    const key = m?.kind === 'human' ? (m.style_prefs ?? '') : '';
+    let resolved = cache.get(key);
+    if (!resolved) {
+      resolved = resolveStyle(policy, m ? memberStylePrefs(m) : undefined);
+      cache.set(key, resolved);
+    }
+    return resolved;
+  };
+}
+
 /**
  * The current style epoch a roster row should show (ADR 514 inc 4, spec §4.4 "Attestation"): a
  * human's own resolved style; an agent's is what its seat should attest — the driver its newest
@@ -177,13 +204,12 @@ export function currentStyleEpochFor(
   humans: MemberRow[],
   member: Pick<MemberRow, 'name' | 'kind' | 'observer'>,
   presenceDriver: string | null,
+  resolve: StyleResolver = styleResolver(policy),
 ): string {
   if (member.kind === 'human' && member.observer !== 1) {
-    const self = humans.find((m) => m.name === member.name);
-    return resolveStyle(policy, self ? memberStylePrefs(self) : undefined).epoch;
+    return resolve(humans.find((m) => m.name === member.name)).epoch;
   }
   // The epoch alone: `styleEnvelopeFrom(...).epoch` rendered the whole block and resolved the team
   // style a second time for every agent row, only to throw both away (lane 01M477S003).
-  const chosen = chosenHuman(humans, presenceDriver);
-  return resolveStyle(policy, chosen ? memberStylePrefs(chosen) : undefined).epoch;
+  return resolve(chosenHuman(humans, presenceDriver)).epoch;
 }

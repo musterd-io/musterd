@@ -721,3 +721,8 @@ profiled the app's Node thread for 120 s (16:06:27–16:08:27Z, 17–19 minutes 
   sits above the four unprofiled 1x runs (1 862–2 202 ms). Do not use it in the spread.
 - **Next:** one lane for the style-epoch memo, one for trimming the roster's reads. Re-measure each
   with an unprofiled run, since a single run cannot show less than the ±8% spread.
+- **2026-10-12 — the memo landed (lane 01M4GQ2G7BDNJVDQ9DM1Q6T53T).** `styleResolver` in
+  `packages/server/src/store/style.ts` resolves each distinct `(kind, style_prefs)` once per roster
+  build: one hash for the team defaults plus one per human with their own prefs, where it was one per
+  row plus one per human row. The wire is unchanged. It is unmeasured until the next unprofiled
+  75/75/75 run; falsified if `summarize` stays above ~5% of plateau samples in a fresh profile.
