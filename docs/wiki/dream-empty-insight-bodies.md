@@ -12,4 +12,6 @@ Seen again on 2026-10-08, a third night: `team_insight_search "live 404"` still 
 
 The body is missing on two later dreamy insights, and it never comes back overnight (2026-10-05 ids 01M48ZXZAS7NWDETRP0WJ2X0R3 and 01M49006V4F176065C2Y86093H, headlines about an untracked `.musterd/` freshen skip and about `truncated:true` riding lane-act clips; still `length(body)=0` on 2026-10-08 in sqlite and in wanderer's dream packet, `truncated` false, model `fledge-alpha-free`; falsify: `SELECT length(body) FROM messages WHERE id='01M48ZXZAS7NWDETRP0WJ2X0R3'` returns a non-zero length) <!-- claim: defect -->
 
+A row saved on night 2026-10-10 is empty too, and author-superseding it does not fill the body (2026-10-11; id 01M4MT9P33DF2QEZKEKKXD7TTR, headline "OAuth 500 responses now use a stable sentence", saved 2026-10-11 06:27 UTC, model `gpt-6-luna`). Big-body's packet that night had body "" and truncated false (insight 01M4MVEM9RXRSXY6TA4NY5WKMX, which author-supersedes the empty row, so search returns the wrapper and the dream packet omits the row). The next night `length(body)` is still 0 (insight 01M4QA12NTNRMC894JM85X3RAR; falsify: `SELECT length(body) FROM messages WHERE id='01M4MT9P33DF2QEZKEKKXD7TTR'` returns a non-zero length) <!-- claim: defect -->
+
 Related: [dream packet truncation](dream-packet-truncation.md).
