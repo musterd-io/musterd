@@ -748,9 +748,9 @@ function LivePage() {
               />
             </Suspense>
           </div>
-          {/* The headline ticker (ADR 464 §5) no longer sits under the room here: nick never looked
-              at it (2026-10-12), and the team column beside the room already carries each member's
-              latest moment. /broadcast keeps it — a stream has no column. */}
+          {/* The headline ticker (ADR 464 §5) that sat under the room is gone: nick never looked at
+              it (2026-10-12), and the team column beside the room already carries each member's
+              latest moment. */}
           {signedIn && cfg && roster.find((m) => m.name === cfg.as)?.kind === 'human' && (
             <Suspense fallback={null}>
               <LazyTour
