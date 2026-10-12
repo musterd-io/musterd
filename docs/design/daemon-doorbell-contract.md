@@ -120,6 +120,11 @@ _(2026-10-10: [ADR 558](../decisions/558-idle-at-prompt-wake.md) designs the ans
 daemon-composed line into an idle session through the harness's own inject, claude-code first. Unbuilt
 until its canary passes; the table above stays the measured state until then.)_
 
+_(2026-10-11: the claude-code idle-at-prompt row is **covered** — measured that day: a steer to a
+session idle for 6 h 46 m started a turn 5.2 s after the send, on daemon `2be1dc81`, n=1. See the
+[canary](../wiki/idle-wake-canary.md). The other rows are unchanged: an adapter with no inject
+reports itself deaf, `no-inject:<harness>`.)_
+
 ### (3) A Presence lease the probe can authenticate with
 
 The weakest clause on the board. It failed the same day for two **different** reasons, and the
