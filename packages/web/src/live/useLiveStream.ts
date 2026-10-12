@@ -9,6 +9,7 @@ import {
   type LiveConfig,
 } from './client';
 import { ensureBuildSync } from './buildSync';
+import { loadSnapshot } from './liveCache';
 import { coalesce } from './coalesce';
 import { firehoseSound } from './sound';
 import { capNewest } from './window';
@@ -46,6 +47,9 @@ export interface LiveState {
    *  read. Silence here used to be total: the presence refetch swallowed every failure, so a persistently
    *  broken roster looked exactly like a quiet team (the ADR 230 shape). */
   rosterStale: boolean;
+  /** The daemon has answered this connection. Until then the roster and envelopes are this
+   *  browser's last snapshot (liveCache), or empty on a first visit. */
+  fresh: boolean;
 }
 
 /**
@@ -72,6 +76,7 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
   const [liveIds, setLiveIds] = useState<Set<string>>(new Set());
   const [rosterUnreadable, setRosterUnreadable] = useState(0);
   const [rosterStale, setRosterStale] = useState(false);
+  const [fresh, setFresh] = useState(false);
   // Consecutive failed roster refetches. One is ordinary (a bounce, a dropped request); a run of them
   // means the roster on screen is frozen, and that is worth saying out loud.
   const rosterFailsRef = useRef(0);
@@ -101,7 +106,11 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
     }
     const cfg: LiveConfig = { team, as, token };
     let alive = true;
-    setEnvelopes([]);
+    // Paint the last snapshot at once; the backfill below replaces it (lane 01M4RNBNFM).
+    const snap = loadSnapshot(team, as);
+    setEnvelopes(snap?.envelopes ?? []);
+    setRoster(snap?.roster ?? []);
+    setFresh(false);
     setLiveIds(new Set());
     setError(null);
     setStatus('connecting');
@@ -139,6 +148,7 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
         setTeamWorkingHours(r.working_hours);
         setRosterUnreadable(r.unreadable);
         add(h);
+        setFresh(true);
         hooksRef.current.onConnected?.(); // backfill worked → re-arm the route's recovery guard
       })
       .catch((e: unknown) => {
@@ -221,5 +231,6 @@ export function useLiveStream(cfg: LiveConfig | null, hooks: LiveStreamHooks = {
     daemonEpoch,
     rosterUnreadable,
     rosterStale,
+    fresh,
   };
 }

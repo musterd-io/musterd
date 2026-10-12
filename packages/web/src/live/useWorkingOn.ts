@@ -1,6 +1,7 @@
 import type { Envelope, LaneBoard } from '@musterd/protocol';
 import { useEffect, useRef, useState } from 'react';
 import { fetchLaneBoard, type LiveConfig } from './client';
+import { loadSnapshot } from './liveCache';
 import { lanesChangedSince } from './workingOn';
 
 /**
@@ -21,8 +22,10 @@ export function useLaneFed<T>(
   cfg: LiveConfig | null,
   envelopes: Envelope[],
   fetcher: (cfg: LiveConfig) => Promise<T>,
+  /** Shown until the first fetch lands — the last snapshot, so the page is not empty meanwhile. */
+  initial: T | null = null,
 ): T | null {
-  const [value, setValue] = useState<T | null>(null);
+  const [value, setValue] = useState<T | null>(initial);
   // The newest envelope we have already reacted to — so a re-render never re-fetches.
   const seenRef = useRef<string | null>(null);
   // Bumped to ask for a fetch; the mount and every lane change both go through it.
@@ -33,6 +36,7 @@ export function useLaneFed<T>(
       setValue(null);
       return;
     }
+    setValue((v) => v ?? initial);
     let cancelled = false;
     fetcher(cfg).then(
       (next) => !cancelled && setValue(next),
@@ -43,7 +47,7 @@ export function useLaneFed<T>(
     return () => {
       cancelled = true;
     };
-  }, [cfg, fetcher, tick]);
+  }, [cfg, fetcher, tick, initial]);
 
   useEffect(() => {
     // `envelopes` is sorted oldest-first by useLiveStream, so the newest arrival is the last element.
@@ -60,5 +64,6 @@ export function useLaneFed<T>(
 
 /** The lane board behind the overlay's working-on strap. */
 export function useWorkingOn(cfg: LiveConfig | null, envelopes: Envelope[]): LaneBoard | null {
-  return useLaneFed(cfg, envelopes, fetchLaneBoard);
+  const initial = cfg ? (loadSnapshot(cfg.team, cfg.as)?.board ?? null) : null;
+  return useLaneFed(cfg, envelopes, fetchLaneBoard, initial);
 }

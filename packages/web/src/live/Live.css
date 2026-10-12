@@ -7787,3 +7787,37 @@
   outline: 2px solid var(--lc-focus);
   outline-offset: 2px;
 }
+
+/* Loading placeholders (lane 01M4RNBNFM): the shape of what is coming, never a false "0" or "none". */
+.lc-skel {
+  display: inline-block;
+  height: 0.8em;
+  border-radius: 4px;
+  background: var(--lc-border);
+  vertical-align: middle;
+  animation: lc-skel 1.1s ease-in-out infinite alternate;
+}
+.lc-skel--face {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+.lc-team-card--skel {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 6px 10px;
+  padding: 12px 14px;
+}
+.lc-team-card--skel .lc-skel--face {
+  grid-row: span 2;
+}
+@keyframes lc-skel {
+  to {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-skel {
+    animation: none;
+  }
+}

@@ -1,4 +1,4 @@
-import type { Envelope } from '@musterd/protocol';
+import type { Envelope, LaneBoard, MemberSummary } from '@musterd/protocol';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import {
   lazy,
@@ -28,6 +28,7 @@ import { briefing, briefingSince } from '../live/briefing';
 import { useSeatRequests } from '../live/useSeatRequests';
 import { TopMeter } from '../live/TopMeter';
 import type { LiveConfig } from '../live/client';
+import { clearSnapshot, saveSnapshot } from '../live/liveCache';
 import {
   provisionObserver,
   loadObserver,
@@ -195,6 +196,7 @@ function LivePage() {
   const recoverObserver = useCallback(() => {
     const team = cfg?.team;
     const staleToken = cfg?.token;
+    const staleAs = cfg?.as;
     if (!team || !staleToken) return;
     if (recoveredToken.current === staleToken) return; // already handling this exact credential
     // A signed-in human is NOT silently demoted to an observer (ADR 222). Doing that would take the
@@ -203,6 +205,7 @@ function LivePage() {
     if (signedIn) {
       recoveredToken.current = staleToken;
       forgetMemberIdentity(team);
+      if (staleAs) clearSnapshot(team, staleAs);
       setSignedIn(false);
       setFormError('your sign-in expired — sign in again to answer asks');
       void acquireObserver(team).then(setCfg, (e: unknown) => {
@@ -231,7 +234,7 @@ function LivePage() {
         setCfg(null);
       }
     })();
-  }, [cfg?.team, cfg?.token, signedIn]);
+  }, [cfg?.team, cfg?.token, cfg?.as, signedIn]);
   const armRecovery = useCallback(() => {
     recoverAttempts.current = 0;
   }, []);
@@ -253,6 +256,7 @@ function LivePage() {
     daemonEpoch,
     rosterUnreadable,
     rosterStale,
+    fresh,
   } = stream;
   // What this browser sent through the demo prompt bar, folded in from the ack so a huddle shows on
   // the screen that opened it at once; the firehose copy that follows is deduped by id below.
@@ -271,6 +275,12 @@ function LivePage() {
   // scene) so both routes hand the scene the same already-projected shape.
   const board = useWorkingOn(cfg, envelopes);
   const report = useReport(cfg, envelopes);
+  // Nothing to show yet: a first visit before the daemon answers. Panels draw their skeletons rather
+  // than "0 working" and "no open questions", which were false while it loaded (lane 01M4RNBNFM).
+  const loading = !!cfg && !fresh && roster.length === 0;
+  // The last snapshot is on screen and the daemon has not answered yet.
+  const refreshing = !!cfg && !fresh && roster.length > 0;
+  useSnapshotSaver(cfg, fresh, roster, envelopes, board);
   // The asks, derived once for the surfaces that read them beside the strip (ADR 464 §4): the team
   // column's "asking nick" and the room's ask moment. The strip keeps its own derivation because it
   // folds in the answers this browser just sent; a second copy here costs one pass over the buffer.
@@ -351,13 +361,15 @@ function LivePage() {
    *  seat never had — before ADR 222 the only way out was clearing localStorage by hand. */
   const signOut = useCallback(() => {
     const slug = cfg?.team;
-    if (!slug) return;
+    const as = cfg?.as;
+    if (!slug || !as) return;
     forgetMemberIdentity(slug);
+    clearSnapshot(slug, as);
     setSignedIn(false);
     void acquireObserver(slug).then(setCfg, (e: unknown) =>
       setFormError(e instanceof Error ? e.message : String(e)),
     );
-  }, [cfg?.team]);
+  }, [cfg?.team, cfg?.as]);
 
   /**
    * The rail's one button, both meanings (ADR 222). If this machine has an identity, becoming
@@ -581,6 +593,7 @@ function LivePage() {
   // note that a phone could not see an open question at all.
   const asksStrip = connected ? (
     <AsksStrip
+      loading={loading}
       envelopes={envelopes}
       roster={roster}
       cfg={cfg}
@@ -610,7 +623,15 @@ function LivePage() {
             office overlay, which carries them over the scene on both /live and /broadcast — repeating
             them a few inches above was the duplication nick asked us to drop (2026-07-24). */}
         <MusterdWord />
-        {connected && <TopMeter teamName={team} envelopes={envelopes} roster={roster} />}
+        {connected && (
+          <TopMeter
+            teamName={team}
+            envelopes={envelopes}
+            roster={roster}
+            loading={loading}
+            refreshing={refreshing}
+          />
+        )}
         {connected && <span id={NOW_SLOT_ID} className="lc__nowslot" />}
         {connected && <span id={TOUR_SLOT_ID} className="lc__nowslot" />}
         <span className="lc__spacer" />
@@ -691,6 +712,7 @@ function LivePage() {
               onPlateHover={setLinked}
             />
             <TeamColumn
+              loading={loading}
               roster={roster}
               board={board}
               goals={report?.goals ?? []}
@@ -723,6 +745,7 @@ function LivePage() {
           </div>
           {/* The headline ticker (ADR 464 §5): the last few notable moments, under the room. */}
           <Ticker
+            loading={loading}
             envelopes={envelopes}
             roster={roster}
             board={board}
@@ -990,4 +1013,36 @@ function ConnectForm({
       </div>
     </div>
   );
+}
+
+/**
+ * Keep this browser's snapshot of /live current (liveCache): every 15 s while the page shows fresh
+ * data, and once more as it is hidden or closed, so the next visit paints at once. Refs, not deps, so
+ * a busy firehose never re-arms the timer.
+ */
+function useSnapshotSaver(
+  cfg: LiveConfig | null,
+  fresh: boolean,
+  roster: MemberSummary[],
+  envelopes: Envelope[],
+  board: LaneBoard | null,
+) {
+  const latest = useRef({ roster, envelopes, board });
+  useEffect(() => {
+    latest.current = { roster, envelopes, board };
+  });
+  useEffect(() => {
+    if (!cfg || !fresh) return;
+    const save = () => saveSnapshot(cfg.team, cfg.as, latest.current);
+    save();
+    const timer = window.setInterval(save, 15_000);
+    const onHide = () => document.visibilityState === 'hidden' && save();
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', save);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', save);
+    };
+  }, [cfg, fresh]);
 }
