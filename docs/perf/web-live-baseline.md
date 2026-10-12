@@ -1203,3 +1203,23 @@ delete, and a re-baseline would loosen. JS is measured + the ~0.7 KB CI gzip del
 
 - Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main after this lands — total JS under 290.5 KB,
   app CSS under 9.8 KB.
+
+### 2026-10-11 — app CSS 10,500 → 12,000 B: the tour redesign (lane 01M4PSEV08EVHHB2XMTCC3MYSJ)
+
+nick took the tour and asked for it to be magical, satisfying and smooth, and approved one raise of about +6 KB
+before the build. The tour lane is now a ticket whose four-stop track lights as the real acts land, the agent's
+team card and the lane's card are spotlit on the page, the picker shows each agent's readiness and suggests an awake
+one, an accept stamps the ticket with a CSS-only confetti burst, and on a phone the panel is a bottom sheet. All of it
+is in the tour's lazy chunk, mounted only for a signed-in human.
+
+| Budget     | Main      | This branch          | Ceiling → new   |
+| ---------- | --------- | -------------------- | --------------- |
+| app CSS    | ~9.9 KB   | 11.1 KB (11,400 B)   | 10,500 → 12,000 |
+| total JS   | ~289.9 KB | 292.6 KB             | unchanged       |
+| initial JS | 138.3 KB  | 138.3 KB             | unchanged       |
+
+`Tour.css` is 2,196 B gzip (was ~720 B) and the tour JS chunk 8,119 B (was 5,384 B). Nothing to trim that is not
+the feature: every rule is a visible part of the design. CSS is measured + ~5%; total JS fits unraised.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main after this lands — app CSS under 11.5 KB,
+  `Tour-*.css` under 2.3 KB gzip.

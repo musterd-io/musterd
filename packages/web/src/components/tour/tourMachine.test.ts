@@ -5,7 +5,10 @@ import {
   agentNow,
   clock,
   hintFor,
-  latestSaid,
+  readinessOf,
+  suggestAgent,
+  ticketStage,
+  timeline,
   initialState,
   modelOf,
   stepLines,
@@ -212,15 +215,57 @@ describe('while the tour waits on the agent', () => {
     expect(agentNow(undefined, 'claims')).toBeNull();
   });
 
-  it('quotes the agent’s newest status_update since the step began', () => {
+  it('ranks an agent ready, busy, asleep or unreachable, and suggests the readiest', () => {
+    const ready = m({ name: 'dolly', posture: 'idle' });
+    const busy = m({ name: 'izzo', posture: 'working' });
+    const asleep = m({ presence: 'offline', wakeable: true });
+    expect(readinessOf(ready)).toBe('ready');
+    expect(readinessOf(busy)).toBe('busy');
+    expect(readinessOf(asleep)).toBe('asleep');
+    expect(readinessOf(m({ presence: 'offline' }))).toBe('unreachable');
+    expect(suggestAgent([asleep, busy, ready], ['ghost', 'izzo', 'dolly'])).toBe('dolly');
+    expect(suggestAgent([asleep, busy], ['ghost', 'izzo'])).toBe('izzo');
+    expect(suggestAgent([asleep], ['ghost', 'nobody'])).toBe('ghost');
+  });
+});
+
+describe('the lane ticket', () => {
+  it('moves opened → claimed → submitted → closed with the steps', () => {
+    expect(ticketStage(initialState('nick', 'dolly'))).toBe(0);
+    expect(ticketStage(waiting('claims'))).toBe(1);
+    expect(ticketStage({ ...waiting('claims'), outcome: 'declined' })).toBe(1);
+    expect(ticketStage(waiting('hands_back'))).toBe(2);
+    expect(ticketStage(waiting('judge'))).toBe(3);
+    expect(ticketStage({ ...waiting('record'), outcome: 'accepted' })).toBe(4);
+    expect(ticketStage({ ...waiting('record'), outcome: 'self_closed' })).toBe(4);
+  });
+
+  it('tells the lane’s story from the record, oldest first, and nothing else', () => {
+    const t0 = ulidTime(LANE);
     const acts = [
-      env({ from: 'ghost', act: 'status_update', body: 'old', ts: 5 }),
-      env({ from: 'ghost', act: 'status_update', body: 'reading the README', ts: 20 }),
-      env({ from: 'ghost', act: 'status_update', body: 'summarising', ts: 30 }),
-      env({ from: 'dolly', act: 'status_update', body: 'not ghost', ts: 40 }),
-      env({ from: 'ghost', act: 'message', body: 'not a status', ts: 50 }),
+      env({ id: 'claim', ts: t0 + 47_000, meta: { lane_claim: { lane: LANE } } }),
+      env({ id: 'open', from: 'nick', ts: t0, meta: { lane_open: { lane: LANE } } }),
+      env({ id: 'req1', from: 'nick', act: 'request_help', ts: t0 + 1 }),
+      env({ id: 'st', act: 'status_update', body: 'reading the README', ts: t0 + 50_000 }),
+      env({ id: 'ask1', act: 'ask', ts: t0 + 66_000, meta: { lane_review: { lane: LANE } } }),
+      env({ id: 'ok', from: 'nick', act: 'accept', ts: t0 + 80_000, meta: { in_reply_to: 'ask1' } }),
+      env({ id: 'noise', from: 'izzo', act: 'status_update', body: 'other work', ts: t0 + 5 }),
+      env({ id: 'other', meta: { lane_claim: { lane: 'OTHER' } }, ts: t0 + 6 }),
+      env({ id: 'old', act: 'status_update', body: 'before the tour', ts: t0 - 9_000 }),
     ];
-    expect(latestSaid(acts, 'ghost', 10)).toBe('summarising');
-    expect(latestSaid(acts, 'ghost', 60)).toBeNull();
+    expect(timeline(acts, waiting('record')).map((e) => e.text)).toEqual([
+      'You opened the lane',
+      'You asked dolly to take it',
+      'dolly claimed it',
+      'dolly: reading the README',
+      'dolly submitted it for your review',
+      'You accepted it',
+    ]);
+    expect(timeline(acts, initialState('nick', 'dolly'))).toEqual([]);
+  });
+
+  it('tells a decline of the request', () => {
+    const no = env({ id: 'no', act: 'decline', body: 'busy', meta: { in_reply_to: 'req1' }, ts: 9 });
+    expect(timeline([no], waiting('claims')).map((e) => e.text)).toEqual(['dolly said no']);
   });
 });

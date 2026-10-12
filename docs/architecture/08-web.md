@@ -229,7 +229,7 @@ live/
     welcomeWagon.ts             // the Welcome Wagon beat sequencer: 2 s waves, Act 1 / Act 2 / crowd scripts, mark/seat gates, backlog cap, busy-room cap — pure
     welcomeRoom.ts              // the Welcome Wagon's wiring behind ports: roster → arrivals → beats → residents, and the paint the renderer is shown (unit-tested; index.ts only plugs it in)
 components/                     // marketing surface (Hero, Roadmap, Footer, LiquidGlass, Wedge)
-  tour/                         // the first-run tour on /live and /board (lane 01M4M4DDYF, spec docs/design/tour-web-copy.md): Tour.tsx (lazy chunk, human viewers only; entry button portalled into the topbar), tourMachine.ts (the CLI tour's step machine, ported; copy from content/tour.data.ts via build-prep → content/generated/tour.ts)
+  tour/                         // the first-run tour on /live and /board (lane 01M4M4DDYF, spec docs/design/tour-web-copy.md): Tour.tsx (lazy chunk, human viewers only; entry button portalled into the topbar), tourMachine.ts (the CLI tour's step machine, ported; copy from content/tour.data.ts via build-prep → content/generated/tour.ts); LaneTicket.tsx (the tour lane as a ticket: track, story, accept stamp; the spotlight reads data-member / data-lane on the team and lane cards)
 brand/                          // unified marks — the mark (full + small cuts) + MusterdWord topbar lockup (ADR 497, was the ADR 154 chip); social-card.png + siteMeta.ts (og:image on musterd.io)
 ```
 

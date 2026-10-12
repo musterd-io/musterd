@@ -232,37 +232,128 @@ export function agentNow(
 ): string | null {
   if (!member) return null;
   const name = member.name;
+  switch (readinessOf(member)) {
+    case 'asleep':
+      return `${name} isn't running right now, so musterd is waking it. That usually takes under a minute.`;
+    case 'unreachable':
+      return `${name} is offline, and musterd can't wake it from here. It will see the request when it next starts.`;
+    case 'busy':
+      if (step !== 'hands_back')
+        return `${name} is online but busy with other work. It reads the request between tasks.`;
+      break;
+    case 'ready':
+      if (step !== 'hands_back') return `${name} is online and has the request.`;
+  }
+  return `${name} is online and working on the lane. When it's done, it submits it for your review.`;
+}
+
+/** How ready an agent is to take the tour lane, best first. */
+export type Readiness = 'ready' | 'busy' | 'asleep' | 'unreachable';
+const READINESS_ORDER: readonly Readiness[] = ['ready', 'busy', 'asleep', 'unreachable'];
+
+/** Only what the roster asserts: a seat whose wake cannot reach it now is never "asleep". */
+export function readinessOf(member: MemberSummary | undefined): Readiness {
+  if (!member) return 'unreachable';
   if (member.presence === 'offline') {
     const canWake = member.wakeability
       ? member.wakeability === 'wakeable'
       : member.wakeable === true;
-    return canWake
-      ? `${name} isn't running right now, so musterd is waking it. That usually takes under a minute.`
-      : `${name} is offline, and musterd can't wake it from here. It will see the request when it next starts.`;
+    return canWake ? 'asleep' : 'unreachable';
   }
-  if (step === 'hands_back') {
-    return `${name} is online and working on the lane. When it's done, it submits it for your review.`;
-  }
-  return member.posture === 'working' || member.activity === 'working'
-    ? `${name} is online but busy with other work. It reads the request between tasks.`
-    : `${name} is online and has the request.`;
+  return member.posture === 'working' || member.activity === 'working' ? 'busy' : 'ready';
 }
 
-/** The agent's newest status_update since `since` — its own word on what it is doing. */
-export function latestSaid(
-  acts: readonly Envelope[],
-  agent: string,
-  since: number,
-): string | null {
-  let found: Envelope | null = null;
+export const READINESS_LABEL: Record<Readiness, string> = {
+  ready: 'online · ready now',
+  busy: 'online · busy',
+  asleep: 'asleep · ~1 min to wake',
+  unreachable: "offline · can't be woken",
+};
+
+/**
+ * The agent the picker suggests: the readiest, roster order breaking a tie. An awake agent saves
+ * the minute a wake takes, which was most of the wait on the first run (ghost, 47s, asleep).
+ */
+export function suggestAgent(roster: readonly MemberSummary[], agents: readonly string[]): string {
+  let best = '';
+  let rank = READINESS_ORDER.length;
+  for (const a of agents) {
+    const r = READINESS_ORDER.indexOf(readinessOf(roster.find((m) => m.name === a)));
+    if (r < rank) [best, rank] = [a, r];
+  }
+  return best;
+}
+
+/**
+ * How far the tour lane has come, as the ticket's track shows it: 0 before the lane exists, then
+ * opened (1), claimed (2), submitted for review (3), closed (4). A decline stays at opened; the
+ * ticket marks it on the claim stop instead.
+ */
+export type TicketStage = 0 | 1 | 2 | 3 | 4;
+
+export function ticketStage(s: TourState): TicketStage {
+  if (!s.laneId) return 0;
+  if (s.outcome === 'accepted' || s.outcome === 'self_closed') return 4;
+  if (s.step === 'judge') return 3;
+  if (s.step === 'hands_back') return 2;
+  return 1;
+}
+
+export interface TimelineEntry {
+  id: string;
+  ts: number;
+  text: string;
+}
+
+/**
+ * The tour lane's story so far, oldest first: the lines under the ticket that turn a wait into
+ * something to watch. Built only from acts the record holds about this lane, and the agent's own
+ * status lines since it opened, so the timeline never says more than the record does.
+ */
+export function timeline(acts: readonly Envelope[], s: TourState): TimelineEntry[] {
+  const lane = s.laneId;
+  if (!lane) return [];
+  const opened = ulidTime(lane);
+  const byId = new Map(acts.map((a) => [a.id, a]));
+  const out = new Map<string, TimelineEntry>();
+  const add = (e: Envelope, text: string) => out.set(e.id, { id: e.id, ts: e.ts, text });
   for (const e of acts) {
-    if (e.from !== agent || e.act !== 'status_update' || e.ts < since || !e.body.trim()) continue;
-    if (!found || e.ts > found.ts) found = e;
+    const meta = metaOf(e);
+    const reply = meta['in_reply_to'];
+    if (metaLane(e, 'lane_open') === lane) add(e, 'You opened the lane');
+    else if (e.id === s.requestId) add(e, `You asked ${s.agent} to take it`);
+    else if (e.from === s.agent && metaLane(e, 'lane_claim') === lane) add(e, `${s.agent} claimed it`);
+    else if (e.from === s.agent && e.act === 'ask' && metaLane(e, 'lane_review') === lane)
+      add(e, `${s.agent} submitted it for your review`);
+    else if (metaLane(e, 'lane_resolve') === lane) add(e, 'The lane closed');
+    else if (e.from === s.agent && reply === s.requestId && (e.act === 'decline' || e.act === 'challenge'))
+      add(e, `${s.agent} said no`);
+    else if (e.from === s.me && (e.act === 'accept' || e.act === 'decline') && typeof reply === 'string') {
+      const ask = byId.get(reply);
+      if (ask && metaLane(ask, 'lane_review') === lane)
+        add(e, e.act === 'accept' ? 'You accepted it' : 'You sent it back');
+    } else if (e.from === s.agent && e.act === 'status_update' && e.ts >= opened && e.body.trim())
+      add(e, `${s.agent}: ${e.body.trim()}`);
   }
-  return found ? found.body.trim() : null;
+  return [...out.values()].sort((a, b) => a.ts - b.ts);
 }
 
-const CROCKFORD ='0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+/** `15:12:09`, in the viewer's local time. */
+export function timeOfDay(ts: number): string {
+  const d = new Date(ts);
+  return [d.getHours(), d.getMinutes(), d.getSeconds()]
+    .map((n) => String(n).padStart(2, '0'))
+    .join(':');
+}
+
+/** Which of the step ids the rail lights: the steps before this one and this one. */
+export function stepIndex(id: TourStepId): number {
+  return TOUR_STEPS.findIndex((s) => s.id === id);
+}
+
+export const TOUR_STEP_COUNT = TOUR_STEPS.length;
+
+const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 /** When a lane opened, from its ULID's first ten characters; the resume replay starts there. */
 export function ulidTime(id: string): number {

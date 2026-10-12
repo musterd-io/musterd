@@ -9,19 +9,29 @@ import {
   updateLane,
   type LiveConfig,
 } from '../../live/client';
+import { Confetti, LaneTicket } from './LaneTicket';
 import {
   advance,
   agentNow,
   agentsOf,
   clock,
   hintFor,
-  latestSaid,
   initialState,
   modelOf,
+  READINESS_LABEL,
+  readinessOf,
+  stepIndex,
   stepLines,
   stepTitle,
+  suggestAgent,
+  ticketStage,
+  timeline,
+  TOUR_STEP_COUNT,
   tourEntry,
   ulidTime,
+  type Readiness,
+  type TicketStage,
+  type TimelineEntry,
   type TourState,
   type TourVars,
 } from './tourMachine';
@@ -35,6 +45,10 @@ import './Tour.css';
  *
  * Acts come from the page's own firehose (`envelopes`), which since #2329 carries this browser's own
  * HTTP sends too; a resume adds the team's history from just before the lane opened (spec §5).
+ *
+ * The redesign (lane 01M4PSEV08) makes the lane something you watch rather than read about: a
+ * ticket that lights up as the real acts land, a spotlight on the agent and the lane on the page
+ * itself, a picker that suggests an awake agent, and a stamp when you accept.
  */
 export interface TourPort {
   openLane(cfg: LiveConfig, title: string): Promise<string>;
@@ -64,6 +78,34 @@ interface Run {
   extra: Envelope[];
 }
 
+const reducedMotion = () =>
+  typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const cssId = (v: string) =>
+  typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(v) : v.replace(/[^\w-]/g, '');
+
+/**
+ * The spotlight: a ring on the agent's team card (/live) and on the lane's card (/board), as one
+ * `<style>` rule keyed by `data-member` / `data-lane`. A rule rather than a class added to the node,
+ * because React rewrites those nodes' className on every roster tick and would wipe a class it
+ * does not own. It breathes while the tour waits on the agent, pops once on the claim, and rests
+ * after. An element that is not on screen simply matches nothing.
+ */
+export function spotlightCss(s: TourState, motion: boolean): string {
+  const lit = s.agent && s.step !== 'what' && s.step !== 'next' && s.step !== 'add_seat';
+  if (!lit) return '';
+  const sels = [`[data-member="${cssId(s.agent)}"]`];
+  if (s.laneId) sels.push(`[data-lane="${cssId(s.laneId)}"]`);
+  const anim = !motion
+    ? 'none'
+    : s.step === 'claims' && s.outcome !== 'declined'
+      ? 'tour-spot-breathe 1.6s ease-in-out infinite'
+      : s.step === 'hands_back'
+        ? 'tour-spot-pop .6s ease-out 1'
+        : 'none';
+  return `${sels.join(',')}{box-shadow:0 0 0 2px var(--lc-accent),0 0 20px color-mix(in srgb,var(--lc-accent) 38%,transparent);animation:${anim};position:relative;z-index:1}`;
+}
+
 export function Tour({
   cfg,
   viewer,
@@ -86,10 +128,12 @@ export function Tour({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stopped, setStopped] = useState(false);
+  const [mini, setMini] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const seen = useRef(new Set<string>());
   const opening = useRef(false);
+  const panel = useRef<HTMLElement | null>(null);
 
   useEffect(() => setSlot(document.getElementById(slotId)), [slotId]);
 
@@ -110,6 +154,7 @@ export function Tour({
     seen.current = new Set();
     opening.current = false;
     setStopped(false);
+    setMini(false);
     setError(null);
     setNote(null);
     setRun({ s: initialState(viewer, agent), at: Date.now(), extra: [] });
@@ -119,6 +164,7 @@ export function Tour({
     const agent = lane.owner_seat ?? (agents.length === 1 ? agents[0]! : '');
     seen.current = new Set();
     setStopped(false);
+    setMini(false);
     setError(null);
     const s0: TourState = { ...initialState(viewer, agent), step: 'claims', laneId: lane.id };
     setRun({ s: s0, at: Date.now(), extra: [] });
@@ -182,7 +228,14 @@ export function Tour({
           to: { kind: 'member', name: s.agent },
           body: fill(TOUR_REQUEST, { you: viewer, lane: laneId }),
         });
-        setRun((r) => r && { ...r, s: advance(r.s, { type: 'lane_opened', laneId, requestId: ack.id }), at: Date.now() });
+        setRun(
+          (r) =>
+            r && {
+              ...r,
+              s: advance(r.s, { type: 'lane_opened', laneId, requestId: ack.id }),
+              at: Date.now(),
+            },
+        );
       } catch (e) {
         opening.current = false;
         setError(e instanceof Error ? e.message : String(e));
@@ -208,8 +261,46 @@ export function Tour({
     return () => clearTimeout(t);
   }, [stopped]);
 
+  // Bring the spotlit thing into view when it first lights: the agent on `team`, the lane once it
+  // opens. Once per step, and only by the least scroll, so the page never yanks under the viewer.
+  const step = s?.step;
+  const agent = s?.agent;
   const laneId = s?.laneId;
+  useEffect(() => {
+    if (step !== 'team' && step !== 'claims') return;
+    const target =
+      (laneId ? document.querySelector(`[data-lane="${cssId(laneId)}"]`) : null) ??
+      (agent ? document.querySelector(`[data-member="${cssId(agent)}"]`) : null);
+    target?.scrollIntoView?.({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  }, [step, agent, laneId]);
+
+  // Enter takes the step's main action and Esc tucks the panel away — but never while the viewer
+  // is typing or has a control focused, so the composer and every button keep their own keys.
+  useEffect(() => {
+    if (!run || mini) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const t = e.target as HTMLElement | null;
+      const inPanel = !!t && !!panel.current?.contains(t);
+      const typing =
+        !!t && (/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(t.tagName) || t.isContentEditable);
+      if (e.key === 'Escape' && (inPanel || t === document.body)) {
+        setMini(true);
+      } else if (e.key === 'Enter' && !typing) {
+        const primary = panel.current?.querySelector<HTMLButtonElement>(
+          '[data-primary]:not(:disabled)',
+        );
+        if (!primary) return;
+        e.preventDefault();
+        primary.click();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [run, mini]);
+
   const detail = (laneId && lanes?.find((l) => l.id === laneId)?.detail) || '';
+  const acts = run ? [...run.extra, ...envelopes] : [];
 
   const verdict = async (accept: boolean, text = '') => {
     if (!s?.askId) return;
@@ -237,7 +328,11 @@ export function Tour({
         {STOPPED}
       </span>
     ) : entry.kind === 'take' ? (
-      <button type="button" className="tour-entry" onClick={() => start(agents.length === 1 ? agents[0]! : '')}>
+      <button
+        type="button"
+        className="tour-entry"
+        onClick={() => start(agents.length === 1 ? agents[0]! : '')}
+      >
         Take the tour
       </button>
     ) : entry.kind === 'resume' ? (
@@ -256,34 +351,60 @@ export function Tour({
       </>
     ) : null);
 
+  const elapsed = waiting && run ? clock(now - run.at) : null;
+
   return (
     <>
       {slot && entryButtons && createPortal(entryButtons, slot)}
-      {s && (
+      {s && <style>{spotlightCss(s, !reducedMotion())}</style>}
+      {s && mini && (
+        <button
+          type="button"
+          className="tour-pill"
+          aria-label={`Open the tour, ${stepTitle(s.step)}`}
+          onClick={() => setMini(false)}
+        >
+          {waiting && <span className="tour__dot" aria-hidden="true" />}
+          Tour · {stepIndex(s.step) + 1}/{TOUR_STEP_COUNT}
+          {elapsed && <span className="tour__clock">{elapsed}</span>}
+        </button>
+      )}
+      {s && !mini && (
         <TourPanel
+          panelRef={panel}
           s={s}
           vars={vars}
           hint={waiting && run ? hintFor(s.step, now - run.at, vars) : null}
           wait={
-            waiting && run
+            elapsed ? { elapsed, now: agentNow(roster.find((m) => m.name === s.agent), s.step) } : null
+          }
+          ticket={
+            s.laneId
               ? {
-                  elapsed: clock(now - run.at),
-                  now: agentNow(roster.find((m) => m.name === s.agent), s.step),
-                  said: latestSaid([...run.extra, ...envelopes], s.agent, run.at),
+                  title:
+                    lanes?.find((l) => l.id === s.laneId)?.title ??
+                    fill(TOUR_LANE_TITLE, { you: viewer }),
+                  stage: ticketStage(s),
+                  entries: timeline(acts, s),
                 }
               : null
           }
-          agents={agents}
+          picks={agents.map((name) => ({
+            name,
+            readiness: readinessOf(roster.find((m) => m.name === name)),
+          }))}
+          suggested={suggestAgent(roster, agents)}
           detail={detail}
           note={note}
           busy={busy}
           error={error}
-          onPick={(agent) => go({ ...s, agent })}
+          onPick={(picked) => go({ ...s, agent: picked })}
           onContinue={() => go(advance(s, { type: 'continue' }))}
           onSkip={() => go(advance(s, { type: 'skip_to_record' }))}
           onToNext={() => go({ ...s, step: 'next' })}
           onDone={() => setRun(null)}
           onStop={stop}
+          onMinimize={() => setMini(true)}
           onNote={setNote}
           onVerdict={verdict}
         />
@@ -331,15 +452,28 @@ function Lines({ lines, mono }: { lines: string[]; mono?: boolean }) {
 export interface TourWait {
   elapsed: string;
   now: string | null;
-  said: string | null;
+}
+
+export interface TourTicket {
+  title: string;
+  stage: TicketStage;
+  entries: readonly TimelineEntry[];
+}
+
+export interface TourPick {
+  name: string;
+  readiness: Readiness;
 }
 
 export function TourPanel({
+  panelRef,
   s,
   vars,
   hint,
   wait = null,
-  agents,
+  ticket = null,
+  picks,
+  suggested = '',
   detail,
   note,
   busy,
@@ -350,14 +484,18 @@ export function TourPanel({
   onToNext,
   onDone,
   onStop,
+  onMinimize,
   onNote,
   onVerdict,
 }: {
+  panelRef?: { current: HTMLElement | null };
   s: TourState;
   vars: TourVars;
   hint: string | null;
   wait?: TourWait | null;
-  agents: readonly string[];
+  ticket?: TourTicket | null;
+  picks: readonly TourPick[];
+  suggested?: string;
   detail: string;
   note: string | null;
   busy: boolean;
@@ -368,6 +506,7 @@ export function TourPanel({
   onToNext: () => void;
   onDone: () => void;
   onStop: () => void;
+  onMinimize?: () => void;
   onNote: (note: string | null) => void;
   onVerdict: (accept: boolean, note?: string) => void;
 }) {
@@ -375,26 +514,52 @@ export function TourPanel({
   const lines = stepLines(s, vars);
   const atRecord = s.step === 'record';
   const stoppable = !atRecord && s.step !== 'add_seat' && s.step !== 'next';
+  const here = stepIndex(s.step);
+  const title = useRef<HTMLHeadingElement | null>(null);
+
+  // Focus follows the step for a keyboard or screen-reader viewer — but only when focus is already
+  // in the panel or nowhere, so an agent's claim never pulls the caret out of the composer.
+  useEffect(() => {
+    const active = document.activeElement;
+    if (active === document.body || (active && panelRef?.current?.contains(active))) {
+      title.current?.focus({ preventScroll: true });
+    }
+  }, [s.step, panelRef]);
 
   let body: ReactNode = <Lines lines={lines} mono={s.step === 'next'} />;
   let actions: ReactNode = null;
 
-  if (!s.agent && agents.length > 1 && (s.step === 'what' || s.step === 'team')) {
+  if (!s.agent && picks.length > 1 && (s.step === 'what' || s.step === 'team')) {
     actions = (
       <div className="tour__pick" role="group" aria-label={TOUR_MESSAGES.pickAgent}>
         <p>{TOUR_MESSAGES.pickAgent}</p>
-        {agents.map((a) => (
-          <button key={a} type="button" className="lc-ask__btn" onClick={() => onPick(a)}>
-            {a}
+        {picks.map((p) => (
+          <button
+            key={p.name}
+            type="button"
+            className={`tour-chip tour-chip--${p.readiness}${p.name === suggested ? ' is-suggested' : ''}`}
+            data-primary={p.name === suggested ? '' : undefined}
+            onClick={() => onPick(p.name)}
+          >
+            <span className="tour-chip__dot" aria-hidden="true" />
+            <span className="tour-chip__name">{p.name}</span>
+            <span className="tour-chip__state">
+              {p.name === suggested ? `Suggested · ${READINESS_LABEL[p.readiness]}` : READINESS_LABEL[p.readiness]}
+            </span>
           </button>
         ))}
       </div>
     );
-  } else if (!s.agent && agents.length === 0) {
+  } else if (!s.agent && picks.length === 0) {
     body = <p>{TOUR_MESSAGES.noAgent}</p>;
   } else if (s.step === 'what' || s.step === 'add_seat') {
     actions = (
-      <button type="button" className="lc-ask__btn lc-ask__btn--accept" onClick={onContinue}>
+      <button
+        type="button"
+        className="lc-ask__btn lc-ask__btn--accept"
+        data-primary=""
+        onClick={onContinue}
+      >
         Continue
       </button>
     );
@@ -406,7 +571,12 @@ export function TourPanel({
     );
     actions = (
       <>
-        <button type="button" className="lc-ask__btn lc-ask__btn--accept" onClick={onSkip}>
+        <button
+          type="button"
+          className="lc-ask__btn lc-ask__btn--accept"
+          data-primary=""
+          onClick={onSkip}
+        >
           See the record
         </button>
         <button type="button" className="tour__link" onClick={onStop}>
@@ -431,6 +601,7 @@ export function TourPanel({
           <button
             type="button"
             className="lc-ask__btn lc-ask__btn--accept"
+            data-primary=""
             disabled={busy || !s.askId}
             onClick={() => onVerdict(true)}
           >
@@ -476,40 +647,87 @@ export function TourPanel({
       </>
     );
     actions = (
-      <button type="button" className="lc-ask__btn lc-ask__btn--accept" onClick={onToNext}>
+      <button
+        type="button"
+        className="lc-ask__btn lc-ask__btn--accept"
+        data-primary=""
+        onClick={onToNext}
+      >
         Continue
       </button>
     );
   } else if (s.step === 'next') {
     actions = (
-      <button type="button" className="lc-ask__btn lc-ask__btn--accept" onClick={onDone}>
+      <button
+        type="button"
+        className="lc-ask__btn lc-ask__btn--accept"
+        data-primary=""
+        onClick={onDone}
+      >
         Done
       </button>
     );
   }
 
+  const showTicket = ticket && s.step !== 'next';
+  const celebrate = atRecord && s.outcome === 'accepted';
+
   return (
-    <aside className="tour" aria-label="The musterd tour">
-      <h2 className="tour__title">{stepTitle(s.step)}</h2>
+    <aside
+      ref={panelRef}
+      className={`tour${celebrate ? ' tour--won' : ''}`}
+      aria-label="The musterd tour"
+    >
+      <div className="tour__top">
+        <ol className="tour-rail" aria-hidden="true">
+          {Array.from({ length: TOUR_STEP_COUNT }, (_, i) => (
+            <li key={i} className={i < here ? 'is-done' : i === here ? 'is-now' : ''} />
+          ))}
+        </ol>
+        {onMinimize && (
+          <button
+            type="button"
+            className="tour__mini"
+            aria-label="Minimize the tour (Esc)"
+            title="Minimize (Esc)"
+            onClick={onMinimize}
+          >
+            –
+          </button>
+        )}
+      </div>
+      <h2 className="tour__title" tabIndex={-1} ref={title}>
+        {stepTitle(s.step)}
+      </h2>
+      {showTicket && (
+        <LaneTicket
+          laneId={s.laneId ?? ''}
+          title={ticket.title}
+          agent={s.agent}
+          stage={ticket.stage}
+          declined={declined}
+          outcome={s.outcome}
+          you={vars.you}
+          entries={ticket.entries}
+        />
+      )}
       <div className="tour__body" aria-live="polite">
-        {s.step === 'hands_back' && s.sentBack > 0 && <p>{fill(TOUR_MESSAGES.sentBack, vars)}</p>}
-        {body}
+        <div key={s.step} className="tour__step">
+          {s.step === 'hands_back' && s.sentBack > 0 && <p>{fill(TOUR_MESSAGES.sentBack, vars)}</p>}
+          {body}
+        </div>
         {wait && (
           <div className="tour__wait">
             <p className="tour__waiting">
               <span className="tour__dot" aria-hidden="true" />
-              Waiting on {s.agent} · {/* Every second inside a live region would chatter at a screen reader; the lines below carry
-                  the news. */}
+              Waiting on {s.agent} ·{' '}
+              {/* Every second inside a live region would chatter at a screen reader; the line
+                  below carries the news. */}
               <span className="tour__clock" aria-hidden="true">
                 {wait.elapsed}
               </span>
             </p>
             {wait.now && <p className="tour__muted">{wait.now}</p>}
-            {wait.said && (
-              <p className="tour__muted">
-                {s.agent} says: <q>{wait.said}</q>
-              </p>
-            )}
           </div>
         )}
         {hint && <p className="tour__muted">{hint}</p>}
@@ -529,6 +747,7 @@ export function TourPanel({
           )}
         </div>
       )}
+      {celebrate && <Confetti />}
     </aside>
   );
 }

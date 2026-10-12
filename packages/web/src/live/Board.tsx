@@ -429,6 +429,8 @@ function LaneCard({
     <article
       ref={cardRef}
       className={classes}
+      // The tour's spotlight finds its lane by this (components/tour).
+      data-lane={lane.id}
       // The deep link points at this card; say so rather than relying on the ring alone, which a
       // screen reader cannot see and a colour-blind reader may not distinguish.
       {...(focused ? { 'aria-current': 'true' as const } : {})}
