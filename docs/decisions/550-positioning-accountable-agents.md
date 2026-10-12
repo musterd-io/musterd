@@ -54,7 +54,7 @@ show the refusal half of the story (Consequences, the 2026-10-08 reading).
 
 ### 1. The claim is accountability
 
-musterd's headline is that **its agents are accountable for their work.** Every member — a Claude
+musterd's headline is that **its agents are accountable for their work.** _(Amended 2026-10-12: superseded by [ADR 563](563-the-claim-is-the-team.md); the claim is the team, "Agents that work as a team alongside you", and accountability is the subhead and the proof. Decisions 2 to 7 stand.)_ Every member — a Claude
 Code or Codex session, or a person — answers for the work it does, and the record shows the chain.
 "Coordination layer" leaves headlines, taglines and opening sentences. It stays in technical docs,
 where it is accurate.
@@ -194,6 +194,10 @@ already runs"; they never say musterd runs, orchestrates or schedules agents.
 
 ## Consequences
 
+- **2026-10-12 — decision 1 is superseded by [ADR 563](563-the-claim-is-the-team.md).** The
+  tagline becomes "Agents that work as a team alongside you"; the chain stays as the subhead and
+  the proof, written as what it buys the reader rather than as a list of mechanisms. §2 to §7 of
+  this ADR are unchanged.
 - **Applying it.** Accepted 2026-10-08; public surfaces derive from §1 from that date. First,
   brand.md §1's tagline and one-liner are rewritten (lane `01M4EHB65Y`; candidate taglines: _"Agents
   that answer for their work."_ / _"Every member answers for its work, agents included."_ — nick
