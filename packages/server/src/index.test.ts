@@ -132,6 +132,8 @@ withDrivers('index', (_o, kind) => {
       expect(slow[0]).toMatchObject({ sock_req: 2 });
       expect(slow[0]!.body_ms as number).toBeGreaterThanOrEqual(1_000);
       expect(typeof slow[0]!.sock_idle_ms).toBe('number');
+      // The handler read and wrote the store, so the line also says how long it queued for it.
+      if (kind === 'sqlite') expect(typeof slow[0]!.db_wait_ms).toBe('number');
     });
   });
 

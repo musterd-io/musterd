@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type Database from 'better-sqlite3';
+import { log } from '../log.js';
 import {
   bodyThenCommitQueue,
   type CommitQueue,
@@ -8,6 +9,30 @@ import {
   type Driver,
   type Params,
 } from './driver.js';
+import { requestTiming } from './requestTiming.js';
+
+/**
+ * A transaction holding the queue this long is logged with where it was opened (lane 01M4S0ZAG8):
+ * every other statement waits behind it, so a body that awaits something slow stalls the daemon's
+ * whole store, and nothing else names the holder.
+ */
+const SLOW_TX_MS = 1_000;
+
+/** The first few frames outside this file, paths cut to the package — enough to name the caller. */
+function callSite(site: Error): string {
+  return (site.stack ?? '')
+    .split('\n')
+    .slice(1)
+    .filter((l) => !/sqliteDriver\.(ts|js):/.test(l) && !l.includes('node:internal'))
+    .slice(0, 4)
+    .map((l) =>
+      l
+        .trim()
+        .replace(/^at /, '')
+        .replace(/\(?(?:file:\/\/)?\/.*?\/(src|dist)\//, '$1/'),
+    )
+    .join(' < ');
+}
 
 /**
  * better-sqlite3 behind the async Driver. Every statement is synchronous underneath; the Promise is
@@ -88,7 +113,10 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
   const onQueue = <R>(sql: string, run: () => R): Promise<R> => {
     assertOpen();
     if (inBody.getStore()?.open) return Promise.reject(outerInsideBody());
+    const timing = requestTiming();
+    const asked = timing ? performance.now() : 0;
     return tail.then(() => {
+      if (timing) timing.waitMs += performance.now() - asked;
       assertOpen();
       notify(sql);
       return run();
@@ -175,11 +203,21 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
         const prev = tail;
         let release!: () => void;
         tail = new Promise<void>((r) => (release = r));
+        // Where this transaction was opened; the stack is only formatted if it turns out slow.
+        const site = new Error();
+        const timing = requestTiming();
+        const asked = performance.now();
+        let began: number | null = null;
         try {
           await prev;
           assertOpen();
           depth = 1;
           const mine = { dead: false, open: true };
+          began = performance.now();
+          if (timing) {
+            timing.tx++;
+            timing.waitMs += began - asked;
+          }
           raw.exec('BEGIN');
           try {
             const root: CommitQueue = [];
@@ -198,6 +236,17 @@ function buildSqliteDriver(raw: Database.Database): SqliteDriver {
           }
         } finally {
           release();
+          if (began !== null) {
+            const held = performance.now() - began;
+            if (timing) timing.holdMs += held;
+            if (held >= SLOW_TX_MS)
+              log.warn({
+                msg: 'sqlite_tx_slow',
+                hold_ms: Math.round(held),
+                wait_ms: Math.round(began - asked),
+                at: callSite(site),
+              });
+          }
         }
       },
       async close() {

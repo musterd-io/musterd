@@ -254,8 +254,11 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
               body_ms: bodyEnd === null ? null : bodyEnd - t0,
             }
           : undefined),
-        // Where the store time went (lane 01M3Z455NE) — Postgres only; absent when untouched.
-        ...(run.timing.tx > 0
+        // Where the store time went (lane 01M3Z455NE): every Postgres request that touched the
+        // store; on SQLite (queue wait and hold, no query time) only on a slow line (lane
+        // 01M4S0ZAG8), since the queue is the question there and fast lines would just grow.
+        ...((run.timing.tx > 0 || run.timing.waitMs > 0) &&
+        (run.timing.queryMs > 0 || ms >= SLOW_REQUEST_MS)
           ? {
               db_tx: run.timing.tx,
               db_wait_ms: Math.round(run.timing.waitMs),
