@@ -434,6 +434,21 @@ describe('runInit — team selection', () => {
     expect(h.http.createTeam).not.toHaveBeenCalled();
   });
 
+  it("probes with the person's credential, not an agent key left in the cache (lane 01M4RHEPA4)", async () => {
+    h.config.current = 'dawn';
+    h.config.identities['dawn'] = { name: 'ryder', key: 'msac_agent', surface: 'mcp' };
+    h.config.knownIdentities.push({ team: 'dawn', name: 'nick', key: 'mscr_nick', surface: 'cli' });
+    const { HttpClient } = await import('../client.js');
+    h.http.inbox.mockResolvedValue({ messages: [] });
+    h.selectQueue.push('dawn'); // which team? → reuse
+    h.selectQueue.push('watch'); // intent
+    expect(await runInit()).toBe(0);
+    const keys = vi.mocked(HttpClient).mock.calls.map((c) => (c[0] as { key?: string }).key);
+    expect(keys).toContain('mscr_nick');
+    expect(keys).not.toContain('msac_agent');
+    expect(h.http.createTeam).not.toHaveBeenCalled();
+  });
+
   it('falls back to create when the cached team is gone (stale token)', async () => {
     h.config.current = 'gone';
     h.config.identities['gone'] = { name: 'nick', key: 'mscr_stale', surface: 'cli' };

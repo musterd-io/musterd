@@ -72,11 +72,18 @@ function folderTeamHere(dir: string = process.cwd()): string | null {
  * has to be too.
  */
 function credentialFor(config: Config, team: string): { name: string; key: string } | undefined {
+  // init is a person's flow, so a person's credential comes first. The single-slot cache routinely
+  // holds whichever agent seat last acted on this machine, and an agent key (`msac_`) is refused
+  // without a live session lease — which made a live team look gone and offered "Name your team"
+  // (lane 01M4RHEPA4, found in the ADR 559 live check).
   const active = config.identities[team];
-  if (active?.key) return { name: active.name, key: active.key };
-  const known = config.knownIdentities.find((i) => i.team === team && i.key);
-  return known ? { name: known.name, key: known.key } : undefined;
+  const known = config.knownIdentities.filter((i) => i.team === team && i.key);
+  const all = [...(active?.key ? [active] : []), ...known];
+  const pick = all.find((i) => !isAgentKey(i.key)) ?? all[0];
+  return pick ? { name: pick.name, key: pick.key } : undefined;
 }
+
+const isAgentKey = (key: string) => key.startsWith('msac_');
 
 /**
  * Every team this machine holds a credential for, most-relevant first: the folder's own team (ADR
