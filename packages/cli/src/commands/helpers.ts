@@ -421,7 +421,7 @@ export async function pendingActionSummary(
   const messages: Envelope[] = [];
   const answered = new Set<string>();
   const discharged = new Set<string>();
-  let page = await http.inbox(team, { unread: true });
+  let page = await http.inbox(team, { unread: true, peek: true });
   for (;;) {
     messages.push(...page.messages);
     for (const id of page.answered ?? []) answered.add(id);
@@ -429,6 +429,7 @@ export async function pendingActionSummary(
     if (!page.truncated || page.messages.length === 0) break;
     page = await http.inbox(team, {
       unread: true,
+      peek: true,
       since: envelopePosition(page.messages[page.messages.length - 1]!),
     });
   }

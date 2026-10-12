@@ -110,6 +110,20 @@ huddle is convened to write must name each harness's injection seam explicitly â
 not a delivery. Existing worktrees carry the old hook command; `musterd init --refresh-hooks`
 rewrites the marker-owned hook, and the SessionStart nudge already says so.
 
+_(2026-10-12, lane 01M4RHXNSH, izzo.)_ Amendment 3's clause (iv) counted **every** `GET /inbox` as a
+render, and most inbox reads render nothing to the model. The Claude Code statusline
+(`musterd session statusline`) reads the inbox on every redraw to count what waits. In the idle-wake
+canary's trial 3 that count discharged a steer held while a dialog was open: the dialog closed at
+10:04:22.7, the statusline read at 10:04:23.06, `inbox.rendered` was written at 10:04:23.156, and
+neither seam rang it again. The model never saw it. `GET /inbox?peek=1` now writes no render row.
+It is sent by the reads that show the addressee a count, a banner or a pointer, never the act:
+the statusline, the session orientation, the pending-acts summary behind `status`, the post-command
+nudge and the Notification hook's `inbox --waiting`, the reply-target lookups in `send` and
+`team_send`, and `init`'s liveness probe. A read that prints the act (`musterd inbox`,
+`inbox --wait`, `team_inbox_check`) is still the render. Where a peek is wrong, the cost is a steer
+that rings once more, not one that is lost. Falsify: on a daemon carrying this, an `inbox.rendered`
+row whose only preceding read by that seat carried `peek=1`.
+
 ## Amendment 3 â€” discharge (2026-09-14, lane 01M2GJFCQV)
 
 Six clauses of the doorbell contract (`docs/design/daemon-doorbell-contract.md`) governed delivery

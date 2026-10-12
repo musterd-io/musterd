@@ -236,6 +236,11 @@ seat's own accept/decline/resolve (#1361, shipped); (ii) the referenced lane lea
 by the addressee, for any act with no answering move** — steer, status_update, plain message.
 Falsifiers for (ii)/(iii) are ryder's; for (iv), delta's. Both live on c8e89dd8.
 
+_(2026-10-12, lane 01M4RHXNSH.)_ (iv) as shipped counted any inbox read as the read, and a
+statusline count discharged a held steer the model never saw (idle-wake canary trial 3). A read that
+shows only a count, a banner or a pointer now sends `peek=1` and discharges nothing. See the ADR 088
+Consequences note of the same date.
+
 **(8) Callable, not merely granted — clause 1's unwritten sibling (added 2026-09-14, after the
 huddle closed).** Clause 1 is the bell reaching the model; this is the model being able to
 **answer**. In Claude Code the musterd tools arrive **deferred**: only their names are in the

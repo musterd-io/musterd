@@ -46,7 +46,7 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 export async function cachedTeamLive(server: string, team: string, key: string): Promise<boolean> {
   return new HttpClient({ server, key })
-    .inbox(team, { limit: 1 })
+    .inbox(team, { limit: 1, peek: true })
     .then(() => true)
     .catch(() => false);
 }

@@ -765,6 +765,10 @@ export class MusterdClient {
      *  default PREFIX bound out of the way: an agent checking once a turn must be handed the newest
      *  acts, not the stalest (ADR 287). What the bound cuts comes back as `unread_remaining`. */
     limit?: number,
+    /** A lookup that renders nothing to the model (the un-named verdict's reply target): the
+     *  daemon does not count it as showing a steer, so the steer keeps its interrupt line
+     *  (doorbell clause 7(iv)). An older daemon ignores it. */
+    peek = false,
   ): Promise<{
     messages: Envelope[];
     cursor: { last_read_ts: number };
@@ -792,6 +796,7 @@ export class MusterdClient {
     const p = new URLSearchParams();
     if (unreadOnly) p.set('unread', '1');
     if (limit !== undefined) p.set('limit', String(limit));
+    if (peek) p.set('peek', '1');
     const q = p.toString();
     return this.request('GET', `/teams/${this.config.team}/inbox${q ? `?${q}` : ''}`);
   }

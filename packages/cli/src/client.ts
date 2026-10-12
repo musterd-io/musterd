@@ -856,7 +856,16 @@ export class HttpClient {
   }
   inbox(
     slug: string,
-    opts: { unread?: boolean; limit?: number; since?: number; ids?: readonly string[] } = {},
+    opts: {
+      unread?: boolean;
+      limit?: number;
+      since?: number;
+      ids?: readonly string[];
+      /** A read that shows the addressee nothing to act on (a count, a banner, a pointer, a
+       *  reply-target lookup): the daemon does not count it as rendering a steer, so the steer
+       *  keeps its interrupt line (doorbell clause 7(iv)). An older daemon ignores it. */
+      peek?: boolean;
+    } = {},
   ): Promise<{
     messages: Envelope[];
     cursor: { last_read_ts: number };
@@ -894,6 +903,7 @@ export class HttpClient {
       if (opts.limit) q.set('limit', String(opts.limit));
       if (opts.since !== undefined) q.set('since', String(opts.since));
     }
+    if (opts.peek) q.set('peek', '1');
     const qs = q.toString();
     return this.request('GET', `/teams/${slug}/inbox${qs ? `?${qs}` : ''}`);
   }

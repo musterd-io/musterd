@@ -101,5 +101,30 @@ withDrivers('inbox-rendered', (_o, kind) => {
       expect(fresh.json.raised).toBe(true);
       expect(fresh.json.act.id).toBe(next.id);
     });
+
+    it('a peek (?peek=1) is not a read: the steer keeps ringing and the seat idle-wakes on it', async () => {
+      // Measured 2026-10-12 (izzo, idle-wake canary trial 3): a steer held mid-turn was discharged
+      // by the Claude Code statusline's count-only GET /inbox, so it never rang and the model never
+      // saw it. A count, a banner or a pointer shows the addressee nothing to act on.
+      const steer = await steerAda('held while a dialog is open');
+
+      const peek = await get('/teams/dawn/inbox?unread=1&peek=1&limit=100', adaAuth);
+      expect(peek.status).toBe(200);
+      expect(peek.json.messages.map((m: { id: string }) => m.id)).toContain(steer.id);
+      // A second peek: the "from the NEXT read on" rule must not count peeks either.
+      await get('/teams/dawn/inbox?unread=1&peek=1', adaAuth);
+
+      const boundary = await get('/teams/dawn/inbox/interrupt-check', adaAuth);
+      expect(boundary.json.raised).toBe(true);
+      expect(boundary.json.act.id).toBe(steer.id);
+      const idle = await get('/teams/dawn/inbox/interrupt-check?seam=idle', adaAuth);
+      expect(idle.json.raised).toBe(true);
+      expect(idle.json.act.id).toBe(steer.id);
+
+      // The real read still discharges it.
+      await get('/teams/dawn/inbox?unread=1', adaAuth);
+      const after = await get('/teams/dawn/inbox/interrupt-check', adaAuth);
+      expect(after.json.raised).toBe(false);
+    });
   });
 });

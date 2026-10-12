@@ -39,7 +39,7 @@ import { findWorkspaceDir, kindLookup, resolve, sendOrEcho, viewerFlags } from '
 async function openRequests(http: HttpClient, team: string, me: string): Promise<Envelope[]> {
   try {
     const [res, viewer] = await Promise.all([
-      http.inbox(team, { unread: false }),
+      http.inbox(team, { unread: false, peek: true }),
       viewerFlags(http, team, me),
     ]);
     const open = openActionNeeded(
