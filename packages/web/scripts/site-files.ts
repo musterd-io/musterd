@@ -186,7 +186,7 @@ inside a single task; the members have names, and their work is attributable.
 
 ## Status
 
-musterd is in private preview. There is nothing to install yet.
+musterd is in private preview. There is no public install yet.
 
 ## Pages
 
