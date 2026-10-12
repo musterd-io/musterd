@@ -76,6 +76,16 @@ jobs:
           echo "week=$week" >> "$GITHUB_OUTPUT"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
           echo "existing_pr=$existing" >> "$GITHUB_OUTPUT"
+          git config user.name 'research-radar'
+          git config user.email 'research-radar@musterd'
+          git fetch origin main
+          if [ -n "$existing" ]; then
+            git fetch origin "$branch"
+            git checkout -B "$branch" "origin/$branch"
+            git rebase origin/main
+          else
+            git checkout -b "$branch" origin/main
+          fi
 
       - uses: pnpm/action-setup@v4
         if: steps.guard.outputs.run == 'true'
@@ -101,7 +111,11 @@ jobs:
           EXPLORING_API_KEY: ${{ secrets.EXPLORING_API_KEY }}
           WEEK: ${{ steps.guard.outputs.week }}
         run: |
-          pnpm --silent radar:sweep --full-text --triage --emit --limit 50 --retry-limit 50 --json > "$RUNNER_TEMP/radar-output.txt"
+          sweep_status=0
+          pnpm --silent radar:sweep --full-text --triage --emit --resume-draft --limit 50 --retry-limit 50 --json > "$RUNNER_TEMP/radar-output.txt" || sweep_status=$?
+          # Exit 2 carries a completed report and retry ledger for feed/model failures.
+          # Other errors (including publication failure) must stop without pushing.
+          if [ "$sweep_status" -ne 0 ] && [ "$sweep_status" -ne 2 ]; then exit "$sweep_status"; fi
           node - "$RUNNER_TEMP/radar-output.txt" "$RUNNER_TEMP/radar-report.json" <<'NODE'
           const fs = require('node:fs');
           const [inputPath, outputPath] = process.argv.slice(2);
@@ -118,17 +132,26 @@ jobs:
             `- Full-text candidates attempted: ${report.printed}`,
             `- Full-text read failures: ${(report.readFailures ?? []).length}`,
             `- Truncated: ${report.truncated ? 'yes' : 'no'}`,
+            `- Fresh cap reached: ${report.selection?.freshTruncated ? 'yes' : 'no'} (50)`,
+            `- Pending retry cap reached: ${report.selection?.pendingTruncated ? 'yes' : 'no'} (50)`,
           ];
+          const ledger = JSON.parse(fs.readFileSync('docs/research/radar/seen.json', 'utf8'));
+          for (const pending of ledger.pending ?? []) {
+            summary.push(`- Deferred ${pending.canonicalId}: ${pending.failure} — ${pending.url}`);
+          }
+          for (const warning of report.triage?.warnings ?? []) {
+            if (warning.startsWith('tier-')) summary.push(`- Triage: ${warning}`);
+          }
+          for (const read of report.fullTextReads ?? []) {
+            if (read.failure === 'source_too_large' || read.failure === 'candidate_too_large') {
+              summary.push(`- Size limit for ${read.candidateId}: source <250000, candidate <=500000, chunks 50000 Unicode characters.`);
+            }
+          }
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary.join('\n')}\n`);
           NODE
           week="$WEEK"
           digest="docs/research/radar/$week.md"
           test -f "$digest"
-          mkdir -p "$RUNNER_TEMP/radar-artifacts"
-          cp "$digest" "$RUNNER_TEMP/radar-artifacts/$week.md"
-          cp docs/research/radar/seen.json "$RUNNER_TEMP/radar-artifacts/seen.json"
-          git restore --worktree --staged -- docs/research/radar/seen.json
-          rm -f "$digest"
 
       - name: Create or update the unreviewed weekly draft
         if: steps.guard.outputs.run == 'true'
@@ -139,20 +162,18 @@ jobs:
           BRANCH: ${{ steps.guard.outputs.branch }}
           EXISTING_PR: ${{ steps.guard.outputs.existing_pr }}
         run: |
-          git fetch origin main
           if [ -n "$EXISTING_PR" ]; then
-            git fetch origin "$BRANCH"
-            git checkout -B "$BRANCH" "origin/$BRANCH"
-            git rebase origin/main
-          else
-            git checkout -b "$BRANCH" origin/main
+            details=$(gh pr view "$EXISTING_PR" --json state,isDraft,reviews)
+            state=$(jq -r '.state' <<< "$details")
+            draft=$(jq -r '.isDraft' <<< "$details")
+            reviews=$(jq '.reviews | length' <<< "$details")
+            if [ "$state" != OPEN ] || [ "$draft" != true ] || [ "$reviews" -gt 0 ]; then
+              echo "Weekly PR #$EXISTING_PR became closed, reviewed, or non-draft during processing; no updates published." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
           fi
-          cp "$RUNNER_TEMP/radar-artifacts/$WEEK.md" "docs/research/radar/$WEEK.md"
-          cp "$RUNNER_TEMP/radar-artifacts/seen.json" docs/research/radar/seen.json
           git add "docs/research/radar/$WEEK.md" docs/research/radar/seen.json
           if ! git diff --cached --quiet; then
-            git config user.name 'research-radar'
-            git config user.email 'research-radar@musterd'
             git commit -m "research(radar): draft $WEEK digest"
             if [ -n "$EXISTING_PR" ]; then
               git push --force-with-lease origin "$BRANCH"

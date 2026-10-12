@@ -23,6 +23,15 @@ checks for `ANTHROPIC_API_KEY`, `EXA_API_KEY`, `EXPLORING_API_KEY`, and `STEWARD
 processing. The workflow opens or updates one unreviewed weekly **draft PR** containing the digest
 and ledger; it never merges. Review the source links and triage before merging.
 
+A repeat run loads the existing unreviewed draft's ledger before reading sources and appends its
+retry findings with `--resume-draft`, preserving prior findings and successful IDs. The workflow
+checks review state again before publishing. Local emission refuses an existing same-week digest
+unless that draft-resume flag is explicitly supplied. Missing model results remain pending;
+successful tier-1 drops are retained even when shortlisted triage fails. Digests record source
+read manifests; Actions summaries name deferred IDs, links, failure categories and the cap reached.
+Recoverable feed or model failures still propose the emitted retry ledger; a failed artifact write
+stops publication.
+
 The local LaunchAgent remains a no-key dry-sweep and team summary. Local summary-only triage remains
 available with `--triage` when full-text keys are not configured.
 
