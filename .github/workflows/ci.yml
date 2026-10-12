@@ -175,8 +175,9 @@ jobs:
               coverage=false; a11y=false; why="$why — coverage + a11y run on the next full main check (ADR 508, ADR 512)"
             fi
           fi
-          # ADR 570 (ADR 498's shape): both drivers run as four shards plus a merge; SQLite alone is one.
-          if [ "$kinds" = both ]; then count=4; shards='[1, 2, 3, 4]'; else count=1; shards='[1]'; fi
+          # ADR 570 (ADR 498's shape): both drivers run as four shards plus a merge. ADR 572: SQLite
+          # alone (most PRs) runs as two, so the coverage job stops setting a PR's wall time.
+          if [ "$kinds" = both ]; then count=4; shards='[1, 2, 3, 4]'; else count=2; shards='[1, 2]'; fi
           # The full main check: both drivers, on main. It leaves the marker the next push reads.
           fullcheck=false
           if [ "$GITHUB_REF" = refs/heads/main ] && [ "$coverage" = true ] && [ "$kinds" = both ]; then fullcheck=true; fi
@@ -252,9 +253,10 @@ jobs:
           CHANGE_ADR_BASE: origin/${{ github.base_ref }}
         run: pnpm change-adr:check
 
-  # One job when SQLite alone runs (most PRs): it enforces the coverage floors itself. Four shards
-  # plus `coverage-merge` when both drivers run (ADR 498's shape, back under ADR 570): a shard's
-  # coverage map is partial, so only the merge checks the floors. Four workers per shard on the
+  # Two shards when SQLite alone runs (most PRs, ADR 572), four when both drivers run (ADR 498's
+  # shape, back under ADR 570), each followed by `coverage-merge`: a shard's coverage map is
+  # partial, so only the merge checks the floors. A one-shard run (shard_count 1) still enforces
+  # them itself. Four workers per shard on the
   # 4-CPU public-repo runner (ADR 569); two on a 2-CPU one (#1985). The blob goes to
   # coverage-blobs/, not .vitest-reports/: upload-artifact skips hidden paths by default.
   coverage:
