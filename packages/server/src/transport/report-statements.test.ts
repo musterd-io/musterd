@@ -79,8 +79,16 @@ withDrivers('report derivation statement count', (_o, kind) => {
       await call('POST', '/teams/dawn/lanes', { title: `lane of ${name}` }, owner);
     }
 
-    const seen: string[] = [];
+    // The setup writes above kick the sync push loop (200 ms debounce), and its pass reads the team
+    // list and node rows. Count from a quiet database, or that pass lands inside the one report read
+    // on whichever run happens to be slower and reads as the report growing with the team.
     const counted = db as Driver & { onStatement(l: (sql: string) => void): () => void };
+    let lastStatementAt = Date.now();
+    const stopWatching = counted.onStatement(() => (lastStatementAt = Date.now()));
+    while (Date.now() - lastStatementAt < 600) await new Promise((r) => setTimeout(r, 50));
+    stopWatching();
+
+    const seen: string[] = [];
     const stop = counted.onStatement((sql) =>
       seen.push(
         // One IN list is one statement at any length.
