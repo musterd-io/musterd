@@ -8012,8 +8012,15 @@ export async function handleHttp(
         // forever), so it is one audit row per (recipient, act), written here and read by
         // `listInterruptCandidates`. Interrupt-check itself never writes it: the one-line notice
         // is not a read. Steers and urgent acts are rare, so the dedupe read is near-free.
+        //
+        // `?peek=1` is a read that shows the addressee nothing to act on — a statusline count, a
+        // banner, an orientation pointer, a reply-target lookup — so it writes no render row. Without
+        // it a background redraw discharged a steer the model never saw (idle-wake canary trial 3,
+        // 2026-10-12: the Claude Code statusline's GET /inbox at 10:04:23 silenced a held steer).
+        const peek = url.searchParams.get('peek') === '1';
         const renderable = messages.filter(
           (m) =>
+            !peek &&
             m.from !== member.name &&
             m.to.kind === 'member' &&
             m.to.name === member.name &&

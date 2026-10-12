@@ -113,7 +113,7 @@ async function openAnswerable(
   admin: boolean,
 ): Promise<Envelope[]> {
   try {
-    const { messages, answered, discharged } = await client.fetchInbox(false);
+    const { messages, answered, discharged } = await client.fetchInbox(false, undefined, true);
     return answerableFor(messages, me, admin, answered, discharged);
   } catch {
     return [];

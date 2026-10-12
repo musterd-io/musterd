@@ -315,7 +315,7 @@ async function defaultOrientationFetcher(
   // Lane 01M2GTB0RA: the summary, not the brief — this runs on every turn of every session, and
   // the brief cost the daemon 0.5–1.8 s of its single thread per call for three numbers.
   const [inboxRes, brief, memory] = await Promise.all([
-    http.inbox(team, { unread: true }),
+    http.inbox(team, { unread: true, peek: true }),
     http.nextSummary(team),
     http.getMemoryEnvelope(team).catch(() => undefined), // absent memory is a normal state
   ]);
@@ -434,7 +434,7 @@ async function defaultStatuslineFetcher(
   }).presenceNeutral();
   // Lane 01M2GTB0RA: the summary, not the brief — see defaultOrientationFetcher.
   const [inboxRes, brief] = await Promise.all([
-    http.inbox(team, { unread: true, limit: STATUSLINE_INBOX_LIMIT }),
+    http.inbox(team, { unread: true, limit: STATUSLINE_INBOX_LIMIT, peek: true }),
     http.nextSummary(team),
   ]);
   // Lane 01M3TB3DA2: exactly two reads, as pinned — see the orientation fetcher's note above.
