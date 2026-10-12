@@ -42,6 +42,19 @@ describe('issuesToRows', () => {
     expect(rows[3]!.detail).toBe('https://github.com/acme/app/issues/16');
   });
 
+  it('strips control characters from titles; a body keeps its line breaks', () => {
+    const [goal, l] = issuesToRows([
+      issue(1, {
+        title: 'Fix\u001b[2J it',
+        body: 'line one\nline\u0007 two',
+        group: { key: '1', title: 'Q\u001b]0;x\u00074' },
+      }),
+    ]);
+    expect(goal!.title).toBe('Q4');
+    expect(l!.title).toBe('Fix it');
+    expect(l!.detail).toBe('https://github.com/acme/app/issues/1\n\nline one\nline two');
+  });
+
   it('cuts a long body to 4000 characters', () => {
     const [lane] = issuesToRows([issue(1, { body: 'b'.repeat(5000) })]);
     expect(lane!.detail).toHaveLength('https://github.com/acme/app/issues/1\n\n'.length + 4000);

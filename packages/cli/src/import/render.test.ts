@@ -52,6 +52,28 @@ describe('renderPreview — a tracker re-sync', () => {
     expect(out).toContain('next: musterd import save s1');
   });
 
+  it('prints tracker text with its control characters stripped', () => {
+    const evil = 'Pwn\u001b]0;owned\u0007\u001b[2J me';
+    const out = plain(
+      renderPreview(
+        stage({
+          lanes: [{ ...lane(1), title: evil }],
+          goals: [{ ref: 'goal:g', row: 1, id: 'g', title: evil, depends_on: [] }],
+          sync: {
+            actions: [
+              { kind: 'rename', lane_id: 'R1', ref: 'acme/app#2', from: evil, title: evil },
+              { kind: 'abandon', lane_id: 'A1', ref: 'acme/app#3', from: evil, reason: 'x' },
+            ],
+            unchanged: 0,
+          },
+          diagnostics: [{ level: 'warning', row: null, code: 'x', message: evil }],
+        }),
+      ),
+    );
+    expect(out).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/);
+    expect(out).toContain('Pwn me');
+  });
+
   it('leaves zero counts out, and says when there is nothing to do', () => {
     const out = plain(renderPreview(stage({ lanes: [], sync: { actions: [], unchanged: 9 } })));
     expect(out).not.toMatch(/new 0|renamed 0|abandon 0/);

@@ -1,3 +1,4 @@
+import { plainTerminalText as safe } from '../render/plainText.js';
 import { theme } from '../render/theme.js';
 import type { PlannedLane } from './check.js';
 import type { Diagnostic } from './rows.js';
@@ -48,13 +49,13 @@ export function renderPreview(stage: ImportStage): string {
     const bits = [
       l.stakes ? l.stakes : null,
       l.depends_on.length
-        ? `after: ${l.depends_on.map((d) => (d.kind === 'staged' ? (titleOf.get(d.ref) ?? d.ref) : d.id)).join(', ')}`
+        ? `after: ${l.depends_on.map((d) => (d.kind === 'staged' ? safe(titleOf.get(d.ref) ?? d.ref) : d.id)).join(', ')}`
         : null,
     ].filter(Boolean);
-    return `    ○ ${l.title}${bits.length ? theme.meta(`  · ${bits.join(' · ')}`) : ''}`;
+    return `    ○ ${safe(l.title)}${bits.length ? theme.meta(`  · ${bits.join(' · ')}`) : ''}`;
   };
   for (const g of stage.goals) {
-    out.push(`◆ ${g.id}  ${g.title} ${theme.meta('(new)')}`);
+    out.push(`◆ ${g.id}  ${safe(g.title)} ${theme.meta('(new)')}`);
     for (const l of stage.lanes.filter((x) => x.goal_id === g.id)) out.push(laneLine(l));
   }
   const planned = new Set(stage.goals.map((g) => g.id));
@@ -79,8 +80,8 @@ export function renderPreview(stage: ImportStage): string {
   const renames = actions.filter((a) => a.kind === 'rename');
   const abandons = actions.filter((a) => a.kind === 'abandon');
   if (renames.length || abandons.length) out.push('');
-  for (const a of renames) out.push(`↻ renamed: "${a.from ?? a.lane_id}" → "${a.title ?? ''}"`);
-  for (const a of abandons) out.push(`✕ abandon: ${a.from ?? a.lane_id} ${theme.meta(`(${a.ref})`)}`);
+  for (const a of renames) out.push(`↻ renamed: "${safe(a.from ?? a.lane_id)}" → "${safe(a.title ?? '')}"`);
+  for (const a of abandons) out.push(`✕ abandon: ${safe(a.from ?? a.lane_id)} ${theme.meta(`(${safe(a.ref)})`)}`);
   if (stage.diagnostics.length) out.push('', ...stage.diagnostics.map(renderDiagnostic));
   const errors = stage.diagnostics.filter((d) => d.level === 'error').length;
   out.push(
@@ -94,7 +95,7 @@ export function renderPreview(stage: ImportStage): string {
 
 function renderDiagnostic(d: Diagnostic): string {
   const mark = d.level === 'error' ? theme.err('✗') : theme.warn('⚠');
-  return `${mark} ${d.row === null ? 'file' : `line ${String(d.row)}`}: ${d.message}`;
+  return `${mark} ${d.row === null ? 'file' : `line ${String(d.row)}`}: ${safe(d.message)}`;
 }
 
 export function renderSaved(stage: ImportStage, r: SaveResult, liveUrl: string): string {
@@ -105,8 +106,8 @@ export function renderSaved(stage: ImportStage, r: SaveResult, liveUrl: string):
     ...r.goals.map((g) => `  ◆ ${g.id}`),
     ...r.lanes.map((l) =>
       l.adopted
-        ? `  ↺ ${l.id}  ${l.title} ${theme.meta('(already on the board)')}`
-        : `  ○ ${l.id}  ${l.title}`,
+        ? `  ↺ ${l.id}  ${safe(l.title)} ${theme.meta('(already on the board)')}`
+        : `  ○ ${l.id}  ${safe(l.title)}`,
     ),
     ...r.sync.map(renderSyncResult),
     '',

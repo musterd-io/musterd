@@ -1,3 +1,4 @@
+import { plainTerminalLines, plainTerminalText } from '../../render/plainText.js';
 import type { ImportRow } from '../rows.js';
 import type { TrackerIssue } from './types.js';
 
@@ -22,22 +23,24 @@ export function issuesToRows(issues: TrackerIssue[]): ImportRow[] {
   const rows: ImportRow[] = [];
   for (const i of issues) {
     if (!i.group || goalKey.has(i.group.key)) continue;
-    let slug = slugify(i.group.title, i.group.key);
+    const title = plainTerminalText(i.group.title);
+    let slug = slugify(title, i.group.key);
     for (let n = 2; used.has(slug); n += 1) {
       const suffix = `-${String(n)}`;
-      slug = `${slugify(i.group.title, i.group.key).slice(0, 64 - suffix.length)}${suffix}`;
+      slug = `${slugify(title, i.group.key).slice(0, 64 - suffix.length)}${suffix}`;
     }
     used.add(slug);
     goalKey.set(i.group.key, slug);
-    rows.push({ row: rows.length + 1, kind: 'goal', key: slug, title: i.group.title, depends_on: [] });
+    rows.push({ row: rows.length + 1, kind: 'goal', key: slug, title, depends_on: [] });
   }
   for (const i of issues) {
-    const body = i.body?.trim() ? i.body.slice(0, BODY_MAX) : undefined;
+    // Tracker text is anyone's: no control characters reach the board or a terminal (escape injection).
+    const body = i.body?.trim() ? plainTerminalLines(i.body.slice(0, BODY_MAX)) : undefined;
     const goal = i.group ? goalKey.get(i.group.key) : undefined;
     rows.push({
       row: rows.length + 1,
       kind: 'lane',
-      title: i.title,
+      title: plainTerminalText(i.title),
       detail: body ? `${i.url}\n\n${body}` : i.url,
       depends_on: [],
       source_ref: i.ref,
