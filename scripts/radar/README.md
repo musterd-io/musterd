@@ -12,7 +12,11 @@ pnpm radar:sweep --full-text --triage --emit --limit 50 --retry-limit 50
 
 Sources: arXiv, HF Papers, and the Exploring Next public feed (`exn`, read-only GET — its
 hand-curated items feed the radar, never the reverse). The scheduled full-text path retrieves the
-complete article through Exa and every attached Exploring Next episode script before triage. It
+complete article through Exa and every attached Exploring Next episode script before triage.
+Known Hugging Face paper and arXiv abstract/HTML links resolve to the original arXiv PDF
+([ADR 564](../../docs/decisions/564-radar-original-paper-targets.md)); a redirect back to a
+landing page is a failed read. The read manifest records the PDF URL, while candidate links keep
+their existing identities. It
 requires `ANTHROPIC_API_KEY`, `EXA_API_KEY`, and `EXPLORING_API_KEY`. Without `--emit` nothing is
 written; with it, successfully triaged canonical and episode IDs enter `seen.json`, while failed
 reads remain in its metadata-only pending queue. Full source bodies are not saved. A same-week

@@ -109,4 +109,45 @@ describe('fetchArticleText', () => {
       ),
     ).rejects.toThrow(/size limit/i);
   });
+
+  it.each([
+    ['https://huggingface.co/papers/2610.07625', 'https://arxiv.org/pdf/2610.07625'],
+    ['https://arxiv.org/abs/2610.13534', 'https://arxiv.org/pdf/2610.13534'],
+    ['https://arxiv.org/html/2609.37226v1', 'https://arxiv.org/pdf/2609.37226v1'],
+    ['https://arxiv.org/pdf/2303.08774.pdf', 'https://arxiv.org/pdf/2303.08774'],
+    ['https://export.arxiv.org/abs/math.GT/0301234v2', 'https://arxiv.org/pdf/math.GT/0301234v2'],
+  ])('reads the original paper for %s, retaining its extraction URL', async (landing, target) => {
+    const result = await fetchArticleText(landing, 'key', async (_url, init) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ urls: [target], text: true });
+      return new Response(
+        JSON.stringify({
+          results: [{ url: target, text: 'Paper body, methods and results.' }],
+          statuses: [{ id: target, status: 'success' }],
+        }),
+      );
+    });
+    expect(result.url).toBe(target);
+  });
+
+  it('does not accept a provider redirect back to the paper landing page', async () => {
+    await expect(
+      fetchArticleText(
+        'https://huggingface.co/papers/2610.07625',
+        'key',
+        async () =>
+          new Response(
+            JSON.stringify({
+              results: [
+                {
+                  id: 'https://arxiv.org/pdf/2610.07625',
+                  url: 'https://arxiv.org/abs/2610.07625',
+                  text: 'Abstract only.',
+                },
+              ],
+              statuses: [{ id: 'https://arxiv.org/pdf/2610.07625', status: 'success' }],
+            }),
+          ),
+      ),
+    ).rejects.toThrow(/landing page/);
+  });
 });
