@@ -94,8 +94,8 @@ Heading: `You'll need`
 - `Internet on the phone. Cellular is fine.`
 - `A browser — the one on your phone is fine. Step 1 happens there, not in the app.`
 
-Below the list, one line, muted: `Using ChatGPT, Cursor, or Codex instead? Steps are at the end —
-same connector, same sign-in.`
+Below the list, one line, muted: `Joining from another app or an agent harness? Steps are at the end —
+same connector, same sign-in.` _(2026-10-12, nick, lane 01M4S3EA81FKQR8RQZY84CYMRQ: site prose names no harness; the per-client bullets in §4.7 keep their product names because the steps mean nothing without them.)_
 
 ### 4.3 Step 1 — Add the connector
 
@@ -184,9 +184,9 @@ Definition list:
 - `Nothing at all` — `Check the phone has signal. The team is on the internet, not on the
   room's wifi.`
 
-### 4.7 From ChatGPT, Cursor, or Codex
+### 4.7 From another app or harness
 
-Heading: `From ChatGPT, Cursor, or Codex`
+Heading: `From another app or harness` _(2026-10-12: was "From ChatGPT, Cursor, or Codex".)_
 
 Body: `Same connector URL, same sign-in, same invite. Where to put it:`
 
@@ -215,7 +215,7 @@ this instead of §4.1–4.8:
 
 - Eyebrow: `musterd · connect an agent`
 - H1: `Connect this agent to the team`
-- Lede: `Open this link on the machine that will run the agent — Claude Code, Codex, or Cursor.`
+- Lede: `Open this link on the machine that will run the agent, in whatever harness it runs in.` _(2026-10-12: was "— Claude Code, Codex, or Cursor".)_
 - Ordered list: `Add the connector URL below as a remote MCP server in the agent's app.` /
   `When the sign-in page opens, choose "Connecting an agent?" and paste the connect code.` /
   `Approve. The agent is on the team under the name it was created with.`

@@ -74,8 +74,8 @@ export function JoinPage({ team }: { team: string }) {
           <li>A browser — the one on your phone is fine. Step 1 happens there, not in the app.</li>
         </ul>
         <p className="join-muted">
-          Using ChatGPT, Cursor, or Codex instead? Steps are at the end — same connector, same
-          sign-in.
+          Joining from another app or an agent harness? Steps are at the end — same connector,
+          same sign-in.
         </p>
       </section>
 
@@ -178,7 +178,7 @@ export function JoinPage({ team }: { team: string }) {
       </section>
 
       <section className="join-section">
-        <h2>From ChatGPT, Cursor, or Codex</h2>
+        <h2>From another app or harness</h2>
         <p>Same connector URL, same sign-in, same invite. Where to put it:</p>
         <ul>
           <li>ChatGPT — Not verified yet — use the Claude app path above.</li>
@@ -203,7 +203,7 @@ function AgentConnect({ url, nonce }: { url: string; nonce: string }) {
       <p className="join__eyebrow mono">musterd · connect an agent</p>
       <h1 className="join__title">Connect this agent to the team</h1>
       <p className="join__lede">
-        Open this link on the machine that will run the agent — Claude Code, Codex, or Cursor.
+        Open this link on the machine that will run the agent, in whatever harness it runs in.
       </p>
       <section className="join-section">
         <ol>
