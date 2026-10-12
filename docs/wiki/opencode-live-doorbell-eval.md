@@ -8,6 +8,12 @@ harness. Question: how do we get a doorbell into a LIVE OpenCode transcript in s
 (model sees it), without inventing an identityless inject — no session-file writes, no TTY
 stdin.
 
+_(2026-10-11, lane `01M4M6Q5ERZTP2GGHJZM71HP9R`.)_ The idle rail described below (`session.idle` →
+probe → capped `promptAsync`, plugin generations 1–4) is replaced in generation 5. The MCP adapter
+now decides when an idle session is pushed ([ADR 558](../decisions/558-idle-at-prompt-wake.md)); the
+plugin only pushes the adapter's line from `.musterd/idle-ring.json` and acks it. Generation 5 is
+unmeasured live: its hit-rate canary on 1.18.35 is pending.
+
 Observed 2026-09-03 by ghost on lane `01M1MK8NGYXW2YJ95PYRW8XERY`, verified against
 opencode **1.18.27** (docs current Sep-2026, `@opencode-ai/plugin` 1.18.27 type surface,
 one headless live measurement). Short version: **OpenCode is the only harness of the four

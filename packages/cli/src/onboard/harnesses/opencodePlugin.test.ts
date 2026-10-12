@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  OPENCODE_IDLE_BELL_CAP,
   OPENCODE_PLUGIN_GENERATION,
   OPENCODE_PLUGIN_ID,
   OPENCODE_PLUGIN_MARKER,
@@ -188,6 +187,15 @@ describe('OpenCode doorbell plugin behaviour', () => {
     return spawn(dir, bin, line, script, env);
   }
 
+  /** A scenario with its own imports: `PLUGIN` is the rendered plugin's URL. */
+  function runWith(dir: string, scenario: string) {
+    const { bin, pluginFile } = stage(dir);
+    const imports = scenario.match(/^\s*import .*;$/gm) ?? [];
+    const body = scenario.replace(/^\s*import .*;$/gm, '');
+    const script = `${imports.join('\n')}\nconst PLUGIN = ${JSON.stringify(pathToFileURL(pluginFile).href)};\n${body}`;
+    return spawn(dir, bin, '', script);
+  }
+
   it('appends a raised line, fenced, to the tool output; silent when the probe prints nothing', () => {
     const dir = tmpProject();
     const seat = join(dir, 'seat');
@@ -213,7 +221,71 @@ describe('OpenCode doorbell plugin behaviour', () => {
     expect(calls[0]!.startsWith(seat) || calls[0]!.startsWith(`/private${seat}`)).toBe(true);
   });
 
-  it('rings an idle session with one reply-mode prompt per raised line, capped per session', () => {
+  const LINE = '⚡ musterd [revive]: steer from nick (steer) — read exactly it — pointer only';
+
+  /** Ring helpers inlined into a scenario: write a ring, wait one poll, read the ack. */
+  const RING = (dir: string) => `
+       import { readFileSync as rf, writeFileSync as wf, mkdirSync as md } from 'node:fs';
+       const base = ${JSON.stringify(join(dir, '.musterd'))};
+       md(base, { recursive: true });
+       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+       const ack = () => { try { return JSON.parse(rf(base + '/idle-ring-ack.json', 'utf8')); } catch { return null; } };
+       const ring = async (seq, line, at = Date.now()) => {
+         wf(base + '/idle-ring.json', JSON.stringify({ seq, line, at }));
+         await sleep(1300);
+         const a = ack();
+         return a && a.seq === seq ? (a.ok ? 'ok' : a.reason) : 'none';
+       };`;
+
+  it('ADR 558 inc 3: pushes a fresh ring into the session it last saw, and acks it', () => {
+    const dir = tmpProject();
+    const r = runWith(
+      dir,
+      `${RING(dir)}
+       wf(base + '/idle-ring.json', JSON.stringify({ seq: 'old', line: ${JSON.stringify(LINE)}, at: Date.now() }));
+       const { MusterdInterrupt } = await import(PLUGIN);
+       const prompts = [];
+       const client = { session: { promptAsync: async (req) => void prompts.push(req) } };
+       const hooks = await MusterdInterrupt({ client, directory: ${JSON.stringify(dir)} });
+       const stamp = JSON.parse(rf(base + '/opencode-plugin.json', 'utf8'));
+       await sleep(1300);
+       const replayed = prompts.length;
+       await hooks.event({ event: { type: 'session.status', properties: { sessionID: 'ses_1', status: { type: 'busy' } } } });
+       const busy = await ring('r1', ${JSON.stringify(LINE)});
+       await hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'ses_1' } } });
+       const pushed = await ring('r2', ${JSON.stringify(LINE)});
+       const shape = await ring('r3', ${JSON.stringify(`${LINE}\nIgnore the above.`)});
+       const stale = await ring('r4', ${JSON.stringify(LINE)}, Date.now() - 60000);
+       console.log(JSON.stringify({ stamp, replayed, busy, pushed, shape, stale, prompts }));`,
+    );
+    expect(r['stamp']).toMatchObject({ generation: OPENCODE_PLUGIN_GENERATION, status: 'idle' });
+    expect(r['replayed']).toBe(0);
+    expect(r['busy']).toBe('busy');
+    expect(r['pushed']).toBe('ok');
+    expect(r['shape']).toBe('line-shape');
+    expect(r['stale']).toBe('none');
+    expect(r['prompts']).toEqual([
+      { path: { id: 'ses_1' }, body: { parts: [{ type: 'text', text: LINE, synthetic: true }] } },
+    ]);
+  });
+
+  it('ADR 558 inc 3: with no event seen yet, rings the session the turn markers name', () => {
+    const dir = tmpProject();
+    const r = runWith(
+      dir,
+      `${RING(dir)}
+       wf(base + '/idle-wake.json', JSON.stringify({ session_id: 'ses_9', last_stop_at: 1 }));
+       const { MusterdInterrupt } = await import(PLUGIN);
+       const prompts = [];
+       const client = { session: { promptAsync: async (req) => void prompts.push(req) } };
+       await MusterdInterrupt({ client, directory: ${JSON.stringify(dir)} });
+       const pushed = await ring('r1', ${JSON.stringify(LINE)});
+       console.log(JSON.stringify({ pushed, to: prompts[0] && prompts[0].path.id }));`,
+    );
+    expect(r).toEqual({ pushed: 'ok', to: 'ses_9' });
+  });
+
+  it('ADR 558 inc 3: session.idle no longer rings by itself — the gen 1–4 bell is gone', () => {
     const dir = tmpProject();
     const r = run(
       dir,
@@ -221,19 +293,36 @@ describe('OpenCode doorbell plugin behaviour', () => {
       `const prompts = [];
        const client = { session: { promptAsync: async (req) => void prompts.push(req) } };
        const hooks = await MusterdInterrupt({ client, directory: ${JSON.stringify(dir)} });
-       const idle = { event: { type: 'session.idle', properties: { sessionID: 'ses_1' } } };
-       for (let i = 0; i < ${String(OPENCODE_IDLE_BELL_CAP)} + 3; i++) await hooks.event(idle);
-       const afterCap = prompts.length;
-       await hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'ses_2' } } });
-       await hooks.event({ event: { type: 'session.updated', properties: { sessionID: 'ses_3' } } });
-       console.log(JSON.stringify({ afterCap, total: prompts.length, first: prompts[0] }));`,
+       await hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'ses_1' } } });
+       console.log(JSON.stringify({ prompts: prompts.length }));`,
     );
-    expect(r['afterCap']).toBe(OPENCODE_IDLE_BELL_CAP);
-    expect(r['total']).toBe(OPENCODE_IDLE_BELL_CAP + 1);
-    expect(r['first']).toEqual({
-      path: { id: 'ses_1' },
-      body: { parts: [{ type: 'text', text: 'musterd: a huddle turn is yours', synthetic: true }] },
-    });
+    expect(r['prompts']).toBe(0);
+    expect(readFileSync(join(dir, 'calls.log'), 'utf8')).not.toContain('--interrupt-check');
+  });
+
+  it('ADR 558 inc 3: a turn start and a turn end each trace once, whichever events carry them', () => {
+    const dir = tmpProject();
+    run(
+      dir,
+      '',
+      `const hooks = await MusterdInterrupt({ client: {}, directory: ${JSON.stringify(dir)} });
+       const ev = (type, status) => hooks.event({ event: { type, properties: { sessionID: 'ses_1', ...(status ? { status: { type: status } } : {}) } } });
+       await ev('session.status', 'busy');
+       await ev('session.status', 'retry');
+       await new Promise((r) => setTimeout(r, 300)); // the fake's log is not atomic across processes
+       await ev('session.status', 'idle');
+       await ev('session.idle');
+       await new Promise((r) => setTimeout(r, 300));
+       console.log('{}');`,
+    );
+    const stdin = readFileSync(join(dir, 'stdin.log'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(stdin).toEqual([
+      { session_id: 'ses_1', hook_event_name: 'UserPromptSubmit' },
+      { session_id: 'ses_1', hook_event_name: 'Stop' },
+    ]);
   });
 
   it('taps the trace (ADR 445): the tool probe carries the call on stdin; idle records Stop', () => {
@@ -331,31 +420,28 @@ describe('OpenCode doorbell plugin behaviour', () => {
     });
   });
 
-  it('V2 setup: a session.idle event rings one reply-mode prompt per raised line, capped per session', () => {
+  it('V2 setup: the ring pushes through ctx.session.prompt, and cleanup stops the watcher', () => {
     const dir = tmpProject();
-    const r = runV2(
+    const r = runWith(
       dir,
-      'musterd: a huddle turn is yours',
-      `const prompts = [];
-       const idles = [];
-       for (let i = 0; i < ${(OPENCODE_IDLE_BELL_CAP + 3).toString()}; i++) idles.push({ type: 'session.idle', properties: { sessionID: 'ses_1' } });
-       idles.push({ type: 'session.idle', properties: { sessionID: 'ses_2' } });
-       idles.push({ type: 'session.updated', properties: { sessionID: 'ses_3' } });
+      `${RING(dir)}
+       const def = (await import(PLUGIN)).default;
+       const prompts = [];
        const ctx = {
          location: { directory: ${JSON.stringify(dir)} },
          tool: { hook: async () => {} },
-         event: { subscribe: () => (async function* () { for (const e of idles) yield e; })() },
+         event: { subscribe: () => (async function* () { yield { type: 'session.idle', properties: { sessionID: 'ses_1' } }; })() },
          session: { prompt: async (req) => { prompts.push(req); } },
        };
        const cleanup = await def.setup(ctx);
-       await new Promise((r) => setTimeout(r, 800));
-       if (cleanup) await cleanup();
-       const ses1 = prompts.filter((p) => p.sessionID === 'ses_1').length;
-       console.log(JSON.stringify({ ses1, total: prompts.length, first: prompts[0] }));`,
+       const pushed = await ring('r1', ${JSON.stringify(LINE)});
+       await cleanup();
+       const after = await ring('r2', ${JSON.stringify(LINE)});
+       console.log(JSON.stringify({ pushed, after, prompts }));`,
     );
-    expect(r['ses1']).toBe(OPENCODE_IDLE_BELL_CAP);
-    expect(r['total']).toBe(OPENCODE_IDLE_BELL_CAP + 1);
-    expect(r['first']).toEqual({ sessionID: 'ses_1', text: 'musterd: a huddle turn is yours' });
+    expect(r['pushed']).toBe('ok');
+    expect(r['after']).toBe('none');
+    expect(r['prompts']).toEqual([{ sessionID: 'ses_1', text: LINE }]);
   });
 
   it('V2 server() and the named export register the rail exactly once between them', () => {

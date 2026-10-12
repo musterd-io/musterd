@@ -1,6 +1,8 @@
 import {
   type Envelope,
   type Hearing,
+  IDLE_BUSY_HOLD_MS,
+  IDLE_BUSY_RECHECK_MS,
   IDLE_COALESCE_MS,
   IDLE_DEAF_AFTER_MS,
   IDLE_KEYBOARD_GUARD_MS,
@@ -10,6 +12,7 @@ import {
   type IdleWakeReport,
   type IdleWakeState,
   idleMayRing,
+  isPushableLine,
 } from '@musterd/protocol';
 import type { InjectAdapter } from './inject.js';
 
@@ -21,12 +24,6 @@ export const IDLE_RETRY_AFTER_FAILURE_MS = 10 * 60_000;
 
 /** What `seam=idle` answered: a line to push, the seat's switch off, or nothing to say. */
 export type IdleCheck = { line: string; act: string; from: string } | { off: true } | null;
-
-/** The daemon-composed interrupt line, and nothing else: one line, printable ASCII plus the two
- *  glyphs the line uses (⚡, —), bounded. A newline or a control character is never pushed. */
-export function isPushableLine(line: string): boolean {
-  return line.length <= 800 && /^⚡ musterd \[[a-z0-9-]+\]: [\x20-\x7E—]+$/.test(line);
-}
 
 export interface IdleWakeDeps {
   seat: () => string | null;
@@ -59,6 +56,8 @@ export class IdleWake {
   private deaf: { reason: string; at: number } | null = null;
   private watch: { cancel(): void } | null = null;
   private firing = false;
+  /** When the session was first found busy with acts still waiting; null when it is not. */
+  private busySince: number | null = null;
   private readonly now: () => number;
   private readonly setTimer: NonNullable<IdleWakeDeps['setTimer']>;
 
@@ -110,12 +109,29 @@ export class IdleWake {
     if (m !== undefined && m > this.deaf.at) this.deaf = null;
   }
 
-  private arm(): void {
+  private arm(ms: number = IDLE_COALESCE_MS): void {
     if (this.timer) return; // already coalescing: the burst becomes one line
     this.timer = this.setTimer(() => {
       this.timer = null;
       void this.fire();
-    }, IDLE_COALESCE_MS);
+    }, ms);
+  }
+
+  /**
+   * The session was busy: keep what waits and look again, for up to `IDLE_BUSY_HOLD_MS`. This is
+   * what rings an act that landed mid-turn with no tool boundary after it, once the turn ends. A
+   * re-look costs a file read until the session is idle; the daemon is asked only then, and drops
+   * whatever a boundary seam delivered in the meantime.
+   */
+  private hold(pending: { id: string; from: string }[]): void {
+    const now = this.now();
+    this.busySince ??= now;
+    if (now - this.busySince >= IDLE_BUSY_HOLD_MS) {
+      this.busySince = null;
+      return;
+    }
+    this.pending = [...pending, ...this.pending];
+    this.arm(IDLE_BUSY_RECHECK_MS);
   }
 
   /**
@@ -150,7 +166,8 @@ export class IdleWake {
     this.pending = [];
     this.firing = true;
     try {
-      await this.fireOnce(pending);
+      if ((await this.fireOnce(pending)) === 'busy') this.hold(pending);
+      else this.busySince = null;
     } catch {
       // fail-open by contract: the boundary seams still carry the act
     } finally {
@@ -158,7 +175,7 @@ export class IdleWake {
     }
   }
 
-  private async fireOnce(pending: { id: string; from: string }[]): Promise<void> {
+  private async fireOnce(pending: { id: string; from: string }[]): Promise<'busy' | undefined> {
     if (this.switchedOff()) return;
     const now = this.now();
     this.recover();
@@ -166,7 +183,7 @@ export class IdleWake {
     if (this.deaf && this.deaf.reason !== 'policy-off') {
       if (now - this.deaf.at < IDLE_RETRY_AFTER_FAILURE_MS) return;
     }
-    if (!this.idle(this.deps.readState(), now)) return;
+    if (!this.idle(this.deps.readState(), now)) return 'busy';
     const adapter = this.deps.adapter();
     if (!adapter.probe().ready) return;
     // A cap known before asking keeps the daemon from recording a raise nobody will hear.
@@ -206,6 +223,9 @@ export class IdleWake {
       return;
     }
     const r = await adapter.inject(res.line);
+    // The harness saw a turn running that this machine's evidence missed: not a failure, and not
+    // deaf. Nothing was pushed; look again as for any busy session.
+    if (!r.ok && r.reason === 'busy') return 'busy';
     if (!r.ok) {
       this.deaf = { reason: r.reason, at: now };
       this.deps.report({

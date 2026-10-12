@@ -1,9 +1,8 @@
-import type { IdleWakeReport, IdleWakeState } from '@musterd/protocol';
+import { type IdleWakeReport, type IdleWakeState, isPushableLine } from '@musterd/protocol';
 import { describe, expect, it, vi } from 'vitest';
 import {
   IDLE_RETRY_AFTER_FAILURE_MS,
   IdleWake,
-  isPushableLine,
   type IdleCheck,
   type IdleWakeDeps,
 } from './decider.js';
@@ -329,5 +328,56 @@ describe('only the daemon-shaped line is pushed (ADR 558 — it becomes a user t
       harness: 'claude-code',
       reason: 'line-shape',
     });
+  });
+});
+
+describe('a busy session holds what waits (ADR 558 increment 3)', () => {
+  it('an act that lands mid-turn rings once the turn ends', async () => {
+    const h = harness();
+    h.state.last_prompt_at = h.state.last_stop_at! + 1; // a turn is running
+    h.iw.onDeliver(h.steer('A1'));
+    await h.advance(20_000);
+    expect(h.injected).toHaveLength(0);
+    expect(h.deps.check).not.toHaveBeenCalled();
+    h.state.last_stop_at = h.now() - 40_000; // the turn ended, before the keyboard guard
+    h.state.last_prompt_at = h.now() - 60_000;
+    await h.advance(15_000);
+    expect(h.injected).toEqual([LINE]);
+  });
+
+  it('gives up after the hold: the boundary seams are left to carry it', async () => {
+    const h = harness();
+    h.state.last_prompt_at = h.state.last_stop_at! + 1;
+    h.iw.onDeliver(h.steer('A1'));
+    await h.advance(11 * 60_000);
+    h.state.last_stop_at = h.now() - 40_000;
+    h.state.last_prompt_at = h.now() - 60_000;
+    await h.advance(60_000);
+    expect(h.injected).toHaveLength(0);
+    expect(h.deps.check).not.toHaveBeenCalled();
+  });
+
+  it('an inject the harness refuses as busy is held, not deaf, and not reported', async () => {
+    let busy = true;
+    const injected: string[] = [];
+    const h = harness({
+      adapter: () => ({
+        harness: 'opencode',
+        probe: () => ({ ready: true }),
+        inject: (line) =>
+          busy
+            ? Promise.resolve<InjectResult>({ ok: false, reason: 'busy' })
+            : (injected.push(line), Promise.resolve<InjectResult>({ ok: true })),
+      }),
+    });
+    h.iw.onDeliver(h.steer('A1'));
+    await h.advance(5_000);
+    expect(injected).toHaveLength(0);
+    expect(h.reports).toEqual([]);
+    expect(h.iw.hearing()).toEqual({ hearing: 'idle' });
+    busy = false;
+    await h.advance(15_000);
+    expect(injected).toEqual([LINE]);
+    expect(h.reports).toContainEqual({ act: 'A2', outcome: 'injected', harness: 'opencode' });
   });
 });

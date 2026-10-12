@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type IdleWakeState, IdleWakeStateSchema } from '@musterd/protocol';
@@ -32,7 +33,8 @@ export function writeIdleWakeState(dir: string, patch: Partial<IdleWakeState>): 
       : prev;
   const next = { ...base, ...patch };
   const path = join(dir, '.musterd', IDLE_WAKE_FILE);
-  const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify(next), { mode: 0o600 });
+  // Fresh name, O_EXCL: a planted file or symlink at the tmp path fails the write, never redirects it.
+  const tmp = `${path}.${randomBytes(6).toString('hex')}.tmp`;
+  writeFileSync(tmp, JSON.stringify(next), { mode: 0o600, flag: 'wx' });
   renameSync(tmp, path);
 }

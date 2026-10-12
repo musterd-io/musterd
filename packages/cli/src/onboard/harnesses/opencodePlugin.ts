@@ -1,5 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import {
+  IDLE_LINE_MAX,
+  IDLE_LINE_PATTERN,
+  IDLE_RING_ACK_FILE,
+  IDLE_RING_ACK_TIMEOUT_MS,
+  IDLE_RING_FILE,
+  OPENCODE_PLUGIN_STAMP_FILE,
+  OPENCODE_STAMP_EVERY_MS,
+} from '@musterd/protocol';
 import { isDeclined } from '../declined.js';
 
 /**
@@ -22,13 +31,20 @@ import { isDeclined } from '../declined.js';
  *   free on the common path (the CLI prints nothing unless an interrupt-class act waits). The MCP-
  *   tool-path caveat (eval §2: mutation may not reach the model for MCP calls on 1.14.x) is the
  *   named falsifier; the idle rail below is the floor if it holds on 1.18.x.
- * - `event: session.idle` — the Stop-hook analog (ADR 370's idle-at-turn-end rung): a raised line is
- *   delivered as a reply-triggering `prompt_async`, capped per session so an ignored bell cannot
- *   burn budget forever (Grok caps at 8; this caps lower because reply-mode spends a real turn).
+ * - Idle-at-prompt wake (ADR 558 increment 3, generation 5). The MCP adapter decides when an idle
+ *   session is pushed and writes the daemon's line to `.musterd/idle-ring.json`; this plugin watches
+ *   that file, pushes the line with a reply-triggering `promptAsync` into the session it last saw,
+ *   and acks in `.musterd/idle-ring-ack.json`. It refuses a session it saw go busy (concurrent
+ *   `promptAsync` into a running turn orphans messages, #28202), a ring the adapter has given up on,
+ *   and any line not shaped like the daemon's. Its stamp, `.musterd/opencode-plugin.json`, is how
+ *   the adapter knows it is loaded. This replaces generations 1–4's own `session.idle` bell (a probe
+ *   and a prompt at the turn-end transition, capped at 4 per session): the core holds an act that
+ *   landed mid-turn until the turn ends, and its caps apply.
  * - The trace tap (ADR 445, generation 2). The tool-boundary probe gets the call's structural
  *   fields on stdin under `--hook opencode`, so it records `PostToolUse` in the process it already
  *   is — no second process per call. Each idle runs `musterd trace hook --kind Stop`, which records
- *   `Stop` and reads the turn's R2 records out of OpenCode's session store (`trace/opencode.ts`).
+ *   `Stop` and reads the turn's R2 records out of OpenCode's session store (`trace/opencode.ts`); each
+ *   turn start runs it with `--kind UserPromptSubmit`. Both also write the ADR 558 turn markers.
  *   `MUSTERD_NO_NUDGE=1` skips the probe, and with it the `PostToolUse` tap.
  *
  * The plugin never composes text: the line is the daemon's (ADR 088), fenced so the model can tell
@@ -44,10 +60,8 @@ import { isDeclined } from '../declined.js';
 
 export const OPENCODE_PLUGIN_MARKER = 'musterd-opencode-interrupt';
 /** Bump when the rendered plugin changes: the doctor names a file stamped otherwise as STALE. */
-export const OPENCODE_PLUGIN_GENERATION = 4;
+export const OPENCODE_PLUGIN_GENERATION = 5;
 export const OPENCODE_PLUGIN_SURFACE = 'opencode:plugin';
-/** Reply-mode idle bells per session before the plugin goes quiet (see module doc). */
-export const OPENCODE_IDLE_BELL_CAP = 4;
 /** The V2 plugin id in the default export (stable; shown in plugin list/diagnostics). */
 export const OPENCODE_PLUGIN_ID = 'musterd-interrupt';
 
@@ -77,14 +91,26 @@ export function renderOpencodePlugin(): string {
   return `${opencodePluginHeader()}
 /* eslint-disable import/no-default-export -- OpenCode V2 requires a default export (ADR 521); this file is generated, never edited. */
 import { execFile } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const PLUGIN_ID = ${JSON.stringify(OPENCODE_PLUGIN_ID)};
+const GENERATION = ${String(OPENCODE_PLUGIN_GENERATION)};
 const PROBE_ARGS = ["inbox", "--interrupt-check"];
 const PROBE_TIMEOUT_MS = 5000;
 const TRACE_TIMEOUT_MS = 15000;
-const IDLE_BELL_CAP = ${String(OPENCODE_IDLE_BELL_CAP)};
 const OPEN = "<musterd-interrupt>";
 const CLOSE = "</musterd-interrupt>";
+// ADR 558 increment 3: the idle ring. Values are @musterd/protocol's, rendered in.
+const RING_FILE = ${JSON.stringify(IDLE_RING_FILE)};
+const ACK_FILE = ${JSON.stringify(IDLE_RING_ACK_FILE)};
+const STAMP_FILE = ${JSON.stringify(OPENCODE_PLUGIN_STAMP_FILE)};
+const RING_MAX_AGE_MS = ${String(IDLE_RING_ACK_TIMEOUT_MS)};
+const STAMP_EVERY_MS = ${String(OPENCODE_STAMP_EVERY_MS)};
+const RING_POLL_MS = 1000;
+const LINE_MAX = ${String(IDLE_LINE_MAX)};
+const LINE_RE = new RegExp(${JSON.stringify(IDLE_LINE_PATTERN)});
 
 // One daemon-composed line, or "" — never a throw, never a rejection (a probe on every tool call
 // must never disrupt the loop, ADR 088). cwd is the seat folder so the bound seat resolves.
@@ -116,19 +142,19 @@ function probe(directory, payload) {
   });
 }
 
-// The turn ended: record Stop and read the turn's transcript records out of OpenCode's session
-// store (ADR 445 R1 + R2). Fire-and-forget — the idle bell below must not wait on the trace.
-function traceTurnEnd(directory, sessionID) {
+// A turn boundary on the trace tap (ADR 445 R1 + R2) and the idle-wake turn markers (ADR 558):
+// "Stop" when the session goes idle, "UserPromptSubmit" when it goes busy. Fire-and-forget.
+function traceTurn(directory, sessionID, kind) {
   try {
     const child = execFile(
       "musterd",
-      ["trace", "hook", "--stdin", "--harness", "opencode", "--kind", "Stop"],
+      ["trace", "hook", "--stdin", "--harness", "opencode", "--kind", kind],
       { cwd: directory, timeout: TRACE_TIMEOUT_MS, env: process.env },
       () => {},
     );
     if (child.stdin) {
       child.stdin.on("error", () => {});
-      child.stdin.end(JSON.stringify({ session_id: sessionID, hook_event_name: "Stop" }));
+      child.stdin.end(JSON.stringify({ session_id: sessionID, hook_event_name: kind }));
     }
   } catch {
     // fail-open, like every tap
@@ -139,12 +165,138 @@ function fenced(line) {
   return OPEN + "\\n" + line + "\\n" + CLOSE;
 }
 
+function readJson(path) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+// Whole-file replace, owner-only: the adapter never reads a half-written file.
+function writeJson(path, value) {
+  try {
+    mkdirSync(join(path, ".."), { recursive: true });
+    // Fresh name, O_EXCL: a planted file or symlink at the tmp path fails the write, never
+    // redirects it; rename() replaces a link at \`path\`, never its target.
+    const tmp = path + "." + randomBytes(6).toString("hex") + ".tmp";
+    writeFileSync(tmp, JSON.stringify(value), { mode: 0o600, flag: "wx" });
+    renameSync(tmp, path);
+  } catch {
+    // best-effort: no stamp reads as no plugin, which is deaf, which is honest
+  }
+}
+
+function eventSession(event) {
+  const p = event.properties || {};
+  return p.sessionID || (p.info && p.info.id) || event.sessionID || event.session_id;
+}
+
+function eventStatus(event) {
+  if (event.type === "session.idle") return "idle";
+  if (event.type !== "session.status") return undefined;
+  const st = (event.properties && event.properties.status) || event.status;
+  const t = typeof st === "string" ? st : st && st.type;
+  if (t === "idle") return "idle";
+  if (t === "busy" || t === "retry") return "busy";
+  return undefined;
+}
+
+// The idle ring (ADR 558 increment 3). The adapter decides when; this only pushes, and only the
+// daemon's line, into a session it has not seen go busy, for a ring the adapter still waits on.
+function startRing(directory, push) {
+  const base = join(directory, ".musterd");
+  const ringPath = join(base, RING_FILE);
+  const status = new Map();
+  let current;
+  let lastSeq;
+  let lastMtime = 0;
+  const seen = readJson(ringPath);
+  if (seen && seen.seq) lastSeq = seen.seq; // never replay a ring from before this load
+  const stamp = () =>
+    writeJson(join(base, STAMP_FILE), {
+      generation: GENERATION,
+      pid: process.pid,
+      ...(current ? { session_id: current } : {}),
+      status: current && status.get(current) === "busy" ? "busy" : "idle",
+      at: Date.now(),
+    });
+  const ack = (seq, ok, reason) =>
+    writeJson(join(base, ACK_FILE), { seq, ok, ...(reason ? { reason } : {}), at: Date.now() });
+  const sessionFor = () => {
+    if (current) return current;
+    const markers = readJson(join(base, "idle-wake.json"));
+    return markers && typeof markers.session_id === "string" ? markers.session_id : undefined;
+  };
+  let ringing = false;
+  const look = async () => {
+    if (ringing) return;
+    let mtime;
+    try {
+      mtime = statSync(ringPath).mtimeMs;
+    } catch {
+      return;
+    }
+    if (mtime === lastMtime) return;
+    lastMtime = mtime;
+    const ring = readJson(ringPath);
+    if (!ring || typeof ring.seq !== "string" || ring.seq === lastSeq) return;
+    lastSeq = ring.seq;
+    if (typeof ring.at !== "number" || Date.now() - ring.at > RING_MAX_AGE_MS) return;
+    const line = typeof ring.line === "string" ? ring.line : "";
+    if (line.length > LINE_MAX || !LINE_RE.test(line)) return ack(ring.seq, false, "line-shape");
+    const id = sessionFor();
+    if (!id) return ack(ring.seq, false, "no-session");
+    if (status.get(id) === "busy") return ack(ring.seq, false, "busy");
+    ringing = true;
+    try {
+      await push(id, line);
+      ack(ring.seq, true);
+    } catch {
+      ack(ring.seq, false, "prompt-failed");
+    } finally {
+      ringing = false;
+    }
+  };
+  stamp();
+  const timers = [
+    setInterval(() => void look(), RING_POLL_MS),
+    setInterval(stamp, STAMP_EVERY_MS),
+  ];
+  for (const t of timers) if (t && t.unref) t.unref();
+  return {
+    // Every event: track the session and its busy/idle state; trace the turn boundaries.
+    onEvent(event) {
+      if (!event) return;
+      const id = eventSession(event);
+      const next = eventStatus(event);
+      if (!id || !next) return;
+      const prev = status.get(id);
+      current = id;
+      status.set(id, next);
+      // On the transition, whichever event carries it (1.18 sends session.idle and
+      // session.status for the same turn end): one Stop per turn, one start per turn.
+      if (next === "idle" && prev !== "idle") traceTurn(directory, id, "Stop");
+      else if (next === "busy" && prev !== "busy") traceTurn(directory, id, "UserPromptSubmit");
+      if (prev !== next) stamp();
+    },
+    stop() {
+      for (const t of timers) clearInterval(t);
+    },
+  };
+}
+
 // Pre-1.18.29 V1 calls every exported function, so the named export and the default export's
 // server() would each register the rail. First initializer wins; the other returns no hooks.
 let v1Claimed = false;
 
 function v1Hooks(client, directory) {
-  const bells = new Map();
+  const ring = startRing(directory, (id, line) =>
+    client.session.promptAsync({
+      path: { id },
+      body: { parts: [{ type: "text", text: line, synthetic: true }] },
+    }),
+  );
   return {
     "tool.execute.after": async (input, output) => {
       const line = await probe(
@@ -162,25 +314,7 @@ function v1Hooks(client, directory) {
       const fencedLine = fenced(line);
       output.output = output.output ? output.output + "\\n\\n" + fencedLine : fencedLine;
     },
-    event: async ({ event }) => {
-      if (!event || event.type !== "session.idle") return;
-      const id = event.properties && event.properties.sessionID;
-      if (!id) return;
-      traceTurnEnd(directory, id);
-      const rung = bells.get(id) || 0;
-      if (rung >= IDLE_BELL_CAP) return;
-      const line = await probe(directory);
-      if (!line) return;
-      bells.set(id, rung + 1);
-      try {
-        await client.session.promptAsync({
-          path: { id },
-          body: { parts: [{ type: "text", text: line, synthetic: true }] },
-        });
-      } catch {
-        // best-effort: the bell is a courtesy to the model, not an obligation on the harness
-      }
-    },
+    event: async ({ event }) => ring.onEvent(event),
   };
 }
 
@@ -202,7 +336,7 @@ export default {
   // whether the fence lands at native boundaries the way §8 measured on 1.18.29.
   setup: async (ctx) => {
     const directory = ctx.location.directory;
-    const bells = new Map();
+    const ring = startRing(directory, (id, line) => ctx.session.prompt({ sessionID: id, text: line }));
     await ctx.tool.hook("execute.after", async (event) => {
       const line = await probe(
         directory,
@@ -226,25 +360,12 @@ export default {
     });
     const controller = new AbortController();
     void (async () => {
-      for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
-        if (!event || event.type !== "session.idle") continue;
-        const id =
-          (event.properties && event.properties.sessionID) || event.sessionID || event.session_id;
-        if (!id) continue;
-        traceTurnEnd(directory, id);
-        const rung = bells.get(id) || 0;
-        if (rung >= IDLE_BELL_CAP) continue;
-        const line = await probe(directory);
-        if (!line) continue;
-        bells.set(id, rung + 1);
-        try {
-          await ctx.session.prompt({ sessionID: id, text: line });
-        } catch {
-          // best-effort: the bell is a courtesy to the model, not an obligation on the harness
-        }
-      }
+      for await (const event of ctx.event.subscribe({ signal: controller.signal })) ring.onEvent(event);
     })();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      ring.stop();
+    };
   },
   // V1.18.29+ calls server(input) on the default export; older V1 calls the named export.
   // Same rail, same claim flag — exactly one registers (see claimV1).
