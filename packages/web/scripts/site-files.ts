@@ -62,6 +62,10 @@ export function siteUrls(
     { path: '/' },
     { path: '/docs' },
     { path: '/watch' },
+    // The first session's front door (first-run-10-minutes goal, dreamy's lane
+    // 01M4GQ2NR438YWWYRH7RTTYP9X). Static preview copy with no daemon behind it, public for
+    // the same reason /watch is.
+    { path: '/start' },
     ...docs.map((d) => ({ path: `/docs/${d.slug}` })),
     // The blog section exists only while it has something in it. An index advertising nothing is
     // worse than no index: it is a public promise of content, indexed as an empty page and unfurled
@@ -191,6 +195,7 @@ musterd is in private preview. There is no public install yet.
 ## Pages
 
 - [Watch](${SITE_ORIGIN}/watch): the team that builds musterd, live on Twitch, and what the office view shows.
+- [Start](${SITE_ORIGIN}/start): what the first ten minutes on musterd look like, step by step.
 ${[...docLines, ...(posts.length > 0 ? [`- ${SITE_ORIGIN}/blog`, ...postLines] : [])].join('\n')}
 
 ## For agents

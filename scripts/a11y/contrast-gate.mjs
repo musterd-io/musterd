@@ -143,6 +143,10 @@ const ROUTES = arg('routes', '')
       // rule, the player's state line. "One representative per template" is exactly why it must be
       // listed: it IS its own template (2026-09-16, miley).
       '/watch',
+      // /start has its own stylesheet (StartPage.css), not Prose.css, so no other listed route
+      // paints its colours — the eyebrow, the board-illustration labels, the figure captions.
+      // Same rule as /watch: it IS its own template (2026-10-12, dreamy).
+      '/start',
       '/office-preview',
       '/character-sheet',
       '/board',

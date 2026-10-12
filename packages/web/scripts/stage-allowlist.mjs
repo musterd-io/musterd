@@ -27,6 +27,10 @@ export const PUBLIC_ALLOW = [
   // /docs is: prerendered marketing copy and a Twitch embed, with no daemon behind it. The
   // surfaces it is ABOUT — /live, /broadcast, the office scene — stay in DAEMON_ROUTES below.
   'watch',
+  // The first session's front door (first-run-10-minutes goal). Public for the same reason
+  // /watch is: prerendered preview copy and stills, with no daemon behind it. The surfaces
+  // the tour runs in — /live, /board — stay in DAEMON_ROUTES below.
+  'start',
   ...(BLOG_HAS_POSTS ? ['blog'] : []),
   // Crawler- and agent-facing text, generated into the build by the `musterd-site-files` plugin in
   // vite.config.ts (see scripts/site-files.ts). These are safe where the daemon routes are not, for

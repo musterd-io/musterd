@@ -219,11 +219,13 @@ describe('landing copy under ADR 550 and the 2026-10-09 revision', () => {
 
   // §0.9 and watch-page-copy-spec §2: honest about what does not exist, and no state word that is
   // true in only one state.
-  // nick, 2026-10-09: deploy without /start. A "Today" row must not link to a page that 404s; the row
-  // comes back when the first-ten-minutes page exists (lane 01M4GQ2NR438YWWYRH7RTTYP9X).
-  it('Getting started links nowhere that does not exist yet — no /start row', () => {
-    expect(start).not.toContain('FIRST_TEN_MINUTES_PATH');
-    expect(start).not.toContain('See your first ten minutes');
+  // The /start row links the first-ten-minutes page (dreamy's lane 01M4GQ2NR438YWWYRH7RTTYP9X).
+  // It was held back while that route did not exist (nick, 2026-10-09: deploy without /start);
+  // a "Today" row must never link to a page that 404s, so this pins the link it carries.
+  it('Getting started links the first-ten-minutes page, and nowhere that does not exist', () => {
+    expect(start).toContain('FIRST_TEN_MINUTES_PATH');
+    expect(start).toContain('See your first ten minutes');
+    expect(start).toContain('What the first session looks like, step by step');
   });
 
   it('Getting started says what exists today and what does not, without a state word or a date', () => {

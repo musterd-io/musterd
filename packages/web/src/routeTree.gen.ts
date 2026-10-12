@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WatchRouteImport } from './routes/watch'
+import { Route as StartRouteImport } from './routes/start'
 import { Route as OfficePreviewRouteImport } from './routes/office-preview'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as CharacterSheetRouteImport } from './routes/character-sheet'
@@ -27,6 +28,11 @@ import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 const WatchRoute = WatchRouteImport.update({
   id: '/watch',
   path: '/watch',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StartRoute = StartRouteImport.update({
+  id: '/start',
+  path: '/start',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OfficePreviewRoute = OfficePreviewRouteImport.update({
@@ -104,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/character-sheet': typeof CharacterSheetRoute
   '/live': typeof LiveRoute
   '/office-preview': typeof OfficePreviewRoute
+  '/start': typeof StartRoute
   '/watch': typeof WatchRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/docs/$slug': typeof DocsSlugRoute
@@ -120,6 +127,7 @@ export interface FileRoutesByTo {
   '/character-sheet': typeof CharacterSheetRoute
   '/live': typeof LiveRoute
   '/office-preview': typeof OfficePreviewRoute
+  '/start': typeof StartRoute
   '/watch': typeof WatchRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/docs/$slug': typeof DocsSlugRoute
@@ -137,6 +145,7 @@ export interface FileRoutesById {
   '/character-sheet': typeof CharacterSheetRoute
   '/live': typeof LiveRoute
   '/office-preview': typeof OfficePreviewRoute
+  '/start': typeof StartRoute
   '/watch': typeof WatchRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/docs/$slug': typeof DocsSlugRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | '/character-sheet'
     | '/live'
     | '/office-preview'
+    | '/start'
     | '/watch'
     | '/blog/$slug'
     | '/docs/$slug'
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/character-sheet'
     | '/live'
     | '/office-preview'
+    | '/start'
     | '/watch'
     | '/blog/$slug'
     | '/docs/$slug'
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '/character-sheet'
     | '/live'
     | '/office-preview'
+    | '/start'
     | '/watch'
     | '/blog/$slug'
     | '/docs/$slug'
@@ -204,6 +216,7 @@ export interface RootRouteChildren {
   CharacterSheetRoute: typeof CharacterSheetRoute
   LiveRoute: typeof LiveRoute
   OfficePreviewRoute: typeof OfficePreviewRoute
+  StartRoute: typeof StartRoute
   WatchRoute: typeof WatchRoute
   BlogSlugRoute: typeof BlogSlugRoute
   DocsSlugRoute: typeof DocsSlugRoute
@@ -219,6 +232,13 @@ declare module '@tanstack/react-router' {
       path: '/watch'
       fullPath: '/watch'
       preLoaderRoute: typeof WatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/start': {
+      id: '/start'
+      path: '/start'
+      fullPath: '/start'
+      preLoaderRoute: typeof StartRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/office-preview': {
@@ -324,6 +344,7 @@ const rootRouteChildren: RootRouteChildren = {
   CharacterSheetRoute: CharacterSheetRoute,
   LiveRoute: LiveRoute,
   OfficePreviewRoute: OfficePreviewRoute,
+  StartRoute: StartRoute,
   WatchRoute: WatchRoute,
   BlogSlugRoute: BlogSlugRoute,
   DocsSlugRoute: DocsSlugRoute,

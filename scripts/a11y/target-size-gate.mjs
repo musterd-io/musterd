@@ -64,11 +64,13 @@ if (STATIC_ONLY && CONNECTED_ONLY) {
  * `/watch` carries the button row (its inline repo URL, once the exemption's worked example, left
  * when the repository went private, 2026-10-03),
  * `/blog` carries the post index. The connect screens are listed because a sign-in button is a
- * target a stranger meets before anything else.
+ * target a stranger meets before anything else. `/start` is listed because its figure + board-block
+ * grid is phone-width geometry no other route renders — the 19×30 flex-shrink class of defect below
+ * is exactly what source reading cannot see.
  */
 const ROUTES = arg('routes', '')
   ? arg('routes', '').split(',')
-  : ['/', '/watch', '/docs', '/docs/concepts', '/blog', '/board', '/live'];
+  : ['/', '/watch', '/start', '/docs', '/docs/concepts', '/blog', '/board', '/live'];
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',

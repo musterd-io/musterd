@@ -86,12 +86,13 @@ describe('structured data and canonical coverage', () => {
         'docs.$slug.tsx',
         'docs.index.tsx',
         'index.tsx',
+        'start.tsx',
         'watch.tsx',
       ].sort(),
     );
   });
 
-  for (const f of ['index.tsx', 'watch.tsx', ...CONTENT_ROUTES]) {
+  for (const f of ['index.tsx', 'watch.tsx', 'start.tsx', ...CONTENT_ROUTES]) {
     it(`${f} emits a canonical and a structured-data graph`, () => {
       const src = read(`./${f}`);
       expect(src, 'pageHead is what emits <link rel="canonical">').toContain('pageHead(');
