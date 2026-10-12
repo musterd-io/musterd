@@ -40,6 +40,17 @@ describe('liveCache', () => {
     expect((await fresh()).loadSnapshot('revive', 'nick')).toBeNull();
   });
 
+  it('a signed-out seat stays cleared until it connects again, whatever the old saver does', async () => {
+    const c = await fresh();
+    c.saveSnapshot('revive', 'nick', { roster, envelopes: [], board: null });
+    c.clearSnapshot('revive', 'nick');
+    c.saveSnapshot('revive', 'nick', { roster, envelopes: [], board: null });
+    expect(store.has('musterd.live.v1:revive:nick')).toBe(false);
+    c.loadSnapshot('revive', 'nick');
+    c.saveSnapshot('revive', 'nick', { roster, envelopes: [], board: null });
+    expect(store.has('musterd.live.v1:revive:nick')).toBe(true);
+  });
+
   it('keeps only the newest 120 envelopes', async () => {
     const c = await fresh();
     const many = Array.from({ length: 300 }, (_, i) => env(i));

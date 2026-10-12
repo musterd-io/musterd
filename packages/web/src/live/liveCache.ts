@@ -18,9 +18,14 @@ export interface LiveSnapshot {
 const key = (team: string, as: string) => `musterd.live.v1:${team}:${as}`;
 /** Parsed once per page: the stream and the board both seed from it on the same mount. */
 const read = new Map<string, LiveSnapshot | null>();
+/** Seats signed out on this page. The old connection's saver can still fire (its timer, a tab hide)
+ *  before /live reconnects as the observer, and must not write the snapshot straight back. Lifted
+ *  when that seat connects again (loadSnapshot). */
+const cleared = new Set<string>();
 
 export function loadSnapshot(team: string, as: string): LiveSnapshot | null {
   const k = key(team, as);
+  cleared.delete(k);
   if (!read.has(k)) {
     let snap: LiveSnapshot | null = null;
     try {
@@ -38,6 +43,7 @@ export function loadSnapshot(team: string, as: string): LiveSnapshot | null {
 const KEEP = 120;
 
 export function saveSnapshot(team: string, as: string, snap: LiveSnapshot): void {
+  if (cleared.has(key(team, as))) return;
   // Only the lanes still in play: the full board is every lane ever (227 KB measured 2026-10-12).
   // A tour lane is kept whatever its state, since the tour's entry point reads the closed one.
   const board = snap.board && {
@@ -58,6 +64,7 @@ export function saveSnapshot(team: string, as: string, snap: LiveSnapshot): void
 
 /** Signing out takes this seat's snapshot with it: the next person at this browser sees none of it. */
 export function clearSnapshot(team: string, as: string): void {
+  cleared.add(key(team, as));
   read.delete(key(team, as));
   try {
     localStorage.removeItem(key(team, as));
