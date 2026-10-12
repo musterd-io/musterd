@@ -13,6 +13,7 @@ import { createActors, type Actors } from './actors';
 import { solidHit, walkable } from './nav';
 import { layoutPlates, leaderFrom, type PlateBox, type PlateMemo } from './plateLayout';
 import { helpWalks } from './mapping';
+import { REPLAY_TEMPO } from './replay';
 import {
   ambientFrameBudgetMs,
   coalesceStep,
@@ -1812,7 +1813,10 @@ export function mountOffice(
     const dt = Math.min(0.05, acc / 1000);
     acc = 0;
     clock += dt;
-    const walking = actors.step(dt);
+    // Replay on open runs the walkers at tempo until the replayed walks have all landed; everything
+    // else in the room (pet, lights, bubbles) keeps real time, so only the catch-up is fast.
+    const walking = actors.step(dt * tempo);
+    if (tempo !== 1 && !actors.active()) tempo = 1;
     if (walking) noticePassersBy(); // a sleeping dog wakes to watch whoever is walking past it
     const petActive = stepPet(pet, dt); // false once it's asleep — the pet never keeps the room awake
     // The receptionist wakes for a present member and looks up while any check-in beat holds. Like
@@ -2206,6 +2210,17 @@ export function mountOffice(
     return false;
   }
 
+  /** The walkers' speed multiplier: 1 live, REPLAY_TEMPO while a replay is landing. */
+  let tempo = 1;
+  /** Walks handed to `replay` before the first roster placed anyone — played by `update` once it has. */
+  let replayPending: readonly OfficeEvent[] | null = null;
+  function playReplay(evs: readonly OfficeEvent[]): void {
+    if (reduced || STILL || evs.length === 0) return;
+    tempo = REPLAY_TEMPO;
+    for (const ev of evs) emit(ev);
+    if (!actors.active()) tempo = 1; // nobody of theirs is in the room — nothing to catch up on
+    else ensureLoop();
+  }
   function update(next: OfficeData) {
     const nextOnline = new Set(
       next.nodes.filter((n) => n.presence === 'online').map((n) => n.name),
@@ -2230,6 +2245,11 @@ export function mountOffice(
     refreshLightEnv(); // fold the new occupancy (+ current clock) into the lighting before we bake
     // Animate presence changes (walk in/out, drift) unless reduced-motion asked for stillness.
     actors.setHomes(placements, byName, !reduced);
+    if (replayPending) {
+      const evs = replayPending;
+      replayPending = null;
+      playReplay(evs);
+    }
     // The pulse is read ONCE, above the motion gate: the door's sound plays under reduced-motion
     // (audio is not motion, E3 spec §2); only the visual glow stays gated.
     // A newcomer's walk-in already rang the door in their colour (welcomeRoom) — the plain cue stands down.
@@ -2761,6 +2781,10 @@ export function mountOffice(
     ...(import.meta.env.DEV ? { spriteParity, spriteCrops, spriteImages } : {}),
     update,
     emit,
+    replay: (evs) => {
+      if (actors.poses().size === 0) replayPending = evs;
+      else playReplay(evs);
+    },
     stats: () => ({ ticks, draws, beats, since, welcomes: welcomeRoom.started() }),
     ambientLog: () => [...ambientLog],
     floorSamples: () =>
