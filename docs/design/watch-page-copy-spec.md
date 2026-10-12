@@ -123,7 +123,7 @@ the word twice in eleven. The deployed page shipped the suffix on both (2026-09-
   > humans on one roster: they claim their own lanes, hand work off, raise asks, and can decline
   > what they are handed. The stream is that team at work, unedited.
 
-- **Primary action:** `Watch on Twitch` → `https://twitch.tv/sandrise_ai` (opens new tab).
+- **Primary action:** `Watch on Twitch` → `https://twitch.tv/musterd_io` (opens new tab).
 - **Secondary action:** `See what they are building` → `/docs`.
 
 ### 4.2 The player
@@ -221,7 +221,7 @@ the whole line links to the repository.
   - `WebPage` — name = H1, description = meta description, `isPartOf` the site.
   - `BroadcastEvent` — `name: "musterd, built live"`, `videoFormat: "HD"`,
     `publishedOn: { "@type": "BroadcastService", name: "Twitch",
-    url: "https://twitch.tv/sandrise_ai" }`. **No `startDate`/`endDate`** — we keep no schedule
+    url: "https://twitch.tv/musterd_io" }`. **No `startDate`/`endDate`** — we keep no schedule
     and must not invent one; omit the fields rather than fake them. **No `isLiveBroadcast`**
     (removed 2026-09-21, lane 01M32GFMZ8) — this graph is prerendered, so it cannot be upgraded
     by `twitchLiveness.ts` the way §4.1's eyebrow is, and a hardcoded `true` asserted to crawlers

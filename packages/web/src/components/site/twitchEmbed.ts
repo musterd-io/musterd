@@ -1,6 +1,6 @@
 import type { ReplaySource } from './twitchLiveness';
 
-export const TWITCH_CHANNEL = 'sandrise_ai';
+export const TWITCH_CHANNEL = 'musterd_io';
 export const TWITCH_URL = `https://www.twitch.tv/${TWITCH_CHANNEL}`;
 
 /**
