@@ -125,6 +125,13 @@ session idle for 6 h 46 m started a turn 5.2 s after the send, on daemon `2be1dc
 [canary](../wiki/idle-wake-canary.md). The other rows are unchanged: an adapter with no inject
 reports itself deaf, `no-inject:<harness>`.)_
 
+_(2026-10-12: the opencode idle-at-prompt row is **measured-failing** — seven steers to a gen-5
+opencode 1.19.0 session idle 1–6 min (five on valid 3+ min windows), daemon `e616efa0`, hearing
+`idle` at every heartbeat: zero wakes, zero `interrupt.raised` / `idle_wake.injected` rows while
+idle, no ring or ack file — every steer surfaced only through the mid-turn probe once busy. See
+the [canary](../wiki/idle-wake-canary.md). Open: whether the daemon ever issues the ring, and the
+1.18.35-vs-1.19.0 question.)_
+
 ### (3) A Presence lease the probe can authenticate with
 
 The weakest clause on the board. It failed the same day for two **different** reasons, and the
