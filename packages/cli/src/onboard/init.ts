@@ -22,6 +22,7 @@ import {
 import { renderBanner } from '../render/rows.js';
 import { paint as pc, theme } from '../render/theme.js';
 import { sym } from '../render/ui.js';
+import { seatFileExists, writeSeatFile } from '../roster.js';
 import { runConnect } from './connect.js';
 import { acceptSurface, readDeclined } from './declined.js';
 import { bindingRefusal, inspectInitTarget, nameBoundElsewhere } from './guard.js';
@@ -819,6 +820,11 @@ export async function runInit(): Promise<number> {
   const sm = p.spinner();
   sm.start(`Adding ${name} to ${team}`);
   try {
+    // ADR 058 §5: on a file-backed team the seat file is the single writer, and the daemon refuses
+    // a member no file declares — so write it first, and only when there is none (lane 01M4RJF62E).
+    const rosterHome = config.rosterHome[team];
+    if (rosterHome && !seatFileExists(rosterHome, name))
+      writeSeatFile(rosterHome, name, { kind: 'agent', ...(role ? { role } : {}) });
     // v0.3 (ADR 075): declaring the seat is enough — the agent claims it with the team agent key,
     // so there's no per-seat token to capture here anymore.
     await http.addMember(team, { name, kind: 'agent', role });
