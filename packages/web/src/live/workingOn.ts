@@ -119,3 +119,23 @@ export function presentCount(roster: MemberSummary[]): number {
 export function invalidatesLanes(env: Pick<Envelope, 'act' | 'meta'>): boolean {
   return laneEvent(env) !== null;
 }
+
+/**
+ * Did any envelope since `seenId` change the lane board? Every arrival since the last look, not
+ * only the newest: acts arrive in bursts, and a lane act followed within one render by an ordinary
+ * one used to go unseen. Measured 2026-10-12 (lane 01M4RHW45W): grokbot's `lane_state` and the
+ * acceptance ask it raises landed 16 ms apart, the ask was newest, the board never refetched, and
+ * nick's tour showed "The lane has no summary yet." for a lane whose detail had been set 4 s before.
+ *
+ * `seenId` null is the first look, which the mount fetch already covers, so only the newest counts
+ * there (as before). A `seenId` no longer in the window means more arrived than the window holds,
+ * so every envelope counts.
+ */
+export function lanesChangedSince(
+  envelopes: readonly Pick<Envelope, 'id' | 'act' | 'meta'>[],
+  seenId: string | null,
+): boolean {
+  // findIndex is -1 for an id that left the window, so the slice starts at 0: everything counts.
+  const from = seenId === null ? envelopes.length - 1 : envelopes.findIndex((e) => e.id === seenId) + 1;
+  return envelopes.slice(Math.max(0, from)).some(invalidatesLanes);
+}
