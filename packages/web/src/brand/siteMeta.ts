@@ -265,7 +265,7 @@ export function jsonLd(nodes: JsonLdNode[]) {
 }
 
 /** The channel the stream goes out on. One constant so the graph and the page cannot disagree. */
-export const TWITCH_CHANNEL_URL = 'https://twitch.tv/sandrise_ai';
+export const TWITCH_CHANNEL_URL = 'https://twitch.tv/musterd_io';
 
 /**
  * The live broadcast, as an entity.
