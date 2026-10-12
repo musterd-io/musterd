@@ -12,7 +12,7 @@ import { createTeam } from './teams.js';
 
 let openStore: () => Promise<Driver>;
 
-withDrivers('deferralFold', (o) => {
+withDrivers('deferralFold', (o, kind) => {
   // Set per test, not at collection: describe.each collects every driver before any test runs.
   beforeEach(() => {
     openStore = o;
@@ -127,6 +127,64 @@ withDrivers('deferralFold', (o) => {
       await say(db, team, nick, null, 'wait', 'w1', { defer_ref: 'a1', until: { lane: 'L1' } });
 
       expect((await deferralFold(db, team.slug, ada)).held.size).toBe(0);
+    });
+  });
+
+  // 2026-10-12: GET /inbox is the hub's busiest route (~350 reads / 10 min, ~100ms each), and this
+  // fold's 2000-row window read was most of each one, while only ~15 messages arrived in the same
+  // ten minutes. Messages are append-only, so on SQLite the fold is reused until a row is added.
+  describe('reuse between messages', async () => {
+    async function countWindowReads(db: Driver, run: () => Promise<void>): Promise<number> {
+      let n = 0;
+      const detach = (db as SqliteDriver | PgliteDriver).onStatement((sql) => {
+        if (/SELECT \* FROM \(SELECT \* FROM messages WHERE team_id = \?/.test(sql)) n++;
+      });
+      try {
+        await run();
+      } finally {
+        detach();
+      }
+      return n;
+    }
+
+    it('reads the window once while no message arrives (SQLite)', async () => {
+      const { db, team, nick, ada } = await seed();
+      await say(db, team, nick, ada, 'message', 'a1');
+      await deferralFold(db, team.slug, ada);
+      const reads = await countWindowReads(db, async () => {
+        await deferralFold(db, team.slug, ada);
+        await deferralFold(db, team.slug, ada);
+      });
+      expect(reads).toBe(kind === 'sqlite' ? 0 : 2);
+    });
+
+    it('sees a wait that arrives after a fold, and the raise that follows it', async () => {
+      const { db, team, nick, ada } = await seed();
+      await say(db, team, nick, ada, 'message', 'a1');
+      expect((await deferralFold(db, team.slug, ada)).held.size).toBe(0);
+
+      await say(db, team, ada, null, 'wait', 'w1', { defer_ref: 'a1', until: { lane: 'L1' } });
+      const before = await deferralFold(db, team.slug, ada);
+      expect([...before.held.keys()]).toEqual(['a1']);
+      expect(before.raised.size).toBe(0);
+      expect(before.own.map((m) => m.id)).toEqual(['w1']);
+
+      await say(db, team, nick, null, 'message', 'l1', {
+        lane_state: { lane: 'L1', state: 'done' },
+      });
+      expect([...(await deferralFold(db, team.slug, ada)).raised]).toEqual(['a1']);
+    });
+
+    it('keeps seats and window sizes apart', async () => {
+      const { db, team, nick, ada } = await seed();
+      await say(db, team, nick, ada, 'message', 'a1');
+      await say(db, team, ada, null, 'wait', 'w1', { defer_ref: 'a1', until: { lane: 'L1' } });
+      expect((await deferralFold(db, team.slug, ada)).held.size).toBe(1);
+      expect((await deferralFold(db, team.slug, nick)).held.size).toBe(0);
+      // A window too small to reach the wait holds nothing, even right after a wide one did.
+      await say(db, team, nick, null, 'status_update', 's1');
+      expect((await deferralFold(db, team.slug, ada)).held.size).toBe(1);
+      expect((await deferralFold(db, team.slug, ada, 1)).held.size).toBe(0);
     });
   });
 });
