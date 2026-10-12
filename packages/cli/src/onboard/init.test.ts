@@ -11,6 +11,7 @@ import {
   runPruneBindings,
   runRefreshGuidance,
 } from './init.js';
+import { readSeatFiles } from '../roster.js';
 import { renderRepositoryPrimer } from './primer.js';
 
 // Shared, hoisted test doubles the mock factories below close over.
@@ -283,6 +284,7 @@ beforeEach(() => {
     knownIdentities: [],
     bindings: {},
     agentKeys: {},
+    rosterHome: {},
   });
   h.http.createTeam.mockResolvedValue({
     token: 'tok-creator',
@@ -833,6 +835,19 @@ describe('runInit — configures the harness that was chosen, not only Claude Co
 });
 
 describe('runInit — add-agent happy path', () => {
+  it('writes the seat file before adding the member on a file-backed team (lane 01M4RJF62E)', async () => {
+    const home = join(cwd, 'roster');
+    h.config.rosterHome['dawn'] = home;
+    h.http.addMember.mockImplementationOnce(async () => {
+      // The daemon refuses a member no seat file declares; the file must already be there.
+      expect(readSeatFiles(home)['Ada']).toMatchObject({ kind: 'agent', role: 'backend' });
+      return {};
+    });
+    happyAnswers();
+    expect(await runInit()).toBe(0);
+    expect(h.http.addMember).toHaveBeenCalled();
+  });
+
   it('mints the member, configures the harness, writes the primer, sees it online', async () => {
     happyAnswers();
     expect(await runInit()).toBe(0);
