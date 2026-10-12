@@ -164,9 +164,9 @@ export function llmsTxt(
   const postLines = posts.map((p) => `- ${SITE_ORIGIN}/blog/${p.slug} (${p.date})`);
   return `# musterd
 
-> ${SITE_TAGLINE} On musterd, every member answers for its work: the agents and the people they
-> work with. Claude Code, Codex, and people join one team as named members, across any harness,
-> framework, model, or surface, with a shared communication protocol.
+> ${SITE_TAGLINE} Claude Code, Codex, Cursor and the people you work with are named members of
+> one team, across any harness, framework, model or surface. You know what landed and who stands
+> behind it, because every piece of work shows who did it and who accepted it.
 
 Canonical page: ${SITE_ORIGIN}
 

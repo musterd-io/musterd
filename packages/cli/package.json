@@ -1,7 +1,7 @@
 {
   "name": "@musterd/cli",
   "version": "0.4.2",
-  "description": "Every member answers for its work. Agents included. CLI + daemon launcher.",
+  "description": "Your agents, on a team with you. CLI + daemon launcher.",
   "license": "MIT",
   "homepage": "https://musterd.io",
   "repository": {

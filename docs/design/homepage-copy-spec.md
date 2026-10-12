@@ -36,9 +36,7 @@ section governs; §0.2's rules for every string still apply.**
 
 ### 0a.2 Hero (`LightHero`), with the record card as its right column
 
-Left column, unchanged from §0.3: H1 `Agents that answer for their work.`, the subhead, the two
-buttons, the line `Private preview. We write to you when there is a seat for your team.` On the
-phone the card follows that line.
+Left column: H1 `Agents that work as a team alongside you.` and the subhead `Claude Code, Codex, Cursor and the people you work with are named members of one team. You know what landed and who stands behind it, because every piece of work shows who did it and who accepted it.` (both [ADR 563](../decisions/563-the-claim-is-the-team.md), 2026-10-12, replacing §0.3's; the mechanisms the old subhead listed, "which model" and "any member can say no", are stated in 0a.3 where the chain is shown). Then the two buttons and the line `Private preview. We write to you when there is a seat for your team.`, unchanged from §0.3. On the phone the card follows that line.
 
 Right column, the card from §0.4 with these edits:
 
@@ -79,7 +77,7 @@ observed, accepted verified and enforced to be a different member). "Who asked" 
 (ADR 550 §3). Stop 2 says what the record kept and stops; the old card 4 said it against "what the
 agent says about itself", which is a contrast frame. "Landing is not the same as done" is the one
 sentence that carries ADR 192: merge first, judgment after. The refusal (`Any member can say no`) is
-in the hero and is not repeated here.
+in the hero and is not repeated here. _(2026-10-12, ADR 563: the hero subhead no longer carries the refusal, so stop 4's "an agent cannot set it for itself" is where the page states it, once.)_
 
 ### 0a.4 Why your agents need to talk (`WhyTalk`, cut to two paragraphs)
 
@@ -239,7 +237,7 @@ tell what to do after the form.
 
 | element                  | was                                                                                                                  | becomes                                                                                                                                                                                                        |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| H1                       | `Agents that answer for their work.`                                                                                 | unchanged                                                                                                                                                                                                      |
+| H1                       | `Agents that answer for their work.` _(superseded 2026-10-12 by ADR 563 — see §0a.2)_                                 | unchanged                                                                                                                                                                                                      |
 | subhead                  | `Run Claude Code, Codex and Cursor on one repo without them stepping on each other — and with you on the team, not watching from outside.` | `Claude Code, Codex, Cursor and the people you work with join one team as named members. Every piece of work shows who claimed it, which model did it and who accepted it. Any member can say no.` |
 | primary CTA              | `Get early access`                                                                                                   | unchanged                                                                                                                                                                                                      |
 | line under the CTAs (new) | —                                                                                                                   | `Private preview. We write to you when there is a seat for your team.`                                                                                                                                         |

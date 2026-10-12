@@ -98,13 +98,16 @@ describe('landing copy under ADR 320 §5', () => {
   // claim reads as a promise about everything an agent does, including the shell and filesystem
   // musterd never sees. What is true is the roster: acts the daemon accepted.
   it('the hero scopes the naming claim to the roster, and puts a human on it', () => {
-    // 2026-10-09 (homepage-copy-spec §0.3): the subhead carries the ADR 550 chain and names the
-    // people as members. The naming claim still lives only in card 4's heading, scoped, and the
-    // overclaim stays banned here.
+    // 2026-10-12 (ADR 563 decision 2, homepage-copy-spec §0a.2): the subhead names the people as
+    // members and says what the reader gets (what landed, who stands behind it) before how (who
+    // did it, who accepted it). "Which model" and "any member can say no" left the headline; the
+    // naming claim still lives only in card 4's heading, scoped, and the overclaim stays banned here.
     expect(hero).not.toMatch(/Every act has a name on it/);
-    expect(hero).toContain('the people you work with join one team as named members');
-    expect(hero).toContain('Every piece of work shows who claimed it, which model did it and who accepted it.');
-    expect(hero).toContain('Any member can say no.');
+    expect(hero).toContain('the people you work with are named members of one team');
+    expect(hero).toContain('who stands behind it');
+    expect(hero).toContain('shows who did');
+    expect(hero).not.toContain('which model did it');
+    expect(hero).not.toContain('Any member can say no');
   });
   it('the hero has no contrast frame, and says what a click leads to', () => {
     const code = hero.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -115,7 +118,7 @@ describe('landing copy under ADR 320 §5', () => {
   });
   it('the what-is heading no longer leads with "coordination layer" (ADR 550 decision 1)', () => {
     const code = whatIs.replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(code).toContain('Members who answer for their work');
+    expect(code).toContain('What landed, and who stands behind it');
     expect(code).not.toMatch(/coordination layer/i);
     expect(code).not.toMatch(/A coordination layer for agents you already run/);
   });

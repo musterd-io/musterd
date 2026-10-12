@@ -5,7 +5,8 @@ import './WhatIs.css';
  * (who did what) was added 2026-09-16 under ADR 320 decision 5: the room now arrives afraid of
  * agents nobody owns, and the answer is names and an observed record, never a containment claim.
  * The heading was the qualified category phrase of ADR 320 decision 4; since 2026-10-09 it is
- * "Members who answer for their work" (homepage-copy-spec §0.7), because ADR 550 decision 1 takes
+ * "What landed, and who stands behind it" (ADR 563 decision 2, 2026-10-12; was "Members who answer
+ * for their work", homepage-copy-spec §0.7), because ADR 550 decision 1 takes
  * "coordination layer" out of headings and opening sentences. Technical docs keep the phrase.
  * Cards 3 and 4 lost their contrast frame ("Most agent tools give you agents you assign work to")
  * and their "ships" claim: acceptance arrives after the merge, so it is "counts as done" here.
@@ -77,7 +78,7 @@ const IDEAS = [
 export function WhatIs() {
   return (
     <section className="wi shell">
-      <h2 className="wi__title">Members who answer for their work</h2>
+      <h2 className="wi__title">What landed, and who stands behind it</h2>
       <div className="wi__grid">
         {IDEAS.map((i) => (
           <div key={i.title} className="wi__card">

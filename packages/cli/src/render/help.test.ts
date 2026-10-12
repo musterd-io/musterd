@@ -15,7 +15,7 @@ describe('renderHelp (grouped overview)', () => {
   const out = renderHelp();
 
   it('leads with the banner tagline and a start-here section', () => {
-    expect(out).toContain('answers for its work');
+    expect(out).toContain('on a team with you');
     expect(out.toLowerCase()).toContain('start here');
   });
 

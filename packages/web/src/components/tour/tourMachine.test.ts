@@ -137,7 +137,7 @@ describe('tour text', () => {
   it('drops a line naming the agent until one is chosen', () => {
     const lines = stepLines(initialState('nick', ''), { ...vars, agent: '' });
     expect(lines.join('\n')).not.toMatch(/\{agent\}|you give\s/);
-    expect(lines[0]).toBe('musterd makes your agents accountable.');
+    expect(lines[0]).toBe('musterd puts your agents on a team with you.');
   });
 
   it('shows only the latest hint that is due', () => {

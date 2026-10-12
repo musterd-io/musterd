@@ -61,7 +61,7 @@ describe('TourPanel — spec docs/design/tour-web-copy.md §3', () => {
   it('opens on what musterd is, with Continue and Stop', () => {
     const html = panel(initialState('nick', 'dolly'));
     expect(html).toContain('Step 1 of 9 · What musterd is');
-    expect(html).toContain('<p>musterd makes your agents accountable.</p>');
+    expect(html).toContain('<p>musterd puts your agents on a team with you.</p>');
     expect(html).toContain('In the next few minutes you give dolly a small piece of work');
     expect(html).toContain('>Continue<');
     expect(html).toContain('>Stop<');

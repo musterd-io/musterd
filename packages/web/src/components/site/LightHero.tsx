@@ -16,16 +16,17 @@ export function LightHero() {
         */}
         <h1 className="lh__title">{TAGLINE}</h1>
         {/*
-          The subhead carries the whole ADR 550 chain above the fold, at the strength the record
-          holds it: claimed (verified), model (observed), accepted (verified, and enforced to be a
-          different member), plus the refusal. It names the people as members. No contrast frame
-          (brand.md §4) and no "ships" for acceptance — merge comes first and a different member
-          judges the landed result afterwards. docs/design/homepage-copy-spec.md §0.3, 2026-10-09.
+          The subhead says what the reader gets (what landed, who stands behind it) before how
+          (who did it, who accepted it) — ADR 563 decision 2. It names the people as members. No
+          contrast frame (brand.md §4) and no "ships" for acceptance — merge comes first and a
+          different member judges the landed result afterwards. The mechanisms ADR 563 moved out
+          of the headline ("which model", "any member can say no") live in the chain section.
+          docs/design/homepage-copy-spec.md §0a.2, 2026-10-12.
         */}
         <p className="lh__sub">
-          Claude Code, Codex, Cursor and the people you work with join one team as named members.
-          Every piece of work shows who claimed it, which model did it and who accepted it. Any
-          member can say no.
+          Claude Code, Codex, Cursor and the people you work with are named members of one team.
+          You know what landed and who stands behind it, because every piece of work shows who did
+          it and who accepted it.
         </p>
         <p className="lh__ctas">
           <a className="lh__cta lh__cta--primary" href={EARLY_ACCESS_URL}>
