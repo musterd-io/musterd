@@ -176,8 +176,8 @@ jobs:
             fi
           fi
           # ADR 570 (ADR 498's shape): both drivers run as four shards plus a merge. ADR 572: SQLite
-          # alone (most PRs) runs as two, so the coverage job stops setting a PR's wall time.
-          if [ "$kinds" = both ]; then count=4; shards='[1, 2, 3, 4]'; else count=2; shards='[1, 2]'; fi
+          # alone (most PRs) runs as three, so the coverage job stops setting a PR's wall time.
+          if [ "$kinds" = both ]; then count=4; shards='[1, 2, 3, 4]'; else count=3; shards='[1, 2, 3]'; fi
           # The full main check: both drivers, on main. It leaves the marker the next push reads.
           fullcheck=false
           if [ "$GITHUB_REF" = refs/heads/main ] && [ "$coverage" = true ] && [ "$kinds" = both ]; then fullcheck=true; fi
@@ -253,7 +253,7 @@ jobs:
           CHANGE_ADR_BASE: origin/${{ github.base_ref }}
         run: pnpm change-adr:check
 
-  # Two shards when SQLite alone runs (most PRs, ADR 572), four when both drivers run (ADR 498's
+  # Three shards when SQLite alone runs (most PRs, ADR 572), four when both drivers run (ADR 498's
   # shape, back under ADR 570), each followed by `coverage-merge`: a shard's coverage map is
   # partial, so only the merge checks the floors. A one-shard run (shard_count 1) still enforces
   # them itself. Four workers per shard on the

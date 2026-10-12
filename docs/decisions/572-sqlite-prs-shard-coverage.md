@@ -28,6 +28,7 @@ A typical PR waits about 5.5 minutes, nearly all of it on one job that can be sp
 1. **When SQLite alone runs, coverage runs as two shards**, each with four vitest workers, followed
    by `coverage-merge`, which checks the floors on the merged report. Both-driver runs keep four
    shards (ADR 570).
+   _(Amended 2026-10-12: three shards, not two, after the first run. See the amendment below.)_
 2. A one-shard run still checks the floors itself, as before. Nothing in the workflow produces one
    now, but the path is kept for the Ubicloud fallback or a manual change.
 
@@ -40,6 +41,13 @@ A typical PR waits about 5.5 minutes, nearly all of it on one job that can be sp
   is free on the public repo. If the repo goes private again, this is the first thing to undo.
 - The merge job now runs on almost every PR, so a missing or broken shard blob shows up on PRs, not
   only on `main`'s full check.
+- 2026-10-12 — **Three shards, not two.** The first two-shard run (#2427, run 38322281120) took
+  3 min 58 s. Shard 2 set it: 189 s, of which 139 s were tests and 39 s setup, then 26 s of merge.
+  Every other job finished in 125 s or less. The shards were 26 s apart, so this is about the
+  total, not balance. Lane `01M4S7GPVB` moves SQLite-only coverage to three
+  shards. Dropping the build from coverage jobs was considered and rejected: `noPgliteInDist.test`
+  and `reportCache.test` skip their dist checks without a build, so they would pass without
+  checking anything.
 
 ## Observability & Evaluation
 
