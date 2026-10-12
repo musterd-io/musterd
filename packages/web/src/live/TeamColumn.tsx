@@ -34,6 +34,7 @@ export function captionColorFor(
  * press, and none of the operator notes — a Twitch viewer cannot reload a seat.
  */
 export function TeamColumn({
+  loading = false,
   roster,
   board,
   goals,
@@ -52,6 +53,8 @@ export function TeamColumn({
   asks = [],
   still = false,
 }: {
+  /** Nothing loaded yet: card-shaped placeholders instead of an empty team saying "0 working". */
+  loading?: boolean;
   roster: MemberSummary[];
   board: LaneBoard | null;
   goals: readonly { id: string; title: string }[];
@@ -128,11 +131,24 @@ export function TeamColumn({
     <aside className="lc-team" aria-label="The team">
       <header className="lc-team__head">
         <span className="lc-team__title">The team</span>
-        <span className="lc-team__count">{working} working</span>
+        <span className="lc-team__count">
+          {loading ? <i className="lc-skel" style={{ width: '5em' }} /> : `${working} working`}
+        </span>
         <span className="lc-team__spacer" />
         {onCollapse && <CollapseButton side="mid" label="the team" onClick={onCollapse} />}
       </header>
       <CaptionPill caption={caption} color={captionColor} className="lc-team__caption" />
+      {loading && (
+        <ul className="lc-team__cards" aria-label="Loading the team">
+          {[0, 1, 2, 3].map((i) => (
+            <li key={i} className="lc-team-card lc-team-card--skel">
+              <i className="lc-skel lc-skel--face" />
+              <i className="lc-skel" style={{ width: '40%' }} />
+              <i className="lc-skel" style={{ width: '85%' }} />
+            </li>
+          ))}
+        </ul>
+      )}
       <ul className="lc-team__cards">
         {(still ? cards.filter((c) => !IDLE.has(c.state)) : cards).map((c) => (
           <TeamCard

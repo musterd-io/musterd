@@ -1266,3 +1266,23 @@ framework (react-dom, the router and seroval: ~290 KB of the ~400 KB minified), 
 
 - Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main after this lands — /live initial JS above
   140,400 B with no other eager change.
+
+### 2026-10-12 — /live paints from the last snapshot, skeletons on a first visit (lane 01M4RNBNFM7Y91HH55FMRWT22C)
+
+nick: /live took 5–10 s to show anyone. Measured on one reload: every script was in by 140 ms, then each daemon read
+took 3–4.4 s on a saturated daemon (80 % CPU, load 13), and the panels said "0 working", "no open questions" and
+"nothing loaded" the whole time. Now the page paints this browser's last snapshot at once (`liveCache.ts`: roster,
+newest 120 envelopes, open lanes; ~119 KB in localStorage) and marks it `refreshing…`; a first visit draws skeletons.
+
+Measured in the dev preview on the revive team: team, asks strip, ticker and meter on screen at ~0.6 s; the daemon's
+answer replaced them at 6.1 s. Before, the same panels were empty or wrong until it answered.
+
+| Budget     | Before (main `552a90a6`) | This branch | Ceiling   |
+| ---------- | ------------------------ | ----------- | --------- |
+| initial JS | ~137.4 KB                | 138.1 KB    | unchanged |
+| total JS   | ~296.8 KB                | 297.6 KB    | unchanged |
+| live CSS   | 20.9 KB                  | 21.1 KB     | unchanged |
+
+Live CSS is now at its ceiling; the next rule there needs a trim or a raise.
+
+- Falsify: open /live, reload — the team column shows cards before the daemon's `/teams/<team>` response completes.

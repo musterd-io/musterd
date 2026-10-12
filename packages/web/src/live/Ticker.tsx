@@ -17,7 +17,10 @@ export function Ticker({
   roster,
   board,
   hide,
+  loading = false,
 }: {
+  /** Nothing loaded yet: placeholders, not "Nothing notable yet", which would be untrue. */
+  loading?: boolean;
   envelopes: readonly Envelope[];
   roster: readonly MemberSummary[];
   board: LaneBoard | null;
@@ -42,9 +45,14 @@ export function Ticker({
   return (
     <div className="lc-ticker" aria-label="Latest moments">
       <ul className="lc-ticker__list">
-        {items.length === 0 && (
-          <li className="lc-ticker__empty">Nothing notable yet — the room is settling in.</li>
-        )}
+        {items.length === 0 &&
+          (loading ? (
+            <li className="lc-ticker__empty" aria-label="Loading">
+              <i className="lc-skel" style={{ width: '14em' }} />
+            </li>
+          ) : (
+            <li className="lc-ticker__empty">Nothing notable yet — the room is settling in.</li>
+          ))}
         {items.map((h) => {
           const kind = kindOf(h.who, idx);
           const color = memberColor(h.who, kind, hueOf(h.who, idx));

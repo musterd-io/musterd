@@ -14,7 +14,13 @@ export function TopMeter({
   envelopes,
   roster,
   now,
+  loading = false,
+  refreshing = false,
 }: {
+  /** Nothing loaded yet: a placeholder where the rate goes, not "0 acts · nothing loaded". */
+  loading?: boolean;
+  /** Showing the last snapshot while the daemon answers (liveCache). */
+  refreshing?: boolean;
   teamName: string;
   envelopes: readonly Envelope[];
   roster: readonly MemberSummary[];
@@ -37,6 +43,9 @@ export function TopMeter({
           aria-hidden="true"
         />
       </span>
+      {loading ? (
+        <i className="lc-skel" style={{ width: '7em' }} aria-label="Loading" />
+      ) : (
       <span className="lc-meter__rate" title={`${envelopes.length} acts loaded · ${b.spanLabel}`}>
         <span className="lc-meter__n">{b.rateLabel}</span>
         <svg
@@ -50,8 +59,9 @@ export function TopMeter({
             return <rect key={i} x={i * 4} y={12 - h} width={3} height={h} />;
           })}
         </svg>
-        <span className="lc-meter__span">{b.spanLabel}</span>
+        <span className="lc-meter__span">{refreshing ? 'refreshing…' : b.spanLabel}</span>
       </span>
+      )}
     </div>
   );
 }

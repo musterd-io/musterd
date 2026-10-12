@@ -43,6 +43,7 @@ import { scrollToMessage } from './reveal';
 const NO_LIVE_IDS: ReadonlySet<string> = new Set();
 
 export function AsksStrip({
+  loading = false,
   envelopes,
   roster,
   cfg,
@@ -56,6 +57,8 @@ export function AsksStrip({
   liveIds = NO_LIVE_IDS,
   onReveal = scrollToMessage,
 }: {
+  /** Nothing loaded yet: a placeholder, not "no open questions", which would be untrue. */
+  loading?: boolean;
   envelopes: Envelope[];
   roster: MemberSummary[];
   cfg: LiveConfig;
@@ -413,7 +416,11 @@ export function AsksStrip({
           </>
         ) : (
           <span className="lc-asks__lead lc-asks__lead--quiet">
-            <span className="lc-asks__verb">no open questions</span>
+            {loading ? (
+              <i className="lc-skel" style={{ width: '9em' }} aria-label="Loading" />
+            ) : (
+              <span className="lc-asks__verb">no open questions</span>
+            )}
           </span>
         )}
 
