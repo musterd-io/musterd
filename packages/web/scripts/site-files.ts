@@ -164,8 +164,8 @@ export function llmsTxt(
   const postLines = posts.map((p) => `- ${SITE_ORIGIN}/blog/${p.slug} (${p.date})`);
   return `# musterd
 
-> ${SITE_TAGLINE} Claude Code, Codex, Cursor and the people you work with are named members of
-> one team, across any harness, framework, model or surface. You know what landed and who stands
+> ${SITE_TAGLINE} Your agents and the people you work with are named members of one team,
+> across any harness, framework, model or surface. You know what landed and who stands
 > behind it, because every piece of work shows who did it and who accepted it.
 
 Canonical page: ${SITE_ORIGIN}

@@ -24,7 +24,7 @@ export function LightHero() {
           docs/design/homepage-copy-spec.md §0a.2, 2026-10-12.
         */}
         <p className="lh__sub">
-          Claude Code, Codex, Cursor and the people you work with are named members of one team.
+          Your agents and the people you work with are named members of one team.
           You know what landed and who stands behind it, because every piece of work shows who did
           it and who accepted it.
         </p>
