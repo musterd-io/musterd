@@ -23,8 +23,11 @@ const lane = (extra: Partial<BoardLane>): BoardLane => ({
   detail: null,
   ...extra,
 });
-const plan = (open: TrackerIssue[], lanes: BoardLane[], upstream: Record<string, 'closed' | 'not_found' | 'open'> = {}) =>
-  planSync({ source, open, lanes, project: 'app', upstream });
+const plan = (
+  open: TrackerIssue[],
+  lanes: BoardLane[],
+  upstream: Record<string, 'closed' | 'not_found' | 'open'> = {},
+) => planSync({ source, open, lanes, project: 'app', upstream });
 const codes = (p: ReturnType<typeof planSync>) => p.warnings.map((w) => w.code);
 
 describe('planSync — the spec §3 table', () => {
@@ -53,14 +56,30 @@ describe('planSync — the spec §3 table', () => {
     const parked = lane({ source_ref: 'acme/app#8', state: 'parked' });
     const p = plan([], [open, parked], { 'acme/app#9': 'closed', 'acme/app#8': 'closed' });
     expect(p.actions).toEqual([
-      { kind: 'abandon', lane_id: open.id, ref: 'acme/app#9', from: 'x', reason: 'closed in GitHub (acme/app#9)' },
-      { kind: 'abandon', lane_id: parked.id, ref: 'acme/app#8', from: 'x', reason: 'closed in GitHub (acme/app#8)' },
+      {
+        kind: 'abandon',
+        lane_id: open.id,
+        ref: 'acme/app#9',
+        from: 'x',
+        reason: 'closed in GitHub (acme/app#9)',
+      },
+      {
+        kind: 'abandon',
+        lane_id: parked.id,
+        ref: 'acme/app#8',
+        from: 'x',
+        reason: 'closed in GitHub (acme/app#8)',
+      },
     ]);
   });
 
   it('closed upstream, lane held → warning, untouched', () => {
     const claimed = lane({ source_ref: 'acme/app#9', state: 'claimed', owner_seat: 'ada' });
-    const waiting = lane({ source_ref: 'acme/app#8', state: 'awaiting_acceptance', owner_seat: null });
+    const waiting = lane({
+      source_ref: 'acme/app#8',
+      state: 'awaiting_acceptance',
+      owner_seat: null,
+    });
     const p = plan([], [claimed, waiting], { 'acme/app#9': 'closed', 'acme/app#8': 'closed' });
     expect(p.actions).toEqual([]);
     expect(p.warnings.map((w) => w.message)).toEqual([

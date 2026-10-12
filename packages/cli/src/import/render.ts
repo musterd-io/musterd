@@ -34,7 +34,8 @@ export function renderPreview(stage: ImportStage): string {
     }
     out.push(
       '',
-      parts.join(' · ') + (sync.unchanged ? theme.meta(` · ${String(sync.unchanged)} unchanged`) : ''),
+      parts.join(' · ') +
+        (sync.unchanged ? theme.meta(` · ${String(sync.unchanged)} unchanged`) : ''),
       '',
     );
   } else {
@@ -80,8 +81,10 @@ export function renderPreview(stage: ImportStage): string {
   const renames = actions.filter((a) => a.kind === 'rename');
   const abandons = actions.filter((a) => a.kind === 'abandon');
   if (renames.length || abandons.length) out.push('');
-  for (const a of renames) out.push(`↻ renamed: "${safe(a.from ?? a.lane_id)}" → "${safe(a.title ?? '')}"`);
-  for (const a of abandons) out.push(`✕ abandon: ${safe(a.from ?? a.lane_id)} ${theme.meta(`(${safe(a.ref)})`)}`);
+  for (const a of renames)
+    out.push(`↻ renamed: "${safe(a.from ?? a.lane_id)}" → "${safe(a.title ?? '')}"`);
+  for (const a of abandons)
+    out.push(`✕ abandon: ${safe(a.from ?? a.lane_id)} ${theme.meta(`(${safe(a.ref)})`)}`);
   if (stage.diagnostics.length) out.push('', ...stage.diagnostics.map(renderDiagnostic));
   const errors = stage.diagnostics.filter((d) => d.level === 'error').length;
   out.push(

@@ -93,6 +93,12 @@ prompt; it cannot inject context, so there is no repeating-nudge seam on Cursor 
   `musterd import sheet`, and a rule for issues that fit no group, found in a real Jira run where
   only 9 of 60 open issues had a fix version (`GUIDANCE_CONTENT_VERSION` 49). Same install paths;
   no wire schema changes.
+- **2026-10-12 — the import skill hands GitHub to `musterd import github` (lane 01M4Q7PMAP).**
+  The [tracker import spec](../superpowers/specs/2026-10-11-tracker-import-design.md) makes the CLI
+  fetch and re-sync a repo's open issues itself, so the skill points there first and writes the file
+  by hand only when the command cannot run; a hand-written GitHub ref now names its repo,
+  `<owner>/<repo>#<number>`, matching what the command writes (ADR 561's `source_ref`)
+  (`GUIDANCE_CONTENT_VERSION` 50). Same install paths; no wire schema changes.
 
 ## Observability & Evaluation
 

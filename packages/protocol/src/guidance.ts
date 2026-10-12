@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 49;
+export const GUIDANCE_CONTENT_VERSION = 50;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -589,9 +589,12 @@ export function renderImportSkill(): string {
     '   - **This repo:** the README, ROADMAP and TODO files, plan and spec docs, a `TODO`/`FIXME`',
     '     search grouped into themes (never one lane per comment), unmerged branches, and recent',
     '     commits for work in progress. Themes become goals; concrete pieces of work become lanes.',
-    '   - **GitHub issues:** `gh issue list --state open --limit 200 --json',
-    '     number,title,body,labels,milestone,url`. Milestones, or else the main labels, become goals;',
-    '     each issue becomes a lane with `source_ref` `github#<number>` and the URL in `detail`.',
+    '   - **GitHub issues:** run `musterd import github [owner/repo]` — it fetches the open issues',
+    '     itself and stages the preview of step 5, and run again later it re-syncs (renamed issues,',
+    '     closed ones abandoned). Write the file by hand only when that command cannot run:',
+    '     `gh issue list --state open --limit 200 --json number,title,body,labels,milestone,url`.',
+    '     Milestones, or else the main labels, become goals; each issue becomes a lane with',
+    '     `source_ref` `<owner>/<repo>#<number>` and the URL in `detail`.',
     '     If `gh` is missing or not signed in, say so and continue with the repo scan.',
     '   - **Linear, Jira or Notion:** use the connector this harness already has for that tool, and',
     '     use it read-only: never create, edit or comment on anything in the tracker.',

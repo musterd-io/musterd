@@ -104,7 +104,9 @@ export function githubSource(opts: {
 }
 
 function toIssue(repo: string, i: ApiIssue): TrackerIssue {
-  const labels = (i.labels ?? []).map((l) => (typeof l === 'string' ? l : (l.name ?? '')).toLowerCase());
+  const labels = (i.labels ?? []).map((l) =>
+    (typeof l === 'string' ? l : (l.name ?? '')).toLowerCase(),
+  );
   const stakes: LaneStakes | undefined = labels.includes('priority:high')
     ? 'high'
     : labels.includes('priority:low')

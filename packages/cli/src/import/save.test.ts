@@ -252,14 +252,41 @@ describe('saveStage — a tracker sync (spec 2026-10-11 §3)', () => {
     ...base(),
     source: { path: 'github acme/app', sha256: 'ab', format: 'github' },
     goals: [{ ref: 'goal:g', row: 1, id: 'g', title: 'G', depends_on: [] }],
-    lanes: [{ ref: 'lane@2', row: 2, title: 'Fresh', goal_id: 'g', depends_on: [], source_ref: 'acme/app#5' }],
+    lanes: [
+      {
+        ref: 'lane@2',
+        row: 2,
+        title: 'Fresh',
+        goal_id: 'g',
+        depends_on: [],
+        source_ref: 'acme/app#5',
+      },
+    ],
     sync: {
       actions: [
         { kind: 'adopt', lane_id: 'D1', ref: 'acme/app#1' },
         { kind: 'rename', lane_id: 'R1', ref: 'acme/app#2', from: 'Old', title: 'New' },
-        { kind: 'abandon', lane_id: 'A1', ref: 'acme/app#3', from: 'Gone', reason: 'closed in GitHub (acme/app#3)' },
-        { kind: 'abandon', lane_id: 'A2', ref: 'acme/app#4', from: 'Taken', reason: 'closed in GitHub (acme/app#4)' },
-        { kind: 'abandon', lane_id: 'A3', ref: 'acme/app#6', from: 'Done', reason: 'closed in GitHub (acme/app#6)' },
+        {
+          kind: 'abandon',
+          lane_id: 'A1',
+          ref: 'acme/app#3',
+          from: 'Gone',
+          reason: 'closed in GitHub (acme/app#3)',
+        },
+        {
+          kind: 'abandon',
+          lane_id: 'A2',
+          ref: 'acme/app#4',
+          from: 'Taken',
+          reason: 'closed in GitHub (acme/app#4)',
+        },
+        {
+          kind: 'abandon',
+          lane_id: 'A3',
+          ref: 'acme/app#6',
+          from: 'Done',
+          reason: 'closed in GitHub (acme/app#6)',
+        },
       ],
       unchanged: 2,
     },
@@ -294,7 +321,12 @@ describe('saveStage — a tracker sync (spec 2026-10-11 §3)', () => {
 
   it('adopts, then goals, new lanes, renames, abandons — re-reading each lane first', async () => {
     const { port, calls } = syncPort();
-    const r = await saveStage(syncStage(), { team: 'dawn', port, persist: () => {}, now: () => NOW });
+    const r = await saveStage(syncStage(), {
+      team: 'dawn',
+      port,
+      persist: () => {},
+      now: () => NOW,
+    });
     expect(calls).toEqual([
       'update D1 {"source_ref":"acme/app#1"}',
       'goal g',
@@ -321,10 +353,20 @@ describe('saveStage — a tracker sync (spec 2026-10-11 §3)', () => {
     });
     let saved: ImportStage | undefined;
     await expect(
-      saveStage(syncStage(), { team: 'dawn', port, persist: (s) => (saved = structuredClone(s)), now: () => NOW }),
+      saveStage(syncStage(), {
+        team: 'dawn',
+        port,
+        persist: (s) => (saved = structuredClone(s)),
+        now: () => NOW,
+      }),
     ).rejects.toThrow(/stopped after/);
     expect(saved!.created).toMatchObject({ 'sync:adopt:D1': 'D1', 'sync:rename:R1': 'R1' });
-    const again = await saveStage(saved!, { team: 'dawn', port, persist: () => {}, now: () => NOW });
+    const again = await saveStage(saved!, {
+      team: 'dawn',
+      port,
+      persist: () => {},
+      now: () => NOW,
+    });
     expect(again.sync.slice(0, 2)).toEqual([
       { kind: 'adopt', lane_id: 'D1', ok: true, note: 'done by an earlier run' },
       { kind: 'rename', lane_id: 'R1', ok: true, note: 'done by an earlier run' },
@@ -338,7 +380,9 @@ describe('saveStage — a tracker sync (spec 2026-10-11 §3)', () => {
     const st = syncStage();
     st.sync!.actions = st.sync!.actions.filter((a) => a.kind !== 'adopt');
     const r = await saveStage(st, { team: 'dawn', port, persist: () => {}, now: () => NOW });
-    expect(r.sync.every((x) => !x.ok && x.note === 'no longer on the board — left alone')).toBe(true);
+    expect(r.sync.every((x) => !x.ok && x.note === 'no longer on the board — left alone')).toBe(
+      true,
+    );
     expect(port.updateLane).not.toHaveBeenCalled();
   });
 });

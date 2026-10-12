@@ -14,7 +14,13 @@ export function slugify(title: string, key: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .slice(0, 64)
     .replace(/^-+|-+$/g, '');
-  return slug || `group-${key}`.toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 64);
+  return (
+    slug ||
+    `group-${key}`
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .slice(0, 64)
+  );
 }
 
 export function issuesToRows(issues: TrackerIssue[]): ImportRow[] {

@@ -59,7 +59,13 @@ const StageShape = z
     sync: z
       .object({
         actions: z.array(
-          z.object({ kind: z.enum(['rename', 'abandon', 'adopt']), lane_id: z.string(), ref: z.string() }).passthrough(),
+          z
+            .object({
+              kind: z.enum(['rename', 'abandon', 'adopt']),
+              lane_id: z.string(),
+              ref: z.string(),
+            })
+            .passthrough(),
         ),
         unchanged: z.number(),
       })

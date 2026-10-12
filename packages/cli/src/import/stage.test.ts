@@ -52,7 +52,13 @@ describe('import stages', () => {
   it('a tracker stage with its sync round-trips', () => {
     const sync = {
       actions: [
-        { kind: 'abandon' as const, lane_id: 'L1', ref: 'acme/app#9', from: 'Old', reason: 'closed in GitHub (acme/app#9)' },
+        {
+          kind: 'abandon' as const,
+          lane_id: 'L1',
+          ref: 'acme/app#9',
+          from: 'Old',
+          reason: 'closed in GitHub (acme/app#9)',
+        },
       ],
       unchanged: 3,
     };

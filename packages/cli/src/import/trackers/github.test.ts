@@ -12,7 +12,10 @@ const fixture = (name: string) =>
 let server: Server | undefined;
 afterEach(() => new Promise<void>((r) => (server ? server.close(() => r()) : r())));
 
-type Route = (path: string, auth: string | undefined) => { status: number; body: string; link?: string };
+type Route = (
+  path: string,
+  auth: string | undefined,
+) => { status: number; body: string; link?: string };
 
 async function fakeGitHub(route: Route): Promise<string> {
   server = createServer((req, res) => {

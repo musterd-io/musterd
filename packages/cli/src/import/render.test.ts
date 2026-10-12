@@ -5,7 +5,13 @@ import type { ImportStage } from './stage.js';
 /* eslint-disable no-control-regex -- stripping ANSI colour to read the words */
 const plain = (s: string) => s.replace(/\u001b\[[0-9;]*m/g, '');
 
-const lane = (n: number) => ({ ref: `lane@${String(n)}`, row: n, title: `New ${String(n)}`, depends_on: [], source_ref: `acme/app#${String(n)}` });
+const lane = (n: number) => ({
+  ref: `lane@${String(n)}`,
+  row: n,
+  title: `New ${String(n)}`,
+  depends_on: [],
+  source_ref: `acme/app#${String(n)}`,
+});
 const stage = (extra: Partial<ImportStage> = {}): ImportStage => ({
   version: 1,
   id: 's1',
@@ -25,8 +31,20 @@ const stage = (extra: Partial<ImportStage> = {}): ImportStage => ({
 describe('renderPreview — a tracker re-sync', () => {
   it('prints one count line, then renames and abandons', () => {
     const actions = [
-      { kind: 'rename' as const, lane_id: 'R1', ref: 'acme/app#11', from: 'Old one', title: 'New one' },
-      { kind: 'rename' as const, lane_id: 'R2', ref: 'acme/app#12', from: 'Old two', title: 'New two' },
+      {
+        kind: 'rename' as const,
+        lane_id: 'R1',
+        ref: 'acme/app#11',
+        from: 'Old one',
+        title: 'New one',
+      },
+      {
+        kind: 'rename' as const,
+        lane_id: 'R2',
+        ref: 'acme/app#12',
+        from: 'Old two',
+        title: 'New two',
+      },
       ...[21, 22, 23].map((n) => ({
         kind: 'abandon' as const,
         lane_id: `A${String(n)}`,
@@ -34,13 +52,24 @@ describe('renderPreview — a tracker re-sync', () => {
         from: `Gone ${String(n)}`,
         reason: `closed in GitHub (acme/app#${String(n)})`,
       })),
-      ...[1, 2, 3, 4, 5, 6, 7].map((n) => ({ kind: 'adopt' as const, lane_id: `D${String(n)}`, ref: `acme/app#${String(30 + n)}` })),
+      ...[1, 2, 3, 4, 5, 6, 7].map((n) => ({
+        kind: 'adopt' as const,
+        lane_id: `D${String(n)}`,
+        ref: `acme/app#${String(30 + n)}`,
+      })),
     ];
     const out = plain(
       renderPreview(
         stage({
           sync: { actions, unchanged: 5 },
-          diagnostics: [{ level: 'warning', row: null, code: 'not_found', message: 'acme/app#40 not found upstream' }],
+          diagnostics: [
+            {
+              level: 'warning',
+              row: null,
+              code: 'not_found',
+              message: 'acme/app#40 not found upstream',
+            },
+          ],
         }),
       ),
     );
@@ -99,7 +128,12 @@ describe('renderSaved — sync rows', () => {
           lanes: [],
           sync: [
             { kind: 'rename', lane_id: 'R1', ok: true },
-            { kind: 'abandon', lane_id: 'A1', ok: false, note: 'claimed since the preview — left alone' },
+            {
+              kind: 'abandon',
+              lane_id: 'A1',
+              ok: false,
+              note: 'claimed since the preview — left alone',
+            },
           ],
         },
         'http://x/live',
