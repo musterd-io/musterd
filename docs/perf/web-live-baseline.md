@@ -1259,7 +1259,9 @@ now `lazy()`: `SeatDetail` on a card's first expand, the drawer only while open.
 | initial JS | 141,696 B       | 140,229 B       | unchanged |
 | total JS   | 292.9 KB        | 293.9 KB        | unchanged |
 
-Total rises by ~1 KB of chunk overhead, as ADR 183 says a split does; it still fits. What remains eager is mostly the
+Measured on `0d84fc43`. Rebased onto `25419dc0` (the /start page, which raised both ceilings the same day): /live
+initial JS 140,728 B against 144,600, total 296.8 KB against 300.1 KB. Total rises by ~1 KB of chunk overhead, as
+ADR 183 says a split does; it still fits. What remains eager is mostly the
 framework (react-dom, the router and seroval: ~290 KB of the ~400 KB minified), so the next app-code cut is small.
 
 - Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main after this lands — /live initial JS above
