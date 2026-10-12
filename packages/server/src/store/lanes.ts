@@ -19,6 +19,7 @@ import {
 } from '@musterd/protocol';
 import { ulid } from 'ulid';
 import type { Driver } from '../db/driver.js';
+import { MusterdError } from '../errors.js';
 import { appendLaneEventRequired, type AuditAction, type AuditRow } from './audit.js';
 import { listGoals } from './goals.js';
 import { getPolicy } from './teams.js';
@@ -62,6 +63,8 @@ interface LaneRow {
   abandon_reason: string | null;
   /** The seat session's unfinished to-dos (ADR 487 §5.2, v82): JSON `{items, at}`; null = none. */
   unfinished_todos_json: string | null;
+  /** The issue this lane came from (ADR 561, v91); null = none. */
+  source_ref: string | null;
   state: string;
   created_by: string;
   created_at: number;
@@ -103,6 +106,7 @@ function rowToLane(row: LaneRow, teamSlug: string): Lane {
     ...(row.unfinished_todos_json
       ? { unfinished_todos: JSON.parse(row.unfinished_todos_json) as Lane['unfinished_todos'] }
       : {}),
+    ...(row.source_ref ? { source_ref: row.source_ref } : {}),
     created_by: row.created_by,
     created_at: row.created_at,
     claimed_at: row.claimed_at,
@@ -267,6 +271,7 @@ export async function openLane(
     follows_up_json: null,
     abandon_reason: null,
     unfinished_todos_json: null,
+    source_ref: input.source_ref ?? null,
     state: claim ? 'claimed' : 'open',
     created_by: createdBy,
     created_at: now,
@@ -274,9 +279,10 @@ export async function openLane(
     resolved_at: null,
     updated_at: now,
   };
-  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  const INSERT = `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, source_ref, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   await db.tx(async (t) => {
+    if (row.source_ref !== null) await refuseHeldSourceRef(t, teamId, row.source_ref, row.id);
     await t.run(INSERT, [
       row.id,
       row.team_id,
@@ -294,6 +300,7 @@ export async function openLane(
       row.stakes,
       row.stakes_provenance,
       row.merged_json,
+      row.source_ref,
       row.state,
       row.created_by,
       row.created_at,
@@ -318,6 +325,7 @@ export async function openLane(
       risk: input.risk ?? [],
       stakes,
       stakes_provenance: row.stakes_provenance ?? 'declared',
+      ...(row.source_ref !== null ? { source_ref: row.source_ref } : {}),
       created_by: createdBy,
       created_at: now,
     });
@@ -400,6 +408,35 @@ export class LaneConflictError extends Error {
     );
     this.name = 'LaneConflictError';
   }
+}
+
+/**
+ * ADR 561: the lane on this team, other than `exceptId`, that holds `ref` while neither done nor
+ * abandoned. At most one, by the refusal below; re-sync reads it to find an issue's lane.
+ */
+export async function laneHoldingSourceRef(
+  db: Driver,
+  teamId: string,
+  ref: string,
+  exceptId?: string,
+): Promise<{ id: string } | undefined> {
+  return db.get<{ id: string }>(
+    `SELECT id FROM lanes WHERE team_id = ? AND source_ref = ? AND state NOT IN ('done','abandoned')
+       AND id <> ? ORDER BY created_at LIMIT 1`,
+    [teamId, ref, exceptId ?? ''],
+  );
+}
+
+/** The 409 for a second live lane on one ref (ADR 561), run inside the writing transaction. */
+async function refuseHeldSourceRef(
+  db: Driver,
+  teamId: string,
+  ref: string,
+  exceptId: string,
+): Promise<void> {
+  const holder = await laneHoldingSourceRef(db, teamId, ref, exceptId);
+  if (holder)
+    throw new MusterdError('conflict', `source_ref "${ref}" already belongs to lane ${holder.id}`);
 }
 
 /**
@@ -523,6 +560,7 @@ async function updateLaneInTx(
     follows_up_json: followsUp !== null ? JSON.stringify(followsUp) : null,
     abandon_reason: abandonReason,
     unfinished_todos_json: todos !== null ? JSON.stringify(todos) : null,
+    source_ref: patch.source_ref !== undefined ? patch.source_ref : (existing.source_ref ?? null),
     state,
     // claimed_at describes the CURRENT tenure: sticky while held, cleared by the release above so a
     // re-claim stamps fresh rather than inheriting the previous holder's timestamp.
@@ -551,6 +589,14 @@ async function updateLaneInTx(
     teamId,
     id,
   ]))!;
+  // ADR 561: one lane that is neither done nor abandoned per ref. Checked when this write would make
+  // the lane such a holder — a new ref, or a closed lane carrying one moving back to a live state.
+  if (
+    next.source_ref !== null &&
+    !LANE_TERMINAL_STATES.has(state) &&
+    (next.source_ref !== rawRow.source_ref || LANE_TERMINAL_STATES.has(existing.state))
+  )
+    await refuseHeldSourceRef(db, teamId, next.source_ref, id);
   const columns = [
     'project',
     'title',
@@ -568,6 +614,7 @@ async function updateLaneInTx(
     'follows_up_json',
     'abandon_reason',
     'unfinished_todos_json',
+    'source_ref',
     'state',
     'claimed_at',
     'resolved_at',
@@ -622,6 +669,7 @@ const AUDITED_LANE_FIELDS = [
   'follows_up',
   'abandon_reason',
   'unfinished_todos',
+  'source_ref',
 ] as const;
 
 /** Which auditable fields differ between two reads of a lane (arrays/objects by value). */
@@ -662,6 +710,8 @@ export interface LaneFilter {
   states?: LaneState[];
   /** Only lanes of this kind (`incident` — the daemon-opened shared-blocker lane). */
   kind?: NonNullable<Lane['kind']>;
+  /** Only lanes carrying this exact `source_ref` (ADR 561), in any state. */
+  sourceRef?: string;
 }
 
 export async function listLanes(
@@ -685,6 +735,7 @@ export async function listLanes(
   eq('state', filter.openOnly ? 'open' : undefined);
   eq('goal_id', filter.goalId);
   eq('kind', filter.kind);
+  eq('source_ref', filter.sourceRef);
   if (filter.states) {
     where.push(`state IN (${filter.states.map(() => '?').join(',')})`);
     params.push(...filter.states);
@@ -734,8 +785,8 @@ export async function countLanesBefore(
  */
 export async function insertLaneSnapshot(db: Driver, teamId: string, lane: Lane): Promise<boolean> {
   const r = await db.run(
-    `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, parked_json, follows_up_json, abandon_reason, unfinished_todos_json, state, created_by, created_at, claimed_at, resolved_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs, depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, parked_json, follows_up_json, abandon_reason, unfinished_todos_json, source_ref, state, created_by, created_at, claimed_at, resolved_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO NOTHING`,
     [
       lane.id,
@@ -758,6 +809,7 @@ export async function insertLaneSnapshot(db: Driver, teamId: string, lane: Lane)
       lane.follows_up !== undefined ? JSON.stringify(lane.follows_up) : null,
       lane.abandon_reason ?? null,
       lane.unfinished_todos ? JSON.stringify(lane.unfinished_todos) : null,
+      lane.source_ref ?? null,
       lane.state,
       lane.created_by,
       lane.created_at,
@@ -781,7 +833,8 @@ export function filterLanes(lanes: Lane[], filter: LaneFilter = {}): Lane[] {
     .filter((l) => (filter.openOnly ? l.state === 'open' : true))
     .filter((l) => (filter.goalId ? l.goal_id === filter.goalId : true))
     .filter((l) => (filter.states ? filter.states.includes(l.state) : true))
-    .filter((l) => (filter.kind ? l.kind === filter.kind : true));
+    .filter((l) => (filter.kind ? l.kind === filter.kind : true))
+    .filter((l) => (filter.sourceRef ? l.source_ref === filter.sourceRef : true));
 }
 
 /**

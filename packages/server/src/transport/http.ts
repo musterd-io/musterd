@@ -6382,6 +6382,10 @@ export async function handleHttp(
           ...(url.searchParams.get('goal') !== null
             ? { goalId: url.searchParams.get('goal')! }
             : {}),
+          // ADR 561: the lanes an issue has, exact match, any state (within the history window).
+          ...(url.searchParams.get('source_ref') !== null
+            ? { sourceRef: url.searchParams.get('source_ref')! }
+            : {}),
           ...(states.length > 0 ? { states } : {}),
         });
         // Contention and staleness still read the whole board; only the response is windowed.

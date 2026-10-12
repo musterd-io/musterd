@@ -153,9 +153,9 @@ async function projectLaneEvent(
     const provenance = typeof d['stakes_provenance'] === 'string' ? d['stakes_provenance'] : null;
     await db.run(
       `INSERT INTO lanes (id, team_id, project, title, detail, kind, owner_seat, role, surface_globs,
-                          depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, state,
-                          created_by, created_at, claimed_at, resolved_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'open', ?, ?, NULL, NULL, ?)`,
+                          depends_on, branch, goal_id, risk, stakes, stakes_provenance, merged_json, source_ref,
+                          state, created_by, created_at, claimed_at, resolved_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'open', ?, ?, NULL, NULL, ?)`,
       [
         laneId,
         teamId,
@@ -171,6 +171,9 @@ async function projectLaneEvent(
         risk.length > 0 ? JSON.stringify(risk) : null,
         stakes !== 'normal' ? stakes : null,
         provenance === 'defaulted' ? 'defaulted' : null,
+        // ADR 561: carried, never judged — the fold applies history, so a ref another live lane
+        // already holds lands anyway (each daemon refuses at its own write; re-sync names the rest).
+        typeof d['source_ref'] === 'string' ? d['source_ref'] : null,
         typeof d['created_by'] === 'string' ? d['created_by'] : (event.actor ?? ''),
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
         typeof d['created_at'] === 'number' ? d['created_at'] : ts,
@@ -262,6 +265,7 @@ async function projectLaneEvent(
         follows_up: 'follows_up_json',
         abandon_reason: 'abandon_reason',
         unfinished_todos: 'unfinished_todos_json',
+        source_ref: 'source_ref',
       };
       for (const [field, change] of Object.entries(changes)) {
         const col = column[field];
