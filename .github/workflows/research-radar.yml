@@ -46,6 +46,7 @@ jobs:
         if: steps.secrets.outputs.ready == 'true'
         with:
           token: ${{ secrets.STEWARD_TOKEN }}
+          fetch-depth: 0
 
       - name: Select weekly draft PR
         id: guard

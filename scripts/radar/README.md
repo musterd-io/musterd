@@ -29,7 +29,8 @@ and ledger; it never merges. Review the source links and triage before merging.
 
 A repeat run loads the existing unreviewed draft's ledger before reading sources and appends its
 retry findings with `--resume-draft`, preserving prior findings and successful IDs. The workflow
-checks review state again before publishing. Local emission refuses an existing same-week digest
+fetches complete Git history so the weekly branch can rebase onto current `main` before processing.
+It checks review state again before publishing. Local emission refuses an existing same-week digest
 unless that draft-resume flag is explicitly supplied. Missing model results remain pending;
 successful tier-1 drops are retained even when shortlisted triage fails. Digests record source
 read manifests; Actions summaries name deferred IDs, links, failure categories and the cap reached.

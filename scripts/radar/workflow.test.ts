@@ -113,6 +113,7 @@ describe('weekly radar workflow', () => {
     expect(result.calls).toBe('');
   });
   it('loads the unreviewed draft before source processing', () => {
+    expect(workflow).toMatch(/uses: actions\/checkout[^]*?fetch-depth: 0/);
     const result = run('Select weekly draft PR', {});
     expect(result.calls).toContain('checkout -B automation/research-radar-');
     expect(workflow.indexOf('git checkout -B')).toBeLessThan(
