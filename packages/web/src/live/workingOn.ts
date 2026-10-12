@@ -135,12 +135,7 @@ export function lanesChangedSince(
   envelopes: readonly Pick<Envelope, 'id' | 'act' | 'meta'>[],
   seenId: string | null,
 ): boolean {
-  if (envelopes.length === 0) return false;
-  if (seenId === null) return invalidatesLanes(envelopes[envelopes.length - 1]!);
-  for (let i = envelopes.length - 1; i >= 0; i--) {
-    const env = envelopes[i]!;
-    if (env.id === seenId) return false;
-    if (invalidatesLanes(env)) return true;
-  }
-  return false;
+  // findIndex is -1 for an id that left the window, so the slice starts at 0: everything counts.
+  const from = seenId === null ? envelopes.length - 1 : envelopes.findIndex((e) => e.id === seenId) + 1;
+  return envelopes.slice(Math.max(0, from)).some(invalidatesLanes);
 }
