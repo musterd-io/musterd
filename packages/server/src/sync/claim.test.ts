@@ -376,6 +376,19 @@ withDrivers('claim', (_o, kind) => {
       const laneA = await laneOnBoth('a');
       const laneB = await laneOnBoth('b');
       await patch(hubBase, `/teams/bravo/lanes/${laneA}`, { owner_seat: 'nick' }, nickOnHub);
+      // The hub's push loop stages that claim in the background (kicked by the write) and binds nick
+      // to the hub at ingest. Unbind only after it has: an ingest that lands after the unbind
+      // re-binds nick, and the joiner's claim below is then refused as the rule working.
+      const nickId = (
+        (await hub.store.get("SELECT id FROM members WHERE team_id = ? AND name = 'nick'", [
+          (await hubTeam()).id,
+        ])) as { id: string }
+      ).id;
+      for (let i = 0; i < 200; i++) {
+        if (await hub.store.get('SELECT node_id FROM seat_nodes WHERE member_id = ?', [nickId]))
+          break;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
       const unbound = await call(
         hubBase,
         'DELETE',
