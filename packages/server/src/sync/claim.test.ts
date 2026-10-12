@@ -757,6 +757,24 @@ withDrivers('claim', (_o, kind) => {
       expect(retry.status).not.toBe(409);
     });
 
+    it("a submit the hub refuses as a bad request reaches the joiner's caller as that refusal, not a 500 (lane 01M4S1GJJ6)", async () => {
+      // dreamy, 2026-10-12: five submits from a joiner came back as a bare "internal server error"
+      // while the hub had answered 400 with the repair (ADR 487: pass follows_up).
+      const laneId = await claimedOnJoiner('spend controls, part 1 of 3');
+      const res = await patch(
+        joinerBase,
+        `/teams/bravo/lanes/${laneId}`,
+        { state: 'ready_for_review', merged: { pr: 1, sha: 'abc', authorized_by: 'nick' } },
+        nickOnJoiner,
+      );
+      expect(res.status).toBe(400);
+      expect(res.json.error.code).toBe('bad_request');
+      expect(res.json.error.message).toContain('pass follows_up');
+      expect((await getLane(hub.store, (await hubTeam()).id, laneId, 'bravo'))!.state).toBe(
+        'claimed',
+      );
+    });
+
     it('a terminal close while the hub is unreachable refuses hub_unreachable and moves nothing', async () => {
       const laneId = await claimedOnJoiner('c');
       await hub.close();
