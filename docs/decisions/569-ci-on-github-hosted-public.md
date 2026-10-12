@@ -37,8 +37,9 @@ fork PR would also run `gates` on the paid runner once a maintainer approves it.
 3. **Ubicloud stays the outage fallback.** Its labels stay in `.github/actionlint.yaml`. If GitHub's
    runner assignment fails for long, set `runs-on: ubicloud-standard-2` again. That is one line, and
    it is not automatic. On a 2-CPU runner, set the workers back to 2 as well.
-4. **nick decides the Ubicloud account** — pause it, or keep it installed for the fallback. With no
-   job asking for its labels it runs nothing, so it should bill nothing beyond any fixed fee.
+4. **The Ubicloud account stays**, installed on `musterd-io`, as the fallback in decision 3 (nick,
+   2026-10-12). With no job asking for its labels it runs nothing, so it should bill nothing beyond
+   any fixed fee.
 5. **If the repo goes private again, this ADR's premise is gone.** Re-weigh then, starting from ADR
    517's numbers.
 
