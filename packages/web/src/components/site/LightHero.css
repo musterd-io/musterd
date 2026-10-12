@@ -13,8 +13,8 @@
    * (1120 - 704) / 2 = 108px inside the left edge of the nav above it and every h2 below it.
    * Measured 2026-09-19 at 1440: nav and all four section headings at x=316, hero at x=424.
    * A rail is a left edge, not a measure — the measure belongs to the text, below. */
-  /* Two columns from tablet up (ADR 560): the pitch, and the record that backs it. The card column
-   * is capped so the pitch keeps its two-line tagline; stacked, the card follows the preview line. */
+  /* Two columns from tablet up (ADR 567): the pitch, and the office it describes. Near-even, so the
+   * room is big enough to read as people at desks; stacked, it follows the preview line. */
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 1.6rem;
@@ -23,7 +23,7 @@
 
 @media (min-width: 880px) {
   .lh__inner {
-    grid-template-columns: minmax(0, 1fr) minmax(19rem, 23rem);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
     column-gap: 2.75rem;
   }
 }
@@ -81,65 +81,4 @@
   font-size: 0.85rem;
   line-height: 1.4;
   margin: 0.8rem 0 0;
-}
-
-/* The record card: a ruled list on paper, because it IS a record (designer tell 4) — the one box on
- * the hero, and the only thing in it that is not our own sentence. */
-.rc {
-  margin: 0;
-  border: 1px solid var(--mustard-100);
-  border-radius: 10px;
-  background: var(--surface-solid);
-  padding: 0.85rem 1rem 0.75rem;
-}
-
-.rc__head {
-  margin: 0 0 0.45rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-.rc__rows {
-  margin: 0;
-}
-
-.rc__row {
-  display: grid;
-  grid-template-columns: 6.6rem minmax(0, 1fr);
-  gap: 0.7rem;
-  padding: 0.42rem 0;
-  border-top: 1px solid var(--mustard-100);
-}
-
-.rc__label {
-  margin: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  color: var(--text-faint);
-  padding-top: 0.12rem;
-}
-
-.rc__value {
-  margin: 0;
-  color: var(--text);
-  font-size: 0.92rem;
-  line-height: 1.4;
-}
-
-.rc__foot {
-  margin: 0.45rem 0 0;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--mustard-100);
-  font-size: 0.78rem;
-  line-height: 1.4;
-  color: var(--text-faint);
-}
-
-@media (max-width: 400px) {
-  .rc__row {
-    grid-template-columns: 1fr;
-    gap: 0.1rem;
-  }
 }

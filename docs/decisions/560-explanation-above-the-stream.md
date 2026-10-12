@@ -73,6 +73,9 @@ the position only because the office had to go somewhere once `OfficeProof` was 
   to the fourth section. There is no telemetry for it; Twitch's own channel stats are the only
   reading, and the drop is accepted (decision 4).
 - Nothing changes for `/watch`, `/live` or `/broadcast`, which have their own layouts.
+- 2026-10-12: decisions 1 to 4 superseded by [ADR 567](567-office-in-the-hero.md) on nick's look at
+  the build: the hero's record card repeated the chain section, and the office belongs in the hero.
+  Decision 5 stands.
 
 ## Observability & Evaluation
 

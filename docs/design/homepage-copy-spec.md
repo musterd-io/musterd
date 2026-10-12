@@ -15,7 +15,7 @@ overlapping points and shows one picture. The measurement and the brief are
 brief asks for. The order is fixed by [ADR 560](../decisions/560-explanation-above-the-stream.md):
 `SiteNav → LightHero (with the record card) → the chain → why → StreamSection → GettingStarted →
 Teasers → SiteFooter`. The strings hold in any order; nothing below refers to what is above or below
-it. miley builds (lane `01M4RCBXVYXXDMB1T3TZF787XJ`). **Where this section and §0 disagree, this
+it. miley builds (lane `01M4RCBXVYXXDMB1T3TZF787XJ`). _(2026-10-12, [ADR 567](../decisions/567-office-in-the-hero.md): the hero's right column is the office, not the record card of 0a.2, which is cut; the order is hero (with the office) → the chain → why → `GettingStarted` → `Teasers` → the line above the footer. The chain's lead became `One lane from our own board, as the board recorded it.`, since there is no card above it.)_ **Where this section and §0 disagree, this
 section governs; §0.2's rules for every string still apply.**
 
 ### 0a.1 What changes, and why in one line each

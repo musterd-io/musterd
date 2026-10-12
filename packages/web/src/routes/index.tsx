@@ -13,7 +13,6 @@ import { GettingStarted } from '../components/site/GettingStarted';
 import { LightHero } from '../components/site/LightHero';
 import { SiteFooter } from '../components/site/SiteFooter';
 import { SiteNav } from '../components/site/SiteNav';
-import { StreamSection } from '../components/site/StreamSection';
 import { Teasers } from '../components/site/Teasers';
 import { WhyTalk } from '../components/site/WhyTalk';
 
@@ -44,12 +43,11 @@ function Home() {
   return (
     <main className="site-page">
       <SiteNav />
-      {/* ADR 560: hero (with the record card), the chain, why, then the stream — the page explains
-          before it shows the room. Five content sections (homepage-copy-spec §0a). */}
+      {/* ADR 567: the hero carries the office (the stream, or its still), then the chain, why and
+          getting started — the room first, then what it is doing. */}
       <LightHero />
       <Chain />
       <WhyTalk />
-      <StreamSection />
       <GettingStarted />
       <Teasers />
       <Boundary />

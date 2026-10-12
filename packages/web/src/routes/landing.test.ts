@@ -13,17 +13,24 @@ describe('landing page', () => {
     expect(src()).not.toContain('Live.css');
   });
   // ADR 428: ONE office, and the stream is it. `OfficeProof` is gone; a second office block is the
-  // defect this asserts against coming back. ADR 560 (2026-10-12) fixes the order: hero, the chain,
-  // why, the stream, getting started — the page explains before it shows the room.
-  it('runs hero, chain, why, stream, getting started, and has no second office block', () => {
+  // defect this asserts against coming back. ADR 567 (2026-10-12, superseding ADR 560's order): the
+  // office is the hero's right column, then the chain, why and getting started.
+  it('runs hero (with the office), chain, why, getting started, and has no second office block', () => {
     const order = src();
     expect(order).not.toContain('OfficeProof');
     const at = (c: string) => order.indexOf(`<${c}`);
-    const seq = ['LightHero', 'Chain', 'WhyTalk', 'StreamSection', 'GettingStarted', 'Teasers', 'Boundary', 'SiteFooter'];
+    const seq = ['LightHero', 'Chain', 'WhyTalk', 'GettingStarted', 'Teasers', 'Boundary', 'SiteFooter'];
     for (const c of seq) expect(at(c), c).toBeGreaterThan(-1);
     for (let i = 1; i < seq.length; i++) expect(at(seq[i - 1]!)).toBeLessThan(at(seq[i]!));
     // §0a.1: these three said the chain as claims; the chain section says it once, about one lane.
-    expect(order).not.toMatch(/ClaimToAccepted|WhatIs|HowItWorks/);
+    expect(order).not.toMatch(/ClaimToAccepted|WhatIs|HowItWorks|RecordCard/);
+    // The office lives in the hero, once.
+    expect(order).not.toContain('<StreamSection');
+    const hero = readFileSync(
+      fileURLToPath(new URL('../components/site/LightHero.tsx', import.meta.url)),
+      'utf8',
+    );
+    expect(hero.match(/<StreamSection \/>/g)).toHaveLength(1);
   });
 });
 
@@ -56,13 +63,13 @@ describe('the office slot in the stream section', () => {
     expect(rendered).not.toMatch(/office-scene|mountOffice|OfficeScene/);
   });
 
-  // Explicit dimensions still. Lazy again since ADR 560 put the stream fourth, below the fold at
-  // 390 and 1414 px wide: ADR 428's eager, high-priority fetch would compete with the hero.
-  it('cannot shift layout, and is lazy now that it is below the fold', () => {
+  // Explicit dimensions still, and eager with a high priority: since ADR 567 it is the hero's
+  // picture, the first image on the page, so lazy would deprioritise the visual a reader waits on.
+  it('cannot shift layout, and is eager now that it is the hero', () => {
     expect(stream).toMatch(/width=\{1200\}/);
     expect(stream).toMatch(/height=\{630\}/);
-    expect(stream).toContain('loading="lazy"');
-    expect(rendered).not.toContain('fetchPriority');
+    expect(stream).toContain('fetchPriority="high"');
+    expect(rendered).not.toContain('loading="lazy"');
   });
 
   // "Whose office is this?" — answered in the one paragraph left (homepage-copy-spec §0a.5): the team
@@ -101,7 +108,6 @@ const read = (rel: string) =>
 // category noun is never bare (decision 4). ADR 563 (2026-10-12): the claim is the team.
 describe('the hero', () => {
   const hero = read('../components/site/LightHero.tsx');
-  const card = read('../components/site/RecordCard.tsx');
 
   // Scoped 2026-09-17 after big-body's cross-family security read (act 01M2PH26PH): the unscoped
   // claim reads as a promise about everything an agent does. ADR 563 decision 2: the subhead names
@@ -120,21 +126,13 @@ describe('the hero', () => {
     expect(hero).toContain('Watch the team work');
     expect(hero).toContain('Private preview. We write to you when there is a seat for your team.');
   });
-  it('carries the record card as its right column (ADR 560)', () => {
-    expect(hero).toContain('<RecordCard />');
+  it('carries the office as its right column (ADR 567), not a record card', () => {
+    expect(hero).toContain('<StreamSection />');
+    expect(hero).not.toContain('RecordCard');
   });
 
-  // §0a.2: a real lane, dated, with the model from the presence record, and no "who asked".
-  it('the record card is a dated snapshot of a real lane, says its work row is plain words, and leaves "who asked" out', () => {
-    expect(card).toContain('One lane from our own board');
-    expect(card).toContain('Pull request 2240, merged 2026-10-08');
-    expect(card).toContain('sloane, a different member, 2026-10-09');
-    expect(card).toContain('Claude Sonnet 5.5, as its tool reported it');
-    expect(card).toContain('A snapshot of the board, <span className="nowrap">2026-10-09</span>. The work row is in plain words.');
-    expect(card).not.toMatch(/who asked|asked for it|requested by/i);
-  });
   it('no surface here uses the critic\'s noun', () => {
-    expect(hero + card).not.toMatch(/swarm/i);
+    expect(hero).not.toMatch(/swarm/i);
   });
 });
 
@@ -148,7 +146,7 @@ describe('the 2026-10-12 cut', () => {
   // §0.2: acceptance arrives after the merge, so it is "done", never "ships on its author's word".
   it('the chain walks one real lane through four stops, and separates landing from done', () => {
     expect(chain).toContain('One piece of work, from claimed to accepted');
-    expect(chain).toContain('The lane on the card above, as the board recorded it.');
+    expect(chain).toContain('One lane from our own board, as the board recorded it.');
     for (const label of ['Claimed', 'Model', 'Landed', 'Accepted']) expect(chain).toContain(`label: '${label}'`);
     expect(chain).toContain('Landing is not the same as done.');
     // ADR 235: an owner CAN close its own lane, recorded unconfirmed — the page says so rather than

@@ -1,14 +1,15 @@
 import { EARLY_ACCESS_URL, TAGLINE } from '../../content/site';
-import { RecordCard } from './RecordCard';
+import { StreamSection } from './StreamSection';
 import './LightHero.css';
 
 /**
  * The typographic landing hero (ADR 302): type on the warm mustard ground, no canvas, no render
  * loop. The pitch is the prerendered text itself.
  *
- * Two columns since 2026-10-12 (ADR 560, homepage-copy-spec §0a.2): the pitch on the left and a real
- * lane's record on the right, so the claim and its proof share the first screen. On a phone the card
- * follows the preview line.
+ * Two columns since 2026-10-12 (ADR 567): the pitch on the left and the team's office on the right —
+ * the stream, or its still between sessions — so the first picture on the page is the team making
+ * the claim. On a phone the office follows the preview line. (A record card sat here for one draft;
+ * it said what the chain section below says, so the lane's facts now live there once.)
  */
 export function LightHero() {
   return (
@@ -47,7 +48,7 @@ export function LightHero() {
             expectation. nick confirms this promise against what the form actually sends. */}
         <p className="lh__note">Private preview. We write to you when there is a seat for your team.</p>
         </div>
-        <RecordCard />
+        <StreamSection />
       </div>
     </section>
   );
