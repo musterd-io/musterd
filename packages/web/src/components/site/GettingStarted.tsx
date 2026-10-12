@@ -1,38 +1,37 @@
-import { EARLY_ACCESS_URL, FIRST_TEN_MINUTES_PATH } from '../../content/site';
+import { FIRST_TEN_MINUTES_PATH, REPO_URL } from '../../content/site';
 import './GettingStarted.css';
 
 /**
- * Getting started (homepage-copy-spec §0.9, 2026-10-09) — the block removed on 2026-10-03 when the
- * repository went private, back in the only form that is honest during the preview. It answers
- * "what am I signing up for", and says what does not exist yet.
+ * Getting started (ADR 568, 2026-10-12): the preview is over, so this is the install, in three
+ * steps, with the commands themselves. It replaced the preview's "Request a seat / Not yet" rows.
  *
- * The `Not yet` row carries no date and no link, because nothing on this page may promise one (the
- * goal's target is internal). When the first-run goal ships, that row becomes a `Today` row with the
- * real command and nothing else on the page changes. The status words are static text, true in every
- * state — no "live", "now" or "currently" (watch-page-copy-spec §2).
+ * Every command here is one a reader can run today: `@musterd/cli` from npm (ADR 156's lockstep
+ * release) or the Homebrew tap's npm-wrapper formula. Step 2 names no harness (nick, #2405: the
+ * site says "agents" or "harness", never Claude Code, Codex or Cursor); `musterd init`'s own
+ * detection list (`packages/cli/src/onboard/harnesses/index.ts`) is what it finds. No time promise
+ * and no state word (watch-page-copy-spec §2).
  *
- * The middle row links the first-ten-minutes page (/start, dreamy's lane 01M4GQ2NR438YWWYRH7RTTYP9X).
- * It was held back until that route existed (nick, 2026-10-09: deploy without /start); now the
- * route exists, the row is back.
+ * The commands are plain text in a terminal block, not a copy button: the page is prerendered and
+ * needs no script for this, and `user-select: all` makes one click select the whole command.
  */
-const ROWS = [
+const STEPS = [
   {
-    status: 'Today',
-    title: 'Request a seat.',
-    body: 'Fill in the form. We write to you when there is a seat for your team.',
-    link: { href: EARLY_ACCESS_URL, text: 'Get early access' },
+    title: 'Install the command line tool.',
+    body: null,
+    commands: ['npm install -g @musterd/cli'],
+    alt: { lead: 'Or with Homebrew:', command: 'brew install SandRiseStudio/musterd/musterd' },
   },
   {
-    status: 'Today',
-    title: 'See your first ten minutes.',
-    body: 'What the first session looks like, step by step, and what you look at along the way.',
-    link: { href: FIRST_TEN_MINUTES_PATH, text: 'See your first ten minutes' },
+    title: 'Run it in your project’s folder.',
+    body: 'It starts musterd on your machine, creates your team, finds the agent tools you already use, and asks before it connects them.',
+    commands: ['cd your-project', 'musterd init'],
+    alt: null,
   },
   {
-    status: 'Not yet',
-    title: 'Install and connect your agents.',
-    body: 'One command, for the agents you already run. It opens to the preview first.',
-    link: null,
+    title: 'Start a chat with your agent in that folder.',
+    body: 'It joins the team and shows up online. Then the tour gives it a small piece of work, and you judge what comes back.',
+    commands: ['musterd tour'],
+    alt: null,
   },
 ] as const;
 
@@ -43,24 +42,45 @@ export function GettingStarted() {
         Getting started
       </h2>
       <p className="gs__lead">
-        musterd is in private preview, so there is no public install yet. This is the path today.
+        You need Node 22 or later, and an agent tool you already use.
       </p>
-      <ol className="gs__rows">
-        {ROWS.map((r) => (
-          <li key={r.title} className={`gs__row${r.status === 'Not yet' ? ' is-later' : ''}`}>
-            <span className="gs__status mono">{r.status}</span>
-            <div>
-              <h3 className="gs__row-title">{r.title}</h3>
-              <p className="gs__row-body">{r.body}</p>
-              {r.link && (
-                <a className="gs__link" href={r.link.href}>
-                  {r.link.text}
-                </a>
+      <ol className="gs__steps">
+        {STEPS.map((s, i) => (
+          <li key={s.title} className="gs__step">
+            <span className="gs__num mono" aria-hidden="true">
+              {i + 1}
+            </span>
+            <div className="gs__step-main">
+              <h3 className="gs__step-title">{s.title}</h3>
+              {s.body && <p className="gs__step-body">{s.body}</p>}
+              <pre className="gs__cmd">
+                {s.commands.map((c, j) => (
+                  <code key={c}>
+                    <span className="gs__prompt" aria-hidden="true">
+                      ${' '}
+                    </span>
+                    <span className="gs__line">{c}</span>
+                    {j < s.commands.length - 1 && '\n'}
+                  </code>
+                ))}
+              </pre>
+              {s.alt && (
+                <p className="gs__alt">
+                  {s.alt.lead} <code className="gs__inline">{s.alt.command}</code>
+                </p>
               )}
             </div>
           </li>
         ))}
       </ol>
+      <p className="gs__more">
+        <a className="gs__link" href={FIRST_TEN_MINUTES_PATH}>
+          See your first ten minutes
+        </a>
+        <a className="gs__link" href={REPO_URL}>
+          Read the source on GitHub
+        </a>
+      </p>
     </section>
   );
 }

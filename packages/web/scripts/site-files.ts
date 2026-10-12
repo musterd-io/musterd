@@ -190,7 +190,8 @@ inside a single task; the members have names, and their work is attributable.
 
 ## Status
 
-musterd is in private preview. There is no public install yet.
+musterd is open source (MIT) and runs on your machine. Install it with \`npm install -g @musterd/cli\`
+(Node 22 or later), then run \`musterd init\` in a project folder.
 
 ## Source
 

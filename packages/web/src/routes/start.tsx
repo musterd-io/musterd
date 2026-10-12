@@ -15,8 +15,8 @@ import { WATCH_COPY } from '../components/site/watchCopy';
  * preview of that session: structure, stills and preview wording. Final copy is alfie's lane
  * 01M4FDBXPX; the homepage block links here (FIRST_TEN_MINUTES_PATH).
  *
- * Every string is preview wording: honest about the private preview, with no state word and
- * no promise of an install date. The share card is the office still — the page is about the
+ * Written in the private preview (no state word, no install date); since ADR 568 the home page's
+ * Getting started carries the install. The share card is the office still — the page is about the
  * picture of the team at work, the same exception /watch claims in siteMeta.ts.
  */
 export const Route = createFileRoute('/start')({

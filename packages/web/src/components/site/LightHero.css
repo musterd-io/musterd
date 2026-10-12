@@ -13,6 +13,19 @@
    * (1120 - 704) / 2 = 108px inside the left edge of the nav above it and every h2 below it.
    * Measured 2026-09-19 at 1440: nav and all four section headings at x=316, hero at x=424.
    * A rail is a left edge, not a measure — the measure belongs to the text, below. */
+  /* Two columns from tablet up (ADR 567): the pitch, and the office it describes. Near-even, so the
+   * room is big enough to read as people at desks; stacked, it follows the preview line. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.6rem;
+  align-items: center;
+}
+
+@media (min-width: 880px) {
+  .lh__inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+    column-gap: 2.75rem;
+  }
 }
 
 .lh__title {

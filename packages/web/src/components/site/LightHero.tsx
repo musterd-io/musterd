@@ -1,14 +1,21 @@
-import { EARLY_ACCESS_URL, TAGLINE } from '../../content/site';
+import { TAGLINE } from '../../content/site';
+import { StreamSection } from './StreamSection';
 import './LightHero.css';
 
 /**
  * The typographic landing hero (ADR 302): type on the warm mustard ground, no canvas, no render
  * loop. The pitch is the prerendered text itself.
+ *
+ * Two columns since 2026-10-12 (ADR 567): the pitch on the left and the team's office on the right —
+ * the stream, or its still between sessions — so the first picture on the page is the team making
+ * the claim. On a phone the office follows the preview line. (A record card sat here for one draft;
+ * it said what the chain section below says, so the lane's facts now live there once.)
  */
 export function LightHero() {
   return (
     <section className="lh">
       <div className="lh__inner shell">
+        <div className="lh__pitch">
         {/*
           No wordmark here. SiteNav states the name 38px above this, at the same size, and at phone
           width both sit flush left — so the page opened by saying "musterd" twice before it said
@@ -29,17 +36,19 @@ export function LightHero() {
           it and who accepted it.
         </p>
         <p className="lh__ctas">
-          <a className="lh__cta lh__cta--primary" href={EARLY_ACCESS_URL}>
-            Get early access
+          <a className="lh__cta lh__cta--primary" href="#getting-started">
+            Get started
           </a>
           {/* Names the action. "Watch it live" was a state claim in prerendered HTML. */}
           <a className="lh__cta" href="/watch">
             Watch the team work
           </a>
         </p>
-        {/* What happens after the click, and why there is no install: the primary button sets an
-            expectation. nick confirms this promise against what the form actually sends. */}
-        <p className="lh__note">Private preview. We write to you when there is a seat for your team.</p>
+        {/* What the reader is agreeing to before the click (ADR 568: the preview is over). Each
+            clause is checkable: the LICENSE file, a local daemon, no sign-up anywhere in init. */}
+        <p className="lh__note">Open source under the MIT license. Runs on your machine, no account.</p>
+        </div>
+        <StreamSection />
       </div>
     </section>
   );

@@ -11,7 +11,9 @@ import { WATCH_COPY } from './watchCopy';
 import './StreamSection.css';
 
 /**
- * The stream section: the homepage's ONE office, directly under the hero (ADR 428).
+ * The stream: the homepage's ONE office (ADR 428), in the hero's right column since ADR 567 — the
+ * claim on the left, the team making it on the right. (ADR 560 had put it fourth; nick reopened
+ * that on 2026-10-12: the room is the proof people come for, and it should be the first picture.)
  *
  * It used to be the second of two. `OfficeProof` carried a still and this carried the player, each
  * for a written reason that held on its own — and measured 2026-09-21 at 390x844 on a live channel,
@@ -125,28 +127,12 @@ export function StreamSection() {
   const showStill = liveness !== 'live' && !replaying;
 
   return (
-    <section className="ss shell">
-      {/* The title is a direct child, not part of `.ss__copy`, purely so the grid can order it
-          independently: stacked on a phone the reader must meet the heading BEFORE the player,
-          or a video arrives with no idea attached to it. */}
-      <h2 className="ss__title">Watch its own agents build it, live</h2>
-      <div className="ss__copy">
-        <p className="ss__body">
-          musterd is built by a team running on musterd. Members claim work, hand it off, and
-          accept each other&rsquo;s changes — the acts this page describes, doing the building.
-        </p>
-        <p className="ss__body">
-          Every member has a desk with their name on it. A desk outlasts the session that filled it:
-          close the window and the member, their inbox and their unfinished work are all
-          still there. This is our team, working on its own product.
-        </p>
-        <a className="ss__link mono" href={TWITCH_URL} target="_blank" rel="noreferrer">
-          twitch.tv/{TWITCH_CHANNEL}
-        </a>
-        <a className="ss__watch" href="/watch">
-          What you are watching &rarr;
-        </a>
-      </div>
+    <section className="ss" aria-labelledby="watch-team">
+      {/* In the hero's right column since ADR 567: the label first, so the room arrives with an
+          idea attached rather than as a bare video. */}
+      <h2 className="ss__title mono" id="watch-team">
+        Watch the team build it
+      </h2>
       <div className="ss__stage">
         <div className="ss__player" ref={hostRef}>
           <div className="ss__mount" ref={mountRef} />
@@ -160,10 +146,10 @@ export function StreamSection() {
               className="ss__still"
               src={officeStill}
               alt={WATCH_COPY.stillAlt}
-              // Explicit dimensions so it cannot shift layout, and EAGER with a high priority —
-              // the opposite of what this image carried below the fold. It is now the first
-              // picture on the page and ships in the prerendered HTML, so `loading="lazy"` would
-              // deprioritise the one visual a reader is waiting on.
+              // Explicit dimensions so it cannot shift layout, and EAGER with a high priority: since
+              // ADR 567 it is the hero's picture, the first image on the page, and ships in the
+              // prerendered HTML — `loading="lazy"` would deprioritise the one visual a reader is
+              // waiting on.
               width={1200}
               height={630}
               fetchPriority="high"
@@ -184,6 +170,22 @@ export function StreamSection() {
             : replaying
               ? WATCH_COPY.stateReplay
               : 'The team works in sessions, so the channel is dark between them. This is a still of the office.'}
+        </p>
+      </div>
+      {/* homepage-copy-spec §0a.5: one paragraph. The desk-outlasts-the-session sentence left the
+          page on purpose (it was said three times); /watch still carries it. */}
+      <div className="ss__copy">
+        <p className="ss__body">
+          musterd is built by a team running on musterd. This is that team claiming work, handing it
+          off and accepting each other&rsquo;s changes.
+        </p>
+        <p className="ss__links">
+          <a className="ss__link mono" href={TWITCH_URL} target="_blank" rel="noreferrer">
+            twitch.tv/{TWITCH_CHANNEL}
+          </a>
+          <a className="ss__watch" href="/watch">
+            What you are watching &rarr;
+          </a>
         </p>
       </div>
     </section>

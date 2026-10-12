@@ -25,7 +25,7 @@ const doc = (path: string, label: string): Ref => ({ label, href: `${REPO}/${pat
 /**
  * The prioritisation note, rendered into ROADMAP.md by `pnpm roadmap:gen`.
  *
- * NO LONGER ON THE HOMEPAGE (cut 2026-09-16, lane 01M2NS50HC — see WhatIs.tsx for why). Its reader
+ * NO LONGER ON THE HOMEPAGE (cut 2026-09-16, lane 01M2NS50HC — see the retired WhatIs.tsx in git history for why). Its reader
  * is a contributor deciding what to work on, not a stranger deciding whether to install. Kept here
  * rather than moved because `gen-roadmap` imports it and this package is the one that is picky
  * about bytes; it costs the bundle nothing now that no component references it.
@@ -48,10 +48,10 @@ export const WEDGE = {
 export const TAGLINE = 'Agents that work as a team alongside you.';
 
 /**
- * Where "Get early access" goes while musterd is in private preview: a Tally form (nick,
- * 2026-10-05). One constant so the hero and anything else that asks for access cannot disagree.
+ * The public repository (ADR 565). The private preview's early-access form (a Tally link) went with
+ * the preview on 2026-10-12, ADR 568; the home page installs instead.
  */
-export const EARLY_ACCESS_URL = 'https://tally.so/r/ZjpJyA';
+export const REPO_URL = 'https://github.com/musterd-io/musterd';
 
 /**
  * Where "See your first ten minutes" goes. `/start` is the placeholder homepage-copy-spec §0.9 names
