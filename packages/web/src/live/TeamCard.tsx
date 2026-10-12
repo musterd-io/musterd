@@ -110,6 +110,7 @@ export function TeamCard({
     return (
       <li
         className={`lc-team-card lc-team-card--${card.state} is-still`}
+        data-member={card.name}
         style={{ ['--member' as string]: card.color }}
       >
         <div className="lc-team-card__hit">{face}</div>
@@ -119,6 +120,8 @@ export function TeamCard({
   return (
     <li
       className={`lc-team-card lc-team-card--${card.state}${linked ? ' is-linked' : ''}`}
+      // The tour's spotlight finds the agent by this (components/tour); nothing else reads it.
+      data-member={card.name}
       style={{ ['--member' as string]: card.color }}
       onMouseEnter={() => onLink?.(card.name)}
       onMouseLeave={() => onLink?.(null)}

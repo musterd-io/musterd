@@ -13,7 +13,7 @@ const panel = (s: TourState, over: Record<string, unknown> = {}) =>
       s,
       vars: { ...vars, agent: s.agent },
       hint: null,
-      agents: ['dolly'],
+      picks: [{ name: 'dolly', readiness: 'ready' }],
       detail: '',
       note: null,
       busy: false,
@@ -47,10 +47,19 @@ describe('TourPanel — spec docs/design/tour-web-copy.md §3', () => {
   });
 
   it('asks which agent before naming one, when there are several', () => {
-    const html = panel(initialState('nick', ''), { agents: ['dolly', 'ghost'] });
+    const html = panel(initialState('nick', ''), {
+      picks: [
+        { name: 'ghost', readiness: 'asleep' },
+        { name: 'dolly', readiness: 'ready' },
+      ],
+      suggested: 'dolly',
+    });
     expect(html).toContain('Which agent should take the tour lane?');
-    expect(html).toContain('>dolly<');
     expect(html).toContain('>ghost<');
+    expect(html).toContain('asleep · ~1 min to wake');
+    // The suggestion is the readiest agent, and Enter takes it.
+    expect(html).toMatch(/is-suggested" data-primary="">.*?>dolly</);
+    expect(html).toContain('Suggested · online · ready now');
     expect(html).not.toContain('{agent}');
     expect(html).not.toContain('>Continue<');
   });
@@ -61,15 +70,52 @@ describe('TourPanel — spec docs/design/tour-web-copy.md §3', () => {
     expect(html).toContain('Still waiting.');
   });
 
-  it('while it waits, shows the clock, what the roster says and what the agent said', () => {
+  it('while it waits, shows the clock and what the roster says', () => {
     const html = panel(at('claims'), {
-      wait: { elapsed: '0:32', now: 'dolly is online and has the request.', said: 'on it' },
+      wait: { elapsed: '0:32', now: 'dolly is online and has the request.' },
     });
     expect(html).toContain('Waiting on dolly');
     expect(html).toMatch(/aria-hidden="true">0:32</);
     expect(html).toContain('dolly is online and has the request.');
-    expect(html).toContain('dolly says: <q>on it</q>');
     expect(panel(at('claims'))).not.toContain('Waiting on');
+  });
+
+  it('lights the rail up to the current step', () => {
+    const html = panel(at('hands_back'));
+    expect(html.match(/class="is-done"/g)).toHaveLength(4);
+    expect(html).toContain('class="is-now"');
+  });
+
+  it('shows the lane ticket with its track and story, and stamps an accept', () => {
+    const ticket = {
+      title: "[tour] nick: summarise this repo's README in three lines",
+      stage: 2,
+      entries: [{ id: 'c', ts: 0, text: 'dolly claimed it' }],
+    };
+    const html = panel(at('hands_back'), { ticket });
+    expect(html).toContain('01M4M4DDYF');
+    expect(html).toContain('owner dolly');
+    expect(html.match(/tour-track__stop is-done/g)).toHaveLength(2);
+    expect(html).toContain('tour-track__stop is-next');
+    expect(html).toContain('dolly claimed it');
+    expect(html).not.toContain('tour-ticket__stamp');
+    const won = panel(at('record', { outcome: 'accepted' }), { ticket: { ...ticket, stage: 4 } });
+    expect(won).toContain('Accepted · nick');
+    expect(won).toContain('tour-confetti');
+    expect(won).toContain('tour--won');
+  });
+
+  it('marks a declined request on the claim stop', () => {
+    const html = panel(at('claims', { outcome: 'declined', declineReason: 'no' }), {
+      ticket: { title: 't', stage: 1, entries: [] },
+    });
+    expect(html).toContain('tour-track__stop is-failed');
+    expect(html).toContain('Declined');
+  });
+
+  it('marks the main action so Enter can take it', () => {
+    expect(panel(initialState('nick', 'dolly'))).toMatch(/data-primary="">Continue</);
+    expect(panel(at('next'))).toMatch(/data-primary="">Done</);
   });
 
   it('shows what the agent wrote as text, never as markup, with both verdicts', () => {

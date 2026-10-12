@@ -98,6 +98,7 @@ export function TeamColumn({
               <li
                 key={c.name}
                 className={`lc-team__pip lc-team__pip--${c.state}${linked === c.name ? ' is-linked' : ''}`}
+                data-member={c.name}
                 aria-label={`${c.name} — ${b.label} — ${what}`}
                 title={`${c.name} · ${b.label} · ${what}`}
                 onMouseEnter={() => onLink?.(c.name)}

@@ -1,6 +1,7 @@
-/* The first-run tour (lane 01M4M4DDYF). Its own file, loaded with its lazy chunk, which mounts only for
-   a viewer signed in as a human. A paper card at the bottom left, clear of the composer on the right
-   and the team column; the buttons are /live's own ask pills. */
+/* The first-run tour (lane 01M4M4DDYF; redesign lane 01M4PSEV08). Its own file, loaded with its lazy
+   chunk, which mounts only for a viewer signed in as a human. A paper card at the bottom left, clear
+   of the composer on the right; a bottom sheet on a phone. Every animation is a one-shot or runs
+   only while the tour waits on the agent, and reduced motion stills all of them. */
 .tour-entry {
   flex: none;
   min-height: 28px;
@@ -12,9 +13,13 @@
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
 }
 .tour-entry:hover {
   border-color: var(--lc-accent);
+  transform: translateY(-1px);
 }
 .tour-entry--link,
 .tour__link {
@@ -28,6 +33,8 @@
   font-size: 12px;
   color: var(--lc-dim);
 }
+
+/* ── The panel ── */
 .tour {
   position: fixed;
   z-index: calc(var(--lc-z-overlay) + 2);
@@ -39,17 +46,68 @@
   padding: var(--lc-4) var(--lc-5);
   background: var(--lc-ground-2);
   border: 1px solid var(--lc-border-2);
-  border-radius: 14px;
-  box-shadow: 0 10px 28px rgba(60, 40, 20, 0.18);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.5) inset,
+    0 14px 40px rgba(60, 40, 20, 0.2);
   color: var(--lc-text);
   font-size: 13.5px;
   line-height: 1.5;
+  animation: tour-rise 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.tour__top {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-3);
+  margin-bottom: var(--lc-2);
+}
+.tour-rail {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tour-rail li {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--lc-border-2);
+  transition: background 0.4s;
+}
+.tour-rail .is-done {
+  background: color-mix(in srgb, var(--lc-accent) 55%, var(--lc-border-2));
+}
+.tour-rail .is-now {
+  background: var(--lc-accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--lc-accent) 60%, transparent);
+}
+.tour__mini {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--lc-dim);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.tour__mini:hover {
+  background: var(--lc-surface);
+  color: var(--lc-text);
 }
 .tour__title {
   margin: 0 0 var(--lc-2);
   font-size: 12px;
   font-weight: 600;
   color: var(--lc-accent-ink);
+  outline: none;
+}
+.tour__step {
+  animation: tour-in 0.28s ease-out;
 }
 .tour__body p,
 .tour__list {
@@ -92,6 +150,18 @@
   min-height: 28px;
   font-size: 12.5px;
 }
+.tour .lc-ask__btn {
+  transition:
+    transform 0.12s,
+    box-shadow 0.12s;
+}
+.tour .lc-ask__btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(60, 40, 20, 0.12);
+}
+.tour .lc-ask__btn:not(:disabled):active {
+  transform: scale(0.97);
+}
 .tour__pick p {
   flex-basis: 100%;
 }
@@ -111,10 +181,62 @@
 .tour__note .lc-ask__btn {
   justify-self: start;
 }
+
+/* ── The picker: each agent and how ready it is ── */
+.tour-chip {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: var(--lc-2);
+  align-items: center;
+  flex: 1 1 140px;
+  padding: var(--lc-2) var(--lc-3);
+  border: 1px solid var(--lc-border-2);
+  border-radius: 12px;
+  background: var(--lc-surface-2);
+  color: var(--lc-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+.tour-chip:hover {
+  border-color: var(--lc-accent);
+  transform: translateY(-1px);
+}
+.tour-chip.is-suggested {
+  border-color: var(--lc-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lc-accent) 18%, transparent);
+}
+.tour-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lc-dim);
+}
+.tour-chip--ready .tour-chip__dot {
+  background: var(--lc-success);
+}
+.tour-chip--asleep .tour-chip__dot {
+  border: 1.5px solid var(--lc-dim);
+  background: none;
+}
+.tour-chip--busy .tour-chip__dot {
+  background: var(--lc-warn);
+}
+.tour-chip__name {
+  font-weight: 600;
+}
+.tour-chip__state {
+  grid-column: 2;
+  font-size: 11.5px;
+  color: var(--lc-dim);
+}
+
+/* ── The waiting line ── */
 .tour__wait {
   margin-top: var(--lc-3);
-  padding-top: var(--lc-3);
-  border-top: 1px solid var(--lc-border-2);
 }
 .tour__waiting {
   display: flex;
@@ -127,19 +249,261 @@
   font-variant-numeric: tabular-nums;
 }
 .tour__dot {
+  flex: none;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--lc-accent);
   animation: tour-pulse 1.4s ease-in-out infinite;
 }
-@keyframes tour-pulse {
-  50% {
-    opacity: 0.25;
+
+/* ── The lane ticket ── */
+.tour-ticket {
+  position: relative;
+  margin: var(--lc-2) 0 var(--lc-3);
+  padding: var(--lc-3);
+  border: 1px dashed color-mix(in srgb, var(--lc-accent) 45%, var(--lc-border-2));
+  border-radius: 12px;
+  background: var(--lc-surface);
+  animation: tour-rise 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.tour-ticket.is-closed {
+  border-style: solid;
+}
+/* Room under the stamp, so it lands beside the title and never on it. */
+.tour-ticket.is-closed .tour-ticket__title {
+  margin-top: 14px;
+}
+.tour-ticket__head {
+  display: flex;
+  gap: var(--lc-3);
+  padding-right: 96px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--lc-dim);
+}
+.tour-ticket__title {
+  margin: 2px 0 var(--lc-3);
+  font-weight: 600;
+}
+.tour-track {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tour-track__stop {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--lc-dim);
+}
+/* The rail between stops fills as the lane moves. */
+.tour-track__stop + .tour-track__stop::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--lc-border-2);
+  transition: background 0.5s;
+}
+.tour-track__stop.is-done::before {
+  background: var(--lc-success);
+}
+.tour-track__mark {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--lc-border-2);
+  border-radius: 50%;
+  background: var(--lc-surface);
+  font-size: 12px;
+  font-weight: 700;
+}
+.is-done > .tour-track__mark {
+  border-color: var(--lc-success-ink);
+  background: var(--lc-success-ink);
+  color: var(--lc-surface);
+  animation: tour-pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.6);
+}
+.is-next > .tour-track__mark {
+  border-color: var(--lc-accent);
+  animation: tour-pulse 1.4s ease-in-out infinite;
+}
+.is-failed > .tour-track__mark {
+  border-color: var(--lc-danger);
+  color: var(--lc-danger-ink);
+}
+.is-done > .tour-track__label {
+  color: var(--lc-success-ink);
+}
+.tour-story {
+  margin: var(--lc-3) 0 0;
+  padding: var(--lc-2) 0 0;
+  border-top: 1px solid var(--lc-border-2);
+  list-style: none;
+  font-size: 12px;
+}
+.tour-story__line {
+  display: flex;
+  gap: var(--lc-2);
+  animation: tour-in 0.3s ease-out;
+}
+.tour-story__time {
+  flex: none;
+  font-family: var(--font-mono, monospace);
+  color: var(--lc-dim);
+}
+.tour-ticket__stamp {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  margin: 0;
+  padding: 1px 8px;
+  border: 2px solid var(--lc-success-ink);
+  border-radius: 6px;
+  color: var(--lc-success-ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transform: rotate(-6deg);
+  animation: tour-stamp 0.5s cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+
+/* ── The accept burst ── */
+.tour-confetti {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  pointer-events: none;
+}
+.tour-confetti i {
+  position: absolute;
+  width: 6px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--lc-accent);
+  opacity: 0;
+  animation: tour-burst 1s ease-out calc(var(--i) * 12ms) both;
+}
+.tour-confetti i:nth-child(3n) {
+  background: var(--lc-success);
+}
+.tour-confetti i:nth-child(3n + 1) {
+  background: var(--lc-warn);
+}
+
+/* ── Minimized ── */
+.tour-pill {
+  position: fixed;
+  z-index: calc(var(--lc-z-overlay) + 2);
+  left: 16px;
+  bottom: 68px;
+  display: flex;
+  align-items: center;
+  gap: var(--lc-2);
+  min-height: 32px;
+  padding: 0 var(--lc-4);
+  border: 1px solid var(--lc-border-2);
+  border-radius: 999px;
+  background: var(--lc-ground-2);
+  box-shadow: 0 8px 24px rgba(60, 40, 20, 0.18);
+  color: var(--lc-text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  animation: tour-rise 0.25s ease-out;
+}
+
+/* ── A bottom sheet on a phone (the /live phone breakpoint) ── */
+@media (max-width: 880px) {
+  .tour {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 72vh;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: calc(var(--lc-4) + env(safe-area-inset-bottom, 0px));
+  }
+  .tour-pill {
+    bottom: 16px;
   }
 }
+
+@keyframes tour-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+}
+@keyframes tour-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes tour-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+@keyframes tour-pop {
+  0% {
+    transform: scale(0.4);
+  }
+  60% {
+    transform: scale(1.25);
+  }
+}
+@keyframes tour-stamp {
+  from {
+    opacity: 0;
+    transform: rotate(-6deg) scale(2.4);
+  }
+}
+@keyframes tour-burst {
+  0% {
+    opacity: 1;
+    transform: rotate(calc(var(--i) * 22.5deg)) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(calc(var(--i) * 22.5deg + 90deg)) translateY(-90px);
+  }
+}
+/* The spotlight rule itself is written by Tour.tsx (spotlightCss); its two motions live here. */
+@keyframes tour-spot-breathe {
+  50% {
+    box-shadow:
+      0 0 0 3px var(--lc-accent),
+      0 0 28px color-mix(in srgb, var(--lc-accent) 55%, transparent);
+  }
+}
+@keyframes tour-spot-pop {
+  40% {
+    transform: scale(1.03);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .tour__dot {
-    animation: none;
+  .tour,
+  .tour *,
+  .tour-pill {
+    animation: none !important;
+    transition: none !important;
+  }
+  .tour-confetti {
+    display: none;
   }
 }
