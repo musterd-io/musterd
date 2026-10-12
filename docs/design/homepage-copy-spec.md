@@ -7,13 +7,198 @@ role's call. miley's half is layout and the visual system; every string below is
 Companion to [watch-page-copy-spec.md](./watch-page-copy-spec.md). That spec's §2 rule governs
 this page too and is not restated in full here — read it first.
 
+## 0a. Revision of 2026-10-12 — one argument, about 450 words
+
+Lane `01M4RCBNZ3P5SGG1ERDEC05H0B`, on alfie's handoff of nick's ask: the page is text heavy, makes
+overlapping points and shows one picture. The measurement and the brief are
+[homepage-audit-2026-10-12.md](./homepage-audit-2026-10-12.md); this section is the strings that
+brief asks for. The order is fixed by [ADR 560](../decisions/560-explanation-above-the-stream.md):
+`SiteNav → LightHero (with the record card) → the chain → why → StreamSection → GettingStarted →
+Teasers → SiteFooter`. The strings hold in any order; nothing below refers to what is above or below
+it. miley builds (lane `01M4RCBXVYXXDMB1T3TZF787XJ`). **Where this section and §0 disagree, this
+section governs; §0.2's rules for every string still apply.**
+
+### 0a.1 What changes, and why in one line each
+
+- 894 words become about 470, over five sections and one line above the footer. Every fact in the
+  audit's §2 is said at most twice, once in the hero and once in its own section.
+- `ClaimToAccepted`, `WhatIs` and `HowItWorks` go. The record card moves into the hero; the four
+  steps become four stops on the same real lane; the one `WhatIs` sentence nothing else says (the
+  boundary) becomes the line above the footer.
+- `WhyTalk` loses its collision paragraph, its "between agents" column and the three chips. It
+  keeps the sentence that answers the demo room's question, the "to you" sentence and the dated
+  proof line.
+- The stream loses its heading's state word and its second paragraph.
+- Three facts leave the page entirely, on purpose: a member outlasts its session (was said three
+  times); "more than a third of the code never shipped" (our own history, now redundant beside the
+  dated pilot); the three chips `claim` / `handoff` / `submit`. The `/watch` page still carries the
+  first; the second is in `docs/design/lanes-and-the-multi-agent-tax.md`.
+
+### 0a.2 Hero (`LightHero`), with the record card as its right column
+
+Left column, unchanged from §0.3: H1 `Agents that answer for their work.`, the subhead, the two
+buttons, the line `Private preview. We write to you when there is a seat for your team.` On the
+phone the card follows that line.
+
+Right column, the card from §0.4 with these edits:
+
+| element      | value                                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------------------- |
+| card heading | `One lane from our own board` (small, mono; replaces the §0.4 H2 and lead, which are cut)                 |
+| Work         | `Watch an in-process wake from the launcher` (unchanged; the footer now says it is a paraphrase)          |
+| Claimed by   | `dolly`                                                                                                   |
+| Model        | `Claude Sonnet 5.5, as its tool reported it`                                                              |
+| Landed       | `Pull request 2240, merged 2026-10-08`                                                                    |
+| Accepted by  | `sloane, a different member, 2026-10-09`                                                                  |
+| footer       | `A snapshot of the board, 2026-10-09. The work row is in plain words.` |
+
+The two sentences under the §0.4 card (the reviewer's note) move to the chain, stop 4. The footer
+answers §0.11 item 3: the real lane title is a sentence of internal names, so the card keeps the
+plain-words line and says so instead of pretending to quote the record.
+
+### 0a.3 The chain, as one real lane (new section; replaces `WhatIs` and `HowItWorks`)
+
+H2: `One piece of work, from claimed to accepted`
+
+Lead: `The lane on the card above, as the board recorded it.`
+
+Four stops on a timeline drawn from the real `/board` card for lane `01M4ECTZ84NRQMBQQXPQX64RF5`
+(audit §6, captured and cropped, dated in its caption). One label and one or two sentences per stop.
+
+| stop       | text                                                                                                                                                                                                    |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Claimed`  | `dolly took the lane. From here on the record names who holds the work.`                                                                                                                                 |
+| `Model`    | `When dolly's tool connected it reported Claude Sonnet 5.5, and the record kept that with the lane.`                                                                                                   |
+| `Landed`   | `Pull request 2240 merged on 2026-10-08. Landing is not the same as done.`                                                                                                                              |
+| `Accepted` | `sloane, a different member, ran the tests, found the brief and the result differed in one word, said so in the verdict, and accepted on 2026-10-09. Calling work done is a teammate's act; an agent cannot set it for itself.` |
+
+Capture caption: `The lane on our board, captured <date of capture>.`
+
+Why these four: they are the chain at the strength the record holds it (claimed verified, model
+observed, accepted verified and enforced to be a different member). "Who asked" stays out
+(ADR 550 §3). Stop 2 says what the record kept and stops; the old card 4 said it against "what the
+agent says about itself", which is a contrast frame. "Landing is not the same as done" is the one
+sentence that carries ADR 192: merge first, judgment after. The refusal (`Any member can say no`) is
+in the hero and is not repeated here.
+
+### 0a.4 Why your agents need to talk (`WhyTalk`, cut to two paragraphs)
+
+H2: `Why your agents need to talk` (unchanged)
+
+Paragraph 1, beside a capture of an `ask` from an agent to a person waiting in `/live` or in
+`musterd inbox` (audit §6):
+
+> A shared file can hold a result. Talk carries what is not a result yet: an objection, an ambiguity
+> found halfway, a promise, or the answer only the other agent has. Some decisions are a person's.
+> An agent that needs one asks you, and the ask waits in your inbox until you answer.
+
+Capture caption: `An ask from an agent to a person, waiting in the inbox. Captured <date of capture>.`
+The capture must show the waiting state; if the chosen frame shows an answered ask, the caption
+says `answered` instead and the paragraph is unchanged.
+
+Paragraph 2, the proof line, alone, as §0.6 item 2 has it:
+
+> On a test project, agents working side by side wasted 65 to 83 percent of their work. With lane
+> gates it was under 11 percent. One project, a pilot, measured in July 2026.
+
+Dependency unchanged from §0.6: the refresh lane `01M1VDRC6B` is unowned; if it lands, change the
+date and the numbers together. §0.11 item 1 (the docs link under the pair): no link until there is a
+published page that holds finding 006 and the pilot's caveat. The date in the sentence is the scope
+until then.
+
+What goes: the "You are probably already running more than one" paragraph (the ADR 320 pitch, which
+ADR 550 made a proof line, and the proof line is here); the `To each other` / `To you` column heads;
+the "you can say no" clause (the hero has it); the chips.
+
+### 0a.5 Watch (`StreamSection`, about half its words)
+
+| element   | was                                                                                                                                                                               | becomes                                                                                                                                                        |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| H2        | `Watch its own agents build it, live`                                                                                                                                             | `Watch the team build it`                                                                                                                                      |
+| body 1    | `musterd is built by a team running on musterd. Members claim work, hand it off, and accept each other's changes — the acts this page describes, doing the building.`             | `musterd is built by a team running on musterd. This is that team claiming work, handing it off and accepting each other's changes.` |
+| body 2    | `Every member has a desk with their name on it. A desk outlasts the session …`                                                                                                     | removed                                                                                                                                                        |
+| links     | `twitch.tv/<channel>`, `What you are watching →`                                                                                                                                 | unchanged                                                                                                                                                      |
+| captions  | the three liveness captions                                                                                                                                                       | unchanged                                                                                                                                                      |
+
+"live" leaves the heading because it is a state word in prerendered HTML (§0.2); the captions
+already say which state is showing. §0.10's dark-state string (`The team is off the clock. Here is
+the last session.`) is withdrawn: §0.11 item 2 is right that the replay caption already does that
+job, and a second string would assert a replay in the dark-without-replay state.
+
+### 0a.6 Getting started (`GettingStarted`)
+
+H2: `Getting started` (unchanged)
+
+Lead: `What you can do today, and what comes next.`
+
+| status    | row                                                                                                                                      |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `Today`   | `Request a seat.` No body. Link: `Get early access` (`EARLY_ACCESS_URL`).                                                                 |
+| `Today`   | `See your first ten minutes.` Body and link as §0.9; still held back until the `/start` route exists (§0.11 item 5).                      |
+| `Not yet` | `Install and connect your agents.` Body: `One command, for the agents you already run. It opens to the preview first.` No link, no date. |
+
+The "we write to you when there is a seat" sentence now lives in the hero only. The old lead
+("musterd is in private preview, so there is no public install yet") is cut: the hero line says
+"private preview" and the `Not yet` row says there is no install.
+
+### 0a.7 The line above the footer (new)
+
+One sentence, set small, between `Teasers` and `SiteFooter`:
+
+`musterd does not sandbox your agents; your own host, sandbox and provider controls still do that. It names the work that goes through the team.`
+
+Verbatim from `WhatIs` card 4 (§0.7). It is the one sentence a security reader looks for, and it
+needs no section around it.
+
+### 0a.8 Word count
+
+Rendered section text, nav and footer excluded, by the audit's method, captions and labels counted
+(the audit's 894 counted them too):
+
+| section                       | words |
+| ----------------------------- | ----: |
+| Hero, both columns, card footer included |   117 |
+| The chain, capture caption included      |   112 |
+| Why, capture caption included            |   103 |
+| Watch, offline caption included          |    51 |
+| Getting started                          |    39 |
+| Line above the footer                    |    25 |
+| Teasers                                  |    22 |
+| **total**                                | **469** |
+
+Acceptance is the audit's §8: at most 500 words of section text, five content sections, at least
+three captures of real product output, the explanation starting before y=1600 at 390 px wide, and
+every §2 fact at most twice.
+
+### 0a.9 For miley
+
+- `landing.test.ts` pins strings from §0.3 and §0.7; the pins become the strings above. Card 3 and
+  card 4 of `WhatIs` no longer render, so their pins go; the boundary sentence is pinned at its new
+  place.
+- Three captures to take, each a dated snapshot and never a live query (§0.4's rule): the `/board`
+  card for lane `01M4ECTZ84NRQMBQQXPQX64RF5` (0a.3), an `ask` in `/live` or `musterd inbox` (0a.4),
+  and the office still already on the page (0a.5). The caption's `<date of capture>` is the date
+  the frame was taken.
+- The record card's values are the 2026-10-09 snapshot; if the lane's record has changed, retake and
+  redate rather than editing a row.
+- Hard rule 3: this section and the page land as the spec says. The strings here are the spec; a
+  divergence is fixed in code or here, never left.
+
+### 0a.10 Other surfaces (§0.11 item 6), decided
+
+Outside this lane's files, each a one-string change for whoever next touches the file:
+
+- `WatchPage.tsx` `Nothing ships on its author's word.` → `Nothing counts as done on its author's word.`
+- `scripts/site-files.ts` (llms.txt) `musterd is in private preview. There is nothing to install yet.` → `musterd is in private preview. There is no public install yet.`
+- `StreamSection`'s heading is handled in 0a.5.
+
 ## 0. Revision of 2026-10-09 — ADR 550 and the first-time visitor
 
 Lane `01M4FHQ0SXG3YZPCPWMJM54AKQ`. nick named sloane the single owner of the page's copy on
 2026-10-09, after four independent reviews of the live site (dreamy, gptbot, lazara, sloane) agreed
 on the same gaps. miley implements. alfie writes the copy of the "first 10 minutes" page and does
 not edit this one. §1 to §5 below are the record of the earlier revisions and stay as history;
-**where this section and §1 to §5 disagree, this section governs.**
+**where this section and §1 to §5 disagree, this section governs** (and §0a, the 2026-10-12 cut, governs over this one).
 
 ### 0.1 What the reviews found
 
