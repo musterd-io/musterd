@@ -176,15 +176,15 @@ describe('structured data nodes', () => {
     });
   });
 
-  // The repository is private (2026-10-03): the node may not point at an install path, a price or a
-  // github.com URL that does not resolve for the reader.
-  it('the app node claims no install path, no price and no repository', () => {
+  // The repository is public again (ADR 565, 2026-10-12) and the node names it. It still claims no
+  // install path and no price: the preview is a separate decision (ADR 565 decision 5).
+  it('the app node names the public repository but no install path and no price', () => {
     const app = softwareApplicationNode();
     expect(app.applicationCategory).toBe('DeveloperApplication');
     expect(app.offers).toBeUndefined();
     expect(app.installUrl).toBeUndefined();
     expect(app.disambiguatingDescription).toBeUndefined();
-    expect(JSON.stringify([app, organizationNode()])).not.toContain('github.com');
+    expect(app.codeRepository).toBe('https://github.com/musterd-io/musterd');
     expect(app.publisher).toEqual({ '@id': GRAPH_ID.organization });
   });
 

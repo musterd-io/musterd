@@ -45,6 +45,9 @@ unrelated personal account (created 2019, one repo), so it is not available.
 - Old links keep working through GitHub's redirects. A redirect breaks only if someone creates a
   new repo at the old name in `SandRiseStudio`, so those two names should stay unused there.
 - The org has one admin, nick. Seats act in it through his `gh` credential.
+- 2026-10-12 — **The platform moved.** `SandRiseStudio/musterd` went public and transferred to
+  `musterd-io/musterd` ([ADR 565](565-repo-public-musterd-io.md)), which supersedes decision 3 for
+  that repo. `musterd-revive`, `musterd-lab`, `batond` and `homebrew-musterd` stay as decision 3 says.
 
 ## Observability & Evaluation
 

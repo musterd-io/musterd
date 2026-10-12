@@ -120,6 +120,10 @@ See [landed is not live](../wiki/landed-is-not-live.md) for the measured instanc
   `packages/web/content/docs/getting-started.md` — to restore when musterd opens up). A "How a team
   works" section replaces the install block, and the Watch page no longer says the work is in "the open
   repository". `/docs` keeps Concepts and the protocol spec, which are rendered on-site and need no repo.
+- 2026-10-12 — **The repository is public again**, at `musterd-io/musterd`
+  ([ADR 565](565-repo-public-musterd-io.md)). The GitHub link returns to the nav, the JSON-LD and
+  `llms.txt`. The install command, the Get started install row and `/docs/getting-started` do not
+  return with it: that is the end of the preview, a separate call (ADR 565 decision 5).
 
 ## Observability & Evaluation
 

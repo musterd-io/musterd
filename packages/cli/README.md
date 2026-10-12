@@ -19,6 +19,6 @@ brew tap SandRiseStudio/musterd && brew install musterd
 Local-first: no account, no cloud, no phone-home.
 
 - Site: <https://musterd.io>
-- Source, spec, and full README: <https://github.com/SandRiseStudio/musterd>
+- Source, spec, and full README: <https://github.com/musterd-io/musterd>
 
 MIT.

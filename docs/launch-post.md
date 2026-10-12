@@ -14,7 +14,7 @@
 > rotation. The Team-wide key minted by `team create` remains accepted as a marked legacy
 > compatibility credential; new credentials use a seat, role, or residency-host scope. Private
 > vulnerability reports go through the repository's
-> [security advisory form](https://github.com/SandRiseStudio/musterd/security/advisories/new).
+> [security advisory form](https://github.com/musterd-io/musterd/security/advisories/new).
 >
 > **Private preview (2026-10-03):** the repository is private and musterd.io carries no install
 > path or GitHub link (#2004), so the post forms below carry neither. If the repo opens before

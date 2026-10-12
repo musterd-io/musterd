@@ -15,7 +15,7 @@
 # Env (every one has a default):
 #   MUSTERD_TEAM=revive        MUSTERD_HUB=nicks-laptop   (tailnet name, or an IP)
 #   MUSTERD_HUB_PORT=4849      MUSTERD_HUMAN=nick
-#   ROSTER_REPO=SandRiseStudio/musterd-revive   WORK_REPO=SandRiseStudio/musterd
+#   ROSTER_REPO=SandRiseStudio/musterd-revive   WORK_REPO=musterd-io/musterd
 #   MUSTERD_RUNTIME_REF=main   MUSTERD_INVITE=msinv_…     (step 4 only; minted on the hub)
 set -euo pipefail
 
@@ -24,7 +24,7 @@ MUSTERD_HUB="${MUSTERD_HUB:-nicks-laptop}"
 MUSTERD_HUB_PORT="${MUSTERD_HUB_PORT:-4849}"
 MUSTERD_HUMAN="${MUSTERD_HUMAN:-nick}"
 ROSTER_REPO="${ROSTER_REPO:-SandRiseStudio/musterd-revive}"
-WORK_REPO="${WORK_REPO:-SandRiseStudio/musterd}"
+WORK_REPO="${WORK_REPO:-musterd-io/musterd}"
 MUSTERD_RUNTIME_REF="${MUSTERD_RUNTIME_REF:-main}"
 RUNTIME="$HOME/.musterd/runtime"
 TEAM_HOME="$HOME/musterd/$MUSTERD_TEAM"

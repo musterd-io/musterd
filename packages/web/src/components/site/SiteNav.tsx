@@ -11,6 +11,8 @@ export const NAV_LINKS = [
   { label: 'Docs', href: '/docs' },
   { label: 'Watch', href: '/watch' },
   ...(hasBlog ? [{ label: 'Blog', href: '/blog' }] : []),
+  // Back since 2026-10-12: the repository is public again (ADR 565).
+  { label: 'GitHub', href: 'https://github.com/musterd-io/musterd' },
 ];
 
 // Plain <a> links, not router <Link>s: each public route is its own prerendered document, so a

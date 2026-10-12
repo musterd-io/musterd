@@ -139,7 +139,7 @@ Below the player, one line, state-dependent:
   dark right now. Every act in it landed in the open repository.`
 - Dark: `The team works in sessions, so the channel is dark between them. The work is public
   either way — every act, decision record and merge is in the repository.` with "repository"
-  linking to `https://github.com/SandRiseStudio/musterd`.
+  linking to `https://github.com/musterd-io/musterd`.
 
 Liveness comes from the Twitch player's own state; if the implementation cannot read it, ship
 the dark line only — it is true in both states.
@@ -199,7 +199,7 @@ reintroduce the jargon to match the ADR — the ADR says derived copy adapts reg
 
 ### 4.6 Footer line
 
-`Built in the open. Every act, decision record and merge: github.com/SandRiseStudio/musterd` —
+`Built in the open. Every act, decision record and merge: github.com/musterd-io/musterd` —
 the whole line links to the repository.
 
 ## 5. Home page changes (same lane, same PR)

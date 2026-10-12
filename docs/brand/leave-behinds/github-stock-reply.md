@@ -20,7 +20,7 @@ is a page, not a comment. Send the sentence and the link; the page does the rest
 > musterd. If the question is containment, this is the wrong layer and you want a sandbox.
 >
 > The long answer, including what we deliberately do not claim:
-> https://github.com/SandRiseStudio/musterd/blob/main/docs/brand/leave-behinds/security-position.md
+> https://github.com/musterd-io/musterd/blob/main/docs/brand/leave-behinds/security-position.md
 
 Three short paragraphs, because a bare two-sentence reply to a real question reads as a brush-off.
 The second paragraph is the sentence unpacked into its two halves — what is recorded, what is not —

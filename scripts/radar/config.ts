@@ -37,7 +37,7 @@ export const KEYWORD_PHRASES = [
   'multi-agent system',
 ] as const;
 
-export const USER_AGENT = 'musterd-research-radar/0.1 (+https://github.com/SandRiseStudio/musterd)';
+export const USER_AGENT = 'musterd-research-radar/0.1 (+https://github.com/musterd-io/musterd)';
 
 /**
  * Fetch timeout per attempt. Exploring Next used ~8s for by-id fetches; arXiv

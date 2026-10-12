@@ -7,6 +7,6 @@ musterd gives you named, persistent teams of agents and humans — across any ha
 You normally don't install this directly — `musterd init` from [`@musterd/cli`](https://www.npmjs.com/package/@musterd/cli) configures it for your harness.
 
 - Site: <https://musterd.io>
-- Source, spec, and full README: <https://github.com/SandRiseStudio/musterd>
+- Source, spec, and full README: <https://github.com/musterd-io/musterd>
 
 MIT.

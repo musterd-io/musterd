@@ -87,7 +87,7 @@ WORKSPACE="/data/musterd-$MUSTERD_SEAT"
 export WORKSPACE
 gh auth setup-git >/dev/null 2>&1 || true
 if [ ! -d "$REPO/.git" ]; then
-  gh repo clone SandRiseStudio/musterd "$REPO"
+  gh repo clone musterd-io/musterd "$REPO"
 fi
 if [ ! -f "$WORKSPACE/.musterd/binding.json" ]; then
   # The team agent key is DAEMON-PRIVATE and never replicates (first boot 2026-09-04: the wake

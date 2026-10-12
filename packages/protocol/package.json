@@ -6,10 +6,10 @@
   "homepage": "https://musterd.io",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SandRiseStudio/musterd.git",
+    "url": "git+https://github.com/musterd-io/musterd.git",
     "directory": "packages/protocol"
   },
-  "bugs": "https://github.com/SandRiseStudio/musterd/issues",
+  "bugs": "https://github.com/musterd-io/musterd/issues",
   "keywords": [
     "agents",
     "multi-agent",

@@ -12,7 +12,7 @@
 
 class Musterd < Formula
   desc "Your agents, on a team with you"
-  homepage "https://github.com/SandRiseStudio/musterd"
+  homepage "https://github.com/musterd-io/musterd"
   url "https://registry.npmjs.org/@musterd/cli/-/cli-0.4.2.tgz"
   sha256 "aa53247c839ba3b4a03c67a684794ab4445ae0f52e6cbd424172f4cf36382cd6"
   license "MIT"

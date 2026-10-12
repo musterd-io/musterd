@@ -56,7 +56,7 @@ const WEEKLY_TARGET: Partial<Record<LogRow['kind'], number>> = {
   'pm-chat': 1,
 };
 
-const REPO = 'SandRiseStudio/musterd';
+const REPO = 'musterd-io/musterd';
 
 function has(flag: string): boolean {
   return process.argv.includes(flag);
