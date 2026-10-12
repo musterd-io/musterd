@@ -45,7 +45,15 @@ Neither path above was both of those.
 - The Getting started harness list is `musterd init`'s own detection list
   (`packages/cli/src/onboard/harnesses/index.ts`: Claude Code, Cursor, Codex, OpenCode, Grok). A
   harness added there without updating the sentence makes the page understate, not overclaim.
-- The README Quickstart already showed npm and brew; it needs no change.
+- The README Quickstart already showed npm and brew; it needs no change. (Its "by hand" block still
+  shows `team create … --as`, which ADR 442 removed; 0.5.0 refuses it.)
+- _(2026-10-12)_ Decision 4 done: nick published `@musterd/*@0.5.0` (all five packages, 21:54 to
+  21:55 UTC, tag `v0.5.0`, version bump in #2406). miley pushed the 0.5.0 formula to the tap and
+  made `SandRiseStudio/homebrew-musterd` public. Checked: the npm package installed into an
+  isolated prefix ran `serve`, `team create`, `send` and `inbox`, and `init --check` listed the five
+  harnesses; the tap clones anonymously; and on Homebrew 7.0.2 with an empty trust list,
+  `brew install --dry-run SandRiseStudio/musterd/musterd` would install 0.5.0, because naming a
+  formula in full trusts that formula. So the page's one-line brew command needs no `brew trust`.
 
 ## Observability & Evaluation
 
