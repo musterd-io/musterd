@@ -1465,3 +1465,82 @@ describe('claiming a lane at the board', () => {
     expect(chin).toBe(true);
   });
 });
+
+/**
+ * Finishing a lane (nick, 2026-10-12): the owner picks the card up at the desk, carries it to the wall
+ * board, reaches and pins it, looks at it a beat, and walks home empty-handed. The card reaches the
+ * cork at the pin — `pinnedSeeds()` is what the board painter reads — and not before.
+ */
+describe('pinning a finished lane on the board', () => {
+  const SEED = 0xd0e;
+  const run = () => {
+    const { placements, byName } = world([node('Ada'), node('Bo')]);
+    const actors = createActors();
+    actors.setHomes(placements, byName, true);
+    return { actors, home: actors.poses().get('Ada')! };
+  };
+
+  it('carries the card to the board, pins it, and comes home without it', () => {
+    const { actors, home } = run();
+    expect(actors.pin('Ada', SEED, 'done')).toBe(true);
+    const seen = { nearBoard: Infinity, carriedOut: false, reach: false, chin: false, pinnedEarly: false, carriedBack: false };
+    let guard = 0;
+    while (actors.active() && guard++ < 4000) {
+      actors.step(0.05);
+      const p = actors.poses().get('Ada')!;
+      const d = Math.hypot(p.lx - BOARD_STAND.lx, p.ly - BOARD_STAND.ly);
+      seen.nearBoard = Math.min(seen.nearBoard, d);
+      if (p.carry === 'card' && d > 12) {
+        if (actors.pinnedSeeds().length) seen.carriedBack = true; // in hand after the pin = wrong
+        else seen.carriedOut = true;
+        if (actors.pinnedSeeds().length) seen.pinnedEarly = true;
+      }
+      if (p.gesture === GESTURE.reach) seen.reach = true;
+      if (p.gesture === GESTURE.chin) seen.chin = true;
+    }
+    expect(actors.active()).toBe(false);
+    expect(seen.nearBoard).toBeLessThan(12);
+    expect(seen.carriedOut).toBe(true);
+    expect(seen.reach).toBe(true);
+    expect(seen.chin).toBe(true);
+    expect(seen.pinnedEarly).toBe(false);
+    expect(seen.carriedBack).toBe(false);
+    seated(actors, 'Ada');
+    const back = actors.poses().get('Ada')!;
+    expect(back.lx).toBeCloseTo(home.lx, 5);
+    expect(back.ly).toBeCloseTo(home.ly, 5);
+    expect(back.carry).not.toBe('card');
+  });
+
+  it('reports the card as pinned, under its column, from the pin until the walk ends', () => {
+    const { actors } = run();
+    actors.pin('Ada', SEED, 'awaiting_acceptance');
+    let pinnedEmptyHanded = false;
+    let guard = 0;
+    while (actors.active() && guard++ < 4000) {
+      actors.step(0.05);
+      const pinned = actors.pinnedSeeds();
+      if (pinned.length && actors.poses().get('Ada')!.carry !== 'card') {
+        pinnedEmptyHanded = true;
+        expect(pinned).toEqual([{ seed: SEED, state: 'awaiting_acceptance' }]);
+      }
+    }
+    expect(pinnedEmptyHanded).toBe(true);
+    expect(actors.pinnedSeeds()).toEqual([]);
+  });
+
+  it('is a real act: it preempts an errand and refuses a member who is not in the room', () => {
+    const { actors } = run();
+    expect(actors.pin('Nobody', SEED, 'done')).toBe(false);
+    expect(actors.ambientWalk('Ada')).toBe(true);
+    actors.step(0.3);
+    expect(actors.pin('Ada', SEED, 'done')).toBe(true);
+    let reach = false;
+    let guard = 0;
+    while (actors.active() && guard++ < 4000) {
+      actors.step(0.05);
+      if (actors.poses().get('Ada')!.gesture === GESTURE.reach) reach = true;
+    }
+    expect(reach).toBe(true);
+  });
+});

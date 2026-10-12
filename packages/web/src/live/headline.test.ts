@@ -177,6 +177,10 @@ describe('collapseHeadlines', () => {
 });
 
 describe('walkTag — the verb over a walker (ADR 464 §3.2)', () => {
+  it('a pin and a submit carry the lane title', () => {
+    expect(walkTag('pin', 'Rotate keys')).toBe('finished Rotate keys');
+    expect(walkTag('submit', null)).toBe('submitting a lane');
+  });
   it.each([
     ['handoff', 'dolly', 'handing off → dolly'],
     ['help', 'izzo', 'asking for help'],

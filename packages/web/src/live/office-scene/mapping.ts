@@ -42,7 +42,22 @@ export function actToEvent(env: Envelope): OfficeEvent | null {
         title: typeof c.title === 'string' ? c.title : '',
       };
   }
-  if (lane === 'lane_resolve') return { kind: 'resolve', who: from };
+  // A finished lane walks its owner back to the board to pin the card under "done"; a submit pins it
+  // under "awaiting acceptance" (nick, 2026-10-12: "when they finish a lane they go stick the card
+  // back on the board"). An abandon keeps the in-place ✓ cue: nothing was finished.
+  if (lane === 'lane_resolve' || lane === 'lane_state') {
+    const c = env.meta?.[lane] as { lane?: unknown; title?: unknown; state?: unknown } | undefined;
+    const state = c?.state === 'done' || c?.state === 'awaiting_acceptance' ? c.state : null;
+    if (typeof c?.lane === 'string' && state)
+      return {
+        kind: 'walk-pin',
+        who: from,
+        lane: c.lane,
+        title: typeof c.title === 'string' ? c.title : '',
+        state,
+      };
+    if (lane === 'lane_resolve') return { kind: 'resolve', who: from };
+  }
   if (lane === 'lane_handoff') {
     return to.kind === 'member'
       ? { kind: 'walk-handoff', from, to: to.name, label: env.body.slice(0, 24) }

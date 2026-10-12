@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Lane, LaneBoard } from '@musterd/protocol';
-import { laneSeed, projectWallBoard, STICKY_CAP, WALL_COLUMNS, withTaken } from './wallboard';
+import { laneSeed, projectWallBoard, STICKY_CAP, WALL_COLUMNS, withPinned, withTaken } from './wallboard';
 
 const lane = (over: Partial<Lane> = {}): Lane => ({
   id: 'L1',
@@ -103,5 +103,25 @@ describe('withTaken — a card someone has walked off with', () => {
     const wb = projectWallBoard(board([lane({ id: 'A' })]));
     expect(withTaken(wb, [])).toBe(wb);
     expect(withTaken(null, [1])).toBeNull();
+  });
+});
+
+describe('withPinned — a card someone has just pinned back on the wall', () => {
+  it('moves the lane to its new column, one card on the wall either way', () => {
+    const wb = projectWallBoard(
+      board([lane({ id: 'A', state: 'active' }), lane({ id: 'B', state: 'active' }), lane({ id: 'C', state: 'done' })]),
+    )!;
+    const out = withPinned(wb, [{ seed: laneSeed('A'), state: 'done' }])!;
+    expect(out.find((c) => c.key === 'active')!.stickies.map((s) => s.seed)).toEqual([laneSeed('B')]);
+    expect(out.find((c) => c.key === 'done')!.stickies.map((s) => s.seed)).toEqual([laneSeed('C'), laneSeed('A')]);
+    // the board caught up: the pin is a no-op, column objects untouched
+    const caught = withPinned(out, [{ seed: laneSeed('A'), state: 'done' }])!;
+    expect(caught.find((c) => c.key === 'done')).toBe(out.find((c) => c.key === 'done'));
+  });
+
+  it('returns the board untouched when nothing is pinned', () => {
+    const wb = projectWallBoard(board([lane({ id: 'A' })]));
+    expect(withPinned(wb, [])).toBe(wb);
+    expect(withPinned(null, [{ seed: 1, state: 'done' }])).toBeNull();
   });
 });

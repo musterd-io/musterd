@@ -334,9 +334,14 @@ interface Walk {
   /** A lane claim's trip to the wall board: which card (`laneSeed`), and the leg at which it leaves the
    *  wall and is in the hand — from there until the walk ends, the board paints its slot empty. */
   claim?: { seed: number; takeLeg: number };
+  /** A finished/submitted lane's trip back to the wall board: which card, which column it goes under,
+   *  and the leg at which it leaves the hand for the cork — from there until the walk ends, the board
+   *  paints it in its new column. */
+  pin?: { seed: number; state: PinState; pinLeg: number };
 }
+type PinState = 'done' | 'awaiting_acceptance';
 type WalkReq = { kind: 'help' | 'handoff'; to: string; urgent: boolean };
-type Req = WalkReq | { kind: 'claim'; seed: number };
+type Req = WalkReq | { kind: 'claim'; seed: number } | { kind: 'pin'; seed: number; state: PinState };
 
 /** How fast an errand ambles — slower than an act-walk; nobody hurries to the fridge. */
 const ERRAND_SPEED = 68;
@@ -491,6 +496,11 @@ export interface Actors {
    *  card (`seed` = `laneSeed(lane id)`), carry it home, set it down. A real act — it preempts an errand
    *  and queues behind other act walks. False when the member is not in the room. */
   claim(from: string, seed: number): boolean;
+  /** A lane finished or submitted (nick, 2026-10-12): `from` picks the card up at their desk, carries it
+   *  to the wall board and pins it under `state`; same preemption rules as `claim`. */
+  pin(from: string, seed: number, state: PinState): boolean;
+  /** The cards on the cork that the board data does not know about yet (pin walks past their pin leg). */
+  pinnedSeeds(): { seed: number; state: PinState }[];
   /** The cards in someone's hand right now (claim walks past their take leg), as `laneSeed`s. */
   takenSeeds(): number[];
   /** Enqueue an ambient coffee run for a seated desk member (home → machine → pour → drink → home).
@@ -958,8 +968,42 @@ export function createActors(): Actors {
     };
   }
 
+  /**
+   * The pin trip — the claim, reversed (nick, 2026-10-12: "when they finish a lane they go stick the card
+   * back on the board"). A short pick-up at the desk (the card appears in the hand), out carrying it, at
+   * the board the reach and the pin — the card leaves the hand for the cork — then a beat looking at it,
+   * and home empty-handed. ~6–8s, like the claim.
+   */
+  function buildPin(from: string, seed: number, state: PinState, origin?: { lx: number; ly: number }): Walk | null {
+    const home = homes.get(from);
+    if (!home) return null;
+    const start = origin ?? home;
+    const avoid = othersAt(from);
+    const out = legsAlong(findPath({ lx: start.lx, ly: start.ly }, BOARD_STAND, avoid), 100, 1.2, 4.5, 'card');
+    const stand = out.length ? endOf(out) : { lx: start.lx, ly: start.ly };
+    const face = travelDir(stand.lx, stand.ly, stand.lx, 0);
+    const back = legsAlong(findPath(stand, { lx: home.lx, ly: home.ly }, avoid), 100, 1.2, 4.5, null);
+    const legs: Leg[] = [
+      hold({ lx: start.lx, ly: start.ly }, home.dir, 0.4, { carry: 'card', overlay: GESTURE.take }),
+      ...out,
+      hold(stand, face, 0.35, { carry: 'card', overlay: GESTURE.reach }),
+      hold(stand, face, 0.4, { overlay: GESTURE.take }),
+      hold(stand, face, 0.9, { overlay: GESTURE.chin }),
+      ...back,
+    ];
+    return {
+      legs,
+      i: 0,
+      t: 0,
+      small: home.small,
+      act: true,
+      pin: { seed, state, pinLeg: out.length + 2 },
+    };
+  }
+
   function build(from: string, req: Req, origin?: { lx: number; ly: number }): Walk | null {
     if (req.kind === 'claim') return buildClaim(from, req.seed, origin);
+    if (req.kind === 'pin') return buildPin(from, req.seed, req.state, origin);
     const home = homes.get(from);
     const target = homes.get(req.to);
     if (!home || !target) return null;
@@ -1111,6 +1155,31 @@ export function createActors(): Actors {
       pending.set(from, q);
       if (!walks.has(from)) startNext(from);
       return true;
+    },
+    pin(from, seed, state) {
+      if (!homes.has(from) || exiting.has(from)) return false;
+      const inflight = walks.get(from);
+      if (inflight && (inflight.ambient || inflight.yield)) {
+        const w = buildPin(from, seed, state, posesNow().get(from));
+        pending.delete(from);
+        if (w) {
+          walks.set(from, w);
+          return true;
+        }
+        walks.delete(from);
+      }
+      const q = pending.get(from) ?? [];
+      if (q.length >= 3) return false;
+      q.push({ kind: 'pin', seed, state });
+      pending.set(from, q);
+      if (!walks.has(from)) startNext(from);
+      return true;
+    },
+    pinnedSeeds() {
+      const out: { seed: number; state: PinState }[] = [];
+      for (const w of walks.values())
+        if (w.pin && w.i >= w.pin.pinLeg) out.push({ seed: w.pin.seed, state: w.pin.state });
+      return out;
     },
     takenSeeds() {
       const out: number[] = [];

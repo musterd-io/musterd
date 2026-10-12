@@ -306,3 +306,32 @@ describe('claiming a lane (nick, 2026-10-09)', () => {
     });
   });
 });
+
+describe('finishing a lane (nick, 2026-10-12)', () => {
+  const laneAct = (key: string, state: string) =>
+    env('message', {
+      from: 'izzo',
+      to: { kind: 'team' } as Recipient,
+      meta: { [key]: { lane: '01LANE', title: 'Rotate the leaked keys', state } },
+      body: '[lane] x',
+    });
+  it('sends the owner to the board to pin a resolved lane under done', () => {
+    expect(actToEvent(laneAct('lane_resolve', 'done'))).toEqual({
+      kind: 'walk-pin',
+      who: 'izzo',
+      lane: '01LANE',
+      title: 'Rotate the leaked keys',
+      state: 'done',
+    });
+  });
+  it('a submit pins it under awaiting acceptance; any other state change is not a walk', () => {
+    expect(actToEvent(laneAct('lane_state', 'awaiting_acceptance'))).toMatchObject({
+      kind: 'walk-pin',
+      state: 'awaiting_acceptance',
+    });
+    expect(actToEvent(laneAct('lane_state', 'blocked'))?.kind).not.toBe('walk-pin');
+  });
+  it('an abandon stays the in-place ✓ — nothing was finished', () => {
+    expect(actToEvent(laneAct('lane_resolve', 'abandoned'))).toEqual({ kind: 'resolve', who: 'izzo' });
+  });
+});

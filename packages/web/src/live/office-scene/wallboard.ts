@@ -71,6 +71,35 @@ export function withTaken(board: WallBoard | null, taken: readonly number[]): Wa
 }
 
 /** Project the real lane board down to what the wall can carry. Null in, null out. */
+/** A card on its way back to the wall (a resolve or submit in flight): which lane, and which column it
+ *  is being pinned under. */
+export interface PinnedCard {
+  seed: number;
+  state: LaneState;
+}
+
+/**
+ * The board as it reads once someone has pinned a card (nick, 2026-10-12): from the pin leg of the
+ * walk until the board's own refresh catches up, the lane's sticky hangs under its NEW column and
+ * nowhere else. Moving it (rather than adding a second) is what keeps a lane one card on the wall
+ * whichever of the two sources is ahead. Pure; returns the input untouched when nothing is pinned.
+ */
+export function withPinned(board: WallBoard | null, pinned: readonly PinnedCard[]): WallBoard | null {
+  if (!board || pinned.length === 0) return board;
+  const moved = new Map(pinned.map((p) => [p.seed, p.state]));
+  return board.map((col) => {
+    const stickies = [
+      ...col.stickies.filter((s) => !moved.has(s.seed) || moved.get(s.seed) === col.key),
+      ...pinned
+        .filter((p) => p.state === col.key && !col.stickies.some((s) => s.seed === p.seed))
+        .map((p) => ({ seed: p.seed, state: p.state })),
+    ];
+    const same =
+      stickies.length === col.stickies.length && stickies.every((s, i) => s === col.stickies[i]);
+    return same ? col : { ...col, stickies };
+  });
+}
+
 export function projectWallBoard(board: LaneBoard | null): WallBoard | null {
   if (!board) return null;
   const byState = new Map<LaneState, WallBoardColumn>(
