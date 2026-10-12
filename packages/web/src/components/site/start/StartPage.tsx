@@ -25,7 +25,7 @@ export function StartPage() {
         <h1 className="start-hero__title">{START_COPY.h1}</h1>
         <p className="start-hero__lede">
           musterd is in private preview, so there is no public install yet. This is what the
-          first session looks like, step by step, with the board as it really appears.
+          first session looks like, step by step, and what you look at along the way.
         </p>
       </section>
 

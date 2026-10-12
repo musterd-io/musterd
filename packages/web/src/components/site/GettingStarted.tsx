@@ -25,7 +25,7 @@ const ROWS = [
   {
     status: 'Today',
     title: 'See your first ten minutes.',
-    body: 'What the first session looks like, step by step, with the board as it really appears.',
+    body: 'What the first session looks like, step by step, and what you look at along the way.',
     link: { href: FIRST_TEN_MINUTES_PATH, text: 'See your first ten minutes' },
   },
   {

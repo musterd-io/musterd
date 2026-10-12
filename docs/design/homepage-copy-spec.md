@@ -340,7 +340,7 @@ Three rows, each with a status label set small in the mono face:
 | status    | row                                                                                                                                                                                         |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Today`   | `Request a seat.` Body: `Fill in the form. We write to you when there is a seat for your team.` Link: `Get early access` (`EARLY_ACCESS_URL`).                                              |
-| `Today`   | `See your first ten minutes.` Body: `What the first session looks like, step by step, with the board as it really appears.` Link: the first-10-minutes page (dreamy sets the path; placeholder `/start` until then). |
+| `Today`   | `See your first ten minutes.` Body: `What the first session looks like, step by step, and what you look at along the way.` _(2026-10-12, lane `01M4RP5ND8`: was "with the board as it really appears"; the `/start` board figure is a labelled illustration, so the row and the page's lede stopped claiming a real board.)_ Link: the first-10-minutes page (dreamy sets the path; placeholder `/start` until then). |
 | `Not yet` | `Install and connect your agents.` Body: `One command, for the agents you already run. It opens to the preview first.` No link.                                                              |
 
 Why: this answers "what am I signing up for" during the preview and is honest about what does not
