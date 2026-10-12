@@ -69,6 +69,8 @@ tour started in one surface resumes in the other, and a closed lane starts a fre
 | Tour panel | `add_seat` | the step's body, then `Continue` | |
 | Tour panel | `next` | the step's body | The three lines are commands; set them in mono. |
 | Tour panel | `next` | `Done` | Button. Closes the panel. |
+| Tour panel | Every step, panel header | `–` | Button, labelled `Minimize the tour (Esc)` for assistive tech, tooltip `Minimize (Esc)`. Collapses the panel to the pill below. Esc does the same, except while the viewer is typing or a control outside the panel has focus. The tour keeps running while collapsed. |
+| `/live`, `/board` | Panel collapsed | `Tour · <n>/9` then, while waiting on the agent, the elapsed `m:ss` | The pill. One button, labelled `Open the tour, <step title>`; a click reopens the panel at the current step. Shows the waiting dot of the `claims` and `hands_back` steps so a collapsed tour still says it is waiting. _(Added 2026-10-12, lane `01M4RHD7Q3`: built in PR #2345, named here on nick's ask so the strings have one home.)_ |
 
 ## 4. The verdict line on `record`
 
