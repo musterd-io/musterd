@@ -31,9 +31,10 @@ The verdict in step 6 must come from a person. The daemon does not check that th
 an acceptance ask is the one it was routed to, so the web shows the tour only to a viewer signed in
 as a **human** member. An agent viewer, or a viewer who is not signed in, sees no entry point.
 
-A viewer's tour lane is the lane titled `TOUR_LANE_TITLE` filled with `{you}`. It is **open** when
-its state is one of `open`, `claimed`, `active`, `blocked` or `awaiting_acceptance`. The CLI finds
-the same lane, so a tour started in one surface resumes in the other.
+A viewer's tour lane is the newest lane titled `TOUR_LANE_TITLE` filled with `{you}`; older
+lanes with that title are the record of earlier runs. It is **open** when its state is one of
+`open`, `claimed`, `active`, `blocked` or `awaiting_acceptance`. The CLI finds the same lane, so a
+tour started in one surface resumes in the other, and a closed lane starts a fresh tour in both.
 
 ## 3. Strings
 
@@ -42,7 +43,7 @@ the same lane, so a tour started in one surface resumes in the other.
 | `/live`, `/board` | Entry: human viewer, at least one agent member, no tour lane of theirs in any state | `Take the tour` | Button. Show it once per page, out of the way of the roster and the board. |
 | `/live`, `/board` | Entry: an open tour lane of theirs exists | `Resume the tour` | Button. Resumes at `claims` with that lane (§5). |
 | `/live`, `/board` | Entry: beside `Resume the tour` | `Start over` | Link. Abandons the open lane (`state: 'abandoned'`, `abandon_reason: 'tour reset'`), then starts at `what`. |
-| `/live`, `/board` | Entry: their tour lane is closed | — | No entry point. The tour is reachable again only from `musterd tour`. |
+| `/live`, `/board` | Entry: their newest tour lane is closed | `Take the tour again` | Button, same place as `Take the tour`. Starts at `what` and opens a new lane at `give_work`; the closed lane stays as the record. _(2026-10-12, lane `01M4RGKQ8P`: this row said "no entry point", and nick could not find the tour after finishing it once. The CLI already starts a fresh tour on a closed lane; the web now matches.)_ |
 | Tour panel | Every step | step title (§1), then the step's `body` lines from `TOUR_STEPS` by id | Render each body line as its own line. Lines starting with two spaces on `add_seat` are a list. |
 | Tour panel | `what`, `add_seat` | `Continue` | Button. Advances to the next step. |
 | Tour panel | Every step before `record` | `Stop` | Link. Closes the panel and leaves the tour lane open. See `Stopped` below. |
