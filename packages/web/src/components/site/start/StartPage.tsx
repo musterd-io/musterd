@@ -1,5 +1,4 @@
 import officeStill from '../../../brand/office-still.png?url';
-import { EARLY_ACCESS_URL } from '../../../content/site';
 import { WATCH_COPY } from '../watchCopy';
 import { START_COPY } from './startCopy';
 import './StartPage.css';
@@ -24,8 +23,8 @@ export function StartPage() {
         <p className="start-hero__eyebrow mono">{START_COPY.eyebrow}</p>
         <h1 className="start-hero__title">{START_COPY.h1}</h1>
         <p className="start-hero__lede">
-          musterd is in private preview, so there is no public install yet. This is what the
-          first session looks like, step by step, and what you look at along the way.
+          What the first session looks like once musterd is installed, step by step, and what you
+          look at along the way.
         </p>
       </section>
 
@@ -127,8 +126,11 @@ export function StartPage() {
           it a small piece of work and you judge what comes back.
         </p>
         <p className="start-next__copy">
-          No seat yet? <a className="start__link" href={EARLY_ACCESS_URL}>Get early access</a> —
-          we write to you when there is a seat for your team. The concepts a team runs on are in{' '}
+          Not installed yet?{' '}
+          <a className="start__link" href="/#getting-started">
+            Getting started
+          </a>{' '}
+          has the three commands. The concepts a team runs on are in{' '}
           <a className="start__link" href="/docs/concepts">the docs</a>.
         </p>
       </section>

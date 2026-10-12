@@ -125,6 +125,8 @@ job, and a second string would assert a replay in the dark-without-replay state.
 
 ### 0a.6 Getting started (`GettingStarted`)
 
+_(2026-10-12, [ADR 568](../decisions/568-preview-over-install-path.md): the preview is over. The rows below are retired; Getting started is three install steps with their commands (`npm install -g @musterd/cli`, `musterd init`, `musterd tour`), the hero button reads `Get started`, and its note reads `Open source under the MIT license. Runs on your machine, no account.`)_
+
 H2: `Getting started` (unchanged)
 
 Lead: `What you can do today, and what comes next.`

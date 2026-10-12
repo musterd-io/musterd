@@ -124,7 +124,11 @@ describe('the hero', () => {
     expect(hero).not.toMatch(/not watching from outside/);
     expect(hero).not.toMatch(/Watch it live/); // a state claim in prerendered HTML
     expect(hero).toContain('Watch the team work');
-    expect(hero).toContain('Private preview. We write to you when there is a seat for your team.');
+    // ADR 568: the preview is over. The primary button goes to the install, and the note says what
+    // the reader is agreeing to; no early-access form anywhere.
+    expect(hero).toContain('href="#getting-started"');
+    expect(hero).toContain('Open source under the MIT license. Runs on your machine, no account.');
+    expect(hero).not.toMatch(/early access|Private preview|EARLY_ACCESS/i);
   });
   it('carries the office as its right column (ADR 567), not a record card', () => {
     expect(hero).toContain('<StreamSection />');
@@ -194,21 +198,19 @@ describe('the 2026-10-12 cut', () => {
   it('Getting started links the first-ten-minutes page, and nowhere that does not exist', () => {
     expect(start).toContain('FIRST_TEN_MINUTES_PATH');
     expect(start).toContain('See your first ten minutes');
-    expect(start).toContain('What the first session looks like, step by step');
   });
 
-  it('Getting started says what exists today and what does not, once, without a state word or a date', () => {
-    expect(start).toContain('What you can do today, and what comes next.');
-    // §0a.6: the hero says "private preview" and carries the seat promise; this section does not.
-    expect(start).not.toMatch(/private preview/);
-    expect(start).not.toMatch(/We write to you/);
-    expect(start).toContain("status: 'Not yet'");
-    expect(start).toContain('Install and connect your agents.');
+  it('Getting started is the install, in three steps with the commands themselves (ADR 568)', () => {
+    expect(start).toContain('You need Node 22 or later, and an agent tool you already use.');
+    expect(start).toContain("'npm install -g @musterd/cli'");
+    expect(start).toContain("'brew install SandRiseStudio/musterd/musterd'");
+    expect(start).toContain("'musterd init'");
+    expect(start).toContain("'musterd tour'");
+    expect(start).toContain('Read the source on GitHub');
+    expect(start).not.toMatch(/private preview|early access|Not yet|EARLY_ACCESS/i);
     for (const code of [chain, start]) {
       expect(code).not.toMatch(/\b(live|now|currently)\b/i);
     }
-    // The "Not yet" row promises nothing: no link, no date.
-    expect(start).toMatch(/status: 'Not yet'[\s\S]*?link: null/);
   });
 });
 

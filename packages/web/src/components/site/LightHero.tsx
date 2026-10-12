@@ -1,4 +1,4 @@
-import { EARLY_ACCESS_URL, TAGLINE } from '../../content/site';
+import { TAGLINE } from '../../content/site';
 import { StreamSection } from './StreamSection';
 import './LightHero.css';
 
@@ -36,17 +36,17 @@ export function LightHero() {
           it and who accepted it.
         </p>
         <p className="lh__ctas">
-          <a className="lh__cta lh__cta--primary" href={EARLY_ACCESS_URL}>
-            Get early access
+          <a className="lh__cta lh__cta--primary" href="#getting-started">
+            Get started
           </a>
           {/* Names the action. "Watch it live" was a state claim in prerendered HTML. */}
           <a className="lh__cta" href="/watch">
             Watch the team work
           </a>
         </p>
-        {/* What happens after the click, and why there is no install: the primary button sets an
-            expectation. nick confirms this promise against what the form actually sends. */}
-        <p className="lh__note">Private preview. We write to you when there is a seat for your team.</p>
+        {/* What the reader is agreeing to before the click (ADR 568: the preview is over). Each
+            clause is checkable: the LICENSE file, a local daemon, no sign-up anywhere in init. */}
+        <p className="lh__note">Open source under the MIT license. Runs on your machine, no account.</p>
         </div>
         <StreamSection />
       </div>

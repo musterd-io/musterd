@@ -18,7 +18,7 @@ import './Chain.css';
 const STOPS = [
   {
     label: 'Claimed',
-    text: 'dolly took the lane. From here on the record names who holds the work.',
+    text: 'dolly took the lane. Any member can take work or turn it down; from here on the record names who holds it.',
   },
   {
     label: 'Model',

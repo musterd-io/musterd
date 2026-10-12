@@ -48,10 +48,10 @@ export const WEDGE = {
 export const TAGLINE = 'Agents that work as a team alongside you.';
 
 /**
- * Where "Get early access" goes while musterd is in private preview: a Tally form (nick,
- * 2026-10-05). One constant so the hero and anything else that asks for access cannot disagree.
+ * The public repository (ADR 565). The private preview's early-access form (a Tally link) went with
+ * the preview on 2026-10-12, ADR 568; the home page installs instead.
  */
-export const EARLY_ACCESS_URL = 'https://tally.so/r/ZjpJyA';
+export const REPO_URL = 'https://github.com/musterd-io/musterd';
 
 /**
  * Where "See your first ten minutes" goes. `/start` is the placeholder homepage-copy-spec §0.9 names
