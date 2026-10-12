@@ -256,20 +256,36 @@ export function startAuditRetention(
 }
 
 /** The store sizes `/health` reports (ADR 478 §Observability). Absent, never zero, when unknown. */
-export async function storeSizes(
-  db: Driver,
-  dbPath: string,
-  archiveDir: string | null,
-): Promise<{
+export interface StoreSizes {
   db_bytes?: number;
   sync_log_rows: number;
   sync_log_bytes?: number;
   archive_bytes?: number;
-}> {
-  const out: Awaited<ReturnType<typeof storeSizes>> = {
+}
+
+/** `bytes: false` skips `sync_log_bytes`: on SQLite it is a `dbstat` walk of every sync_log page —
+ *  0.8 s warm and 15 s cold on the hub (2026-10-12) — and synchronous. See `healthStoreSizes`. */
+export async function storeSizes(
+  db: Driver,
+  dbPath: string,
+  archiveDir: string | null,
+  opts: { bytes?: boolean } = {},
+): Promise<StoreSizes> {
+  const out: StoreSizes = {
     sync_log_rows: (await db.get<{ n: number }>('SELECT COUNT(*) AS n FROM sync_log'))!.n,
   };
   if (dbPath !== ':memory:' && existsSync(dbPath)) out.db_bytes = statSync(dbPath).size;
+  if (opts.bytes !== false) await syncLogBytes(db, out);
+  if (archiveDir && existsSync(archiveDir)) {
+    out.archive_bytes = readdirSync(archiveDir).reduce(
+      (n, f) => n + statSync(join(archiveDir, f)).size,
+      0,
+    );
+  }
+  return out;
+}
+
+async function syncLogBytes(db: Driver, out: StoreSizes): Promise<void> {
   try {
     // The table plus its indexes: dbstat is compiled into better-sqlite3's SQLite; Postgres has
     // pg_total_relation_size. Engine introspection, not store SQL — the one dialect branch here.
@@ -283,13 +299,6 @@ export async function storeSizes(
   } catch {
     // a build without dbstat: omit, do not guess
   }
-  if (archiveDir && existsSync(archiveDir)) {
-    out.archive_bytes = readdirSync(archiveDir).reduce(
-      (n, f) => n + statSync(join(archiveDir, f)).size,
-      0,
-    );
-  }
-  return out;
 }
 
 /** How many churn rows a pass would take right now — `musterd store prune --dry-run`. */
