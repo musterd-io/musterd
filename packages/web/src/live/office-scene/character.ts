@@ -693,9 +693,9 @@ function drawCarry(ctx: CanvasRenderingContext2D, px: (j: V3) => Proj, k: Skel, 
   }
   if (kind === 'box') {
     const c = px({ x: 0, y: k.chest.y - 1, z: k.chest.z + 13 });
-    ctx.fillStyle = '#b592f0';
+    ctx.fillStyle = '#8fd0dd';
     ctx.fillRect(c.p.x - 11 * u, c.p.y - 9 * u, 22 * u, 17 * u);
-    ctx.fillStyle = '#8a5fd6';
+    ctx.fillStyle = '#2f8fa3';
     ctx.fillRect(c.p.x - 11 * u, c.p.y - 9 * u, 22 * u, 5 * u);
     return;
   }
