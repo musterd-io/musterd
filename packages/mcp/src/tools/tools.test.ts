@@ -1620,7 +1620,10 @@ describe('lane_resolve handler (branch cleanup hint, ADR 106)', () => {
   });
 
   it('lane_open and lane_update take source_ref, and the lane line prints src= (ADR 561)', async () => {
-    const schemas: Record<string, { inputSchema: Record<string, { safeParse: (v: unknown) => { success: boolean } }> }> = {};
+    const schemas: Record<
+      string,
+      { inputSchema: Record<string, { safeParse: (v: unknown) => { success: boolean } }> }
+    > = {};
     registerLanes(
       { registerTool: (name: string, schema: any) => void (schemas[name] = schema) } as any,
       {} as any,
@@ -1630,7 +1633,10 @@ describe('lane_resolve handler (branch cleanup hint, ADR 106)', () => {
       expect(arg.safeParse('acme/app#3').success).toBe(true);
       expect(arg.safeParse('').success).toBe(false);
     }
-    const openLane = vi.fn(async () => ({ lane: lane({ source_ref: 'acme/app#3' }), warnings: [] }));
+    const openLane = vi.fn(async () => ({
+      lane: lane({ source_ref: 'acme/app#3' }),
+      warnings: [],
+    }));
     const handlers = captureAll(registerLanes, { openLane } as Partial<MusterdClient>);
     const out = text(await handlers['lane_open']!({ title: 'a', source_ref: 'acme/app#3' }));
     expect(openLane).toHaveBeenCalledWith(expect.objectContaining({ source_ref: 'acme/app#3' }));

@@ -1465,7 +1465,11 @@ withDrivers('integration · attestation-lanes', (_o, kind) => {
       const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
       const ada = { key: team.json.agent_key, seat: 'Ada' };
       await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, team.json.human_credential);
-      const held = await post('/teams/dawn/lanes', { title: 'from Linear', source_ref: 'ENG-1' }, ada);
+      const held = await post(
+        '/teams/dawn/lanes',
+        { title: 'from Linear', source_ref: 'ENG-1' },
+        ada,
+      );
       expect(held.json.lane.source_ref).toBe('ENG-1');
       await post('/teams/dawn/lanes', { title: 'other', source_ref: 'ENG-10' }, ada);
       await post('/teams/dawn/lanes', { title: 'plain' }, ada);

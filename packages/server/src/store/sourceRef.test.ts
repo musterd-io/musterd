@@ -2,7 +2,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Driver } from '../db/driver.js';
 import { withDrivers } from '../db/testing.js';
 import { MusterdError } from '../errors.js';
-import { filterLanes, getLane, laneHoldingSourceRef, listLanes, openLane, updateLane } from './lanes.js';
+import {
+  filterLanes,
+  getLane,
+  laneHoldingSourceRef,
+  listLanes,
+  openLane,
+  updateLane,
+} from './lanes.js';
 import { createTeam } from './teams.js';
 
 /**
@@ -143,7 +150,10 @@ withDrivers('source_ref', (o) => {
 
     it('filters the board by ref', async () => {
       const { db, team } = await seed();
-      const a = await openLane(db, team.id, team.slug, 'dolly', { title: 'a', source_ref: 'ENG-1' });
+      const a = await openLane(db, team.id, team.slug, 'dolly', {
+        title: 'a',
+        source_ref: 'ENG-1',
+      });
       await openLane(db, team.id, team.slug, 'dolly', { title: 'b', source_ref: 'ENG-2' });
       await openLane(db, team.id, team.slug, 'dolly', { title: 'c' });
       const board = await listLanes(db, team.id, team.slug);
@@ -156,16 +166,31 @@ withDrivers('source_ref', (o) => {
 
     it('a change of ref is audited like any field', async () => {
       const { db, team } = await seed();
-      const a = await openLane(db, team.id, team.slug, 'dolly', { title: 'a', source_ref: 'ENG-1' });
-      await updateLane(db, team.id, a.id, team.slug, { source_ref: 'ENG-9' }, Date.now(), undefined, {
-        actor: 'dolly',
+      const a = await openLane(db, team.id, team.slug, 'dolly', {
+        title: 'a',
+        source_ref: 'ENG-1',
       });
+      await updateLane(
+        db,
+        team.id,
+        a.id,
+        team.slug,
+        { source_ref: 'ENG-9' },
+        Date.now(),
+        undefined,
+        {
+          actor: 'dolly',
+        },
+      );
       const rows = await db.all<{ action: string; detail: string }>(
         "SELECT action, detail FROM audit WHERE target = ? AND action IN ('lane.opened','lane.updated') ORDER BY ts, id",
         [a.id],
       );
       expect(JSON.parse(rows[0]!.detail).source_ref).toBe('ENG-1');
-      expect(JSON.parse(rows[1]!.detail).changes.source_ref).toEqual({ from: 'ENG-1', to: 'ENG-9' });
+      expect(JSON.parse(rows[1]!.detail).changes.source_ref).toEqual({
+        from: 'ENG-1',
+        to: 'ENG-9',
+      });
       await db.close();
     });
   });

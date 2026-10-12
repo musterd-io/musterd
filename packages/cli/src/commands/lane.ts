@@ -87,7 +87,7 @@ function list(flags: Record<string, string | boolean>, name: string): string[] |
     .filter(Boolean);
 }
 
-function renderLane(l: Lane): string {
+export function renderLane(l: Lane): string {
   const owner = l.owner_seat ? theme.memberName(l.owner_seat, 'agent') : theme.meta('unowned');
   const state =
     l.state === 'done' ? theme.ok(l.state) : l.state === 'blocked' ? theme.warn(l.state) : l.state;
@@ -96,7 +96,8 @@ function renderLane(l: Lane): string {
   const branch = l.branch ? theme.meta(` ⎇ ${l.branch}`) : '';
   const goal = l.goal_id ? theme.meta(` ◆ ${l.goal_id}`) : '';
   // ADR 561: the issue the lane came from.
-  const src = l.source_ref ? theme.meta(` ⌁ ${l.source_ref}`) : '';
+  // Stripped: a fold stores what another daemon sent, and a ref names text from outside the team.
+  const src = l.source_ref ? theme.meta(` ⌁ ${plainTerminalText(l.source_ref)}`) : '';
   // ADR 466: a parked lane shows who shelved it and why where an owner would be.
   const parked = l.parked
     ? theme.meta(

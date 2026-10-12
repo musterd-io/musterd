@@ -13,11 +13,17 @@ export interface SavePort {
   goals(team: string): Promise<{ goals: { id: string }[] }>;
   declareGoal(team: string, body: DeclareGoal): Promise<{ id: string }>;
   openLane(team: string, body: OpenLane): Promise<{ lane: { id: string } }>;
+  /** ADR 561: the lanes carrying one issue ref — read when an open is refused because one does. */
+  laneBoard(
+    team: string,
+    q: { source_ref: string },
+  ): Promise<{ lanes: { id: string; state: string }[] }>;
 }
 
 export interface SaveResult {
   goals: { ref: string; id: string; resumed: boolean; linked?: boolean }[];
-  lanes: { ref: string; id: string; title: string; resumed: boolean }[];
+  /** `adopted`: the ref was already on the board (a 409 on open), so that lane was recorded instead. */
+  lanes: { ref: string; id: string; title: string; resumed: boolean; adopted?: boolean }[];
 }
 
 export function refusal(stage: ImportStage, team: string, now: number): string | null {
@@ -83,11 +89,18 @@ export async function saveStage(
       if (l.detail) body.detail = l.detail;
       if (l.goal_id) body.goal_id = l.goal_id;
       if (l.stakes) body.stakes = l.stakes;
+      if (l.source_ref) body.source_ref = l.source_ref;
       if (l.depends_on.length > 0) body.depends_on = l.depends_on.map((d) => resolveDep(d, stage));
-      const res = await opts.port.openLane(opts.team, body);
-      stage.created[l.ref] = res.lane.id;
+      const opened = await openOrAdopt(opts.port, opts.team, body);
+      stage.created[l.ref] = opened.id;
       opts.persist(stage);
-      result.lanes.push({ ref: l.ref, id: res.lane.id, title: l.title, resumed: false });
+      result.lanes.push({
+        ref: l.ref,
+        id: opened.id,
+        title: l.title,
+        resumed: false,
+        ...(opened.adopted ? { adopted: true } : {}),
+      });
     }
   } catch (err) {
     const done = Object.keys(stage.created).length;
@@ -103,6 +116,28 @@ export async function saveStage(
   stage.saved_at = opts.now();
   opts.persist(stage);
   return result;
+}
+
+/**
+ * ADR 561: a ref already held by a live lane is refused with a 409 — after the preview (someone
+ * opened it since) or because this save's earlier create landed and its response was lost. Either
+ * way that lane is the row's lane, so record it and go on. With no live holder left, the refusal
+ * stands and the save stops as for any other error.
+ */
+async function openOrAdopt(
+  port: SavePort,
+  team: string,
+  body: OpenLane,
+): Promise<{ id: string; adopted: boolean }> {
+  try {
+    return { id: (await port.openLane(team, body)).lane.id, adopted: false };
+  } catch (err) {
+    if (!(err instanceof CliError && err.code === 'conflict' && body.source_ref)) throw err;
+    const { lanes } = await port.laneBoard(team, { source_ref: body.source_ref });
+    const live = lanes.find((x) => x.state !== 'done' && x.state !== 'abandoned');
+    if (!live) throw err;
+    return { id: live.id, adopted: true };
+  }
 }
 
 function resolveDep(d: LaneDep, stage: ImportStage): string {

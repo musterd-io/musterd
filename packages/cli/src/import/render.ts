@@ -68,7 +68,11 @@ export function renderSaved(stage: ImportStage, r: SaveResult, liveUrl: string):
     `${theme.ok('✓')} ${n(r.goals.length, 'goal')}, ${n(r.lanes.length, 'lane')} saved from import ${stage.id}` +
       (resumed ? theme.meta(` (${String(resumed)} already created by an earlier run)`) : ''),
     ...r.goals.map((g) => `  ◆ ${g.id}`),
-    ...r.lanes.map((l) => `  ○ ${l.id}  ${l.title}`),
+    ...r.lanes.map((l) =>
+      l.adopted
+        ? `  ↺ ${l.id}  ${l.title} ${theme.meta('(already on the board)')}`
+        : `  ○ ${l.id}  ${l.title}`,
+    ),
     '',
     `see them: ${liveUrl}  ·  musterd next`,
   ];

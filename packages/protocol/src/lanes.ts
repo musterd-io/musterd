@@ -338,7 +338,13 @@ export type LaneFollowsUp = z.infer<typeof LaneFollowsUpSchema>;
  * ADR 561: the issue a lane came from (`acme/app#12`, `ENG-42`) — the key `musterd import` re-sync
  * matches on. One lane that is neither done nor abandoned per ref per team; the store refuses a second.
  */
-export const LaneSourceRefSchema = z.string().min(1).max(200);
+export const LaneSourceRefSchema = z
+  .string()
+  .min(1)
+  .max(200)
+  // Printed on terminals and handed to models: no C0/C1 control characters (escape injection).
+  // eslint-disable-next-line no-control-regex -- the control characters ARE the subject here
+  .regex(/^[^\u0000-\u001f\u007f-\u009f]+$/, 'source_ref may not contain control characters');
 
 /** ADR 487 §5.4: how long a Goal's live lanes may all sit untouched before `team_next` says so. */
 export const GOAL_STALE_DAYS = 7;
@@ -499,7 +505,8 @@ export const LaneSchema = z.object({
   /** ADR 487: why the lane was dropped (≤ 280), set on or after the move to `abandoned`. */
   abandon_reason: z.string().nullable().optional(),
   /** ADR 561: the issue this lane came from. Absent reads as none (skew posture, like `follows_up`). */
-  source_ref: LaneSourceRefSchema.nullable().optional(),
+  // Read side stays a plain string: a stored value the write rule would refuse must not break a board.
+  source_ref: z.string().nullable().optional(),
   /** ADR 487 §5.2: the seat session's unfinished to-dos, last write wins. Absent reads as none. */
   unfinished_todos: LaneTodosSchema.nullable().optional(),
   /**

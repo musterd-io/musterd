@@ -58,6 +58,10 @@ for that source and adds rename, abandon and adopt actions to the stage.
   isn't one.
   - A done or abandoned lane keeps its ref as history, and a reopened issue can then get a new lane.
 - When a synced team merges changes from another machine, the hub applies the same refusal on that path.
+  - _(Corrected 2026-10-12, ADR 561: the merge path cannot refuse — the fold applies history and never
+    refuses an event. Each daemon refuses at its own write, which covers the hub's arbitrated writes; two
+    machines opening one ref at once can leave two live lanes, and re-sync reports that as `duplicate_ref`
+    and acts on neither.)_
 - `GET /lanes?source_ref=<ref>` is an exact-match filter alongside `goal`.
 - Lane snapshots and the lane-update field diff carry the column like any other.
 

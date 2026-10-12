@@ -29,13 +29,16 @@ issue?
 ## Decision
 
 1. **`source_ref` is an optional lane field**, a string of 1–200 characters (`acme/app#12`, `ENG-42`,
-   `CLI-7`). It rides `OpenLane` and `UpdateLane`, and `Lane` carries it as `.nullable().optional()`
-   — the posture `follows_up` used (ADR 487), so a lane from an older daemon still parses and reads
-   as having none. `musterd/0.3` is unchanged; `FEATURE_EPOCH` goes to 34 so a client can tell
-   whether the daemon has the field.
+   `CLI-7`) with no control characters — it is printed on terminals and handed to models, and much
+   of it will come from outside the team. It rides `OpenLane` and `UpdateLane`, and `Lane` carries
+   it as a plain `.nullable().optional()` string — the posture `follows_up` used (ADR 487), so a lane
+   from an older daemon still parses and reads as having none, and a stored value the write rule
+   would refuse never breaks a board read. The CLI strips control characters when it prints one.
+   `musterd/0.3` is unchanged; `FEATURE_EPOCH` goes to 34 so a client can tell whether the daemon
+   has the field.
 2. **One open lane per ref per team.** Opening a lane with a ref, updating a lane onto a ref, or
    reopening a done or abandoned lane that carries a ref, is refused with a 409 `conflict` —
-   `source_ref "<ref>" already belongs to lane <id>` — when another lane on the team that is neither
+   `source_ref "<ref>" already belongs to lane <id>` — when a different lane on the team that is neither
    `done` nor `abandoned` holds it. The check runs inside the store transaction, the way
    `store/calendar.ts` refuses a duplicate. The index on `(team_id, source_ref)` is not unique: "among
    lanes not done or abandoned" is not something a partial index can say over a state that changes.
@@ -62,3 +65,24 @@ issue?
 - **Lanes imported before this keep their `Source:` line** and no field. There is no backfill; a
   re-sync adopts them (increment 2).
 - The two MCP tools grow by one argument each, counted against the context budget.
+
+## Observability & Evaluation
+
+**Traces.** n/a — no new span. A refusal is the ordinary 409 `conflict` on `POST`/`PATCH /lanes`,
+and a change of ref is a `lane.updated` audit row with `changes.source_ref {from, to}` like any
+audited field.
+
+**Baseline.** Before this ADR the only record of an issue was a `Source: <ref>` line in the lane's
+detail, and nothing stopped a second lane for the same issue: re-running a file import opened every
+lane again unless the title check caught it (a warning, never a refusal).
+
+**Eval.** Unit tests: `store/sourceRef.test.ts` (round-trip, the refusal and its message, a closed
+lane frees its ref and keeps it, a reopen onto a held ref is refused, update onto a held ref, two
+teams, the filter, the audit diff), `sync/fold.test.ts` (a birth and an update carry the ref; a
+duplicate is applied, never refused), the `?source_ref=` and 409 integration test, the CLI and MCP
+surface tests, and `import/check.test.ts` + `import/save.test.ts` (`already_on_board`, the 409
+adoption).
+
+**Experiment.** Import the same CSV with `source_ref` set twice on one team. Falsify: the second
+save opens any lane, or the board ever shows two lanes that are neither done nor abandoned on one
+ref without a synced team's simultaneous open to explain it.
