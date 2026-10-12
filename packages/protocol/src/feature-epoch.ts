@@ -139,5 +139,9 @@
 // `idle_wake` residency policy key, `hearing` on the heartbeat, and `POST …/inbox/idle-wake`. A
 // daemon behind this epoch ignores `seam` (its reply carries no `seam` echo, which the adapter reads
 // as silence) and drops the policy key; an adapter behind it never injects or sends `hearing`.
-export const FEATURE_EPOCH = 32 as const;
+// Epoch 33 — ADR 558 increment 3: opencode idle wake. The ADR 392 plugin at generation 5 watches
+// the adapter's ring file and drops its own turn-end bell; `isPushableLine` and the ring shapes move
+// into the protocol. An adapter behind this epoch keeps opencode deaf (`no-inject:opencode`), and an
+// older checkout's `init` must not rewrite the generation 5 plugin back to the bell.
+export const FEATURE_EPOCH = 33 as const;
 export type FeatureEpoch = typeof FEATURE_EPOCH;

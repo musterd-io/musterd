@@ -466,12 +466,12 @@ async function main(): Promise<void> {
   const stopToolTelemetry = startToolTelemetryFlush(client, recorder);
   // ADR 558: idle-at-prompt wake. The daemon decides what rings (`seam=idle`); this decides when,
   // from evidence only this machine has. The harness is the attested surface (it follows capture),
-  // and the inject adapter for anything but claude-code is deaf by name until its increment lands.
+  // and the inject adapter for a harness with no increment yet is deaf by name.
   const bindingDir = config.bindingDir ?? process.cwd();
   client.attachIdleWake(
     new IdleWake({
       seat: () => client.member ?? null,
-      adapter: () => injectAdapterFor(config.surface ?? null),
+      adapter: () => injectAdapterFor(config.surface ?? null, process.env, bindingDir),
       readState: () => markersFor(readIdleWakeState(bindingDir), client.capturedSessionId()),
       envSwitchOff: process.env['MUSTERD_IDLE_WAKE'] === 'off',
       inFlight: toolCallsInFlight,

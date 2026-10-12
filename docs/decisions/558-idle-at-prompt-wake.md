@@ -198,6 +198,31 @@ report never fakes liveness.
   adapter also pushes nothing that is not one short printable line of the composed shape, and
   reports `failed` with reason `line-shape`. The boundary seam is unchanged and still carries such
   an act as hook output. Found by a commit security review during the build.
+- _(2026-10-11, increment 2's canary.)_ Passed on Claude Code 2.1.296, n=1: a steer to a session
+  idle for 6 h 46 m started a turn 5.2 s after the send ([the canary](../wiki/idle-wake-canary.md)).
+  Claude Code frames the pushed line as a peer message (`origin.kind: 'peer'`) with a
+  no-escalation rider, which is stricter than the user turn assumed above. The guards stay.
+- _(2026-10-11, building increment 3.)_ Three changes from the spec's opencode row and from the
+  Increments note that the per-harness increments change nothing else in the core.
+  1. **The ring is three files**, not one. The adapter writes `.musterd/idle-ring.json` and waits up
+     to 10 s for the plugin's `.musterd/idle-ring-ack.json`, so `idle_wake.injected` means opencode
+     took the prompt, not that a file was written. The plugin (ADR 392, generation 5) stamps
+     `.musterd/opencode-plugin.json`; without a fresh stamp the session is deaf by name (`no-plugin`,
+     `plugin-stale`, `plugin-gone`). The shapes and the line check (`isPushableLine`, moved here from
+     the adapter) are in `@musterd/protocol`, because the plugin renders them into its own text.
+  2. **The core holds a busy session's acts.** Generations 1–4 of the plugin rang at the turn-end
+     transition with their own probe and a cap of 4. That bell is gone, as the spec says, and its
+     one case (an act that lands mid-turn with no tool call after it) moves to the core. A fire that
+     finds the session busy keeps what waits and looks again every 15 s for up to 10 minutes. The
+     daemon is asked only once the session is idle, and drops whatever a boundary seam delivered
+     meanwhile. An inject the harness refuses as `busy` is held the same way, not counted deaf. The
+     plugin refuses a session it saw go busy, because a `promptAsync` into a running turn orphans
+     messages (#28202). This applies to Claude Code too.
+  3. **The switch now covers the turn-end bell.** With idle wake off, opencode rings nothing at turn
+     end, where generations 1–4 rang regardless. The boundary seam is unchanged.
+
+  The plugin also records each turn start (`trace hook --kind UserPromptSubmit`, beside the existing
+  `Stop`), so the turn markers and the keyboard guard have evidence on opencode.
 
 Follows-up: lane `01M4M6PXZT8ND6F17ZSBDKZQCS` — the core and the claude-code inject, with its canary.
 Follows-up: lane `01M4M6Q5ERZTP2GGHJZM71HP9R` — the opencode inject.
