@@ -2835,7 +2835,7 @@ export async function handleHttp(
           // seat file that never arrived, the build that cannot read an event. Null when moving.
           sync: {
             wedged: await readPushRefusal(ctx.db, team.id),
-            pull_stopped: await readPullStop(ctx.db, team.id),
+            pull_stopped: await readPullStop(ctx.config, team.id),
           },
         });
       }

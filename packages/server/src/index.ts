@@ -89,6 +89,8 @@ export interface RunningServer {
   close: () => Promise<void>;
   /** The raw better-sqlite3 handle, for SQLite-backed tests only; throws when the store is Postgres. */
   db: Database;
+  /** The resolved config — the key the sync loops register their doorbells and stops under. */
+  config: Ctx['config'];
   /** The trace store (ADR 445 §3) — exposed so tests can read what a hook posted. Same caveat. */
   traceDb: Database;
   /**
@@ -293,6 +295,9 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     // back through `server.db.prepare`); the daemon's own code never takes this door.
     get db() {
       return rawHandle(db, 'db');
+    },
+    get config() {
+      return config;
     },
     get traceDb() {
       return rawHandle(traceDb, 'traceDb');

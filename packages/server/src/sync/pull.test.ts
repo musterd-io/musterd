@@ -233,10 +233,12 @@ withDrivers('pull', (_o, kind) => {
     });
   });
 
+  // The hub daemon's OWN config: the pull-stop registry is keyed on it (one object per daemon), so a
+  // test that re-minted a config per call would be reading a different daemon's state each time.
   const hubCtx = () => ({
     db: hub.store,
     hub: new Hub(),
-    config: resolveConfig(),
+    config: hub.config,
     rosterRoots: [],
   });
   const hubTeam = async () => (await getTeamBySlug(hub.store, 'bravo'))!;
@@ -363,15 +365,15 @@ withDrivers('pull', (_o, kind) => {
       const team = await hubTeam();
 
       // Nothing has stopped yet.
-      expect(await readPullStop(hub.store, team.id, t0)).toBeNull();
+      expect(await readPullStop(hub.config, team.id, t0)).toBeNull();
 
       await pullTeam(hubCtx(), team, t0);
       // A stop of one tick is routine (the roster is usually a pull away): quiet inside the grace.
-      expect(await readPullStop(hub.store, team.id, t0 + 60_000)).toBeNull();
+      expect(await readPullStop(hub.config, team.id, t0 + 60_000)).toBeNull();
 
       // Still stopped on the next tick, which must not restart the clock.
       await pullTeam(hubCtx(), team, t0 + 60_000);
-      const stop = await readPullStop(hub.store, team.id, t0 + SYNC_STOP_WARN_AFTER_MS);
+      const stop = await readPullStop(hub.config, team.id, t0 + SYNC_STOP_WARN_AFTER_MS);
       expect(stop).toMatchObject({ kind: 'unresolved_seat', subject: 'late', since: t0 });
       expect(stop!.hub_seq).toBeGreaterThan(0);
 
@@ -387,7 +389,7 @@ withDrivers('pull', (_o, kind) => {
       // The roster catches up; the next pull folds past it and the warning goes.
       await addSeat(hub, 'late');
       await pullTeam(hubCtx(), team, t0 + 2 * SYNC_STOP_WARN_AFTER_MS);
-      expect(await readPullStop(hub.store, team.id, t0 + 2 * SYNC_STOP_WARN_AFTER_MS)).toBeNull();
+      expect(await readPullStop(hub.config, team.id, t0 + 2 * SYNC_STOP_WARN_AFTER_MS)).toBeNull();
       const cleared = await get(hubBase, '/teams/bravo/members', nickCredential);
       expect(cleared.json.sync.pull_stopped).toBeNull();
     });
