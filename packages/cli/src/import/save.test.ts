@@ -265,7 +265,22 @@ describe('saveStage — a tracker sync (spec 2026-10-11 §3)', () => {
     sync: {
       actions: [
         { kind: 'adopt', lane_id: 'D1', ref: 'acme/app#1' },
-        { kind: 'rename', lane_id: 'R1', ref: 'acme/app#2', from: 'Old', title: 'New' },
+        {
+          kind: 'rename',
+          lane_id: 'R1',
+          ref: 'acme/app#2',
+          from: 'Old',
+          title: 'New',
+          held_by: 'ada',
+        },
+        {
+          kind: 'rename',
+          lane_id: 'R2',
+          ref: 'acme/app#7',
+          from: 'Old 2',
+          title: 'New 2',
+          held_by: null,
+        },
         {
           kind: 'abandon',
           lane_id: 'A1',
@@ -294,6 +309,8 @@ describe('saveStage — a tracker sync (spec 2026-10-11 §3)', () => {
   type Live = { id: string; state: string; owner_seat: string | null };
   const board: Record<string, Live> = {
     'acme/app#2': { id: 'R1', state: 'claimed', owner_seat: 'ada' },
+    // Unowned at preview, claimed since: the rename is skipped like the abandon (spec §3 Save).
+    'acme/app#7': { id: 'R2', state: 'claimed', owner_seat: 'bo' },
     'acme/app#3': { id: 'A1', state: 'open', owner_seat: null },
     'acme/app#4': { id: 'A2', state: 'claimed', owner_seat: 'ada' },
     'acme/app#6': { id: 'A3', state: 'abandoned', owner_seat: null },
@@ -337,6 +354,7 @@ describe('saveStage — a tracker sync (spec 2026-10-11 §3)', () => {
     expect(r.sync).toEqual([
       { kind: 'adopt', lane_id: 'D1', ok: true },
       { kind: 'rename', lane_id: 'R1', ok: true },
+      { kind: 'rename', lane_id: 'R2', ok: false, note: 'claimed since the preview — left alone' },
       { kind: 'abandon', lane_id: 'A1', ok: true },
       { kind: 'abandon', lane_id: 'A2', ok: false, note: 'claimed since the preview — left alone' },
       { kind: 'abandon', lane_id: 'A3', ok: true, note: 'already abandoned' },
@@ -371,7 +389,11 @@ describe('saveStage — a tracker sync (spec 2026-10-11 §3)', () => {
       { kind: 'adopt', lane_id: 'D1', ok: true, note: 'done by an earlier run' },
       { kind: 'rename', lane_id: 'R1', ok: true, note: 'done by an earlier run' },
     ]);
-    expect(again.sync[2]).toEqual({ kind: 'abandon', lane_id: 'A1', ok: true });
+    expect(again.sync.find((x) => x.lane_id === 'A1')).toEqual({
+      kind: 'abandon',
+      lane_id: 'A1',
+      ok: true,
+    });
   });
 
   it('a lane gone from the board is not renamed or abandoned', async () => {
