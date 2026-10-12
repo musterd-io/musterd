@@ -1,3 +1,4 @@
+import { Agent as HttpAgent, request as httpRequest } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { openDriver } from './db/open.js';
 import { openTestDriver, withDrivers } from './db/testing.js';
@@ -67,6 +68,70 @@ withDrivers('index', (_o, kind) => {
       expect(requestLines.join('')).toContain('/mcp/[redacted]');
       expect(lines.join('')).not.toContain(secret);
       expect(bodies.join('')).not.toContain(secret);
+    });
+  });
+
+  /**
+   * Lane 01M4S0ZAG8: the Air's wake-leases poll logged ~5 s every few minutes with every neighbour
+   * fast and nothing else in between, which reads as a request held by the connection, not the
+   * handler. A slow line now says which: the request's place on its socket, how long that socket
+   * sat idle first, and when the body finished arriving.
+   */
+  describe('a slow request line says where the time went on the connection', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
+    });
+
+    it('carries the socket request count, its idle gap and the body time', async () => {
+      vi.stubEnv('MUSTERD_SILENT', '0');
+      const lines: string[] = [];
+      const capture = (chunk: unknown) => {
+        lines.push(String(chunk));
+        return true;
+      };
+      vi.spyOn(process.stdout, 'write').mockImplementation(capture);
+      vi.spyOn(process.stderr, 'write').mockImplementation(capture);
+
+      const server = createServer({ db: await openTestDriver(kind, { instance: 'c' }), port: 0 });
+      const { port } = await server.listen();
+      const agent = new HttpAgent({ keepAlive: true, maxSockets: 1 });
+      const post = (slowBodyMs: number) =>
+        new Promise<void>((done, fail) => {
+          const req = httpRequest(
+            {
+              host: '127.0.0.1',
+              port,
+              agent,
+              method: 'POST',
+              path: '/teams/nope/residency/wake-leases',
+              headers: { 'content-type': 'application/json' },
+            },
+            (res) => {
+              res.resume();
+              res.on('end', () => done());
+            },
+          );
+          req.on('error', fail);
+          req.flushHeaders();
+          setTimeout(() => req.end('{"host":"h"}'), slowBodyMs);
+        });
+      try {
+        await post(0);
+        await post(1_100);
+      } finally {
+        agent.destroy();
+        await server.close();
+      }
+
+      const slow = lines
+        .filter((l) => l.includes('"http_request"'))
+        .map((l) => JSON.parse(l) as Record<string, unknown>)
+        .filter((l) => (l.ms as number) >= 1_000);
+      expect(slow).toHaveLength(1);
+      expect(slow[0]).toMatchObject({ sock_req: 2 });
+      expect(slow[0]!.body_ms as number).toBeGreaterThanOrEqual(1_000);
+      expect(typeof slow[0]!.sock_idle_ms).toBe('number');
     });
   });
 

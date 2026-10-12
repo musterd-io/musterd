@@ -52,6 +52,9 @@ import { broadcastReconciled } from './transport/memberAdded.js';
 import { startProvisionSweep, sweepProvisionsPass } from './transport/sponsoredAgentMint.js';
 import { attachWsServer } from './transport/ws.js';
 
+/** A request at least this slow logs its connection fields (lane 01M4S0ZAG8). */
+const SLOW_REQUEST_MS = 1_000;
+
 export interface ServerOptions {
   port?: number;
   host?: string;
@@ -203,6 +206,10 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
   const opTraceDb = opCtx.traceDb;
   const loops = loopsFor(config.mode);
 
+  // Lane 01M4S0ZAG8: per keep-alive socket, how many requests it has carried and when the last one
+  // finished. A slow line reads them to say whether the time was the connection's (an idle socket
+  // the server was about to drop, a body that came late) rather than the handler's.
+  const sockets = new WeakMap<object, { requests: number; lastFinish: number | null }>();
   const handler = async (
     req: import('node:http').IncomingMessage,
     res: import('node:http').ServerResponse,
@@ -213,16 +220,34 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     // skipped (the CLI guard polls it — it would drown the log). warn on 4xx, error on 5xx.
     const t0 = Date.now();
     const path = redactPath((req.url ?? '/').split('?')[0]!);
+    const socket = sockets.get(req.socket) ?? { requests: 0, lastFinish: null };
+    sockets.set(req.socket, socket);
+    socket.requests += 1;
+    const sockReq = socket.requests;
+    const sockIdleMs = socket.lastFinish === null ? null : t0 - socket.lastFinish;
+    let bodyEnd: number | null = null;
+    req.once('end', () => (bodyEnd = Date.now()));
     res.on('finish', () => {
+      const now = Date.now();
+      socket.lastFinish = now;
       const status = res.statusCode;
       if (path === '/health' && status < 400) return;
       const failure = requestFailure(res);
+      const ms = now - t0;
       const fields = {
         msg: 'http_request',
         method: req.method ?? 'GET',
         path,
         status,
-        ms: Date.now() - t0,
+        ms,
+        // Only on a slow line, where the question is whether the connection held it.
+        ...(ms >= SLOW_REQUEST_MS
+          ? {
+              sock_req: sockReq,
+              sock_idle_ms: sockIdleMs,
+              body_ms: bodyEnd === null ? null : bodyEnd - t0,
+            }
+          : undefined),
         // Where the store time went (lane 01M3Z455NE) — Postgres only; absent when untouched.
         ...(run.timing.tx > 0
           ? {
