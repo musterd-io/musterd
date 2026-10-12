@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // vi.mock calls below are hoisted above these imports, so init.js resolves the mocked deps.
+import { readSeatFiles } from '../roster.js';
 import {
   cachedTeamLive,
   missingGitignoreEntries,
@@ -11,7 +12,6 @@ import {
   runPruneBindings,
   runRefreshGuidance,
 } from './init.js';
-import { readSeatFiles } from '../roster.js';
 import { renderRepositoryPrimer } from './primer.js';
 
 // Shared, hoisted test doubles the mock factories below close over.
