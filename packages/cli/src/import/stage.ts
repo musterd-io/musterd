@@ -6,6 +6,8 @@ import { CliError } from '../errors.js';
 import { writeJsonAtomic } from '../onboard/atomicWrite.js';
 import type { PlannedGoal, PlannedLane } from './check.js';
 import type { Diagnostic, ImportFormat } from './rows.js';
+import type { SyncAction } from './trackers/sync.js';
+import type { Tracker } from './trackers/types.js';
 
 /**
  * Staged imports (spec 2026-10-10 §"Step 1"/"Step 2"): what step 1 previewed, saved so step 2 creates
@@ -20,13 +22,19 @@ export interface ImportStage {
   team: string;
   project: string;
   created_at: number;
-  source: { path: string; sha256: string; format: ImportFormat };
+  /**
+   * A file: its path. A tracker (spec 2026-10-11): `format` names it and `path` is the command tail
+   * that re-runs it (`github acme/app`), so the preview and refusals can say what to re-run.
+   */
+  source: { path: string; sha256: string; format: ImportFormat | Tracker };
   goals: PlannedGoal[];
   lanes: PlannedLane[];
   linked_goals: string[];
   diagnostics: Diagnostic[];
   created: Record<string, string>;
   saved_at: number | null;
+  /** A tracker re-sync's actions on lanes already on the board (spec 2026-10-11 §3). Absent on a file. */
+  sync?: { actions: SyncAction[]; unchanged: number };
 }
 
 /** Shape guard for a file read back off disk — enough to refuse garbage, not a second schema of record. */
@@ -37,15 +45,42 @@ const StageShape = z
     team: z.string(),
     project: z.string(),
     created_at: z.number(),
-    source: z.object({ path: z.string(), sha256: z.string(), format: z.enum(['csv', 'jsonl']) }),
+    source: z.object({
+      path: z.string(),
+      sha256: z.string(),
+      format: z.enum(['csv', 'jsonl', 'github', 'linear', 'jira']),
+    }),
     goals: z.array(z.object({ ref: z.string(), id: z.string() }).passthrough()),
     lanes: z.array(z.object({ ref: z.string(), title: z.string() }).passthrough()),
     linked_goals: z.array(z.string()),
     diagnostics: z.array(z.object({ level: z.enum(['error', 'warning']) }).passthrough()),
     created: z.record(z.string()),
     saved_at: z.number().nullable(),
+    sync: z
+      .object({
+        actions: z.array(
+          z.object({ kind: z.enum(['rename', 'abandon', 'adopt']), lane_id: z.string(), ref: z.string() }).passthrough(),
+        ),
+        unchanged: z.number(),
+      })
+      .optional(),
   })
   .passthrough();
+
+const TRACKERS: ReadonlySet<string> = new Set(['github', 'linear', 'jira']);
+
+/** Whether a stage came from a tracker rather than a file. */
+export function isTrackerStage(stage: ImportStage): boolean {
+  return TRACKERS.has(stage.source.format);
+}
+
+/** The command that stages this source again: `musterd import x.csv` or `musterd import github acme/app`. */
+export function rerunCommand(stage: ImportStage): string {
+  const path = isTrackerStage(stage)
+    ? stage.source.path
+    : (stage.source.path.split(/[\\/]/).pop() ?? stage.source.path);
+  return `musterd import ${path}`;
+}
 
 export function importsDir(workspace: string): string {
   return join(workspace, '.musterd', 'imports');

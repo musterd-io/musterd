@@ -53,8 +53,8 @@ describe('planSync — the spec §3 table', () => {
     const parked = lane({ source_ref: 'acme/app#8', state: 'parked' });
     const p = plan([], [open, parked], { 'acme/app#9': 'closed', 'acme/app#8': 'closed' });
     expect(p.actions).toEqual([
-      { kind: 'abandon', lane_id: open.id, ref: 'acme/app#9', reason: 'closed in GitHub (acme/app#9)' },
-      { kind: 'abandon', lane_id: parked.id, ref: 'acme/app#8', reason: 'closed in GitHub (acme/app#8)' },
+      { kind: 'abandon', lane_id: open.id, ref: 'acme/app#9', from: 'x', reason: 'closed in GitHub (acme/app#9)' },
+      { kind: 'abandon', lane_id: parked.id, ref: 'acme/app#8', from: 'x', reason: 'closed in GitHub (acme/app#8)' },
     ]);
   });
 
@@ -106,6 +106,16 @@ describe('planSync — around the table', () => {
     const theirs = lane({ title: 'Issue 9', detail: 'Source: github#9', project: 'web' });
     const p = plan([issue(9)], [mine, theirs]);
     expect(p.actions).toEqual([{ kind: 'adopt', lane_id: mine.id, ref: 'acme/app#9' }]);
+  });
+
+  it('only a Source: line that ends the detail counts — phase 1 always wrote it last', () => {
+    const quoted = lane({ detail: 'Someone pasted:\nSource: acme/app#9\nand kept writing' });
+    const last = lane({ detail: 'Body\n\nSource: acme/app#8\n' });
+    const p = plan([], [quoted, last], { 'acme/app#9': 'closed', 'acme/app#8': 'closed' });
+    expect(p.actions.map((a) => [a.kind, a.lane_id])).toEqual([
+      ['adopt', last.id],
+      ['abandon', last.id],
+    ]);
   });
 
   it('a legacy closed lane is adopted before it is abandoned', () => {

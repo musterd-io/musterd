@@ -25,7 +25,7 @@ export interface SyncAction {
   ref: string;
   /** rename: the issue's title now. */
   title?: string;
-  /** rename: the lane's title at preview. */
+  /** rename and abandon: the lane's title at preview (the preview's row reads it). */
   from?: string;
   /** abandon: `closed in GitHub (acme/app#9)`. */
   reason?: string;
@@ -45,7 +45,9 @@ type Source = Pick<TrackerSource, 'tracker' | 'label' | 'scope' | 'ownsRef'>;
 const CLOSED = new Set(['done', 'abandoned']);
 /** States an abandon may take a lane from: nobody is on it. */
 const UNHELD = new Set(['open', 'parked']);
-const LEGACY_SOURCE_RE = /^Source: (\S+)\s*$/m;
+// Phase 1 appended `Source: <ref>` as the detail's last line. Only that position counts: a line the
+// same shape anywhere else (quoted text, a pasted issue body) must not tie a lane to an issue.
+const LEGACY_SOURCE_RE = /(?:^|\n)Source: (\S+)\s*$/;
 
 interface Owned {
   lane: BoardLane;
@@ -150,6 +152,7 @@ export function planSync(input: {
           kind: 'abandon',
           lane_id: lane.id,
           ref,
+          from: lane.title,
           reason: `closed in ${source.label} (${ref})`,
         });
       } else

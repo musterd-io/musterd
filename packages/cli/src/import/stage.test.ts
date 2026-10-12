@@ -42,6 +42,30 @@ describe('import stages', () => {
     expect(existsSync(join(importsDir(ws), `${s.id}.json.tmp-${String(process.pid)}`))).toBe(false);
   });
 
+  it('a stage written before trackers (no sync, csv) still reads', () => {
+    const s = createStage(ws, init, 1);
+    const raw = JSON.parse(readFileSync(join(importsDir(ws), `${s.id}.json`), 'utf8'));
+    expect(raw).not.toHaveProperty('sync');
+    expect(readStage(ws, s.id).source.format).toBe('csv');
+  });
+
+  it('a tracker stage with its sync round-trips', () => {
+    const sync = {
+      actions: [
+        { kind: 'abandon' as const, lane_id: 'L1', ref: 'acme/app#9', from: 'Old', reason: 'closed in GitHub (acme/app#9)' },
+      ],
+      unchanged: 3,
+    };
+    const s = createStage(
+      ws,
+      { ...init, source: { path: 'github acme/app', sha256: 'cd', format: 'github' }, sync },
+      1,
+    );
+    const back = readStage(ws, s.id);
+    expect(back.source.format).toBe('github');
+    expect(back.sync).toEqual(sync);
+  });
+
   it('refuses a missing or malformed stage with a usage error', () => {
     expect(() => readStage(ws, 'nope')).toThrow(/no staged import "nope"/);
     createStage(ws, init, 1);
