@@ -81,7 +81,7 @@ import {
 } from './render';
 import { makeSpriteCache } from './sprite-cache';
 import { GESTURE, isIdleGesture } from './skeleton';
-import { laneSeed, withTaken, type WallBoard } from './wallboard';
+import { laneSeed, withPinned, withTaken, type PinnedCard, type WallBoard } from './wallboard';
 import {
   enqueueSpeech,
   shapeSpeech,
@@ -569,11 +569,19 @@ export function mountOffice(
    *  own refresh has moved it to "claimed" (or 12s pass), so the card does not pop back onto the wall
    *  between the walker sitting down and the board catching up. `laneSeed` → expiry (ms). */
   const takenUntil = new Map<number, number>();
+  /** Cards pinned back on the wall by a resolve/submit walk, and for a while after — the counterpart of
+   *  `takenUntil`: the card hangs under its new column until the board's own refresh agrees (or 12s). */
+  const pinnedUntil = new Map<number, { state: PinnedCard['state']; until: number }>();
   function wallBoardNow(): WallBoard | null {
     const now = performance.now();
     for (const seed of actors.takenSeeds()) takenUntil.set(seed, now + 12_000);
     for (const [seed, until] of takenUntil) if (until < now) takenUntil.delete(seed);
-    return takenUntil.size ? withTaken(wallBoard, [...takenUntil.keys()]) : wallBoard;
+    for (const p of actors.pinnedSeeds()) pinnedUntil.set(p.seed, { state: p.state, until: now + 12_000 });
+    for (const [seed, p] of pinnedUntil) if (p.until < now) pinnedUntil.delete(seed);
+    let wb = takenUntil.size ? withTaken(wallBoard, [...takenUntil.keys()]) : wallBoard;
+    if (pinnedUntil.size)
+      wb = withPinned(wb, [...pinnedUntil].map(([seed, p]) => ({ seed, state: p.state })));
+    return wb;
   }
   let heads = new Map<string, Pt>(); // home head anchors — where in-place cues sit
   let occupied = false; // any online member on the floor → overhead lights on
@@ -2398,6 +2406,17 @@ export function mountOffice(
           walkTags.set(ev.who, walkTag('claim', t || null));
         } else {
           pushCue(ev.who, '#948DDE', '');
+        }
+        break;
+      case 'walk-pin':
+        // A lane finished or submitted (nick, 2026-10-12): the owner carries the card back to the wall
+        // board and pins it under its new column. Falls back to the in-place ✓ when they are not in the
+        // room to make the trip.
+        if (actors.pin(ev.who, laneSeed(ev.lane), ev.state)) {
+          const t = ev.title.length > 28 ? `${ev.title.slice(0, 27)}…` : ev.title;
+          walkTags.set(ev.who, walkTag(ev.state === 'done' ? 'pin' : 'submit', t || null));
+        } else {
+          pushCue(ev.who, '#5cd49a', '✓');
         }
         break;
       case 'megaphone':
