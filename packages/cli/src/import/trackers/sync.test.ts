@@ -27,7 +27,7 @@ const plan = (
   open: TrackerIssue[],
   lanes: BoardLane[],
   upstream: Record<string, 'closed' | 'not_found' | 'open'> = {},
-) => planSync({ source, open, lanes, project: 'app', upstream });
+) => planSync({ source, open, lanes, project: 'app', upstream, legacyGithub: true });
 const codes = (p: ReturnType<typeof planSync>) => p.warnings.map((w) => w.code);
 
 describe('planSync — the spec §3 table', () => {
@@ -137,6 +137,21 @@ describe('planSync — around the table', () => {
     ]);
   });
 
+  it('legacy github#N refs are read only when the imported repo is this workspace’s own', () => {
+    const l = lane({ title: 'Old', detail: 'Source: github#9', project: 'app' });
+    const p = planSync({
+      source,
+      open: [issue(9)],
+      lanes: [l],
+      project: 'app',
+      upstream: { 'acme/app#9': 'closed' },
+      legacyGithub: false,
+    });
+    expect(p.actions).toEqual([]);
+    expect(p.fresh.map((i) => i.ref)).toEqual(['acme/app#9']);
+    expect(absentRefs(source, [], [l], 'app', { legacyGithub: false })).toEqual([]);
+  });
+
   it('a legacy closed lane is adopted before it is abandoned', () => {
     const l = lane({ detail: 'Source: github#9' });
     const p = plan([], [l], { 'acme/app#9': 'closed' });
@@ -184,6 +199,9 @@ describe('absentRefs', () => {
       lane({ source_ref: 'other/app#5' }),
       lane({ source_ref: 'acme/app#6', state: 'done' }),
     ];
-    expect(absentRefs(source, [issue(1)], lanes, 'app')).toEqual(['acme/app#2', 'acme/app#3']);
+    expect(absentRefs(source, [issue(1)], lanes, 'app', { legacyGithub: true })).toEqual([
+      'acme/app#2',
+      'acme/app#3',
+    ]);
   });
 });

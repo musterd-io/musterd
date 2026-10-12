@@ -79,6 +79,7 @@ export async function importCommand(parsed: Parsed): Promise<number> {
   }
 
   if (first === 'github') {
+    const own = ownRepo();
     const repo = second ?? repoFromRemote();
     if (!/^[\w.-]+\/[\w.-]+$/.test(repo))
       throw new CliError(`"${repo}" is not owner/repo — e.g. musterd import github acme/app`, 2);
@@ -94,6 +95,7 @@ export async function importCommand(parsed: Parsed): Promise<number> {
       http,
       project: resolveProject({ explicit: flagStr(parsed.flags, 'project') }),
       rerun: `github ${repo}`,
+      legacyGithub: own?.toLowerCase() === repo.toLowerCase(),
       ...limitFlag(parsed),
     });
   }
@@ -128,6 +130,15 @@ export async function importCommand(parsed: Parsed): Promise<number> {
   );
   process.stdout.write(renderPreview(stage) + '\n');
   return stage.diagnostics.some((d) => d.level === 'error') ? 1 : 0;
+}
+
+/** This workspace's own GitHub repo, or null — phase 1's `github#N` refs can only mean this one. */
+function ownRepo(): string | null {
+  try {
+    return repoFromRemote();
+  } catch {
+    return null;
+  }
 }
 
 function limitFlag(parsed: Parsed): { limit?: number } {

@@ -56,7 +56,15 @@ interface Owned {
   legacy: boolean;
 }
 
-function refOf(source: Source, lane: BoardLane, project: string): Owned | null {
+/**
+ * `legacyGithub`: whether phase 1's repo-less `github#N` refs may be read as this source's. They name
+ * no repo, so only an import of the workspace's own repo (its `origin`) can claim them — and then
+ * only on lanes of the workspace's project. Importing any other repo from here must never adopt or
+ * abandon them.
+ */
+type LegacyOpt = { legacyGithub: boolean };
+
+function refOf(source: Source, lane: BoardLane, project: string, opt: LegacyOpt): Owned | null {
   let ref = lane.source_ref ?? null;
   let legacy = false;
   if (!ref) {
@@ -67,18 +75,23 @@ function refOf(source: Source, lane: BoardLane, project: string): Owned | null {
     // The skill's GitHub ref named no repo; it is this repo's only on this repo's project.
     const gh = /^github#(\d+)$/.exec(ref);
     if (gh) {
-      if (source.tracker !== 'github' || lane.project !== project) return null;
+      if (source.tracker !== 'github' || !opt.legacyGithub || lane.project !== project) return null;
       ref = `${source.scope}#${gh[1]!}`;
     }
   }
   return source.ownsRef(ref) ? { lane, ref, legacy } : null;
 }
 
-function ownedByRef(source: Source, lanes: BoardLane[], project: string): Map<string, Owned[]> {
+function ownedByRef(
+  source: Source,
+  lanes: BoardLane[],
+  project: string,
+  opt: LegacyOpt,
+): Map<string, Owned[]> {
   const byRef = new Map<string, Owned[]>();
   for (const lane of lanes) {
     if (CLOSED.has(lane.state)) continue;
-    const owned = refOf(source, lane, project);
+    const owned = refOf(source, lane, project, opt);
     if (!owned) continue;
     byRef.set(owned.ref, [...(byRef.get(owned.ref) ?? []), owned]);
   }
@@ -90,9 +103,10 @@ export function absentRefs(
   open: TrackerIssue[],
   lanes: BoardLane[],
   project: string,
+  opt: LegacyOpt,
 ): string[] {
   const openRefs = new Set(open.map((i) => i.ref));
-  return [...ownedByRef(source, lanes, project).keys()].filter((ref) => !openRefs.has(ref));
+  return [...ownedByRef(source, lanes, project, opt).keys()].filter((ref) => !openRefs.has(ref));
 }
 
 export function planSync(input: {
@@ -101,9 +115,10 @@ export function planSync(input: {
   lanes: BoardLane[];
   project: string;
   upstream: Record<string, UpstreamState>;
+  legacyGithub: boolean;
 }): SyncPlan {
   const { source, open, upstream } = input;
-  const byRef = ownedByRef(source, input.lanes, input.project);
+  const byRef = ownedByRef(source, input.lanes, input.project, input);
   const plan: SyncPlan = { fresh: [], actions: [], unchanged: 0, warnings: [] };
   const warn = (code: string, message: string) =>
     plan.warnings.push({ level: 'warning', row: null, code, message });

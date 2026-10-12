@@ -80,12 +80,15 @@ export function renderPreview(stage: ImportStage): string {
   const actions = stage.sync?.actions ?? [];
   const renames = actions.filter((a) => a.kind === 'rename');
   const abandons = actions.filter((a) => a.kind === 'abandon');
-  if (renames.length || abandons.length) out.push('');
+  if ((renames.length || abandons.length) && out.at(-1) !== '') out.push('');
   for (const a of renames)
     out.push(`↻ renamed: "${safe(a.from ?? a.lane_id)}" → "${safe(a.title ?? '')}"`);
   for (const a of abandons)
     out.push(`✕ abandon: ${safe(a.from ?? a.lane_id)} ${theme.meta(`(${safe(a.ref)})`)}`);
   if (stage.diagnostics.length) out.push('', ...stage.diagnostics.map(renderDiagnostic));
+  // A tracker stage ends its sections with a blank line of its own; never print two in a row.
+  for (let i = out.length - 1; i > 0; i -= 1)
+    if (out[i] === '' && out[i - 1] === '') out.splice(i, 1);
   const errors = stage.diagnostics.filter((d) => d.level === 'error').length;
   out.push(
     '',
@@ -98,7 +101,8 @@ export function renderPreview(stage: ImportStage): string {
 
 function renderDiagnostic(d: Diagnostic): string {
   const mark = d.level === 'error' ? theme.err('✗') : theme.warn('⚠');
-  return `${mark} ${d.row === null ? 'file' : `line ${String(d.row)}`}: ${safe(d.message)}`;
+  // A row-less diagnostic is about the source as a whole: no `file:` label (a tracker has none).
+  return `${mark} ${d.row === null ? '' : `line ${String(d.row)}: `}${safe(d.message)}`;
 }
 
 export function renderSaved(stage: ImportStage, r: SaveResult, liveUrl: string): string {

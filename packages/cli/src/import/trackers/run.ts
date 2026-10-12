@@ -30,6 +30,8 @@ export async function runTrackerImport(
     project: string;
     /** The command tail that re-runs this import, e.g. `github acme/app`. */
     rerun: string;
+    /** The imported repo is this workspace's own `origin` — see `planSync`'s `legacyGithub`. */
+    legacyGithub?: boolean;
     limit?: number;
   },
 ): Promise<number> {
@@ -40,10 +42,18 @@ export async function runTrackerImport(
   ]);
   const upstream: Record<string, UpstreamState> = {};
   // One request per lane whose issue left the open set, in turn — never a burst at the tracker.
-  for (const ref of absentRefs(source, open, board.lanes, ctx.project))
+  const legacyGithub = ctx.legacyGithub === true;
+  for (const ref of absentRefs(source, open, board.lanes, ctx.project, { legacyGithub }))
     upstream[ref] = await source.state(ref);
 
-  const sync = planSync({ source, open, lanes: board.lanes, project: ctx.project, upstream });
+  const sync = planSync({
+    source,
+    open,
+    lanes: board.lanes,
+    project: ctx.project,
+    upstream,
+    legacyGithub,
+  });
   const plan = checkAgainstBoard(issuesToRows(sync.fresh), {
     goals: goals.goals,
     lanes: board.lanes,

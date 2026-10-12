@@ -103,6 +103,24 @@ describe('renderPreview — a tracker re-sync', () => {
     expect(out).toContain('Pwn me');
   });
 
+  it('a tracker warning has no file prefix, and no run of blank lines', () => {
+    const out = plain(
+      renderPreview(
+        stage({
+          lanes: [],
+          sync: {
+            actions: [{ kind: 'rename', lane_id: 'R1', ref: 'acme/app#1', from: 'a', title: 'b' }],
+            unchanged: 0,
+          },
+          diagnostics: [{ level: 'warning', row: null, code: 'not_found', message: 'gone' }],
+        }),
+      ),
+    );
+    expect(out).toContain('⚠ gone');
+    expect(out).not.toContain('file:');
+    expect(out).not.toContain('\n\n\n');
+  });
+
   it('leaves zero counts out, and says when there is nothing to do', () => {
     const out = plain(renderPreview(stage({ lanes: [], sync: { actions: [], unchanged: 9 } })));
     expect(out).not.toMatch(/new 0|renamed 0|abandon 0/);
