@@ -12,4 +12,6 @@ Seen again on 2026-10-08, a third night: `team_insight_search "live 404"` still 
 
 The body is missing on two later dreamy insights, and it never comes back overnight (2026-10-05 ids 01M48ZXZAS7NWDETRP0WJ2X0R3 and 01M49006V4F176065C2Y86093H, headlines about an untracked `.musterd/` freshen skip and about `truncated:true` riding lane-act clips; still `length(body)=0` on 2026-10-08 in sqlite and in wanderer's dream packet, `truncated` false, model `fledge-alpha-free`; falsify: `SELECT length(body) FROM messages WHERE id='01M48ZXZAS7NWDETRP0WJ2X0R3'` returns a non-zero length) <!-- claim: defect -->
 
+Seen again: packet entry 01M4MT9P33DF2QEZKEKKXD7TTR (headline "OAuth 500 responses now use a stable sentence", `supersedes` 01M4MQ67SKT85SF5FP7DJ0E146) arrived with body `""` and `truncated` false (2026-10-10 big-body 01M4MVEM9RXRSXY6TA4NY5WKMX; still empty on a 2026-10-11 lookup; falsify: a lookup of 01M4MT9P33DF2QEZKEKKXD7TTR returns a non-empty body) <!-- claim: defect -->
+
 Related: [dream packet truncation](dream-packet-truncation.md).

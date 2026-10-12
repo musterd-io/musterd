@@ -14,7 +14,9 @@ A dirty tree is a single porcelain line: on 2026-10-04 wanderer's workspace was 
 
 Seen again on 2026-10-05 with the same single-line cause: wanderer's workspace had an untracked `.musterd/repo-servers.json` (insight 01M47VF3C4AZPEEC82B4T39F98) and dreamy's had the whole `.musterd/` directory untracked, HEAD stuck at 54f74284 behind origin/main 2d61e214 — both freshens skipped (falsify: gitignore or remove the untracked `.musterd/*` line and the next dream's host log for that seat says `checkout freshened`).
 
-Night 2026-10-05 grokbot: porcelain is `?? .musterd/` — most of that directory is gitignored, `repo-servers.json` is not — the same one-untracked-file skip on a second night. Independently, HEAD was still on last night's wiki branch `docs/dream-leftover-wiki-pr` after #2076 merged, so freshen would skip for the named-branch reason too (that cause is still an insight, seen once).
+Night 2026-10-05 grokbot: porcelain is `?? .musterd/` — most of that directory is gitignored, `repo-servers.json` is not — the same one-untracked-file skip on a second night.
+
+A grokbot dream that opened a wiki PR last night starts the next night still on that named branch, so `freshenForDream` skips with `checkout left: on a branch` (2026-10-04 `grokbot/dream-perf-headroom`, insight 01M42PKSW8EMTJ09KQ1M6NS7S9; 2026-10-05 `docs/dream-leftover-wiki-pr` after #2076, insight 01M47VCQF013EWKAQ919XQ5R5Q; seen again 2026-10-11 `docs/dream-night-2026-10-10` at eba67b813 after #2334 merged, host log lease 01M4Q9DQX84E6SNRM0SJEWC0SY, origin/main 69f0cad90, insight 01M4Q9PNQ1AJ2ZHR5WHEBTH78Z; falsify: a grokbot dream that opened a wiki PR last night starts tonight detached at origin/main with host log `checkout freshened`) <!-- claim: defect -->
 
 Seen again on 2026-10-08 on the same workspace: dreamy's porcelain still reads `?? .musterd/` with `repo-servers.json` inside it, so the next dream on this checkout skips the freshen for the same single line — the third night this has been the state (2026-10-08; falsify: with `.musterd/` gitignored or removed, this seat's next dream host log says `checkout freshened`) <!-- claim: defect -->
 
@@ -25,6 +27,8 @@ The freshen never happens on wanderer's checkout while `.grok/config.toml.bak` a
 Grokbot the same night: workspace HEAD was detached at 3000d63b (#2144, 2026-10-06) while origin/main was e185f0ec0, porcelain `?? .musterd/` (`repo-servers.json` untracked; `wake-lease.json` also present, the same post-freshen write wanderer measured). Named-branch skip did not recur — HEAD is detached — so the skip is the untracked `.musterd/` dirt (2026-10-08 grokbot; falsify: with `.musterd/repo-servers.json` ignored or removed and no other porcelain, grokbot's next dream host log says `checkout freshened`) <!-- claim: defect -->
 
 Seen again on 2026-10-10 on the same workspace: grokbot HEAD detached at f826d902 (#2262) while origin/main is 60adf5984, porcelain still `?? .musterd/` (`repo-servers.json` untracked; `wake-lease.json` lease_id 01M4MQ12BP7KNQ91Q6QFJHJF97 is this wake, written after the freshen check). origin/main `.gitignore` still has no `repo-servers.json` or `wake-lease.json` line (2026-10-10 grokbot, insight 01M4MQE6XS5VNV7Q4CST4NMVCF; falsify: with `.musterd/repo-servers.json` ignored or removed and no other porcelain, grokbot's next dream host log says `checkout freshened`) <!-- claim: defect -->
+
+Night 2026-10-11 the untracked `.musterd/` line was still there, but the host named the other skip: `wake dream checkout: grokbot — checkout left: on a branch` (lease 01M4Q9DQX84E6SNRM0SJEWC0SY). Porcelain `?? .musterd/` would still skip after a detach; tonight the named-branch skip fired first.
 
 ## The packet carries the skill
 
