@@ -59,9 +59,9 @@ describe('pendingActionSummary walks every unread page (the banner counts the to
     const pending = await pendingActionSummary(http, 'dawn', 'nick');
 
     expect(inbox).toHaveBeenCalledTimes(3);
-    expect(inbox.mock.calls[0]?.[1]).toEqual({ unread: true });
-    expect(inbox.mock.calls[1]?.[1]).toEqual({ unread: true, since: 2_000 });
-    expect(inbox.mock.calls[2]?.[1]).toEqual({ unread: true, since: 3_000 });
+    expect(inbox.mock.calls[0]?.[1]).toEqual({ unread: true, peek: true });
+    expect(inbox.mock.calls[1]?.[1]).toEqual({ unread: true, peek: true, since: 2_000 });
+    expect(inbox.mock.calls[2]?.[1]).toEqual({ unread: true, peek: true, since: 3_000 });
     // a, c, e are action-needed; d was discharged on page 2 (stand-downs union across pages).
     expect(pending?.count).toBe(3);
     expect(pending?.since).toBe(1_000);
