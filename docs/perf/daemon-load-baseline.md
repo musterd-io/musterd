@@ -726,3 +726,28 @@ profiled the app's Node thread for 120 s (16:06:27–16:08:27Z, 17–19 minutes 
   build: one hash for the team defaults plus one per human with their own prefs, where it was one per
   row plus one per human row. The wire is unchanged. It is unmeasured until the next unprofiled
   75/75/75 run; falsified if `summarize` stays above ~5% of plateau samples in a fresh profile.
+
+## 2026-10-12 — Cloud runs 29–31: the style-epoch memo is inside the noise at the roster's p95 (lane 01M4GQ2G7BDNJVDQ9DM1Q6T53T)
+
+Staging redeployed on main `daeb0a3` (#2413, the memo), `performance-1x` / 2 GB app machine, Neon
+1 CU, `performance-4x` bench machine, 75/75/75, no profiler. This build carries everything merged
+since runs 22–26's `1831ecf5`, not the memo alone.
+
+| run | p50 | p95 | p99 | requests (req/s) | errors | `GET /teams` p95 | what it showed |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 29 | 691 ms | 1 613 ms | 2 012 ms | 56 450 (43.4) | 39 | 1 623 ms | light load: viewers dropped (23 WS 1006) |
+| 30 | — | — | — | — | — | — | seed failed: `ECONNRESET` 28 s in; app machine did not restart |
+| 31 | 840 ms | 1 872 ms | 2 337 ms | 58 511 (45.0) | 19 | 1 864 ms | the clean repeat |
+
+- **Run 31 sits at the bottom of the old 1x spread** (1 862–2 202 ms, mean 2 074). A ~10% drop from
+  the mean is about the ±8% spread, so the memo is not shown to move p95 on its own. Run 29's 1 613 ms
+  ran about 8% fewer requests than runs 23–26, so it measured the lighter load, not the change.
+- **Both runs carried less load than the baseline** (43–45 req/s against 47) and more errors (19–39
+  against 1–5), all viewer WebSocket 1006 closes and network errors at the edge. The server logged no
+  restart. Read each run against its own request count, not only its p95.
+- **The memo stays in.** It removes per-row work and changes nothing on the wire. A fresh plateau
+  profile, not a p95, is the test of its 4.8 points: falsified if `summarize` stays above ~5% of
+  samples.
+- **The bench log stream can drop the summary.** Run 31's streamed log stopped after the seed. The
+  summary came back from `fly logs -a musterd-loadbench --no-tail`, which keeps only the last ~100
+  lines, so read it before the next run.
