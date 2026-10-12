@@ -173,8 +173,8 @@ describe('the 2026-10-12 cut', () => {
     expect(why).toContain('An agent that needs one asks you, and the ask waits in your inbox until you answer.');
     expect(why).toContain('wasted 65 to 83 percent of their work');
     expect(why).toContain('One project, a pilot, measured in July 2026.');
-    // The frame shows the answer, so the caption says "answered" (§0a.4).
-    expect(why).toContain('An ask from an agent to a person, answered in the inbox. Captured');
+    // The frame shows an ask nobody has answered yet, so the caption says "waiting" (§0a.4).
+    expect(why).toContain('An ask from an agent to a person, waiting in the inbox. Sent');
     // §0a.1: left the page on purpose.
     expect(why).not.toMatch(/more than a third of the code/);
     expect(why).not.toMatch(/You are probably already running more than one/);
