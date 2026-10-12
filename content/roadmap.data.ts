@@ -174,7 +174,7 @@ export function resolveItem(r: RawItem): RoadmapItem {
   return { ...rest, status: r.shipped ? 'shipped' : r.plan! };
 }
 
-const REPO = 'https://github.com/SandRiseStudio/musterd/blob/main';
+const REPO = 'https://github.com/musterd-io/musterd/blob/main';
 
 // ADRs link to the decisions folder; the number lives in the label.
 const adr = (_n: number, label: string): Ref => ({

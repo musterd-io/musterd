@@ -3,7 +3,7 @@
 ## Report a vulnerability
 
 Please report suspected vulnerabilities through
-[GitHub private vulnerability reporting](https://github.com/SandRiseStudio/musterd/security/advisories/new).
+[GitHub private vulnerability reporting](https://github.com/musterd-io/musterd/security/advisories/new).
 Do not open a public issue or pull request for an undisclosed vulnerability.
 
 Include the affected version or commit, the conditions needed to reproduce the issue, its expected

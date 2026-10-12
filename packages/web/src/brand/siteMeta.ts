@@ -225,6 +225,9 @@ export function softwareApplicationNode(): JsonLdNode {
     operatingSystem: 'macOS, Linux, Windows',
     description: SITE_ONE_LINER,
     softwareHelp: { '@type': 'WebPage', url: `${SITE_ORIGIN}/docs` },
+    // The repository is public again (ADR 565). No install path or price: the preview is a
+    // separate decision (ADR 565 decision 5).
+    codeRepository: 'https://github.com/musterd-io/musterd',
     publisher: { '@id': GRAPH_ID.organization },
   };
 }

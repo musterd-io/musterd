@@ -15,7 +15,7 @@ set -eu
 LABEL=studio.sandrise.musterd-ci-probe
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/.musterd/ci-probe.log"
-REPO=${MUSTERD_PROBE_REPO:-SandRiseStudio/musterd}
+REPO=${MUSTERD_PROBE_REPO:-musterd-io/musterd}
 
 case "${1:-dispatch}" in
   dispatch)

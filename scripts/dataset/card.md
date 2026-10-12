@@ -14,7 +14,7 @@ task_categories:
 
 # musterd coordination traces (v1)
 
-This is a **structural event log** from [musterd](https://github.com/SandRiseStudio/musterd), a protocol for named Teams of humans and agents. Each row is an **Act** (typed intent), not a chat turn. Message bodies are omitted on purpose ([ADR 184](https://github.com/SandRiseStudio/musterd/blob/main/docs/decisions/184-dataset-consent-and-redaction.md)): v1 publishes coordination structure, not prose. If the files look empty of text, that is the release, not a truncated dump. This is **not a chat dump**.
+This is a **structural event log** from [musterd](https://github.com/musterd-io/musterd), a protocol for named Teams of humans and agents. Each row is an **Act** (typed intent), not a chat turn. Message bodies are omitted on purpose ([ADR 184](https://github.com/musterd-io/musterd/blob/main/docs/decisions/184-dataset-consent-and-redaction.md)): v1 publishes coordination structure, not prose. If the files look empty of text, that is the release, not a truncated dump. This is **not a chat dump**.
 
 The software is MIT. This directory is **not yet licensed for redistribution**. The intended license at a HuggingFace upload is CC-BY-4.0; writing this card does not grant it. Confirm before any publish.
 
@@ -81,7 +81,7 @@ These are counts for the files beside this README. They are not a published find
 | `defer`         | shelve a Goal                                                                                                   |
 | `ask`           | directed to a human (`meta.species`: consult / escalate / approve; `meta.tier`: advisory / standard / blocking) |
 
-Protocol: [SPEC.md](https://github.com/SandRiseStudio/musterd/blob/main/SPEC.md). `ask` is [ADR 147](https://github.com/SandRiseStudio/musterd/blob/main/docs/decisions/147-ask-the-human.md).
+Protocol: [SPEC.md](https://github.com/musterd-io/musterd/blob/main/SPEC.md). `ask` is [ADR 147](https://github.com/musterd-io/musterd/blob/main/docs/decisions/147-ask-the-human.md).
 
 ## Pseudonyms
 
@@ -91,13 +91,13 @@ Team slugs (`revive`, `dawn`, `lab`, `difftest`, `bench`, `bench2`) are **not** 
 
 ## How it was made
 
-A private corpus snapshot (`pnpm corpus:snapshot`, [ADR 280](https://github.com/SandRiseStudio/musterd/blob/main/docs/decisions/280-the-evidence-base-lives-on-one-laptop.md)) then `pnpm dataset:export` from that copy — never from the live daemon db. One human `--authorized-by` per cut. This script is not a HuggingFace upload.
+A private corpus snapshot (`pnpm corpus:snapshot`, [ADR 280](https://github.com/musterd-io/musterd/blob/main/docs/decisions/280-the-evidence-base-lives-on-one-laptop.md)) then `pnpm dataset:export` from that copy — never from the live daemon db. One human `--authorized-by` per cut. This script is not a HuggingFace upload.
 
 ## Limitations
 
 - No message bodies, no lane `title`, no seat memory. You cannot read what was said or what the work was.
 - Not a conversation dataset and not instruction data. Do not fine-tune a chat model on it.
-- Not a benchmark and not MAST labels. Detectors, a leaderboard, and a paper are later rungs ([research README](https://github.com/SandRiseStudio/musterd/blob/main/docs/research/README.md)).
+- Not a benchmark and not MAST labels. Detectors, a leaderboard, and a paper are later rungs ([research README](https://github.com/musterd-io/musterd/blob/main/docs/research/README.md)).
 - Mixed Teams on one machine (dogfood + short-lived experiment Teams). Do not treat row counts as "the field."
 - `kind: service` appears (platform daemons). Brand copy says Member is agent or human; the files are the truth for this dump.
 - `meta.model` is attested occupancy when present; many acts have `meta: null`.
@@ -111,13 +111,13 @@ Count directed vs team Acts; act mix over time; model stamps where present; lane
 ## Citation
 
 ```
-musterd coordination traces v1 (structural-only). SandRiseStudio/musterd.
+musterd coordination traces v1 (structural-only). musterd-io/musterd.
 Export: pnpm dataset:export. Gate: ADR 184.
 ```
 
-- Repo: https://github.com/SandRiseStudio/musterd
-- [ADR 184](https://github.com/SandRiseStudio/musterd/blob/main/docs/decisions/184-dataset-consent-and-redaction.md)
-- [SPEC.md](https://github.com/SandRiseStudio/musterd/blob/main/SPEC.md)
-- [docs/research/README.md](https://github.com/SandRiseStudio/musterd/blob/main/docs/research/README.md)
+- Repo: https://github.com/musterd-io/musterd
+- [ADR 184](https://github.com/musterd-io/musterd/blob/main/docs/decisions/184-dataset-consent-and-redaction.md)
+- [SPEC.md](https://github.com/musterd-io/musterd/blob/main/SPEC.md)
+- [docs/research/README.md](https://github.com/musterd-io/musterd/blob/main/docs/research/README.md)
 
 No HuggingFace URL until a release is uploaded.

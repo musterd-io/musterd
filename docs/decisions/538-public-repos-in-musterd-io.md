@@ -30,7 +30,7 @@ unrelated personal account (created 2019, one repo), so it is not available.
 2. **Moved on 2026-10-06:** `SandRiseStudio/musterd-skills` → `musterd-io/skills`, and
    `SandRiseStudio/musterd-whiteboard` → `musterd-io/whiteboard`. GitHub redirects both old
    addresses, for the web, the API and git.
-3. **Private repos stay in `SandRiseStudio`** until each goes public: the platform, `musterd-revive`,
+3. **Private repos stay in `SandRiseStudio`** until each goes public _(Amended 2026-10-12: the platform went public and moved to `musterd-io/musterd`, [ADR 565](565-repo-public-musterd-io.md); the rest of this decision stands)_: the platform, `musterd-revive`,
    `musterd-lab`, `batond` and `homebrew-musterd`. The CI and review apps (Ubicloud, ADR 517;
    Cursor Bugbot, ADR 106) are connected to `SandRiseStudio`, and moving a private repo would mean
    reconnecting them for no public benefit. A repo moves to `musterd-io` when it goes public.
@@ -45,6 +45,9 @@ unrelated personal account (created 2019, one repo), so it is not available.
 - Old links keep working through GitHub's redirects. A redirect breaks only if someone creates a
   new repo at the old name in `SandRiseStudio`, so those two names should stay unused there.
 - The org has one admin, nick. Seats act in it through his `gh` credential.
+- 2026-10-12 — **The platform moved.** `SandRiseStudio/musterd` went public and transferred to
+  `musterd-io/musterd` ([ADR 565](565-repo-public-musterd-io.md)), which supersedes decision 3 for
+  that repo. `musterd-revive`, `musterd-lab`, `batond` and `homebrew-musterd` stay as decision 3 says.
 
 ## Observability & Evaluation
 

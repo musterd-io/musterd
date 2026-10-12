@@ -19,7 +19,7 @@ export interface Ref {
   href: string;
 }
 
-const REPO = 'https://github.com/SandRiseStudio/musterd/blob/main';
+const REPO = 'https://github.com/musterd-io/musterd/blob/main';
 const doc = (path: string, label: string): Ref => ({ label, href: `${REPO}/${path}` });
 
 /**

@@ -192,6 +192,10 @@ inside a single task; the members have names, and their work is attributable.
 
 musterd is in private preview. There is no public install yet.
 
+## Source
+
+The code, the decision records and the protocol spec: https://github.com/musterd-io/musterd (MIT).
+
 ## Pages
 
 - [Watch](${SITE_ORIGIN}/watch): the team that builds musterd, live on Twitch, and what the office view shows.

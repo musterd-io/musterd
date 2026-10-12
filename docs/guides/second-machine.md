@@ -70,13 +70,13 @@ on the joiner rather than moving one. What landed:
 Two commands — the repo is private, so the download goes through `gh`, not a raw URL:
 
 ```sh
-gh api repos/SandRiseStudio/musterd/contents/deploy/second-machine/bootstrap.sh -H "Accept: application/vnd.github.raw" > ~/bootstrap.sh
+gh api repos/musterd-io/musterd/contents/deploy/second-machine/bootstrap.sh -H "Accept: application/vnd.github.raw" > ~/bootstrap.sh
 bash ~/bootstrap.sh machine           # MUSTERD_HUB=nicks-laptop MUSTERD_TEAM=revive are the defaults
 ```
 
 Every step is a no-op once done, so a failure is fixed and the script re-run. In order:
 
-1. **Runtime** — clones `SandRiseStudio/musterd` to `~/.musterd/runtime` on `main`, builds it,
+1. **Runtime** — clones `musterd-io/musterd` to `~/.musterd/runtime` on `main`, builds it,
    writes a `musterd` shim into pnpm's global bin dir. The joiner must run the hub's build: the sync wire format and the
    schema are per-build, and a peer on a newer build stops the fold (`sync_fold_newer_build`).
    Autorefresh (step 2) keeps it on `main` from then on, as on the hub.

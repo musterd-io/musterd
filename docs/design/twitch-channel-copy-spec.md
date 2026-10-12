@@ -183,7 +183,7 @@ not worth re-opening now.
 
 ~~The 246-character version below was the spec (2026-09-16)~~ NOT TAKEN the same day, nick's call:
 
-> AI agents and humans on one roster, building the thing that coordinates them. The agents are not assigned work — they claim it, hand it off, and decline it. Peers, not a fleet someone runs. Dark between sessions. github.com/SandRiseStudio/musterd
+> AI agents and humans on one roster, building the thing that coordinates them. The agents are not assigned work — they claim it, hand it off, and decline it. Peers, not a fleet someone runs. Dark between sessions. github.com/musterd-io/musterd
 
 Neither version uses "coordination layer": ADR 320 §4 forbids the bare term and 300 characters has
 no room to qualify it properly. The position survives without the contested label.
@@ -195,7 +195,7 @@ Panel title / body. Verb-first links, outcome named (product-communications skil
 | # | Title | Body |
 | --- | --- | --- |
 | 1 | `What you are watching` | `musterd is built by a team running on musterd. The members you can see are agents and humans on one roster: they claim lanes, hand work off, raise asks, and accept each other's merges. The stream is that team at work, unedited. The team works in sessions, so the channel is dark between them — the work is public either way.` |
-| 2 | `The code` | `Every act, decision record and merge is in the open repository. Read what the team is building: github.com/SandRiseStudio/musterd` (the panel links to the repository) |
+| 2 | `The code` | `Every act, decision record and merge is in the open repository. Read what the team is building: github.com/musterd-io/musterd` (the panel links to the repository) |
 | 3 | `Start your own team` | `Zero to a working team in one command. musterd.io/docs/getting-started` (the panel links to the docs) |
 
 Panel 1 is the /watch spec's hero lede plus its dark-state line, verbatim, so the channel and the
@@ -218,7 +218,7 @@ clip is the post; its title is the post's first line.
 
 One still of the office scene with members at desks, captured from a real session (same asset as
 /watch spec §7), with the wordmark. Text on the image, one line: `between sessions — the work
-continues at github.com/SandRiseStudio/musterd`. Never the word "offline" (reads as broken).
+continues at github.com/musterd-io/musterd`. Never the word "offline" (reads as broken).
 
 ## 8. Acceptance
 

@@ -91,7 +91,7 @@ export function buildSnapshot(packages: ResolvedPackage[], id: SnapshotIdentity)
     detector: {
       name: 'musterd-pnpm-lock',
       version: '1.0.0',
-      url: 'https://github.com/SandRiseStudio/musterd',
+      url: 'https://github.com/musterd-io/musterd',
     },
     scanned: id.scanned,
     manifests: {
@@ -115,7 +115,7 @@ async function main(): Promise<void> {
   }
   const token = process.env['GITHUB_TOKEN'];
   if (!token) throw new Error('GITHUB_TOKEN is required to POST the snapshot');
-  const repo = process.env['GITHUB_REPOSITORY'] ?? 'SandRiseStudio/musterd';
+  const repo = process.env['GITHUB_REPOSITORY'] ?? 'musterd-io/musterd';
   const snapshot = buildSnapshot(packages, {
     sha: process.env['GITHUB_SHA'] ?? gitHead(),
     ref: process.env['GITHUB_REF'] ?? 'refs/heads/main',
