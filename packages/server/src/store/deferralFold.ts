@@ -29,12 +29,45 @@ export const DEFERRAL_SCAN_LIMIT = 2000;
  * inbox read folds a second answer off exactly that subset (which asks it has already replied to, by
  * `meta.in_reply_to`). One narrow hydration, two folds; the caller never has to reach for the window.
  */
+type Fold = { held: Map<string, Deferral>; raised: Set<string>; own: Envelope[] };
+
+/**
+ * Reuse between messages (SQLite). The fold reads only `messages` (plus member names, which never
+ * change), and `messages` is insert-only outside migrations, so its result holds until a row is added.
+ * `MAX(rowid)` is that marker at O(1), whichever path inserted (a send or the sync fold). It is read
+ * BEFORE the fold, so a row landing mid-fold leaves the entry keyed to an already-stale marker: never
+ * served, only recomputed. Postgres has no rowid, and the fold is not on its event loop, so it is
+ * computed fresh there. GET /inbox ran this on every read: ~350 reads per 10 minutes on the hub
+ * against ~15 new messages, ~40ms each (2026-10-12). Callers treat the result as read-only.
+ */
+const foldMemo = new WeakMap<Driver, Map<string, { mark: number; fold: Fold }>>();
+
 export async function deferralFold(
   db: Driver,
   teamSlug: string,
   member: MemberRow,
   limit: number = DEFERRAL_SCAN_LIMIT,
-): Promise<{ held: Map<string, Deferral>; raised: Set<string>; own: Envelope[] }> {
+): Promise<Fold> {
+  if (db.dialect !== 'sqlite') return await computeFold(db, teamSlug, member, limit);
+  const mark = Number(
+    (await db.get<{ mark: number | null }>('SELECT MAX(rowid) AS mark FROM messages'))?.mark ?? 0,
+  );
+  let memo = foldMemo.get(db);
+  if (!memo) foldMemo.set(db, (memo = new Map()));
+  const key = `${member.id}\0${teamSlug}\0${limit}`;
+  const hit = memo.get(key);
+  if (hit && hit.mark === mark) return hit.fold;
+  const fold = await computeFold(db, teamSlug, member, limit);
+  memo.set(key, { mark, fold });
+  return fold;
+}
+
+async function computeFold(
+  db: Driver,
+  teamSlug: string,
+  member: MemberRow,
+  limit: number,
+): Promise<Fold> {
   const window = await listTeamMessages(db, member.team_id, { forMemberId: member.id, limit });
   const own = await rowsToEnvelopes(
     db,
