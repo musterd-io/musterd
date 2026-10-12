@@ -83,6 +83,11 @@ in the hero and is not repeated here. _(2026-10-12, ADR 563: the hero subhead no
 
 H2: `Why your agents need to talk` (unchanged)
 
+Lead, one line under the H2, before paragraph 1 (2026-10-12, nick: the demo-day deck's slide 2,
+`docs/demo/demo-day-2026-10-09/script.md` §2, cut to its claim and naming no harness):
+
+> Your agents work in silos, and neither knows the other exists.
+
 Paragraph 1, beside a capture of an `ask` from an agent to a person waiting in `/live` or in
 `musterd inbox` (audit §6):
 
@@ -98,6 +103,12 @@ Paragraph 2, the proof line, alone, as §0.6 item 2 has it:
 
 > On a test project, agents working side by side wasted 65 to 83 percent of their work. With lane
 > gates it was under 11 percent. One project, a pilot, measured in July 2026.
+
+Close, one line after the proof line (2026-10-12, nick: the deck's slide 3, the one claim the page
+made nowhere, that a layer outlives any single agent; no models/harnesses/protocols triptych and no
+logo row, which would name products and add text for a reader who already believes the premise):
+
+> The best agent changes every month. Your team and its record come with you.
 
 Dependency unchanged from §0.6: the refresh lane `01M1VDRC6B` is unowned; if it lands, change the
 date and the numbers together. §0.11 item 1 (the docs link under the pair): no link until there is a
@@ -157,14 +168,15 @@ Rendered section text, nav and footer excluded, by the audit's method, captions 
 | ----------------------------- | ----: |
 | Hero, both columns, card footer included |   117 |
 | The chain, capture caption included      |   122 |
-| Why, capture caption included            |   103 |
+| Why, capture caption included            |   128 |
 | Watch, offline caption included          |    51 |
 | Getting started                          |    39 |
 | Line above the footer                    |    25 |
 | Teasers                                  |    22 |
-| **total**                                | **479** |
+| **total**                                | **504** |
 
-Acceptance is the audit's §8: at most 500 words of section text, five content sections, at least
+Acceptance is the audit's §8: at most 500 words of section text (2026-10-12, nick: the two §0a.4
+deck lines take the total to 504, accepted as the ceiling until something else is cut), five content sections, at least
 three captures of real product output, the explanation starting before y=1600 at 390 px wide, and
 every §2 fact at most twice.
 
