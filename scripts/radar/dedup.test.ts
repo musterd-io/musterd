@@ -43,6 +43,17 @@ describe('loadSeen', () => {
 });
 
 describe('partitionRadarCandidates', () => {
+  it('excludes every pending ID before capping the genuinely fresh batch', () => {
+    const backlog = Array.from({ length: 100 }, (_, i) => pending(`p${i}`, '2026-10-01'));
+    const feed = [...backlog.map((p) => candidate(p.canonicalId)), candidate('fresh')];
+    const result = partitionRadarCandidates(
+      feed,
+      { arxiv: [], hf: [], exn: [], pending: backlog },
+      50,
+    );
+    expect(result.ready.filter(({ id }) => id.startsWith('p'))).toHaveLength(50);
+    expect(result.ready.some(({ id }) => id === 'fresh')).toBe(true);
+  });
   it('retries candidates older than the feed window, oldest first, and keeps the backlog deferred', () => {
     const seen = {
       arxiv: [],

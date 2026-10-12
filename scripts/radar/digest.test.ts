@@ -144,6 +144,35 @@ describe('renderDigest', () => {
 });
 
 describe('emitDigest', () => {
+  it('preserves the existing digest and ledger when explicitly resuming an unreviewed draft', () => {
+    const dir = tempRadarDir();
+    emitDigest(report(), dir);
+    const previous = readFileSync(join(dir, '2026-W35.md'), 'utf8');
+    const retry = report();
+    retry.new = [{ ...retry.new[0]!, id: 'retry' }];
+    retry.triage!.tier1 = [];
+    emitDigest(retry, dir, [], true);
+    expect(readFileSync(join(dir, '2026-W35.md'), 'utf8')).toContain(previous);
+    const ledger = JSON.parse(readFileSync(join(dir, 'seen.json'), 'utf8'));
+    expect(ledger.arxiv).toContain('2608.01001');
+    expect(ledger.pending[0].canonicalId).toBe('retry');
+  });
+  it('keeps omitted model results pending while preserving successful tier-1 drops', () => {
+    const r = report();
+    r.triage!.tier1[1] = { id: '2608.01002', keep: false, score: 0, reason: 'tier-1 omitted' };
+    r.triage!.tier2 = [];
+    r.triage!.surfaced = [];
+    r.triage!.warnings = ['tier-2 failed: provider_error'];
+    const dir = tempRadarDir();
+    emitDigest(r, dir);
+    const seen = JSON.parse(readFileSync(join(dir, 'seen.json'), 'utf8'));
+    expect(seen.arxiv).toEqual(['2608.01003']);
+    expect(seen.hf).toEqual([]);
+    expect(seen.pending.map((p: { canonicalId: string }) => p.canonicalId)).toEqual([
+      '2608.01001',
+      '2608.01002',
+    ]);
+  });
   it('writes the weekly digest file and appends every triaged candidate to seen.json', () => {
     const dir = tempRadarDir();
     const out = emitDigest(report(), dir);

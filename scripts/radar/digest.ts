@@ -36,7 +36,7 @@ export function isoWeek(dateISO: string): string {
 
 const VERDICT_ORDER: readonly TriageVerdict[] = ['consider-ADR', 'record-as-evidence'];
 
-export function renderDigest(report: SweepReport): string {
+export function renderDigest(report: SweepReport, readFailures: RadarReadFailure[] = []): string {
   const t = report.triage;
   if (t === undefined) {
     throw new Error('cannot emit a digest without triage — run with --triage');
@@ -57,9 +57,28 @@ export function renderDigest(report: SweepReport): string {
     `# Research radar — ${week}`,
     '',
     `Swept the last ${report.since_days} days: ${report.candidates_fetched} fetched, ` +
-      `${report.already_seen} already seen, ${report.new_count} new, ${report.printed} triaged.`,
+      `${report.already_seen} already seen, ${report.new_count} new, ${report.printed} attempted.`,
     '',
   ];
+  if (report.fullTextReads) {
+    lines.push(
+      '## Full-text reads',
+      '',
+      `${report.fullTextReads.filter((r) => r.status === 'complete').length} complete reads; ${readFailures.length} deferred source reads.`,
+      '',
+    );
+    for (const read of report.fullTextReads) {
+      lines.push(
+        `- \`${read.candidateId}\`: ${read.status}${read.failure ? ` (${read.failure})` : ''}`,
+      );
+      for (const source of read.manifest) {
+        lines.push(
+          `  - [${source.source}](${source.url}): ${source.characters} characters, ${source.chunks} chunks, ${source.complete ? 'complete' : 'incomplete'}`,
+        );
+      }
+    }
+    lines.push('');
+  }
   for (const verdict of VERDICT_ORDER) {
     const entries = t.surfaced.filter((r) => r.verdict === verdict);
     if (entries.length === 0) continue;
@@ -67,10 +86,13 @@ export function renderDigest(report: SweepReport): string {
     for (const r of entries) lines.push(...renderEntry(r));
   }
   if (t.surfaced.length === 0) {
-    lines.push('_No papers surfaced this week — everything scored below the relevance floor._', '');
+    lines.push(
+      '_No papers surfaced this week. See read status and triage warnings for incomplete attempts._',
+      '',
+    );
   }
-  const dropped = t.tier1.filter((h) => !h.keep).length;
-  const ignored = t.shortlisted - t.surfaced.length;
+  const dropped = t.tier1.filter((h) => !h.keep && h.reason !== 'tier-1 omitted').length;
+  const ignored = t.tier2.filter((h) => h.verdict === 'ignore').length;
   lines.push(
     `— tier-1 dropped ${dropped}, tier-2 ignored ${ignored}, relevance floor ${t.relevance_floor}.`,
   );
@@ -181,12 +203,16 @@ export function emitDigest(
   report: SweepReport,
   radarDir: string,
   readFailures: RadarReadFailure[] = [],
+  resumeDraft = false,
 ): EmitResult {
-  const md = renderDigest(report);
+  let md = renderDigest(report, readFailures);
   mkdirSync(radarDir, { recursive: true });
   const digestPath = join(radarDir, `${isoWeek(report.generated)}.md`);
-  if (existsSync(digestPath)) {
+  if (existsSync(digestPath) && !resumeDraft) {
     throw new Error(`digest already exists for this week: ${digestPath} — not overwriting`);
+  }
+  if (existsSync(digestPath)) {
+    md = `${readFileSync(digestPath, 'utf8')}\n## Retry attempt ${report.generated}\n\n${md.slice(md.indexOf('# Research radar'))}`;
   }
   const seenFile = join(radarDir, 'seen.json');
   const seen: SeenLedger = existsSync(seenFile)
@@ -197,16 +223,27 @@ export function emitDigest(
   const failureById = new Map(
     readFailures.map(({ candidateId, failure }) => [candidateId, failure]),
   );
-  const successfulIds = new Set(report.triage?.tier1.map(({ id }) => id) ?? []);
-  const triageFailed =
-    report.triage?.warnings.some(
-      (warning) => warning.startsWith('tier-1 failed') || warning.startsWith('tier-2 failed'),
-    ) ?? false;
+  const triage = report.triage!;
+  const shortlistedIds = new Set(
+    triage.tier1
+      .filter((h) => h.keep)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, triage.shortlisted)
+      .map((h) => h.id),
+  );
+  const tier2Ids = new Set([...triage.tier2, ...triage.surfaced].map((h) => h.id));
+  const successfulIds = new Set(
+    triage.tier1
+      .filter(
+        (h) => h.reason !== 'tier-1 omitted' && (!shortlistedIds.has(h.id) || tier2Ids.has(h.id)),
+      )
+      .map((h) => h.id),
+  );
   const appended = { arxiv: 0, hf: 0, exn: 0 };
   const generatedDate = report.generated.slice(0, 10);
 
   for (const c of report.new) {
-    const failure = failureById.get(c.id) ?? (triageFailed ? 'triage_failed' : undefined);
+    const failure = failureById.get(c.id);
     if (failure || !successfulIds.has(c.id)) {
       const previous = byPendingId.get(c.id);
       const next: PendingCandidate = {

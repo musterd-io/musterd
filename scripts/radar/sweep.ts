@@ -33,6 +33,8 @@ export interface SweepArgs {
   retryLimit: number;
   /** M4: write the weekly digest + append triaged ids to seen.json. Requires triage. */
   emit: boolean;
+  /** Workflow-only opt-in after verifying an existing draft is unreviewed. */
+  resumeDraft: boolean;
   /** The scheduled form: run at most once per 7 days (a stamp file); otherwise exit at once. */
   weekly: boolean;
   /** Post the dry-sweep summary to the team as the `sweep` service seat (print-only without a token). */
@@ -57,6 +59,7 @@ export function parseArgs(argv: string[]): SweepArgs {
   let fullText = false;
   let retryLimit = 50;
   let emit = false;
+  let resumeDraft = false;
   let weekly = false;
   let post = false;
   for (let i = 0; i < argv.length; i++) {
@@ -65,6 +68,7 @@ export function parseArgs(argv: string[]): SweepArgs {
     else if (a === '--triage') triage = true;
     else if (a === '--full-text') fullText = true;
     else if (a === '--emit') emit = true;
+    else if (a === '--resume-draft') resumeDraft = true;
     else if (a === '--weekly') weekly = true;
     else if (a === '--post') post = true;
     else if (a === '--since') {
@@ -95,7 +99,8 @@ export function parseArgs(argv: string[]): SweepArgs {
     throw new Error('--emit requires --triage — a digest is a triage artifact');
   }
   if (fullText && !triage) throw new Error('--full-text requires --triage');
-  return { json, sinceDays, limit, triage, fullText, retryLimit, emit, weekly, post };
+  if (resumeDraft && !emit) throw new Error('--resume-draft requires --emit');
+  return { json, sinceDays, limit, triage, fullText, retryLimit, emit, resumeDraft, weekly, post };
 }
 
 function printHelp(): void {
@@ -111,6 +116,7 @@ function printHelp(): void {
   --full-text    read every complete article and attached episode script before triage
   --retry-limit  maximum old pending candidates to retry (default 50)
   --emit         write docs/research/radar/<YYYY-WW>.md + mark triaged ids seen (requires --triage)
+  --resume-draft  append retry results to an existing unreviewed draft (requires --emit)
   --weekly       the scheduled form: run at most once per 7 days (stamp ~/.musterd/sweep/radar-sweep.last)
   --post         post the dry-sweep summary to the team as the sweep service seat (lane 01M3TAKHQ4)
   --dry-run      no-op (print-only without --emit)
@@ -133,10 +139,10 @@ export async function runSweep(args: SweepArgs): Promise<SweepRunReport> {
   const seen = loadSeen(args.seenFile ?? seenPath);
   const { fresh, alreadySeen } = partitionBySeen(merged, seen);
   const selection = args.fullText
-    ? partitionRadarCandidates(fresh.slice(0, args.limit), seen, args.retryLimit)
+    ? partitionRadarCandidates(fresh, seen, args.retryLimit, args.limit)
     : undefined;
   const printed = selection?.ready ?? fresh.slice(0, args.limit);
-  const truncated = (selection?.truncated ?? false) || fresh.length > args.limit;
+  const truncated = selection?.truncated ?? fresh.length > args.limit;
 
   let triage: TriageReport | undefined;
   let readResults: CandidateReadResult[] = [];
@@ -166,6 +172,22 @@ export async function runSweep(args: SweepArgs): Promise<SweepRunReport> {
   }
 
   return {
+    ...(args.fullText
+      ? {
+          fullTextReads: readResults.map((result) => ({
+            candidateId: result.candidateId,
+            status: result.status,
+            ...(result.status === 'failed' ? { failure: result.failure } : {}),
+            manifest: result.manifest,
+          })),
+          selection: {
+            freshTruncated:
+              fresh.filter((c) => !(seen.pending ?? []).some((p) => p.canonicalId === c.id))
+                .length > Math.min(50, args.limit),
+            pendingTruncated: (selection?.deferred.length ?? 0) > 0,
+          },
+        }
+      : {}),
     generated: new Date().toISOString(),
     since_days: args.sinceDays,
     candidates_fetched: merged.length,
@@ -330,7 +352,7 @@ async function main(): Promise<void> {
   if (args.weekly) markRan(now);
   if (args.emit) {
     const { emitDigest } = await import('./digest.ts');
-    const out = emitDigest(report, radarDir, report.readFailures);
+    const out = emitDigest(report, radarDir, report.readFailures, args.resumeDraft);
     process.stdout.write(
       `digest ready: ${out.digestPath} (seen +${out.appended.arxiv} arxiv, +${out.appended.hf} hf, +${out.appended.exn} exn)\n`,
     );

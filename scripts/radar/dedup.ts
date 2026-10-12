@@ -69,6 +69,7 @@ export function partitionRadarCandidates(
   fresh: RadarCandidate[],
   seen: SeenLedger,
   retryLimit: number,
+  freshLimit = 50,
 ): { ready: RadarCandidate[]; deferred: NonNullable<SeenLedger['pending']>; truncated: boolean } {
   const pending = [...(seen.pending ?? [])].sort(
     (a, b) =>
@@ -88,10 +89,12 @@ export function partitionRadarCandidates(
       relatedExn: item.episodeIds.map((episodeId) => ({ episodeId })),
     }),
   );
-  const selectedFresh = fresh.slice(0, 50);
+  const pendingIds = new Set(pending.map(({ canonicalId }) => canonicalId));
+  const genuinelyFresh = fresh.filter(({ id }) => !pendingIds.has(id));
+  const selectedFresh = genuinelyFresh.slice(0, Math.min(50, freshLimit));
   return {
     ready: mergeCandidates([selected, selectedFresh]),
     deferred: pending.slice(pendingLimit),
-    truncated: pending.length > pendingLimit || fresh.length > 50,
+    truncated: pending.length > pendingLimit || genuinelyFresh.length > selectedFresh.length,
   };
 }

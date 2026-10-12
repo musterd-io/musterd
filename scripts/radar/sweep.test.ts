@@ -89,6 +89,11 @@ describe('parseArgs full-text sweep flags', () => {
     });
 
     expect(report.new.map(({ id }) => id)).toEqual(['2401.00001']);
+    expect(report.fullTextReads?.[0]).toMatchObject({
+      candidateId: '2401.00001',
+      status: 'complete',
+    });
+    expect(JSON.stringify(report.fullTextReads)).not.toContain('Complete article body.');
     expect(report.triage?.candidates_in).toBe(1);
     expect(report.triage?.tier1[0]?.id).toBe('2401.00001');
   });
