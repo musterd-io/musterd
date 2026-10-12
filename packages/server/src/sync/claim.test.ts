@@ -288,9 +288,13 @@ withDrivers('claim', (_o, kind) => {
       expect((await getLane(hub.store, (await hubTeam()).id, laneId, 'bravo'))!.owner_seat).toBe(
         'ada',
       );
-      expect(
-        (await getLane(joiner.store, (await joinerTeam()).id, laneId, 'bravo'))!.owner_seat,
-      ).toBeNull();
+      // The refused claim must leave no provisional claim by nick on the joiner. The row may already
+      // read 'ada' — the hub's own `lane.claimed` folds in on a doorbell/kick (which fires on every
+      // driver since the kick registries stopped keying on a db handle) — so assert what the refusal
+      // guarantees, not the instant at which the fold lands.
+      const joinerOwner = (await getLane(joiner.store, (await joinerTeam()).id, laneId, 'bravo'))!
+        .owner_seat;
+      expect(joinerOwner === null || joinerOwner === 'ada').toBe(true);
     });
 
     it('refuses, with its own error, while the hub is unreachable — never a provisional claim', async () => {
