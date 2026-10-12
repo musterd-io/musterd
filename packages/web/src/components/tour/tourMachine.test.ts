@@ -2,6 +2,7 @@ import type { Envelope, Lane, MemberSummary } from '@musterd/protocol';
 import { describe, expect, it } from 'vitest';
 import {
   advance,
+  canGoBack,
   agentNow,
   clock,
   hintFor,
@@ -277,5 +278,30 @@ describe('the lane ticket', () => {
   it('tells a decline of the request', () => {
     const no = env({ id: 'no', act: 'decline', body: 'busy', meta: { in_reply_to: 'req1' }, ts: 9 });
     expect(timeline([no], waiting('claims')).map((e) => e.text)).toEqual(['dolly said no']);
+  });
+});
+
+describe('back', () => {
+  const base = (step: TourState['step'], laneId?: string): TourState => ({
+    ...initialState('nick', 'dolly'),
+    step,
+    ...(laneId ? { laneId } : {}),
+  });
+
+  it('steps back from team and give_work while no lane exists', () => {
+    expect(advance(base('team'), { type: 'back' }).step).toBe('what');
+    expect(advance(base('give_work'), { type: 'back' }).step).toBe('team');
+  });
+
+  it('never steps back once the lane is real, or from the first step', () => {
+    const claims = base('claims', LANE);
+    expect(advance(claims, { type: 'back' })).toBe(claims);
+    expect(canGoBack(base('give_work', LANE))).toBe(false);
+    const what = base('what');
+    expect(advance(what, { type: 'back' })).toBe(what);
+  });
+
+  it('team waits for continue: nothing else moves it', () => {
+    expect(advance(base('team'), { type: 'continue' }).step).toBe('give_work');
   });
 });

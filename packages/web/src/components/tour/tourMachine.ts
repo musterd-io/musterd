@@ -35,6 +35,7 @@ export interface TourState {
 export type TourEvent =
   | { type: 'continue' }
   | { type: 'lane_opened'; laneId: string; requestId: string }
+  | { type: 'back' }
   | { type: 'act'; env: Envelope }
   | { type: 'verdict'; accept: boolean }
   | { type: 'skip_to_record' };
@@ -55,6 +56,16 @@ function stepOf(id: TourStepId) {
 function stepAfter(id: TourStepId): TourStepId | null {
   const i = TOUR_STEPS.findIndex((s) => s.id === id);
   return TOUR_STEPS[i + 1]?.id ?? null;
+}
+
+function stepBefore(id: TourStepId): TourStepId | null {
+  const i = TOUR_STEPS.findIndex((s) => s.id === id);
+  return i > 0 ? TOUR_STEPS[i - 1]!.id : null;
+}
+
+/** Back is only for the steps before the lane exists; after that the lane is real and stays. */
+export function canGoBack(s: TourState): boolean {
+  return !s.laneId && (s.step === 'team' || s.step === 'give_work');
 }
 
 function metaOf(env: Envelope): Record<string, unknown> {
@@ -105,6 +116,10 @@ export function advance(s: TourState, e: TourEvent): TourState {
       const w = stepOf(s.step).wait;
       const next = stepAfter(s.step);
       return (w === 'continue' || w === 'none') && next ? { ...s, step: next } : s;
+    }
+    case 'back': {
+      const prev = stepBefore(s.step);
+      return canGoBack(s) && prev ? { ...s, step: prev } : s;
     }
     case 'lane_opened':
       return s.step === 'give_work'

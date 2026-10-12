@@ -20,6 +20,8 @@ const panel = (s: TourState, over: Record<string, unknown> = {}) =>
       error: null,
       onPick: noop,
       onContinue: noop,
+      onBack: noop,
+      onGiveWork: noop,
       onSkip: noop,
       onToNext: noop,
       onDone: noop,
@@ -36,7 +38,26 @@ const at = (step: TourState['step'], over: Partial<TourState> = {}): TourState =
   ...over,
 });
 
+/** A step before the lane exists. */
+const pre = (step: TourState['step']): TourState => ({ ...initialState('nick', 'dolly'), step });
+
 describe('TourPanel — spec docs/design/tour-web-copy.md §3', () => {
+  // nick, 2026-10-12: steps 2 and 3 moved on by themselves; now the viewer drives both.
+  it('team waits for Continue and offers Back', () => {
+    const html = panel(pre('team'));
+    expect(html).toContain('>Continue</button>');
+    expect(html).toContain('>Back</button>');
+  });
+
+  it('give_work opens nothing until the viewer presses the button, and offers Back', () => {
+    const html = panel(pre('give_work'));
+    expect(html).toContain('>Give dolly the work</button>');
+    expect(html).toContain('>Back</button>');
+    expect(panel(pre('give_work'), { busy: true })).toContain(
+      'Opening the lane…',
+    );
+  });
+
   it('opens on what musterd is, with Continue and Stop', () => {
     const html = panel(initialState('nick', 'dolly'));
     expect(html).toContain('Step 1 of 9 · What musterd is');
