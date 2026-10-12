@@ -105,6 +105,18 @@ function retryAfterMs(response: Response): number | undefined {
   return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined;
 }
 
+/** Known paper indexes link to metadata pages; extract the original PDF (ADR 564). */
+function articleTarget(value: string): string {
+  const url = new URL(value);
+  const paperId = '(?:\\d{4}\\.\\d{4,5}|[a-z-]+(?:\\.[a-z]{2})?/\\d{7})(?:v[1-9]\\d*)?';
+  const match = ['arxiv.org', 'www.arxiv.org', 'export.arxiv.org'].includes(url.hostname)
+    ? url.pathname.match(new RegExp(`^/(?:abs|html|pdf)/(${paperId})(?:\\.pdf)?/?$`, 'i'))
+    : url.hostname === 'huggingface.co'
+      ? url.pathname.match(new RegExp(`^/papers/(${paperId})/?$`, 'i'))
+      : null;
+  return match ? `https://arxiv.org/pdf/${match[1]}` : value;
+}
+
 /** Retrieve the full extracted page text for one already-known public HTTPS URL. */
 export async function fetchArticleText(
   url: string,
@@ -113,6 +125,8 @@ export async function fetchArticleText(
 ): Promise<{ url: string; text: string }> {
   if (!isPublicHttpsUrl(url)) throw new Error('Article URL must be a public HTTPS URL');
   if (!apiKey.trim()) throw new Error('EXA_API_KEY is required');
+  const target = articleTarget(url);
+  const paperTarget = target.startsWith('https://arxiv.org/pdf/');
 
   let lastError: unknown;
   for (let attempt = 0; attempt <= FETCH_RETRIES; attempt++) {
@@ -128,7 +142,7 @@ export async function fetchArticleText(
           'content-type': 'application/json',
           accept: 'application/json',
         },
-        body: JSON.stringify({ urls: [url], text: true }),
+        body: JSON.stringify({ urls: [target], text: true }),
       });
     } catch (error) {
       clearTimeout(timer);
@@ -159,13 +173,16 @@ export async function fetchArticleText(
         results?: Array<{ id?: unknown; url?: unknown; text?: unknown }>;
         statuses?: Array<{ id?: unknown; status?: unknown }>;
       };
-      const result = payload.results?.find((item) => item.url === url || item.id === url);
-      const status = payload.statuses?.find((item) => item.id === url);
+      const result = payload.results?.find((item) => item.url === target || item.id === target);
+      const status = payload.statuses?.find((item) => item.id === target);
       if (status?.status !== 'success') {
         throw new Error(`Exa Contents status was ${String(status?.status ?? 'missing')}`);
       }
       if (!result || typeof result.url !== 'string' || !isPublicHttpsUrl(result.url)) {
         throw new Error('Exa Contents returned an unsafe or missing URL');
+      }
+      if (paperTarget && !result.url.startsWith('https://arxiv.org/pdf/')) {
+        throw new Error('Exa Contents returned a landing page instead of the original paper');
       }
       if (typeof result.text !== 'string' || !result.text.trim()) {
         throw new Error('Exa Contents returned empty article text');
