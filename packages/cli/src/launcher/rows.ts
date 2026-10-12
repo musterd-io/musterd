@@ -65,7 +65,8 @@ export interface SeatLineOpts {
 /** One seat row: marker · member · [team/project] · [harness] · state · tail. */
 export function seatLine(seat: Seat, o: SeatLineOpts): string {
   const marker = o.selected ? `${theme.accent('›')} ` : '  ';
-  const name = padEndVisible(theme.memberName(seat.member, seat.kind), o.nameWidth);
+  const shown = theme.memberName(seat.member, seat.kind);
+  const name = padEndVisible(o.selected ? theme.bold(shown) : shown, o.nameWidth);
   const address =
     o.addressWidth === null
       ? ''
