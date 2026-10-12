@@ -14,16 +14,17 @@ describe('landing page', () => {
   });
   // ADR 428: ONE office, and the stream is it. `OfficeProof` is gone; a second office block is the
   // defect this asserts against coming back. ADR 567 (2026-10-12, superseding ADR 560's order): the
-  // office is the hero's right column, then the chain, why and getting started.
-  it('runs hero (with the office), chain, why, getting started, and has no second office block', () => {
+  // office is the hero's right column, then a day in the life (ADR 571, replacing the chain), why and
+  // getting started.
+  it('runs hero (with the office), a day in the life, why, getting started, and has no second office block', () => {
     const order = src();
     expect(order).not.toContain('OfficeProof');
     const at = (c: string) => order.indexOf(`<${c}`);
-    const seq = ['LightHero', 'Chain', 'WhyTalk', 'GettingStarted', 'Teasers', 'Boundary', 'SiteFooter'];
+    const seq = ['LightHero', 'DayInTheLife', 'WhyTalk', 'GettingStarted', 'Teasers', 'Boundary', 'SiteFooter'];
     for (const c of seq) expect(at(c), c).toBeGreaterThan(-1);
     for (let i = 1; i < seq.length; i++) expect(at(seq[i - 1]!)).toBeLessThan(at(seq[i]!));
     // §0a.1: these three said the chain as claims; the chain section says it once, about one lane.
-    expect(order).not.toMatch(/ClaimToAccepted|WhatIs|HowItWorks|RecordCard/);
+    expect(order).not.toMatch(/ClaimToAccepted|WhatIs|HowItWorks|RecordCard|<Chain/);
     // The office lives in the hero, once.
     expect(order).not.toContain('<StreamSection');
     const hero = readFileSync(
@@ -142,36 +143,40 @@ describe('the hero', () => {
 
 // homepage-copy-spec §0a (2026-10-12): one argument, five sections, every fact at most twice.
 describe('the 2026-10-12 cut', () => {
-  const chain = read('../components/site/Chain.tsx');
+  const day = read('../components/site/DayInTheLife.tsx');
   const why = read('../components/site/WhyTalk.tsx');
   const start = read('../components/site/GettingStarted.tsx');
   const boundary = read('../components/site/Boundary.tsx');
 
-  // §0.2: acceptance arrives after the merge, so it is "done", never "ships on its author's word".
-  it('the chain walks one real lane through four stops, and separates landing from done', () => {
-    expect(chain).toContain('One piece of work, from claimed to accepted');
-    expect(chain).toContain('One lane from our own board, as the board recorded it.');
-    for (const label of ['Claimed', 'Model', 'Landed', 'Accepted']) expect(chain).toContain(`label: '${label}'`);
-    expect(chain).toContain('Landing is not the same as done.');
-    // ADR 235: an owner CAN close its own lane, recorded unconfirmed — the page says so rather than
-    // claiming an agent cannot (miley's decline of 01M4RCBNZ3, 2026-10-12).
-    expect(chain).toContain(
-      "Accepting work is a teammate's act; an agent that closes its own lane is recorded as unconfirmed.",
-    );
-    expect(chain).not.toMatch(/cannot set it for itself/);
-    expect(chain).toContain('reported Claude Sonnet 5.5, and the record kept that with the lane');
-    expect(chain).not.toMatch(/Nothing ships|ships on its author/);
-    // Stop 2 says what the record kept and stops — the old contrast frame stays out.
-    expect(chain).not.toMatch(/not what the agent says about itself/);
-    expect(chain).not.toMatch(/who asked|asked for it|requested by/i);
+  // ADR 571 (2026-10-12): the deck's "A day in the life" slide replaces the four-stop chain. The
+  // chain's facts ride on three of its steps, so the record is still stated once (ADR 550 §2).
+  it('a day in the life: ten steps of one real session, the record folded into claim / ready / review', () => {
+    expect(day).toContain('A day in the life of a member');
+    for (const k of ['join', 'orient', 'claim', 'build', 'inbox', 'mate', 'admin', 'ready', 'review', 'wrap'])
+      expect(day).toContain(`k: '${k}'`);
+    expect(day).toContain('From here on the record names who holds the work.');
+    expect(day).toContain('Landing is not the same as done.');
+    expect(day).toContain('A member from another model family judges what landed.');
+    expect(day).toContain('Her verdict goes on the record.');
+    expect(day).not.toMatch(/who asked|asked for it|requested by/i);
+    expect(day).not.toMatch(/Nothing ships|ships on its author/);
   });
 
-  it('the chain shows a capture of the real board card, never a live query, and spells no date in copy', () => {
-    expect(chain).toMatch(/captures\/board-lane-\d{4}-\d{2}-\d{2}\.webp/);
-    expect(chain).toContain("The lane&rsquo;s card on our board.");
-    expect(chain).toContain('Pull request 2240 merged. Landing is not the same as done.');
-    expect(chain).toContain('accepted the next day.');
-    expect(chain).not.toMatch(/fetch\(|useBoardData|useLiveStream/);
+  it('a day in the life: names no harness, and its chips say when, not whose hook', () => {
+    const rendered = day.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(rendered).not.toMatch(/Claude Code|Codex|Cursor|OpenCode|Grok|SessionStart|PostToolUse|PreToolUse|MCP/);
+    expect(day).toContain("'after every tool call'");
+  });
+
+  it('a day in the life: moves only on screen, stops under reduced motion, and every step is reachable', () => {
+    expect(day).toContain('prefers-reduced-motion');
+    expect(day).toContain('IntersectionObserver');
+    expect(day).toContain('aria-live="polite"');
+    expect(day).toContain("aria-label={`Step ${i + 1}, ${s.label}`}");
+    expect(day).toContain('aria-label="Previous step"');
+    expect(day).toContain('aria-label="Next step"');
+    // No spelled-out date in the copy (nick, 2026-10-12).
+    expect(day.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 
   it('Why agents talk: one argument in three paragraphs, our own receipt, no date in the copy', () => {
@@ -217,7 +222,8 @@ describe('the 2026-10-12 cut', () => {
     expect(start).toContain("'musterd tour'");
     expect(start).toContain('Read the source on GitHub');
     expect(start).not.toMatch(/private preview|early access|Not yet|EARLY_ACCESS/i);
-    for (const code of [chain, start]) {
+    // `aria-live` is an attribute, not a state claim; the prose guard skips it.
+    for (const code of [day.replace(/\/\*[\s\S]*?\*\//g, '').replace(/aria-live/g, ''), start]) {
       expect(code).not.toMatch(/\b(live|now|currently)\b/i);
     }
   });

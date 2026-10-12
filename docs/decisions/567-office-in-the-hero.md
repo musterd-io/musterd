@@ -41,6 +41,7 @@ thing people come to see, the team working in its office, sat fourth.
   where they sit and removes the card's, and the chain's lead was rewritten to stand alone (sloane to
   confirm or replace).
 - ADR 560 carries a dated note in its Consequences.
+- _(2026-10-12: decision 2 is reversed by [ADR 571](571-day-in-the-life-replaces-the-chain.md); the chain section is replaced by "A day in the life of a member", and the record's three sentences ride on its steps.)_
 
 ## Observability & Evaluation
 
