@@ -44,14 +44,16 @@ const PULL_TIMEOUT_MS = 10_000;
  * suppression set, or the second daemon's first stall is silently "already reported" by the first
  * (dolly, #1155 review F3).
  */
-const reportedByDb = new WeakMap<Ctx['db'], Set<string>>();
+const reportedByConfig = new WeakMap<Ctx['config'], Set<string>>();
 function reportedFor(ctx: Ctx): Set<string> {
-  // Keyed on the database handle, not the Ctx object: the handle IS the daemon's identity, and a
-  // Ctx may be re-assembled around it (tests build one per call).
-  let set = reportedByDb.get(ctx.db);
+  // Keyed on the resolved config, not the Ctx object and not the db handle: a Ctx is re-assembled
+  // per request (`teamCtx` spreads it) and on Postgres `forTeam()` mints a NEW handle each call, so
+  // a handle-keyed registry written by the loop is invisible to the request that reads it
+  // (PGlite CI, 2026-10-08: every kick missed, reads of the pull stop came back null).
+  let set = reportedByConfig.get(ctx.config);
   if (!set) {
     set = new Set<string>();
-    reportedByDb.set(ctx.db, set);
+    reportedByConfig.set(ctx.config, set);
   }
   return set;
 }
@@ -69,7 +71,7 @@ export const SYNC_STOP_WARN_AFTER_MS = 5 * 60_000;
  * within one `SYNC_PULL_INTERVAL_MS` and nothing here needs a migration. `since` is the first tick
  * that saw THIS stop; the same stop on the next tick keeps it, a different one restarts it.
  */
-const pullStopsByDb = new WeakMap<Ctx['db'], Map<string, SyncPullStop>>();
+const pullStopsByConfig = new WeakMap<Ctx['config'], Map<string, SyncPullStop>>();
 
 /** The thing a stop names — a seat, an act, a lane — for the sentence the roster prints. */
 function stopSubject(stop: FoldStop): string | null {
@@ -84,8 +86,8 @@ function stopSubject(stop: FoldStop): string | null {
 }
 
 function notePullStop(ctx: Ctx, teamId: string, stop: FoldStop, now: number): void {
-  let teams = pullStopsByDb.get(ctx.db);
-  if (!teams) pullStopsByDb.set(ctx.db, (teams = new Map()));
+  let teams = pullStopsByConfig.get(ctx.config);
+  if (!teams) pullStopsByConfig.set(ctx.config, (teams = new Map()));
   const subject = sanitizeStopSubject(stopSubject(stop));
   const prior = teams.get(teamId);
   const same = prior?.kind === stop.kind && prior.subject === subject;
@@ -98,7 +100,7 @@ function notePullStop(ctx: Ctx, teamId: string, stop: FoldStop, now: number): vo
 }
 
 function clearPullStop(ctx: Ctx, teamId: string): void {
-  pullStopsByDb.get(ctx.db)?.delete(teamId);
+  pullStopsByConfig.get(ctx.config)?.delete(teamId);
 }
 
 /**
@@ -106,11 +108,11 @@ function clearPullStop(ctx: Ctx, teamId: string): void {
  * grace, and null on a machine whose fold is moving (or that has no hub).
  */
 export async function readPullStop(
-  db: Ctx['db'],
+  config: Ctx['config'],
   teamId: string,
   now: number = Date.now(),
 ): Promise<SyncPullStop | null> {
-  const stop = pullStopsByDb.get(db)?.get(teamId);
+  const stop = pullStopsByConfig.get(config)?.get(teamId);
   return stop && now - stop.since >= SYNC_STOP_WARN_AFTER_MS ? stop : null;
 }
 
@@ -514,7 +516,7 @@ export const SYNC_PULL_KICK_DEBOUNCE_MS = 100;
 
 /** The running loop's doorbell, by database handle (same keying as push.ts's). Absent when no
  *  pull loop runs, so a kick is then a no-op. */
-const kickers = new WeakMap<Ctx['db'], () => void>();
+const kickers = new WeakMap<Ctx['config'], () => void>();
 
 /**
  * Ask this daemon's pull loop to drain now. The hub rings it when `/sync/push` stages events:
@@ -523,7 +525,7 @@ const kickers = new WeakMap<Ctx['db'], () => void>();
  * hub `messages` 60 051 ms with push-on-write already in). Never throws, never blocks the caller.
  */
 export function kickSyncPull(ctx: Ctx): void {
-  kickers.get(ctx.db)?.();
+  kickers.get(ctx.config)?.();
 }
 
 /** Start the pull loop. Returns a stop function (same contract as startSyncPush). */
@@ -562,7 +564,7 @@ export function startSyncPull(ctx: Ctx): () => void {
   if (typeof handle.unref === 'function') handle.unref();
 
   let kick: ReturnType<typeof setTimeout> | null = null;
-  kickers.set(ctx.db, () => {
+  kickers.set(ctx.config, () => {
     if (kick || stopped) return;
     kick = setTimeout(() => {
       kick = null;
@@ -574,6 +576,6 @@ export function startSyncPull(ctx: Ctx): () => void {
     stopped = true;
     clearInterval(handle);
     if (kick) clearTimeout(kick);
-    kickers.delete(ctx.db);
+    kickers.delete(ctx.config);
   };
 }

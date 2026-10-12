@@ -19,12 +19,12 @@ export const SYNC_STREAM_BACKOFF_MAX_MS = 30_000;
 /** How often the joiner looks for teams newly enrolled (or re-enrolled) since it last looked. */
 const SYNC_STREAM_RESCAN_MS = 15_000;
 
-/** The scan to run now, per database: enrolling a node must not wait for the next rescan. */
-const scanners = new WeakMap<Ctx['db'], () => void>();
+/** The scan to run now, per daemon: enrolling a node must not wait for the next rescan. */
+const scanners = new WeakMap<Ctx['config'], () => void>();
 
 /** Look for enrollment changes now (called after `/node/enroll`). Never throws, never blocks. */
 export function kickSyncStream(ctx: Ctx): void {
-  scanners.get(ctx.db)?.();
+  scanners.get(ctx.config)?.();
 }
 
 /** `http(s)://hub/…` → `ws(s)://hub/teams/<slug>/sync/stream`. */
@@ -163,12 +163,12 @@ export function startSyncStream(ctx: Ctx): () => void {
   };
 
   void scan();
-  scanners.set(ctx.db, () => void scan());
+  scanners.set(ctx.config, () => void scan());
   const handle = setInterval(() => void scan(), SYNC_STREAM_RESCAN_MS);
   if (typeof handle.unref === 'function') handle.unref();
   return () => {
     stopped = true;
-    scanners.delete(ctx.db);
+    scanners.delete(ctx.config);
     clearInterval(handle);
     for (const link of links.values()) link.stop();
     links.clear();

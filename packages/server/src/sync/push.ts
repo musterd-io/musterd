@@ -469,14 +469,15 @@ export async function pushTeam(
  */
 export const SYNC_PUSH_KICK_DEBOUNCE_MS = 200;
 
-/** The running loop's doorbell, by database handle — the handle is the daemon's identity (as in
- *  pull.ts), so two in-process daemons do not ring each other. Absent when no loop runs (a hub
+/** The running loop's doorbell, by resolved config — one object per daemon, shared by every Ctx
+ *  spread from it (a database handle is NOT: Postgres `forTeam()` mints one per call), so two
+ *  in-process daemons do not ring each other. Absent when no loop runs (a hub
  *  that is not a joiner, cloud, a test that never started one): a kick is then a no-op. */
-const kickers = new WeakMap<Ctx['db'], () => void>();
+const kickers = new WeakMap<Ctx['config'], () => void>();
 
 /** Ask this daemon's push loop to run soon. Never throws, never blocks the caller. */
 export function kickSyncPush(ctx: Ctx): void {
-  kickers.get(ctx.db)?.();
+  kickers.get(ctx.config)?.();
 }
 
 /** Start the push loop. Returns a stop function (same contract as startSeedsIngest). */
@@ -512,7 +513,7 @@ export function startSyncPush(ctx: Ctx): () => void {
   if (typeof handle.unref === 'function') handle.unref();
 
   let kick: ReturnType<typeof setTimeout> | null = null;
-  kickers.set(ctx.db, () => {
+  kickers.set(ctx.config, () => {
     if (kick) return;
     kick = setTimeout(() => {
       kick = null;
@@ -523,6 +524,6 @@ export function startSyncPush(ctx: Ctx): () => void {
   return () => {
     clearInterval(handle);
     if (kick) clearTimeout(kick);
-    kickers.delete(ctx.db);
+    kickers.delete(ctx.config);
   };
 }
