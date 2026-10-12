@@ -17,14 +17,16 @@
     "2610.13416",
     "2610.13296",
     "2610.13273",
-    "2610.13116"
+    "2610.13116",
+    "2610.13439"
   ],
   "hf": [
     "2609.02783",
     "2610.08215",
     "2610.12299",
     "2610.07625",
-    "2610.07967"
+    "2610.07967",
+    "2610.13947"
   ],
   "exn": [
     "2609.37226",
@@ -131,22 +133,6 @@
       "sourceIds": [
         {
           "source": "arxiv",
-          "id": "2610.13439"
-        }
-      ],
-      "canonicalId": "2610.13439",
-      "title": "Collective Autonomous Vehicle Routing Needs Social Awareness for Coexistence with Human Drivers",
-      "url": "https://arxiv.org/abs/2610.13439",
-      "published": "2026-10-09",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-12",
-      "failure": "triage_incomplete"
-    },
-    {
-      "sourceIds": [
-        {
-          "source": "arxiv",
           "id": "2610.13267"
         }
       ],
@@ -169,22 +155,6 @@
       "canonicalId": "2610.13144",
       "title": "Competence-Aware Orchestration for LLM-Based Multi-Agent Systems",
       "url": "https://arxiv.org/abs/2610.13144",
-      "published": "2026-10-09",
-      "episodeIds": [],
-      "firstAttempt": "2026-10-12",
-      "lastAttempt": "2026-10-12",
-      "failure": "triage_incomplete"
-    },
-    {
-      "sourceIds": [
-        {
-          "source": "hf",
-          "id": "2610.13947"
-        }
-      ],
-      "canonicalId": "2610.13947",
-      "title": "Towards Physically Grounded Articulated 3D Assets: A Multi-Agent Pipeline and Benchmark",
-      "url": "https://huggingface.co/papers/2610.13947",
       "published": "2026-10-09",
       "episodeIds": [],
       "firstAttempt": "2026-10-12",
