@@ -30,7 +30,7 @@ A further constraint rules out the obvious fix. **Liveness is only knowable _thr
 
 **The homepage has ONE office, it is the stream, and it sits directly under the hero.**
 
-1. `OfficeProof` is deleted. Its picture, its two load-bearing closing sentences ("This is our team. Yours is what `npx @musterd/cli init` starts" — [ADR 320](320-naming-over-containment.md) §1) and its constraints move into `StreamSection`, which is now the page's second section, after `LightHero` and before `WhatIs`.
+1. `OfficeProof` is deleted. Its picture, its two load-bearing closing sentences ("This is our team. Yours is what `npx @musterd/cli init` starts" — [ADR 320](320-naming-over-containment.md) §1) and its constraints move into `StreamSection`, which is now the page's second section, after `LightHero` and before `WhatIs`. _(Amended 2026-10-12: the "second section" clause is superseded by [ADR 560](560-explanation-above-the-stream.md); the stream is the page's fourth section, under the explanation. Decisions 2 to 5 stand.)_
 2. **The still is the player's offline state, not a separate figure.** One fixed-aspect slot: the player always mounts, and the still is absolutely positioned over it whenever liveness is not `live`. The box never changes size, so nothing below it moves — measured CLS 0.0047 across a full load.
 3. **`unknown` shows the still.** It is the state the prerendered HTML ships and the one a reader with a blocked SDK keeps, so it must be the state that claims least. The caption rendered beside it says the channel is dark between sessions and that the work lands in the open repository either way — true whichever state actually holds, per watch-page-copy-spec §2.
 4. **`StreamSection` constructs a `Twitch.Player` rather than a hand-built `<iframe>`**, the same mechanism `/watch` uses, so it can read liveness at all. Measured 2026-09-16: the SDK emits the same origin, path and parameters, and additionally sets `allow="autoplay; fullscreen"`, which the hand-written iframe never carried.
@@ -38,6 +38,10 @@ A further constraint rules out the obvious fix. **Liveness is only knowable _thr
 
 ## Consequences
 
+- **2026-10-12 — the order clause of decision 1 is superseded by [ADR 560](560-explanation-above-the-stream.md).**
+  The explanation sits above the stream; the stream is the fourth section and goes back below the
+  fold, with the still lazily loaded again. One office, the still as its offline state, the SDK
+  player and the hero's first screen (decisions 2 to 5) are unchanged.
 
 - **2026-09-21 — the still is now the player's THIRD state, not its second** (lane 01M32JE1ZP, the
   follow-up this ADR named). A dark channel plays a hand-curated Twitch collection of past
