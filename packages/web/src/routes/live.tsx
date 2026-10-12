@@ -23,7 +23,6 @@ import { applyTierClock, askIsLoud, deriveAsks } from '../live/asks';
 import { logOpenMode } from '../live/stillMode';
 import { promptBarFlag, promptBarVisible } from '../live/promptGate';
 import { revealWhenMounted } from '../live/reveal';
-import { LogDrawer } from '../live/LogDrawer';
 import { Ticker } from '../live/Ticker';
 import { briefing, briefingSince } from '../live/briefing';
 import { useSeatRequests } from '../live/useSeatRequests';
@@ -101,6 +100,8 @@ const NO_COLLAPSE: Collapsed = { office: false, team: false };
 
 /** The log drawer hosts today's `Stream` unchanged (ADR 464 lane 2) — fetched the first time it
  *  opens, never before: the stream column left /live's eager graph with the column itself. */
+/** The log drawer only exists while open (L, or the log button); its chunk loads then. */
+const LazyLogDrawer = lazy(() => import('../live/LogDrawer').then((m) => ({ default: m.LogDrawer })));
 const LazyStream = lazy(() => import('../live/Stream').then((m) => ({ default: m.Stream })));
 // The Now briefing is not needed to paint the room: it comes up a beat after first paint anyway, so
 // its code rides a lazy chunk and /live's eager graph (ADR 151/183) does not pay for it.
@@ -752,11 +753,20 @@ function LivePage() {
               />
             </Suspense>
           )}
-          <LogDrawer open={logOpen} onClose={closeLog} title={`Team log — ${team}`}>
-            <Suspense fallback={<p className="lc-drawer__loading">Opening the log…</p>}>
-              <LazyStream envelopes={envelopes} roster={roster} liveIds={liveIds} cfg={cfg ?? undefined} />
+          {logOpen && (
+            <Suspense fallback={null}>
+              <LazyLogDrawer open onClose={closeLog} title={`Team log — ${team}`}>
+                <Suspense fallback={<p className="lc-drawer__loading">Opening the log…</p>}>
+                  <LazyStream
+                    envelopes={envelopes}
+                    roster={roster}
+                    liveIds={liveIds}
+                    cfg={cfg ?? undefined}
+                  />
+                </Suspense>
+              </LazyLogDrawer>
             </Suspense>
-          </LogDrawer>
+          )}
           {boardOpen && (
             <Suspense fallback={null}>
               <LazyBoardOverlay

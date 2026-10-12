@@ -192,7 +192,7 @@ live/
   StreamHuddleCard.tsx          // a huddle as one card in the feed: header, turn lines with time-to-turn, close/yet-to-speak footer
   huddleTrace.ts                // the huddle trace fetch (ADR 493, type-only protocol import) + seatPath: one seat's wake → tools → hooks, in time order
   reveal.ts                     // the "reveal this act in the log" window event + revealWhenMounted (the drawer mounts the stream lazily)
-  LogDrawer.tsx                 // the /live log drawer (ADR 464 lane 2): a right-edge dialog around the stream; Escape closes, focus returns
+  LogDrawer.tsx                 // the /live log drawer (ADR 464 lane 2): a right-edge dialog around the stream; Escape closes, focus returns; lazy, mounted only while open
   busyness.ts                   // envelopes + roster → last-act age, acts over the loaded span (bucketed), who is working (pure, node-tested)
   TopMeter.tsx                  // the top bar's busyness meter: team · heartbeat · sparkline
   headline.ts                   // notable act → { who, verb, object, target } from names and titles, never the body; collapseHeadlines (pure)
@@ -202,7 +202,7 @@ live/
   askPhrase.ts                  // the ask banner's words (spec §6 table) + askBanner() view-model: open / settled / idle (pure)
   OfficeKey.tsx                 // "how to read the office" — the four postures in a closable corner card (ADR 464 §3.4), /live only
   TeamColumn.tsx                // the /live team column (ADR 464) + its collapsed avatar rail; `captionColorFor` (the narrator's colour)
-  TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type; click expands to `SeatDetail`
+  TeamCard.tsx                  // one member card: avatar, name, model badge, plain state, work in big type; click expands to `SeatDetail` (lazy: its chunk loads on the first expand)
   teamCards.ts                  // roster + lane board + goals → ordered team cards in plain words (pure, node-tested)
   modelBadge.ts                 // presence → provider + readable model label; observed / declared / unknown / human / service — never a guess
   briefing.ts                   // the Now briefing's one selector (pure, node-tested): needs-a-human by human, goals in motion ("d of n done", who), shipped by who; waitingFor(viewer)
