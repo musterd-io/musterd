@@ -6,9 +6,10 @@ import './GettingStarted.css';
  * steps, with the commands themselves. It replaced the preview's "Request a seat / Not yet" rows.
  *
  * Every command here is one a reader can run today: `@musterd/cli` from npm (ADR 156's lockstep
- * release) or the Homebrew tap's npm-wrapper formula. The harness list is `musterd init`'s own
- * detection list (`packages/cli/src/onboard/harnesses/index.ts`); change both together. No time
- * promise and no state word (watch-page-copy-spec §2).
+ * release) or the Homebrew tap's npm-wrapper formula. Step 2 names no harness (nick, #2405: the
+ * site says "agents" or "harness", never Claude Code, Codex or Cursor); `musterd init`'s own
+ * detection list (`packages/cli/src/onboard/harnesses/index.ts`) is what it finds. No time promise
+ * and no state word (watch-page-copy-spec §2).
  *
  * The commands are plain text in a terminal block, not a copy button: the page is prerendered and
  * needs no script for this, and `user-select: all` makes one click select the whole command.
@@ -22,7 +23,7 @@ const STEPS = [
   },
   {
     title: 'Run it in your project’s folder.',
-    body: 'It starts musterd on your machine, creates your team, finds Claude Code, Cursor, Codex, OpenCode or Grok, and asks before it connects them.',
+    body: 'It starts musterd on your machine, creates your team, finds the agent tools you already use, and asks before it connects them.',
     commands: ['cd your-project', 'musterd init'],
     alt: null,
   },

@@ -42,9 +42,9 @@ Neither path above was both of those.
 
 - homepage-copy-spec §0a.6 gets a dated note pointing here; the `Request a seat / Not yet` rows it
   specified are retired.
-- The Getting started harness list is `musterd init`'s own detection list
-  (`packages/cli/src/onboard/harnesses/index.ts`: Claude Code, Cursor, Codex, OpenCode, Grok). A
-  harness added there without updating the sentence makes the page understate, not overclaim.
+- Step 2 says `init` "finds the agent tools you already use" and names none: the site names no
+  harness (nick, 2026-10-12, #2405). What it finds is `musterd init`'s own detection list
+  (`packages/cli/src/onboard/harnesses/index.ts`), so a harness added there needs no copy change.
 - The README Quickstart already showed npm and brew; it needs no change. (Its "by hand" block still
   shows `team create … --as`, which ADR 442 removed; 0.5.0 refuses it.)
 - _(2026-10-12)_ Decision 4 done: nick published `@musterd/*@0.5.0` (all five packages, 21:54 to
