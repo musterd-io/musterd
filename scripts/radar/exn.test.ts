@@ -215,7 +215,7 @@ describe('seen ledger with the exn source', () => {
         candidates_in: 1,
         shortlisted: 0,
         shortlist_truncated: false,
-        tier1: [],
+        tier1: [{ id: 'uuid-1', keep: false, score: 0.1, reason: 'off thesis' }],
         surfaced: [],
         tier2: [],
         warnings: [],

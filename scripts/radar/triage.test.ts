@@ -44,6 +44,18 @@ const failed = (candidateId: string): CandidateReadResult => ({
 });
 
 describe('runTriage with complete-read results', () => {
+  it('does not expose provider response bodies through failure warnings', async () => {
+    const report = await runTriage({
+      candidates: [candidate('a')],
+      apiKey: 'test',
+      promptBody: 'test',
+      completeFn: async () => {
+        throw new Error('private source text');
+      },
+    });
+    expect(report.warnings.join(' ')).not.toContain('private source text');
+    expect(report.warnings.join(' ')).toContain('tier-1 failed');
+  });
   it('sends only successful full-text evidence through tier-1 and tier-2', async () => {
     const calls: Array<{ model: string; user: string }> = [];
     const completeFn = async (args: { model: string; messages: Array<{ content: string }> }) => {

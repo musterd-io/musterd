@@ -39,6 +39,8 @@ The workflow uses `ANTHROPIC_API_KEY`, `EXA_API_KEY`, `EXPLORING_API_KEY`, and t
 
 ## Failure, retry, and idempotency
 
+Implementation boundary: a model-omitted candidate remains pending; a failed tier-2 batch does not requeue successful tier-1 drops. The fresh cap excludes all pending IDs before selection. Full-text reports retain metadata-only source manifests for the digest. A workflow rerun loads the unreviewed draft branch's ledger first and uses `--resume-draft` to append retry findings while preserving earlier findings; ordinary local emission still refuses an existing same-week digest. The workflow rechecks review state immediately before publication.
+
 - Exa non-success status, missing/empty extracted text, missing ExN script, incomplete chunk processing, or a failed model call is a candidate failure. Record a concise failure category in the workflow summary; do not fall back to the feed's short description or audio summary as the article read.
 - Retry transient retrieval failures with bounded backoff, reusing the radar's existing timeout/retry policy where it applies. Permanent/unavailable sources remain unseen for the next run.
 - Serialize scheduled and manually dispatched runs. Use one weekly digest path and one weekly PR branch; a repeat run must not silently overwrite a digest that has already been reviewed. It may update the same open draft PR only while the PR has no review or approval and the weekly artifact remains unmerged. If it has been reviewed, report the retryable items and leave the reviewed artifact untouched for the next week.

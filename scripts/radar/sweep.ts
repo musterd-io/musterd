@@ -14,8 +14,9 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DEFAULT_PRINT_LIMIT, DEFAULT_SINCE_DAYS, radarDir, repoRoot, seenPath } from './config.ts';
-import { loadSeen, mergeCandidates, partitionBySeen } from './dedup.ts';
+import { loadSeen, mergeCandidates, partitionBySeen, partitionRadarCandidates } from './dedup.ts';
 import { sweepArxiv, sweepExn, sweepHf, type FetchFn } from './fetch.ts';
+import type { CandidateReadResult } from './fullText.ts';
 import { requireAnthropicKey } from './llm.ts';
 import { runTriage, type CompleteFn } from './triage.ts';
 import type { RadarCandidate, SweepReport, TriageReport } from './types.ts';
@@ -26,8 +27,14 @@ export interface SweepArgs {
   sinceDays: number;
   limit: number;
   triage: boolean;
+  /** Read full article and attached episode scripts before triage. */
+  fullText: boolean;
+  /** Maximum number of pending candidates selected for retry. */
+  retryLimit: number;
   /** M4: write the weekly digest + append triaged ids to seen.json. Requires triage. */
   emit: boolean;
+  /** Workflow-only opt-in after verifying an existing draft is unreviewed. */
+  resumeDraft: boolean;
   /** The scheduled form: run at most once per 7 days (a stamp file); otherwise exit at once. */
   weekly: boolean;
   /** Post the dry-sweep summary to the team as the `sweep` service seat (print-only without a token). */
@@ -40,19 +47,28 @@ export interface SweepArgs {
   promptBody?: string | undefined;
 }
 
+export interface SweepRunReport extends SweepReport {
+  readFailures: Array<{ candidateId: string; failure: string }>;
+}
+
 export function parseArgs(argv: string[]): SweepArgs {
   let json = false;
   let sinceDays = DEFAULT_SINCE_DAYS;
   let limit = DEFAULT_PRINT_LIMIT;
   let triage = false;
+  let fullText = false;
+  let retryLimit = 50;
   let emit = false;
+  let resumeDraft = false;
   let weekly = false;
   let post = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === '--json') json = true;
     else if (a === '--triage') triage = true;
+    else if (a === '--full-text') fullText = true;
     else if (a === '--emit') emit = true;
+    else if (a === '--resume-draft') resumeDraft = true;
     else if (a === '--weekly') weekly = true;
     else if (a === '--post') post = true;
     else if (a === '--since') {
@@ -64,6 +80,12 @@ export function parseArgs(argv: string[]): SweepArgs {
       const v = Number(argv[++i]);
       if (!Number.isFinite(v) || v < 1) throw new Error('--limit requires a positive integer');
       limit = Math.floor(v);
+    } else if (a === '--retry-limit') {
+      const v = Number(argv[++i]);
+      if (!Number.isFinite(v) || v < 1 || !Number.isInteger(v)) {
+        throw new Error('--retry-limit requires a positive integer');
+      }
+      retryLimit = v;
     } else if (a === '--help' || a === '-h') {
       printHelp();
       process.exit(0);
@@ -76,11 +98,13 @@ export function parseArgs(argv: string[]): SweepArgs {
   if (emit && !triage) {
     throw new Error('--emit requires --triage — a digest is a triage artifact');
   }
-  return { json, sinceDays, limit, triage, emit, weekly, post };
+  if (fullText && !triage) throw new Error('--full-text requires --triage');
+  if (resumeDraft && !emit) throw new Error('--resume-draft requires --emit');
+  return { json, sinceDays, limit, triage, fullText, retryLimit, emit, resumeDraft, weekly, post };
 }
 
 function printHelp(): void {
-  console.log(`Usage: pnpm radar:sweep [--json] [--since <days>] [--limit <n>] [--triage]
+  console.log(`Usage: pnpm radar:sweep [--json] [--since <days>] [--limit <n>] [--triage] [--full-text]
 
   Dry-sweep arXiv + HF Papers for multi-agent / human-agent research.
   Dedups against docs/research/radar/seen.json. Print-only (does not mark seen).
@@ -89,14 +113,17 @@ function printHelp(): void {
   --since <n>    lookback days (default ${DEFAULT_SINCE_DAYS})
   --limit <n>    max new candidates to print / feed into triage (default ${DEFAULT_PRINT_LIMIT})
   --triage       run tier-1 + tier-2 LLM triage (needs ANTHROPIC_API_KEY)
+  --full-text    read every complete article and attached episode script before triage
+  --retry-limit  maximum old pending candidates to retry (default 50)
   --emit         write docs/research/radar/<YYYY-WW>.md + mark triaged ids seen (requires --triage)
+  --resume-draft  append retry results to an existing unreviewed draft (requires --emit)
   --weekly       the scheduled form: run at most once per 7 days (stamp ~/.musterd/sweep/radar-sweep.last)
   --post         post the dry-sweep summary to the team as the sweep service seat (lane 01M3TAKHQ4)
   --dry-run      no-op (print-only without --emit)
 `);
 }
 
-export async function runSweep(args: SweepArgs): Promise<SweepReport> {
+export async function runSweep(args: SweepArgs): Promise<SweepRunReport> {
   const warnings: string[] = [];
   const fetchFn = args.fetchFn;
   const [arxiv, hf, exn] = await Promise.all([
@@ -111,14 +138,31 @@ export async function runSweep(args: SweepArgs): Promise<SweepReport> {
   const merged = mergeCandidates([arxiv.candidates, hf.candidates, exn.candidates]);
   const seen = loadSeen(args.seenFile ?? seenPath);
   const { fresh, alreadySeen } = partitionBySeen(merged, seen);
-  const truncated = fresh.length > args.limit;
-  const printed = fresh.slice(0, args.limit);
+  const selection = args.fullText
+    ? partitionRadarCandidates(fresh, seen, args.retryLimit, args.limit)
+    : undefined;
+  const printed = selection?.ready ?? fresh.slice(0, args.limit);
+  const truncated = selection?.truncated ?? fresh.length > args.limit;
 
   let triage: TriageReport | undefined;
+  let readResults: CandidateReadResult[] = [];
   if (args.triage) {
     const apiKey = args.apiKey ?? requireAnthropicKey();
+    if (args.fullText) {
+      const exaApiKey = process.env.EXA_API_KEY ?? '';
+      if (!exaApiKey.trim()) throw new Error('EXA_API_KEY is required for --full-text');
+      const { readCandidateFullText } = await import('./fullText.ts');
+      readResults = await readCandidatesWithLimit(printed, (candidate) =>
+        readCandidateFullText(candidate, {
+          exaApiKey,
+          ...(fetchFn ? { fetchFn } : {}),
+          ...(args.completeFn ? { completeFn: args.completeFn } : {}),
+        }),
+      );
+    }
     triage = await runTriage({
       candidates: printed,
+      ...(args.fullText ? { readResults } : {}),
       apiKey,
       fetchFn,
       completeFn: args.completeFn,
@@ -128,6 +172,22 @@ export async function runSweep(args: SweepArgs): Promise<SweepReport> {
   }
 
   return {
+    ...(args.fullText
+      ? {
+          fullTextReads: readResults.map((result) => ({
+            candidateId: result.candidateId,
+            status: result.status,
+            ...(result.status === 'failed' ? { failure: result.failure } : {}),
+            manifest: result.manifest,
+          })),
+          selection: {
+            freshTruncated:
+              fresh.filter((c) => !(seen.pending ?? []).some((p) => p.canonicalId === c.id))
+                .length > Math.min(50, args.limit),
+            pendingTruncated: (selection?.deferred.length ?? 0) > 0,
+          },
+        }
+      : {}),
     generated: new Date().toISOString(),
     since_days: args.sinceDays,
     candidates_fetched: merged.length,
@@ -137,8 +197,30 @@ export async function runSweep(args: SweepArgs): Promise<SweepReport> {
     truncated,
     new: printed,
     warnings,
+    readFailures: readResults.flatMap((result) =>
+      result.status === 'failed'
+        ? [{ candidateId: result.candidateId, failure: result.failure }]
+        : [],
+    ),
     ...(triage !== undefined ? { triage } : {}),
   };
+}
+
+async function readCandidatesWithLimit(
+  candidates: RadarCandidate[],
+  read: (candidate: RadarCandidate) => Promise<CandidateReadResult>,
+): Promise<CandidateReadResult[]> {
+  const results = new Array<CandidateReadResult>(candidates.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(3, candidates.length) }, async () => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= candidates.length) return;
+      results[index] = await read(candidates[index]!);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 function formatHuman(report: SweepReport): string {
@@ -270,7 +352,7 @@ async function main(): Promise<void> {
   if (args.weekly) markRan(now);
   if (args.emit) {
     const { emitDigest } = await import('./digest.ts');
-    const out = emitDigest(report, radarDir);
+    const out = emitDigest(report, radarDir, report.readFailures, args.resumeDraft);
     process.stdout.write(
       `digest ready: ${out.digestPath} (seen +${out.appended.arxiv} arxiv, +${out.appended.hf} hf, +${out.appended.exn} exn)\n`,
     );

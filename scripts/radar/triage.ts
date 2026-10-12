@@ -252,8 +252,8 @@ export async function runTriage(args: TriageArgs): Promise<TriageReport> {
       fetchFn: args.fetchFn,
     });
     tier1 = parseTier1(extractJson(reply.text), candidates);
-  } catch (err) {
-    warnings.push(`tier-1 failed: ${err instanceof Error ? err.message : String(err)}`);
+  } catch {
+    warnings.push('tier-1 failed: provider_or_response_error');
     return {
       prompt_version: PROMPT_VERSION,
       tier1_model: tier1Model,
@@ -273,6 +273,7 @@ export async function runTriage(args: TriageArgs): Promise<TriageReport> {
   const hitIds = new Set(tier1.map((h) => h.id));
   for (const c of candidates) {
     if (!hitIds.has(c.id)) {
+      warnings.push(`tier-1 incomplete: ${c.id}`);
       tier1.push({ id: c.id, keep: false, score: 0, reason: 'tier-1 omitted' });
     }
   }
@@ -313,8 +314,12 @@ export async function runTriage(args: TriageArgs): Promise<TriageReport> {
       fetchFn: args.fetchFn,
     });
     tier2 = parseTier2(extractJson(reply.text), shortlist, floor);
-  } catch (err) {
-    warnings.push(`tier-2 failed: ${err instanceof Error ? err.message : String(err)}`);
+  } catch {
+    warnings.push('tier-2 failed: provider_or_response_error');
+  }
+  const tier2Ids = new Set(tier2.map(({ id }) => id));
+  for (const candidate of shortlist) {
+    if (!tier2Ids.has(candidate.id)) warnings.push(`tier-2 incomplete: ${candidate.id}`);
   }
 
   const surfaced = tier2.filter((t) => t.verdict !== 'ignore').sort((a, b) => b.score - a.score);

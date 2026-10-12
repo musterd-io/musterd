@@ -1,3 +1,5 @@
+import type { FullTextManifest } from './fullText.ts';
+
 /** Normalized candidate from arXiv, Hugging Face Papers, or the Exploring Next feed (exn). */
 export type RadarSource = 'arxiv' | 'hf' | 'exn';
 
@@ -87,6 +89,14 @@ export interface TriageReport {
 }
 
 export interface SweepReport {
+  /** Source bodies and model evidence are excluded from this publication metadata. */
+  fullTextReads?: Array<{
+    candidateId: string;
+    status: 'complete' | 'failed';
+    failure?: string;
+    manifest: FullTextManifest[];
+  }>;
+  selection?: { freshTruncated: boolean; pendingTruncated: boolean };
   generated: string;
   since_days: number;
   candidates_fetched: number;

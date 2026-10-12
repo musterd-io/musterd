@@ -2,16 +2,32 @@
  * Radar M4 — the emit rail: weekly digest + seen-ledger append (research-radar-plan §4.5, §5).
  *
  * A digest is a TRIAGE artifact — emitting an untriaged sweep is refused, because a bare candidate
- * list has no verdicts for a human to act on. The seen ledger gains EVERY candidate that entered
- * triage, not only the surfaced ones the plan first sketched: marking only surfaced ids would
- * re-pay tier-1 for the same ignores every single week (the fetch window overlaps the cadence).
- * A same-week re-emit refuses rather than overwriting — the first digest is data.
+ * list has no verdicts for a human to act on. Successfully triaged candidates enter the seen
+ * ledger, including ignores, so tier-1 is not repaid every week. A source-read or triage failure
+ * stays in the metadata-only pending queue for retry. A same-week re-emit refuses rather than
+ * overwriting — the first digest is data.
  */
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { loadSeen } from './dedup.ts';
 import { isoWeekString } from './fetch.ts';
-import type { SweepReport, Tier2Result, TriageVerdict } from './types.ts';
+import type {
+  PendingCandidate,
+  RadarCandidate,
+  SeenLedger,
+  SweepReport,
+  Tier2Result,
+  TriageVerdict,
+} from './types.ts';
 
 /** ISO-8601 week of an ISO date/timestamp string, e.g. 2026-W35. */
 export function isoWeek(dateISO: string): string {
@@ -20,7 +36,7 @@ export function isoWeek(dateISO: string): string {
 
 const VERDICT_ORDER: readonly TriageVerdict[] = ['consider-ADR', 'record-as-evidence'];
 
-export function renderDigest(report: SweepReport): string {
+export function renderDigest(report: SweepReport, readFailures: RadarReadFailure[] = []): string {
   const t = report.triage;
   if (t === undefined) {
     throw new Error('cannot emit a digest without triage — run with --triage');
@@ -41,9 +57,28 @@ export function renderDigest(report: SweepReport): string {
     `# Research radar — ${week}`,
     '',
     `Swept the last ${report.since_days} days: ${report.candidates_fetched} fetched, ` +
-      `${report.already_seen} already seen, ${report.new_count} new, ${report.printed} triaged.`,
+      `${report.already_seen} already seen, ${report.new_count} new, ${report.printed} attempted.`,
     '',
   ];
+  if (report.fullTextReads) {
+    lines.push(
+      '## Full-text reads',
+      '',
+      `${report.fullTextReads.filter((r) => r.status === 'complete').length} complete reads; ${readFailures.length} deferred source reads.`,
+      '',
+    );
+    for (const read of report.fullTextReads) {
+      lines.push(
+        `- \`${read.candidateId}\`: ${read.status}${read.failure ? ` (${read.failure})` : ''}`,
+      );
+      for (const source of read.manifest) {
+        lines.push(
+          `  - [${source.source}](${source.url}): ${source.characters} characters, ${source.chunks} chunks, ${source.complete ? 'complete' : 'incomplete'}`,
+        );
+      }
+    }
+    lines.push('');
+  }
   for (const verdict of VERDICT_ORDER) {
     const entries = t.surfaced.filter((r) => r.verdict === verdict);
     if (entries.length === 0) continue;
@@ -51,10 +86,13 @@ export function renderDigest(report: SweepReport): string {
     for (const r of entries) lines.push(...renderEntry(r));
   }
   if (t.surfaced.length === 0) {
-    lines.push('_No papers surfaced this week — everything scored below the relevance floor._', '');
+    lines.push(
+      '_No papers surfaced this week. See read status and triage warnings for incomplete attempts._',
+      '',
+    );
   }
-  const dropped = t.tier1.filter((h) => !h.keep).length;
-  const ignored = t.shortlisted - t.surfaced.length;
+  const dropped = t.tier1.filter((h) => !h.keep && h.reason !== 'tier-1 omitted').length;
+  const ignored = t.tier2.filter((h) => h.verdict === 'ignore').length;
   lines.push(
     `— tier-1 dropped ${dropped}, tier-2 ignored ${ignored}, relevance floor ${t.relevance_floor}.`,
   );
@@ -76,27 +114,166 @@ function renderEntry(r: Tier2Result): string[] {
 export interface EmitResult {
   digestPath: string;
   appended: { arxiv: number; hf: number; exn: number };
+  pending: number;
 }
 
-/** Write the weekly digest into `radarDir` and append every triaged candidate to its seen.json. */
-export function emitDigest(report: SweepReport, radarDir: string): EmitResult {
-  const md = renderDigest(report);
+export interface RadarReadFailure {
+  candidateId: string;
+  failure: string;
+}
+
+/** Stage and validate both artifacts, then replace them as one recoverable filesystem operation. */
+export function commitRadarArtifacts(
+  digestPath: string,
+  seenPath: string,
+  digest: string,
+  ledger: SeenLedger,
+  replace: typeof renameSync = renameSync,
+): void {
+  const suffix = `${process.pid}-${randomUUID()}`;
+  const digestTemp = `${digestPath}.${suffix}.tmp`;
+  const seenTemp = `${seenPath}.${suffix}.tmp`;
+  const digestBackup = `${digestPath}.${suffix}.bak`;
+  const seenBackup = `${seenPath}.${suffix}.bak`;
+  const hadDigest = existsSync(digestPath);
+  const hadSeen = existsSync(seenPath);
+  let digestReplaced = false;
+  let seenReplaced = false;
+
+  mkdirSync(join(digestPath, '..'), { recursive: true });
+  mkdirSync(join(seenPath, '..'), { recursive: true });
+  try {
+    writeFileSync(digestTemp, digest, { flag: 'wx' });
+    const normalized: SeenLedger = {
+      arxiv: [...ledger.arxiv],
+      hf: [...ledger.hf],
+      exn: [...ledger.exn],
+      pending: [...(ledger.pending ?? [])],
+    };
+    writeFileSync(seenTemp, `${JSON.stringify(normalized, null, 2)}\n`, { flag: 'wx' });
+    if (readFileSync(digestTemp, 'utf8') !== digest)
+      throw new Error('staged digest validation failed');
+    const stagedLedger = JSON.parse(readFileSync(seenTemp, 'utf8')) as SeenLedger;
+    if (
+      !Array.isArray(stagedLedger.arxiv) ||
+      !Array.isArray(stagedLedger.hf) ||
+      !Array.isArray(stagedLedger.exn)
+    ) {
+      throw new Error('staged seen ledger validation failed');
+    }
+    if (hadDigest) copyFileSync(digestPath, digestBackup);
+    if (hadSeen) copyFileSync(seenPath, seenBackup);
+
+    replace(digestTemp, digestPath);
+    digestReplaced = true;
+    replace(seenTemp, seenPath);
+    seenReplaced = true;
+  } catch (error) {
+    if (digestReplaced) {
+      if (hadDigest) copyFileSync(digestBackup, digestPath);
+      else if (existsSync(digestPath)) unlinkSync(digestPath);
+    }
+    if (seenReplaced) {
+      if (hadSeen) copyFileSync(seenBackup, seenPath);
+      else if (existsSync(seenPath)) unlinkSync(seenPath);
+    }
+    throw error;
+  } finally {
+    for (const path of [digestTemp, seenTemp, digestBackup, seenBackup]) {
+      if (existsSync(path)) unlinkSync(path);
+    }
+  }
+}
+
+function sourceIds(candidate: RadarCandidate): PendingCandidate['sourceIds'] {
+  const seen = new Set<string>();
+  return [
+    { source: candidate.source, id: candidate.id },
+    ...candidate.relatedExn.map(({ episodeId }) => ({ source: 'exn' as const, id: episodeId })),
+  ].filter(({ source, id }) => {
+    const key = `${source}:${id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Write a weekly digest and reconcile successful IDs and retryable full-text failures. */
+export function emitDigest(
+  report: SweepReport,
+  radarDir: string,
+  readFailures: RadarReadFailure[] = [],
+  resumeDraft = false,
+): EmitResult {
+  let md = renderDigest(report, readFailures);
   mkdirSync(radarDir, { recursive: true });
   const digestPath = join(radarDir, `${isoWeek(report.generated)}.md`);
-  if (existsSync(digestPath)) {
+  if (existsSync(digestPath) && !resumeDraft) {
     throw new Error(`digest already exists for this week: ${digestPath} — not overwriting`);
   }
-  writeFileSync(digestPath, md);
-
-  const seenFile = join(radarDir, 'seen.json');
-  const seen = existsSync(seenFile) ? loadSeen(seenFile) : { arxiv: [], hf: [], exn: [] };
-  const appended = { arxiv: 0, hf: 0, exn: 0 };
-  for (const c of report.new) {
-    const ledger = seen[c.source];
-    if (ledger.includes(c.id)) continue;
-    ledger.push(c.id);
-    appended[c.source]++;
+  if (existsSync(digestPath)) {
+    md = `${readFileSync(digestPath, 'utf8')}\n## Retry attempt ${report.generated}\n\n${md.slice(md.indexOf('# Research radar'))}`;
   }
-  writeFileSync(seenFile, `${JSON.stringify(seen, null, 2)}\n`);
-  return { digestPath, appended };
+  const seenFile = join(radarDir, 'seen.json');
+  const seen: SeenLedger = existsSync(seenFile)
+    ? loadSeen(seenFile)
+    : { arxiv: [], hf: [], exn: [], pending: [] };
+  const pending = [...(seen.pending ?? [])];
+  const byPendingId = new Map(pending.map((item) => [item.canonicalId, item]));
+  const failureById = new Map(
+    readFailures.map(({ candidateId, failure }) => [candidateId, failure]),
+  );
+  const triage = report.triage!;
+  const shortlistedIds = new Set(
+    triage.tier1
+      .filter((h) => h.keep)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, triage.shortlisted)
+      .map((h) => h.id),
+  );
+  const tier2Ids = new Set([...triage.tier2, ...triage.surfaced].map((h) => h.id));
+  const successfulIds = new Set(
+    triage.tier1
+      .filter(
+        (h) => h.reason !== 'tier-1 omitted' && (!shortlistedIds.has(h.id) || tier2Ids.has(h.id)),
+      )
+      .map((h) => h.id),
+  );
+  const appended = { arxiv: 0, hf: 0, exn: 0 };
+  const generatedDate = report.generated.slice(0, 10);
+
+  for (const c of report.new) {
+    const failure = failureById.get(c.id);
+    if (failure || !successfulIds.has(c.id)) {
+      const previous = byPendingId.get(c.id);
+      const next: PendingCandidate = {
+        sourceIds: sourceIds(c),
+        canonicalId: c.id,
+        title: c.title,
+        url: c.url,
+        published: c.published,
+        episodeIds: c.relatedExn.map(({ episodeId }) => episodeId),
+        firstAttempt: previous?.firstAttempt ?? generatedDate,
+        lastAttempt: generatedDate,
+        failure: failure ?? 'triage_incomplete',
+      };
+      const index = pending.findIndex((item) => item.canonicalId === c.id);
+      if (index >= 0) pending[index] = next;
+      else pending.push(next);
+      byPendingId.set(c.id, next);
+      continue;
+    }
+
+    for (const sourceId of sourceIds(c)) {
+      const ids = seen[sourceId.source];
+      if (ids.includes(sourceId.id)) continue;
+      ids.push(sourceId.id);
+      appended[sourceId.source]++;
+    }
+    const index = pending.findIndex((item) => item.canonicalId === c.id);
+    if (index >= 0) pending.splice(index, 1);
+  }
+  seen.pending = pending;
+  commitRadarArtifacts(digestPath, seenFile, md, seen);
+  return { digestPath, appended, pending: pending.length };
 }

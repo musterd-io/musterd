@@ -202,7 +202,10 @@ describe('runSweep (mocked fetch)', () => {
       sinceDays: 14,
       limit: 3,
       triage: true,
+      fullText: false,
+      retryLimit: 50,
       emit: false,
+      resumeDraft: false,
       weekly: false,
       post: false,
     });
