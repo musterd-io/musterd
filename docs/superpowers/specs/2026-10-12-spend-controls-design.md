@@ -8,9 +8,12 @@ on measured cost; approvals for costly acts is a named follow-up, not this lane.
 
 ## Outcome
 
-An admin sets one number — the team's spend cap in USD — and the team stops spending past it.
-Not a dashboard, not an alert: a bound. The trust the speaker described becomes something an
-admin can grant and the team can see: this team may burn this much, and no more.
+An admin sets one number — the team's spend cap in USD — and past it, the team denies new
+agent actuation: once observed priced model cost reaches the rolling cap, agents stop getting
+new spend and humans steer. That is the bound, stated with its limits: cost reported late
+can overshoot before the total catches up, and unpriced or external spend is invisible to
+it. Not a dashboard, not an alert — a bound on what the team can see, and the trust the
+speaker described becomes something an admin can grant and the team can read.
 
 ## Decisions (nick, 2026-10-12, via the seed steer)
 
