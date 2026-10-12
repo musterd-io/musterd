@@ -142,7 +142,7 @@ export async function fetchArticleText(
           'content-type': 'application/json',
           accept: 'application/json',
         },
-        body: JSON.stringify({ urls: [target], text: true }),
+        body: JSON.stringify({ urls: [target], text: true, maxAgeHours: 0 }),
       });
     } catch (error) {
       clearTimeout(timer);
