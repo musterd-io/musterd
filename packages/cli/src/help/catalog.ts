@@ -572,7 +572,8 @@ export const CATALOG: readonly CommandEntry[] = [
   },
   {
     name: 'import',
-    signature: '<file.csv|file.jsonl>  |  save <id>  |  list  |  sheet [path]',
+    signature:
+      '<file.csv|file.jsonl>  |  github [owner/repo]  |  save <id>  |  list  |  sheet [path]',
     summary: 'bring existing work in: preview a file of goals and lanes, then save it',
     group: 'work',
     detail:
@@ -583,10 +584,14 @@ export const CATALOG: readonly CommandEntry[] = [
       'Columns: kind (goal|lane), key, title, detail, story, goal, depends_on (;-separated), stakes, source_ref.\n' +
       '`import sheet` writes a blank one to fill in by hand: the header and an example goal and lane;\n' +
       'a row still matching an example is flagged at preview. It never overwrites a file.\n' +
-      'The musterd-import skill writes this file for you from the repo, an issue tracker, or a plan.',
+      'The musterd-import skill writes this file for you from the repo, an issue tracker, or a plan.\n' +
+      '`import github [owner/repo] [--limit N]` reads the open issues itself, with the token `gh`\n' +
+      'holds (else GITHUB_TOKEN), and stages the same preview; run it again to re-sync: renamed\n' +
+      'issues retitle their lanes, closed ones abandon an unclaimed lane. It never writes to GitHub.',
     examples: [
       'musterd import sheet',
       'musterd import backlog.csv',
+      'musterd import github acme/app',
       'musterd import save 20261010-130509-a1f2',
       'musterd import list',
     ],

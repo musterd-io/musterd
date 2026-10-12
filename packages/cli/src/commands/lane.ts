@@ -14,6 +14,7 @@ import { resolveProject } from '@musterd/protocol/project';
 import { flagStr, type Parsed } from '../args.js';
 import type { HttpClient } from '../client.js';
 import { CliError } from '../errors.js';
+import { plainTerminalText } from '../render/plainText.js';
 import { theme } from '../render/theme.js';
 import { resolve } from './helpers.js';
 
@@ -108,22 +109,6 @@ export function renderLane(l: Lane): string {
       )
     : '';
   return `${theme.meta(l.id)} ${state} "${l.title}" — ${owner} · ${l.project}${goal}${src}${surface}${deps}${branch}${parked}`;
-}
-
-/** Drop C0/C1 control characters and any ESC-introduced sequence (CSI, OSC, …) from text that
- *  originated with a teammate before it reaches the terminal. Keeps the visible characters only. */
-export function plainTerminalText(s: string): string {
-  /* eslint-disable no-control-regex -- the control characters ARE the subject here */
-  return (
-    s
-      // ESC + CSI/OSC/other: `ESC [ … final`, `ESC ] … BEL/ST`, `ESC <single>`
-      .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
-      .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/g, '')
-      .replace(/\u001b[\x20-\x7e]/g, '')
-      // C0 (except nothing — a one-line field has no legitimate control), DEL, C1
-      .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
-  );
-  /* eslint-enable no-control-regex */
 }
 
 function renderWarnings(warnings: LaneWarning[]): void {

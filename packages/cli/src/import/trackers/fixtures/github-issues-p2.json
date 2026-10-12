@@ -1,0 +1,24 @@
+[
+  {
+    "url": "https://api.github.com/repos/acme/app/issues/15",
+    "repository_url": "https://api.github.com/repos/acme/app",
+    "html_url": "https://github.com/acme/app/issues/15",
+    "number": 15,
+    "title": "Write the install guide",
+    "state": "open",
+    "body": null,
+    "labels": [{ "name": "docs" }, { "name": "priority:low" }],
+    "milestone": { "number": 3, "title": "v1.0 — First release" }
+  },
+  {
+    "url": "https://api.github.com/repos/acme/app/issues/16",
+    "repository_url": "https://api.github.com/repos/acme/app",
+    "html_url": "https://github.com/acme/app/issues/16",
+    "number": 16,
+    "title": "Dark mode",
+    "state": "open",
+    "body": "",
+    "labels": [],
+    "milestone": null
+  }
+]

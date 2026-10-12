@@ -1,7 +1,8 @@
-import type { DeclareGoal, OpenLane } from '@musterd/protocol';
+import type { DeclareGoal, OpenLane, UpdateLane } from '@musterd/protocol';
 import { CliError } from '../errors.js';
 import type { LaneDep } from './check.js';
-import { STAGE_TTL_MS, type ImportStage } from './stage.js';
+import { rerunCommand, STAGE_TTL_MS, type ImportStage } from './stage.js';
+import type { SyncAction } from './trackers/sync.js';
 
 /**
  * Step 2 of `musterd import` (spec 2026-10-10 §"Step 2"): goals, then lanes, in the order the stage
@@ -13,31 +14,37 @@ export interface SavePort {
   goals(team: string): Promise<{ goals: { id: string }[] }>;
   declareGoal(team: string, body: DeclareGoal): Promise<{ id: string }>;
   openLane(team: string, body: OpenLane): Promise<{ lane: { id: string } }>;
-  /** ADR 561: the lanes carrying one issue ref — read when an open is refused because one does. */
+  /**
+   * ADR 561: the lanes carrying one issue ref — read when an open is refused because one does, and
+   * just before a re-sync renames or abandons a lane.
+   */
   laneBoard(
     team: string,
-    q: { source_ref: string },
-  ): Promise<{ lanes: { id: string; state: string }[] }>;
+    q: { source_ref: string; history?: boolean },
+  ): Promise<{ lanes: { id: string; state: string; owner_seat: string | null }[] }>;
+  updateLane(team: string, id: string, patch: UpdateLane): Promise<unknown>;
 }
 
 export interface SaveResult {
   goals: { ref: string; id: string; resumed: boolean; linked?: boolean }[];
   /** `adopted`: the ref was already on the board (a 409 on open), so that lane was recorded instead. */
   lanes: { ref: string; id: string; title: string; resumed: boolean; adopted?: boolean }[];
+  /** A tracker re-sync's actions on board lanes, in the order they ran (spec 2026-10-11 §3). */
+  sync: { kind: SyncAction['kind']; lane_id: string; ok: boolean; note?: string }[];
 }
 
 export function refusal(stage: ImportStage, team: string, now: number): string | null {
   const errors = stage.diagnostics.filter((d) => d.level === 'error').length;
   if (errors > 0)
-    return `${String(errors)} error${errors === 1 ? '' : 's'} — fix the file and re-run \`musterd import <file>\``;
+    return `${String(errors)} error${errors === 1 ? '' : 's'} — fix them and re-run \`${rerunCommand(stage)}\``;
   if (stage.saved_at !== null) return `already saved ${new Date(stage.saved_at).toISOString()}`;
   if (stage.team !== team)
-    return `staged for team "${stage.team}", this workspace is "${team}" — re-run \`musterd import <file>\` here`;
+    return `staged for team "${stage.team}", this workspace is "${team}" — re-run \`${rerunCommand(stage)}\` here`;
   // A save that already created something is finished, never re-imported: a fresh stage would not
   // know what this one created and would open it all again.
   const started = Object.keys(stage.created).length > 0;
   if (!started && now - stage.created_at > STAGE_TTL_MS)
-    return 'older than 24 hours — re-run `musterd import <file>` to check it against the board again';
+    return `older than 24 hours — re-run \`${rerunCommand(stage)}\` to check it against the board again`;
   return null;
 }
 
@@ -52,10 +59,26 @@ export async function saveStage(
     created: { ...input.created },
     linked_goals: [...input.linked_goals],
   };
-  const result: SaveResult = { goals: [], lanes: [] };
-  const total = stage.goals.length + stage.lanes.length;
+  const result: SaveResult = { goals: [], lanes: [], sync: [] };
+  const actions = stage.sync?.actions ?? [];
+  const total = stage.goals.length + stage.lanes.length + actions.length;
+  const runSync = async (kind: SyncAction['kind']) => {
+    for (const a of actions.filter((x) => x.kind === kind)) {
+      const key = `sync:${a.kind}:${a.lane_id}`;
+      if (stage.created[key]) {
+        result.sync.push({ kind, lane_id: a.lane_id, ok: true, note: 'done by an earlier run' });
+        continue;
+      }
+      const row = await applySync(opts.port, opts.team, a);
+      stage.created[key] = a.lane_id;
+      opts.persist(stage);
+      result.sync.push({ kind, lane_id: a.lane_id, ...row });
+    }
+  };
 
   try {
+    // Adoptions first: a legacy lane gets its `source_ref` before anything else reads by it.
+    await runSync('adopt');
     const onBoard = new Set((await opts.port.goals(opts.team)).goals.map((g) => g.id));
     for (const g of stage.goals) {
       const have = stage.created[g.ref];
@@ -102,6 +125,8 @@ export async function saveStage(
         ...(opened.adopted ? { adopted: true } : {}),
       });
     }
+    await runSync('rename');
+    await runSync('abandon');
   } catch (err) {
     const done = Object.keys(stage.created).length;
     const cause = err instanceof Error ? err.message : String(err);
@@ -116,6 +141,42 @@ export async function saveStage(
   stage.saved_at = opts.now();
   opts.persist(stage);
   return result;
+}
+
+/**
+ * One re-sync action (spec 2026-10-11 §3). A rename or abandon reads the lane again first: the board
+ * may have moved since the preview, and a lane someone claimed since is never abandoned (review
+ * focus 5). A lane already abandoned is the outcome asked for, so it counts as done.
+ */
+async function applySync(
+  port: SavePort,
+  team: string,
+  a: SyncAction,
+): Promise<{ ok: boolean; note?: string }> {
+  if (a.kind === 'adopt') {
+    try {
+      await port.updateLane(team, a.lane_id, { source_ref: a.ref });
+      return { ok: true };
+    } catch (err) {
+      if (err instanceof CliError && err.code === 'conflict')
+        return { ok: false, note: `another live lane already holds ${a.ref} — left alone` };
+      throw err;
+    }
+  }
+  const { lanes } = await port.laneBoard(team, { source_ref: a.ref, history: true });
+  const lane = lanes.find((l) => l.id === a.lane_id);
+  if (!lane) return { ok: false, note: 'no longer on the board — left alone' };
+  if (a.kind === 'rename') {
+    if (lane.state === 'done' || lane.state === 'abandoned')
+      return { ok: false, note: `${lane.state} since the preview — left alone` };
+    await port.updateLane(team, a.lane_id, { title: a.title! });
+    return { ok: true };
+  }
+  if (lane.state === 'abandoned') return { ok: true, note: 'already abandoned' };
+  if (lane.owner_seat !== null || (lane.state !== 'open' && lane.state !== 'parked'))
+    return { ok: false, note: 'claimed since the preview — left alone' };
+  await port.updateLane(team, a.lane_id, { state: 'abandoned', abandon_reason: a.reason! });
+  return { ok: true };
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { DeclareGoal, OpenLane } from '@musterd/protocol';
+import type { DeclareGoal, OpenLane, UpdateLane } from '@musterd/protocol';
 import { describe, expect, it, vi } from 'vitest';
 import { CliError } from '../errors.js';
 import { refusal, saveStage, type SavePort } from './save.js';
@@ -37,7 +37,10 @@ function fakePort(failOnLane?: string) {
   let n = 0;
   const port: SavePort = {
     goals: vi.fn(async () => ({ goals: [] as { id: string }[] })),
-    laneBoard: vi.fn(async () => ({ lanes: [] as { id: string; state: string }[] })),
+    laneBoard: vi.fn(async () => ({
+      lanes: [] as { id: string; state: string; owner_seat: string | null }[],
+    })),
+    updateLane: vi.fn(async () => ({})),
     declareGoal: vi.fn(async (_t: string, body: DeclareGoal) => ({ id: body.id })),
     openLane: vi.fn(async (_t: string, body: OpenLane) => {
       if (body.title === failOnLane) throw new Error('daemon restarted');
@@ -241,5 +244,145 @@ describe('saveStage — source_ref (ADR 561)', () => {
     await expect(
       saveStage(stage, { team: 'dawn', port, persist: () => {}, now: () => NOW }),
     ).rejects.toThrow(/stopped after 1 of 3/);
+  });
+});
+
+describe('saveStage — a tracker sync (spec 2026-10-11 §3)', () => {
+  const syncStage = (): ImportStage => ({
+    ...base(),
+    source: { path: 'github acme/app', sha256: 'ab', format: 'github' },
+    goals: [{ ref: 'goal:g', row: 1, id: 'g', title: 'G', depends_on: [] }],
+    lanes: [
+      {
+        ref: 'lane@2',
+        row: 2,
+        title: 'Fresh',
+        goal_id: 'g',
+        depends_on: [],
+        source_ref: 'acme/app#5',
+      },
+    ],
+    sync: {
+      actions: [
+        { kind: 'adopt', lane_id: 'D1', ref: 'acme/app#1' },
+        { kind: 'rename', lane_id: 'R1', ref: 'acme/app#2', from: 'Old', title: 'New' },
+        {
+          kind: 'abandon',
+          lane_id: 'A1',
+          ref: 'acme/app#3',
+          from: 'Gone',
+          reason: 'closed in GitHub (acme/app#3)',
+        },
+        {
+          kind: 'abandon',
+          lane_id: 'A2',
+          ref: 'acme/app#4',
+          from: 'Taken',
+          reason: 'closed in GitHub (acme/app#4)',
+        },
+        {
+          kind: 'abandon',
+          lane_id: 'A3',
+          ref: 'acme/app#6',
+          from: 'Done',
+          reason: 'closed in GitHub (acme/app#6)',
+        },
+      ],
+      unchanged: 2,
+    },
+  });
+  type Live = { id: string; state: string; owner_seat: string | null };
+  const board: Record<string, Live> = {
+    'acme/app#2': { id: 'R1', state: 'claimed', owner_seat: 'ada' },
+    'acme/app#3': { id: 'A1', state: 'open', owner_seat: null },
+    'acme/app#4': { id: 'A2', state: 'claimed', owner_seat: 'ada' },
+    'acme/app#6': { id: 'A3', state: 'abandoned', owner_seat: null },
+  };
+  function syncPort() {
+    const calls: string[] = [];
+    const port = fakePort();
+    port.declareGoal = vi.fn(async (_t: string, body: DeclareGoal) => {
+      calls.push(`goal ${body.id}`);
+      return { id: body.id };
+    });
+    port.openLane = vi.fn(async (_t: string, body: OpenLane) => {
+      calls.push(`open ${body.title}`);
+      return { lane: { id: 'L-NEW' } };
+    });
+    port.updateLane = vi.fn(async (_t: string, id: string, patch: UpdateLane) => {
+      calls.push(`update ${id} ${JSON.stringify(patch)}`);
+      return {};
+    });
+    port.laneBoard = vi.fn(async (_t: string, q: { source_ref: string }) => ({
+      lanes: board[q.source_ref] ? [board[q.source_ref]!] : [],
+    }));
+    return { port, calls };
+  }
+
+  it('adopts, then goals, new lanes, renames, abandons — re-reading each lane first', async () => {
+    const { port, calls } = syncPort();
+    const r = await saveStage(syncStage(), {
+      team: 'dawn',
+      port,
+      persist: () => {},
+      now: () => NOW,
+    });
+    expect(calls).toEqual([
+      'update D1 {"source_ref":"acme/app#1"}',
+      'goal g',
+      'open Fresh',
+      'update R1 {"title":"New"}',
+      'update A1 {"state":"abandoned","abandon_reason":"closed in GitHub (acme/app#3)"}',
+    ]);
+    expect(r.sync).toEqual([
+      { kind: 'adopt', lane_id: 'D1', ok: true },
+      { kind: 'rename', lane_id: 'R1', ok: true },
+      { kind: 'abandon', lane_id: 'A1', ok: true },
+      { kind: 'abandon', lane_id: 'A2', ok: false, note: 'claimed since the preview — left alone' },
+      { kind: 'abandon', lane_id: 'A3', ok: true, note: 'already abandoned' },
+    ]);
+  });
+
+  it('records each action as it completes, so a re-run skips it', async () => {
+    const { port } = syncPort();
+    let calls = 0;
+    port.updateLane = vi.fn(async (_t: string, id: string) => {
+      calls += 1;
+      if (id === 'A1' && calls < 4) throw new Error('daemon restarted');
+      return {};
+    });
+    let saved: ImportStage | undefined;
+    await expect(
+      saveStage(syncStage(), {
+        team: 'dawn',
+        port,
+        persist: (s) => (saved = structuredClone(s)),
+        now: () => NOW,
+      }),
+    ).rejects.toThrow(/stopped after/);
+    expect(saved!.created).toMatchObject({ 'sync:adopt:D1': 'D1', 'sync:rename:R1': 'R1' });
+    const again = await saveStage(saved!, {
+      team: 'dawn',
+      port,
+      persist: () => {},
+      now: () => NOW,
+    });
+    expect(again.sync.slice(0, 2)).toEqual([
+      { kind: 'adopt', lane_id: 'D1', ok: true, note: 'done by an earlier run' },
+      { kind: 'rename', lane_id: 'R1', ok: true, note: 'done by an earlier run' },
+    ]);
+    expect(again.sync[2]).toEqual({ kind: 'abandon', lane_id: 'A1', ok: true });
+  });
+
+  it('a lane gone from the board is not renamed or abandoned', async () => {
+    const { port } = syncPort();
+    port.laneBoard = vi.fn(async () => ({ lanes: [] }));
+    const st = syncStage();
+    st.sync!.actions = st.sync!.actions.filter((a) => a.kind !== 'adopt');
+    const r = await saveStage(st, { team: 'dawn', port, persist: () => {}, now: () => NOW });
+    expect(r.sync.every((x) => !x.ok && x.note === 'no longer on the board — left alone')).toBe(
+      true,
+    );
+    expect(port.updateLane).not.toHaveBeenCalled();
   });
 });

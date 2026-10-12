@@ -18,6 +18,8 @@ import {
   readStage,
   writeStage,
 } from '../import/stage.js';
+import { githubSource, githubToken, repoFromRemote } from '../import/trackers/github.js';
+import { runTrackerImport } from '../import/trackers/run.js';
 import { findWorkspaceDir, resolve } from './helpers.js';
 
 const USAGE =
@@ -25,7 +27,10 @@ const USAGE =
   '  musterd import <file.csv|file.jsonl>   check against the board, preview, and stage (creates nothing)\n' +
   '  musterd import save <id>               create the staged goals and lanes (re-run resumes)\n' +
   '  musterd import list                    staged imports in this workspace\n' +
-  '  musterd import sheet [path]            a blank sheet to fill in by hand (never overwrites)';
+  '  musterd import sheet [path]            a blank sheet to fill in by hand (never overwrites)\n' +
+  '  musterd import github [owner/repo] [--limit N]\n' +
+  '                                         open issues from GitHub (gh auth token, or GITHUB_TOKEN);\n' +
+  '                                         run it again to re-sync — reads only, writes nothing back';
 
 /** `musterd import` (spec 2026-10-10 "bring work in"): two steps — preview+stage, then save. */
 export async function importCommand(parsed: Parsed): Promise<number> {
@@ -73,6 +78,28 @@ export async function importCommand(parsed: Parsed): Promise<number> {
     return 0;
   }
 
+  if (first === 'github') {
+    const own = ownRepo();
+    const repo = second ?? repoFromRemote();
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo))
+      throw new CliError(`"${repo}" is not owner/repo — e.g. musterd import github acme/app`, 2);
+    // Credentials before anything else: a refused or missing token is the fix to print first.
+    const source = githubSource({
+      repo,
+      token: githubToken(),
+      ...(process.env['MUSTERD_GITHUB_API'] ? { apiBase: process.env['MUSTERD_GITHUB_API'] } : {}),
+    });
+    return runTrackerImport(source, {
+      ws,
+      team,
+      http,
+      project: resolveProject({ explicit: flagStr(parsed.flags, 'project') }),
+      rerun: `github ${repo}`,
+      legacyGithub: own?.toLowerCase() === repo.toLowerCase(),
+      ...limitFlag(parsed),
+    });
+  }
+
   const path = resolvePath(first);
   let text: string;
   try {
@@ -103,6 +130,24 @@ export async function importCommand(parsed: Parsed): Promise<number> {
   );
   process.stdout.write(renderPreview(stage) + '\n');
   return stage.diagnostics.some((d) => d.level === 'error') ? 1 : 0;
+}
+
+/** This workspace's own GitHub repo, or null — phase 1's `github#N` refs can only mean this one. */
+function ownRepo(): string | null {
+  try {
+    return repoFromRemote();
+  } catch {
+    return null;
+  }
+}
+
+function limitFlag(parsed: Parsed): { limit?: number } {
+  const raw = flagStr(parsed.flags, 'limit');
+  if (raw === undefined) return {};
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1)
+    throw new CliError(`--limit wants a whole number, got "${raw}"`, 2);
+  return { limit: n };
 }
 
 /** The team's /live viewer, served by the daemon on its own origin (ADR 132). */

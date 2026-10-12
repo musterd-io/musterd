@@ -1,4 +1,6 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer as createHttpServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer, openDb, type RunningServer } from '@musterd/server';
@@ -159,5 +161,120 @@ describe('import command', () => {
     // the imports folder ignores itself before anything else can fail, so a draft the skill
     // wrote there is never committed (review finding)
     expect(readFileSync(join(dir, '.musterd', 'imports', '.gitignore'), 'utf8')).toBe('*\n');
+  });
+
+  describe('import github (spec 2026-10-11)', () => {
+    type Issue = {
+      number: number;
+      title: string;
+      state: 'open' | 'closed';
+      milestone: { number: number; title: string } | null;
+    };
+    let issues: Issue[];
+    let gh: Server;
+    const TOKEN = 'ghp_TESTTOKEN_never_printed';
+    const saved = { path: process.env['PATH'] };
+
+    beforeEach(async () => {
+      issues = [
+        { number: 1, title: 'Login fails', state: 'open', milestone: { number: 1, title: 'v1' } },
+        { number: 2, title: 'Install guide', state: 'open', milestone: { number: 1, title: 'v1' } },
+        { number: 3, title: 'Dark mode', state: 'open', milestone: { number: 2, title: 'v2' } },
+      ];
+      const api = (i: Issue) => ({
+        ...i,
+        html_url: `https://github.com/acme/app/issues/${String(i.number)}`,
+        repository_url: 'https://api.github.com/repos/acme/app',
+        labels: [],
+        body: null,
+      });
+      gh = createHttpServer((req, res) => {
+        if (req.headers.authorization !== `Bearer ${TOKEN}`) {
+          res.writeHead(401).end('{}');
+          return;
+        }
+        const url = req.url ?? '';
+        const one = /^\/repos\/acme\/app\/issues\/(\d+)$/.exec(url);
+        res.setHeader('content-type', 'application/json');
+        if (one) {
+          const i = issues.find((x) => x.number === Number(one[1]));
+          if (!i) res.writeHead(404).end('{}');
+          else res.end(JSON.stringify(api(i)));
+          return;
+        }
+        res.end(JSON.stringify(issues.filter((i) => i.state === 'open').map(api)));
+      });
+      await new Promise<void>((r) => gh.listen(0, '127.0.0.1', r));
+      process.env['MUSTERD_GITHUB_API'] =
+        `http://127.0.0.1:${String((gh.address() as AddressInfo).port)}`;
+      process.env['GITHUB_TOKEN'] = TOKEN;
+      // No `gh` on PATH: the token must come from GITHUB_TOKEN, never this machine's own login.
+      process.env['PATH'] = dir;
+    });
+    afterEach(async () => {
+      process.env['PATH'] = saved.path;
+      delete process.env['MUSTERD_GITHUB_API'];
+      delete process.env['GITHUB_TOKEN'];
+      await new Promise<void>((r) => gh.close(() => r()));
+    });
+
+    const lanesByRef = async () => {
+      const { lanes } = await board().laneBoard('dawn', { history: true });
+      return new Map(lanes.filter((l) => l.source_ref).map((l) => [l.source_ref!, l]));
+    };
+    const stageId = (out: string) => /musterd import save (\S+)/.exec(out)![1]!;
+
+    it('imports, then re-syncs renames, closes and new issues, leaving a held lane alone', async () => {
+      const first = await capture(() => importCommand(parseArgs(['github', 'acme/app'])));
+      expect(first.code).toBe(0);
+      expect(first.out).toContain('new 3');
+      expect(first.out).not.toContain(TOKEN);
+      const id = stageId(first.out);
+      expect(readFileSync(join(dir, '.musterd', 'imports', `${id}.json`), 'utf8')).not.toContain(
+        TOKEN,
+      );
+      await capture(() => importCommand(parseArgs(['save', id])));
+      let byRef = await lanesByRef();
+      expect([...byRef.keys()].sort()).toEqual(['acme/app#1', 'acme/app#2', 'acme/app#3']);
+      expect(byRef.get('acme/app#1')!.goal_id).toBe('v1');
+      expect((await board().goals('dawn')).goals.map((g) => g.id).sort()).toEqual(['v1', 'v2']);
+
+      issues[0]!.title = 'Login fails on Safari';
+      issues[1]!.state = 'closed';
+      issues[2]!.state = 'closed';
+      issues.push({
+        number: 4,
+        title: 'Docs site',
+        state: 'open',
+        milestone: { number: 1, title: 'v1' },
+      });
+      await board().updateLane('dawn', byRef.get('acme/app#3')!.id, { owner_seat: 'nick' });
+
+      const second = await capture(() => importCommand(parseArgs(['github', 'acme/app'])));
+      expect(second.out).toContain('new 1 · renamed 1 · closed upstream: abandon 1 · 1 warning');
+      expect(second.out).toContain('↻ renamed: "Login fails" → "Login fails on Safari"');
+      expect(second.out).toContain('✕ abandon: Install guide');
+      expect(second.out).toMatch(/acme\/app#3 closed upstream — lane \S+ held by nick, left alone/);
+      await capture(() => importCommand(parseArgs(['save', stageId(second.out)])));
+      byRef = await lanesByRef();
+      expect(byRef.get('acme/app#1')!.title).toBe('Login fails on Safari');
+      expect(byRef.get('acme/app#2')).toMatchObject({
+        state: 'abandoned',
+        abandon_reason: 'closed in GitHub (acme/app#2)',
+      });
+      expect(byRef.get('acme/app#4')).toMatchObject({ state: 'open', goal_id: 'v1' });
+      expect(byRef.get('acme/app#3')).toMatchObject({ owner_seat: 'nick' });
+
+      const third = await capture(() => importCommand(parseArgs(['github', 'acme/app'])));
+      expect(third.out).not.toMatch(/new \d|abandon \d|renamed \d/);
+    });
+
+    it('a refused token stages nothing and exits 2 with the fix', async () => {
+      process.env['GITHUB_TOKEN'] = 'wrong';
+      await expect(capture(() => importCommand(parseArgs(['github', 'acme/app'])))).rejects.toThrow(
+        /GitHub refused the credentials \(401\) — run `gh auth login`, or set GITHUB_TOKEN/,
+      );
+      expect(listStages(dir)).toEqual([]);
+    });
   });
 });

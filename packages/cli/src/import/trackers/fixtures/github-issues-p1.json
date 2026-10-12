@@ -1,0 +1,25 @@
+[
+  {
+    "url": "https://api.github.com/repos/acme/app/issues/12",
+    "repository_url": "https://api.github.com/repos/acme/app",
+    "html_url": "https://github.com/acme/app/issues/12",
+    "number": 12,
+    "title": "Login fails on Safari",
+    "state": "open",
+    "body": "Steps: open the login page in Safari 18.",
+    "labels": [{ "name": "bug" }, { "name": "Priority:High" }],
+    "milestone": { "number": 3, "title": "v1.0 — First release" }
+  },
+  {
+    "url": "https://api.github.com/repos/acme/app/issues/14",
+    "repository_url": "https://api.github.com/repos/acme/app",
+    "html_url": "https://github.com/acme/app/pull/14",
+    "number": 14,
+    "title": "Fix the Safari login",
+    "state": "open",
+    "body": "Closes #12",
+    "labels": [],
+    "milestone": null,
+    "pull_request": { "url": "https://api.github.com/repos/acme/app/pulls/14" }
+  }
+]
