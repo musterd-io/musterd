@@ -1,6 +1,6 @@
 # 560 — The explanation sits above the stream: ADR 428's section order is reopened
 
-- Status: proposed (drafted by alfie on 2026-10-12 at nick's ask; nick decides)
+- Status: accepted (2026-10-12, nick; drafted by alfie in session with nick)
 - Date: 2026-10-12
 - Lane: `01M4RFC872BS8X9MBE9AFVY73F` (goal `home-page-cut`)
 - Supersedes: [ADR 428](428-one-office-above-the-fold.md) decision 1, the clause that makes the
