@@ -1,7 +1,7 @@
 import type { Envelope, LaneBoard } from '@musterd/protocol';
 import { useEffect, useRef, useState } from 'react';
 import { fetchLaneBoard, type LiveConfig } from './client';
-import { invalidatesLanes } from './workingOn';
+import { lanesChangedSince } from './workingOn';
 
 /**
  * The lane board behind the overlay's working-on strap.
@@ -40,10 +40,12 @@ export function useWorkingOn(cfg: LiveConfig | null, envelopes: Envelope[]): Lan
   useEffect(() => {
     if (!cfg || envelopes.length === 0) return;
     // `envelopes` is sorted oldest-first by useLiveStream, so the newest arrival is the last element.
+    // Every arrival since the last look is checked, not just that one (lanesChangedSince).
     const latest = envelopes[envelopes.length - 1]!;
     if (latest.id === seenRef.current) return;
+    const changed = lanesChangedSince(envelopes, seenRef.current);
     seenRef.current = latest.id;
-    if (!invalidatesLanes(latest)) return;
+    if (!changed) return;
     let cancelled = false;
     void (async () => {
       try {

@@ -1,7 +1,7 @@
 import type { Envelope, Report } from '@musterd/protocol';
 import { useEffect, useRef, useState } from 'react';
 import { fetchReport, type LiveConfig } from './client';
-import { invalidatesLanes } from './workingOn';
+import { lanesChangedSince } from './workingOn';
 
 /**
  * The insight report behind the board's rail — the useWorkingOn pattern, verbatim (Inc B).
@@ -38,8 +38,9 @@ export function useReport(cfg: LiveConfig | null, envelopes: Envelope[]): Report
     if (!cfg || envelopes.length === 0) return;
     const latest = envelopes[envelopes.length - 1]!;
     if (latest.id === seenRef.current) return;
+    const changed = lanesChangedSince(envelopes, seenRef.current);
     seenRef.current = latest.id;
-    if (!invalidatesLanes(latest)) return;
+    if (!changed) return;
     let cancelled = false;
     void (async () => {
       try {

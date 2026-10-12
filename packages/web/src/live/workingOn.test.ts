@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Lane, LaneBoard, MemberSummary } from '@musterd/protocol';
 import { memberColor } from './format';
-import { invalidatesLanes, presentCount, roomEntries } from './workingOn';
+import { invalidatesLanes, lanesChangedSince, presentCount, roomEntries } from './workingOn';
 
 function lane(over: Partial<Lane>): Lane {
   return {
@@ -187,5 +187,30 @@ describe('the stored hue reaches the reel (ADR 374)', () => {
     );
     expect(byName.get('stanley')!.color).toBe('hsl(212, 68%, 62%)');
     expect(byName.get('nick')!.color).toBe(memberColor('nick', 'human'));
+  });
+});
+
+describe('lanesChangedSince', () => {
+  const lane = (id: string) => ({ id, act: 'message' as const, meta: { lane_state: { lane: 'L1' } } });
+  const chat = (id: string) => ({ id, act: 'ask' as const, meta: { species: 'approve' } });
+
+  it('sees a lane act that an ordinary act arrived right behind', () => {
+    // The 2026-10-12 burst: lane_state, then the acceptance ask 16 ms later, in one render.
+    expect(lanesChangedSince([chat('a'), lane('b'), chat('c')], 'a')).toBe(true);
+  });
+
+  it('ignores lane acts it has already seen', () => {
+    expect(lanesChangedSince([lane('a'), chat('b'), chat('c')], 'a')).toBe(false);
+    expect(lanesChangedSince([lane('a'), chat('b')], 'b')).toBe(false);
+  });
+
+  it('on the first look counts only the newest, which the mount fetch does not cover', () => {
+    expect(lanesChangedSince([lane('a'), chat('b')], null)).toBe(false);
+    expect(lanesChangedSince([chat('a'), lane('b')], null)).toBe(true);
+  });
+
+  it('counts everything when the last seen id has left the window', () => {
+    expect(lanesChangedSince([lane('x'), chat('y')], 'gone')).toBe(true);
+    expect(lanesChangedSince([chat('x'), chat('y')], 'gone')).toBe(false);
   });
 });
