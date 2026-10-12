@@ -115,6 +115,11 @@ function ledgerOwners(fs: MemoryFs): string[] | undefined {
   return got.kind === 'valid' ? got.value.fragments[RESOURCE]?.owners : undefined;
 }
 
+function ledgerFingerprint(fs: MemoryFs): string | undefined {
+  const got = loadLedger(fs, MACHINE);
+  return got.kind === 'valid' ? got.value.fragments[RESOURCE]?.fingerprint : undefined;
+}
+
 describe('the reconciliation action matrix (ADR 282)', () => {
   let fs: MemoryFs;
   let state: FakeState;
@@ -195,6 +200,35 @@ describe('the reconciliation action matrix (ADR 282)', () => {
     expect(state.applied).toEqual([]);
     // Ledger evidence retained for the human to adjudicate.
     expect(ledgerOwners(fs)).toEqual([ROOT]);
+  });
+
+  // ADR 562: drift is only a conflict when converging would overwrite something musterd did not
+  // write. A fragment that already IS the intent, or is gone, has nothing to overwrite.
+  it('desired + owned + observed equals the intent under a stale receipt → ledger re-stamped, no write', async () => {
+    seedProvisioning(fs, ['fake']);
+    seedLedger(fs, 's'.repeat(64), ['/w/b']);
+    state.observed = { state: 'present', fingerprint: DESIRED_FP };
+    const report = await run(['fake']);
+    const r = report.results[0]!;
+    expect(r.action).toBe('add-owner');
+    expect(r.result).toBe('applied');
+    expect(state.applied).toEqual([]);
+    expect(ledgerFingerprint(fs)).toBe(DESIRED_FP);
+    expect(ledgerOwners(fs)).toEqual([ROOT, '/w/b'].sort());
+    expect(loadJournal(fs, MACHINE, CONTAINER).kind).toBe('missing');
+  });
+
+  it('desired + owned + absent → journaled create, owners kept', async () => {
+    seedProvisioning(fs, ['fake']);
+    seedLedger(fs, 's'.repeat(64), ['/w/b']);
+    state.observed = { state: 'absent' };
+    const report = await run(['fake']);
+    const r = report.results[0]!;
+    expect(r.action).toBe('create');
+    expect(r.result).toBe('applied');
+    expect(state.applied[0]?.kind).toBe('write');
+    expect(ledgerFingerprint(fs)).toBe(DESIRED_FP);
+    expect(ledgerOwners(fs)).toEqual([ROOT, '/w/b'].sort());
   });
 
   it('undesired + owned-exact + root plus others → journaled release-owner, fragment kept', async () => {

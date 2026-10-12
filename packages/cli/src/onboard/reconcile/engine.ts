@@ -205,6 +205,13 @@ export function classifyFragment(
     };
   }
   const drifted = fp !== ledger.fingerprint;
+  if (drifted && desired && (fp === null || fp === intentFingerprint)) {
+    // ADR 562: the receipt is stale but converging overwrites nothing — the fragment is gone, or
+    // already IS the intent. Gone: recreate it. Equal: owner-only re-stamp, no physical write.
+    return fp === null
+      ? { observation: 'owned-drifted', plan: 'create', planned: 'applied' }
+      : { observation: 'owned-drifted', plan: 'add-owner', planned: 'applied' };
+  }
   if (drifted) {
     // Owned but the physical fragment no longer matches our evidence (edited or deleted): never
     // overwrite or remove — retain the evidence and stop.

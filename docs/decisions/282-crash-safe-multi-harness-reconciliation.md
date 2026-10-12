@@ -170,6 +170,11 @@ harness state, ledger ownership, or managed registration fragments.
 - The ledger and journal add local state and failure cases, but make ownership and recovery auditable.
 - Existing mistaken prose that names ADR 038 as the harness-registry decision is corrected where
   this behavior is documented; ADR 026 and ADR 116 are the relevant architectural lineage.
+- 2026-10-12: [ADR 562](562-owned-drift-that-equals-intent-converges.md) narrows the
+  `owned-drifted` conflict for a desired fragment. An observed fragment that equals the intent is
+  re-stamped (owner-only), and an absent fragment is recreated. Only content musterd did not write
+  still stops. A stale receipt on the repo-shared Claude Code `mcp.musterd` entry had blocked every
+  seat's provisioning, and the doctor's delete-then-`wire` repair could not clear it.
 
 ## Observability & Evaluation
 
