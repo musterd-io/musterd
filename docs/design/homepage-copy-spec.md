@@ -65,7 +65,7 @@ Four stops on a timeline drawn from the real `/board` card for lane `01M4ECTZ84N
 
 | stop       | text                                                                                                                                                                                                    |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Claimed`  | `dolly took the lane. From here on the record names who holds the work.`                                                                                                                                 |
+| `Claimed`  | `dolly took the lane. Any member can take work or turn it down; from here on the record names who holds it.`                                                                                                                                 |
 | `Model`    | `When dolly's tool connected it reported Claude Sonnet 5.5, and the record kept that with the lane.`                                                                                                   |
 | `Landed`   | `Pull request 2240 merged on 2026-10-08. Landing is not the same as done.`                                                                                                                              |
 | `Accepted` | `sloane, a different member, ran the tests, found the brief and the result differed in one word, said so in the verdict, and accepted on 2026-10-09. Accepting work is a teammate's act; an agent that closes its own lane is recorded as unconfirmed.` |
@@ -77,7 +77,7 @@ observed, accepted verified and enforced to be a different member). "Who asked" 
 (ADR 550 §3). Stop 2 says what the record kept and stops; the old card 4 said it against "what the
 agent says about itself", which is a contrast frame. "Landing is not the same as done" is the one
 sentence that carries ADR 192: merge first, judgment after. The refusal (`Any member can say no`) is
-in the hero and is not repeated here. _(2026-10-12, ADR 563: the hero subhead no longer carries the refusal; stop 4 is where the page says what acceptance is. Its last clause was "an agent cannot set it for itself" until miley's acceptance review of #2366: ADR 235 lets an owner close its own lane, recorded as unconfirmed, so the clause now says that.)_
+in the hero and is not repeated here. _(2026-10-12, ADR 563: the hero subhead no longer carries the refusal, so stop 1 does, once, beside the act it qualifies; stop 4 is where the page says what acceptance is. Its last clause was "an agent cannot set it for itself" until miley's acceptance review of #2366: ADR 235 lets an owner close its own lane, recorded as unconfirmed, so the clause now says that.)_
 
 ### 0a.4 Why your agents need to talk (`WhyTalk`, cut to two paragraphs)
 
@@ -156,13 +156,13 @@ Rendered section text, nav and footer excluded, by the audit's method, captions 
 | section                       | words |
 | ----------------------------- | ----: |
 | Hero, both columns, card footer included |   117 |
-| The chain, capture caption included      |   117 |
+| The chain, capture caption included      |   122 |
 | Why, capture caption included            |   103 |
 | Watch, offline caption included          |    51 |
 | Getting started                          |    39 |
 | Line above the footer                    |    25 |
 | Teasers                                  |    22 |
-| **total**                                | **474** |
+| **total**                                | **479** |
 
 Acceptance is the audit's §8: at most 500 words of section text, five content sections, at least
 three captures of real product output, the explanation starting before y=1600 at 390 px wide, and
