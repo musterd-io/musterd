@@ -237,6 +237,7 @@ describe('version-bump discipline (ADR 085)', () => {
     48: '2e33b61b92826439', // musterd-import reads Linear, Jira and Notion through the harness's connector, read-only, or a CSV export; never asks for a token (lane 01M4M4A67Z)
     49: '3f1fe9596e3a7372', // musterd-import plans new work (goals → 3-7 lanes, agreed before the file), points at `musterd import sheet`, and says where an issue that fits no group goes (lane 01M4M4AAJA)
     50: '8ecce30506ed33eb', // musterd-import prefers `musterd import github` (fetch + re-sync) and a hand-written GitHub ref names the repo, `<owner>/<repo>#<number>` (spec 2026-10-11, lane 01M4Q7PMAP)
+    51: 'f348bcba0be5b8ad', // musterd-import points Linear and Jira at `musterd import linear` / `musterd import jira` when the credentials are already set (spec 2026-10-11, lane 01M4Q7PQGX)
   };
 
   it('the rendered content matches the snapshot for the current version (bump on change)', () => {
@@ -419,6 +420,12 @@ describe('musterd-import skill (spec 2026-10-10 "bring work in")', () => {
     expect(skill).toMatch(/`musterd import github[^`]*`[\s\S]*re-sync/);
     expect(skill).toContain('`source_ref` `<owner>/<repo>#<number>`');
     expect(skill).not.toContain('github#<number>');
+  });
+
+  it('points Linear and Jira at their commands when the credentials are already set (lane 01M4Q7PQGX)', () => {
+    expect(skill).toMatch(/`musterd import linear <TEAM-KEY>`[\s\S]*LINEAR_API_KEY/);
+    expect(skill).toMatch(/`musterd import jira <site> <PROJECT-KEY>`[\s\S]*JIRA_PAT/);
+    expect(skill).toMatch(/Never ask the human for an API key or token/);
   });
 
   it('names the file columns', () => {

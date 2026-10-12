@@ -1,0 +1,31 @@
+{
+  "startAt": 2,
+  "maxResults": 2,
+  "total": 3,
+  "issues": [
+    {
+      "id": "12341049",
+      "key": "CLI-82",
+      "fields": {
+        "summary": "Interaction with Commons Configuration",
+        "description": "A configuration instance could be automatically filled according to the \ncontents of a CommandLine instance.",
+        "priority": {
+          "name": "Major"
+        },
+        "fixVersions": [],
+        "issuetype": {
+          "name": "Improvement"
+        },
+        "parent": {
+          "key": "CLI-77",
+          "fields": {
+            "summary": "a story",
+            "issuetype": {
+              "name": "Story"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

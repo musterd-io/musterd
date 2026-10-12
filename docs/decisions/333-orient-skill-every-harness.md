@@ -99,6 +99,10 @@ prompt; it cannot inject context, so there is no repeating-nudge seam on Cursor 
   by hand only when the command cannot run; a hand-written GitHub ref now names its repo,
   `<owner>/<repo>#<number>`, matching what the command writes (ADR 561's `source_ref`)
   (`GUIDANCE_CONTENT_VERSION` 50). Same install paths; no wire schema changes.
+- **2026-10-12 — Linear and Jira get their commands too (lane 01M4Q7PQGX).** When the human already
+  has the credentials set, the skill runs `musterd import linear <TEAM-KEY>` or
+  `musterd import jira <site> <PROJECT-KEY>` instead of reading through a connector; it still never
+  asks for a key (`GUIDANCE_CONTENT_VERSION` 51). Same install paths; no wire schema changes.
 
 ## Observability & Evaluation
 

@@ -18,7 +18,7 @@
 
 /** Bumped whenever the rendered skill/command *content* changes (the stamp + doctor drift check key off
  * it). A snapshot test fails if the body changes without this moving, forcing the bump. */
-export const GUIDANCE_CONTENT_VERSION = 50;
+export const GUIDANCE_CONTENT_VERSION = 51;
 
 /** MCP tool names the skill references by name. CI (`guidance:check`) asserts each is a registered tool
  * in `@musterd/mcp`, so renaming a tool without updating the skill breaks the build. */
@@ -596,6 +596,10 @@ export function renderImportSkill(): string {
     '     Milestones, or else the main labels, become goals; each issue becomes a lane with',
     '     `source_ref` `<owner>/<repo>#<number>` and the URL in `detail`.',
     '     If `gh` is missing or not signed in, say so and continue with the repo scan.',
+    '   - **Linear or Jira, with credentials already set:** run `musterd import linear <TEAM-KEY>`',
+    '     (`LINEAR_API_KEY`) or `musterd import jira <site> <PROJECT-KEY>` (`JIRA_EMAIL` and',
+    '     `JIRA_API_TOKEN`, or `JIRA_PAT`; a public site needs neither). Each fetches, stages the',
+    '     preview of step 5, and re-syncs when run again. Check the variable is set; never ask for it.',
     '   - **Linear, Jira or Notion:** use the connector this harness already has for that tool, and',
     '     use it read-only: never create, edit or comment on anything in the tracker.',
     "     With no connector, ask the human for the tool's CSV export and map its columns the same way.",

@@ -1,0 +1,53 @@
+{
+  "issues": [
+    {
+      "id": "12341042",
+      "key": "CLI-77",
+      "fields": {
+        "summary": "[cli] Factored out help for common groups",
+        "priority": {
+          "name": "Highest"
+        },
+        "fixVersions": [
+          {
+            "id": "12345",
+            "name": "1.10.0"
+          }
+        ],
+        "issuetype": {
+          "name": "Improvement"
+        }
+      }
+    },
+    {
+      "id": "12341046",
+      "key": "CLI-81",
+      "fields": {
+        "summary": "Default Values from Properties object",
+        "priority": {
+          "name": "Lowest"
+        },
+        "fixVersions": [
+          {
+            "id": "12345",
+            "name": "1.10.0"
+          }
+        ],
+        "issuetype": {
+          "name": "Improvement"
+        },
+        "parent": {
+          "key": "CLI-300",
+          "fields": {
+            "summary": "Help formatter rework",
+            "issuetype": {
+              "name": "Epic"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "nextPageToken": "tok-2",
+  "isLast": false
+}
