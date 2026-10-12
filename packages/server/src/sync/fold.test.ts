@@ -332,6 +332,39 @@ withDrivers('fold', (_o, kind) => {
       await db.close();
     });
 
+    it('carries source_ref on a birth and an update, and never refuses a duplicate (ADR 561)', async () => {
+      const { db, team } = await seed();
+      // A local open lane already holds the ref; the fold applies history and does not judge it —
+      // the one-open-lane-per-ref check lives at each daemon's own write.
+      await db.run(
+        `INSERT INTO lanes (id, team_id, project, title, surface_globs, depends_on, state, source_ref,
+                            created_by, created_at, updated_at)
+         VALUES ('L0', ?, 'default', 'local', '[]', '[]', 'open', 'acme/app#1', 'ada', 1, 1)`,
+        [team.id],
+      );
+      const res = await foldBatch(db, team.id, [
+        foreignLane('e-1', 1, 1, 'lane.opened', {
+          lane: 'L1',
+          title: 'from afar',
+          source_ref: 'acme/app#1',
+        }),
+        foreignLane('e-2', 2, 2, 'lane.opened', { lane: 'L2', title: 'no ref' }),
+        foreignLane('e-3', 3, 3, 'lane.updated', {
+          lane: 'L2',
+          changes: { source_ref: { from: null, to: 'ENG-7' } },
+        }),
+      ]);
+      expect(res).toMatchObject({ applied: 3, skipped: 0, stop: null });
+      expect(
+        await db.all('SELECT id, source_ref FROM lanes WHERE team_id = ? ORDER BY id', [team.id]),
+      ).toEqual([
+        { id: 'L0', source_ref: 'acme/app#1' },
+        { id: 'L1', source_ref: 'acme/app#1' },
+        { id: 'L2', source_ref: 'ENG-7' },
+      ]);
+      await db.close();
+    });
+
     it('blocks on a verb it cannot project — the wire outran the reader', async () => {
       const { db, team } = await seed();
       const res = await foldBatch(db, team.id, [

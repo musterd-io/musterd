@@ -2,11 +2,12 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
+import type { Lane } from '@musterd/protocol';
 import { createServer, openDb, type RunningServer } from '@musterd/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseArgs } from '../args.js';
 import { loadConfig } from '../config.js';
-import { laneCommand, lanesCommand } from './lane.js';
+import { laneCommand, lanesCommand, renderLane } from './lane.js';
 import { teamCommand } from './team.js';
 
 describe('lane commands', () => {
@@ -345,6 +346,51 @@ describe('lane commands', () => {
     const board = await capture(() => lanesCommand(parseArgs(['--json'])));
     const { lanes } = JSON.parse(board.out) as { lanes: { id: string; goal_id: string | null }[] };
     expect(lanes.find((l) => l.id === id)?.goal_id).toBe('goals-front-door');
+  });
+
+  it('open and update carry --source-ref; a second live lane on the ref is refused (ADR 561)', async () => {
+    const res = await capture(() =>
+      laneCommand(parseArgs(['open', 'from github', '--source-ref', 'acme/app#3'])),
+    );
+    expect(res.code).toBe(0);
+    expect(res.out).toContain('⌁ acme/app#3');
+    await expect(
+      capture(() => laneCommand(parseArgs(['open', 'again', '--source-ref', 'acme/app#3']))),
+    ).rejects.toThrow(/source_ref "acme\/app#3" already belongs to lane/);
+    const id = await openLane(['plain']);
+    const upd = await capture(() =>
+      laneCommand(parseArgs(['update', id, '--source-ref', 'ENG-42'])),
+    );
+    expect(upd.out).toContain('⌁ ENG-42');
+  });
+
+  it('renderLane strips control characters from a stored source_ref', () => {
+    const out = renderLane({
+      id: 'L1',
+      team: 'dawn',
+      project: 'p',
+      title: 't',
+      detail: null,
+      owner_seat: null,
+      role: null,
+      scope: [],
+      depends_on: [],
+      branch: null,
+      goal_id: null,
+      risk: [],
+      stakes: 'normal',
+      merged: null,
+      state: 'open',
+      created_by: 'nick',
+      created_at: 1,
+      claimed_at: null,
+      resolved_at: null,
+      updated_at: 1,
+      // Stored by a replicated fold, which carries and never judges (ADR 561).
+      source_ref: 'x\u001b]0;pwned\u0007y',
+    } as Lane);
+    expect(out).toContain('⌁ xy');
+    expect(out).not.toContain('\u001b');
   });
 
   it('lanes renders an empty board hint', async () => {

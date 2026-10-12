@@ -26,11 +26,13 @@ export interface PlannedLane {
   goal_id?: string;
   depends_on: LaneDep[];
   stakes?: LaneStakes;
+  /** ADR 561: the issue the row came from, sent as the lane field. */
+  source_ref?: string;
 }
 
 export interface BoardSnapshot {
   goals: { id: string }[];
-  lanes: { id: string; title: string; state: string }[];
+  lanes: { id: string; title: string; state: string; source_ref?: string | null | undefined }[];
 }
 
 export interface ImportPlan {
@@ -62,6 +64,18 @@ export function checkAgainstBoard(rows: ImportRow[], board: BoardSnapshot): Impo
   const fileGoalKeys = new Set(goalRows.map((r) => r.key!));
   const laneRefByKey = new Map(
     laneRows.filter((r) => r.key).map((r) => [r.key!, `lane:${r.key!}`]),
+  );
+  // ADR 561: a row whose ref an open lane already holds is not opened again; a row in this file
+  // that depends on it by key depends on that lane instead.
+  const heldRefs = new Map(
+    board.lanes
+      .filter((l) => !CLOSED.has(l.state) && l.source_ref)
+      .map((l) => [l.source_ref!, l.id]),
+  );
+  const heldByKey = new Map(
+    laneRows
+      .filter((r) => r.key && r.source_ref && heldRefs.has(r.source_ref))
+      .map((r) => [r.key!, heldRefs.get(r.source_ref!)!]),
   );
 
   const linkedGoals: string[] = [];
@@ -104,6 +118,17 @@ export function checkAgainstBoard(rows: ImportRow[], board: BoardSnapshot): Impo
 
   const lanes: PlannedLane[] = [];
   for (const r of laneRows) {
+    const holder = r.source_ref ? heldRefs.get(r.source_ref) : undefined;
+    if (holder) {
+      diagnostics.push(
+        warn(
+          r.row,
+          'already_on_board',
+          `${r.source_ref!} is already on the board as lane ${holder} — not opened again`,
+        ),
+      );
+      continue;
+    }
     const ref = r.key ? `lane:${r.key}` : `lane@${String(r.row)}`;
     const lane: PlannedLane = { ref, row: r.row, title: r.title, depends_on: [] };
     if (r.goal !== undefined) {
@@ -118,8 +143,10 @@ export function checkAgainstBoard(rows: ImportRow[], board: BoardSnapshot): Impo
         );
     }
     for (const d of r.depends_on) {
+      const held = heldByKey.get(d);
       const staged = laneRefByKey.get(d);
-      if (staged) lane.depends_on.push({ kind: 'staged', ref: staged });
+      if (held) lane.depends_on.push({ kind: 'existing', id: held });
+      else if (staged) lane.depends_on.push({ kind: 'staged', ref: staged });
       else if (boardLanes.has(d)) lane.depends_on.push({ kind: 'existing', id: d });
       else
         diagnostics.push(
@@ -140,10 +167,8 @@ export function checkAgainstBoard(rows: ImportRow[], board: BoardSnapshot): Impo
       );
     if (lane.goal_id === undefined && r.goal === undefined)
       diagnostics.push(warn(r.row, 'no_goal', 'lane has no goal'));
-    const detail = [r.detail, r.source_ref ? `Source: ${r.source_ref}` : undefined]
-      .filter(Boolean)
-      .join('\n\n');
-    if (detail) lane.detail = detail;
+    if (r.detail) lane.detail = r.detail;
+    if (r.source_ref) lane.source_ref = r.source_ref;
     if (r.stakes) lane.stakes = r.stakes;
     lanes.push(lane);
   }

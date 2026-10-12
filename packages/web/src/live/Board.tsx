@@ -23,7 +23,7 @@ import {
   type LaneAction,
   type MovedLanes,
 } from './boardWrite';
-import { initial, kindOf, memberAvatar, hueOf} from './format';
+import { initial, kindOf, memberAvatar, hueOf, sourceRefHref } from './format';
 import { GoalGrid } from './GoalGridView';
 import { GoalTable } from './GoalTableView';
 
@@ -460,6 +460,9 @@ function LaneCard({
           </span>
         )}
         {lane.goal_id && <span className="lc-card__chip lc-card__chip--goal">{lane.goal_id}</span>}
+        {lane.source_ref && (
+          <SourceChip sourceRef={lane.source_ref} href={sourceRefHref(lane.detail)} />
+        )}
         {lane.state === 'done' && lane.verified === true && (
           <span className="lc-card__chip lc-card__chip--verified" title="Accepted by a counterpart">
             ✓ accepted
@@ -704,5 +707,20 @@ function ComposeCard({
         </button>
       </div>
     </form>
+  );
+}
+
+/** ADR 561: the issue a lane came from, linked when its detail carries the issue URL. */
+function SourceChip({ sourceRef, href }: { sourceRef: string; href: string | null }) {
+  return (
+    <span className="lc-card__chip lc-card__chip--src" title={`From ${sourceRef}`}>
+      {href ? (
+        <a href={href} target="_blank" rel="noreferrer">
+          {sourceRef}
+        </a>
+      ) : (
+        sourceRef
+      )}
+    </span>
   );
 }

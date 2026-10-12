@@ -1460,6 +1460,32 @@ withDrivers('integration · attestation-lanes', (_o, kind) => {
     });
   });
 
+  describe('source_ref (ADR 561)', () => {
+    it('?source_ref= is an exact filter, and a second live lane on one ref is a 409', async () => {
+      const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
+      const ada = { key: team.json.agent_key, seat: 'Ada' };
+      await post('/teams/dawn/members', { name: 'Ada', kind: 'agent' }, team.json.human_credential);
+      const held = await post(
+        '/teams/dawn/lanes',
+        { title: 'from Linear', source_ref: 'ENG-1' },
+        ada,
+      );
+      expect(held.json.lane.source_ref).toBe('ENG-1');
+      await post('/teams/dawn/lanes', { title: 'other', source_ref: 'ENG-10' }, ada);
+      await post('/teams/dawn/lanes', { title: 'plain' }, ada);
+
+      const byRef = await get('/teams/dawn/lanes?source_ref=ENG-1', ada);
+      expect(byRef.json.lanes.map((l: { id: string }) => l.id)).toEqual([held.json.lane.id]);
+
+      const dup = await post('/teams/dawn/lanes', { title: 'again', source_ref: 'ENG-1' }, ada);
+      expect(dup.status).toBe(409);
+      expect(dup.json.error.code).toBe('conflict');
+      expect(dup.json.error.message).toBe(
+        `source_ref "ENG-1" already belongs to lane ${held.json.lane.id}`,
+      );
+    });
+  });
+
   describe('releasing a lane — open ⟺ unowned', () => {
     async function setup() {
       const team = await post('/teams', { slug: 'dusk', creator: { name: 'nick', kind: 'human' } });

@@ -635,7 +635,8 @@ export const CATALOG: readonly CommandEntry[] = [
       '  handoff <id> --to <seat> [--branch <ref>]   transfer it, with its branch\n' +
       '  update <id> [--state <s>] [--branch <ref>] [--goal <id>]  edit it\n' +
       '  resolve <id>                  close it\n' +
-      '--goal links a lane to a Goal (ADR 084).',
+      '--goal links a lane to a Goal (ADR 084). --source-ref names the issue it came from\n' +
+      '(acme/app#12, ENG-42) on open or update; one open lane per ref (ADR 561).',
     examples: [
       'musterd lane open "wire the help catalog" --claim',
       'musterd lane handoff L3 --to scout --branch feat/help',

@@ -193,7 +193,26 @@ export const LADDER: PortableMigration[] = [
       await d.exec(MESSAGES_ORIGIN_INDEX_SQL);
     },
   },
+  {
+    // v91 — ADR 561: the issue a lane came from. Nullable, no backfill; a lane imported before this
+    // keeps its `Source:` detail line until a re-sync adopts it. The index serves the per-ref lookup
+    // the store runs before a write and `GET /lanes?source_ref=`; it is not unique — uniqueness is
+    // "among lanes not done or abandoned", which only the store transaction can say.
+    version: 91,
+    sqlite: (db) => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('lanes')").pluck().all();
+      if (!cols.includes('source_ref')) db.exec('ALTER TABLE lanes ADD COLUMN source_ref TEXT');
+      db.exec(LANES_SOURCE_REF_INDEX_SQL);
+    },
+    postgres: async (d) => {
+      await d.exec('ALTER TABLE lanes ADD COLUMN IF NOT EXISTS source_ref TEXT');
+      await d.exec(LANES_SOURCE_REF_INDEX_SQL);
+    },
+  },
 ];
+
+const LANES_SOURCE_REF_INDEX_SQL =
+  'CREATE INDEX IF NOT EXISTS idx_lanes_team_source_ref ON lanes(team_id, source_ref) WHERE source_ref IS NOT NULL';
 
 const MESSAGES_ORIGIN_INDEX_SQL =
   'CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_origin ON messages(origin_node, origin_seq) WHERE origin_seq > 0';

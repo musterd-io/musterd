@@ -39,12 +39,13 @@ function fmtLane(l: Lane): string {
   const deps = l.depends_on.length ? ` deps=[${l.depends_on.join(', ')}]` : '';
   const branch = l.branch ? ` branch=${l.branch}` : '';
   const goal = l.goal_id ? ` goal=${l.goal_id}` : '';
+  const src = l.source_ref ? ` src=${l.source_ref}` : '';
   // ADR 466: a parked lane says who shelved it and why, in place of an owner.
   const parked = l.parked
     ? ` parked by ${l.parked.by}: "${l.parked.reason}"` +
       (l.parked.until ? ` (revisit ${new Date(l.parked.until).toISOString().slice(0, 10)})` : '')
     : '';
-  return `${l.id} [${l.state}] "${l.title}" — owner=${owner} project=${l.project}${goal}${scope}${deps}${branch}${parked}`;
+  return `${l.id} [${l.state}] "${l.title}" — owner=${owner} project=${l.project}${goal}${src}${scope}${deps}${branch}${parked}`;
 }
 
 function fmtWarnings(warnings: LaneWarning[]): string {
@@ -137,6 +138,12 @@ export function registerLanes(
           .string()
           .optional()
           .describe('link this lane to a Goal (team_next groups by it)'),
+        source_ref: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe('issue it came from (acme/app#12); one open lane per ref'),
         role: z.string().optional().describe('assignment hint (advisory)'),
         stakes: z
           .enum(['low', 'normal', 'high'])
@@ -316,6 +323,8 @@ export function registerLanes(
           .nullable()
           .optional()
           .describe('link (or clear, with null) this lane to a Goal'),
+        // ADR 561 — described on lane_open; undescribed here for the tools-list budget.
+        source_ref: z.string().min(1).max(200).optional(),
         // ADR 466 — with state "parked" (humans only). The daemon requires and bounds the reason;
         // until is a date string, advisory. Undescribed on purpose: the tools list is budgeted.
         park_reason: z.string().optional(),

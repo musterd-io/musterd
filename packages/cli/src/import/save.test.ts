@@ -1,5 +1,6 @@
 import type { DeclareGoal, OpenLane } from '@musterd/protocol';
 import { describe, expect, it, vi } from 'vitest';
+import { CliError } from '../errors.js';
 import { refusal, saveStage, type SavePort } from './save.js';
 import type { ImportStage } from './stage.js';
 
@@ -36,6 +37,7 @@ function fakePort(failOnLane?: string) {
   let n = 0;
   const port: SavePort = {
     goals: vi.fn(async () => ({ goals: [] as { id: string }[] })),
+    laneBoard: vi.fn(async () => ({ lanes: [] as { id: string; state: string }[] })),
     declareGoal: vi.fn(async (_t: string, body: DeclareGoal) => ({ id: body.id })),
     openLane: vi.fn(async (_t: string, body: OpenLane) => {
       if (body.title === failOnLane) throw new Error('daemon restarted');
@@ -187,5 +189,57 @@ describe('saveStage', () => {
     expect(err.message).toContain('daemon restarted');
     expect(err.message).toContain('stopped after 2 of 3');
     expect(err.message).toContain('re-run `musterd import save s1` to resume');
+  });
+});
+
+describe('saveStage — source_ref (ADR 561)', () => {
+  it('sends the ref, and adopts the lane that holds it when the open comes back 409', async () => {
+    const port = fakePort();
+    port.openLane = vi.fn(async (_t: string, body: OpenLane) => {
+      if (body.source_ref === 'acme/app#1')
+        throw new CliError('source_ref "acme/app#1" already belongs to lane L-HELD', 1, 'conflict');
+      return { lane: { id: 'L-NEW' } };
+    });
+    port.laneBoard = vi.fn(async () => ({
+      lanes: [
+        { id: 'L-OLD', state: 'abandoned' },
+        { id: 'L-HELD', state: 'claimed' },
+      ],
+    }));
+    const stage = base();
+    stage.lanes[0]!.source_ref = 'acme/app#1';
+    stage.lanes[1]!.source_ref = 'acme/app#2';
+    const saved: ImportStage[] = [];
+    const r = await saveStage(stage, {
+      team: 'dawn',
+      port,
+      persist: (s) => saved.push(structuredClone(s)),
+      now: () => NOW,
+    });
+    expect(port.laneBoard).toHaveBeenCalledWith('dawn', { source_ref: 'acme/app#1' });
+    expect(r.lanes[0]).toMatchObject({
+      ref: 'lane:a',
+      id: 'L-HELD',
+      resumed: false,
+      adopted: true,
+    });
+    // The dependent lane resolves the adopted id.
+    expect(port.openLane).toHaveBeenLastCalledWith(
+      'dawn',
+      expect.objectContaining({ source_ref: 'acme/app#2', depends_on: ['L-HELD', 'OLD'] }),
+    );
+    expect(saved.at(-1)!.created['lane:a']).toBe('L-HELD');
+  });
+
+  it('a 409 with no live holder left still stops the save', async () => {
+    const port = fakePort();
+    port.openLane = vi.fn(async () => {
+      throw new CliError('source_ref "acme/app#1" already belongs to lane L-GONE', 1, 'conflict');
+    });
+    const stage = base();
+    stage.lanes[0]!.source_ref = 'acme/app#1';
+    await expect(
+      saveStage(stage, { team: 'dawn', port, persist: () => {}, now: () => NOW }),
+    ).rejects.toThrow(/stopped after 1 of 3/);
   });
 });

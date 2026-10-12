@@ -101,9 +101,34 @@ describe('checkAgainstBoard', () => {
     ]);
   });
 
-  it('appends the source line to detail', () => {
+  it('plans the source ref as the lane field, not a detail line (ADR 561)', () => {
     const p = checkAgainstBoard([lane(2, { detail: 'Body', source_ref: 'github#7' })], empty);
-    expect(p.lanes[0]!.detail).toBe('Body\n\nSource: github#7');
+    expect(p.lanes[0]!.source_ref).toBe('github#7');
+    expect(p.lanes[0]!.detail).toBe('Body');
+  });
+
+  it('leaves out a row whose ref an open lane holds, and points its dependents at that lane', () => {
+    const board = {
+      goals: [],
+      lanes: [
+        { id: 'L-OPEN', title: 'Old title', state: 'claimed', source_ref: 'acme/app#1' },
+        { id: 'L-DONE', title: 'Shipped', state: 'done', source_ref: 'acme/app#2' },
+      ],
+    };
+    const p = checkAgainstBoard(
+      [
+        lane(2, { key: 'one', title: 'Old title', source_ref: 'acme/app#1', goal: undefined }),
+        lane(3, { source_ref: 'acme/app#2', depends_on: ['one'] }),
+      ],
+      board,
+    );
+    expect(p.lanes.map((l) => l.source_ref)).toEqual(['acme/app#2']);
+    expect(p.lanes[0]!.depends_on).toEqual([{ kind: 'existing', id: 'L-OPEN' }]);
+    const dup = p.diagnostics.find((d) => d.code === 'already_on_board')!;
+    expect(dup).toMatchObject({ level: 'warning', row: 2 });
+    expect(dup.message).toContain('L-OPEN');
+    // Already on the board says it all — no second warning about the same title.
+    expect(codes(p)).not.toContain('warning:likely_duplicate@2');
   });
 
   it('normalizes titles', () => {

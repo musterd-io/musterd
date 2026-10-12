@@ -25,13 +25,13 @@ import { resolve } from './helpers.js';
 
 const USAGE =
   'usage:\n' +
-  '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--claim]\n' +
+  '  musterd lane open "<title>" [--surface <glob>[,<glob>…]] [--depends <id>[,<id>…]] [--goal <id>] [--project p] [--role r] [--branch b] [--detail d] [--stakes low|normal|high] [--risk tag[,tag…]|none] [--source-ref <ref>] [--claim]\n' +
   '  musterd lane claim <id> [--goal <id>]\n' +
   '  musterd lane release <id>\n' +
   '  musterd lane park <id> --reason "<why not now>" [--until <date>]   (humans only, ADR 466)\n' +
   '  musterd lane unpark <id>                                           (humans only)\n' +
   '  musterd lane handoff <id> --to <seat> [--branch <ref>] [--note <why>]\n' +
-  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--clear-merged] [--abandon-reason "<why>"]\n' +
+  '  musterd lane update <id> [--state open|claimed|active|blocked|awaiting_acceptance|done|abandoned] [--title t] [--surface …] [--depends …] [--branch b] [--detail d] [--project p] [--stakes low|normal|high] [--goal <id>] [--source-ref <ref>] [--clear-merged] [--abandon-reason "<why>"]\n' +
   '  musterd lane submit <id> [--to <seat>] [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>]\n' +
   '                          [--branch b]\n' +
   '  musterd lane resolve <id> [--pr <n>] [--sha <sha>] [--authorized-by <human>] [--follows-up <id,id|none>]\n' +
@@ -87,7 +87,7 @@ function list(flags: Record<string, string | boolean>, name: string): string[] |
     .filter(Boolean);
 }
 
-function renderLane(l: Lane): string {
+export function renderLane(l: Lane): string {
   const owner = l.owner_seat ? theme.memberName(l.owner_seat, 'agent') : theme.meta('unowned');
   const state =
     l.state === 'done' ? theme.ok(l.state) : l.state === 'blocked' ? theme.warn(l.state) : l.state;
@@ -95,6 +95,9 @@ function renderLane(l: Lane): string {
   const deps = l.depends_on.length ? theme.meta(` deps:${l.depends_on.length}`) : '';
   const branch = l.branch ? theme.meta(` ⎇ ${l.branch}`) : '';
   const goal = l.goal_id ? theme.meta(` ◆ ${l.goal_id}`) : '';
+  // ADR 561: the issue the lane came from.
+  // Stripped: a fold stores what another daemon sent, and a ref names text from outside the team.
+  const src = l.source_ref ? theme.meta(` ⌁ ${plainTerminalText(l.source_ref)}`) : '';
   // ADR 466: a parked lane shows who shelved it and why where an owner would be.
   const parked = l.parked
     ? theme.meta(
@@ -104,7 +107,7 @@ function renderLane(l: Lane): string {
             : ''),
       )
     : '';
-  return `${theme.meta(l.id)} ${state} "${l.title}" — ${owner} · ${l.project}${goal}${surface}${deps}${branch}${parked}`;
+  return `${theme.meta(l.id)} ${state} "${l.title}" — ${owner} · ${l.project}${goal}${src}${surface}${deps}${branch}${parked}`;
 }
 
 /** Drop C0/C1 control characters and any ESC-introduced sequence (CSI, OSC, …) from text that
@@ -190,6 +193,9 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
         : {}),
       ...(flagStr(parsed.flags, 'goal') !== undefined
         ? { goal_id: flagStr(parsed.flags, 'goal')! }
+        : {}),
+      ...(flagStr(parsed.flags, 'source-ref') !== undefined
+        ? { source_ref: flagStr(parsed.flags, 'source-ref')! }
         : {}),
       ...(list(parsed.flags, 'surface') !== undefined
         ? { scope: list(parsed.flags, 'surface')! }
@@ -388,6 +394,10 @@ export async function laneCommand(parsed: Parsed): Promise<number> {
       // took --goal. A goal-less lane had no CLI way to attach after the fact.
       ...(flagStr(parsed.flags, 'goal') !== undefined
         ? { goal_id: flagStr(parsed.flags, 'goal')! }
+        : {}),
+      // ADR 561: the issue this lane came from; refused while another live lane holds it.
+      ...(flagStr(parsed.flags, 'source-ref') !== undefined
+        ? { source_ref: flagStr(parsed.flags, 'source-ref')! }
         : {}),
       // ADR 305 amendment 2 (lane 01M2GR0434): the one verb for NONE — a lane stamped with the
       // wrong merge had no way back. Owner or admin only; the daemon refuses a counterpart.
