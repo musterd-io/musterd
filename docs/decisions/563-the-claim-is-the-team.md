@@ -1,7 +1,6 @@
 # 563 — The claim is the team: "Agents that work as a team alongside you"
 
-- Status: proposed (drafted by alfie on 2026-10-12 in session with nick, who gave the line; nick
-  decides)
+- Status: accepted (2026-10-12, nick; drafted by alfie in session with nick, who gave the line)
 - Date: 2026-10-12
 - Lane: `01M4RK12F7M6023B0C7W7KAJDX` (goal `home-page-cut`)
 - Supersedes: [ADR 550](550-positioning-accountable-agents.md) decision 1, the claim and the
