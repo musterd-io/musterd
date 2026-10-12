@@ -13,6 +13,7 @@ import {
   modelOf,
   stepLines,
   stepTitle,
+  entryLabel,
   tourEntry,
   tourLaneOf,
   ulidTime,
@@ -163,12 +164,21 @@ describe('tour entry (spec §2–3)', () => {
     expect(tourEntry([], [member('nick', 'human')], 'nick')).toEqual({ kind: 'none' });
   });
 
-  it('resumes an open tour lane, and offers nothing once it closed', () => {
+  it('resumes an open tour lane, and offers it again once it closed', () => {
     expect(tourEntry([lane(TITLE, 'claimed')], roster, 'nick').kind).toBe('resume');
-    expect(tourEntry([lane(TITLE, 'done')], roster, 'nick')).toEqual({ kind: 'none' });
+    expect(tourEntry([lane(TITLE, 'done')], roster, 'nick')).toEqual({ kind: 'again' });
+    expect(tourEntry([lane(TITLE, 'done')], [member('nick', 'human')], 'nick')).toEqual({
+      kind: 'none',
+    });
     expect(tourEntry([lane(TITLE.replace('nick', 'alfie'), 'open')], roster, 'nick').kind).toBe(
       'take',
     );
+  });
+
+  it('labels a first run and a re-run, and nothing else', () => {
+    expect(entryLabel({ kind: 'take' })).toBe('Take the tour');
+    expect(entryLabel({ kind: 'again' })).toBe('Take the tour again');
+    expect(entryLabel({ kind: 'none' })).toBeNull();
   });
 
   it('finds the newest of two lanes with the title (after Start over)', () => {

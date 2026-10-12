@@ -27,6 +27,7 @@ import {
   ticketStage,
   timeline,
   TOUR_STEP_COUNT,
+  entryLabel,
   tourEntry,
   ulidTime,
   type Readiness,
@@ -327,13 +328,13 @@ export function Tour({
       <span className="tour-entry__note" role="status">
         {STOPPED}
       </span>
-    ) : entry.kind === 'take' ? (
+    ) : entryLabel(entry) ? (
       <button
         type="button"
         className="tour-entry"
         onClick={() => start(agents.length === 1 ? agents[0]! : '')}
       >
-        Take the tour
+        {entryLabel(entry)}
       </button>
     ) : entry.kind === 'resume' ? (
       <>

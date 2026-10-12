@@ -189,7 +189,11 @@ export function isOpenTourLane(lane: Lane): boolean {
 }
 
 /** What the entry point offers (spec §3): nothing, a start, or a resume beside a start-over. */
-export type TourEntry = { kind: 'none' } | { kind: 'take' } | { kind: 'resume'; lane: Lane };
+export type TourEntry =
+  | { kind: 'none' }
+  | { kind: 'take' }
+  | { kind: 'again' }
+  | { kind: 'resume'; lane: Lane };
 
 export function tourEntry(
   lanes: readonly Lane[] | null,
@@ -200,8 +204,18 @@ export function tourEntry(
   // a `Take the tour` that a second later turns into `Resume`.
   if (!lanes || roster.find((m) => m.name === you)?.kind !== 'human') return { kind: 'none' };
   const lane = tourLaneOf(lanes, you);
-  if (lane) return isOpenTourLane(lane) ? { kind: 'resume', lane } : { kind: 'none' };
-  return agentsOf(roster, you).length > 0 ? { kind: 'take' } : { kind: 'none' };
+  if (lane && isOpenTourLane(lane)) return { kind: 'resume', lane };
+  if (agentsOf(roster, you).length === 0) return { kind: 'none' };
+  // A closed tour lane stays as the record and a new run opens a new lane (tour-web-copy.md §3, lane
+  // 01M4RGKRKS): nick finished the tour once on 2026-10-12 and then could not find it again.
+  return lane ? { kind: 'again' } : { kind: 'take' };
+}
+
+/** The entry button's words (tour-web-copy.md §3); null where the entry is not a start. */
+export function entryLabel(entry: TourEntry): string | null {
+  if (entry.kind === 'take') return 'Take the tour';
+  if (entry.kind === 'again') return 'Take the tour again';
+  return null;
 }
 
 export function agentsOf(roster: readonly MemberSummary[], you: string): string[] {
