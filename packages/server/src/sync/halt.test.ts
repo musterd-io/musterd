@@ -96,9 +96,13 @@ withDrivers('halt-sync', (_o, kind) => {
   beforeEach(async () => {
     dir = mkdtempSync(join(tmpdir(), 'musterd-halt-sync-'));
     process.env['MUSTERD_NODE_STATE'] = join(dir, 'node.json');
-    hub = createServer({ db: await openTestDriver(kind), port: 0 });
+    hub = createServer({ db: await openTestDriver(kind), port: 0, syncLoops: false });
     hubBase = `http://127.0.0.1:${(await hub.listen()).port}`;
-    joiner = createServer({ db: await openTestDriver(kind, { instance: 'b' }), port: 0 });
+    joiner = createServer({
+      db: await openTestDriver(kind, { instance: 'b' }),
+      port: 0,
+      syncLoops: false,
+    });
     joinerBase = `http://127.0.0.1:${(await joiner.listen()).port}`;
     joinerCtx = {
       db: joiner.store,
@@ -230,7 +234,11 @@ withDrivers('halt-sync', (_o, kind) => {
       expect(res.status).toBe(503);
       expect(res.json.error.code).toBe('hub_unreachable');
       expect(await haltedOn(joiner.store)).toBeNull();
-      hub = createServer({ db: await openTestDriver(kind, { instance: 'c' }), port: 0 });
+      hub = createServer({
+        db: await openTestDriver(kind, { instance: 'c' }),
+        port: 0,
+        syncLoops: false,
+      });
       await hub.listen();
     });
   });

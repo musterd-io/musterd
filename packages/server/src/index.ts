@@ -72,6 +72,10 @@ export interface ServerOptions {
   /** Inject the trace store (ADR 445 §3) for tests; bypasses traceDbPath. With `db` injected and
    *  this absent, the trace store opens in memory — a test never writes a real `trace.db`. */
   traceDb?: Database | Driver;
+  /** Tests only: `false` leaves the sync push and pull loops (and the doorbell they carry) unstarted,
+   *  so a test that drives `pushTeam`/`pullTeam` by hand is not raced by the daemon doing the same.
+   *  Production never passes this. */
+  syncLoops?: boolean;
   /** Roster roots to project + watch (ADR 058). Defaults to {@link resolveRosterRoots}; pass an
    * explicit list to keep tests hermetic (no global-config dependency). `[]` disables reconcile. */
   rosterRoots?: string[];
@@ -204,7 +208,9 @@ export function createServer(opts: ServerOptions = {}): RunningServer {
     return (await routeEnvelope(opCtx, team, from, env, undefined, true)).message;
   };
   const opTraceDb = opCtx.traceDb;
-  const loops = loopsFor(config.mode);
+  const loops = new Set(loopsFor(config.mode));
+  if (opts.syncLoops === false)
+    for (const name of ['sync_push', 'sync_pull'] as const) loops.delete(name);
 
   // Lane 01M4S0ZAG8: per keep-alive socket, how many requests it has carried and when the last one
   // finished. A slow line reads them to say whether the time was the connection's (an idle socket
