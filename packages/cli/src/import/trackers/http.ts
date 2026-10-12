@@ -27,6 +27,8 @@ export interface TrackerRequest {
   headers: Record<string, string>;
   method?: 'GET' | 'POST';
   body?: string;
+  /** Non-2xx statuses whose JSON body the caller reads itself (a GraphQL API's 400 carries `errors`). */
+  okStatuses?: number[];
 }
 
 export interface TrackerResponse {
@@ -61,7 +63,7 @@ export async function getJson(
     );
   if (res.status === 404 || res.status === 410)
     return { status: res.status, json: null, headers: res.headers };
-  if (!res.ok)
+  if (!res.ok && !init.okStatuses?.includes(res.status))
     throw new CliError(`${ctx.tracker} answered ${String(res.status)} for ${pathOf(url)}`, 1);
   let json: unknown;
   try {

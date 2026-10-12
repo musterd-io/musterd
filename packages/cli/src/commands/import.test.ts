@@ -277,4 +277,113 @@ describe('import command', () => {
       expect(listStages(dir)).toEqual([]);
     });
   });
+
+  describe('import linear (spec 2026-10-11)', () => {
+    type Issue = { identifier: string; title: string; type: string };
+    let issues: Issue[];
+    let lin: Server;
+    const KEY = 'lin_api_TESTKEY_never_printed';
+
+    beforeEach(async () => {
+      issues = [
+        { identifier: 'ENG-1', title: 'Login fails', type: 'started' },
+        { identifier: 'ENG-2', title: 'Install guide', type: 'backlog' },
+      ];
+      lin = createHttpServer((req, res) => {
+        let raw = '';
+        req.on('data', (c: Buffer) => (raw += c.toString()));
+        req.on('end', () => {
+          res.setHeader('content-type', 'application/json');
+          if (req.headers.authorization !== KEY) {
+            res.writeHead(400).end(
+              JSON.stringify({
+                errors: [
+                  {
+                    message: 'Authentication required',
+                    extensions: { code: 'AUTHENTICATION_ERROR' },
+                  },
+                ],
+              }),
+            );
+            return;
+          }
+          const q = JSON.parse(raw) as { variables: { id?: string } };
+          const node = (i: Issue) => ({
+            identifier: i.identifier,
+            title: i.title,
+            url: `https://linear.app/acme/issue/${i.identifier}`,
+            description: null,
+            priority: 0,
+            project: { id: 'p1', name: 'First release' },
+            cycle: null,
+          });
+          if (q.variables.id) {
+            const i = issues.find((x) => x.identifier === q.variables.id)!;
+            res.end(
+              JSON.stringify({
+                data: {
+                  issue: { identifier: i.identifier, archivedAt: null, state: { type: i.type } },
+                },
+              }),
+            );
+            return;
+          }
+          const open = issues.filter((i) => i.type !== 'completed' && i.type !== 'canceled');
+          res.end(
+            JSON.stringify({
+              data: {
+                issues: {
+                  nodes: open.map(node),
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                },
+              },
+            }),
+          );
+        });
+      });
+      await new Promise<void>((r) => lin.listen(0, '127.0.0.1', r));
+      process.env['MUSTERD_LINEAR_API'] =
+        `http://127.0.0.1:${String((lin.address() as AddressInfo).port)}/graphql`;
+      process.env['LINEAR_API_KEY'] = KEY;
+    });
+    afterEach(async () => {
+      delete process.env['MUSTERD_LINEAR_API'];
+      delete process.env['LINEAR_API_KEY'];
+      await new Promise<void>((r) => lin.close(() => r()));
+    });
+
+    const stageId = (out: string) => /musterd import save (\S+)/.exec(out)![1]!;
+
+    it('imports a team, then re-syncs a rename and a completed issue', async () => {
+      const first = await capture(() => importCommand(parseArgs(['linear', 'ENG'])));
+      expect(first.out).toContain('new 2');
+      expect(first.out).not.toContain(KEY);
+      await capture(() => importCommand(parseArgs(['save', stageId(first.out)])));
+
+      issues[0]!.title = 'Login fails on Safari';
+      issues[1]!.type = 'completed';
+      const second = await capture(() => importCommand(parseArgs(['linear', 'ENG'])));
+      expect(second.out).toContain('renamed 1 · closed upstream: abandon 1');
+      await capture(() => importCommand(parseArgs(['save', stageId(second.out)])));
+      const { lanes } = await board().laneBoard('dawn', { history: true });
+      const byRef = new Map(lanes.map((l) => [l.source_ref, l]));
+      expect(byRef.get('ENG-1')!.title).toBe('Login fails on Safari');
+      expect(byRef.get('ENG-2')).toMatchObject({
+        state: 'abandoned',
+        abandon_reason: 'closed in Linear (ENG-2)',
+      });
+      expect(byRef.get('ENG-1')!.goal_id).toBe('first-release');
+    });
+
+    it('needs the team key, and a wrong key is exit 2', async () => {
+      await expect(capture(() => importCommand(parseArgs(['linear'])))).rejects.toThrow(
+        /musterd import linear <TEAM-KEY>/,
+      );
+      process.env['LINEAR_API_KEY'] = 'wrong';
+      await expect(capture(() => importCommand(parseArgs(['linear', 'ENG'])))).rejects.toThrow(
+        /^Linear refused the key/,
+      );
+      expect(listStages(dir)).toEqual([]);
+    });
+  });
 });

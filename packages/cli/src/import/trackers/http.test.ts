@@ -82,6 +82,13 @@ describe('getJson', () => {
     });
   });
 
+  it('okStatuses hands back a body the caller reads itself (a GraphQL 400)', async () => {
+    const f = await fake([{ status: 400, body: { errors: [{ message: 'bad' }] } }]);
+    expect(
+      await getJson(recordingHttp(), f.url, { headers, okStatuses: [400] }, ctx),
+    ).toMatchObject({ status: 400, json: { errors: [{ message: 'bad' }] } });
+  });
+
   it('an unreachable host names the host, not the request', async () => {
     const err = await getJson(recordingHttp(), 'http://127.0.0.1:1/x', { headers }, ctx).catch(
       (e: unknown) => e,

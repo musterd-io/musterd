@@ -1,0 +1,27 @@
+{
+  "data": {
+    "issues": {
+      "nodes": [
+        {
+          "identifier": "ENG-12",
+          "title": "Login fails on Safari",
+          "url": "https://linear.app/acme/issue/ENG-12/login-fails-on-safari",
+          "description": "Steps: open the login page in Safari 18.",
+          "priority": 1,
+          "project": { "id": "8f1c2a4e-1111-4b6a-9d7e-0a1b2c3d4e5f", "name": "First release" },
+          "cycle": { "number": 7, "name": null }
+        },
+        {
+          "identifier": "ENG-15",
+          "title": "Write the install guide",
+          "url": "https://linear.app/acme/issue/ENG-15/write-the-install-guide",
+          "description": null,
+          "priority": 4,
+          "project": null,
+          "cycle": { "number": 7, "name": null }
+        }
+      ],
+      "pageInfo": { "hasNextPage": true, "endCursor": "cursor-1" }
+    }
+  }
+}
