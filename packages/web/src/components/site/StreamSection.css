@@ -1,9 +1,7 @@
 /* Stream section: copy beside a contained player (never full-width). Semantic tokens only. */
 
-/* Directly under the hero now (ADR 428), so it is the first thing a reader meets after the value
-   proposition — and it is sized to be SEEN there, not to dominate. The player column is the
-   narrower of the two: the install command in the hero above it is still the page's loudest
-   element, which is the ordering §3 of the copy spec has always wanted. */
+/* Fourth on the page since ADR 560, after the chain and the why. Sized to be SEEN, not to
+   dominate: the player column is the narrower of the two. */
 .ss {
   display: grid;
   grid-template-columns: 1.15fr 1fr;

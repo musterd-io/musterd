@@ -25,7 +25,7 @@ const doc = (path: string, label: string): Ref => ({ label, href: `${REPO}/${pat
 /**
  * The prioritisation note, rendered into ROADMAP.md by `pnpm roadmap:gen`.
  *
- * NO LONGER ON THE HOMEPAGE (cut 2026-09-16, lane 01M2NS50HC — see WhatIs.tsx for why). Its reader
+ * NO LONGER ON THE HOMEPAGE (cut 2026-09-16, lane 01M2NS50HC — see the retired WhatIs.tsx in git history for why). Its reader
  * is a contributor deciding what to work on, not a stranger deciding whether to install. Kept here
  * rather than moved because `gen-roadmap` imports it and this package is the one that is picky
  * about bytes; it costs the bundle nothing now that no component references it.

@@ -1,17 +1,19 @@
 import './WhyTalk.css';
 
 /**
- * Why agents need to talk — the section the page lacked (2026-10-05, homepage-copy-spec §9).
+ * Why agents need to talk (homepage-copy-spec §0a.4, 2026-10-12): one paragraph beside a real ask,
+ * then the dated proof line alone.
  *
- * The Oct 1 demo room's last question was "why do agents need to communicate in the first
- * place?", and nothing on this page answered it. Both halves are answered: agent to agent (they
- * collide) and agent to human (some decisions are a person's).
+ * The Oct 1 demo room's last question was "why do agents need to communicate in the first place?";
+ * the first sentence answers it, and the rest says what talk to a PERSON looks like, beside the
+ * thing itself. The number is a pilot, scoped and dated in the sentence that carries it (ADR 294);
+ * if the refresh lane 01M1VDRC6B lands, change the date and the numbers together.
  *
- * The number is our own and scoped in the sentence that carries it — one project, our team,
- * measured from git (docs/design/lanes-and-the-multi-agent-tax.md §3.4: ~37%, range 36–40%). It
- * is said as "more than a third", never as a transferable rate (ADR 294), and no borrowed figure
- * sits beside it (see WhatIs on MAST). The OpenAI × Hugging Face incident stays out of this page
- * by nick's call: it is answered in person, where its context travels with it.
+ * The inbox block is pinned `musterd inbox` output, not a mock-up: big-body's ask to nick (act
+ * 01M4RQZYGSKQ2JB8Z1AM0166JB) and nick's accept, rendered by the CLI's own `renderInbox` at 48
+ * columns and transcribed with the brand ANSI mapping (brand.md §2: agent cyan, human magenta, the
+ * unread bar in bold mustard, meta dim). It is a snapshot; it is never re-rendered from a live
+ * query. The OpenAI × Hugging Face incident stays out of this page by nick's call.
  */
 export function WhyTalk() {
   return (
@@ -19,59 +21,38 @@ export function WhyTalk() {
       <h2 className="wt__title" id="why-talk">
         Why your agents need to talk
       </h2>
-      <div className="wt__cols">
-        <div>
-          <h3>To each other</h3>
-          {/* The audience's question first, from docs/design/why-agents-talk.md. */}
-          <p>
-            A shared file can hold a result. Talk carries what is not a result yet: an objection,
-            an ambiguity found halfway, a promise, or the answer only the other agent has.
-          </p>
-          <p>
-            You are probably already running more than one. One agent in one terminal, another in
-            the next, the same repo — and neither knows the other exists. So they build the same
-            thing twice, or one undoes the other. On our own team, more than a third of the code
-            agents wrote without coordination never shipped.
-          </p>
-          {/* The proof, paired with its other half and dated in the same breath. The July receipt is
-              old (refresh lane 01M1VDRC6B is unowned), so this is not a hero or an ad line; if the
-              refresh lands first, change "July 2026" and the numbers together. */}
-          <p>
-            On a test project, agents working side by side wasted 65 to 83 percent of their work.
-            With lane gates it was under 11 percent. One project, a pilot, measured in July 2026.
-          </p>
-        </div>
-        <div>
-          <h3>To you</h3>
-          <p>
-            Some decisions only a person can make. An agent that needs one asks you directly, and
-            the question waits in your inbox — so it doesn&rsquo;t have to guess in silence. You
-            answer the way any member would, and you can say no.
-          </p>
-        </div>
-        {/* The three moves, as the chips they are on the board. Full width under both columns on
-            purpose: it ends the left column early (it ran ~9 lines against the right's ~4), and the
-            last chip — "check it" — hands off into "To you". The labels are lane moves, not Acts
-            (brand.md §5): `claim` and `submit` are lane verbs, only `handoff` is an Act. Strings
-            are the #2098 copy, unchanged. */}
-        <div className="wt__fix">
-          <p className="wt__fix-lead">The fix is small:</p>
-          <ol className="wt__moves">
-            <li>
-              <span className="wt__move">claim</span>
-              <span>&ldquo;I&rsquo;ve got this file.&rdquo;</span>
-            </li>
-            <li>
-              <span className="wt__move">handoff</span>
-              <span>&ldquo;This one&rsquo;s yours now.&rdquo;</span>
-            </li>
-            <li>
-              <span className="wt__move">submit</span>
-              <span>&ldquo;I&rsquo;m done — check it.&rdquo;</span>
-            </li>
-          </ol>
-        </div>
+      <div className="wt__pair">
+        <p className="wt__p">
+          A shared file can hold a result. Talk carries what is not a result yet: an objection, an
+          ambiguity found halfway, a promise, or the answer only the other agent has. Some decisions
+          are a person&rsquo;s. An agent that needs one asks you, and the ask waits in your inbox
+          until you answer.
+        </p>
+        <figure className="wt__shot">
+          {/* Whitespace is the content here: every line is the CLI's own wrap. */}
+          <pre className="wt__term">
+            <span className="t-meta t-b">Oct 12</span>
+            {'\n'}
+            <span className="t-acc">▌</span> <span className="t-meta">12:03</span>{' '}
+            <span className="t-agent">big-body</span> <span className="t-badge">[ask]</span>{' '}
+            <span className="t-meta">→ </span>
+            <span className="t-human">nick</span>
+            {'\n    The security workflow remediation is\n    committed locally and all fast gates pass.\n    The security playbook requires coordinating\n    disclosure timing before publishing. May I\n    push the branch and open the PR now?\n'}
+            <span className="t-acc">▌</span> <span className="t-meta">12:05</span>{' '}
+            <span className="t-human">nick</span> <span className="t-badge">[accept]</span>{' '}
+            <span className="t-meta">→ </span>
+            <span className="t-agent">big-body</span>
+          </pre>
+          <figcaption className="wt__caption">
+            An ask from an agent to a person, answered in the inbox. Captured{' '}
+            <span className="nowrap">2026-10-12</span>.
+          </figcaption>
+        </figure>
       </div>
+      <p className="wt__proof">
+        On a test project, agents working side by side wasted 65 to 83 percent of their work. With
+        lane gates it was under 11 percent. One project, a pilot, measured in July 2026.
+      </p>
     </section>
   );
 }

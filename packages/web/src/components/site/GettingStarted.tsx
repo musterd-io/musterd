@@ -14,12 +14,16 @@ import './GettingStarted.css';
  * The middle row links the first-ten-minutes page (/start, dreamy's lane 01M4GQ2NR438YWWYRH7RTTYP9X).
  * It was held back until that route existed (nick, 2026-10-09: deploy without /start); now the
  * route exists, the row is back.
+ *
+ * 2026-10-12 (homepage-copy-spec §0a.6): the "we write to you" promise lives in the hero only, so the
+ * first row has no body, and the lead no longer repeats "private preview" — the hero line says it and
+ * the `Not yet` row says there is no install.
  */
 const ROWS = [
   {
     status: 'Today',
     title: 'Request a seat.',
-    body: 'Fill in the form. We write to you when there is a seat for your team.',
+    body: null,
     link: { href: EARLY_ACCESS_URL, text: 'Get early access' },
   },
   {
@@ -42,16 +46,14 @@ export function GettingStarted() {
       <h2 className="gs__title" id="getting-started-h">
         Getting started
       </h2>
-      <p className="gs__lead">
-        musterd is in private preview, so there is no public install yet. This is the path today.
-      </p>
+      <p className="gs__lead">What you can do today, and what comes next.</p>
       <ol className="gs__rows">
         {ROWS.map((r) => (
           <li key={r.title} className={`gs__row${r.status === 'Not yet' ? ' is-later' : ''}`}>
             <span className="gs__status mono">{r.status}</span>
             <div>
               <h3 className="gs__row-title">{r.title}</h3>
-              <p className="gs__row-body">{r.body}</p>
+              {r.body && <p className="gs__row-body">{r.body}</p>}
               {r.link && (
                 <a className="gs__link" href={r.link.href}>
                   {r.link.text}

@@ -11,7 +11,8 @@ import { WATCH_COPY } from './watchCopy';
 import './StreamSection.css';
 
 /**
- * The stream section: the homepage's ONE office, directly under the hero (ADR 428).
+ * The stream section: the homepage's ONE office (ADR 428), fourth since ADR 560 — below the chain
+ * and the why, so the page explains before it shows the room.
  *
  * It used to be the second of two. `OfficeProof` carried a still and this carried the player, each
  * for a written reason that held on its own — and measured 2026-09-21 at 390x844 on a live channel,
@@ -129,16 +130,13 @@ export function StreamSection() {
       {/* The title is a direct child, not part of `.ss__copy`, purely so the grid can order it
           independently: stacked on a phone the reader must meet the heading BEFORE the player,
           or a video arrives with no idea attached to it. */}
-      <h2 className="ss__title">Watch its own agents build it, live</h2>
+      <h2 className="ss__title">Watch the team build it</h2>
       <div className="ss__copy">
+        {/* homepage-copy-spec §0a.5: one paragraph. The desk-outlasts-the-session sentence left the
+            page on purpose (it was said three times); /watch still carries it. */}
         <p className="ss__body">
-          musterd is built by a team running on musterd. Members claim work, hand it off, and
-          accept each other&rsquo;s changes — the acts this page describes, doing the building.
-        </p>
-        <p className="ss__body">
-          Every member has a desk with their name on it. A desk outlasts the session that filled it:
-          close the window and the member, their inbox and their unfinished work are all
-          still there. This is our team, working on its own product.
+          musterd is built by a team running on musterd. This is that team claiming work, handing it
+          off and accepting each other&rsquo;s changes.
         </p>
         <a className="ss__link mono" href={TWITCH_URL} target="_blank" rel="noreferrer">
           twitch.tv/{TWITCH_CHANNEL}
@@ -160,13 +158,12 @@ export function StreamSection() {
               className="ss__still"
               src={officeStill}
               alt={WATCH_COPY.stillAlt}
-              // Explicit dimensions so it cannot shift layout, and EAGER with a high priority —
-              // the opposite of what this image carried below the fold. It is now the first
-              // picture on the page and ships in the prerendered HTML, so `loading="lazy"` would
-              // deprioritise the one visual a reader is waiting on.
+              // Explicit dimensions so it cannot shift layout, and lazy again: ADR 560 put the
+              // stream fourth, below the fold at 390 and 1414 px wide, so ADR 428's eager, high
+              // priority fetch would now compete with the hero for a picture nobody sees yet.
               width={1200}
               height={630}
-              fetchPriority="high"
+              loading="lazy"
               decoding="async"
             />
           )}

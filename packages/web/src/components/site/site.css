@@ -75,3 +75,17 @@
     font-size: 0.85rem;
   }
 }
+
+/* A date is one word on the public pages: it must not break at its hyphens on a phone. */
+.nowrap {
+  white-space: nowrap;
+}
+
+/* The boundary sentence above the footer: small, quiet, and on the page's left edge. */
+.site-boundary {
+  margin-block: 0.4rem calc(var(--section-y) * 0.8);
+  max-width: 40rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-faint);
+}

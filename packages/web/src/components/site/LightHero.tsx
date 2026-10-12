@@ -1,14 +1,20 @@
 import { EARLY_ACCESS_URL, TAGLINE } from '../../content/site';
+import { RecordCard } from './RecordCard';
 import './LightHero.css';
 
 /**
  * The typographic landing hero (ADR 302): type on the warm mustard ground, no canvas, no render
  * loop. The pitch is the prerendered text itself.
+ *
+ * Two columns since 2026-10-12 (ADR 560, homepage-copy-spec §0a.2): the pitch on the left and a real
+ * lane's record on the right, so the claim and its proof share the first screen. On a phone the card
+ * follows the preview line.
  */
 export function LightHero() {
   return (
     <section className="lh">
       <div className="lh__inner shell">
+        <div className="lh__pitch">
         {/*
           No wordmark here. SiteNav states the name 38px above this, at the same size, and at phone
           width both sit flush left — so the page opened by saying "musterd" twice before it said
@@ -40,6 +46,8 @@ export function LightHero() {
         {/* What happens after the click, and why there is no install: the primary button sets an
             expectation. nick confirms this promise against what the form actually sends. */}
         <p className="lh__note">Private preview. We write to you when there is a seat for your team.</p>
+        </div>
+        <RecordCard />
       </div>
     </section>
   );
