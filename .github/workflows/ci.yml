@@ -90,10 +90,10 @@ jobs:
   # inside the job instead — the job itself must always end success or failure.
   gates:
     name: gates
-    # ADR 517: Ubicloud's 2 vCPU runner — same size as ubuntu-latest, about a fifth of the per-minute
-    # price, a fresh VM per job, and not subject to GitHub's hosted-runner queue. To go back, set
-    # this to `ubuntu-latest`; nothing else in the job depends on where it runs.
-    runs-on: ubicloud-standard-2
+    # ADR 569: GitHub-hosted, free on a public repo, 4 CPUs and 16 GB. ADR 517's Ubicloud runner is
+    # the outage fallback: set this to `ubicloud-standard-2` (2 CPUs) and the coverage step's
+    # --maxWorkers back to 2. Nothing else in the job depends on where it runs.
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
@@ -102,6 +102,10 @@ jobs:
         with:
           # Full history: roadmap-truth:check, change-adr:check and wiki-probe read old SHAs.
           fetch-depth: 0
+
+      # ADR 569's eval reads this: the runner's size, so a timing change can be put down to it.
+      - name: Runner
+        run: echo "cpus=$(nproc) mem_gb=$(free -g | awk '/^Mem:/{print $2}')"
 
       # ADR 499 / 492 / 498 / 508 / 510 / 512 — which gates run, on which drivers. Same rules as the
       # old `plan` job, now a step: docs-only diffs run the docs gates alone; a11y runs when
@@ -236,10 +240,10 @@ jobs:
 
       # --- coverage (was the `coverage` leaves + merge) -------------------------------------------
       # One job, no shards (ADR 515): the floors are enforced here, as on every one-shard run since
-      # ADR 498. Two workers on the 2 vCPU runner (lane 01M3ZC1Z6G, #1985).
+      # ADR 498. Four workers on the 4-CPU public-repo runner (ADR 569); two on a 2-CPU one (#1985).
       - name: Tests + coverage
         if: steps.pick.outputs.coverage == 'true'
-        run: pnpm coverage --maxWorkers=2 --reporter=default --reporter=github-actions
+        run: pnpm coverage --maxWorkers=4 --reporter=default --reporter=github-actions
         env:
           MUSTERD_TEST_DRIVER: ${{ steps.pick.outputs.kinds }}
 

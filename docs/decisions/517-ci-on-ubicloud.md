@@ -39,6 +39,8 @@ assignment, which failed for hours on the day this was decided.
 
 1. **`gates` runs on `ubicloud-standard-2`**: 2 vCPU, the same size as `ubuntu-latest`, so the
    step timings and the two-worker vitest setting (#1985) carry over unchanged.
+   _(Amended 2026-10-12: superseded by [ADR 569](569-ci-on-github-hosted-public.md) once the repo
+   went public. See the amendment below.)_
 2. **`main-red` stays on `ubuntu-latest`.** It runs only after a red scheduled run, costs a minute,
    and should not depend on the runner that may have just failed.
 3. **Going back is one line**: set `runs-on` back to `ubuntu-latest`. Nothing else in the job
@@ -58,6 +60,10 @@ assignment, which failed for hours on the day this was decided.
   Ubicloud label run there. Narrowing the app to this repo is optional hygiene.
 - The first run must confirm that the image matches what the job assumes: Node via setup-node,
   Google Chrome at `/usr/bin/google-chrome` for the a11y steps, and `gh`/`jq` for the pick step.
+- 2026-10-12 — **Superseded for `gates`.** The repo went public ([ADR 565](565-repo-public-musterd-io.md)),
+  where GitHub-hosted runners are free and have 4 CPUs. [ADR 569](569-ci-on-github-hosted-public.md)
+  moves `gates` back to `ubuntu-latest` and keeps this ADR's runner as the outage fallback.
+  Decisions 2–4 stand. The weekly bill eval below ends.
 
 ## Observability & Evaluation
 
