@@ -50,8 +50,8 @@ tour started in one surface resumes in the other, and a closed lane starts a fre
 | Tour panel | After `Stop` | `Stopped. Resume the tour any time to pick up where you left off.` | Toast or inline line. Web wording of the CLI's `STOPPED`; the CLI line names a command the web viewer has no reason to run. |
 | Tour panel | `team`, more than one agent member | `TOUR_MESSAGES.pickAgent` | Then one choice per agent member, labelled with its name. Ask before `give_work` opens the lane. |
 | Tour panel | `team`, no agent member | `TOUR_MESSAGES.noAgent` | The tour stops here. The entry point is hidden in this state anyway; this covers an agent that leaves mid-tour. |
-| Tour panel | `team` | — | Advances by itself. Recommended placement: point at the roster on `/live`. |
-| Tour panel | `give_work` | — | Advances once the lane is open and the request is sent (§5). |
+| Tour panel | `team` | `Continue`, `Back` | Waits for `Continue`. Recommended placement: point at the roster on `/live`. _(2026-10-12, lane `01M4RM16N0`: this row said "advances by itself"; nick could not tell the tour had moved on.)_ |
+| Tour panel | `give_work` | `Give {agent} the work`, `Back` | The button opens the lane and sends the request (§5), reading `Opening the lane…` while it does; nothing opens before it is pressed. Advances once both are done. `Back` only exists on `team` and `give_work`, before the lane does. _(2026-10-12, lane `01M4RM16N0`: the lane used to open the moment this step appeared.)_ |
 | Tour panel | `claims` waiting | `TOUR_STEPS` `claims` hints | First hint at 60 s, second at 180 s after the step began. Show only the latest due hint, once. |
 | Tour panel | `hands_back` waiting | `TOUR_STEPS` `hands_back` hint | At 180 s after the step began. |
 | Tour panel | `judge` | the step's body, then the lane's `detail` | Render `detail` as plain text, never as HTML or markdown: an agent wrote it. |

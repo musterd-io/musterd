@@ -12,6 +12,7 @@ import {
 import { Confetti, LaneTicket } from './LaneTicket';
 import {
   advance,
+  canGoBack,
   agentNow,
   agentsOf,
   clock,
@@ -65,8 +66,6 @@ const livePort: TourPort = {
   history: (cfg, since) => fetchHistory(cfg, { since, limit: 200 }),
 };
 
-/** How long `team` stays up before the tour moves on by itself (spec §3: it advances by itself). */
-const TEAM_DWELL_MS = 6_000;
 /** The resume replay starts this long before the lane opened (spec §5). */
 const OVERLAP_MS = 5_000;
 const STOPPED = 'Stopped. Resume the tour any time to pick up where you left off.';
@@ -209,15 +208,10 @@ export function Tour({
     if (next !== run.s) go(next);
   }, [envelopes, run]);
 
-  // `team` moves on by itself once an agent is chosen.
-  useEffect(() => {
-    if (s?.step !== 'team' || !s.agent) return;
-    const t = setTimeout(() => go(advance(s, { type: 'continue' })), TEAM_DWELL_MS);
-    return () => clearTimeout(t);
-  }, [s]);
-
-  // `give_work` opens the lane in the viewer's name, unowned, and asks the agent to take it.
-  useEffect(() => {
+  // `give_work` opens the lane in the viewer's name, unowned, and asks the agent to take it — when
+  // the viewer presses the button, never by itself. nick, 2026-10-12: steps 2 and 3 moved on their
+  // own and opened a lane in the background, and he could not tell anything had happened.
+  const giveWork = () => {
     if (s?.step !== 'give_work' || opening.current) return;
     opening.current = true;
     setBusy(true);
@@ -244,7 +238,7 @@ export function Tour({
         setBusy(false);
       }
     })();
-  }, [s, cfg, port, viewer]);
+  };
 
   // A clock for the elapsed line and the hints, only while the tour waits on the agent. A decline
   // stops the wait: nothing more is coming.
@@ -401,6 +395,8 @@ export function Tour({
           error={error}
           onPick={(picked) => go({ ...s, agent: picked })}
           onContinue={() => go(advance(s, { type: 'continue' }))}
+          onBack={() => go(advance(s, { type: 'back' }))}
+          onGiveWork={giveWork}
           onSkip={() => go(advance(s, { type: 'skip_to_record' }))}
           onToNext={() => go({ ...s, step: 'next' })}
           onDone={() => setRun(null)}
@@ -481,6 +477,8 @@ export function TourPanel({
   error,
   onPick,
   onContinue,
+  onBack,
+  onGiveWork,
   onSkip,
   onToNext,
   onDone,
@@ -503,6 +501,8 @@ export function TourPanel({
   error: string | null;
   onPick: (agent: string) => void;
   onContinue: () => void;
+  onBack: () => void;
+  onGiveWork: () => void;
   onSkip: () => void;
   onToNext: () => void;
   onDone: () => void;
@@ -563,6 +563,26 @@ export function TourPanel({
       >
         Continue
       </button>
+    );
+  } else if (s.step === 'team' || s.step === 'give_work') {
+    const give = s.step === 'give_work';
+    actions = (
+      <>
+        <button
+          type="button"
+          className="lc-ask__btn lc-ask__btn--accept"
+          data-primary=""
+          disabled={busy}
+          onClick={give ? onGiveWork : onContinue}
+        >
+          {give ? (busy ? 'Opening the lane…' : `Give ${vars.agent} the work`) : 'Continue'}
+        </button>
+        {canGoBack(s) && (
+          <button type="button" className="lc-ask__btn" disabled={busy} onClick={onBack}>
+            Back
+          </button>
+        )}
+      </>
     );
   } else if (declined) {
     body = (
