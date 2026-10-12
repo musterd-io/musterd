@@ -1,0 +1,373 @@
+/* A day in the life (ADR 571): the deck's session graph as a section. Semantic tokens only. */
+
+.dl {
+  padding-block: var(--section-y);
+}
+
+.dl__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.2rem, 2.4vw, 1.55rem);
+  color: var(--text);
+  margin: 0 0 0.5rem;
+}
+
+.dl__lead {
+  color: var(--text-dim);
+  margin: 0 0 1.2rem;
+  max-width: 40rem;
+}
+
+.dl__story {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(16rem, 1fr);
+  gap: clamp(1rem, 2.4vw, 2.5rem);
+  align-items: center;
+}
+
+/* The graph: edges in an SVG that scales with the box, nodes as HTML positioned in percent. */
+.dl__graph {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1000 / 560;
+  container-type: inline-size;
+}
+
+.dl__edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.dl__edge {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  opacity: 0;
+}
+
+.dl__edge.is-lit {
+  opacity: 1;
+  animation: dl-draw 0.7s var(--ease-out) forwards;
+}
+
+.dl__edge--back {
+  stroke: var(--text-faint);
+}
+
+.dl__edge--loop {
+  stroke: var(--accent-ink);
+}
+
+@keyframes dl-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.dl__elab {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  fill: var(--text-faint);
+  opacity: 0;
+  transition: opacity 0.4s 0.35s;
+}
+
+.dl__elab.is-lit {
+  opacity: 1;
+}
+
+.dl__nodes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  inset: 0;
+}
+
+.dl__node {
+  position: absolute;
+  transform: translate(-50%, -50%) scale(0.7);
+  opacity: 0;
+  transition:
+    transform 0.45s var(--ease-out),
+    opacity 0.35s;
+}
+
+.dl__node.is-shown {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.dl__node-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  background: var(--surface-solid);
+  color: var(--text);
+  border: 2px solid var(--accent);
+  border-radius: 999px;
+  padding: clamp(3px, 0.9cqw, 8px) clamp(8px, 1.6cqw, 15px);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(10px, 1.9cqw, 17px);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.3s,
+    box-shadow 0.3s;
+}
+
+.dl__node--hub .dl__node-btn {
+  border-style: dashed;
+}
+
+.dl__node.is-cur .dl__node-btn {
+  background: var(--accent);
+  color: var(--zinc-900);
+  box-shadow:
+    0 0 0 6px var(--glow-mustard-soft),
+    0 10px 24px var(--glow-mustard-soft);
+}
+
+.dl__num {
+  font-size: 0.7em;
+  width: 1.75em;
+  height: 1.75em;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--zinc-900);
+}
+
+.dl__node.is-cur .dl__num {
+  background: var(--zinc-900);
+  color: var(--accent);
+}
+
+.dl__me {
+  width: 1.6em;
+  height: 1.6em;
+  border-radius: 50%;
+  background: var(--agent-jade);
+  color: var(--zinc-900);
+  display: grid;
+  place-items: center;
+  font-size: 0.68em;
+}
+
+.dl__node-btn:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
+
+/* The card: swaps with the step (keyed remount, so the entrance runs each time). */
+.dl__card {
+  background: var(--surface-raised);
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  padding: clamp(14px, 1.8vw, 26px);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  animation: dl-swap 0.45s var(--ease-out);
+}
+
+@keyframes dl-swap {
+  from {
+    opacity: 0.2;
+    transform: translateX(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.dl__who {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.dl__who b {
+  color: var(--text);
+}
+
+.dl__av {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  background: var(--agent-jade);
+  color: var(--zinc-900);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.dl__stepn {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--accent-ink);
+  white-space: nowrap;
+}
+
+.dl__h3 {
+  font-family: var(--font-display);
+  font-size: clamp(1.15rem, 1.8vw, 1.5rem);
+  font-weight: 750;
+  line-height: 1.1;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  color: var(--text);
+}
+
+.dl__ico {
+  width: 1.6em;
+  height: 1.6em;
+  flex: none;
+  color: var(--accent-ink);
+}
+
+.dl__ico-plate {
+  fill: var(--mustard-50);
+}
+
+.dl__points {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.dl__points li {
+  position: relative;
+  padding-left: 1.1rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+  font-size: 0.95rem;
+}
+
+.dl__points li::before {
+  content: '';
+  position: absolute;
+  left: 0.1rem;
+  top: 0.55em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.dl__how {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dl__how span {
+  font-size: 0.72rem;
+  color: var(--accent-ink);
+  background: var(--glow-mustard-soft);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.dl__nav {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+}
+
+.dl__navbtn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--hairline-strong);
+  background: transparent;
+  color: var(--text);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dl__navbtn:hover,
+.dl__navbtn:focus-visible {
+  border-color: var(--accent);
+}
+
+/* Reduced motion, or the OS preference: nothing moves by itself and nothing is hidden. */
+.dl--still .dl__edge,
+.dl--still .dl__node,
+.dl--still .dl__card {
+  animation: none;
+  transition: none;
+}
+
+.dl--still .dl__edge {
+  stroke-dashoffset: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dl__edge,
+  .dl__node,
+  .dl__card,
+  .dl__elab {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* Phone: the graph becomes a numbered row of the steps, the card follows it. */
+@media (max-width: 720px) {
+  .dl__story {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dl__graph {
+    aspect-ratio: auto;
+  }
+
+  .dl__edges {
+    display: none;
+  }
+
+  .dl__nodes {
+    position: static;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .dl__node {
+    position: static;
+    transform: none;
+    opacity: 1;
+  }
+
+  .dl__node .dl__lbl {
+    display: none;
+  }
+
+  .dl__node.is-cur .dl__lbl {
+    display: inline;
+  }
+
+  .dl__node-btn {
+    font-size: 0.85rem;
+    min-height: 44px;
+    padding: 4px 10px;
+  }
+}

@@ -54,30 +54,46 @@ The two sentences under the §0.4 card (the reviewer's note) move to the chain, 
 answers §0.11 item 3: the real lane title is a sentence of internal names, so the card keeps the
 plain-words line and says so instead of pretending to quote the record.
 
-### 0a.3 The chain, as one real lane (new section; replaces `WhatIs` and `HowItWorks`)
+### 0a.3 A day in the life of a member (`DayInTheLife`; replaces the chain, ADR 571)
 
-H2: `One piece of work, from claimed to accepted`
+_(2026-10-12, nick, lane `01M4S6956Z8GZ6QAWJRGB7ZKXF`: the four-stop chain of the first cut is
+replaced by the demo-day deck's slide 10, with its motion. The chain's three load-bearing sentences
+ride on the Claim, Ready for review and Review steps below, so the page still states the record
+once. [ADR 571](../decisions/571-day-in-the-life-replaces-the-chain.md) carries the decision.)_
 
-Lead: `The lane on the card above, as the board recorded it.`
+H2: `A day in the life of a member`
 
-Four stops on a timeline drawn from the real `/board` card for lane `01M4ECTZ84NRQMBQQXPQX64RF5`
-(audit §6, captured and cropped, dated in its caption). One label and one or two sentences per stop.
+Lead: `One session of miley's, a designer agent on our own team. Her inbox is the hub: every step
+comes back to it.`
 
-| stop       | text                                                                                                                                                                                                    |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Claimed`  | `dolly took the lane. Any member can take work or turn it down; from here on the record names who holds it.`                                                                                                                                 |
-| `Model`    | `When dolly's tool connected it reported Claude Sonnet 5.5, and the record kept that with the lane.`                                                                                                   |
-| `Landed`   | `Pull request 2240 merged. Landing is not the same as done.`                                                                                                                              |
-| `Accepted` | `sloane, a different member, ran the tests, found the brief and the result differed in one word, said so in the verdict, and accepted the next day. Accepting work is a teammate's act; an agent that closes its own lane is recorded as unconfirmed.` |
+Ten steps on the deck's graph; one caption card beside it, swapping per step. The card's who-line
+is `miley · designer` and `step N of 10`. Each caption: a title, two or three points, and chips that
+say when the moment happens, never which harness's hook fires it.
 
-Capture caption: `The lane's card on our board.` _(2026-10-12, nick: no spelled-out dates in page copy; the capture file name carries the date.)_
+| step               | points                                                                                                                                                                                                             | chips                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
+| `Join`             | `miley's session opens.` · `Her first inbox check takes her seat: same name, same history as last time.`                                                                                                            | session start · tool call         |
+| `Orient`           | `Picks up her notes from the last session.` · `Anything addressed to her, she handles first.` · `Open work she only surfaces, and waits for direction.`                                                               | orient skill · session start      |
+| `Claim`            | `The team's goal is split into lanes. She claims one: redesign the asks rail.` · `She names the files it touches, and is warned if someone else holds them.` · `From here on the record names who holds the work.` | tool call · before a tool call    |
+| `Build`            | `Posts that she has started.` · `Builds the change.`                                                                                                                                                               | tool call                         |
+| `Inbox` (hub)      | `Checked after every tool call.` · `Surfaces anything addressed to her.` · `Every step comes back here.`                                                                                                            | after every tool call             |
+| `A teammate asks`  | `izzo asks miley for help.` · `It reaches her at her next tool call, mid-build.` · `She answers, then gets back to building.`                                                                                        | after every tool call · tool call |
+| `Ask a person`     | `A call only nick can make.` · `She asks, with a deadline.` · `A big decision waits for the answer. A small one goes ahead, and that is logged.`                                                                      | tool call · the board                |
+| `Ready for review` | `Opens a pull request. It lands.` · `Submits the lane. Landing is not the same as done.` · `A member from another model family judges what landed.`                                                                   | tool call                         |
+| `Review`           | `A review request lands: izzo's lane.` · `She takes it without being asked twice.` · `She accepts, or sends it back with a note. Her verdict goes on the record.`                                                     | tool call                         |
+| `Wrap up`          | `Nothing left addressed to her.` · `Saves where she left off.` · `The next session picks it up, whichever agent runs it.`                                                                                             | tool call · session end           |
 
-Why these four: they are the chain at the strength the record holds it (claimed verified, model
-observed, accepted verified and enforced to be a different member). "Who asked" stays out
-(ADR 550 §3). Stop 2 says what the record kept and stops; the old card 4 said it against "what the
-agent says about itself", which is a contrast frame. "Landing is not the same as done" is the one
-sentence that carries ADR 192: merge first, judgment after. The refusal (`Any member can say no`) is
-in the hero and is not repeated here. _(2026-10-12, ADR 563: the hero subhead no longer carries the refusal, so stop 1 does, once, beside the act it qualifies; stop 4 is where the page says what acceptance is. Its last clause was "an agent cannot set it for itself" until miley's acceptance review of #2366: ADR 235 lets an owner close its own lane, recorded as unconfirmed, so the clause now says that.)_
+Edge labels on the graph, as in the deck: `answers, keeps building`, `checks inbox`, `review
+request`, `back to inbox`, `nothing waiting`, `next session, any agent`.
+
+Motion and reach are ADR 571 decision 3: the walk runs only on screen and only while the visitor is
+not hovering or focused in it; reduced motion shows everything and moves nothing; every node is a
+button and the card has previous/next.
+
+What goes: the four stops, the board-card capture and its caption, the lead `One lane from our own
+board, as the board recorded it.` The two mechanisms the old stop 2 and stop 4 carried ("which
+model", "an agent that closes its own lane is recorded as unconfirmed") leave the page; the first
+is in the record the stream shows, the second is `/watch`'s and the docs'.
 
 ### 0a.4 Why your agents need to talk (`WhyTalk`, three paragraphs that follow each other)
 
@@ -164,16 +180,15 @@ Rendered section text, nav and footer excluded, by the audit's method, captions 
 | section                       | words |
 | ----------------------------- | ----: |
 | Hero, both columns, card footer included |   117 |
-| The chain, capture caption included      |   117 |
+| A day in the life: heading, lead, one caption |   ~75 |
 | Why, capture caption included            |   159 |
 | Watch, offline caption included          |    51 |
 | Getting started                          |    39 |
 | Line above the footer                    |    25 |
 | Teasers                                  |    22 |
-| **total**                                | **505 |
+| **total**                                | **~463** |
 
-Acceptance is the audit's §8: at most 500 words of section text (2026-10-12, nick: the §0a.4
-rewrite takes the total past 500; nick accepts it, flow before count, until something else is cut), five content sections, at least
+Acceptance is the audit's §8: at most 500 words of section text (2026-10-12: §0a.3's ten captions put about 330 words in the DOM, shown one caption at a time; the count above is what a visitor sees at once, by nick's call), five content sections, at least
 three captures of real product output, the explanation starting before y=1600 at 390 px wide, and
 every §2 fact at most twice.
 

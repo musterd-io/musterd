@@ -8,7 +8,7 @@ import {
   webSiteNode,
 } from '../brand/siteMeta';
 import { Boundary } from '../components/site/Boundary';
-import { Chain } from '../components/site/Chain';
+import { DayInTheLife } from '../components/site/DayInTheLife';
 import { GettingStarted } from '../components/site/GettingStarted';
 import { LightHero } from '../components/site/LightHero';
 import { SiteFooter } from '../components/site/SiteFooter';
@@ -46,7 +46,7 @@ function Home() {
       {/* ADR 567: the hero carries the office (the stream, or its still), then the chain, why and
           getting started — the room first, then what it is doing. */}
       <LightHero />
-      <Chain />
+      <DayInTheLife />
       <WhyTalk />
       <GettingStarted />
       <Teasers />

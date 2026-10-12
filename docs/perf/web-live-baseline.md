@@ -1286,3 +1286,22 @@ answer replaced them at 6.1 s. Before, the same panels were empty or wrong until
 Live CSS is now at its ceiling; the next rule there needs a trim or a raise.
 
 - Falsify: open /live, reload — the team column shows cards before the daemon's `/teams/<team>` response completes.
+
+### 2026-10-12 — the home page's day-in-the-life graph (ADR 571, lane `01M4S6956Z8GZ6QAWJRGB7ZKXF`)
+
+The chain section (`Chain.tsx` + `Chain.css` + a 218 px board-card capture) is replaced by
+`DayInTheLife`: ten HTML nodes positioned in percent over an SVG of drawn edges, a swapping caption
+card, a phone layout and a reduced-motion variant. The new CSS is the whole cost; the JS is one
+site-route chunk and the capture's bytes leave.
+
+| Budget   | Before (main `8ce5b689`) | This branch | Ceiling                |
+| -------- | ------------------------ | ----------- | ---------------------- |
+| site CSS | 3.8 KB                   | 5.3 KB      | RAISED 4.7 KB → 6.1 KB |
+| total JS | 293.1 KB                 | 299.1 KB    | unchanged (300.1 KB)   |
+
+The raise is measured + 15% (ADR 183). Trimming was not available without dropping the phone layout
+or the reduced-motion rules, both of which the ADR requires. Total JS is now 1 KB under its ceiling;
+the next site-route component needs a trim or a raise there.
+
+- Falsify: `pnpm perf:check` after a build reports site CSS at or under 6.1 KB with the section
+  present in the home route.
