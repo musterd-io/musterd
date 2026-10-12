@@ -47,14 +47,67 @@ belongs to Claude Code and could change in any release.
 
 ## Not measured yet
 
-- **Hit rate.** One run, one pass. The ADR asks for 5.
-- **A half-typed draft** at the prompt when the line lands: kept, lost or merged.
+- ~~**Hit rate.** One run, one pass. The ADR asks for 5.~~ MEASURED 2026-10-12: five of five
+  qualifying runs passed (below).
+- ~~**A half-typed draft** at the prompt when the line lands: kept, lost or merged.~~ MEASURED
+  2026-10-12: kept (trial 2).
 - **An open tool-approval dialog** when the line lands. The keyboard guard does not cover a dialog
-  that is waiting on the human.
+  that is waiting on the human. Partly measured 2026-10-12: a question dialog (`AskUserQuestion`)
+  held the act until it closed (trial 3). A permission dialog was not raised: the session ran in
+  auto mode, which does not ask.
 - **A held-message dialog** (`crossSessionInbound`). None reached the model. Whether Claude Code
   showed the human anything on screen was not recorded.
 
-Follows-up: deferred — the four runs above are taken on the next idle-wake lane that touches the claude-code inject (2026-10-11)
+Follows-up: 01M4M6PXZT8ND6F17ZSBDKZQCS
+
+## The five-run follow-up (2026-10-12; falsify: the audit rows and transcript lines below) <!-- claim: other -->
+
+Five qualifying runs on Claude Code, five passes: four idle steers or asks injected 5.06–5.25 s
+after the send, and one held behind an open dialog until it closed. One more natural act was
+injected late, under a stalled daemon. One planned trial did not count.
+
+- **Setup.** Seat izzo, Claude Code, daemon on `c0b4969` (includes the peek fix, #2370 `7c5035e`)
+  for trials 3–5, on `b30bf80`/`c55284d` for the earlier runs. Sends are nick's
+  `musterd send --act steer --to izzo 'trial N: reply with the act id you read'`. Times are UTC,
+  from `messages.ts` (send), the `audit` table (`interrupt.raised`, `idle_wake.injected`) and the
+  session transcript (`queue-operation enqueue`, the `turnOrigin: 'peer'` user entry).
+
+| run | act | sent | idle before | raised | injected | turn | result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| trial 1 | — | 16:49:20 | — | — | — | — | VOID: session not joined (below) |
+| trial 2 | `01M4RGSZA9EEYA8J8HQR7XG1W6` | 16:58:19.30 | 4 m 40 s | +5.218 s | +5.253 s | +9.535 s | PASS; half-typed draft kept |
+| trial 3 | `01M4RTZVQFVEGNJ9JAVKE38C9N` | 19:56:15.98 | dialog open | +77.2 s | — | on close | PASS; held while the dialog was open |
+| trial 4 | `01M4RV7F8E3Q5D7ZPQHYCK8GC1` | 20:00:25.36 | 2 m 29 s | +5.225 s | +5.230 s | +5.309 s | PASS |
+| trial 5 | `01M4RVC724D7877K5DD86V4D3W` | 20:03:00.81 | 2 m 19 s | +5.056 s | +5.063 s | +5.136 s | PASS |
+| natural (alfie's acceptance ask) | `01M4RCS1P30VZN2HF30P6T99H8` | 15:47:52.64 | ~9 h | +5.072 s | +5.093 s | +5.237 s | PASS |
+| natural (ghost's request_help) | `01M4RMNPWGM2FCCXT8FMMBR6TX` | 18:05:51.89 | 5 m 27 s | +30.1 s | +6 m 37 s | +6 m 38 s | LATE, daemon stalled |
+
+- **Each woken turn answered.** Trials 2–5 each replied to nick naming the act id read
+  (trial 3 `01M4RV2KA7ZT4KRMXNWQZ60YD5`, trial 4 `01M4RV7W7E4X28BCG53PS9VK16`,
+  trial 5 `01M4RVCKZH9CYFWMRAF1WYCCFZ`).
+- **The half-typed draft (trial 2).** nick left text in the prompt box before the steer landed.
+  Claude Code ran the pushed line as its own turn and the draft was still in the box afterwards.
+- **The dialog (trial 3).** The steer was sent while an `AskUserQuestion` dialog was open. Nothing
+  reached the screen or the model while it was open. When nick answered, the act was raised at
+  +77.2 s and reached the model as a PostToolUse hook line, not through the idle inject. In Claude
+  Code an open dialog is a tool call still running, so the busy rail carries it, which is the right
+  rail. A first attempt at this trial, before #2370, lost the act: the statusline's count-only
+  `GET /inbox` wrote `inbox.rendered` and discharged it. #2370 (`GET /inbox?peek=1`) fixed that.
+- **Trial 1 did not count.** After a `/mcp` reload the new adapter held no presence until the
+  session's first `team_*` call. The steer at 16:49:20 raised nothing, and the daemon logged
+  `interrupt.refused` with `not_joined` at 16:52:41. A reloaded session is deaf until its next tool
+  call (2026-10-12; falsify: an `interrupt.raised` row for izzo between 16:49 and 16:52 UTC). <!-- claim: defect -->
+  The same session start state recurred at 19:53 (the hook reported a dead lease until
+  `team_join`). Lane `01M4RX7NE2GWA4P8Q6R6NMEA5F` owns the fix: join on connect when idle wake is
+  on.
+- **The late natural run.** The session had been idle since 18:00:25. The auto-refresher bounced
+  the daemon at 18:03:58, and its health probe failed at 18:06:03, 18:08:09 and 18:10:25
+  (`~/.musterd/autorefresh/refresh.log`, local times there). The act was raised 30 s after the send,
+  six times the normal 5 s, and no inject followed. An unrelated turn (a background task finishing)
+  ran 18:08:50–18:11:03, and the act was injected at 18:12:29, 86 s after that turn ended. It was
+  late, not lost. The likely cause is that the adapter's `seam=idle` check did not get an answer
+  from the stalled daemon, and the busy hold re-armed it after the next turn. That is inferred from
+  the timings, not traced.
 
 ## The opencode run (2026-10-12; falsify: the message rows and audit rows below) <!-- claim: other -->
 
