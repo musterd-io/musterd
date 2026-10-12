@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, appendFileSync } from 'node:fs';
+import { connect as tcpConnect } from 'node:net';
 import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
 import * as p from '@clack/prompts';
@@ -379,13 +380,48 @@ function guard<T>(value: T | symbol): T {
   return value as T;
 }
 
-async function health(server: string): Promise<boolean> {
+async function health(server: string, timeoutMs = 1500): Promise<boolean> {
   try {
-    const res = await fetch(server + '/health', { signal: AbortSignal.timeout(1500) });
+    const res = await fetch(server + '/health', { signal: AbortSignal.timeout(timeoutMs) });
     return res.ok;
   } catch {
     return false;
   }
+}
+
+/** A loaded laptop can take seconds to answer /health; a running daemon is not a missing one. */
+const FIRST_PROBE_MS = 5000;
+const SLOW_DAEMON_WAIT_MS = 20_000;
+
+/** Whether something already accepts connections on the server's port (a daemon too busy to answer). */
+function portTaken(server: string): Promise<boolean> {
+  let url: URL;
+  try {
+    url = new URL(server);
+  } catch {
+    return Promise.resolve(false);
+  }
+  const port = Number(url.port || (url.protocol === 'https:' ? 443 : 80));
+  return new Promise((resolve) => {
+    const sock = tcpConnect({ host: url.hostname.replace(/^\[|\]$/g, ''), port });
+    const done = (taken: boolean) => {
+      sock.destroy();
+      resolve(taken);
+    };
+    sock.setTimeout(1000, () => done(false));
+    sock.once('connect', () => done(true));
+    sock.once('error', () => done(false));
+  });
+}
+
+/** Keep asking a daemon that holds the port but is slow, up to `SLOW_DAEMON_WAIT_MS`. */
+async function waitForSlowDaemon(server: string): Promise<boolean> {
+  const until = Date.now() + SLOW_DAEMON_WAIT_MS;
+  while (Date.now() < until) {
+    if (await health(server, FIRST_PROBE_MS)) return true;
+    await delay(500);
+  }
+  return false;
 }
 
 /** Spawn `musterd serve` detached so it outlives this process, then wait for health. */
@@ -429,7 +465,20 @@ export async function runInit(): Promise<number> {
   // 1) Daemon ---------------------------------------------------------------
   const s = p.spinner();
   s.start('Looking for the team server');
-  if (await health(server)) {
+  if (await health(server, FIRST_PROBE_MS)) {
+    s.stop(`Team server is up at ${pc.dim(server)}`);
+  } else if (await portTaken(server)) {
+    // Something holds the port but did not answer in time: a daemon on a busy machine. Offering to
+    // start another would only collide with it, so wait for it instead.
+    s.message(`A team server is running at ${pc.dim(server)} but slow to answer — waiting`);
+    if (!(await waitForSlowDaemon(server))) {
+      s.stop(`The team server at ${pc.dim(server)} is running but not answering`);
+      p.note(
+        `Give it a moment, then re-run ${pc.yellow('musterd init')}. If it stays silent, ${pc.yellow('musterd service restart')} restarts it.`,
+        'Daemon busy',
+      );
+      return 1;
+    }
     s.stop(`Team server is up at ${pc.dim(server)}`);
   } else {
     s.stop(`No team server at ${pc.dim(server)}`);
