@@ -16,7 +16,7 @@ import {
 } from '../help/catalog.js';
 import { renderBanner } from './rows.js';
 import { theme } from './theme.js';
-import { defList, dim, heading, rule, sym, termWidth, wrapText } from './ui.js';
+import { defList, dim, heading, hint, rule, sym, termWidth, wrapText } from './ui.js';
 
 function entry(name: string): CommandEntry | undefined {
   return CATALOG.find((c) => c.name === name);
@@ -26,12 +26,12 @@ function entry(name: string): CommandEntry | undefined {
 export function renderHelp(opts: { full?: boolean; width?: number } = {}): string {
   const width = opts.width ?? termWidth();
   const out: string[] = [renderBanner(), ''];
-  out.push(
-    dim(`the coordination layer for your team · ${sym.arrow} musterd help <command> for detail`),
-  );
+  out.push(dim('the coordination layer for your team'));
+  out.push(hint('musterd help <command> for detail'));
 
   // Start here — the four commands a fresh session reaches for first.
-  out.push('', heading('start here'));
+  // A short rule (not a full-width bar) is the room divider; the footer keeps the long one.
+  out.push('', rule(28), heading('start here'));
   const startRows = START_HERE.map((n) => entry(n))
     .filter((c): c is CommandEntry => !!c)
     .map((c) => ({ term: c.name, desc: c.summary }));
@@ -42,18 +42,24 @@ export function renderHelp(opts: { full?: boolean; width?: number } = {}): strin
     const inGroup = CATALOG.filter((c) => c.group === group.id);
     const shown = opts.full ? inGroup : inGroup.filter((c) => c.primary);
     const rows = (shown.length ? shown : inGroup).map((c) => ({ term: c.name, desc: c.summary }));
-    out.push('', `${heading(group.title)}  ${dim(group.blurb)}`);
+    out.push('', rule(28), `${heading(group.title)}  ${dim(group.blurb)}`);
     out.push(defList(rows, { width }));
     const hidden = inGroup.length - rows.length;
     if (hidden > 0) {
-      out.push(dim(`  ${sym.more} +${hidden} more — musterd help ${group.id}`));
+      out.push(
+        `  ${dim(`${sym.more} +${hidden} more — `)}${theme.accent(`musterd help ${group.id}`)}`,
+      );
     }
   }
 
   // Footer.
   out.push('', rule(Math.min(width, 72)));
-  out.push(theme.meta('global flags') + '  ' + GLOBAL_FLAGS.map((f) => f.flag).join('  '));
-  out.push(theme.meta('acts') + '  ' + ACTS.join(' '));
+  out.push(
+    theme.meta('global flags') +
+      '  ' +
+      GLOBAL_FLAGS.map((f) => theme.accent(f.flag)).join(theme.meta('  ')),
+  );
+  out.push(theme.meta('acts') + '  ' + ACTS.map((a) => theme.dim(a)).join(' '));
   out.push(dim(`more   musterd help <command>  ${sym.dot}  musterd help --json`));
   return out.join('\n');
 }
@@ -84,6 +90,7 @@ export function renderCommandHelp(name: string): string | null {
 
   const sig = cmd.signature ? ` ${theme.meta(cmd.signature)}` : '';
   out.push(`${theme.accent('musterd ' + cmd.name)}${sig}`);
+  out.push(rule(Math.min(28, width)));
   out.push('  ' + cmd.summary);
 
   if (cmd.detail) {

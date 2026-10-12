@@ -100,6 +100,30 @@ export function hint(s: string): string {
 }
 
 /**
+ * Key tokens a footer leads a clause with. Longer tokens first so `any key` and `⌃R` win.
+ * A lone `w` is the wake-menu watch key; it only matches when a space or the end follows.
+ */
+const KEY_TOKEN = /^(any key|letters|⌃R|⌃C|⌃P|⌃N|↑↓|⏎|⇥|→|←|esc|w)(?=\s|$)/;
+
+/**
+ * A footer whose leading key is accent and the rest is meta: `⏎ launch · esc quit`.
+ * With color off every role is the identity, so this returns `line` unchanged and the
+ * no-color frames stay exact.
+ */
+export function paintKeys(line: string): string {
+  const lead = /^\s*/.exec(line)?.[0] ?? '';
+  const parts = line.slice(lead.length).split(' · ');
+  const painted = parts
+    .map((part) => {
+      const key = KEY_TOKEN.exec(part)?.[1];
+      if (!key) return theme.meta(part);
+      return theme.accent(key) + theme.meta(part.slice(key.length));
+    })
+    .join(theme.meta(' · '));
+  return lead + painted;
+}
+
+/**
  * A success confirmation with the signature `✓`, and — the delight-in-moments touch — an optional dim
  * `next:` line so a command never dead-ends: it names the obvious next move.
  */

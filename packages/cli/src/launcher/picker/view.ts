@@ -1,5 +1,5 @@
 import { theme } from '../../render/theme.js';
-import { padEndVisible, visibleLen } from '../../render/ui.js';
+import { padEndVisible, paintKeys, visibleLen } from '../../render/ui.js';
 import { harnessLabel, LAUNCHABLE_HARNESSES } from '../labels.js';
 import {
   ago,
@@ -42,7 +42,8 @@ function header(s: PickerState, cols: number): string {
         : s.level.kind === 'members'
           ? [s.level.team, s.level.project]
           : [];
-  const left = `${theme.presenceDot('online')} ${theme.presenceDot('away')} ${theme.presenceDot('offline')} ${['musterd', ...crumbs].join(' › ')}`;
+  const trail = [theme.brandmark('musterd'), ...crumbs].join(theme.meta(' › '));
+  const left = `${theme.presenceDot('online')} ${theme.presenceDot('away')} ${theme.presenceDot('offline')} ${trail}`;
   const teams = [...new Set(s.seats.map((x) => x.team))].sort().join(', ');
   const status =
     s.liveStatus === 'pending'
@@ -89,23 +90,28 @@ function body(s: PickerState, cols: number): { line: string; selected: boolean }
         return { line: `  ${theme.meta(row.text)}`, selected };
       case 'member': {
         const verb = canVerb(row.entry.can);
+        const name = theme.memberName(row.entry.member, row.entry.kind);
         return {
-          line: `${marker}${padEndVisible(theme.memberName(row.entry.member, row.entry.kind), nameWidth)}${theme.meta(describeWhere(row.entry))}${verb ? `  ${theme.meta(verb)}` : ''}`,
+          line: `${marker}${padEndVisible(selected ? theme.bold(name) : name, nameWidth)}${theme.meta(describeWhere(row.entry))}${verb ? `  ${theme.meta(verb)}` : ''}`,
           selected,
         };
       }
       case 'new-seat':
         return { line: `${marker}${theme.accent('+ new seat')}`, selected };
-      case 'team':
+      case 'team': {
+        const name = selected ? theme.bold(row.team) : row.team;
         return {
-          line: `${marker}${padEndVisible(row.team, 9)}${row.here ? `${theme.ok('●')} here  ${row.count} seats` : theme.meta('○ no Workspace here')}${row.star ? '  ★' : ''}`,
+          line: `${marker}${padEndVisible(name, 9)}${row.here ? `${theme.ok('●')} here  ${row.count} seats` : theme.meta('○ no Workspace here')}${row.star ? '  ★' : ''}`,
           selected,
         };
-      case 'project':
+      }
+      case 'project': {
+        const name = selected ? theme.bold(row.project) : row.project;
         return {
-          line: `${marker}${padEndVisible(row.project, 9)}${theme.ok('●')} here  ${row.count} seats${row.star ? '  ★' : ''}${row.remote ? `  ${theme.meta(row.remote)}` : ''}`,
+          line: `${marker}${padEndVisible(name, 9)}${theme.ok('●')} here  ${row.count} seats${row.star ? '  ★' : ''}${row.remote ? `  ${theme.meta(row.remote)}` : ''}`,
           selected,
         };
+      }
       case 'seat': {
         const { seat } = row;
         const live = s.live[seat.address];
@@ -165,13 +171,11 @@ function footer(s: PickerState, cols: number): string[] {
       `  ${c.seat.member} · ${n} harness${n === 1 ? '' : 'es'} configured`,
       ...c.options.map((h, i) => {
         const marker = i === c.index ? `${theme.accent('›')} ` : '  ';
-        const label =
-          h === last
-            ? `${padEndVisible(harnessLabel(h), 10)}${theme.meta('last used')}`
-            : harnessLabel(h);
+        const name = i === c.index ? theme.bold(harnessLabel(h)) : harnessLabel(h);
+        const label = h === last ? `${padEndVisible(name, 10)}${theme.meta('last used')}` : name;
         return `  ${marker}${label}`;
       }),
-      theme.meta('  ⏎ launch · ↑↓ choose · esc back'),
+      paintKeys('  ⏎ launch · ↑↓ choose · esc back'),
     ];
   }
   if (s.create) {
@@ -202,13 +206,13 @@ function footer(s: PickerState, cols: number): string[] {
       cols - 2,
     ).map((l) => `  ${l}`);
   }
-  if (s.help) return [theme.meta('  any key to go back')];
-  if (s.query) return [theme.meta('  ⏎ launch · ⌃R resume · esc clear')];
+  if (s.help) return [paintKeys('  any key to go back')];
+  if (s.query) return [paintKeys('  ⏎ launch · ⌃R resume · esc clear')];
   if (s.level.kind === 'recent') {
     // ADR 540: a team row on the first screen opens; a seat row launches.
     const onTeam = rows(s).filter(selectable)[s.cursor]?.kind === 'team';
     return [
-      theme.meta(
+      paintKeys(
         onTeam
           ? '  ⏎ open · type to search · → teams · esc quit'
           : '  ⏎ launch · ⌃R resume · type to search · → teams · esc quit',
@@ -223,12 +227,12 @@ function footer(s: PickerState, cols: number): string[] {
     if (entry && entry.can === 'none' && (entry.where === 'node' || entry.where === 'cloud'))
       return wrap(describeMove(entry), cols - 2).map((l) => `  ${theme.meta(l)}`);
     if (row?.kind === 'member' && entry?.can === 'wake')
-      return [theme.meta('  ⏎ wake — rings its doorbell (a steer, as you) · ← back · esc back')];
+      return [paintKeys('  ⏎ wake — rings its doorbell (a steer, as you) · ← back · esc back')];
     if (row?.kind === 'member' && entry?.can === 'setup')
-      return [theme.meta('  ⏎ set up here · ← back · esc back')];
-    return [theme.meta('  ⏎ launch · ⌃R resume · ⇥ harness · ← back · esc back')];
+      return [paintKeys('  ⏎ set up here · ← back · esc back')];
+    return [paintKeys('  ⏎ launch · ⌃R resume · ⇥ harness · ← back · esc back')];
   }
-  return [theme.meta('  ⏎ open · ← back · type to search · esc back')];
+  return [paintKeys('  ⏎ open · ← back · type to search · esc back')];
 }
 
 /** Word-wrap plain text to `width` columns; a word longer than the width is left to `clip`. */
@@ -255,7 +259,14 @@ function helpLines(): string[] {
     '  letters        search every seat',
     '  esc            clear · back · quit',
     '  ⌃C             quit',
-  ];
+  ].map(paintKeyColumn);
+}
+
+/** Key column in accent, the action in meta. Color off returns the line unchanged. */
+function paintKeyColumn(raw: string): string {
+  const m = /^( {2})(\S.*?)( {3,})(.*)$/.exec(raw);
+  if (!m) return theme.meta(raw);
+  return `${m[1]}${theme.accent(m[2]!)}${theme.meta(m[3]! + m[4]!)}`;
 }
 
 function clip(line: string, cols: number): string {

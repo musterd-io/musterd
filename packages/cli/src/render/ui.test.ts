@@ -5,6 +5,7 @@ import {
   defRow,
   hint,
   padEndVisible,
+  paintKeys,
   success,
   sym,
   termWidth,
@@ -106,6 +107,17 @@ describe('success', () => {
 describe('hint', () => {
   it('prefixes with the arrow glyph', () => {
     expect(hint('do this')).toBe(`${sym.arrow} do this`);
+  });
+});
+
+describe('paintKeys', () => {
+  it('is the original string when color is off, including keys the frame pins', () => {
+    const line = '  ⏎ launch · ⌃R resume · type to search · → teams · esc quit';
+    expect(paintKeys(line)).toBe(line);
+    expect(paintKeys('  ⏎ wake — rings its doorbell (a steer, as you) · ← back · esc back')).toBe(
+      '  ⏎ wake — rings its doorbell (a steer, as you) · ← back · esc back',
+    );
+    expect(paintKeys('  any key to go back')).toBe('  any key to go back');
   });
 });
 
