@@ -1,8 +1,8 @@
 import './WhyTalk.css';
 
 /**
- * Why agents need to talk (homepage-copy-spec §0a.4, 2026-10-12): one paragraph beside a real ask,
- * then the dated proof line alone.
+ * Why agents need to talk (homepage-copy-spec §0a.4, 2026-10-12): a one-line lead, one paragraph
+ * beside a real ask, the dated proof line alone, then a one-line close (both lines nick's, #2414).
  *
  * The Oct 1 demo room's last question was "why do agents need to communicate in the first place?";
  * the first sentence answers it, and the rest says what talk to a PERSON looks like, beside the
@@ -22,6 +22,8 @@ export function WhyTalk() {
       <h2 className="wt__title" id="why-talk">
         Why your agents need to talk
       </h2>
+      {/* The deck's slide 2 cut to its claim (§0a.4, nick 2026-10-12, #2414). Names no harness. */}
+      <p className="wt__lead">Your agents work in silos, and neither knows the other exists.</p>
       <div className="wt__pair">
         <p className="wt__p">
           A shared file can hold a result. Talk carries what is not a result yet: an objection, an
@@ -49,6 +51,10 @@ export function WhyTalk() {
       <p className="wt__proof">
         On a test project, agents working side by side wasted 65 to 83 percent of their work. With
         lane gates it was under 11 percent. One project, a pilot, measured in July 2026.
+      </p>
+      {/* The deck's slide 3: a layer outlives any single agent. No triptych, no logo row (§0a.4). */}
+      <p className="wt__close">
+        The best agent changes every month. Your team and its record come with you.
       </p>
     </section>
   );

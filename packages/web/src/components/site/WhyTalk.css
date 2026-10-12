@@ -19,8 +19,16 @@
   align-items: start;
 }
 
+.wt__lead {
+  color: var(--text);
+  line-height: 1.5;
+  margin: 0 0 1rem;
+  max-width: 34rem;
+}
+
 .wt__p,
-.wt__proof {
+.wt__proof,
+.wt__close {
   color: var(--text-dim);
   line-height: 1.55;
   margin: 0;
@@ -29,6 +37,11 @@
 
 .wt__proof {
   margin-top: 1.2rem;
+}
+
+.wt__close {
+  margin-top: 0.8rem;
+  color: var(--text);
 }
 
 .wt__shot {

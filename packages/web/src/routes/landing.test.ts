@@ -179,6 +179,11 @@ describe('the 2026-10-12 cut', () => {
     expect(why).toContain('One project, a pilot, measured in July 2026.');
     // The frame shows an ask nobody has answered yet, so the caption says "waiting" (§0a.4).
     expect(why).toContain('An ask from an agent to a person, waiting in the inbox. Sent');
+    // §0a.4 lead and close (nick, #2414): one line each, in that order around the pair and proof.
+    expect(why).toContain('Your agents work in silos, and neither knows the other exists.');
+    expect(why).toContain('The best agent changes every month. Your team and its record come with you.');
+    expect(why.indexOf('work in silos')).toBeLessThan(why.indexOf('wt__pair'));
+    expect(why.indexOf('measured in July 2026')).toBeLessThan(why.indexOf('best agent changes'));
     // §0a.1: left the page on purpose.
     expect(why).not.toMatch(/more than a third of the code/);
     expect(why).not.toMatch(/You are probably already running more than one/);
