@@ -98,12 +98,12 @@ export interface PetState {
    */
   speed: number;
   /** What the dog is hauling this frame — the painter draws it. `none` outside a welcome errand. */
-  cargo: 'none' | 'wagon' | 'polaroid';
+  cargo: 'none' | 'wagon';
   /**
    * A two-stage welcome errand (lane 01M3F81DD9): `fetch` to the pickup, then `deliver` to `drop`
    * hauling `load`. While one is set, nothing else may send the dog anywhere — see `setOff`.
    */
-  errand: null | { stage: 'fetch' | 'deliver'; drop: P; load: 'wagon' | 'polaroid' };
+  errand: null | { stage: 'fetch' | 'deliver'; drop: P; load: 'wagon' };
 }
 
 /** Walking speed, logical units/s — an unhurried pad, slower than the members. */
@@ -470,18 +470,13 @@ export function petWagon(pet: PetState, pickup: P, drop: P): boolean {
   return startErrand(pet, pickup, drop, 'wagon');
 }
 
-/** No free desk: the printed nameplate goes to the wall board's new-arrivals corner in the dog's mouth. */
-export function petCarryToWall(pet: PetState, pickup: P, wall: P): boolean {
-  return startErrand(pet, pickup, wall, 'polaroid');
-}
-
 /** The crowd's one lap (spec §3.4): the zoomies the ambient beat already knows, on cue. */
 export function petZoomies(pet: PetState, rng: () => number = Math.random): boolean {
   if (pet.mode === 'stretch' || pet.mode === 'curl') return false; // mid-transition — let it finish
   return zoomies(pet, rng);
 }
 
-function startErrand(pet: PetState, pickup: P, drop: P, load: 'wagon' | 'polaroid'): boolean {
+function startErrand(pet: PetState, pickup: P, drop: P, load: 'wagon'): boolean {
   if (pet.errand) return false;
   pet.sitFor = 4;
   // minTrip 0: the dog may already be lying by the counter, and the errand must still run.

@@ -11,13 +11,10 @@ import type { ReceptionistState } from './receptionist';
 import { GESTURE } from './skeleton';
 import {
   BOOT_LED,
-  wallArrivalSpots,
   drawActor,
   receptionistPose,
   confettiColor,
-  counterDigits,
-  plateText,
-  POLAROID_WHITE,
+    plateText,
   WAGON_RED,
   wagonTrail,
   actorSortAnchor,
@@ -1575,20 +1572,12 @@ describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
     hello: new Map(),
     bootBlink: new Map(),
     labels: [],
-    polaroids: [],
-    counter: null,
     ...over,
   });
 
-  it('clips a long name on a nameplate or polaroid', () => {
+  it('clips a long name on a nameplate', () => {
     expect(plateText('ada')).toBe('ada');
     expect(plateText('a-very-long-seat-name')).toBe('a-very-lo…');
-  });
-
-  it('shows the flip counter as two digits at least, and caps at 99+', () => {
-    expect(counterDigits(4)).toBe('04');
-    expect(counterDigits(37)).toBe('37');
-    expect(counterDigits(140)).toBe('99+');
   });
 
   it("colours a newcomer's confetti in their colour and mustard; plain confetti keeps its palette", () => {
@@ -1612,16 +1601,7 @@ describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
     expect(free).not.toContain(WAGON_RED);
   });
 
-  it('puts the polaroid in the dog’s mouth', () => {
-    const paints: string[] = [];
-    drawDog(recCtx(paints), fit, walkingPet({ cargo: 'polaroid' }), 1);
-    expect(paints).toContain(POLAROID_WHITE);
-    const plain: string[] = [];
-    drawDog(recCtx(plain), fit, walkingPet(), 1);
-    expect(plain).not.toContain(POLAROID_WHITE);
-  });
-
-  it('paints the lanyard, the label strip, the polaroids, the counter, the hello and the blink', () => {
+  it('paints the lanyard, the label strip, the hello and the blink', () => {
     const member = node('ada', 'working');
     const members = new Map([[member.name, member]]);
     const placements = assignSeats([member]);
@@ -1636,18 +1616,11 @@ describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
         hello: new Map([['ada', 4.8]]),
         bootBlink: new Map([['ada', 4.9]]),
         labels: [{ color: 'hsl(22, 68%, 62%)', t0: 4.5 }],
-        polaroids: [{ name: 'a-very-long-seat-name', color: 'hsl(33, 68%, 62%)' }],
-        counter: { value: 12, flippedAt: 4.9, until: Infinity },
       }),
     });
     expect(paints).toContain('hsl(11, 68%, 62%)'); // the lanyard
     expect(paints).toContain('hsl(22, 68%, 62%)'); // the label strip
-    expect(paints).toContain('hsl(33, 68%, 62%)'); // the polaroid
     expect(paints).toContain(BOOT_LED); // the agent's boot blink
-    expect(texts).toContain('a-very-lo…');
-    expect(texts).toContain('12');
-    expect(texts).toContain('joined'); // the counter's label — never 'guests' (sloane)
-    expect(texts).not.toContain('guests');
     expect(texts).toContain('hello');
   });
 
@@ -1701,19 +1674,6 @@ describe('the Welcome Wagon painters (lane 01M3F81DD9)', () => {
     const paints: string[] = [];
     drawActor(recCtx(paints), fit, away, member, 1, false, undefined, 'hsl(55, 68%, 62%)');
     expect(paints).toContain('hsl(55, 68%, 62%)');
-  });
-
-  it('hangs the polaroids and the counter ON the wall, under the board — never past the wall’s end', () => {
-    for (const f of [fitFloor(1200, 900), fitFloor(1400, 648), fitFloor(700, 500)]) {
-      const board = boardAnchor(f);
-      const wallEnd = project(900, 0, f).x; // the right wall's far end (FLOOR, ly 0)
-      const spots = wallArrivalSpots(f, 3);
-      for (const p of [...spots.polaroids, spots.counter]) {
-        expect(p.x).toBeGreaterThan(board.x - 1);
-        expect(p.x).toBeLessThan(Math.min(board.x + board.w, wallEnd));
-        expect(p.y).toBeGreaterThan(board.y + board.h * 0.5); // under the board, not beside it
-      }
-    }
   });
 
   it('a spent welcome paints nothing of itself', () => {

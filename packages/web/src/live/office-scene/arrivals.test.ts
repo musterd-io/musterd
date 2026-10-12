@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diffArrivals, newArrivalsCorner, type ArrivalSubject } from './arrivals';
+import { diffArrivals, type ArrivalSubject } from './arrivals';
 
 const m = (name: string, over: Partial<ArrivalSubject> = {}): ArrivalSubject => ({
   name,
@@ -95,26 +95,5 @@ describe('diffArrivals — a lapsed presence is not a first arrival (lane 01M3F8
       seenOnline: new Set(),
     });
     expect(out.map((a) => [a.kind, a.name])).toEqual([['firstOnline', 'ada']]);
-  });
-});
-
-describe('newArrivalsCorner', () => {
-  const now = 100 * 3_600_000;
-  it('lists deskless Members created in the last 24 h, newest first, at most 3', () => {
-    const nodes = [
-      m('a', { created_at: now - 1_000 }),
-      m('b', { created_at: now - 2_000 }),
-      m('c', { created_at: now - 3_000 }),
-      m('d', { created_at: now - 4_000 }),
-      m('old', { created_at: now - 25 * 3_600_000 }),
-      m('seated', { created_at: now - 500 }),
-      m('svc', { created_at: now - 100, service: true }),
-      m('gone', { created_at: now - 100, offline_reason: 'left_team' }),
-    ];
-    expect(newArrivalsCorner(nodes, new Set(['seated']), now).map((p) => p.name)).toEqual([
-      'a',
-      'b',
-      'c',
-    ]);
   });
 });

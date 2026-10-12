@@ -16,7 +16,6 @@ import {
   SEAT_BACK,
   SINK_STAND,
   WAGON_PICKUP,
-  WALL_DROP,
   BOARD_STAND,
 } from './layout';
 import { findPath, walkable } from './nav';
@@ -238,9 +237,6 @@ describe('the front desk blocks', () => {
     // A stop inside a footprint would still route (findPath nudges the endpoint) and the dog would
     // collect the wagon from somewhere that is not beside the counter — the failure the marks guard.
     expect(walkable(WAGON_PICKUP.lx, WAGON_PICKUP.ly)).toBe(true);
-    expect(walkable(WALL_DROP.lx, WALL_DROP.ly)).toBe(true);
-    const path = findPath(WAGON_PICKUP, WALL_DROP);
-    expect(path.at(-1)).toEqual(WALL_DROP);
   });
 
   it('stands every errand dweller and reader on open floor', () => {
