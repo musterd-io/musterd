@@ -28,7 +28,6 @@ import {
   petGreet,
   petNotice,
   petBeg,
-  petCarryToWall,
   petWagon,
   petZoomies,
   PET_DASH,
@@ -46,7 +45,6 @@ import {
   MEETING,
   NOOK,
   WAGON_PICKUP,
-  WALL_DROP,
 } from './layout';
 import { walkable } from './nav';
 
@@ -491,7 +489,6 @@ describe('the welcome wagon (lane 01M3F81DD9)', () => {
     const pet = createPet(lcg(3));
     expect(petWagon(pet, WAGON_PICKUP, COFFEE_STAND)).toBe(true);
     expect(petWagon(pet, WAGON_PICKUP, NOOK)).toBe(false);
-    expect(petCarryToWall(pet, WAGON_PICKUP, WALL_DROP)).toBe(false);
   });
 
   it('runs the errand even when it is already lying at the pickup', () => {
@@ -500,15 +497,6 @@ describe('the welcome wagon (lane 01M3F81DD9)', () => {
     pet.ly = WAGON_PICKUP.ly;
     expect(petWagon(pet, WAGON_PICKUP, COFFEE_STAND)).toBe(true);
     stepUntil(pet, () => pet.cargo === 'wagon');
-  });
-
-  it('carries a polaroid in its mouth to the wall', () => {
-    const pet = createPet(lcg(3));
-    expect(petCarryToWall(pet, WAGON_PICKUP, WALL_DROP)).toBe(true);
-    stepUntil(pet, () => pet.errand?.stage === 'deliver');
-    expect(pet.cargo).toBe('polaroid');
-    stepUntil(pet, () => pet.errand === null);
-    expect(Math.hypot(pet.lx - WALL_DROP.lx, pet.ly - WALL_DROP.ly)).toBeLessThan(2);
   });
 
   it('a crowd gets one lap of zoomies, fast', () => {

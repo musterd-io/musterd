@@ -63,12 +63,12 @@ describe('welcomeWagon — Act 1 (created, offline)', () => {
     expect(welcomePlaying(s)).toBe(false);
   });
 
-  it('with no free desk the dog takes a polaroid to the wall instead', () => {
+  it('with no free desk there is no delivery — the wall takes no polaroid (2026-10-12)', () => {
     const s = createWelcomeWagon();
     enqueueArrivals(s, [a('ada')], 0);
     const beats = run(s, WAVE_MS, WAVE_MS + 5_000, deps({ hasDesk: () => false }));
-    expect(types(beats)).toContain('polaroid');
     expect(types(beats)).not.toContain('wagon');
+    expect(types(beats)).toContain('caption');
   });
 
   it('several created in one wave: one ring, their labels, one plural caption', () => {
@@ -134,18 +134,17 @@ describe('welcomeWagon — Act 2 (first time online)', () => {
 describe('welcomeWagon — the crowd', () => {
   const crowd = (n: number) => Array.from({ length: n }, (_, i) => a(`g${i}`, { online: true }));
 
-  it('one zoomies, a toss + counter per guest, one confetti, one caption', () => {
+  it('one zoomies, a toss per member, one confetti, one caption', () => {
     const s = createWelcomeWagon();
     enqueueArrivals(s, crowd(5), 0);
     const t = types(run(s, WAVE_MS, WAVE_MS + 10_000));
     expect(t.filter((x) => x === 'zoomies')).toHaveLength(1);
     expect(t.filter((x) => x === 'toss')).toHaveLength(5);
-    expect(t.filter((x) => x === 'counter')).toHaveLength(5);
     expect(t.filter((x) => x === 'confetti')).toHaveLength(1);
     expect(t.filter((x) => x === 'caption')).toHaveLength(1);
   });
 
-  it('tosses are 0.6 s apart and the counter counts up across waves', () => {
+  it('tosses are 0.6 s apart, wave after wave', () => {
     const s = createWelcomeWagon();
     enqueueArrivals(s, crowd(3), 0);
     const first = run(s, WAVE_MS, WAVE_MS + 6_000);
@@ -157,11 +156,7 @@ describe('welcomeWagon — the crowd', () => {
       10_000,
     );
     const second = run(s, 10_000 + WAVE_MS, 10_000 + WAVE_MS + 6_000);
-    expect(
-      second
-        .filter((b) => b.beat.type === 'counter')
-        .map((b) => (b.beat as { value: number }).value),
-    ).toEqual([4, 5, 6]);
+    expect(second.filter((b) => b.beat.type === 'toss')).toHaveLength(3);
   });
 
   it('an all-human crowd says people; a mixed one says members — never guests (sloane)', () => {

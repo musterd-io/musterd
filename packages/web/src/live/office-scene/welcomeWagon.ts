@@ -15,13 +15,11 @@ export type WelcomeBeat =
   | { type: 'say'; text: string }
   | { type: 'label'; name: string; hue: number | null }
   | { type: 'wagon'; name: string }
-  | { type: 'polaroid'; name: string }
   | { type: 'toss'; name: string; hue: number | null }
   | { type: 'wave'; name: string }
   | { type: 'confetti'; name: string; hue: number | null }
   | { type: 'hello'; name: string }
   | { type: 'zoomies' }
-  | { type: 'counter'; value: number }
   | { type: 'caption'; text: string; who: string };
 
 /** What the sequencer needs to know about the room, asked fresh every step. */
@@ -84,12 +82,10 @@ export interface WelcomeWagonState {
   /** Arrivals waiting for their wave to start. Read by the scene to keep its loop awake. */
   pending: Pending[];
   playing: Sequence | null;
-  /** Guests counted so far this page session — the wallboard flip counter's value. */
-  guests: number;
 }
 
 export function createWelcomeWagon(): WelcomeWagonState {
-  return { pending: [], playing: null, guests: 0 };
+  return { pending: [], playing: null };
 }
 
 export function enqueueArrivals(
@@ -110,13 +106,15 @@ function addedLine(a: Arrival): string {
     : `${a.name} was added to the team`;
 }
 
-/** Where the new nameplate goes: onto their desk by wagon, or onto the wall in the dog's mouth. */
-function delivery(a: Arrival, d: WagonDeps): WelcomeBeat {
-  return d.hasDesk(a.name) ? { type: 'wagon', name: a.name } : { type: 'polaroid', name: a.name };
+/** The new nameplate goes onto their desk by wagon. A deskless newcomer gets no delivery: the wall
+ *  used to take a polaroid, retired 2026-10-12 (nick: one kind of card on the wall — the board's). */
+function delivery(a: Arrival, d: WagonDeps): WelcomeBeat | null {
+  return d.hasDesk(a.name) ? { type: 'wagon', name: a.name } : null;
 }
 
 /** Act 1 alone: the room makes space (spec §3.1). */
 function actOne(a: Arrival, d: WagonDeps): Cue[] {
+  const delivered = delivery(a, d);
   const caption: Cue = { t: 4.0, beat: { type: 'caption', text: addedLine(a), who: a.name } };
   if (d.reduced)
     return [{ t: 0, beat: { type: 'label', name: a.name, hue: a.hue } }, { ...caption, t: 0 }];
@@ -124,7 +122,7 @@ function actOne(a: Arrival, d: WagonDeps): Cue[] {
     { t: 0, beat: { type: 'ring' } },
     { t: 0, beat: { type: 'say', text: `oh! someone new: ${a.name}` } },
     { t: 0.9, beat: { type: 'label', name: a.name, hue: a.hue }, who: a.name },
-    { t: 1.4, beat: delivery(a, d), who: a.name },
+    ...(delivered ? [{ t: 1.4, beat: delivered, who: a.name } as Cue] : []),
     caption,
   ];
 }
@@ -145,7 +143,7 @@ function actTwo(a: Arrival, d: WagonDeps): Cue[] {
     a.kind === 'created'
       ? [
           { t: 0.1, beat: { type: 'label', name: a.name, hue: a.hue }, who: a.name },
-          { t: 0.4, beat: delivery(a, d), who: a.name },
+          ...(delivery(a, d) ? [{ t: 0.4, beat: delivery(a, d)!, who: a.name } as Cue] : []),
         ]
       : [];
   const mark: Gate = { kind: 'mark', name: a.name };
@@ -172,16 +170,11 @@ function crowd(online: Pending[], s: WelcomeWagonState, d: WagonDeps): Cue[] {
     t: end,
     beat: { type: 'caption', text: `${n} ${noun} joined — welcome`, who: online[0]!.name },
   };
-  if (d.reduced) {
-    s.guests += n;
-    return [{ ...caption, t: 0 }];
-  }
+  if (d.reduced) return [{ ...caption, t: 0 }];
   const cues: Cue[] = [{ t: 0.2, beat: { type: 'zoomies' } }];
   online.forEach((a, i) => {
     const t = 1.2 + i * TOSS_GAP_S;
-    s.guests += 1;
     cues.push({ t, beat: { type: 'toss', name: a.name, hue: a.hue }, who: a.name });
-    cues.push({ t, beat: { type: 'counter', value: s.guests } });
     if (i === 0) cues.push({ t, beat: { type: 'say', text: 'welcome!' } });
   });
   cues.push({ t: end, beat: { type: 'confetti', name: online[0]!.name, hue: null } });

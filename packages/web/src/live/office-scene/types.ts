@@ -97,9 +97,6 @@ export interface WelcomePaint {
   /** Label strips curling off the front desk's label maker. */
   labels: { color: string; t0: number }[];
   /** The wall board's new-arrivals corner — derived from the roster on every update, never stored. */
-  polaroids: { name: string; color: string }[];
-  /** The crowd's flip counter: its value, when it last flipped (scene clock), when it folds away (ms). */
-  counter: { value: number; flippedAt: number; until: number } | null;
 }
 
 /** The office has no arcs — relationships show as choreography, not edges. */

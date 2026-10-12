@@ -1,4 +1,4 @@
-import { diffArrivals, newArrivalsCorner, type Arrival, type ArrivalSubject } from './arrivals';
+import { diffArrivals, type Arrival, type ArrivalSubject } from './arrivals';
 import type { CarryKind, WelcomePaint } from './types';
 import {
   createWelcomeWagon,
@@ -39,8 +39,6 @@ export interface WelcomePorts {
   say(text: string): void;
   /** The dog fetches the wagon and pulls it to `name`'s desk. */
   wagon(name: string): void;
-  /** The dog carries `name`'s printed nameplate to the wall board. */
-  polaroid(name: string): void;
   zoomies(): void;
   /** The nearest teammates wave at `name`; the dog trots alongside. */
   wave(name: string): void;
@@ -52,13 +50,11 @@ export interface WelcomePorts {
 
 export interface WelcomeRoom {
   /** Feed the roster the scene is about to seat. Returns the arrivals it found (never on the first). */
-  onRoster(nodes: readonly ArrivalSubject[], deskHolders: ReadonlySet<string>, now: number): Arrival[];
+  onRoster(nodes: readonly ArrivalSubject[], now: number): Arrival[];
   /** Advance to `now` (wall ms) at scene clock `clock` (s); plays due beats. */
   step(now: number, clock: number): void;
   /** Something is queued or playing, or a transient paint is still animating — keep the loop running. */
   active(): boolean;
-  /** Fold away what has outlived its window while the loop is parked. True when the paint changed. */
-  expire(now: number): boolean;
   /** How many welcome sequences have started — a probe for the perf harness (`stats()`). */
   started(): number;
   readonly paint: WelcomePaint;
@@ -72,10 +68,6 @@ const HELLO_S = 1.0;
 const BLINK_S = 1.2;
 /** A lanyard outlives its moment by at most this long — a guest in the overflow gallery never sits. */
 const LANYARD_MAX_S = 12;
-/** The counter's flip animation, scene seconds — the only part of the counter that moves. */
-const FLIP_S = 0.25;
-/** The crowd counter folds away this long after its last flip, wall ms. */
-const COUNTER_HOLD_MS = 60_000;
 
 export function createWelcomeRoom(
   ports: WelcomePorts,
@@ -86,7 +78,6 @@ export function createWelcomeRoom(
   /** Everyone seen online since the page loaded — a return is never a first arrival. */
   const seenOnline = new Set<string>();
   let started = 0;
-  let clockNow = 0;
   /** When each lanyard was tossed (scene clock) — the painter only needs the colour. */
   const tossedAt = new Map<string, number>();
   const paint: WelcomePaint = {
@@ -95,11 +86,9 @@ export function createWelcomeRoom(
     hello: new Map(),
     bootBlink: new Map(),
     labels: [],
-    polaroids: [],
-    counter: null,
   };
 
-  function play(b: WelcomeBeat, now: number, clock: number): void {
+  function play(b: WelcomeBeat, clock: number): void {
     switch (b.type) {
       case 'ring':
         if (!opts.reduced) ports.receptionist('ring');
@@ -121,9 +110,6 @@ export function createWelcomeRoom(
         ports.wagon(b.name);
         ports.sound('rattle', 'desk');
         return;
-      case 'polaroid':
-        ports.polaroid(b.name); // a dog with a polaroid in its mouth makes no sound
-        return;
       case 'toss':
         ports.receptionist('toss');
         paint.lanyards.set(b.name, ports.color(b.name, b.hue));
@@ -144,9 +130,6 @@ export function createWelcomeRoom(
         return;
       case 'zoomies':
         ports.zoomies();
-        return;
-      case 'counter':
-        paint.counter = { value: b.value, flippedAt: clock, until: now + COUNTER_HOLD_MS };
         return;
       case 'caption':
         ports.caption(b.text, b.who);
@@ -171,7 +154,7 @@ export function createWelcomeRoom(
 
   return {
     paint,
-    onRoster(nodes, deskHolders, now) {
+    onRoster(nodes, now) {
       // An empty roster before any roster is the page mounting ahead of its data, not an empty team:
       // taking it as the baseline made the real roster read as the whole team arriving at once.
       if (prev === null && nodes.length === 0) return [];
@@ -190,14 +173,9 @@ export function createWelcomeRoom(
         if (!opts.reduced) ports.door(walkingIn.length === 1 ? walkingIn[0]!.hue : null);
         ports.sound('doorbell', 'door');
       }
-      paint.polaroids = newArrivalsCorner(nodes, deskHolders, now).map((p) => ({
-        name: p.name,
-        color: ports.color(p.name, p.hue),
-      }));
       return arrivals;
     },
     step(now, clock) {
-      clockNow = clock;
       const wasPlaying = welcomePlaying(wagon);
       const beats = stepWelcomeWagon(wagon, now, {
         busy: ports.busy(),
@@ -208,7 +186,7 @@ export function createWelcomeRoom(
         atMark: ports.reachedMark,
       });
       if (!wasPlaying && (welcomePlaying(wagon) || beats.length > 0)) started++;
-      for (const b of beats) play(b, now, clock);
+      for (const b of beats) play(b, clock);
       prune(clock);
     },
     active() {
@@ -219,16 +197,8 @@ export function createWelcomeRoom(
         paint.tosses.length > 0 ||
         paint.hello.size > 0 ||
         paint.bootBlink.size > 0 ||
-        paint.lanyards.size > 0 ||
-        (paint.counter !== null && clockNow - paint.counter.flippedAt < FLIP_S)
+        paint.lanyards.size > 0
       );
-    },
-    expire(now) {
-      if (paint.counter && now > paint.counter.until) {
-        paint.counter = null;
-        return true;
-      }
-      return false;
     },
     started: () => started,
   };

@@ -81,31 +81,3 @@ function isNewcomer(n: ArrivalSubject, ctx: ArrivalContext): boolean {
   if (ctx.seenOnline.has(n.name)) return false;
   return n.created_at === null || ctx.now - n.created_at < FIRST_ONLINE_WINDOW_MS;
 }
-
-/** The corner holds this many polaroids — more is a noticeboard, not a welcome. */
-export const CORNER_MAX = 3;
-/** How long a deskless newcomer stays pinned. */
-export const CORNER_WINDOW_MS = 24 * 3_600_000;
-
-/**
- * The wallboard's *new arrivals* corner (spec §3.1): Members created in the last 24 h who hold no desk.
- * Derived from the roster every bake, never stored — so it survives a reload as a still.
- */
-export function newArrivalsCorner(
-  nodes: readonly ArrivalSubject[],
-  deskHolders: ReadonlySet<string>,
-  now: number,
-): { name: string; hue: number | null }[] {
-  return nodes
-    .filter(
-      (n) =>
-        !n.service &&
-        n.offline_reason !== 'left_team' &&
-        !deskHolders.has(n.name) &&
-        n.created_at !== null &&
-        now - n.created_at < CORNER_WINDOW_MS,
-    )
-    .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0))
-    .slice(0, CORNER_MAX)
-    .map((n) => ({ name: n.name, hue: n.hue ?? null }));
-}

@@ -28,7 +28,6 @@ import {
   createPet,
   petBeat,
   petBeg,
-  petCarryToWall,
   petFollow,
   petGreet,
   petNotice,
@@ -48,7 +47,6 @@ import {
   RECEPTIONIST,
   SEAT_BACK,
   WAGON_PICKUP,
-  WALL_DROP,
 } from './layout';
 import { computeLightEnv, type LightEnv } from './lighting';
 import { isWithinWorkingHours } from './workingHours';
@@ -499,7 +497,6 @@ export function mountOffice(
         const drop = deskDrop(n);
         if (drop) petWagon(pet, WAGON_PICKUP, drop);
       },
-      polaroid: () => void petCarryToWall(pet, WAGON_PICKUP, WALL_DROP),
       zoomies: () => void petZoomies(pet),
       wave: (n) => {
         // The three nearest teammates who are free to look up wave; the nearest of them says so.
@@ -516,13 +513,12 @@ export function mountOffice(
     { reduced, still: STILL },
   );
   /**
-   * The Welcome Wagon's off-loop clock — armed by update() only while a welcome is queued or playing
-   * or the crowd's counter is on the wall, and it stops itself after (idle cost is paid by every
+   * The Welcome Wagon's off-loop clock — armed by update() only while a welcome is queued or playing,
+   * and it stops itself after (idle cost is paid by every
    * viewer, forever: packages/web/AGENTS.md). Two jobs. Under reduced motion there is no rAF loop at
    * all, so this IS the welcome's clock: stepped here, its captions and end states land (the final
    * review found that without it a reduced-motion room never drained and its canvas froze). Otherwise
-   * it starts the loop for a welcome that became ready while the room was parked, and folds the
-   * counter away. Coarse on purpose: 500 ms on a 2 s wave window is invisible.
+   * it starts the loop for a welcome that became ready while the room was parked. Coarse on purpose: 500 ms on a 2 s wave window is invisible.
    */
   let wagonTimer: ReturnType<typeof setInterval> | null = null;
   function armWagonTimer() {
@@ -534,11 +530,7 @@ export function mountOffice(
       } else if (seen && welcomeRoom.active() && !raf) {
         ensureLoop();
       }
-      if (welcomeRoom.expire(Date.now()) && !raf && !disposed) {
-        bake();
-        paintResting();
-      }
-      if (disposed || (!welcomeRoom.active() && !welcomeRoom.paint.counter)) {
+      if (disposed || !welcomeRoom.active()) {
         if (wagonTimer) clearInterval(wagonTimer);
         wagonTimer = null;
       }
@@ -2222,10 +2214,8 @@ export function mountOffice(
     syncAsks(next.asks ?? [], byName);
     // Who is NEW (lane 01M3F81DD9) — fed BEFORE setHomes, because a first arrival's walk-in (the box,
     // the longer pause at the mark) is built inside it.
-    const deskHolders = new Set<string>();
-    for (const [n, p] of placements) if (p.kind === 'desk') deskHolders.add(n);
-    const arrivals = welcomeRoom.onRoster(next.nodes, deskHolders, Date.now());
-    if (welcomeRoom.active() || welcomeRoom.paint.counter) armWagonTimer();
+    const arrivals = welcomeRoom.onRoster(next.nodes, Date.now());
+    if (welcomeRoom.active()) armWagonTimer();
     // "{name} just walked in" would say it twice — the welcome writes its own line for a newcomer.
     if (presenceLine && !arrivals.some((a) => a.online && a.name === presenceLine.who))
       pushRail(presenceLine);
