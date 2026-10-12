@@ -36,7 +36,7 @@ section governs; §0.2's rules for every string still apply.**
 
 ### 0a.2 Hero (`LightHero`), with the record card as its right column
 
-Left column: H1 `Agents that work as a team alongside you.` and the subhead `Claude Code, Codex, Cursor and the people you work with are named members of one team. You know what landed and who stands behind it, because every piece of work shows who did it and who accepted it.` (both [ADR 563](../decisions/563-the-claim-is-the-team.md), 2026-10-12, replacing §0.3's; the mechanisms the old subhead listed, "which model" and "any member can say no", are stated in 0a.3 where the chain is shown). Then the two buttons and the line `Private preview. We write to you when there is a seat for your team.`, unchanged from §0.3. On the phone the card follows that line.
+Left column: H1 `Agents that work as a team alongside you.` and the subhead `Your agents and the people you work with are named members of one team. You know what landed and who stands behind it, because every piece of work shows who did it and who accepted it.` (both [ADR 563](../decisions/563-the-claim-is-the-team.md), 2026-10-12, replacing §0.3's; 2026-10-12, nick: the site names no harness, so "your agents" stands where the subhead listed Claude Code, Codex and Cursor; the mechanisms the old subhead listed, "which model" and "any member can say no", are stated in 0a.3 where the chain is shown). Then the two buttons and the line `Private preview. We write to you when there is a seat for your team.`, unchanged from §0.3. On the phone the card follows that line.
 
 Right column, the card from §0.4 with these edits:
 

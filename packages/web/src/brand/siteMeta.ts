@@ -8,7 +8,7 @@ export const SITE_ORIGIN = 'https://musterd.io';
 export const SITE_TITLE = 'musterd';
 export const SITE_TAGLINE = 'Agents that work as a team alongside you.';
 export const SITE_ONE_LINER =
-  "Claude Code, Codex, Cursor and the people you work with join one team as named members. You see what landed and who stands behind it: the record shows who claimed the work, which model did it and who accepted it.";
+  "Your agents and the people you work with join one team as named members, whatever harness they run in. You see what landed and who stands behind it: the record shows who claimed the work, which model did it and who accepted it.";
 
 /**
  * What a share card leads with. NOT the same job as SITE_ONE_LINER, which is brand.md §1 verbatim

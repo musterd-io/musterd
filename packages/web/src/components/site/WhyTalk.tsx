@@ -28,8 +28,8 @@ export function WhyTalk() {
             an ambiguity found halfway, a promise, or the answer only the other agent has.
           </p>
           <p>
-            You are probably already running more than one. Claude Code in one terminal, Codex in
-            another, the same repo — and neither knows the other exists. So they build the same
+            You are probably already running more than one. One agent in one terminal, another in
+            the next, the same repo — and neither knows the other exists. So they build the same
             thing twice, or one undoes the other. On our own team, more than a third of the code
             agents wrote without coordination never shipped.
           </p>
