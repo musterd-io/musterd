@@ -20,7 +20,26 @@ export interface TwitchPlayerLike {
   addEventListener: (event: string, cb: () => void) => void;
   /** Swap the player's source to a collection. Optional: an older SDK may not expose it. */
   setCollection?: (collectionId: string, videoId?: string) => void;
+  /** Swap the player's source to one video (`v<id>`). Optional for the same reason. */
+  setVideo?: (videoId: string, timestamp: number) => void;
 }
+
+/**
+ * What a dark channel plays: a collection first, and one pinned video if the collection never
+ * starts. Both should be HIGHLIGHTS — Twitch deletes past broadcasts after 7–60 days, highlights
+ * never, and a collection of past broadcasts empties itself (lane 01M4RC8WAA).
+ */
+export interface ReplaySource {
+  /** Absent: go straight to `fallbackVideo` — no point waiting out a collection that isn't there. */
+  collection?: string;
+  /** `v<id>`; played when the collection has not fired PLAY within `fallbackAfterMs`. */
+  fallbackVideo?: string;
+  fallbackAfterMs?: number;
+}
+
+/** How long a requested collection gets to start before the pinned video replaces it. Measured
+ *  2026-10-12: a dead collection fires nothing at all, so absence of PLAY is the only signal. */
+export const REPLAY_FALLBACK_MS = 8000;
 export interface TwitchGlobal {
   Player: (new (el: HTMLElement | string, opts: Record<string, unknown>) => TwitchPlayerLike) & {
     ONLINE: string;
@@ -110,20 +129,40 @@ export function loadTwitchSdk(doc: Document = document): Promise<TwitchGlobal> {
  * `setCollection` is optional on the interface because a viewer's SDK may predate it. Absent, the
  * swap simply never happens, `onReplay` never fires, and the caller keeps the still — the same
  * outcome as a blocked script, which the caller already handles.
+ *
+ * THE FALLBACK (lane 01M4RC8WAA). A collection that is deleted, private or empty fails SILENTLY:
+ * measured 2026-10-12, `setCollection` on the unavailable `oHDc4g501xg16g` left `getVideo()` null
+ * and fired no event at all, and musterd.io showed the still for as long as that lasted. So a
+ * collection that has not played within `fallbackAfterMs` is replaced by one pinned video. The
+ * same PLAY rule covers both: the caption still waits for the player to actually start.
  */
 export function replayWhenDark(
   player: TwitchPlayerLike,
   events: { OFFLINE: string; PLAY: string },
-  collectionId: string,
+  source: ReplaySource,
   onReplay: () => void,
+  schedule: (cb: () => void, ms: number) => unknown = (cb, ms) => setTimeout(cb, ms),
 ): void {
   let switched = false;
+  let played = false;
+  const playFallback = () => {
+    if (played || !source.fallbackVideo || !player.setVideo) return;
+    player.setVideo(source.fallbackVideo, 0);
+  };
   player.addEventListener(events.OFFLINE, () => {
-    if (switched || !player.setCollection) return;
-    switched = true;
-    player.setCollection(collectionId);
+    if (switched) return;
+    if (source.collection && player.setCollection) {
+      switched = true;
+      player.setCollection(source.collection);
+      schedule(playFallback, source.fallbackAfterMs ?? REPLAY_FALLBACK_MS);
+    } else if (source.fallbackVideo && player.setVideo) {
+      switched = true;
+      playFallback();
+    }
   });
   player.addEventListener(events.PLAY, () => {
-    if (switched) onReplay();
+    if (!switched) return;
+    played = true;
+    onReplay();
   });
 }

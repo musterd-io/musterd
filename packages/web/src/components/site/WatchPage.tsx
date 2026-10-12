@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { TWITCH_CHANNEL, TWITCH_COLLECTION, TWITCH_URL } from './twitchEmbed';
+import { TWITCH_CHANNEL, TWITCH_REPLAY, TWITCH_URL } from './twitchEmbed';
 import {
   eyebrowFor,
   loadTwitchSdk,
@@ -112,7 +112,7 @@ export function WatchPage() {
         /* Same replay as the homepage, and deliberately the same module: two surfaces deciding
            independently what a dark channel shows is how the two drift into disagreeing about
            what the reader is looking at. */
-        replayWhenDark(player, twitch.Player, TWITCH_COLLECTION, () => {
+        replayWhenDark(player, twitch.Player, TWITCH_REPLAY, () => {
           if (!cancelled) setReplaying(true);
         });
       })

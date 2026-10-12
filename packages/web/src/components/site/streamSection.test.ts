@@ -99,7 +99,7 @@ describe('a dark channel replays real work, captioned as a replay', () => {
   it('asks for the collection through the player rather than a second embed', () => {
     // A second iframe would be a second office in one viewport — the exact composition ADR 428
     // removed — and would not count as a viewer either (ADR 302's autoplay gate).
-    expect(src()).toContain('replayWhenDark(player, twitch.Player, TWITCH_COLLECTION');
+    expect(src()).toContain('replayWhenDark(player, twitch.Player, TWITCH_REPLAY');
     expect(src()).not.toMatch(/<iframe/);
   });
 

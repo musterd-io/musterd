@@ -11,9 +11,10 @@ import {
 import { WATCH_COPY } from './watchCopy';
 
 /** A stand-in for Twitch.Player that lets a test fire the events the real one fires. */
-function fakePlayer(opts: { setCollection?: boolean } = {}) {
+function fakePlayer(opts: { setCollection?: boolean; setVideo?: boolean } = {}) {
   const handlers = new Map<string, (() => void)[]>();
   const collections: string[] = [];
+  const videos: string[] = [];
   return {
     player: {
       addEventListener: (e: string, cb: () => void) =>
@@ -22,8 +23,10 @@ function fakePlayer(opts: { setCollection?: boolean } = {}) {
       ...(opts.setCollection === false
         ? {}
         : { setCollection: (id: string) => void collections.push(id) }),
+      ...(opts.setVideo === false ? {} : { setVideo: (id: string) => void videos.push(id) }),
     },
     collections,
+    videos,
     fire: (e: string) => (handlers.get(e) ?? []).forEach((cb) => cb()),
   };
 }
@@ -99,7 +102,7 @@ describe('replayWhenDark', () => {
 
   it('asks for the collection when the channel goes dark', () => {
     const { player, collections, fire } = fakePlayer();
-    replayWhenDark(player, R_EVENTS, 'coll-1', () => {});
+    replayWhenDark(player, R_EVENTS, { collection: 'coll-1' }, () => {});
     expect(collections, 'nothing is swapped before the channel says it is dark').toEqual([]);
     fire('offline');
     expect(collections).toEqual(['coll-1']);
@@ -110,7 +113,7 @@ describe('replayWhenDark', () => {
     // never plays, and the caller must keep showing the office still rather than caption a void.
     let replayed = false;
     const { player, fire } = fakePlayer();
-    replayWhenDark(player, R_EVENTS, 'coll-1', () => (replayed = true));
+    replayWhenDark(player, R_EVENTS, { collection: 'coll-1' }, () => (replayed = true));
     fire('offline');
     expect(replayed).toBe(false);
   });
@@ -118,7 +121,7 @@ describe('replayWhenDark', () => {
   it('reports a replay once the player actually plays after the swap', () => {
     let replayed = false;
     const { player, fire } = fakePlayer();
-    replayWhenDark(player, R_EVENTS, 'coll-1', () => (replayed = true));
+    replayWhenDark(player, R_EVENTS, { collection: 'coll-1' }, () => (replayed = true));
     fire('offline');
     fire('play');
     expect(replayed).toBe(true);
@@ -129,14 +132,14 @@ describe('replayWhenDark', () => {
     // yesterday's recording the moment it started, which is worse than showing no replay at all.
     let replayed = false;
     const { player, fire } = fakePlayer();
-    replayWhenDark(player, R_EVENTS, 'coll-1', () => (replayed = true));
+    replayWhenDark(player, R_EVENTS, { collection: 'coll-1' }, () => (replayed = true));
     fire('play');
     expect(replayed).toBe(false);
   });
 
   it('swaps once, however many times the channel reports itself dark', () => {
     const { player, collections, fire } = fakePlayer();
-    replayWhenDark(player, R_EVENTS, 'coll-1', () => {});
+    replayWhenDark(player, R_EVENTS, { collection: 'coll-1' }, () => {});
     fire('offline');
     fire('offline');
     fire('offline');
@@ -145,14 +148,91 @@ describe('replayWhenDark', () => {
     ]);
   });
 
-  it('degrades to doing nothing when the SDK has no setCollection', () => {
+  it('degrades to doing nothing when the SDK can swap to neither', () => {
     // Same outcome as a blocked script: no swap, no replay claim, and the caller keeps the still.
     let replayed = false;
-    const { player, fire } = fakePlayer({ setCollection: false });
-    replayWhenDark(player, R_EVENTS, 'coll-1', () => (replayed = true));
+    const { player, fire } = fakePlayer({ setCollection: false, setVideo: false });
+    replayWhenDark(player, R_EVENTS, { collection: 'coll-1' }, () => (replayed = true));
     fire('offline');
     fire('play');
     expect(replayed).toBe(false);
+  });
+
+  /** Lane 01M4RC8WAA: a dead collection fires nothing, so the fallback hangs off a timer. */
+  describe('the pinned fallback video', () => {
+    const SOURCE = { collection: 'coll-1', fallbackVideo: 'v42', fallbackAfterMs: 8000 };
+    function timers() {
+      const pending: { cb: () => void; ms: number }[] = [];
+      return {
+        schedule: (cb: () => void, ms: number) => void pending.push({ cb, ms }),
+        pending,
+        runAll: () => pending.splice(0).forEach((t) => t.cb()),
+      };
+    }
+
+    it('plays the pinned video when the collection never starts', () => {
+      const t = timers();
+      const { player, videos, fire } = fakePlayer();
+      replayWhenDark(player, R_EVENTS, SOURCE, () => {}, t.schedule);
+      fire('offline');
+      expect(videos, 'the collection gets its chance first').toEqual([]);
+      expect(t.pending.map((p) => p.ms)).toEqual([8000]);
+      t.runAll();
+      expect(videos).toEqual(['v42']);
+    });
+
+    it('leaves a collection that started alone', () => {
+      const t = timers();
+      const { player, videos, fire } = fakePlayer();
+      replayWhenDark(player, R_EVENTS, SOURCE, () => {}, t.schedule);
+      fire('offline');
+      fire('play');
+      t.runAll();
+      expect(videos).toEqual([]);
+    });
+
+    it('still waits for PLAY before reporting a replay', () => {
+      // The fallback is a request too; a pinned highlight that was deleted must not caption a void.
+      const t = timers();
+      let replayed = false;
+      const { player, fire } = fakePlayer();
+      replayWhenDark(player, R_EVENTS, SOURCE, () => (replayed = true), t.schedule);
+      fire('offline');
+      t.runAll();
+      expect(replayed).toBe(false);
+      fire('play');
+      expect(replayed).toBe(true);
+    });
+
+    it('goes straight to the video when the SDK cannot set a collection', () => {
+      const t = timers();
+      const { player, videos, fire } = fakePlayer({ setCollection: false });
+      replayWhenDark(player, R_EVENTS, SOURCE, () => {}, t.schedule);
+      fire('offline');
+      expect(videos).toEqual(['v42']);
+      expect(t.pending).toEqual([]);
+    });
+
+    it('goes straight to the video when there is no collection to wait for', () => {
+      const t = timers();
+      const { player, collections, videos, fire } = fakePlayer();
+      replayWhenDark(player, R_EVENTS, { fallbackVideo: 'v42' }, () => {}, t.schedule);
+      fire('offline');
+      fire('offline');
+      expect(collections).toEqual([]);
+      expect(videos, 'once, however often OFFLINE repeats').toEqual(['v42']);
+      expect(t.pending).toEqual([]);
+    });
+
+    it('schedules nothing a live channel could trip', () => {
+      const t = timers();
+      const { player, videos, fire } = fakePlayer();
+      replayWhenDark(player, R_EVENTS, SOURCE, () => {}, t.schedule);
+      fire('play');
+      t.runAll();
+      expect(videos).toEqual([]);
+      expect(t.pending).toEqual([]);
+    });
   });
 });
 
