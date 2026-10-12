@@ -145,7 +145,14 @@ export async function importCommand(parsed: Parsed): Promise<number> {
     } catch {
       throw new CliError(`"${rawSite}" is not a Jira site URL`, 2);
     }
-    return runTrackerImport(jiraSource({ site, project: key, auth: jiraAuth() }), {
+    const creds = jiraAuth(site);
+    const source = jiraSource({
+      site,
+      project: key,
+      auth: creds.auth,
+      ...(creds.withheld ? { withheld: creds.withheld } : {}),
+    });
+    return runTrackerImport(source, {
       ws,
       team,
       http,

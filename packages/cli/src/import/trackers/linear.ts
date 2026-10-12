@@ -104,6 +104,11 @@ export function linearSource(opts: {
         )?.issues;
         if (!page?.nodes) throw new CliError('Linear sent an issues page without nodes', 1);
         for (const n of page.nodes) {
+          if (typeof n.identifier !== 'string' || !owns.test(n.identifier))
+            throw new CliError(
+              `Linear sent an issue identifier that is not ${opts.team}-<number> — stopped`,
+              1,
+            );
           out.push(toIssue(n));
           if (out.length >= limit) return out;
         }

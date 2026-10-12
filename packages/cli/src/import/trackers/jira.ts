@@ -17,13 +17,59 @@ export type JiraAuth =
 
 const AUTH_FIX = 'set JIRA_EMAIL and JIRA_API_TOKEN, or JIRA_PAT (Server/Data Center)';
 
-export function jiraAuth(env: NodeJS.ProcessEnv = process.env): JiraAuth {
+/**
+ * Which credentials this site may receive. The site is typed on the command line — a typo, or a
+ * command someone else suggested, must never hand a token to the wrong host — so a credential goes
+ * only where it can be meant: over https (loopback excepted), the Cloud email + token only to
+ * `*.atlassian.net`, and a PAT only to the host `JIRA_SITE` names. Anywhere else the request is
+ * anonymous, and `withheld` says why, for the 401 that may follow.
+ */
+export function jiraAuth(
+  site: string,
+  env: NodeJS.ProcessEnv = process.env,
+): { auth: JiraAuth; withheld?: string } {
+  const url = new URL(site);
+  const host = url.hostname.toLowerCase();
+  const loopback = host === '127.0.0.1' || host === 'localhost' || host === '[::1]';
+  const secure = url.protocol === 'https:' || loopback;
   const email = env['JIRA_EMAIL']?.trim();
   const token = env['JIRA_API_TOKEN']?.trim();
-  if (email && token) return { kind: 'basic', email, token };
   const pat = env['JIRA_PAT']?.trim();
-  if (pat) return { kind: 'bearer', token: pat };
-  return { kind: 'anonymous' };
+  const anonymous: JiraAuth = { kind: 'anonymous' };
+  if (email && token) {
+    if (secure && (host.endsWith('.atlassian.net') || loopback))
+      return { auth: { kind: 'basic', email, token } };
+    if (!pat)
+      return {
+        auth: anonymous,
+        withheld: `JIRA_API_TOKEN is an Atlassian Cloud token — sent only to *.atlassian.net over https, so not to ${host}`,
+      };
+  }
+  if (pat) {
+    const named = siteHost(env['JIRA_SITE']);
+    if (!named)
+      return {
+        auth: anonymous,
+        withheld: `JIRA_PAT is sent only to the host in JIRA_SITE — set JIRA_SITE=${host} if ${host} is yours`,
+      };
+    if (named !== host || !secure)
+      return {
+        auth: anonymous,
+        withheld: `JIRA_PAT is sent only to the host in JIRA_SITE (${named}) over https, so not to ${host}`,
+      };
+    return { auth: { kind: 'bearer', token: pat } };
+  }
+  return { auth: anonymous };
+}
+
+function siteHost(raw: string | undefined): string | null {
+  const v = raw?.trim();
+  if (!v) return null;
+  try {
+    return new URL(/^https?:\/\//.test(v) ? v : `https://${v}`).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
 }
 
 interface ApiIssue {
@@ -43,12 +89,17 @@ export function jiraSource(opts: {
   auth: JiraAuth;
   http?: TrackerHttp;
   apiVersion?: 2 | 3;
+  /** Why `jiraAuth` sent no credentials to this site — named in the error if the site refuses. */
+  withheld?: string;
 }): TrackerSource & { apiVersion: 2 | 3 } {
   const http = opts.http ?? defaultHttp;
   const site = opts.site.replace(/\/+$/, '');
   const apiVersion = opts.apiVersion ?? (new URL(site).hostname.endsWith('.atlassian.net') ? 3 : 2);
   const api = `${site}/rest/api/${String(apiVersion)}`;
-  const ctx = { tracker: 'Jira', authFix: AUTH_FIX };
+  const ctx = {
+    tracker: 'Jira',
+    authFix: opts.withheld ? `credentials not sent: ${opts.withheld}` : AUTH_FIX,
+  };
   const headers: Record<string, string> = { accept: 'application/json', 'user-agent': 'musterd' };
   if (opts.auth.kind === 'basic')
     headers['authorization'] =
@@ -99,6 +150,12 @@ export function jiraSource(opts: {
             ? await search(token ? { nextPageToken: token } : {})
             : await search({ startAt: String(startAt) });
         for (const i of page.issues!) {
+          // The key becomes a lane's source_ref and a URL path: it must be this project's.
+          if (typeof i.key !== 'string' || !owns.test(i.key))
+            throw new CliError(
+              `Jira sent an issue key that is not ${opts.project}-<number> — stopped`,
+              1,
+            );
           out.push(toIssue(site, i));
           if (out.length >= limit) return out;
         }

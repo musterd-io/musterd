@@ -108,6 +108,24 @@ describe('linearSource.open', () => {
   });
 });
 
+describe('linear identifiers are checked', () => {
+  it('an identifier that is not <TEAM>-<n> stops the fetch', async () => {
+    const endpoint = await fakeLinear(() => ({
+      body: JSON.stringify({
+        data: {
+          issues: {
+            nodes: [{ identifier: 'OPS-1', title: 't', url: 'https://linear.app/x' }],
+            pageInfo: { hasNextPage: false },
+          },
+        },
+      }),
+    }));
+    await expect(src(endpoint).open()).rejects.toThrow(
+      /Linear sent an issue identifier that is not ENG-<number>/,
+    );
+  });
+});
+
 describe('linearSource.state', () => {
   it('completed/canceled are closed; not found, moved and archived are not_found', async () => {
     const endpoint = await fakeLinear((q) => {

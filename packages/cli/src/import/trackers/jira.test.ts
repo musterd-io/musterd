@@ -146,15 +146,71 @@ describe('jiraSource.state', () => {
   });
 });
 
-describe('jiraAuth', () => {
-  it('email + token, else a PAT, else anonymous', () => {
-    expect(jiraAuth({ JIRA_EMAIL: 'a@b.c', JIRA_API_TOKEN: 't' })).toEqual({
-      kind: 'basic',
-      email: 'a@b.c',
-      token: 't',
+describe('jiraAuth — credentials go only where they belong', () => {
+  const cloud = 'https://acme.atlassian.net';
+  it('a Cloud token goes to *.atlassian.net over https, and nowhere else', () => {
+    const env = { JIRA_EMAIL: 'a@b.c', JIRA_API_TOKEN: 't' };
+    expect(jiraAuth(cloud, env)).toEqual({ auth: { kind: 'basic', email: 'a@b.c', token: 't' } });
+    const elsewhere = jiraAuth('https://evil.example/jira', env);
+    expect(elsewhere.auth).toEqual({ kind: 'anonymous' });
+    expect(elsewhere.withheld).toMatch(
+      /JIRA_API_TOKEN is an Atlassian Cloud token — sent only to \*\.atlassian\.net/,
+    );
+    expect(jiraAuth('http://acme.atlassian.net', env).auth).toEqual({ kind: 'anonymous' });
+  });
+
+  it('a PAT goes only to the host JIRA_SITE names', () => {
+    expect(jiraAuth('https://jira.acme.io', { JIRA_PAT: 'p', JIRA_SITE: 'jira.acme.io' })).toEqual({
+      auth: { kind: 'bearer', token: 'p' },
     });
-    expect(jiraAuth({ JIRA_PAT: 'p' })).toEqual({ kind: 'bearer', token: 'p' });
-    expect(jiraAuth({ JIRA_EMAIL: 'a@b.c' })).toEqual({ kind: 'anonymous' });
-    expect(jiraAuth({})).toEqual({ kind: 'anonymous' });
+    expect(
+      jiraAuth('https://jira.acme.io/', { JIRA_PAT: 'p', JIRA_SITE: 'https://jira.acme.io/jira' })
+        .auth.kind,
+    ).toBe('bearer');
+    const other = jiraAuth('https://evil.example', { JIRA_PAT: 'p', JIRA_SITE: 'jira.acme.io' });
+    expect(other.auth).toEqual({ kind: 'anonymous' });
+    expect(other.withheld).toMatch(
+      /JIRA_PAT is sent only to the host in JIRA_SITE \(jira\.acme\.io\)/,
+    );
+    expect(jiraAuth('https://jira.acme.io', { JIRA_PAT: 'p' }).withheld).toMatch(
+      /set JIRA_SITE=jira\.acme\.io/,
+    );
+  });
+
+  it('loopback may be plain http (tests, a local Jira); nothing set is anonymous', () => {
+    expect(
+      jiraAuth('http://127.0.0.1:9/jira', { JIRA_PAT: 'p', JIRA_SITE: '127.0.0.1' }).auth.kind,
+    ).toBe('bearer');
+    expect(jiraAuth(cloud, {})).toEqual({ auth: { kind: 'anonymous' } });
+  });
+
+  it('a 401 after credentials were withheld says why', async () => {
+    const site = await fakeJira(() => ({ status: 401, body: '{}' }));
+    const err = (await jiraSource({
+      site,
+      project: 'CLI',
+      auth: anon,
+      withheld: 'JIRA_PAT is sent only to the host in JIRA_SITE (jira.acme.io)',
+      http,
+    })
+      .open()
+      .catch((e: unknown) => e)) as CliError;
+    expect(err.exitCode).toBe(2);
+    expect(err.message).toMatch(/JIRA_PAT is sent only to the host in JIRA_SITE/);
+  });
+});
+
+describe('issue keys are checked', () => {
+  it('a key that is not <PROJECT>-<n> stops the fetch', async () => {
+    const site = await fakeJira(() => ({
+      body: JSON.stringify({
+        startAt: 0,
+        total: 1,
+        issues: [{ key: 'CLI-1\u001b]0;x\u0007', fields: { summary: 's' } }],
+      }),
+    }));
+    await expect(jiraSource({ site, project: 'CLI', auth: anon, http }).open()).rejects.toThrow(
+      /Jira sent an issue key that is not CLI-<number>/,
+    );
   });
 });

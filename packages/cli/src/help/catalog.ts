@@ -590,7 +590,8 @@ export const CATALOG: readonly CommandEntry[] = [
       'issues retitle their lanes, closed ones abandon an unclaimed lane. It never writes to GitHub.\n' +
       '`import linear <TEAM-KEY>` does the same for a Linear team, with LINEAR_API_KEY: projects,\n' +
       'else cycles, become goals. `import jira <site> <PROJECT-KEY>` reads a Jira project with\n' +
-      'JIRA_EMAIL + JIRA_API_TOKEN, JIRA_PAT, or anonymously on a public site.',
+      'JIRA_EMAIL + JIRA_API_TOKEN (sent only to *.atlassian.net), JIRA_PAT (sent only to the\n' +
+      'host in JIRA_SITE), or anonymously on a public site.',
     examples: [
       'musterd import sheet',
       'musterd import backlog.csv',

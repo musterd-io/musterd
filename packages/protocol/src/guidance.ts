@@ -598,7 +598,7 @@ export function renderImportSkill(): string {
     '     If `gh` is missing or not signed in, say so and continue with the repo scan.',
     '   - **Linear or Jira, with credentials already set:** run `musterd import linear <TEAM-KEY>`',
     '     (`LINEAR_API_KEY`) or `musterd import jira <site> <PROJECT-KEY>` (`JIRA_EMAIL` and',
-    '     `JIRA_API_TOKEN`, or `JIRA_PAT`; a public site needs neither). Each fetches, stages the',
+    '     `JIRA_API_TOKEN`, or `JIRA_PAT` with `JIRA_SITE`; a public site needs neither). Each fetches, stages the',
     '     preview of step 5, and re-syncs when run again. Check the variable is set; never ask for it.',
     '   - **Linear, Jira or Notion:** use the connector this harness already has for that tool, and',
     '     use it read-only: never create, edit or comment on anything in the tracker.',
