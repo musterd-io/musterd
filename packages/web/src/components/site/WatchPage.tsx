@@ -26,7 +26,7 @@ const LOOKING_AT = [
   },
   {
     term: 'Acceptance',
-    copy: 'Nothing ships on its author’s word. A different member judges the landed result, and can send it back.',
+    copy: 'Nothing counts as done on its author’s word. A different member judges the landed result, and can send it back.',
   },
   {
     term: 'The blink',

@@ -186,10 +186,10 @@ every §2 fact at most twice.
 
 ### 0a.10 Other surfaces (§0.11 item 6), decided
 
-Outside this lane's files, each a one-string change for whoever next touches the file:
+Outside the copy lane's files; done 2026-10-12 in a follow-up lane:
 
 - `WatchPage.tsx` `Nothing ships on its author's word.` → `Nothing counts as done on its author's word.`
-- `scripts/site-files.ts` (llms.txt) `musterd is in private preview. There is nothing to install yet.` → `musterd is in private preview. There is no public install yet.`
+- `packages/web/scripts/site-files.ts` (llms.txt) `musterd is in private preview. There is nothing to install yet.` → `musterd is in private preview. There is no public install yet.`
 - `StreamSection`'s heading is handled in 0a.5.
 
 ## 0. Revision of 2026-10-09 — ADR 550 and the first-time visitor
