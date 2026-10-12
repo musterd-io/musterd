@@ -1223,3 +1223,26 @@ the feature: every rule is a visible part of the design. CSS is measured + ~5%; 
 
 - Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main after this lands — app CSS under 11.5 KB,
   `Tour-*.css` under 2.3 KB gzip.
+
+### 2026-10-12 — initial JS 141,700 → 144,600 B, total JS 301,200 → 307,300 B, site CSS 4,000 → 4,800 B: the /start page (lane 01M4GQ2NR438YWWYRH7RTTYP9X)
+
+The first session's front door for the first-run-10-minutes goal: a static public route (`/start`) with the
+ten-minute arc in four moves, the real office still, a labelled board-chain illustration, and the handoff to
+the in-product tour. The homepage Getting started block links here again (held back while the route 404ed).
+
+| Budget     | Main     | This branch          | Ceiling → new     |
+| ---------- | -------- | -------------------- | ----------------- |
+| initial JS | 138.4 KB | 138.8 KB (~142.2 KB top of rounding) | 141,700 → 144,600 |
+| total JS   | 294.1 KB | 295.8 KB (~302.9 KB top of rounding) | 301,200 → 307,300 |
+| site CSS   | 3.9 KB   | 4.4 KB               | 4,000 → 4,800     |
+
+The marginal cost is the page itself and is measured, not inferred: the `start-*.js` chunk is 1,618 B gzip
+(≈ the +1.7 KB total overage), the route-tree row the new route adds to every route's eager graph is the
++0.4 KB on /live, and `start-*.css` is 641 B gzip (classified `site` per ADR 313, beside `watch`). The page
+is static markup with no hooks and no daemon imports; lazy-loading cannot move the route-tree row or the
+total (ADR 183), and there is nothing to delete. JS follows the tour precedent (measured + ~0.7 KB CI gzip
+delta + ~1.2%, rounded up to the hundred); CSS is measured + ~5%. A re-baseline would loosen, so this is a
+raise. The 2026-10-11 tour entries' falsify lines still stand; this entry's budgets are the new ceilings.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main after this lands — total JS under 303.5 KB,
+  initial JS under 139.5 KB, `start-*.css` under 700 B gzip.

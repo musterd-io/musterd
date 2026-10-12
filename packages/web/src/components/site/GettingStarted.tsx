@@ -1,4 +1,4 @@
-import { EARLY_ACCESS_URL } from '../../content/site';
+import { EARLY_ACCESS_URL, FIRST_TEN_MINUTES_PATH } from '../../content/site';
 import './GettingStarted.css';
 
 /**
@@ -11,9 +11,9 @@ import './GettingStarted.css';
  * real command and nothing else on the page changes. The status words are static text, true in every
  * state — no "live", "now" or "currently" (watch-page-copy-spec §2).
  *
- * §0.9's middle row ("See your first ten minutes", `FIRST_TEN_MINUTES_PATH`) is held back until that
- * page exists (nick, 2026-10-09: deploy without /start). It comes back with dreamy's lane
- * 01M4GQ2NR438YWWYRH7RTTYP9X; until then a "Today" row would link to a 404.
+ * The middle row links the first-ten-minutes page (/start, dreamy's lane 01M4GQ2NR438YWWYRH7RTTYP9X).
+ * It was held back until that route existed (nick, 2026-10-09: deploy without /start); now the
+ * route exists, the row is back.
  */
 const ROWS = [
   {
@@ -21,6 +21,12 @@ const ROWS = [
     title: 'Request a seat.',
     body: 'Fill in the form. We write to you when there is a seat for your team.',
     link: { href: EARLY_ACCESS_URL, text: 'Get early access' },
+  },
+  {
+    status: 'Today',
+    title: 'See your first ten minutes.',
+    body: 'What the first session looks like, step by step, with the board as it really appears.',
+    link: { href: FIRST_TEN_MINUTES_PATH, text: 'See your first ten minutes' },
   },
   {
     status: 'Not yet',

@@ -379,7 +379,9 @@ for the copy owner:
    (`claude-sonnet-5-5`, `claude-code`) read on 2026-10-09, not a commit trailer.
 5. **`See your first ten minutes` links to `/start`**, the placeholder (`FIRST_TEN_MINUTES_PATH` in
    `content/site.ts`). The route does not exist until dreamy's lane `01M4GQ2NR438YWWYRH7RTTYP9X` lands,
-   so **this copy is not deployed to musterd.io before it does**. _(Amended 2026-10-09: nick chose to
+   so **this copy is not deployed to musterd.io before it does**. (2026-10-12: the route landed in
+   that lane — structure, stills, preview wording — and the Getting started row links it again.
+   Deploy is miley's call per ADR 308.) _(Amended 2026-10-09: nick chose to
    deploy without it — the Getting started row is held back until the page exists, so the deploy is
    not blocked on `/start`.)_
 6. **Other surfaces still carry strings §0.2 retires**, outside this lane's files: `WatchPage.tsx`

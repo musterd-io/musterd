@@ -1,0 +1,154 @@
+/* First ten minutes page. Semantic tokens only; the same rhythm as GettingStarted. */
+
+.start-hero {
+  padding-block: var(--section-y) 0;
+}
+
+.start-hero__eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 0.5rem;
+}
+
+.start-hero__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  color: var(--text);
+  margin: 0 0 0.75rem;
+}
+
+.start-hero__lede {
+  color: var(--text-dim);
+  line-height: 1.55;
+  font-size: 1rem;
+  margin: 0;
+  max-width: 40rem;
+}
+
+.start-steps,
+.start-figures,
+.start-next {
+  padding-block: var(--section-y) 0;
+}
+
+.start-steps__title,
+.start-figures__title,
+.start-next__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.2rem, 2.4vw, 1.55rem);
+  color: var(--text);
+  margin: 0 0 1rem;
+}
+
+.start-steps__list {
+  list-style: none;
+  counter-reset: start-step;
+  margin: 0;
+  padding: 0;
+  max-width: 40rem;
+}
+
+.start-steps__item {
+  counter-increment: start-step;
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  gap: 0.8rem;
+  padding: 0.8rem 0;
+  border-top: 1px solid var(--mustard-100);
+}
+
+.start-steps__item::before {
+  content: counter(start-step);
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  padding-top: 0.25rem;
+}
+
+.start-steps__step {
+  font-family: var(--font-display);
+  font-size: 0.98rem;
+  color: var(--text);
+  margin: 0 0 0.25rem;
+}
+
+.start-steps__copy {
+  color: var(--text-dim);
+  line-height: 1.5;
+  font-size: 0.92rem;
+  margin: 0;
+}
+
+.start-fig {
+  margin: 0 0 1.5rem;
+  max-width: 48rem;
+}
+
+.start-fig__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--mustard-100);
+}
+
+.start-fig__cap {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0.5rem 0 0;
+}
+
+/* The board figure is an illustration of the record's shape, not a screenshot: a static
+   snapshot card in the same register as the homepage's claim-to-accepted card. */
+.start-board {
+  border: 1px solid var(--mustard-100);
+  padding: 1rem 1.1rem;
+  max-width: 40rem;
+}
+
+.start-board__rows {
+  margin: 0;
+}
+
+.start-board__row {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: 0.8rem;
+  padding: 0.45rem 0;
+}
+
+.start-board__row + .start-board__row {
+  border-top: 1px solid var(--mustard-100);
+}
+
+.start-board__label {
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.start-board__value {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.start-next__copy {
+  color: var(--text-dim);
+  line-height: 1.55;
+  font-size: 0.95rem;
+  margin: 0 0 0.9rem;
+  max-width: 40rem;
+}
+
+.start-next__ui {
+  color: var(--text);
+}
+
+.start__link {
+  font-size: inherit;
+  color: var(--text);
+}
