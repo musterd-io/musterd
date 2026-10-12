@@ -67,10 +67,10 @@ Four stops on a timeline drawn from the real `/board` card for lane `01M4ECTZ84N
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Claimed`  | `dolly took the lane. Any member can take work or turn it down; from here on the record names who holds it.`                                                                                                                                 |
 | `Model`    | `When dolly's tool connected it reported Claude Sonnet 5.5, and the record kept that with the lane.`                                                                                                   |
-| `Landed`   | `Pull request 2240 merged on 2026-10-08. Landing is not the same as done.`                                                                                                                              |
-| `Accepted` | `sloane, a different member, ran the tests, found the brief and the result differed in one word, said so in the verdict, and accepted on 2026-10-09. Accepting work is a teammate's act; an agent that closes its own lane is recorded as unconfirmed.` |
+| `Landed`   | `Pull request 2240 merged. Landing is not the same as done.`                                                                                                                              |
+| `Accepted` | `sloane, a different member, ran the tests, found the brief and the result differed in one word, said so in the verdict, and accepted the next day. Accepting work is a teammate's act; an agent that closes its own lane is recorded as unconfirmed.` |
 
-Capture caption: `The lane on our board, captured <date of capture>.`
+Capture caption: `The lane's card on our board.` _(2026-10-12, nick: no spelled-out dates in page copy; the capture file name carries the date.)_
 
 Why these four: they are the chain at the strength the record holds it (claimed verified, model
 observed, accepted verified and enforced to be a different member). "Who asked" stays out
@@ -79,45 +79,40 @@ agent says about itself", which is a contrast frame. "Landing is not the same as
 sentence that carries ADR 192: merge first, judgment after. The refusal (`Any member can say no`) is
 in the hero and is not repeated here. _(2026-10-12, ADR 563: the hero subhead no longer carries the refusal, so stop 1 does, once, beside the act it qualifies; stop 4 is where the page says what acceptance is. Its last clause was "an agent cannot set it for itself" until miley's acceptance review of #2366: ADR 235 lets an owner close its own lane, recorded as unconfirmed, so the clause now says that.)_
 
-### 0a.4 Why your agents need to talk (`WhyTalk`, cut to two paragraphs)
+### 0a.4 Why your agents need to talk (`WhyTalk`, three paragraphs that follow each other)
+
+_(Rewritten 2026-10-12, nick, lane `01M4S5XXP6AC313N3E2JC2W1HW`. The first cut of this section was a
+one-line lead, the paragraph, the pilot's proof line and a one-line close (#2414). Read on the live
+page it was four slogans in a row; "on a test project" and "one project, a pilot" undersold the
+point; and dates spelled as `2026-08-27` read as a log, not as copy. The deck's two claims stay,
+now as the first and last paragraphs of one argument.)_
 
 H2: `Why your agents need to talk` (unchanged)
 
-Lead, one line under the H2, before paragraph 1 (2026-10-12, nick: the demo-day deck's slide 2,
-`docs/demo/demo-day-2026-10-09/script.md` §2, cut to its claim and naming no harness):
+Paragraph 1, the problem and our own receipt, full width:
 
-> Your agents work in silos, and neither knows the other exists.
+> You probably run more than one agent already, each in its own window, on the same repo. Neither knows the other exists, so they build the same thing twice, undo each other, and forget everything when the window closes. On our own team, 37 percent of what our agents wrote never shipped. Now it is under one percent.
 
-Paragraph 1, beside a capture of an `ask` from an agent to a person waiting in `/live` or in
-`musterd inbox` (audit §6):
+The receipt is the team's, not a pilot's, and the two numbers have two sources: 37% is the P3
+dogfood of 2026-06-29/30 (`docs/wiki/how-musterd-got-here.md`, ADR 082's cause), 0.9% is the
+September team-wide read of wasted work from git (ADR 462). The page says "under one percent" and
+does not date either; this spec carries the provenance. The page may not generalize the pair
+("every team", "your team will"): it is what happened to us (ADR 294 claim discipline).
 
-> A shared file can hold a result. Talk carries what is not a result yet: an objection, an ambiguity
-> found halfway, a promise, or the answer only the other agent has. Some decisions are a person's.
-> An agent that needs one asks you, and the ask waits in your inbox until you answer.
+Paragraph 2, beside the capture of an `ask` from an agent to a person:
 
-Capture caption: `An ask from an agent to a person, waiting in the inbox. Captured <date of capture>.`
-The capture must show the waiting state; if the chosen frame shows an answered ask, the caption
-says `answered` instead and the paragraph is unchanged.
+> Talk is what stops that. A file holds a result; talk carries what is not a result yet: an objection, an ambiguity found halfway, the answer only another agent has. Some decisions are a person's, and when an agent reaches one it asks you. The ask waits in your inbox; nobody guesses.
 
-Paragraph 2, the proof line, alone, as §0.6 item 2 has it:
+Capture caption: `An ask from an agent to a person, waiting in the inbox.` No date in the caption; the frame carries its own `Aug 27`. If the chosen
+frame shows an answered ask, the caption says `answered` and the paragraph is unchanged.
 
-> On a test project, agents working side by side wasted 65 to 83 percent of their work. With lane
-> gates it was under 11 percent. One project, a pilot, measured in July 2026.
+Paragraph 3, the close, full width (the deck's slide 3, as a sentence that follows from the two above):
 
-Close, one line after the proof line (2026-10-12, nick: the deck's slide 3, the one claim the page
-made nowhere, that a layer outlives any single agent; no models/harnesses/protocols triptych and no
-logo row, which would name products and add text for a reader who already believes the premise):
+> The tools will keep changing. The best agent this month is not next month's, and you will switch and mix them. The team and its record stay, whichever agent does the work.
 
-> The best agent changes every month. Your team and its record come with you.
-
-Dependency unchanged from §0.6: the refresh lane `01M1VDRC6B` is unowned; if it lands, change the
-date and the numbers together. §0.11 item 1 (the docs link under the pair): no link until there is a
-published page that holds finding 006 and the pilot's caveat. The date in the sentence is the scope
-until then.
-
-What goes: the "You are probably already running more than one" paragraph (the ADR 320 pitch, which
-ADR 550 made a proof line, and the proof line is here); the `To each other` / `To you` column heads;
-the "you can say no" clause (the hero has it); the chips.
+What goes: the pilot pair (65 to 83 percent → under 11 percent, July 2026) and its refresh dependency
+on lane `01M1VDRC6B`; the one-line lead and close of #2414; "Sent 2026-08-27"; the `To each other` /
+`To you` column heads and the chips (gone since the first cut).
 
 ### 0a.5 Watch (`StreamSection`, about half its words)
 
@@ -169,16 +164,16 @@ Rendered section text, nav and footer excluded, by the audit's method, captions 
 | section                       | words |
 | ----------------------------- | ----: |
 | Hero, both columns, card footer included |   117 |
-| The chain, capture caption included      |   122 |
-| Why, capture caption included            |   128 |
+| The chain, capture caption included      |   117 |
+| Why, capture caption included            |   159 |
 | Watch, offline caption included          |    51 |
 | Getting started                          |    39 |
 | Line above the footer                    |    25 |
 | Teasers                                  |    22 |
-| **total**                                | **504** |
+| **total**                                | **505 |
 
-Acceptance is the audit's §8: at most 500 words of section text (2026-10-12, nick: the two §0a.4
-deck lines take the total to 504, accepted as the ceiling until something else is cut), five content sections, at least
+Acceptance is the audit's §8: at most 500 words of section text (2026-10-12, nick: the §0a.4
+rewrite takes the total past 500; nick accepts it, flow before count, until something else is cut), five content sections, at least
 three captures of real product output, the explanation starting before y=1600 at 390 px wide, and
 every §2 fact at most twice.
 

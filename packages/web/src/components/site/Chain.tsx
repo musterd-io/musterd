@@ -26,11 +26,11 @@ const STOPS = [
   },
   {
     label: 'Landed',
-    text: 'Pull request 2240 merged on 2026-10-08. Landing is not the same as done.',
+    text: 'Pull request 2240 merged. Landing is not the same as done.',
   },
   {
     label: 'Accepted',
-    text: "sloane, a different member, ran the tests, found the brief and the result differed in one word, said so in the verdict, and accepted on 2026-10-09. Accepting work is a teammate's act; an agent that closes its own lane is recorded as unconfirmed.",
+    text: "sloane, a different member, ran the tests, found the brief and the result differed in one word, said so in the verdict, and accepted the next day. Accepting work is a teammate's act; an agent that closes its own lane is recorded as unconfirmed.",
   },
 ] as const;
 
@@ -66,7 +66,7 @@ export function Chain() {
             decoding="async"
           />
           <figcaption className="ch__caption">
-            The lane on our board, captured <span className="nowrap">2026-10-12</span>.
+            The lane&rsquo;s card on our board.
           </figcaption>
         </figure>
         <ol className="ch__stops">
