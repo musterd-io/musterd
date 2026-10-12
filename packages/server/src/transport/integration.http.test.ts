@@ -777,6 +777,16 @@ withDrivers('integration · http', (_o, kind) => {
         expect(spa.status).toBe(200);
         expect(await spa.text()).toMatch(/musterd live/);
 
+        // A prerendered route is served its own page, not the root shell (lane 01M4RNDKHX): the
+        // root shell booted the homepage first and /live waited ~1.1–1.4 s on the detour.
+        mkdirSync(join(dir, 'board'));
+        writeFileSync(join(dir, 'board', 'index.html'), '<!doctype html><title>the board</title>');
+        for (const path of ['/board', '/board/', '/board?lane=x']) {
+          const page = await fetch(`${b}${path}`);
+          expect(page.status).toBe(200);
+          expect(await page.text()).toMatch(/the board/);
+        }
+
         // A missing *asset* (has an extension) is a real 404, not the shell.
         expect((await fetch(`${b}/assets/missing.js`)).status).toBe(404);
 

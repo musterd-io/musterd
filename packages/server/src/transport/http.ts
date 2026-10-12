@@ -776,8 +776,9 @@ function sendFile(
 }
 
 /**
- * Serve the built web UI same-origin (ADR 062). A real file is served as-is; an extensionless path
- * (a client route like `/live`) falls back to `index.html` so deep links + refresh work. Path
+ * Serve the built web UI same-origin (ADR 062). A real file is served as-is; a prerendered route
+ * (`/live` with `live/index.html` on disk) is served its own page; any other extensionless path (a
+ * client route) falls back to `index.html` so deep links + refresh work. Path
  * traversal is refused by resolving under `webRoot` and requiring containment.
  */
 function serveStatic(
@@ -801,6 +802,12 @@ function serveStatic(
   const assetsDir = join(root, 'assets') + sep;
   if (existsSync(target) && statSync(target).isFile())
     return sendFile(req, res, target, target.startsWith(assetsDir));
+  // A prerendered route (`/live` → `live/index.html`) is served as itself. Before this every route
+  // got the ROOT shell — the homepage's HTML, its hero preload and Twitch preconnects — and the
+  // browser booted the homepage before the router switched to the real page: measured 2026-10-12,
+  // /live's first data request waited ~1.1–1.4 s on that detour (lane 01M4RNDKHX).
+  const routeIndex = join(target, 'index.html');
+  if (target !== root && existsSync(routeIndex)) return sendFile(req, res, routeIndex, false);
   // SPA fallback: client routes have no file extension → serve the app shell (never immutable).
   if (extname(target) === '') {
     const index = join(root, 'index.html');

@@ -255,7 +255,7 @@ server's fixed strings, never lane prose. `ReviewPromisesQuerySchema` accepts on
 `ReviewPromiseAuditRowSchema` entries (`request_id`, `requester`, `owner`, `accepted_at`) and omits
 request prose and artifact references.
 
-**Serving the web UI (ADR 062).** With `--web-root <dir>` / `MUSTERD_WEB_ROOT` the daemon also serves a built web UI from that directory: any unmatched `GET` outside the API namespaces (`/health`, `/teams/*`) returns a file, with extensionless client routes (e.g. `/live`) falling back to `index.html`. This puts the dashboard, the HTTP API, and the WS on one origin — no CORS, no proxy — and the WS upgrade gate (above) admits a **same-origin** `Origin` (its host:port equals the `Host` header) so the daemon-served page can connect. Off by default (API-only).
+**Serving the web UI (ADR 062).** With `--web-root <dir>` / `MUSTERD_WEB_ROOT` the daemon also serves a built web UI from that directory: any unmatched `GET` outside the API namespaces (`/health`, `/teams/*`) returns a file; a prerendered route is served its own page (`/live` → `live/index.html`), and any other extensionless client route falls back to `index.html`. This puts the dashboard, the HTTP API, and the WS on one origin — no CORS, no proxy — and the WS upgrade gate (above) admits a **same-origin** `Origin` (its host:port equals the `Host` header) so the daemon-served page can connect. Off by default (API-only).
 
 ## Error codes (shared by WS `error` frames and HTTP)
 
