@@ -101,6 +101,10 @@ are not `withDrivers` blocks and keep running under every setting.
 - 2026-10-03 — [ADR 499](499-gates-run-where-inputs-changed.md): "a push to `main` always runs
   both" holds whenever the suite runs at all; a docs-only squash runs no suite on either engine,
   because no engine's inputs changed.
+- 2026-10-12 — **The compute objection no longer applies.** The repo is public again (ADR 565),
+  where GitHub-hosted minutes are free (ADR 569). [ADR 572](572-sqlite-prs-shard-coverage.md) shards
+  SQLite-only PR coverage two ways for wall time. The driver scoping above is unchanged.
+
 
 _Note, 2026-10-05 (izzo, lane 01M46EH1FA)._ **The PR half of the filter is replaced.**
 [ADR 510](510-pr-sqlite-only.md) makes every PR run SQLite only, unless it carries the `pglite`

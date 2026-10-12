@@ -47,6 +47,8 @@ this is gone.
 2. **When both drivers run, coverage runs as four shards plus `coverage-merge`**, which merges the
    blobs and checks the floors on the merged map, as in ADR 498. When SQLite alone runs (most PRs),
    coverage is one job and checks the floors itself. Each shard runs four vitest workers.
+   _(Amended 2026-10-12: [ADR 572](572-sqlite-prs-shard-coverage.md) runs SQLite-only coverage as
+   two shards plus the merge. See the amendment below.)_
 3. **The full-main-check markers keep their meaning.** `plan` uploads the in-flight marker when a
    full check starts. `gates` uploads `full-main-check` only when every job of that check passed.
 4. **The Ubicloud fallback (ADR 569) covers every job.** Going back means changing every
@@ -61,6 +63,9 @@ this is gone.
   515's reasoning applies again; re-weigh then.
 - A failed job no longer stops the others, so a red PR shows every failing gate in one run.
 - `docs/wiki/running-the-gates.md` and the `ci.yml` header describe this shape.
+- 2026-10-12 — **SQLite-only PRs shard too.** [ADR 572](572-sqlite-prs-shard-coverage.md): after
+  this ADR and #2424, the single coverage job (~330–340 s) set every SQLite-only PR's wall time, so
+  it runs as two shards plus `coverage-merge`.
 
 ## Observability & Evaluation
 
