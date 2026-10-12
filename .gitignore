@@ -48,6 +48,9 @@ coverage-blobs/
 **/.musterd/trace-policy.json
 **/.musterd/trace-tail.json
 **/.musterd/todos.json
+# ADR 558 idle-wake state — the turn hooks' and MCP adapter's shared session clock, 0600, machine-local.
+# Untracked, it made scripts/cloud/deploy.mjs refuse a "dirty" tree (2026-10-12).
+**/.musterd/idle-wake.json
 # ADR 442 wall 1c: the per-session ledger of subagents this session spawned (the Agent PostToolUse
 # hook writes it; the SendMessage gate reads it). Machine-local and per-session — unignored, it
 # stamped every seat's build `<sha>-dirty` (ryder, 2026-09-25, on 434c9625).
