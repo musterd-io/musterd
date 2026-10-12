@@ -346,6 +346,12 @@ export function ffmpegArgs(
       : ['-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo']),
     '-c:v',
     vcodec,
+    // libx264's default preset is `medium`, which on the hosted performance-4x took 1.4 of the 4
+    // cores for a 1080p15 stream and starved Chrome: 2026-10-12, load 6.0 with 0% idle, the office
+    // drew 8.7 frames/s under the 12/s floor (docs/perf/broadcast-baseline.md). `veryfast` encodes
+    // the same bitrate for roughly a third of the CPU; the bits spent are capped by -maxrate anyway,
+    // so the quality cost is small and the cores go back to the picture. VideoToolbox is hardware.
+    ...(vcodec === 'libx264' ? ['-preset', 'veryfast'] : []),
     '-b:v',
     opts.bitrate,
     '-maxrate',

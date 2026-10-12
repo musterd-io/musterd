@@ -82,6 +82,22 @@ arrives in fewer padded frames, and the capture's share of the CPU drops. Raisin
 is the scene's job, not this table's ([broadcast stream](../wiki/broadcast-stream.md)). The floor
 stays 12: it is an absolute draw rate and still fires while the room draws fewer.
 
+**2026-10-12 — the box is the bottleneck again, and the encoder's preset was the lever** (miley;
+lane 01M4S7YV4TQ0DV8DYPP3DTV2G0; falsify: on a machine built from this lane, `fly machine exec … top -bn1`
+on a live 1080p15 stream shows ffmpeg above 100% CPU or the draw floor still reporting under 12/s).
+Nick saw the stream slow. On machine `2861422c319218` (performance-4x, 39 min up): load average 6.0
+on 4 vCPUs with 0% idle; `ffmpeg` at 140% CPU, Chrome's three processes at ~200% between them; the
+draw floor logged `the office drew 8.7 frames/s over the last 70s, under the 12/s floor` — 58% of
+15fps — while `speed=` read 0.98-1.00x, exactly the padded-repeats mode the floor exists to name.
+The laptop, the tailnet (9 ms direct) and the daemon (`/health` 3 ms) were all clear; the page
+itself drew at 60/s on a Mac. The 2026-09-15 rows above were taken before the claim walk, the pin
+walk, the denser team cards and the card-wall rework, each a raster cost on a GPU-less box, so the
+room's draw cost grew into the encoder's share. libx264 ran at its default `medium` preset until
+this lane; it now runs `-preset veryfast` (same `-b:v`/`-maxrate`, so the bits are capped either
+way), which is the cheapest third of a core to give back to Chrome. The after-numbers on the box go
+here once the image is rebuilt and the stream relaunched; 720p stays the next lever if the floor
+still does not hold.
+
 **What the first row is expected to show,** from #369's spot measurement: delivered ~35 fps at
 ~181 KB/frame, canvas drawing at ~60, so **draws/delivered ≈ 1.7–2.0**. If that holds, the page is
 being painted roughly twice for every frame that reaches the encoder, and the plan's candidate #1 is

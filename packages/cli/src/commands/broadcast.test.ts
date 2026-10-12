@@ -291,8 +291,15 @@ describe('ffmpegArgs', () => {
   it('libx264 swaps the codec only — the pipeline shape is identical', () => {
     const linux = parseOptions({ team: 't', out: 'p.mp4' }, 'linux');
     const args = ffmpegArgs(linux, { kind: 'file', target: 'p.mp4' }).join(' ');
-    expect(args).toContain('-c:v libx264');
+    expect(args).toContain('-c:v libx264 -preset veryfast');
     expect(args).not.toContain('videotoolbox');
+  });
+
+  it('the preset is libx264-only — VideoToolbox is hardware and has no x264 presets', () => {
+    const mac = parseOptions({ team: 't', out: 'p.mp4' }, 'darwin');
+    const args = ffmpegArgs(mac, { kind: 'file', target: 'p.mp4' }).join(' ');
+    expect(args).toContain('-c:v h264_videotoolbox');
+    expect(args).not.toContain('-preset');
   });
 
   // 2026-09-03, the live run: ffmpeg logged `Thread message queue blocking; consider raising the
