@@ -37,6 +37,8 @@ fork PR would also run `gates` on the paid runner once a maintainer approves it.
 3. **Ubicloud stays the outage fallback.** Its labels stay in `.github/actionlint.yaml`. If GitHub's
    runner assignment fails for long, set `runs-on: ubicloud-standard-2` again. That is one line, and
    it is not automatic. On a 2-CPU runner, set the workers back to 2 as well.
+   _(Amended 2026-10-12: since [ADR 570](570-ci-fans-out-on-the-public-repo.md) the fallback is every
+   job's `runs-on`, not one line. See the amendment below.)_
 4. **The Ubicloud account stays**, installed on `musterd-io`, as the fallback in decision 3 (nick,
    2026-10-12). With no job asking for its labels it runs nothing, so it should bill nothing beyond
    any fixed fee.
@@ -54,6 +56,9 @@ fork PR would also run `gates` on the paid runner once a maintainer approves it.
 - The comments in `ci.yml` that describe the private-repo, 2-CPU world (the header's sharding
   history, the coverage step) are history, not current guidance. The coverage step's comment now
   names this ADR.
+- 2026-10-12 — **The fallback is now several lines.** [ADR 570](570-ci-fans-out-on-the-public-repo.md)
+  split `gates` into parallel jobs, so going back to Ubicloud means changing every job's `runs-on`
+  together, and the 2-CPU worker and shard settings with them. The `ci.yml` header says so.
 
 ## Observability & Evaluation
 

@@ -42,9 +42,13 @@ jobs, so it pays five roundings and three setups to do about three minutes of di
    step); one setup and build; typecheck, perf budgets, context budgets, lint; `format:check` and
    `change-adr:check`; tests with coverage; and the five a11y steps. Each step group runs where its
    old leaf ran, decided by the pick's outputs.
+   _(Amended 2026-10-12: superseded by [ADR 570](570-ci-fans-out-on-the-public-repo.md) once the
+   repo went public. See the amendment below.)_
 2. **Coverage is not sharded.** One run enforces the floors itself, as every one-shard run has since
    ADR 498. The both-driver suite now takes about 20 minutes of wall time. It runs only on main's
    full check and on `pglite`-labelled PRs, where wall time matters least.
+   _(Amended 2026-10-12: superseded by [ADR 570](570-ci-fans-out-on-the-public-repo.md) once the
+   repo went public. See the amendment below.)_
 3. **The full-main-check marker is its own artifact, `full-main-check`.** It is uploaded only when a
    full check on main passes. ADR 512's trigger reads it, instead of the coverage shard blob that no
    longer exists. A red full check leaves no marker, so the next push retries it.
@@ -78,6 +82,12 @@ _Note, 2026-10-05 (izzo, from miley's report)._ **Item 4 was wrong, and [ADR 523
 reverses it.** A skipped required check counts as passing. #2104 went draft → ready → auto-merge
 and landed on its draft run's `gates: skipped` before the `ready_for_review` run existed. Drafts run
 CI again, and `gates` carries no job-level skip.
+
+_Note, 2026-10-12 (izzo, nick's call)._ **Items 1 and 2 are superseded by [ADR 570](570-ci-fans-out-on-the-public-repo.md).**
+The repo went public ([ADR 565](565-repo-public-musterd-io.md)), so minutes are free and the billed
+setup per job that this ADR saved is gone. The gates run as parallel jobs again, and the both-driver
+suite shards four ways with `coverage-merge`. Item 3 (the `full-main-check` artifact) stands; the
+`gates` fan-in uploads it now.
 
 ## Observability & Evaluation
 

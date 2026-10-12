@@ -1,9 +1,9 @@
 # CI — the authoritative merge gate (ADR 106). Runs the same gates agents run locally, on every PR
 # — each gate where its inputs changed (ADR 499): a docs-only change runs the docs gates alone, and
-# the Chrome a11y gates run when packages/web (or what renders it) changed. Since ADR 515 every gate
-# is a step of the one `gates` job, which decides from the diff which steps run. Local runs are an
-# optional fast smoke-test; THIS is the source of truth that branch protection requires green before
-# a squash-merge. Keep the job name `gates` stable — it's the required check.
+# the Chrome a11y gates run when packages/web (or what renders it) changed. Since ADR 570 the gates
+# run as parallel jobs that `plan` picks from the diff, and `gates` is their fan-in. Local runs are
+# an optional fast smoke-test; THIS is the source of truth that branch protection requires green
+# before a squash-merge. Keep the job name `gates` stable — it's the required check.
 #
 # Shape (ADR 106 amendment 2026-09-03): the gates run as PARALLEL leaves and `gates` is the fan-in.
 # Measured before the change, one serial job took 8m10s per PR, and 78% of it was two steps that do
@@ -45,6 +45,13 @@
 # where the old leaves were skipped. Coverage is no longer sharded: the both-driver suite runs
 # only on main's 4-hourly check and on `pglite`-labelled PRs, where wall time matters least. Draft
 # PRs run CI like any other PR (ADR 523): skipping them let a draft→ready→auto-merge land unchecked.
+#
+# Shape (ADR 570, 2026-10-12): parallel jobs again. The repo is public (ADR 565), so minutes are free
+# and the 4-CPU runner is too (ADR 569); ADR 515's reason for one job — billed setup per job — is
+# gone. One serial job took 605s on 2026-10-12 (tests 221s, a11y ~270s, static + docs ~82s, setup
+# 32s); in parallel the longest job sets the wall time. The both-driver suite shards four ways again,
+# with `coverage-merge` checking the floors, as in ADR 498. Ubicloud remains the outage fallback
+# (ADR 569): every `runs-on` moves together, and shards and workers go back to 2-CPU settings.
 name: CI
 
 on:
@@ -82,39 +89,31 @@ permissions:
   contents: read
 
 jobs:
-  # The ONLY required check (ADR 106 §2) and, since ADR 515, the only job that runs the gates. Each
-  # former leaf is a step group below, gated on the same `pick` decision the old `plan` job made.
-  # NEVER give this job a job-level `if:` that can skip it on a PR. Branch protection counts a
-  # SKIPPED required check as passing: ADR 515 skipped drafts, and #2104 went draft → ready →
-  # auto-merge and landed with no CI before the ready_for_review run existed (ADR 523). Skip steps
-  # inside the job instead — the job itself must always end success or failure.
-  gates:
-    name: gates
-    # ADR 569: GitHub-hosted, free on a public repo, 4 CPUs and 16 GB. ADR 517's Ubicloud runner is
-    # the outage fallback: set this to `ubicloud-standard-2` (2 CPUs) and the coverage step's
-    # --maxWorkers back to 2. Nothing else in the job depends on where it runs.
+  # ADR 570: the gates run as PARALLEL jobs again, now the repo is public and minutes are free (ADR
+  # 515 had folded them into one job only because each job's setup was billed). `plan` decides; each
+  # job below does its own checkout + setup; `gates` is the fan-in and the one required check.
+  plan:
+    name: plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
+    outputs:
+      kinds: ${{ steps.pick.outputs.kinds }}
+      suite: ${{ steps.pick.outputs.suite }}
+      coverage: ${{ steps.pick.outputs.coverage }}
+      a11y: ${{ steps.pick.outputs.a11y }}
+      docs: ${{ steps.pick.outputs.docs }}
+      fullcheck: ${{ steps.pick.outputs.fullcheck }}
+      shard_count: ${{ steps.pick.outputs.count }}
+      shards: ${{ steps.pick.outputs.shards }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           # Full history: roadmap-truth:check, change-adr:check and wiki-probe read old SHAs.
           fetch-depth: 0
 
-      # ADR 569's eval reads this: the runner's size, so a timing change can be put down to it.
-      - name: Runner
-        run: echo "cpus=$(nproc) mem_gb=$(free -g | awk '/^Mem:/{print $2}')"
-
-      # ADR 499 / 492 / 498 / 508 / 510 / 512 — which gates run, on which drivers. Same rules as the
-      # old `plan` job, now a step: docs-only diffs run the docs gates alone; a11y runs when
-      # packages/web, the sweep scripts, the workflow or deps changed; a PR runs SQLite unless
-      # labelled `pglite`; a push to main runs static + docs unless the last full main check is over
-      # 4 hours old; a probe (the hourly cron, ADR 535, or a `probe: true` dispatch, ADR 542) runs
-      # the full check only when the last one is over 4 hours old and code changed since it, and
-      # skips everything otherwise.
-      - name: Pick the gates and the test drivers
+      - name: Pick the jobs, the test drivers and the shard count
         id: pick
         env:
           GH_TOKEN: ${{ github.token }}
@@ -176,20 +175,23 @@ jobs:
               coverage=false; a11y=false; why="$why — coverage + a11y run on the next full main check (ADR 508, ADR 512)"
             fi
           fi
+          # ADR 570 (ADR 498's shape): both drivers run as four shards plus a merge; SQLite alone is one.
+          if [ "$kinds" = both ]; then count=4; shards='[1, 2, 3, 4]'; else count=1; shards='[1]'; fi
           # The full main check: both drivers, on main. It leaves the marker the next push reads.
           fullcheck=false
           if [ "$GITHUB_REF" = refs/heads/main ] && [ "$coverage" = true ] && [ "$kinds" = both ]; then fullcheck=true; fi
           {
             echo "kinds=$kinds"; echo "suite=$suite"; echo "coverage=$coverage"
             echo "a11y=$a11y"; echo "docs=$docs"; echo "fullcheck=$fullcheck"
+            echo "count=$count"; echo "shards=$shards"
           } >> "$GITHUB_OUTPUT"
           {
             echo "plan: suite=$suite coverage=$coverage a11y=$a11y docs=$docs full=$fullcheck — $why"
-            echo "MUSTERD_TEST_DRIVER=$kinds (ADR 492, ADR 510); one job (ADR 515)"
+            echo "MUSTERD_TEST_DRIVER=$kinds (ADR 492, ADR 510); coverage in $count shard(s) (ADR 570)"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # Claim the full check BEFORE the ~20 minutes of work, so a push landing meanwhile sees it in
-      # flight and runs static + docs only (see the pick step).
+      # Claim the full check BEFORE its jobs start, so a push landing meanwhile sees it in flight and
+      # runs static + docs only (see the pick step).
       - name: Mark the full main check in flight
         if: steps.pick.outputs.fullcheck == 'true'
         run: |
@@ -204,90 +206,227 @@ jobs:
           path: full-main-check-started/
           retention-days: 2
 
+  static:
+    name: static
+    runs-on: ubuntu-latest
+    needs: [plan]
+    if: needs.plan.outputs.suite == 'true'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # Full history: roadmap-truth:check, change-adr:check and wiki-probe read old SHAs.
+          fetch-depth: 0
       - uses: ./.github/actions/setup
-        if: steps.pick.outputs.suite == 'true' || steps.pick.outputs.docs == 'true'
-
-      # --- static (was the `static` leaf) ---------------------------------------------------------
       - name: Typecheck
-        if: steps.pick.outputs.suite == 'true'
         run: pnpm typecheck
       # Byte budgets for the built web client (ADR 151).
       - name: Perf budgets
-        if: steps.pick.outputs.suite == 'true'
         run: pnpm perf:check
       # Standing-context byte budgets (spec 2026-08-03).
       - name: Context budgets
-        if: steps.pick.outputs.suite == 'true'
         run: pnpm context:check
       # Runs after Build: the import resolver follows workspace packages to their ./dist.
       - name: Lint
-        if: steps.pick.outputs.suite == 'true'
         run: pnpm lint
 
-      # --- docs (was the `docs` leaf) -------------------------------------------------------------
-      # prettier + roadmap / arch-trees / obs-evals / adr-numbers / guidance / vocab / tokens /
-      # migrations / source-nul / build-context / wiki / intents / controls / watch checks.
+  # prettier + roadmap / arch-trees / obs-evals / adr-numbers / guidance / vocab / tokens /
+  # migrations / source-nul / build-context / wiki / intents / controls / watch checks.
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    needs: [plan]
+    if: needs.plan.outputs.docs == 'true'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # Full history: roadmap-truth:check, change-adr:check and wiki-probe read old SHAs.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
       - name: Gates (format + docs)
-        if: steps.pick.outputs.docs == 'true'
         run: pnpm format:check
       # A protocol schema change or a new runtime dep must carry an ADR; an accepted ADR's Decision
       # is immutable (ADR 180). Diff-based, so PRs only.
       - name: ADR-gated changes
-        if: steps.pick.outputs.docs == 'true' && github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request'
         env:
           CHANGE_ADR_BASE: origin/${{ github.base_ref }}
         run: pnpm change-adr:check
 
-      # --- coverage (was the `coverage` leaves + merge) -------------------------------------------
-      # One job, no shards (ADR 515): the floors are enforced here, as on every one-shard run since
-      # ADR 498. Four workers on the 4-CPU public-repo runner (ADR 569); two on a 2-CPU one (#1985).
-      - name: Tests + coverage
-        if: steps.pick.outputs.coverage == 'true'
-        run: pnpm coverage --maxWorkers=4 --reporter=default --reporter=github-actions
-        env:
-          MUSTERD_TEST_DRIVER: ${{ steps.pick.outputs.kinds }}
+  # One job when SQLite alone runs (most PRs): it enforces the coverage floors itself. Four shards
+  # plus `coverage-merge` when both drivers run (ADR 498's shape, back under ADR 570): a shard's
+  # coverage map is partial, so only the merge checks the floors. Four workers per shard on the
+  # 4-CPU public-repo runner (ADR 569); two on a 2-CPU one (#1985). The blob goes to
+  # coverage-blobs/, not .vitest-reports/: upload-artifact skips hidden paths by default.
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    needs: [plan]
+    if: needs.plan.outputs.coverage == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # Full history: roadmap-truth:check, change-adr:check and wiki-probe read old SHAs.
+          fetch-depth: 0
 
-      # --- a11y (was the two a11y leaves) ---------------------------------------------------------
-      # Contrast cannot be computed from hex (alpha tints, color-mix()), so it sweeps the built client
-      # in real Chrome; target size (WCAG 2.2 AA 2.5.8) is measured at phone width. The connected
-      # phase stands up a throwaway daemon over a synthetic team so /board and /live are measured
-      # past their sign-in screen. CHROME_BIN is named so a runner-image change fails loudly.
+      # ADR 569's eval reads this: the runner's size, so a timing change can be put down to it.
+      - name: Runner
+        run: echo "cpus=$(nproc) mem_gb=$(free -g | awk '/^Mem:/{print $2}')"
+      - uses: ./.github/actions/setup
+      - name: Tests + coverage (shard ${{ matrix.shard }} of ${{ needs.plan.outputs.shard_count }})
+        run: pnpm coverage --maxWorkers=4 --shard=${{ matrix.shard }}/${{ needs.plan.outputs.shard_count }} --reporter=default --reporter=github-actions --reporter=blob --outputFile.blob=coverage-blobs/blob-${{ matrix.shard }}-${{ needs.plan.outputs.shard_count }}.json
+        env:
+          MUSTERD_TEST_DRIVER: ${{ needs.plan.outputs.kinds }}
+          MUSTERD_COVERAGE_SHARD: ${{ needs.plan.outputs.shard_count != '1' && matrix.shard || '' }}
+      - name: Upload this shard's report blob
+        if: needs.plan.outputs.shard_count != '1'
+        # Pinned by commit (not by tag). v7.0.1.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-blob-${{ matrix.shard }}
+          path: coverage-blobs/
+          if-no-files-found: error
+          retention-days: 1
+
+  # The fold, on sharded runs only: replays the shard results, merges the coverage maps and checks
+  # the floors on the MERGED map. The blobs hold source-mapped coverage, so it installs but does not
+  # build, and it runs from the same checkout path as the shards (the floors are path globs). It
+  # refuses unless every shard's blob is present — a missing one would pass the floors vacuously.
+  coverage-merge:
+    name: coverage-merge
+    runs-on: ubuntu-latest
+    needs: [plan, coverage]
+    if: needs.plan.outputs.coverage == 'true' && needs.plan.outputs.shard_count != '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/setup
+        with:
+          build: 'false'
+      - name: Download the shard blobs
+        # Pinned by commit (not by tag). v8.0.1.
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: coverage-blob-*
+          merge-multiple: true
+          path: coverage-blobs
+      - name: Merge reports + enforce the coverage floors
+        env:
+          EXPECTED: ${{ needs.plan.outputs.shard_count }}
+        run: |
+          ls -la coverage-blobs
+          have="$(find coverage-blobs -name 'blob-*.json' | wc -l | tr -d ' ')"
+          test "$have" -eq "$EXPECTED" || { echo "::error::expected $EXPECTED blobs, found $have"; exit 1; }
+          pnpm coverage:merge
+
+  # Contrast cannot be computed from hex (alpha tints, color-mix()), so it sweeps the built client
+  # in real Chrome; target size (WCAG 2.2 AA 2.5.8) is measured at phone width. Two jobs, because
+  # the phases share nothing but the dist: the prerendered routes, and the connected phase, which
+  # stands up a throwaway daemon over a synthetic team so /board and /live are measured past their
+  # sign-in screen. CHROME_BIN is named so a runner-image change fails loudly.
+  a11y-prerender:
+    name: a11y-prerender
+    runs-on: ubuntu-latest
+    needs: [plan]
+    if: needs.plan.outputs.a11y == 'true'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # Full history: roadmap-truth:check, change-adr:check and wiki-probe read old SHAs.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
       - name: A11y contrast (prerendered routes)
-        if: steps.pick.outputs.a11y == 'true'
         run: pnpm a11y:check --static-only
         env:
           CHROME_BIN: /usr/bin/google-chrome
       - name: A11y tap targets (390x844, prerendered)
-        if: steps.pick.outputs.a11y == 'true'
         run: pnpm a11y:targets:check --static-only
         env:
           CHROME_BIN: /usr/bin/google-chrome
       # The gate about the gate: five fixtures with known verdicts, three of which MUST fail.
       - name: A11y tap-target falsifier (controls)
-        if: steps.pick.outputs.a11y == 'true'
         run: node scripts/a11y/target-size-falsifier.mjs
         env:
           CHROME_BIN: /usr/bin/google-chrome
+
+  a11y-connected:
+    name: a11y-connected
+    runs-on: ubuntu-latest
+    needs: [plan]
+    if: needs.plan.outputs.a11y == 'true'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # Full history: roadmap-truth:check, change-adr:check and wiki-probe read old SHAs.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
       - name: A11y contrast (connected board + live)
-        if: steps.pick.outputs.a11y == 'true'
         run: pnpm a11y:check --connected-only
         env:
           CHROME_BIN: /usr/bin/google-chrome
       - name: A11y tap targets (390x844, connected board + live)
-        if: steps.pick.outputs.a11y == 'true'
         run: pnpm a11y:targets:check --connected-only
         env:
           CHROME_BIN: /usr/bin/google-chrome
 
+  # The fan-in, and the ONLY required check (ADR 106 §2). NEVER give it an `if:` that can skip it:
+  # branch protection counts a SKIPPED required check as passing (#2104, ADR 523). `always()` so it
+  # runs when a job fails, and then it asserts every job SUCCEEDED by name — a bare `always()` with
+  # no result check is the classic mistake that turns a red job into a green gate. The sanctioned
+  # skips, and only these: `coverage-merge` on a one-shard run; `static`, `coverage` and
+  # `coverage-merge` when the diff is docs-only; `coverage` and `coverage-merge` when plan skipped
+  # coverage (a push to main between full checks); the a11y jobs when plan said the web did not
+  # change; `docs` when plan skipped it (a probe that found nothing due). Anything else — a skip for
+  # another reason, a cancel, a failed `plan` — is red.
+  gates:
+    name: gates
+    runs-on: ubuntu-latest
+    needs: [plan, static, docs, coverage, coverage-merge, a11y-prerender, a11y-connected]
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Every job must have succeeded, or been skipped by plan
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          SHARDS: ${{ needs.plan.outputs.shard_count }}
+          SUITE: ${{ needs.plan.outputs.suite }}
+          COVERAGE: ${{ needs.plan.outputs.coverage }}
+          A11Y: ${{ needs.plan.outputs.a11y }}
+          DOCS: ${{ needs.plan.outputs.docs }}
+        run: |
+          echo "$RESULTS" | jq .
+          echo "plan: suite=$SUITE coverage=$COVERAGE a11y=$A11Y docs=$DOCS shards=$SHARDS"
+          failed="$(echo "$RESULTS" | jq -r --arg shards "$SHARDS" --arg suite "$SUITE" --arg coverage "$COVERAGE" --arg a11y "$A11Y" --arg docs "$DOCS" '
+            to_entries[]
+            | select(.value.result != "success")
+            | select(
+                (
+                  (.key == "coverage-merge" and .value.result == "skipped" and $shards == "1")
+                  or ((.key == "static" or .key == "coverage" or .key == "coverage-merge") and .value.result == "skipped" and $suite == "false")
+                  or ((.key == "coverage" or .key == "coverage-merge") and .value.result == "skipped" and $coverage == "false")
+                  or (.key == "docs" and .value.result == "skipped" and $docs == "false")
+                  or ((.key == "a11y-prerender" or .key == "a11y-connected") and .value.result == "skipped" and $a11y == "false")
+                ) | not)
+            | .key')"
+          if [ -n "$failed" ]; then
+            echo "::error::gates — job(s) did not succeed: $(echo "$failed" | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "gates — all $(echo "$RESULTS" | jq 'length') jobs succeeded or were skipped by plan"
+
       # ADR 512/515: the marker the next push to main reads to decide whether it must run the full
-      # check. Written only when the full check passed — a red one is retried by the next push.
+      # check. Written only when every job of the full check passed — a red one is retried by the
+      # next push.
       - name: Mark the full main check
-        if: success() && steps.pick.outputs.fullcheck == 'true'
+        if: success() && needs.plan.outputs.fullcheck == 'true'
         run: |
           mkdir -p full-main-check
           echo "${GITHUB_SHA} $(date -u +%Y-%m-%dT%H:%M:%SZ) run ${GITHUB_RUN_ID}" > full-main-check/marker.txt
       - name: Upload the full-main-check marker
-        if: success() && steps.pick.outputs.fullcheck == 'true'
+        if: success() && needs.plan.outputs.fullcheck == 'true'
         # Pinned by commit (not by tag). v7.0.1.
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
