@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import type { LiveConfig } from './client';
 import { initial, isFeatureBehind, memberAvatar } from './format';
 import { modelBadge } from './modelBadge';
 import { providerIconHtml } from './modelProviderIcon';
-import { SeatDetail } from './RosterPanel';
 import { elapsed, type TeamCard as Card } from './teamCards';
+
+/** The expanded operator detail, fetched on the first expand: most visits never open a card, and
+ *  RosterPanel rode /live's initial download only for this (lane 01M4RNDW6Z). */
+const SeatDetail = lazy(() => import('./RosterPanel').then((m) => ({ default: m.SeatDetail })));
 
 /**
  * One member, read by a room (ADR 464, spec §4): avatar, name, the model badge (provider logo +
@@ -138,7 +141,9 @@ export function TeamCard({
       </button>
       {open && (
         <div className="lc-team-card__detail">
-          <SeatDetail m={card.member} cfg={cfg} />
+          <Suspense fallback={null}>
+            <SeatDetail m={card.member} cfg={cfg} />
+          </Suspense>
         </div>
       )}
     </li>

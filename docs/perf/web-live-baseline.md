@@ -1246,3 +1246,23 @@ raise. The 2026-10-11 tour entries' falsify lines still stand; this entry's budg
 
 - Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main after this lands — total JS under 303.5 KB,
   initial JS under 139.5 KB, `start-*.css` under 700 B gzip.
+
+### 2026-10-12 — /live initial JS 141,696 → 140,229 B: the card detail and the log drawer load on use (lane 01M4RNDW6ZKW1MV77FRBJ9BTSP)
+
+Main sat 4 B under `initialJsGzipBytes` (141,700), so a lazy chunk's new hash alone pushed /live over and turned
+unrelated web PRs red (#2371). Measured from the build's source maps: `RosterPanel.tsx` rode the eager graph only
+because `TeamCard` imported `SeatDetail` for the expanded card, and `LogDrawer` mounted closed on every visit. Both are
+now `lazy()`: `SeatDetail` on a card's first expand, the drawer only while open.
+
+| Budget     | Main            | This branch     | Ceiling   |
+| ---------- | --------------- | --------------- | --------- |
+| initial JS | 141,696 B       | 140,229 B       | unchanged |
+| total JS   | 292.9 KB        | 293.9 KB        | unchanged |
+
+Measured on `0d84fc43`. Rebased onto `25419dc0` (the /start page, which raised both ceilings the same day): /live
+initial JS 140,728 B against 144,600, total 296.8 KB against 300.1 KB. Total rises by ~1 KB of chunk overhead, as
+ADR 183 says a split does; it still fits. What remains eager is mostly the
+framework (react-dom, the router and seroval: ~290 KB of the ~400 KB minified), so the next app-code cut is small.
+
+- Falsify: `pnpm --filter @musterd/web build && pnpm perf:check` on main after this lands — /live initial JS above
+  140,400 B with no other eager change.
