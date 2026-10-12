@@ -2,7 +2,7 @@ import type { Hold } from '@musterd/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { HoldsBanner } from './HoldsBanner';
+import { HoldsBanner, HoldsPause } from './HoldsBanner';
 
 /** ADR 516: the /live banner renders what is in force and nothing else (first frame, no DOM). */
 describe('HoldsBanner', () => {
@@ -38,14 +38,16 @@ describe('HoldsBanner', () => {
   const withCfg = (holds: Hold[], canSet: boolean) =>
     renderToStaticMarkup(createElement(HoldsBanner, { holds, now, cfg, canSet }));
 
-  it('a viewer the daemon says may set sees lift on each hold and a pause… control', () => {
+  it('a viewer the daemon says may set sees lift on each hold; pause… lives in the topbar', () => {
     const out = withCfg([hold], true);
     expect(out).toContain('>lift<');
-    expect(out).toContain('pause…');
-    // and with nothing in force, the pause… control alone
-    const empty = withCfg([], true);
-    expect(empty).toContain('pause…');
-    expect(empty).not.toContain('>lift<');
+    expect(out).not.toContain('pause…');
+    // With nothing in force the banner is gone — it used to be an empty bar carrying pause… alone
+    // (nick, 2026-10-12). The control renders from HoldsPause, on the same can_set rule.
+    expect(withCfg([], true)).toBe('');
+    const pause = renderToStaticMarkup(createElement(HoldsPause, { cfg }));
+    expect(pause).toContain('pause…');
+    expect(pause).not.toContain('>lift<');
   });
 
   it('a viewer who may not set sees the banner and no controls — even signed in', () => {

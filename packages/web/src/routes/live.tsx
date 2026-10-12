@@ -19,11 +19,10 @@ import { MemberSignInFields, MemberSignInToggle, type AdvancedState } from '../l
 import { OfficeScene } from '../live/OfficeScene';
 import { TeamColumn, captionColorFor } from '../live/TeamColumn';
 import type { Caption } from '../live/captions';
-import { applyTierClock, askIsLoud, deriveAsks } from '../live/asks';
+import { applyTierClock, deriveAsks } from '../live/asks';
 import { logOpenMode } from '../live/stillMode';
 import { promptBarFlag, promptBarVisible } from '../live/promptGate';
 import { revealWhenMounted } from '../live/reveal';
-import { Ticker } from '../live/Ticker';
 import { briefing, briefingSince } from '../live/briefing';
 import { useSeatRequests } from '../live/useSeatRequests';
 import { TopMeter } from '../live/TopMeter';
@@ -124,6 +123,9 @@ const TOUR_SLOT_ID = 'lc-tour-slot';
 // stays out of /live's eager graph on every ordinary day.
 const HoldsBanner = lazy(() =>
   import('../live/HoldsBanner').then((m) => ({ default: m.HoldsBanner })),
+);
+const HoldsPause = lazy(() =>
+  import('../live/HoldsBanner').then((m) => ({ default: m.HoldsPause })),
 );
 /** Below this width the team column starts folded (ADR 464): the room keeps its pixels. */
 const TEAM_FOLDS_BELOW = 1280;
@@ -286,11 +288,6 @@ function LivePage() {
   // folds in the answers this browser just sent; a second copy here costs one pass over the buffer.
   const derivedAsks = useMemo(() => deriveAsks(envelopes), [envelopes]);
   const asks = useMemo(() => applyTierClock(derivedAsks, Date.now()), [derivedAsks]);
-  // The acts the asks strip is showing; the ticker leaves them out rather than repeat them.
-  const stripAskIds = useMemo(
-    () => new Set(asks.filter((a) => askIsLoud(a.state)).map((a) => a.env.id)),
-    [asks],
-  );
   // The briefing (live-briefing spec): the topbar's sentence and the column's Now tab read ONE
   // derivation, so a count cannot disagree with the list under it. Pending seat claims are admin-only
   // data — they are asked for only once someone is signed in, and a "no" ends the asking.
@@ -612,8 +609,10 @@ function LivePage() {
   return (
     <main className="lc">
       <HealthBanner reason={outage} />
-      {/* ADR 516: the chunk loads only when a hold is in force or this viewer may set one (inc 4). */}
-      {(holds.length > 0 || canSetHold) && (
+      {/* ADR 516: the banner is a hold IN FORCE, so it mounts only then — an admin used to get an
+          empty amber bar on every visit just so "pause…" had somewhere to live (nick, 2026-10-12);
+          that control now sits in the topbar. */}
+      {holds.length > 0 && (
         <Suspense fallback={null}>
           <HoldsBanner holds={holds} cfg={cfg} canSet={canSetHold} onChanged={refreshHolds} />
         </Suspense>
@@ -635,6 +634,12 @@ function LivePage() {
         {connected && <span id={NOW_SLOT_ID} className="lc__nowslot" />}
         {connected && <span id={TOUR_SLOT_ID} className="lc__nowslot" />}
         <span className="lc__spacer" />
+        {/* ADR 516 inc 4: an admin's "pause…" lives here, not on an always-on banner. */}
+        {cfg && canSetHold && (
+          <Suspense fallback={null}>
+            <HoldsPause cfg={cfg} onChanged={refreshHolds} />
+          </Suspense>
+        )}
         {connected && (
           <button
             type="button"
@@ -743,14 +748,9 @@ function LivePage() {
               />
             </Suspense>
           </div>
-          {/* The headline ticker (ADR 464 §5): the last few notable moments, under the room. */}
-          <Ticker
-            loading={loading}
-            envelopes={envelopes}
-            roster={roster}
-            board={board}
-            hide={stripAskIds}
-          />
+          {/* The headline ticker (ADR 464 §5) no longer sits under the room here: nick never looked
+              at it (2026-10-12), and the team column beside the room already carries each member's
+              latest moment. /broadcast keeps it — a stream has no column. */}
           {signedIn && cfg && roster.find((m) => m.name === cfg.as)?.kind === 'human' && (
             <Suspense fallback={null}>
               <LazyTour

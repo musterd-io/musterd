@@ -84,7 +84,9 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
   a heartbeat that pulses on every act (the last act's age on hover), and acts over the loaded span
   (never extrapolated). Counts of who is working on what are the Now card's, not the meter's
   (live-briefing spec, increment 4). The team log's door is a topbar button beside Seeds.
-- **Headline ticker** (`live/Ticker.tsx`, from `live/headline.ts`) — under the room: the last few
+- **Headline ticker** (`live/Ticker.tsx`, from `live/headline.ts`) — `/broadcast` only since
+  2026-10-12 (nick never looked at it on `/live`, where the team column beside the room already
+  carries each member's latest moment): the last few
   notable moments in one line, newest left, each chip in its actor's hue. `headline()` builds every
   line from names and lane titles, never the act body (an ask's question, clipped, is the one
   exception); adjacent same-actor same-verb lines within 30s fold into a count. An ask the asks
@@ -111,8 +113,9 @@ traffic. It is a scoped observer, not anonymous access; roster handles and Prese
 - **Holds banner** (`live/HoldsBanner.tsx`, read by `live/useTeamHolds.ts`) — above the room, the
   Team's active holds (ADR 516): `⏸ merges paused by nick until 15:30 (42m left): demo 14:00`, one
   line per hold from `describeHoldLine` in `@musterd/protocol/wire`, a 30s poll of `GET /holds`, and
-  nothing when nothing is in force. A lazy chunk — it loads only once a hold is in force or the viewer
-  may set one. Increment 4: `lift` on each hold and a `pause…` form (effect, reason, duration preset)
+  nothing when nothing is in force — an admin no longer gets an empty bar on every visit (nick,
+  2026-10-12): the `pause…` form is `HoldsPause`, mounted in the topbar's right end. Both are one
+  lazy chunk. Increment 4: `lift` on each hold and the `pause…` form (effect, reason, duration preset)
   render from the read's `can_set` alone — the daemon's per-reader answer, never the viewer's role in
   the client — and a refusal shows in place in the daemon's words.
 - **How agents talk to me** (`live/StyleSheet.tsx`, merges in `live/styleEdit.ts`; ADR 514

@@ -44,7 +44,7 @@ export function HoldsBanner({
 }) {
   const live = holds.filter((h) => h.lifted_at === null && h.expires_at > now);
   const controls = canSet && cfg !== null;
-  if (live.length === 0 && !controls) return null;
+  if (live.length === 0) return null;
   return (
     <div className="lc-holds" role="status">
       {live.map((h) => (
@@ -53,8 +53,25 @@ export function HoldsBanner({
           {controls && <LiftControl cfg={cfg} id={h.id} onChanged={onChanged} />}
         </div>
       ))}
-      {controls && <SetControl cfg={cfg} onChanged={onChanged} />}
     </div>
+  );
+}
+
+/**
+ * The "pause…" control on its own, for the topbar: an admin sets a hold from here, and the banner
+ * above the room appears only once one is in force. Same `canSet` rule as the banner (ADR 501).
+ */
+export function HoldsPause({
+  cfg,
+  onChanged,
+}: {
+  cfg: LiveConfig;
+  onChanged?: (() => void) | undefined;
+}) {
+  return (
+    <span className="lc-holds lc-holds--inline">
+      <SetControl cfg={cfg} onChanged={onChanged} />
+    </span>
   );
 }
 
