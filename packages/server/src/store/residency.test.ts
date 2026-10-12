@@ -2453,6 +2453,26 @@ withDrivers('residency', (o, kind) => {
       // The seat, its sender, and the lease bookkeeping — a handful. NOT one per timeline row.
       expect(lookups).toBeLessThan(50);
     });
+
+    // The candidate hydration names every row's sender and recipient through a per-poll memo. The
+    // rows hydrate concurrently, so a memo of resolved names missed on every row (each checked the
+    // map before any lookup had landed): measured on the revive hub, 2,051 lookups for ~30 members
+    // in one poll. The memo holds the lookup itself, so a member is read once however many rows name it.
+    it('reads each member once however many candidate rows name them', async () => {
+      const { db, team, nick, ada, bob } = await seed();
+      await enroll(db, team, ada);
+      for (let i = 0; i < 200; i++) {
+        await msg(db, team, i % 2 ? nick : bob, ada, 'message', `u${i}`, 1_000 + i, {
+          meta: { urgent: true, urgent_reason: 'wake me' },
+        });
+      }
+
+      const lookups = await countMemberLookups(db, async () => {
+        await claimWakeLeases(db, team.id, team.slug, HOST, PRESENCE_TIMEOUT_MS);
+      });
+
+      expect(lookups).toBeLessThan(20);
+    });
   });
 
   /**

@@ -8,7 +8,7 @@ import {
   type LaneState,
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
-import { getCursor } from './cursors.js';
+import { type Cursor, getCursor } from './cursors.js';
 import { repliedByRecipientWhere, undischargedSql } from './discharge.js';
 import type { MessageRow } from './rows.js';
 
@@ -26,15 +26,50 @@ interface RecipientRow {
   name: string;
 }
 
+/**
+ * One ledger read's member and cursor lookups, shared by all its acts. A team has tens of members
+ * and the ledger can hold hundreds of open acts, so asking per act read the same few rows hundreds
+ * of times (the revive hub's wake poll: ~700 statements for 173 open acts). It holds the lookups
+ * rather than their results because the acts hydrate concurrently, and it lives for one read only,
+ * so there is nothing to invalidate.
+ */
+interface LedgerMemo {
+  member(id: string): Promise<RecipientRow | undefined>;
+  cursor(id: string): Promise<Cursor>;
+}
+
+function ledgerMemo(db: Driver): LedgerMemo {
+  const members = new Map<string, Promise<RecipientRow | undefined>>();
+  const cursors = new Map<string, Promise<Cursor>>();
+  return {
+    member(id) {
+      let row = members.get(id);
+      if (!row)
+        members.set(
+          id,
+          (row = db.get<RecipientRow>('SELECT id, name FROM members WHERE id = ?', [id])),
+        );
+      return row;
+    },
+    cursor(id) {
+      let cursor = cursors.get(id);
+      if (!cursor) cursors.set(id, (cursor = getCursor(db, id)));
+      return cursor;
+    },
+  };
+}
+
 /** Whom a persisted act addresses. For team/broadcast this is the *current* non-observer roster
  * minus the sender — membership that changed since the send is approximated by the roster of now
  * (the log stores no fan-out list; ADR 090 accepts and labels this). */
-async function recipientsOf(db: Driver, msg: MessageRow): Promise<RecipientRow[]> {
+async function recipientsOf(
+  db: Driver,
+  msg: MessageRow,
+  memo: LedgerMemo,
+): Promise<RecipientRow[]> {
   if (msg.to_kind === 'member') {
     if (!msg.to_member) return [];
-    const row = await db.get<RecipientRow>('SELECT id, name FROM members WHERE id = ?', [
-      msg.to_member,
-    ]);
+    const row = await memo.member(msg.to_member);
     return row ? [row] : [];
   }
   // ADR 254: an eligible set narrows OBLIGATION, not visibility. The act is team-addressed and every
@@ -418,6 +453,7 @@ async function recipientLedger(
   msg: MessageRow,
   recipient: RecipientRow,
   resolve: { act: string; id: string; ts: number } | null,
+  memo: LedgerMemo,
   tallies?: AuditTallies,
 ): Promise<DeliveryRecipient> {
   // ADR 254: on an eligible-set act the FIRST answer from anyone discharges it for every named seat
@@ -426,7 +462,7 @@ async function recipientLedger(
     ? await anyAnswer(db, msg)
     : await answerBy(db, msg, recipient.id);
   const answered = ownAnswer ?? resolve ?? (await laneHandoffDischarged(db, msg));
-  const cursor = await getCursor(db, recipient.id);
+  const cursor = await memo.cursor(recipient.id);
   // The cursor is a `(created_at, id)` point, not a ts (ADR 290, amended 2026-08-20; re-keyed from
   // `ts` to receipt by the ts-cursor fix, see `cursors.ts`). Comparing on ts alone called an act
   // tied with the cursor row SEEN although the reader was never handed it — while `listInbox`
@@ -458,12 +494,11 @@ async function actDeliveryOf(
   db: Driver,
   msg: MessageRow,
   now: number,
+  memo: LedgerMemo,
   tallies?: AuditTallies,
 ): Promise<ActDelivery> {
   const resolve = await threadResolve(db, msg);
-  const from = await db.get<{ name: string }>('SELECT name FROM members WHERE id = ?', [
-    msg.from_member,
-  ]);
+  const from = await memo.member(msg.from_member);
   return {
     id: msg.id,
     act: msg.act,
@@ -474,7 +509,9 @@ async function actDeliveryOf(
     age_ms: Math.max(0, now - msg.ts),
     urgent: isUrgent(msg),
     recipients: await Promise.all(
-      (await recipientsOf(db, msg)).map((r) => recipientLedger(db, msg, r, resolve, tallies)),
+      (await recipientsOf(db, msg, memo)).map((r) =>
+        recipientLedger(db, msg, r, resolve, memo, tallies),
+      ),
     ),
   };
 }
@@ -517,7 +554,7 @@ export async function actDelivery(
     teamId,
     messageId,
   ]);
-  return msg ? await actDeliveryOf(db, msg, now) : null;
+  return msg ? await actDeliveryOf(db, msg, now, ledgerMemo(db)) : null;
 }
 
 /**
@@ -543,5 +580,6 @@ export async function openDirectedLedger(
   );
   if (rows.length === 0) return [];
   const tallies = await auditTallies(db, teamId);
-  return Promise.all(rows.map((m) => actDeliveryOf(db, m, now, tallies)));
+  const memo = ledgerMemo(db);
+  return Promise.all(rows.map((m) => actDeliveryOf(db, m, now, memo, tallies)));
 }
