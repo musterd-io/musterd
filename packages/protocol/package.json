@@ -75,7 +75,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "smol-toml": "^1.8.0",
+    "smol-toml": "^1.9.0",
     "zod": "^3.24.1"
   }
 }
