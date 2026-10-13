@@ -1063,6 +1063,41 @@ export function deriveGoalStatus(
 }
 
 /**
+ * Longest declared segment `globsOverlap` matches exactly. A longer one is assumed to overlap: the
+ * check is warn-only, and the cap bounds the work one lane's declaration can cost every lane verb.
+ */
+const OVERLAP_SEGMENT_MAX = 256;
+
+/**
+ * One path segment against a pattern whose only wildcard is `*` (any run within the segment — `?`
+ * and `[` are literal, as in `globToRegExp`'s path flavor). Greedy with one backtrack point, so it
+ * is O(pattern × text) at worst: both sides are member-supplied, and a backtracking regex here let
+ * one declared glob hold the event loop (security review of ADR 575, 2026-10-12).
+ */
+function segmentMatches(pattern: string, text: string): boolean {
+  let p = 0;
+  let t = 0;
+  let star = -1;
+  let mark = 0;
+  while (t < text.length) {
+    if (p < pattern.length && pattern[p] === '*') {
+      star = p++;
+      mark = t;
+    } else if (p < pattern.length && pattern[p] === text[t]) {
+      p++;
+      t++;
+    } else if (star !== -1) {
+      p = star + 1;
+      t = ++mark;
+    } else {
+      return false;
+    }
+  }
+  while (pattern[p] === '*') p++;
+  return p === pattern.length;
+}
+
+/**
  * Glob-vs-glob surface intersection, segment by segment (ADR 083; ADR 575). Two declared surfaces
  * overlap when every segment they both have can name the same thing: equal, one a wildcard segment
  * matching the other's literal, or both wildcards. A `**` absorbs the rest, and a surface that runs
@@ -1074,12 +1109,14 @@ export function deriveGoalStatus(
 export function globsOverlap(a: string, b: string): boolean {
   const sa = a.split('/').filter(Boolean);
   const sb = b.split('/').filter(Boolean);
-  const wild = (seg: string) => /[*?[]/.test(seg);
+  const wild = (seg: string) => seg.includes('*');
   const meets = (x: string, y: string) =>
     x === y ||
     (wild(x) && wild(y)) ||
-    (wild(x) && globToRegExp(x, 'path').test(y)) ||
-    (wild(y) && globToRegExp(y, 'path').test(x));
+    x.length > OVERLAP_SEGMENT_MAX ||
+    y.length > OVERLAP_SEGMENT_MAX ||
+    (wild(x) && segmentMatches(x, y)) ||
+    (wild(y) && segmentMatches(y, x));
   for (let i = 0; ; i++) {
     const x = sa[i];
     const y = sb[i];

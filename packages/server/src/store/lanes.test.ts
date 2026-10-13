@@ -89,6 +89,16 @@ withDrivers('lanes', (o) => {
       );
       expect(globsOverlap('docs/decisions', 'docs/decisions/575-x.md')).toBe(true); // a bare directory
     });
+    // Both sides are member-supplied, so the segment match must not be a backtracking regex: a
+    // pattern of many stars against a long near-miss would hold the event loop (security review).
+    it('stays fast on a pathological wildcard segment', () => {
+      const pattern = 'x/' + '*a'.repeat(30) + 'b';
+      const text = 'x/' + 'a'.repeat(5_000);
+      const t0 = performance.now();
+      expect(globsOverlap(pattern, text)).toBe(true); // too long to match exactly → errs to warn
+      expect(globsOverlap('x/' + '*a'.repeat(12) + 'b', 'x/' + 'a'.repeat(200))).toBe(false);
+      expect(performance.now() - t0).toBeLessThan(50);
+    });
   });
 
   /**
