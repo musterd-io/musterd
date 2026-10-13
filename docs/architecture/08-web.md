@@ -195,7 +195,7 @@ live/
   LogDrawer.tsx                 // the /live log drawer (ADR 464 lane 2): a right-edge dialog around the stream; Escape closes, focus returns; lazy, mounted only while open
   busyness.ts                   // envelopes + roster → last-act age, acts over the loaded span (bucketed), who is working (pure, node-tested)
   TopMeter.tsx                  // the top bar's busyness meter: team · heartbeat · sparkline
-  headline.ts                   // notable act → { who, verb, object, target } from names and titles, never the body; collapseHeadlines (pure)
+  headline.ts                   // walkTag — the verb a walker wears (handing off → dolly / claiming … / finished …); the ticker's headline builders left with the ticker (2026-10-12)
 
   RosterPanel.tsx               // the roster rail (no route mounts it since ADR 464) + `SeatDetail`, the per-seat operator block the team card expands to; `trace` expander (ADR 445 inc 4b) lazy-loads the timeline
   askPhrase.ts                  // the ask banner's words (spec §6 table) + askBanner() view-model: open / settled / idle (pure)
