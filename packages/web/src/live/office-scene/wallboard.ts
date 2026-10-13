@@ -21,6 +21,9 @@ export interface WallSticky {
   taken?: true;
   /** Seconds since a pin walk landed this card (L5): it swings on its tape for a moment, then hangs still. */
   age?: number;
+  /** Part of a plan that stopped (lane 01M4V9YKMG): the paper is sun-faded, and it pins first in its
+   *  column so a stopped plan is among the cards the wall shows rather than hidden in the badge. */
+  faded?: true;
 }
 
 export interface WallBoardColumn {
@@ -108,18 +111,31 @@ export function withPinned(board: WallBoard | null, pinned: readonly PinnedCard[
   });
 }
 
-export function projectWallBoard(board: LaneBoard | null): WallBoard | null {
+export function projectWallBoard(
+  board: LaneBoard | null,
+  stalled: ReadonlySet<string> = new Set(),
+): WallBoard | null {
   if (!board) return null;
   const byState = new Map<LaneState, WallBoardColumn>(
     WALL_COLUMNS.map((key) => [key, { key, count: 0, stickies: [] }]),
   );
-  for (const lane of board.lanes) {
+  // Stopped plans pin first (lane 01M4V9YKMG): a column shows STICKY_CAP cards of possibly dozens,
+  // and the tell is pointless inside the "+N". Within each group, board order holds; placement is
+  // seeded per lane, so nothing reshuffles when a card changes group.
+  const lanes = stalled.size
+    ? [...board.lanes].sort((a, b) => Number(stalled.has(b.id)) - Number(stalled.has(a.id)))
+    : board.lanes;
+  for (const lane of lanes) {
     const key = lane.state === 'ready_for_review' ? 'awaiting_acceptance' : lane.state;
     const col = byState.get(key);
     if (!col) continue; // abandoned — no column
     col.count++;
     if (col.stickies.length < STICKY_CAP) {
-      col.stickies.push({ seed: laneSeed(lane.id), state: lane.state });
+      col.stickies.push({
+        seed: laneSeed(lane.id),
+        state: lane.state,
+        ...(stalled.has(lane.id) ? { faded: true as const } : {}),
+      });
     }
   }
   return WALL_COLUMNS.map((key) => byState.get(key)!);

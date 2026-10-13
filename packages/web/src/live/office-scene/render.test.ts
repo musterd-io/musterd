@@ -388,6 +388,20 @@ describe('the wall agile board', () => {
     expect(notes).toBeLessThanOrEqual(6 * STICKY_CAP);
   });
 
+  // A stopped plan's cards (lane 01M4V9YKMG): sun-bleached paper, paler tape, a curled corner.
+  it('paints a stalled lane\'s sticky sun-faded, and a fresh one at full wash', () => {
+    const fresh: string[] = [];
+    scene(textCtx(fresh, []), projectWallBoard({ lanes: [laneFix('L1', 'open')], warnings: [] }));
+    expect(fresh).toContain('#EFE8D8');
+    expect(fresh).not.toContain('#E4DED1');
+    const faded: string[] = [];
+    scene(textCtx(faded, []), projectWallBoard({ lanes: [laneFix('L1', 'open')], warnings: [] }, new Set(['L1'])));
+    expect(faded).toContain('#E4DED1'); // the open wash pulled toward newsprint grey
+    expect(faded).toContain('rgba(180, 168, 143, 0.35)'); // its tape, half as present
+    expect(faded).toContain('rgba(60, 35, 10, 0.22)'); // the curl's shadow wedge
+    expect(faded).not.toContain('#EFE8D8');
+  });
+
   it('boardAnchor returns a finite on-screen box for the hotspot to sit on', () => {
     const a = boardAnchor(fit);
     for (const v of [a.x, a.y, a.w, a.h]) expect(Number.isFinite(v)).toBe(true);

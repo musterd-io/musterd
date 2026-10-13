@@ -14,6 +14,7 @@ import { captionFor, type Caption } from './captions';
 import type { RoomEntry } from './workingOn';
 import { dreamingSeat, lingerUntil, wokenSeat } from './wokenSeat';
 import { blockedOwners, type OfficeRoomProps } from './officeRoom';
+import { stalledLaneIds } from './briefing';
 import { projectWallBoard } from './office-scene/wallboard';
 
 /** The key (ADR 464 §3.4) is a corner card a viewer reads once; it rides a lazy chunk so the words
@@ -58,7 +59,8 @@ function computeData(
   return {
     teamName,
     teamWorkingHours,
-    wallBoard: projectWallBoard(board),
+    // A stopped plan's cards fade on the wall (lane 01M4V9YKMG) — the Now card's rule, at lane level.
+    wallBoard: projectWallBoard(board, stalledLaneIds(board, now)),
     // Who is in an open huddle right now (ADR 378 increment 2) — folded from the timeline the page
     // already holds, so both surfaces gather without either route wiring anything.
     gathered: [...gatheredFrom(envelopes)],

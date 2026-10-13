@@ -135,3 +135,35 @@ describe('withPinned — a card someone has just pinned back on the wall', () =>
     expect(withPinned(null, [{ seed: 1, state: 'done' }])).toBeNull();
   });
 });
+
+describe('projectWallBoard — stopped goals (lane 01M4V9YKMG)', () => {
+  it('marks a stalled lane\'s sticky faded and pins faded cards first in their column', () => {
+    const wb = projectWallBoard(
+      board([
+        lane({ id: 'fresh1' }),
+        lane({ id: 'fresh2' }),
+        lane({ id: 'stale1' }),
+        lane({ id: 'fresh3' }),
+        lane({ id: 'fresh4' }),
+        lane({ id: 'stale2' }),
+        lane({ id: 'done1', state: 'done' }),
+      ]),
+      new Set(['stale1', 'stale2']),
+    )!;
+    const open = wb[0]!;
+    expect(open.count).toBe(6);
+    expect(open.stickies.map((s) => [s.seed, s.faded ?? false])).toEqual([
+      [laneSeed('stale1'), true],
+      [laneSeed('stale2'), true],
+      [laneSeed('fresh1'), false],
+      [laneSeed('fresh2'), false],
+    ]);
+    expect(wb[5]!.stickies[0]!.faded).toBeUndefined();
+  });
+
+  it('keeps board order when nothing is stalled', () => {
+    const wb = projectWallBoard(board([lane({ id: 'a' }), lane({ id: 'b' })]), new Set())!;
+    expect(wb[0]!.stickies.map((s) => s.seed)).toEqual([laneSeed('a'), laneSeed('b')]);
+    expect(wb[0]!.stickies.some((s) => 'faded' in s)).toBe(false);
+  });
+});

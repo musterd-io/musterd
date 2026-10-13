@@ -126,7 +126,10 @@ nothing is stalled: one row per goal that is **quiet** — every live, unparked 
 unowned lanes that old while the rest of the goal moves. The row is the motion row without faces or
 states: name, bar, "d of n done", and the line "nothing moved in 9d · 3 waiting, nobody's"; hover
 names the oldest untouched lane, click drills the board into the goal. Capped at three with "N more
-stopped". The office's own tell for a stopped goal is a second increment, after this one is seen.)_
+stopped". The office's own tell is the second increment, lane `01M4V9YKMGXGGZKMPK7DPJAGAJ`: the
+same lanes (`stalledLaneIds`) hang on the wall board as sun-faded paper with a lifted corner, and pin
+first in their column so a stopped plan is among the four cards the wall shows rather than inside the
+"+N" badge; the office key names it.)_
 
 **Shape.** One card, `min(920px, 100vw − 48px)` wide, over the room, placed just under the room's
 asks strip and huddle rail (measured, since the rail grows as huddles open — a fixed offset covered the

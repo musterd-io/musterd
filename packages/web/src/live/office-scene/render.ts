@@ -917,11 +917,21 @@ function wallLaneBoard(
       const sw = age !== undefined && age < 1.1 ? Math.sin(age * 20) * Math.exp(-age * 4.2) * 2.4 : 0;
       // Shadow first, offset down-right: paper held a hair off the cork rather than printed on it.
       quad(ctx, [p(l + 0.8, top - 0.8), p(r + 0.8, top - 0.8), p(r + 0.8 + sw, top - noteH - 0.8), p(l + 0.8 + sw, top - noteH - 0.8)], PINBOARD.noteCast);
-      quad(ctx, [p(l, top), p(r, top), p(r + sw, top - noteH), p(l + sw, top - noteH)], tone.note);
+      // A stopped plan's card (lane 01M4V9YKMG) is the same paper sun-bleached: the wash pulled toward
+      // white, the tape half as present, and the bottom-right corner lifting off the cork — a wedge of
+      // shadow under a lighter wedge of the paper's back. It is a paint, not a motion.
+      const faded = col.stickies[s]!.faded === true;
+      quad(ctx, [p(l, top), p(r, top), p(r + sw, top - noteH), p(l + sw, top - noteH)], faded ? tone.faded : tone.note);
+      if (faded) {
+        const cx = r + sw;
+        const cy = top - noteH;
+        quad(ctx, [p(cx - 4.5, cy), p(cx, cy), p(cx, cy + 3.5), p(cx - 4.5, cy)], PINBOARD.curlCast);
+        quad(ctx, [p(cx - 4, cy + 0.4), p(cx - 0.6, cy + 3.2), p(cx - 0.6, cy + 0.4), p(cx - 4, cy + 0.4)], PINBOARD.curlBack);
+      }
       // The washi tab, straddling the note's top edge onto the cork — the tape is doing the holding,
       // so it has to overlap both. Its own sheen line is what stops it reading as a painted stripe.
       const tw = 8;
-      rect(mid - tw / 2 + ja, top - 1.6, mid + tw / 2 + ja, top + 1.6, tone.tape);
+      rect(mid - tw / 2 + ja, top - 1.6, mid + tw / 2 + ja, top + 1.6, faded ? tone.fadedTape : tone.tape);
       rect(mid - tw / 2 + ja, top + 1, mid + tw / 2 + ja, top + 1.6, PINBOARD.tapeSheen);
     }
     // The overflow badge — the one piece of type, at the size that survives the downscale.
@@ -944,20 +954,25 @@ function wallLaneBoard(
  * `tape` is the washi tab holding each note to the cork: the cap colour at ~75%, so the tab reads as
  * translucent paper tape over both the note and the cork behind it. Written out rather than derived
  * because canvas takes a colour string, and a per-note hex→rgba conversion would run every frame.
+ *
+ * `faded` / `fadedTape` are the sun-bleached pair for a stopped plan's cards (lane 01M4V9YKMG):
+ * the note pulled 55% toward old-newsprint grey (#DAD5CB) and the tab at half its presence — the
+ * same paper, left in the window too long. (Pulling toward white was tried first, 2026-10-13: at the
+ * wall's scale a whiter cream card read as pale, not old; yellowed grey reads as old beside fresh.)
  */
-const WALLBOARD_TONES: ReadonlyArray<{ cap: string; note: string; tape: string }> = [
+const WALLBOARD_TONES: ReadonlyArray<{ cap: string; note: string; tape: string; faded: string; fadedTape: string }> = [
   // open — warm unbleached paper
-  { cap: '#B4A88F', note: '#EFE8D8', tape: 'rgba(180, 168, 143, 0.75)' },
+  { cap: '#B4A88F', note: '#EFE8D8', tape: 'rgba(180, 168, 143, 0.75)', faded: '#E4DED1', fadedTape: 'rgba(180, 168, 143, 0.35)' },
   // claimed — lane blue, lightened: picked up, not yet moving
-  { cap: '#8FB0E6', note: '#E2EBF8', tape: 'rgba(143, 176, 230, 0.75)' },
+  { cap: '#8FB0E6', note: '#E2EBF8', tape: 'rgba(143, 176, 230, 0.75)', faded: '#DEDFDF', fadedTape: 'rgba(143, 176, 230, 0.35)' },
   // active — the lane tone itself (--lc-lane)
-  { cap: '#3F74C4', note: '#D6E2F4', tape: 'rgba(63, 116, 196, 0.75)' },
+  { cap: '#3F74C4', note: '#D6E2F4', tape: 'rgba(63, 116, 196, 0.75)', faded: '#D8DBDE', fadedTape: 'rgba(63, 116, 196, 0.35)' },
   // blocked — --lc-danger
-  { cap: '#D1503F', note: '#F5DAD4', tape: 'rgba(209, 80, 63, 0.75)' },
+  { cap: '#D1503F', note: '#F5DAD4', tape: 'rgba(209, 80, 63, 0.75)', faded: '#E6D7CF', fadedTape: 'rgba(209, 80, 63, 0.35)' },
   // awaiting acceptance — blue leaning patient
-  { cap: '#6A93D4', note: '#DDE6F6', tape: 'rgba(106, 147, 212, 0.75)' },
+  { cap: '#6A93D4', note: '#DDE6F6', tape: 'rgba(106, 147, 212, 0.75)', faded: '#DBDDDE', fadedTape: 'rgba(106, 147, 212, 0.35)' },
   // done — --lc-success
-  { cap: '#2F9E6A', note: '#D5ECDF', tape: 'rgba(47, 158, 106, 0.75)' },
+  { cap: '#2F9E6A', note: '#D5ECDF', tape: 'rgba(47, 158, 106, 0.75)', faded: '#D8DFD4', fadedTape: 'rgba(47, 158, 106, 0.35)' },
 ];
 
 /**
@@ -984,6 +999,9 @@ const PINBOARD = {
   noteCast: 'rgba(60, 35, 10, 0.26)',
   /** The washi tab's own highlight; without it the tape is just a painted stripe. */
   tapeSheen: 'rgba(255, 251, 240, 0.5)',
+  /** A faded card's lifted corner: the shadow it throws on the cork, and the paper's lighter back. */
+  curlCast: 'rgba(60, 35, 10, 0.22)',
+  curlBack: '#FFFDF8',
 } as const;
 
 /**
