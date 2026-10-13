@@ -460,10 +460,6 @@ withDrivers('integration · misc', (_o, kind) => {
       const roster = join(root, '.musterd');
       mkdirSync(join(roster, 'seats'), { recursive: true });
       mkdirSync(join(roster, 'roles'), { recursive: true });
-      writeFileSync(join(roster, 'team.toml'), 'slug = "dawn"\n');
-      writeFileSync(join(roster, 'roles', 'admin.toml'), '[capabilities]\nis_admin = true\n');
-      writeFileSync(join(roster, 'seats', 'nick.toml'), 'kind = "human"\nrole = "admin"\n');
-      writeFileSync(join(roster, 'seats', 'worker.toml'), 'kind = "agent"\n');
 
       const server = createServer({
         db: await openTestDriver(kind),
@@ -500,6 +496,13 @@ withDrivers('integration · misc', (_o, kind) => {
         expect(created.status).toBe(201);
         const team = (await created.json()) as any;
         const nickCred = team.human_credential as string;
+
+        // Create the DB-backed founder first so the test has a real admin credential; adding the
+        // roster afterward turns the next member request into a file-backed projection.
+        writeFileSync(join(roster, 'team.toml'), 'slug = "dawn"\n');
+        writeFileSync(join(roster, 'roles', 'admin.toml'), '[capabilities]\nis_admin = true\n');
+        writeFileSync(join(roster, 'seats', 'nick.toml'), 'kind = "human"\nrole = "admin"\n');
+        writeFileSync(join(roster, 'seats', 'worker.toml'), 'kind = "agent"\n');
 
         writeFileSync(join(roster, 'seats', 'intruder.toml'), 'kind = "human"\nrole = "admin"\n');
         const addAdmin = await postRoster({ name: 'worker', kind: 'agent' });

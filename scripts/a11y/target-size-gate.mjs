@@ -133,12 +133,16 @@ const freePort = () =>
     });
   });
 
-const sweep = (url, require) =>
+const sweep = (url, require, identityFile) =>
   new Promise((resolve) => {
     const argv = [join(HERE, 'target-size-sweep.mjs'), url];
     if (require) argv.push('--require', require);
+    const env = { ...process.env };
+    if (identityFile) env.A11Y_CONNECTED_MEMBER_IDENTITY_FILE = identityFile;
+    else delete env.A11Y_CONNECTED_MEMBER_IDENTITY_FILE;
     const child = spawn(process.execPath, argv, {
       stdio: ['ignore', 'pipe', 'inherit'],
+      env,
     });
     let out = '';
     child.stdout.on('data', (d) => (out += d));
@@ -243,11 +247,12 @@ if (!STATIC_ONLY) {
      to the same daemon port, DB and team name, and the loser exits 1 in the same shape as a real
      red — the defect contrast-gate hit and fixed one layer down. The same env goes to `up` and
      `down`, so teardown tears down THIS run's stack and nobody else's. */
+  const fixtureRoot =
+    process.env['A11Y_FIXTURE_ROOT'] ??
+    join(process.env['TMPDIR'] ?? '/tmp', `musterd-targets-${process.pid}`);
   const fixtureEnv = {
     ...process.env,
-    A11Y_FIXTURE_ROOT:
-      process.env['A11Y_FIXTURE_ROOT'] ??
-      join(process.env['TMPDIR'] ?? '/tmp', `musterd-targets-${process.pid}`),
+    A11Y_FIXTURE_ROOT: fixtureRoot,
     A11Y_FIXTURE_PORT: process.env['A11Y_FIXTURE_PORT'] ?? String(await freePort()),
     A11Y_FIXTURE_TEAM: process.env['A11Y_FIXTURE_TEAM'] ?? `paper-t${process.pid}`,
   };
@@ -282,6 +287,7 @@ if (!STATIC_ONLY) {
   }
   const base = /(http:\/\/127\.0\.0\.1:\d+)\/board/.exec(up.out)?.[1];
   const team = /team=([\w-]+)/.exec(up.out)?.[1] ?? 'paper';
+  const identityFile = join(fixtureRoot, 'browser-identity.json');
   try {
     /* Floors, measured rather than guessed (2026-09-21): a connected /board renders 17 targets and
        a connected /live 7, against THREE apiece on their sign-in screens. 10 and 5 sit comfortably
@@ -293,7 +299,11 @@ if (!STATIC_ONLY) {
        unshipped, and the fixture clears that by exactly one — so without this the grid could stop
        mounting and the floor of 10 would still pass on the columns view (sloane's read of lane
        01M32WGSG6; the grid is where the contrast gate found ten of its eleven failures). */
-    report(await sweep(`${base}/board?team=${team}`, '.gg-stage'), '/board (connected)', 10);
+    report(
+      await sweep(`${base}/board?team=${team}`, '.gg-stage', identityFile),
+      '/board (connected)',
+      10,
+    );
     /* The scene is PINNED, for the same reason contrast-gate pins it: an unpinned verdict is a
        function of the wall clock and of what the room happened to be doing. Geometry is less
        light-sensitive than colour, but it is not motion-insensitive — a walker mid-stride moves a
@@ -303,7 +313,7 @@ if (!STATIC_ONLY) {
     /* `.lc__topbar` is the chrome that carries /live's small controls — the row that was laid out
        at 19x30 against a `width: 30px`. If it stops mounting, this sweep has nothing to say. */
     report(
-      await sweep(`${base}/live?team=${team}&light=12&still`, '.lc__topbar'),
+      await sweep(`${base}/live?team=${team}&light=12&still`, '.lc__topbar', identityFile),
       '/live (connected)',
       5,
     );

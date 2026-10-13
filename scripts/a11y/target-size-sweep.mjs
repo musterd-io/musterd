@@ -53,7 +53,7 @@
  * anything behind an interaction are not measured, and a target a route does not render is a target
  * nobody swept. The output says so every run.
  */
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { openChromePage } from './chrome.mjs';
 import { HOUSE_FLOOR_SCOPE, MIN, judge, overlappingPairs } from './target-size-rules.mjs';
 
@@ -111,6 +111,24 @@ await send('Emulation.setDeviceMetricsOverride', {
 await send('Emulation.setEmulatedMedia', {
   features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
 }).catch(() => {});
+const identityFile = process.env['A11Y_CONNECTED_MEMBER_IDENTITY_FILE'];
+if (identityFile) {
+  const parsedUrl = new URL(url);
+  if (!['127.0.0.1', 'localhost', '[::1]'].includes(parsedUrl.hostname))
+    throw new Error('connected fixture identity is only allowed on loopback pages');
+  const team = parsedUrl.searchParams.get('team');
+  const identity = JSON.parse(readFileSync(identityFile, 'utf8'));
+  if (!team || !identity.as || !identity.token?.startsWith('mscr_'))
+    throw new Error('connected fixture identity is invalid');
+  await send('Page.addScriptToEvaluateOnNewDocument', {
+    source:
+      'try { localStorage.setItem(' +
+      JSON.stringify(`musterd.member.v1.${team}`) +
+      ', ' +
+      JSON.stringify(JSON.stringify({ as: identity.as, token: identity.token })) +
+      '); } catch {}',
+  });
+}
 await send('Page.navigate', { url });
 
 /**
