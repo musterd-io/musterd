@@ -319,8 +319,10 @@ export function OfficeScene({
         replayOnce(handle, replayRef);
         onReadyRef.current?.(handle);
       })
-      .catch(() => {
-        /* canvas unavailable — the warm gradient + labels stand in. */
+      .catch((err: unknown) => {
+        /* canvas unavailable — the warm gradient + labels stand in. A thrown update/replay lands
+           here too and used to vanish; say so where a developer can see it. */
+        if (import.meta.env.DEV) console.error('office mount failed', err);
       });
     return () => {
       disposed = true;

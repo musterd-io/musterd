@@ -1815,6 +1815,7 @@ export function mountOffice(
     clock += dt;
     // Replay on open runs the walkers at tempo until the replayed walks have all landed; everything
     // else in the room (pet, lights, bubbles) keeps real time, so only the catch-up is fast.
+    drainReplay();
     const walking = actors.step(dt * tempo);
     if (tempo !== 1 && !actors.active()) tempo = 1;
     if (walking) noticePassersBy(); // a sleeping dog wakes to watch whoever is walking past it
@@ -2212,14 +2213,29 @@ export function mountOffice(
 
   /** The walkers' speed multiplier: 1 live, REPLAY_TEMPO while a replay is landing. */
   let tempo = 1;
-  /** Walks handed to `replay` before the first roster placed anyone — played by `update` once it has. */
+  /**
+   * Walks handed to `replay`, played by the FRAME LOOP — never from inside `update()`. #2429 played
+   * them right after `setHomes`, before the rest of the update had built the frame (bake, heads,
+   * labels), and fifty's acceptance found the room not filling whenever a walk was in the window
+   * (2026-10-12). The first frame after the roster is placed drains this; each walk is emitted in
+   * its own try so one bad event can only lose itself, not the room.
+   */
   let replayPending: readonly OfficeEvent[] | null = null;
-  function playReplay(evs: readonly OfficeEvent[]): void {
+  function drainReplay(): void {
+    if (!replayPending) return;
+    if (actors.poses().size === 0) return; // nobody placed yet — the roster is still on its way
+    const evs = replayPending;
+    replayPending = null;
     if (reduced || STILL || evs.length === 0) return;
     tempo = REPLAY_TEMPO;
-    for (const ev of evs) emit(ev);
+    for (const ev of evs) {
+      try {
+        emit(ev);
+      } catch (err) {
+        if (import.meta.env.DEV) console.error('office replay: event dropped', ev, err);
+      }
+    }
     if (!actors.active()) tempo = 1; // nobody of theirs is in the room — nothing to catch up on
-    else ensureLoop();
   }
   function update(next: OfficeData) {
     const nextOnline = new Set(
@@ -2245,11 +2261,7 @@ export function mountOffice(
     refreshLightEnv(); // fold the new occupancy (+ current clock) into the lighting before we bake
     // Animate presence changes (walk in/out, drift) unless reduced-motion asked for stillness.
     actors.setHomes(placements, byName, !reduced);
-    if (replayPending) {
-      const evs = replayPending;
-      replayPending = null;
-      playReplay(evs);
-    }
+    if (replayPending) ensureLoop(); // the queued replay drains on the next frame, now that people are placed
     // The pulse is read ONCE, above the motion gate: the door's sound plays under reduced-motion
     // (audio is not motion, E3 spec §2); only the visual glow stays gated.
     // A newcomer's walk-in already rang the door in their colour (welcomeRoom) — the plain cue stands down.
@@ -2782,8 +2794,9 @@ export function mountOffice(
     update,
     emit,
     replay: (evs) => {
-      if (actors.poses().size === 0) replayPending = evs;
-      else playReplay(evs);
+      if (reduced || STILL || evs.length === 0) return;
+      replayPending = evs;
+      ensureLoop(); // a frame drains it once someone is placed; a parked room would otherwise never start
     },
     stats: () => ({ ticks, draws, beats, since, welcomes: welcomeRoom.started() }),
     ambientLog: () => [...ambientLog],
