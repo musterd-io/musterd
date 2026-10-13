@@ -136,6 +136,16 @@ function overlapArea(a: Rect, b: Rect, m = 0): number {
   return w > 0 && h > 0 ? w * h : 0;
 }
 
+/**
+ * Would a plate of this size, placed here, hide the wall board? A plate carries a "working on" chip beside
+ * the name, which runs it to ~350 px; anchored over a desk to the board's left it reaches across the
+ * board's face and covers the cards (lane 01M4VNDVF7). A sliver is not a cover — under `minShare` of the
+ * plate's own area stays put, like `SLACK` for two plates.
+ */
+export function plateCoversBoard(at: { x: number; y: number }, w: number, h: number, board: Rect, minShare = 0.06): boolean {
+  return overlapArea(plateRect(at, w, h), board) > minShare * w * h;
+}
+
 /** Straight above the head, `i` steps up. Slot 0 is home. */
 function slotAt(i: number, p: PlateBox): PlatePlacement {
   return { x: p.anchor.x, y: p.anchor.y - i * (p.h + GAP), displaced: i > 0 };
