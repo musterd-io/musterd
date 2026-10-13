@@ -45,7 +45,11 @@ const routes = [
     source: http,
     start: "if (method === 'GET' && rest === '/local-identity') {",
     end: 'const handoffMatch = rest.match(',
-    gates: [/requireLocalPeer\(/, /await authHuman\(ctx, slug, req\)/, /credential: bearer\(req\)/],
+    gates: [
+      /requireLocalPeer\(/,
+      /await authHuman\(ctx, slug, req\)/,
+      /const credential = bearer\(req\)/,
+    ],
   },
   {
     name: 'POST /teams/:slug/signin-handoff',
@@ -87,7 +91,7 @@ const routes = [
     name: 'POST /oauth/:team/token',
     source: oauth,
     start: "if (method === 'POST' && rest === '/token') {",
-    end: "if (method === 'POST' && rest === '/revoke') {",
+    end: "if (rest === '/revoke') {",
     gates: [/requireTlsPeer\(ctx, req, 'token issuance'\)/, /redeemCode\(/, /mintTokenPair\(/],
   },
   {

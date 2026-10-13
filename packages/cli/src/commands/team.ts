@@ -1379,11 +1379,10 @@ async function teamAdd(parsed: Parsed): Promise<number> {
 async function teamObserve(parsed: Parsed): Promise<number> {
   const name = parsed.positionals[1];
   if (!name) throw new CliError('usage: musterd team observe <name> [--team <slug>]', 2);
-  const config = loadConfig();
-  const server = flagStr(parsed.flags, 'server') ?? config.server;
-  const team = flagStr(parsed.flags, 'team') ?? config.current;
+  const team = flagStr(parsed.flags, 'team') ?? loadConfig().current;
   if (!team) throw new CliError('no team — pass --team <slug> or set a current team', 2);
-  const http = new HttpClient({ server });
+  // Observers can read team traffic, so provisioning one requires a human admin even on loopback.
+  const { http } = resolve({ ...parsed.flags, team });
   const res = await http.addMember(team, { name, kind: 'human', observer: true });
 
   if (parsed.flags['json']) {
@@ -1408,9 +1407,8 @@ async function teamObserve(parsed: Parsed): Promise<number> {
  * minting overwrites it, so a human who lost their credential could not authenticate, could not
  * `musterd board`, and could not even be re-added (`POST /members` conflicts on a live member).
  *
- * Deliberately identity-free — it resolves the team like `team export` (flags/config, no `resolve()`)
- * because requiring an active identity would be circular: the caller's problem IS that they have
- * none. The daemon holds the real bar (localhost, or an admin credential off-host).
+ * Reissuing a human credential requires an authenticated human admin, including on loopback (ADR
+ * 580). The caller acts from its Workspace identity; the daemon remains the authority on privilege.
  *
  * When the local machine already knows this (team, name), the rotate repairs what it knows in the
  * same breath — the vault entry, the team's active identity, and the cwd binding's key — so ADR
@@ -1602,10 +1600,9 @@ async function teamCredential(parsed: Parsed): Promise<number> {
   if (!name)
     throw new CliError('usage: musterd team credential <name> [--team <slug>] [--server <url>]', 2);
   const config = loadConfig();
-  const server = flagStr(parsed.flags, 'server') ?? config.server;
   const team = flagStr(parsed.flags, 'team') ?? config.current;
   if (!team) throw new CliError('no team — pass --team <slug> or set a current team', 2);
-  const http = new HttpClient({ server });
+  const { http } = resolve({ ...parsed.flags, team });
   const res = await http.rotateCredential(team, name);
 
   const repaired = repairLocalCredential(config, team, res.member, res.credential);

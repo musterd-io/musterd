@@ -259,11 +259,14 @@ const freePort = () =>
  * when its result is reported, so a parallel run reads exactly like a serial one: each route's
  * diagnostics sit directly above its own result line, which is what the `!` line points at.
  */
-const sweep = (url, { buffered = false } = {}) =>
+const sweep = (url, { buffered = false, identityFile } = {}) =>
   new Promise((resolve) => {
+    const env = { ...process.env, CHROME_BIN: CHROME };
+    if (identityFile) env.A11Y_CONNECTED_MEMBER_IDENTITY_FILE = identityFile;
+    else delete env.A11Y_CONNECTED_MEMBER_IDENTITY_FILE;
     const child = spawn(process.execPath, [join(HERE, 'contrast-sweep.mjs'), url], {
       stdio: ['ignore', 'pipe', buffered ? 'pipe' : 'inherit'],
-      env: { ...process.env, CHROME_BIN: CHROME },
+      env,
     });
     let out = '';
     let err = '';
@@ -501,11 +504,12 @@ if (!STATIC_ONLY) {
   // same shape as a contrast red. Same defect as the static phase's fixed port, one layer down.
   // Derive per-run values unless the caller pinned their own; the same env goes to `up` and
   // `down`, so teardown tears down THIS run's stack and nobody else's.
+  const fixtureRoot =
+    process.env['A11Y_FIXTURE_ROOT'] ??
+    join(process.env['TMPDIR'] ?? '/tmp', `musterd-a11y-${process.pid}`);
   const fixtureEnv = {
     ...process.env,
-    A11Y_FIXTURE_ROOT:
-      process.env['A11Y_FIXTURE_ROOT'] ??
-      join(process.env['TMPDIR'] ?? '/tmp', `musterd-a11y-${process.pid}`),
+    A11Y_FIXTURE_ROOT: fixtureRoot,
     A11Y_FIXTURE_PORT: process.env['A11Y_FIXTURE_PORT'] ?? String(await freePort()),
     A11Y_FIXTURE_TEAM: process.env['A11Y_FIXTURE_TEAM'] ?? `paper-${process.pid}`,
   };
@@ -543,10 +547,11 @@ if (!STATIC_ONLY) {
   }
   const base = /(http:\/\/127\.0\.0\.1:\d+)\/board/.exec(up.out)?.[1];
   const team = /team=([\w-]+)/.exec(up.out)?.[1] ?? 'paper';
+  const identityFile = join(fixtureRoot, 'browser-identity.json');
   try {
     // 12 is comfortably under what a connected page renders (25 apiece today) and comfortably
     // over the 1 a sign-in screen renders, so it separates "connected" from "never got there".
-    report(await sweep(`${base}/board?team=${team}`), '/board (connected)', 12);
+    report(await sweep(`${base}/board?team=${team}`, { identityFile }), '/board (connected)', 12);
     /* /live's floor is NOT /board's 12. A /live whose team data never arrives renders its empty
        screen ("0 seats", "No seats on this team", "Listening.") at ~18 rows, so 12 passed it green.
        The fixture team painted 260-307 (CI, 2026-09-24) while the stream column was on the page;
@@ -560,7 +565,9 @@ if (!STATIC_ONLY) {
     // same clock-dependence, same two-ended bracket. See SCENE_LIGHTS above.
     for (const light of SCENE_LIGHTS) {
       report(
-        await sweep(`${base}/live?team=${team}&light=${light}${SCENE_STILL}`),
+        await sweep(`${base}/live?team=${team}&light=${light}${SCENE_STILL}`, {
+          identityFile,
+        }),
         `/live (connected, light=${light})`,
         LIVE_FLOOR,
       );
@@ -575,7 +582,9 @@ if (!STATIC_ONLY) {
        its inks do not vary with the room's light the way the rail's do — a second pass would
        measure the same pairs twice and cost ~15s of fixture time for nothing. */
     report(
-      await sweep(`${base}/live?team=${team}&light=${SCENE_LIGHTS[0]}${SCENE_STILL}&asks-open`),
+      await sweep(`${base}/live?team=${team}&light=${SCENE_LIGHTS[0]}${SCENE_STILL}&asks-open`, {
+        identityFile,
+      }),
       '/live (connected, asks sheet open)',
       LIVE_FLOOR,
     );
@@ -591,7 +600,9 @@ if (!STATIC_ONLY) {
        track the room's light the way the canvas-adjacent rows do — the bracket would measure the
        same pairs twice for ~15s of fixture time. */
     report(
-      await sweep(`${base}/live?team=${team}&light=${SCENE_LIGHTS[0]}${SCENE_STILL}&plates-open`),
+      await sweep(`${base}/live?team=${team}&light=${SCENE_LIGHTS[0]}${SCENE_STILL}&plates-open`, {
+        identityFile,
+      }),
       '/live (connected, nameplates open)',
       LIVE_FLOOR,
     );
@@ -601,7 +612,9 @@ if (!STATIC_ONLY) {
        lighting value: the drawer is opaque paper over the page, so its inks do not track the room's
        light. Its floor is the old whole-page floor, because the rows are what carried it. */
     report(
-      await sweep(`${base}/live?team=${team}&light=${SCENE_LIGHTS[0]}${SCENE_STILL}&log-open`),
+      await sweep(`${base}/live?team=${team}&light=${SCENE_LIGHTS[0]}${SCENE_STILL}&log-open`, {
+        identityFile,
+      }),
       '/live (connected, log open)',
       LOG_FLOOR,
     );
@@ -612,7 +625,9 @@ if (!STATIC_ONLY) {
        other sweep reads. One lighting value: the card is opaque paper over the room, so its inks do
        not track the room's light. */
     report(
-      await sweep(`${base}/live?team=${team}&light=${SCENE_LIGHTS[0]}${SCENE_STILL}&now-open`),
+      await sweep(`${base}/live?team=${team}&light=${SCENE_LIGHTS[0]}${SCENE_STILL}&now-open`, {
+        identityFile,
+      }),
       '/live (connected, now briefing open)',
       LIVE_FLOOR,
     );

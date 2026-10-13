@@ -501,9 +501,6 @@ withDrivers('integration · misc', (_o, kind) => {
         const team = (await created.json()) as any;
         const nickCred = team.human_credential as string;
 
-        const provisioned = await postRoster({ name: 'worker', kind: 'agent' });
-        expect(provisioned.status).toBe(201);
-
         writeFileSync(join(roster, 'seats', 'intruder.toml'), 'kind = "human"\nrole = "admin"\n');
         const addAdmin = await postRoster({ name: 'worker', kind: 'agent' });
         expect(addAdmin.status).toBe(401);
@@ -531,7 +528,8 @@ withDrivers('integration · misc', (_o, kind) => {
             .is_admin,
         ).toBe(true);
 
-        expect((await postRoster({ name: 'worker', kind: 'agent' }, nickCred)).status).toBe(201);
+        const provisioned = await postRoster({ name: 'worker', kind: 'agent' }, nickCred);
+        expect(provisioned.status, JSON.stringify(provisioned.json)).toBe(201);
         expect(
           (await rosterView(nickCred)).members.find((m: any) => m.name === 'nick').capabilities
             .is_admin,

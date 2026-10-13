@@ -96,7 +96,12 @@ describe('loopback audit — behavioural (1C task 9, spec §8.3)', () => {
         const res = await hostRequest(url, r.path, 'revive.musterd.test', {
           method: r.method,
           ...(r.method === 'POST'
-            ? { headers: { 'content-type': 'application/json' }, body: '{}' }
+            ? {
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(
+                  r.path === '/teams/revive/members' ? { name: 'worker', kind: 'human' } : {},
+                ),
+              }
             : {}),
         });
         got.push(`${r.method} ${r.path} → ${res.status}`);

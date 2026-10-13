@@ -18,6 +18,7 @@ withDrivers('signin-handoff-http', (_o, kind) => {
   let base: string;
   let nickCred: string;
   let adaCred: string;
+  let agentKey: string;
 
   async function post(path: string, body: unknown, headers: Record<string, string> = {}) {
     const res = await fetch(base + path, {
@@ -47,6 +48,7 @@ withDrivers('signin-handoff-http', (_o, kind) => {
     base = `http://127.0.0.1:${port}`;
     const team = await post('/teams', { slug: 'dawn', creator: { name: 'nick', kind: 'human' } });
     nickCred = team.json.human_credential;
+    agentKey = team.json.agent_key;
     const ada = await post('/teams/dawn/members', { name: 'ada', kind: 'human' }, bearer(nickCred));
     adaCred = ada.json.human_credential;
   });
@@ -104,14 +106,21 @@ withDrivers('signin-handoff-http', (_o, kind) => {
     it('a local agent cannot stage or retrieve a human identity', async () => {
       const worker = await post('/teams/dawn/members', { name: 'worker', kind: 'agent' });
       expect(worker.status).toBe(201);
+      const grant = await post(
+        '/teams/dawn/grants',
+        { scope: 'seat', target: 'worker', lifetime: 'standing' },
+        bearer(nickCred),
+      );
+      expect(grant.status).toBe(201);
       const claim = await post('/teams/dawn/claim', {
-        key: worker.json.token,
+        key: agentKey,
         target: { seat: 'worker' },
+        grant: grant.json.token,
         surface: 'cli',
       });
       expect(claim.status).toBe(200);
       const workerAuth = {
-        ...bearer(worker.json.token),
+        ...bearer(claim.json.seat_credential),
         'x-musterd-seat': 'worker',
         'x-musterd-session-lease': claim.json.session_lease,
       };
