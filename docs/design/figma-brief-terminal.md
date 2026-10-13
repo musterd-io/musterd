@@ -52,13 +52,15 @@ Use realistic data: team `dawn`, members `Ada (agent, backend)`, `Lin (agent, fr
    (checkbox list), preselecting the current desired set; unavailable adapters stay selectable with
    a dim `(pending — not installed here)` hint:
    ```
-   ◆ Which harnesses should launch this worktree's member?
+   ◆ Which harnesses should launch this worktree's member? (space toggles, enter confirms)
    ◼ Claude Code
    ◻ Cursor
    ◻ Codex (pending — not installed here)
    ◼ musterd (native host)
    ```
-   On confirm: `✓ desired harnesses: claude-code, musterd` then one line per reconciled fragment
+   On confirm: `✓ desired harnesses: claude-code, musterd`, then a dim delta against the prior set
+   (`  added grok · removed cursor`, or `  no change from the previous set` — so an Enter that
+   toggled nothing is visible), then one line per reconciled fragment
    (see the status verdict glyphs below), ending `✓ worktree configured — musterd wire repairs it any time`.
    Cancel (esc) prints `no changes made` (dim) and exits **0**.
 9. `cmd/harness-status` — `$ musterd harness status` → one block per registry adapter:

@@ -12,7 +12,7 @@ import {
   type HarnessAdapter,
   type ObservedFragment,
 } from '../onboard/reconcile/fragments.js';
-import { harnessCommand } from './harness.js';
+import { deltaLine, harnessCommand } from './harness.js';
 
 let cwd: string;
 let machineRoot: string;
@@ -199,6 +199,22 @@ describe('musterd harness configure', () => {
     expect(b.state.applied).toEqual([]);
     const prov = loadProvisioning(cwd);
     expect(prov.kind === 'valid' && prov.value.desired).toEqual(['fake-a']);
+  });
+
+  it('echoes the delta against the prior set, so an Enter that toggled nothing is visible', async () => {
+    writeV2Identity();
+    writeV3Provisioning(['fake-a']);
+    const registry = [fakeAdapter('fake-a'), fakeAdapter('fake-b')];
+    const same = await run(['configure'], { ctx: ctxOf(), registry, select: ['fake-a'] });
+    expect(same.out).toContain('no change from the previous set');
+    const swapped = await run(['configure'], { ctx: ctxOf(), registry, select: ['fake-b'] });
+    expect(swapped.out).toContain('added fake-b · removed fake-a');
+  });
+
+  it('deltaLine names additions before removals', () => {
+    expect(deltaLine(['a', 'b'], ['a', 'b'])).toBe('no change from the previous set');
+    expect(deltaLine(['a'], ['a', 'grok'])).toBe('added grok');
+    expect(deltaLine(['a', 'b'], ['a'])).toBe('removed b');
   });
 
   it('an empty set is valid — everything owned is released', async () => {
