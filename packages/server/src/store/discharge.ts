@@ -61,8 +61,8 @@ export function repliedByRecipientSql(alias: string, recipient: string): string 
   return `SELECT 1 FROM messages dy WHERE ${repliedByRecipientWhere(alias, recipient)}`;
 }
 
-/** The WHERE body of shapes 3 and 4 over a reply row aliased `dy`, for a caller that wants the
- *  reply itself (`answerBy`) rather than its existence. */
+/** The WHERE body of shapes 3 and 4 over a reply row aliased `dy`. `answerBy` (delivery.ts) restates
+ *  it as two separately indexable queries so it can seek; a change to the predicate changes both. */
 export function repliedByRecipientWhere(alias: string, recipient: string): string {
   return `dy.team_id = ${alias}.team_id
        AND dy.from_member = ${recipient}

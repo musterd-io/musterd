@@ -9,7 +9,7 @@ import {
 } from '@musterd/protocol';
 import type { Driver } from '../db/driver.js';
 import { type Cursor, getCursor } from './cursors.js';
-import { repliedByRecipientWhere, undischargedSql } from './discharge.js';
+import { undischargedSql } from './discharge.js';
 import type { MessageRow } from './rows.js';
 
 /**
@@ -163,14 +163,28 @@ async function answerBy(
   msg: MessageRow,
   recipientId: string,
 ): Promise<{ act: string; id: string; ts: number } | null> {
-  const row = await db.get<{ act: string; id: string; ts: number }>(
-    `SELECT dy.act, dy.id, dy.ts FROM messages dy
-         JOIN messages m ON m.id = ?
-        WHERE ${repliedByRecipientWhere('m', '?')}
-        ORDER BY dy.created_at ASC, dy.id ASC LIMIT 1`,
-    [msg.id, recipientId],
+  // The predicate in `discharge.ts` is one OR, and as one query with `ORDER BY created_at … LIMIT 1`
+  // SQLite walks the team's whole `created_at` index for it (364 calls on the Air's 23k messages were
+  // ~6 s of a cold /report). Each arm alone seeks, and the earlier of the two wins.
+  type Hit = { act: string; id: string; ts: number; created_at: number };
+  // No ORDER BY on the reply arm: with one SQLite picks the `(team_id, created_at)` index to skip the
+  // sort and scans the team. One recipient's replies naming one act are a handful of rows.
+  const replies = await db.all<Hit>(
+    `SELECT act, id, ts, created_at FROM messages
+        WHERE team_id = ? AND from_member = ? AND in_reply_to = ?`,
+    [msg.team_id, recipientId, msg.id],
   );
-  return row ?? null;
+  const byThread = await db.get<Hit>(
+    `SELECT act, id, ts, created_at FROM messages
+        WHERE team_id = ? AND thread_id = ? AND from_member = ?
+          AND (created_at > ? OR (created_at = ? AND id > ?))
+        ORDER BY created_at ASC, id ASC LIMIT 1`,
+    [msg.team_id, msg.thread_id ?? msg.id, recipientId, msg.created_at, msg.created_at, msg.id],
+  );
+  const earliest = [...replies, ...(byThread ? [byThread] : [])].sort(
+    (a, b) => a.created_at - b.created_at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  )[0];
+  return earliest ? { act: earliest.act, id: earliest.id, ts: earliest.ts } : null;
 }
 
 /**

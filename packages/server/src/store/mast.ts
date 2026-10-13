@@ -41,20 +41,28 @@ export async function timeToUnblock(
   const since = now - WINDOW_MS;
   const latencies = (
     await db.all<{ ms: number }>(
+      // Three arms, not one join with an OR in its ON clause: that form made SQLite pair every closer
+      // with every request in the team (~10 s of a cold /report on the Air, 23k messages). Each arm
+      // seeks the opener by id or thread. A closer is accept/decline or resolve, never both, so the
+      // arms never double-count; the last two arms split `COALESCE(o.thread_id, o.id)`.
       `SELECT (c.ts - o.ts) AS ms
          FROM messages c
-         JOIN messages o
-           ON o.team_id = c.team_id
-          AND o.act IN ('request_help','handoff')
-          AND (
-            (c.act IN ('accept','decline') AND o.id = c.in_reply_to)
-            OR
-            (c.act = 'resolve' AND c.thread_id IS NOT NULL
-             AND COALESCE(o.thread_id, o.id) = c.thread_id)
-          )
-        WHERE c.team_id = ? AND c.ts > ? AND c.act IN ('accept','decline','resolve')
-          AND c.ts >= o.ts`,
-      [teamId, since],
+         JOIN messages o ON o.id = c.in_reply_to AND o.team_id = c.team_id
+        WHERE c.team_id = ? AND c.ts > ? AND c.act IN ('accept','decline')
+          AND o.act IN ('request_help','handoff') AND c.ts >= o.ts
+       UNION ALL
+       SELECT (c.ts - o.ts) AS ms
+         FROM messages c
+         JOIN messages o ON o.thread_id = c.thread_id AND o.team_id = c.team_id
+        WHERE c.team_id = ? AND c.ts > ? AND c.act = 'resolve' AND c.thread_id IS NOT NULL
+          AND o.act IN ('request_help','handoff') AND c.ts >= o.ts
+       UNION ALL
+       SELECT (c.ts - o.ts) AS ms
+         FROM messages c
+         JOIN messages o ON o.id = c.thread_id AND o.thread_id IS NULL AND o.team_id = c.team_id
+        WHERE c.team_id = ? AND c.ts > ? AND c.act = 'resolve' AND c.thread_id IS NOT NULL
+          AND o.act IN ('request_help','handoff') AND c.ts >= o.ts`,
+      [teamId, since, teamId, since, teamId, since],
     )
   )
     .map((r) => r.ms)
