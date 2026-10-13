@@ -87,6 +87,7 @@ import { laneSeed, WALL_COLUMNS, withPinned, withTaken, type PinnedCard, type Wa
 import {
   enqueueSpeech,
   shapeSpeech,
+  bubbleCoversBoard,
   speechHoldMs,
   speechLength,
   speechTokens,
@@ -1351,15 +1352,26 @@ export function mountOffice(
   }
 
   // ── ephemeral speech: an act's body types out over the sender's head, then fades ───────────────────
-  function positionSpeech(outer: HTMLDivElement, head: Pt) {
+  function positionSpeech(outer: HTMLDivElement, head: Pt, board?: { x: number; y: number; w: number; h: number }) {
     outer.style.transform = `translate(-50%, -100%) translate(${head.x}px, ${head.y - SPEECH_LIFT}px)`;
+    // A bubble follows its speaker, and a speaker at the wall board puts it across the board face for
+    // the whole landing — hiding the card, its sway and the flourish. While the bubble would cover
+    // the board it steps aside (a quick fade, kept in its timers), and it returns when the speaker
+    // walks off. Measured only when the head is near the board's span, so the common frame pays a
+    // comparison, not a layout read.
+    const over = board ? bubbleCoversBoard(head, { w: outer.offsetWidth, h: outer.offsetHeight }, SPEECH_LIFT, board) : false;
+    outer.style.opacity = over ? '0' : '';
+    outer.style.transition = over ? 'opacity 0.2s' : '';
+    // A hidden bubble must not catch the click meant for the board behind it.
+    outer.style.pointerEvents = over ? 'none' : 'auto';
   }
 
   /** Keep every live bubble anchored over its member (follows a walker; snaps after a reseat). */
   function repositionSpeeches(headMap: Map<string, Pt>) {
+    const board = speeches.size ? boardAnchor(fit) : undefined;
     for (const [name, s] of speeches) {
       const head = headMap.get(name);
-      if (head) positionSpeech(s.outer, head);
+      if (head) positionSpeech(s.outer, head, board);
     }
   }
 

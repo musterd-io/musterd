@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bubbleCoversBoard,
   enqueueSpeech,
   speechHoldMs,
   SPEECH_HOLD_MS,
@@ -445,5 +446,26 @@ describe('speechHoldMs', () => {
     // And a queued hold is always shorter than the shortest unqueued one — otherwise the backlog
     // would make the room slower, which is the opposite of the point.
     expect(SPEECH_HOLD_QUEUED_MS).toBeLessThan(speechHoldMs(0, 'status_update', 0));
+  });
+});
+
+describe('bubbleCoversBoard — a bubble follows its speaker onto the board face (lane 01M4VMFE3A)', () => {
+  const board = { x: 800, y: 200, w: 120, h: 90 };
+  const bubble = { w: 200, h: 60 };
+  const LIFT = 26;
+  it('covers the board for a speaker standing under it', () => {
+    // BOARD_STAND is the floor under the board: the head is just below the board, the bubble rises across it.
+    expect(bubbleCoversBoard({ x: 860, y: 330 }, bubble, LIFT, board)).toBe(true);
+    // Not exactly centred still covers: the bubble is wider than the board's overhang.
+    expect(bubbleCoversBoard({ x: 760, y: 330 }, bubble, LIFT, board)).toBe(true);
+  });
+  it('leaves the board clear for anyone elsewhere in the room', () => {
+    expect(bubbleCoversBoard({ x: 300, y: 330 }, bubble, LIFT, board)).toBe(false); // far to the left
+    expect(bubbleCoversBoard({ x: 860, y: 190 }, bubble, LIFT, board)).toBe(false); // head above the board
+    expect(bubbleCoversBoard({ x: 860, y: 700 }, bubble, LIFT, board)).toBe(false); // so far below the bubble rises short of it
+  });
+  it('clears once the bubble has moved off to the side', () => {
+    expect(bubbleCoversBoard({ x: 600, y: 330 }, bubble, LIFT, board)).toBe(false); // right edge at 700, board starts at 800
+    expect(bubbleCoversBoard({ x: 1130, y: 330 }, bubble, LIFT, board)).toBe(false); // left edge at 1030, board ends at 920
   });
 });
