@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Lane, LaneBoard } from '@musterd/protocol';
-import { laneSeed, projectWallBoard, STICKY_CAP, STICKY_SWAY_S, stickySway, WALL_COLUMNS, withPinned, withTaken } from './wallboard';
+import { laneSeed, projectWallBoard, STICKY_CAP, STICKY_SWAY_S, stickySway, WALL_COLUMNS, withHeld, withPinned, withTaken } from './wallboard';
 
 const lane = (over: Partial<Lane> = {}): Lane => ({
   id: 'L1',
@@ -191,5 +191,38 @@ describe('stickySway — a landed card swings where a viewer can see it (L5 foll
   });
   it('is small enough to settle: by the end the swing is under half a unit', () => {
     expect(Math.abs(stickySway(STICKY_SWAY_S - 0.01))).toBeLessThan(0.5);
+  });
+});
+
+describe('withHeld — the cork remembers where cards hung (lane 01M4VP3V99)', () => {
+  const wb = (ids: Array<[string, Lane['state']]>) =>
+    projectWallBoard(board(ids.map(([id, state]) => lane({ id, state }))))!;
+  const heldOf = (b: ReturnType<typeof withHeld>['board'], key: string) => b!.find((c) => c.key === key)!.held;
+
+  it('raises a column\'s mark to the cards seen hanging there, up to the sticky cap', () => {
+    const r = withHeld(wb([['A', 'active'], ['B', 'active']]), {});
+    expect(r.changed).toBe(true);
+    expect(r.marks.active).toBe(2);
+    expect(heldOf(r.board, 'active')).toBe(2);
+    const many = withHeld(wb(Array.from({ length: STICKY_CAP + 3 }, (_, i) => [`L${i}`, 'done'] as [string, Lane['state']])), {});
+    expect(many.marks.done).toBe(STICKY_CAP);
+  });
+
+  it('never lowers a mark: a card that moved on leaves its hole behind', () => {
+    const first = withHeld(wb([['A', 'active'], ['B', 'active']]), {});
+    const later = withHeld(wb([['A', 'active']]), first.marks); // B left
+    expect(later.changed).toBe(false);
+    expect(later.marks.active).toBe(2);
+    expect(heldOf(later.board, 'active')).toBe(2); // one card hanging, two slots held: one hole
+  });
+
+  it('leaves a column that never held a card unmarked', () => {
+    const r = withHeld(wb([['A', 'active']]), {});
+    expect(heldOf(r.board, 'blocked')).toBeUndefined();
+    expect(r.marks.blocked).toBeUndefined();
+  });
+
+  it('passes a missing board through', () => {
+    expect(withHeld(null, { done: 2 })).toEqual({ board: null, marks: { done: 2 }, changed: false });
   });
 });

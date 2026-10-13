@@ -315,3 +315,14 @@ describe('a plate drops its work chip rather than cover the wall board (lane 01M
     expect(body).toContain("work.style.display = over ? 'none' : '';");
   });
 });
+
+describe('the cork keeps a hole where a card hung (lane 01M4VP3V99)', () => {
+  it('folds each board into the viewer\'s marks, loading once per team and saving only when one rises', () => {
+    const at = index.indexOf('if (heldTeam !== teamName) {');
+    const body = index.slice(at, at + 520);
+    expect(body).toContain('heldMarks = loadHeld(teamName);');
+    expect(body).toContain('const heldNow = withHeld(next.wallBoard ?? null, heldMarks);');
+    expect(body).toContain('if (heldNow.changed) saveHeld(teamName, heldMarks);');
+    expect(body).toContain('wallBoard = heldNow.board;');
+  });
+});

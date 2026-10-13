@@ -1525,20 +1525,23 @@ describe('background layer (sprite cache)', () => {
     expect(draw(taken)).not.toEqual(draw(plain));
   });
 
-  it('empty slots keep their tack holes, so a used board reads as used (L5)', () => {
+  it('a slot a card has held keeps its tack hole; a slot none has held stays clean (L5, history)', () => {
     const draw = (w: WallBoard) => {
       const r = recordingCtx();
       drawWalls(r.ctx, fit, env, schedule, w, 3, 'live');
       return fmtOps(r.ops);
     };
+    const holeFills = (ops: string[]) => ops.filter((o) => o.includes('rgba(52, 28, 8, 0.75)')).length;
     const full = board();
     const emptied: WallBoard = full.map((c) => ({ ...c, stickies: [] }));
-    // Taking every card off the wall must not leave a blank cork: each of the six columns shows STICKY_CAP
-    // holes, and a column with cards shows one fewer hole per card (the card hangs where the hole is).
-    const holeFills = (ops: string[]) => ops.filter((o) => o.includes('rgba(52, 28, 8, 0.75)')).length;
-    const cards = full.reduce((n, c) => n + c.stickies.length, 0);
-    expect(holeFills(draw(emptied))).toBeGreaterThanOrEqual(full.length * STICKY_CAP);
-    expect(holeFills(draw(emptied)) - holeFills(draw(full))).toBe(cards);
+    // never held: a cork with no history shows no holes at all
+    expect(holeFills(draw(emptied))).toBe(0);
+    // held 3 slots in the first column and 2 in the second, now empty: five holes
+    const held: WallBoard = emptied.map((c, i) => (i === 0 ? { ...c, held: 3 } : i === 1 ? { ...c, held: 2 } : c));
+    expect(holeFills(draw(held))).toBe(5);
+    // a card back on one of those slots covers its hole: held 3, one card hanging -> two holes remain
+    const oneBack: WallBoard = held.map((c, i) => (i === 0 ? { ...c, stickies: full[0]!.stickies.slice(0, 1) } : c));
+    expect(holeFills(draw(oneBack))).toBe(4);
   });
 
   it('the live slice paints the clock, the sign and the board and nothing else', () => {
