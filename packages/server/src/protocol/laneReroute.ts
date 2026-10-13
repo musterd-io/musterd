@@ -220,6 +220,12 @@ export async function rerouteAcceptances(
   for (const one of held) {
     const lane = await getLane(ctx.db, team.id, one.lane, team.slug);
     if (!lane) continue;
+    // Lane 01M4V6ACBP: the stage-two human ask is not a peer review, so there is no one to move it
+    // to — the picker only offers agents. Re-routing it handed a fresh PEER ask to an agent, whose
+    // accept fired the human ask again, and the reaper moved that one too (lane 01M4SPZB1V,
+    // 2026-10-13: miley → nick → sloane → dreamy → nick). A human being offline is the normal case,
+    // not an abandonment; the ask waits for them.
+    if (await isHumanStageAsk(ctx.db, team.id, one.ask)) continue;
     const worker = lane.owner_seat ?? gone.name;
     const pick = (
       await selectReviewCounterpart(ctx.db, team.id, lane, worker, ctx.config.presenceTimeoutMs, {
@@ -280,6 +286,15 @@ export async function rerouteAcceptances(
     out.push(lane.id);
   }
   return out;
+}
+
+/** The ask is ADR 172's stage-two human acceptance (`lane_review.grade: 'human'`), not a peer one. */
+async function isHumanStageAsk(db: Driver, teamId: string, askId: string): Promise<boolean> {
+  const row = await db.get<{ grade: string | null }>(
+    `SELECT json_extract(meta, '$.lane_review.grade') AS grade FROM messages WHERE team_id = ? AND id = ?`,
+    [teamId, askId],
+  );
+  return row?.grade === 'human';
 }
 
 /** ADR 412's trigger: the seat said goodbye, so it is gone whatever its presence row still says. */
