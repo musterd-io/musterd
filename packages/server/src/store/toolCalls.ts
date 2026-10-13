@@ -1,4 +1,6 @@
 import type {
+  AdapterStartup,
+  StartupDistribution,
   SeatSurfaceWeight,
   SurfaceRender,
   ToolCallEvent,
@@ -113,6 +115,77 @@ export async function recordSurfaceRender(
       ...(surface.breakdown ? { breakdown: surface.breakdown } : {}),
     },
   });
+}
+
+/**
+ * ADR 584: one adapter launch's startup as an append-only `mcp.startup_measured` row. Once per
+ * adapter session by contract, so the row count is the launch count, and the window's rows ARE
+ * the distribution — no aggregate table, since percentiles cannot be summed.
+ */
+export async function recordAdapterStartup(
+  db: Driver,
+  teamId: string,
+  seat: string,
+  startup: AdapterStartup,
+): Promise<void> {
+  await appendAudit(db, teamId, {
+    actor: seat,
+    action: 'mcp.startup_measured',
+    target: seat,
+    result: 'allow',
+    detail: {
+      surface: startup.surface,
+      initialize_ms: startup.initialize_ms,
+      tools_list_ms: startup.tools_list_ms,
+    },
+  });
+}
+
+/** Nearest-rank percentile of an ascending array; the array is never empty here. */
+function nearestRank(sorted: number[], p: number): number {
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1))]!;
+}
+
+/** ADR 584: adapter launch times per harness over the window, slowest-median first. */
+export async function deriveStartupDistribution(
+  db: Driver,
+  teamId: string,
+  since: number,
+): Promise<StartupDistribution[]> {
+  const rows = await db.all<{ detail: string | null }>(
+    `SELECT detail FROM audit
+        WHERE team_id = ? AND action = 'mcp.startup_measured' AND ts > ?`,
+    [teamId, since],
+  );
+  const bySurface = new Map<string, { init: number[]; list: number[] }>();
+  for (const r of rows) {
+    try {
+      const d = JSON.parse(r.detail ?? '{}') as Partial<AdapterStartup>;
+      if (typeof d.surface !== 'string' || typeof d.tools_list_ms !== 'number') continue;
+      let acc = bySurface.get(d.surface);
+      if (!acc) bySurface.set(d.surface, (acc = { init: [], list: [] }));
+      acc.list.push(d.tools_list_ms);
+      if (typeof d.initialize_ms === 'number') acc.init.push(d.initialize_ms);
+    } catch {
+      /* best-effort rows stay skippable */
+    }
+  }
+  const out: StartupDistribution[] = [];
+  for (const [surface, { init, list }] of bySurface) {
+    init.sort((a, b) => a - b);
+    list.sort((a, b) => a - b);
+    out.push({
+      surface,
+      launches: list.length,
+      initialize_p50_ms: init.length > 0 ? nearestRank(init, 0.5) : null,
+      initialize_p90_ms: init.length > 0 ? nearestRank(init, 0.9) : null,
+      tools_list_p50_ms: nearestRank(list, 0.5),
+      tools_list_p90_ms: nearestRank(list, 0.9),
+    });
+  }
+  return out.sort(
+    (a, b) => b.tools_list_p50_ms - a.tools_list_p50_ms || a.surface.localeCompare(b.surface),
+  );
 }
 
 interface StatRow {
@@ -239,5 +312,6 @@ export async function deriveToolCallMetrics(
     coerced: tools.reduce((n, t) => n + t.coerced, 0),
     tools,
     surface,
+    startup: await deriveStartupDistribution(db, teamId, since),
   };
 }

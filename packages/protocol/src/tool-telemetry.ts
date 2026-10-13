@@ -61,12 +61,29 @@ export const SurfaceRenderSchema = z.object({
 });
 export type SurfaceRender = z.infer<typeof SurfaceRenderSchema>;
 
+/**
+ * How long one adapter launch took to serve its harness (ADR 584): process start to the
+ * `initialized` notification, and to the first harness-requested `tools/list` answered, both in ms
+ * of the adapter's own `process.uptime()`. Sent once per adapter session, on the first flush, so a
+ * probe that never calls a tool sends nothing (the recorder flushes only for a session with a seat).
+ * `initialize_ms` is null for a client that opens with `server/discover` and never initializes.
+ */
+export const AdapterStartupSchema = z.object({
+  /** The harness the adapter was launched for (`MUSTERD_LAUNCH_SURFACE`), e.g. `claude-code`. */
+  surface: z.string().min(1).max(32),
+  initialize_ms: z.number().int().min(0).max(600_000).nullable(),
+  tools_list_ms: z.number().int().min(0).max(600_000),
+});
+export type AdapterStartup = z.infer<typeof AdapterStartupSchema>;
+
 /** `POST /teams/:slug/telemetry/tool-calls` — the adapter's periodic flush. The seat comes from
  * the authenticated request and the caller's role is stamped server-side at ingest (the
  * `from_provenance` rule: a caller cannot supply either). `surface` rides the first flush only. */
 export const ToolTelemetryReportSchema = z.object({
   events: z.array(ToolCallEventSchema).max(256),
   surface: SurfaceRenderSchema.optional(),
+  /** ADR 584: rides the first flush only, like `surface`. */
+  startup: AdapterStartupSchema.optional(),
 });
 export type ToolTelemetryReport = z.infer<typeof ToolTelemetryReportSchema>;
 
@@ -103,6 +120,18 @@ export const SeatSurfaceWeightSchema = z.object({
 });
 export type SeatSurfaceWeight = z.infer<typeof SeatSurfaceWeightSchema>;
 
+/** ADR 584: one harness's adapter launches over the report window, as a distribution. */
+export const StartupDistributionSchema = z.object({
+  surface: z.string(),
+  launches: z.number().int(),
+  /** Nearest-rank percentiles; null when no launch in the window initialized. */
+  initialize_p50_ms: z.number().int().nullable(),
+  initialize_p90_ms: z.number().int().nullable(),
+  tools_list_p50_ms: z.number().int(),
+  tools_list_p90_ms: z.number().int(),
+});
+export type StartupDistribution = z.infer<typeof StartupDistributionSchema>;
+
 /**
  * The tool-call block of the insight report (ADR 144 inc 1): per-tool usage/bounce/latency over
  * the window plus the latest rendered-surface weight per seat. Diagnostic instruments for the
@@ -118,5 +147,7 @@ export const ToolCallMetricsSchema = z.object({
   tools: z.array(ToolUsageRowSchema),
   /** Latest attested weight per seat (not window-bound — an attestation, like `presence.build`). */
   surface: z.array(SeatSurfaceWeightSchema),
+  /** ADR 584: adapter launch times per harness over the window. Absent from an older daemon. */
+  startup: z.array(StartupDistributionSchema).optional(),
 });
 export type ToolCallMetrics = z.infer<typeof ToolCallMetricsSchema>;

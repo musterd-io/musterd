@@ -1,5 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import type {
+  AdapterStartup,
   SurfaceRender,
   ToolCallEvent,
   ToolCallOutcome,
@@ -69,6 +70,33 @@ export class ToolCallRecorder {
   private listTools: (() => unknown) | null = null;
   private surface: SurfaceRender | null = null;
   private surfaceSent = false;
+  // ADR 584: this launch's startup, in ms of process uptime. The first mark of each wins, so a
+  // factory that mints a second server instance cannot move them.
+  private initializedMs: number | null = null;
+  private toolsListMs: number | null = null;
+  private startupSent = false;
+
+  constructor(private readonly opts: { surface?: string | null; uptimeMs?: () => number } = {}) {}
+
+  private uptime(): number {
+    return Math.round(this.opts.uptimeMs?.() ?? process.uptime() * 1000);
+  }
+
+  /** The harness's `initialized` notification arrived (legacy era only — 2026-07-28 never sends it). */
+  markInitialized(): void {
+    this.initializedMs ??= this.uptime();
+  }
+
+  /** The first `tools/list` the HARNESS asked for was answered. Never the recorder's own listing. */
+  markToolsList(): void {
+    this.toolsListMs ??= this.uptime();
+  }
+
+  private startup(): AdapterStartup | null {
+    const surface = this.opts.surface?.trim().slice(0, 32);
+    if (this.startupSent || !surface || this.toolsListMs === null) return null;
+    return { surface, initialize_ms: this.initializedMs, tools_list_ms: this.toolsListMs };
+  }
 
   record(tool: string, outcome: ToolCallOutcome, durationMs: number): void {
     const name = KNOWN_TOOLS.has(tool) ? tool : UNKNOWN_TOOL;
@@ -140,14 +168,20 @@ export class ToolCallRecorder {
       }
     }
     const surface = this.surfaceSent ? null : this.surface;
-    if (this.cells.size === 0 && !surface) return;
+    const startup = this.startup();
+    if (this.cells.size === 0 && !surface && !startup) return;
     const batch = this.cells;
     this.cells = new Map();
     const events: ToolCallEvent[] = [...batch.values()];
-    const report: ToolTelemetryReport = { events, ...(surface ? { surface } : {}) };
+    const report: ToolTelemetryReport = {
+      events,
+      ...(surface ? { surface } : {}),
+      ...(startup ? { startup } : {}),
+    };
     try {
       await client.reportToolTelemetry(report);
       if (surface) this.surfaceSent = true;
+      if (startup) this.startupSent = true;
     } catch {
       // Re-merge so the next tick retries — bounded, see the class doc.
       for (const [key, cell] of batch) {
@@ -198,8 +232,15 @@ export function instrumentToolTransport(server: McpServer, recorder: ToolCallRec
     const handler = args[args.length - 1] as RequestHandler;
     if (typeof handler !== 'function') return original(...args);
     if (method === 'tools/list') {
+      // The recorder's own surface measurement calls the RAW handler, so it never marks startup;
+      // only a listing the harness asked for over the transport does (ADR 584).
       recorder.captureListHandler(() => handler({ method: 'tools/list', params: {} }, {}));
-      return original(...args);
+      const timed: RequestHandler = async (request, extra) => {
+        const result = await handler(request, extra);
+        recorder.markToolsList();
+        return result;
+      };
+      return original(...args.slice(0, -1), timed);
     }
     if (method !== 'tools/call') return original(...args);
     const wrapped: RequestHandler = async (request, extra) => {

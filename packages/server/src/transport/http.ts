@@ -469,7 +469,7 @@ import {
   rotateAgentKey,
   applyPolicyChange,
 } from '../store/teams.js';
-import { applyToolCalls, recordSurfaceRender } from '../store/toolCalls.js';
+import { applyToolCalls, recordAdapterStartup, recordSurfaceRender } from '../store/toolCalls.js';
 import {
   ingestSyncedTraceRows,
   ingestTraceEvents,
@@ -6702,6 +6702,7 @@ export async function handleHttp(
         // Stamped and replicated (ADR 371 §1): the report on every machine counts this flush.
         await applyToolCalls(ctx.db, team.id, member.name, member.role || null, body.events);
         if (body.surface) await recordSurfaceRender(ctx.db, team.id, member.name, body.surface);
+        if (body.startup) await recordAdapterStartup(ctx.db, team.id, member.name, body.startup);
         return sendJson(res, 200, {});
       }
 
